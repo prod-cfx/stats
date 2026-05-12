@@ -101,11 +101,21 @@ export function optionalAuthHeaders(): Record<string, string> {
   return buildBearerAuthHeaders(token)
 }
 
-export async function apiCall<T>(operation: () => Promise<T>, context: string): Promise<T> {
+interface ApiCallOptions {
+  shouldLogError?: (error: unknown) => boolean
+}
+
+export async function apiCall<T>(
+  operation: () => Promise<T>,
+  context: string,
+  options: ApiCallOptions = {},
+): Promise<T> {
   try {
     return await operation()
   } catch (error) {
-    logError(context, error)
+    if (options.shouldLogError?.(error) !== false) {
+      logError(context, error)
+    }
 
     if (error instanceof AuthenticationError) {
       throw error

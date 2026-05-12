@@ -13,6 +13,7 @@ describe('signalGeneratorService coordinator behavior', () => {
     cooldownMinutes: 15,
     batchSize: 2,
     maxSymbolsPerStrategy: 3,
+    spread: { enabled: false, windowSeconds: 300 },
     debug: { enabled: false, maxScriptLength: 1000, maxValueLength: 200 },
     ai: {
       maxAttempts: 2,
@@ -76,6 +77,7 @@ describe('signalGeneratorService coordinator behavior', () => {
       overrides.publishedSnapshotsRepository as any,
       runtimeExecutionStateService as any,
       runtimeExecutionStateRepository as any,
+      overrides.workloadSharding as any,
     )
 
     return {
@@ -83,6 +85,7 @@ describe('signalGeneratorService coordinator behavior', () => {
       generatorRepository,
       runtimeExecutionStateService,
       runtimeExecutionStateRepository,
+      workloadSharding: overrides.workloadSharding,
     }
   }
 
@@ -125,6 +128,49 @@ describe('signalGeneratorService coordinator behavior', () => {
     expect(processStrategyInstance.mock.calls[0]?.[0]).toBe(instances[0])
     expect(processStrategyInstance.mock.calls[1]?.[0]).toBe(instances[1])
     expect((service as any).lastStrategyIndex).toBe(2)
+  })
+
+  it('filters running instances by strategy instance id when sharding is enabled', async () => {
+    const instances = [
+      { id: 'instance-1' },
+      { id: 'instance-2' },
+      { id: 'instance-3' },
+    ]
+    const { service } = createService({
+      generatorRepository: {
+        findRunningInstances: jest.fn().mockResolvedValue(instances),
+      },
+      workloadSharding: {
+        ownsStrategyInstance: jest.fn((id: string) => id === 'instance-2'),
+      },
+    })
+    const processStrategyInstance = jest
+      .spyOn(service as any, 'processStrategyInstance')
+      .mockResolvedValue(undefined)
+
+    await service.generateSignals({ ...config, batchSize: 10 })
+
+    expect(processStrategyInstance).toHaveBeenCalledTimes(1)
+    expect(processStrategyInstance.mock.calls[0]?.[0]).toBe(instances[1])
+  })
+
+  it('keeps all running instances when sharding is disabled', async () => {
+    const instances = [
+      { id: 'instance-1' },
+      { id: 'instance-2' },
+    ]
+    const { service } = createService({
+      generatorRepository: {
+        findRunningInstances: jest.fn().mockResolvedValue(instances),
+      },
+    })
+    const processStrategyInstance = jest
+      .spyOn(service as any, 'processStrategyInstance')
+      .mockResolvedValue(undefined)
+
+    await service.generateSignals({ ...config, batchSize: 10 })
+
+    expect(processStrategyInstance).toHaveBeenCalledTimes(2)
   })
 
   it('uses the bound published snapshot script as the runtime execution source', async () => {

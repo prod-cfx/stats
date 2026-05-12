@@ -192,7 +192,7 @@ export interface RuntimeRequirements {
 
 export interface RiskPredicateDef {
   id: string
-  kind: 'atrMultipleStop' | 'atrMultipleTakeProfit' | 'rememberedLevelStop' | 'timeStopBars'
+  kind: 'atrMultipleStop' | 'atrMultipleTakeProfit' | 'rememberedLevelStop' | 'timeStopBars' | 'cooldownBars'
   params: Record<string, number | string | boolean>
   actions?: RiskPredicateActionDef[]
 }

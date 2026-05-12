@@ -107,6 +107,8 @@ export interface BuildDisplayLogicGraphInput {
   }
 }
 
+export type DisplayLogicGraphLocale = 'zh' | 'en'
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
@@ -880,5 +882,134 @@ export function buildDisplayLogicGraphFromCodegenSpec(input: BuildDisplayLogicGr
       ...blocks,
       executeBlock,
     ],
+  }
+}
+
+function localizeMarketTypeText(value: string): string {
+  switch (value) {
+    case '现货':
+      return 'Spot'
+    case '永续':
+      return 'Perpetual'
+    default:
+      return value
+  }
+}
+
+function localizeDisplayText(text: string): string {
+  let next = text
+
+  next = next
+    .replace(/^交易所:\s*/u, 'Exchange: ')
+    .replace(/^标的:\s*/u, 'Symbol: ')
+    .replace(/^周期:\s*/u, 'Timeframe: ')
+    .replace(/^仓位:\s*/u, 'Position: ')
+    .replace(/^标签:\s*/u, 'Tag: ')
+    .replace(/^执行信息待补充$/u, 'Execution info pending')
+    .replace(/^条件待补充$/u, 'Condition pending')
+    .replace(/^等待策略规则补充$/u, 'Waiting for strategy rule details')
+    .replace(/^不支持的条件，待补充$/u, 'Unsupported condition, pending details')
+    .replace(/^未支持的动作，待补充$/u, 'Unsupported action, pending details')
+    .replace(/^启动时执行$/u, 'Execute on start')
+    .replace(/^市场:\s*(.+)$/u, (_match, value: string) => `Market: ${localizeMarketTypeText(value)}`)
+
+  next = next
+    .replace(/风控:/gu, 'Risk:')
+    .replace(/开多/gu, 'Open long')
+    .replace(/开空/gu, 'Open short')
+    .replace(/平仓/gu, 'Close position')
+    .replace(/减仓/gu, 'Reduce position')
+
+  next = next
+    .replace(/上穿阈值/gu, 'crosses above threshold')
+    .replace(/下穿阈值/gu, 'crosses below threshold')
+    .replace(/高于或等于/gu, 'greater than or equal to')
+    .replace(/低于或等于/gu, 'less than or equal to')
+    .replace(/高于阈值/gu, 'above threshold')
+    .replace(/低于阈值/gu, 'below threshold')
+    .replace(/上穿/gu, 'crosses above')
+    .replace(/下穿/gu, 'crosses below')
+    .replace(/高于/gu, 'above')
+    .replace(/低于/gu, 'below')
+    .replace(/等于/gu, 'equals')
+
+  next = next
+    .replace(/相对前收盘/gu, 'vs previous close ')
+    .replace(/相对开仓均价盈利达到/gu, 'profit vs entry average price reaches')
+    .replace(/相对开仓均价/gu, 'vs entry average price ')
+    .replace(/相对持仓收益/gu, 'vs position P&L ')
+    .replace(/持仓收益率/gu, 'Position P&L rate')
+    .replace(/持仓收益达到/gu, 'Position P&L reaches')
+    .replace(/盈利达到/gu, 'Profit reaches')
+    .replace(/亏损达到/gu, 'Loss reaches')
+    .replace(/亏损条件/gu, 'Loss condition')
+    .replace(/止盈条件/gu, 'Take-profit condition')
+    .replace(/价格变化条件待补充/gu, 'Price-change condition pending')
+    .replace(/价格变化百分比/gu, 'Price-change percentage')
+    .replace(/上涨/gu, 'rises')
+    .replace(/下跌/gu, 'drops')
+    .replace(/ 内/gu, ' within')
+
+  next = next
+    .replace(/价格向上突破布林带上轨/gu, 'Price breaks above Bollinger upper band')
+    .replace(/价格向下突破布林带下轨/gu, 'Price breaks below Bollinger lower band')
+    .replace(/价格回到布林带中轨/gu, 'Price returns to Bollinger middle band')
+    .replace(/价格连续 ([\d.]+) 根 K 线在布林带外/gu, 'Price stays outside Bollinger Bands for $1 candles')
+    .replace(/布林带条件/gu, 'Bollinger condition')
+    .replace(/均线条件/gu, 'Moving-average condition')
+    .replace(/金叉/gu, 'golden cross')
+    .replace(/死叉/gu, 'death cross')
+
+  next = next
+    .replace(/最近 ([\d.]+) 根 K 线区间下 ([\d.]+)%/gu, 'lower $2% of the last $1-candle range')
+    .replace(/最近 ([\d.]+) 根 K 线区间上 ([\d.]+)%/gu, 'upper $2% of the last $1-candle range')
+    .replace(/最近区间下方/gu, 'lower part of the recent range')
+    .replace(/最近区间上方/gu, 'upper part of the recent range')
+    .replace(/突破最近 ([\d.]+) 根 K 线高点/gu, 'breaks the high of the last $1 candles')
+    .replace(/跌回最近 ([\d.]+) 根 K 线低点/gu, 'falls back below the low of the last $1 candles')
+    .replace(/突破缓冲 ([\d.]+)%/gu, 'breakout buffer $1%')
+    .replace(/突破近期高点/gu, 'breaks the recent high')
+    .replace(/跌回近期低点/gu, 'falls back below the recent low')
+
+  next = next
+    .replace(/价格在 ([A-Z]+[\d.]*) 上方/gu, 'Price is above $1')
+    .replace(/价格低于 ([A-Z]+[\d.]*)/gu, 'Price is below $1')
+    .replace(/成交量高于或等于过去 ([\d.]+) 根均量的 ([\d.]+) 倍/gu, 'Volume is at least $2x the last $1-candle average')
+    .replace(/成交量高于过去 ([\d.]+) 根均量的 ([\d.]+) 倍/gu, 'Volume is above $2x the last $1-candle average')
+    .replace(/成交量低于或等于过去 ([\d.]+) 根均量的 ([\d.]+) 倍/gu, 'Volume is at most $2x the last $1-candle average')
+    .replace(/成交量低于过去 ([\d.]+) 根均量的 ([\d.]+) 倍/gu, 'Volume is below $2x the last $1-candle average')
+    .replace(/成交量条件/gu, 'Volume condition')
+
+  next = next
+    .replace(/网格区间/gu, 'Grid range')
+    .replace(/级别/gu, 'timeframe')
+    .replace(/步长/gu, 'step')
+    .replace(/共 ([\d.]+) 格/gu, '$1 levels')
+    .replace(/倍 ATR 止损/gu, 'x ATR stop-loss')
+    .replace(/倍 ATR 止盈/gu, 'x ATR take-profit')
+    .replace(/ATR 止损/gu, 'ATR stop-loss')
+    .replace(/ATR 止盈/gu, 'ATR take-profit')
+    .replace(/记录位止损/gu, 'remembered-level stop-loss')
+    .replace(/跌破记录位 ([\w.-]+) 止损/gu, 'breaks remembered level $1 stop-loss')
+
+  return next.replace(/\s{2,}/gu, ' ').trim()
+}
+
+export function localizeDisplayLogicGraph(
+  graph: DisplayLogicGraph,
+  locale: DisplayLogicGraphLocale,
+): DisplayLogicGraph {
+  if (locale !== 'en') return graph
+  return {
+    blocks: graph.blocks.map(block => ({
+      ...block,
+      items: block.items.map(item => ({
+        ...item,
+        text: localizeDisplayText(item.text),
+        ...(item.kind === 'execute' && item.value
+          ? { value: item.value }
+          : {}),
+      })),
+    })),
   }
 }

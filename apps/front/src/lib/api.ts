@@ -74,10 +74,12 @@ export {
 } from './api-market-domain'
 export {
   createStrategyPlazaRunRequestId,
+  type ExistingStrategyPlazaRunResult,
   fetchStrategyPlazaTemplates,
   runStrategyPlazaTemplate,
   startStrategyPlazaEditSession,
   type StrategyPlazaEditSessionResponse,
+  type StrategyPlazaRunResult,
   type StrategyPlazaTemplate,
 } from './api-strategy-plaza-domain'
 export {
@@ -551,6 +553,7 @@ export interface RecoverAiQuantEditConversationPayload {
   conversationId?: string
   sessionId?: string
   source?: 'account-detail' | 'backtest' | 'plaza' | 'ai-quant'
+  locale?: 'zh' | 'en'
 }
 
 export interface LlmClarificationGateItem {
@@ -627,10 +630,12 @@ export interface LlmSemanticGraphValidationReport {
 
 export interface StartLlmCodegenSessionPayload {
   initialMessage?: string
+  locale?: 'zh' | 'en'
 }
 
 export interface ContinueLlmCodegenSessionPayload {
   message: string
+  locale?: 'zh' | 'en'
   confirmGenerate?: boolean
   confirmedCanonicalDigest?: string
   clarificationAnswers?: Record<string, string>

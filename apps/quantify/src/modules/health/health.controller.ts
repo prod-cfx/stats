@@ -22,7 +22,18 @@ export class HealthController {
             service: { type: 'string', example: 'backend' },
             status: { type: 'string', example: 'ok', enum: ['ok', 'degraded', 'down'] },
             timestamp: { type: 'string', example: '2025-11-15T14:00:00.000Z' },
+            shard: {
+              type: 'object',
+              properties: {
+                enabled: { type: 'boolean', example: false },
+                count: { type: 'number', example: 1 },
+                index: { type: 'number', example: 0 },
+                activeStrategies: { type: 'number', example: 0 },
+              },
+              required: ['enabled', 'count', 'index', 'activeStrategies'],
+            },
           },
+          required: ['service', 'status', 'timestamp', 'shard'],
         },
         message: {
           type: 'string',
@@ -35,4 +46,3 @@ export class HealthController {
     return this.healthService.getHealth()
   }
 }
-

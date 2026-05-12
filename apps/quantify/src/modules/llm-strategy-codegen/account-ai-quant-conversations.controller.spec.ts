@@ -193,6 +193,7 @@ describe('accountAiQuantConversationsController', () => {
         conversationId: 'conversation-1',
         sessionId: 'session-1',
         source: 'backtest',
+        locale: 'en',
       },
     )
 
@@ -202,6 +203,7 @@ describe('accountAiQuantConversationsController', () => {
       conversationId: 'conversation-1',
       sessionId: 'session-1',
       source: 'backtest',
+      locale: 'en',
     })
   })
 
@@ -229,5 +231,10 @@ describe('accountAiQuantConversationsController', () => {
       ]),
     )
     await expect(validateRecoverEditConversationDto({ strategyInstanceId: 'strategy-1' })).resolves.toEqual([])
+    await expect(validateRecoverEditConversationDto({ strategyInstanceId: 'strategy-1', locale: 'fr' as never })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ property: 'locale' }),
+      ]),
+    )
   })
 })

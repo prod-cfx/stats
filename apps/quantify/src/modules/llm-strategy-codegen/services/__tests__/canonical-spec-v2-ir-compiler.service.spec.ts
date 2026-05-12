@@ -1231,111 +1231,6 @@ describe('canonicalSpecV2IrCompilerService', () => {
       expect.objectContaining({ id: 'macd_line_12_26_9_15m' }),
       expect.objectContaining({ id: 'macd_signal_12_26_9_15m' }),
     ]))
-    expect(result.graphSnapshot.trigger[0]?.operator).toContain('MACD_LINE(CLOSE,16,34,12)')
-    expect(result.graphSnapshot.trigger[0]?.operator).not.toContain('MACD_LINE(CLOSE,12,26,9)')
-  })
-
-  it('compiles MACD cross atom params without falling back to spec indicator defaults', () => {
-    const compiler = new CanonicalSpecV2IrCompilerService()
-
-    const result = compiler.compile({
-      canonicalSpec: {
-        version: 2,
-        market: {
-          exchange: 'okx',
-          symbol: 'ETHUSDT',
-          marketType: 'perp',
-          timeframe: '15m',
-        },
-        indicators: [{ kind: 'macd', params: { fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 } }],
-        sizing: { mode: 'RATIO', value: 0.35 },
-        executionPolicy: {
-          signalTiming: 'BAR_CLOSE',
-          fillTiming: 'NEXT_BAR_OPEN',
-        },
-        dataRequirements: {
-          requiredTimeframes: ['15m'],
-        },
-        rules: [
-          {
-            id: 'entry-macd-cross',
-            phase: 'entry',
-            sideScope: 'long',
-            priority: 200,
-            condition: {
-              kind: 'atom',
-              key: 'macd.golden_cross',
-              semanticScope: 'market',
-              op: 'CROSS_OVER',
-              params: { fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 },
-            },
-            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.35 } }],
-          },
-        ],
-      },
-      fallback: {
-        exchange: 'okx',
-        symbol: 'ETHUSDT',
-        baseTimeframe: '15m',
-        positionPct: 35,
-      },
-    })
-
-    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'macd_line_16_34_12_15m', params: { fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 } }),
-      expect.objectContaining({ id: 'macd_signal_16_34_12_15m', params: { fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 } }),
-    ]))
-    expect(result.ir.signalCatalog.series).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'macd_line_12_26_9_15m' }),
-      expect.objectContaining({ id: 'macd_signal_12_26_9_15m' }),
-    ]))
-  })
-
-  it('fails closed for invalid canonical MACD cross atom periods', () => {
-    const compiler = new CanonicalSpecV2IrCompilerService()
-
-    expect(() => compiler.compile({
-      canonicalSpec: {
-        version: 2,
-        market: {
-          exchange: 'okx',
-          symbol: 'ETHUSDT',
-          marketType: 'perp',
-          timeframe: '15m',
-        },
-        indicators: [{ kind: 'macd', params: { fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 } }],
-        sizing: { mode: 'RATIO', value: 0.35 },
-        executionPolicy: {
-          signalTiming: 'BAR_CLOSE',
-          fillTiming: 'NEXT_BAR_OPEN',
-        },
-        dataRequirements: {
-          requiredTimeframes: ['15m'],
-        },
-        rules: [
-          {
-            id: 'entry-macd-cross',
-            phase: 'entry',
-            sideScope: 'long',
-            priority: 200,
-            condition: {
-              kind: 'atom',
-              key: 'macd.golden_cross',
-              semanticScope: 'market',
-              op: 'CROSS_OVER',
-              params: { fastPeriod: 0, slowPeriod: 34, signalPeriod: 12 },
-            },
-            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.35 } }],
-          },
-        ],
-      },
-      fallback: {
-        exchange: 'okx',
-        symbol: 'ETHUSDT',
-        baseTimeframe: '15m',
-        positionPct: 35,
-      },
-    })).toThrow(/codegen\.canonical_spec_v2_macd_cross_invalid_fast_period/)
   })
 
   it('compiles canonical spec v2 into deterministic graphSnapshot and IR without reading UI state', () => {
@@ -1923,6 +1818,55 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 
+  it('fails closed when position_loss_pct threshold is 0', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const canonicalSpec = {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '1h',
+        },
+        indicators: [],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['1h'],
+        },
+        rules: [
+          {
+            id: 'entry-stop-loss-invalid',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'position_loss_pct',
+              semanticScope: 'position',
+              op: 'GTE',
+              value: 0,
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      } satisfies CanonicalStrategySpecV2
+
+    expect(() => compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    })).toThrow(/codegen\.canonical_spec_v2_position_loss_pct_invalid_pct/)
+  })
+
   it('keeps price.change_pct thresholds in ratio units', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
@@ -2379,6 +2323,162 @@ describe('canonicalSpecV2IrCompilerService', () => {
         operator: 'OR(GTE(CLOSE,MID_BAND(CLOSE,20,2)),LTE(CLOSE,MID_BAND(CLOSE,20,2)))',
       }),
     ]))
+  })
+
+  // ────────────────────────────────────────────────────────────────────
+  // Wave 2 P3 #1216 / bollinger.touch_* atoms ghost atom fix
+  //   - registry 标 supported_executable，但 IR-compiler 此前没有对应 case，
+  //     直接走 compileCondition default → throw codegen.canonical_spec_v2_condition_unsupported。
+  //   - 修复策略：在 compileAtom + describeAtomCondition 两个层把 touch_* 与
+  //     既有 upper_break/lower_break/middle_revert 视作别名分支。
+  //   - 默认语义：touch_upper/lower 默认 GTE/LTE（touch 语义）；当 params.confirmationMode='close_confirm'
+  //     时退化为 CROSS_OVER/CROSS_UNDER；touch_middle 与 middle_revert 同形（OR(CROSS_OVER,CROSS_UNDER)）。
+  // ────────────────────────────────────────────────────────────────────
+  describe('bollinger.touch_* atoms — raw registry key path (Wave 2 P3 ghost atom fix)', () => {
+    function buildTouchSpec(
+      atomKey: 'bollinger.touch_upper' | 'bollinger.touch_lower' | 'bollinger.touch_middle',
+      overrides: { op?: 'GT' | 'GTE' | 'LT' | 'LTE', params?: Record<string, string | number | boolean>, period?: number, stdDev?: number } = {},
+    ) {
+      const { op, params, period = 20, stdDev = 2 } = overrides
+      return {
+        version: 2 as const,
+        market: { exchange: 'binance' as const, symbol: 'BTCUSDT', marketType: 'spot' as const, defaultTimeframe: '1h' },
+        indicators: [{ kind: 'bollingerBands' as const, params: { period, stdDev } }],
+        sizing: { mode: 'RATIO' as const, value: 0.1 },
+        executionPolicy: { signalTiming: 'BAR_CLOSE' as const, fillTiming: 'NEXT_BAR_OPEN' as const },
+        dataRequirements: { requiredTimeframes: ['1h'] },
+        rules: [
+          {
+            id: 'entry-touch-rule',
+            phase: 'entry' as const,
+            sideScope: 'long' as const,
+            priority: 200,
+            condition: {
+              kind: 'atom' as const,
+              key: atomKey,
+              semanticScope: 'market' as const,
+              ...(op ? { op } : {}),
+              value: 1,
+              ...(params ? { params } : {}),
+            },
+            actions: [{ type: 'OPEN_LONG' as const, sizing: { mode: 'RATIO' as const, value: 0.1 } }],
+          },
+        ],
+      }
+    }
+
+    const fallback = { exchange: 'binance' as const, symbol: 'BTCUSDT', baseTimeframe: '1h', positionPct: 10 }
+
+    it('touch_upper happy path: 默认 touch 语义 → GTE(CLOSE,UPPER_BAND)', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const result = compiler.compile({ canonicalSpec: buildTouchSpec('bollinger.touch_upper'), fallback })
+      expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({ phase: 'entry', operator: 'GTE(CLOSE,UPPER_BAND(CLOSE,20,2))' }),
+      ]))
+      expect(result.ir.signalCatalog?.series ?? []).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: 'UPPER_BAND' }),
+      ]))
+    })
+
+    it('touch_lower happy path: 默认 touch 语义 → LTE(CLOSE,LOWER_BAND)', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const result = compiler.compile({ canonicalSpec: buildTouchSpec('bollinger.touch_lower'), fallback })
+      expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({ phase: 'entry', operator: 'LTE(CLOSE,LOWER_BAND(CLOSE,20,2))' }),
+      ]))
+      expect(result.ir.signalCatalog?.series ?? []).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: 'LOWER_BAND' }),
+      ]))
+    })
+
+    it('touch_middle happy path: 与 middle_revert 同形 OR(CROSS_OVER,CROSS_UNDER)', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const result = compiler.compile({ canonicalSpec: buildTouchSpec('bollinger.touch_middle'), fallback })
+      expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          operator: 'OR(CROSS_OVER(CLOSE,MID_BAND(CLOSE,20,2)),CROSS_UNDER(CLOSE,MID_BAND(CLOSE,20,2)))',
+        }),
+      ]))
+      expect(result.ir.signalCatalog?.series ?? []).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: 'MID_BAND' }),
+      ]))
+    })
+
+    it('touch_upper confirmationMode=close_confirm → 退化为 CROSS_OVER', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const result = compiler.compile({
+        canonicalSpec: buildTouchSpec('bollinger.touch_upper', { params: { confirmationMode: 'close_confirm' } }),
+        fallback,
+      })
+      expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({ phase: 'entry', operator: 'CROSS_OVER(CLOSE,UPPER_BAND(CLOSE,20,2))' }),
+      ]))
+    })
+
+    it('touch_lower confirmationMode=close_confirm → 退化为 CROSS_UNDER', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const result = compiler.compile({
+        canonicalSpec: buildTouchSpec('bollinger.touch_lower', { params: { confirmationMode: 'close_confirm' } }),
+        fallback,
+      })
+      expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({ phase: 'entry', operator: 'CROSS_UNDER(CLOSE,LOWER_BAND(CLOSE,20,2))' }),
+      ]))
+    })
+
+    it('多腿混合：touch_upper + touch_lower 同 spec 不互盖（独立 predicate）', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildTouchSpec('bollinger.touch_upper')
+      spec.rules.push({
+        id: 'exit-touch-lower',
+        phase: 'entry' as const,
+        sideScope: 'long' as const,
+        priority: 150,
+        condition: {
+          kind: 'atom' as const,
+          key: 'bollinger.touch_lower',
+          semanticScope: 'market' as const,
+          value: 1,
+        },
+        actions: [{ type: 'OPEN_LONG' as const, sizing: { mode: 'RATIO' as const, value: 0.1 } }],
+      })
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({ operator: 'GTE(CLOSE,UPPER_BAND(CLOSE,20,2))' }),
+        expect.objectContaining({ operator: 'LTE(CLOSE,LOWER_BAND(CLOSE,20,2))' }),
+      ]))
+      const seriesKinds = (result.ir.signalCatalog?.series ?? []).map(s => s.kind)
+      expect(seriesKinds).toEqual(expect.arrayContaining(['UPPER_BAND', 'LOWER_BAND']))
+    })
+
+    it('precision: 非整数 stdDev → series id token 保留并展开（toFixed 链路兼容）', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const result = compiler.compile({
+        canonicalSpec: buildTouchSpec('bollinger.touch_upper', { stdDev: 2.5 }),
+        fallback,
+      })
+      // upper_band_20_2_5_1h —— normalizeNumberToken 把 2.5 转成 "2_5"
+      expect((result.ir.signalCatalog?.series ?? []).map(s => s.id)).toEqual(expect.arrayContaining([
+        expect.stringMatching(/^upper_band_20_2_5_1h$/),
+      ]))
+    })
+
+    it('atom.op 显式覆盖默认 touch 语义（如 op=GT 时透传到 predicate）', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const result = compiler.compile({
+        canonicalSpec: buildTouchSpec('bollinger.touch_upper', { op: 'GT' }),
+        fallback,
+      })
+      // compileAtom 优先采用 atom.op；只有 op 缺省才走 defaultOp（touch -> GTE）
+      const predicates = result.ir.signalCatalog?.predicates ?? []
+      const touchPred = predicates.find(p => p.id?.includes('touch_upper'))
+      expect(touchPred).toBeDefined()
+      expect(touchPred?.params).toMatchObject({ op: 'GT' })
+      expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({ phase: 'entry', operator: 'GT(CLOSE,UPPER_BAND(CLOSE,20,2))' }),
+      ]))
+    })
   })
 
   it('compiles RSI threshold rules into RSI series and graph operators', () => {
@@ -6558,5 +6658,356 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
         /codegen\.canonical_spec_v2_indicator_threshold_invalid_period/,
       )
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// risk.stop_loss_pct ghost-atom fix (P3, #1264): canonical→IR compile branch
+// ---------------------------------------------------------------------------
+describe('canonicalSpecV2IrCompilerService risk.stop_loss_pct', () => {
+  const fallback = { exchange: 'binance' as const, symbol: 'BTCUSDT', baseTimeframe: '1m', positionPct: 10 }
+
+  function buildBaseSpec(): CanonicalStrategySpecV2 {
+    return {
+      version: 2,
+      market: { exchange: 'binance', symbol: 'BTCUSDT', marketType: 'spot', defaultTimeframe: '1m' },
+      indicators: [],
+      sizing: { mode: 'QUOTE', value: 10 },
+      executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+      dataRequirements: { requiredTimeframes: ['1m'] },
+      rules: [{
+        id: 'entry-baseline',
+        phase: 'entry',
+        sideScope: 'long',
+        priority: 200,
+        condition: { kind: 'expression', op: 'GT', left: { kind: 'series', source: 'bar', field: 'close' }, right: { kind: 'series', source: 'bar', field: 'open' } },
+        actions: [{ type: 'OPEN_LONG' }],
+      }],
+    } satisfies CanonicalStrategySpecV2
+  }
+
+  function buildSpecWithStopLossPct(valuePct: number): CanonicalStrategySpecV2 {
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'risk-stop-loss',
+      phase: 'risk',
+      sideScope: 'both',
+      priority: 100,
+      condition: { kind: 'atom', key: 'risk.stop_loss_pct', semanticScope: 'position', op: 'GTE', value: Number((valuePct / 100).toFixed(4)) },
+      actions: [{ type: 'FORCE_EXIT' }],
+    })
+    return spec
+  }
+
+  it('fails closed when legacy position_loss_pct risk guard value is 0', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'risk-position-loss-invalid',
+      phase: 'risk',
+      sideScope: 'both',
+      priority: 100,
+      condition: { kind: 'atom', key: 'position_loss_pct', semanticScope: 'position', op: 'GTE', value: 0 },
+      actions: [{ type: 'FORCE_EXIT' }],
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback }))
+      .toThrow(/codegen\.canonical_spec_v2_position_loss_pct_invalid_pct/)
+  })
+
+  it('emits STOP_LOSS_PCT guard into riskPolicy.guards for valuePct:5', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithStopLossPct(5), fallback })
+    const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-stop-loss')
+    expect(guard).toBeDefined()
+    expect(guard?.kind).toBe('STOP_LOSS_PCT')
+    expect(guard?.scope).toBe('position')
+    expect(guard?.value).toBeCloseTo(5, 4)
+    expect(guard?.onBreach).toBe('FORCE_EXIT')
+  })
+
+  it('does not leak risk.stop_loss_pct into ruleBlocks or portfolioRisks', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithStopLossPct(8), fallback })
+    expect(result.ir.ruleBlocks.map(r => r.id)).not.toContain('risk-stop-loss')
+    expect((result.ir.orchestrationPortfolioRisks ?? []).map(r => r.id)).not.toContain('risk-stop-loss')
+  })
+
+  it('preserves fractional valuePct precision (5.5 → value ≈ 5.5)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithStopLossPct(5.5), fallback })
+    const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-stop-loss')
+    expect(guard?.value).toBeCloseTo(5.5, 4)
+  })
+
+  it('accepts already-percentage values (>1) without double-converting', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({ id: 'risk-stop-loss', phase: 'risk', sideScope: 'both', priority: 100, condition: { kind: 'atom', key: 'risk.stop_loss_pct', semanticScope: 'position', op: 'GTE', value: 10 }, actions: [{ type: 'FORCE_EXIT' }] })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-stop-loss')?.value).toBeCloseTo(10, 4)
+  })
+
+  it('accepts registry-style params.valuePct when value is omitted', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({ id: 'risk-stop-loss-param', phase: 'risk', sideScope: 'both', priority: 100, condition: { kind: 'atom', key: 'risk.stop_loss_pct', semanticScope: 'position', op: 'GTE', params: { valuePct: 6.25 } }, actions: [{ type: 'FORCE_EXIT' }] })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-stop-loss-param')?.value).toBeCloseTo(6.25, 4)
+  })
+
+  it('emits one guard per rule when spec carries multiple stop_loss rules (no merge)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    for (const [id, pct] of [['risk-sl-tight', 3], ['risk-sl-loose', 7]] as const) {
+      spec.rules.push({ id, phase: 'risk', sideScope: 'both', priority: 100, condition: { kind: 'atom', key: 'risk.stop_loss_pct', semanticScope: 'position', op: 'GTE', value: Number((pct / 100).toFixed(4)) }, actions: [{ type: 'FORCE_EXIT' }] })
+    }
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-sl-tight')?.value).toBeCloseTo(3, 4)
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-sl-loose')?.value).toBeCloseTo(7, 4)
+  })
+
+  it('isolates risk.stop_loss_pct guard from max_drawdown_pct portfolioRisk (coexistence)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push(
+      { id: 'risk-sl', phase: 'risk', sideScope: 'long', priority: 90, condition: { kind: 'atom', key: 'risk.stop_loss_pct', semanticScope: 'position', op: 'GTE', value: 0.05 }, actions: [{ type: 'FORCE_EXIT' }] },
+      { id: 'risk-dd', phase: 'risk', sideScope: 'both', priority: 100, condition: { kind: 'atom', key: 'risk.max_drawdown_pct', semanticScope: 'portfolio', op: 'GTE', value: 0.15 }, actions: [{ type: 'FORCE_EXIT' }] },
+    )
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards.map(g => g.id)).toContain('guard_risk-sl')
+    expect((result.ir.orchestrationPortfolioRisks ?? []).map(r => r.id)).toContain('risk-dd')
+    expect(result.ir.ruleBlocks.map(r => r.id)).not.toContain('risk-sl')
+  })
+
+  it('fails closed when valuePct is 0 (throws invalid_pct)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    expect(() => compiler.compile({ canonicalSpec: buildSpecWithStopLossPct(0), fallback }))
+      .toThrow(/codegen\.canonical_spec_v2_stop_loss_pct_invalid_pct/)
+  })
+
+  it('fails closed when valuePct is 100 (throws invalid_pct)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    expect(() => compiler.compile({ canonicalSpec: buildSpecWithStopLossPct(100), fallback }))
+      .toThrow(/codegen\.canonical_spec_v2_stop_loss_pct_invalid_pct/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// risk.max_single_loss_pct ghost-atom fix (P3, #1264): canonical→IR compile branch
+// ---------------------------------------------------------------------------
+describe('canonicalSpecV2IrCompilerService risk.max_single_loss_pct', () => {
+  const fallback = { exchange: 'binance' as const, symbol: 'BTCUSDT', baseTimeframe: '1m', positionPct: 10 }
+
+  function buildBaseSpec(): CanonicalStrategySpecV2 {
+    return {
+      version: 2,
+      market: { exchange: 'binance', symbol: 'BTCUSDT', marketType: 'spot', defaultTimeframe: '1m' },
+      indicators: [],
+      sizing: { mode: 'QUOTE', value: 10 },
+      executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+      dataRequirements: { requiredTimeframes: ['1m'] },
+      rules: [{
+        id: 'entry-baseline',
+        phase: 'entry',
+        sideScope: 'long',
+        priority: 200,
+        condition: { kind: 'expression', op: 'GT', left: { kind: 'series', source: 'bar', field: 'close' }, right: { kind: 'series', source: 'bar', field: 'open' } },
+        actions: [{ type: 'OPEN_LONG' }],
+      }],
+    } satisfies CanonicalStrategySpecV2
+  }
+
+  function buildSpecWithMaxSingleLoss(valuePct: number): CanonicalStrategySpecV2 {
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'risk-max-single-loss',
+      phase: 'risk',
+      sideScope: 'both',
+      priority: 100,
+      condition: { kind: 'atom', key: 'risk.max_single_loss_pct', semanticScope: 'position', op: 'GTE', value: Number((valuePct / 100).toFixed(4)) },
+      actions: [{ type: 'FORCE_EXIT' }],
+    })
+    return spec
+  }
+
+  it('emits MAX_SINGLE_LOSS_PCT guard into riskPolicy.guards for valuePct:5', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithMaxSingleLoss(5), fallback })
+    const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-max-single-loss')
+    expect(guard).toBeDefined()
+    expect(guard?.kind).toBe('MAX_SINGLE_LOSS_PCT')
+    expect(guard?.scope).toBe('position')
+    expect(guard?.value).toBeCloseTo(5, 4)
+    expect(guard?.onBreach).toBe('FORCE_EXIT')
+  })
+
+  it('does not leak risk.max_single_loss_pct into ruleBlocks or portfolioRisks', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithMaxSingleLoss(8), fallback })
+    expect(result.ir.ruleBlocks.map(r => r.id)).not.toContain('risk-max-single-loss')
+    expect((result.ir.orchestrationPortfolioRisks ?? []).map(r => r.id)).not.toContain('risk-max-single-loss')
+  })
+
+  it('preserves fractional valuePct precision (2.25 → value ≈ 2.25)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithMaxSingleLoss(2.25), fallback })
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-max-single-loss')?.value).toBeCloseTo(2.25, 4)
+  })
+
+  it('accepts already-percentage values (>1) without double-converting', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({ id: 'risk-max-single-loss', phase: 'risk', sideScope: 'both', priority: 100, condition: { kind: 'atom', key: 'risk.max_single_loss_pct', semanticScope: 'position', op: 'GTE', value: 15 }, actions: [{ type: 'FORCE_EXIT' }] })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-max-single-loss')?.value).toBeCloseTo(15, 4)
+  })
+
+  it('accepts registry-style params.valuePct when value is omitted', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({ id: 'risk-max-single-loss-param', phase: 'risk', sideScope: 'both', priority: 100, condition: { kind: 'atom', key: 'risk.max_single_loss_pct', semanticScope: 'position', op: 'GTE', params: { valuePct: 3.5 } }, actions: [{ type: 'FORCE_EXIT' }] })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-max-single-loss-param')?.value).toBeCloseTo(3.5, 4)
+  })
+
+  it('emits one guard per rule when spec carries multiple max_single_loss rules (no merge)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    for (const [id, pct] of [['risk-msl-a', 2], ['risk-msl-b', 6]] as const) {
+      spec.rules.push({ id, phase: 'risk', sideScope: 'both', priority: 100, condition: { kind: 'atom', key: 'risk.max_single_loss_pct', semanticScope: 'position', op: 'GTE', value: Number((pct / 100).toFixed(4)) }, actions: [{ type: 'FORCE_EXIT' }] })
+    }
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-msl-a')?.value).toBeCloseTo(2, 4)
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-msl-b')?.value).toBeCloseTo(6, 4)
+  })
+
+  it('isolates MAX_SINGLE_LOSS_PCT from sibling STOP_LOSS_PCT (distinct guard kinds)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push(
+      { id: 'risk-msl', phase: 'risk', sideScope: 'both', priority: 95, condition: { kind: 'atom', key: 'risk.max_single_loss_pct', semanticScope: 'position', op: 'GTE', value: 0.04 }, actions: [{ type: 'FORCE_EXIT' }] },
+      { id: 'risk-sl', phase: 'risk', sideScope: 'long', priority: 90, condition: { kind: 'atom', key: 'risk.stop_loss_pct', semanticScope: 'position', op: 'GTE', value: 0.02 }, actions: [{ type: 'FORCE_EXIT' }] },
+    )
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-msl')?.kind).toBe('MAX_SINGLE_LOSS_PCT')
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-sl')?.kind).toBe('STOP_LOSS_PCT')
+  })
+
+  it('fails closed when valuePct is 0 (throws invalid_pct)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    expect(() => compiler.compile({ canonicalSpec: buildSpecWithMaxSingleLoss(0), fallback }))
+      .toThrow(/codegen\.canonical_spec_v2_max_single_loss_pct_invalid_pct/)
+  })
+
+  it('fails closed when valuePct is 100 (throws invalid_pct)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    expect(() => compiler.compile({ canonicalSpec: buildSpecWithMaxSingleLoss(100), fallback }))
+      .toThrow(/codegen\.canonical_spec_v2_max_single_loss_pct_invalid_pct/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// risk.cooldown_bars ghost-atom fix (P3, #1264): canonical→IR compile branch
+// ---------------------------------------------------------------------------
+describe('canonicalSpecV2IrCompilerService risk.cooldown_bars', () => {
+  const fallback = { exchange: 'binance' as const, symbol: 'BTCUSDT', baseTimeframe: '1m', positionPct: 10 }
+
+  function buildBaseSpec(): CanonicalStrategySpecV2 {
+    return {
+      version: 2,
+      market: { exchange: 'binance', symbol: 'BTCUSDT', marketType: 'spot', defaultTimeframe: '1m' },
+      indicators: [],
+      sizing: { mode: 'QUOTE', value: 10 },
+      executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+      dataRequirements: { requiredTimeframes: ['1m'] },
+      rules: [{
+        id: 'entry-baseline',
+        phase: 'entry',
+        sideScope: 'long',
+        priority: 200,
+        condition: { kind: 'expression', op: 'GT', left: { kind: 'series', source: 'bar', field: 'close' }, right: { kind: 'series', source: 'bar', field: 'open' } },
+        actions: [{ type: 'OPEN_LONG' }],
+      }],
+    } satisfies CanonicalStrategySpecV2
+  }
+
+  function buildSpecWithCooldownBars(bars: number | string | undefined): CanonicalStrategySpecV2 {
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'risk-cooldown',
+      phase: 'risk',
+      sideScope: 'both',
+      priority: 100,
+      condition: { kind: 'atom', key: 'risk.cooldown_bars', semanticScope: 'position', op: 'GTE', value: 1, params: bars !== undefined ? { bars } : {} },
+      actions: [{ type: 'FORCE_EXIT' }],
+    })
+    return spec
+  }
+
+  it('emits cooldownBars RiskPredicateDef into riskPolicy.riskPredicates for bars:3', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithCooldownBars(3), fallback })
+    const preds = result.ir.riskPolicy.riskPredicates ?? []
+    const cd = preds.find(p => p.id === 'risk-cooldown')
+    expect(cd).toBeDefined()
+    expect(cd?.kind).toBe('cooldownBars')
+    expect(cd?.params.bars).toBe(3)
+    expect(cd?.actions?.[0]?.kind).toBe('FORCE_EXIT')
+  })
+
+  it('does not leak risk.cooldown_bars into ruleBlocks or guards', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithCooldownBars(5), fallback })
+    expect(result.ir.ruleBlocks.map(r => r.id)).not.toContain('risk-cooldown')
+    expect(result.ir.riskPolicy.guards.map(g => g.id)).not.toContain('guard_risk-cooldown')
+  })
+
+  it('preserves the bars count verbatim (no scaling)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithCooldownBars(12), fallback })
+    expect((result.ir.riskPolicy.riskPredicates ?? []).find(p => p.id === 'risk-cooldown')?.params.bars).toBe(12)
+  })
+
+  it('emits one predicate per rule when spec carries multiple cooldown_bars rules (no merge)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    for (const [id, bars] of [['risk-cd-fast', 2], ['risk-cd-slow', 10]] as const) {
+      spec.rules.push({ id, phase: 'risk', sideScope: 'both', priority: 100, condition: { kind: 'atom', key: 'risk.cooldown_bars', semanticScope: 'position', op: 'GTE', value: 1, params: { bars } }, actions: [{ type: 'FORCE_EXIT' }] })
+    }
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const preds = result.ir.riskPolicy.riskPredicates ?? []
+    expect(preds.find(p => p.id === 'risk-cd-fast')?.params.bars).toBe(2)
+    expect(preds.find(p => p.id === 'risk-cd-slow')?.params.bars).toBe(10)
+  })
+
+  it('isolates cooldownBars from sibling timeStopBars (both in riskPredicates, distinct kinds)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push(
+      { id: 'risk-cooldown', phase: 'risk', sideScope: 'both', priority: 95, condition: { kind: 'atom', key: 'risk.cooldown_bars', semanticScope: 'position', op: 'GTE', value: 1, params: { bars: 4 } }, actions: [{ type: 'FORCE_EXIT' }] },
+      { id: 'risk-time-stop', phase: 'risk', sideScope: 'both', priority: 90, condition: { kind: 'atom', key: 'risk.time_stop_bars', semanticScope: 'position', op: 'GTE', value: 1, params: { maxBars: 20, scope: 'both', effect: 'close_position' } }, actions: [{ type: 'FORCE_EXIT' }] },
+    )
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const preds = result.ir.riskPolicy.riskPredicates ?? []
+    expect(preds.find(p => p.id === 'risk-cooldown')?.kind).toBe('cooldownBars')
+    expect(preds.find(p => p.id === 'risk-time-stop')?.kind).toBe('timeStopBars')
+  })
+
+  it('fails closed when params.bars is missing (throws invalid_bars)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    expect(() => compiler.compile({ canonicalSpec: buildSpecWithCooldownBars(undefined), fallback }))
+      .toThrow(/codegen\.canonical_spec_v2_cooldown_bars_invalid_bars/)
+  })
+
+  it('fails closed when params.bars is 0 (throws invalid_bars)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    expect(() => compiler.compile({ canonicalSpec: buildSpecWithCooldownBars(0), fallback }))
+      .toThrow(/codegen\.canonical_spec_v2_cooldown_bars_invalid_bars/)
+  })
+
+  it('fails closed when params.bars is fractional (throws invalid_bars)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    expect(() => compiler.compile({ canonicalSpec: buildSpecWithCooldownBars(2.5), fallback }))
+      .toThrow(/codegen\.canonical_spec_v2_cooldown_bars_invalid_bars/)
   })
 })

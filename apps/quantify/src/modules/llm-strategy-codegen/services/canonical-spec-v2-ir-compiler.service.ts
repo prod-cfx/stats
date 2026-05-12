@@ -14,7 +14,6 @@ import type {
   SeriesDef,
   LevelSetDef,
 } from '../types/canonical-strategy-ir'
-import { LIQUIDITY_SWEEP_DEFAULT_RECLAIM_BARS } from '../types/canonical-strategy-ir'
 import type {
   CanonicalConditionAtom,
   CanonicalConditionGroup,
@@ -37,13 +36,14 @@ import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
 import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
+import { SizingEvidenceMissingException } from '../exceptions/sizing-evidence-missing.exception'
+import { LIQUIDITY_SWEEP_DEFAULT_RECLAIM_BARS } from '../types/canonical-strategy-ir'
+import { ACTIONABLE_RULE_ACTION_TYPES } from '../types/canonical-strategy-spec-v2'
 import { CanonicalSpecV2DigestService } from './canonical-spec-v2-digest.service'
 import { CanonicalStrategyIrCanonicalizerService } from './canonical-strategy-ir-canonicalizer.service'
 import { CanonicalStrategyIrValidatorService } from './canonical-strategy-ir-validator.service'
 import { CodegenGraphSnapshotService } from './codegen-graph-snapshot.service'
 import { SpecDescBuilderService } from './spec-desc-builder.service'
-import { SizingEvidenceMissingException } from '../exceptions/sizing-evidence-missing.exception'
-import { ACTIONABLE_RULE_ACTION_TYPES } from '../types/canonical-strategy-spec-v2'
 
 interface CompileCanonicalSpecV2ToIrInput {
   canonicalSpec: CanonicalStrategySpecV2
@@ -968,6 +968,8 @@ export class CanonicalSpecV2IrCompilerService {
             positionHandlingOnDeactivate: scope.positionHandlingOnDeactivate,
             orderHandlingOnDeactivate: scope.orderHandlingOnDeactivate,
           }
+        default:
+          throw new Error('codegen.orchestration_scope_unsupported')
       }
     })
   }
@@ -1393,8 +1395,9 @@ export class CanonicalSpecV2IrCompilerService {
 
       case 'ma.golden_cross':
       case 'ma.death_cross': {
-        const fastRef = this.ensureMovingAverageSeries(context, context.movingAverage.fast)
-        const slowRef = this.ensureMovingAverageSeries(context, context.movingAverage.slow)
+        const movingAverage = this.resolveMovingAverageAtomConfig(atom, context.movingAverage)
+        const fastRef = this.ensureMovingAverageSeries(context, movingAverage.kind, movingAverage.fast)
+        const slowRef = this.ensureMovingAverageSeries(context, movingAverage.kind, movingAverage.slow)
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}`,
@@ -1599,21 +1602,35 @@ export class CanonicalSpecV2IrCompilerService {
       }
 
       case 'bollinger.upper_break':
-      case 'bollinger.lower_break': {
+      case 'bollinger.lower_break':
+      case 'bollinger.touch_upper':
+      case 'bollinger.touch_lower': {
         context.runtimeRequirements.helpers.add('bollinger')
-        const bandRef = atom.key === 'bollinger.upper_break'
+        const isUpper = atom.key === 'bollinger.upper_break' || atom.key === 'bollinger.touch_upper'
+        const bandRef = isUpper
           ? this.ensureBollingerSeries(context, 'UPPER_BAND')
           : this.ensureBollingerSeries(context, 'LOWER_BAND')
+        const confirmationMode = typeof atom.params?.confirmationMode === 'string'
+          ? atom.params.confirmationMode
+          : undefined
+        // touch_* 默认走 touch 语义（GTE/LTE）；显式确认模式（如 close_confirm）走 CROSS_*。
+        // upper_break/lower_break 保持原有 CROSS_* 默认，兼容 builder 既有路径。
+        const isTouchKey = atom.key === 'bollinger.touch_upper' || atom.key === 'bollinger.touch_lower'
+        const usesTouchSemantics = isTouchKey && (confirmationMode === undefined || confirmationMode === 'touch')
+        const defaultOp = isUpper
+          ? (usesTouchSemantics ? 'GTE' : 'CROSS_OVER')
+          : (usesTouchSemantics ? 'LTE' : 'CROSS_UNDER')
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}`,
           'compare',
           [closeRef, bandRef],
-          { op: atom.op ?? (atom.key === 'bollinger.upper_break' ? 'CROSS_OVER' : 'CROSS_UNDER') },
+          { op: atom.op ?? defaultOp },
         )
       }
 
-      case 'bollinger.middle_revert': {
+      case 'bollinger.middle_revert':
+      case 'bollinger.touch_middle': {
         context.runtimeRequirements.helpers.add('bollinger')
         const midRef = this.ensureBollingerSeries(context, 'MID_BAND')
         const over = this.upsertPredicate(context.predicateMap, `${seed}_middle_over`, 'CROSS_OVER', [closeRef, midRef])
@@ -1654,7 +1671,11 @@ export class CanonicalSpecV2IrCompilerService {
           })
         }
         const threshold = -Math.abs(
-          this.normalizePositionPnlPctThreshold(this.readNumber([atom.value], 0)),
+          this.normalizeRiskGuardPctThreshold(
+            this.readNumber([atom.value, atom.params?.valuePct], Number.NaN),
+            'canonical_spec_v2_position_loss_pct_invalid_pct',
+            seed,
+          ),
         )
         const thresholdRef = this.ensureConstSeries(
           context,
@@ -2016,14 +2037,14 @@ export class CanonicalSpecV2IrCompilerService {
     return id
   }
 
-  private ensureMovingAverageSeries(context: CompileContext, period: number): string {
+  private ensureMovingAverageSeries(context: CompileContext, kind: 'EMA' | 'SMA', period: number): string {
     const closeRef = this.ensurePriceSeries(context, 'close')
-    const prefix = context.movingAverage.kind.toLowerCase()
+    const prefix = kind.toLowerCase()
     const id = `${prefix}_${period}_${context.timeframe}`
     if (!context.seriesMap.has(id)) {
       context.seriesMap.set(id, {
         id,
-        kind: context.movingAverage.kind,
+        kind,
         inputs: [closeRef],
         params: { period },
       })
@@ -2050,6 +2071,33 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:${indicator}`)
+  }
+
+  private resolveMovingAverageAtomConfig(
+    atom: CanonicalConditionAtom,
+    fallback: CompileContext['movingAverage'],
+  ): CompileContext['movingAverage'] {
+    const rawIndicator = this.readStringParam(atom.params?.indicator)?.toLowerCase()
+    const kind = rawIndicator === 'sma' || rawIndicator === 'ma'
+      ? 'SMA'
+      : (rawIndicator === 'ema' ? 'EMA' : fallback.kind)
+    const fast = this.readNumber([
+      atom.params?.fast,
+      atom.params?.short,
+      atom.params?.fastPeriod,
+    ], fallback.fast)
+    const slow = this.readNumber([
+      atom.params?.slow,
+      atom.params?.long,
+      atom.params?.slowPeriod,
+      atom.params?.period,
+    ], fallback.slow)
+
+    return {
+      kind,
+      fast,
+      slow: slow > fast ? slow : fast + 14,
+    }
   }
 
   private ensureRsiSeries(context: CompileContext, period: number): string {
@@ -2385,6 +2433,35 @@ export class CanonicalSpecV2IrCompilerService {
       }
     }
 
+    // risk.cooldown_bars ghost-atom fix (P3, #1264).
+    //
+    // The registry declares risk.cooldown_bars as executableRisk('risk.cooldown_bars', ['bars']).
+    // canonical-spec-builder has no case for it, so rules reach tryCompileRiskPredicate directly.
+    // Previously there was no matching branch → rule fell through to compileConditionAtom → throw
+    // condition_unsupported (ghost atom).
+    //
+    // Shape contract: phase:'risk', condition.kind:'atom', condition.key:'risk.cooldown_bars',
+    // condition.params.bars: positive integer (bars to suppress new entries after fill/exit).
+    //
+    // Fail-closed: non-integer, ≤ 0, or missing bars → throw a distinct invalid_bars error.
+    // Silent return-null is forbidden here because cooldown_bars is a safety-affecting parameter;
+    // falling through to condition_unsupported would mask the contract violation.
+    if (rule.condition.key === 'risk.cooldown_bars') {
+      const barsRaw = (rule.condition.params ?? {}).bars
+      const bars = typeof barsRaw === 'number' ? barsRaw : Number(barsRaw)
+      if (!Number.isInteger(bars) || bars <= 0) {
+        throw new Error(
+          `codegen.canonical_spec_v2_cooldown_bars_invalid_bars:${rule.id}:${barsRaw}`,
+        )
+      }
+      return {
+        id: rule.id,
+        kind: 'cooldownBars',
+        params: { bars },
+        actions: this.compileRiskPredicateActions(rule),
+      }
+    }
+
     if (rule.condition.key === 'risk.remembered_level_stop') {
       const levelKey = typeof rule.condition.params?.levelKey === 'string' && rule.condition.params.levelKey.trim().length > 0
         ? rule.condition.params.levelKey.trim()
@@ -2505,18 +2582,27 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     const threshold = this.readNumber([rule.condition.value], 0)
+    const percentRiskThreshold = this.readNumber(
+      [rule.condition.value, rule.condition.params?.valuePct],
+      Number.NaN,
+    )
     const onBreach = rule.actions.some(action => action.type === 'BLOCK_NEW_ENTRY')
       ? 'BLOCK_NEW_ENTRY'
       : 'FORCE_EXIT'
     const hasReduceAction = rule.actions.some(action => action.type === 'REDUCE_LONG' || action.type === 'REDUCE_SHORT')
 
     if (rule.condition.key === 'position_loss_pct') {
+      const thresholdPct = this.normalizeRiskGuardPctThreshold(
+        percentRiskThreshold,
+        'canonical_spec_v2_position_loss_pct_invalid_pct',
+        rule.id,
+      )
       return {
         id: `guard_${rule.id}`,
         kind: 'STOP_LOSS_PCT',
         scope: 'position',
         appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
-        value: threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold,
+        value: thresholdPct,
         onBreach,
       }
     }
@@ -2541,6 +2627,60 @@ export class CanonicalSpecV2IrCompilerService {
         scope: 'position',
         appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
         value: threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold,
+        onBreach,
+      }
+    }
+
+    // risk.stop_loss_pct ghost-atom fix (P3, #1264).
+    //
+    // canonical-spec-builder rewrites this atom into `position_loss_pct` via
+    // buildPercentRiskCanonicalRule, so normal builder paths are already covered.
+    // However spec authors and contract tests can inject `risk.stop_loss_pct`
+    // directly; without an explicit branch the rule falls through
+    // compileConditionAtom and throws condition_unsupported.
+    //
+    // Boundary semantics mirror the existing position_loss_pct case:
+    //   rawValue ∈ (0, 1] → fraction form → * 100 with toFixed(4)
+    //   rawValue > 1      → already percentage, passed through verbatim
+    //
+    // Fail-closed: thresholdPct ∉ (0, 100) → throw. Silent skip is forbidden:
+    // a skipped stop-loss guard is indistinguishable from "no stop-loss" at runtime.
+    if (rule.condition.key === 'risk.stop_loss_pct') {
+      const thresholdPct = this.normalizeRiskGuardPctThreshold(
+        percentRiskThreshold,
+        'canonical_spec_v2_stop_loss_pct_invalid_pct',
+        rule.id,
+      )
+      return {
+        id: `guard_${rule.id}`,
+        kind: 'STOP_LOSS_PCT',
+        scope: 'position',
+        appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
+        value: thresholdPct,
+        onBreach,
+      }
+    }
+
+    // risk.max_single_loss_pct ghost-atom fix (P3, #1264).
+    //
+    // canonical-spec-builder emits phase:'risk', condition.key:'risk.max_single_loss_pct',
+    // condition.value = valuePct/100 (fraction). The MAX_SINGLE_LOSS_PCT RiskGuard.kind is
+    // already declared in canonical-strategy-ir.ts but no compile branch existed —
+    // leaving the atom as a ghost (rule fell through to condition_unsupported).
+    //
+    // Boundary semantics and fail-closed contract mirror risk.stop_loss_pct above.
+    if (rule.condition.key === 'risk.max_single_loss_pct') {
+      const thresholdPct = this.normalizeRiskGuardPctThreshold(
+        percentRiskThreshold,
+        'canonical_spec_v2_max_single_loss_pct_invalid_pct',
+        rule.id,
+      )
+      return {
+        id: `guard_${rule.id}`,
+        kind: 'MAX_SINGLE_LOSS_PCT',
+        scope: 'position',
+        appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
+        value: thresholdPct,
         onBreach,
       }
     }
@@ -3533,7 +3673,8 @@ export class CanonicalSpecV2IrCompilerService {
       case 'ma.golden_cross':
       case 'ma.death_cross': {
         const operator = condition.key === 'ma.golden_cross' ? 'CROSS_OVER' : 'CROSS_UNDER'
-        return `${operator}(${config.movingAverage.kind}(CLOSE,${config.movingAverage.fast}),${config.movingAverage.kind}(CLOSE,${config.movingAverage.slow}))`
+        const movingAverage = this.resolveMovingAverageAtomConfig(condition, config.movingAverage)
+        return `${operator}(${movingAverage.kind}(CLOSE,${movingAverage.fast}),${movingAverage.kind}(CLOSE,${movingAverage.slow}))`
       }
 
       case 'rsi.threshold_lte':
@@ -3579,16 +3720,29 @@ export class CanonicalSpecV2IrCompilerService {
         return `GTE(POSITION_PNL_PCT,${this.normalizePositionPnlPctThreshold(this.readNumber([condition.value], 0))})`
 
       case 'bollinger.upper_break':
-        return condition.op === 'GTE'
-          ? `GTE(CLOSE,UPPER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
-          : `CROSS_OVER(CLOSE,UPPER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
+      case 'bollinger.touch_upper': {
+        const confirmationMode = typeof condition.params?.confirmationMode === 'string'
+          ? condition.params.confirmationMode
+          : undefined
+        const isTouchKey = condition.key === 'bollinger.touch_upper'
+        const usesTouchSemantics = isTouchKey && (confirmationMode === undefined || confirmationMode === 'touch')
+        const operator = condition.op ?? (usesTouchSemantics ? 'GTE' : 'CROSS_OVER')
+        return this.describeBollingerBandOperator(operator, 'UPPER_BAND', config)
+      }
 
       case 'bollinger.lower_break':
-        return condition.op === 'LTE'
-          ? `LTE(CLOSE,LOWER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
-          : `CROSS_UNDER(CLOSE,LOWER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
+      case 'bollinger.touch_lower': {
+        const confirmationMode = typeof condition.params?.confirmationMode === 'string'
+          ? condition.params.confirmationMode
+          : undefined
+        const isTouchKey = condition.key === 'bollinger.touch_lower'
+        const usesTouchSemantics = isTouchKey && (confirmationMode === undefined || confirmationMode === 'touch')
+        const operator = condition.op ?? (usesTouchSemantics ? 'LTE' : 'CROSS_UNDER')
+        return this.describeBollingerBandOperator(operator, 'LOWER_BAND', config)
+      }
 
       case 'bollinger.middle_revert':
+      case 'bollinger.touch_middle':
         return `OR(CROSS_OVER(CLOSE,MID_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev})),CROSS_UNDER(CLOSE,MID_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev})))`
 
       case 'bollinger.bars_outside': {
@@ -3740,6 +3894,14 @@ export class CanonicalSpecV2IrCompilerService {
     return 'GTE'
   }
 
+  private describeBollingerBandOperator(
+    operator: NonNullable<CanonicalConditionAtom['op']>,
+    band: 'UPPER_BAND' | 'LOWER_BAND',
+    config: { bollinger: CompileContext['bollinger'] },
+  ): string {
+    return `${operator}(CLOSE,${band}(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
+  }
+
   private isConditionAtom(node: CanonicalConditionNode): node is CanonicalConditionAtom {
     return node.kind === 'atom'
   }
@@ -3779,6 +3941,14 @@ export class CanonicalSpecV2IrCompilerService {
   private normalizePositionPnlPctThreshold(value: number): number {
     if (!Number.isFinite(value)) return value
     return Math.abs(value) <= 1 ? value * 100 : value
+  }
+
+  private normalizeRiskGuardPctThreshold(value: number, errorCode: string, ruleId: string): number {
+    const thresholdPct = value <= 1 ? Number((value * 100).toFixed(4)) : value
+    if (!Number.isFinite(thresholdPct) || thresholdPct <= 0 || thresholdPct >= 100) {
+      throw new Error(`codegen.${errorCode}:${ruleId}:${thresholdPct}`)
+    }
+    return thresholdPct
   }
 
   private normalizeRangePositionThreshold(value: number): number {

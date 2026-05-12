@@ -13,8 +13,11 @@ import type {
   UnifiedTicker,
 } from '../core/types'
 import type { OkxConfig } from '../factory/account-store'
+import type { RateLimiterRegistry } from '../services/rate-limiter-registry.service'
+import type { Dispatcher } from 'undici'
 import { createHmac } from 'node:crypto'
-import { AuthError, ExchangeError } from '../core/errors'
+import { MessageBusMetricsService } from '@/modules/message-bus/metrics/message-bus-metrics.service'
+import { AuthError, ExchangeError, RateLimitError } from '../core/errors'
 import { BaseCexClient } from './base-cex-client'
 
 type HttpMethod = 'GET' | 'POST' | 'DELETE'
@@ -102,7 +105,27 @@ interface OkxInstrumentSpecItem {
   minSz?: string
 }
 
+interface OkxInstrumentSpecCacheEntry {
+  expiresAt: number
+  promise: Promise<OkxInstrumentSpecItem | null>
+}
+
+interface OkxClientOptions {
+  dispatcher?: Dispatcher
+  rateLimiter?: Pick<RateLimiterRegistry, 'acquire'>
+  tokenBucketEnabled?: boolean
+  retryEnabled?: boolean
+  retryMaxAttempts?: number
+  retryBaseDelayMs?: number
+  sleep?: (delayMs: number) => Promise<void>
+  metrics?: Pick<MessageBusMetricsService, 'incOkxRateLimit'>
+}
+
 export class OkxClient extends BaseCexClient {
+  private static readonly instrumentSpecCache = new Map<string, OkxInstrumentSpecCacheEntry>()
+
+  private static readonly instrumentSpecCacheTtlMs = 24 * 60 * 60 * 1000
+
   private readonly apiKey: string
 
   private readonly secret: string
@@ -111,17 +134,20 @@ export class OkxClient extends BaseCexClient {
 
   private readonly useUnifiedAccount: boolean
 
-  private readonly instrumentSpecCache = new Map<string, Promise<OkxInstrumentSpecItem | null>>()
-
   constructor(
     marketType: MarketType,
     private readonly config: OkxConfig,
+    private readonly options: OkxClientOptions = {},
   ) {
-    super('https://www.okx.com', marketType)
+    super('https://www.okx.com', marketType, options.dispatcher)
     this.apiKey = config.apiKey
     this.secret = config.secret
     this.passphrase = config.passphrase
     this.useUnifiedAccount = config.useUnifiedAccount ?? true
+  }
+
+  static clearInstrumentSpecCacheForTesting(): void {
+    OkxClient.instrumentSpecCache.clear()
   }
 
   async init(): Promise<void> {
@@ -565,10 +591,34 @@ export class OkxClient extends BaseCexClient {
     return { url, headers, body: bodyString || undefined }
   }
 
-  protected mapError(status: number, data: unknown): ExchangeError {
+  protected override async beforeRequest(context: { isPrivate: boolean }): Promise<void> {
+    if (!this.options.tokenBucketEnabled || !this.options.rateLimiter) return
+
+    await this.options.rateLimiter.acquire(
+      context.isPrivate ? `okx:${this.apiKeyFingerprint}:private` : 'okx:public',
+      context.isPrivate
+        ? { capacity: 50, refillIntervalMs: 2_000 }
+        : { capacity: 15, refillIntervalMs: 2_000 },
+    )
+  }
+
+  private get apiKeyFingerprint(): string {
+    return createHmac('sha256', 'okx-token-bucket-fingerprint')
+      .update(this.apiKey)
+      .digest('hex')
+      .slice(0, 12)
+  }
+
+  protected override mapError(status: number, data: unknown): ExchangeError {
     if (typeof data === 'object' && data !== null && 'code' in data && 'msg' in data) {
       const record = data as { code: string; msg: string }
       const { code, msg } = record
+
+      if (status === 429 || code === '50011') {
+        if (status === 429) this.options.metrics?.incOkxRateLimit('429')
+        if (code === '50011') this.options.metrics?.incOkxRateLimit('50011')
+        return new RateLimitError(`OKX rate limit exceeded: ${msg}`, data)
+      }
 
       // API Key 无效或不存在
       if (code === '50113') {
@@ -614,6 +664,34 @@ export class OkxClient extends BaseCexClient {
     }
 
     return super.mapError(status, data)
+  }
+
+  protected override mapSuccessfulResponseError(data: unknown): ExchangeError | undefined {
+    if (typeof data === 'object' && data !== null && 'code' in data && 'msg' in data) {
+      const record = data as { code: string; msg: string }
+      if (record.code === '50011') {
+        this.options.metrics?.incOkxRateLimit('50011')
+        return new RateLimitError(`OKX rate limit exceeded: ${record.msg}`, data)
+      }
+    }
+
+    return undefined
+  }
+
+  protected override getRetryPolicy(): { maxAttempts: number; baseDelayMs: number; maxDelayMs: number } {
+    return {
+      maxAttempts: this.options.retryEnabled ? this.options.retryMaxAttempts ?? 3 : 1,
+      baseDelayMs: this.options.retryBaseDelayMs ?? 250,
+      maxDelayMs: 2_000,
+    }
+  }
+
+  protected override shouldRetryRequest(error: ExchangeError): boolean {
+    return this.options.retryEnabled === true && error instanceof RateLimitError
+  }
+
+  protected override sleepBeforeRetry(delayMs: number): Promise<void> {
+    return this.options.sleep?.(delayMs) ?? super.sleepBeforeRetry(delayMs)
   }
 
   private buildQuery(params: Record<string, unknown>): string {
@@ -889,9 +967,14 @@ export class OkxClient extends BaseCexClient {
   }
 
   private async fetchInstrumentSpec(instId: string): Promise<OkxInstrumentSpecItem | null> {
-    const cached = this.instrumentSpecCache.get(instId)
+    const cacheKey = this.getInstrumentSpecCacheKey(instId)
+    const cached = OkxClient.instrumentSpecCache.get(cacheKey)
+    const now = Date.now()
+    if (cached && cached.expiresAt > now) {
+      return cached.promise
+    }
     if (cached) {
-      return cached
+      OkxClient.instrumentSpecCache.delete(cacheKey)
     }
 
     const instType = this.marketType === 'spot' ? 'SPOT' : 'SWAP'
@@ -903,7 +986,14 @@ export class OkxClient extends BaseCexClient {
       return res.data[0] ?? null
     })
 
-    this.instrumentSpecCache.set(instId, promise)
+    OkxClient.instrumentSpecCache.set(cacheKey, {
+      expiresAt: now + OkxClient.instrumentSpecCacheTtlMs,
+      promise,
+    })
     return promise
+  }
+
+  private getInstrumentSpecCacheKey(instId: string): string {
+    return `${this.marketType}:${instId}`
   }
 }

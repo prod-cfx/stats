@@ -149,17 +149,17 @@ export function BacktestSummaryCard({
       : t('aiQuant.messages.backtestDrawdownFail')
   const effectiveDeployLabel = deployLabel
     ?? (deploymentState === 'running'
-      ? t('aiQuant.deploy.running', { defaultValue: '已部署运行' })
+      ? t('aiQuant.deployRunning', { defaultValue: 'Running' })
       : deploymentState === 'stopped'
-        ? t('aiQuant.deploy.redeploy', { defaultValue: '重新部署' })
+        ? t('aiQuant.deployRedeploy', { defaultValue: 'Redeploy' })
         : deploymentState === 'unknown'
-          ? t('aiQuant.deploy.pending', { defaultValue: '部署状态待确认' })
+          ? t('aiQuant.deployPending', { defaultValue: 'Deployment status pending' })
           : t('aiQuant.deploy'))
   const deployDisabled = !canDeploy || deploymentState === 'running' || deploymentState === 'unknown'
   const showDeployBlockMessage =
     !isConfigChangedRecovery && !canDeploy && deploymentState !== 'running' && deploymentState !== 'unknown'
   const deploymentHint = deploymentState === 'unknown'
-    ? t('aiQuant.deploy.pendingHint', { defaultValue: '正在确认部署状态，确认前暂不能重复部署。' })
+    ? t('aiQuant.deployPendingHint', { defaultValue: 'Deployment status is being confirmed. You cannot deploy again until it is verified.' })
     : null
 
   return (
@@ -222,7 +222,7 @@ export function BacktestSummaryCard({
             onClick={onViewRunningStrategy}
             className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
           >
-            {t('aiQuant.deploy.viewRunning', { defaultValue: '查看运行策略' })}
+            {t('aiQuant.deployViewRunning', { defaultValue: 'View running strategy' })}
           </button>
         )}
 

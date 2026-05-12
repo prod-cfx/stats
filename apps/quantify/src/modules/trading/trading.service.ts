@@ -11,7 +11,9 @@ import type {
   UnifiedTicker,
 } from './core/types'
 import type { BinanceConfig, ExchangeAccountConfig, ExchangeAccountStore, HyperliquidConfig, OkxConfig } from './factory/account-store'
-import { Inject, Injectable } from '@nestjs/common'
+import { Inject, Injectable, Optional } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
+import { MarketDataReadGateway, type GatewayQuote } from '@/modules/market-data/services/market-data-read.gateway'
 import { AuthError, ExchangeError } from './core/errors'
 import {
   ExchangeOperationFailedException,
@@ -30,6 +32,12 @@ export class TradingService {
     private readonly exchangeFactory: ExchangeFactory,
     @Inject('ExchangeAccountStore')
     private readonly accountStore: ExchangeAccountStore,
+    @Optional()
+    @Inject(ConfigService)
+    private readonly configService?: Pick<ConfigService, 'get'>,
+    @Optional()
+    @Inject(MarketDataReadGateway)
+    private readonly marketDataReadGateway?: Pick<MarketDataReadGateway, 'getLatestQuote'>,
   ) {}
 
   async placeOrder(
@@ -101,6 +109,46 @@ export class TradingService {
         reason: (error as Error).message,
       })
     }
+  }
+
+  private async getSharedTicker(exchangeId: ExchangeId, symbol: string): Promise<UnifiedTicker | null> {
+    if (exchangeId !== 'okx' || !this.isPublicDataSharedEnabled() || !this.marketDataReadGateway) {
+      return null
+    }
+
+    try {
+      return this.toUnifiedTicker(symbol, await this.marketDataReadGateway.getLatestQuote(symbol))
+    }
+    catch {
+      return null
+    }
+  }
+
+  private isPublicDataSharedEnabled(): boolean {
+    const direct = this.configService?.get<boolean>('featureFlags.publicDataShared')
+    if (typeof direct === 'boolean') return direct
+
+    const featureFlags = this.configService?.get<{ publicDataShared?: boolean }>('featureFlags')
+    return featureFlags?.publicDataShared ?? false
+  }
+
+  private toUnifiedTicker(symbol: string, quote: GatewayQuote): UnifiedTicker {
+    return {
+      symbol,
+      last: Number.parseFloat(quote.lastPrice),
+      bid: this.parseNullableNumber(quote.bidPrice),
+      ask: this.parseNullableNumber(quote.askPrice),
+      high: this.parseNullableNumber(quote.highPrice),
+      low: this.parseNullableNumber(quote.lowPrice),
+      volume: this.parseNullableNumber(quote.volume),
+      raw: quote,
+    }
+  }
+
+  private parseNullableNumber(value: string | null): number | undefined {
+    if (value === null) return undefined
+    const parsed = Number.parseFloat(value)
+    return Number.isFinite(parsed) ? parsed : undefined
   }
 
   async getOpenOrders(
@@ -214,6 +262,11 @@ export class TradingService {
       throw new TradingAccountNotFoundException({ userId, exchangeId })
     }
     this.ensureMarketTypeSupported(exchangeId, marketType, account)
+
+    const sharedTicker = await this.getSharedTicker(exchangeId, symbol)
+    if (sharedTicker) {
+      return sharedTicker
+    }
 
     const client = this.exchangeFactory.createClient(exchangeId, marketType, account)
 

@@ -59,12 +59,13 @@ describe('strategyPlazaProxyController', () => {
   it('starts edit sessions with backend-controlled user/auth and no body payload', async () => {
     const { controller, service } = createController()
 
-    await controller.editSession('user-1', 'Bearer token-1', 'bollinger-reversion')
+    await controller.editSession('user-1', 'Bearer token-1', 'bollinger-reversion', 'en')
 
     expect(service.startStrategyPlazaEditSession).toHaveBeenCalledWith(
       'user-1',
       'Bearer token-1',
       'bollinger-reversion',
+      { locale: 'en' },
     )
   })
 })

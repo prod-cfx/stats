@@ -18,6 +18,7 @@ import type {
   UserStrategyAccount,
   StrategyInstanceRiskProfile,
 } from '@/prisma/prisma.types'
+import type { OkxPrivateOrderEvent } from '@/modules/trading/events/okx-private-ws.events'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { LedgerEntryType, MARKET_TIMEFRAMES } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 TransactionHost
@@ -40,6 +41,7 @@ import { resolveStrategyFundingFromStrategyAccount } from '@/modules/trading/cor
 import { normalizeLedgerSymbol } from '@/modules/trading/core/symbol-normalizer'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingExecutionService } from '@/modules/trading-execution/services/trading-execution.service'
+import { OKX_PRIVATE_ORDER_EVENT } from '@/modules/trading/events/okx-private-ws.events'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingService } from '@/modules/trading/trading.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -148,6 +150,76 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     await this.txEvents.withAfterCommit(async () => {
       await this.executeSignalForSubscribedUsers(event.signalId, config)
     })
+  }
+
+  @OnEvent(OKX_PRIVATE_ORDER_EVENT, { async: true })
+  async handleOkxPrivateOrderEvent(event: OkxPrivateOrderEvent) {
+    await this.txEvents.withAfterCommit(async () => {
+      await this.processOkxPrivateOrderEvent(event)
+    })
+  }
+
+  private async processOkxPrivateOrderEvent(event: OkxPrivateOrderEvent) {
+    try {
+      const execution = await this.executionRepository.findPendingByOkxOrderIds({
+        orderId: event.orderId,
+        clientOrderId: event.clientOrderId,
+        exchangeAccountId: event.exchangeAccountId,
+      })
+
+      if (!execution) {
+        this.logger.warn(
+          `OKX private order event ${event.orderId} (${event.state}) has no pending signal execution match`,
+        )
+        return
+      }
+
+      const metadata = this.buildOkxPrivateOrderMetadata(event)
+      if (this.isFilledOkxPrivateOrderEvent(event)) {
+        const executedPrice = event.avgPrice ?? event.fillPrice
+        await this.executionRepository.markPendingStage(execution.id, 'RECONCILE_REQUIRED', {
+          ...metadata,
+          ledgerApplied: false,
+          reconcileRequired: true,
+          reason: 'OKX_PRIVATE_WS_FILLED_REQUIRES_LEDGER_RECONCILIATION',
+          orderResponse: {
+            id: event.orderId,
+            status: event.state,
+            amount: event.filledSize,
+            filled: event.filledSize,
+            ...(typeof executedPrice === 'number' ? { price: executedPrice } : {}),
+            createdAt: event.updatedAt.toISOString(),
+            raw: {
+              ...event.raw,
+              ...(typeof event.fee === 'number' ? { fee: String(event.fee) } : {}),
+              ...(event.feeCurrency ? { feeCcy: event.feeCurrency } : {}),
+            },
+          },
+          providerFill: {
+            executedPrice,
+            executedQuantity: event.filledSize,
+            fee: event.fee,
+            feeCurrency: event.feeCurrency,
+            tradeId: event.tradeId,
+            executedAt: event.updatedAt.toISOString(),
+          },
+        })
+        return
+      }
+
+      if (this.isFailedOkxPrivateOrderEvent(event)) {
+        await this.executionRepository.markPendingFailed(execution.id, `OKX_ORDER_${event.state.toUpperCase()}`)
+        return
+      }
+
+      await this.executionRepository.markPendingStage(execution.id, 'ORDER_ACKED', metadata)
+    }
+    catch (error) {
+      this.logger.error(
+        `Failed to consume OKX private order event ${event.orderId}: ${(error as Error).message}`,
+        (error as Error).stack,
+      )
+    }
   }
 
   private getConfig(): StrategySignalsRuntimeConfig {
@@ -1797,6 +1869,25 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     return Object.fromEntries(
       Object.entries(value).filter(([, item]) => item !== undefined),
     ) as Prisma.JsonObject
+  }
+
+  private isFilledOkxPrivateOrderEvent(event: OkxPrivateOrderEvent): boolean {
+    const state = event.state.toLowerCase()
+    return (state === 'filled' || this.isFailedOkxPrivateOrderEvent(event)) && (event.filledSize ?? 0) > 0
+  }
+
+  private isFailedOkxPrivateOrderEvent(event: OkxPrivateOrderEvent): boolean {
+    return ['canceled', 'cancelled', 'rejected'].includes(event.state.toLowerCase())
+  }
+
+  private buildOkxPrivateOrderMetadata(event: OkxPrivateOrderEvent): Prisma.JsonObject {
+    return {
+      providerOrderId: event.orderId,
+      providerStatus: event.state,
+      exchangeAccountId: event.exchangeAccountId,
+      source: 'okx_private_ws',
+      raw: this.toJsonObject(event.raw),
+    }
   }
 
   private buildExecutionStageMetadata(stages: ExecutionStage[]): Prisma.JsonObject {

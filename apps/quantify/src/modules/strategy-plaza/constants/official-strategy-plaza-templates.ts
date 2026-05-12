@@ -55,6 +55,18 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
         exitRuleExample: 'MA6 下穿 MA48',
         riskRuleExample: 'OKX 模拟盘，仓位 35%，2 倍杠杆',
       },
+      locales: {
+        en: {
+          initialMessage: 'Create an MA 6/48 crossover trend-following strategy on OKX Demo BTC-USDT-SWAP perpetual, 15m timeframe. Entry rule: open long when MA6 crosses above MA48. Exit rule: close long when MA6 crosses below MA48. Risk controls: 35% position, 2x leverage, 2% stop loss, 0.6% take profit.',
+          guideConfig: {
+            symbolExample: 'BTC-USDT-SWAP',
+            timeframeExample: '15m',
+            entryRuleExample: 'MA6 crosses above MA48',
+            exitRuleExample: 'MA6 crosses below MA48',
+            riskRuleExample: 'OKX Demo, 35% position, 2x leverage',
+          },
+        },
+      },
     },
     displayMetrics: metricsFor('ma-cross'),
   },
@@ -88,6 +100,18 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
         entryRuleExample: '价格触及布林带下轨后出现回归信号',
         exitRuleExample: '价格回归布林带中轨附近',
         riskRuleExample: 'OKX 模拟盘，仓位 35%，2 倍杠杆',
+      },
+      locales: {
+        en: {
+          initialMessage: 'Create a Bollinger mean reversion strategy on OKX Demo ETH-USDT-SWAP perpetual, 15m timeframe. Entry rule: open long when price touches the lower Bollinger Band using period 30 and 0.9 standard deviation, with a reversion signal. Exit rule: close long when price returns near the middle band. Risk controls: 35% position, 2x leverage, 3% stop loss, 0.5% take profit.',
+          guideConfig: {
+            symbolExample: 'ETH-USDT-SWAP',
+            timeframeExample: '15m',
+            entryRuleExample: 'price touches the lower Bollinger Band and shows reversion',
+            exitRuleExample: 'price returns near the Bollinger middle band',
+            riskRuleExample: 'OKX Demo, 35% position, 2x leverage',
+          },
+        },
       },
     },
     displayMetrics: metricsFor('bollinger-reversion'),
@@ -123,6 +147,18 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
         exitRuleExample: '价格回到区间上沿卖出',
         riskRuleExample: 'OKX 模拟盘现货，单次仓位 25%，不使用杠杆',
       },
+      locales: {
+        en: {
+          initialMessage: 'Create a range buy/sell strategy on OKX Demo BTC-USDT spot, 15m timeframe. Entry rule: buy when price is in the lower 20% of the most recent 36-candle range. Exit rule: sell when price returns to the upper 55% of the range or profit reaches 0.45%. Risk controls: 25% position per trade, no leverage, 3% stop loss.',
+          guideConfig: {
+            symbolExample: 'BTC-USDT',
+            timeframeExample: '15m',
+            entryRuleExample: 'buy when price enters the lower part of the recent candle range',
+            exitRuleExample: 'sell when price returns to the upper range',
+            riskRuleExample: 'OKX Demo spot, 25% position per trade, no leverage',
+          },
+        },
+      },
     },
     displayMetrics: metricsFor('grid-range'),
   },
@@ -156,6 +192,18 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
         entryRuleExample: 'RSI14 从 38 下方向上穿回 38',
         exitRuleExample: 'RSI14 高于 64',
         riskRuleExample: 'OKX 模拟盘现货，仓位 25%，不使用杠杆',
+      },
+      locales: {
+        en: {
+          initialMessage: 'Create an RSI reversal strategy on OKX Demo ETH-USDT spot, 15m timeframe. Entry rule: buy when RSI14 crosses back above 38 from below. Exit rule: sell when RSI14 is above 64. Risk controls: 25% position, no leverage, 5% stop loss, 0.5% take profit.',
+          guideConfig: {
+            symbolExample: 'ETH-USDT',
+            timeframeExample: '15m',
+            entryRuleExample: 'RSI14 crosses back above 38 from below',
+            exitRuleExample: 'RSI14 is above 64',
+            riskRuleExample: 'OKX Demo spot, 25% position, no leverage',
+          },
+        },
       },
     },
     displayMetrics: metricsFor('rsi-reversal'),
@@ -191,6 +239,18 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
         exitRuleExample: '价格跌回突破区间',
         riskRuleExample: 'OKX 模拟盘，仓位 25%，2 倍杠杆',
       },
+      locales: {
+        en: {
+          initialMessage: 'Create a breakout follow strategy on OKX Demo BTC-USDT-SWAP perpetual, 15m timeframe. Entry rule: open long when price breaks above the highest high of the most recent 24 candles with a 0.25% breakout buffer. Exit rule: close long when price falls back below the low of the most recent 12 candles. Risk controls: 25% position, 2x leverage, 3% stop loss, 0.6% take profit.',
+          guideConfig: {
+            symbolExample: 'BTC-USDT-SWAP',
+            timeframeExample: '15m',
+            entryRuleExample: 'price breaks above the recent high',
+            exitRuleExample: 'price falls back into the breakout range',
+            riskRuleExample: 'OKX Demo, 25% position, 2x leverage',
+          },
+        },
+      },
     },
     displayMetrics: metricsFor('breakout-follow'),
   },
@@ -224,6 +284,18 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
         entryRuleExample: 'MACD DIF 上穿 DEA',
         exitRuleExample: 'MACD DIF 下穿 DEA',
         riskRuleExample: 'OKX 模拟盘，仓位 35%，2 倍杠杆',
+      },
+      locales: {
+        en: {
+          initialMessage: 'Create a MACD 16/34/12 crossover strategy on OKX Demo ETH-USDT-SWAP perpetual, 15m timeframe. Entry rule: open long when MACD DIF crosses above DEA. Exit rule: close long when MACD DIF crosses below DEA. Risk controls: 35% position, 2x leverage, 2% stop loss, 0.5% take profit.',
+          guideConfig: {
+            symbolExample: 'ETH-USDT-SWAP',
+            timeframeExample: '15m',
+            entryRuleExample: 'MACD DIF crosses above DEA',
+            exitRuleExample: 'MACD DIF crosses below DEA',
+            riskRuleExample: 'OKX Demo, 35% position, 2x leverage',
+          },
+        },
       },
     },
     displayMetrics: metricsFor('macd-cross'),

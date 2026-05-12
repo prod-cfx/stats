@@ -24,6 +24,10 @@ export interface OkxConfig {
   isTestnet?: boolean
 }
 
+export interface OkxAccountConfig extends OkxConfig {
+  exchangeAccountId: string
+}
+
 export interface HyperliquidConfig {
   mainWalletAddress: string
   agentPrivateKey: string
@@ -37,6 +41,7 @@ export type ExchangeAccountConfig =
 
 export interface ExchangeAccountStore {
   getAccountConfig: (userId: string, exchangeId: ExchangeId) => Promise<ExchangeAccountConfig | null>
+  listOkxAccountConfigs: () => Promise<OkxAccountConfig[]>
   /**
    * 按账户 ID 精确获取配置（用于 LLM 订阅等需要指定具体账户的场景）。
    * @param accountId 账户 ID

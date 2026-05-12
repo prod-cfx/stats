@@ -45,6 +45,7 @@ const config: StrategySignalsRuntimeConfig = {
   cooldownMinutes: 15,
   batchSize: 1,
   maxSymbolsPerStrategy: 1,
+  spread: { enabled: false, windowSeconds: 300 },
   debug: { enabled: false, maxScriptLength: 1000, maxValueLength: 200 },
   ai: {
     maxAttempts: 1,
