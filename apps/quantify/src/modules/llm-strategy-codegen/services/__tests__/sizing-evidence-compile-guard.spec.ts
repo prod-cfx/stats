@@ -75,6 +75,18 @@ describe('CanonicalSpecV2IrCompilerService — sizing evidence compile-time guar
         compiler.compile({ canonicalSpec: buildSpecWithoutSizing('OPEN_SHORT'), fallback: FALLBACK_ZERO }),
       ).toThrow(SizingEvidenceMissingException)
     })
+
+    it('when spec.sizing is absent and fallbackPositionPct is 0 — ADD_LONG (#1232 Round 1 M4)', () => {
+      expect(() =>
+        compiler.compile({ canonicalSpec: buildSpecWithoutSizing('ADD_LONG'), fallback: FALLBACK_ZERO }),
+      ).toThrow(SizingEvidenceMissingException)
+    })
+
+    it('when spec.sizing is absent and fallbackPositionPct is 0 — ADD_SHORT (#1232 Round 1 M4)', () => {
+      expect(() =>
+        compiler.compile({ canonicalSpec: buildSpecWithoutSizing('ADD_SHORT'), fallback: FALLBACK_ZERO }),
+      ).toThrow(SizingEvidenceMissingException)
+    })
   })
 
   describe('does NOT throw', () => {
