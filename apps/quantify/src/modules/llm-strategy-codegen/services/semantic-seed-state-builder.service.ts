@@ -1,6 +1,6 @@
 import { createHash } from 'crypto'
 
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable, Logger, Optional } from '@nestjs/common'
 
 import type {
   MarketInstrumentQuote,
@@ -105,6 +105,7 @@ export class SemanticSeedStateBuilderService {
     private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
     private readonly semanticAtomRegistry: SemanticAtomRegistryService = new SemanticAtomRegistryService(),
     private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
+    @Optional()
     evidenceInvariantMode?: EvidenceInvariantMode,
   ) {
     // Default to 'drop' in all environments; callers can inject 'throw' for
