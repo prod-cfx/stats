@@ -72,3 +72,4 @@ apps/quantify/generated/
 
 /release/
 .omx/
+.claude/worktrees/
