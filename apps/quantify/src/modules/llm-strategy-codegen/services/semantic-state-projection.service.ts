@@ -1307,7 +1307,8 @@ export class SemanticStateProjectionService {
       if (trigger.phase !== 'entry' && trigger.phase !== 'exit') continue
       const groupId = this.readTriggerContractGroupId(trigger)
       if (!groupId) continue
-      const bucketKey = [trigger.phase, trigger.sideScope ?? '', groupId].join('|')
+      // 使用 NUL 字节分隔，避免 groupId 本身含 '|' 时产生键碰撞
+      const bucketKey = [trigger.phase, trigger.sideScope ?? '', groupId].join('\x00')
       const bucket = buckets.get(bucketKey) ?? []
       bucket.push(trigger)
       buckets.set(bucketKey, bucket)
@@ -1354,6 +1355,7 @@ export class SemanticStateProjectionService {
   }
 
   private readTriggerContractJoin(trigger: SemanticState['triggers'][number]): 'AND' | 'OR' | null {
+    // 同一 trigger 的所有 contracts 共享同一 join；取第一个有值的即可。
     for (const contract of trigger.contracts ?? []) {
       const value = this.readString(contract.params?.join)
       if (value === 'AND' || value === 'OR') return value
@@ -1373,6 +1375,8 @@ export class SemanticStateProjectionService {
       ? line.slice(phaseLabel.length + 1)
       : line
     // 行内可能附加 action 后缀（如 "时做多开仓"），剥离得到纯条件
+    // NOTE: 此 regex 必须与 formatActionSuffix 的所有返回词保持同步。
+    // 新增 action 词时请同步更新此处。
     return head
       .replace(/\s?时(?:做多开仓|做空开仓|双向开仓|买入|平多|平空|双向平仓|卖出平仓)$/u, '')
       .trim()
