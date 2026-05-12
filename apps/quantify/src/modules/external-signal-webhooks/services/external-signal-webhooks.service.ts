@@ -225,7 +225,7 @@ export class ExternalSignalWebhooksService {
     }
     catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        const existingEvent = await this.repo.findEventByDedupeKey(dedupeKey)
+        const existingEvent = await this.repo.findEventByDedupeKey(subscription.id, dedupeKey)
         if (existingEvent) {
           await this.repo.createAudit({
             subscriptionId: subscription.id,

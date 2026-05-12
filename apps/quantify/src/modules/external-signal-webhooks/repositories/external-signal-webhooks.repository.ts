@@ -4,6 +4,7 @@ import { OutboxStatus } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires value import with emitDecoratorMetadata
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
+import { normalizeRequestedCode } from '@/modules/market-data/utils/market-symbol-code.util'
 
 export interface CreateWebhookSignalEventInput {
   subscriptionId: string
@@ -82,6 +83,63 @@ export class ExternalSignalWebhooksRepository {
     })
   }
 
+  async findAcceptedEventForRuntime(eventId: string) {
+    return this.txHost.tx.webhookSignalEvent.findUnique({
+      where: { id: eventId },
+      select: {
+        id: true,
+        subscriptionId: true,
+        strategyInstanceId: true,
+        provider: true,
+        signalId: true,
+        dedupeKey: true,
+        payload: true,
+        signatureStatus: true,
+        receivedAt: true,
+        subscription: {
+          select: {
+            id: true,
+            status: true,
+            userId: true,
+            strategyInstanceId: true,
+            signalId: true,
+          },
+        },
+        strategyInstance: {
+          select: {
+            id: true,
+            strategyTemplateId: true,
+            status: true,
+            mode: true,
+            strategyTemplate: {
+              select: {
+                id: true,
+                status: true,
+              },
+            },
+          },
+        },
+      },
+    })
+  }
+
+  async findSymbolByCode(code: string) {
+    return this.txHost.tx.symbol.findUnique({
+      where: { code: normalizeRequestedCode(code) },
+    })
+  }
+
+  async findTradingSignalById(id: string) {
+    return this.txHost.tx.tradingSignal.findUnique({
+      where: { id },
+      select: { id: true },
+    })
+  }
+
+  async createExternalSignalTradingSignal(data: Prisma.TradingSignalCreateInput) {
+    return this.txHost.tx.tradingSignal.create({ data })
+  }
+
   async rotateSubscription(subscriptionId: string, secretCiphertext: string): Promise<WebhookSignalSubscription> {
     return this.txHost.tx.webhookSignalSubscription.update({
       where: { id: subscriptionId },
@@ -102,7 +160,7 @@ export class ExternalSignalWebhooksRepository {
         signalId: data.signalId,
         dedupeKey: data.dedupeKey,
         payload: data.payload,
-        headers: data.headers,
+        sanitizedHeaders: data.headers,
         rawBodySha256: data.rawBodySha256,
         signatureStatus: 'ACCEPTED',
         sourceTimestamp: data.sourceTimestamp ?? null,
@@ -110,9 +168,9 @@ export class ExternalSignalWebhooksRepository {
     })
   }
 
-  async findEventByDedupeKey(dedupeKey: string): Promise<{ id: string; receivedAt: Date } | null> {
+  async findEventByDedupeKey(subscriptionId: string, dedupeKey: string): Promise<{ id: string; receivedAt: Date } | null> {
     return this.txHost.tx.webhookSignalEvent.findUnique({
-      where: { dedupeKey },
+      where: { subscriptionId_dedupeKey: { subscriptionId, dedupeKey } },
       select: { id: true, receivedAt: true },
     })
   }
@@ -135,7 +193,7 @@ export class ExternalSignalWebhooksRepository {
         dedupeKey: data.dedupeKey ?? null,
         signatureStatus: data.signatureStatus,
         reason: data.reason ?? null,
-        requestHeaders: data.requestHeaders ?? undefined,
+        requestHeadersRedacted: data.requestHeaders ?? undefined,
         rawBodySha256: data.rawBodySha256 ?? null,
         remoteIp: data.remoteIp ?? null,
         userAgent: data.userAgent ?? null,
