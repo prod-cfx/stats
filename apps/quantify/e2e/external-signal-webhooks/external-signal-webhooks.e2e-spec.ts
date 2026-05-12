@@ -123,6 +123,13 @@ describe('External signal webhooks (E2E)', () => {
     expect(created.webhookUrl).toBe(`/api/v1/webhook/strategy/${instanceId}/signal`)
 
     await client
+      .post(`account/ai-quant/strategies/${instanceId}/external-signal-subscriptions`)
+      .set('authorization', `Bearer ${bearerForUser(ownerId)}`)
+      .set('x-user-id', ownerId)
+      .send({ provider: 'tradingview', signalId: '   ' })
+      .expect(400)
+
+    await client
       .get(`account/ai-quant/strategies/${instanceId}/external-signal-subscriptions`)
       .set('authorization', `Bearer ${bearerForUser(otherUserId)}`)
       .set('x-user-id', otherUserId)
