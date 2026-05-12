@@ -106,6 +106,17 @@ function resolvePreferredDeployLeverage(conversation: ConversationState | null |
     ?? readPositiveFiniteNumber(conversation?.publishedSnapshotDeploymentExecutionDefaults?.leverage)
 }
 
+function resolveLocalizedRuntimeErrorMessage(
+  error: unknown,
+  fallback: string,
+  lng: 'zh' | 'en',
+): string {
+  const message = error instanceof Error && error.message.trim() ? error.message.trim() : ''
+  if (!message) return fallback
+  if (lng === 'en' && /[\u4E00-\u9FFF]/.test(message)) return fallback
+  return message
+}
+
 type CapabilityState = 'loading' | 'ready' | 'failed'
 type ConversationSyncState = 'idle' | 'loading' | 'ready' | 'error'
 type DeploymentDetailStatus = 'idle' | 'loading' | 'ready' | 'not_found' | 'error'
@@ -865,9 +876,13 @@ export function AiQuantPageClient({
     } catch (error) {
       if (!isMountedRef.current) return
       setDeploymentGuardErrorMessage(
-        error instanceof Error && error.message.trim()
-          ? error.message
-          : '无法确认策略最新状态，请稍后重试。',
+        resolveLocalizedRuntimeErrorMessage(
+          error,
+          lng === 'en'
+            ? 'Unable to confirm the latest strategy status. Please try again later.'
+            : '无法确认策略最新状态，请稍后重试。',
+          lng,
+        ),
       )
     } finally {
       if (isMountedRef.current) {
@@ -898,11 +913,17 @@ export function AiQuantPageClient({
     } catch (error) {
       if (!isMountedRef.current) return
       setDeploymentGuardErrorMessage(
-        error instanceof Error && error.message.trim()
-          ? error.message
-          : action === 'liquidate_and_stop'
-            ? '平仓并停止失败，请检查模拟盘账户状态后重试。'
-            : '停止策略失败，请稍后重试。',
+        resolveLocalizedRuntimeErrorMessage(
+          error,
+          action === 'liquidate_and_stop'
+            ? lng === 'en'
+              ? 'Liquidate and stop failed. Check the paper trading account status and try again.'
+              : '平仓并停止失败，请检查模拟盘账户状态后重试。'
+            : lng === 'en'
+              ? 'Failed to stop the strategy. Please try again later.'
+              : '停止策略失败，请稍后重试。',
+          lng,
+        ),
       )
     } finally {
       if (isMountedRef.current) {
@@ -1375,6 +1396,7 @@ export function AiQuantPageClient({
       backtestRunTokenRef,
       graphConfirmed,
       isMountedRef,
+      lng,
       setConversationBacktestExecutionState,
       t,
       updateConversationById,

@@ -463,16 +463,27 @@ function formatOrderEvidenceList(
     .join('；')
 }
 
+function hasChineseText(value: string) {
+  return /[\u4E00-\u9FFF]/.test(value)
+}
+
 function resolveRuntimeControlErrorMessage(
   action: RuntimeAction,
   error: unknown,
   t: DetailTranslation,
+  lng: 'zh' | 'en',
 ) {
+  const fallbackMessage = action === 'run'
+    ? t('aiQuant.detail.runFailed')
+    : action === 'liquidate_and_stop'
+      ? t('aiQuant.detail.liquidateAndStopFailed')
+      : t('aiQuant.detail.stopFailed')
+
   if (error instanceof Error && error.message.trim()) {
-    return error.message
+    const message = error.message.trim()
+    return lng === 'en' && hasChineseText(message) ? fallbackMessage : message
   }
-  if (action === 'run') return t('aiQuant.detail.runFailed')
-  return action === 'liquidate_and_stop' ? t('aiQuant.detail.liquidateAndStopFailed') : t('aiQuant.detail.stopFailed')
+  return fallbackMessage
 }
 
 interface AiQuantStrategyDetailProps {
@@ -619,7 +630,7 @@ export function AiQuantStrategyDetail({
     } catch (error) {
       setRuntimeControlFeedback({
         kind: 'error',
-        message: resolveRuntimeControlErrorMessage(action, error, t),
+        message: resolveRuntimeControlErrorMessage(action, error, t, lng),
       })
     } finally {
       setPendingRuntimeAction(null)
@@ -639,7 +650,7 @@ export function AiQuantStrategyDetail({
     } catch (error) {
       setRuntimeControlFeedback({
         kind: 'error',
-        message: resolveRuntimeControlErrorMessage('stop', error, t),
+        message: resolveRuntimeControlErrorMessage('stop', error, t, lng),
       })
     } finally {
       setPendingRuntimeAction(null)
