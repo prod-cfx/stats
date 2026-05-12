@@ -4525,6 +4525,439 @@ describe('canonicalSpecV2IrCompilerService risk.max_drawdown_pct', () => {
   })
 })
 
+// ─────────────────────────────────────────────────────────────────────────────
+// canonicalSpecV2IrCompilerService action.reverse_position
+// 7 件套：compile() 直接喂入 CanonicalStrategySpecV2，不走 seed extractor
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('canonicalSpecV2IrCompilerService action.reverse_position', () => {
+  const fallback = {
+    exchange: 'okx' as const,
+    symbol: 'BTCUSDT',
+    baseTimeframe: '15m',
+    positionPct: 10,
+  }
+
+  function buildBaseSpec(): CanonicalStrategySpecV2 {
+    return {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        defaultTimeframe: '15m',
+      },
+      indicators: [],
+      sizing: { mode: 'RATIO', value: 0.1 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      rules: [
+        {
+          id: 'entry-close-above-open',
+          phase: 'entry',
+          sideScope: 'long',
+          priority: 200,
+          condition: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'series', source: 'bar', field: 'open' },
+          },
+          actions: [{ type: 'OPEN_LONG' }],
+        },
+      ],
+    } satisfies CanonicalStrategySpecV2
+  }
+
+  function buildSpecWithReversePosition(opts: {
+    fromSide: 'long' | 'short'
+    toSide: 'long' | 'short'
+    sameBarPolicy?: 'allow' | 'next_bar_only'
+    sizingSource?: 'current_position' | 'fixed' | 'position_sizing'
+    ruleId?: string
+  }): CanonicalStrategySpecV2 {
+    const {
+      fromSide,
+      toSide,
+      sameBarPolicy = 'next_bar_only',
+      sizingSource = 'fixed',
+      ruleId = 'exit-reverse-long-short',
+    } = opts
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: ruleId,
+      phase: 'exit',
+      sideScope: fromSide,
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [
+        { type: fromSide === 'long' ? 'CLOSE_LONG' : 'CLOSE_SHORT' },
+        {
+          type: toSide === 'long' ? 'OPEN_LONG' : 'OPEN_SHORT',
+          // sizingSource='current_position': 显式注入 sizing+quantityMode 使下游翻译为 position_pct
+          // sizingSource='fixed'/'position_sizing': 不注入 sizing，依赖 spec.sizing（RATIO:0.1）兜底
+          ...(sizingSource === 'current_position'
+            ? { sizing: { mode: 'RATIO', value: 100 }, params: { quantityMode: 'position_pct' } }
+            : {}),
+        },
+      ],
+      metadata: {
+        reversePosition: { fromSide, toSide, sameBarPolicy, sizingSource },
+      },
+    })
+    return spec
+  }
+
+  // ─── happy path ────────────────────────────────────────────────────────────
+
+  it('compile() happy path: long→short produces CLOSE_LONG + OPEN_SHORT in ruleBlocks', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({ fromSide: 'long', toSide: 'short' })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const reverseBlock = result.ir.ruleBlocks.find(r => r.id === 'exit-reverse-long-short')
+    expect(reverseBlock).toBeDefined()
+    const kinds = reverseBlock!.actions.map(a => a.kind)
+    expect(kinds).toContain('CLOSE_LONG')
+    expect(kinds).toContain('OPEN_SHORT')
+  })
+
+  it('compile() happy path: short→long produces CLOSE_SHORT + OPEN_LONG in ruleBlocks', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({ fromSide: 'short', toSide: 'long' })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const reverseBlock = result.ir.ruleBlocks.find(r => r.id === 'exit-reverse-long-short')
+    expect(reverseBlock).toBeDefined()
+    const kinds = reverseBlock!.actions.map(a => a.kind)
+    expect(kinds).toContain('CLOSE_SHORT')
+    expect(kinds).toContain('OPEN_LONG')
+  })
+
+  it('metadata.reversePosition is preserved in IR ruleBlock (fromSide, toSide, sameBarPolicy, sizingSource)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({
+      fromSide: 'long',
+      toSide: 'short',
+      sameBarPolicy: 'allow',
+      sizingSource: 'current_position',
+    })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const reverseBlock = result.ir.ruleBlocks.find(r => r.id === 'exit-reverse-long-short')
+    expect(reverseBlock).toBeDefined()
+    expect(reverseBlock!.metadata?.reversePosition?.fromSide).toBe('long')
+    expect(reverseBlock!.metadata?.reversePosition?.toSide).toBe('short')
+    expect(reverseBlock!.metadata?.reversePosition?.sameBarPolicy).toBe('allow')
+    expect(reverseBlock!.metadata?.reversePosition?.sizingSource).toBe('current_position')
+  })
+
+  it('CLOSE action precedes OPEN action in same ruleBlock (order preserved)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({ fromSide: 'long', toSide: 'short' })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const reverseBlock = result.ir.ruleBlocks.find(r => r.id === 'exit-reverse-long-short')
+    expect(reverseBlock).toBeDefined()
+    const kinds = reverseBlock!.actions.map(a => a.kind)
+    const closeIdx = kinds.indexOf('CLOSE_LONG')
+    const openIdx = kinds.indexOf('OPEN_SHORT')
+    expect(closeIdx).toBeGreaterThanOrEqual(0)
+    expect(openIdx).toBeGreaterThanOrEqual(0)
+    expect(closeIdx).toBeLessThan(openIdx)
+  })
+
+  it('sizingSource=current_position → OPEN action quantity.mode is position_pct', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({
+      fromSide: 'long',
+      toSide: 'short',
+      sizingSource: 'current_position',
+    })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const reverseBlock = result.ir.ruleBlocks.find(r => r.id === 'exit-reverse-long-short')
+    const openAction = reverseBlock?.actions.find(a => a.kind === 'OPEN_SHORT')
+    expect(openAction?.quantity?.mode).toBe('position_pct')
+  })
+
+  it('reverse_position node does NOT appear in orchestrationPortfolioRisks or riskPolicy.guards', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({ fromSide: 'long', toSide: 'short' })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const ruleIds = (result.ir.orchestrationPortfolioRisks ?? []).map(r => r.id)
+    expect(ruleIds).not.toContain('exit-reverse-long-short')
+    const guardIds = (result.ir.riskPolicy?.guards ?? []).map(g => g.id)
+    expect(guardIds).not.toContain('exit-reverse-long-short')
+  })
+
+  // ─── multi-rule: 2 reverse_position rules coexist without overwriting each other ──
+
+  it('multi-rule: two reverse_position rules both appear in ruleBlocks independently', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({ fromSide: 'long', toSide: 'short', ruleId: 'reverse-r1' })
+    spec.rules.push({
+      id: 'reverse-r2',
+      phase: 'exit',
+      sideScope: 'short',
+      priority: 140,
+      condition: {
+        kind: 'expression',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [
+        { type: 'CLOSE_SHORT' },
+        { type: 'OPEN_LONG' },
+      ],
+      metadata: {
+        reversePosition: { fromSide: 'short', toSide: 'long', sameBarPolicy: 'allow', sizingSource: 'fixed' },
+      },
+    })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const r1 = result.ir.ruleBlocks.find(r => r.id === 'reverse-r1')
+    const r2 = result.ir.ruleBlocks.find(r => r.id === 'reverse-r2')
+    expect(r1).toBeDefined()
+    expect(r2).toBeDefined()
+    expect(r1!.metadata?.reversePosition?.fromSide).toBe('long')
+    expect(r2!.metadata?.reversePosition?.fromSide).toBe('short')
+  })
+
+  // ─── 混合隔离: reverse_position 与其他 action 同 spec 不互相干扰 ────────────
+
+  it('mixed spec isolation: reverse_position rule does not bleed into reduce_position rule', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({ fromSide: 'long', toSide: 'short', ruleId: 'reverse-rule' })
+    // 添加一个普通 reduce_position 规则
+    spec.rules.push({
+      id: 'reduce-rule',
+      phase: 'exit',
+      sideScope: 'long',
+      priority: 130,
+      condition: {
+        kind: 'expression',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'CLOSE_LONG', sizing: { mode: 'RATIO', value: 0.5 }, params: { lifecycle: true } }],
+      metadata: { addPosition: undefined },
+    })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const reverseBlock = result.ir.ruleBlocks.find(r => r.id === 'reverse-rule')
+    const reduceBlock = result.ir.ruleBlocks.find(r => r.id === 'reduce-rule')
+    // reverse rule 有 reversePosition metadata
+    expect(reverseBlock?.metadata?.reversePosition).toBeDefined()
+    // reduce rule 没有 reversePosition metadata
+    expect(reduceBlock?.metadata?.reversePosition).toBeUndefined()
+  })
+
+  // ─── fail-closed: invalid fields throw with correct error codes ──────────
+
+  it('fail-closed: invalid fromSide throws codegen.canonical_spec_v2_reverse_position_invalid_from_side', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'bad-from-side',
+      phase: 'exit',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'CLOSE_LONG' }, { type: 'OPEN_SHORT' }],
+      metadata: {
+        reversePosition: {
+          fromSide: 'both' as unknown as 'long',
+          toSide: 'short',
+          sameBarPolicy: 'next_bar_only',
+          sizingSource: 'fixed',
+        },
+      },
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_reverse_position_invalid_from_side/,
+    )
+  })
+
+  it('fail-closed: invalid toSide throws codegen.canonical_spec_v2_reverse_position_invalid_to_side', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'bad-to-side',
+      phase: 'exit',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'CLOSE_LONG' }, { type: 'OPEN_SHORT' }],
+      metadata: {
+        reversePosition: {
+          fromSide: 'long',
+          toSide: 'both' as unknown as 'short',
+          sameBarPolicy: 'next_bar_only',
+          sizingSource: 'fixed',
+        },
+      },
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_reverse_position_invalid_to_side/,
+    )
+  })
+
+  it('fail-closed: fromSide === toSide throws codegen.canonical_spec_v2_reverse_position_invalid_same_side', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'same-side',
+      phase: 'exit',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'CLOSE_LONG' }, { type: 'OPEN_LONG' }],
+      metadata: {
+        reversePosition: {
+          fromSide: 'long',
+          toSide: 'long',
+          sameBarPolicy: 'next_bar_only',
+          sizingSource: 'fixed',
+        },
+      },
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_reverse_position_invalid_same_side/,
+    )
+  })
+
+  it('fail-closed: invalid sameBarPolicy throws codegen.canonical_spec_v2_reverse_position_invalid_same_bar_policy', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'bad-same-bar-policy',
+      phase: 'exit',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'CLOSE_LONG' }, { type: 'OPEN_SHORT' }],
+      metadata: {
+        reversePosition: {
+          fromSide: 'long',
+          toSide: 'short',
+          sameBarPolicy: 'immediate' as unknown as 'allow',
+          sizingSource: 'fixed',
+        },
+      },
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_reverse_position_invalid_same_bar_policy/,
+    )
+  })
+
+  it('fail-closed: invalid sizingSource throws codegen.canonical_spec_v2_reverse_position_invalid_sizing_source', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'bad-sizing-source',
+      phase: 'exit',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'CLOSE_LONG' }, { type: 'OPEN_SHORT' }],
+      metadata: {
+        reversePosition: {
+          fromSide: 'long',
+          toSide: 'short',
+          sameBarPolicy: 'next_bar_only',
+          sizingSource: 'unknown' as unknown as 'fixed',
+        },
+      },
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_reverse_position_invalid_sizing_source/,
+    )
+  })
+
+  // ─── precision: sizingSource=fixed → OPEN action quantity uses spec sizing ──
+
+  it('precision: sizingSource=fixed → OPEN action quantity is derived from spec sizing (not position_pct)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({
+      fromSide: 'long',
+      toSide: 'short',
+      sizingSource: 'fixed',
+    })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const reverseBlock = result.ir.ruleBlocks.find(r => r.id === 'exit-reverse-long-short')
+    const openAction = reverseBlock?.actions.find(a => a.kind === 'OPEN_SHORT')
+    expect(openAction).toBeDefined()
+    expect(openAction?.quantity?.mode).not.toBe('position_pct')
+  })
+
+  // ─── 命名前缀稳定性 ────────────────────────────────────────────────────────
+
+  it('naming stability: error codes use codegen.canonical_spec_v2_reverse_position_ prefix', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'naming-check',
+      phase: 'exit',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'CLOSE_LONG' }, { type: 'OPEN_SHORT' }],
+      metadata: {
+        reversePosition: {
+          fromSide: 'long',
+          toSide: 'long',
+          sameBarPolicy: 'next_bar_only',
+          sizingSource: 'fixed',
+        },
+      },
+    })
+    let errorCode = ''
+    try {
+      compiler.compile({ canonicalSpec: spec, fallback })
+    }
+    catch (e) {
+      errorCode = (e as Error).message
+    }
+    expect(errorCode).toMatch(/^codegen\.canonical_spec_v2_reverse_position_/)
+  })
+})
+
 // action.add_position ghost-atom fix: compile-time validation + IR output contract
 // ---------------------------------------------------------------------------
 describe('canonicalSpecV2IrCompilerService action.add_position', () => {
