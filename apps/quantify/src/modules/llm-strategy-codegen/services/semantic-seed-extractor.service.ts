@@ -5267,15 +5267,22 @@ export class SemanticSeedExtractorService {
     clause: string,
   ): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' } | null {
     // Long-side entry 优先：保护 DCA clause（e.g. segment 含"卖出"但 clause 含"开多/补仓"）
-    const hasEntryLongVerb = /开始\s*DCA|补仓|加仓|定投|开仓|入场|进场|开多|做多|买入/u.test(clause)
+    // 负向守卫：若 clause 同时含平仓词（平多/平空/平仓/卖出），不短路为 entry，交委托路径处理
+    const hasEntryLongVerb =
+      /开始\s*DCA|补仓|加仓|定投|开仓|入场|进场|开多|做多|买入/u.test(clause) &&
+      !/卖出|平仓|平多|平空/u.test(clause)
     if (hasEntryLongVerb) return { phase: 'entry', sideScope: 'long' }
+
+    // Long-side 明确平仓词：与 exit/short 对称，避免依赖委托路径造成静默漂移
+    const hasCloseLongVerb = /平多|卖出平多|卖出多单/u.test(clause)
+    if (hasCloseLongVerb) return { phase: 'exit', sideScope: 'long' }
 
     // Short-side 明确平仓词：优先于 entry/short，避免"做空+止损/平仓"误判为 entry/short
     const hasCloseShortVerb = /买回平空|平空|买回空单/u.test(clause)
     if (hasCloseShortVerb) return { phase: 'exit', sideScope: 'short' }
 
     const hasGenericExitVerb = /止损|止盈|出场|离场|减仓|平仓/u.test(clause)
-    const hasShortContext = /做空|开空|空单|short/u.test(clause)
+    const hasShortContext = /做空|开空|空单|空头|空方|空仓|short/u.test(clause)
     if (hasGenericExitVerb && hasShortContext) return { phase: 'exit', sideScope: 'short' }
 
     // 其余情况委托 resolveTradeIntent，保持两套 resolver 词汇集统一
