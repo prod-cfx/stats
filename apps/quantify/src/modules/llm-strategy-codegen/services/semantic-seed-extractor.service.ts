@@ -3202,9 +3202,10 @@ export class SemanticSeedExtractorService {
   }
 
   private pushMovingAverageCrossTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
-    const clauses = segment.includes('，') || segment.includes(',')
-      ? segment.split(/[，,]/u).map(clause => clause.trim()).filter(Boolean)
-      : [segment]
+    // Issue #1220：同子句多组同模式必须全部抽出（不仅是逗号分隔）。
+    // splitLogicClauses 同时切「，/,/、」与「且/并且/同时/以及」，确保
+    // 「MA20 上穿 MA50 且 EMA7 上穿 EMA21」能拆成两个子句各自被解析。
+    const clauses = this.splitLogicClauses(segment)
 
     for (const clause of clauses) {
       const cross = this.parseMovingAverageCrossClause(clause) ?? this.parseGenericMovingAverageCrossClause(clause, segment)
@@ -3212,6 +3213,9 @@ export class SemanticSeedExtractorService {
 
       const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
       if (!intent) continue
+
+      // evidence.text 缩到精确命中子句，避免 hetero AND 分桶定位错位（Issue #1220）。
+      const evidenceText = clause
 
       if (cross.direction === 'up') {
         this.pushTrigger(triggers, seen, {
@@ -3224,7 +3228,7 @@ export class SemanticSeedExtractorService {
             ...(cross.fastPeriod !== undefined ? { fastPeriod: cross.fastPeriod } : {}),
             ...(cross.slowPeriod !== undefined ? { slowPeriod: cross.slowPeriod } : {}),
           },
-          evidence: { text: segment, source: 'user_explicit' },
+          evidence: { text: evidenceText, source: 'user_explicit' },
         })
       }
 
@@ -3239,7 +3243,7 @@ export class SemanticSeedExtractorService {
             ...(cross.fastPeriod !== undefined ? { fastPeriod: cross.fastPeriod } : {}),
             ...(cross.slowPeriod !== undefined ? { slowPeriod: cross.slowPeriod } : {}),
           },
-          evidence: { text: segment, source: 'user_explicit' },
+          evidence: { text: evidenceText, source: 'user_explicit' },
         })
       }
     }

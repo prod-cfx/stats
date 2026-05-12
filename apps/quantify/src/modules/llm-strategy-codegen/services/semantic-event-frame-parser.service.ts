@@ -47,9 +47,11 @@ export class SemanticEventFrameParserService {
   }
 
   private toEventClauses(input: string): string[] {
+    // Issue #1220：同子句多组同模式必须全部抽出。除了句末/逗号，还需在「且/并且/同时/以及」
+    // 等并列连词处切分，否则 .exec() 只能命中第一组 cross（MA20/MA50），后续组（EMA7/EMA21）丢失。
     return input
       .split(/[；;。]/u)
-      .flatMap(sentence => this.expandCompactCrosses(sentence).split(/[，,]/u))
+      .flatMap(sentence => this.expandCompactCrosses(sentence).split(/[，,]|(?:且|并且|同时|以及)/u))
       .map(clause => clause.trim())
       .filter(clause => clause.length > 0)
   }
