@@ -45,26 +45,34 @@
     {
       "key": "bollinger.touch_lower",
       "category": "trigger",
-      "status": "uncovered",
-      "failureLayer": "compile-throw",
-      "trace": [],
-      "note": "codegen.canonical_spec_v2_condition_unsupported:bollinger.touch_lower"
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:compare",
+        "series:LOWER_BAND"
+      ]
     },
     {
       "key": "bollinger.touch_middle",
       "category": "trigger",
-      "status": "uncovered",
-      "failureLayer": "compile-throw",
-      "trace": [],
-      "note": "codegen.canonical_spec_v2_condition_unsupported:bollinger.touch_middle"
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:CROSS_OVER",
+        "predicate:CROSS_UNDER",
+        "predicate:OR",
+        "series:MID_BAND"
+      ]
     },
     {
       "key": "bollinger.touch_upper",
       "category": "trigger",
-      "status": "uncovered",
-      "failureLayer": "compile-throw",
-      "trace": [],
-      "note": "codegen.canonical_spec_v2_condition_unsupported:bollinger.touch_upper"
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:compare",
+        "series:UPPER_BAND"
+      ]
     },
     {
       "key": "close_long",
