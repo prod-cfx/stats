@@ -4,8 +4,9 @@
  * 覆盖 `generateSignalWithAi` 中当策略层 params 指定 positionSizeQuote/positionSizeRatio 时：
  * 1. 策略层指定 100 USDT，LLM 输出 100 → pass（返回信号）
  * 2. 策略层指定 100 USDT，LLM 输出 50 → strict 模式 reject（返回 null）
- * 3. 策略层指定 100 USDT，LLM 输出 50 → 非 strict 模式沿用 LLM 50（返回信号）
+ * 3. 策略层指定 100 USDT，LLM 输出 50 → 非 strict 模式用 strategy.params 覆盖 LLM（M1 修复后）
  * 4. 策略层未指定 → 沿用原逻辑（LLM 自由指定 sizing，正常返回）
+ * 5. close signal (EXIT) 即使策略层指定 sizing 也豁免 mismatch 校验（M5 修复后）
  */
 import { Logger } from '@nestjs/common'
 import type { AiService } from '@/modules/ai/ai.service'
