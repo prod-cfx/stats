@@ -20,6 +20,21 @@ export class StrategyPlazaRunService {
     runRequestId: string
   }) {
     const template = this.templates.getRequired(input.templateId)
+    const existingSnapshot = await this.officialSnapshots.resolveExistingOfficialSnapshotForUser({
+      userId: input.userId,
+      template,
+    })
+
+    if (existingSnapshot?.existingStrategyInstanceId) {
+      return {
+        result: 'existing' as const,
+        strategy: await this.accountStrategyViewService.getStrategyDetail(
+          input.userId,
+          existingSnapshot.existingStrategyInstanceId,
+        ),
+      }
+    }
+
     const account = await this.exchangeAccounts.findLatestOkxDemoAccountForUser(input.userId)
     if (!account) {
       throw new StrategyPlazaOkxDemoApiKeyRequiredException({ userId: input.userId })

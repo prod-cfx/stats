@@ -33,6 +33,10 @@ type TemplateRuntimeContent = Pick<
   | 'lockedParams'
 >
 
+type UserOfficialSnapshotResolution = Pick<PublishedStrategySnapshot, 'id'> & {
+  existingStrategyInstanceId?: string
+}
+
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex')
 }
@@ -44,14 +48,30 @@ export class StrategyPlazaOfficialSnapshotRepository {
   async resolveOfficialSnapshotForUser(input: {
     userId: string
     template: OfficialStrategyPlazaTemplate
-  }): Promise<Pick<PublishedStrategySnapshot, 'id'> & { existingStrategyInstanceId?: string }> {
+  }): Promise<UserOfficialSnapshotResolution> {
     return this.txHost.withTransaction(async () => this.resolveOfficialSnapshotForUserInTransaction(input))
+  }
+
+  async resolveExistingOfficialSnapshotForUser(input: {
+    userId: string
+    template: OfficialStrategyPlazaTemplate
+  }): Promise<UserOfficialSnapshotResolution | null> {
+    return this.txHost.withTransaction(async () => {
+      const sourceSnapshot = await this.resolveOrCreateOfficialSourceSnapshot(input.template)
+      const sessionId = this.buildSessionId(input.userId, input.template.id, sourceSnapshot)
+      const existing = await this.findExistingUserSnapshot(input.userId, sessionId, sourceSnapshot)
+      if (!existing) return null
+
+      await this.updateSnapshotTemplateRuntimeContent(existing.id, input.template)
+      await this.bindStrategyInstanceToSnapshot(existing.strategyInstanceId, input.template, sourceSnapshot, existing)
+      return { id: existing.id, existingStrategyInstanceId: existing.strategyInstanceId }
+    })
   }
 
   private async resolveOfficialSnapshotForUserInTransaction(input: {
     userId: string
     template: OfficialStrategyPlazaTemplate
-  }): Promise<Pick<PublishedStrategySnapshot, 'id'> & { existingStrategyInstanceId?: string }> {
+  }): Promise<UserOfficialSnapshotResolution> {
     const client = this.txHost.tx
     const sourceSnapshot = await this.resolveOrCreateOfficialSourceSnapshot(input.template)
     const sessionId = this.buildSessionId(input.userId, input.template.id, sourceSnapshot)
@@ -303,6 +323,7 @@ export class StrategyPlazaOfficialSnapshotRepository {
       where: runnableStrategyInstanceWhere({
         id: existing.strategyInstanceId,
         createdBy: userId,
+        status: { in: ['running', 'stopped', 'paused'] },
       }),
       select: { id: true },
     })
