@@ -1,4 +1,10 @@
-import { normalizeLedgerSymbol } from './symbol-normalizer'
+import { normalizeExecutionSymbol, normalizeLedgerSymbol } from './symbol-normalizer'
+
+describe('normalizeExecutionSymbol', () => {
+  it('normalizes OKX native swap ids before open-order lookup', () => {
+    expect(normalizeExecutionSymbol('BTC-USDT-SWAP', 'perp', 'okx')).toBe('BTC/USDT:PERP')
+  })
+})
 
 describe('normalizeLedgerSymbol', () => {
   it('removes market suffixes before ledger position lookup', () => {

@@ -26,6 +26,7 @@ export interface ConstraintPackSnapshot {
   forbiddenTokens: readonly string[]
   runtime: 'current_script_engine'
   allowHelpersOnly: boolean
+  locale?: 'zh' | 'en'
   guidePrompt?: CodegenGuidePromptConfigSnapshot
   recommendationStyle?: 'ma' | 'drop-rise'
   conversationHistory?: string[]

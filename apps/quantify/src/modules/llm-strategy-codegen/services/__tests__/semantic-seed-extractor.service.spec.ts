@@ -143,6 +143,49 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('extracts English RSI DCA strategy semantics', () => {
+    const patch = service.extract(
+      'OKX spot BTCUSDT 1h: start DCA when RSI14 falls below 30; add to the position every time the price drops another 5%, with 100 USDT per buy, up to a maximum of 4 buys, and total investment not exceeding 500 USDT. Sell when RSI14 rises above 70.',
+    )
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
+      timeframe: '1h',
+    }))
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'oscillator.rsi_lte',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ period: 14, value: 30 }),
+      }),
+      expect.objectContaining({
+        key: 'oscillator.rsi_gte',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({ period: 14, value: 70 }),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+    expect(patch.position?.constraints).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'position.dca_schedule',
+        params: expect.objectContaining({
+          maxCount: 4,
+          perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+          capitalCap: { kind: 'quote', value: 500, asset: 'USDT' },
+          triggerMode: 'price_interval',
+          priceIntervalPct: 5,
+        }),
+      }),
+    ]))
+  })
+
   it('extracts position sizing quote contracts from seed text', () => {
     const patch = service.extract('BTCUSDT 1m，收盘价高于开盘价开多，固定使用 10 USDT')
 

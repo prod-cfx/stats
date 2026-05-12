@@ -474,7 +474,11 @@ const BacktestingCreateJobResponseDto = z
   })
   .passthrough()
 const LlmCodegenStartRequestDto = z
-  .object({ initialMessage: z.string(), guideConfig: z.object({}).partial().passthrough() })
+  .object({
+    initialMessage: z.string(),
+    guideConfig: z.object({}).partial().passthrough(),
+    locale: z.enum(['zh', 'en']),
+  })
   .partial()
   .passthrough()
 const CodegenConversationMessageResponseDto = z
@@ -525,6 +529,7 @@ const LlmCodegenContinueRequestDto = z
     message: z.string(),
     clarificationAnswers: z.record(z.string()).optional(),
     guideConfig: z.object({}).partial().passthrough().optional(),
+    locale: z.enum(['zh', 'en']).optional(),
     confirmGenerate: z.boolean().optional(),
     confirmedCanonicalDigest: z.string().optional(),
     providerCode: z.string().optional(),
@@ -564,6 +569,9 @@ const StrategyPlazaTemplateResponseDto = z
   })
   .passthrough()
 const StrategyPlazaRunRequestDto = z.object({ runRequestId: z.string().min(8) }).passthrough()
+const StrategyPlazaRunExistingResponseDto = z
+  .object({ result: z.literal('existing'), strategy: AccountAiQuantStrategyDetailResponseDto })
+  .passthrough()
 const StrategyPlazaEditSessionResponseDto = z
   .object({ sessionId: z.string(), templateId: z.string(), initialMessage: z.string() })
   .passthrough()
@@ -1498,6 +1506,7 @@ export const schemas = {
   StrategyPlazaDisplayMetricsResponseDto,
   StrategyPlazaTemplateResponseDto,
   StrategyPlazaRunRequestDto,
+  StrategyPlazaRunExistingResponseDto,
   StrategyPlazaEditSessionResponseDto,
   AdminLoginDto,
   AdminProfileDto,
@@ -4523,6 +4532,11 @@ const endpoints = makeApi([
         type: 'Path',
         schema: z.string(),
       },
+      {
+        name: 'locale',
+        type: 'Query',
+        schema: z.enum(['zh', 'en']).optional(),
+      },
     ],
     response: z
       .object({ data: StrategyPlazaEditSessionResponseDto, message: z.string().optional() })
@@ -4551,7 +4565,13 @@ const endpoints = makeApi([
       },
     ],
     response: z
-      .object({ data: AccountAiQuantStrategyDetailResponseDto, message: z.string().optional() })
+      .object({
+        data: z.union([
+          AccountAiQuantStrategyDetailResponseDto,
+          StrategyPlazaRunExistingResponseDto,
+        ]),
+        message: z.string().optional(),
+      })
       .passthrough(),
   },
   {

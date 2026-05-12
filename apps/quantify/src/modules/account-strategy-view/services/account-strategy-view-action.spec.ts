@@ -339,6 +339,29 @@ describe('accountStrategyViewService.performAction', () => {
     )
   })
 
+  it('normalizes OKX native swap ids when checking open orders before stop', async () => {
+    const { service, tradingService } = createActionTestContext({
+      params: {
+        exchange: 'okx',
+        symbol: 'BTC-USDT-SWAP',
+        marketType: 'perp',
+      },
+    })
+
+    await service.performAction('inst-1', {
+      userId: 'user-1',
+      action: 'liquidate_and_stop' as any,
+    })
+
+    expect(tradingService.getOpenOrders).toHaveBeenCalledWith(
+      'user-1',
+      'okx',
+      'perp',
+      'BTC/USDT:PERP',
+      'exchange-account-1',
+    )
+  })
+
   it('skips duplicate liquidate_and_stop requests when the strategy is already pausing', async () => {
     const { service, strategyInstancesService, tradingService, positionsService } = createActionTestContext({
       status: 'paused',

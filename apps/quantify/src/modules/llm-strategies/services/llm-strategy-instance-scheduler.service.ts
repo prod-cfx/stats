@@ -7,6 +7,8 @@ import { SchedulerRegistry } from '@nestjs/schedule'
 import { CronJob } from 'cron'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { WorkloadShardingService } from '@/modules/sharding/services/workload-sharding.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { LlmOrchestratedEngineV3 } from '../llm-orchestrated-engine-v3.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { LlmStrategyInstancesRepository } from '../repositories'
@@ -35,6 +37,7 @@ export class LlmStrategyInstanceSchedulerService implements OnModuleInit, OnModu
     private readonly instancesRepo: LlmStrategyInstancesRepository,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly engine: LlmOrchestratedEngineV3,
+    private readonly workloadSharding: WorkloadShardingService,
   ) {}
 
   /**
@@ -107,6 +110,11 @@ export class LlmStrategyInstanceSchedulerService implements OnModuleInit, OnModu
         status: HttpStatus.NOT_FOUND,
         args: { instanceId: typeof instance === 'string' ? instance : (instance as { id: string }).id },
       })
+    }
+
+    if (!this.workloadSharding.ownsStrategyInstance(instanceData.id)) {
+      this.logger.debug(`LLM实例 ${instanceData.id} 属于其他 shard，跳过本地调度启动`)
+      return
     }
 
     // 🔧 使用并发锁保护

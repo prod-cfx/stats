@@ -15,6 +15,17 @@ const mockCreateStrategyPlazaRunRequestId = jest.fn()
 const mockSetIntent = jest.fn()
 const mockGetIntent = jest.fn()
 const mockClearIntent = jest.fn()
+const mockTranslations: Record<string, string> = {
+  'aiQuant.guestLanding.plazaSubtitle': '精选策略模板',
+  'aiQuant.plaza': '策略广场',
+  'aiQuant.plazaPage.back': '返回',
+  'aiQuant.plazaPage.editSessionFailed': '创建策略广场编辑会话失败',
+  'aiQuant.plazaPage.guestHint': '登录后可以一键运行或编辑策略模板，未登录也可以先浏览策略广场。',
+  'aiQuant.plazaPage.loadFailed': '获取策略广场模板失败',
+  'aiQuant.plazaPage.runFailed': '运行策略广场模板失败',
+  'aiQuant.strategyPlazaSubtitle': '精选策略模板',
+}
+const mockT = (key: string) => mockTranslations[key] ?? key
 
 let mockSession: { userId: string } | null = { userId: 'u-1' }
 let mockIsLoading = false
@@ -56,7 +67,7 @@ const template: StrategyPlazaTemplate = {
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: mockT,
   }),
 }))
 
@@ -220,6 +231,43 @@ describe('AiQuantPlazaPageClient', () => {
     expect(mockPush).toHaveBeenCalledWith('/zh/account/ai-quant/strategy/strategy-1')
   })
 
+  it('shows an existing strategy dialog and lets users open the existing strategy detail', async () => {
+    mockRunStrategyPlazaTemplate.mockResolvedValue({
+      result: 'existing',
+      strategy: {
+        id: 'strategy-existing',
+        name: 'MA Cross Demo',
+        status: 'stopped',
+        symbol: 'BTC-USDT-SWAP',
+        timeframe: '15m',
+      },
+    })
+
+    await act(async () => {
+      root.render(<AiQuantPlazaPageClient />)
+    })
+    await flushPromises()
+
+    await act(async () => {
+      await plazaProps?.onRunStrategy('ma-cross')
+    })
+
+    expect(container.textContent).toContain('aiQuant.strategyPlazaExisting.title')
+    expect(container.textContent).toContain('MA Cross Demo')
+    expect(mockPush).not.toHaveBeenCalled()
+
+    const viewButton = Array.from(container.querySelectorAll('button')).find(button =>
+      button.textContent?.includes('aiQuant.strategyPlazaExisting.viewDetail'),
+    )
+    expect(viewButton).toBeTruthy()
+
+    await act(async () => {
+      viewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mockPush).toHaveBeenCalledWith('/zh/account/ai-quant/strategy/strategy-existing')
+  })
+
   it('stores plaza-run intent and routes to exchange API binding when OKX demo key is missing', async () => {
     mockRunStrategyPlazaTemplate.mockRejectedValue(
       new ApiError(
@@ -271,7 +319,7 @@ describe('AiQuantPlazaPageClient', () => {
       await plazaProps?.onEditStrategy('ma-cross')
     })
 
-    expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledWith('ma-cross')
+    expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledWith('ma-cross', 'zh')
     expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-chat-session', sessionId: 'session-1' })
     expect(mockPush).toHaveBeenCalledWith('/zh/ai-quant')
   })
@@ -288,7 +336,7 @@ describe('AiQuantPlazaPageClient', () => {
     expect(mockGetIntent).toHaveBeenCalledWith(10 * 60 * 1000)
     expect(mockClearIntent).toHaveBeenCalledTimes(1)
     expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledTimes(1)
-    expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledWith('ma-cross')
+    expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledWith('ma-cross', 'zh')
     expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-chat-session', sessionId: 'session-resume-1' })
     expect(mockPush).toHaveBeenCalledWith('/zh/ai-quant')
   })

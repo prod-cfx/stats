@@ -14,7 +14,8 @@
 
 import {
   INDIRECTLY_COVERED_ATOMS,
-  SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS,
+  SUPPORTED_REQUIRES_SLOT_UTTERANCE_ATOMS,
+  SUPPORTED_UTTERANCE_CORPUS_ATOMS,
   getUtteranceCorpusForAtom,
   type SupportedExecutableUtteranceAtom,
 } from '../../nl-gateway/utterance-corpus'
@@ -23,6 +24,7 @@ import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service
 
 const registry = new SemanticAtomRegistryService()
 const extractor = new SemanticSeedExtractorService()
+const strictRequiresSlotCorpusAtoms = new Set<string>(SUPPORTED_REQUIRES_SLOT_UTTERANCE_ATOMS)
 
 // 一些 supported atom 在 NL 层是 action/risk/position，seed-extractor 输出在不同 patch 字段下。
 // 对这些 atom，识别探针需要扫整个 patch（triggers + actions + risk + position.constraints）。
@@ -52,7 +54,7 @@ describe('Atom coverage contract — supported atoms have ≥3 utterances and re
     expect(supportedAtoms.length).toBeGreaterThan(0)
   })
 
-  describe.each(SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS)('utterance corpus — %s', (atomKey) => {
+  describe.each(SUPPORTED_UTTERANCE_CORPUS_ATOMS)('utterance corpus — %s', (atomKey) => {
     // 豁免清单从 utterance-corpus/index.ts 单点导入，避免与 utterance-corpus.spec.ts 漂移
     const skipReason = INDIRECTLY_COVERED_ATOMS.has(atomKey as SupportedExecutableUtteranceAtom)
       ? '间接触发，豁免独立 corpus fixture 要求（详见 utterance-corpus.spec.ts 同步豁免说明）'
@@ -79,7 +81,10 @@ describe('Atom coverage contract — supported atoms have ≥3 utterances and re
       const keys = collectAtomKeysFromPatch(patch)
 
       const atom = registry.resolve(atomKey)
-      if (atom.supportStatus === 'supported_executable') {
+      if (
+        atom.supportStatus === 'supported_executable'
+        || strictRequiresSlotCorpusAtoms.has(atomKey)
+      ) {
         expect(keys.has(atomKey)).toBe(true)
       } else if (atom.supportStatus === 'supported_requires_slot') {
         if (!keys.has(atomKey)) {
@@ -92,7 +97,7 @@ describe('Atom coverage contract — supported atoms have ≥3 utterances and re
   })
 
   it('记录 supported_requires_slot atom 在 utterance corpus 中的缺口（不失败，仅 warn）', () => {
-    const corpusAtomKeys = new Set<string>(SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS)
+    const corpusAtomKeys = new Set<string>(SUPPORTED_UTTERANCE_CORPUS_ATOMS)
     const requiresSlotGaps = supportedAtoms
       .filter(atom => atom.supportStatus === 'supported_requires_slot')
       .map(atom => atom.key)
@@ -105,5 +110,21 @@ describe('Atom coverage contract — supported atoms have ≥3 utterances and re
     // 不强制断言：requires_slot 的 NL 探针缺口在 Issue #1231 follow-up (#1247) 中收口；
     // 此处仅暴露数据形状，保证未来缺口列表始终是 string[] 而非异常类型
     expect(Array.isArray(requiresSlotGaps)).toBe(true)
+  })
+
+  it('external.signal 的 registry 必填槽位与 seed extractor open-slot 契约保持一致', () => {
+    const atom = registry.get('external.signal')
+    expect(atom.requiredParams).toEqual(expect.arrayContaining(['provider', 'signalId', 'secret']))
+
+    const patch = extractor.extract('OKX 合约 BTCUSDT 15m，收到 webhook 信号时开多，单笔 10%。')
+    const trigger = patch.triggers?.find(item => item.key === 'external.signal')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params?.provider).toBe('webhook')
+
+    const openSlotKeys = trigger?.openSlots?.map(slot => slot.slotKey) ?? []
+    expect(openSlotKeys).toEqual(expect.arrayContaining([
+      'external.signal.signalId',
+      'external.signal.secret',
+    ]))
   })
 })

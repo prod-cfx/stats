@@ -1,7 +1,7 @@
 import type { ExchangeId as PrismaExchangeId } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { ExchangeId } from '../core/types'
-import type { BinanceConfig, ExchangeAccountConfig, ExchangeAccountStore, HyperliquidConfig, OkxConfig } from './account-store'
+import type { BinanceConfig, ExchangeAccountConfig, ExchangeAccountStore, HyperliquidConfig, OkxAccountConfig, OkxConfig } from './account-store'
 import type { PrismaClient } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
@@ -47,6 +47,27 @@ export class DbExchangeAccountStore implements ExchangeAccountStore {
       return null
 
     return this.decryptAndBuildConfig(account)
+  }
+
+  async listOkxAccountConfigs(): Promise<OkxAccountConfig[]> {
+    const accounts = await this.txHost.tx.exchangeAccount.findMany({
+      where: {
+        exchangeId: 'okx' as PrismaExchangeId,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    })
+
+    return accounts.flatMap((account) => {
+      const config = this.decryptAndBuildConfig(account)
+      return config.exchangeId === 'okx'
+        ? [{
+            ...config.config,
+            exchangeAccountId: account.id,
+          }]
+        : []
+    })
   }
 
   private decryptAndBuildConfig(account: { id: string; exchangeId: PrismaExchangeId; encryptedConfig: string; isTestnet: boolean }): ExchangeAccountConfig {

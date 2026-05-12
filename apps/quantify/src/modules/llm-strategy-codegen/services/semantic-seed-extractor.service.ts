@@ -1650,12 +1650,15 @@ export class SemanticSeedExtractorService {
 
     for (const clause of this.extractDcaLifecycleTexts(text)) {
       const maxCount = this.extractNumberBefore(clause, ['次'], /(?:次|回)/u)
+        ?? this.extractEnglishDcaMaxCount(clause)
       const perOrderSizing = this.extractQuoteAmountAfter(clause, '每次')
         ?? this.extractQuoteAmountAfter(clause, '定投补仓')
         ?? this.extractQuoteAmountAfter(clause, '补仓')
         ?? this.extractQuoteAmountAfter(clause, '定投')
+        ?? this.extractEnglishDcaPerOrderSizing(clause)
       const capitalCap = this.extractQuoteAmountAfter(clause, '总投入不超过')
         ?? this.extractQuoteAmountAfter(clause, '总投入')
+        ?? this.extractEnglishDcaCapitalCap(clause)
       const exitRule = this.hasDcaExitRule(clause) ? this.resolveDcaExitRule(clause) : null
       // critic round 1 A-C1 修复：triggerMode 不再硬编码 'price_interval'
       // 按 utterance 关键词分流：time_interval (每天/每周/每小时) / signal (信号触发/on signal) / price_interval (默认或每跌)
@@ -1663,7 +1666,7 @@ export class SemanticSeedExtractorService {
         ? 'time_interval'
         : /(?:信号触发|on\s+signal|信号驱动|按信号)/iu.test(clause)
           ? 'signal'
-          : /(?:每跌|每下跌|price\s+drops?|drops?\s+\d+(?:\.\d+)?\s*%)/iu.test(clause)
+          : /(?:每跌|每下跌|price\s+drops?|drops?\s+(?:another\s+)?\d+(?:\.\d+)?\s*%)/iu.test(clause)
             ? 'price_interval'
             : undefined
       const priceIntervalPct = triggerMode === 'price_interval' ? this.extractDcaPriceIntervalPct(clause) : null
@@ -1753,6 +1756,21 @@ export class SemanticSeedExtractorService {
     return texts
   }
 
+  private extractEnglishDcaContinuationText(text: string): string | null {
+    if (!/\bDCA\b/iu.test(text) || !/\b(?:add\s+to\s+(?:the\s+)?position|per\s+buy|per\s+order|total\s+investment)\b/iu.test(text)) {
+      return null
+    }
+
+    const startIndex = text.search(/\b(?:start\s+DCA|DCA)\b/iu)
+    if (startIndex < 0) {
+      return null
+    }
+    const tail = text.slice(startIndex)
+    const exitIndex = tail.search(/\b(?:sell|exit|close)\b/iu)
+    const dcaText = (exitIndex >= 0 ? tail.slice(0, exitIndex) : tail).trim()
+    return dcaText.length > 0 ? dcaText : null
+  }
+
   private extractDcaLifecycleTexts(text: string): string[] {
     const texts: string[] = []
     for (const segment of this.splitPositionLifecycleSegments(text)) {
@@ -1782,6 +1800,11 @@ export class SemanticSeedExtractorService {
           break
         }
       }
+    }
+
+    const englishDcaContinuation = this.extractEnglishDcaContinuationText(text)
+    if (englishDcaContinuation && (texts.length === 0 || englishDcaContinuation.length > texts[0].length)) {
+      return [englishDcaContinuation]
     }
 
     return texts
@@ -1815,7 +1838,7 @@ export class SemanticSeedExtractorService {
       return false
     }
 
-    return /(?:每跌|每下跌|DCA|dca|定投)/u.test(clause)
+    return /(?:每跌|每下跌|DCA|dca|定投|\badd\s+to\s+(?:the\s+)?position\b|\bscale\s+in\b)/iu.test(clause)
   }
 
   private withInheritedLifecycleContextSlots(
@@ -1936,8 +1959,34 @@ export class SemanticSeedExtractorService {
     return { kind: 'quote', value, asset }
   }
 
+  private extractEnglishDcaMaxCount(text: string): number | null {
+    const match = text.match(/\b(?:up\s+to\s+(?:a\s+)?maximum\s+of|max(?:imum)?|no\s+more\s+than)\s*(\d+(?:\.\d+)?)\s*(?:buys?|orders?|times?)\b/iu)
+      ?? text.match(/\b(\d+(?:\.\d+)?)\s*(?:buys?|orders?|times?)\s*(?:maximum|max)\b/iu)
+    if (!match?.[1]) return null
+    const value = Number(match[1])
+    return Number.isFinite(value) && value > 0 ? value : null
+  }
+
+  private extractEnglishDcaPerOrderSizing(text: string): { kind: 'quote'; value: number; asset: QuoteAsset } | null {
+    const match = text.match(/\b(?:with\s+)?(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U)\s*(?:per|each)\s*(?:buy|order|DCA)\b/iu)
+      ?? text.match(/\b(?:per|each)\s*(?:buy|order|DCA).{0,16}?(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U)\b/iu)
+    if (!match?.[1] || !match[2]) return null
+    const value = Number(match[1])
+    if (!Number.isFinite(value) || value <= 0) return null
+    return { kind: 'quote', value, asset: this.normalizeQuoteAsset(match[2]) }
+  }
+
+  private extractEnglishDcaCapitalCap(text: string): { kind: 'quote'; value: number; asset: QuoteAsset } | null {
+    const match = text.match(/\b(?:total\s+(?:investment|capital|allocation|budget).{0,24}?(?:not\s+exceeding|not\s+exceed|no\s+more\s+than|up\s+to|max(?:imum)?|cap(?:ped)?\s+at)\s*)(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U)\b/iu)
+      ?? text.match(/\b(?:not\s+exceeding|not\s+exceed|no\s+more\s+than|up\s+to|max(?:imum)?|cap(?:ped)?\s+at)\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U).{0,24}?\b(?:total\s+)?(?:investment|capital|allocation|budget)\b/iu)
+    if (!match?.[1] || !match[2]) return null
+    const value = Number(match[1])
+    if (!Number.isFinite(value) || value <= 0) return null
+    return { kind: 'quote', value, asset: this.normalizeQuoteAsset(match[2]) }
+  }
+
   private extractDcaPriceIntervalPct(text: string): number | null {
-    const match = text.match(/(?:每\s*(?:跌|下跌)|price\s+drops?)\s*(\d+(?:\.\d+)?)\s*%/iu)
+    const match = text.match(/(?:每\s*(?:跌|下跌)|price\s+drops?)\s*(?:another\s+)?(\d+(?:\.\d+)?)\s*%/iu)
     if (!match?.[1]) return null
 
     const value = Number(match[1])
@@ -2549,11 +2598,11 @@ export class SemanticSeedExtractorService {
   }
 
   private pushCandleExpressionTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
-    for (const clause of this.splitLogicClauses(segment)) {
+    for (const { clause, parentClause } of this.splitLogicClausesWithParent(segment)) {
       const expression = this.extractCloseOpenCandleExpression(clause)
       if (!expression) continue
 
-      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
       if (!intent) continue
 
       this.pushTrigger(triggers, seen, {
@@ -2602,10 +2651,10 @@ export class SemanticSeedExtractorService {
     triggers: SeedTrigger[],
     seen: Set<string>,
   ): void {
-    for (const clause of this.splitLogicClauses(segment)) {
+    for (const { clause, parentClause } of this.splitLogicClausesWithParent(segment)) {
       const previousExtrema = this.extractPreviousExtremaReference(clause)
       if (previousExtrema) {
-        const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+        const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
         if (intent) {
           this.pushTrigger(triggers, seen, {
             key: 'price.previous_extrema',
@@ -2619,7 +2668,7 @@ export class SemanticSeedExtractorService {
       const expression = this.extractPreviousBarExtremaExpression(clause)
       if (!expression) continue
 
-      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
       if (!intent) continue
 
       this.pushTrigger(triggers, seen, {
@@ -3222,13 +3271,11 @@ export class SemanticSeedExtractorService {
     // Issue #1220：同子句多组同模式必须全部抽出（不仅是逗号分隔）。
     // splitLogicClauses 同时切「，/,/、」与「且/并且/同时/以及」，确保
     // 「MA20 上穿 MA50 且 EMA7 上穿 EMA21」能拆成两个子句各自被解析。
-    const clauses = this.splitLogicClauses(segment)
-
-    for (const clause of clauses) {
+    for (const { clause, parentClause } of this.splitLogicClausesWithParent(segment)) {
       const cross = this.parseMovingAverageCrossClause(clause) ?? this.parseGenericMovingAverageCrossClause(clause, segment)
       if (!cross) continue
 
-      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
       if (!intent) continue
 
       // evidence.text 缩到精确命中子句，避免 hetero AND 分桶定位错位（Issue #1220）。
@@ -3717,16 +3764,14 @@ export class SemanticSeedExtractorService {
   ): void {
     if (!/RSI/iu.test(segment)) return
 
-    const clauses = this.splitLogicClauses(segment)
     const segmentPeriod = this.extractLastRsiPeriod(segment) ?? aliasContext.rsi?.period ?? 14
 
-    for (const clause of clauses) {
+    for (const { clause, parentClause } of this.splitLogicClausesWithParent(segment)) {
       if (!/RSI/iu.test(clause) && !this.isRsiThresholdAliasClause(clause, segment)) continue
 
       // Issue #1219: phase / sideScope 由子句动词决定，与阈值方向解耦；
       // 子句无动词时跟随父级 segment 的动词，不用"低于→exit"硬编码兜底。
-      const intent = this.resolvePhaseByClauseVerb(clause)
-        ?? this.resolvePhaseByClauseVerb(segment)
+      const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
       if (!intent) continue
 
       const period = this.extractLastRsiPeriod(clause) ?? segmentPeriod
@@ -3825,14 +3870,12 @@ export class SemanticSeedExtractorService {
           },
         })
       }
-      return
     }
 
-    const clauses = this.splitLogicClauses(segment)
-
-    for (const clause of clauses) {
+    for (const { clause, parentClause } of this.splitLogicClausesWithParent(segment)) {
       if (!/MACD|DIF|DEA/iu.test(clause)) continue
-      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      if (eventFrames.length > 0 && this.resolveTradeIntent(clause)) continue
+      const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
       if (!intent) continue
 
       const direction = /上穿|金叉/iu.test(clause)
@@ -3860,8 +3903,8 @@ export class SemanticSeedExtractorService {
     if (!/最近\s*\d{1,4}\s*根\s*K\s*线/u.test(segment)) return
     if (!/突破|跌回|跌破|高点|低点/u.test(segment)) return
 
-    for (const clause of this.splitLogicClauses(segment)) {
-      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+    for (const { clause, parentClause } of this.splitLogicClausesWithParent(segment)) {
+      const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
       if (!intent) continue
 
       const highPeriod = this.extractNumber(clause, [
@@ -3905,10 +3948,10 @@ export class SemanticSeedExtractorService {
   private pushPartialBreakoutTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
     if (!/(突破|升破|上破|跌破|下破|失守).{0,12}(关键位置|支撑|压力|阻力)/u.test(segment)) return
 
-    for (const clause of this.splitLogicClauses(segment)) {
+    for (const { clause, parentClause } of this.splitLogicClausesWithParent(segment)) {
       if (!/(突破|升破|上破|跌破|下破|失守).{0,12}(关键位置|支撑|压力|阻力)/u.test(clause)) continue
 
-      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
       if (!intent) continue
 
       const isDown = /跌破|下破|失守|支撑/u.test(clause)
@@ -3942,8 +3985,8 @@ export class SemanticSeedExtractorService {
     if (!/(过去|最近)\s*\d{1,4}\s*根\s*K\s*线/u.test(segment)) return
     if (!/(最高价|最高|高点|最低价|最低|低点)/u.test(segment)) return
 
-    for (const clause of this.splitLogicClauses(segment)) {
-      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+    for (const { clause, parentClause } of this.splitLogicClausesWithParent(segment)) {
+      const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
       if (!intent) continue
 
       const highLookback = this.extractNumber(clause, [
@@ -5048,16 +5091,17 @@ export class SemanticSeedExtractorService {
     triggers: SeedTrigger[],
     seen: Set<string>,
   ): void {
-    for (const clause of this.splitLogicClauses(segment)) {
+    const clauses = this.splitLogicClauses(segment)
+    for (const [index, clause] of clauses.entries()) {
       const intent = this.resolveUnsupportedTriggerIntent(clause, segment)
       // critic round 1 P4-5 B2 修复：provider 关键词必须与 signal-semantic 词共现，避免
       // "下载 webhook 文档"/"讨论 telegram 群" 等非信号语义文本被误识别为 external.signal。
-      const hasSignalSemantics = /(?:外部喊单|喊单群|KOL|口令|神秘评分|内部\s*AI|external\s+signal)/iu.test(clause)
-      const hasProviderWithSignalContext = /(?:tradingview|discord|telegram|webhook)\s*(?:信号|喊单|推送|触发|signal|alert|hook|bot|webhook)|(?:信号|喊单|推送|触发|on)\s*(?:tradingview|discord|telegram|webhook)/iu.test(clause)
+      const hasSignalSemantics = /(?:外部信号|外部喊单|喊单群|KOL|口令|神秘评分|内部\s*AI|external\s+signal)/iu.test(clause)
+      const hasProviderWithSignalContext = /(?:tradingview|discord|telegram|webhook)\s*(?:(?:buy|sell|long|short|bullish|bearish|多|空)\s*)?(?:事件|信号|喊单|推送|触发|signal\s*id|signalId|signal|event|alert|hook|bot|webhook)|(?:事件|信号|喊单|推送|触发|event)\s*(?:tradingview|discord|telegram|webhook)/iu.test(clause)
       if (hasSignalSemantics || hasProviderWithSignalContext) {
         // P4-5: external.signal — atom-only `supported_requires_slot`
         // 必填 slot：provider（tradingview/discord/telegram/webhook）+ signalId + secret
-        // provider 可从文本关键词锁定；signalId / secret 必须由用户显式提供
+        // provider / signalId 可从文本关键词锁定；secret 只接受"已配置"语义，不从 NL 读取明文。
         const provider = /tradingview/iu.test(clause)
           ? 'tradingview'
           : /discord/iu.test(clause)
@@ -5067,7 +5111,20 @@ export class SemanticSeedExtractorService {
               : /webhook/iu.test(clause)
                 ? 'webhook'
                 : null
-        const externalOpenSlots: SeedTrigger['openSlots'] = []
+        const signalId = this.extractExternalSignalId(clause)
+        const previousClause = clauses[index - 1]
+        const nextClause = clauses[index + 1]
+        const secretConfigured = this.hasExternalSignalSecretConfigured(clause)
+          || this.isExternalSignalSecretCompanionClause(previousClause)
+          || this.isExternalSignalSecretCompanionClause(nextClause)
+        const externalOpenSlots: SeedTrigger['openSlots'] = [{
+          slotKey: 'external.signal.runtime',
+          fieldPath: 'trigger.params.runtime',
+          status: 'open',
+          priority: 'risk',
+          questionHint: 'Webhook 接收、HMAC 校验与信号队列运行时尚未启用，当前外部信号不能进入执行路径。',
+          affectsExecution: true,
+        }]
         if (!provider) {
           externalOpenSlots.push({
             slotKey: 'external.signal.provider',
@@ -5078,27 +5135,33 @@ export class SemanticSeedExtractorService {
             affectsExecution: true,
           })
         }
-        externalOpenSlots.push({
-          slotKey: 'external.signal.signalId',
-          fieldPath: 'trigger.params.signalId',
-          status: 'open',
-          priority: 'core',
-          questionHint: '请提供外部信号订阅 ID（用于过滤推送）。',
-          affectsExecution: true,
-        })
-        externalOpenSlots.push({
-          slotKey: 'external.signal.secret',
-          fieldPath: 'trigger.params.secret',
-          status: 'open',
-          priority: 'risk',
-          questionHint: '请提供 HMAC 校验 secret，避免冒名信号触发开仓（可由系统生成后回填）。',
-          affectsExecution: true,
-        })
+        if (!signalId) {
+          externalOpenSlots.push({
+            slotKey: 'external.signal.signalId',
+            fieldPath: 'trigger.params.signalId',
+            status: 'open',
+            priority: 'core',
+            questionHint: '请提供外部信号订阅 ID（用于过滤推送）。',
+            affectsExecution: true,
+          })
+        }
+        if (!secretConfigured) {
+          externalOpenSlots.push({
+            slotKey: 'external.signal.secret',
+            fieldPath: 'trigger.params.secret',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认 HMAC 校验 secret 已由系统生成并绑定，避免冒名信号触发开仓。',
+            affectsExecution: true,
+          })
+        }
         this.pushTrigger(triggers, seen, {
           key: 'external.signal',
           ...intent,
           params: {
             ...(provider ? { provider } : {}),
+            ...(signalId ? { signalId } : {}),
+            ...(secretConfigured ? { secret: 'configured' } : {}),
             sourceText: clause,
           },
           status: 'open',
@@ -5153,6 +5216,38 @@ export class SemanticSeedExtractorService {
         push('action.pause_trading', { sourceText: clause })
       }
     }
+  }
+
+  private extractExternalSignalId(clause: string): string | null {
+    const patterns = [
+      /\bsignalId\s*(?:为|是|=|:)?\s*([a-z0-9][a-z0-9_.:-]{0,63})\b/iu,
+      /\bsignal\s*id\s*(?:为|是|=|:)?\s*([a-z0-9][a-z0-9_.:-]{0,63})\b/iu,
+      /(?:信号|事件|喊单)\s*(?:ID|id|编号|为|是|=|:)?\s*([a-z0-9][a-z0-9_.:-]{1,63})/iu,
+      /(?:外部信号|webhook\s*信号|webhook\s*event|external\s+signal)\s+([a-z0-9][a-z0-9_.:-]{1,63})\b/iu,
+    ]
+
+    for (const pattern of patterns) {
+      const match = pattern.exec(clause)
+      const candidate = match?.[1]?.trim()
+      if (candidate && !this.isExternalSignalReservedWord(candidate)) {
+        return candidate
+      }
+    }
+    return null
+  }
+
+  private isExternalSignalReservedWord(value: string): boolean {
+    return /^(?:after|arrives?|bearish|bullish|buy|configured|event|hook|long|open|secret|sell|short|signal|signals?|trigger|when|with|触发|开多|开空)$/iu.test(value)
+  }
+
+  private hasExternalSignalSecretConfigured(clause: string): boolean {
+    return /(?:secret|密钥|秘钥|HMAC|签名)\s*(?:已|已经|already\s+)?(?:配置|绑定|生成|configured|bound|generated)/iu.test(clause)
+      || /(?:已|已经|already\s+)(?:配置|绑定|生成)\s*(?:secret|密钥|秘钥|HMAC|签名)/iu.test(clause)
+  }
+
+  private isExternalSignalSecretCompanionClause(clause: string | undefined): boolean {
+    if (!clause || !this.hasExternalSignalSecretConfigured(clause)) return false
+    return !/(?:tradingview|discord|telegram|webhook|外部信号|外部喊单|signal\s*id|signalId|external\s+signal|信号|事件|喊单)/iu.test(clause)
   }
 
   private extractRecognizedUnsupportedPosition(
@@ -5312,8 +5407,8 @@ export class SemanticSeedExtractorService {
     // Long-side entry 优先：保护 DCA clause（e.g. segment 含"卖出"但 clause 含"开多/补仓"）
     // 负向守卫：若 clause 同时含平仓词（平多/平空/平仓/卖出），不短路为 entry，交委托路径处理
     const hasEntryLongVerb =
-      /开始\s*DCA|补仓|加仓|定投|开仓|入场|进场|开多|做多|买入/u.test(clause) &&
-      !/卖出|平仓|平多|平空/u.test(clause)
+      /开始\s*DCA|补仓|加仓|定投|开仓|入场|进场|开多|做多|买入|\b(?:start\s+DCA|add\s+to\s+(?:the\s+)?position|scale\s+in|enter|open\s+long|go\s+long|buy)\b/iu.test(clause) &&
+      !/卖出|平仓|平多|平空|\b(?:sell|close|exit)\b/iu.test(clause)
     if (hasEntryLongVerb) return { phase: 'entry', sideScope: 'long' }
 
     // Long-side 明确平仓词：与 exit/short 对称，避免依赖委托路径造成静默漂移
@@ -5324,12 +5419,28 @@ export class SemanticSeedExtractorService {
     const hasCloseShortVerb = /买回平空|平空|买回空单/u.test(clause)
     if (hasCloseShortVerb) return { phase: 'exit', sideScope: 'short' }
 
-    const hasGenericExitVerb = /止损|止盈|出场|离场|减仓|平仓/u.test(clause)
+    const hasGenericExitVerb = /止损|止盈|出场|离场|减仓|平仓|\b(?:take\s+profit|stop\s+loss|exit|close|sell)\b/iu.test(clause)
     const hasShortContext = /做空|开空|空单|空头|空方|空仓|short/u.test(clause)
     if (hasGenericExitVerb && hasShortContext) return { phase: 'exit', sideScope: 'short' }
 
     // 其余情况委托 resolveTradeIntent，保持两套 resolver 词汇集统一
     return this.resolveTradeIntent(clause)
+  }
+
+  private resolveLogicClauseTradeIntent(
+    clause: string,
+    parentClause: string,
+    segment: string,
+  ): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' } | null {
+    const direct = this.resolvePhaseByClauseVerb(clause)
+    if (direct) return direct
+
+    if (parentClause !== clause) {
+      const parentIntent = this.resolvePhaseByClauseVerb(parentClause)
+      if (parentIntent) return parentIntent
+    }
+
+    return this.resolvePhaseByClauseVerb(segment)
   }
 
   /**
@@ -5356,16 +5467,16 @@ export class SemanticSeedExtractorService {
     if (/卖出平多|平多|卖出多单/u.test(segment)) {
       return { phase: 'exit', sideScope: 'long' }
     }
-    if (/出场|离场/u.test(segment)) {
+    if (/出场|离场|\b(?:exit|close)\b/iu.test(segment)) {
       return { phase: 'exit', sideScope: /做空|开空|空单|short/u.test(segment) ? 'short' : 'long' }
     }
     if (/做空|开空|空单|short/u.test(segment)) {
       return { phase: 'entry', sideScope: 'short' }
     }
-    if (/卖出|卖/u.test(segment)) {
+    if (/卖出|卖|\bsell\b/iu.test(segment)) {
       return { phase: 'exit', sideScope: /做空|开空|空单|short/u.test(segment) ? 'short' : 'long' }
     }
-    if (/做多|开多|买入|买|入场|开仓|long/u.test(segment)) {
+    if (/做多|开多|买入|买|入场|开仓|long|\b(?:buy|enter|open\s+long|go\s+long|start\s+DCA|add\s+to\s+(?:the\s+)?position|scale\s+in)\b/iu.test(segment)) {
       return { phase: 'entry', sideScope: 'long' }
     }
     if (/平仓/u.test(segment)) {
@@ -5431,6 +5542,12 @@ export class SemanticSeedExtractorService {
   }
 
   private extractRsiThreshold(clause: string, period: number): number | null {
+    const englishThreshold = this.extractNumber(clause, [
+      /\b(?:above|over|greater\s+than|below|under|less\s+than|falls?\s+below|drops?\s+below|rises?\s+above|cross(?:es)?\s+(?:above|below))\s*(\d+(?:\.\d+)?)/iu,
+      /\b(\d+(?:\.\d+)?)\s*(?:or\s+)?(?:above|over|below|under)\b/iu,
+    ])
+    if (englishThreshold !== null) return englishThreshold
+
     const compact = clause.replace(/\s+/gu, '')
     const explicitThreshold = this.extractNumber(compact, [
       /(?:高于|大于|超过|上方|低于|小于|下方|上穿|穿回|下穿|跌破)(\d+(?:\.\d+)?)/u,
@@ -5475,6 +5592,16 @@ export class SemanticSeedExtractorService {
       .split(/[，,、]|(?:且|并且|同时|以及)/u)
       .map(clause => clause.trim())
       .filter(Boolean)
+  }
+
+  private splitLogicClausesWithParent(segment: string): Array<{ clause: string; parentClause: string }> {
+    return this.splitCommaClauses(segment).flatMap(parentClause =>
+      parentClause
+        .split(/并且|同时|以及|且|、/u)
+        .map(clause => clause.trim())
+        .filter(Boolean)
+        .map(clause => ({ clause, parentClause })),
+    )
   }
 
   private hasExplicitPriceChangeContext(segment: string): boolean {

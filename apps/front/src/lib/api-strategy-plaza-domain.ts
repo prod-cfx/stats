@@ -43,6 +43,13 @@ export interface StrategyPlazaEditSessionResponse {
   initialMessage: string
 }
 
+export interface ExistingStrategyPlazaRunResult {
+  result: 'existing'
+  strategy: AccountAiQuantStrategyDetail
+}
+
+export type StrategyPlazaRunResult = AccountAiQuantStrategyDetail | ExistingStrategyPlazaRunResult
+
 async function parseStrategyPlazaJson(response: Response, fallbackMessage: string): Promise<unknown> {
   let json: unknown = null
   try {
@@ -77,12 +84,25 @@ function extractBackendErrorCode(payload: unknown): string | undefined {
   return typeof error?.code === 'string' && error.code.trim() ? error.code : undefined
 }
 
-function buildStrategyPlazaUrl(templateId?: string, action?: 'run' | 'edit-session'): string {
+function buildStrategyPlazaUrl(
+  templateId?: string,
+  action?: 'run' | 'edit-session',
+  query?: Record<string, string | undefined>,
+): string {
   const baseUrl = `${API_BASE_URL}/strategy-plaza/templates`
-  if (!templateId) return baseUrl
+  const appendQuery = (url: string) => {
+    const params = new URLSearchParams()
+    Object.entries(query ?? {}).forEach(([key, value]) => {
+      if (value?.trim()) params.set(key, value.trim())
+    })
+    const queryString = params.toString()
+    return queryString ? `${url}?${queryString}` : url
+  }
+
+  if (!templateId) return appendQuery(baseUrl)
 
   const templateUrl = `${baseUrl}/${encodeURIComponent(templateId)}`
-  return action ? `${templateUrl}/${action}` : templateUrl
+  return appendQuery(action ? `${templateUrl}/${action}` : templateUrl)
 }
 
 export async function fetchStrategyPlazaTemplates(): Promise<StrategyPlazaTemplate[]> {
@@ -101,7 +121,7 @@ export async function fetchStrategyPlazaTemplates(): Promise<StrategyPlazaTempla
 export async function runStrategyPlazaTemplate(
   templateId: string,
   runRequestId: string,
-): Promise<AccountAiQuantStrategyDetail> {
+): Promise<StrategyPlazaRunResult> {
   return apiCall(async () => {
     const slug = getStrategyPlazaTemplateSlug(templateId)
     if (!runRequestId?.trim()) {
@@ -117,19 +137,20 @@ export async function runStrategyPlazaTemplate(
       body: JSON.stringify({ runRequestId: runRequestId.trim() }),
     })
     const json = await parseStrategyPlazaJson(response, '运行策略广场模板失败')
-    return unwrapResponse<AccountAiQuantStrategyDetail>(
-      json as AccountAiQuantStrategyDetail | { data?: AccountAiQuantStrategyDetail; message?: string },
+    return unwrapResponse<StrategyPlazaRunResult>(
+      json as StrategyPlazaRunResult | { data?: StrategyPlazaRunResult; message?: string },
     )
   }, 'RUN_STRATEGY_PLAZA_TEMPLATE')
 }
 
 export async function startStrategyPlazaEditSession(
   templateId: string,
+  locale?: 'zh' | 'en',
 ): Promise<StrategyPlazaEditSessionResponse> {
   return apiCall(async () => {
     const slug = getStrategyPlazaTemplateSlug(templateId)
 
-    const response = await fetch(buildStrategyPlazaUrl(slug, 'edit-session'), {
+    const response = await fetch(buildStrategyPlazaUrl(slug, 'edit-session', { locale }), {
       method: 'POST',
       headers: requireAuthHeaders(),
     })

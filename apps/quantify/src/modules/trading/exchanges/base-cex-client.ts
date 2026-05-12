@@ -7,9 +7,20 @@ import type {
   UnifiedPosition,
   UnifiedTicker,
 } from '../core/types'
+import type { Dispatcher } from 'undici'
+import { Agent, ProxyAgent } from 'undici'
 import { ExchangeError, NetworkError } from '../core/errors'
 
 type HttpMethod = 'GET' | 'POST' | 'DELETE'
+
+type RequestInitWithDispatcher = RequestInit & {
+  dispatcher?: Dispatcher
+}
+
+export interface HttpEgressOptions {
+  proxyUrl?: string
+  localAddress?: string
+}
 
 interface SignedRequest {
   url: string
@@ -17,10 +28,42 @@ interface SignedRequest {
   body?: string
 }
 
+interface BeforeRequestContext {
+  isPrivate: boolean
+  method: HttpMethod
+  path: string
+}
+
+interface RetryPolicy {
+  maxAttempts: number
+  baseDelayMs: number
+  maxDelayMs?: number
+}
+
+function trimOptional(value?: string): string | undefined {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : undefined
+}
+
+export function createHttpEgressDispatcher(options?: HttpEgressOptions): Dispatcher | undefined {
+  const proxyUrl = trimOptional(options?.proxyUrl)
+  if (proxyUrl) {
+    return new ProxyAgent(proxyUrl)
+  }
+
+  const localAddress = trimOptional(options?.localAddress)
+  if (localAddress) {
+    return new Agent({ connect: { localAddress } })
+  }
+
+  return undefined
+}
+
 export abstract class BaseCexClient implements IExchangeClient {
   protected constructor(
     protected readonly baseUrl: string,
     protected readonly marketType: MarketType,
+    private readonly dispatcher?: Dispatcher,
   ) {}
 
   abstract init(): Promise<void>
@@ -61,19 +104,50 @@ export abstract class BaseCexClient implements IExchangeClient {
     isPrivate = false,
     body?: unknown,
   ): Promise<TResponse> {
-    const signed = await this.signRequest(method, path, params, isPrivate, body)
+    const retryPolicy = this.getRetryPolicy()
+    let attempt = 0
 
-    const url = new URL(signed.url, this.baseUrl)
+    while (true) {
+      attempt += 1
+      await this.beforeRequest({ isPrivate, method, path })
 
-    const init: RequestInit = {
-      method,
-      headers: signed.headers,
+      const signed = await this.signRequest(method, path, params, isPrivate, body)
+
+      const url = new URL(signed.url, this.baseUrl)
+
+      const init: RequestInitWithDispatcher = {
+        method,
+        headers: signed.headers,
+      }
+
+      if (signed.body !== undefined) {
+        init.body = signed.body
+      }
+
+      if (this.dispatcher !== undefined) {
+        init.dispatcher = this.dispatcher
+      }
+
+      try {
+        const data = await this.fetchAndParse(url, init)
+        return data as TResponse
+      }
+      catch (error) {
+        if (
+          error instanceof ExchangeError
+          && attempt < retryPolicy.maxAttempts
+          && this.shouldRetryRequest(error)
+        ) {
+          await this.sleepBeforeRetry(this.getRetryDelayMs(attempt, retryPolicy))
+          continue
+        }
+
+        throw error
+      }
     }
+  }
 
-    if (signed.body !== undefined) {
-      init.body = signed.body
-    }
-
+  private async fetchAndParse(url: URL, init: RequestInitWithDispatcher): Promise<unknown> {
     let response: Response
     try {
       response = await fetch(url, init)
@@ -103,7 +177,12 @@ export abstract class BaseCexClient implements IExchangeClient {
       throw this.mapError(response.status, data)
     }
 
-    return data as TResponse
+    const responseError = this.mapSuccessfulResponseError(data)
+    if (responseError) {
+      throw responseError
+    }
+
+    return data
   }
 
   /**
@@ -118,4 +197,31 @@ export abstract class BaseCexClient implements IExchangeClient {
 
     return new ExchangeError(message, String(status), data)
   }
+
+  protected mapSuccessfulResponseError(_data: unknown): ExchangeError | undefined {
+    return undefined
+  }
+
+  protected getRetryPolicy(): RetryPolicy {
+    return { maxAttempts: 1, baseDelayMs: 0 }
+  }
+
+  protected shouldRetryRequest(_error: ExchangeError): boolean {
+    return false
+  }
+
+  protected sleepBeforeRetry(delayMs: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, delayMs))
+  }
+
+  private getRetryDelayMs(attempt: number, policy: RetryPolicy): number {
+    const delayMs = policy.baseDelayMs * (2 ** Math.max(0, attempt - 1))
+    if (policy.maxDelayMs === undefined) {
+      return delayMs
+    }
+
+    return Math.min(delayMs, policy.maxDelayMs)
+  }
+
+  protected beforeRequest(_context: BeforeRequestContext): Promise<void> | void {}
 }

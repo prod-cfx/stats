@@ -3,6 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import {
   IsBoolean,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -35,6 +36,11 @@ export class ContinueCodegenSessionDto {
   @IsOptional()
   @IsString()
   userId?: string
+
+  @ApiPropertyOptional({ description: '会话回复语言', enum: ['zh', 'en'] })
+  @IsOptional()
+  @IsIn(['zh', 'en'])
+  locale?: string
 
   @ApiProperty({ description: '用户本轮输入' })
   @IsString()

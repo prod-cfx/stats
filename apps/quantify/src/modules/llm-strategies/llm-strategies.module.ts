@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 
 import { AiModule } from '@/modules/ai/ai.module'
 import { LlmSubscriptionsRepository } from '@/modules/llm-strategy-subscriptions/repositories/llm-subscriptions.repository'
+import { ShardingModule } from '@/modules/sharding/sharding.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 
 import { LiveLlmStrategyInstancesController } from './controllers/live-llm-strategy-instances.controller'
@@ -23,7 +24,7 @@ import { LlmStrategyInstancesService } from './services/llm-strategy-instances.s
 import { LlmStrategyRunsService } from './services/llm-strategy-runs.service'
 
 @Module({
-  imports: [PrismaModule, AiModule],
+  imports: [PrismaModule, AiModule, ShardingModule],
   controllers: [
     OpsLlmStrategiesController,
     OpsLlmStrategyInstancesController,

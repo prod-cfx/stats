@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server.node'
+import mockZhCommon from '../../../public/locales/zh/common.json'
 import {
   AiQuantStrategyList,
   AiQuantStrategyPrimarySummary,
@@ -42,7 +43,18 @@ const mockDeleteAccountAiQuantStrategy = jest.fn()
 const mockListAiQuantConversations = jest.fn()
 const mockRouterPush = jest.fn()
 let mockSession: { userId: string } | null = null
-const mockT = (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key
+const mockT = (key: string, options?: { defaultValue?: string } & Record<string, unknown>) => {
+  const value = key.split('.').reduce<unknown>((curr, segment) => (
+    curr && typeof curr === 'object' ? (curr as Record<string, unknown>)[segment] : undefined
+  ), mockZhCommon)
+  const template = typeof value === 'string' ? value : (options?.defaultValue ?? key)
+  return Object.entries(options ?? {}).reduce(
+    (text, [name, replacement]) => name === 'defaultValue'
+      ? text
+      : text.replaceAll(`{{${name}}}`, String(replacement)),
+    template,
+  )
+}
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -197,10 +209,10 @@ describe('AiQuantStrategyList primary summary', () => {
   })
 
   it('uses a stop-specific label for running strategies to avoid duplicate detail actions', () => {
-    const t = (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key
+    const t = mockT
 
     expect(getStrategyRuntimeActionLabel('running', t)).toBe('停止策略')
-    expect(getStrategyRuntimeActionLabel('stopped', t)).toBe('aiQuant.actions.run')
+    expect(getStrategyRuntimeActionLabel('stopped', t)).toBe('运行')
   })
 
   async function renderStrategyListWithItems(items: unknown[]) {
@@ -362,7 +374,7 @@ describe('AiQuantStrategyList primary summary', () => {
     await renderStrategyListWithItems([listItem({ status: 'stopped', hasActiveConversation: true })])
 
     const deleteButton = Array.from(container.querySelectorAll('button'))
-      .find(button => button.textContent?.includes('Delete'))
+      .find(button => button.textContent?.includes('删除'))
     expect(deleteButton?.closest('a')).toBeNull()
 
     await act(async () => {
@@ -393,7 +405,7 @@ describe('AiQuantStrategyList primary summary', () => {
     await renderStrategyListWithItems([listItem({ status: 'stopped', hasActiveConversation: true })])
 
     const deleteButton = Array.from(container.querySelectorAll('button'))
-      .find(button => button.textContent?.includes('Delete'))
+      .find(button => button.textContent?.includes('删除'))
     await act(async () => {
       deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
@@ -429,7 +441,7 @@ describe('AiQuantStrategyList primary summary', () => {
     await renderStrategyListWithItems([listItem({ status: 'stopped', hasActiveConversation: false })])
 
     const deleteButton = Array.from(container.querySelectorAll('button'))
-      .find(button => button.textContent?.includes('Delete'))
+      .find(button => button.textContent?.includes('删除'))
     await act(async () => {
       deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
@@ -460,7 +472,7 @@ describe('AiQuantStrategyList primary summary', () => {
     await renderStrategyListWithItems([listItem({ status: 'stopped', hasActiveConversation: false })])
 
     const deleteButton = Array.from(container.querySelectorAll('button'))
-      .find(button => button.textContent?.includes('Delete'))
+      .find(button => button.textContent?.includes('删除'))
     await act(async () => {
       deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
@@ -493,7 +505,7 @@ describe('AiQuantStrategyList primary summary', () => {
     // running 状态下列表行同时渲染「停止策略」与「Delete」按钮（viewOnly 才隐藏）；
     // 点击 Delete 应把弹框切换到 running 分支，而非进入 with-conversation 分支。
     const deleteButton = Array.from(container.querySelectorAll('button'))
-      .find(button => button.textContent?.includes('Delete'))
+      .find(button => button.textContent?.includes('删除'))
     expect(deleteButton).toBeTruthy()
 
     await act(async () => {
@@ -519,7 +531,7 @@ describe('AiQuantStrategyList primary summary', () => {
     await renderStrategyListWithItems([listItem({ status: 'stopped', hasActiveConversation: false })])
 
     const deleteButton = Array.from(container.querySelectorAll('button'))
-      .find(button => button.textContent?.includes('Delete'))
+      .find(button => button.textContent?.includes('删除'))
     await act(async () => {
       deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
@@ -545,12 +557,12 @@ describe('AiQuantStrategyList primary summary', () => {
 
     const rowButtons = Array.from(container.querySelectorAll('button'))
       .filter(b => !b.getAttribute('data-testid')?.startsWith('strategy-filter-tab-'))
-    expect(rowButtons.find(b => b.textContent?.includes('Delete'))).toBeUndefined()
+    expect(rowButtons.find(b => b.textContent?.includes('删除'))).toBeUndefined()
     expect(rowButtons.find(b => b.textContent?.includes('Run'))).toBeUndefined()
     expect(rowButtons.find(b => b.textContent?.includes('停止策略'))).toBeUndefined()
 
     const link = Array.from(container.querySelectorAll('a'))
-      .find(a => a.textContent?.includes('aiQuant.viewDetail'))
+      .find(a => a.textContent?.includes('查看详情'))
     expect(link).toBeTruthy()
   })
 
@@ -738,6 +750,6 @@ describe('AiQuantStrategyList tabs UI', () => {
       .filter(b => !b.getAttribute('data-testid')?.startsWith('strategy-filter-tab-'))
     expect(rowButtons.find(b => b.textContent?.includes('Run'))).toBeUndefined()
     expect(rowButtons.find(b => b.textContent?.includes('停止策略'))).toBeUndefined()
-    expect(rowButtons.find(b => b.textContent?.includes('Delete'))).toBeUndefined()
+    expect(rowButtons.find(b => b.textContent?.includes('删除'))).toBeUndefined()
   })
 })

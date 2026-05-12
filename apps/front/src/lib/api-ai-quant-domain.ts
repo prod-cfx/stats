@@ -121,6 +121,13 @@ function parseApiErrorMessage(status: number, payload: unknown, fallback: string
   return buildAiQuantErrorMessage(fallback, status, meta)
 }
 
+function isAccountStrategyNotFoundApiError(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false
+  const details = error.details as { error?: { code?: unknown }; code?: unknown } | null | undefined
+  return details?.error?.code === 'ACCOUNT_STRATEGY_NOT_FOUND'
+    || details?.code === 'ACCOUNT_STRATEGY_NOT_FOUND'
+}
+
 async function postLlmCodegen<T>(path: string, payload: unknown): Promise<T> {
   const authHeaders = requireAuthHeaders()
   let response: Response
@@ -201,26 +208,30 @@ export async function fetchAccountAiQuantStrategyDetail(
   strategyId: string,
   userId: string,
 ): Promise<AccountAiQuantStrategyDetail> {
-  return apiCall(async () => {
-    validateId(strategyId, 'strategy ID')
-    if (!userId?.trim()) {
-      throw new ApiError('userId is required', 'INVALID_INPUT')
-    }
+  return apiCall(
+    async () => {
+      validateId(strategyId, 'strategy ID')
+      if (!userId?.trim()) {
+        throw new ApiError('userId is required', 'INVALID_INPUT')
+      }
 
-    const search = new URLSearchParams({ userId: userId.trim() })
-    const response = await fetch(
-      `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}?${search.toString()}`,
-      { method: 'GET', headers: buildAccountAiQuantHeaders(userId.trim()) },
-    )
-    const json = await parseAccountAiQuantJson(response, '获取 AI 量化策略详情失败')
-    const detail = unwrapResponse<AccountAiQuantStrategyDetail | null>(
-      json as AccountAiQuantStrategyDetail | { data?: AccountAiQuantStrategyDetail; message?: string },
-    )
-    if (!detail) {
-      throw new ApiError('策略详情不存在', 'ACCOUNT_AI_QUANT_NOT_FOUND', 404, json)
-    }
-    return detail
-  }, 'FETCH_ACCOUNT_AI_QUANT_STRATEGY_DETAIL')
+      const search = new URLSearchParams({ userId: userId.trim() })
+      const response = await fetch(
+        `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}?${search.toString()}`,
+        { method: 'GET', headers: buildAccountAiQuantHeaders(userId.trim()) },
+      )
+      const json = await parseAccountAiQuantJson(response, '获取 AI 量化策略详情失败')
+      const detail = unwrapResponse<AccountAiQuantStrategyDetail | null>(
+        json as AccountAiQuantStrategyDetail | { data?: AccountAiQuantStrategyDetail; message?: string },
+      )
+      if (!detail) {
+        throw new ApiError('策略详情不存在', 'ACCOUNT_AI_QUANT_NOT_FOUND', 404, json)
+      }
+      return detail
+    },
+    'FETCH_ACCOUNT_AI_QUANT_STRATEGY_DETAIL',
+    { shouldLogError: error => !isAccountStrategyNotFoundApiError(error) },
+  )
 }
 
 export async function fetchAccountAiQuantDeployResult(
@@ -420,6 +431,7 @@ export async function recoverAiQuantEditConversation(
       conversationId: payload.conversationId?.trim() || undefined,
       sessionId: payload.sessionId?.trim() || undefined,
       source: payload.source,
+      locale: payload.locale,
     }),
   })
   let json: unknown = null

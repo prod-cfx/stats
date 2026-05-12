@@ -1123,6 +1123,7 @@ describe('AiQuantPageClient backtest range integration', () => {
       conversationId: undefined,
       sessionId: undefined,
       source: 'account-detail',
+      locale: 'zh',
     })
     expect(localStorage.getItem('ai_quant_return_intent_v1')).toBeNull()
   })
@@ -1323,7 +1324,7 @@ describe('AiQuantPageClient backtest range integration', () => {
       await Promise.resolve()
     })
 
-    expect(container.textContent).toContain('当前策略正在运行')
+    expect(container.textContent).toContain('aiQuant.deleteDialog.runningTitle')
     expect(deleteAiQuantConversation).not.toHaveBeenCalled()
   })
 
@@ -1414,7 +1415,7 @@ describe('AiQuantPageClient backtest range integration', () => {
       await Promise.resolve()
     })
 
-    expect(container.textContent).toContain('同时删除已停止策略记录')
+    expect(container.textContent).toContain('aiQuant.deleteDialog.deleteStoppedStrategy')
 
     await act(async () => {
       ;(container.querySelector('input[type="checkbox"]') as HTMLInputElement).click()

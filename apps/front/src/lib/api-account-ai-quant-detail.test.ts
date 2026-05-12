@@ -78,6 +78,7 @@ describe('fetchAccountAiQuantStrategyDetail', () => {
   it('does not fallback to local mock detail when backend detail request fails', async () => {
     process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK = 'true'
     process.env.NEXT_PUBLIC_APP_ENV = 'development'
+    jest.spyOn(console, 'error').mockImplementation(() => {})
 
     const fetchMock = jest.fn().mockRejectedValue(new TypeError('fetch failed'))
     globalThis.fetch = fetchMock as unknown as typeof fetch
@@ -87,5 +88,32 @@ describe('fetchAccountAiQuantStrategyDetail', () => {
     await expect(fetchAccountAiQuantStrategyDetail('strategy-1', 'user-1')).rejects.toThrow('fetch failed')
     expect(getStrategyById).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not log expected missing linked strategy detail as a console error', async () => {
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({
+        error: {
+          code: 'ACCOUNT_STRATEGY_NOT_FOUND',
+          message: 'account_strategy.not_found',
+        },
+      }),
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { fetchAccountAiQuantStrategyDetail } = await import('./api')
+
+    await expect(fetchAccountAiQuantStrategyDetail('strategy-missing', 'user-1')).rejects.toMatchObject({
+      statusCode: 404,
+      details: {
+        error: {
+          code: 'ACCOUNT_STRATEGY_NOT_FOUND',
+        },
+      },
+    })
+    expect(consoleErrorSpy).not.toHaveBeenCalled()
   })
 })

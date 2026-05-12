@@ -218,6 +218,7 @@ describe('strategyPlazaOfficialSnapshotRepository', () => {
         id: 'archived-strategy-instance',
         createdBy: 'user-1',
         archivedAt: null,
+        status: { in: ['running', 'stopped', 'paused'] },
         // 复用路径同时排除 view-only 实例：用户主动把策略转为只读后，
         // 不应再被 plaza「再次运行」复活。
         viewOnlyAt: null,
@@ -261,6 +262,7 @@ describe('strategyPlazaOfficialSnapshotRepository', () => {
         id: 'view-only-strategy-instance',
         createdBy: 'user-1',
         archivedAt: null,
+        status: { in: ['running', 'stopped', 'paused'] },
         viewOnlyAt: null,
       },
       select: { id: true },
@@ -301,6 +303,7 @@ describe('strategyPlazaOfficialSnapshotRepository', () => {
 
     await expect(repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template })).resolves.toEqual({
       id: 'user-snapshot-1',
+      existingStrategyInstanceId: 'strategy-instance-1',
     })
 
     expect(tx.publishedStrategySnapshot.findFirst).toHaveBeenCalledWith({

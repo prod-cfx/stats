@@ -1318,6 +1318,9 @@ const StrategyPlazaTemplateResponseDto = z
   })
   .passthrough()
 const RunStrategyPlazaTemplateDto = z.object({ runRequestId: z.string() }).passthrough()
+const StrategyPlazaRunExistingResponseDto = z
+  .object({ result: z.literal('existing'), strategy: AccountStrategyDetailResponseDto })
+  .passthrough()
 const StrategyPlazaEditSessionResponseDto = z
   .object({ sessionId: z.string(), templateId: z.string(), initialMessage: z.string() })
   .passthrough()
@@ -1438,6 +1441,7 @@ const RecoverAiQuantEditConversationRequestDto = z
     conversationId: z.string().optional(),
     sessionId: z.string().optional(),
     source: z.enum(['account-detail', 'backtest', 'plaza', 'ai-quant']).optional(),
+    locale: z.enum(['zh', 'en']).optional(),
   })
   .passthrough()
 const AiQuantConversationBacktestDraftConfigRequestDto = z
@@ -1454,7 +1458,12 @@ const CodegenGuideConfigDto = z
   .partial()
   .passthrough()
 const StartCodegenSessionDto = z
-  .object({ userId: z.string(), initialMessage: z.string(), guideConfig: CodegenGuideConfigDto })
+  .object({
+    userId: z.string(),
+    initialMessage: z.string(),
+    locale: z.enum(['zh', 'en']),
+    guideConfig: CodegenGuideConfigDto,
+  })
   .partial()
   .passthrough()
 const CodegenConversationMessageDto = z
@@ -1571,6 +1580,7 @@ const CodegenSessionResponseDto = z
 const ContinueCodegenSessionDto = z
   .object({
     userId: z.string().optional(),
+    locale: z.enum(['zh', 'en']).optional(),
     message: z.string(),
     clarificationAnswers: z.record(z.string()).optional(),
     guideConfig: CodegenGuideConfigDto.optional(),
@@ -1864,6 +1874,7 @@ export const schemas = {
   UpdateStrategyTemplateDto,
   StrategyPlazaTemplateResponseDto,
   RunStrategyPlazaTemplateDto,
+  StrategyPlazaRunExistingResponseDto,
   StrategyPlazaEditSessionResponseDto,
   CreateExchangeAccountDto,
   ExchangeAccountResponseDto,
@@ -4496,6 +4507,11 @@ const endpoints = makeApi([
         type: 'Header',
         schema: z.string().optional(),
       },
+      {
+        name: 'locale',
+        type: 'Query',
+        schema: z.enum(['zh', 'en']).optional(),
+      },
     ],
     response: z
       .object({ data: StrategyPlazaEditSessionResponseDto, message: z.string().optional() })
@@ -4529,7 +4545,10 @@ const endpoints = makeApi([
       },
     ],
     response: z
-      .object({ data: AccountStrategyDetailResponseDto, message: z.string().optional() })
+      .object({
+        data: z.union([AccountStrategyDetailResponseDto, StrategyPlazaRunExistingResponseDto]),
+        message: z.string().optional(),
+      })
       .passthrough(),
   },
   {

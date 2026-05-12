@@ -44,6 +44,8 @@ describe('StrategyPlazaRunService', () => {
   function buildService(overrides?: {
     account?: { id: string, name: string } | null
     deployResult?: unknown
+    existingStrategyInstanceId?: string
+    existingStrategyDetail?: unknown
     snapshotId?: string
   }) {
     const account = overrides && 'account' in overrides
@@ -55,12 +57,25 @@ describe('StrategyPlazaRunService', () => {
       findLatestOkxDemoAccountForUser: jest.fn().mockResolvedValue(account),
     }
     const officialSnapshots = {
+      resolveExistingOfficialSnapshotForUser: jest.fn().mockResolvedValue(
+        overrides?.existingStrategyInstanceId
+          ? {
+              id: overrides?.snapshotId ?? 'user-visible-ma-cross-snapshot',
+              existingStrategyInstanceId: overrides.existingStrategyInstanceId,
+            }
+          : null,
+      ),
       resolveOfficialSnapshotForUser: jest.fn().mockResolvedValue({
         id: overrides?.snapshotId ?? 'user-visible-ma-cross-snapshot',
       }),
     }
     const accountStrategyViewService = {
       deployStrategy: jest.fn().mockResolvedValue(overrides?.deployResult ?? { id: 'strategy-1', status: 'running' }),
+      getStrategyDetail: jest.fn().mockResolvedValue(overrides?.existingStrategyDetail ?? {
+        id: overrides?.existingStrategyInstanceId ?? 'strategy-existing',
+        name: 'MA 均线交叉',
+        status: 'stopped',
+      }),
     }
     const service = new StrategyPlazaRunService(
       templates as never,
@@ -87,6 +102,10 @@ describe('StrategyPlazaRunService', () => {
       runRequestId: 'run-123456',
     })).rejects.toBeInstanceOf(StrategyPlazaOkxDemoApiKeyRequiredException)
 
+    expect(officialSnapshots.resolveExistingOfficialSnapshotForUser).toHaveBeenCalledWith({
+      template,
+      userId: 'user-1',
+    })
     expect(officialSnapshots.resolveOfficialSnapshotForUser).not.toHaveBeenCalled()
     expect(accountStrategyViewService.deployStrategy).not.toHaveBeenCalled()
   })
@@ -100,6 +119,10 @@ describe('StrategyPlazaRunService', () => {
       runRequestId: 'run-123456',
     })
 
+    expect(officialSnapshots.resolveExistingOfficialSnapshotForUser).toHaveBeenCalledWith({
+      template,
+      userId: 'user-1',
+    })
     expect(officialSnapshots.resolveOfficialSnapshotForUser).toHaveBeenCalledWith({
       template,
       userId: 'user-1',
@@ -114,5 +137,66 @@ describe('StrategyPlazaRunService', () => {
       mode: 'TESTNET',
       deploymentExecutionConfig: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
     })
+  })
+
+  it('returns the existing plaza strategy without deploying again', async () => {
+    const { accountStrategyViewService, exchangeAccounts, officialSnapshots, service } = buildService({
+      existingStrategyInstanceId: 'strategy-existing',
+      existingStrategyDetail: {
+        id: 'strategy-existing',
+        name: 'MA 均线交叉',
+        status: 'stopped',
+      },
+    })
+
+    await expect(service.runTemplate({
+      userId: 'user-1',
+      templateId: 'ma-cross',
+      runRequestId: 'run-123456',
+    })).resolves.toEqual({
+      result: 'existing',
+      strategy: {
+        id: 'strategy-existing',
+        name: 'MA 均线交叉',
+        status: 'stopped',
+      },
+    })
+
+    expect(accountStrategyViewService.getStrategyDetail).toHaveBeenCalledWith('user-1', 'strategy-existing')
+    expect(officialSnapshots.resolveExistingOfficialSnapshotForUser).toHaveBeenCalledWith({
+      template,
+      userId: 'user-1',
+    })
+    expect(exchangeAccounts.findLatestOkxDemoAccountForUser).not.toHaveBeenCalled()
+    expect(officialSnapshots.resolveOfficialSnapshotForUser).not.toHaveBeenCalled()
+    expect(accountStrategyViewService.deployStrategy).not.toHaveBeenCalled()
+  })
+
+  it('returns an existing plaza strategy even when the OKX demo key is missing', async () => {
+    const { accountStrategyViewService, exchangeAccounts, service } = buildService({
+      account: null,
+      existingStrategyInstanceId: 'strategy-existing',
+      existingStrategyDetail: {
+        id: 'strategy-existing',
+        name: 'MA 均线交叉',
+        status: 'running',
+      },
+    })
+
+    await expect(service.runTemplate({
+      userId: 'user-1',
+      templateId: 'ma-cross',
+      runRequestId: 'run-123456',
+    })).resolves.toEqual({
+      result: 'existing',
+      strategy: {
+        id: 'strategy-existing',
+        name: 'MA 均线交叉',
+        status: 'running',
+      },
+    })
+
+    expect(exchangeAccounts.findLatestOkxDemoAccountForUser).not.toHaveBeenCalled()
+    expect(accountStrategyViewService.deployStrategy).not.toHaveBeenCalled()
   })
 })
