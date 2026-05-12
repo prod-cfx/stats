@@ -175,18 +175,26 @@
     {
       "key": "indicator.cross_over",
       "category": "trigger",
-      "status": "uncovered",
-      "failureLayer": "compile-throw",
-      "trace": [],
-      "note": "codegen.canonical_spec_v2_condition_unsupported:indicator.cross_over"
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "guard.kind:EXPRESSION_GUARD",
+        "guard:guard_probe-gate-rule",
+        "predicate:CROSS_OVER",
+        "series:SMA"
+      ]
     },
     {
       "key": "indicator.cross_under",
       "category": "trigger",
-      "status": "uncovered",
-      "failureLayer": "compile-throw",
-      "trace": [],
-      "note": "codegen.canonical_spec_v2_condition_unsupported:indicator.cross_under"
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "guard.kind:EXPRESSION_GUARD",
+        "guard:guard_probe-gate-rule",
+        "predicate:CROSS_UNDER",
+        "series:SMA"
+      ]
     },
     {
       "key": "indicator.divergence",
@@ -202,18 +210,27 @@
     {
       "key": "indicator.threshold_gte",
       "category": "trigger",
-      "status": "uncovered",
-      "failureLayer": "compile-throw",
-      "trace": [],
-      "note": "codegen.canonical_spec_v2_condition_unsupported:indicator.threshold_gte"
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "guard.kind:EXPRESSION_GUARD",
+        "guard:guard_probe-gate-rule",
+        "predicate:LT",
+        "series:CONST",
+        "series:RSI"
+      ]
     },
     {
       "key": "indicator.threshold_lte",
       "category": "trigger",
-      "status": "uncovered",
-      "failureLayer": "compile-throw",
-      "trace": [],
-      "note": "codegen.canonical_spec_v2_condition_unsupported:indicator.threshold_lte"
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "guard.kind:EXPRESSION_GUARD",
+        "guard:guard_probe-gate-rule",
+        "series:CONST",
+        "series:RSI"
+      ]
     },
     {
       "key": "liquidity.sweep",

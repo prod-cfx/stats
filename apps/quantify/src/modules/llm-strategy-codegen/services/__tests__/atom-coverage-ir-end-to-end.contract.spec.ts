@@ -271,6 +271,15 @@ const SPECIAL_TRIGGER_MUTATORS: Record<string, SpecMutation> = {
   'condition.expression': () => null,
   // 'volume.threshold' phase-1 gate：需 metric 参数
   'volume.threshold': key => mutateAsGateTrigger(key, { metric: 'base_volume' }),
+  // P3 ghost-atom 修复 (Issue #1262)：indicator.cross_over / cross_under
+  //   phase-1 gate，按 params.indicator 路由（默认 'sma'）。fastPeriod/slowPeriod 必填。
+  'indicator.cross_over': key => mutateAsGateTrigger(key, { indicator: 'sma', fastPeriod: 20, slowPeriod: 50 }),
+  'indicator.cross_under': key => mutateAsGateTrigger(key, { indicator: 'sma', fastPeriod: 20, slowPeriod: 50 }),
+  // P3 ghost-atom 修复 (Issue #1262)：indicator.threshold_gte / threshold_lte
+  //   phase-1 gate，按 params.indicator 路由（默认 'rsi' 是最典型 use case）；value 来自 condition.value（mutateAsGateTrigger 默认 1）。
+  //   value=1 对 RSI(0..100) 永远 GTE，但本契约只关心"是否落出可观测 IR"，数值语义由 runtime parity spec 兜底。
+  'indicator.threshold_gte': key => mutateAsGateTrigger(key, { indicator: 'rsi', period: 14 }),
+  'indicator.threshold_lte': key => mutateAsGateTrigger(key, { indicator: 'rsi', period: 14 }),
   // 'volatility.atr_threshold' phase-1 gate：需 period + thresholdUnit
   'volatility.atr_threshold': key => mutateAsGateTrigger(key, { period: 14, thresholdUnit: 'percent_of_close' }),
   // 'strategy.time_window' phase-1 gate：windows JSON + timezone
