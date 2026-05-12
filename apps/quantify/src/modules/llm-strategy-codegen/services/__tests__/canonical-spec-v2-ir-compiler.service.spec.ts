@@ -4604,6 +4604,8 @@ describe('canonicalSpecV2IrCompilerService action.reverse_position', () => {
         { type: fromSide === 'long' ? 'CLOSE_LONG' : 'CLOSE_SHORT' },
         {
           type: toSide === 'long' ? 'OPEN_LONG' : 'OPEN_SHORT',
+          // sizingSource='current_position': 显式注入 sizing+quantityMode 使下游翻译为 position_pct
+          // sizingSource='fixed'/'position_sizing': 不注入 sizing，依赖 spec.sizing（RATIO:0.1）兜底
           ...(sizingSource === 'current_position'
             ? { sizing: { mode: 'RATIO', value: 100 }, params: { quantityMode: 'position_pct' } }
             : {}),
