@@ -109,7 +109,8 @@ describe('Atom coverage contract — supported atoms have ≥3 utterances and re
       // eslint-disable-next-line no-console
       console.warn(`[atom-coverage-contract] supported_requires_slot atoms missing utterance corpus: ${requiresSlotGaps.join(', ')}`)
     }
-    // 不强制断言：requires_slot 的 NL 探针缺口在 Issue #1231 follow-up 中收口
-    expect(true).toBe(true)
+    // 不强制断言：requires_slot 的 NL 探针缺口在 Issue #1231 follow-up (#1247) 中收口；
+    // 此处仅暴露数据形状，保证未来缺口列表始终是 string[] 而非异常类型
+    expect(Array.isArray(requiresSlotGaps)).toBe(true)
   })
 })
