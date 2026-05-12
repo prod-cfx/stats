@@ -140,7 +140,7 @@ export function StopRunningStrategyDialog({
                 data-testid="liquidate-and-stop-strategy"
                 disabled={pending}
                 onClick={onLiquidateAndStop}
-                className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
               >
                 平仓并停止
               </button>
