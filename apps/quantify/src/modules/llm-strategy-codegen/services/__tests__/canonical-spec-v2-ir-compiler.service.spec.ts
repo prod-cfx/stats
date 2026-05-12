@@ -4529,11 +4529,15 @@ describe('canonicalSpecV2IrCompilerService risk.max_drawdown_pct', () => {
 //
 // 验证 canonical-spec-v2-ir-compiler 正确透传 dca_schedule metadata：
 //   - ADD_LONG action 出现在 ruleBlocks
-//   - metadata.dcaSchedule 字段全量透传
-//   - fail-closed：maxCount=0 / capitalCap 缺失 / maxCount 非法
+//   - metadata.dcaSchedule 字段全量透传（maxCount / stateKey / capitalCap /
+//     triggerMode / priceIntervalPct / timeIntervalMs / exitRule）
 //   - multi-rule 不互盖；与 position 其他 atom 隔离
-//   - precision toFixed(4)
-//   - exitRule 缺失时走 cap_only 哨兵
+//     （OPEN_LONG / orchestrationPortfolioRisks / riskPolicy.guards）
+//   - precision：priceIntervalPct toBeCloseTo 4 位小数
+//   - exitRule 缺省 → IR compiler 不会人为补 cap_only 哨兵（透传 undefined）
+//
+// 本套测试仅覆盖 IR compiler 透传层；validation / fail-closed（maxCount=0、
+// capitalCap 缺失等）属 canonical-spec-builder 职责，不在本文件范围。
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('canonicalSpecV2IrCompilerService position.dca_schedule', () => {
