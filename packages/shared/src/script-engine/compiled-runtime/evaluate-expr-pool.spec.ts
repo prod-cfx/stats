@@ -1053,12 +1053,15 @@ describe('evaluateExprPool', () => {
 
     it('uses timezone conversion — Asia/Tokyo shifts Mon 14:30 UTC to Tue 23:30', () => {
       // In Tokyo, 14:30 UTC = 23:30 local (Tuesday)
+      // 24:00 is not valid HH:MM → parseHHMM returns null → window skipped → false
       const values = evaluateExprPool(
         { timestamp: MON_1430_UTC, bars: [] },
         [buildNode('Asia/Tokyo', [{ start: '23:00', end: '24:00' }])],
         ['in_time_window_node'],
       )
-      // 24:00 is not valid HH:MM so window is skipped; use 23:59 instead
+      expect(values.in_time_window_node).toBe(false)
+
+      // 23:59 is valid — Tokyo 23:30 falls inside [23:00, 23:59)
       const values2 = evaluateExprPool(
         { timestamp: MON_1430_UTC, bars: [] },
         [buildNode('Asia/Tokyo', [{ start: '23:00', end: '23:59' }])],
@@ -1280,6 +1283,28 @@ describe('evaluateExprPool', () => {
         ['in_time_window_node'],
       )
       expect(values.in_time_window_node).toBe(true)
+    })
+
+    it('handles overnight window ending at 00:00 (= midnight = end of day)', () => {
+      // {start:'22:00', end:'00:00'} means 22:00 through end of day (24h boundary as exclusive).
+      // end < start (0 < 1320), overnight branch: localMinutes >= 1320 || localMinutes < 0.
+      // Second sub-range is unreachable (minutes never < 0), effectively becomes "after 22:00".
+
+      // Tokyo 23:30 → inside 22:00–00:00 window
+      const insideTokyo = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('Asia/Tokyo', [{ start: '22:00', end: '00:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(insideTokyo.in_time_window_node).toBe(true)
+
+      // UTC 14:30 → outside 22:00–00:00 window (not in the 22:00-24:00 stretch)
+      const outsideUtc = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('UTC', [{ start: '22:00', end: '00:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(outsideUtc.in_time_window_node).toBe(false)
     })
 
     it('returns false for zero-duration window (end === start)', () => {
