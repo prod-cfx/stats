@@ -1,4 +1,4 @@
-import type { UnifiedPosition } from '@/modules/trading/core/types'
+import type { UnifiedOrder, UnifiedOrderFill, UnifiedPosition } from '@/modules/trading/core/types'
 import { Injectable } from '@nestjs/common'
 import { TradingService } from '@/modules/trading/trading.service'
 import { ClientOrderIdFactoryService } from './client-order-id-factory.service'
@@ -116,6 +116,31 @@ export class TradingExecutionService {
     catch (error) {
       return { status: 'submit_failed', intent, normalized, reason: this.errorReason(error), error }
     }
+  }
+
+  async getSubmittedOrder(intent: OrderIntent, order: UnifiedOrder): Promise<UnifiedOrder> {
+    return this.tradingService.getOrder(
+      intent.userId,
+      intent.exchangeId,
+      intent.marketType,
+      order.id,
+      order.symbol || intent.symbol,
+      intent.exchangeAccountId ?? undefined,
+    )
+  }
+
+  async getSubmittedOrderFills(intent: OrderIntent, order: UnifiedOrder): Promise<UnifiedOrderFill[]> {
+    return this.tradingService.getOrderFills(
+      intent.userId,
+      intent.exchangeId,
+      intent.marketType,
+      {
+        symbol: order.symbol || intent.symbol,
+        orderId: order.id,
+        clientOrderId: order.clientOrderId,
+      },
+      intent.exchangeAccountId ?? undefined,
+    )
   }
 
   private errorReason(error: unknown): string {

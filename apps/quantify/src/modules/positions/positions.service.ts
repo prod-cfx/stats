@@ -533,7 +533,7 @@ export class PositionsService {
       typeof order.filled === 'number' && Number.isFinite(order.filled) && order.filled > 0
         ? order.filled
         : closeQuantity.toNumber()
-    const tradePrice = this.resolveCloseTradePrice(order, Number(position.avgEntryPrice))
+    const tradePrice = await this.resolveCloseTradePrice(intent, order, dto.positionId)
     const { amount: feeAmount, currency: feeCurrency } = this.extractOrderFee(order)
 
     // 6. 下单成功后立即落地本地成交，避免仓位状态长期漂移
@@ -580,12 +580,29 @@ export class PositionsService {
     return `${positionId}:${closeQuantity.toString()}:${Date.now()}:${randomUUID()}`
   }
 
-  private resolveCloseTradePrice(order: UnifiedOrder, fallbackPrice: number): number {
+  private async resolveCloseTradePrice(intent: OrderIntent, order: UnifiedOrder, positionId: string): Promise<number> {
+    const submittedPrice = this.resolveOrderFilledAveragePrice(order)
+    if (submittedPrice !== undefined) return submittedPrice
+
+    const latestOrder = await this.tradingExecution.getSubmittedOrder(intent, order)
+    const latestPrice = this.resolveOrderFilledAveragePrice(latestOrder)
+    if (latestPrice !== undefined) return latestPrice
+
+    const fills = await this.tradingExecution.getSubmittedOrderFills(intent, latestOrder)
+    const fillsPrice = this.resolveWeightedAverageFillPrice(fills)
+    if (fillsPrice !== undefined) return fillsPrice
+
+    throw new DomainException('position.close_trade_price_unavailable', {
+      code: ErrorCode.PORTFOLIO_POSITION_CLOSE_ERROR,
+      args: { positionId, orderId: order.id },
+    })
+  }
+
+  private resolveOrderFilledAveragePrice(order: UnifiedOrder): number | undefined {
     return this.firstPositiveNumber(
       this.extractRawFilledAveragePrice(order.raw),
       order.price,
-      fallbackPrice,
-    ) ?? fallbackPrice
+    )
   }
 
   private extractRawFilledAveragePrice(raw: unknown): number | undefined {
