@@ -539,11 +539,12 @@ export class PositionsService {
     const { order } = executionResult
     const executionSummary = await this.resolveCloseTradeExecutionSummary(intent, order, closeQuantity.toNumber())
     if (executionSummary.price === undefined) {
+      await this.markManualClosePendingSync(position, dto, executionResult, closeQuantity.toString())
       return {
         success: true,
         orderId: order.id,
         positionId: dto.positionId,
-        filledQuantity: executionSummary.filledQuantity.toString(),
+        filledQuantity: '0',
         message: '市价平仓单已提交，成交均价待交易所同步',
       }
     }
@@ -660,8 +661,8 @@ export class PositionsService {
 
     for (const fill of fills) {
       if (Number.isFinite(fill.amount) && fill.amount > 0) filledQuantity += fill.amount
-      if (Number.isFinite(fill.fee) && fill.fee && fill.fee > 0) {
-        feeAmount += fill.fee
+      if (Number.isFinite(fill.fee) && fill.fee && fill.fee !== 0) {
+        feeAmount += Math.abs(fill.fee)
         feeCurrency ??= fill.feeCurrency ?? null
       }
       if (Number.isFinite(fill.executedAt) && fill.executedAt > executedAt) executedAt = fill.executedAt
@@ -678,6 +679,31 @@ export class PositionsService {
 
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms))
+  }
+
+  private async markManualClosePendingSync(
+    position: Position & { account?: { id: string, userId: string } },
+    dto: ClosePositionDto,
+    executionResult: Extract<TradingExecutionResult, { status: 'submitted' }>,
+    requestedQuantity: string,
+  ): Promise<void> {
+    const currentMetadata = this.asJsonObject(position.metadata)
+    await this.positionsRepository.updatePosition(position.id, {
+      metadata: {
+        ...currentMetadata,
+        pendingManualClose: this.toJsonSafe({
+          status: 'pending_sync',
+          orderId: executionResult.order.id,
+          clientOrderId: executionResult.normalized.clientOrderId,
+          positionId: dto.positionId,
+          requestedQuantity,
+          exchangeId: dto.exchangeId,
+          marketType: dto.marketType,
+          submittedAt: new Date(executionResult.order.createdAt).toISOString(),
+          reason: 'close_trade_price_pending',
+        }),
+      },
+    })
   }
 
   private extractRawFilledAveragePrice(raw: unknown): number | undefined {
@@ -812,6 +838,11 @@ export class PositionsService {
       return jsonObject
     }
     return String(value)
+  }
+
+  private asJsonObject(value: unknown): Prisma.JsonObject {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+    return this.toJsonSafe(value) as Prisma.JsonObject
   }
 
   private normalizeEntryTimeframe(value: string | undefined): MarketTimeframe | null {

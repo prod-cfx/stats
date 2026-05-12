@@ -561,11 +561,13 @@ describe('positionsService', () => {
     const getSubmittedOrderFills = jest.fn()
     const recordTrade = jest.spyOn(PositionsService.prototype, 'recordTrade').mockResolvedValue({} as any)
 
+    const updatePosition = jest.fn().mockResolvedValue({})
     const service = createService(
       {},
       {},
       { executeIntent, getSubmittedOrder, getSubmittedOrderFills },
       {
+        updatePosition,
         findUniqueWithAccount: jest.fn().mockResolvedValue({
           id: 'position-okx-close',
           userStrategyAccountId: 'account-1',
@@ -653,7 +655,7 @@ describe('positionsService', () => {
         side: 'sell',
         price: 80600,
         amount: 0.01,
-        fee: 0.2,
+        fee: -0.2,
         feeCurrency: 'USDT',
         executedAt: Date.parse('2026-05-11T12:00:02.000Z'),
         raw: {},
@@ -666,7 +668,7 @@ describe('positionsService', () => {
         side: 'sell',
         price: 80700,
         amount: 0.01161279,
-        fee: 0.3,
+        fee: -0.3,
         feeCurrency: 'USDT',
         executedAt: Date.parse('2026-05-11T12:00:03.000Z'),
         raw: {},
@@ -689,6 +691,7 @@ describe('positionsService', () => {
           status: 'OPEN',
           exchangeId: 'okx',
           marketType: 'spot',
+          metadata: { keep: 'value' },
           account: { id: 'account-1', userId: 'user-1' },
         }),
       },
@@ -754,11 +757,13 @@ describe('positionsService', () => {
     const getSubmittedOrderFills = jest.fn().mockResolvedValue([])
     const recordTrade = jest.spyOn(PositionsService.prototype, 'recordTrade').mockResolvedValue({} as any)
 
+    const updatePosition = jest.fn().mockResolvedValue({})
     const service = createService(
       {},
       {},
       { executeIntent, getSubmittedOrder, getSubmittedOrderFills },
       {
+        updatePosition,
         findUniqueWithAccount: jest.fn().mockResolvedValue({
           id: 'position-okx-close',
           userStrategyAccountId: 'account-1',
@@ -769,6 +774,7 @@ describe('positionsService', () => {
           status: 'OPEN',
           exchangeId: 'okx',
           marketType: 'spot',
+          metadata: { keep: 'value' },
           account: { id: 'account-1', userId: 'user-1' },
         }),
       },
@@ -785,12 +791,25 @@ describe('positionsService', () => {
     } as any)
 
     expect(recordTrade).not.toHaveBeenCalled()
+    expect(updatePosition).toHaveBeenCalledWith('position-okx-close', {
+      metadata: expect.objectContaining({
+        keep: 'value',
+        pendingManualClose: expect.objectContaining({
+          status: 'pending_sync',
+          orderId: 'okx-pending-order',
+          clientOrderId: 'pt-close-okx-pending',
+          positionId: 'position-okx-close',
+          requestedQuantity: '0.02161279',
+          reason: 'close_trade_price_pending',
+        }),
+      }),
+    })
     expect(getSubmittedOrder).toHaveBeenCalledTimes(3)
     expect(getSubmittedOrderFills).toHaveBeenCalledTimes(3)
     expect(result).toEqual(expect.objectContaining({
       success: true,
       orderId: 'okx-pending-order',
-      filledQuantity: '0.02161279',
+      filledQuantity: '0',
       message: '市价平仓单已提交，成交均价待交易所同步',
     }))
     expect(result.averagePrice).toBeUndefined()
