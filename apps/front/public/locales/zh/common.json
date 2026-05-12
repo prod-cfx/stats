@@ -121,6 +121,15 @@
     "backtestError.nonNegative": "请输入大于等于 0 的数值",
     "backtestError.priceSource": "请选择成交价来源",
     "backtestError.allowPartial": "请选择有效的布尔值",
+    "codegenValidation": {
+      "invalidExchange": "请求前校验失败：请先确认交易所参数有效。",
+      "missingSymbol": "请求前校验失败：请先确认交易标的。",
+      "missingTimeframe": "请求前校验失败：请先确认策略周期。",
+      "invalidSizing": "请求前校验失败：仓位配置无效。",
+      "invalidRatioSizing": "请求前校验失败：仓位比例需要在 0 到 100 之间。",
+      "invalidQuoteSizing": "请求前校验失败：固定金额需要大于 0。",
+      "invalidQuantitySizing": "请求前校验失败：固定数量需要大于 0。"
+    },
     "backtestPriceSource.open": "开盘价",
     "backtestPriceSource.close": "收盘价",
     "backtestPriceSource.mid": "中间价",

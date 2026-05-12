@@ -121,6 +121,15 @@
     "backtestError.nonNegative": "Please enter a value greater than or equal to 0",
     "backtestError.priceSource": "Please select a price source",
     "backtestError.allowPartial": "Please select a valid boolean value",
+    "codegenValidation": {
+      "invalidExchange": "Preflight validation failed: please confirm the exchange parameter is valid.",
+      "missingSymbol": "Preflight validation failed: please confirm the trading symbol.",
+      "missingTimeframe": "Preflight validation failed: please confirm the strategy timeframe.",
+      "invalidSizing": "Preflight validation failed: position sizing is invalid.",
+      "invalidRatioSizing": "Preflight validation failed: position percentage must be between 0 and 100.",
+      "invalidQuoteSizing": "Preflight validation failed: fixed amount must be greater than 0.",
+      "invalidQuantitySizing": "Preflight validation failed: fixed quantity must be greater than 0."
+    },
     "backtestPriceSource.open": "Open",
     "backtestPriceSource.close": "Close",
     "backtestPriceSource.mid": "Mid",

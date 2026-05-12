@@ -868,46 +868,46 @@ function updateConversationById(
   setConversations(prev => prev.map(conv => (conv.id === conversationId ? updater(conv) : conv)))
 }
 
-function getSemanticRequestValidationError(params: QuantParams): string | null {
+function getSemanticRequestValidationError(params: QuantParams, t: Translate): string | null {
   if (!['binance', 'okx', 'hyperliquid'].includes(params.exchange)) {
-    return '请求前校验失败：请先确认交易所参数有效。'
+    return t('aiQuant.codegenValidation.invalidExchange')
   }
 
   if (!params.symbol.trim()) {
-    return '请求前校验失败：请先确认交易标的。'
+    return t('aiQuant.codegenValidation.missingSymbol')
   }
 
   if (!params.baseTimeframe.trim()) {
-    return '请求前校验失败：请先确认策略周期。'
+    return t('aiQuant.codegenValidation.missingTimeframe')
   }
 
   const sizing = params.sizing
   if (!sizing || typeof sizing !== 'object' || Array.isArray(sizing)) {
-    return '请求前校验失败：仓位配置无效。'
+    return t('aiQuant.codegenValidation.invalidSizing')
   }
 
   if (sizing.mode === 'RATIO') {
     if (!Number.isFinite(sizing.value) || sizing.value <= 0 || sizing.value > 100) {
-      return '请求前校验失败：仓位比例需要在 0 到 100 之间。'
+      return t('aiQuant.codegenValidation.invalidRatioSizing')
     }
     return null
   }
 
   if (sizing.mode === 'QUOTE') {
     if (!Number.isFinite(sizing.value) || sizing.value <= 0) {
-      return '请求前校验失败：固定金额需要大于 0。'
+      return t('aiQuant.codegenValidation.invalidQuoteSizing')
     }
     return null
   }
 
   if (sizing.mode === 'QTY') {
     if (!Number.isFinite(sizing.value) || sizing.value <= 0) {
-      return '请求前校验失败：固定数量需要大于 0。'
+      return t('aiQuant.codegenValidation.invalidQuantitySizing')
     }
     return null
   }
 
-  return '请求前校验失败：仓位配置无效。'
+  return t('aiQuant.codegenValidation.invalidSizing')
 }
 
 function buildSemanticRequestMessage(args: {
@@ -976,7 +976,7 @@ export async function requestAiQuantCodegen(args: {
   if (!trimmedMessage) {
     return
   }
-  const validationError = getSemanticRequestValidationError(targetParams)
+  const validationError = getSemanticRequestValidationError(targetParams, t)
   if (validationError) {
     updateConversationById(setConversations, conversationId, curr => ({
       ...curr,
