@@ -81,6 +81,13 @@ describe('OKX rate limit configuration', () => {
     expect(() => shardingConfig()).toThrow('SHARD_INDEX (2) must be less than SHARD_COUNT (2)')
   })
 
+  it('rejects negative shard indexes instead of clamping to zero', () => {
+    process.env.SHARD_COUNT = '2'
+    process.env.SHARD_INDEX = '-1'
+
+    expect(() => shardingConfig()).toThrow('SHARD_INDEX (-1) must be greater than or equal to 0')
+  })
+
   it('loads the new configuration namespaces globally', () => {
     const names = backendConfigLoaders.map(loader => loader.KEY)
 

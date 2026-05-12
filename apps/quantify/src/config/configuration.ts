@@ -146,7 +146,10 @@ export const featureFlagsConfig = registerAs('featureFlags', () => ({
 
 export const shardingConfig = registerAs('sharding', () => {
   const count = parsePositiveInt(env.str('SHARD_COUNT'), 1)
-  const index = Math.max(0, env.int('SHARD_INDEX', 0))
+  const index = env.int('SHARD_INDEX', 0)
+  if (index < 0) {
+    throw new Error(`Invalid shard config: SHARD_INDEX (${index}) must be greater than or equal to 0`)
+  }
   if (index >= count) {
     throw new Error(`Invalid shard config: SHARD_INDEX (${index}) must be less than SHARD_COUNT (${count})`)
   }
