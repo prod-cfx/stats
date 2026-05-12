@@ -533,10 +533,7 @@ export class PositionsService {
       typeof order.filled === 'number' && Number.isFinite(order.filled) && order.filled > 0
         ? order.filled
         : closeQuantity.toNumber()
-    const tradePrice =
-      typeof order.price === 'number' && Number.isFinite(order.price) && order.price > 0
-        ? order.price
-        : Number(position.avgEntryPrice)
+    const tradePrice = this.resolveCloseTradePrice(order, Number(position.avgEntryPrice))
     const { amount: feeAmount, currency: feeCurrency } = this.extractOrderFee(order)
 
     // 6. 下单成功后立即落地本地成交，避免仓位状态长期漂移
@@ -581,6 +578,72 @@ export class PositionsService {
 
   private createClosePositionSourceId(positionId: string, closeQuantity: Decimal): string {
     return `${positionId}:${closeQuantity.toString()}:${Date.now()}:${randomUUID()}`
+  }
+
+  private resolveCloseTradePrice(order: UnifiedOrder, fallbackPrice: number): number {
+    return this.firstPositiveNumber(
+      this.extractRawFilledAveragePrice(order.raw),
+      order.price,
+      fallbackPrice,
+    ) ?? fallbackPrice
+  }
+
+  private extractRawFilledAveragePrice(raw: unknown): number | undefined {
+    if (!raw || typeof raw !== 'object') return undefined
+    const record = raw as Record<string, unknown>
+
+    const directPrice = this.firstPositiveNumber(record.avgPx, record.fillPx)
+    if (directPrice !== undefined) return directPrice
+
+    const fillsAverage = this.resolveWeightedAverageFillPrice(record.fills)
+    if (fillsAverage !== undefined) return fillsAverage
+
+    if (Array.isArray(record.data)) {
+      for (const item of record.data) {
+        const price = this.extractRawFilledAveragePrice(item)
+        if (price !== undefined) return price
+      }
+    }
+
+    return undefined
+  }
+
+  private resolveWeightedAverageFillPrice(fills: unknown): number | undefined {
+    if (!Array.isArray(fills) || fills.length === 0) return undefined
+
+    let totalQuantity = 0
+    let totalNotional = 0
+    for (const fill of fills) {
+      if (!fill || typeof fill !== 'object') continue
+      const record = fill as Record<string, unknown>
+      const price = this.firstPositiveNumber(record.fillPx, record.price)
+      const quantity = this.firstPositiveNumber(
+        record.fillSz,
+        record.sz,
+        record.amount,
+        record.qty,
+        record.quantity,
+      )
+      if (price === undefined || quantity === undefined) continue
+      totalQuantity += quantity
+      totalNotional += price * quantity
+    }
+
+    if (totalQuantity <= 0) return undefined
+    return totalNotional / totalQuantity
+  }
+
+  private firstPositiveNumber(...values: unknown[]): number | undefined {
+    for (const value of values) {
+      let parsed = Number.NaN
+      if (typeof value === 'number') {
+        parsed = value
+      } else if (typeof value === 'string') {
+        parsed = Number.parseFloat(value)
+      }
+      if (Number.isFinite(parsed) && parsed > 0) return parsed
+    }
+    return undefined
   }
 
   private resolveClosePositionRole(
