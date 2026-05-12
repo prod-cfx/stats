@@ -42,6 +42,12 @@ import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { buildTriggerCombinationContract, isTriggerPredicateGroupContract, normalizeRiskSemantic } from './semantic-state-normalization'
 import { validateSemanticRiskContract } from './strategy-semantic-contracts'
 
+// Issue #1223: 出口 evidence invariant 模式
+//   throw  — 违规立即抛出（spec 测试需显式传入）
+//   drop   — 违规静默丢弃 + logger.warn（全环境默认；测试 fixture 含无 evidence atom，兼容存量）
+//   off    — 关闭检查（跳过 invariant）
+export type EvidenceInvariantMode = 'throw' | 'drop' | 'off'
+
 type SemanticPatchRecord = Record<string, unknown>
 type ContextField = 'exchange' | 'symbol' | 'marketType' | 'timeframe'
 type SlotValueRead =
@@ -93,13 +99,22 @@ function legacyModeFromAxis(axis: ProjectableSizingAxis): string {
 export class SemanticSeedStateBuilderService {
   private readonly logger = new Logger(SemanticSeedStateBuilderService.name)
 
+  private readonly evidenceInvariantMode: EvidenceInvariantMode
+
   constructor(
     private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
     private readonly semanticAtomRegistry: SemanticAtomRegistryService = new SemanticAtomRegistryService(),
     private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
-  ) {}
+    evidenceInvariantMode?: EvidenceInvariantMode,
+  ) {
+    // Default to 'drop' in all environments; callers can inject 'throw' for
+    // strict validation (spec tests) or 'off' to disable the invariant.
+    // We do NOT default to 'throw' in dev/test because existing test fixtures
+    // use mock planner patches without evidence on every atom.
+    this.evidenceInvariantMode = evidenceInvariantMode ?? 'drop'
+  }
 
-  build(semanticPatch: unknown): SemanticState | null {
+  build(semanticPatch: unknown, message?: string): SemanticState | null {
     if (!this.isRecord(semanticPatch)) {
       return null
     }
@@ -113,19 +128,91 @@ export class SemanticSeedStateBuilderService {
     const riskItems = Array.isArray(semanticPatch.risk)
       ? semanticPatch.risk
       : (Array.isArray(semanticPatch.riskUpdates) ? semanticPatch.riskUpdates : [])
+
+    // Issue #1223: 出口 evidence invariant — 仅在调用方显式提供 message 时启用
+    //   - source === 'system_default' 跳过（系统默认占位 atom 不要求 evidence）
+    //   - throw 模式：atom 缺 evidence、空串或非子串均视为违规，统一抛出
+    //   - drop 模式：仅当 atom 已显式设置 evidence 但内容非法（空串/非子串）时才 drop；
+    //     atom 完全不带 evidence 时仅 warn，不 drop（向后兼容未迁移的 planner patch）
+    //   - off 模式：跳过检查
+    const evidenceInvariantViolations: string[] = []
+    // violations that should cause the atom to be dropped in drop-mode
+    const dropViolations = new Set<string>()
+    const evidenceMode = this.evidenceInvariantMode
+    const checkEvidenceInvariant = (
+      items: unknown[],
+      kind: 'trigger' | 'action' | 'risk',
+    ): void => {
+      if (evidenceMode === 'off' || typeof message !== 'string') return
+      for (const item of items) {
+        if (!this.isRecord(item)) continue
+        if (item.source === 'system_default') continue
+        const evidence = this.isRecord(item.evidence) ? item.evidence : null
+        const hasEvidenceField = evidence !== null || item.evidence !== undefined
+        const evidenceText = evidence && typeof evidence.text === 'string' ? evidence.text : null
+        const key = typeof item.key === 'string' ? item.key : '<unknown-key>'
+        const phase = typeof item.phase === 'string' ? `/${item.phase}` : ''
+        // Include array index to avoid atomId collision when multiple atoms share the same key+phase
+        // (e.g. multi-MA strategies with several indicator.above/entry triggers)
+        const itemIndex = items.indexOf(item)
+        const atomId = `${kind}[${itemIndex}:${key}${phase}]`
+        let reason: string | null = null
+        if (!hasEvidenceField || evidenceText === null) {
+          reason = 'missing evidence.text'
+          // missing evidence is warn-only in drop mode (backward-compatible)
+        } else if (evidenceText === '') {
+          reason = 'evidence.text is empty string'
+          dropViolations.add(atomId)
+        } else if (!message.includes(evidenceText)) {
+          reason = 'evidence.text not a substring of message'
+          dropViolations.add(atomId)
+        }
+        if (reason !== null) {
+          evidenceInvariantViolations.push(`${atomId}: ${reason}`)
+        }
+      }
+    }
+    checkEvidenceInvariant(triggerItems, 'trigger')
+    checkEvidenceInvariant(actionItems, 'action')
+    checkEvidenceInvariant(riskItems, 'risk')
+    if (evidenceInvariantViolations.length > 0) {
+      if (evidenceMode === 'throw') {
+        throw new Error(
+          `SemanticSeedStateBuilderService evidence invariant violated (#1223): ${evidenceInvariantViolations.join('; ')}`,
+        )
+      } else {
+        // drop mode: log all violations; only atoms in dropViolations are filtered below
+        this.logger.warn(
+          `event=evidence_invariant_drop count=${evidenceInvariantViolations.length} violations=${evidenceInvariantViolations.join('; ')}`,
+        )
+      }
+    }
+    const filterByEvidenceInvariant = (
+      items: unknown[],
+      kind: 'trigger' | 'action' | 'risk',
+    ): unknown[] => {
+      if (evidenceMode !== 'drop' || typeof message !== 'string' || dropViolations.size === 0) return items
+      return items.filter((item, index) => {
+        if (!this.isRecord(item)) return true
+        if (item.source === 'system_default') return true
+        const key = typeof item.key === 'string' ? item.key : '<unknown-key>'
+        const phase = typeof item.phase === 'string' ? `/${item.phase}` : ''
+        return !dropViolations.has(`${kind}[${index}:${key}${phase}]`)
+      })
+    }
     const positionUpdate = this.toPositionState(semanticPatch.position ?? semanticPatch.positionUpdate)
     const contextSlots = this.toContextSlots(
       semanticPatch.contextSlots ?? semanticPatch.contextUpdates ?? semanticPatch.context,
     )
 
-    const triggerUpdates = triggerItems
+    const triggerUpdates = filterByEvidenceInvariant(triggerItems, 'trigger')
       .map((item, index) => this.toTriggerState(item, index))
       .filter((item): item is SemanticTriggerState => item !== null)
     const groupedTriggerUpdates = this.withMovingAverageStackCombinationContracts(triggerUpdates)
-    const actionUpdates = actionItems
+    const actionUpdates = filterByEvidenceInvariant(actionItems, 'action')
       .map((item, index) => this.toActionState(item, index))
       .filter((item): item is SemanticActionState => item !== null)
-    const riskUpdates = riskItems
+    const riskUpdates = filterByEvidenceInvariant(riskItems, 'risk')
       .map((item, index) => this.toRiskState(item, index))
       .filter((item): item is SemanticRiskState => item !== null)
     const orchestration = this.toOrchestrationState(semanticPatch.orchestration)

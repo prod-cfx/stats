@@ -5544,9 +5544,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.status).toBe('CONFIRM_GATE')
     expect(result.assistantPrompt).toContain('入场：触及布林带')
-    expect(result.assistantPrompt).toContain('下轨时做多')
+    // Issue #1223: bollinger boundary trigger 现在挂 evidence={text: clause}，
+    //   projection 在 evidence.text 含「买入」时按用户原话渲染为「时买入」（更忠实于 utterance）。
+    expect(result.assistantPrompt).toContain('下轨时买入')
     expect(result.assistantPrompt).toContain('出场：触及布林带')
-    expect(result.assistantPrompt).toContain('上轨时平多')
+    expect(result.assistantPrompt).toContain('上轨时卖出平仓')
     expect(result.assistantPrompt).toContain('止损：价格相对入场均价下跌5% 强制平仓')
     expect(result.assistantPrompt).toContain('仓位：10%')
     expect(result.assistantPrompt).not.toContain('price.detect.indicator_boundary')
