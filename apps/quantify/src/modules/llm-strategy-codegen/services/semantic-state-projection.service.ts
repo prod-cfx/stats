@@ -1158,9 +1158,22 @@ export class SemanticStateProjectionService {
     const orderedTriggers = sourceTriggers.sort((left, right) => this.compareTriggers(left, right))
     const groupedIndicatorCompareSummaries = this.buildGroupedIndicatorCompareSummaries(orderedTriggers)
     const groupedAtomicSummaries = this.buildGroupedAtomicTriggerSummaries(orderedTriggers)
+    // Issue #1222：按 contract.params.groupId 折叠同 (phase, sideScope) 下 ≥2 个 trigger
+    //   为单行「A 且 B 且 C 时做多开仓」（连词由 contract.params.join 决定）。
+    //   仅作用于尚未被 marker grouping / atomic grouping 接管的桶。
+    const contractGroupFoldedSummaries = this.buildContractGroupFoldedSummaries(
+      orderedTriggers,
+      groupedIndicatorCompareSummaries,
+      groupedAtomicSummaries,
+    )
 
     return orderedTriggers
       .map((trigger) => {
+        const folded = contractGroupFoldedSummaries.get(trigger.id)
+        if (folded !== undefined) {
+          return folded
+        }
+
         const groupedAtomicSummary = groupedAtomicSummaries.get(trigger.id)
         if (groupedAtomicSummary !== undefined) {
           return groupedAtomicSummary
@@ -1269,6 +1282,100 @@ export class SemanticStateProjectionService {
       })
       .filter(item => item.length > 0)
       .join('；')
+  }
+
+  /**
+   * Issue #1222：按 (phase, sideScope, contract.params.groupId) 折叠同组 trigger。
+   *
+   * - 桶大小 >= 2 且 groupId 存在：渲染为单行「{条件1} {且|或} {条件2} ... 时做多开仓」，
+   *   连词由 contract.params.join 决定（'AND' → '且'，'OR' → '或'）。
+   * - 第一个成员落定 folded 行；其余成员落 ''（被 .filter(item => item.length > 0) 剔除）。
+   * - 已被 marker grouping / atomic grouping 接管的桶直接跳过（避免双重折叠）。
+   * - 桶大小 = 1 / groupId 缺失：不落入本 map，走原 singleton 渲染路径。
+   */
+  private buildContractGroupFoldedSummaries(
+    triggers: SemanticState['triggers'],
+    groupedIndicatorCompareSummaries: Map<string, string>,
+    groupedAtomicSummaries: Map<string, string>,
+  ): Map<string, string> {
+    const result = new Map<string, string>()
+    const buckets = new Map<string, Array<SemanticState['triggers'][number]>>()
+
+    for (const trigger of triggers) {
+      if (groupedIndicatorCompareSummaries.has(trigger.id)) continue
+      if (groupedAtomicSummaries.has(trigger.id)) continue
+      if (trigger.phase !== 'entry' && trigger.phase !== 'exit') continue
+      const groupId = this.readTriggerContractGroupId(trigger)
+      if (!groupId) continue
+      const bucketKey = [trigger.phase, trigger.sideScope ?? '', groupId].join('|')
+      const bucket = buckets.get(bucketKey) ?? []
+      bucket.push(trigger)
+      buckets.set(bucketKey, bucket)
+    }
+
+    for (const bucket of buckets.values()) {
+      if (bucket.length < 2) continue
+      const first = bucket[0]!
+      const join = this.readTriggerContractJoin(first) ?? 'AND'
+      const connector = join === 'OR' ? '或' : '且'
+      const conditions: string[] = []
+      for (const trigger of bucket) {
+        const condition = this.renderTriggerCondition(trigger)
+        if (!condition) {
+          // 任一成员无法渲染条件 → 放弃折叠，保留原 singleton 路径
+          conditions.length = 0
+          break
+        }
+        conditions.push(condition)
+      }
+      if (conditions.length < 2) continue
+
+      const innerJoined = conditions.join(` ${connector} `)
+      const phaseLabel = this.formatTriggerPhaseLabel(first.phase)
+      const rawSuffix = this.formatActionSuffix(first, innerJoined)
+      // 折叠场景：在多条件合并行内强制 condition 与 action 间加一个空格，
+      //   避免「...上方时做多开仓」这种贴合（issue #1222 期望可读）
+      const suffix = rawSuffix && !rawSuffix.startsWith(' ') ? ` ${rawSuffix}` : rawSuffix
+      result.set(first.id, `${phaseLabel}：${innerJoined}${suffix}`)
+      for (let i = 1; i < bucket.length; i += 1) {
+        result.set(bucket[i]!.id, '')
+      }
+    }
+
+    return result
+  }
+
+  private readTriggerContractGroupId(trigger: SemanticState['triggers'][number]): string | null {
+    for (const contract of trigger.contracts ?? []) {
+      const value = this.readString(contract.params?.groupId)
+      if (value) return value
+    }
+    return null
+  }
+
+  private readTriggerContractJoin(trigger: SemanticState['triggers'][number]): 'AND' | 'OR' | null {
+    for (const contract of trigger.contracts ?? []) {
+      const value = this.readString(contract.params?.join)
+      if (value === 'AND' || value === 'OR') return value
+    }
+    return null
+  }
+
+  /**
+   * 渲染单个 trigger 的条件文本（不含 phase 前缀与 action 后缀），供 #1222 折叠拼接使用。
+   * 复用 buildTriggerSummary 的渲染结果再剥离前后缀，比内联完整渲染规则更稳健。
+   */
+  private renderTriggerCondition(trigger: SemanticState['triggers'][number]): string {
+    const line = this.buildTriggerSummary([trigger], true)
+    if (!line) return ''
+    const phaseLabel = this.formatTriggerPhaseLabel(trigger.phase)
+    const head = line.startsWith(`${phaseLabel}：`)
+      ? line.slice(phaseLabel.length + 1)
+      : line
+    // 行内可能附加 action 后缀（如 "时做多开仓"），剥离得到纯条件
+    return head
+      .replace(/\s?时(?:做多开仓|做空开仓|双向开仓|买入|平多|平空|双向平仓|卖出平仓)$/u, '')
+      .trim()
   }
 
   private buildGroupedIndicatorCompareSummaries(
