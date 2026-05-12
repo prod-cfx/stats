@@ -2529,6 +2529,10 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     const threshold = this.readNumber([rule.condition.value], 0)
+    const percentRiskThreshold = this.readNumber(
+      [rule.condition.value, rule.condition.params?.valuePct],
+      Number.NaN,
+    )
     const onBreach = rule.actions.some(action => action.type === 'BLOCK_NEW_ENTRY')
       ? 'BLOCK_NEW_ENTRY'
       : 'FORCE_EXIT'
@@ -2584,12 +2588,11 @@ export class CanonicalSpecV2IrCompilerService {
     // Fail-closed: thresholdPct ∉ (0, 100) → throw. Silent skip is forbidden:
     // a skipped stop-loss guard is indistinguishable from "no stop-loss" at runtime.
     if (rule.condition.key === 'risk.stop_loss_pct') {
-      const thresholdPct = threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold
-      if (!Number.isFinite(thresholdPct) || thresholdPct <= 0 || thresholdPct >= 100) {
-        throw new Error(
-          `codegen.canonical_spec_v2_stop_loss_pct_invalid_pct:${rule.id}:${thresholdPct}`,
-        )
-      }
+      const thresholdPct = this.normalizeRiskGuardPctThreshold(
+        percentRiskThreshold,
+        'canonical_spec_v2_stop_loss_pct_invalid_pct',
+        rule.id,
+      )
       return {
         id: `guard_${rule.id}`,
         kind: 'STOP_LOSS_PCT',
@@ -2609,12 +2612,11 @@ export class CanonicalSpecV2IrCompilerService {
     //
     // Boundary semantics and fail-closed contract mirror risk.stop_loss_pct above.
     if (rule.condition.key === 'risk.max_single_loss_pct') {
-      const thresholdPct = threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold
-      if (!Number.isFinite(thresholdPct) || thresholdPct <= 0 || thresholdPct >= 100) {
-        throw new Error(
-          `codegen.canonical_spec_v2_max_single_loss_pct_invalid_pct:${rule.id}:${thresholdPct}`,
-        )
-      }
+      const thresholdPct = this.normalizeRiskGuardPctThreshold(
+        percentRiskThreshold,
+        'canonical_spec_v2_max_single_loss_pct_invalid_pct',
+        rule.id,
+      )
       return {
         id: `guard_${rule.id}`,
         kind: 'MAX_SINGLE_LOSS_PCT',
@@ -3657,6 +3659,14 @@ export class CanonicalSpecV2IrCompilerService {
   private normalizePositionPnlPctThreshold(value: number): number {
     if (!Number.isFinite(value)) return value
     return Math.abs(value) <= 1 ? value * 100 : value
+  }
+
+  private normalizeRiskGuardPctThreshold(value: number, errorCode: string, ruleId: string): number {
+    const thresholdPct = value <= 1 ? Number((value * 100).toFixed(4)) : value
+    if (!Number.isFinite(thresholdPct) || thresholdPct <= 0 || thresholdPct >= 100) {
+      throw new Error(`codegen.${errorCode}:${ruleId}:${thresholdPct}`)
+    }
+    return thresholdPct
   }
 
   private normalizeRangePositionThreshold(value: number): number {

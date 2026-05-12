@@ -5729,6 +5729,14 @@ describe('canonicalSpecV2IrCompilerService risk.stop_loss_pct', () => {
     expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-stop-loss')?.value).toBeCloseTo(10, 4)
   })
 
+  it('accepts registry-style params.valuePct when value is omitted', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({ id: 'risk-stop-loss-param', phase: 'risk', sideScope: 'both', priority: 100, condition: { kind: 'atom', key: 'risk.stop_loss_pct', semanticScope: 'position', op: 'GTE', params: { valuePct: 6.25 } }, actions: [{ type: 'FORCE_EXIT' }] })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-stop-loss-param')?.value).toBeCloseTo(6.25, 4)
+  })
+
   it('emits one guard per rule when spec carries multiple stop_loss rules (no merge)', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
     const spec = buildBaseSpec()
@@ -5834,6 +5842,14 @@ describe('canonicalSpecV2IrCompilerService risk.max_single_loss_pct', () => {
     spec.rules.push({ id: 'risk-max-single-loss', phase: 'risk', sideScope: 'both', priority: 100, condition: { kind: 'atom', key: 'risk.max_single_loss_pct', semanticScope: 'position', op: 'GTE', value: 15 }, actions: [{ type: 'FORCE_EXIT' }] })
     const result = compiler.compile({ canonicalSpec: spec, fallback })
     expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-max-single-loss')?.value).toBeCloseTo(15, 4)
+  })
+
+  it('accepts registry-style params.valuePct when value is omitted', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({ id: 'risk-max-single-loss-param', phase: 'risk', sideScope: 'both', priority: 100, condition: { kind: 'atom', key: 'risk.max_single_loss_pct', semanticScope: 'position', op: 'GTE', params: { valuePct: 3.5 } }, actions: [{ type: 'FORCE_EXIT' }] })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-max-single-loss-param')?.value).toBeCloseTo(3.5, 4)
   })
 
   it('emits one guard per rule when spec carries multiple max_single_loss rules (no merge)', () => {
