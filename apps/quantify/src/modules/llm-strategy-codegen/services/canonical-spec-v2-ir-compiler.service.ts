@@ -2526,6 +2526,13 @@ export class CanonicalSpecV2IrCompilerService {
     // both fraction (≤1) and percentage (>1) via the same heuristic — see
     // tryCompileRiskGuard. Mirror that contract here so upstream changes do not silently
     // produce a 1500% threshold (which would never trigger and would not throw either).
+    //
+    // Boundary semantics:
+    //   rawValue ∈ (0, 1] → treated as fraction, multiplied by 100 (so rawValue=1 maps
+    //                       to 100% and is rejected by the (0, 100) guard below)
+    //   rawValue > 1     → treated as already-percentage, passed through verbatim
+    // Trade-off: fractional 99.99% drawdown (rawValue=0.9999) is the largest expressible
+    // fraction; users wanting 99.x% must use percentage form (rawValue=99.x).
     const rawValue = this.readNumber([rule.condition.value], Number.NaN)
     const thresholdPct = Number.isFinite(rawValue) && rawValue <= 1
       ? Number((rawValue * 100).toFixed(4))
