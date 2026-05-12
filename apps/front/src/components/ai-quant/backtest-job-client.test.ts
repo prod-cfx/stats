@@ -190,6 +190,24 @@ describe('backtest-job-client', () => {
     expect(message).not.toContain('Request failed with status code 429')
   })
 
+  it('formats failed-job messages in English without leaking Chinese upstream text', () => {
+    expect(formatBacktestJobFailure({
+      error: '回测任务执行失败',
+      errorDetails: {
+        code: 'BACKTEST_FAILED',
+        message: '回测任务执行失败',
+      },
+    }, 'en')).toBe('Backtest job failed. Please adjust the strategy or backtest parameters and try again.')
+
+    expect(formatBacktestJobFailure({
+      error: 'Request failed with status code 429',
+      errorDetails: {
+        code: 'TOO_MANY_REQUESTS',
+        message: 'Request failed with status code 429',
+      },
+    }, 'en')).toContain('Backtest market data is temporarily rate limited')
+  })
+
   it('encodes jobId safely in path params', async () => {
     mockClient.BacktestingProxyController_getJob.mockResolvedValue({
       data: { id: 'btjob-1', status: 'queued', createdAt: '2026-03-25T00:00:00.000Z' },

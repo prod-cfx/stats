@@ -87,10 +87,20 @@ export interface AtomContract<TParams = Record<string, unknown>> {
   mutex: readonly string[]
 
   /**
+   * 是否为 actionable atom（能触发实际下单/平仓/调仓等执行行为）。
+   *   true  → 该 atom 可以携带 sizingEvidence（null 或非空均可）
+   *   false → non-actionable atom，sizingEvidence 必须为 null
+   * INVARIANT-J 守门：non-actionable + sizingEvidence 非空 → throw
+   */
+  isActionable: boolean
+
+  /**
    * 是否贡献 per-trade sizing evidence
    *   null    → 不贡献（需显式声明已审计）
    *   非空    → 声明 capability + paramSource
-   * INVARIANT-J 守门：SIZING_BEARING_ATOMS 白名单内必须非 null
+   * INVARIANT-J 守门（扩容后）：
+   *   - actionable atom：null 或非空均合法
+   *   - non-actionable atom：必须为 null
    */
   sizingEvidence: SizingEvidence | null
 }

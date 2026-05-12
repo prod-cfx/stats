@@ -385,11 +385,11 @@ describe('aiQuantProxyService', () => {
       initialMessage: 'Edit this strategy',
     })
 
-    await service.startStrategyPlazaEditSession('user-1', 'Bearer token-1', 'ma-cross')
+    await service.startStrategyPlazaEditSession('user-1', 'Bearer token-1', 'ma-cross', { locale: 'en' })
 
     expect(quantifyClient.startStrategyPlazaEditSession).toHaveBeenCalledWith(
       'ma-cross',
-      { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
+      { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' }, locale: 'en' },
     )
   })
 

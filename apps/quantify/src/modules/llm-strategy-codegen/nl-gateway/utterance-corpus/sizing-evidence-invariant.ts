@@ -1,53 +1,51 @@
 /**
  * INVARIANT-J — Sizing Evidence Registration
  *
- * SIZING_BEARING_ATOMS 白名单内 atom 必须在 ATOM_CONTRACT_REGISTRY 声明非空
- * `sizingEvidence`。强制 per-trade sizing 证据生产者显式声明，避免 sizing
- * 守门切换后又有原子漏 emit `capital.allocate.per_order_budget` 而 sizing
- * 静默缺失。
+ * 规则（Issue #1230 扩容）：
+ *   - actionable atom（isActionable: true）：sizingEvidence 可为 null 或非空，均合法
+ *   - non-actionable atom（isActionable: false）：sizingEvidence 必须为 null
  *
- * 编译期守门：AtomContract.sizingEvidence 必填 + ATOM_CONTRACT_REGISTRY 通过
- *   `satisfies Record<AtomContractKey, AtomContract>` exhaustive 强制每个 atom
- *   显式声明（null 或非空）
- * 运行期守门：`assertSizingEvidenceRegistered()` 遍历白名单验证非空
+ * SIZING_BEARING_ATOMS 不再硬编码，改为从 ATOM_CONTRACT_REGISTRY 中派生：
+ *   凡是 sizingEvidence 非空的 atom，即为 sizing-bearing atom。
  *
- * 后续约束（plan PR0 决策文档 canonical extract）：
- *   - 新增"自带 per-trade 资金分配语义"的 atom 必须：
- *     1) emit `capital.allocate.per_order_budget` capability
- *     2) ATOM_CONTRACT_REGISTRY 填非空 sizingEvidence
- *     3) atom key 加入 SIZING_BEARING_ATOMS 白名单
- *   - 不贡献 sizing 的 atom 显式填 `null`（表示已审计）
+ * 编译期守门：AtomContract.sizingEvidence + isActionable 均必填，
+ *   ATOM_CONTRACT_REGISTRY 通过 `satisfies Record<AtomContractKey, AtomContract>`
+ *   exhaustive 强制每个 atom 显式声明。
+ * 运行期守门：`assertSizingEvidenceRegistered()` 遍历所有 atom 验证不变式。
  */
 
 import { ATOM_CONTRACT_REGISTRY } from '../../atom-contracts/atom-contract-registry'
 import type { AtomContractKey } from '../../atom-contracts/atom-contract-types'
 
 /**
- * 已声明对 per-trade sizing 有 evidence 贡献的 atom 白名单。
- * 新增 sizing-bearing atom 时必须同步加入此 Set。
+ * 派生自 ATOM_CONTRACT_REGISTRY 中 sizingEvidence 非空的 atom 集合。
+ * 向后兼容历史调用：调用方可继续使用 SIZING_BEARING_ATOMS.has(key)。
  */
-export const SIZING_BEARING_ATOMS: ReadonlySet<AtomContractKey> = new Set<AtomContractKey>([
-  'position.dca_schedule',
-  'position.pyramiding_limit',
-  // Issue #1198：grid 路径 emit `capital.allocate.per_order_budget` 已恢复（PR #1197 补 kind），
-  //   atom union 同步纳入 grid.range_rebalance 后白名单收口至 grid 路径。
-  'grid.range_rebalance',
-])
+export const SIZING_BEARING_ATOMS: ReadonlySet<AtomContractKey> = new Set<AtomContractKey>(
+  (Object.entries(ATOM_CONTRACT_REGISTRY) as [AtomContractKey, (typeof ATOM_CONTRACT_REGISTRY)[AtomContractKey]][])
+    .filter(([, contract]) => contract.sizingEvidence !== null)
+    .map(([key]) => key),
+)
 
 /**
- * 验证 ATOM_CONTRACT_REGISTRY 中所有 SIZING_BEARING_ATOMS 都声明了非空 sizingEvidence。
- * 在模块 bootstrap 或专属 spec 中调用，违反时立即 throw。
+ * 验证 ATOM_CONTRACT_REGISTRY 中所有 atom 满足 INVARIANT-J 不变式：
+ *   - actionable atom：sizingEvidence 可为 null 或非空（不强制）
+ *   - non-actionable atom：sizingEvidence 必须为 null
+ * 违反时立即 throw。
  */
 export function assertSizingEvidenceRegistered(): void {
   const violations: string[] = []
-  for (const key of SIZING_BEARING_ATOMS) {
-    if (!ATOM_CONTRACT_REGISTRY[key].sizingEvidence) {
-      violations.push(key)
+  for (const [key, contract] of Object.entries(ATOM_CONTRACT_REGISTRY) as [
+    AtomContractKey,
+    (typeof ATOM_CONTRACT_REGISTRY)[AtomContractKey],
+  ][]) {
+    if (!contract.isActionable && contract.sizingEvidence !== null) {
+      violations.push(`${key} (non-actionable atom must not carry sizingEvidence)`)
     }
   }
   if (violations.length > 0) {
     throw new Error(
-      `INVARIANT-J violated: atoms missing sizingEvidence in ATOM_CONTRACT_REGISTRY: ${violations.join(', ')}`,
+      `INVARIANT-J violated: non-actionable atoms with sizingEvidence in ATOM_CONTRACT_REGISTRY: ${violations.join(', ')}`,
     )
   }
 }

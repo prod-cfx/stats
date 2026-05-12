@@ -106,6 +106,17 @@ function resolvePreferredDeployLeverage(conversation: ConversationState | null |
     ?? readPositiveFiniteNumber(conversation?.publishedSnapshotDeploymentExecutionDefaults?.leverage)
 }
 
+function resolveLocalizedRuntimeErrorMessage(
+  error: unknown,
+  fallback: string,
+  lng: 'zh' | 'en',
+): string {
+  const message = error instanceof Error && error.message.trim() ? error.message.trim() : ''
+  if (!message) return fallback
+  if (lng === 'en' && /[\u4E00-\u9FFF]/.test(message)) return fallback
+  return message
+}
+
 type CapabilityState = 'loading' | 'ready' | 'failed'
 type ConversationSyncState = 'idle' | 'loading' | 'ready' | 'error'
 type DeploymentDetailStatus = 'idle' | 'loading' | 'ready' | 'not_found' | 'error'
@@ -326,6 +337,7 @@ export function AiQuantPageClient({
                 conversationId: intent.conversationId,
                 sessionId: intent.sessionId,
                 source: intent.source,
+                locale: lng,
               })
               if (cancelled) return
 
@@ -678,15 +690,15 @@ export function AiQuantPageClient({
   ])
   const deployLabel = useMemo(() => {
     if (deploymentState === 'running') {
-      return t('aiQuant.deploy.running', { defaultValue: '已部署运行' })
+      return t('aiQuant.deployRunning', { defaultValue: 'Running' })
     }
     if (deploymentState === 'stopped') {
-      return t('aiQuant.deploy.redeploy', { defaultValue: '重新部署' })
+      return t('aiQuant.deployRedeploy', { defaultValue: 'Redeploy' })
     }
     if (deploymentState === 'unknown') {
       return deploymentDetailStatus === 'loading'
-        ? t('aiQuant.deploy.loading', { defaultValue: '正在确认部署状态' })
-        : t('aiQuant.deploy.pending', { defaultValue: '部署状态待确认' })
+        ? t('aiQuant.deployLoading', { defaultValue: 'Checking deployment status' })
+        : t('aiQuant.deployPending', { defaultValue: 'Deployment status pending' })
     }
     return t('aiQuant.deploy')
   }, [deploymentDetailStatus, deploymentState, t])
@@ -864,9 +876,13 @@ export function AiQuantPageClient({
     } catch (error) {
       if (!isMountedRef.current) return
       setDeploymentGuardErrorMessage(
-        error instanceof Error && error.message.trim()
-          ? error.message
-          : '无法确认策略最新状态，请稍后重试。',
+        resolveLocalizedRuntimeErrorMessage(
+          error,
+          lng === 'en'
+            ? 'Unable to confirm the latest strategy status. Please try again later.'
+            : '无法确认策略最新状态，请稍后重试。',
+          lng,
+        ),
       )
     } finally {
       if (isMountedRef.current) {
@@ -897,11 +913,17 @@ export function AiQuantPageClient({
     } catch (error) {
       if (!isMountedRef.current) return
       setDeploymentGuardErrorMessage(
-        error instanceof Error && error.message.trim()
-          ? error.message
-          : action === 'liquidate_and_stop'
-            ? '平仓并停止失败，请检查模拟盘账户状态后重试。'
-            : '停止策略失败，请稍后重试。',
+        resolveLocalizedRuntimeErrorMessage(
+          error,
+          action === 'liquidate_and_stop'
+            ? lng === 'en'
+              ? 'Liquidate and stop failed. Check the paper trading account status and try again.'
+              : '平仓并停止失败，请检查模拟盘账户状态后重试。'
+            : lng === 'en'
+              ? 'Failed to stop the strategy. Please try again later.'
+              : '停止策略失败，请稍后重试。',
+          lng,
+        ),
       )
     } finally {
       if (isMountedRef.current) {
@@ -1134,7 +1156,9 @@ export function AiQuantPageClient({
       callingMessage,
       codegenRequestMutexRef,
       conversations,
+      locale: lng,
       sessionUserId: session?.userId,
+      locale: lng,
       setCodegenBusyConversationIds,
       setConversations,
       t,
@@ -1373,6 +1397,7 @@ export function AiQuantPageClient({
       backtestRunTokenRef,
       graphConfirmed,
       isMountedRef,
+      lng,
       setConversationBacktestExecutionState,
       t,
       updateConversationById,

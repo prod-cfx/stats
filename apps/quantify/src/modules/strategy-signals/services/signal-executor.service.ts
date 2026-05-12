@@ -1113,6 +1113,13 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         )
       }
       else {
+        // requireExplicitSizing=true 时拒绝无明确仓位的信号，保留 fallback 行为作默认
+        if (config.execution.requireExplicitSizing) {
+          return {
+            ok: false,
+            reason: 'SIZING_REQUIRED: signal missing positionSizeQuote/positionSizeRatio while requireExplicitSizing=true',
+          }
+        }
         // 回退到全局配置：此时才使用 defaultQuoteAmount
         quoteBudget = Decimal.min(maxRiskQuote, defaultQuote, buyingPower)
         this.logger.debug(

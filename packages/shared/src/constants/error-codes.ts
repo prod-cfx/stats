@@ -200,6 +200,8 @@ export enum ErrorCode {
   READINESS_TIMEFRAME_MISMATCH = 'READINESS_TIMEFRAME_MISMATCH',
   // PR3 (#1186) multi-leg per_order_budget readiness — 单 leg 缺 anchored 即不满足
   READINESS_PER_ORDER_BUDGET_MISSING = 'READINESS_PER_ORDER_BUDGET_MISSING',
+  // #1230 compile-time guard：actionable rule action 缺 sizing evidence → 编译期 fail-closed
+  SIZING_EVIDENCE_MISSING = 'SIZING_EVIDENCE_MISSING',
 
   // ===== NL Gateway / Atom 翻牌基建 =====
   INTERNAL_KEY_LEAK_DETECTED = 'INTERNAL_KEY_LEAK_DETECTED',

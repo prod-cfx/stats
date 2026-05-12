@@ -388,7 +388,20 @@ export class SemanticStateProjectionService {
   } {
     const triggerSummary = this.buildTriggerSummary(state.triggers, true)
     const riskSummary = this.buildRiskSummary(state.risk)
-    const summaryItems = [triggerSummary, riskSummary].filter(item => item.length > 0)
+    // #1238：clarification 路径下"我当前理解的策略是"这条提示长期只渲染
+    // trigger + risk，遗漏 position 段（含 sizing、dca_schedule / pyramiding_limit
+    // 等 constraint 显示），导致用户给出 DCA / 加仓配置时即使 state.position.constraints
+    // 里已 locked，UI 也不会回显，看起来像"DCA 没识别"（#1217 误判为 merge 层 bug，
+    // 实际根因在此处 summary 渲染函数）。与 buildConversationView 对齐让 clarification
+    // summary 也包含 position 段。
+    // 未并入项 follow-up：
+    //   - actionSummary / orchestrationSummary 与 buildTriggerSummary 的 deterministic
+    //     过滤未与 conversation 路径完全对齐 → #1243（抽 shared summary helper）
+    //   - position locked 时 nextQuestion 仍可能追问已被 summary 覆盖的 position open slot
+    //     → #1244（dedupe nextQuestion vs summary）
+    //   - buildPositionSummary 内 presentationRegistry try/catch 吞错变沉默失败 → #1245
+    const positionSummary = this.buildPositionSummary(state.position)
+    const summaryItems = [triggerSummary, riskSummary, positionSummary].filter(item => item.length > 0)
 
     const nextSlot = this.findNextOpenSlot(state)
 
@@ -2440,25 +2453,36 @@ export class SemanticStateProjectionService {
     // 有 sizing 时优先走 pyramiding_limit 简化输出
     if (sizingText) {
       const pyramidingLimit = (position.constraints ?? [])
-        .find(c => c.status === 'locked' && c.key === 'position.pyramiding_limit')
+        // #1238 follow-up：open status 也接受，避免 readiness 因软性 requirement 缺失
+        //   把用户已显式给出的 constraint 降级后整段不显示。superseded 仍跳过。
+        .find(c => c.status !== 'superseded' && c.key === 'position.pyramiding_limit')
       if (pyramidingLimit) {
         const maxLayers = this.readFiniteNumber((pyramidingLimit.params as Record<string, unknown>)?.maxLayers as unknown)
         if (maxLayers !== null) {
-          return `${sizingText}，最多${maxLayers}次加仓`
+          const suffix = pyramidingLimit.status === 'open' ? '（待补充）' : ''
+          return `${sizingText}，最多${maxLayers}次加仓${suffix}`
         }
       }
     }
 
-    // Task 4 (#1162)：扫 locked constraints 用 presentationRegistry 渲染（dca_schedule 等）
+    // Task 4 (#1162)：扫 constraints 用 presentationRegistry 渲染（dca_schedule 等）
+    // #1238 follow-up：原来只渲染 locked，但 readiness 会把"用户已显式给出但软性
+    //   requirement（如 dca_exit_rule）未填"的 constraint 降级到 open，结果用户
+    //   说了 DCA UI 完全看不到。改为渲染 locked + open，open 加"（待补充）"提示，
+    //   既给用户回显"我识别了你的 DCA 配置"，又保留后续 nextQuestion 追问 exit rule 的空间。
+    //   superseded 仍跳过。
     const constraintParts: string[] = []
     for (const constraint of position.constraints ?? []) {
-      if (constraint.status !== 'locked') continue
+      if (constraint.status === 'superseded') continue
       try {
         const entry = this.presentationRegistry.getEntry(constraint.key)
         const renderer = entry?.displayRenderer
         if (typeof renderer === 'function') {
           const rendered = renderer({ params: (constraint.params ?? {}) as Record<string, unknown> })
-          if (rendered) constraintParts.push(rendered)
+          if (rendered) {
+            const suffix = constraint.status === 'open' ? '（待补充）' : ''
+            constraintParts.push(`${rendered}${suffix}`)
+          }
         }
       }
       catch {

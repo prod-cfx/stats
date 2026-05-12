@@ -25,6 +25,11 @@ jest.mock('react-i18next', () => ({
       'aiQuant.openTradeCount': '未平仓笔数',
       'aiQuant.openPnl': 'Open P&L',
       'aiQuant.deploy': '一键部署',
+      'aiQuant.deployRunning': '已部署运行',
+      'aiQuant.deployRedeploy': '重新部署',
+      'aiQuant.deployPending': '部署状态待确认',
+      'aiQuant.deployPendingHint': '正在确认部署状态，确认前暂不能重复部署。',
+      'aiQuant.deployViewRunning': '查看运行策略',
     }[key] ?? options?.defaultValue ?? key),
   }),
 }))

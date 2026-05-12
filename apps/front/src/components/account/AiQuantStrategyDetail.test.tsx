@@ -5,6 +5,7 @@ import type { AccountAiQuantStrategyDetail } from '@/lib/api'
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
+import mockZhCommon from '../../../public/locales/zh/common.json'
 import { AiQuantStrategyDetail } from './AiQuantStrategyDetail'
 
 const mockPerformAccountAiQuantStrategyAction = jest.fn()
@@ -12,7 +13,16 @@ const mockFetchAccountAiQuantStrategyDetail = jest.fn()
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, options?: Record<string, unknown>) => {
+      const value = key.split('.').reduce<unknown>((curr, segment) => (
+        curr && typeof curr === 'object' ? (curr as Record<string, unknown>)[segment] : undefined
+      ), mockZhCommon)
+      const template = typeof value === 'string' ? value : key
+      return Object.entries(options ?? {}).reduce(
+        (text, [name, replacement]) => text.replaceAll(`{{${name}}}`, String(replacement)),
+        template,
+      )
+    },
   }),
 }))
 

@@ -29,6 +29,7 @@ describe('StrategyPlazaEditSessionService', () => {
     expect(codegenConversationService.startSession).toHaveBeenCalledWith({
       initialMessage: 'Build a MA cross strategy',
       guideConfig: { symbolExample: 'BTC-USDT-SWAP', timeframeExample: '15m' },
+      locale: 'zh',
     }, 'user-1')
     expect(result).toEqual({
       sessionId: 'session-1',
@@ -65,11 +66,51 @@ describe('StrategyPlazaEditSessionService', () => {
     expect(codegenConversationService.startSession).toHaveBeenCalledWith({
       initialMessage: 'Build an RSI reversal strategy',
       guideConfig: { symbolExample: 'ETHUSDT', timeframeExample: '1h' },
+      locale: 'zh',
     }, 'user-2')
     expect(result).toEqual({
       sessionId: 'session-2',
       templateId: 'rsi-reversal',
       initialMessage: 'Build an RSI reversal strategy',
     })
+  })
+
+  it('uses the English edit seed when locale is en', async () => {
+    const template = {
+      id: 'ma-cross',
+      editSeed: {
+        initialMessage: '创建 MA 策略',
+        guideConfig: { entryRuleExample: 'MA6 上穿 MA48' },
+        locales: {
+          en: {
+            initialMessage: 'Create a MA crossover strategy',
+            guideConfig: { entryRuleExample: 'MA6 crosses above MA48' },
+          },
+        },
+      },
+    }
+    const templates = {
+      getRequired: jest.fn().mockReturnValue(template),
+    }
+    const codegenConversationService = {
+      startSession: jest.fn().mockResolvedValue({ id: 'session-en' }),
+    }
+    const service = new StrategyPlazaEditSessionService(
+      templates as never,
+      codegenConversationService as never,
+    )
+
+    const result = await service.startEditSession({
+      userId: 'user-en',
+      templateId: 'ma-cross',
+      locale: 'en',
+    })
+
+    expect(codegenConversationService.startSession).toHaveBeenCalledWith({
+      initialMessage: 'Create a MA crossover strategy',
+      guideConfig: { entryRuleExample: 'MA6 crosses above MA48' },
+      locale: 'en',
+    }, 'user-en')
+    expect(result.initialMessage).toBe('Create a MA crossover strategy')
   })
 })

@@ -55,6 +55,22 @@ export type CanonicalRuleActionType =
   | 'FORCE_EXIT'
   | 'BLOCK_NEW_ENTRY'
 
+/**
+ * #1230 — 需要 sizing evidence 的 actionable action type 单一来源。
+ * 这些 action type 会真正开新仓位 / 加仓，必须显式提供 sizing 来源
+ * （action.sizing > spec.sizing > fallback.positionPct）。
+ * IR 编译期 assertSizingEvidence() 守门基于此集合判定。
+ *
+ * CLOSE_LONG / CLOSE_SHORT / REDUCE_LONG / REDUCE_SHORT / FORCE_EXIT /
+ * BLOCK_NEW_ENTRY 不在此列，因为它们的数量由当前持仓决定，与下单 sizing 无关。
+ */
+export const ACTIONABLE_RULE_ACTION_TYPES: ReadonlySet<CanonicalRuleActionType> = new Set([
+  'OPEN_LONG',
+  'OPEN_SHORT',
+  'ADD_LONG',
+  'ADD_SHORT',
+])
+
 export interface CanonicalRuleAction {
   type: CanonicalRuleActionType
   sizing?: {

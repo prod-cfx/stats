@@ -220,10 +220,11 @@ export class AiQuantProxyService {
     userId: string,
     authorization: string | undefined,
     templateId: string,
+    options: { locale?: string } = {},
   ): Promise<StrategyPlazaEditSessionResponseDto> {
     return this.quantifyClient.startStrategyPlazaEditSession<StrategyPlazaEditSessionResponseDto>(
       templateId,
-      { userId, headers: this.userHeaders(userId, authorization) },
+      { userId, headers: this.userHeaders(userId, authorization), locale: options.locale },
     ).catch(error => { throw this.mapQuantifyError(error) })
   }
 

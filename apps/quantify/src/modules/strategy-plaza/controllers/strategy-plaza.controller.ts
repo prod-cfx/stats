@@ -1,6 +1,6 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS decorators require runtime imports for metadata */
-import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post } from '@nestjs/common'
-import { ApiExtraModels, ApiHeader, ApiOkResponse, ApiOperation, ApiTags, getSchemaPath } from '@nestjs/swagger'
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common'
+import { ApiExtraModels, ApiHeader, ApiOkResponse, ApiOperation, ApiQuery, ApiTags, getSchemaPath } from '@nestjs/swagger'
 import { BaseResponseDto } from '@/common/dto/base.dto'
 import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
 import { AccountStrategyDetailResponseDto } from '@/modules/account-strategy-view/dto/account-strategy-detail.response.dto'
@@ -90,16 +90,19 @@ export class StrategyPlazaController {
     required: false,
     description: '仅用于服务间转发校验；如提供，必须与 JWT 用户一致',
   })
+  @ApiQuery({ name: 'locale', enum: ['zh', 'en'], required: false })
   @ApiOkResponse({ schema: buildBaseResponseSchema(StrategyPlazaEditSessionResponseDto) })
   async editSession(
     @Param('id') id: string,
     @Headers('authorization') authorization?: string,
     @Headers('x-user-id') forwardedUserId?: string,
+    @Query('locale') locale?: string,
   ): Promise<StrategyPlazaEditSessionResponseDto> {
     const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.editSessionService.startEditSession({
       userId,
       templateId: id,
+      locale,
     })
   }
 }

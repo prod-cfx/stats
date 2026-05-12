@@ -4223,3 +4223,1437 @@ describe('canonicalSpecV2IrCompilerService orchestration gates', () => {
     expect(program.sizing).toEqual({ mode: 'fixed_pct', value: 5 })
   })
 })
+
+// ---------------------------------------------------------------------------
+// risk.max_drawdown_pct ghost-atom fix: canonical→IR compile branch
+// ---------------------------------------------------------------------------
+describe('canonicalSpecV2IrCompilerService risk.max_drawdown_pct', () => {
+  const fallback = {
+    exchange: 'binance' as const,
+    symbol: 'BTCUSDT',
+    baseTimeframe: '1m',
+    positionPct: 10,
+  }
+
+  function buildBaseSpec(): CanonicalStrategySpecV2 {
+    return {
+      version: 2,
+      market: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        defaultTimeframe: '1m',
+      },
+      indicators: [],
+      sizing: { mode: 'QUOTE', value: 10 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['1m'],
+      },
+      rules: [
+        {
+          id: 'entry-close-above-open',
+          phase: 'entry',
+          sideScope: 'long',
+          priority: 200,
+          condition: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'series', source: 'bar', field: 'open' },
+          },
+          actions: [{ type: 'OPEN_LONG' }],
+        },
+      ],
+    } satisfies CanonicalStrategySpecV2
+  }
+
+  function buildSpecWithMaxDrawdown(valuePct: number): CanonicalStrategySpecV2 {
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'risk-max-drawdown',
+      phase: 'risk',
+      sideScope: 'both',
+      priority: 100,
+      condition: {
+        kind: 'atom',
+        key: 'risk.max_drawdown_pct',
+        semanticScope: 'portfolio',
+        op: 'GTE',
+        // canonical-spec-builder stores as fraction (valuePct / 100)
+        value: Number((valuePct / 100).toFixed(4)),
+      },
+      actions: [{ type: 'FORCE_EXIT' }],
+    })
+    return spec
+  }
+
+  it('emits a portfolio drawdown risk into orchestrationPortfolioRisks for valuePct:15', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithMaxDrawdown(15)
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const risks = result.ir.orchestrationPortfolioRisks ?? []
+    expect(risks.length).toBeGreaterThanOrEqual(1)
+    const drawdown = risks.find(r => r.id === 'risk-max-drawdown')
+    expect(drawdown).toBeDefined()
+    expect(drawdown?.scope).toBe('portfolio')
+    expect(drawdown?.mode).toBe('enforce')
+    expect(drawdown?.effectWhenTriggered).toBe('block_new_entries')
+    if (drawdown?.scope === 'portfolio') {
+      expect(drawdown.thresholdPct).toBeCloseTo(15, 2)
+    }
+  })
+
+  it('does not add risk.max_drawdown_pct rule to ruleBlocks or riskPolicy.guards', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithMaxDrawdown(10)
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const ruleIds = result.ir.ruleBlocks.map(b => b.id)
+    expect(ruleIds).not.toContain('risk-max-drawdown')
+    const guardIds = result.ir.riskPolicy.guards.map(g => g.id)
+    expect(guardIds).not.toContain('guard_risk-max-drawdown')
+  })
+
+  it('preserves fractional valuePct precision (15.5 → thresholdPct ≈ 15.5)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithMaxDrawdown(15.5)
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const drawdown = (result.ir.orchestrationPortfolioRisks ?? []).find(r => r.id === 'risk-max-drawdown')
+    expect(drawdown).toBeDefined()
+    if (drawdown?.scope === 'portfolio') {
+      // buildSpecWithMaxDrawdown stores 0.155 (toFixed(4) → "0.1550"), * 100 = 15.5
+      // toBeCloseTo(15.5, 4) locks both magnitude and 4-decimal precision contract.
+      expect(drawdown.thresholdPct).toBeCloseTo(15.5, 4)
+    }
+  })
+
+  it('isolates risk.max_drawdown_pct from sibling position-scope risk atoms (stop_loss_pct coexistence)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push(
+      {
+        id: 'risk-max-drawdown',
+        phase: 'risk',
+        sideScope: 'both',
+        priority: 100,
+        condition: {
+          kind: 'atom',
+          key: 'risk.max_drawdown_pct',
+          semanticScope: 'portfolio',
+          op: 'GTE',
+          value: 0.15,
+        },
+        actions: [{ type: 'FORCE_EXIT' }],
+      },
+      {
+        id: 'risk-stop-loss',
+        phase: 'risk',
+        sideScope: 'long',
+        priority: 90,
+        condition: {
+          kind: 'atom',
+          key: 'position_loss_pct',
+          semanticScope: 'position',
+          op: 'GTE',
+          value: 0.05,
+        },
+        actions: [{ type: 'FORCE_EXIT' }],
+      },
+    )
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+
+    // Drawdown lives in orchestrationPortfolioRisks only
+    const portfolioRiskIds = (result.ir.orchestrationPortfolioRisks ?? []).map(r => r.id)
+    expect(portfolioRiskIds).toContain('risk-max-drawdown')
+    expect(portfolioRiskIds).not.toContain('risk-stop-loss')
+
+    // Stop-loss lives in riskPolicy.guards only
+    const guardIds = result.ir.riskPolicy.guards.map(g => g.id)
+    expect(guardIds).toContain('guard_risk-stop-loss')
+    expect(guardIds).not.toContain('guard_risk-max-drawdown')
+
+    // Neither rule leaks into ruleBlocks
+    const ruleIds = result.ir.ruleBlocks.map(b => b.id)
+    expect(ruleIds).not.toContain('risk-max-drawdown')
+    expect(ruleIds).not.toContain('risk-stop-loss')
+  })
+
+  it('emits one node per max_drawdown_pct rule when the spec carries multiple rules (OR semantics, no merge)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    for (const [id, valuePct] of [
+      ['risk-max-drawdown-tight', 10],
+      ['risk-max-drawdown-loose', 20],
+    ] as const) {
+      spec.rules.push({
+        id,
+        phase: 'risk',
+        sideScope: 'both',
+        priority: 100,
+        condition: {
+          kind: 'atom',
+          key: 'risk.max_drawdown_pct',
+          semanticScope: 'portfolio',
+          op: 'GTE',
+          value: Number((valuePct / 100).toFixed(4)),
+        },
+        actions: [{ type: 'FORCE_EXIT' }],
+      })
+    }
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const risks = result.ir.orchestrationPortfolioRisks ?? []
+    const tight = risks.find(r => r.id === 'risk-max-drawdown-tight')
+    const loose = risks.find(r => r.id === 'risk-max-drawdown-loose')
+    expect(tight).toBeDefined()
+    expect(loose).toBeDefined()
+    if (tight?.scope === 'portfolio') expect(tight.thresholdPct).toBeCloseTo(10, 2)
+    if (loose?.scope === 'portfolio') expect(loose.thresholdPct).toBeCloseTo(20, 2)
+  })
+
+  it('accepts already-percentage values (>1) without double-converting — mirrors tryCompileRiskGuard contract', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'risk-max-drawdown',
+      phase: 'risk',
+      sideScope: 'both',
+      priority: 100,
+      condition: {
+        kind: 'atom',
+        key: 'risk.max_drawdown_pct',
+        semanticScope: 'portfolio',
+        op: 'GTE',
+        // raw percentage form (>1) — must not be multiplied by 100 again
+        value: 15,
+      },
+      actions: [{ type: 'FORCE_EXIT' }],
+    })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const drawdown = result.ir.orchestrationPortfolioRisks?.find(r => r.id === 'risk-max-drawdown')
+    expect(drawdown).toBeDefined()
+    if (drawdown?.scope === 'portfolio') {
+      expect(drawdown.thresholdPct).toBeCloseTo(15, 4)
+    }
+  })
+
+  it('coexists with spec.orchestration.portfolioRisks — both appear in output', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithMaxDrawdown(20)
+    spec.orchestration = {
+      portfolioRisks: [
+        {
+          id: 'portfolio-drawdown-explicit',
+          scope: 'portfolio',
+          mode: 'observe',
+          thresholdPct: 5,
+          effectWhenTriggered: 'block_new_entries',
+        },
+      ],
+    }
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const risks = result.ir.orchestrationPortfolioRisks ?? []
+    expect(risks.length).toBe(2)
+    expect(risks.some(r => r.id === 'portfolio-drawdown-explicit')).toBe(true)
+    expect(risks.some(r => r.id === 'risk-max-drawdown')).toBe(true)
+  })
+
+  it('fails closed when valuePct is 0 (compile entry throws)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithMaxDrawdown(0)
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_max_drawdown_invalid_pct/,
+    )
+  })
+
+  it('fails closed when valuePct is 100 (compile entry throws)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithMaxDrawdown(100)
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_max_drawdown_invalid_pct/,
+    )
+  })
+
+  it('fails closed when condition.value is missing (compile entry throws)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'risk-max-drawdown',
+      phase: 'risk',
+      sideScope: 'both',
+      priority: 100,
+      condition: {
+        kind: 'atom',
+        key: 'risk.max_drawdown_pct',
+        semanticScope: 'portfolio',
+        op: 'GTE',
+        // intentionally no `value` field — fail-closed expects throw
+      } as CanonicalStrategySpecV2['rules'][number]['condition'],
+      actions: [{ type: 'FORCE_EXIT' }],
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_max_drawdown_invalid_pct/,
+    )
+  })
+
+  it('evaluator contract: emitted IR node drives evaluateOrchestrationPortfolioRisks block decision', async () => {
+    // Verifies the IR↔evaluator data contract: compiled node feeds correctly into
+    // evaluateOrchestrationPortfolioRisks. This is NOT a full strategy-run integration —
+    // run-decision-programs aggregation is not exercised; that lives elsewhere.
+    const { evaluateOrchestrationPortfolioRisks } = await import(
+      '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-portfolio-risks'
+    )
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithMaxDrawdown(15)
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const drawdown = (result.ir.orchestrationPortfolioRisks ?? []).find(r => r.id === 'risk-max-drawdown')
+    if (!drawdown) {
+      throw new Error('expected risk-max-drawdown node in orchestrationPortfolioRisks')
+    }
+
+    // drawdownPct=16 > threshold=15 → should block both long and short
+    const blocked = evaluateOrchestrationPortfolioRisks([drawdown], { drawdownPct: 16 })
+    expect(blocked.blockEntryLong).toBe(true)
+    expect(blocked.blockEntryShort).toBe(true)
+
+    // drawdownPct=14 < threshold=15 → should not block
+    const ok = evaluateOrchestrationPortfolioRisks([drawdown], { drawdownPct: 14 })
+    expect(ok.blockEntryLong).toBe(false)
+    expect(ok.blockEntryShort).toBe(false)
+  })
+})
+
+// ─── position.dca_schedule ghost-atom fix (#1252) ────────────────────────────
+//
+// 验证 canonical-spec-v2-ir-compiler 正确透传 dca_schedule metadata：
+//   - ADD_LONG action 出现在 ruleBlocks
+//   - metadata.dcaSchedule 字段全量透传（maxCount / stateKey / capitalCap /
+//     triggerMode / priceIntervalPct / timeIntervalMs / exitRule）
+//   - multi-rule 不互盖；与 position 其他 atom 隔离
+//     （OPEN_LONG / orchestrationPortfolioRisks / riskPolicy.guards）
+//   - precision：priceIntervalPct toBeCloseTo 4 位小数
+//   - exitRule 缺省 → IR compiler 不会人为补 cap_only 哨兵（透传 undefined）
+//
+// 本套测试仅覆盖 IR compiler 透传层；validation / fail-closed（maxCount=0、
+// capitalCap 缺失等）属 canonical-spec-builder 职责，不在本文件范围。
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('canonicalSpecV2IrCompilerService position.dca_schedule', () => {
+  const fallback = {
+    exchange: 'binance' as const,
+    symbol: 'BTCUSDT',
+    baseTimeframe: '1m',
+    positionPct: 10,
+  }
+
+  function buildBaseSpec(): CanonicalStrategySpecV2 {
+    return {
+      version: 2,
+      market: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        defaultTimeframe: '1m',
+      },
+      indicators: [],
+      sizing: { mode: 'QUOTE', value: 100 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['1m'],
+      },
+      rules: [
+        {
+          id: 'entry-open',
+          phase: 'entry',
+          sideScope: 'long',
+          priority: 200,
+          condition: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'series', source: 'bar', field: 'open' },
+          },
+          actions: [{ type: 'OPEN_LONG' }],
+        },
+      ],
+    } satisfies CanonicalStrategySpecV2
+  }
+
+  /** 向 spec 追加一条带 metadata.dcaSchedule 的 ADD_LONG entry rule */
+  function pushDcaRule(
+    spec: CanonicalStrategySpecV2,
+    opts: {
+      id?: string
+      maxCount: number
+      capitalCap: number
+      triggerMode?: string
+      priceIntervalPct?: number
+      timeIntervalMs?: number
+      exitRule?: Record<string, string>
+      stateKey?: string
+    },
+  ): void {
+    spec.rules.push({
+      id: opts.id ?? 'dca-add-long',
+      phase: 'entry',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'ADD_LONG' }],
+      metadata: {
+        dcaSchedule: {
+          maxCount: opts.maxCount,
+          capitalCap: opts.capitalCap,
+          stateKey: opts.stateKey ?? 'dca_fired_count',
+          ...(opts.triggerMode !== undefined ? { triggerMode: opts.triggerMode } : {}),
+          ...(opts.priceIntervalPct !== undefined ? { priceIntervalPct: opts.priceIntervalPct } : {}),
+          ...(opts.timeIntervalMs !== undefined ? { timeIntervalMs: opts.timeIntervalMs } : {}),
+          ...(opts.exitRule !== undefined ? { exitRule: opts.exitRule } : {}),
+        },
+      },
+    })
+  }
+
+  // ── 1. happy path: ADD_LONG 出现在 ruleBlocks ────────────────────────────
+
+  it('compile() emits ADD_LONG action in ruleBlocks for a dca_schedule rule', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    pushDcaRule(spec, { maxCount: 3, capitalCap: 1000, triggerMode: 'price_interval', priceIntervalPct: 5, exitRule: { type: 'cap_only' } })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const allKinds = ir.ruleBlocks.flatMap(b => b.actions.map(a => a.kind))
+    expect(allKinds).toContain('ADD_LONG')
+  })
+
+  // ── 2. metadata.dcaSchedule maxCount + stateKey 透传 ─────────────────────
+
+  it('metadata.dcaSchedule carries maxCount and stateKey verbatim', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    // 用非 helper 默认值（'custom_dca_state'）才能真测到「透传」语义
+    pushDcaRule(spec, { maxCount: 4, capitalCap: 2000, stateKey: 'custom_dca_state', exitRule: { type: 'cap_only' } })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const dcaBlock = ir.ruleBlocks.find(b => b.metadata?.dcaSchedule)
+    expect(dcaBlock).toBeDefined()
+    expect(dcaBlock?.metadata?.dcaSchedule?.maxCount).toBe(4)
+    expect(dcaBlock?.metadata?.dcaSchedule?.stateKey).toBe('custom_dca_state')
+  })
+
+  // ── 3. triggerMode + priceIntervalPct 精确透传 ───────────────────────────
+
+  it('metadata.dcaSchedule carries triggerMode and priceIntervalPct with 4-decimal precision', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    // 断言 priceIntervalPct toBeCloseTo 4 位小数（IR compiler 仅透传，
+    // toFixed 由上游 spec-builder 负责；此处直接给 4 位小数字面量）
+    pushDcaRule(spec, {
+      maxCount: 3,
+      capitalCap: 1000,
+      triggerMode: 'price_interval',
+      priceIntervalPct: 5.1234,
+      exitRule: { type: 'cap_only' },
+    })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const dcaBlock = ir.ruleBlocks.find(b => b.metadata?.dcaSchedule)
+    expect(dcaBlock?.metadata?.dcaSchedule?.triggerMode).toBe('price_interval')
+    expect(dcaBlock?.metadata?.dcaSchedule?.priceIntervalPct).toBeCloseTo(5.1234, 4)
+  })
+
+  // ── 4. timeIntervalMs 透传 ───────────────────────────────────────────────
+
+  it('metadata.dcaSchedule carries timeIntervalMs for time_interval mode', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    const dayMs = 24 * 60 * 60 * 1000
+    pushDcaRule(spec, {
+      maxCount: 5,
+      capitalCap: 500,
+      triggerMode: 'time_interval',
+      timeIntervalMs: dayMs,
+      exitRule: { type: 'cap_only' },
+    })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const dcaBlock = ir.ruleBlocks.find(b => b.metadata?.dcaSchedule)
+    expect(dcaBlock?.metadata?.dcaSchedule?.triggerMode).toBe('time_interval')
+    expect(dcaBlock?.metadata?.dcaSchedule?.timeIntervalMs).toBe(dayMs)
+  })
+
+  // ── 5. exitRule 透传（非空时） ────────────────────────────────────────────
+
+  it('metadata.dcaSchedule carries exitRule when explicitly set', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    pushDcaRule(spec, {
+      maxCount: 3,
+      capitalCap: 1000,
+      exitRule: { type: 'stop_on_break_previous_low', reference: 'previous_low' },
+    })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const dcaBlock = ir.ruleBlocks.find(b => b.metadata?.dcaSchedule)
+    const exitRule = dcaBlock?.metadata?.dcaSchedule?.exitRule as Record<string, string> | undefined
+    expect(exitRule?.type).toBe('stop_on_break_previous_low')
+    expect(exitRule?.reference).toBe('previous_low')
+  })
+
+  // ── 6. exitRule 缺省 → IR compiler 不会人为补 cap_only 哨兵 ─────────────
+
+  it('metadata.dcaSchedule exitRule stays undefined when spec omits it (compiler does not inject sentinel)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    // 真正不传 exitRule：helper 的 spread 会跳过该字段，断言 compiler 不会替我们补默认
+    pushDcaRule(spec, {
+      maxCount: 3,
+      capitalCap: 1000,
+    })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const dcaBlock = ir.ruleBlocks.find(b => b.metadata?.dcaSchedule)
+    expect(dcaBlock).toBeDefined()
+    expect(dcaBlock?.metadata?.dcaSchedule?.exitRule).toBeUndefined()
+  })
+
+  // ── 7. multi-rule: 2 条 dca_schedule 规则不互相覆盖 ─────────────────────
+
+  it('two dca_schedule rules in the same spec each appear independently in ruleBlocks', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    pushDcaRule(spec, { id: 'dca-rule-a', maxCount: 3, capitalCap: 1000, triggerMode: 'price_interval', priceIntervalPct: 5, exitRule: { type: 'cap_only' } })
+    pushDcaRule(spec, { id: 'dca-rule-b', maxCount: 5, capitalCap: 2000, triggerMode: 'time_interval', timeIntervalMs: 3600000, exitRule: { type: 'cap_only' } })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const dcaBlocks = ir.ruleBlocks.filter(b => b.metadata?.dcaSchedule)
+    expect(dcaBlocks.length).toBeGreaterThanOrEqual(2)
+    const maxCounts = dcaBlocks.map(b => b.metadata?.dcaSchedule?.maxCount)
+    expect(maxCounts).toContain(3)
+    expect(maxCounts).toContain(5)
+  })
+
+  // ── 8. 混合隔离：与 OPEN_LONG 规则共存，dca 不进入其他规则的 metadata ────
+
+  it('dca_schedule metadata does not contaminate sibling OPEN_LONG ruleBlocks', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    pushDcaRule(spec, { maxCount: 3, capitalCap: 1000, exitRule: { type: 'cap_only' } })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const openBlocks = ir.ruleBlocks.filter(b => b.actions.some(a => a.kind === 'OPEN_LONG'))
+    for (const block of openBlocks) {
+      expect(block.metadata?.dcaSchedule).toBeUndefined()
+    }
+  })
+
+  // ── 9. dca_schedule 规则不进入 orchestrationPortfolioRisks ──────────────
+
+  it('dca_schedule rule does NOT appear in orchestrationPortfolioRisks', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    pushDcaRule(spec, { id: 'dca-add-long', maxCount: 3, capitalCap: 1000, exitRule: { type: 'cap_only' } })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const portfolioRiskIds = (ir.orchestrationPortfolioRisks ?? []).map(r => r.id)
+    expect(portfolioRiskIds).not.toContain('dca-add-long')
+  })
+
+  // ── 10. dca_schedule 规则不进入 riskPolicy.guards ────────────────────────
+
+  it('dca_schedule rule does NOT appear in riskPolicy.guards', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    pushDcaRule(spec, { id: 'dca-add-long', maxCount: 3, capitalCap: 1000, exitRule: { type: 'cap_only' } })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const guardIds = ir.riskPolicy.guards.map(g => g.id)
+    expect(guardIds).not.toContain('dca-add-long')
+    expect(guardIds).not.toContain('guard_dca-add-long')
+  })
+
+  // ── 11. capitalCap 透传（数字类型） ──────────────────────────────────────
+
+  it('metadata.dcaSchedule carries capitalCap as number', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    pushDcaRule(spec, { maxCount: 2, capitalCap: 500, exitRule: { type: 'cap_only' } })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const dcaBlock = ir.ruleBlocks.find(b => b.metadata?.dcaSchedule)
+    expect(typeof dcaBlock?.metadata?.dcaSchedule?.capitalCap).toBe('number')
+    expect(dcaBlock?.metadata?.dcaSchedule?.capitalCap).toBe(500)
+  })
+
+  // ── 12. signal triggerMode 无 interval 字段 ──────────────────────────────
+
+  it('signal triggerMode does not attach priceIntervalPct or timeIntervalMs', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    pushDcaRule(spec, { maxCount: 3, capitalCap: 1000, triggerMode: 'signal', exitRule: { type: 'cap_only' } })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const dcaBlock = ir.ruleBlocks.find(b => b.metadata?.dcaSchedule)
+    expect(dcaBlock?.metadata?.dcaSchedule?.triggerMode).toBe('signal')
+    expect(dcaBlock?.metadata?.dcaSchedule?.priceIntervalPct).toBeUndefined()
+    expect(dcaBlock?.metadata?.dcaSchedule?.timeIntervalMs).toBeUndefined()
+  })
+})
+
+// action.add_position ghost-atom fix: compile-time validation + IR output contract
+// ---------------------------------------------------------------------------
+describe('canonicalSpecV2IrCompilerService action.add_position', () => {
+  const fallback = {
+    exchange: 'okx' as const,
+    symbol: 'BTCUSDT',
+    baseTimeframe: '15m',
+    positionPct: 10,
+  }
+
+  function buildBaseSpec(): CanonicalStrategySpecV2 {
+    return {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        defaultTimeframe: '15m',
+      },
+      indicators: [],
+      sizing: { mode: 'RATIO', value: 10 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      rules: [
+        {
+          id: 'entry-open-long',
+          phase: 'entry',
+          sideScope: 'long',
+          priority: 200,
+          condition: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'series', source: 'bar', field: 'open' },
+          },
+          actions: [{ type: 'OPEN_LONG' }],
+        },
+      ],
+    } satisfies CanonicalStrategySpecV2
+  }
+
+  function buildSpecWithAddPosition(
+    id: string,
+    addMode: string,
+    addRatio: number,
+    side: 'long' | 'short' = 'long',
+  ): CanonicalStrategySpecV2 {
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id,
+      phase: 'entry',
+      sideScope: side,
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: side === 'short' ? 'ADD_SHORT' : 'ADD_LONG', sizing: { mode: 'RATIO', value: addRatio * 100 } }],
+      metadata: {
+        addPosition: {
+          stateKey: 'pyramiding_layer_count',
+          addMode,
+          addRatio: Number(addRatio.toFixed(4)),
+          maxLayers: 3,
+        },
+      },
+    })
+    return spec
+  }
+
+  // -------------------------------------------------------------------------
+  // 1. happy path: ADD_LONG 出现在 ruleBlocks
+  // -------------------------------------------------------------------------
+  it('happy path: ADD_LONG appears in ruleBlocks for signal_confirm addMode', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithAddPosition('add-pos-signal', 'signal_confirm', 0.2)
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const kinds = ir.ruleBlocks.flatMap(r => r.actions.map(a => a.kind))
+    expect(kinds).toContain('ADD_LONG')
+  })
+
+  // -------------------------------------------------------------------------
+  // 2. happy path: ADD_SHORT 出现在 ruleBlocks（short 侧）
+  // -------------------------------------------------------------------------
+  it('happy path: ADD_SHORT appears in ruleBlocks for short-side add_position', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithAddPosition('add-pos-short', 'signal_confirm', 0.2, 'short')
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const kinds = ir.ruleBlocks.flatMap(r => r.actions.map(a => a.kind))
+    expect(kinds).toContain('ADD_SHORT')
+  })
+
+  // -------------------------------------------------------------------------
+  // 3. metadata 完整透传：addMode + addRatio 出现在 IR ruleBlock metadata
+  // -------------------------------------------------------------------------
+  it('IR ruleBlock metadata.addPosition transports addMode and addRatio', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithAddPosition('add-pos-meta', 'profit_pct', 0.3)
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const addRule = ir.ruleBlocks.find(r => r.id === 'add-pos-meta')
+    expect(addRule).toBeDefined()
+    expect(addRule?.metadata?.addPosition?.addMode).toBe('profit_pct')
+    expect(addRule?.metadata?.addPosition?.addRatio).toBeCloseTo(0.3, 4)
+    expect(addRule?.metadata?.addPosition?.stateKey).toBe('pyramiding_layer_count')
+  })
+
+  // -------------------------------------------------------------------------
+  // 4. precision: addRatio toFixed(4) 精度锁定
+  // -------------------------------------------------------------------------
+  it('precision: addRatio is stored with 4-decimal precision', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithAddPosition('add-pos-precision', 'drawdown_pct', 0.1234)
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const addRule = ir.ruleBlocks.find(r => r.id === 'add-pos-precision')
+    expect(addRule?.metadata?.addPosition?.addRatio).toBeCloseTo(0.1234, 4)
+  })
+
+  // -------------------------------------------------------------------------
+  // 5. multi-rule: 2 条 add_position 规则互不干扰
+  // -------------------------------------------------------------------------
+  it('multi-rule: two add_position rules both appear in ruleBlocks independently', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithAddPosition('add-pos-1', 'signal_confirm', 0.2)
+    spec.rules.push({
+      id: 'add-pos-2',
+      phase: 'entry',
+      sideScope: 'long',
+      priority: 140,
+      condition: {
+        kind: 'expression',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'ADD_LONG', sizing: { mode: 'RATIO', value: 30 } }],
+      metadata: {
+        addPosition: {
+          stateKey: 'pyramiding_layer_count',
+          addMode: 'profit_pct',
+          addRatio: 0.3,
+          maxLayers: 2,
+        },
+      },
+    })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const addRule1 = ir.ruleBlocks.find(r => r.id === 'add-pos-1')
+    const addRule2 = ir.ruleBlocks.find(r => r.id === 'add-pos-2')
+    expect(addRule1).toBeDefined()
+    expect(addRule2).toBeDefined()
+    expect(addRule1?.metadata?.addPosition?.addMode).toBe('signal_confirm')
+    expect(addRule2?.metadata?.addPosition?.addMode).toBe('profit_pct')
+  })
+
+  // -------------------------------------------------------------------------
+  // 6. 混合隔离: add_position 与 OPEN_LONG / REDUCE_LONG 同 spec 不互相污染
+  // -------------------------------------------------------------------------
+  it('isolation: add_position rule does not pollute OPEN_LONG or REDUCE_LONG rules', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithAddPosition('add-pos-mixed', 'signal_confirm', 0.2)
+    spec.rules.push({
+      id: 'reduce-exit',
+      phase: 'exit',
+      sideScope: 'long',
+      priority: 80,
+      condition: {
+        kind: 'expression',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'REDUCE_LONG', sizing: { mode: 'RATIO', value: 0.5 } }],
+    })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+
+    const openRule = ir.ruleBlocks.find(r => r.id === 'entry-open-long')
+    const addRule = ir.ruleBlocks.find(r => r.id === 'add-pos-mixed')
+    const reduceRule = ir.ruleBlocks.find(r => r.id === 'reduce-exit')
+
+    expect(openRule?.actions.every(a => a.kind === 'OPEN_LONG')).toBe(true)
+    expect(addRule?.metadata?.addPosition?.addMode).toBe('signal_confirm')
+    expect(reduceRule?.metadata?.addPosition).toBeUndefined()
+  })
+
+  // -------------------------------------------------------------------------
+  // 7. fail-closed: addMode 缺失时 compile 抛出
+  // -------------------------------------------------------------------------
+  it('fail-closed: missing addMode throws codegen.canonical_spec_v2_add_position_invalid_addMode', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'add-pos-no-mode',
+      phase: 'entry',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'ADD_LONG', sizing: { mode: 'RATIO', value: 20 } }],
+      metadata: {
+        addPosition: {
+          stateKey: 'pyramiding_layer_count',
+          // intentionally no addMode
+        },
+      },
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_add_position_invalid_addMode/,
+    )
+  })
+
+  // -------------------------------------------------------------------------
+  // 8. fail-closed: addMode 为空字符串时 compile 抛出
+  // -------------------------------------------------------------------------
+  it('fail-closed: empty string addMode throws codegen.canonical_spec_v2_add_position_invalid_addMode', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'add-pos-empty-mode',
+      phase: 'entry',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'ADD_LONG', sizing: { mode: 'RATIO', value: 20 } }],
+      metadata: {
+        addPosition: {
+          stateKey: 'pyramiding_layer_count',
+          addMode: '',
+        },
+      },
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_add_position_invalid_addMode/,
+    )
+  })
+
+  // -------------------------------------------------------------------------
+  // 9. fail-closed: addRatio > 1 时 compile 抛出
+  // -------------------------------------------------------------------------
+  it('fail-closed: addRatio > 1 (accidental percentage form) throws codegen.canonical_spec_v2_add_position_invalid_addRatio', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'add-pos-bad-ratio',
+      phase: 'entry',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'ADD_LONG', sizing: { mode: 'RATIO', value: 20 } }],
+      metadata: {
+        addPosition: {
+          stateKey: 'pyramiding_layer_count',
+          addMode: 'signal_confirm',
+          addRatio: 20, // accidental percentage instead of 0.20
+        },
+      },
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_add_position_invalid_addRatio/,
+    )
+  })
+
+  // -------------------------------------------------------------------------
+  // 10. fail-closed: addRatio = 0 时 compile 抛出
+  // -------------------------------------------------------------------------
+  it('fail-closed: addRatio = 0 throws codegen.canonical_spec_v2_add_position_invalid_addRatio', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'add-pos-zero-ratio',
+      phase: 'entry',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'ADD_LONG', sizing: { mode: 'RATIO', value: 20 } }],
+      metadata: {
+        addPosition: {
+          stateKey: 'pyramiding_layer_count',
+          addMode: 'profit_pct',
+          addRatio: 0,
+        },
+      },
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_add_position_invalid_addRatio/,
+    )
+  })
+
+  // -------------------------------------------------------------------------
+  // 11. addRatio = 1.0 (100%) 是合法的边界值
+  // -------------------------------------------------------------------------
+  it('boundary: addRatio = 1.0 is valid and does not throw', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithAddPosition('add-pos-full', 'signal_confirm', 1.0)
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).not.toThrow()
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const addRule = ir.ruleBlocks.find(r => r.id === 'add-pos-full')
+    expect(addRule?.metadata?.addPosition?.addRatio).toBe(1)
+  })
+
+  // -------------------------------------------------------------------------
+  // 12. ADD_LONG 不进入 orchestrationPortfolioRisks 或 riskPolicy.guards
+  // -------------------------------------------------------------------------
+  it('isolation: add_position rule does not leak into orchestrationPortfolioRisks or riskPolicy.guards', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithAddPosition('add-pos-leak-check', 'drawdown_pct', 0.15)
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const portfolioRiskIds = (ir.orchestrationPortfolioRisks ?? []).map(r => r.id)
+    expect(portfolioRiskIds).not.toContain('add-pos-leak-check')
+    const guardIds = ir.riskPolicy.guards.map(g => g.id)
+    expect(guardIds.some(id => id.includes('add-pos-leak-check'))).toBe(false)
+  })
+
+  // -------------------------------------------------------------------------
+  // 13. 规则无 metadata.addPosition 时（手写 ADD_LONG）不触发验证
+  // -------------------------------------------------------------------------
+  it('non-lifecycle ADD_LONG without addPosition metadata compiles without throw', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'raw-add-long',
+      phase: 'entry',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      // ADD_LONG without lifecycle metadata — no addPosition key
+      actions: [{ type: 'ADD_LONG', sizing: { mode: 'RATIO', value: 20 } }],
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).not.toThrow()
+  })
+
+  // -------------------------------------------------------------------------
+  // 14. metadata.addPosition 存在但 actions 无 ADD_LONG/ADD_SHORT → 跳过验证
+  // -------------------------------------------------------------------------
+  it('metadata.addPosition with no ADD action is silently skipped (covers hasAddAction guard)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'odd-shape-rule',
+      phase: 'entry',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      // metadata.addPosition present but actions list has no ADD_LONG/ADD_SHORT
+      actions: [{ type: 'OPEN_LONG' }],
+      metadata: {
+        addPosition: {
+          stateKey: 'pyramiding_layer_count',
+          // no addMode — would fail if validation were triggered
+        },
+      },
+    })
+    // hasAddAction guard returns early: no throw expected
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).not.toThrow()
+  })
+
+  // -------------------------------------------------------------------------
+  // 15. addRatio = NaN → compile 一定 throw（covers Number.isFinite guard）
+  //
+  // NaN 在 spec 中会被 CanonicalSpecV2DigestService.hash() 内的 canonicalSerialize
+  // 先于 tryCompileActionAddPosition 处理，抛出 "non-finite numbers are not allowed"。
+  // 两条路径都是 fail-closed：要么 digest 拒绝，要么 addRatio 验证拒绝。
+  // 此处只断言 compile() 抛出，不指定具体 error message。
+  // -------------------------------------------------------------------------
+  it('fail-closed: addRatio = NaN causes compile to throw (digest or addRatio guard)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'add-pos-nan-ratio',
+      phase: 'entry',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'ADD_LONG', sizing: { mode: 'RATIO', value: 20 } }],
+      metadata: {
+        addPosition: {
+          stateKey: 'pyramiding_layer_count',
+          addMode: 'signal_confirm',
+          addRatio: Number.NaN,
+        },
+      },
+    })
+    // NaN is always rejected: either by canonical-serialize (digest) or by
+    // the addRatio Number.isFinite guard in tryCompileActionAddPosition.
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow()
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// canonicalSpecV2IrCompilerService action.reverse_position
+// 7 件套：compile() 直接喂入 CanonicalStrategySpecV2，不走 seed extractor
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('canonicalSpecV2IrCompilerService action.reverse_position', () => {
+  const fallback = {
+    exchange: 'okx' as const,
+    symbol: 'BTCUSDT',
+    baseTimeframe: '15m',
+    positionPct: 10,
+  }
+
+  function buildBaseSpec(): CanonicalStrategySpecV2 {
+    return {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        defaultTimeframe: '15m',
+      },
+      indicators: [],
+      sizing: { mode: 'RATIO', value: 0.1 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      rules: [
+        {
+          id: 'entry-close-above-open',
+          phase: 'entry',
+          sideScope: 'long',
+          priority: 200,
+          condition: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'series', source: 'bar', field: 'open' },
+          },
+          actions: [{ type: 'OPEN_LONG' }],
+        },
+      ],
+    } satisfies CanonicalStrategySpecV2
+  }
+
+  function buildSpecWithReversePosition(opts: {
+    fromSide: 'long' | 'short'
+    toSide: 'long' | 'short'
+    sameBarPolicy?: 'allow' | 'next_bar_only'
+    sizingSource?: 'current_position' | 'fixed' | 'position_sizing'
+    ruleId?: string
+  }): CanonicalStrategySpecV2 {
+    const {
+      fromSide,
+      toSide,
+      sameBarPolicy = 'next_bar_only',
+      sizingSource = 'fixed',
+      ruleId = 'exit-reverse-long-short',
+    } = opts
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: ruleId,
+      phase: 'exit',
+      sideScope: fromSide,
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [
+        { type: fromSide === 'long' ? 'CLOSE_LONG' : 'CLOSE_SHORT' },
+        {
+          type: toSide === 'long' ? 'OPEN_LONG' : 'OPEN_SHORT',
+          // sizingSource='current_position': 显式注入 sizing+quantityMode 使下游翻译为 position_pct
+          // sizingSource='fixed'/'position_sizing': 不注入 sizing，依赖 spec.sizing（RATIO:0.1）兜底
+          ...(sizingSource === 'current_position'
+            ? { sizing: { mode: 'RATIO', value: 100 }, params: { quantityMode: 'position_pct' } }
+            : {}),
+        },
+      ],
+      metadata: {
+        reversePosition: { fromSide, toSide, sameBarPolicy, sizingSource },
+      },
+    })
+    return spec
+  }
+
+  // ─── happy path ────────────────────────────────────────────────────────────
+
+  it('compile() happy path: long→short produces CLOSE_LONG + OPEN_SHORT in ruleBlocks', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({ fromSide: 'long', toSide: 'short' })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const reverseBlock = result.ir.ruleBlocks.find(r => r.id === 'exit-reverse-long-short')
+    expect(reverseBlock).toBeDefined()
+    const kinds = reverseBlock!.actions.map(a => a.kind)
+    expect(kinds).toContain('CLOSE_LONG')
+    expect(kinds).toContain('OPEN_SHORT')
+  })
+
+  it('compile() happy path: short→long produces CLOSE_SHORT + OPEN_LONG in ruleBlocks', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({ fromSide: 'short', toSide: 'long' })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const reverseBlock = result.ir.ruleBlocks.find(r => r.id === 'exit-reverse-long-short')
+    expect(reverseBlock).toBeDefined()
+    const kinds = reverseBlock!.actions.map(a => a.kind)
+    expect(kinds).toContain('CLOSE_SHORT')
+    expect(kinds).toContain('OPEN_LONG')
+  })
+
+  it('metadata.reversePosition is preserved in IR ruleBlock (fromSide, toSide, sameBarPolicy, sizingSource)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({
+      fromSide: 'long',
+      toSide: 'short',
+      sameBarPolicy: 'allow',
+      sizingSource: 'current_position',
+    })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const reverseBlock = result.ir.ruleBlocks.find(r => r.id === 'exit-reverse-long-short')
+    expect(reverseBlock).toBeDefined()
+    expect(reverseBlock!.metadata?.reversePosition?.fromSide).toBe('long')
+    expect(reverseBlock!.metadata?.reversePosition?.toSide).toBe('short')
+    expect(reverseBlock!.metadata?.reversePosition?.sameBarPolicy).toBe('allow')
+    expect(reverseBlock!.metadata?.reversePosition?.sizingSource).toBe('current_position')
+  })
+
+  it('CLOSE action precedes OPEN action in same ruleBlock (order preserved)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({ fromSide: 'long', toSide: 'short' })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const reverseBlock = result.ir.ruleBlocks.find(r => r.id === 'exit-reverse-long-short')
+    expect(reverseBlock).toBeDefined()
+    const kinds = reverseBlock!.actions.map(a => a.kind)
+    const closeIdx = kinds.indexOf('CLOSE_LONG')
+    const openIdx = kinds.indexOf('OPEN_SHORT')
+    expect(closeIdx).toBeGreaterThanOrEqual(0)
+    expect(openIdx).toBeGreaterThanOrEqual(0)
+    expect(closeIdx).toBeLessThan(openIdx)
+  })
+
+  it('sizingSource=current_position → OPEN action quantity.mode is position_pct', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({
+      fromSide: 'long',
+      toSide: 'short',
+      sizingSource: 'current_position',
+    })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const reverseBlock = result.ir.ruleBlocks.find(r => r.id === 'exit-reverse-long-short')
+    const openAction = reverseBlock?.actions.find(a => a.kind === 'OPEN_SHORT')
+    expect(openAction?.quantity?.mode).toBe('position_pct')
+  })
+
+  it('reverse_position node does NOT appear in orchestrationPortfolioRisks or riskPolicy.guards', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({ fromSide: 'long', toSide: 'short' })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const ruleIds = (result.ir.orchestrationPortfolioRisks ?? []).map(r => r.id)
+    expect(ruleIds).not.toContain('exit-reverse-long-short')
+    const guardIds = (result.ir.riskPolicy?.guards ?? []).map(g => g.id)
+    expect(guardIds).not.toContain('exit-reverse-long-short')
+  })
+
+  // ─── multi-rule: 2 reverse_position rules coexist without overwriting each other ──
+
+  it('multi-rule: two reverse_position rules both appear in ruleBlocks independently', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({ fromSide: 'long', toSide: 'short', ruleId: 'reverse-r1' })
+    spec.rules.push({
+      id: 'reverse-r2',
+      phase: 'exit',
+      sideScope: 'short',
+      priority: 140,
+      condition: {
+        kind: 'expression',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [
+        { type: 'CLOSE_SHORT' },
+        { type: 'OPEN_LONG' },
+      ],
+      metadata: {
+        reversePosition: { fromSide: 'short', toSide: 'long', sameBarPolicy: 'allow', sizingSource: 'fixed' },
+      },
+    })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const r1 = result.ir.ruleBlocks.find(r => r.id === 'reverse-r1')
+    const r2 = result.ir.ruleBlocks.find(r => r.id === 'reverse-r2')
+    expect(r1).toBeDefined()
+    expect(r2).toBeDefined()
+    expect(r1!.metadata?.reversePosition?.fromSide).toBe('long')
+    expect(r2!.metadata?.reversePosition?.fromSide).toBe('short')
+  })
+
+  // ─── 混合隔离: reverse_position 与其他 action 同 spec 不互相干扰 ────────────
+
+  it('mixed spec isolation: reverse_position rule does not bleed into reduce_position rule', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({ fromSide: 'long', toSide: 'short', ruleId: 'reverse-rule' })
+    // 添加一个普通 reduce_position 规则
+    spec.rules.push({
+      id: 'reduce-rule',
+      phase: 'exit',
+      sideScope: 'long',
+      priority: 130,
+      condition: {
+        kind: 'expression',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'CLOSE_LONG', sizing: { mode: 'RATIO', value: 0.5 }, params: { lifecycle: true } }],
+      metadata: { addPosition: undefined },
+    })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const reverseBlock = result.ir.ruleBlocks.find(r => r.id === 'reverse-rule')
+    const reduceBlock = result.ir.ruleBlocks.find(r => r.id === 'reduce-rule')
+    // reverse rule 有 reversePosition metadata
+    expect(reverseBlock?.metadata?.reversePosition).toBeDefined()
+    // reduce rule 没有 reversePosition metadata
+    expect(reduceBlock?.metadata?.reversePosition).toBeUndefined()
+  })
+
+  // ─── fail-closed: invalid fields throw with correct error codes ──────────
+
+  it('fail-closed: invalid fromSide throws codegen.canonical_spec_v2_reverse_position_invalid_from_side', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'bad-from-side',
+      phase: 'exit',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'CLOSE_LONG' }, { type: 'OPEN_SHORT' }],
+      metadata: {
+        reversePosition: {
+          fromSide: 'both' as unknown as 'long',
+          toSide: 'short',
+          sameBarPolicy: 'next_bar_only',
+          sizingSource: 'fixed',
+        },
+      },
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_reverse_position_invalid_from_side/,
+    )
+  })
+
+  it('fail-closed: invalid toSide throws codegen.canonical_spec_v2_reverse_position_invalid_to_side', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'bad-to-side',
+      phase: 'exit',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'CLOSE_LONG' }, { type: 'OPEN_SHORT' }],
+      metadata: {
+        reversePosition: {
+          fromSide: 'long',
+          toSide: 'both' as unknown as 'short',
+          sameBarPolicy: 'next_bar_only',
+          sizingSource: 'fixed',
+        },
+      },
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_reverse_position_invalid_to_side/,
+    )
+  })
+
+  it('fail-closed: fromSide === toSide throws codegen.canonical_spec_v2_reverse_position_invalid_same_side', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'same-side',
+      phase: 'exit',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'CLOSE_LONG' }, { type: 'OPEN_LONG' }],
+      metadata: {
+        reversePosition: {
+          fromSide: 'long',
+          toSide: 'long',
+          sameBarPolicy: 'next_bar_only',
+          sizingSource: 'fixed',
+        },
+      },
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_reverse_position_invalid_same_side/,
+    )
+  })
+
+  it('fail-closed: invalid sameBarPolicy throws codegen.canonical_spec_v2_reverse_position_invalid_same_bar_policy', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'bad-same-bar-policy',
+      phase: 'exit',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'CLOSE_LONG' }, { type: 'OPEN_SHORT' }],
+      metadata: {
+        reversePosition: {
+          fromSide: 'long',
+          toSide: 'short',
+          sameBarPolicy: 'immediate' as unknown as 'allow',
+          sizingSource: 'fixed',
+        },
+      },
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_reverse_position_invalid_same_bar_policy/,
+    )
+  })
+
+  it('fail-closed: invalid sizingSource throws codegen.canonical_spec_v2_reverse_position_invalid_sizing_source', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'bad-sizing-source',
+      phase: 'exit',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'CLOSE_LONG' }, { type: 'OPEN_SHORT' }],
+      metadata: {
+        reversePosition: {
+          fromSide: 'long',
+          toSide: 'short',
+          sameBarPolicy: 'next_bar_only',
+          sizingSource: 'unknown' as unknown as 'fixed',
+        },
+      },
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_reverse_position_invalid_sizing_source/,
+    )
+  })
+
+  // ─── precision: sizingSource=fixed → OPEN action quantity uses spec sizing ──
+
+  it('precision: sizingSource=fixed → OPEN action quantity is derived from spec sizing (not position_pct)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithReversePosition({
+      fromSide: 'long',
+      toSide: 'short',
+      sizingSource: 'fixed',
+    })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const reverseBlock = result.ir.ruleBlocks.find(r => r.id === 'exit-reverse-long-short')
+    const openAction = reverseBlock?.actions.find(a => a.kind === 'OPEN_SHORT')
+    expect(openAction).toBeDefined()
+    expect(openAction?.quantity?.mode).not.toBe('position_pct')
+  })
+
+  // ─── 命名前缀稳定性 ────────────────────────────────────────────────────────
+
+  it('naming stability: error codes use codegen.canonical_spec_v2_reverse_position_ prefix', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'naming-check',
+      phase: 'exit',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'CLOSE_LONG' }, { type: 'OPEN_SHORT' }],
+      metadata: {
+        reversePosition: {
+          fromSide: 'long',
+          toSide: 'long',
+          sameBarPolicy: 'next_bar_only',
+          sizingSource: 'fixed',
+        },
+      },
+    })
+    let errorCode = ''
+    try {
+      compiler.compile({ canonicalSpec: spec, fallback })
+    }
+    catch (e) {
+      errorCode = (e as Error).message
+    }
+    expect(errorCode).toMatch(/^codegen\.canonical_spec_v2_reverse_position_/)
+  })
+})

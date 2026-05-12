@@ -5,6 +5,7 @@ export interface StrategySignalsExecutionConfig {
   defaultQuoteAmount: number
   minBalanceThreshold: number
   maxRiskFraction: number
+  requireExplicitSizing?: boolean
 }
 
 export interface StrategySignalsAiConfig {
@@ -69,5 +70,6 @@ export const DEFAULT_STRATEGY_SIGNALS_CONFIG: StrategySignalsRuntimeConfig = {
     defaultQuoteAmount: 100,
     minBalanceThreshold: 50,
     maxRiskFraction: 0.2,
+    requireExplicitSizing: false,
   },
 }

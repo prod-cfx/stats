@@ -14,7 +14,6 @@ import type {
   SeriesDef,
   LevelSetDef,
 } from '../types/canonical-strategy-ir'
-import { LIQUIDITY_SWEEP_DEFAULT_RECLAIM_BARS } from '../types/canonical-strategy-ir'
 import type {
   CanonicalConditionAtom,
   CanonicalConditionGroup,
@@ -37,6 +36,9 @@ import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
 import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
+import { SizingEvidenceMissingException } from '../exceptions/sizing-evidence-missing.exception'
+import { LIQUIDITY_SWEEP_DEFAULT_RECLAIM_BARS } from '../types/canonical-strategy-ir'
+import { ACTIONABLE_RULE_ACTION_TYPES } from '../types/canonical-strategy-spec-v2'
 import { CanonicalSpecV2DigestService } from './canonical-spec-v2-digest.service'
 import { CanonicalStrategyIrCanonicalizerService } from './canonical-strategy-ir-canonicalizer.service'
 import { CanonicalStrategyIrValidatorService } from './canonical-strategy-ir-validator.service'
@@ -104,6 +106,8 @@ export class CanonicalSpecV2IrCompilerService {
       throw new Error('canonical_spec_v2_required')
     }
 
+    this.assertSizingEvidence(input)
+
     const specHash = this.digest.hash(input.canonicalSpec)
     const graphSnapshot = this.buildGraphSnapshot(input)
     const rawIr = this.buildIr(input, specHash, specHash, graphSnapshot.version)
@@ -117,6 +121,32 @@ export class CanonicalSpecV2IrCompilerService {
       graphSnapshot,
       semanticView: this.specDescBuilder.buildFromCanonicalSpec(input.canonicalSpec, ''),
       ir,
+    }
+  }
+
+  /**
+   * #1230 — compile-time sizing evidence guard.
+   * actionable rule action（来自 ACTIONABLE_RULE_ACTION_TYPES）必须有 sizing 来源：
+   *   action.sizing > spec.sizing > fallback.positionPct(>0)
+   * 三者皆缺即 fail-closed，避免下游 runtime 静默回退 defaultQuoteAmount。
+   *
+   * 单一来源：判定集合在 canonical-strategy-spec-v2.ts 集中维护，新增需要
+   * sizing 的 action type 时只改一处。
+   */
+  private assertSizingEvidence(input: CompileCanonicalSpecV2ToIrInput): void {
+    const spec = input.canonicalSpec
+    const fallbackPositionPct = input.fallback.positionPct ?? 0
+    const rules = Array.isArray(spec.rules) ? spec.rules : []
+    for (const rule of rules) {
+      const actions = Array.isArray(rule?.actions) ? rule.actions : []
+      for (const action of actions) {
+        if (action?.type && ACTIONABLE_RULE_ACTION_TYPES.has(action.type)) {
+          const effectiveSizing = action.sizing ?? spec.sizing
+          if (!effectiveSizing && !fallbackPositionPct) {
+            throw new SizingEvidenceMissingException({ ruleId: rule.id, actionType: action.type })
+          }
+        }
+      }
     }
   }
 
@@ -155,6 +185,7 @@ export class CanonicalSpecV2IrCompilerService {
     const ruleBlocks: RuleBlock[] = []
     const guards: RiskGuard[] = []
     const riskPredicates: RiskPredicateDef[] = []
+    const rulePortfolioRisks: IrOrchestrationPortfolioRisk[] = []
 
     // Phase 5 S2/S3/S9/S10/S11: 收集 supported scope id 集合，供 toRuleBlockMetadata silent-skip
     const specScopes = input.canonicalSpec.orchestration?.scopes ?? []
@@ -184,6 +215,34 @@ export class CanonicalSpecV2IrCompilerService {
       const partialTakeProfitBlock = this.tryCompileReduceActionRule(rule, input.canonicalSpec, input.fallback.positionPct, context)
       if (partialTakeProfitBlock) {
         ruleBlocks.push(partialTakeProfitBlock)
+        continue
+      }
+
+      // action.add_position ghost-atom fix (#1251): validate required fields
+      // before the rule reaches compileActions. Returns null on success (lets
+      // the rule proceed through the normal ruleBlock path). Throws fail-closed
+      // when addMode is absent/non-string or addRatio is out-of-range.
+      this.tryCompileActionAddPosition(rule)
+
+      const maxDrawdownRisk = this.tryCompileRiskMaxDrawdownPct(rule)
+      if (maxDrawdownRisk) {
+        rulePortfolioRisks.push(maxDrawdownRisk)
+        continue
+      }
+
+      const reversePositionBlock = this.tryCompileActionReversePosition(
+        rule,
+        input.canonicalSpec,
+        input.fallback.positionPct,
+        context,
+        supportedSymbolScopeIds,
+        supportedLegScopeIds,
+        supportedTimeframeScopeIds,
+        supportedDataSourceScopeIds,
+        supportedSubStrategyScopeIds,
+      )
+      if (reversePositionBlock) {
+        ruleBlocks.push(reversePositionBlock)
         continue
       }
 
@@ -228,7 +287,10 @@ export class CanonicalSpecV2IrCompilerService {
     const orchestrationScopes = this.compileOrchestrationScopes(input.canonicalSpec)
     const orchestrationLegScopes = this.compileOrchestrationLegScopes(input.canonicalSpec)
     const orchestrationGates = this.compileOrchestrationGates(input.canonicalSpec, context)
-    const orchestrationPortfolioRisks = this.compileOrchestrationPortfolioRisks(input.canonicalSpec)
+    const orchestrationPortfolioRisks = [
+      ...this.compileOrchestrationPortfolioRisks(input.canonicalSpec),
+      ...rulePortfolioRisks,
+    ]
     const orchestrationPrograms = this.compileOrchestrationPrograms(input.canonicalSpec, orchestrationGates)
 
     const maxLookback = this.resolveMaxLookback(seriesMap)
@@ -906,6 +968,8 @@ export class CanonicalSpecV2IrCompilerService {
             positionHandlingOnDeactivate: scope.positionHandlingOnDeactivate,
             orderHandlingOnDeactivate: scope.orderHandlingOnDeactivate,
           }
+        default:
+          throw new Error('codegen.orchestration_scope_unsupported')
       }
     })
   }
@@ -1331,8 +1395,9 @@ export class CanonicalSpecV2IrCompilerService {
 
       case 'ma.golden_cross':
       case 'ma.death_cross': {
-        const fastRef = this.ensureMovingAverageSeries(context, context.movingAverage.fast)
-        const slowRef = this.ensureMovingAverageSeries(context, context.movingAverage.slow)
+        const movingAverage = this.resolveMovingAverageAtomConfig(atom, context.movingAverage)
+        const fastRef = this.ensureMovingAverageSeries(context, movingAverage.kind, movingAverage.fast)
+        const slowRef = this.ensureMovingAverageSeries(context, movingAverage.kind, movingAverage.slow)
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}`,
@@ -1953,14 +2018,14 @@ export class CanonicalSpecV2IrCompilerService {
     return id
   }
 
-  private ensureMovingAverageSeries(context: CompileContext, period: number): string {
+  private ensureMovingAverageSeries(context: CompileContext, kind: 'EMA' | 'SMA', period: number): string {
     const closeRef = this.ensurePriceSeries(context, 'close')
-    const prefix = context.movingAverage.kind.toLowerCase()
+    const prefix = kind.toLowerCase()
     const id = `${prefix}_${period}_${context.timeframe}`
     if (!context.seriesMap.has(id)) {
       context.seriesMap.set(id, {
         id,
-        kind: context.movingAverage.kind,
+        kind,
         inputs: [closeRef],
         params: { period },
       })
@@ -1987,6 +2052,33 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:${indicator}`)
+  }
+
+  private resolveMovingAverageAtomConfig(
+    atom: CanonicalConditionAtom,
+    fallback: CompileContext['movingAverage'],
+  ): CompileContext['movingAverage'] {
+    const rawIndicator = this.readStringParam(atom.params?.indicator)?.toLowerCase()
+    const kind = rawIndicator === 'sma' || rawIndicator === 'ma'
+      ? 'SMA'
+      : (rawIndicator === 'ema' ? 'EMA' : fallback.kind)
+    const fast = this.readNumber([
+      atom.params?.fast,
+      atom.params?.short,
+      atom.params?.fastPeriod,
+    ], fallback.fast)
+    const slow = this.readNumber([
+      atom.params?.slow,
+      atom.params?.long,
+      atom.params?.slowPeriod,
+      atom.params?.period,
+    ], fallback.slow)
+
+    return {
+      kind,
+      fast,
+      slow: slow > fast ? slow : fast + 14,
+    }
   }
 
   private ensureRsiSeries(context: CompileContext, period: number): string {
@@ -2479,6 +2571,239 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     return null
+  }
+
+  /**
+   * risk.max_drawdown_pct ghost-atom fix (#1242).
+   *
+   * canonical-spec-builder emits this atom as a rule (phase:'risk',
+   * condition.kind:'atom', condition.key:'risk.max_drawdown_pct',
+   * condition.value = valuePct/100 as fraction).
+   * The runtime evaluator lives in evaluate-orchestration-portfolio-risks.ts
+   * and expects a CompiledPortfolioDrawdownRisk (scope:'portfolio').
+   *
+   * Dispatch fall-through: returns null when the rule does not match this atom,
+   * letting downstream compilers handle it.
+   *
+   * Fail-closed: when the rule matches but valuePct lies outside (0, 100),
+   * throws `codegen.canonical_spec_v2_max_drawdown_invalid_pct`. The upstream
+   * canonical-spec-builder already validates valuePct; reaching this branch
+   * indicates a contract violation (hand-written canonical spec, LLM direct
+   * injection). Silent skip is forbidden — it would let users believe the
+   * drawdown guard is in effect when it is not.
+   */
+  /**
+   * action.add_position ghost-atom fix (#1251).
+   *
+   * canonical-spec-builder emits add_position rules as phase:'entry'/'exit'
+   * with action type ADD_LONG or ADD_SHORT and metadata.addPosition carrying
+   * { stateKey, addMode, addRatio, maxLayers, maxExposurePct }.
+   *
+   * The runtime (run-add-position.ts) uses addMode to branch between three
+   * semantically distinct behaviors:
+   *   signal_confirm — fire on repeated entry signal
+   *   profit_pct     — fire when position PnL exceeds profitThreshold
+   *   drawdown_pct   — fire when unrealised drawdown exceeds drawdownThreshold
+   *
+   * Without compile-time validation, a missing addMode produces an ADD_LONG
+   * in the IR that the runtime silently falls through, making all three modes
+   * behaviourally identical — a ghost-atom equivalent.
+   *
+   * Contract:
+   *   • Returns void (null-equivalent) — lets the rule proceed through the
+   *     normal ruleBlock path unmodified.
+   *   • Throws fail-closed when:
+   *       – addMode is absent or not a string
+   *       – addRatio is present but outside (0, 1]
+   *
+   * Guard logic mirrors tryCompileRiskMaxDrawdownPct: we only intercept rules
+   * that are unambiguously add_position rules (have ADD_LONG or ADD_SHORT
+   * action AND metadata.addPosition). Rules that lack metadata.addPosition
+   * (e.g. hand-crafted ADD_LONG without lifecycle metadata) are passed through
+   * without validation — they do not claim to be add_position lifecycle rules.
+   */
+  private tryCompileActionAddPosition(rule: CanonicalRuleV2): void {
+    const addPositionMeta = rule.metadata?.addPosition
+    if (!addPositionMeta) {
+      // Not an add_position lifecycle rule — nothing to validate.
+      return
+    }
+
+    const hasAddAction = rule.actions.some(
+      a => a.type === 'ADD_LONG' || a.type === 'ADD_SHORT',
+    )
+    if (!hasAddAction) {
+      // metadata.addPosition present but no ADD action — odd shape; skip.
+      return
+    }
+
+    // addMode is required: runtime cannot dispatch without it.
+    if (typeof addPositionMeta.addMode !== 'string' || addPositionMeta.addMode.trim() === '') {
+      throw new Error(
+        `codegen.canonical_spec_v2_add_position_invalid_addMode:${rule.id}`,
+      )
+    }
+
+    // addRatio, when present, must be a positive fraction in (0, 1].
+    // Values >1 look like accidental percentages (e.g. 20 instead of 0.20);
+    // values ≤0 are semantically incoherent.
+    const addRatio = addPositionMeta.addRatio
+    if (addRatio !== undefined) {
+      const ratio = Number(addRatio)
+      if (!Number.isFinite(ratio) || ratio <= 0 || ratio > 1) {
+        throw new Error(
+          `codegen.canonical_spec_v2_add_position_invalid_addRatio:${rule.id}:${addRatio}`,
+        )
+      }
+    }
+  }
+
+  /**
+   * risk.max_drawdown_pct ghost-atom fix (#1242).
+   *
+   * canonical-spec-builder emits this atom as a rule (phase:'risk',
+   * condition.kind:'atom', condition.key:'risk.max_drawdown_pct',
+   * condition.value = valuePct/100 as fraction).
+   * The runtime evaluator lives in evaluate-orchestration-portfolio-risks.ts
+   * and expects a CompiledPortfolioDrawdownRisk (scope:'portfolio').
+   *
+   * Dispatch fall-through: returns null when the rule does not match this atom,
+   * letting downstream compilers handle it.
+   *
+   * Fail-closed: when the rule matches but valuePct lies outside (0, 100),
+   * throws `codegen.canonical_spec_v2_max_drawdown_invalid_pct`. The upstream
+   * canonical-spec-builder already validates valuePct; reaching this branch
+   * indicates a contract violation (hand-written canonical spec, LLM direct
+   * injection). Silent skip is forbidden — it would let users believe the
+   * drawdown guard is in effect when it is not.
+   */
+  private tryCompileRiskMaxDrawdownPct(
+    rule: CanonicalRuleV2,
+  ): IrOrchestrationPortfolioRisk | null {
+    if (
+      rule.phase !== 'risk'
+      || rule.condition.kind !== 'atom'
+      || rule.condition.key !== 'risk.max_drawdown_pct'
+    ) {
+      return null
+    }
+
+    // canonical-spec-builder currently stores valuePct as a fraction (valuePct / 100),
+    // but other risk atoms (stop_loss_pct, take_profit_pct, trailing_stop_pct) accept
+    // both fraction (≤1) and percentage (>1) via the same heuristic — see
+    // tryCompileRiskGuard. Mirror that contract here so upstream changes do not silently
+    // produce a 1500% threshold (which would never trigger and would not throw either).
+    //
+    // Boundary semantics:
+    //   rawValue ∈ (0, 1] → treated as fraction, multiplied by 100 (so rawValue=1 maps
+    //                       to 100% and is rejected by the (0, 100) guard below)
+    //   rawValue > 1     → treated as already-percentage, passed through verbatim
+    // Trade-off: fractional 99.99% drawdown (rawValue=0.9999) is the largest expressible
+    // fraction; users wanting 99.x% must use percentage form (rawValue=99.x).
+    const rawValue = this.readNumber([rule.condition.value], Number.NaN)
+    const thresholdPct = Number.isFinite(rawValue) && rawValue <= 1
+      ? Number((rawValue * 100).toFixed(4))
+      : rawValue
+
+    if (!Number.isFinite(thresholdPct) || thresholdPct <= 0 || thresholdPct >= 100) {
+      throw new Error(
+        `codegen.canonical_spec_v2_max_drawdown_invalid_pct:${rule.id}:${thresholdPct}`,
+      )
+    }
+
+    return {
+      id: rule.id,
+      scope: 'portfolio',
+      mode: 'enforce',
+      thresholdPct,
+      effectWhenTriggered: 'block_new_entries',
+    }
+  }
+
+  private tryCompileActionReversePosition(
+    rule: CanonicalRuleV2,
+    spec: CanonicalStrategySpecV2,
+    fallbackPositionPct: number,
+    context: CompileContext,
+    supportedSymbolScopeIds: ReadonlySet<string>,
+    supportedLegScopeIds: ReadonlySet<string>,
+    supportedTimeframeScopeIds: ReadonlySet<string>,
+    supportedDataSourceScopeIds: ReadonlySet<string>,
+    supportedSubStrategyScopeIds: ReadonlySet<string>,
+  ): RuleBlock | null {
+    const reverseMeta = rule.metadata?.reversePosition
+    if (!reverseMeta) {
+      return null
+    }
+
+    // fail-closed: fromSide must be 'long' | 'short'
+    if (reverseMeta.fromSide !== 'long' && reverseMeta.fromSide !== 'short') {
+      throw new Error(
+        `codegen.canonical_spec_v2_reverse_position_invalid_from_side:${rule.id}:${reverseMeta.fromSide}`,
+      )
+    }
+
+    // fail-closed: toSide must be 'long' | 'short'
+    if (reverseMeta.toSide !== 'long' && reverseMeta.toSide !== 'short') {
+      throw new Error(
+        `codegen.canonical_spec_v2_reverse_position_invalid_to_side:${rule.id}:${reverseMeta.toSide}`,
+      )
+    }
+
+    // fail-closed: fromSide and toSide must differ (reversing to same side is a no-op)
+    if (reverseMeta.fromSide === reverseMeta.toSide) {
+      throw new Error(
+        `codegen.canonical_spec_v2_reverse_position_invalid_same_side:${rule.id}:${reverseMeta.fromSide}`,
+      )
+    }
+
+    // fail-closed: sameBarPolicy must be known
+    if (reverseMeta.sameBarPolicy !== 'allow' && reverseMeta.sameBarPolicy !== 'next_bar_only') {
+      throw new Error(
+        `codegen.canonical_spec_v2_reverse_position_invalid_same_bar_policy:${rule.id}:${reverseMeta.sameBarPolicy}`,
+      )
+    }
+
+    // fail-closed: sizingSource must be known
+    if (
+      reverseMeta.sizingSource !== 'current_position'
+      && reverseMeta.sizingSource !== 'fixed'
+      && reverseMeta.sizingSource !== 'position_sizing'
+    ) {
+      throw new Error(
+        `codegen.canonical_spec_v2_reverse_position_invalid_sizing_source:${rule.id}:${reverseMeta.sizingSource}`,
+      )
+    }
+
+    const when = this.compileCondition(rule.condition, context, rule.id)
+    const actions = this.compileActions(rule, spec, fallbackPositionPct)
+    if (actions.length === 0) {
+      return null
+    }
+
+    this.collectPositionLifecycleRuntimeRequirements(rule, actions, context)
+
+    // Reuse the scope-id Sets already computed in buildIr so that
+    // symbolScopeRef / timeframeScopeRef / dataSourceScopeRef / subStrategyScopeRef
+    // are subject to the same whitelist checks as rules compiled via the generic path.
+    const metadata = this.toRuleBlockMetadata(
+      rule.metadata!,
+      supportedSymbolScopeIds,
+      supportedLegScopeIds,
+      supportedTimeframeScopeIds,
+      supportedDataSourceScopeIds,
+      supportedSubStrategyScopeIds,
+    )
+
+    return {
+      id: rule.id,
+      phase: this.mapRulePhase(rule, actions),
+      when,
+      priority: rule.priority,
+      cooldownBars: typeof rule.cooldownBars === 'number' && rule.cooldownBars > 0 ? rule.cooldownBars : undefined,
+      actions,
+      ...(metadata && Object.keys(metadata).length > 0 ? { metadata } : {}),
+    }
   }
 
   private tryCompileReduceActionRule(
@@ -3032,7 +3357,8 @@ export class CanonicalSpecV2IrCompilerService {
       case 'ma.golden_cross':
       case 'ma.death_cross': {
         const operator = condition.key === 'ma.golden_cross' ? 'CROSS_OVER' : 'CROSS_UNDER'
-        return `${operator}(${config.movingAverage.kind}(CLOSE,${config.movingAverage.fast}),${config.movingAverage.kind}(CLOSE,${config.movingAverage.slow}))`
+        const movingAverage = this.resolveMovingAverageAtomConfig(condition, config.movingAverage)
+        return `${operator}(${movingAverage.kind}(CLOSE,${movingAverage.fast}),${movingAverage.kind}(CLOSE,${movingAverage.slow}))`
       }
 
       case 'rsi.threshold_lte':
