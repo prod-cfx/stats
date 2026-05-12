@@ -282,7 +282,17 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     for (const account of accounts) {
       const result = await this.processAccount(signal, account, config)
       if (result === 'executed') executed += 1
-      else if (result === 'failed') failed += 1
+      else if (result === 'failed') {
+        failed += 1
+        // #1208 — executor-stage multi-leg saga compensate.
+        //   If this signal carries metadata.runtimeProvenance.leg (multi-leg
+        //   fan-out batch) and its execution failed, market-close any sibling
+        //   leg already EXECUTED on the same account.
+        //   Scope per dispatch failure-mode decision: same strategyInstance +
+        //   same emit batch (executionSemanticKey) + same account.
+        //   Compensate failures are warned only — no infinite retry.
+        await this.triggerMultiLegSagaCompensateIfNeeded(signal, account, config)
+      }
       else skipped += 1
     }
 
@@ -1564,6 +1574,215 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       exchangeSize: normalized?.exchangeSize ?? null,
       normalizedRequest: normalized ? this.toJsonObject(normalized.request as unknown as Record<string, unknown>) : null,
       orderResponse: order ? this.buildOrderResponseSnapshot(order) : null,
+    }
+  }
+
+  /**
+   * #1208 — Executor-stage multi-leg saga compensate trigger.
+   *
+   * Called after processAccount returns 'failed'. If the signal belongs to a
+   * multi-leg fan-out batch (has metadata.runtimeProvenance.leg), queries
+   * sibling signals from the same batch+account that are already EXECUTED and
+   * submits a reduce-only market close for each.
+   *
+   * Single-leg signals (no runtimeProvenance.leg) exit at the first guard —
+   * byte-equal to pre-#1208 behaviour (AC #3).
+   *
+   * Idempotency: siblings with metadata.sagaCompensated=true are skipped so
+   * the recovery cron cannot double-compensate.
+   */
+  private async triggerMultiLegSagaCompensateIfNeeded(
+    failedSignal: NonNullable<Awaited<ReturnType<TradingSignalRepository['findById']>>>,
+    account: UserStrategyAccount,
+    config: StrategySignalsRuntimeConfig,
+  ): Promise<void> {
+    if (!config.execution.enabled) return
+
+    const runtimeProvenance = this.readSignalRuntimeProvenance(failedSignal)
+    if (!runtimeProvenance) return
+
+    const legMeta = runtimeProvenance.leg
+    if (!legMeta || Array.isArray(legMeta) || typeof legMeta !== 'object') return
+
+    const executionSemanticKey = runtimeProvenance.executionSemanticKey
+    if (typeof executionSemanticKey !== 'string' || executionSemanticKey.length === 0) {
+      this.logger.warn(
+        `[multi-leg saga executor] signal ${failedSignal.id} has leg metadata but no executionSemanticKey; ` +
+        `skipping compensate (cannot identify sibling batch)`,
+      )
+      return
+    }
+
+    const failedLegId = typeof (legMeta as Prisma.JsonObject).legId === 'string'
+      ? String((legMeta as Prisma.JsonObject).legId)
+      : 'unknown'
+
+    let siblings: Awaited<ReturnType<SignalExecutorRepository['findExecutedMultiLegSiblings']>>
+    try {
+      siblings = await this.executorRepository.findExecutedMultiLegSiblings({
+        strategyInstanceId: failedSignal.strategyInstanceId ?? null,
+        llmStrategyInstanceId: failedSignal.llmStrategyInstanceId ?? null,
+        executionSemanticKey,
+        excludeSignalId: failedSignal.id,
+        accountId: account.id,
+      })
+    }
+    catch (err) {
+      this.logger.error(
+        `[multi-leg saga executor] failed to query sibling signals for leg ${failedLegId} ` +
+        `(signal ${failedSignal.id}, account ${account.id}): ${(err as Error).message}`,
+      )
+      return
+    }
+
+    if (!siblings.length) return
+
+    this.logger.warn(
+      `[multi-leg saga executor] leg ${failedLegId} (signal ${failedSignal.id}) failed on account ${account.id}; ` +
+      `compensating ${siblings.length} executed sibling(s) via reduce-only market close`,
+    )
+
+    for (const sibling of siblings) {
+      const siblingExecution = sibling.executions.find(e => e.status === 'EXECUTED')
+      if (!siblingExecution) continue
+
+      // Idempotency guard: already saga-compensated → skip.
+      const meta = siblingExecution.metadata
+      if (meta && typeof meta === 'object' && !Array.isArray(meta)
+        && (meta as Prisma.JsonObject).sagaCompensated === true) {
+        continue
+      }
+
+      await this.submitMultiLegSagaMarketClose({
+        failedSignalId: failedSignal.id,
+        failedLegId,
+        sibling,
+        siblingExecution,
+        account,
+      })
+    }
+  }
+
+  private async submitMultiLegSagaMarketClose(input: {
+    failedSignalId: string
+    failedLegId: string
+    sibling: Awaited<ReturnType<SignalExecutorRepository['findExecutedMultiLegSiblings']>>[number]
+    siblingExecution: Awaited<ReturnType<SignalExecutorRepository['findExecutedMultiLegSiblings']>>[number]['executions'][number]
+    account: UserStrategyAccount
+  }): Promise<void> {
+    const { sibling, siblingExecution, account, failedLegId, failedSignalId } = input
+    const compensatedAt = new Date().toISOString()
+    const symbolMeta = sibling.symbol
+
+    if (!symbolMeta) {
+      await this.recordSagaCompensateFailure(siblingExecution.id, {
+        failedSignalId, failedLegId, compensatedAt, reason: 'SAGA_COMPENSATE_SYMBOL_MISSING',
+      })
+      return
+    }
+
+    const exchangeId = this.normalizeExchangeId(symbolMeta.exchange)
+    const marketType = this.normalizeMarketType(symbolMeta.instrumentType)
+    if (!exchangeId || !marketType) {
+      await this.recordSagaCompensateFailure(siblingExecution.id, {
+        failedSignalId, failedLegId, compensatedAt, reason: 'SAGA_COMPENSATE_UNSUPPORTED_EXCHANGE_OR_MARKET',
+      })
+      return
+    }
+
+    // Reverse executed side (BUY→sell, SELL→buy) for reduce-only close.
+    const closeSide: 'buy' | 'sell' = siblingExecution.orderSide === 'BUY' ? 'sell' : 'buy'
+    const quantity = siblingExecution.executedQuantity ? Number(siblingExecution.executedQuantity) : 0
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      await this.recordSagaCompensateFailure(siblingExecution.id, {
+        failedSignalId, failedLegId, compensatedAt, reason: 'SAGA_COMPENSATE_QUANTITY_INVALID',
+      })
+      return
+    }
+
+    const symbolStr = this.buildUnifiedSymbol(symbolMeta, marketType)
+    const orderIntent: OrderIntent = {
+      source: 'signal',
+      sourceId: siblingExecution.id,
+      userId: account.userId,
+      exchangeAccountId: null,
+      exchangeId,
+      marketType,
+      symbol: symbolStr,
+      side: closeSide,
+      type: 'market',
+      amount: quantity,
+      reduceOnly: true,
+      role: this.mapOrderIntentRole(marketType, closeSide, true),
+      ...(marketType === 'perp' ? { tdMode: 'cross' as const } : {}),
+    }
+
+    try {
+      const prepared = await this.tradingExecution.prepareIntent(orderIntent)
+      if (prepared.status !== 'prepared') {
+        await this.recordSagaCompensateFailure(siblingExecution.id, {
+          failedSignalId, failedLegId, compensatedAt,
+          reason: prepared.reason ?? 'SAGA_COMPENSATE_PREPARE_FAILED',
+        })
+        return
+      }
+      const submitted = await this.tradingExecution.submitPrepared(prepared)
+      if (submitted.status !== 'submitted') {
+        await this.recordSagaCompensateFailure(siblingExecution.id, {
+          failedSignalId, failedLegId, compensatedAt,
+          reason: 'reason' in submitted && submitted.reason
+            ? submitted.reason
+            : 'SAGA_COMPENSATE_SUBMIT_FAILED',
+        })
+        return
+      }
+      const compensateOrderId = submitted.order?.id ?? null
+      await this.executionRepository.markStage(siblingExecution.id, 'RECONCILE_REQUIRED', {
+        sagaCompensated: true,
+        sagaReason: 'sibling_leg_execute_failed',
+        failedLegId,
+        failedSignalId,
+        compensateOrderId,
+        compensatedAt,
+      })
+      this.logger.warn(
+        `[multi-leg saga executor] sibling signal ${sibling.id} (execution ${siblingExecution.id}) ` +
+        `compensated via reduce-only market close (orderId=${compensateOrderId ?? 'n/a'}, ` +
+        `qty=${quantity}, side=${closeSide})`,
+      )
+    }
+    catch (err) {
+      await this.recordSagaCompensateFailure(siblingExecution.id, {
+        failedSignalId, failedLegId, compensatedAt,
+        reason: `SAGA_COMPENSATE_THROWN:${(err as Error).message}`,
+      })
+    }
+  }
+
+  private async recordSagaCompensateFailure(
+    siblingExecutionId: string,
+    audit: { failedSignalId: string; failedLegId: string; compensatedAt: string; reason: string },
+  ): Promise<void> {
+    this.logger.error(
+      `[multi-leg saga executor] failed to compensate sibling execution ${siblingExecutionId} ` +
+      `(failedLeg=${audit.failedLegId}, failedSignal=${audit.failedSignalId}): ${audit.reason}`,
+    )
+    try {
+      await this.executionRepository.markStage(siblingExecutionId, 'RECONCILE_REQUIRED', {
+        sagaCompensated: true,
+        sagaReason: 'sibling_leg_execute_failed',
+        sagaCompensateFailed: true,
+        sagaCompensateFailureReason: audit.reason,
+        failedLegId: audit.failedLegId,
+        failedSignalId: audit.failedSignalId,
+        compensatedAt: audit.compensatedAt,
+      })
+    }
+    catch (err) {
+      this.logger.error(
+        `[multi-leg saga executor] also failed to record audit metadata for sibling ${siblingExecutionId}: ` +
+        `${(err as Error).message}`,
+      )
     }
   }
 

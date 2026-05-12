@@ -1,4 +1,4 @@
-import type { PositionSide, SignalStatus, QuantifyInstrumentType as InstrumentType } from '@ai/shared'
+import type { ExecutionStatus, PositionSide, SignalStatus, QuantifyInstrumentType as InstrumentType } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { ExchangeId, MarketType } from '@/modules/trading/core/types'
 import type { PrismaClient, Prisma } from '@/prisma/prisma.types'
@@ -204,6 +204,63 @@ export class SignalExecutorRepository {
       },
     })
     return count > 0
+  }
+
+  /**
+   * #1208 — Find sibling multi-leg signals from the same emit batch that have
+   * an EXECUTED execution on the given account, so the executor can
+   * market-close them when one leg fails (executor-stage saga compensate).
+   *
+   * Batch identity: same strategyInstance + same `executionSemanticKey` (written
+   * into `metadata.runtimeProvenance.executionSemanticKey` by PR4a emit).
+   *
+   * Idempotency: callers must skip siblings whose execution already has
+   * `metadata.sagaCompensated=true` before re-firing (recovery cron guard).
+   */
+  findExecutedMultiLegSiblings(input: {
+    strategyInstanceId?: string | null
+    llmStrategyInstanceId?: string | null
+    executionSemanticKey: string
+    excludeSignalId: string
+    accountId: string
+  }) {
+    const instanceClause: Prisma.TradingSignalWhereInput = input.strategyInstanceId
+      ? { strategyInstanceId: input.strategyInstanceId }
+      : input.llmStrategyInstanceId
+        ? { llmStrategyInstanceId: input.llmStrategyInstanceId }
+        : { id: '__never__' }
+
+    return this.txHost.tx.tradingSignal.findMany({
+      where: {
+        ...instanceClause,
+        id: { not: input.excludeSignalId },
+        metadata: {
+          path: ['runtimeProvenance', 'executionSemanticKey'],
+          equals: input.executionSemanticKey,
+        },
+        executions: {
+          some: {
+            userStrategyAccountId: input.accountId,
+            status: 'EXECUTED' as unknown as ExecutionStatus,
+          },
+        },
+      },
+      include: {
+        symbol: true,
+        executions: {
+          where: { userStrategyAccountId: input.accountId },
+          select: {
+            id: true,
+            userStrategyAccountId: true,
+            status: true,
+            metadata: true,
+            executedQuantity: true,
+            positionSide: true,
+            orderSide: true,
+          },
+        },
+      },
+    })
   }
 
   lockAccount(accountId: string) {
