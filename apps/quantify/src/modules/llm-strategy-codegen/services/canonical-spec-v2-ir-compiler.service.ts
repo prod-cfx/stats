@@ -1656,7 +1656,11 @@ export class CanonicalSpecV2IrCompilerService {
           })
         }
         const threshold = -Math.abs(
-          this.normalizePositionPnlPctThreshold(this.readNumber([atom.value], 0)),
+          this.normalizeRiskGuardPctThreshold(
+            this.readNumber([atom.value, atom.params?.valuePct], Number.NaN),
+            'canonical_spec_v2_position_loss_pct_invalid_pct',
+            seed,
+          ),
         )
         const thresholdRef = this.ensureConstSeries(
           context,
@@ -2414,6 +2418,35 @@ export class CanonicalSpecV2IrCompilerService {
       }
     }
 
+    // risk.cooldown_bars ghost-atom fix (P3, #1264).
+    //
+    // The registry declares risk.cooldown_bars as executableRisk('risk.cooldown_bars', ['bars']).
+    // canonical-spec-builder has no case for it, so rules reach tryCompileRiskPredicate directly.
+    // Previously there was no matching branch → rule fell through to compileConditionAtom → throw
+    // condition_unsupported (ghost atom).
+    //
+    // Shape contract: phase:'risk', condition.kind:'atom', condition.key:'risk.cooldown_bars',
+    // condition.params.bars: positive integer (bars to suppress new entries after fill/exit).
+    //
+    // Fail-closed: non-integer, ≤ 0, or missing bars → throw a distinct invalid_bars error.
+    // Silent return-null is forbidden here because cooldown_bars is a safety-affecting parameter;
+    // falling through to condition_unsupported would mask the contract violation.
+    if (rule.condition.key === 'risk.cooldown_bars') {
+      const barsRaw = (rule.condition.params ?? {}).bars
+      const bars = typeof barsRaw === 'number' ? barsRaw : Number(barsRaw)
+      if (!Number.isInteger(bars) || bars <= 0) {
+        throw new Error(
+          `codegen.canonical_spec_v2_cooldown_bars_invalid_bars:${rule.id}:${barsRaw}`,
+        )
+      }
+      return {
+        id: rule.id,
+        kind: 'cooldownBars',
+        params: { bars },
+        actions: this.compileRiskPredicateActions(rule),
+      }
+    }
+
     if (rule.condition.key === 'risk.remembered_level_stop') {
       const levelKey = typeof rule.condition.params?.levelKey === 'string' && rule.condition.params.levelKey.trim().length > 0
         ? rule.condition.params.levelKey.trim()
@@ -2530,18 +2563,27 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     const threshold = this.readNumber([rule.condition.value], 0)
+    const percentRiskThreshold = this.readNumber(
+      [rule.condition.value, rule.condition.params?.valuePct],
+      Number.NaN,
+    )
     const onBreach = rule.actions.some(action => action.type === 'BLOCK_NEW_ENTRY')
       ? 'BLOCK_NEW_ENTRY'
       : 'FORCE_EXIT'
     const hasReduceAction = rule.actions.some(action => action.type === 'REDUCE_LONG' || action.type === 'REDUCE_SHORT')
 
     if (rule.condition.key === 'position_loss_pct') {
+      const thresholdPct = this.normalizeRiskGuardPctThreshold(
+        percentRiskThreshold,
+        'canonical_spec_v2_position_loss_pct_invalid_pct',
+        rule.id,
+      )
       return {
         id: `guard_${rule.id}`,
         kind: 'STOP_LOSS_PCT',
         scope: 'position',
         appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
-        value: threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold,
+        value: thresholdPct,
         onBreach,
       }
     }
@@ -2566,6 +2608,60 @@ export class CanonicalSpecV2IrCompilerService {
         scope: 'position',
         appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
         value: threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold,
+        onBreach,
+      }
+    }
+
+    // risk.stop_loss_pct ghost-atom fix (P3, #1264).
+    //
+    // canonical-spec-builder rewrites this atom into `position_loss_pct` via
+    // buildPercentRiskCanonicalRule, so normal builder paths are already covered.
+    // However spec authors and contract tests can inject `risk.stop_loss_pct`
+    // directly; without an explicit branch the rule falls through
+    // compileConditionAtom and throws condition_unsupported.
+    //
+    // Boundary semantics mirror the existing position_loss_pct case:
+    //   rawValue ∈ (0, 1] → fraction form → * 100 with toFixed(4)
+    //   rawValue > 1      → already percentage, passed through verbatim
+    //
+    // Fail-closed: thresholdPct ∉ (0, 100) → throw. Silent skip is forbidden:
+    // a skipped stop-loss guard is indistinguishable from "no stop-loss" at runtime.
+    if (rule.condition.key === 'risk.stop_loss_pct') {
+      const thresholdPct = this.normalizeRiskGuardPctThreshold(
+        percentRiskThreshold,
+        'canonical_spec_v2_stop_loss_pct_invalid_pct',
+        rule.id,
+      )
+      return {
+        id: `guard_${rule.id}`,
+        kind: 'STOP_LOSS_PCT',
+        scope: 'position',
+        appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
+        value: thresholdPct,
+        onBreach,
+      }
+    }
+
+    // risk.max_single_loss_pct ghost-atom fix (P3, #1264).
+    //
+    // canonical-spec-builder emits phase:'risk', condition.key:'risk.max_single_loss_pct',
+    // condition.value = valuePct/100 (fraction). The MAX_SINGLE_LOSS_PCT RiskGuard.kind is
+    // already declared in canonical-strategy-ir.ts but no compile branch existed —
+    // leaving the atom as a ghost (rule fell through to condition_unsupported).
+    //
+    // Boundary semantics and fail-closed contract mirror risk.stop_loss_pct above.
+    if (rule.condition.key === 'risk.max_single_loss_pct') {
+      const thresholdPct = this.normalizeRiskGuardPctThreshold(
+        percentRiskThreshold,
+        'canonical_spec_v2_max_single_loss_pct_invalid_pct',
+        rule.id,
+      )
+      return {
+        id: `guard_${rule.id}`,
+        kind: 'MAX_SINGLE_LOSS_PCT',
+        scope: 'position',
+        appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
+        value: thresholdPct,
         onBreach,
       }
     }
@@ -3603,6 +3699,14 @@ export class CanonicalSpecV2IrCompilerService {
   private normalizePositionPnlPctThreshold(value: number): number {
     if (!Number.isFinite(value)) return value
     return Math.abs(value) <= 1 ? value * 100 : value
+  }
+
+  private normalizeRiskGuardPctThreshold(value: number, errorCode: string, ruleId: string): number {
+    const thresholdPct = value <= 1 ? Number((value * 100).toFixed(4)) : value
+    if (!Number.isFinite(thresholdPct) || thresholdPct <= 0 || thresholdPct >= 100) {
+      throw new Error(`codegen.${errorCode}:${ruleId}:${thresholdPct}`)
+    }
+    return thresholdPct
   }
 
   private normalizeRangePositionThreshold(value: number): number {

@@ -509,10 +509,11 @@
     {
       "key": "risk.cooldown_bars",
       "category": "risk",
-      "status": "uncovered",
-      "failureLayer": "compile-throw",
-      "trace": [],
-      "note": "codegen.canonical_spec_v2_condition_unsupported:risk.cooldown_bars"
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "risk-predicate:probe-risk-rule"
+      ]
     },
     {
       "key": "risk.max_drawdown_pct",
@@ -526,10 +527,12 @@
     {
       "key": "risk.max_single_loss_pct",
       "category": "risk",
-      "status": "uncovered",
-      "failureLayer": "compile-throw",
-      "trace": [],
-      "note": "codegen.canonical_spec_v2_condition_unsupported:risk.max_single_loss_pct"
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "guard.kind:MAX_SINGLE_LOSS_PCT",
+        "guard:guard_probe-risk-rule"
+      ]
     },
     {
       "key": "risk.protective_exit",
@@ -558,10 +561,12 @@
     {
       "key": "risk.stop_loss_pct",
       "category": "risk",
-      "status": "uncovered",
-      "failureLayer": "compile-throw",
-      "trace": [],
-      "note": "codegen.canonical_spec_v2_condition_unsupported:risk.stop_loss_pct"
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "guard.kind:STOP_LOSS_PCT",
+        "guard:guard_probe-risk-rule"
+      ]
     },
     {
       "key": "risk.take_profit",
