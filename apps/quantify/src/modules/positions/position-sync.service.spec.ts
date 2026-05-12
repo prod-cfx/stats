@@ -165,17 +165,43 @@ describe('positionSyncService', () => {
     expect(positionsService.recordTrade).not.toHaveBeenCalled()
   })
 
-  it('loads shared attribution from trades after the current exchange account binding started', async () => {
-    const bindingStartedAt = new Date('2026-05-12T00:00:00.000Z')
+  it('loads shared attribution only from trades tagged with the current exchange account', async () => {
     const positionsRepository = {
       countActiveStrategyBindingsByExchangeAccount: jest.fn().mockResolvedValue(3),
-      findActiveBindingStartedAtByExchangeAccount: jest.fn().mockResolvedValue(bindingStartedAt),
-      findTradesByAccount: jest.fn().mockResolvedValue([]),
+      findTradesByAccount: jest.fn().mockResolvedValue([
+        {
+          symbol: 'ETHUSDT:PERP',
+          market: 'okx:perp',
+          side: 'BUY',
+          positionSide: 'LONG',
+          quantity: '0.305',
+          orderId: 'current-account-trade',
+          externalTradeId: 'current-account-trade',
+          provider: 'okx',
+          metadata: { exchangeAccountId: 'exchange-account-1' },
+        },
+        {
+          symbol: 'ETHUSDT:PERP',
+          market: 'okx:perp',
+          side: 'BUY',
+          positionSide: 'LONG',
+          quantity: '0.764',
+          orderId: 'other-account-trade',
+          externalTradeId: 'other-account-trade',
+          provider: 'okx',
+          metadata: { exchangeAccountId: 'exchange-account-2' },
+        },
+      ]),
       findOpenByAccount: jest.fn().mockResolvedValue([]),
       saveSyncLog: jest.fn().mockResolvedValue(undefined),
     }
     const tradingService = {
-      getPositions: jest.fn().mockResolvedValue([]),
+      getPositions: jest.fn().mockResolvedValue([{
+        symbol: 'ETH/USDT:PERP',
+        side: 'long',
+        size: '1.069',
+        entryPrice: '2287.03',
+      }]),
     }
     const positionsService = {
       recordTrade: jest.fn(),
@@ -187,7 +213,7 @@ describe('positionSyncService', () => {
       positionsService as any,
     )
 
-    await service.syncUserPositions(
+    const result = await service.syncUserPositions(
       'user-1',
       'strategy-account-1',
       'okx',
@@ -197,15 +223,17 @@ describe('positionSyncService', () => {
       'exchange-account-1',
     )
 
-    expect(positionsRepository.findActiveBindingStartedAtByExchangeAccount).toHaveBeenCalledWith(
-      'user-1',
-      'strategy-account-1',
-      'exchange-account-1',
-    )
-    expect(positionsRepository.findTradesByAccount).toHaveBeenCalledWith(
-      'strategy-account-1',
-      bindingStartedAt,
-    )
+    expect(result.differences).toEqual([expect.objectContaining({
+      action: 'created',
+      difference: '0.305',
+    })])
+    expect(positionsRepository.findTradesByAccount).toHaveBeenCalledWith('strategy-account-1')
+    expect(positionsService.recordTrade).toHaveBeenCalledWith(expect.objectContaining({
+      quantity: '0.305',
+      metadata: expect.objectContaining({
+        exchangeAccountId: 'exchange-account-1',
+      }),
+    }))
   })
 
   it('keeps normal reconciliation for non-shared exchange accounts', async () => {
@@ -348,7 +376,7 @@ describe('positionSyncService', () => {
         orderId: 'sync-1778580001229',
         externalTradeId: 'sync-strategy-account-1-ETH-USDT-SWAP',
         provider: 'okx',
-        metadata: { syncSource: 'position-reconciliation' },
+        metadata: { syncSource: 'position-reconciliation', exchangeAccountId: 'exchange-account-1' },
       }]),
       findOpenByAccount: jest.fn().mockResolvedValue([{
         id: 'position-synthetic-1',
@@ -359,7 +387,7 @@ describe('positionSyncService', () => {
         avgEntryPrice: '2287.03',
         exchangeId: 'okx',
         marketType: 'perp',
-        metadata: { syncSource: 'position-reconciliation', market: 'okx:perp' },
+        metadata: { syncSource: 'position-reconciliation', market: 'okx:perp', exchangeAccountId: 'exchange-account-1' },
       }]),
       saveSyncLog: jest.fn().mockResolvedValue(undefined),
     }
@@ -423,7 +451,7 @@ describe('positionSyncService', () => {
           orderId: '3559343634595618816',
           externalTradeId: '3559343634595618816',
           provider: 'okx',
-          metadata: { runtimeProvenance: { runtimeStrategyInstanceId: 'strategy-1' } },
+          metadata: { exchangeAccountId: 'exchange-account-1', runtimeProvenance: { runtimeStrategyInstanceId: 'strategy-1' } },
         },
         {
           symbol: 'ETHUSDT:PERP',
@@ -434,7 +462,7 @@ describe('positionSyncService', () => {
           orderId: 'sync-adjust-1',
           externalTradeId: 'sync-adjust-position-1',
           provider: 'reconciliation',
-          metadata: { syncSource: 'position-adjustment' },
+          metadata: { syncSource: 'position-adjustment', exchangeAccountId: 'exchange-account-1' },
         },
       ]),
       findOpenByAccount: jest.fn().mockResolvedValue([{
@@ -446,7 +474,7 @@ describe('positionSyncService', () => {
         avgEntryPrice: '2287.03',
         exchangeId: 'okx',
         marketType: 'perp',
-        metadata: { syncSource: 'position-adjustment', market: 'okx:perp' },
+        metadata: { syncSource: 'position-adjustment', market: 'okx:perp', exchangeAccountId: 'exchange-account-1' },
       }]),
       saveSyncLog: jest.fn().mockResolvedValue(undefined),
     }
@@ -509,7 +537,7 @@ describe('positionSyncService', () => {
         orderId: '3559343634595618816',
         externalTradeId: '3559343634595618816',
         provider: 'okx',
-        metadata: { runtimeProvenance: { runtimeStrategyInstanceId: 'strategy-1' } },
+        metadata: { exchangeAccountId: 'exchange-account-1', runtimeProvenance: { runtimeStrategyInstanceId: 'strategy-1' } },
       }]),
       findOpenByAccount: jest.fn().mockResolvedValue([]),
       saveSyncLog: jest.fn().mockResolvedValue(undefined),
