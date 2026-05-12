@@ -4317,6 +4317,19 @@ describe('canonicalSpecV2IrCompilerService risk.max_drawdown_pct', () => {
     expect(guardIds).not.toContain('guard_risk-max-drawdown')
   })
 
+  it('preserves fractional valuePct precision (15.5 → thresholdPct ≈ 15.5)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithMaxDrawdown(15.5)
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const drawdown = (result.ir.orchestrationPortfolioRisks ?? []).find(r => r.id === 'risk-max-drawdown')
+    expect(drawdown).toBeDefined()
+    if (drawdown?.scope === 'portfolio') {
+      // buildSpecWithMaxDrawdown stores 0.155 (toFixed(4) → "0.1550"), * 100 = 15.5
+      // toBeCloseTo(15.5, 4) locks both magnitude and 4-decimal precision contract.
+      expect(drawdown.thresholdPct).toBeCloseTo(15.5, 4)
+    }
+  })
+
   it('isolates risk.max_drawdown_pct from sibling position-scope risk atoms (stop_loss_pct coexistence)', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
     const spec = buildBaseSpec()
