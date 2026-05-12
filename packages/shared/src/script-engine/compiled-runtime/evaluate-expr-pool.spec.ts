@@ -1190,6 +1190,67 @@ describe('evaluateExprPool', () => {
       expect(values.in_time_window_node).toBe(false)
     })
 
+    it('uses timezone conversion — Asia/Shanghai (UTC+8, no DST) shifts Mon 14:30 UTC to Mon 22:30', () => {
+      // Asia/Shanghai is UTC+8 year-round (no DST), distinct from Asia/Tokyo (UTC+9).
+      const values = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('Asia/Shanghai', [{ start: '22:00', end: '23:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(true)
+
+      // Outside the Shanghai window
+      const outside = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('Asia/Shanghai', [{ start: '09:00', end: '10:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(outside.in_time_window_node).toBe(false)
+    })
+
+    it('handles DST: America/New_York summer (EDT, UTC-4) vs winter (EST, UTC-5) on same UTC clock-time', () => {
+      // Both timestamps are Mon 14:30 UTC. EDT pushes local to 10:30, EST to 09:30.
+      // The 09:30-10:00 window should match winter but NOT summer.
+      const SUMMER_MON_1430_UTC = new Date('2024-07-15T14:30:00Z').getTime() // Mon, EDT
+      const WINTER_MON_1430_UTC = MON_1430_UTC                                // Mon, EST
+
+      const summer = evaluateExprPool(
+        { timestamp: SUMMER_MON_1430_UTC, bars: [] },
+        [buildNode('America/New_York', [{ start: '09:00', end: '10:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(summer.in_time_window_node).toBe(false)
+
+      const winter = evaluateExprPool(
+        { timestamp: WINTER_MON_1430_UTC, bars: [] },
+        [buildNode('America/New_York', [{ start: '09:00', end: '10:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(winter.in_time_window_node).toBe(true)
+
+      // Symmetrically, the 10:00-11:00 window matches only summer
+      const summerTen = evaluateExprPool(
+        { timestamp: SUMMER_MON_1430_UTC, bars: [] },
+        [buildNode('America/New_York', [{ start: '10:00', end: '11:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(summerTen.in_time_window_node).toBe(true)
+    })
+
+    it('handles DST spring-forward boundary — local 02:30 does not exist, falls in skipped hour', () => {
+      // 2024-03-10 02:00 EST → 03:00 EDT; local 02:00-03:00 is skipped that day.
+      // A UTC timestamp landing in that gap should map to 03:xx EDT not throw.
+      // 2024-03-10T07:30:00Z = either 02:30 EST (didn't happen) or 03:30 EDT (real).
+      // ICU consistently resolves to EDT (03:30), so a window 03:00-04:00 should match.
+      const SPRING_FORWARD_UTC = new Date('2024-03-10T07:30:00Z').getTime()
+      const values = evaluateExprPool(
+        { timestamp: SPRING_FORWARD_UTC, bars: [] },
+        [buildNode('America/New_York', [{ start: '03:00', end: '04:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(true)
+    })
+
     it('falls back to last bar timestamp when ctx.timestamp is NaN (not just absent)', () => {
       // !Number.isFinite(NaN) === true so we must fall through to bar fallback,
       // not return false outright. Previously this path was uncovered by tests.
