@@ -253,6 +253,157 @@ function formatRuntimeExecutionFailureFamily(
   }
 }
 
+function formatRuntimeSemanticServiceStatus(status: AiQuantStrategyViewState, t: DetailTranslation) {
+  return t(`aiQuant.detail.runtimeSemantics.serviceStatus.${status}`)
+}
+
+function formatRuntimeSemanticPositionStatus(
+  summary: NonNullable<AiQuantStrategyRecord['runtimeSemanticSummary']>,
+  t: DetailTranslation,
+) {
+  if (summary.positionState === 'flat') {
+    return summary.marketType === 'spot'
+      ? t('aiQuant.detail.runtimeSemantics.positionState.spotFlat')
+      : t('aiQuant.detail.runtimeSemantics.positionState.contractFlat')
+  }
+  return t(`aiQuant.detail.runtimeSemantics.positionState.${summary.positionState}`)
+}
+
+function formatRuntimeSemanticCycleStatus(
+  summary: NonNullable<AiQuantStrategyRecord['runtimeSemanticSummary']>,
+  t: DetailTranslation,
+) {
+  return t(`aiQuant.detail.runtimeSemantics.cycleState.${summary.cycleState}`)
+}
+
+function formatRuntimeSemanticNextAction(
+  summary: NonNullable<AiQuantStrategyRecord['runtimeSemanticSummary']>,
+  status: AiQuantStrategyViewState,
+  t: DetailTranslation,
+) {
+  if (status === 'stopped') {
+    return summary.cycleState === 'needs_attention'
+      ? t('aiQuant.detail.runtimeSemantics.nextAction.checkOpenPosition')
+      : null
+  }
+  if (status !== 'running') return null
+  if (summary.cycleState === 'entered') {
+    return t('aiQuant.detail.runtimeSemantics.nextAction.waitExit')
+  }
+  if (summary.cycleState === 'waiting_entry' || summary.cycleState === 'completed') {
+    return t('aiQuant.detail.runtimeSemantics.nextAction.waitEntry')
+  }
+  return summary.nextExpectedAction
+}
+
+function formatRuntimeSemanticExplanation(
+  summary: NonNullable<AiQuantStrategyRecord['runtimeSemanticSummary']>,
+  status: AiQuantStrategyViewState,
+  symbol: string,
+  t: DetailTranslation,
+) {
+  if (status === 'stopped' && summary.cycleState === 'needs_attention') {
+    return t('aiQuant.detail.runtimeSemantics.explanation.stoppedNeedsAttention')
+  }
+  if (status === 'stopped' && summary.positionState === 'flat' && summary.cycleState === 'waiting_entry') {
+    return t('aiQuant.detail.runtimeSemantics.explanation.stoppedFlat')
+  }
+
+  const serviceStatus = formatRuntimeSemanticServiceStatus(status, t)
+  if (summary.marketType === 'spot') {
+    if (summary.positionState === 'spot_holding') {
+      return t('aiQuant.detail.runtimeSemantics.explanation.spotHolding', { symbol, serviceStatus })
+    }
+    if (summary.positionState === 'flat' && summary.cycleState === 'completed') {
+      return status === 'running'
+        ? t('aiQuant.detail.runtimeSemantics.explanation.spotCompletedRunning', { symbol })
+        : t('aiQuant.detail.runtimeSemantics.explanation.spotCompletedStopped', { symbol, serviceStatus })
+    }
+    if (summary.positionState === 'flat') {
+      return t('aiQuant.detail.runtimeSemantics.explanation.spotWaitingEntry', { symbol, serviceStatus })
+    }
+  }
+
+  if (summary.marketType === 'perp' || summary.marketType === 'futures' || summary.marketType === 'swap') {
+    if (summary.positionState === 'long' || summary.positionState === 'short') {
+      const positionStatus = formatRuntimeSemanticPositionStatus(summary, t)
+      return t('aiQuant.detail.runtimeSemantics.explanation.contractHolding', { positionStatus, serviceStatus })
+    }
+    if (summary.positionState === 'flat' && summary.cycleState === 'completed') {
+      return status === 'running'
+        ? t('aiQuant.detail.runtimeSemantics.explanation.contractCompletedRunning')
+        : t('aiQuant.detail.runtimeSemantics.explanation.contractCompletedStopped', { serviceStatus })
+    }
+    if (summary.positionState === 'flat') {
+      return t('aiQuant.detail.runtimeSemantics.explanation.contractWaitingEntry', { serviceStatus })
+    }
+  }
+
+  return t('aiQuant.detail.runtimeSemantics.explanation.unknown')
+}
+
+function formatRuntimeSemanticHeadline(
+  summary: NonNullable<AiQuantStrategyRecord['runtimeSemanticSummary']>,
+  status: AiQuantStrategyViewState,
+  t: DetailTranslation,
+) {
+  return [
+    formatRuntimeSemanticServiceStatus(status, t),
+    formatRuntimeSemanticPositionStatus(summary, t),
+    formatRuntimeSemanticCycleStatus(summary, t),
+  ].join(' · ')
+}
+
+function formatOrderSemanticAction(
+  order: NonNullable<AiQuantStrategyRecord['latestOrders']>[number],
+  t: DetailTranslation,
+) {
+  const value = order.semanticAction?.trim()
+  if (!value) return t('aiQuant.detail.semanticPending')
+
+  const normalized = value.toUpperCase()
+  if (value === '买入' || normalized === 'BUY') return t('aiQuant.detail.orderSemanticActions.spotBuy')
+  if (value === '卖出' || normalized === 'SELL') return t('aiQuant.detail.orderSemanticActions.spotSell')
+  if (value === '开多' || normalized === 'OPEN_LONG') return t('aiQuant.detail.orderSemanticActions.openLong')
+  if (value === '开空' || normalized === 'OPEN_SHORT') return t('aiQuant.detail.orderSemanticActions.openShort')
+  if (value === '平多' || normalized === 'CLOSE_LONG') return t('aiQuant.detail.orderSemanticActions.closeLong')
+  if (value === '平空' || normalized === 'CLOSE_SHORT') return t('aiQuant.detail.orderSemanticActions.closeShort')
+  if (value === '平仓' || normalized === 'FORCE_EXIT') return t('aiQuant.detail.orderSemanticActions.closePosition')
+  if (value === '合约成交') return t('aiQuant.detail.orderSemanticActions.contractTrade')
+  if (value === '语义待确认') return t('aiQuant.detail.semanticPending')
+
+  return value
+}
+
+function formatTimelineEvent(event: string, t: DetailTranslation) {
+  const normalized = event.trim()
+  switch (normalized) {
+    case '创建策略':
+    case 'Strategy Created':
+      return t('aiQuant.detail.timelineEvents.strategyCreated')
+    case '订阅策略':
+    case 'Subscribed Strategy':
+      return t('aiQuant.detail.timelineEvents.strategySubscribed')
+    case '信号执行':
+    case 'Signal Executed':
+      return t('aiQuant.detail.timelineEvents.signalExecuted')
+    case '回测通过':
+    case 'Backtest Passed':
+      return t('aiQuant.detail.timelineEvents.backtestPassed')
+    case '已部署':
+    case 'Deployed':
+      return t('aiQuant.detail.timelineEvents.deployed')
+    case '已启动':
+    case 'Started':
+      return t('aiQuant.detail.timelineEvents.started')
+    case '已停止':
+    case 'Stopped':
+      return t('aiQuant.detail.timelineEvents.stopped')
+    default:
+      return event
+  }
+}
+
 function formatRuleSummary(rule: NonNullable<AiQuantStrategyRecord['ruleSummary']>['rules'][number], t: DetailTranslation) {
   const actions = rule.actions.length > 0 ? rule.actions.join(', ') : '--'
   if (rule.conditionKey === 'execution.on_start') {
@@ -423,6 +574,22 @@ export function AiQuantStrategyDetail({
   const showLiquidateAndStop = strategy.status === 'running' && hasRuntimeRisk
   const exposureSummary = isSpotMarket ? formatSpotHolding(strategy, t) : `${openPositionsCount}`
   const runtimeActionDisabled = !session?.userId || pendingRuntimeAction !== null
+  const semanticHeadline = semanticSummary ? formatRuntimeSemanticHeadline(semanticSummary, strategy.status, t) : null
+  const semanticExplanation = semanticSummary
+    ? formatRuntimeSemanticExplanation(semanticSummary, strategy.status, strategy.symbol, t)
+    : null
+  const semanticServiceStatus = semanticSummary
+    ? formatRuntimeSemanticServiceStatus(strategy.status, t)
+    : null
+  const semanticPositionStatus = semanticSummary
+    ? formatRuntimeSemanticPositionStatus(semanticSummary, t)
+    : null
+  const semanticCycleStatus = semanticSummary
+    ? formatRuntimeSemanticCycleStatus(semanticSummary, t)
+    : null
+  const semanticNextAction = semanticSummary
+    ? formatRuntimeSemanticNextAction(semanticSummary, strategy.status, t)
+    : null
   const timelineItems = showFullTimeline
     ? strategy.timeline
     : strategy.timeline.slice(0, TIMELINE_PREVIEW_LIMIT)
@@ -490,7 +657,7 @@ export function AiQuantStrategyDetail({
         </div>
         <div className="flex items-center gap-2">
           <span className={`rounded-lg border px-2 py-1 text-xs ${STATUS_CLASS[strategy.status]}`}>
-            {semanticSummary?.headline ?? t(`aiQuant.status.${strategy.status}`)}
+            {semanticHeadline ?? t(`aiQuant.status.${strategy.status}`)}
           </span>
           <Link
             href={`/${lng}/account?tab=ai-quant`}
@@ -651,19 +818,19 @@ export function AiQuantStrategyDetail({
       {semanticSummary && (
         <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
           <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.detail.currentStatusExplanation')}</h2>
-          <p className="mt-2 text-sm leading-6 text-[color:var(--cf-text)]">{semanticSummary.explanation}</p>
+          <p className="mt-2 text-sm leading-6 text-[color:var(--cf-text)]">{semanticExplanation}</p>
           <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
             <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
               <p className="text-xs text-[color:var(--cf-muted)]">{t('aiQuant.detail.strategyService')}</p>
-              <p className="mt-1 font-semibold text-[color:var(--cf-text-strong)]">{semanticSummary.serviceStatusLabel}</p>
+              <p className="mt-1 font-semibold text-[color:var(--cf-text-strong)]">{semanticServiceStatus}</p>
             </article>
             <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
               <p className="text-xs text-[color:var(--cf-muted)]">{t('aiQuant.detail.currentPosition')}</p>
-              <p className="mt-1 font-semibold text-[color:var(--cf-text-strong)]">{semanticSummary.positionStatusLabel}</p>
+              <p className="mt-1 font-semibold text-[color:var(--cf-text-strong)]">{semanticPositionStatus}</p>
             </article>
             <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
               <p className="text-xs text-[color:var(--cf-muted)]">{t('aiQuant.detail.currentCycle')}</p>
-              <p className="mt-1 font-semibold text-[color:var(--cf-text-strong)]">{semanticSummary.cycleStatusLabel}</p>
+              <p className="mt-1 font-semibold text-[color:var(--cf-text-strong)]">{semanticCycleStatus}</p>
             </article>
           </div>
           <div className="mt-4 grid gap-2 text-sm md:grid-cols-2">
@@ -683,7 +850,7 @@ export function AiQuantStrategyDetail({
             </p>
             <p className="text-[color:var(--cf-muted)]">
               {t('aiQuant.detail.nextExpectedAction')}
-              <span className="ml-1 text-[color:var(--cf-text-strong)]">{semanticSummary.nextExpectedAction ?? '--'}</span>
+              <span className="ml-1 text-[color:var(--cf-text-strong)]">{semanticNextAction ?? '--'}</span>
             </p>
             <p className="text-[color:var(--cf-muted)]">
               {t('aiQuant.detail.evidenceSourceLabel')}
@@ -928,7 +1095,7 @@ export function AiQuantStrategyDetail({
                           <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.executedAt}</td>
                           <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.side}</td>
                           <td className="py-2 pr-3 text-[color:var(--cf-text)]">
-                            <div>{order.semanticAction ?? t('aiQuant.detail.semanticPending')}</div>
+                            <div>{formatOrderSemanticAction(order, t)}</div>
                             {order.reconcileRequired
                               ? <div className="mt-0.5 text-xs text-amber-300">{t('aiQuant.detail.localReconcilePending')}</div>
                               : null}
@@ -1114,7 +1281,7 @@ export function AiQuantStrategyDetail({
             {timelineItems.map(item => (
               <li key={`${item.at}-${item.event}`} className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
                 <p className="text-xs text-[color:var(--cf-muted)]">{item.at}</p>
-                <p className="mt-1 text-sm font-semibold text-[color:var(--cf-text-strong)]">{item.event}</p>
+                <p className="mt-1 text-sm font-semibold text-[color:var(--cf-text-strong)]">{formatTimelineEvent(item.event, t)}</p>
                 {item.note && <p className="mt-1 text-xs text-[color:var(--cf-muted)]">{item.note}</p>}
               </li>
             ))}

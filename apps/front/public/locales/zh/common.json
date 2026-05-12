@@ -342,6 +342,57 @@
         "execution": "执行",
         "persistence": "持久化"
       },
+      "runtimeSemantics": {
+        "serviceStatus": {
+          "running": "运行中",
+          "stopped": "已停止",
+          "draft": "草稿"
+        },
+        "positionState": {
+          "spotFlat": "空仓",
+          "contractFlat": "无仓位",
+          "spot_holding": "持有现货",
+          "long": "持有多头",
+          "short": "持有空头",
+          "unknown": "方向待确认"
+        },
+        "cycleState": {
+          "waiting_entry": "等待入场",
+          "entered": "等待出场",
+          "exit_triggered": "已触发出场",
+          "completed": "本轮已完成",
+          "needs_attention": "需处理",
+          "unknown": "查看成交与规则"
+        },
+        "nextAction": {
+          "waitEntry": "等待下一次入场条件",
+          "waitExit": "等待出场条件触发",
+          "checkOpenPosition": "核对并处理未平仓位"
+        },
+        "explanation": {
+          "spotHolding": "当前持有 {{symbol}} 现货仓位，策略服务{{serviceStatus}}，等待出场条件触发。",
+          "spotCompletedRunning": "本轮现货交易已完成，当前未持有 {{symbol}}。策略服务运行中，等待下一次入场条件。",
+          "spotCompletedStopped": "本轮现货交易已完成，当前未持有 {{symbol}}。策略服务{{serviceStatus}}。",
+          "spotWaitingEntry": "当前未持有 {{symbol}}。策略服务{{serviceStatus}}，等待入场条件触发。",
+          "contractHolding": "当前{{positionStatus}}仓位，策略服务{{serviceStatus}}，等待出场条件触发。",
+          "contractCompletedRunning": "上一轮合约仓位已平，当前无未平仓位。策略服务运行中，等待下一次入场条件。",
+          "contractCompletedStopped": "上一轮合约仓位已平，当前无未平仓位。策略服务{{serviceStatus}}。",
+          "contractWaitingEntry": "当前无未平仓位。策略服务{{serviceStatus}}，等待入场条件触发。",
+          "stoppedNeedsAttention": "策略服务已停止，但本地台账仍显示存在未平仓位，请核对交易所仓位和本地记录。",
+          "stoppedFlat": "策略服务已停止，当前无未平仓位。启动策略后才会继续等待入场条件。",
+          "unknown": "当前策略类型暂未提供专用语义解释，请结合成交记录、持仓概览和发布快照规则核对。"
+        }
+      },
+      "orderSemanticActions": {
+        "spotBuy": "买入",
+        "spotSell": "卖出",
+        "openLong": "开多",
+        "openShort": "开空",
+        "closeLong": "平多",
+        "closeShort": "平空",
+        "closePosition": "平仓",
+        "contractTrade": "合约成交"
+      },
       "ruleSummary": {
         "onStart": "启动时执行：{{actions}}",
         "priceChange": "价格变化 {{operator}} {{pct}}：{{actions}}",
@@ -361,6 +412,15 @@
       "runtimeTimeline": "运行时间线",
       "timelineCount": "共 {{count}} 条",
       "timelinePreviewSuffix": "，默认显示最近 {{limit}} 条",
+      "timelineEvents": {
+        "strategyCreated": "创建策略",
+        "strategySubscribed": "订阅策略",
+        "signalExecuted": "信号执行",
+        "backtestPassed": "回测通过",
+        "deployed": "已部署",
+        "started": "已启动",
+        "stopped": "已停止"
+      },
       "collapse": "收起",
       "expandAll": "展开全部"
     },

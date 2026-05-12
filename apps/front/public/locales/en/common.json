@@ -342,6 +342,57 @@
         "execution": "Execution",
         "persistence": "Persistence"
       },
+      "runtimeSemantics": {
+        "serviceStatus": {
+          "running": "Running",
+          "stopped": "Stopped",
+          "draft": "Draft"
+        },
+        "positionState": {
+          "spotFlat": "Flat",
+          "contractFlat": "No position",
+          "spot_holding": "Holding spot",
+          "long": "Long position",
+          "short": "Short position",
+          "unknown": "Needs review"
+        },
+        "cycleState": {
+          "waiting_entry": "Waiting for entry",
+          "entered": "Waiting for exit",
+          "exit_triggered": "Exit triggered",
+          "completed": "Cycle completed",
+          "needs_attention": "Needs attention",
+          "unknown": "Review trades and rules"
+        },
+        "nextAction": {
+          "waitEntry": "Waiting for the next entry condition",
+          "waitExit": "Waiting for exit condition",
+          "checkOpenPosition": "Check and handle open positions"
+        },
+        "explanation": {
+          "spotHolding": "Currently holding a {{symbol}} spot position. The strategy service is {{serviceStatus}} and waiting for an exit condition.",
+          "spotCompletedRunning": "This spot trading cycle is complete and no {{symbol}} is currently held. The strategy service is running and waiting for the next entry condition.",
+          "spotCompletedStopped": "This spot trading cycle is complete and no {{symbol}} is currently held. The strategy service is {{serviceStatus}}.",
+          "spotWaitingEntry": "No {{symbol}} is currently held. The strategy service is {{serviceStatus}} and waiting for an entry condition.",
+          "contractHolding": "Currently holding a {{positionStatus}}. The strategy service is {{serviceStatus}} and waiting for an exit condition.",
+          "contractCompletedRunning": "The previous contract position is closed. There is no open position now. The strategy service is running and waiting for the next entry condition.",
+          "contractCompletedStopped": "The previous contract position is closed. There is no open position now. The strategy service is {{serviceStatus}}.",
+          "contractWaitingEntry": "There is no open position now. The strategy service is {{serviceStatus}} and waiting for an entry condition.",
+          "stoppedNeedsAttention": "The strategy service is stopped, but the local ledger still shows an open position. Check the exchange position and local records.",
+          "stoppedFlat": "The strategy service is stopped and there is no open position. Start the strategy before it waits for entry conditions again.",
+          "unknown": "No dedicated semantic explanation is available for this strategy type yet. Review latest trades, positions, and published snapshot rules together."
+        }
+      },
+      "orderSemanticActions": {
+        "spotBuy": "Buy",
+        "spotSell": "Sell",
+        "openLong": "Open long",
+        "openShort": "Open short",
+        "closeLong": "Close long",
+        "closeShort": "Close short",
+        "closePosition": "Close position",
+        "contractTrade": "Contract trade"
+      },
       "ruleSummary": {
         "onStart": "Run on start: {{actions}}",
         "priceChange": "Price change {{operator}} {{pct}}: {{actions}}",
@@ -361,6 +412,15 @@
       "runtimeTimeline": "Runtime Timeline",
       "timelineCount": "{{count}} total",
       "timelinePreviewSuffix": ", showing the latest {{limit}} by default",
+      "timelineEvents": {
+        "strategyCreated": "Strategy created",
+        "strategySubscribed": "Strategy subscribed",
+        "signalExecuted": "Signal executed",
+        "backtestPassed": "Backtest passed",
+        "deployed": "Deployed",
+        "started": "Started",
+        "stopped": "Stopped"
+      },
       "collapse": "Collapse",
       "expandAll": "Expand all"
     },
