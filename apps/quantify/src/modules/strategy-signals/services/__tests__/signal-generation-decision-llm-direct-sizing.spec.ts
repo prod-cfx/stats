@@ -118,7 +118,10 @@ describe('SignalGenerationDecisionStage#generateSignalWithAi — LLM Direct sizi
     expect(aiService.chat).toHaveBeenCalledTimes(2)
   })
 
-  it('案例3: 策略层指定 positionSizeQuote=100，LLM 输出 50 → 非 strict 模式沿用 LLM 50 走', async () => {
+  it('案例3: 策略层指定 positionSizeQuote=100，LLM 输出 50 → 非 strict 模式用 strategy.params 覆盖 LLM', async () => {
+    // #1232 Round 1 M1：mismatch 不应静默放行 LLM 输出。非 strict 模式下：
+    // 信号仍返回（不破老策略），但 sizing 被强制为 strategy.params 的 100，
+    // 防止 LLM 自由发挥导致用户配置静默失效。
     const llmResponse = {
       direction: 'BUY',
       signalType: 'ENTRY',
@@ -143,8 +146,9 @@ describe('SignalGenerationDecisionStage#generateSignalWithAi — LLM Direct sizi
     )
 
     expect(result).not.toBeNull()
-    // 非 strict：LLM 返回的 50 原样透传
-    expect(result?.positionSizeQuote).toBe(50)
+    // 非 strict + mismatch：用 strategy.params 覆盖 LLM 输出
+    expect(result?.positionSizeQuote).toBe(100)
+    expect(result?.positionSizeRatio).toBeUndefined()
     expect(aiService.chat).toHaveBeenCalledTimes(1)
   })
 

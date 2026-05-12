@@ -298,14 +298,31 @@ export class SignalGenerationDecisionStage {
             sizingMismatch = actual === null || Math.abs(actual - expected) / expected > 0.001
           }
 
-          if (sizingMismatch && config.execution.requireExplicitSizing) {
+          if (sizingMismatch) {
+            if (config.execution.requireExplicitSizing) {
+              this.logger.warn(
+                `[SIZING_MISMATCH] Strategy ${strategy.id} (attempt ${attempt}): ` +
+                `expected ${hasParamsSizeQuote ? `positionSizeQuote=${paramsSizeQuote}` : `positionSizeRatio=${paramsSizeRatio}`}, ` +
+                `got positionSizeQuote=${parsed.positionSizeQuote} positionSizeRatio=${parsed.positionSizeRatio}. ` +
+                `Rejecting signal (requireExplicitSizing=true).`,
+              )
+              continue
+            }
+            // #1230 — 非 strict 模式：用 strategy.params 覆盖 LLM 输出，避免 LLM 自由发挥
+            // 导致用户配置的 sizing 静默失效。策略层意图始终优先于 LLM 输出。
             this.logger.warn(
               `[SIZING_MISMATCH] Strategy ${strategy.id} (attempt ${attempt}): ` +
               `expected ${hasParamsSizeQuote ? `positionSizeQuote=${paramsSizeQuote}` : `positionSizeRatio=${paramsSizeRatio}`}, ` +
               `got positionSizeQuote=${parsed.positionSizeQuote} positionSizeRatio=${parsed.positionSizeRatio}. ` +
-              `Rejecting signal (requireExplicitSizing=true).`,
+              `Overriding LLM output with strategy.params (requireExplicitSizing=false).`,
             )
-            continue
+            if (hasParamsSizeQuote) {
+              parsed.positionSizeQuote = paramsSizeQuote
+              parsed.positionSizeRatio = undefined
+            } else {
+              parsed.positionSizeRatio = paramsSizeRatio
+              parsed.positionSizeQuote = undefined
+            }
           }
         }
 
