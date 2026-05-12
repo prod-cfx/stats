@@ -5070,8 +5070,10 @@ export class SemanticSeedExtractorService {
                 ? 'webhook'
                 : null
         const signalId = this.extractExternalSignalId(clause)
+        const previousClause = clauses[index - 1]
         const nextClause = clauses[index + 1]
         const secretConfigured = this.hasExternalSignalSecretConfigured(clause)
+          || this.isExternalSignalSecretCompanionClause(previousClause)
           || this.isExternalSignalSecretCompanionClause(nextClause)
         const externalOpenSlots: SeedTrigger['openSlots'] = [{
           slotKey: 'external.signal.runtime',

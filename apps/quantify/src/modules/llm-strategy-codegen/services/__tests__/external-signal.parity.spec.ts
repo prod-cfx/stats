@@ -157,6 +157,18 @@ describe('external.signal atom 五层 parity', () => {
       expect(telegramSlotKeys).toContain('external.signal.secret')
     })
 
+    it('accepts adjacent secret-only companion clauses before or after the signal clause', () => {
+      const afterPatch = seedExtractor.extract('OKX BTCUSDT 15m, on webhook signalId AFTER_01, secret configured, open long 100 USDT.')
+      const beforePatch = seedExtractor.extract('OKX BTCUSDT 15m, secret configured, on webhook signalId BEFORE_01, open long 100 USDT.')
+      const afterTrigger = afterPatch.triggers?.find(t => t.key === 'external.signal')
+      const beforeTrigger = beforePatch.triggers?.find(t => t.key === 'external.signal')
+
+      expect(afterTrigger?.params?.secret).toBe('configured')
+      expect(beforeTrigger?.params?.secret).toBe('configured')
+      expect(afterTrigger?.openSlots?.map(slot => slot.slotKey)).not.toContain('external.signal.secret')
+      expect(beforeTrigger?.openSlots?.map(slot => slot.slotKey)).not.toContain('external.signal.secret')
+    })
+
     it('does not treat plain direction words after external signal as signalId', () => {
       const patch = seedExtractor.extract('OKX BTCUSDT 15m, external signal buy triggers long entry, stop loss 5%.')
       const trigger = patch.triggers?.find(t => t.key === 'external.signal')
