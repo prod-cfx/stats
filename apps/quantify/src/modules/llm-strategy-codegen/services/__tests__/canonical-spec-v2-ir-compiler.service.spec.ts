@@ -4884,4 +4884,70 @@ describe('canonicalSpecV2IrCompilerService action.add_position', () => {
     })
     expect(() => compiler.compile({ canonicalSpec: spec, fallback })).not.toThrow()
   })
+
+  // -------------------------------------------------------------------------
+  // 14. metadata.addPosition 存在但 actions 无 ADD_LONG/ADD_SHORT → 跳过验证
+  // -------------------------------------------------------------------------
+  it('metadata.addPosition with no ADD action is silently skipped (covers hasAddAction guard)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'odd-shape-rule',
+      phase: 'entry',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      // metadata.addPosition present but actions list has no ADD_LONG/ADD_SHORT
+      actions: [{ type: 'OPEN_LONG' }],
+      metadata: {
+        addPosition: {
+          stateKey: 'pyramiding_layer_count',
+          // no addMode — would fail if validation were triggered
+        },
+      },
+    })
+    // hasAddAction guard returns early: no throw expected
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).not.toThrow()
+  })
+
+  // -------------------------------------------------------------------------
+  // 15. addRatio = NaN → compile 一定 throw（covers Number.isFinite guard）
+  //
+  // NaN 在 spec 中会被 CanonicalSpecV2DigestService.hash() 内的 canonicalSerialize
+  // 先于 tryCompileActionAddPosition 处理，抛出 "non-finite numbers are not allowed"。
+  // 两条路径都是 fail-closed：要么 digest 拒绝，要么 addRatio 验证拒绝。
+  // 此处只断言 compile() 抛出，不指定具体 error message。
+  // -------------------------------------------------------------------------
+  it('fail-closed: addRatio = NaN causes compile to throw (digest or addRatio guard)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'add-pos-nan-ratio',
+      phase: 'entry',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'ADD_LONG', sizing: { mode: 'RATIO', value: 20 } }],
+      metadata: {
+        addPosition: {
+          stateKey: 'pyramiding_layer_count',
+          addMode: 'signal_confirm',
+          addRatio: Number.NaN,
+        },
+      },
+    })
+    // NaN is always rejected: either by canonical-serialize (digest) or by
+    // the addRatio Number.isFinite guard in tryCompileActionAddPosition.
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow()
+  })
 })
