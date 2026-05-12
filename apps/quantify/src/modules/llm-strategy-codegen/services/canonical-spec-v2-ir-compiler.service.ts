@@ -2492,15 +2492,23 @@ export class CanonicalSpecV2IrCompilerService {
   }
 
   /**
-   * risk.max_drawdown_pct ghost-atom fix (#<issue>).
+   * risk.max_drawdown_pct ghost-atom fix (#1242).
    *
    * canonical-spec-builder emits this atom as a rule (phase:'risk',
    * condition.kind:'atom', condition.key:'risk.max_drawdown_pct',
    * condition.value = valuePct/100 as fraction).
    * The runtime evaluator lives in evaluate-orchestration-portfolio-risks.ts
    * and expects a CompiledPortfolioDrawdownRisk (scope:'portfolio').
-   * Fail-closed: invalid valuePct → enforce block (runtime handles it);
-   * we simply skip emitting the node so runtime falls through to no-op.
+   *
+   * Dispatch fall-through: returns null when the rule does not match this atom,
+   * letting downstream compilers handle it.
+   *
+   * Fail-closed: when the rule matches but valuePct lies outside (0, 100),
+   * throws `codegen.canonical_spec_v2_max_drawdown_invalid_pct`. The upstream
+   * canonical-spec-builder already validates valuePct; reaching this branch
+   * indicates a contract violation (hand-written canonical spec, LLM direct
+   * injection). Silent skip is forbidden — it would let users believe the
+   * drawdown guard is in effect when it is not.
    */
   private tryCompileMaxDrawdownPortfolioRisk(
     rule: CanonicalRuleV2,
@@ -2519,7 +2527,9 @@ export class CanonicalSpecV2IrCompilerService {
     const thresholdPct = Number((rawValue * 100).toFixed(4))
 
     if (!Number.isFinite(thresholdPct) || thresholdPct <= 0 || thresholdPct >= 100) {
-      return null
+      throw new Error(
+        `codegen.canonical_spec_v2_max_drawdown_invalid_pct:${rule.id}:${thresholdPct}`,
+      )
     }
 
     return {

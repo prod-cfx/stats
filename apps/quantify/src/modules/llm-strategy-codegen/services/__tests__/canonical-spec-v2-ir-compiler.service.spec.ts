@@ -4338,59 +4338,42 @@ describe('canonicalSpecV2IrCompilerService risk.max_drawdown_pct', () => {
     expect(risks.some(r => r.id === 'risk-max-drawdown')).toBe(true)
   })
 
-  it('skips emission when valuePct fraction rounds to ≤0 pct (value=0)', () => {
+  it('fails closed when valuePct is 0 (compile entry throws)', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
-    // Use a spec without the drawdown rule — verify it's absent
-    // value=0 → 0*100=0 pct → invalid; but passing 0 as condition.value and compiling
-    // would fall through to compileCondition which throws for unrecognised atom keys.
-    // We verify at the method boundary: tryCompileMaxDrawdownPortfolioRisk must return null for value=0.
-    // Access via cast to test internal guard without going through full compile.
-    const compilerAsAny = compiler as unknown as {
-      tryCompileMaxDrawdownPortfolioRisk: (rule: unknown) => unknown
-    }
-    const nullResult = compilerAsAny.tryCompileMaxDrawdownPortfolioRisk({
-      phase: 'risk',
-      condition: { kind: 'atom', key: 'risk.max_drawdown_pct', op: 'GTE', value: 0 },
-    })
-    expect(nullResult).toBeNull()
+    const spec = buildSpecWithMaxDrawdown(0)
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_max_drawdown_invalid_pct/,
+    )
   })
 
-  it('skips emission when valuePct fraction converts to ≥100 pct (value=1)', () => {
+  it('fails closed when valuePct is 100 (compile entry throws)', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
-    const compilerAsAny = compiler as unknown as {
-      tryCompileMaxDrawdownPortfolioRisk: (rule: unknown) => unknown
-    }
-    // value=1 → 1*100=100 pct → invalid (≥100)
-    const nullResult = compilerAsAny.tryCompileMaxDrawdownPortfolioRisk({
-      phase: 'risk',
-      condition: { kind: 'atom', key: 'risk.max_drawdown_pct', op: 'GTE', value: 1 },
-    })
-    expect(nullResult).toBeNull()
+    const spec = buildSpecWithMaxDrawdown(100)
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_max_drawdown_invalid_pct/,
+    )
   })
 
-  it('skips emission when valuePct is not a number (missing/undefined)', () => {
+  it('fails closed when condition.value is missing (compile entry throws)', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
-    const compilerAsAny = compiler as unknown as {
-      tryCompileMaxDrawdownPortfolioRisk: (rule: unknown) => unknown
-    }
-    // no value field
-    const nullResult = compilerAsAny.tryCompileMaxDrawdownPortfolioRisk({
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'risk-max-drawdown',
       phase: 'risk',
-      condition: { kind: 'atom', key: 'risk.max_drawdown_pct', op: 'GTE' },
+      sideScope: 'both',
+      priority: 100,
+      condition: {
+        kind: 'atom',
+        key: 'risk.max_drawdown_pct',
+        semanticScope: 'portfolio',
+        op: 'GTE',
+        // intentionally no `value` field — fail-closed expects throw
+      } as CanonicalStrategySpecV2['rules'][number]['condition'],
+      actions: [{ type: 'FORCE_EXIT' }],
     })
-    expect(nullResult).toBeNull()
-  })
-
-  it('skips emission for non-risk phase rules', () => {
-    const compiler = new CanonicalSpecV2IrCompilerService()
-    const compilerAsAny = compiler as unknown as {
-      tryCompileMaxDrawdownPortfolioRisk: (rule: unknown) => unknown
-    }
-    const nullResult = compilerAsAny.tryCompileMaxDrawdownPortfolioRisk({
-      phase: 'gate',
-      condition: { kind: 'atom', key: 'risk.max_drawdown_pct', op: 'GTE', value: 0.15 },
-    })
-    expect(nullResult).toBeNull()
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+      /codegen\.canonical_spec_v2_max_drawdown_invalid_pct/,
+    )
   })
 
   it('runtime: emitted IR node causes evaluateOrchestrationPortfolioRisks to block entry when drawdownPct exceeds threshold', async () => {
