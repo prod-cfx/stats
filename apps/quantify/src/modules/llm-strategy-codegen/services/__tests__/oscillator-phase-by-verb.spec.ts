@@ -6,7 +6,7 @@
  * 与阈值方向（低于 / 高于 / 超买 / 超卖）解耦。
  *
  * 覆盖（限于当前 SemanticSeedExtractor 实际支持的 RSI 范围；
- * KDJ / ADX extractor 尚未实现，已拆到后续 issue，这里不做断言）：
+ * KDJ / ADX extractor 尚未实现，已拆到后续 issue（待创建，跟踪 KDJ/ADX oscillator 支持），这里不做断言）：
  * - RSI: 低于+开多 / 高于+开空 / 高于+平多 / 低于+平空
  * - Case 0 utterance: 多触发 AND 串联场景下 RSI 子句仍为 entry/long
  * - 子句无动词时 phase/sideScope 跟随父级（不再用阈值方向兜底）
@@ -86,6 +86,45 @@ describe('oscillator/threshold trigger phase 由子句动词决定（Issue #1219
     const rsi = findOscillatorTrigger(triggers, /rsi/i)
     expect(rsi).toBeDefined()
     expect(rsi!.phase).toBe('entry')
+    expect(rsi!.sideScope).toBe('short')
+  })
+
+  it('[#8] RSI14 高于 70 卖出（裸卖出）→ exit/long regression 兜底', () => {
+    const triggers = extractTriggers('RSI14 高于 70 卖出')
+    const rsi = findOscillatorTrigger(triggers, /rsi/i)
+    expect(rsi).toBeDefined()
+    expect(rsi!.phase).toBe('exit')
+    expect(rsi!.sideScope).toBe('long')
+  })
+
+  it('[#9] RSI14 做空仓位达到止损点 → exit/short（exit 动词优先于 short-side entry）', () => {
+    const triggers = extractTriggers('RSI14 低于 50 做空仓位达到止损点')
+    const rsi = findOscillatorTrigger(triggers, /rsi/i)
+    expect(rsi).toBeDefined()
+    expect(rsi!.phase).toBe('exit')
+    expect(rsi!.sideScope).toBe('short')
+  })
+
+  it('[#10] RSI14 低于 40（clause 无动词）且 segment 也无动词 → trigger 被整体跳过（intent=null）', () => {
+    const triggers = extractTriggers('RSI14 低于 40')
+    const rsi = findOscillatorTrigger(triggers, /rsi/i)
+    // 无动词时 intent=null → pushRsiTriggers 中 continue，trigger 不产出
+    expect(rsi).toBeUndefined()
+  })
+
+  it('[#11] RSI14 高于 70 做空条件下平仓 → exit/short（平仓 + 空头线索）', () => {
+    const triggers = extractTriggers('做空条件：RSI14 高于 70 平仓')
+    const rsi = findOscillatorTrigger(triggers, /rsi/i)
+    expect(rsi).toBeDefined()
+    expect(rsi!.phase).toBe('exit')
+    expect(rsi!.sideScope).toBe('short')
+  })
+
+  it('[#12] segment 含 开多策略，clause 含 平空 → clause 动词优先，phase=exit/short', () => {
+    const triggers = extractTriggers('开多策略：RSI14 高于 70 平空')
+    const rsi = findOscillatorTrigger(triggers, /rsi/i)
+    expect(rsi).toBeDefined()
+    expect(rsi!.phase).toBe('exit')
     expect(rsi!.sideScope).toBe('short')
   })
 })

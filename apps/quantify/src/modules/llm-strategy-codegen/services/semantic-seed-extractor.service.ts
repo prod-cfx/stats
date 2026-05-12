@@ -5280,6 +5280,23 @@ export class SemanticSeedExtractorService {
     return this.resolveTradeIntent(clause)
   }
 
+  /**
+   * 通用交易意图 resolver（segment 级）。
+   *
+   * 使用场景：
+   * - `resolvePhaseByClauseVerb` 在排除 long-side DCA entry 优先后委托此方法，
+   *   确保两路 resolver 词汇集统一，避免静默漂移。
+   * - 直接调用场景：MACD / Bollinger / 其他阈值路径中仍按 segment 粒度判断意图。
+   *
+   * 词汇覆盖（优先级从高到低）：
+   * 1. 平空类（`买回平空/平空/买回空单`）→ exit/short
+   * 2. 平多类（`卖出平多/平多/卖出多单`）→ exit/long
+   * 3. 出场/离场（side 取入参文本多/空线索，默认 long）→ exit
+   * 4. 做空/开空/空单/short → entry/short
+   * 5. 裸卖出/卖 → exit（side 取入参文本多/空线索，默认 long）
+   * 6. 做多/开多/买入/买/入场/开仓/long → entry/long
+   * 7. 平仓（side 取入参文本多/空线索，默认 long）→ exit
+   */
   private resolveTradeIntent(segment: string): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' } | null {
     if (/买回平空|平空|买回空单/u.test(segment)) {
       return { phase: 'exit', sideScope: 'short' }
