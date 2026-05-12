@@ -2342,25 +2342,36 @@ export class SemanticStateProjectionService {
     // 有 sizing 时优先走 pyramiding_limit 简化输出
     if (sizingText) {
       const pyramidingLimit = (position.constraints ?? [])
-        .find(c => c.status === 'locked' && c.key === 'position.pyramiding_limit')
+        // #1238 follow-up：open status 也接受，避免 readiness 因软性 requirement 缺失
+        //   把用户已显式给出的 constraint 降级后整段不显示。superseded 仍跳过。
+        .find(c => c.status !== 'superseded' && c.key === 'position.pyramiding_limit')
       if (pyramidingLimit) {
         const maxLayers = this.readFiniteNumber((pyramidingLimit.params as Record<string, unknown>)?.maxLayers as unknown)
         if (maxLayers !== null) {
-          return `${sizingText}，最多${maxLayers}次加仓`
+          const suffix = pyramidingLimit.status === 'open' ? '（待补充）' : ''
+          return `${sizingText}，最多${maxLayers}次加仓${suffix}`
         }
       }
     }
 
-    // Task 4 (#1162)：扫 locked constraints 用 presentationRegistry 渲染（dca_schedule 等）
+    // Task 4 (#1162)：扫 constraints 用 presentationRegistry 渲染（dca_schedule 等）
+    // #1238 follow-up：原来只渲染 locked，但 readiness 会把"用户已显式给出但软性
+    //   requirement（如 dca_exit_rule）未填"的 constraint 降级到 open，结果用户
+    //   说了 DCA UI 完全看不到。改为渲染 locked + open，open 加"（待补充）"提示，
+    //   既给用户回显"我识别了你的 DCA 配置"，又保留后续 nextQuestion 追问 exit rule 的空间。
+    //   superseded 仍跳过。
     const constraintParts: string[] = []
     for (const constraint of position.constraints ?? []) {
-      if (constraint.status !== 'locked') continue
+      if (constraint.status === 'superseded') continue
       try {
         const entry = this.presentationRegistry.getEntry(constraint.key)
         const renderer = entry?.displayRenderer
         if (typeof renderer === 'function') {
           const rendered = renderer({ params: (constraint.params ?? {}) as Record<string, unknown> })
-          if (rendered) constraintParts.push(rendered)
+          if (rendered) {
+            const suffix = constraint.status === 'open' ? '（待补充）' : ''
+            constraintParts.push(`${rendered}${suffix}`)
+          }
         }
       }
       catch {

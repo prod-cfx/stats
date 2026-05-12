@@ -3,7 +3,10 @@ import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticStateProjectionService } from '../semantic-state-projection.service'
 import { SemanticPresentationRegistryService } from '../semantic-presentation-registry.service'
-import type { SemanticState } from '../../types/semantic-state'
+import type {
+  SemanticPositionConstraintState,
+  SemanticState,
+} from '../../types/semantic-state'
 
 /**
  * #1238 follow-up：clarification 路径下"我当前理解的策略是：${summary}"长期只渲染
@@ -84,6 +87,44 @@ describe('semantic-state-projection — buildClarificationView 包含 position �
     // 防 join('；') 留下悬挂分隔符（"...；" 结尾或 "；；" 中间）
     expect(summary.endsWith('；')).toBe(false)
     expect(summary).not.toMatch(/；；/)
+  })
+
+  it('open-status dca_schedule constraint — 仍渲染并带"（待补充）"提示', () => {
+    // 真实根因复现：normalizeSemanticContractReadiness 检测到 dca 缺 dca_exit_rule
+    // requirement 后会给 constraint 加 open slot 并把 status 降到 'open'，旧实现
+    // 在 buildPositionSummary 直接 `if (status !== 'locked') continue`，整段 DCA
+    // 段消失（用户看到只有"仓位：100 USDT"）。修复后 open 状态也渲染，但加"（待补充）"
+    // 提示用户还差什么。
+    const state = buildStateOrFail(dcaUtterance)
+    // 构造 readiness 降级后的形态：dca constraint status='open' + 一条 open slot
+    const dcaConstraint = state.position?.constraints?.find(c => c.key === 'position.dca_schedule')
+    expect(dcaConstraint).toBeDefined()
+    const downgraded: SemanticPositionConstraintState = {
+      ...dcaConstraint!,
+      status: 'open',
+      openSlots: [
+        {
+          slotKey: 'contract.requirement.guard.define.dca_exit_rule',
+          fieldPath: 'position.constraints[x].contracts[y].requires.guard.define.dca_exit_rule',
+          status: 'open',
+          priority: 'risk',
+          affectsExecution: true,
+          questionHint: '请补充 guard define dca_exit_rule 的执行语义。',
+          evidence: {
+            source: 'derived',
+            text: 'Missing semantic contract requirement',
+          },
+        },
+      ],
+    }
+    state.position = {
+      ...state.position!,
+      constraints: [downgraded],
+    }
+    const summary = projection.buildClarificationView(state).summary
+
+    expect(summary).toContain('DCA 补仓计划')
+    expect(summary).toContain('（待补充）')
   })
 
   it('state.position = null — clarificationView 不抛错，summary 不含 position 段', () => {
