@@ -617,7 +617,7 @@ export class PositionSyncService {
 
     if (!localPos) {
       if (attributedQty.gt(0)) {
-        await this.createMissingPosition(accountId, { ...exchangePos, size: attributedQty.toNumber() }, exchangeId, marketType, exchangeAccountId)
+        await this.createMissingPosition(accountId, exchangePos, exchangeId, marketType, exchangeAccountId, attributedQty)
         differences.push({
           symbol: exchangePos.symbol,
           positionSide,
@@ -675,7 +675,7 @@ export class PositionSyncService {
       const diff = attributedQty.sub(localQty)
       await this.adjustPositionQuantity(
         localPos,
-        { ...exchangePos, size: attributedQty.toNumber() },
+        exchangePos,
         diff,
         exchangeId,
         marketType,
@@ -779,6 +779,7 @@ export class PositionSyncService {
     exchangeId: ExchangeId,
     marketType: MarketType,
     exchangeAccountId?: string | null,
+    quantityOverride?: Decimal,
   ): Promise<void> {
     // 由于不知道具体的成交历史，只能记录一个对账调整
     const positionSide = this.resolveExchangePositionSide(exchangePos)
@@ -788,6 +789,8 @@ export class PositionSyncService {
 
     const tradeSide = positionSide === PositionSide.LONG ? TradeSide.BUY : TradeSide.SELL
 
+    const quantity = quantityOverride ?? new Decimal(exchangePos.size)
+
     await this.positionsService.recordTrade({
       userStrategyAccountId: accountId,
       symbol: normalizeLedgerSymbol(exchangePos.symbol),
@@ -795,7 +798,7 @@ export class PositionSyncService {
       side: tradeSide,
       positionSide,
       price: exchangePos.entryPrice.toString(),
-      quantity: exchangePos.size.toString(),
+      quantity: quantity.toString(),
       fee: '0',
       orderId: `sync-${Date.now()}`,
       externalTradeId: `sync-${accountId}-${exchangePos.symbol}-${Date.now()}`,
@@ -805,7 +808,9 @@ export class PositionSyncService {
         syncSource: 'position-reconciliation',
         market: `${exchangeId}:${marketType}`,
         exchangeAccountId: exchangeAccountId ?? null,
-        exchangePosition: exchangePos,
+        exchangePosition: quantityOverride
+          ? { ...exchangePos, size: quantity.toString() }
+          : exchangePos,
       },
     })
   }

@@ -174,7 +174,7 @@ describe('positionSyncService', () => {
           market: 'okx:perp',
           side: 'BUY',
           positionSide: 'LONG',
-          quantity: '0.305',
+          quantity: '0.123456789123456789',
           orderId: 'current-account-trade',
           externalTradeId: 'current-account-trade',
           provider: 'okx',
@@ -225,14 +225,14 @@ describe('positionSyncService', () => {
 
     expect(result.differences).toEqual([expect.objectContaining({
       action: 'created',
-      difference: '0.305',
+      difference: '0.123456789123456789',
     })])
     expect(positionsRepository.findTradesByAccount).toHaveBeenCalledWith(
       'strategy-account-1',
       ['ETHUSDT'],
     )
     expect(positionsService.recordTrade).toHaveBeenCalledWith(expect.objectContaining({
-      quantity: '0.305',
+      quantity: '0.123456789123456789',
       metadata: expect.objectContaining({
         exchangeAccountId: 'exchange-account-1',
       }),
