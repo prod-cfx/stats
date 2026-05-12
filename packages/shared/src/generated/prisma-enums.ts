@@ -321,3 +321,16 @@ export const ExchangeId = {
   hyperliquid: 'hyperliquid',
 } as const
 export type ExchangeId = (typeof ExchangeId)[keyof typeof ExchangeId]
+
+export const WebhookSignalSubscriptionStatus = {
+  ACTIVE: 'ACTIVE',
+  DISABLED: 'DISABLED',
+  ROTATED: 'ROTATED',
+} as const
+export type WebhookSignalSubscriptionStatus = (typeof WebhookSignalSubscriptionStatus)[keyof typeof WebhookSignalSubscriptionStatus]
+
+export const WebhookSignalSignatureStatus = {
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED',
+} as const
+export type WebhookSignalSignatureStatus = (typeof WebhookSignalSignatureStatus)[keyof typeof WebhookSignalSignatureStatus]

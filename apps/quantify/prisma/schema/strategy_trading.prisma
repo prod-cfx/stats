@@ -283,14 +283,17 @@ model StrategyInstance {
   createdAt                 DateTime               @default(now()) @map("created_at")
   updatedAt                 DateTime               @default(now()) @updatedAt @map("updated_at")
 
-  strategyTemplate       StrategyTemplate                @relation(fields: [strategyTemplateId], references: [id], onDelete: Cascade)
-  signals                TradingSignal[]
-  signalState            StrategySignalState?
-  safetyState            StrategyInstanceSafetyState?
-  riskProfile            StrategyInstanceRiskProfile?
-  runtimeExecutionStates StrategyRuntimeExecutionState[]
-  subscriptions          UserStrategySubscription[]
-  deployRequests         DeployRequest[]
+  strategyTemplate           StrategyTemplate                @relation(fields: [strategyTemplateId], references: [id], onDelete: Cascade)
+  signals                    TradingSignal[]
+  signalState                StrategySignalState?
+  safetyState                StrategyInstanceSafetyState?
+  riskProfile                StrategyInstanceRiskProfile?
+  runtimeExecutionStates     StrategyRuntimeExecutionState[]
+  subscriptions              UserStrategySubscription[]
+  deployRequests             DeployRequest[]
+  webhookSignalSubscriptions WebhookSignalSubscription[]
+  webhookSignalEvents        WebhookSignalEvent[]
+  webhookSignalAudits        WebhookSignalAudit[]
 
   @@index([strategyTemplateId, llmModel, name, archivedAt], map: "idx_strategy_instance_template_model_name_archived")
   @@index([strategyTemplateId, status], map: "idx_strategy_instance_template_status")

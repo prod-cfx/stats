@@ -17,14 +17,15 @@ model User {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
 
-  inviter                  User?                         @relation("UserInviter", fields: [inviterId], references: [id])
-  invitedUsers             User[]                        @relation("UserInviter")
-  exchangeAccounts         ExchangeAccount[]
-  strategyAccounts         UserStrategyAccount[]
-  strategySubscriptions    UserStrategySubscription[]
-  llmStrategySubscriptions UserLlmStrategySubscription[]
-  signalExecutions         UserSignalExecution[]
-  deployRequests           DeployRequest[]
+  inviter                    User?                         @relation("UserInviter", fields: [inviterId], references: [id])
+  invitedUsers               User[]                        @relation("UserInviter")
+  exchangeAccounts           ExchangeAccount[]
+  strategyAccounts           UserStrategyAccount[]
+  strategySubscriptions      UserStrategySubscription[]
+  llmStrategySubscriptions   UserLlmStrategySubscription[]
+  signalExecutions           UserSignalExecution[]
+  deployRequests             DeployRequest[]
+  webhookSignalSubscriptions WebhookSignalSubscription[]
 
   @@map("users")
 }
