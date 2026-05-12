@@ -46,6 +46,39 @@ describe('exchangeFactory', () => {
     )
   })
 
+  it('reuses and closes configured OKX http egress dispatchers', async () => {
+    const configService = {
+      get: jest.fn((key: string) => key === 'httpEgress.proxyUrl' ? 'http://127.0.0.1:7890' : undefined),
+    }
+    const factory = new ExchangeFactory(configService as any)
+
+    factory.createClient('okx', 'spot', {
+      exchangeId: 'okx',
+      config: {
+        apiKey: 'test-api-key',
+        secret: 'test-secret',
+        passphrase: 'test-passphrase',
+      },
+    })
+    const firstDispatcher = (OkxClient as jest.Mock).mock.calls[0][2].dispatcher
+    const close = jest.spyOn(firstDispatcher, 'close').mockResolvedValue(undefined)
+
+    factory.createClient('okx', 'perp', {
+      exchangeId: 'okx',
+      config: {
+        apiKey: 'second-api-key',
+        secret: 'test-secret',
+        passphrase: 'test-passphrase',
+      },
+    })
+
+    expect((OkxClient as jest.Mock).mock.calls[1][2].dispatcher).toBe(firstDispatcher)
+
+    await factory.onModuleDestroy()
+
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
   it('passes token bucket settings to OKX clients', () => {
     const rateLimiter = { acquire: jest.fn(async () => undefined) }
     const configService = {

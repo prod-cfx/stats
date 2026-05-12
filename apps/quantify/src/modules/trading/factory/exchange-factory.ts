@@ -2,6 +2,8 @@ import type { IExchangeClient } from '../core/interface'
 import type { ExchangeId, MarketType } from '../core/types'
 import type { HttpEgressOptions } from '../exchanges/base-cex-client'
 import type { ExchangeAccountConfig, HyperliquidConfig } from './account-store'
+import type { OnModuleDestroy } from '@nestjs/common'
+import type { Dispatcher } from 'undici'
 import { Inject, Injectable, Optional } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { MessageBusMetricsService } from '@/modules/message-bus/metrics/message-bus-metrics.service'
@@ -14,7 +16,9 @@ import { RateLimiterRegistry } from '../services/rate-limiter-registry.service'
 type HyperliquidClientConstructor = new (config: HyperliquidConfig, marketType?: MarketType) => IExchangeClient
 
 @Injectable()
-export class ExchangeFactory {
+export class ExchangeFactory implements OnModuleDestroy {
+  private readonly dispatchers = new Map<string, Dispatcher>()
+
   constructor(
     @Optional()
     @Inject(ConfigService)
@@ -37,7 +41,7 @@ export class ExchangeFactory {
 
     if (account.exchangeId === 'okx' && exchangeId === 'okx') {
       return new OkxClient(marketType, account.config, {
-        dispatcher: createHttpEgressDispatcher(this.getHttpEgressOptions()),
+        dispatcher: this.getHttpEgressDispatcher(),
         rateLimiter: this.rateLimiter,
         tokenBucketEnabled: this.isTokenBucketEnabled(),
         retryEnabled: this.isOkxRetryEnabled(),
@@ -52,6 +56,13 @@ export class ExchangeFactory {
     }
 
     throw new UnsupportedExchangeException({ exchangeId })
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    const dispatchers = [...this.dispatchers.values()]
+    this.dispatchers.clear()
+
+    await Promise.all(dispatchers.map(dispatcher => dispatcher.close()))
   }
 
   private loadHyperliquidClient(): HyperliquidClientConstructor {
@@ -88,6 +99,19 @@ export class ExchangeFactory {
     }
 
     return { proxyUrl, localAddress }
+  }
+
+  private getHttpEgressDispatcher(): Dispatcher | undefined {
+    const options = this.getHttpEgressOptions()
+    if (!options) return undefined
+
+    const key = `${options.proxyUrl ?? ''}|${options.localAddress ?? ''}`
+    const existing = this.dispatchers.get(key)
+    if (existing) return existing
+
+    const dispatcher = createHttpEgressDispatcher(options)
+    if (dispatcher) this.dispatchers.set(key, dispatcher)
+    return dispatcher
   }
 
   private readOptionalString(key: string): string | undefined {
