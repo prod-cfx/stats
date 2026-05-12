@@ -82,6 +82,43 @@ describe('positionSyncService', () => {
     expect(positionsService.recordTrade).not.toHaveBeenCalled()
   })
 
+  it('ignores non-directional exchange positions during reconciliation', async () => {
+    const positionsRepository = {
+      findOpenByAccount: jest.fn().mockResolvedValue([]),
+      saveSyncLog: jest.fn().mockResolvedValue(undefined),
+    }
+    const tradingService = {
+      getPositions: jest.fn().mockResolvedValue([{
+        symbol: 'BTC/USDT:PERP',
+        side: 'flat',
+        size: '0',
+        entryPrice: '0',
+      }]),
+    }
+    const positionsService = {
+      recordTrade: jest.fn(),
+    }
+
+    const service = new PositionSyncService(
+      positionsRepository as any,
+      tradingService as any,
+      positionsService as any,
+    )
+
+    const result = await service.syncUserPositions(
+      'user-1',
+      'strategy-account-1',
+      'okx',
+      'perp',
+      'auto',
+      'position-sync',
+      'exchange-account-1',
+    )
+
+    expect(result.differences).toEqual([])
+    expect(positionsService.recordTrade).not.toHaveBeenCalled()
+  })
+
   it('skips creating missing positions for unassigned net exposure on shared exchange accounts', async () => {
     const positionsRepository = {
       countActiveStrategyBindingsByExchangeAccount: jest.fn().mockResolvedValue(3),

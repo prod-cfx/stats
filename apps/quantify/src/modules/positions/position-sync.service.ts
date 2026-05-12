@@ -101,7 +101,13 @@ export class PositionSyncService {
       // 3. 构建交易所仓位映射（按 symbol + side 分组）
       const exchangePositionMap = new Map<string, UnifiedPosition>()
       for (const pos of exchangePositions) {
-        const key = this.getPositionKey(pos.symbol, pos.side === 'long' ? 'LONG' : 'SHORT')
+        const positionSide = this.resolveExchangePositionSide(pos)
+        if (!positionSide) {
+          this.logger.warn(`Skipped non-directional exchange position: ${pos.symbol} ${pos.side}`)
+          continue
+        }
+
+        const key = this.getPositionKey(pos.symbol, positionSide)
         exchangePositionMap.set(key, pos)
       }
 
@@ -118,6 +124,10 @@ export class PositionSyncService {
         const localPos = localPositionMap.get(key)
         const exchangeQty = new Decimal(exchangePos.size)
         const localQty = localPos ? new Decimal(localPos.quantity) : new Decimal(0)
+        const positionSide = this.resolveExchangePositionSide(exchangePos)
+        if (!positionSide) {
+          continue
+        }
 
         if (sharedAccountAttribution) {
           try {
@@ -152,7 +162,7 @@ export class PositionSyncService {
             await this.createMissingPosition(accountId, exchangePos, exchangeId, marketType)
             differences.push({
               symbol: exchangePos.symbol,
-              positionSide: exchangePos.side === 'long' ? 'LONG' : 'SHORT',
+              positionSide,
               exchangeQuantity: exchangeQty.toString(),
               localQuantity: '0',
               difference: exchangeQty.toString(),
@@ -173,7 +183,7 @@ export class PositionSyncService {
             await this.adjustPositionQuantity(localPos, exchangePos, diff, exchangeId, marketType)
             differences.push({
               symbol: exchangePos.symbol,
-              positionSide: exchangePos.side === 'long' ? 'LONG' : 'SHORT',
+              positionSide,
               exchangeQuantity: exchangeQty.toString(),
               localQuantity: localQty.toString(),
               difference: diff.toString(),
@@ -397,6 +407,18 @@ export class PositionSyncService {
     return `${normalizeLedgerSymbol(symbol)}:${side}`
   }
 
+  private resolveExchangePositionSide(position: UnifiedPosition): PositionSide | null {
+    if (position.side === 'long') {
+      return PositionSide.LONG
+    }
+
+    if (position.side === 'short') {
+      return PositionSide.SHORT
+    }
+
+    return null
+  }
+
   private isPositionInSyncScope(
     localPos: { symbol?: string | null; exchangeId?: string | null; marketType?: string | null; metadata?: unknown },
     syncExchangeId: ExchangeId,
@@ -586,7 +608,10 @@ export class PositionSyncService {
       differences,
     } = params
     const attributedQty = attribution.quantities.get(key) ?? new Decimal(0)
-    const positionSide = exchangePos.side === 'long' ? PositionSide.LONG : PositionSide.SHORT
+    const positionSide = this.resolveExchangePositionSide(exchangePos)
+    if (!positionSide) {
+      return true
+    }
 
     if (!localPos) {
       if (attributedQty.gt(0)) {
@@ -736,8 +761,12 @@ export class PositionSyncService {
     marketType: MarketType,
   ): Promise<void> {
     // 由于不知道具体的成交历史，只能记录一个对账调整
-    const positionSide = exchangePos.side === 'long' ? PositionSide.LONG : PositionSide.SHORT
-    const tradeSide = exchangePos.side === 'long' ? TradeSide.BUY : TradeSide.SELL
+    const positionSide = this.resolveExchangePositionSide(exchangePos)
+    if (!positionSide) {
+      return
+    }
+
+    const tradeSide = positionSide === PositionSide.LONG ? TradeSide.BUY : TradeSide.SELL
 
     await this.positionsService.recordTrade({
       userStrategyAccountId: accountId,
