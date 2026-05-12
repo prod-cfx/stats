@@ -3086,11 +3086,11 @@ export class CanonicalSpecV2IrCompilerService {
     if (indicator === 'rsi') {
       const period = this.readNumber([atom.params?.period], context.rsi.period)
       if (!Number.isFinite(period) || period <= 0) {
-        throw new Error(`codegen.canonical_spec_v2_indicator_cross_invalid_period:${atom.key}`)
+        throw new Error(`codegen.canonical_spec_v2_indicator_cross_invalid_period:${atom.key}:${period}`)
       }
       const value = this.readNumber([atom.value], Number.NaN)
       if (!Number.isFinite(value)) {
-        throw new Error(`codegen.canonical_spec_v2_indicator_cross_invalid_value:${atom.key}`)
+        throw new Error(`codegen.canonical_spec_v2_indicator_cross_invalid_value:${atom.key}:${atom.value}`)
       }
       const rsiRef = this.ensureRsiSeries(context, period)
       const thresholdRef = this.ensureConstSeries(context, value)
@@ -3106,10 +3106,10 @@ export class CanonicalSpecV2IrCompilerService {
       const fastPeriod = this.readNumber([atom.params?.fastPeriod], Number.NaN)
       const slowPeriod = this.readNumber([atom.params?.slowPeriod], Number.NaN)
       if (!Number.isFinite(fastPeriod) || fastPeriod <= 0) {
-        throw new Error(`codegen.canonical_spec_v2_indicator_cross_invalid_fast_period:${atom.key}`)
+        throw new Error(`codegen.canonical_spec_v2_indicator_cross_invalid_fast_period:${atom.key}:${fastPeriod}`)
       }
       if (!Number.isFinite(slowPeriod) || slowPeriod <= 0) {
-        throw new Error(`codegen.canonical_spec_v2_indicator_cross_invalid_slow_period:${atom.key}`)
+        throw new Error(`codegen.canonical_spec_v2_indicator_cross_invalid_slow_period:${atom.key}:${slowPeriod}`)
       }
       const seriesKind: Extract<SeriesDef['kind'], 'SMA' | 'EMA'> = indicator === 'ema' ? 'EMA' : 'SMA'
       const fastRef = this.ensureIndicatorSeries(context, seriesKind, fastPeriod)
@@ -3135,7 +3135,7 @@ export class CanonicalSpecV2IrCompilerService {
       : ''
     const value = this.readNumber([atom.value], Number.NaN)
     if (!Number.isFinite(value)) {
-      throw new Error(`codegen.canonical_spec_v2_indicator_threshold_invalid_value:${atom.key}`)
+      throw new Error(`codegen.canonical_spec_v2_indicator_threshold_invalid_value:${atom.key}:${atom.value}`)
     }
 
     // gate phase：用户 op 描述的是"通过 gate 的条件"，guard 需要触发的是反向比较；
@@ -3146,7 +3146,7 @@ export class CanonicalSpecV2IrCompilerService {
     if (indicator === 'rsi') {
       const period = this.readNumber([atom.params?.period], context.rsi.period)
       if (!Number.isFinite(period) || period <= 0) {
-        throw new Error(`codegen.canonical_spec_v2_indicator_threshold_invalid_period:${atom.key}`)
+        throw new Error(`codegen.canonical_spec_v2_indicator_threshold_invalid_period:${atom.key}:${period}`)
       }
       const rsiRef = this.ensureRsiSeries(context, period)
       const thresholdRef = this.ensureConstSeries(context, value)
@@ -3164,7 +3164,7 @@ export class CanonicalSpecV2IrCompilerService {
         Number.NaN,
       )
       if (!Number.isFinite(period) || period <= 0) {
-        throw new Error(`codegen.canonical_spec_v2_indicator_threshold_invalid_period:${atom.key}`)
+        throw new Error(`codegen.canonical_spec_v2_indicator_threshold_invalid_period:${atom.key}:${period}`)
       }
       const seriesKind: Extract<SeriesDef['kind'], 'SMA' | 'EMA'> = indicator === 'ema' ? 'EMA' : 'SMA'
       const indicatorRef = this.ensureIndicatorSeries(context, seriesKind, period)
