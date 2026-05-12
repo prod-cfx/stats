@@ -103,6 +103,7 @@ describe('signalExecutorService', () => {
       orderId: 'okx-order-1',
       clientOrderId: 'client-order-1',
     })
+    expect((service as any).txEvents.withAfterCommit).toHaveBeenCalled()
     expect(executionRepository.markExecuted).toHaveBeenCalledWith('exec-okx-ws-1', {
       executedPrice: 60123.45,
       executedQuantity: 0.01,

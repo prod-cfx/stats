@@ -154,6 +154,12 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
 
   @OnEvent(OKX_PRIVATE_ORDER_EVENT, { async: true })
   async handleOkxPrivateOrderEvent(event: OkxPrivateOrderEvent) {
+    await this.txEvents.withAfterCommit(async () => {
+      await this.processOkxPrivateOrderEvent(event)
+    })
+  }
+
+  private async processOkxPrivateOrderEvent(event: OkxPrivateOrderEvent) {
     try {
       const execution = await this.executionRepository.findPendingByOkxOrderIds({
         orderId: event.orderId,
