@@ -1,11 +1,11 @@
 'use client'
 
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
-import type { StrategyPlazaTemplate } from '@/lib/api'
+import type { ExistingStrategyPlazaRunResult, StrategyPlazaRunResult, StrategyPlazaTemplate } from '@/lib/api'
 import { ArrowLeft } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-storage'
 import { StrategyPlaza } from '@/components/ai-quant/StrategyPlaza'
@@ -21,6 +21,13 @@ import { ApiError } from '@/lib/errors'
 
 const OKX_DEMO_API_KEY_REQUIRED_CODE = 'strategy_plaza.okx_demo_api_key_required'
 const INTENT_TTL_MS = 10 * 60 * 1000
+
+function isExistingStrategyPlazaRunResult(result: StrategyPlazaRunResult): result is ExistingStrategyPlazaRunResult {
+  return !!result
+    && typeof result === 'object'
+    && 'result' in result
+    && result.result === 'existing'
+}
 
 function getErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiError && error.message.trim()) return error.message
@@ -42,6 +49,7 @@ export function AiQuantPlazaPageClient() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [runningTemplateId, setRunningTemplateId] = useState<string | null>(null)
   const [pendingAction, setPendingAction] = useState<'run' | 'edit' | null>(null)
+  const [existingStrategy, setExistingStrategy] = useState<ExistingStrategyPlazaRunResult['strategy'] | null>(null)
   const resumingIntentKeyRef = useRef<string | null>(null)
 
   const goLoginWithIntent = (intent: QuantReturnIntentInput) => {
@@ -88,8 +96,13 @@ export function AiQuantPlazaPageClient() {
     setRunningTemplateId(templateId)
     setPendingAction('run')
     setActionError(null)
+    setExistingStrategy(null)
     try {
       const strategy = await runStrategyPlazaTemplate(templateId, createStrategyPlazaRunRequestId())
+      if (isExistingStrategyPlazaRunResult(strategy)) {
+        setExistingStrategy(strategy.strategy)
+        return
+      }
       router.push(`/${lng}/account/ai-quant/strategy/${strategy.id}`)
     } catch (error) {
       if (error instanceof ApiError && error.code === OKX_DEMO_API_KEY_REQUIRED_CODE) {
@@ -125,6 +138,21 @@ export function AiQuantPlazaPageClient() {
       setPendingAction(null)
     }
   }
+
+  const closeExistingStrategyDialog = () => {
+    setExistingStrategy(null)
+  }
+
+  const openExistingStrategyDetail = () => {
+    if (!existingStrategy) return
+    router.push(`/${lng}/account/ai-quant/strategy/${existingStrategy.id}`)
+  }
+
+  const existingStrategyStatusLabel = existingStrategy?.status === 'running'
+    ? t('aiQuant.strategyPlazaExisting.statusRunning', { defaultValue: '运行中' })
+    : existingStrategy?.status === 'stopped'
+      ? t('aiQuant.strategyPlazaExisting.statusStopped', { defaultValue: '已停止' })
+      : t('aiQuant.strategyPlazaExisting.statusDraft', { defaultValue: '草稿' })
 
   useEffect(() => {
     if (isLoading || !session) return
@@ -179,6 +207,71 @@ export function AiQuantPlazaPageClient() {
         onRunStrategy={runTemplate}
         onEditStrategy={editTemplate}
       />
+
+      {existingStrategy && (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4"
+          role="dialog"
+        >
+          <div className="w-full max-w-[444px] rounded-[18px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 shadow-2xl shadow-slate-950/20">
+            <div className="flex gap-4">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-100 text-lg font-bold text-violet-700 dark:bg-violet-500/20 dark:text-violet-200">
+                ✓
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-[color:var(--cf-text-strong)]">
+                  {t('aiQuant.strategyPlazaExisting.title', { defaultValue: '已存在相同策略' })}
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--cf-muted)]">
+                  {t('aiQuant.strategyPlazaExisting.description', {
+                    defaultValue: '这个策略模板已经创建过，系统只保留一个相同模板策略。',
+                  })}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-muted)] p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-bold text-[color:var(--cf-text-strong)]">{existingStrategy.name}</div>
+                  <div className="mt-2 text-xs text-[color:var(--cf-muted)]">
+                    {[
+                      existingStrategy.symbol,
+                      existingStrategy.timeframe,
+                    ].filter(Boolean).join(' / ')}
+                  </div>
+                </div>
+                <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+                  {existingStrategyStatusLabel}
+                </span>
+              </div>
+              <p className="mt-3 text-xs leading-5 text-[color:var(--cf-muted)]">
+                {t('aiQuant.strategyPlazaExisting.hint', {
+                  defaultValue: '再次运行会跳转到这个已有策略详情，不会重复创建。',
+                })}
+              </p>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                className="inline-flex h-11 min-w-[160px] items-center justify-center rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#B414F4] px-5 text-sm font-bold text-white shadow-sm transition hover:brightness-105"
+                type="button"
+                onClick={openExistingStrategyDetail}
+              >
+                {t('aiQuant.strategyPlazaExisting.viewDetail', { defaultValue: '查看策略详情' })}
+              </button>
+              <button
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+                type="button"
+                onClick={closeExistingStrategyDialog}
+              >
+                {t('aiQuant.strategyPlazaExisting.close', { defaultValue: '关闭' })}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }

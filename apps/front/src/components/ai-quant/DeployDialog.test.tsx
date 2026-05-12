@@ -5,6 +5,10 @@ import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { DeployDialog } from './DeployDialog'
 
+jest.mock('lucide-react', () => ({
+  Loader2: () => <span data-testid="deploy-loading-icon" />,
+}))
+
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
@@ -171,5 +175,41 @@ describe('DeployDialog', () => {
     expect(container.textContent).toContain('重新部署策略？')
     expect(container.textContent).toContain('系统将按当前已发布版本重新部署策略，并开始运行。')
     expect(container.textContent).toContain('确认重新部署')
+  })
+
+  it('shows button loading state and disables close while deployment is submitting', async () => {
+    await act(async () => {
+      root.render(
+        <DeployDialog
+          open
+          canDeploy
+          deploySubmitting
+          apiConfigured
+          exchange="okx"
+          marketType="spot"
+          accounts={[{
+            accountId: 'acct-1',
+            exchange: 'okx',
+            accountName: 'OKX Main',
+            apiKeyMask: 'OKX***1',
+            status: 'available',
+          }]}
+          selectedAccountId="acct-1"
+          lng="zh"
+          onSelectAccount={() => {}}
+          onConfirmDeploy={() => {}}
+          onClose={() => {}}
+        />,
+      )
+    })
+
+    const buttons = [...container.querySelectorAll('button')]
+    const confirmButton = buttons.find(button => button.textContent?.includes('部署中')) as HTMLButtonElement | undefined
+    const closeButton = buttons.find(button => button.textContent?.includes('common.close')) as HTMLButtonElement | undefined
+
+    expect(confirmButton).toBeTruthy()
+    expect(confirmButton?.disabled).toBe(true)
+    expect(confirmButton?.querySelector('[data-testid="deploy-loading-icon"]')).not.toBeNull()
+    expect(closeButton?.disabled).toBe(true)
   })
 })

@@ -220,6 +220,43 @@ describe('AiQuantPlazaPageClient', () => {
     expect(mockPush).toHaveBeenCalledWith('/zh/account/ai-quant/strategy/strategy-1')
   })
 
+  it('shows an existing strategy dialog and lets users open the existing strategy detail', async () => {
+    mockRunStrategyPlazaTemplate.mockResolvedValue({
+      result: 'existing',
+      strategy: {
+        id: 'strategy-existing',
+        name: 'MA Cross Demo',
+        status: 'stopped',
+        symbol: 'BTC-USDT-SWAP',
+        timeframe: '15m',
+      },
+    })
+
+    await act(async () => {
+      root.render(<AiQuantPlazaPageClient />)
+    })
+    await flushPromises()
+
+    await act(async () => {
+      await plazaProps?.onRunStrategy('ma-cross')
+    })
+
+    expect(container.textContent).toContain('aiQuant.strategyPlazaExisting.title')
+    expect(container.textContent).toContain('MA Cross Demo')
+    expect(mockPush).not.toHaveBeenCalled()
+
+    const viewButton = Array.from(container.querySelectorAll('button')).find(button =>
+      button.textContent?.includes('aiQuant.strategyPlazaExisting.viewDetail'),
+    )
+    expect(viewButton).toBeTruthy()
+
+    await act(async () => {
+      viewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mockPush).toHaveBeenCalledWith('/zh/account/ai-quant/strategy/strategy-existing')
+  })
+
   it('stores plaza-run intent and routes to exchange API binding when OKX demo key is missing', async () => {
     mockRunStrategyPlazaTemplate.mockRejectedValue(
       new ApiError(

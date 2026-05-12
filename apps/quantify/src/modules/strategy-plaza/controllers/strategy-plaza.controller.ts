@@ -72,7 +72,7 @@ export class StrategyPlazaController {
     @Body() dto: RunStrategyPlazaTemplateDto,
     @Headers('authorization') authorization?: string,
     @Headers('x-user-id') forwardedUserId?: string,
-  ): Promise<AccountStrategyDetailResponseDto> {
+  ): Promise<AccountStrategyDetailResponseDto | { result: 'existing'; strategy: AccountStrategyDetailResponseDto }> {
     const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.runService.runTemplate({
       userId,

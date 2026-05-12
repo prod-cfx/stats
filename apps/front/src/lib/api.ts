@@ -74,10 +74,12 @@ export {
 } from './api-market-domain'
 export {
   createStrategyPlazaRunRequestId,
+  type ExistingStrategyPlazaRunResult,
   fetchStrategyPlazaTemplates,
   runStrategyPlazaTemplate,
   startStrategyPlazaEditSession,
   type StrategyPlazaEditSessionResponse,
+  type StrategyPlazaRunResult,
   type StrategyPlazaTemplate,
 } from './api-strategy-plaza-domain'
 export {

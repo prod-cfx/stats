@@ -29,6 +29,16 @@ export class StrategyPlazaRunService {
       template,
     })
 
+    if (snapshot.existingStrategyInstanceId) {
+      return {
+        result: 'existing' as const,
+        strategy: await this.accountStrategyViewService.getStrategyDetail(
+          input.userId,
+          snapshot.existingStrategyInstanceId,
+        ),
+      }
+    }
+
     return this.accountStrategyViewService.deployStrategy({
       userId: input.userId,
       name: template.name,
