@@ -1231,6 +1231,8 @@ describe('canonicalSpecV2IrCompilerService', () => {
       expect.objectContaining({ id: 'macd_line_12_26_9_15m' }),
       expect.objectContaining({ id: 'macd_signal_12_26_9_15m' }),
     ]))
+    expect(result.graphSnapshot.trigger[0]?.operator).toContain('MACD_LINE(CLOSE,16,34,12)')
+    expect(result.graphSnapshot.trigger[0]?.operator).not.toContain('MACD_LINE(CLOSE,12,26,9)')
   })
 
   it('compiles MACD cross atom params without falling back to spec indicator defaults', () => {

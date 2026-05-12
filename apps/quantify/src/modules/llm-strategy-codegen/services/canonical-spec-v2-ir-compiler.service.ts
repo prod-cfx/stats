@@ -1483,7 +1483,7 @@ export class CanonicalSpecV2IrCompilerService {
 
       case 'macd.golden_cross':
       case 'macd.death_cross': {
-        const macd = this.resolveMacdAtomConfig(atom, context, 'codegen.canonical_spec_v2_macd_cross')
+        const macd = this.resolveMacdAtomConfig(atom, context.macd, 'codegen.canonical_spec_v2_macd_cross')
         const macdLineRef = this.ensureMacdSeries(context, 'MACD_LINE', context.timeframe, macd)
         const macdSignalRef = this.ensureMacdSeries(context, 'MACD_SIGNAL', context.timeframe, macd)
         return this.upsertPredicate(
@@ -3078,7 +3078,7 @@ export class CanonicalSpecV2IrCompilerService {
     const operator: 'CROSS_OVER' | 'CROSS_UNDER' = atom.key === 'indicator.cross_over' ? 'CROSS_OVER' : 'CROSS_UNDER'
 
     if (indicator === 'macd') {
-      const macd = this.resolveMacdAtomConfig(atom, context, 'codegen.canonical_spec_v2_indicator_cross')
+      const macd = this.resolveMacdAtomConfig(atom, context.macd, 'codegen.canonical_spec_v2_indicator_cross')
       const macdLineRef = this.ensureMacdSeries(context, 'MACD_LINE', timeframe, macd)
       const macdSignalRef = this.ensureMacdSeries(context, 'MACD_SIGNAL', timeframe, macd)
       const crossRef = this.upsertPredicate(
@@ -3196,22 +3196,22 @@ export class CanonicalSpecV2IrCompilerService {
 
   private resolveMacdAtomConfig(
     atom: CanonicalConditionAtom,
-    context: CompileContext,
+    fallback: CompileContext['macd'],
     errorPrefix: string,
   ): CompileContext['macd'] {
     const fastPeriod = this.readRequiredPositiveNumberParam(
       atom.params?.fastPeriod,
-      context.macd.fastPeriod,
+      fallback.fastPeriod,
       `${errorPrefix}_invalid_fast_period`,
     )
     const slowPeriod = this.readRequiredPositiveNumberParam(
       atom.params?.slowPeriod,
-      context.macd.slowPeriod,
+      fallback.slowPeriod,
       `${errorPrefix}_invalid_slow_period`,
     )
     const signalPeriod = this.readRequiredPositiveNumberParam(
       atom.params?.signalPeriod,
-      context.macd.signalPeriod,
+      fallback.signalPeriod,
       `${errorPrefix}_invalid_signal_period`,
     )
 
@@ -3551,7 +3551,8 @@ export class CanonicalSpecV2IrCompilerService {
       case 'macd.golden_cross':
       case 'macd.death_cross': {
         const operator = condition.key === 'macd.golden_cross' ? 'CROSS_OVER' : 'CROSS_UNDER'
-        return `${operator}(MACD_LINE(CLOSE,${config.macd.fastPeriod},${config.macd.slowPeriod},${config.macd.signalPeriod}),MACD_SIGNAL(CLOSE,${config.macd.fastPeriod},${config.macd.slowPeriod},${config.macd.signalPeriod}))`
+        const macd = this.resolveMacdAtomConfig(condition, config.macd, 'codegen.canonical_spec_v2_macd_cross')
+        return `${operator}(MACD_LINE(CLOSE,${macd.fastPeriod},${macd.slowPeriod},${macd.signalPeriod}),MACD_SIGNAL(CLOSE,${macd.fastPeriod},${macd.slowPeriod},${macd.signalPeriod}))`
       }
 
       case 'breakout.channel_high_break':
