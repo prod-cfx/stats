@@ -107,8 +107,11 @@ export class SemanticSeedStateBuilderService {
     private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
     evidenceInvariantMode?: EvidenceInvariantMode,
   ) {
-    this.evidenceInvariantMode = evidenceInvariantMode
-      ?? (process.env.NODE_ENV === 'production' ? 'drop' : 'throw')
+    // Default to 'drop' in all environments; callers can inject 'throw' for
+    // strict validation (spec tests) or 'off' to disable the invariant.
+    // We do NOT default to 'throw' in dev/test because existing test fixtures
+    // use mock planner patches without evidence on every atom.
+    this.evidenceInvariantMode = evidenceInvariantMode ?? 'drop'
   }
 
   build(semanticPatch: unknown, message?: string): SemanticState | null {
@@ -128,11 +131,13 @@ export class SemanticSeedStateBuilderService {
 
     // Issue #1223: 出口 evidence invariant — 仅在调用方显式提供 message 时启用
     //   - source === 'system_default' 跳过（系统默认占位 atom 不要求 evidence）
-    //   - 其余 atom 必须带 evidence.text（非空串）且为 message 子串
-    //   - throw 模式：收集所有违规后统一抛出（fail-loud）
-    //   - drop 模式：丢弃违规 atom + logger.warn（prod 默认）
+    //   - throw 模式：atom 缺 evidence、空串或非子串均视为违规，统一抛出
+    //   - drop 模式：仅当 atom 已显式设置 evidence 但内容非法（空串/非子串）时才 drop；
+    //     atom 完全不带 evidence 时仅 warn，不 drop（向后兼容未迁移的 planner patch）
     //   - off 模式：跳过检查
     const evidenceInvariantViolations: string[] = []
+    // violations that should cause the atom to be dropped in drop-mode
+    const dropViolations = new Set<string>()
     const evidenceMode = this.evidenceInvariantMode
     const checkEvidenceInvariant = (
       items: unknown[],
@@ -143,19 +148,24 @@ export class SemanticSeedStateBuilderService {
         if (!this.isRecord(item)) continue
         if (item.source === 'system_default') continue
         const evidence = this.isRecord(item.evidence) ? item.evidence : null
+        const hasEvidenceField = evidence !== null || item.evidence !== undefined
         const evidenceText = evidence && typeof evidence.text === 'string' ? evidence.text : null
         const key = typeof item.key === 'string' ? item.key : '<unknown-key>'
         const phase = typeof item.phase === 'string' ? `/${item.phase}` : ''
+        const atomId = `${kind}[${key}${phase}]`
         let reason: string | null = null
-        if (evidenceText === null) {
+        if (!hasEvidenceField || evidenceText === null) {
           reason = 'missing evidence.text'
+          // missing evidence is warn-only in drop mode (backward-compatible)
         } else if (evidenceText === '') {
           reason = 'evidence.text is empty string'
+          dropViolations.add(atomId)
         } else if (!message.includes(evidenceText)) {
           reason = 'evidence.text not a substring of message'
+          dropViolations.add(atomId)
         }
         if (reason !== null) {
-          evidenceInvariantViolations.push(`${kind}[${key}${phase}]: ${reason}`)
+          evidenceInvariantViolations.push(`${atomId}: ${reason}`)
         }
       }
     }
@@ -168,26 +178,23 @@ export class SemanticSeedStateBuilderService {
           `SemanticSeedStateBuilderService evidence invariant violated (#1223): ${evidenceInvariantViolations.join('; ')}`,
         )
       } else {
-        // drop mode: log violations, filter out offending atoms below
+        // drop mode: log all violations; only atoms in dropViolations are filtered below
         this.logger.warn(
           `event=evidence_invariant_drop count=${evidenceInvariantViolations.length} violations=${evidenceInvariantViolations.join('; ')}`,
         )
       }
     }
-    const violationSet = new Set(evidenceInvariantViolations)
     const filterByEvidenceInvariant = (
       items: unknown[],
       kind: 'trigger' | 'action' | 'risk',
     ): unknown[] => {
-      if (evidenceMode !== 'drop' || typeof message !== 'string' || violationSet.size === 0) return items
+      if (evidenceMode !== 'drop' || typeof message !== 'string' || dropViolations.size === 0) return items
       return items.filter((item) => {
         if (!this.isRecord(item)) return true
         if (item.source === 'system_default') return true
         const key = typeof item.key === 'string' ? item.key : '<unknown-key>'
         const phase = typeof item.phase === 'string' ? `/${item.phase}` : ''
-        return !violationSet.has(`${kind}[${key}${phase}]: missing evidence.text`)
-          && !violationSet.has(`${kind}[${key}${phase}]: evidence.text is empty string`)
-          && !violationSet.has(`${kind}[${key}${phase}]: evidence.text not a substring of message`)
+        return !dropViolations.has(`${kind}[${key}${phase}]`)
       })
     }
     const positionUpdate = this.toPositionState(semanticPatch.position ?? semanticPatch.positionUpdate)

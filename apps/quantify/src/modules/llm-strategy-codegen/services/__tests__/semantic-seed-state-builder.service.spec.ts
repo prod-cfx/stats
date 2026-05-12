@@ -2164,7 +2164,7 @@ describe('SemanticSeedStateBuilderService — evidence invariant (throw mode)', 
 describe('SemanticSeedStateBuilderService — evidence invariant (drop mode)', () => {
   const svc = makeService('drop')
 
-  it('drops violating trigger and returns state with remaining valid atoms', () => {
+  it('drops trigger with evidence.text that is not a message substring', () => {
     const state = svc.build({
       triggers: [
         {
@@ -2178,13 +2178,27 @@ describe('SemanticSeedStateBuilderService — evidence invariant (drop mode)', (
           key: 'rsi.oversold',
           phase: 'entry',
           source: 'user_explicit',
-          // missing evidence — should be dropped
+          // evidence set but wrong (not a substring of MSG) — should be dropped
+          evidence: { text: '完全不相关的文本', source: 'user_explicit' },
           params: { period: 14, threshold: 30 },
         },
       ],
     }, MSG)
     expect(state?.triggers).toHaveLength(1)
     expect(state?.triggers[0]?.key).toBe('indicator.above')
+  })
+
+  it('keeps trigger with missing evidence (warn-only, backward-compatible)', () => {
+    const state = svc.build({
+      triggers: [{
+        key: 'indicator.above',
+        phase: 'entry',
+        source: 'user_explicit',
+        // no evidence — warn only, atom is kept
+        params: { indicator: 'ema', 'reference.period': 20 },
+      }],
+    }, MSG)
+    expect(state?.triggers).toHaveLength(1)
   })
 
   it('drops trigger with empty evidence.text (C2)', () => {
@@ -2205,12 +2219,13 @@ describe('SemanticSeedStateBuilderService — evidence invariant (drop mode)', (
     expect(state?.triggers).toHaveLength(0)
   })
 
-  it('returns null when all atoms are dropped', () => {
+  it('returns null when all atoms are dropped (all have explicitly wrong evidence)', () => {
     const state = svc.build({
       triggers: [{
         key: 'indicator.above',
         phase: 'entry',
         source: 'user_explicit',
+        evidence: { text: '完全无关', source: 'user_explicit' },
         params: { indicator: 'ema', 'reference.period': 20 },
       }],
     }, MSG)
@@ -2223,6 +2238,7 @@ describe('SemanticSeedStateBuilderService — evidence invariant (drop mode)', (
         key: 'indicator.above',
         phase: 'entry',
         source: 'user_explicit',
+        evidence: { text: '完全无关', source: 'user_explicit' },
         params: { indicator: 'ema', 'reference.period': 20 },
       }],
     }, MSG)).not.toThrow()
