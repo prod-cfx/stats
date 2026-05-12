@@ -323,6 +323,13 @@ export class CodegenConversationService {
         return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
       }
       // 全部 unsupported atom 已被 supported 触发器同义覆盖，清掉 fallback 状态后继续走常规路径
+      this.logger.warn({
+        event: 'unsupported_fallback_covered_by_supported',
+        site: 'initial_session',
+        userId: sessionUserId,
+        unsupportedAtoms: initialSupportGate.unsupportedAtoms.map(a => a.key),
+        supportedTriggers: initialSupportGate.state.triggers?.map(t => t.key) ?? [],
+      })
       initialSemanticState = this.clearUnsupportedFallback(initialSemanticState)
     }
     if (initialSupportGate.route === 'unknown_unsupported') {
@@ -7090,6 +7097,14 @@ export class CodegenConversationService {
         }
       }
       // 全部 unsupported atom 已被 supported 触发器同义覆盖；清掉 fallback 状态后让上层继续
+      this.logger.warn({
+        event: 'unsupported_fallback_covered_by_supported',
+        site: 'continue_session',
+        userId: args.userId,
+        sessionId: args.session.id,
+        unsupportedAtoms: classification.unsupportedAtoms.map(a => a.key),
+        supportedTriggers: classification.state.triggers?.map(t => t.key) ?? [],
+      })
       return {
         semanticState: this.clearUnsupportedFallback(classification.state),
         response: null,
