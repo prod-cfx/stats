@@ -28,10 +28,12 @@ export class StrategyPlazaEditSessionService {
     locale?: string | null
   }) {
     const template = this.templates.getRequired(input.templateId)
+    const locale = normalizeLocale(input.locale)
     const editSeed = resolveEditSeed(template.editSeed, input.locale)
     const session = await this.codegenConversationService.startSession({
       initialMessage: editSeed.initialMessage,
       guideConfig: editSeed.guideConfig,
+      locale,
     }, input.userId)
 
     return {
