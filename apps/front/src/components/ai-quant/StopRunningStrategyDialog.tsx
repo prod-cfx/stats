@@ -64,7 +64,7 @@ export function StopRunningStrategyDialog({
   const isSpotMarket = strategy?.marketType === 'spot'
   const hasUnknownOpenOrders = openOrdersCount == null
   const hasOpenOrders = typeof openOrdersCount === 'number' && openOrdersCount > 0
-  const requiresRiskChoice = openPositionsCount > 0 || hasOpenOrders
+  const requiresRiskChoice = openPositionsCount > 0 || hasOpenOrders || hasUnknownOpenOrders
   const title = requiresRiskChoice ? `当前策略仍有${isSpotMarket ? '现货持币' : '持仓'}或挂单` : '确认停止策略？'
   const exposureLabel = isSpotMarket ? '当前现货持币' : '当前持仓'
   const exposureValue = isSpotMarket ? formatSpotHolding(strategy) : String(openPositionsCount)

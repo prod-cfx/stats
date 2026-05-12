@@ -1214,6 +1214,28 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('当前未成交挂单 1 条')
   })
 
+  it('shows liquidate_and_stop when current open order count is unknown', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({
+            positionOverview: {
+              openPositionsCount: 0,
+              closedPositionsCount: 0,
+              totalRealizedPnl: 0,
+              totalUnrealizedPnl: 0,
+            },
+            openOrdersCount: null,
+          })}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('平仓并停止')
+    expect(container.textContent).toContain('当前未成交挂单 待确认 条')
+  })
+
   it('shows spot holding quantity separately from pending order count', async () => {
     const spotStrategy = buildStrategy({
       symbol: 'BTC-USDT',

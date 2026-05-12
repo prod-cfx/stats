@@ -62,7 +62,7 @@ describe('StopRunningStrategyDialog', () => {
     expect(onLiquidateAndStop).not.toHaveBeenCalled()
   })
 
-  it('shows a simple stop confirmation when open order count is unknown but no open position is reported', async () => {
+  it('offers risk choices when open order count is unknown even if no open position is reported', async () => {
     await act(async () => {
       root.render(
         <StopRunningStrategyDialog
@@ -84,9 +84,9 @@ describe('StopRunningStrategyDialog', () => {
       )
     })
 
-    expect(container.textContent).toContain('确认停止策略？')
-    expect(container.textContent).not.toContain('当前策略仍有持仓或挂单')
-    expect(container.textContent).not.toContain('平仓并停止')
+    expect(container.textContent).toContain('当前策略仍有持仓或挂单')
+    expect(container.textContent).toContain('当前未成交挂单待确认')
+    expect(container.textContent).toContain('平仓并停止')
   })
 
   it('offers stop-only and liquidate-and-stop choices when positions exist', async () => {

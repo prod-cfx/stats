@@ -421,7 +421,7 @@ export function AiQuantStrategyDetail({
   const openOrdersCount = strategy.openOrdersCount
   const hasUnknownOpenOrders = openOrdersCount == null
   const hasOpenOrders = typeof openOrdersCount === 'number' && openOrdersCount > 0
-  const hasRuntimeRisk = openPositionsCount > 0 || hasOpenOrders
+  const hasRuntimeRisk = openPositionsCount > 0 || hasOpenOrders || hasUnknownOpenOrders
   const showLiquidateAndStop = strategy.status === 'running' && hasRuntimeRisk
   const exposureSummary = isSpotMarket ? formatSpotHolding(strategy) : `${openPositionsCount} 个 open positions`
   const runtimeActionDisabled = !session?.userId || pendingRuntimeAction !== null
