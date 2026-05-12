@@ -128,6 +128,49 @@ describe('positionSyncService', () => {
     expect(positionsService.recordTrade).not.toHaveBeenCalled()
   })
 
+  it('loads shared attribution from trades after the current exchange account binding started', async () => {
+    const bindingStartedAt = new Date('2026-05-12T00:00:00.000Z')
+    const positionsRepository = {
+      countActiveStrategyBindingsByExchangeAccount: jest.fn().mockResolvedValue(3),
+      findActiveBindingStartedAtByExchangeAccount: jest.fn().mockResolvedValue(bindingStartedAt),
+      findTradesByAccount: jest.fn().mockResolvedValue([]),
+      findOpenByAccount: jest.fn().mockResolvedValue([]),
+      saveSyncLog: jest.fn().mockResolvedValue(undefined),
+    }
+    const tradingService = {
+      getPositions: jest.fn().mockResolvedValue([]),
+    }
+    const positionsService = {
+      recordTrade: jest.fn(),
+    }
+
+    const service = new PositionSyncService(
+      positionsRepository as any,
+      tradingService as any,
+      positionsService as any,
+    )
+
+    await service.syncUserPositions(
+      'user-1',
+      'strategy-account-1',
+      'okx',
+      'perp',
+      'auto',
+      'position-sync',
+      'exchange-account-1',
+    )
+
+    expect(positionsRepository.findActiveBindingStartedAtByExchangeAccount).toHaveBeenCalledWith(
+      'user-1',
+      'strategy-account-1',
+      'exchange-account-1',
+    )
+    expect(positionsRepository.findTradesByAccount).toHaveBeenCalledWith(
+      'strategy-account-1',
+      bindingStartedAt,
+    )
+  })
+
   it('keeps normal reconciliation for non-shared exchange accounts', async () => {
     const positionsRepository = {
       countActiveStrategyBindingsByExchangeAccount: jest.fn().mockResolvedValue(1),

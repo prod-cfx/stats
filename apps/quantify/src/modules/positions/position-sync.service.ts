@@ -501,7 +501,8 @@ export class PositionSyncService {
       return null
     }
 
-    const trades = await this.positionsRepository.findTradesByAccount(accountId)
+    const bindingStartedAt = await this.resolveActiveBindingStartedAt(userId, accountId, exchangeAccountId)
+    const trades = await this.positionsRepository.findTradesByAccount(accountId, bindingStartedAt ?? undefined)
     const quantities = new Map<string, Decimal>()
     const realTradeKeys = new Set<string>()
     const syntheticTradeKeys = new Set<string>()
@@ -536,6 +537,18 @@ export class PositionSyncService {
     }
 
     return this.positionsRepository.findExchangeAccountIdForStrategyAccount(userId, accountId, exchangeId)
+  }
+
+  private async resolveActiveBindingStartedAt(
+    userId: string,
+    accountId: string,
+    exchangeAccountId: string,
+  ): Promise<Date | null> {
+    if (typeof this.positionsRepository.findActiveBindingStartedAtByExchangeAccount !== 'function') {
+      return null
+    }
+
+    return this.positionsRepository.findActiveBindingStartedAtByExchangeAccount(userId, accountId, exchangeAccountId)
   }
 
   private async syncSharedAccountPosition(params: {

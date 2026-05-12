@@ -207,9 +207,71 @@ export class PositionsRepository {
     return strategySub?.exchangeAccountId ?? llmSub?.exchangeAccountId ?? null
   }
 
-  async findTradesByAccount(accountId: string) {
+  async findActiveBindingStartedAtByExchangeAccount(userId: string, accountId: string, exchangeAccountId: string) {
+    const account = await this.txHost.tx.userStrategyAccount.findUnique({
+      where: { id: accountId },
+      select: { strategyId: true },
+    })
+    if (!account) {
+      return null
+    }
+
+    const [strategySub, llmSub] = await Promise.all([
+      this.txHost.tx.userStrategySubscription.findFirst({
+        where: {
+          userId,
+          status: 'active',
+          exchangeAccountId,
+          strategyInstance: {
+            strategyTemplateId: account.strategyId,
+          },
+        },
+        select: { subscribedAt: true },
+        orderBy: { subscribedAt: 'asc' },
+      }),
+      this.txHost.tx.userLlmStrategySubscription.findFirst({
+        where: {
+          userId,
+          status: 'active',
+          exchangeAccountId,
+          llmStrategyInstance: {
+            strategyId: account.strategyId,
+          },
+        },
+        select: { subscribedAt: true },
+        orderBy: { subscribedAt: 'asc' },
+      }),
+    ])
+
+    const startedAt = [
+      strategySub?.subscribedAt,
+      llmSub?.subscribedAt,
+    ].filter((value): value is Date => value instanceof Date)
+
+    if (startedAt.length === 0) {
+      return null
+    }
+
+    return startedAt.reduce((earliest, current) => current < earliest ? current : earliest)
+  }
+
+  async findTradesByAccount(accountId: string, executedAtFrom?: Date) {
     return this.txHost.tx.trade.findMany({
-      where: { userStrategyAccountId: accountId },
+      where: {
+        userStrategyAccountId: accountId,
+        ...(executedAtFrom ? { executedAt: { gte: executedAtFrom } } : {}),
+      },
+      select: {
+        symbol: true,
+        market: true,
+        side: true,
+        positionSide: true,
+        quantity: true,
+        orderId: true,
+        externalTradeId: true,
+        provider: true,
+        metadata: true,
+      },
       orderBy: { executedAt: 'asc' },
     })
   }
