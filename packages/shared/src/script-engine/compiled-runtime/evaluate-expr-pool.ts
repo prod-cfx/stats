@@ -1237,6 +1237,13 @@ function evaluateMemoryOperand(
 // Asymmetric defaults (be explicit when configuring):
 //   - `windows: []` (empty array)        → never matches (fail-closed default)
 //   - `daysOfWeek` omitted on a window   → allows all 7 days
+//   - `daysOfWeek: []` (empty array)     → window never matches (`[].every()` is
+//                                          vacuously true so the day-range guard
+//                                          passes, but `[].includes(x)` is always
+//                                          false → always `continue` → window is
+//                                          effectively disabled. Same end-result as
+//                                          fail-closed, just semantically distinct
+//                                          from "no constraint")
 //
 // Returns true if the timestamp falls inside at least one window; false otherwise.
 // Non-parseable payload, missing timestamp, invalid timezone, out-of-range

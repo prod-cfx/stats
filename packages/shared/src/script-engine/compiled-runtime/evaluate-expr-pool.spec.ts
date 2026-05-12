@@ -1089,6 +1089,18 @@ describe('evaluateExprPool', () => {
       expect(values.in_time_window_node).toBe(true)
     })
 
+    it('daysOfWeek: [] (empty array) skips the window — vacuous-truth quirk locked in', () => {
+      // [].every(...) is vacuously true so the range check passes, but
+      // [].includes(localDayOfWeek) is always false → continue → window never matches.
+      // This is distinct from "daysOfWeek omitted" (which allows all days).
+      const values = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('America/New_York', [{ daysOfWeek: [], start: '09:00', end: '10:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(false)
+    })
+
     it('respects daysOfWeek — rejects non-matching day', () => {
       // Wednesday = 3; timestamp is Monday → rejected
       const values = evaluateExprPool(
