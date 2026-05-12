@@ -714,6 +714,83 @@ describe('ai-quant-page-conversation', () => {
     expect(isDeployableBacktestResult(conversation.backtestResult)).toBe(false)
   })
 
+  it('restores a just-written server lastBacktestRef as deployable when the returned draft is stale', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'conv-just-backtested',
+      conversationTitle: 'remote',
+      status: 'PUBLISHED',
+      conversationMessages: [],
+      updatedAt: '2026-04-23T00:04:03.000Z',
+      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: null,
+      publishedSnapshotStrategyConfig: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+      backtestDraftConfig: {
+        range: {
+          preset: '30D',
+        },
+        execution: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: false,
+        },
+      },
+      lastBacktestRef: {
+        jobId: 'btjob-just-finished',
+        publishedSnapshotId: 'snapshot-1',
+        config: {
+          range: {
+            preset: '30D',
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: 3,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: false,
+          },
+        },
+        summary: {
+          maxDrawdownPct: 0.17,
+          totalReturnPct: 0.12,
+          winRatePct: 41.67,
+          tradeCount: 12,
+          openTradeCount: 0,
+          openPnl: 0,
+          marketType: 'perp',
+        },
+        completedAt: '2026-04-23T00:04:00.000Z',
+      },
+    } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
+
+    expect(conversation.backtestDraftConfig?.execution.leverage).toBe(3)
+    expect(conversation.paramValues.backtestLeverage).toBe(3)
+    expect(conversation.backtestResult).toEqual(expect.objectContaining({
+      id: 'btjob-just-finished',
+      tradeCount: 12,
+      marketType: 'perp',
+    }))
+    expect(conversation.backtestResult?.recoveryStatus).toBeUndefined()
+    expect(isDeployableBacktestResult(conversation.backtestResult)).toBe(true)
+  })
+
   it('restores backtest summary using explicit backtestDraftConfig without relying on implicit range defaults', () => {
     const conversation = createConversationFromServerConversation({
       id: 'conv-draft-1',

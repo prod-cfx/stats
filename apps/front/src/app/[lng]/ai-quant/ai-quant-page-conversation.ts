@@ -339,6 +339,7 @@ const TRANSIENT_BACKTEST_STATES = new Set<ConversationState['backtestExecutionSt
   'running',
   'timeout',
 ])
+const LAST_BACKTEST_WRITEBACK_STALE_DRAFT_GRACE_MS = 10_000
 const NON_STRATEGY_PARAM_KEYS = new Set([
   'backtestRangePreset',
   'backtestStart',
@@ -1349,6 +1350,43 @@ function restoreBacktestResultFromLastBacktestRef(input: {
   }
 }
 
+function shouldPreferLastBacktestConfigForFreshWriteback(input: {
+  conversationUpdatedAt: string | undefined
+  conversationPublishedSnapshotId: string | null
+  backtestDraftConfig: AiQuantBacktestDraftConfig | null
+  lastBacktestRef: AiQuantConversationLastBacktestRef | null
+}): boolean {
+  const {
+    conversationUpdatedAt,
+    conversationPublishedSnapshotId,
+    backtestDraftConfig,
+    lastBacktestRef,
+  } = input
+  if (!conversationUpdatedAt || !backtestDraftConfig || !lastBacktestRef) {
+    return false
+  }
+  if (
+    !conversationPublishedSnapshotId
+    || conversationPublishedSnapshotId !== lastBacktestRef.publishedSnapshotId
+  ) {
+    return false
+  }
+  if (doesBacktestRangeMatch(backtestDraftConfig, lastBacktestRef.config)) {
+    if (doesBacktestExecutionConfigMatch(backtestDraftConfig, lastBacktestRef.config)) {
+      return false
+    }
+  }
+
+  const updatedAtMs = Date.parse(conversationUpdatedAt)
+  const completedAtMs = Date.parse(lastBacktestRef.completedAt)
+  if (!Number.isFinite(updatedAtMs) || !Number.isFinite(completedAtMs)) {
+    return false
+  }
+
+  const deltaMs = updatedAtMs - completedAtMs
+  return deltaMs >= 0 && deltaMs <= LAST_BACKTEST_WRITEBACK_STALE_DRAFT_GRACE_MS
+}
+
 export function reconcileBacktestResultWithDraftConfig(input: {
   result: BacktestResult | null
   currentBacktestConfig: AiQuantBacktestDraftConfig | null
@@ -2093,19 +2131,28 @@ export function createConversationFromServerConversation(
       })
     : null
   const snapshotParamValues = normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
+  const publishedSnapshotId = normalizePublishedSnapshotId(response.publishedSnapshotId)
+  const lastBacktestRef = normalizeLastBacktestRef(response.lastBacktestRef)
   const mergedSnapshotParamValues = mergeSnapshotBoundParamValues({
     currentValues: syncResult?.paramValues ?? seed.paramValues,
     snapshotParamValues,
     snapshotBacktestConfigDefaults,
   })
   const backtestDraftConfig = normalizeBacktestDraftConfig(response.backtestDraftConfig)
+  const effectiveBacktestDraftConfig = shouldPreferLastBacktestConfigForFreshWriteback({
+    conversationUpdatedAt: response.updatedAt,
+    conversationPublishedSnapshotId: publishedSnapshotId,
+    backtestDraftConfig,
+    lastBacktestRef,
+  })
+    ? lastBacktestRef?.config ?? backtestDraftConfig
+    : backtestDraftConfig
   const nextParamValues = applyBacktestDraftConfigToValues({
     currentValues: mergedSnapshotParamValues.paramValues,
-    backtestDraftConfig,
+    backtestDraftConfig: effectiveBacktestDraftConfig,
   })
   const nextParams = normalizeParamsFromValues(nextParamValues, seed.params)
   const normalizedParamValues = syncNormalizedSizingParamValues(nextParamValues, nextParams)
-  const publishedSnapshotId = normalizePublishedSnapshotId(response.publishedSnapshotId)
   const effectivePublishedBacktestInputs = resolveEffectivePublishedBacktestInputs({
     publishedSnapshotId,
     publishedSnapshotStrategyConfig: snapshotStrategyConfig,
@@ -2114,11 +2161,10 @@ export function createConversationFromServerConversation(
     ?? (typeof snapshotStrategyConfig?.symbol === 'string' && snapshotStrategyConfig.symbol.trim()
       ? snapshotStrategyConfig.symbol.trim()
       : nextParams.symbol)
-  const lastBacktestRef = normalizeLastBacktestRef(response.lastBacktestRef)
   const restoredBacktestResult = restoreBacktestResultFromLastBacktestRef({
     conversationPublishedSnapshotId: publishedSnapshotId,
     lastBacktestRef,
-    currentBacktestConfig: backtestDraftConfig,
+    currentBacktestConfig: effectiveBacktestDraftConfig,
     symbol: restoredBacktestSymbol,
   })
   const graphVersion =
@@ -2205,7 +2251,7 @@ export function createConversationFromServerConversation(
     publishedSnapshotDeploymentExecutionDefaults: snapshotDeploymentExecutionDefaults,
     publishedSnapshotDeploymentExecutionConstraints: snapshotDeploymentExecutionConstraints,
     publishedSnapshotCompatibilityMetadata: snapshotCompatibilityMetadata,
-    backtestDraftConfig,
+    backtestDraftConfig: effectiveBacktestDraftConfig,
     publishedScriptCode: response.scriptCode ?? null,
     publishedScriptGraphVersion:
       response.scriptCode && logicGraph?.status === 'confirmed'
