@@ -74,8 +74,8 @@ CREATE INDEX "idx_webhook_signal_subscriptions_created_at"
 CREATE UNIQUE INDEX "uniq_webhook_signal_subscriptions_id_instance_signal"
   ON "webhook_signal_subscriptions"("id", "strategy_instance_id", "signal_id");
 
-CREATE UNIQUE INDEX "uniq_webhook_signal_events_dedupe_key"
-  ON "webhook_signal_events"("dedupe_key");
+CREATE UNIQUE INDEX "uniq_webhook_signal_events_subscription_dedupe_key"
+  ON "webhook_signal_events"("subscription_id", "dedupe_key");
 CREATE INDEX "idx_webhook_signal_events_subscription_received"
   ON "webhook_signal_events"("subscription_id", "received_at");
 CREATE INDEX "idx_webhook_signal_events_instance_signal_received"

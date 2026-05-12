@@ -43,7 +43,7 @@ model WebhookSignalEvent {
   strategyInstanceId String                       @map("strategy_instance_id")
   provider           String?
   signalId           String                       @map("signal_id")
-  dedupeKey          String                       @unique(map: "uniq_webhook_signal_events_dedupe_key") @map("dedupe_key")
+  dedupeKey          String                       @map("dedupe_key")
   payload            Json
   headers            Json?
   rawBodySha256      String?                      @map("raw_body_sha256")
@@ -56,6 +56,7 @@ model WebhookSignalEvent {
   strategyInstance StrategyInstance          @relation(fields: [strategyInstanceId], references: [id], onDelete: Cascade)
   audits           WebhookSignalAudit[]
 
+  @@unique([subscriptionId, dedupeKey], map: "uniq_webhook_signal_events_subscription_dedupe_key")
   @@index([subscriptionId, receivedAt], map: "idx_webhook_signal_events_subscription_received")
   @@index([strategyInstanceId, signalId, receivedAt], map: "idx_webhook_signal_events_instance_signal_received")
   @@index([signatureStatus, receivedAt], map: "idx_webhook_signal_events_signature_received")
