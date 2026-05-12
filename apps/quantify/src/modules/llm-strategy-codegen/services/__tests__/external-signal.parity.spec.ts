@@ -144,6 +144,19 @@ describe('external.signal atom 五层 parity', () => {
       expect(trigger?.params?.signalId).toBe('BTC_LONG_01')
     })
 
+    it('does not leak configured secret from one external signal to a later signal', () => {
+      const patch = seedExtractor.extract(
+        'OKX BTCUSDT 15m，webhook signalId alpha 已配置 secret 时开多，同时 telegram signalId beta 触发时开空。',
+      )
+      const triggers = patch.triggers?.filter(t => t.key === 'external.signal') ?? []
+      const telegram = triggers.find(t => t.params?.provider === 'telegram')
+      const telegramSlotKeys = telegram?.openSlots?.map(slot => slot.slotKey) ?? []
+
+      expect(telegram?.params?.signalId).toBe('beta')
+      expect(telegram?.params?.secret).toBeUndefined()
+      expect(telegramSlotKeys).toContain('external.signal.secret')
+    })
+
     // critic round 1 P4-5 B2 回归：provider 关键词必须与 signal-semantic 词共现
     it('B2 negative: bare provider keyword without signal context → 不产生 external.signal trigger', () => {
       const noSignalUtterances = [

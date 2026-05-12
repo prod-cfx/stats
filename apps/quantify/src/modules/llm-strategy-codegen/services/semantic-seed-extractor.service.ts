@@ -2549,7 +2549,8 @@ export class SemanticSeedExtractorService {
   }
 
   private pushCandleExpressionTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
-    for (const clause of this.splitLogicClauses(segment)) {
+    const clauses = this.splitLogicClauses(segment)
+    for (const [index, clause] of clauses.entries()) {
       const expression = this.extractCloseOpenCandleExpression(clause)
       if (!expression) continue
 
@@ -5048,7 +5049,8 @@ export class SemanticSeedExtractorService {
     triggers: SeedTrigger[],
     seen: Set<string>,
   ): void {
-    for (const clause of this.splitLogicClauses(segment)) {
+    const clauses = this.splitLogicClauses(segment)
+    for (const [index, clause] of clauses.entries()) {
       const intent = this.resolveUnsupportedTriggerIntent(clause, segment)
       // critic round 1 P4-5 B2 修复：provider 关键词必须与 signal-semantic 词共现，避免
       // "下载 webhook 文档"/"讨论 telegram 群" 等非信号语义文本被误识别为 external.signal。
@@ -5068,8 +5070,9 @@ export class SemanticSeedExtractorService {
                 ? 'webhook'
                 : null
         const signalId = this.extractExternalSignalId(clause)
+        const nextClause = clauses[index + 1]
         const secretConfigured = this.hasExternalSignalSecretConfigured(clause)
-          || this.hasExternalSignalSecretConfigured(segment)
+          || this.isExternalSignalSecretCompanionClause(nextClause)
         const externalOpenSlots: SeedTrigger['openSlots'] = [{
           slotKey: 'external.signal.runtime',
           fieldPath: 'trigger.params.runtime',
@@ -5196,6 +5199,11 @@ export class SemanticSeedExtractorService {
   private hasExternalSignalSecretConfigured(clause: string): boolean {
     return /(?:secret|密钥|秘钥|HMAC|签名)\s*(?:已|已经|already\s+)?(?:配置|绑定|生成|configured|bound|generated)/iu.test(clause)
       || /(?:已|已经|already\s+)(?:配置|绑定|生成)\s*(?:secret|密钥|秘钥|HMAC|签名)/iu.test(clause)
+  }
+
+  private isExternalSignalSecretCompanionClause(clause: string | undefined): boolean {
+    if (!clause || !this.hasExternalSignalSecretConfigured(clause)) return false
+    return !/(?:tradingview|discord|telegram|webhook|外部信号|外部喊单|signal\s*id|signalId|external\s+signal|信号|事件|喊单)/iu.test(clause)
   }
 
   private extractRecognizedUnsupportedPosition(
