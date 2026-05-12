@@ -60,7 +60,8 @@ describe('exchangeFactory', () => {
         passphrase: 'test-passphrase',
       },
     })
-    const firstDispatcher = (OkxClient as jest.Mock).mock.calls[0][2].dispatcher
+    const okxClientMock = OkxClient as unknown as jest.Mock
+    const firstDispatcher = okxClientMock.mock.calls[0][2].dispatcher
     const close = jest.spyOn(firstDispatcher, 'close').mockResolvedValue(undefined)
 
     factory.createClient('okx', 'perp', {
@@ -72,7 +73,7 @@ describe('exchangeFactory', () => {
       },
     })
 
-    expect((OkxClient as jest.Mock).mock.calls[1][2].dispatcher).toBe(firstDispatcher)
+    expect(okxClientMock.mock.calls[1][2].dispatcher).toBe(firstDispatcher)
 
     await factory.onModuleDestroy()
 
