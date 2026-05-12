@@ -121,6 +121,15 @@
     "backtestError.nonNegative": "Please enter a value greater than or equal to 0",
     "backtestError.priceSource": "Please select a price source",
     "backtestError.allowPartial": "Please select a valid boolean value",
+    "codegenValidation": {
+      "invalidExchange": "Preflight validation failed: please confirm the exchange parameter is valid.",
+      "missingSymbol": "Preflight validation failed: please confirm the trading symbol.",
+      "missingTimeframe": "Preflight validation failed: please confirm the strategy timeframe.",
+      "invalidSizing": "Preflight validation failed: position sizing is invalid.",
+      "invalidRatioSizing": "Preflight validation failed: position percentage must be between 0 and 100.",
+      "invalidQuoteSizing": "Preflight validation failed: fixed amount must be greater than 0.",
+      "invalidQuantitySizing": "Preflight validation failed: fixed quantity must be greater than 0."
+    },
     "backtestPriceSource.open": "Open",
     "backtestPriceSource.close": "Close",
     "backtestPriceSource.mid": "Mid",
@@ -141,6 +150,12 @@
     "openTradeCount": "Open Trades",
     "openPnl": "Open P&L",
     "deploy": "Deploy",
+    "deployRunning": "Running",
+    "deployRedeploy": "Redeploy",
+    "deployLoading": "Checking deployment status",
+    "deployPending": "Deployment status pending",
+    "deployPendingHint": "Deployment status is being confirmed. You cannot deploy again until it is verified.",
+    "deployViewRunning": "View running strategy",
     "optimize": "Optimize",
     "fullScreen": "Full Screen",
     "logicGraph": "Strategy Logic Graph",
@@ -174,6 +189,8 @@
         "perp": "Perp"
       },
       "positionLeverage": "Position / Leverage",
+      "noLeverage": "No leverage",
+      "empty": "No strategy templates available",
       "running": "Running",
       "processing": "Processing"
     },
@@ -191,7 +208,10 @@
     },
     "actions": {
       "run": "Run",
-      "stop": "Stop"
+      "stop": "Stop",
+      "stopStrategy": "Stop Strategy",
+      "delete": "Delete",
+      "deleting": "Deleting..."
     },
     "timeframe": "Timeframe",
     "position": "Position",
@@ -201,6 +221,285 @@
     "deployTimeLabel": "Deploy Time",
     "legacyUnsupportedTitle": "Strategy Parameters Unavailable",
     "legacyUnsupportedMessage": "This legacy strategy is unsupported. Please regenerate.",
+    "apiKeyStatus": {
+      "configured": "API configured",
+      "notConfigured": "API not configured"
+    },
+    "plazaPage": {
+      "loadFailed": "Failed to load Strategy Plaza templates",
+      "runFailed": "Failed to run Strategy Plaza template",
+      "editSessionFailed": "Failed to create Strategy Plaza edit session",
+      "back": "Back",
+      "guestHint": "Log in to run or edit strategy templates in one click. You can still browse Strategy Plaza before logging in."
+    },
+    "authGate": {
+      "title": "Log in to use AI Quant",
+      "description": "To save your strategies, backtest records, and deployment status, AI Quant requires login first.",
+      "login": "Log in now"
+    },
+    "detail": {
+      "notFoundTitle": "Strategy not found or inaccessible",
+      "notFoundDescription": "Return to the AI Quant list and choose a deployed strategy again.",
+      "backToList": "Back to list",
+      "viewOnlyBanner": "This strategy is now read-only. Runtime controls are disabled and it is shown as historical record only.",
+      "runtimeControl": "Runtime Control",
+      "runtimeOnline": "Runtime instance online",
+      "runtimeOffline": "Runtime instance offline",
+      "runningWithRiskDescription": "This strategy is running and the account still has open positions or open orders. You can stop only, or cancel open orders, close positions, and then stop.",
+      "runningWithSpotRiskDescription": "This strategy is running and the account still has spot holdings or open orders. You can stop only, or cancel open orders, sell holdings, and then stop.",
+      "runningDescription": "This strategy is running. Stopping it only stops the runtime instance; existing positions and orders remain.",
+      "stoppedDescription": "The runtime instance has ended.",
+      "riskHint": "Detected {{positions}} open positions and {{orders}} open orders. Liquidate and stop will first try to cancel exchange open orders for this strategy symbol, then handle positions.",
+      "spotRiskHint": "Detected {{holding}} and {{orders}} open orders. Liquidate and stop will first try to cancel exchange open orders for this strategy symbol, then handle spot holdings.",
+      "unknown": "unknown",
+      "stopSuccess": "Strategy stopped. Existing positions and orders remain and need separate management.",
+      "liquidateAndStopSuccess": "Strategy liquidated and stopped.",
+      "runSuccess": "Strategy started.",
+      "stopFailed": "Failed to stop strategy. Please try again later.",
+      "liquidateAndStopFailed": "Failed to liquidate and stop. Please check the demo trading account and try again.",
+      "runFailed": "Failed to start strategy. Please try again later.",
+      "run": "Run",
+      "returnToChat": "Return to chat",
+      "republishRequired": "Republish required",
+      "legacySnapshotDescription": "The current snapshot still uses the legacy structure.",
+      "republishBacktestRequired": " Republish before backtesting.",
+      "republishDeployRequired": " Republish before redeploying.",
+      "snapshotBindingInvalid": "Snapshot binding is invalid",
+      "snapshotBindingInvalidDescription": "The runtime binding of this deployed instance does not match the snapshot truth. Execution config and runtime status have been hidden automatically. Please republish and redeploy.",
+      "currentStatusExplanation": "Current Status Explanation",
+      "strategyService": "Strategy service",
+      "currentPosition": "Current position",
+      "currentCycle": "Current cycle",
+      "evidenceSource": "Local position ledger, latest trades, published snapshot rules",
+      "latestEntry": "Latest entry:",
+      "latestExit": "Latest exit:",
+      "nextExpectedAction": "Next expected action:",
+      "evidenceSourceLabel": "Evidence source:",
+      "advancedRuntimeDiagnostics": "Advanced Runtime Diagnostics",
+      "runtimeDiagnosticsSummary": "{{consumed}} runtime diagnostics consumed, {{pending}} pending/cooling/failed. Current status only reflects registered runtime semantics, not that every rule is continuously monitored.",
+      "snapshot": "Snapshot: {{id}}",
+      "lastAttempt": "Last attempt:",
+      "consumedAt": "Consumed at:",
+      "cooldownUntil": "Cooldown until:",
+      "failureFamily": "Failure family:",
+      "failureReason": "Failure reason:",
+      "publishedSnapshotRuleSummary": "Published Snapshot Rule Summary",
+      "backtestBaseline": "Backtest Baseline",
+      "initialCash": "Initial Cash",
+      "backtestLeverage": "Backtest Leverage",
+      "marketType": "Market Type",
+      "priceSource": "Price Source",
+      "price": "Price",
+      "executionConfig": "Execution Config",
+      "baselineExecutionLeverage": "Baseline Execution Leverage",
+      "currentExecutionLeverage": "Current Execution Leverage",
+      "allowedLeverageRange": "Allowed Leverage Range",
+      "returnPct": "Return",
+      "maxDrawdown": "Max Drawdown",
+      "winRate": "Win Rate",
+      "tradeCount": "Trades",
+      "totalPnl": "Total P&L",
+      "todayPnl": "Today {{value}} {{currency}}",
+      "accountOverview": "Account Overview",
+      "accountOverviewSource": "Source: local account ledger plus latest market valuation; this is not the same as the real-time OKX wallet balance.",
+      "initialBalance": "Initial Balance",
+      "totalEquity": "Total Equity",
+      "availableBalance": "Available Balance",
+      "positionOverview": "Position Overview",
+      "holdingOverview": "Holding Overview",
+      "positionOverviewSource": "Source: local trades and position ledger; unrealized P&L is refreshed from market valuation.",
+      "currentHoldings": "Current Holdings",
+      "currentPositionCount": "Open Positions",
+      "completedSpotCycles": "Completed Buy/Sell Cycles",
+      "closedPositions": "Closed Positions",
+      "totalRealizedPnl": "Total Realized P&L",
+      "currentFloatingPnl": "Current Floating P&L",
+      "currentUnrealizedPnl": "Current Unrealized P&L",
+      "latestTrades": "Latest Trades",
+      "latestTradesSource": "Source: exchange order receipts persisted locally; fees prefer OKX raw fee / feeCcy.",
+      "time": "Time",
+      "side": "Side",
+      "semanticAction": "Semantic Action",
+      "quantityNotional": "Quantity / Notional",
+      "fee": "Fee",
+      "semanticPending": "Semantic pending",
+      "localReconcilePending": "Local reconcile pending",
+      "noTrades": "No trade records",
+      "equitySeriesTitle": "Strategy Equity Curve",
+      "equitySeriesSourceContract": "Source: strategy contract account equity ledger, shown by margin currency and realized/unrealized P&L.",
+      "equitySeriesSourceSpot": "Source: strategy spot account equity ledger, shown by cash balance, holding market value, and realized/unrealized P&L.",
+      "noEquityData": "No equity curve data",
+      "equity": "Equity",
+      "change": "Change",
+      "approx": "Approx. {{value}} {{currency}}",
+      "spotZeroHolding": "0 {{asset}}",
+      "spotHoldingRecords": "{{count}} holding records",
+      "marketTypes": {
+        "spot": "Spot",
+        "perp": "Perpetual",
+        "swap": "Perpetual",
+        "futures": "Futures"
+      },
+      "runtimeExecutionStatus": {
+        "ready": "Ready",
+        "consumed": "Consumed",
+        "failed": "Failed",
+        "cooldown": "Cooldown"
+      },
+      "runtimeExecutionFailure": {
+        "binding": "Deployment binding issue. Please republish and redeploy.",
+        "activationMissingBar": "Current execution condition is not met (missing reference bar).",
+        "activation": "Current execution condition is not met.",
+        "persistence": "Signal generated but persistence failed.",
+        "noSignal": "No executable signal generated."
+      },
+      "runtimeExecutionFailureFamily": {
+        "binding": "Binding",
+        "activation": "Activation",
+        "execution": "Execution",
+        "persistence": "Persistence"
+      },
+      "runtimeSemantics": {
+        "serviceStatus": {
+          "running": "Running",
+          "stopped": "Stopped",
+          "draft": "Draft"
+        },
+        "positionState": {
+          "spotFlat": "Flat",
+          "contractFlat": "No position",
+          "spot_holding": "Holding spot",
+          "long": "Long position",
+          "short": "Short position",
+          "unknown": "Needs review"
+        },
+        "cycleState": {
+          "waiting_entry": "Waiting for entry",
+          "entered": "Waiting for exit",
+          "exit_triggered": "Exit triggered",
+          "completed": "Cycle completed",
+          "needs_attention": "Needs attention",
+          "unknown": "Review trades and rules"
+        },
+        "nextAction": {
+          "waitEntry": "Waiting for the next entry condition",
+          "waitExit": "Waiting for exit condition",
+          "checkOpenPosition": "Check and handle open positions"
+        },
+        "explanation": {
+          "spotHolding": "Currently holding a {{symbol}} spot position. The strategy service is {{serviceStatus}} and waiting for an exit condition.",
+          "spotCompletedRunning": "This spot trading cycle is complete and no {{symbol}} is currently held. The strategy service is running and waiting for the next entry condition.",
+          "spotCompletedStopped": "This spot trading cycle is complete and no {{symbol}} is currently held. The strategy service is {{serviceStatus}}.",
+          "spotWaitingEntry": "No {{symbol}} is currently held. The strategy service is {{serviceStatus}} and waiting for an entry condition.",
+          "contractHolding": "Currently holding a {{positionStatus}}. The strategy service is {{serviceStatus}} and waiting for an exit condition.",
+          "contractCompletedRunning": "The previous contract position is closed. There is no open position now. The strategy service is running and waiting for the next entry condition.",
+          "contractCompletedStopped": "The previous contract position is closed. There is no open position now. The strategy service is {{serviceStatus}}.",
+          "contractWaitingEntry": "There is no open position now. The strategy service is {{serviceStatus}} and waiting for an entry condition.",
+          "stoppedNeedsAttention": "The strategy service is stopped, but the local ledger still shows an open position. Check the exchange position and local records.",
+          "stoppedFlat": "The strategy service is stopped and there is no open position. Start the strategy before it waits for entry conditions again.",
+          "unknown": "No dedicated semantic explanation is available for this strategy type yet. Review latest trades, positions, and published snapshot rules together."
+        }
+      },
+      "orderSemanticActions": {
+        "spotBuy": "Buy",
+        "spotSell": "Sell",
+        "openLong": "Open long",
+        "openShort": "Open short",
+        "closeLong": "Close long",
+        "closeShort": "Close short",
+        "closePosition": "Close position",
+        "contractTrade": "Contract trade"
+      },
+      "ruleSummary": {
+        "onStart": "Run on start: {{actions}}",
+        "priceChange": "Price change {{operator}} {{pct}}: {{actions}}",
+        "positionLoss": "Position loss {{operator}} {{pct}}: {{actions}}"
+      },
+      "feePendingReconcile": "Pending reconcile",
+      "feeMissingSync": "-- (sync record has no fee)",
+      "truthAudit": "Truth Audit",
+      "strategyInstance": "Strategy Instance",
+      "publishedSnapshot": "Published Snapshot",
+      "snapshotHash": "Snapshot Hash",
+      "entryOrderEvidence": "Entry Order Evidence",
+      "exitOrderEvidence": "Exit Order Evidence",
+      "syncOrderEvidence": "Sync Order Evidence",
+      "dataBoundary": "Data Boundary",
+      "dataBoundaryText": "Backtests use the published snapshot; deployment execution binds the same snapshot; current trades come from exchange receipts persisted locally.",
+      "runtimeTimeline": "Runtime Timeline",
+      "timelineCount": "{{count}} total",
+      "timelinePreviewSuffix": ", showing the latest {{limit}} by default",
+      "timelineEvents": {
+        "strategyCreated": "Strategy created",
+        "strategySubscribed": "Strategy subscribed",
+        "signalExecuted": "Signal executed",
+        "backtestPassed": "Backtest passed",
+        "deployed": "Deployed",
+        "started": "Started",
+        "stopped": "Stopped"
+      },
+      "collapse": "Collapse",
+      "expandAll": "Expand all"
+    },
+    "stopDialog": {
+      "titleWithRisk": "This strategy still has positions or open orders",
+      "titleWithSpotRisk": "This strategy still has spot holdings or open orders",
+      "titleConfirm": "Stop this strategy?",
+      "descriptionWithRisk": "Before stopping, confirm how to handle current positions. Stop only will not close positions; liquidate and stop will submit closing orders on OKX demo trading.",
+      "descriptionWithSpotRisk": "Before stopping, confirm how to handle current spot holdings. Stop only will not sell holdings; liquidate and stop will submit closing orders on OKX demo trading.",
+      "descriptionConfirm": "After stopping, the strategy will no longer execute or generate new trading signals.",
+      "strategy": "Strategy",
+      "exchangeSymbol": "Exchange / Symbol",
+      "openPositions": "Open Positions",
+      "spotHolding": "Current Spot Holdings",
+      "spotHoldingRecords": "{{count}} spot holding records",
+      "spotHoldingPending": "Spot holdings pending confirmation",
+      "unrealizedPnl": "Unrealized P&L",
+      "openOrders": "Open Orders",
+      "unknown": "Unknown",
+      "liquidateHint": "Liquidate and stop will first try to cancel exchange open orders for this strategy symbol, then handle positions.",
+      "liquidateSpotHint": "Liquidate and stop will first try to cancel exchange open orders for this strategy symbol, then handle spot holdings.",
+      "stopOnly": "Stop only, keep positions/orders",
+      "stopOnlySpot": "Stop only, keep spot holdings/orders",
+      "liquidateAndStop": "Liquidate and Stop",
+      "confirmStop": "Confirm Stop",
+      "cancel": "Cancel"
+    },
+    "deleteDialog": {
+      "loadingTitle": "Confirming strategy status",
+      "loadingDescription": "Confirming the linked strategy runtime status.",
+      "unknownTitle": "Unable to delete right now",
+      "unknownDescription": "The strategy runtime status cannot be confirmed right now. To avoid deleting a running strategy by mistake, please try again later.",
+      "runningTitle": "This strategy is running",
+      "runningDescription": "The strategy linked to this conversation is running and cannot be deleted. Go to strategy details and stop it first. If it has positions or orders, choose stop only or liquidate and stop.",
+      "noConversationTitle": "Delete strategy",
+      "noConversationDescription": "This strategy was created by running Strategy Plaza directly and has no linked AI Quant conversation. By default it remains in My Strategies as view-only; select the option below to delete it permanently.",
+      "withConversationTitle": "Delete AI Quant Conversation",
+      "withConversationDescription": "This conversation has generated a strategy, and the strategy is currently stopped. By default, only the AI conversation and generation process are deleted, not the strategy record in My Strategies.",
+      "cancel": "Cancel",
+      "goToRunningStrategy": "Go to running strategy",
+      "close": "Close",
+      "deleteConversationAndStrategy": "Delete conversation and strategy",
+      "deleteConversationOnly": "Delete conversation only",
+      "deleteStrategyPermanently": "Delete strategy permanently",
+      "keepViewOnly": "Keep as view-only",
+      "deleteStrategyRecord": "Permanently delete strategy record (cannot be recovered)",
+      "deleteStrategyRecordHint": "After selecting this, the strategy will be removed from My Strategies and cannot be run again.",
+      "deleteStoppedStrategy": "Also delete stopped strategy record",
+      "deleteStoppedStrategyHint": "After deletion, the strategy will be removed from My Strategies and cannot be run again.",
+      "destructiveWarning": "This action cannot be recovered. Confirm you no longer need this strategy record before continuing.",
+      "conversation": "Conversation",
+      "strategy": "Strategy"
+    },
+    "runningGuard": {
+      "runningTitle": "Strategy is running and cannot be edited directly",
+      "unknownTitle": "Deployment status is pending, so editing is temporarily unavailable",
+      "runningDescription": "The strategy is currently running with the deployed version. To avoid mismatches between runtime logic and edits, stop the strategy first. After stopping, you can edit and redeploy it.",
+      "unknownDescription": "The deployment status of this strategy instance is still being confirmed. To avoid incorrectly treating it as editable or redeployable, view the running strategy or stop it first, then continue editing.",
+      "viewRunningStrategy": "View running strategy",
+      "stopStrategy": "Stop Strategy",
+      "cancel": "Cancel"
+    },
     "saveApiConfig": "Save API Config",
     "apiConfigTitle": "Exchange API Configuration",
     "apiConfigDesc": "Credentials are sent to the backend and verified by the quantify service. Only validated credentials are persisted.",
@@ -449,6 +748,15 @@
       "returnRevise": "Return to Chat to Revise"
     },
     "strategies": {
+      "ma-cross": {
+        "name": "MA Crossover",
+        "desc": "Go long when the short moving average crosses above the long moving average, and exit when price falls back below the long moving average.",
+        "tags": {
+          "trend": "Trend Follow",
+          "ma": "Moving Average",
+          "okxDemo": "OKX Demo"
+        }
+      },
       "momentum-steady": {
         "name": "Price Momentum (Steady)",
         "desc": "Buy on 1% drop in 3m, sell on 2% rise in 15m, 10% position",
@@ -476,12 +784,40 @@
           "okxDemo": "OKX Demo"
         }
       },
+      "rsi-reversal": {
+        "name": "RSI Reversal",
+        "desc": "Buy when RSI is low and exit when RSI is high, suitable for short-term reversals.",
+        "tags": {
+          "rsi": "RSI",
+          "reversal": "Reversal",
+          "okxDemo": "OKX Demo"
+        }
+      },
+      "breakout-follow": {
+        "name": "Breakout Follow",
+        "desc": "Follow the trend after price breaks out of the recent range, and exit when price falls back into the range.",
+        "tags": {
+          "breakout": "Breakout",
+          "trend": "Trend",
+          "okxDemo": "OKX Demo"
+        }
+      },
+      "macd-cross": {
+        "name": "MACD Crossover",
+        "desc": "Go long on a MACD golden cross and exit on a death cross, suitable for trend confirmation.",
+        "tags": {
+          "macd": "MACD",
+          "momentum": "Momentum",
+          "okxDemo": "OKX Demo"
+        }
+      },
       "bollinger-reversion": {
         "name": "Bollinger Mean Reversion",
-        "desc": "15m timeframe, short at upper band, long at lower band, 10% position",
+        "desc": "Wait for mean reversion after price touches the outer Bollinger Band, and take profit near the middle band.",
         "tags": {
           "meanReversion": "Mean Reversion",
-          "bollinger": "Bollinger"
+          "bollinger": "Bollinger",
+          "okxDemo": "OKX Demo"
         }
       },
       "breakout-short": {

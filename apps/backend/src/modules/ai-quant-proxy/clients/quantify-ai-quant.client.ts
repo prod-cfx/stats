@@ -182,10 +182,13 @@ export class QuantifyAiQuantClient {
 
   async startStrategyPlazaEditSession<T = unknown>(
     templateId: string,
-    options: QuantifyRequestOptions & { userId: string },
+    options: QuantifyRequestOptions & { userId: string, locale?: string },
   ): Promise<T> {
+    const query = options.locale?.trim()
+      ? `?locale=${encodeURIComponent(options.locale.trim())}`
+      : ''
     return this.post<T>(
-      `/strategy-plaza/templates/${encodeURIComponent(templateId)}/edit-session`,
+      `/strategy-plaza/templates/${encodeURIComponent(templateId)}/edit-session${query}`,
       undefined,
       {
         ...options,
