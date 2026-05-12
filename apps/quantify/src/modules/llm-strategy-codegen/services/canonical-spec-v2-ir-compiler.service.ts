@@ -1483,8 +1483,13 @@ export class CanonicalSpecV2IrCompilerService {
 
       case 'macd.golden_cross':
       case 'macd.death_cross': {
-        const macdLineRef = this.ensureMacdSeries(context, 'MACD_LINE')
-        const macdSignalRef = this.ensureMacdSeries(context, 'MACD_SIGNAL')
+        const macd = {
+          fastPeriod: this.readNumber([atom.params?.fastPeriod], context.macd.fastPeriod),
+          slowPeriod: this.readNumber([atom.params?.slowPeriod], context.macd.slowPeriod),
+          signalPeriod: this.readNumber([atom.params?.signalPeriod], context.macd.signalPeriod),
+        }
+        const macdLineRef = this.ensureMacdSeries(context, 'MACD_LINE', context.timeframe, macd)
+        const macdSignalRef = this.ensureMacdSeries(context, 'MACD_SIGNAL', context.timeframe, macd)
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}`,
