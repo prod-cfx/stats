@@ -32,6 +32,7 @@ export class RateLimiterRegistry {
   ) {}
 
   acquire(bucketKey: string, options: RateLimiterAcquireOptions): Promise<void> {
+    this.assertValidAcquireOptions(bucketKey, options)
     const bucket = this.getBucket(bucketKey, options)
     bucket.queueDepth += 1
     this.publishQueueDepth(bucketKey, bucket)
@@ -82,6 +83,13 @@ export class RateLimiterRegistry {
       }
 
       await this.sleepFn(Math.max(0, bucket.resetAt - Date.now()))
+    }
+  }
+
+  private assertValidAcquireOptions(bucketKey: string, options: RateLimiterAcquireOptions): void {
+    const weight = options.weight ?? 1
+    if (weight > options.capacity) {
+      throw new Error(`Token bucket weight (${weight}) exceeds capacity (${options.capacity}) for ${bucketKey}`)
     }
   }
 

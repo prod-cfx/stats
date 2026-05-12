@@ -79,4 +79,14 @@ describe('rateLimiterRegistry', () => {
     expect(metrics.setOkxTokenBucketQueueDepth).toHaveBeenCalledWith('okx:public', 1)
     expect(metrics.setOkxTokenBucketQueueDepth).toHaveBeenLastCalledWith('okx:public', 0)
   })
+
+  it('rejects weights that exceed bucket capacity', () => {
+    const registry = new RateLimiterRegistry(async () => undefined)
+
+    expect(() => registry.acquire('okx:public', {
+      capacity: 1,
+      refillIntervalMs: 2_000,
+      weight: 2,
+    })).toThrow('Token bucket weight (2) exceeds capacity (1) for okx:public')
+  })
 })
