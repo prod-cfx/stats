@@ -218,6 +218,12 @@ export class CanonicalSpecV2IrCompilerService {
         continue
       }
 
+      // action.add_position ghost-atom fix (#1251): validate required fields
+      // before the rule reaches compileActions. Returns null on success (lets
+      // the rule proceed through the normal ruleBlock path). Throws fail-closed
+      // when addMode is absent/non-string or addRatio is out-of-range.
+      this.tryCompileActionAddPosition(rule)
+
       const maxDrawdownRisk = this.tryCompileRiskMaxDrawdownPct(rule)
       if (maxDrawdownRisk) {
         rulePortfolioRisks.push(maxDrawdownRisk)
@@ -2519,6 +2525,91 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     return null
+  }
+
+  /**
+   * risk.max_drawdown_pct ghost-atom fix (#1242).
+   *
+   * canonical-spec-builder emits this atom as a rule (phase:'risk',
+   * condition.kind:'atom', condition.key:'risk.max_drawdown_pct',
+   * condition.value = valuePct/100 as fraction).
+   * The runtime evaluator lives in evaluate-orchestration-portfolio-risks.ts
+   * and expects a CompiledPortfolioDrawdownRisk (scope:'portfolio').
+   *
+   * Dispatch fall-through: returns null when the rule does not match this atom,
+   * letting downstream compilers handle it.
+   *
+   * Fail-closed: when the rule matches but valuePct lies outside (0, 100),
+   * throws `codegen.canonical_spec_v2_max_drawdown_invalid_pct`. The upstream
+   * canonical-spec-builder already validates valuePct; reaching this branch
+   * indicates a contract violation (hand-written canonical spec, LLM direct
+   * injection). Silent skip is forbidden — it would let users believe the
+   * drawdown guard is in effect when it is not.
+   */
+  /**
+   * action.add_position ghost-atom fix (#1251).
+   *
+   * canonical-spec-builder emits add_position rules as phase:'entry'/'exit'
+   * with action type ADD_LONG or ADD_SHORT and metadata.addPosition carrying
+   * { stateKey, addMode, addRatio, maxLayers, maxExposurePct }.
+   *
+   * The runtime (run-add-position.ts) uses addMode to branch between three
+   * semantically distinct behaviors:
+   *   signal_confirm — fire on repeated entry signal
+   *   profit_pct     — fire when position PnL exceeds profitThreshold
+   *   drawdown_pct   — fire when unrealised drawdown exceeds drawdownThreshold
+   *
+   * Without compile-time validation, a missing addMode produces an ADD_LONG
+   * in the IR that the runtime silently falls through, making all three modes
+   * behaviourally identical — a ghost-atom equivalent.
+   *
+   * Contract:
+   *   • Returns void (null-equivalent) — lets the rule proceed through the
+   *     normal ruleBlock path unmodified.
+   *   • Throws fail-closed when:
+   *       – addMode is absent or not a string
+   *       – addRatio is present but outside (0, 1]
+   *
+   * Guard logic mirrors tryCompileRiskMaxDrawdownPct: we only intercept rules
+   * that are unambiguously add_position rules (have ADD_LONG or ADD_SHORT
+   * action AND metadata.addPosition). Rules that lack metadata.addPosition
+   * (e.g. hand-crafted ADD_LONG without lifecycle metadata) are passed through
+   * without validation — they do not claim to be add_position lifecycle rules.
+   */
+  private tryCompileActionAddPosition(rule: CanonicalRuleV2): void {
+    const addPositionMeta = rule.metadata?.addPosition
+    if (!addPositionMeta) {
+      // Not an add_position lifecycle rule — nothing to validate.
+      return
+    }
+
+    const hasAddAction = rule.actions.some(
+      a => a.type === 'ADD_LONG' || a.type === 'ADD_SHORT',
+    )
+    if (!hasAddAction) {
+      // metadata.addPosition present but no ADD action — odd shape; skip.
+      return
+    }
+
+    // addMode is required: runtime cannot dispatch without it.
+    if (typeof addPositionMeta.addMode !== 'string' || addPositionMeta.addMode.trim() === '') {
+      throw new Error(
+        `codegen.canonical_spec_v2_add_position_invalid_addMode:${rule.id}`,
+      )
+    }
+
+    // addRatio, when present, must be a positive fraction in (0, 1].
+    // Values >1 look like accidental percentages (e.g. 20 instead of 0.20);
+    // values ≤0 are semantically incoherent.
+    const addRatio = addPositionMeta.addRatio
+    if (addRatio !== undefined) {
+      const ratio = Number(addRatio)
+      if (!Number.isFinite(ratio) || ratio <= 0 || ratio > 1) {
+        throw new Error(
+          `codegen.canonical_spec_v2_add_position_invalid_addRatio:${rule.id}:${addRatio}`,
+        )
+      }
+    }
   }
 
   /**
