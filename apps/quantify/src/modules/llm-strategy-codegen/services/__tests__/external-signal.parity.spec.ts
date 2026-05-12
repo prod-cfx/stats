@@ -164,6 +164,8 @@ describe('external.signal atom 五层 parity', () => {
         'OKX BTCUSDT 15m，讨论 telegram 群里聊聊行情，单笔 10%。',
         'OKX BTCUSDT 15m，研究下 tradingview 平台的功能，单笔 10%。',
         'OKX BTCUSDT 15m，加入 discord 服务器交流，单笔 10%。',
+        'OKX BTCUSDT 15m, on discord server discuss market, open long 100 USDT.',
+        'OKX BTCUSDT 15m, on telegram channel chat about market, open long 100 USDT.',
       ]
       for (const utterance of noSignalUtterances) {
         const patch = seedExtractor.extract(utterance)

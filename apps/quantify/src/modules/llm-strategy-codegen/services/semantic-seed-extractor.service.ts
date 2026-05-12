@@ -5055,7 +5055,7 @@ export class SemanticSeedExtractorService {
       // critic round 1 P4-5 B2 修复：provider 关键词必须与 signal-semantic 词共现，避免
       // "下载 webhook 文档"/"讨论 telegram 群" 等非信号语义文本被误识别为 external.signal。
       const hasSignalSemantics = /(?:外部信号|外部喊单|喊单群|KOL|口令|神秘评分|内部\s*AI|external\s+signal)/iu.test(clause)
-      const hasProviderWithSignalContext = /(?:tradingview|discord|telegram|webhook)\s*(?:事件|信号|喊单|推送|触发|signal\s*id|signalId|signal|event|alert|hook|bot|webhook)|(?:事件|信号|喊单|推送|触发|on|event)\s*(?:tradingview|discord|telegram|webhook)/iu.test(clause)
+      const hasProviderWithSignalContext = /(?:tradingview|discord|telegram|webhook)\s*(?:(?:buy|sell|long|short|bullish|bearish|多|空)\s*)?(?:事件|信号|喊单|推送|触发|signal\s*id|signalId|signal|event|alert|hook|bot|webhook)|(?:事件|信号|喊单|推送|触发|event)\s*(?:tradingview|discord|telegram|webhook)/iu.test(clause)
       if (hasSignalSemantics || hasProviderWithSignalContext) {
         // P4-5: external.signal — atom-only `supported_requires_slot`
         // 必填 slot：provider（tradingview/discord/telegram/webhook）+ signalId + secret
