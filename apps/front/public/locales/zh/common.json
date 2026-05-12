@@ -174,6 +174,8 @@
         "perp": "永续"
       },
       "positionLeverage": "仓位 / 杠杆",
+      "noLeverage": "无杠杆",
+      "empty": "暂无可用策略模板",
       "running": "运行中",
       "processing": "处理中"
     },
@@ -731,6 +733,15 @@
       "returnRevise": "返回对话修改"
     },
     "strategies": {
+      "ma-cross": {
+        "name": "MA 均线交叉",
+        "desc": "短均线上穿长均线做多，跌回长均线下方退出。",
+        "tags": {
+          "trend": "趋势跟随",
+          "ma": "均线",
+          "okxDemo": "OKX 模拟盘"
+        }
+      },
       "momentum-steady": {
         "name": "价格动量（稳健）",
         "desc": "3分钟跌 1% 买入，15分钟涨 2% 卖出，10% 仓位",
@@ -758,12 +769,40 @@
           "okxDemo": "OKX 模拟盘"
         }
       },
+      "rsi-reversal": {
+        "name": "RSI 超买超卖",
+        "desc": "RSI 低位买入，高位退出，适合短周期反转。",
+        "tags": {
+          "rsi": "RSI",
+          "reversal": "反转",
+          "okxDemo": "OKX 模拟盘"
+        }
+      },
+      "breakout-follow": {
+        "name": "突破追踪",
+        "desc": "价格突破近期区间后跟随趋势，跌回区间则退出。",
+        "tags": {
+          "breakout": "突破",
+          "trend": "趋势",
+          "okxDemo": "OKX 模拟盘"
+        }
+      },
+      "macd-cross": {
+        "name": "MACD 金叉死叉",
+        "desc": "MACD 金叉做多，死叉退出，适合趋势确认。",
+        "tags": {
+          "macd": "MACD",
+          "momentum": "动能",
+          "okxDemo": "OKX 模拟盘"
+        }
+      },
       "bollinger-reversion": {
         "name": "布林带均值回归",
-        "desc": "15分钟周期，上轨做空下轨做多，单笔 10%",
+        "desc": "价格触及布林带外轨后等待回归，中轨附近止盈。",
         "tags": {
           "meanReversion": "均值回归",
-          "bollinger": "布林带"
+          "bollinger": "布林带",
+          "okxDemo": "OKX 模拟盘"
         }
       },
       "breakout-short": {
