@@ -122,6 +122,32 @@ MSG
 - 「遗留的问题」与「必须做但本 PR 未做的」语义不同：前者是**事实层**——「我们知道还欠什么」，含原 Issue 范围内未做完的项与本次新发现的问题；后者是**承诺层**——「我们承诺接下来要做什么」，每条必须挂 owner 或后续 Issue 编号
 - PR 标题遵循 §2 Conventional Commits；body 用 `gh pr create --body-file -` 加 heredoc 提交（§3）
 
+## 9) Push 前 Build Precheck（强制，Issue #1202）
+
+**根因**：`dx lint` + `dx test unit` 不足以捕获 conflict marker（TS1185）或类型错误——spec 文件被 Jest 部分编译可以过，但 `dx build` 全量 TS 编译会挂。
+
+**机制**：`.husky/pre-push` 在每次 `git push` 前自动执行：
+1. 对比 `origin/main...HEAD` diff 推断受影响 target（backend / quantify / front / admin / shared / contracts）
+2. 对每个 target 串行跑 `dx build <target> --dev`
+3. 任一非 0 → 打印错误、block push
+4. 纯文档/配置改动（不命中任何 app/package 路径）→ 自动 skip，不增加延迟
+5. `origin/main` 不存在 / diff 失败 → **fail-closed**（exit 1），防止静默绕过
+
+**`--no-verify` 使用条件**（`git push --no-verify`）：
+- 仅限以下紧急场景：修复 main hotfix 且构建耗时不可接受、或 hook 本身出错
+- **必须在 PR body「已做的验证」段注明原因**；否则 reviewer 有权退回 PR
+
+**PR body 验证段示例**（含 build 证据）：
+```
+## 已做的验证
+- dx lint → 通过
+- dx build quantify --dev → exit 0（由 pre-push hook 自动执行并通过）
+- dx test unit quantify → 252 passed
+```
+
+**hook 激活**：执行 `pnpm install`（触发 `prepare: husky`）后生效。
+CI 环境通常不走 pre-push hook，应在 CI pipeline 显式加 build 步骤。
+
 ## 8) 合并前自检与合并后回访（强制）
 
 「合并人」指实际点击 GitHub「Merge」按钮的人，不必是 PR 作者；作者自合并场景下作者本人即合并人，规则一视同仁。CODEOWNERS 与 branch protection 是基础设施层兜底，不替代本节自检——制度上的「可以合并」不等于「应该合并」。

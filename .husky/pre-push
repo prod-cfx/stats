@@ -1,0 +1,73 @@
+#!/bin/sh
+# pre-push: build precheck to prevent conflict marker / compile error leakage
+# Issue #1202 — https://github.com/AlphaNet7ed/stats/issues/1202
+#
+# Infers affected build targets from git diff vs origin/main, then runs
+# `dx build <target> --dev` for each. Any non-zero exit blocks push.
+# Use `git push --no-verify` ONLY in emergencies; note the reason in PR body.
+
+set -e
+
+# Determine changed files relative to origin/main.
+# If the diff fails (first clone, CI without fetch, non-main base), fail-closed.
+CHANGED=""
+if git rev-parse --verify origin/main >/dev/null 2>&1; then
+  CHANGED=$(git diff --name-only origin/main...HEAD 2>/dev/null) || {
+    echo "[pre-push] ERROR: git diff failed. Failing closed to protect main."
+    echo "[pre-push] If this is intentional, use: git push --no-verify"
+    exit 1
+  }
+else
+  echo "[pre-push] WARNING: origin/main not found — cannot infer affected targets."
+  echo "[pre-push] Failing closed to protect main. Use 'git push --no-verify' only in emergencies."
+  exit 1
+fi
+
+if [ -z "$CHANGED" ]; then
+  echo "[pre-push] No changes detected vs origin/main. Skipping build precheck."
+  exit 0
+fi
+
+# Infer targets from changed paths.
+TARGETS=""
+
+echo "$CHANGED" | grep -qE "^apps/backend/" && TARGETS="$TARGETS backend"
+echo "$CHANGED" | grep -qE "^apps/quantify/" && TARGETS="$TARGETS quantify"
+echo "$CHANGED" | grep -qE "^apps/front/" && TARGETS="$TARGETS front"
+echo "$CHANGED" | grep -qE "^apps/admin-front/" && TARGETS="$TARGETS admin"
+echo "$CHANGED" | grep -qE "^packages/shared/" && TARGETS="$TARGETS shared"
+echo "$CHANGED" | grep -qE "^packages/api-contracts/" && TARGETS="$TARGETS contracts"
+
+# Trim leading space
+TARGETS=$(echo "$TARGETS" | sed 's/^ *//')
+
+if [ -z "$TARGETS" ]; then
+  echo "[pre-push] No app/package targets affected (docs/config only). Skipping build precheck."
+  exit 0
+fi
+
+echo "[pre-push] Affected targets: $TARGETS"
+echo "[pre-push] Running build precheck before push..."
+
+FAILED=""
+for TARGET in $TARGETS; do
+  echo "[pre-push] >>> dx build $TARGET --dev"
+  if ! dx build "$TARGET" --dev; then
+    echo "[pre-push] FAILED: dx build $TARGET --dev"
+    FAILED="$FAILED $TARGET"
+  fi
+done
+
+if [ -n "$FAILED" ]; then
+  echo ""
+  echo "[pre-push] =========================================================="
+  echo "[pre-push] BUILD PRECHECK FAILED for:$FAILED"
+  echo "[pre-push] Push blocked. Fix build errors before pushing."
+  echo "[pre-push] Hint: conflict markers (>>>>>>> ...) cause TS1185."
+  echo "[pre-push] Emergency bypass: git push --no-verify  (must note reason in PR body)"
+  echo "[pre-push] =========================================================="
+  exit 1
+fi
+
+echo "[pre-push] Build precheck passed. Proceeding with push."
+exit 0

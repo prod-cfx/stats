@@ -10,7 +10,10 @@
 
 1. `dx lint`
 2. 如 lint 有错：按提示修复后再 `dx lint`
-3. 构建：优先直接执行目标构建（如 `dx build backend --dev`）；改动范围不确定时再用 `dx build affected --dev|--prod`（避免手工逐个编译）
+3. **构建（必须，push 前硬门槛）**：对每个受影响 target 执行 `dx build <target> --dev`；改动范围不确定时用 `dx build affected --dev`。
+   - `dx lint` + `dx test unit` **不能替代** build 检查——conflict marker、TS 类型错误仅全量编译能捕获。
+   - `.husky/pre-push` 会自动执行此步骤（`pnpm install` 后生效）；但手动 push 前也应主动跑，不依赖 hook 兜底。
+   - 紧急绕过：`git push --no-verify`，**必须在 PR body 注明原因**，否则 reviewer 有权退回。
 4. 后端改动：识别受影响 E2E，逐个运行 `dx test e2e backend <file-or-dir> [-t "case name"]`
 5. Quantify 改动：识别受影响 E2E，逐个运行 `dx test e2e quantify apps/quantify/e2e/<file-or-dir>`；最小可用校验可执行 `dx test e2e quantify apps/quantify/e2e/health`
 6. 前端改动：按改动范围执行 `dx test unit front` / `dx test unit admin`；若只需最小验证，也通过 `dx test unit <target> <file>` 聚焦单个 Jest 测试文件
