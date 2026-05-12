@@ -1610,7 +1610,7 @@ const ExternalSignalWebhookSubscriptionResponseDto = z
     id: z.string(),
     userId: z.string(),
     strategyInstanceId: z.string(),
-    provider: z.string().optional(),
+    provider: z.string().nullish(),
     signalId: z.string(),
     secretVersion: z.number(),
     status: z.string(),
@@ -1624,7 +1624,7 @@ const ExternalSignalWebhookSubscriptionResponseDto = z
   .passthrough()
 const CreateExternalSignalWebhookSubscriptionDto = z
   .object({
-    provider: z.string().nullish(),
+    provider: z.string().optional(),
     signalId: z.string(),
     metadata: z.object({}).partial().passthrough().optional(),
   })
@@ -1634,7 +1634,7 @@ const ExternalSignalWebhookSubscriptionSecretResponseDto = z
     id: z.string(),
     userId: z.string(),
     strategyInstanceId: z.string(),
-    provider: z.string().optional(),
+    provider: z.string().nullish(),
     signalId: z.string(),
     secretVersion: z.number(),
     status: z.string(),
