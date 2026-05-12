@@ -8,6 +8,38 @@ import { AiQuantDeletionDialog } from './AiQuantDeletionDialog'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
+const mockTranslations: Record<string, string> = {
+  'aiQuant.deleteDialog.cancel': '取消',
+  'aiQuant.deleteDialog.close': '关闭',
+  'aiQuant.deleteDialog.conversation': '会话',
+  'aiQuant.deleteDialog.deleteConversationAndStrategy': '删除会话和策略',
+  'aiQuant.deleteDialog.deleteConversationOnly': '仅删除会话',
+  'aiQuant.deleteDialog.deleteStoppedStrategy': '同时删除已停止策略记录',
+  'aiQuant.deleteDialog.deleteStoppedStrategyHint': '删除后该策略将从我的策略列表移除，不能再次运行。',
+  'aiQuant.deleteDialog.deleteStrategyPermanently': '彻底删除策略',
+  'aiQuant.deleteDialog.deleteStrategyRecord': '彻底删除策略记录（不可恢复）',
+  'aiQuant.deleteDialog.deleteStrategyRecordHint': '勾选后该策略将从我的策略列表移除，不能再次运行。',
+  'aiQuant.deleteDialog.destructiveWarning': '此操作不可恢复。继续之前请确认你已不再需要该策略记录。',
+  'aiQuant.deleteDialog.goToRunningStrategy': '前往运行策略',
+  'aiQuant.deleteDialog.keepViewOnly': '保留为只读',
+  'aiQuant.deleteDialog.loadingDescription': '正在确认关联策略的运行状态。',
+  'aiQuant.deleteDialog.loadingTitle': '正在确认策略状态',
+  'aiQuant.deleteDialog.noConversationDescription': '该策略由「策略广场」直接运行生成，没有关联 AI Quant 会话。默认保留在我的策略列表中（仅可查看详情）；如不再需要可勾选下方选项彻底删除。',
+  'aiQuant.deleteDialog.noConversationTitle': '删除策略',
+  'aiQuant.deleteDialog.runningDescription': '当前会话关联的策略正在运行，不能删除。请先前往策略详情停止运行；如有持仓或挂单，可选择仅停止或平仓并停止。',
+  'aiQuant.deleteDialog.runningTitle': '当前策略正在运行',
+  'aiQuant.deleteDialog.strategy': '策略',
+  'aiQuant.deleteDialog.unknownDescription': '暂时无法确认该策略是否正在运行。为避免误删运行中的策略，请稍后重试。',
+  'aiQuant.deleteDialog.unknownTitle': '暂时无法删除',
+  'aiQuant.deleteDialog.withConversationDescription': '这个会话已生成过策略，当前策略已停止。默认只删除 AI 对话和生成过程，不删除我的策略列表中的策略记录。',
+  'aiQuant.deleteDialog.withConversationTitle': '删除 AI Quant 会话',
+}
+const mockT = (key: string) => mockTranslations[key] ?? key
+
+jest.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: mockT }),
+}))
+
 let container: HTMLDivElement
 let root: Root
 

@@ -45,7 +45,16 @@ const translationMap: Record<string, string> = {
   'aiQuant.messages.confirmGenerate': 'aiQuant.messages.confirmGenerate',
   'aiQuant.messages.generatedCodeTitle': '生成的策略代码：',
   'aiQuant.messages.staleConversationRecovered': '检测到本地会话已过期，已为你重建一个干净的对话，请重新确认并生成策略。',
+  'aiQuant.runningGuard.runningTitle': '策略正在运行，不能直接修改',
+  'aiQuant.runningGuard.runningDescription': '当前策略正在使用已部署版本运行。为避免运行逻辑与编辑内容不一致，请先停止策略。停止后你可以修改策略并重新部署。',
+  'aiQuant.runningGuard.unknownTitle': '部署状态待确认，暂不能直接修改',
+  'aiQuant.runningGuard.unknownDescription': '当前策略实例的部署状态仍在确认中。为避免误判为可编辑或可重复部署，请先查看运行策略或停止策略，确认后再继续修改。',
+  'aiQuant.runningGuard.viewRunningStrategy': '查看运行策略',
+  'aiQuant.runningGuard.stopStrategy': '停止策略',
+  'aiQuant.runningGuard.cancel': '取消',
 }
+const mockT = (key: string, options?: { defaultValue?: string }) =>
+  translationMap[key] ?? options?.defaultValue ?? key
 
 function readStoredConversations<T>(): T[] {
   const raw = localStorage.getItem('ai_quant_conversations_v1')
@@ -63,8 +72,7 @@ function readStoredConversations<T>(): T[] {
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) =>
-      translationMap[key] ?? options?.defaultValue ?? key,
+    t: mockT,
   }),
 }))
 

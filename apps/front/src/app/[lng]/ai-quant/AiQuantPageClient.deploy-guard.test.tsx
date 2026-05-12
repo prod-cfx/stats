@@ -11,10 +11,14 @@ const mockDeployAccountAiQuantStrategy = jest.fn()
 const mockFetchAccountAiQuantDeployResult = jest.fn()
 const mockFetchAccountAiQuantStrategyDetail = jest.fn()
 const mockFetchUserExchangeAccountStatuses = jest.fn()
+const mockTranslations: Record<string, string> = {
+  'aiQuant.deployRunning': '已部署运行',
+}
+const mockT = (key: string, options?: { defaultValue?: string }) => mockTranslations[key] ?? options?.defaultValue ?? key
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
+    t: mockT,
   }),
 }))
 
