@@ -3,6 +3,8 @@ import { Agent, ProxyAgent } from 'undici'
 import { BaseCexClient, createHttpEgressDispatcher } from './base-cex-client'
 
 class TestCexClient extends BaseCexClient {
+  readonly calls: string[] = []
+
   constructor(dispatcher?: Dispatcher) {
     super('https://example.test', 'spot', dispatcher)
   }
@@ -11,6 +13,10 @@ class TestCexClient extends BaseCexClient {
 
   async ping(): Promise<void> {
     await this.request('GET', '/ping')
+  }
+
+  async privatePing(): Promise<void> {
+    await this.request('GET', '/private-ping', {}, true)
   }
 
   async createOrder(): Promise<never> {
@@ -46,7 +52,12 @@ class TestCexClient extends BaseCexClient {
   }
 
   protected async signRequest(): Promise<{ url: string; headers: Record<string, string> }> {
+    this.calls.push('signRequest')
     return { url: '/ping', headers: { accept: 'application/json' } }
+  }
+
+  protected override async beforeRequest(): Promise<void> {
+    this.calls.push('beforeRequest')
   }
 }
 
@@ -85,6 +96,17 @@ describe('BaseCexClient', () => {
       new URL('https://example.test/ping'),
       expect.not.objectContaining({ dispatcher: expect.anything() }),
     )
+  })
+
+  it('waits for request admission before signing private requests', async () => {
+    globalThis.fetch = jest.fn(async () => {
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }) as typeof fetch
+    const client = new TestCexClient()
+
+    await client.privatePing()
+
+    expect(client.calls).toEqual(['beforeRequest', 'signRequest'])
   })
 
   it('creates a ProxyAgent before localAddress when both egress options are configured', () => {

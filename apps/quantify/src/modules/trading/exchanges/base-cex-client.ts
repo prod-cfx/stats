@@ -109,11 +109,11 @@ export abstract class BaseCexClient implements IExchangeClient {
 
     while (true) {
       attempt += 1
+      await this.beforeRequest({ isPrivate, method, path })
+
       const signed = await this.signRequest(method, path, params, isPrivate, body)
 
       const url = new URL(signed.url, this.baseUrl)
-
-      await this.beforeRequest({ isPrivate, method, path })
 
       const init: RequestInitWithDispatcher = {
         method,
