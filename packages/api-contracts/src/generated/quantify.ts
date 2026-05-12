@@ -2956,8 +2956,15 @@ const endpoints = makeApi([
             service: z.string(),
             status: z.enum(['ok', 'degraded', 'down']),
             timestamp: z.string(),
+            shard: z
+              .object({
+                enabled: z.boolean(),
+                count: z.number(),
+                index: z.number(),
+                activeStrategies: z.number(),
+              })
+              .passthrough(),
           })
-          .partial()
           .passthrough(),
         message: z.string(),
       })
