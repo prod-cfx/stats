@@ -595,11 +595,18 @@ export class OkxClient extends BaseCexClient {
     if (!this.options.tokenBucketEnabled || !this.options.rateLimiter) return
 
     await this.options.rateLimiter.acquire(
-      context.isPrivate ? `okx:${this.apiKey}:private` : 'okx:public',
+      context.isPrivate ? `okx:${this.apiKeyFingerprint}:private` : 'okx:public',
       context.isPrivate
         ? { capacity: 50, refillIntervalMs: 2_000 }
         : { capacity: 15, refillIntervalMs: 2_000 },
     )
+  }
+
+  private get apiKeyFingerprint(): string {
+    return createHmac('sha256', 'okx-token-bucket-fingerprint')
+      .update(this.apiKey)
+      .digest('hex')
+      .slice(0, 12)
   }
 
   protected override mapError(status: number, data: unknown): ExchangeError {

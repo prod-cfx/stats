@@ -392,10 +392,11 @@ describe('okxClient', () => {
       capacity: 15,
       refillIntervalMs: 2_000,
     })
-    expect(rateLimiter.acquire).toHaveBeenCalledWith('okx:test-api-key:private', {
+    expect(rateLimiter.acquire).toHaveBeenCalledWith('okx:78745e716c6d:private', {
       capacity: 50,
       refillIntervalMs: 2_000,
     })
+    expect(rateLimiter.acquire).not.toHaveBeenCalledWith(expect.stringContaining('test-api-key'), expect.anything())
   })
 
   it('retries OKX public requests after HTTP 429 with backoff', async () => {
