@@ -78,7 +78,7 @@ describe('signalExecutorService', () => {
     return service
   }
 
-  it('marks an execution as executed from an OKX private filled order event', async () => {
+  it('keeps OKX private filled order events pending until ledger reconciliation', async () => {
     const service = createService()
     const executionRepository = (service as any).executionRepository
     const updatedAt = new Date('2026-05-12T01:02:03.000Z')
@@ -109,22 +109,24 @@ describe('signalExecutorService', () => {
       exchangeAccountId: 'exchange-account-okx-1',
     })
     expect((service as any).txEvents.withAfterCommit).toHaveBeenCalled()
-    expect(executionRepository.markPendingExecuted).toHaveBeenCalledWith('exec-okx-ws-1', {
-      executedPrice: 60123.45,
-      executedQuantity: 0.01,
-      fee: 0.12,
-      feeCurrency: 'USDT',
-      tradeId: 'trade-1',
-      executedAt: updatedAt,
-      metadata: {
-        providerOrderId: 'okx-order-1',
-        providerStatus: 'filled',
-        exchangeAccountId: 'exchange-account-okx-1',
-        source: 'okx_private_ws',
-        raw,
+    expect(executionRepository.markPendingStage).toHaveBeenCalledWith('exec-okx-ws-1', 'RECONCILE_REQUIRED', {
+      providerOrderId: 'okx-order-1',
+      providerStatus: 'filled',
+      exchangeAccountId: 'exchange-account-okx-1',
+      source: 'okx_private_ws',
+      raw,
+      reconcileRequired: true,
+      reason: 'OKX_PRIVATE_WS_FILLED_REQUIRES_LEDGER_RECONCILIATION',
+      providerFill: {
+        executedPrice: 60123.45,
+        executedQuantity: 0.01,
+        fee: 0.12,
+        feeCurrency: 'USDT',
+        tradeId: 'trade-1',
+        executedAt: updatedAt.toISOString(),
       },
     })
-    expect(executionRepository.markPendingStage).not.toHaveBeenCalled()
+    expect(executionRepository.markPendingExecuted).not.toHaveBeenCalled()
   })
 
   it('does not throw when an OKX private filled order event has no pending execution match', async () => {
@@ -230,7 +232,7 @@ describe('signalExecutorService', () => {
     expect(executionRepository.markPendingFailed).toHaveBeenCalledWith('exec-okx-canceled', 'OKX_ORDER_CANCELED')
   })
 
-  it('records filled quantity from canceled OKX private order events before terminal failure handling', async () => {
+  it('keeps filled quantity from canceled OKX private order events pending for ledger reconciliation', async () => {
     const service = createService()
     const executionRepository = (service as any).executionRepository
     const updatedAt = new Date('2026-05-12T01:02:03.000Z')
@@ -252,21 +254,24 @@ describe('signalExecutorService', () => {
       raw,
     })
 
-    expect(executionRepository.markPendingExecuted).toHaveBeenCalledWith('exec-okx-canceled-filled', {
-      executedPrice: 60000,
-      executedQuantity: 0.02,
-      fee: 0.2,
-      feeCurrency: 'USDT',
-      tradeId: undefined,
-      executedAt: updatedAt,
-      metadata: {
-        providerOrderId: 'okx-order-canceled-filled',
-        providerStatus: 'canceled',
-        exchangeAccountId: 'exchange-account-okx-1',
-        source: 'okx_private_ws',
-        raw,
+    expect(executionRepository.markPendingStage).toHaveBeenCalledWith('exec-okx-canceled-filled', 'RECONCILE_REQUIRED', {
+      providerOrderId: 'okx-order-canceled-filled',
+      providerStatus: 'canceled',
+      exchangeAccountId: 'exchange-account-okx-1',
+      source: 'okx_private_ws',
+      raw,
+      reconcileRequired: true,
+      reason: 'OKX_PRIVATE_WS_FILLED_REQUIRES_LEDGER_RECONCILIATION',
+      providerFill: {
+        executedPrice: 60000,
+        executedQuantity: 0.02,
+        fee: 0.2,
+        feeCurrency: 'USDT',
+        tradeId: undefined,
+        executedAt: updatedAt.toISOString(),
       },
     })
+    expect(executionRepository.markPendingExecuted).not.toHaveBeenCalled()
     expect(executionRepository.markPendingFailed).not.toHaveBeenCalled()
   })
 
