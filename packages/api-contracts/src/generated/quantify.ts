@@ -1061,7 +1061,7 @@ const RecordTradeDto = z
       .optional(),
     orderId: z.string().optional(),
     externalTradeId: z.string().optional(),
-    provider: z.string().optional(),
+    provider: z.string().nullish(),
     executedAt: z.string(),
     metadata: z.object({}).partial().passthrough().optional(),
   })
@@ -1614,9 +1614,9 @@ const ExternalSignalWebhookSubscriptionResponseDto = z
     signalId: z.string(),
     secretVersion: z.number(),
     status: z.string(),
-    lastAcceptedAt: z.string().optional(),
-    rotatedAt: z.string().optional(),
-    metadata: z.object({}).partial().passthrough().optional(),
+    lastAcceptedAt: z.string().nullish(),
+    rotatedAt: z.string().nullish(),
+    metadata: z.object({}).partial().passthrough().nullish(),
     webhookUrl: z.string(),
     createdAt: z.string(),
     updatedAt: z.string(),
@@ -1624,7 +1624,7 @@ const ExternalSignalWebhookSubscriptionResponseDto = z
   .passthrough()
 const CreateExternalSignalWebhookSubscriptionDto = z
   .object({
-    provider: z.string().optional(),
+    provider: z.string().nullish(),
     signalId: z.string(),
     metadata: z.object({}).partial().passthrough().optional(),
   })
@@ -1638,9 +1638,9 @@ const ExternalSignalWebhookSubscriptionSecretResponseDto = z
     signalId: z.string(),
     secretVersion: z.number(),
     status: z.string(),
-    lastAcceptedAt: z.string().optional(),
-    rotatedAt: z.string().optional(),
-    metadata: z.object({}).partial().passthrough().optional(),
+    lastAcceptedAt: z.string().nullish(),
+    rotatedAt: z.string().nullish(),
+    metadata: z.object({}).partial().passthrough().nullish(),
     webhookUrl: z.string(),
     createdAt: z.string(),
     updatedAt: z.string(),

@@ -30,7 +30,7 @@ export class ExternalSignalWebhookSubscriptionResponseDto {
   @ApiProperty()
   strategyInstanceId!: string
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   provider?: string | null
 
   @ApiProperty()
@@ -42,13 +42,13 @@ export class ExternalSignalWebhookSubscriptionResponseDto {
   @ApiProperty()
   status!: string
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   lastAcceptedAt?: string | null
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   rotatedAt?: string | null
 
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ type: 'object', additionalProperties: true, nullable: true })
   metadata?: Record<string, unknown> | null
 
   @ApiProperty()
