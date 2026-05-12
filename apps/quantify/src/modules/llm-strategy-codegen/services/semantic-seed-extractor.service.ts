@@ -4493,6 +4493,9 @@ export class SemanticSeedExtractorService {
             })
           }
 
+          // Issue #1231：仅在白名单 pattern 命中时才视为"已被 supported 覆盖"，
+          // 用于下游 price.pattern 兜底分支的互斥判断；patternRaw=null（主观词或
+          // 缺失 pattern 词）时不置位，仍允许兜底走 unsupported 路径。
           if (patternRaw) {
             candlePatternMatched = true
           }
@@ -4572,6 +4575,8 @@ export class SemanticSeedExtractorService {
             })
           }
 
+          // Issue #1231：同 candle_pattern flag 语义——仅白名单 4 patterns
+          // (head_and_shoulders / double_top / double_bottom / triangle) 命中时置位
           if (chartPatternRaw) {
             chartPatternMatched = true
           }
@@ -4661,6 +4666,8 @@ export class SemanticSeedExtractorService {
 
           // critic round 1 A1 修复：sideScope 在缺方向时回退 undefined，避免静默归类为 long
           const lsSideScope = lsDirection === 'bearish' ? 'short' : lsDirection === 'bullish' ? 'long' : undefined
+          // Issue #1231：同 candle_pattern flag 语义——仅 reference 白名单
+          // (prev_low / prev_high / session_low / session_high) 命中时置位
           if (lsReference) {
             liquiditySweepMatched = true
           }
