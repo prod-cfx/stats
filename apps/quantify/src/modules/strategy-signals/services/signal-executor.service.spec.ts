@@ -43,6 +43,7 @@ describe('signalExecutorService', () => {
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn(), findById: jest.fn().mockResolvedValue(null) }
     const executionRepository = {
+      findPendingByOkxOrderIds: jest.fn(),
       markStage: jest.fn(),
       markExecuted: jest.fn(),
       markFailed: jest.fn(),
@@ -73,6 +74,99 @@ describe('signalExecutorService', () => {
     )
     return service
   }
+
+  it('marks an execution as executed from an OKX private filled order event', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const updatedAt = new Date('2026-05-12T01:02:03.000Z')
+    const raw = { ordId: 'okx-order-1', state: 'filled' }
+    executionRepository.findPendingByOkxOrderIds.mockResolvedValue({ id: 'exec-okx-ws-1' })
+
+    await (service as any).handleOkxPrivateOrderEvent({
+      exchangeId: 'okx',
+      apiKey: 'masked-key',
+      instId: 'BTC-USDT-SWAP',
+      orderId: 'okx-order-1',
+      clientOrderId: 'client-order-1',
+      state: 'filled',
+      avgPrice: 60123.45,
+      fillPrice: 60120,
+      filledSize: 0.01,
+      fee: 0.12,
+      feeCurrency: 'USDT',
+      tradeId: 'trade-1',
+      updatedAt,
+      raw,
+    })
+
+    expect(executionRepository.findPendingByOkxOrderIds).toHaveBeenCalledWith({
+      orderId: 'okx-order-1',
+      clientOrderId: 'client-order-1',
+    })
+    expect(executionRepository.markExecuted).toHaveBeenCalledWith('exec-okx-ws-1', {
+      executedPrice: 60123.45,
+      executedQuantity: 0.01,
+      fee: 0.12,
+      feeCurrency: 'USDT',
+      tradeId: 'trade-1',
+      executedAt: updatedAt,
+      metadata: {
+        providerOrderId: 'okx-order-1',
+        providerStatus: 'filled',
+        source: 'okx_private_ws',
+        raw,
+      },
+    })
+    expect(executionRepository.markStage).not.toHaveBeenCalled()
+  })
+
+  it('does not throw when an OKX private filled order event has no pending execution match', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    executionRepository.findPendingByOkxOrderIds.mockResolvedValue(null)
+
+    await expect((service as any).handleOkxPrivateOrderEvent({
+      exchangeId: 'okx',
+      apiKey: 'masked-key',
+      instId: 'BTC-USDT-SWAP',
+      orderId: 'already-executed-order',
+      state: 'filled',
+      avgPrice: 60123.45,
+      filledSize: 0.01,
+      updatedAt: new Date('2026-05-12T01:02:03.000Z'),
+      raw: {},
+    })).resolves.toBeUndefined()
+
+    expect(executionRepository.markExecuted).not.toHaveBeenCalled()
+    expect(executionRepository.markStage).not.toHaveBeenCalled()
+  })
+
+  it('acks a non-terminal OKX private order event without marking execution complete', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const raw = { ordId: 'okx-order-open', state: 'live' }
+    executionRepository.findPendingByOkxOrderIds.mockResolvedValue({ id: 'exec-okx-open' })
+
+    await (service as any).handleOkxPrivateOrderEvent({
+      exchangeId: 'okx',
+      apiKey: 'masked-key',
+      instId: 'BTC-USDT-SWAP',
+      orderId: 'okx-order-open',
+      clientOrderId: 'client-order-open',
+      state: 'live',
+      filledSize: 0,
+      updatedAt: new Date('2026-05-12T01:02:03.000Z'),
+      raw,
+    })
+
+    expect(executionRepository.markExecuted).not.toHaveBeenCalled()
+    expect(executionRepository.markStage).toHaveBeenCalledWith('exec-okx-open', 'ORDER_ACKED', {
+      providerOrderId: 'okx-order-open',
+      providerStatus: 'live',
+      source: 'okx_private_ws',
+      raw,
+    })
+  })
 
   it('rejects hyperliquid spot entries below minimum notional after precision rounding', () => {
     const service = createService()

@@ -1,15 +1,30 @@
 import type { IExchangeClient } from '../core/interface'
 import type { ExchangeId, MarketType } from '../core/types'
+import type { HttpEgressOptions } from '../exchanges/base-cex-client'
 import type { ExchangeAccountConfig, HyperliquidConfig } from './account-store'
-import { Injectable } from '@nestjs/common'
+import { Inject, Injectable, Optional } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
+import { MessageBusMetricsService } from '@/modules/message-bus/metrics/message-bus-metrics.service'
 import { UnsupportedExchangeException } from '../exceptions'
 import { BinanceClient } from '../exchanges/binance-client'
+import { createHttpEgressDispatcher } from '../exchanges/base-cex-client'
 import { OkxClient } from '../exchanges/okx-client'
+import { RateLimiterRegistry } from '../services/rate-limiter-registry.service'
 
 type HyperliquidClientConstructor = new (config: HyperliquidConfig, marketType?: MarketType) => IExchangeClient
 
 @Injectable()
 export class ExchangeFactory {
+  constructor(
+    @Optional()
+    @Inject(ConfigService)
+    private readonly configService?: Pick<ConfigService, 'get'>,
+    @Optional()
+    private readonly rateLimiter?: RateLimiterRegistry,
+    @Optional()
+    private readonly metrics?: MessageBusMetricsService,
+  ) {}
+
   createClient(
     exchangeId: ExchangeId,
     marketType: MarketType,
@@ -21,7 +36,13 @@ export class ExchangeFactory {
     }
 
     if (account.exchangeId === 'okx' && exchangeId === 'okx') {
-      return new OkxClient(marketType, account.config)
+      return new OkxClient(marketType, account.config, {
+        dispatcher: createHttpEgressDispatcher(this.getHttpEgressOptions()),
+        rateLimiter: this.rateLimiter,
+        tokenBucketEnabled: this.isTokenBucketEnabled(),
+        retryEnabled: this.isOkxRetryEnabled(),
+        metrics: this.metrics,
+      })
     }
 
     if (account.exchangeId === 'hyperliquid' && exchangeId === 'hyperliquid') {
@@ -42,5 +63,40 @@ export class ExchangeFactory {
     }
 
     return hyperliquidModule.HyperliquidClient
+  }
+
+  private isTokenBucketEnabled(): boolean {
+    const direct = this.configService?.get<boolean>('featureFlags.tokenBucketEnabled')
+    if (typeof direct === 'boolean') return direct
+
+    return this.configService?.get<{ tokenBucketEnabled?: boolean }>('featureFlags')?.tokenBucketEnabled ?? false
+  }
+
+  private isOkxRetryEnabled(): boolean {
+    const direct = this.configService?.get<boolean>('featureFlags.okxRetryEnabled')
+    if (typeof direct === 'boolean') return direct
+
+    return this.configService?.get<{ okxRetryEnabled?: boolean }>('featureFlags')?.okxRetryEnabled ?? false
+  }
+
+  private getHttpEgressOptions(): HttpEgressOptions | undefined {
+    const proxyUrl = this.readOptionalString('httpEgress.proxyUrl')
+    const localAddress = this.readOptionalString('httpEgress.localAddress')
+
+    if (!proxyUrl && !localAddress) {
+      return undefined
+    }
+
+    return { proxyUrl, localAddress }
+  }
+
+  private readOptionalString(key: string): string | undefined {
+    const value = this.configService?.get<string>(key)
+    if (typeof value !== 'string') {
+      return undefined
+    }
+
+    const trimmed = value.trim()
+    return trimmed ? trimmed : undefined
   }
 }

@@ -1,6 +1,101 @@
 import { ExchangeFactory } from './exchange-factory'
+import { OkxClient } from '../exchanges/okx-client'
+
+jest.mock('../exchanges/okx-client', () => ({
+  OkxClient: jest.fn(() => ({ source: 'okx' })),
+}))
 
 describe('exchangeFactory', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('passes configured http egress options to OKX clients', () => {
+    const configService = {
+      get: jest.fn((key: string) => {
+        const values: Record<string, string> = {
+          'httpEgress.proxyUrl': 'http://127.0.0.1:7890',
+          'httpEgress.localAddress': '10.0.0.12',
+        }
+        return values[key]
+      }),
+    }
+    const factory = new ExchangeFactory(configService as any)
+
+    const client = factory.createClient('okx', 'spot', {
+      exchangeId: 'okx',
+      config: {
+        apiKey: 'test-api-key',
+        secret: 'test-secret',
+        passphrase: 'test-passphrase',
+      },
+    })
+
+    expect(client).toEqual({ source: 'okx' })
+    expect(OkxClient).toHaveBeenCalledWith(
+      'spot',
+      {
+        apiKey: 'test-api-key',
+        secret: 'test-secret',
+        passphrase: 'test-passphrase',
+      },
+      expect.objectContaining({
+        dispatcher: expect.any(Object),
+        tokenBucketEnabled: false,
+      }),
+    )
+  })
+
+  it('passes token bucket settings to OKX clients', () => {
+    const rateLimiter = { acquire: jest.fn(async () => undefined) }
+    const configService = {
+      get: jest.fn((key: string) => key === 'featureFlags.tokenBucketEnabled' ? true : undefined),
+    }
+    const factory = new ExchangeFactory(configService as any, rateLimiter as any)
+
+    factory.createClient('okx', 'spot', {
+      exchangeId: 'okx',
+      config: {
+        apiKey: 'test-api-key',
+        secret: 'test-secret',
+        passphrase: 'test-passphrase',
+      },
+    })
+
+    expect(OkxClient).toHaveBeenCalledWith(
+      'spot',
+      expect.objectContaining({ apiKey: 'test-api-key' }),
+      expect.objectContaining({
+        rateLimiter,
+        tokenBucketEnabled: true,
+      }),
+    )
+  })
+
+  it('passes OKX retry flag to OKX clients', () => {
+    const configService = {
+      get: jest.fn((key: string) => key === 'featureFlags.okxRetryEnabled' ? true : undefined),
+    }
+    const factory = new ExchangeFactory(configService as any)
+
+    factory.createClient('okx', 'spot', {
+      exchangeId: 'okx',
+      config: {
+        apiKey: 'test-api-key',
+        secret: 'test-secret',
+        passphrase: 'test-passphrase',
+      },
+    })
+
+    expect(OkxClient).toHaveBeenCalledWith(
+      'spot',
+      expect.objectContaining({ apiKey: 'test-api-key' }),
+      expect.objectContaining({
+        retryEnabled: true,
+      }),
+    )
+  })
+
   it('creates a Hyperliquid client for perp accounts', () => {
     const factory = new ExchangeFactory()
     const fakeClient = { source: 'hyperliquid' }

@@ -1,5 +1,5 @@
 import type { StrategySignalsRuntimeConfig } from '../../types/strategy-signals-config.type'
-import { SignalGenerationSchedulerStage } from '../signal-generation-scheduler.stage'
+import { computeSpreadDelayMs, SignalGenerationSchedulerStage } from '../signal-generation-scheduler.stage'
 
 describe('signalGenerationSchedulerStage', () => {
   const config: StrategySignalsRuntimeConfig = {
@@ -8,6 +8,7 @@ describe('signalGenerationSchedulerStage', () => {
     cooldownMinutes: 15,
     batchSize: 2,
     maxSymbolsPerStrategy: 3,
+    spread: { enabled: false, windowSeconds: 300 },
     debug: { enabled: false, maxScriptLength: 1000, maxValueLength: 200 },
     ai: {
       maxAttempts: 2,
@@ -60,5 +61,35 @@ describe('signalGenerationSchedulerStage', () => {
 
     expect(generateSignals).toHaveBeenCalledTimes(1)
     expect(state.isRunning).toBe(false)
+  })
+
+  it('computes a stable delay inside the configured spread window', () => {
+    const first = computeSpreadDelayMs('strategy-instance-1', 300)
+    const second = computeSpreadDelayMs('strategy-instance-1', 300)
+
+    expect(first).toBe(second)
+    expect(first).toBeGreaterThanOrEqual(0)
+    expect(first).toBeLessThan(300_000)
+  })
+
+  it('applies a computed spread delay before generation without forcing real sleeps', async () => {
+    const sleep = jest.fn().mockResolvedValue(undefined)
+    const stage = new SignalGenerationSchedulerStage(
+      { addCronJob: jest.fn(), deleteCronJob: jest.fn() } as any,
+      { warn: jest.fn(), error: jest.fn(), log: jest.fn() } as any,
+      sleep,
+    )
+    const generateSignals = jest.fn().mockResolvedValue(undefined)
+
+    await stage.runGenerationCycle(
+      { ...config, spread: { enabled: true, windowSeconds: 300 } },
+      false,
+      jest.fn(),
+      generateSignals,
+      'strategy-instance-1',
+    )
+
+    expect(sleep).toHaveBeenCalledWith(computeSpreadDelayMs('strategy-instance-1', 300))
+    expect(generateSignals).toHaveBeenCalledTimes(1)
   })
 })

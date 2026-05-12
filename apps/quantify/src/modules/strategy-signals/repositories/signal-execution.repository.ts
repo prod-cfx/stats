@@ -23,6 +23,11 @@ interface ExecutionStageMetadata extends Prisma.JsonObject {
   stageHistory?: Prisma.JsonArray
 }
 
+interface FindPendingByOkxOrderIdsInput {
+  orderId: string
+  clientOrderId?: string
+}
+
 @Injectable()
 export class SignalExecutionRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
@@ -38,6 +43,65 @@ export class SignalExecutionRepository {
           signalId,
           userStrategyAccountId,
         },
+      },
+    })
+  }
+
+  findPendingByOkxOrderIds(input: FindPendingByOkxOrderIdsInput) {
+    const clientOrderId = input.clientOrderId?.trim()
+    const or: Prisma.UserSignalExecutionWhereInput[] = [
+      {
+        metadata: {
+          path: ['orderResponse', 'id'],
+          equals: input.orderId,
+        },
+      },
+      {
+        metadata: {
+          path: ['providerOrderId'],
+          equals: input.orderId,
+        },
+      },
+    ]
+
+    if (clientOrderId) {
+      or.push(
+        {
+          metadata: {
+            path: ['clientOrderId'],
+            equals: clientOrderId,
+          },
+        },
+        {
+          metadata: {
+            path: ['orderRequest', 'clientOrderId'],
+            equals: clientOrderId,
+          },
+        },
+        {
+          metadata: {
+            path: ['tradingExecution', 'clientOrderId'],
+            equals: clientOrderId,
+          },
+        },
+        {
+          metadata: {
+            path: ['tradingExecution', 'normalizedRequest', 'clientOrderId'],
+            equals: clientOrderId,
+          },
+        },
+      )
+    }
+
+    return this.txHost.tx.userSignalExecution.findFirst({
+      where: {
+        status: {
+          not: ExecutionStatus.EXECUTED,
+        },
+        OR: or,
+      },
+      orderBy: {
+        createdAt: 'desc',
       },
     })
   }

@@ -22,12 +22,18 @@ export interface StrategySignalsDebugConfig {
   maxValueLength: number
 }
 
+export interface StrategySignalsSpreadConfig {
+  enabled: boolean
+  windowSeconds: number
+}
+
 export interface StrategySignalsRuntimeConfig {
   enabled: boolean
   cronExpression: string
   cooldownMinutes: number
   batchSize: number
   maxSymbolsPerStrategy: number
+  spread: StrategySignalsSpreadConfig
   debug: StrategySignalsDebugConfig
   ai: StrategySignalsAiConfig
   execution: StrategySignalsExecutionConfig
@@ -39,6 +45,10 @@ export const DEFAULT_STRATEGY_SIGNALS_CONFIG: StrategySignalsRuntimeConfig = {
   cooldownMinutes: 15,
   batchSize: 10,
   maxSymbolsPerStrategy: 3,
+  spread: {
+    enabled: false,
+    windowSeconds: 300,
+  },
   debug: {
     enabled: false,
     maxScriptLength: 1000,

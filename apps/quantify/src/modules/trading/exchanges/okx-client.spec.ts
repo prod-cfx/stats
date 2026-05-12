@@ -6,6 +6,7 @@ describe('okxClient', () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch
+    OkxClient.clearInstrumentSpecCacheForTesting()
     jest.restoreAllMocks()
   })
 
@@ -16,12 +17,27 @@ describe('okxClient', () => {
     })
   }
 
-  function createClient(options: { marketType?: 'spot' | 'perp' } = {}) {
+  function createClient(options: {
+    marketType?: 'spot' | 'perp'
+    rateLimiter?: { acquire: jest.Mock<Promise<void>, [string, { capacity: number; refillIntervalMs: number }]> }
+    tokenBucketEnabled?: boolean
+    retryEnabled?: boolean
+    retryBaseDelayMs?: number
+    sleep?: (delayMs: number) => Promise<void>
+    metrics?: { incOkxRateLimit: jest.Mock<void, [string]> }
+  } = {}) {
     return new OkxClient(options.marketType ?? 'spot', {
       apiKey: 'test-api-key',
       secret: 'test-secret',
       passphrase: 'test-passphrase',
       isTestnet: true,
+    }, {
+      rateLimiter: options.rateLimiter,
+      tokenBucketEnabled: options.tokenBucketEnabled ?? false,
+      retryEnabled: options.retryEnabled ?? false,
+      retryBaseDelayMs: options.retryBaseDelayMs,
+      sleep: options.sleep,
+      metrics: options.metrics,
     })
   }
 
@@ -313,6 +329,148 @@ describe('okxClient', () => {
       const search = new URLSearchParams(request.search)
       return search.get('instType') === 'SWAP' && search.get('instId') === 'BTC-USDT-SWAP'
     })).toBe(true)
+  })
+
+  it('shares OKX instrument spec fetches across client instances', async () => {
+    let instrumentRequests = 0
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/api/v5/public/instruments') {
+        instrumentRequests += 1
+        return okJson({
+          data: [{
+            instId: 'BTC-USDT-SWAP',
+            ctVal: '0.01',
+            lotSz: '1',
+            tickSz: '0.1',
+            minSz: '1',
+          }],
+        })
+      }
+      return okJson({ code: '0', data: [] })
+    }) as typeof fetch
+
+    const firstClient = createClient({ marketType: 'perp' })
+    const secondClient = createClient({ marketType: 'perp' })
+
+    await firstClient.fetchInstrumentConstraints?.('BTC/USDT:PERP')
+    await secondClient.fetchInstrumentConstraints?.('BTC/USDT:PERP')
+
+    expect(instrumentRequests).toBe(1)
+  })
+
+  it('acquires private and public OKX token buckets before requests when enabled', async () => {
+    const rateLimiter = {
+      acquire: jest.fn<Promise<void>, [string, { capacity: number; refillIntervalMs: number }]>(async () => undefined),
+    }
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/api/v5/public/instruments') {
+        return okJson({
+          data: [{
+            instId: 'BTC-USDT-SWAP',
+            ctVal: '0.01',
+            lotSz: '1',
+            tickSz: '0.1',
+            minSz: '1',
+          }],
+        })
+      }
+      return okJson({ code: '0', data: [] })
+    }) as typeof fetch
+
+    const client = createClient({
+      marketType: 'perp',
+      rateLimiter,
+      tokenBucketEnabled: true,
+    })
+
+    await client.fetchInstrumentConstraints?.('BTC/USDT:PERP')
+    await client.fetchBalance()
+
+    expect(rateLimiter.acquire).toHaveBeenCalledWith('okx:public', {
+      capacity: 15,
+      refillIntervalMs: 2_000,
+    })
+    expect(rateLimiter.acquire).toHaveBeenCalledWith('okx:test-api-key:private', {
+      capacity: 50,
+      refillIntervalMs: 2_000,
+    })
+  })
+
+  it('retries OKX public requests after HTTP 429 with backoff', async () => {
+    const sleep = jest.fn(async () => undefined)
+    let attempts = 0
+    globalThis.fetch = jest.fn(async () => {
+      attempts += 1
+      if (attempts === 1) {
+        return new Response(JSON.stringify({ code: '50011', msg: 'Rate limit reached' }), { status: 429 })
+      }
+
+      return okJson({
+        data: [{
+          instId: 'BTC-USDT-SWAP',
+          ctVal: '0.01',
+          lotSz: '1',
+          tickSz: '0.1',
+          minSz: '1',
+        }],
+      })
+    }) as typeof fetch
+
+    await createClient({
+      marketType: 'perp',
+      retryEnabled: true,
+      retryBaseDelayMs: 25,
+      sleep,
+    }).fetchInstrumentConstraints?.('BTC/USDT:PERP')
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+    expect(sleep).toHaveBeenCalledWith(25)
+  })
+
+  it('retries OKX 50011 JSON responses before exposing rate-limit errors', async () => {
+    const sleep = jest.fn(async () => undefined)
+    let attempts = 0
+    globalThis.fetch = jest.fn(async () => {
+      attempts += 1
+      if (attempts === 1) {
+        return okJson({ code: '50011', msg: 'Too many requests' })
+      }
+
+      return okJson({
+        data: [{
+          instId: 'BTC-USDT-SWAP',
+          ctVal: '0.01',
+          lotSz: '1',
+          tickSz: '0.1',
+          minSz: '1',
+        }],
+      })
+    }) as typeof fetch
+
+    await createClient({
+      marketType: 'perp',
+      retryEnabled: true,
+      retryBaseDelayMs: 10,
+      sleep,
+    }).fetchInstrumentConstraints?.('BTC/USDT:PERP')
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+    expect(sleep).toHaveBeenCalledWith(10)
+  })
+
+  it('records OKX rate-limit metrics for HTTP 429 and 50011 JSON responses', async () => {
+    const metrics = { incOkxRateLimit: jest.fn() }
+    globalThis.fetch = jest.fn(async () => {
+      return new Response(JSON.stringify({ code: '50011', msg: 'Rate limit reached' }), { status: 429 })
+    }) as typeof fetch
+
+    await expect(createClient({ metrics }).fetchInstrumentConstraints?.('BTC/USDT:PERP'))
+      .rejects.toMatchObject({ name: 'RateLimitError' })
+
+    expect(metrics.incOkxRateLimit).toHaveBeenCalledWith('429')
+    expect(metrics.incOkxRateLimit).toHaveBeenCalledWith('50011')
   })
 
   it('throws when OKX perp instrument constraints are incomplete', async () => {

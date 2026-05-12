@@ -134,6 +134,32 @@ export const prismaConfig = registerAs('prisma', () => ({
   criticalSlowQueryMs: env.int('PRISMA_CRITICAL_SLOW_QUERY_MS', 500),
 }))
 
+export const featureFlagsConfig = registerAs('featureFlags', () => ({
+  okxRetryEnabled: env.bool('QUANTIFY_OKX_RETRY_ENABLED', false),
+  signalGenerationSpreadEnabled: env.bool('QUANTIFY_SIGNAL_GEN_SPREAD_ENABLED', false),
+  instrumentCacheShared: env.bool('QUANTIFY_INSTRUMENT_CACHE_SHARED', false),
+  tokenBucketEnabled: env.bool('QUANTIFY_TOKEN_BUCKET_ENABLED', false),
+  okxWsEnabled: env.bool('QUANTIFY_OKX_WS_ENABLED', false),
+  publicDataShared: env.bool('QUANTIFY_PUBLIC_DATA_SHARED', false),
+  shardingEnabled: env.bool('QUANTIFY_SHARDING_ENABLED', false),
+}))
+
+export const shardingConfig = registerAs('sharding', () => ({
+  enabled: env.bool('QUANTIFY_SHARDING_ENABLED', false),
+  count: parsePositiveInt(env.str('SHARD_COUNT'), 1),
+  index: Math.max(0, env.int('SHARD_INDEX', 0)),
+}))
+
+export const httpEgressConfig = registerAs('httpEgress', () => ({
+  proxyUrl: env.str('QUANTIFY_EGRESS_PROXY_URL', ''),
+  localAddress: env.str('QUANTIFY_EGRESS_LOCAL_ADDRESS', ''),
+}))
+
+export const prismaPoolConfig = registerAs('prismaPool', () => ({
+  connectionLimit: parsePositiveInt(env.str('QUANTIFY_PRISMA_CONNECTION_LIMIT'), 50),
+  poolTimeout: parsePositiveInt(env.str('QUANTIFY_PRISMA_POOL_TIMEOUT'), 10),
+}))
+
 const parseFloatValue = (value: string | undefined, fallback: number): number => {
   if (!value) return fallback
   const parsed = Number.parseFloat(value)
@@ -213,6 +239,10 @@ export const strategySignalsConfig = registerAs('strategySignals', () => ({
   cooldownMinutes: parsePositiveInt(env.str('STRATEGY_SIGNALS_COOLDOWN_MINUTES'), 15),
   batchSize: parsePositiveInt(env.str('STRATEGY_SIGNALS_BATCH_SIZE'), 10),
   maxSymbolsPerStrategy: parsePositiveInt(env.str('STRATEGY_SIGNALS_MAX_SYMBOLS'), 3),
+  spread: {
+    enabled: env.bool('QUANTIFY_SIGNAL_GEN_SPREAD_ENABLED', false),
+    windowSeconds: parsePositiveInt(env.str('STRATEGY_SIGNALS_SPREAD_WINDOW_SECONDS'), 300),
+  },
   debug: {
     // 是否启用详细的脚本调试日志（仅用于开发调试，生产环境应禁用）
     enabled: env.bool('DEBUG_STRATEGY_SCRIPTS', false),
@@ -244,6 +274,10 @@ export const backendConfigLoaders = [
   appConfig,
   httpConfig,
   redisConfig,
+  featureFlagsConfig,
+  shardingConfig,
+  httpEgressConfig,
+  prismaPoolConfig,
   aiConfig, // AI 配置用于策略脚本生成
   mastraConfig, // Mastra 基础设施 (Phase 1 脚手架)
   marketDataConfig,

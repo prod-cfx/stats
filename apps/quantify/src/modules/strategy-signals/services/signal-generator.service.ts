@@ -62,6 +62,8 @@ import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/serv
 import { normalizeGatewayBars } from '@/modules/market-data/services/market-data-bar.mapper'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { WorkloadShardingService } from '@/modules/sharding/services/workload-sharding.service'
 import { getMarketTimeframeMs } from '@/modules/market-data/utils/market-timeframe.util'
 import {
   readAtomicRuntimeRequirementsFromSnapshot,
@@ -220,6 +222,7 @@ export class SignalGeneratorService {
     @Optional() private readonly publishedSnapshotsRepository?: PublishedStrategySnapshotsRepository,
     @Optional() private readonly runtimeExecutionStateService?: StrategyRuntimeExecutionStateService,
     @Optional() private readonly runtimeExecutionStateRepository?: StrategyRuntimeExecutionStateRepository,
+    @Optional() private readonly workloadSharding?: WorkloadShardingService,
   ) {
     this.schedulerStage = new SignalGenerationSchedulerStage(
       this.schedulerRegistry,
@@ -288,7 +291,9 @@ export class SignalGeneratorService {
     // 以“策略实例”为单位生成信号：
     // - 只处理 status='running' 且 mode='LIVE' 的实例
     // - 底层模板必须为 status='live'
-    const instances = await this.generatorRepository.findRunningInstances()
+    const instances = (await this.generatorRepository.findRunningInstances()).filter(instance =>
+      this.workloadSharding?.ownsStrategyInstance(instance.id) ?? true,
+    )
 
     const total = instances.length
     if (!total) {

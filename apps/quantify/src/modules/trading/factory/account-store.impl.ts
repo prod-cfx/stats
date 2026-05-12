@@ -49,6 +49,22 @@ export class DbExchangeAccountStore implements ExchangeAccountStore {
     return this.decryptAndBuildConfig(account)
   }
 
+  async listOkxAccountConfigs(): Promise<OkxConfig[]> {
+    const accounts = await this.txHost.tx.exchangeAccount.findMany({
+      where: {
+        exchangeId: 'okx' as PrismaExchangeId,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    })
+
+    return accounts.flatMap((account) => {
+      const config = this.decryptAndBuildConfig(account)
+      return config.exchangeId === 'okx' ? [config.config] : []
+    })
+  }
+
   private decryptAndBuildConfig(account: { id: string; exchangeId: PrismaExchangeId; encryptedConfig: string; isTestnet: boolean }): ExchangeAccountConfig {
     const exchangeId = account.exchangeId as ExchangeId
     const decrypted = this.crypto.decryptConfig<unknown>(account.encryptedConfig)

@@ -8,6 +8,7 @@ describe('signal generator concurrency guard', () => {
     cooldownMinutes: 15,
     batchSize: 10,
     maxSymbolsPerStrategy: 3,
+    spread: { enabled: false, windowSeconds: 300 },
     debug: {
       enabled: false,
       maxScriptLength: 1000,

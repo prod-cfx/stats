@@ -18,6 +18,7 @@ import type {
   UserStrategyAccount,
   StrategyInstanceRiskProfile,
 } from '@/prisma/prisma.types'
+import type { OkxPrivateOrderEvent } from '@/modules/trading/events/okx-private-ws.events'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { LedgerEntryType, MARKET_TIMEFRAMES } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 TransactionHost
@@ -40,6 +41,7 @@ import { resolveStrategyFundingFromStrategyAccount } from '@/modules/trading/cor
 import { normalizeLedgerSymbol } from '@/modules/trading/core/symbol-normalizer'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingExecutionService } from '@/modules/trading-execution/services/trading-execution.service'
+import { OKX_PRIVATE_ORDER_EVENT } from '@/modules/trading/events/okx-private-ws.events'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingService } from '@/modules/trading/trading.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -148,6 +150,45 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     await this.txEvents.withAfterCommit(async () => {
       await this.executeSignalForSubscribedUsers(event.signalId, config)
     })
+  }
+
+  @OnEvent(OKX_PRIVATE_ORDER_EVENT, { async: true })
+  async handleOkxPrivateOrderEvent(event: OkxPrivateOrderEvent) {
+    try {
+      const execution = await this.executionRepository.findPendingByOkxOrderIds({
+        orderId: event.orderId,
+        clientOrderId: event.clientOrderId,
+      })
+
+      if (!execution) {
+        this.logger.warn(
+          `OKX private order event ${event.orderId} (${event.state}) has no pending signal execution match`,
+        )
+        return
+      }
+
+      const metadata = this.buildOkxPrivateOrderMetadata(event)
+      if (this.isFilledOkxPrivateOrderEvent(event)) {
+        await this.executionRepository.markExecuted(execution.id, {
+          executedPrice: event.avgPrice ?? event.fillPrice,
+          executedQuantity: event.filledSize,
+          fee: event.fee,
+          feeCurrency: event.feeCurrency,
+          tradeId: event.tradeId,
+          executedAt: event.updatedAt,
+          metadata,
+        })
+        return
+      }
+
+      await this.executionRepository.markStage(execution.id, 'ORDER_ACKED', metadata)
+    }
+    catch (error) {
+      this.logger.error(
+        `Failed to consume OKX private order event ${event.orderId}: ${(error as Error).message}`,
+        (error as Error).stack,
+      )
+    }
   }
 
   private getConfig(): StrategySignalsRuntimeConfig {
@@ -1790,6 +1831,20 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     return Object.fromEntries(
       Object.entries(value).filter(([, item]) => item !== undefined),
     ) as Prisma.JsonObject
+  }
+
+  private isFilledOkxPrivateOrderEvent(event: OkxPrivateOrderEvent): boolean {
+    const state = event.state.toLowerCase()
+    return (state === 'filled' || state === 'partially_filled') && (event.filledSize ?? 0) > 0
+  }
+
+  private buildOkxPrivateOrderMetadata(event: OkxPrivateOrderEvent): Prisma.JsonObject {
+    return {
+      providerOrderId: event.orderId,
+      providerStatus: event.state,
+      source: 'okx_private_ws',
+      raw: this.toJsonObject(event.raw),
+    }
   }
 
   private buildExecutionStageMetadata(stages: ExecutionStage[]): Prisma.JsonObject {
