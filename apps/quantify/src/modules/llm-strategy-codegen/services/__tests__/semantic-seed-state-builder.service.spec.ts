@@ -1,6 +1,6 @@
 import { buildSemanticSlotId } from '../../types/semantic-state'
 import { SemanticOpenSlotAnswerResolverService } from '../semantic-open-slot-answer-resolver.service'
-import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
+import { type EvidenceInvariantMode, SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticStateReducerService } from '../semantic-state-reducer.service'
 
 describe('SemanticSeedStateBuilderService', () => {
@@ -2020,5 +2020,227 @@ describe('projectSingleAnchorToPosition — base_qty asset 投影', () => {
         ]),
       )
     expect(result.position?.sizing).toBeUndefined()
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Issue #1223: 出口 evidence invariant
+// ─────────────────────────────────────────────────────────────────────────────
+
+function makeService(mode: EvidenceInvariantMode): SemanticSeedStateBuilderService {
+  return new SemanticSeedStateBuilderService(undefined, undefined, undefined, mode)
+}
+
+const MSG = '当收盘价在 EMA20 上方时开多，止损 2%'
+
+describe('SemanticSeedStateBuilderService — evidence invariant (throw mode)', () => {
+  const svc = makeService('throw')
+
+  it('passes when all non-default atoms have evidence.text as message substring', () => {
+    expect(() => svc.build({
+      triggers: [{
+        key: 'indicator.above',
+        phase: 'entry',
+        source: 'user_explicit',
+        evidence: { text: 'EMA20 上方', source: 'user_explicit' },
+        params: { indicator: 'ema', 'reference.period': 20 },
+      }],
+    }, MSG)).not.toThrow()
+  })
+
+  it('throws when trigger is missing evidence.text', () => {
+    expect(() => svc.build({
+      triggers: [{
+        key: 'indicator.above',
+        phase: 'entry',
+        source: 'user_explicit',
+        params: { indicator: 'ema', 'reference.period': 20 },
+      }],
+    }, MSG)).toThrow(/evidence invariant violated/)
+  })
+
+  it('throws when trigger has evidence.text = empty string (C2)', () => {
+    expect(() => svc.build({
+      triggers: [{
+        key: 'indicator.above',
+        phase: 'entry',
+        source: 'user_explicit',
+        evidence: { text: '', source: 'user_explicit' },
+        params: { indicator: 'ema', 'reference.period': 20 },
+      }],
+    }, MSG)).toThrow(/empty string/)
+  })
+
+  it('throws when evidence.text is not a substring of message', () => {
+    expect(() => svc.build({
+      triggers: [{
+        key: 'indicator.above',
+        phase: 'entry',
+        source: 'user_explicit',
+        evidence: { text: '完全不相关文本', source: 'user_explicit' },
+        params: { indicator: 'ema', 'reference.period': 20 },
+      }],
+    }, MSG)).toThrow(/not a substring/)
+  })
+
+  it('throws when action is missing evidence.text (action dimension)', () => {
+    expect(() => svc.build({
+      actions: [{
+        key: 'open_long',
+        source: 'user_explicit',
+        // no evidence
+      }],
+    }, MSG)).toThrow(/evidence invariant violated/)
+  })
+
+  it('throws when risk is missing evidence.text (risk dimension)', () => {
+    expect(() => svc.build({
+      risk: [{
+        key: 'stop_loss',
+        source: 'user_explicit',
+        // no evidence
+      }],
+    }, MSG)).toThrow(/evidence invariant violated/)
+  })
+
+  it('includes all violations in one throw message (multi-violation join)', () => {
+    let error: Error | null = null
+    try {
+      svc.build({
+        triggers: [{
+          key: 'indicator.above',
+          phase: 'entry',
+          source: 'user_explicit',
+          params: { indicator: 'ema', 'reference.period': 20 },
+        }],
+        actions: [{
+          key: 'open_long',
+          source: 'user_explicit',
+        }],
+      }, MSG)
+    } catch (err) {
+      error = err as Error
+    }
+    expect(error).not.toBeNull()
+    expect(error?.message).toContain('trigger[indicator.above/entry]')
+    expect(error?.message).toContain('action[open_long')
+  })
+
+  it('skips invariant when source === system_default', () => {
+    expect(() => svc.build({
+      triggers: [{
+        key: 'indicator.above',
+        phase: 'entry',
+        source: 'system_default',
+        params: { indicator: 'ema', 'reference.period': 20 },
+      }],
+    }, MSG)).not.toThrow()
+  })
+
+  it('skips invariant when message is not provided', () => {
+    expect(() => svc.build({
+      triggers: [{
+        key: 'indicator.above',
+        phase: 'entry',
+        source: 'user_explicit',
+        params: { indicator: 'ema', 'reference.period': 20 },
+      }],
+    })).not.toThrow()
+  })
+
+  it('throws when evidence.text is a non-string type (number)', () => {
+    expect(() => svc.build({
+      triggers: [{
+        key: 'indicator.above',
+        phase: 'entry',
+        source: 'user_explicit',
+        evidence: { text: 20, source: 'user_explicit' },
+        params: { indicator: 'ema', 'reference.period': 20 },
+      }],
+    }, MSG)).toThrow(/evidence invariant violated/)
+  })
+})
+
+describe('SemanticSeedStateBuilderService — evidence invariant (drop mode)', () => {
+  const svc = makeService('drop')
+
+  it('drops violating trigger and returns state with remaining valid atoms', () => {
+    const state = svc.build({
+      triggers: [
+        {
+          key: 'indicator.above',
+          phase: 'entry',
+          source: 'user_explicit',
+          evidence: { text: 'EMA20 上方', source: 'user_explicit' },
+          params: { indicator: 'ema', 'reference.period': 20 },
+        },
+        {
+          key: 'rsi.oversold',
+          phase: 'entry',
+          source: 'user_explicit',
+          // missing evidence — should be dropped
+          params: { period: 14, threshold: 30 },
+        },
+      ],
+    }, MSG)
+    expect(state?.triggers).toHaveLength(1)
+    expect(state?.triggers[0]?.key).toBe('indicator.above')
+  })
+
+  it('drops trigger with empty evidence.text (C2)', () => {
+    const state = svc.build({
+      triggers: [{
+        key: 'rsi.oversold',
+        phase: 'entry',
+        source: 'user_explicit',
+        evidence: { text: '', source: 'user_explicit' },
+        params: { period: 14 },
+      }],
+      actions: [{
+        key: 'open_long',
+        source: 'user_explicit',
+        evidence: { text: '开多', source: 'user_explicit' },
+      }],
+    }, '开多 RSI 超卖')
+    expect(state?.triggers).toHaveLength(0)
+  })
+
+  it('returns null when all atoms are dropped', () => {
+    const state = svc.build({
+      triggers: [{
+        key: 'indicator.above',
+        phase: 'entry',
+        source: 'user_explicit',
+        params: { indicator: 'ema', 'reference.period': 20 },
+      }],
+    }, MSG)
+    expect(state).toBeNull()
+  })
+
+  it('does not throw even when violations exist', () => {
+    expect(() => svc.build({
+      triggers: [{
+        key: 'indicator.above',
+        phase: 'entry',
+        source: 'user_explicit',
+        params: { indicator: 'ema', 'reference.period': 20 },
+      }],
+    }, MSG)).not.toThrow()
+  })
+})
+
+describe('SemanticSeedStateBuilderService — evidence invariant (off mode)', () => {
+  const svc = makeService('off')
+
+  it('allows atoms without evidence when mode is off', () => {
+    const state = svc.build({
+      triggers: [{
+        key: 'indicator.above',
+        phase: 'entry',
+        source: 'user_explicit',
+        params: { indicator: 'ema', 'reference.period': 20 },
+      }],
+    }, MSG)
+    expect(state?.triggers).toHaveLength(1)
   })
 })
