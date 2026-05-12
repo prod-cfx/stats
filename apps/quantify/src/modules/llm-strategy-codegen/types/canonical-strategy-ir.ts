@@ -420,7 +420,7 @@ export interface IrSymbolScope {
 
 // Phase 5 S11 (#1112): scope.leg substrate IR
 export interface IrOrchestrationLegSizing {
-  mode: 'fixed_pct' | 'fixed_quote' | 'fixed_ratio'
+  mode: 'fixed_pct' | 'fixed_quote' | 'fixed_ratio' | 'fixed_base'
   value: number
   pairedLegId?: string
 }

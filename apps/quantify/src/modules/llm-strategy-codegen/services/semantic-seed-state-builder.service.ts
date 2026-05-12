@@ -71,7 +71,8 @@ type ProjectableSizingAxis = Exclude<SizingAxis, 'risk_budget'>
 function legacySizingFromNormalized(axis: ProjectableSizingAxis, value: number, asset?: string): SemanticPositionSizingContract {
   switch (axis) {
     case 'notional_quote':
-      return { kind: 'quote', value, asset: asset ?? 'USDT' }
+      // asset is guaranteed to be a valid quote symbol by callers; fallback 'USDT' is always valid.
+      return { kind: 'quote', value, asset: (asset ?? 'USDT') as 'USDT' | 'USDC' | 'USD' }
     case 'base_qty':
       return { kind: 'base', value, asset: asset ?? '' }
     case 'equity_ratio':

@@ -3406,7 +3406,6 @@ describe('#1186 PR3 — multi-leg per_order_budget per-leg anchored', () => {
       )
       expect(capitalMissing).toHaveLength(0)
     })
-  })
 })
 
 function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticState {

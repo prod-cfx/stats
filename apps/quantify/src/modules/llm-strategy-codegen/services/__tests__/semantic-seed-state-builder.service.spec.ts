@@ -1947,7 +1947,7 @@ describe('SemanticSeedStateBuilderService', () => {
 describe('projectSingleAnchorToPosition — base_qty asset 投影', () => {
   const svc = new SemanticSeedStateBuilderService()
 
-  function makeBaseQtyCapabilityState(asset: string | undefined): import('../../../types/semantic-state').SemanticState {
+  function makeBaseQtyCapabilityState(asset: string | undefined): import('../../types/semantic-state').SemanticState {
     return {
       version: 1,
       families: ['single-leg'],
@@ -1987,7 +1987,7 @@ describe('projectSingleAnchorToPosition — base_qty asset 投影', () => {
 
   it('base_qty + asset → 投影出 position.sizing = { kind: base, asset } + mode = fixed_qty', () => {
     // 直接构造已含 capability 的 state，走 projectSingleAnchorToPosition 路径
-    const result = (svc as unknown as { projectSingleAnchorToPosition: (state: import('../../../types/semantic-state').SemanticState, anchors: ReadonlyMap<string, import('../../per-trade-sizing-resolver.service').SizingAnchor>) => import('../../../types/semantic-state').SemanticState })
+    const result = (svc as unknown as { projectSingleAnchorToPosition: (state: import('../../types/semantic-state').SemanticState, anchors: ReadonlyMap<string, import('../per-trade-sizing-resolver.service').SizingAnchor>) => import('../../types/semantic-state').SemanticState })
       .projectSingleAnchorToPosition(
         makeBaseQtyCapabilityState('BTC'),
         new Map([
@@ -2006,7 +2006,7 @@ describe('projectSingleAnchorToPosition — base_qty asset 投影', () => {
 
   it('base_qty 无 asset → 不投影（守门继续追问）', () => {
     const baseState = makeBaseQtyCapabilityState(undefined)
-    const result = (svc as unknown as { projectSingleAnchorToPosition: (state: import('../../../types/semantic-state').SemanticState, anchors: ReadonlyMap<string, import('../../per-trade-sizing-resolver.service').SizingAnchor>) => import('../../../types/semantic-state').SemanticState })
+    const result = (svc as unknown as { projectSingleAnchorToPosition: (state: import('../../types/semantic-state').SemanticState, anchors: ReadonlyMap<string, import('../per-trade-sizing-resolver.service').SizingAnchor>) => import('../../types/semantic-state').SemanticState })
       .projectSingleAnchorToPosition(
         baseState,
         new Map([

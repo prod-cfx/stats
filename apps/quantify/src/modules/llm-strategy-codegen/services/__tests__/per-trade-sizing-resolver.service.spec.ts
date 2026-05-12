@@ -1,5 +1,6 @@
 import { PerTradeSizingResolver, scopeKey } from '../per-trade-sizing-resolver.service'
 import type { SizingAnchor } from '../per-trade-sizing-resolver.service'
+import type { SemanticState } from '../../types/semantic-state'
 import {
   buildAmbiguousSizingState,
   buildEmptyState,
