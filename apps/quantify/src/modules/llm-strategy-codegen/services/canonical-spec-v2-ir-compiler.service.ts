@@ -2521,10 +2521,15 @@ export class CanonicalSpecV2IrCompilerService {
       return null
     }
 
-    // condition.value is stored as a fraction (valuePct / 100) by canonical-spec-builder
+    // canonical-spec-builder currently stores valuePct as a fraction (valuePct / 100),
+    // but other risk atoms (stop_loss_pct, take_profit_pct, trailing_stop_pct) accept
+    // both fraction (≤1) and percentage (>1) via the same heuristic — see
+    // tryCompileRiskGuard. Mirror that contract here so upstream changes do not silently
+    // produce a 1500% threshold (which would never trigger and would not throw either).
     const rawValue = this.readNumber([rule.condition.value], Number.NaN)
-    // Convert fraction back to percentage for the runtime evaluator
-    const thresholdPct = Number((rawValue * 100).toFixed(4))
+    const thresholdPct = Number.isFinite(rawValue) && rawValue <= 1
+      ? Number((rawValue * 100).toFixed(4))
+      : rawValue
 
     if (!Number.isFinite(thresholdPct) || thresholdPct <= 0 || thresholdPct >= 100) {
       throw new Error(

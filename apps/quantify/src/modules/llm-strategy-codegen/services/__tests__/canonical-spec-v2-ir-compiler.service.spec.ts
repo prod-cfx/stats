@@ -4317,6 +4317,32 @@ describe('canonicalSpecV2IrCompilerService risk.max_drawdown_pct', () => {
     expect(guardIds).not.toContain('guard_risk-max-drawdown')
   })
 
+  it('accepts already-percentage values (>1) without double-converting — mirrors tryCompileRiskGuard contract', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'risk-max-drawdown',
+      phase: 'risk',
+      sideScope: 'both',
+      priority: 100,
+      condition: {
+        kind: 'atom',
+        key: 'risk.max_drawdown_pct',
+        semanticScope: 'portfolio',
+        op: 'GTE',
+        // raw percentage form (>1) — must not be multiplied by 100 again
+        value: 15,
+      },
+      actions: [{ type: 'FORCE_EXIT' }],
+    })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const drawdown = result.ir.orchestrationPortfolioRisks?.find(r => r.id === 'risk-max-drawdown')
+    expect(drawdown).toBeDefined()
+    if (drawdown?.scope === 'portfolio') {
+      expect(drawdown.thresholdPct).toBeCloseTo(15, 4)
+    }
+  })
+
   it('coexists with spec.orchestration.portfolioRisks — both appear in output', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
     const spec = buildSpecWithMaxDrawdown(20)
