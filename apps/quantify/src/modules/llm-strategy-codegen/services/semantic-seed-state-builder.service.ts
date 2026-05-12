@@ -1,6 +1,6 @@
 import { createHash } from 'crypto'
 
-import { Injectable, Logger } from '@nestjs/common'
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 
 import type {
   MarketInstrumentQuote,
@@ -47,6 +47,7 @@ import { validateSemanticRiskContract } from './strategy-semantic-contracts'
 //   drop   — 违规静默丢弃 + logger.warn（全环境默认；测试 fixture 含无 evidence atom，兼容存量）
 //   off    — 关闭检查（跳过 invariant）
 export type EvidenceInvariantMode = 'throw' | 'drop' | 'off'
+export const SEMANTIC_SEED_EVIDENCE_INVARIANT_MODE = 'SEMANTIC_SEED_EVIDENCE_INVARIANT_MODE'
 
 type SemanticPatchRecord = Record<string, unknown>
 type ContextField = 'exchange' | 'symbol' | 'marketType' | 'timeframe'
@@ -105,6 +106,7 @@ export class SemanticSeedStateBuilderService {
     private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
     private readonly semanticAtomRegistry: SemanticAtomRegistryService = new SemanticAtomRegistryService(),
     private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
+    @Optional() @Inject(SEMANTIC_SEED_EVIDENCE_INVARIANT_MODE)
     evidenceInvariantMode?: EvidenceInvariantMode,
   ) {
     // Default to 'drop' in all environments; callers can inject 'throw' for
@@ -144,7 +146,7 @@ export class SemanticSeedStateBuilderService {
       kind: 'trigger' | 'action' | 'risk',
     ): void => {
       if (evidenceMode === 'off' || typeof message !== 'string') return
-      for (const item of items) {
+      for (const [itemIndex, item] of items.entries()) {
         if (!this.isRecord(item)) continue
         if (item.source === 'system_default') continue
         const evidence = this.isRecord(item.evidence) ? item.evidence : null
@@ -154,7 +156,6 @@ export class SemanticSeedStateBuilderService {
         const phase = typeof item.phase === 'string' ? `/${item.phase}` : ''
         // Include array index to avoid atomId collision when multiple atoms share the same key+phase
         // (e.g. multi-MA strategies with several indicator.above/entry triggers)
-        const itemIndex = items.indexOf(item)
         const atomId = `${kind}[${itemIndex}:${key}${phase}]`
         let reason: string | null = null
         if (!hasEvidenceField || evidenceText === null) {
