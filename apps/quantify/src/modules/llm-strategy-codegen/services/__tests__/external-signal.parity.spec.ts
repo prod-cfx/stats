@@ -237,6 +237,21 @@ describe('external.signal atom 五层 parity', () => {
       const trigger = normalized.state.triggers?.find(t => t.key === 'external.signal')
       expect(trigger?.status).toBe('open')
     })
+
+    it('fully specified webhook signal still stays blocked until runtime lands', () => {
+      const patch = seedExtractor.extract(WEBHOOK_SIGNAL_ID_UTTERANCE)
+      const state = seedStateBuilder.build(patch)
+      expect(state).not.toBeNull()
+      const classified = supportClassifier.classify(state!)
+      const normalized = readiness.normalize(classified.state)
+      const trigger = normalized.state.triggers?.find(t => t.key === 'external.signal')
+      const slotKeys = trigger?.openSlots?.map(slot => slot.slotKey) ?? []
+
+      expect(classified.route).toBe('open_slots')
+      expect(normalized.ready).toBe(false)
+      expect(trigger?.status).toBe('open')
+      expect(slotKeys).toContain('external.signal.runtime')
+    })
   })
 
   // ─── Layer 7: display + clarification renderer ───────────────────────────────

@@ -5070,7 +5070,14 @@ export class SemanticSeedExtractorService {
         const signalId = this.extractExternalSignalId(clause)
         const secretConfigured = this.hasExternalSignalSecretConfigured(clause)
           || this.hasExternalSignalSecretConfigured(segment)
-        const externalOpenSlots: SeedTrigger['openSlots'] = []
+        const externalOpenSlots: SeedTrigger['openSlots'] = [{
+          slotKey: 'external.signal.runtime',
+          fieldPath: 'trigger.params.runtime',
+          status: 'open',
+          priority: 'risk',
+          questionHint: 'Webhook 接收、HMAC 校验与信号队列运行时尚未启用，当前外部信号不能进入执行路径。',
+          affectsExecution: true,
+        }]
         if (!provider) {
           externalOpenSlots.push({
             slotKey: 'external.signal.provider',
