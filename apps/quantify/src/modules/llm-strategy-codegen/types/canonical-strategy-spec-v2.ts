@@ -61,8 +61,8 @@ export type CanonicalRuleActionType =
  * （action.sizing > spec.sizing > fallback.positionPct）。
  * IR 编译期 assertSizingEvidence() 守门基于此集合判定。
  *
- * CLOSE_*/REDUCE_*/FORCE_EXIT/BLOCK_NEW_ENTRY 不在此列，因为它们的
- * 数量由当前持仓决定，与下单 sizing 无关。
+ * CLOSE_LONG / CLOSE_SHORT / REDUCE_LONG / REDUCE_SHORT / FORCE_EXIT /
+ * BLOCK_NEW_ENTRY 不在此列，因为它们的数量由当前持仓决定，与下单 sizing 无关。
  */
 export const ACTIONABLE_RULE_ACTION_TYPES: ReadonlySet<CanonicalRuleActionType> = new Set([
   'OPEN_LONG',
