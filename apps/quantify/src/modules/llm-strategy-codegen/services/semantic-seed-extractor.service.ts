@@ -2786,11 +2786,12 @@ export class SemanticSeedExtractorService {
       }
 
       // Issue #1223: MA stack 副产路径屏蔽
-      //   clause 中出现 ≥2 个 MA/EMA 周期（如"价格在 EMA20、EMA60、EMA144 上方"）属于 stack 语义，
+      //   clause 中出现 ≥2 个不同 MA/EMA 周期（如"价格在 EMA20、EMA60、EMA144 上方"）属于 stack 语义，
       //   已由 indicator.above 路径正确覆盖；继续 emit condition.expression 只能挑首/末一个周期，
       //   等价凭空构造"close > EMA{last}"，污染 state 且无 evidence。直接跳过。
-      const maReferenceCount = (clause.match(/\b(?:MA|EMA)\s*\d{1,4}/giu) ?? []).length
-      if (maReferenceCount >= 2) continue
+      //   用 Set 去重避免重复提及同一周期（如"EMA20 和 EMA20"）误判为 stack。
+      const maReferences = new Set((clause.match(/\b(?:MA|EMA)\s*\d{1,4}/giu) ?? []).map(m => m.replace(/\s+/g, '').toUpperCase()))
+      if (maReferences.size >= 2) continue
 
       const period = Number(priceAbove[2])
       if (!Number.isFinite(period)) continue
@@ -2801,7 +2802,8 @@ export class SemanticSeedExtractorService {
         : 'condition.expression'
 
       // Issue #1223: 出口 evidence invariant — 非默认 atom 必须挂可定位的 message 子串
-      const evidenceText = priceAbove[0].trim()
+      //   使用原始 match 字符串（不 trim），保证是 clause（及原始 message）的真实子串。
+      const evidenceText = priceAbove[0]
 
       this.pushTrigger(triggers, seen, {
         key,
