@@ -2549,11 +2549,11 @@ export class SemanticSeedExtractorService {
   }
 
   private pushCandleExpressionTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
-    for (const clause of this.splitLogicClauses(segment)) {
+    for (const { clause, parentClause } of this.splitLogicClausesWithParent(segment)) {
       const expression = this.extractCloseOpenCandleExpression(clause)
       if (!expression) continue
 
-      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
       if (!intent) continue
 
       this.pushTrigger(triggers, seen, {
@@ -2602,10 +2602,10 @@ export class SemanticSeedExtractorService {
     triggers: SeedTrigger[],
     seen: Set<string>,
   ): void {
-    for (const clause of this.splitLogicClauses(segment)) {
+    for (const { clause, parentClause } of this.splitLogicClausesWithParent(segment)) {
       const previousExtrema = this.extractPreviousExtremaReference(clause)
       if (previousExtrema) {
-        const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+        const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
         if (intent) {
           this.pushTrigger(triggers, seen, {
             key: 'price.previous_extrema',
@@ -2619,7 +2619,7 @@ export class SemanticSeedExtractorService {
       const expression = this.extractPreviousBarExtremaExpression(clause)
       if (!expression) continue
 
-      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
       if (!intent) continue
 
       this.pushTrigger(triggers, seen, {
@@ -3222,13 +3222,11 @@ export class SemanticSeedExtractorService {
     // Issue #1220：同子句多组同模式必须全部抽出（不仅是逗号分隔）。
     // splitLogicClauses 同时切「，/,/、」与「且/并且/同时/以及」，确保
     // 「MA20 上穿 MA50 且 EMA7 上穿 EMA21」能拆成两个子句各自被解析。
-    const clauses = this.splitLogicClauses(segment)
-
-    for (const clause of clauses) {
+    for (const { clause, parentClause } of this.splitLogicClausesWithParent(segment)) {
       const cross = this.parseMovingAverageCrossClause(clause) ?? this.parseGenericMovingAverageCrossClause(clause, segment)
       if (!cross) continue
 
-      const intent = this.resolveLogicClauseTradeIntent(clause, segment)
+      const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
       if (!intent) continue
 
       // evidence.text 缩到精确命中子句，避免 hetero AND 分桶定位错位（Issue #1220）。
@@ -3717,15 +3715,14 @@ export class SemanticSeedExtractorService {
   ): void {
     if (!/RSI/iu.test(segment)) return
 
-    const clauses = this.splitLogicClauses(segment)
     const segmentPeriod = this.extractLastRsiPeriod(segment) ?? aliasContext.rsi?.period ?? 14
 
-    for (const clause of clauses) {
+    for (const { clause, parentClause } of this.splitLogicClausesWithParent(segment)) {
       if (!/RSI/iu.test(clause) && !this.isRsiThresholdAliasClause(clause, segment)) continue
 
       // Issue #1219: phase / sideScope 由子句动词决定，与阈值方向解耦；
       // 子句无动词时跟随父级 segment 的动词，不用"低于→exit"硬编码兜底。
-      const intent = this.resolveLogicClauseTradeIntent(clause, segment)
+      const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
       if (!intent) continue
 
       const period = this.extractLastRsiPeriod(clause) ?? segmentPeriod
@@ -3824,14 +3821,12 @@ export class SemanticSeedExtractorService {
           },
         })
       }
-      return
     }
 
-    const clauses = this.splitLogicClauses(segment)
-
-    for (const clause of clauses) {
+    for (const { clause, parentClause } of this.splitLogicClausesWithParent(segment)) {
       if (!/MACD|DIF|DEA/iu.test(clause)) continue
-      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      if (eventFrames.length > 0 && this.resolveTradeIntent(clause)) continue
+      const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
       if (!intent) continue
 
       const direction = /上穿|金叉/iu.test(clause)
@@ -3859,8 +3854,8 @@ export class SemanticSeedExtractorService {
     if (!/最近\s*\d{1,4}\s*根\s*K\s*线/u.test(segment)) return
     if (!/突破|跌回|跌破|高点|低点/u.test(segment)) return
 
-    for (const clause of this.splitLogicClauses(segment)) {
-      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+    for (const { clause, parentClause } of this.splitLogicClausesWithParent(segment)) {
+      const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
       if (!intent) continue
 
       const highPeriod = this.extractNumber(clause, [
@@ -3904,10 +3899,10 @@ export class SemanticSeedExtractorService {
   private pushPartialBreakoutTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
     if (!/(突破|升破|上破|跌破|下破|失守).{0,12}(关键位置|支撑|压力|阻力)/u.test(segment)) return
 
-    for (const clause of this.splitLogicClauses(segment)) {
+    for (const { clause, parentClause } of this.splitLogicClausesWithParent(segment)) {
       if (!/(突破|升破|上破|跌破|下破|失守).{0,12}(关键位置|支撑|压力|阻力)/u.test(clause)) continue
 
-      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
       if (!intent) continue
 
       const isDown = /跌破|下破|失守|支撑/u.test(clause)
@@ -3941,8 +3936,8 @@ export class SemanticSeedExtractorService {
     if (!/(过去|最近)\s*\d{1,4}\s*根\s*K\s*线/u.test(segment)) return
     if (!/(最高价|最高|高点|最低价|最低|低点)/u.test(segment)) return
 
-    for (const clause of this.splitLogicClauses(segment)) {
-      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+    for (const { clause, parentClause } of this.splitLogicClausesWithParent(segment)) {
+      const intent = this.resolveLogicClauseTradeIntent(clause, parentClause, segment)
       if (!intent) continue
 
       const highLookback = this.extractNumber(clause, [
@@ -5333,15 +5328,14 @@ export class SemanticSeedExtractorService {
 
   private resolveLogicClauseTradeIntent(
     clause: string,
+    parentClause: string,
     segment: string,
   ): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' } | null {
     const direct = this.resolvePhaseByClauseVerb(clause)
     if (direct) return direct
 
-    const parentCommaClause = this.splitCommaClauses(segment)
-      .find(candidate => candidate === clause || candidate.includes(clause))
-    if (parentCommaClause && parentCommaClause !== segment) {
-      const parentIntent = this.resolvePhaseByClauseVerb(parentCommaClause)
+    if (parentClause !== clause) {
+      const parentIntent = this.resolvePhaseByClauseVerb(parentClause)
       if (parentIntent) return parentIntent
     }
 
@@ -5491,6 +5485,16 @@ export class SemanticSeedExtractorService {
       .split(/[，,、]|(?:且|并且|同时|以及)/u)
       .map(clause => clause.trim())
       .filter(Boolean)
+  }
+
+  private splitLogicClausesWithParent(segment: string): Array<{ clause: string; parentClause: string }> {
+    return this.splitCommaClauses(segment).flatMap(parentClause =>
+      parentClause
+        .split(/[、]|(?:并且|同时|以及|且)/u)
+        .map(clause => clause.trim())
+        .filter(Boolean)
+        .map(clause => ({ clause, parentClause })),
+    )
   }
 
   private hasExplicitPriceChangeContext(segment: string): boolean {

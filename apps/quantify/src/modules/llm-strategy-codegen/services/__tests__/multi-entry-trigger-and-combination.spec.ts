@@ -12,10 +12,10 @@
  * - MA stack + hetero AND 不重叠
  */
 import type { SemanticAtomContract, SemanticState } from '../../types/semantic-state'
-import { isTriggerPredicateGroupContract } from '../semantic-state-normalization'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
+import { isTriggerPredicateGroupContract } from '../semantic-state-normalization'
 import { SemanticTriggerCombinationContractService } from '../semantic-trigger-combination-contract.service'
 
 // Minor m3：每次 beforeEach 新建实例，防御未来引入静态/缓存状态
@@ -272,6 +272,73 @@ it('[#1c] 完整策略中逗号后的平多不污染前置 AND 入场组', () =>
     condition: expect.objectContaining({ key: 'ma.death_cross' }),
     actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
   }))
+})
+
+it('[#1d] 重复逻辑子句按所在逗号块继承意图，不被前一父块污染', () => {
+  const state = buildState(
+    'MA20 上穿 MA50 开多，MA20 上穿 MA50 且 EMA7 上穿 EMA21 开空',
+  )
+
+  expect(state.triggers).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      key: 'indicator.cross_over',
+      phase: 'entry',
+      sideScope: 'long',
+      params: expect.objectContaining({ indicator: 'ma', fastPeriod: 20, slowPeriod: 50 }),
+    }),
+    expect.objectContaining({
+      key: 'indicator.cross_over',
+      phase: 'entry',
+      sideScope: 'short',
+      params: expect.objectContaining({ indicator: 'ma', fastPeriod: 20, slowPeriod: 50 }),
+    }),
+    expect.objectContaining({
+      key: 'indicator.cross_over',
+      phase: 'entry',
+      sideScope: 'short',
+      params: expect.objectContaining({ indicator: 'ema', fastPeriod: 7, slowPeriod: 21 }),
+    }),
+  ]))
+
+  const shortEntryGroups = combinationResolver.resolveExecutableGroups(state.triggers)
+    .filter(g => g.phase === 'entry' && g.sideScope === 'short')
+  expect(shortEntryGroups).toHaveLength(1)
+  expect(shortEntryGroups[0]).toEqual(expect.objectContaining({ join: 'AND' }))
+  expect(shortEntryGroups[0]!.members).toHaveLength(2)
+})
+
+it('[#1e] 非 MA/RSI 逻辑子句同样继承所在逗号块意图', () => {
+  const macdState = buildState('MACD 金叉 且 RSI14 低于 35 开多，MACD 死叉 平多')
+  expect(macdState.triggers).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      key: 'indicator.cross_over',
+      phase: 'entry',
+      sideScope: 'long',
+      params: expect.objectContaining({ indicator: 'macd' }),
+    }),
+    expect.objectContaining({
+      key: 'indicator.cross_under',
+      phase: 'exit',
+      sideScope: 'long',
+      params: expect.objectContaining({ indicator: 'macd' }),
+    }),
+  ]))
+
+  const breakoutState = buildState('突破最近20根K线高点 且 RSI14 低于 35 开多，跌破最近20根K线低点 平多')
+  expect(breakoutState.triggers).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      key: 'price.breakout_up',
+      phase: 'entry',
+      sideScope: 'long',
+      params: expect.objectContaining({ period: 20, reference: 'channel_high' }),
+    }),
+    expect.objectContaining({
+      key: 'price.breakout_down',
+      phase: 'exit',
+      sideScope: 'long',
+      params: expect.objectContaining({ period: 20, reference: 'channel_low' }),
+    }),
+  ]))
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
