@@ -71,6 +71,8 @@ CREATE INDEX "idx_webhook_signal_subscriptions_instance_signal_status"
   ON "webhook_signal_subscriptions"("strategy_instance_id", "signal_id", "status");
 CREATE INDEX "idx_webhook_signal_subscriptions_created_at"
   ON "webhook_signal_subscriptions"("created_at");
+CREATE UNIQUE INDEX "uniq_webhook_signal_subscriptions_id_instance_signal"
+  ON "webhook_signal_subscriptions"("id", "strategy_instance_id", "signal_id");
 
 CREATE UNIQUE INDEX "uniq_webhook_signal_events_dedupe_key"
   ON "webhook_signal_events"("dedupe_key");
@@ -100,7 +102,8 @@ ALTER TABLE "webhook_signal_subscriptions"
 
 ALTER TABLE "webhook_signal_events"
   ADD CONSTRAINT "webhook_signal_events_subscription_id_fkey"
-  FOREIGN KEY ("subscription_id") REFERENCES "webhook_signal_subscriptions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  FOREIGN KEY ("subscription_id", "strategy_instance_id", "signal_id")
+  REFERENCES "webhook_signal_subscriptions"("id", "strategy_instance_id", "signal_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 ALTER TABLE "webhook_signal_events"
   ADD CONSTRAINT "webhook_signal_events_strategy_instance_id_fkey"

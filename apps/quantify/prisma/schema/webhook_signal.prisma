@@ -33,6 +33,7 @@ model WebhookSignalSubscription {
   @@index([userId, status], map: "idx_webhook_signal_subscriptions_user_status")
   @@index([strategyInstanceId, signalId, status], map: "idx_webhook_signal_subscriptions_instance_signal_status")
   @@index([createdAt], map: "idx_webhook_signal_subscriptions_created_at")
+  @@unique([id, strategyInstanceId, signalId], map: "uniq_webhook_signal_subscriptions_id_instance_signal")
   @@map("webhook_signal_subscriptions")
 }
 
@@ -51,7 +52,7 @@ model WebhookSignalEvent {
   receivedAt         DateTime                     @default(now()) @map("received_at")
   createdAt          DateTime                     @default(now()) @map("created_at")
 
-  subscription     WebhookSignalSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  subscription     WebhookSignalSubscription @relation(fields: [subscriptionId, strategyInstanceId, signalId], references: [id, strategyInstanceId, signalId], onDelete: Cascade)
   strategyInstance StrategyInstance          @relation(fields: [strategyInstanceId], references: [id], onDelete: Cascade)
   audits           WebhookSignalAudit[]
 
