@@ -2540,6 +2540,37 @@ export class CanonicalSpecV2IrCompilerService {
       }
     }
 
+    // risk.stop_loss_pct ghost-atom fix (P3, #1264).
+    //
+    // canonical-spec-builder rewrites this atom into `position_loss_pct` via
+    // buildPercentRiskCanonicalRule, so normal builder paths are already covered.
+    // However spec authors and contract tests can inject `risk.stop_loss_pct`
+    // directly; without an explicit branch the rule falls through
+    // compileConditionAtom and throws condition_unsupported.
+    //
+    // Boundary semantics mirror the existing position_loss_pct case:
+    //   rawValue ∈ (0, 1] → fraction form → * 100 with toFixed(4)
+    //   rawValue > 1      → already percentage, passed through verbatim
+    //
+    // Fail-closed: thresholdPct ∉ (0, 100) → throw. Silent skip is forbidden:
+    // a skipped stop-loss guard is indistinguishable from "no stop-loss" at runtime.
+    if (rule.condition.key === 'risk.stop_loss_pct') {
+      const thresholdPct = threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold
+      if (!Number.isFinite(thresholdPct) || thresholdPct <= 0 || thresholdPct >= 100) {
+        throw new Error(
+          `codegen.canonical_spec_v2_stop_loss_pct_invalid_pct:${rule.id}:${thresholdPct}`,
+        )
+      }
+      return {
+        id: `guard_${rule.id}`,
+        kind: 'STOP_LOSS_PCT',
+        scope: 'position',
+        appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
+        value: thresholdPct,
+        onBreach,
+      }
+    }
+
     return null
   }
 

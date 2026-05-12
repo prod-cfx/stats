@@ -5657,3 +5657,111 @@ describe('canonicalSpecV2IrCompilerService action.reverse_position', () => {
     expect(errorCode).toMatch(/^codegen\.canonical_spec_v2_reverse_position_/)
   })
 })
+
+// ---------------------------------------------------------------------------
+// risk.stop_loss_pct ghost-atom fix (P3, #1264): canonical→IR compile branch
+// ---------------------------------------------------------------------------
+describe('canonicalSpecV2IrCompilerService risk.stop_loss_pct', () => {
+  const fallback = { exchange: 'binance' as const, symbol: 'BTCUSDT', baseTimeframe: '1m', positionPct: 10 }
+
+  function buildBaseSpec(): CanonicalStrategySpecV2 {
+    return {
+      version: 2,
+      market: { exchange: 'binance', symbol: 'BTCUSDT', marketType: 'spot', defaultTimeframe: '1m' },
+      indicators: [],
+      sizing: { mode: 'QUOTE', value: 10 },
+      executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+      dataRequirements: { requiredTimeframes: ['1m'] },
+      rules: [{
+        id: 'entry-baseline',
+        phase: 'entry',
+        sideScope: 'long',
+        priority: 200,
+        condition: { kind: 'expression', op: 'GT', left: { kind: 'series', source: 'bar', field: 'close' }, right: { kind: 'series', source: 'bar', field: 'open' } },
+        actions: [{ type: 'OPEN_LONG' }],
+      }],
+    } satisfies CanonicalStrategySpecV2
+  }
+
+  function buildSpecWithStopLossPct(valuePct: number): CanonicalStrategySpecV2 {
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'risk-stop-loss',
+      phase: 'risk',
+      sideScope: 'both',
+      priority: 100,
+      condition: { kind: 'atom', key: 'risk.stop_loss_pct', semanticScope: 'position', op: 'GTE', value: Number((valuePct / 100).toFixed(4)) },
+      actions: [{ type: 'FORCE_EXIT' }],
+    })
+    return spec
+  }
+
+  it('emits STOP_LOSS_PCT guard into riskPolicy.guards for valuePct:5', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithStopLossPct(5), fallback })
+    const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-stop-loss')
+    expect(guard).toBeDefined()
+    expect(guard?.kind).toBe('STOP_LOSS_PCT')
+    expect(guard?.scope).toBe('position')
+    expect(guard?.value).toBeCloseTo(5, 4)
+    expect(guard?.onBreach).toBe('FORCE_EXIT')
+  })
+
+  it('does not leak risk.stop_loss_pct into ruleBlocks or portfolioRisks', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithStopLossPct(8), fallback })
+    expect(result.ir.ruleBlocks.map(r => r.id)).not.toContain('risk-stop-loss')
+    expect((result.ir.orchestrationPortfolioRisks ?? []).map(r => r.id)).not.toContain('risk-stop-loss')
+  })
+
+  it('preserves fractional valuePct precision (5.5 → value ≈ 5.5)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithStopLossPct(5.5), fallback })
+    const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-stop-loss')
+    expect(guard?.value).toBeCloseTo(5.5, 4)
+  })
+
+  it('accepts already-percentage values (>1) without double-converting', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({ id: 'risk-stop-loss', phase: 'risk', sideScope: 'both', priority: 100, condition: { kind: 'atom', key: 'risk.stop_loss_pct', semanticScope: 'position', op: 'GTE', value: 10 }, actions: [{ type: 'FORCE_EXIT' }] })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-stop-loss')?.value).toBeCloseTo(10, 4)
+  })
+
+  it('emits one guard per rule when spec carries multiple stop_loss rules (no merge)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    for (const [id, pct] of [['risk-sl-tight', 3], ['risk-sl-loose', 7]] as const) {
+      spec.rules.push({ id, phase: 'risk', sideScope: 'both', priority: 100, condition: { kind: 'atom', key: 'risk.stop_loss_pct', semanticScope: 'position', op: 'GTE', value: Number((pct / 100).toFixed(4)) }, actions: [{ type: 'FORCE_EXIT' }] })
+    }
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-sl-tight')?.value).toBeCloseTo(3, 4)
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-sl-loose')?.value).toBeCloseTo(7, 4)
+  })
+
+  it('isolates risk.stop_loss_pct guard from max_drawdown_pct portfolioRisk (coexistence)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push(
+      { id: 'risk-sl', phase: 'risk', sideScope: 'long', priority: 90, condition: { kind: 'atom', key: 'risk.stop_loss_pct', semanticScope: 'position', op: 'GTE', value: 0.05 }, actions: [{ type: 'FORCE_EXIT' }] },
+      { id: 'risk-dd', phase: 'risk', sideScope: 'both', priority: 100, condition: { kind: 'atom', key: 'risk.max_drawdown_pct', semanticScope: 'portfolio', op: 'GTE', value: 0.15 }, actions: [{ type: 'FORCE_EXIT' }] },
+    )
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards.map(g => g.id)).toContain('guard_risk-sl')
+    expect((result.ir.orchestrationPortfolioRisks ?? []).map(r => r.id)).toContain('risk-dd')
+    expect(result.ir.ruleBlocks.map(r => r.id)).not.toContain('risk-sl')
+  })
+
+  it('fails closed when valuePct is 0 (throws invalid_pct)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    expect(() => compiler.compile({ canonicalSpec: buildSpecWithStopLossPct(0), fallback }))
+      .toThrow(/codegen\.canonical_spec_v2_stop_loss_pct_invalid_pct/)
+  })
+
+  it('fails closed when valuePct is 100 (throws invalid_pct)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    expect(() => compiler.compile({ canonicalSpec: buildSpecWithStopLossPct(100), fallback }))
+      .toThrow(/codegen\.canonical_spec_v2_stop_loss_pct_invalid_pct/)
+  })
+})
