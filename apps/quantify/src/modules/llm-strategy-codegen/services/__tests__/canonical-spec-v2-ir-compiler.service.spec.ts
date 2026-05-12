@@ -4485,18 +4485,20 @@ describe('canonicalSpecV2IrCompilerService risk.max_drawdown_pct', () => {
     )
   })
 
-  it('runtime: emitted IR node causes evaluateOrchestrationPortfolioRisks to block entry when drawdownPct exceeds threshold', async () => {
-    // Integration: verify the emitted IR node feeds correctly into the runtime evaluator.
-    // Import directly from the source file since the function is not re-exported by the barrel.
+  it('evaluator contract: emitted IR node drives evaluateOrchestrationPortfolioRisks block decision', async () => {
+    // Verifies the IR↔evaluator data contract: compiled node feeds correctly into
+    // evaluateOrchestrationPortfolioRisks. This is NOT a full strategy-run integration —
+    // run-decision-programs aggregation is not exercised; that lives elsewhere.
     const { evaluateOrchestrationPortfolioRisks } = await import(
       '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-portfolio-risks'
     )
     const compiler = new CanonicalSpecV2IrCompilerService()
     const spec = buildSpecWithMaxDrawdown(15)
     const result = compiler.compile({ canonicalSpec: spec, fallback })
-    const risks = result.ir.orchestrationPortfolioRisks ?? []
-    const drawdown = risks.find(r => r.id === 'risk-max-drawdown')
-    expect(drawdown).toBeDefined()
+    const drawdown = (result.ir.orchestrationPortfolioRisks ?? []).find(r => r.id === 'risk-max-drawdown')
+    if (!drawdown) {
+      throw new Error('expected risk-max-drawdown node in orchestrationPortfolioRisks')
+    }
 
     // drawdownPct=16 > threshold=15 → should block both long and short
     const blocked = evaluateOrchestrationPortfolioRisks([drawdown], { drawdownPct: 16 })
