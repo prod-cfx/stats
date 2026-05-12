@@ -1189,5 +1189,24 @@ describe('evaluateExprPool', () => {
       )
       expect(values.in_time_window_node).toBe(false)
     })
+
+    it('returns false for zero-duration window (end === start)', () => {
+      // Both 14:30 (matching local time) and 09:00 (non-matching) start===end → never match.
+      // Previously this collapsed to `localMinutes >= 14:30 || localMinutes < 14:30` which
+      // was tautologically true (all-day match) — that's the M1 chasing-tail trap fixed here.
+      const matching = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('UTC', [{ start: '14:30', end: '14:30' }])],
+        ['in_time_window_node'],
+      )
+      expect(matching.in_time_window_node).toBe(false)
+
+      const nonMatching = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('UTC', [{ start: '09:00', end: '09:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(nonMatching.in_time_window_node).toBe(false)
+    })
   })
 })

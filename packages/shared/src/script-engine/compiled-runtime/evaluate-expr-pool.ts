@@ -1303,8 +1303,12 @@ function evaluateInTimeWindow(
       if (!daysOfWeek.includes(localDayOfWeek)) continue
     }
 
+    // Zero-duration window (start === end): fail-closed treats as "never matches"
+    // rather than the previous accidental "all day" behavior (start <= end branch
+    // collapsed to `>= start || < start` which is tautologically true).
+    if (end === start) continue
     // Window spans midnight (e.g. 22:00–02:00) — split into two sub-ranges
-    if (end <= start) {
+    if (end < start) {
       if (localMinutes >= start || localMinutes < end) return true
     }
     else {
