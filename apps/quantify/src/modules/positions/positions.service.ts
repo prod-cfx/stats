@@ -4,7 +4,7 @@ import type { PositionResponseDto } from './dto/position.response.dto'
 import type { PositionsQueryDto } from './dto/positions-query.dto'
 import type { RecordTradeDto } from './dto/record-trade.dto'
 import type { TradeResponseDto } from './dto/trade.response.dto'
-import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
+import type { ExchangeId, MarketType, UnifiedOrder, UnifiedOrderFill } from '@/modules/trading/core/types'
 import type { OrderIntent, TradingExecutionResult } from '@/modules/trading-execution/types/trading-execution.types'
 import type { Position, Trade, PrismaClient } from '@/prisma/prisma.types'
 import { randomUUID } from 'node:crypto'
@@ -32,6 +32,14 @@ import { PositionsRepository } from './repositories/positions.repository'
 type Decimal = Prisma.Decimal
 const Decimal = Prisma.Decimal
 /* eslint-enable no-redeclare, ts/no-redeclare */
+
+interface CloseTradeExecutionSummary {
+  price?: number
+  filledQuantity: number
+  feeAmount: number
+  feeCurrency: string | null
+  executedAt: number
+}
 
 @Injectable()
 export class PositionsService {
@@ -529,12 +537,16 @@ export class PositionsService {
       throw this.toClosePositionExecutionException(dto.positionId, executionResult)
     }
     const { order } = executionResult
-    const filledQuantity =
-      typeof order.filled === 'number' && Number.isFinite(order.filled) && order.filled > 0
-        ? order.filled
-        : closeQuantity.toNumber()
-    const tradePrice = await this.resolveCloseTradePrice(intent, order, dto.positionId)
-    const { amount: feeAmount, currency: feeCurrency } = this.extractOrderFee(order)
+    const executionSummary = await this.resolveCloseTradeExecutionSummary(intent, order, closeQuantity.toNumber())
+    if (executionSummary.price === undefined) {
+      return {
+        success: true,
+        orderId: order.id,
+        positionId: dto.positionId,
+        filledQuantity: executionSummary.filledQuantity.toString(),
+        message: '市价平仓单已提交，成交均价待交易所同步',
+      }
+    }
 
     // 6. 下单成功后立即落地本地成交，避免仓位状态长期漂移
     await this.recordTrade({
@@ -543,14 +555,14 @@ export class PositionsService {
       market: `${exchangeId}:${marketType}`,
       side: orderSide === 'buy' ? TradeSide.BUY : TradeSide.SELL,
       positionSide: position.positionSide,
-      price: tradePrice.toString(),
-      quantity: filledQuantity.toString(),
-      fee: feeAmount > 0 ? feeAmount.toString() : '0',
-      feeCurrency: feeCurrency ?? undefined,
+      price: executionSummary.price.toString(),
+      quantity: executionSummary.filledQuantity.toString(),
+      fee: executionSummary.feeAmount > 0 ? executionSummary.feeAmount.toString() : '0',
+      feeCurrency: executionSummary.feeCurrency ?? undefined,
       orderId: order.id,
       externalTradeId: order.id,
       provider: exchangeId,
-      executedAt: new Date(order.createdAt).toISOString(),
+      executedAt: new Date(executionSummary.executedAt).toISOString(),
       metadata: {
         source: 'manual-close-position',
         positionId: dto.positionId,
@@ -570,8 +582,8 @@ export class PositionsService {
       success: true,
       orderId: order.id,
       positionId: dto.positionId,
-      filledQuantity: filledQuantity.toString(),
-      averagePrice: tradePrice.toString(),
+      filledQuantity: executionSummary.filledQuantity.toString(),
+      averagePrice: executionSummary.price.toString(),
       message: dto.note || '市价平仓成功',
     }
   }
@@ -580,29 +592,92 @@ export class PositionsService {
     return `${positionId}:${closeQuantity.toString()}:${Date.now()}:${randomUUID()}`
   }
 
-  private async resolveCloseTradePrice(intent: OrderIntent, order: UnifiedOrder, positionId: string): Promise<number> {
-    const submittedPrice = this.resolveOrderFilledAveragePrice(order)
-    if (submittedPrice !== undefined) return submittedPrice
+  private async resolveCloseTradeExecutionSummary(
+    intent: OrderIntent,
+    order: UnifiedOrder,
+    fallbackQuantity: number,
+  ): Promise<CloseTradeExecutionSummary> {
+    const submittedSummary = this.resolveOrderExecutionSummary(order, fallbackQuantity)
+    if (submittedSummary.price !== undefined) return submittedSummary
 
-    const latestOrder = await this.tradingExecution.getSubmittedOrder(intent, order)
-    const latestPrice = this.resolveOrderFilledAveragePrice(latestOrder)
-    if (latestPrice !== undefined) return latestPrice
+    let latestOrder = order
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (attempt > 0) await this.delay(250)
 
-    const fills = await this.tradingExecution.getSubmittedOrderFills(intent, latestOrder)
-    const fillsPrice = this.resolveWeightedAverageFillPrice(fills)
-    if (fillsPrice !== undefined) return fillsPrice
+      try {
+        latestOrder = await this.tradingExecution.getSubmittedOrder(intent, order)
+        const latestSummary = this.resolveOrderExecutionSummary(latestOrder, fallbackQuantity)
+        if (latestSummary.price !== undefined) return latestSummary
+      }
+      catch {
+        latestOrder = order
+      }
 
-    throw new DomainException('position.close_trade_price_unavailable', {
-      code: ErrorCode.PORTFOLIO_POSITION_CLOSE_ERROR,
-      args: { positionId, orderId: order.id },
-    })
+      try {
+        const fills = await this.tradingExecution.getSubmittedOrderFills(intent, latestOrder)
+        const fillsSummary = this.resolveFillsExecutionSummary(fills, latestOrder, fallbackQuantity)
+        if (fillsSummary.price !== undefined) return fillsSummary
+      }
+      catch {
+        // A submitted exchange order may need a short settlement window before fills are queryable.
+      }
+    }
+
+    return this.resolveOrderExecutionSummary(latestOrder, fallbackQuantity)
   }
 
-  private resolveOrderFilledAveragePrice(order: UnifiedOrder): number | undefined {
-    return this.firstPositiveNumber(
-      this.extractRawFilledAveragePrice(order.raw),
-      order.price,
-    )
+  private resolveOrderExecutionSummary(order: UnifiedOrder, fallbackQuantity: number): CloseTradeExecutionSummary {
+    const fee = this.extractOrderFee(order)
+    const filledQuantity =
+      typeof order.filled === 'number' && Number.isFinite(order.filled) && order.filled > 0
+        ? order.filled
+        : fallbackQuantity
+
+    return {
+      price: this.firstPositiveNumber(
+        this.extractRawFilledAveragePrice(order.raw),
+        order.price,
+      ),
+      filledQuantity,
+      feeAmount: fee.amount,
+      feeCurrency: fee.currency,
+      executedAt: order.updatedAt ?? order.createdAt,
+    }
+  }
+
+  private resolveFillsExecutionSummary(
+    fills: UnifiedOrderFill[],
+    order: UnifiedOrder,
+    fallbackQuantity: number,
+  ): CloseTradeExecutionSummary {
+    const price = this.resolveWeightedAverageFillPrice(fills)
+    if (price === undefined) return this.resolveOrderExecutionSummary(order, fallbackQuantity)
+
+    let filledQuantity = 0
+    let feeAmount = 0
+    let feeCurrency: string | null = null
+    let executedAt = order.updatedAt ?? order.createdAt
+
+    for (const fill of fills) {
+      if (Number.isFinite(fill.amount) && fill.amount > 0) filledQuantity += fill.amount
+      if (Number.isFinite(fill.fee) && fill.fee && fill.fee > 0) {
+        feeAmount += fill.fee
+        feeCurrency ??= fill.feeCurrency ?? null
+      }
+      if (Number.isFinite(fill.executedAt) && fill.executedAt > executedAt) executedAt = fill.executedAt
+    }
+
+    return {
+      price,
+      filledQuantity: filledQuantity > 0 ? filledQuantity : fallbackQuantity,
+      feeAmount,
+      feeCurrency,
+      executedAt,
+    }
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
   }
 
   private extractRawFilledAveragePrice(raw: unknown): number | undefined {
