@@ -2282,7 +2282,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
   //     直接走 compileCondition default → throw codegen.canonical_spec_v2_condition_unsupported。
   //   - 修复策略：在 compileAtom + describeAtomCondition 两个层把 touch_* 与
   //     既有 upper_break/lower_break/middle_revert 视作别名分支。
-  //   - 默认语义：touch_upper/lower 默认 GTE/LTE（touch 语义）；当 params.confirmationMode='cross'
+  //   - 默认语义：touch_upper/lower 默认 GTE/LTE（touch 语义）；当 params.confirmationMode='close_confirm'
   //     时退化为 CROSS_OVER/CROSS_UNDER；touch_middle 与 middle_revert 同形（OR(CROSS_OVER,CROSS_UNDER)）。
   // ────────────────────────────────────────────────────────────────────
   describe('bollinger.touch_* atoms — raw registry key path (Wave 2 P3 ghost atom fix)', () => {
@@ -2356,10 +2356,10 @@ describe('canonicalSpecV2IrCompilerService', () => {
       ]))
     })
 
-    it('touch_upper confirmationMode=cross → 退化为 CROSS_OVER', () => {
+    it('touch_upper confirmationMode=close_confirm → 退化为 CROSS_OVER', () => {
       const compiler = new CanonicalSpecV2IrCompilerService()
       const result = compiler.compile({
-        canonicalSpec: buildTouchSpec('bollinger.touch_upper', { params: { confirmationMode: 'cross' } }),
+        canonicalSpec: buildTouchSpec('bollinger.touch_upper', { params: { confirmationMode: 'close_confirm' } }),
         fallback,
       })
       expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
@@ -2367,10 +2367,10 @@ describe('canonicalSpecV2IrCompilerService', () => {
       ]))
     })
 
-    it('touch_lower confirmationMode=cross → 退化为 CROSS_UNDER', () => {
+    it('touch_lower confirmationMode=close_confirm → 退化为 CROSS_UNDER', () => {
       const compiler = new CanonicalSpecV2IrCompilerService()
       const result = compiler.compile({
-        canonicalSpec: buildTouchSpec('bollinger.touch_lower', { params: { confirmationMode: 'cross' } }),
+        canonicalSpec: buildTouchSpec('bollinger.touch_lower', { params: { confirmationMode: 'close_confirm' } }),
         fallback,
       })
       expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([

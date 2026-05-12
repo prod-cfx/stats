@@ -1609,12 +1609,13 @@ export class CanonicalSpecV2IrCompilerService {
         const confirmationMode = typeof atom.params?.confirmationMode === 'string'
           ? atom.params.confirmationMode
           : undefined
-        // touch_* 默认走 touch 语义（GTE/LTE）；cross 仅在 confirmationMode='cross' 时启用。
+        // touch_* 默认走 touch 语义（GTE/LTE）；显式确认模式（如 close_confirm）走 CROSS_*。
         // upper_break/lower_break 保持原有 CROSS_* 默认，兼容 builder 既有路径。
         const isTouchKey = atom.key === 'bollinger.touch_upper' || atom.key === 'bollinger.touch_lower'
+        const usesTouchSemantics = isTouchKey && (confirmationMode === undefined || confirmationMode === 'touch')
         const defaultOp = isUpper
-          ? (isTouchKey && confirmationMode !== 'cross' ? 'GTE' : 'CROSS_OVER')
-          : (isTouchKey && confirmationMode !== 'cross' ? 'LTE' : 'CROSS_UNDER')
+          ? (usesTouchSemantics ? 'GTE' : 'CROSS_OVER')
+          : (usesTouchSemantics ? 'LTE' : 'CROSS_UNDER')
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}`,
@@ -3390,7 +3391,7 @@ export class CanonicalSpecV2IrCompilerService {
           ? condition.params.confirmationMode
           : undefined
         const isTouchKey = condition.key === 'bollinger.touch_upper'
-        const isTouch = condition.op === 'GTE' || (isTouchKey && confirmationMode !== 'cross')
+        const isTouch = condition.op === 'GTE' || (isTouchKey && (confirmationMode === undefined || confirmationMode === 'touch'))
         return isTouch
           ? `GTE(CLOSE,UPPER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
           : `CROSS_OVER(CLOSE,UPPER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
@@ -3402,7 +3403,7 @@ export class CanonicalSpecV2IrCompilerService {
           ? condition.params.confirmationMode
           : undefined
         const isTouchKey = condition.key === 'bollinger.touch_lower'
-        const isTouch = condition.op === 'LTE' || (isTouchKey && confirmationMode !== 'cross')
+        const isTouch = condition.op === 'LTE' || (isTouchKey && (confirmationMode === undefined || confirmationMode === 'touch'))
         return isTouch
           ? `LTE(CLOSE,LOWER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
           : `CROSS_UNDER(CLOSE,LOWER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
