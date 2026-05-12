@@ -5257,7 +5257,7 @@ export class SemanticSeedExtractorService {
    * Issue #1219: clause-verb-driven phase/sideScope resolver。
    * - 子句含 `开多/做多/买入/进场/入场/加仓/补仓/定投/开仓/开始 DCA` → entry/long
    * - 子句含 `开空/做空` → entry/short
-   * - 子句含 `平多/卖出平多/卖出多单` → exit/long
+   * - 子句含 `卖出/平多/卖出平多/卖出多单` → exit/long
    * - 子句含 `平空/买回平空/买回空单` → exit/short
    * - 子句含 `止损/止盈/出场/离场/减仓/平仓` → exit（side 取 segment 内多/空线索，默认 long）
    * - 子句无动词 → null（由调用方回退父级 segment，不再用阈值方向兜底）
@@ -5271,7 +5271,7 @@ export class SemanticSeedExtractorService {
   ): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' } | null {
     const hasEntryLongVerb = /开始\s*DCA|补仓|加仓|定投|开仓|入场|进场|开多|做多|买入/u.test(clause)
     const hasEntryShortVerb = /开空|做空/u.test(clause)
-    const hasCloseLongVerb = /卖出平多|平多|卖出多单/u.test(clause)
+    const hasCloseLongVerb = /卖出平多|平多|卖出多单|卖出/u.test(clause)
     const hasCloseShortVerb = /买回平空|平空|买回空单/u.test(clause)
     const hasGenericExitVerb = /止损|止盈|出场|离场|减仓|平仓/u.test(clause)
 
