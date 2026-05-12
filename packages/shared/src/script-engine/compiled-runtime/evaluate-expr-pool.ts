@@ -1229,13 +1229,23 @@ function evaluateMemoryOperand(
 // Converts a UTC ms timestamp to local time in the given IANA timezone using
 // Intl.DateTimeFormat, then checks whether the local time falls inside any of
 // the configured windows.  Each window specifies:
-//   start / end  — "HH:MM" 24-hour local time strings (inclusive start, exclusive end)
-//   daysOfWeek   — optional array of 0-6 (0=Sunday); omit to allow all days
+//   start / end  — "H:MM" or "HH:MM" 24-hour local time strings (start inclusive,
+//                  end exclusive). Single-digit hour accepted ("9:30" == "09:30").
+//                  Minutes must be 2 digits.
+//   daysOfWeek   — optional array of integers in [0, 6] (0=Sunday).
+//
+// Asymmetric defaults (be explicit when configuring):
+//   - `windows: []` (empty array)        → never matches (fail-closed default)
+//   - `daysOfWeek` omitted on a window   → allows all 7 days
+//
 // Returns true if the timestamp falls inside at least one window; false otherwise.
-// Non-parseable payload or missing timestamp → false (fail-closed).
+// Non-parseable payload, missing timestamp, invalid timezone, out-of-range
+// daysOfWeek, or zero-duration windows (end === start) → fail-closed (false / skip).
 // ---------------------------------------------------------------------------
 
 function parseHHMM(value: string): number | null {
+  // Accepts "H:MM" or "HH:MM" (single-digit hour like "9:30" is intentional).
+  // Minutes must be exactly 2 digits to disambiguate "9:0" (rejected) vs "9:00".
   const matched = value.match(/^(\d{1,2}):(\d{2})$/)
   if (!matched) return null
   const hours = Number(matched[1])
