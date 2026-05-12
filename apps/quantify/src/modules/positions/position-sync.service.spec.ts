@@ -170,7 +170,7 @@ describe('positionSyncService', () => {
       countActiveStrategyBindingsByExchangeAccount: jest.fn().mockResolvedValue(3),
       findTradesByAccount: jest.fn().mockResolvedValue([
         {
-          symbol: 'ETHUSDT:PERP',
+          symbol: 'ETHUSDT',
           market: 'okx:perp',
           side: 'BUY',
           positionSide: 'LONG',
@@ -181,7 +181,7 @@ describe('positionSyncService', () => {
           metadata: { exchangeAccountId: 'exchange-account-1' },
         },
         {
-          symbol: 'ETHUSDT:PERP',
+          symbol: 'ETHUSDT',
           market: 'okx:perp',
           side: 'BUY',
           positionSide: 'LONG',
@@ -227,7 +227,10 @@ describe('positionSyncService', () => {
       action: 'created',
       difference: '0.305',
     })])
-    expect(positionsRepository.findTradesByAccount).toHaveBeenCalledWith('strategy-account-1')
+    expect(positionsRepository.findTradesByAccount).toHaveBeenCalledWith(
+      'strategy-account-1',
+      ['ETHUSDT'],
+    )
     expect(positionsService.recordTrade).toHaveBeenCalledWith(expect.objectContaining({
       quantity: '0.305',
       metadata: expect.objectContaining({
@@ -368,7 +371,7 @@ describe('positionSyncService', () => {
     const positionsRepository = {
       countActiveStrategyBindingsByExchangeAccount: jest.fn().mockResolvedValue(3),
       findTradesByAccount: jest.fn().mockResolvedValue([{
-        symbol: 'ETHUSDT:PERP',
+        symbol: 'ETHUSDT',
         market: 'okx:perp',
         side: 'BUY',
         positionSide: 'LONG',
@@ -381,7 +384,7 @@ describe('positionSyncService', () => {
       findOpenByAccount: jest.fn().mockResolvedValue([{
         id: 'position-synthetic-1',
         userStrategyAccountId: 'strategy-account-1',
-        symbol: 'ETHUSDT:PERP',
+        symbol: 'ETHUSDT',
         positionSide: 'LONG',
         quantity: '1.069',
         avgEntryPrice: '2287.03',
@@ -443,7 +446,7 @@ describe('positionSyncService', () => {
       countActiveStrategyBindingsByExchangeAccount: jest.fn().mockResolvedValue(3),
       findTradesByAccount: jest.fn().mockResolvedValue([
         {
-          symbol: 'ETHUSDT:PERP',
+          symbol: 'ETHUSDT',
           market: 'okx:perp',
           side: 'BUY',
           positionSide: 'LONG',
@@ -454,7 +457,7 @@ describe('positionSyncService', () => {
           metadata: { exchangeAccountId: 'exchange-account-1', runtimeProvenance: { runtimeStrategyInstanceId: 'strategy-1' } },
         },
         {
-          symbol: 'ETHUSDT:PERP',
+          symbol: 'ETHUSDT',
           market: 'okx:perp',
           side: 'BUY',
           positionSide: 'LONG',
@@ -468,7 +471,7 @@ describe('positionSyncService', () => {
       findOpenByAccount: jest.fn().mockResolvedValue([{
         id: 'position-1',
         userStrategyAccountId: 'strategy-account-1',
-        symbol: 'ETHUSDT:PERP',
+        symbol: 'ETHUSDT',
         positionSide: 'LONG',
         quantity: '1.069',
         avgEntryPrice: '2287.03',
@@ -529,7 +532,7 @@ describe('positionSyncService', () => {
     const positionsRepository = {
       countActiveStrategyBindingsByExchangeAccount: jest.fn().mockResolvedValue(3),
       findTradesByAccount: jest.fn().mockResolvedValue([{
-        symbol: 'ETHUSDT:PERP',
+        symbol: 'ETHUSDT',
         market: 'okx:perp',
         side: 'BUY',
         positionSide: 'LONG',

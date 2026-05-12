@@ -85,13 +85,6 @@ export class PositionSyncService {
       const allLocalPositions = await this.positionsRepository.findOpenByAccount(accountId)
       const localPositions = allLocalPositions.filter(pos => this.isPositionInSyncScope(pos, exchangeId, marketType))
       const matchableLocalPositions = allLocalPositions.filter(pos => this.isPositionMatchScope(pos, exchangeId, marketType))
-      const sharedAccountAttribution = await this.loadSharedAccountAttribution(
-        userId,
-        accountId,
-        exchangeId,
-        marketType,
-        resolvedExchangeAccountId ?? undefined,
-      )
 
       this.logger.log(
         `Syncing positions for user ${userId}, account ${accountId}: ` +
@@ -110,6 +103,16 @@ export class PositionSyncService {
         const key = this.getPositionKey(pos.symbol, positionSide)
         exchangePositionMap.set(key, pos)
       }
+      const sharedAccountSymbols = Array.from(exchangePositionMap.values())
+        .map(pos => normalizeLedgerSymbol(pos.symbol))
+      const sharedAccountAttribution = await this.loadSharedAccountAttribution(
+        userId,
+        accountId,
+        exchangeId,
+        marketType,
+        resolvedExchangeAccountId ?? undefined,
+        sharedAccountSymbols,
+      )
 
       // 4. 构建本地仓位映射
       const localPositionMap = new Map<string, typeof localPositions[0]>()
@@ -511,12 +514,17 @@ export class PositionSyncService {
     exchangeId: ExchangeId,
     marketType: MarketType,
     exchangeAccountId?: string,
+    symbols: string[] = [],
   ): Promise<SharedAccountAttribution | null> {
     if (exchangeId !== 'okx' || marketType !== 'perp') {
       return null
     }
 
     if (!exchangeAccountId) {
+      return null
+    }
+
+    if (symbols.length === 0) {
       return null
     }
 
@@ -532,7 +540,7 @@ export class PositionSyncService {
       return null
     }
 
-    const trades = await this.positionsRepository.findTradesByAccount(accountId)
+    const trades = await this.positionsRepository.findTradesByAccount(accountId, symbols)
     const quantities = new Map<string, Decimal>()
     const realTradeKeys = new Set<string>()
     const syntheticTradeKeys = new Set<string>()

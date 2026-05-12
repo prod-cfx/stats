@@ -207,10 +207,11 @@ export class PositionsRepository {
     return strategySub?.exchangeAccountId ?? llmSub?.exchangeAccountId ?? null
   }
 
-  async findTradesByAccount(accountId: string) {
+  async findTradesByAccount(accountId: string, symbols?: string[]) {
     return this.txHost.tx.trade.findMany({
       where: {
         userStrategyAccountId: accountId,
+        ...(symbols && symbols.length > 0 ? { symbol: { in: symbols } } : {}),
       },
       select: {
         symbol: true,
