@@ -210,6 +210,7 @@ describe('External signal webhooks (E2E)', () => {
       .set('proxy-authorization', 'Bearer leaked-proxy-token')
       .set('cookie', 'session=leaked-cookie')
       .set('x-api-key', 'leaked-api-key')
+      .set('x_api_key', 'leaked-underscore-api-key')
       .set('x-secret-key', 'leaked-secret')
       .set('x-external-signal-timestamp', String(Date.now()))
       .send(JSON.stringify({ signalId: 'BTC_PERP_LONG_01' }))
@@ -249,6 +250,7 @@ describe('External signal webhooks (E2E)', () => {
       'proxy-authorization': '[redacted]',
       cookie: '[redacted]',
       'x-api-key': '[redacted]',
+      x_api_key: '[redacted]',
       'x-secret-key': '[redacted]',
     }))
     expect(outbox).toHaveLength(1)

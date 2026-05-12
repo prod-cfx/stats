@@ -369,15 +369,16 @@ export class ExternalSignalWebhooksService {
   }
 
   private isSensitiveHeader(key: string): boolean {
+    const compactKey = key.replace(/[^a-z0-9]/g, '')
     return key === 'cookie'
       || key === 'set-cookie'
       || key.includes('authorization')
       || key.includes('signature')
-      || key.includes('api-key')
       || key.includes('token')
       || key.includes('secret')
       || key.includes('credential')
       || key.includes('password')
+      || compactKey.includes('apikey')
   }
 
   private readHeader(value: string | string[] | undefined): string | null {
