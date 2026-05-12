@@ -204,7 +204,7 @@ export async function createTestingApp(
 
   const moduleFixture: TestingModule = await moduleBuilder.compile()
 
-  const app = moduleFixture.createNestApplication()
+  const app = moduleFixture.createNestApplication({ rawBody: true })
 
   app.useGlobalPipes(
     new ValidationPipe({

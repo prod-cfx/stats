@@ -27,6 +27,7 @@ import { AccountStrategyViewModule } from './account-strategy-view/account-strat
 import { AccountsModule } from './accounts/accounts.module'
 import { BacktestingModule } from './backtesting/backtesting.module'
 import { ExchangeAccountsModule } from './exchange-accounts/exchange-accounts.module'
+import { ExternalSignalWebhooksModule } from './external-signal-webhooks/external-signal-webhooks.module'
 import { GridRuntimeModule } from './grid-runtime/grid-runtime.module'
 import { HealthModule } from './health/health.module'
 import { IndicatorsModule } from './indicators/indicators.module'
@@ -122,6 +123,7 @@ const infrastructureImports = isMessageBusRuntimeEnabled()
     LlmStrategyCodegenModule,
     StrategyInstancesModule,
     ExchangeAccountsModule,
+    ExternalSignalWebhooksModule,
     GridRuntimeModule,
     StrategySubscriptionsModule,
     LlmStrategySubscriptionsModule,

@@ -1605,6 +1605,51 @@ const LlmCodegenEngineTestResponseDto = z
     rejectReason: z.string().optional(),
   })
   .passthrough()
+const ExternalSignalWebhookSubscriptionResponseDto = z
+  .object({
+    id: z.string(),
+    userId: z.string(),
+    strategyInstanceId: z.string(),
+    provider: z.string().optional(),
+    signalId: z.string(),
+    secretVersion: z.number(),
+    status: z.string(),
+    lastAcceptedAt: z.string().optional(),
+    rotatedAt: z.string().optional(),
+    metadata: z.object({}).partial().passthrough().optional(),
+    webhookUrl: z.string(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .passthrough()
+const CreateExternalSignalWebhookSubscriptionDto = z
+  .object({
+    provider: z.string().optional(),
+    signalId: z.string(),
+    metadata: z.object({}).partial().passthrough().optional(),
+  })
+  .passthrough()
+const ExternalSignalWebhookSubscriptionSecretResponseDto = z
+  .object({
+    id: z.string(),
+    userId: z.string(),
+    strategyInstanceId: z.string(),
+    provider: z.string().optional(),
+    signalId: z.string(),
+    secretVersion: z.number(),
+    status: z.string(),
+    lastAcceptedAt: z.string().optional(),
+    rotatedAt: z.string().optional(),
+    metadata: z.object({}).partial().passthrough().optional(),
+    webhookUrl: z.string(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    secret: z.string(),
+  })
+  .passthrough()
+const ExternalSignalWebhookAcceptedResponseDto = z
+  .object({ accepted: z.boolean(), eventId: z.string() })
+  .passthrough()
 const CreateSubscriptionDto = z
   .object({
     userId: z.string(),
@@ -1843,6 +1888,10 @@ export const schemas = {
   ContinueCodegenSessionDto,
   TestLlmCodegenEngineDto,
   LlmCodegenEngineTestResponseDto,
+  ExternalSignalWebhookSubscriptionResponseDto,
+  CreateExternalSignalWebhookSubscriptionDto,
+  ExternalSignalWebhookSubscriptionSecretResponseDto,
+  ExternalSignalWebhookAcceptedResponseDto,
   CreateSubscriptionDto,
   SubscriptionStatus,
   SubscriptionResponseDto,
@@ -1961,6 +2010,30 @@ const endpoints = makeApi([
       },
     ],
     response: AiQuantConversationResponseDto,
+  },
+  {
+    method: 'post',
+    path: '/account/ai-quant/external-signal-subscriptions/:subscriptionId/rotate',
+    alias: 'AccountExternalSignalWebhookRotationController_rotate',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'subscriptionId',
+        type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+    ],
+    response: ExternalSignalWebhookSubscriptionSecretResponseDto,
   },
   {
     method: 'get',
@@ -2132,6 +2205,59 @@ const endpoints = makeApi([
     response: z
       .object({ data: AccountStrategyDetailResponseDto, message: z.string().optional() })
       .passthrough(),
+  },
+  {
+    method: 'get',
+    path: '/account/ai-quant/strategies/:strategyInstanceId/external-signal-subscriptions',
+    alias: 'AccountExternalSignalWebhooksController_list',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'strategyInstanceId',
+        type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+    ],
+    response: z.array(ExternalSignalWebhookSubscriptionResponseDto),
+  },
+  {
+    method: 'post',
+    path: '/account/ai-quant/strategies/:strategyInstanceId/external-signal-subscriptions',
+    alias: 'AccountExternalSignalWebhooksController_create',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: CreateExternalSignalWebhookSubscriptionDto,
+      },
+      {
+        name: 'strategyInstanceId',
+        type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+    ],
+    response: ExternalSignalWebhookSubscriptionSecretResponseDto,
   },
   {
     method: 'post',
@@ -4510,6 +4636,30 @@ const endpoints = makeApi([
       },
     ],
     response: z.void(),
+  },
+  {
+    method: 'post',
+    path: '/webhook/strategy/:strategyInstanceId/signal',
+    alias: 'PublicExternalSignalWebhookController_accept',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'strategyInstanceId',
+        type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'x-external-signal-timestamp',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'x-external-signal-signature',
+        type: 'Header',
+        schema: z.string(),
+      },
+    ],
+    response: ExternalSignalWebhookAcceptedResponseDto,
   },
 ])
 

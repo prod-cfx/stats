@@ -30,6 +30,7 @@ async function bootstrap() {
   applyQuantifyEnvOverrides()
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
+    rawBody: true,
   })
   const logger = app.get(WINSTON_MODULE_NEST_PROVIDER)
   app.useLogger(logger)
