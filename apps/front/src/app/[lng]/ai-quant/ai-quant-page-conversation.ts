@@ -1371,10 +1371,11 @@ function shouldPreferLastBacktestConfigForFreshWriteback(input: {
   ) {
     return false
   }
-  if (doesBacktestRangeMatch(backtestDraftConfig, lastBacktestRef.config)) {
-    if (doesBacktestExecutionConfigMatch(backtestDraftConfig, lastBacktestRef.config)) {
-      return false
-    }
+  if (!doesBacktestRangeMatch(backtestDraftConfig, lastBacktestRef.config)) {
+    return false
+  }
+  if (doesBacktestExecutionConfigMatch(backtestDraftConfig, lastBacktestRef.config)) {
+    return false
   }
 
   const updatedAtMs = Date.parse(conversationUpdatedAt)

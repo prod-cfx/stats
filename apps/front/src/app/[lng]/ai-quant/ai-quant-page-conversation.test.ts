@@ -791,6 +791,79 @@ describe('ai-quant-page-conversation', () => {
     expect(isDeployableBacktestResult(conversation.backtestResult)).toBe(true)
   })
 
+  it('keeps a fresh server draft when the last backtest range no longer matches', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'conv-range-changed',
+      conversationTitle: 'remote',
+      status: 'PUBLISHED',
+      conversationMessages: [],
+      updatedAt: '2026-04-23T00:04:03.000Z',
+      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: null,
+      publishedSnapshotStrategyConfig: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+      backtestDraftConfig: {
+        range: {
+          preset: '7D',
+        },
+        execution: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: false,
+        },
+      },
+      lastBacktestRef: {
+        jobId: 'btjob-old-range',
+        publishedSnapshotId: 'snapshot-1',
+        config: {
+          range: {
+            preset: '30D',
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: 3,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: false,
+          },
+        },
+        summary: {
+          maxDrawdownPct: 0.17,
+          totalReturnPct: 0.12,
+          winRatePct: 41.67,
+          tradeCount: 12,
+          openTradeCount: 0,
+          openPnl: 0,
+          marketType: 'perp',
+        },
+        completedAt: '2026-04-23T00:04:00.000Z',
+      },
+    } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
+
+    expect(conversation.backtestDraftConfig?.range.preset).toBe('7D')
+    expect(conversation.backtestDraftConfig?.execution.leverage).toBe(1)
+    expect(conversation.paramValues.backtestRangePreset).toBe('7D')
+    expect(conversation.backtestResult?.recoveryStatus).toBe('range_mismatch')
+    expect(isDeployableBacktestResult(conversation.backtestResult)).toBe(false)
+  })
+
   it('restores backtest summary using explicit backtestDraftConfig without relying on implicit range defaults', () => {
     const conversation = createConversationFromServerConversation({
       id: 'conv-draft-1',
