@@ -4692,7 +4692,11 @@ export class SemanticSeedExtractorService {
         !chartPatternMatched
         && !candlePatternMatched
         && !liquiditySweepMatched
-        && /(?:头肩|双底|双顶|三角形|楔形|旗形|head\s+and\s+shoulders|h&s|double\s+top|double\s+bottom|triangle|wedge|flag|pennant|三只乌鸦|three\s+(?:black|white)\s+(?:crows|soldiers))/iu.test(clause)
+        // Issue #1231 #m1：英文复合形态名加 [\s\-_]* 连接符容差，覆盖
+        // `head-and-shoulders` / `head_and_shoulders` / `headandshoulders` /
+        // `double-top` / `doublebottom` / `three-black-crows` 等连字符或粘连写法，
+        // 避免裸 `形态|pattern` 被移除后这些写法被静默吞掉
+        && /(?:头肩|双底|双顶|三角形|楔形|旗形|head[\s\-_]*and[\s\-_]*shoulders|h&s|double[\s\-_]*top|double[\s\-_]*bottom|triangle|wedge|flag|pennant|三只乌鸦|three[\s\-_]*(?:black|white)[\s\-_]*(?:crows|soldiers))/iu.test(clause)
         && !/(?:截图|screenshot|image)/iu.test(clause)
       ) {
         this.pushTrigger(triggers, seen, {

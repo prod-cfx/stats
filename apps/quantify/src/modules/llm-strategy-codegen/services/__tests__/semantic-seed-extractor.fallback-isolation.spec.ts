@@ -62,4 +62,17 @@ describe('SemanticSeedExtractorService — unsupported price.pattern fallback is
     const keys = triggerKeys(patch)
     expect(keys).toContain('price.pattern')
   })
+
+  // Issue #1231 #m1：连字符/下划线/粘连写法的英文复合形态名也必须落入 unsupported 兜底，
+  // 不能因为 regex 只识别 `\s+` 分隔的标准写法而被静默吞掉
+  it.each([
+    ['head-and-shoulders', 'OKX 合约 BTCUSDT 15m，head-and-shoulders 形态出现后开空。'],
+    ['head_and_shoulders', 'OKX 合约 BTCUSDT 15m，head_and_shoulders 出现后开空。'],
+    ['double-top', 'OKX 合约 BTCUSDT 15m，double-top 形态后开空。'],
+    ['three-black-crows', 'OKX 合约 BTCUSDT 15m，three-black-crows 出现后开空。'],
+  ])('回归：连字符复合写法 %s → 落入 price.pattern unsupported 兜底（不被静默吞掉）', (_label, utterance) => {
+    const patch = extractor.extract(utterance)
+    const keys = triggerKeys(patch)
+    expect(keys).toContain('price.pattern')
+  })
 })
