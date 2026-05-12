@@ -1,8 +1,9 @@
 import { MODULE_METADATA, OPTIONAL_DEPS_METADATA, SELF_DECLARED_DEPS_METADATA } from '@nestjs/common/constants'
+import { LlmStrategyCodegenModule } from './llm-strategy-codegen.module'
 import { CanonicalSpecV2IrCompilerService } from './services/canonical-spec-v2-ir-compiler.service'
 import { CodegenGraphSnapshotService } from './services/codegen-graph-snapshot.service'
-import { LlmStrategyCodegenModule } from './llm-strategy-codegen.module'
 import { MarketInstrumentSymbolResolverService } from './services/market-instrument-symbol-resolver.service'
+import { PerTradeSizingResolver } from './services/per-trade-sizing-resolver.service'
 import { SemanticAtomContractService } from './services/semantic-atom-contract.service'
 import { SemanticContractReadinessService } from './services/semantic-contract-readiness.service'
 import { SemanticEventFrameParserService } from './services/semantic-event-frame-parser.service'
@@ -14,9 +15,8 @@ import {
   SEMANTIC_SEED_EVIDENCE_INVARIANT_MODE,
   SemanticSeedStateBuilderService,
 } from './services/semantic-seed-state-builder.service'
-import { PerTradeSizingResolver } from './services/per-trade-sizing-resolver.service'
 
-describe('LlmStrategyCodegenModule', () => {
+describe('llmStrategyCodegenModule', () => {
   it('registers providers required by the canonical spec v2 IR compiler constructor', () => {
     const compilerDependencies = Reflect.getMetadata('design:paramtypes', CanonicalSpecV2IrCompilerService)
     const providers = Reflect.getMetadata(MODULE_METADATA.PROVIDERS, LlmStrategyCodegenModule)
