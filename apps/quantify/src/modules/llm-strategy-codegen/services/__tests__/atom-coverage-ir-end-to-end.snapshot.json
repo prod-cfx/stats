@@ -1,0 +1,695 @@
+{
+  "description": "Wave 2 atom-coverage IR 端到端契约快照。每条记录 atom 在 IR-compiler 层的覆盖状态 + 失败层 + 痕迹集合。新 atom 落地或 ghost atom 修复 → 此文件应同步更新。",
+  "generatedFromContractVersion": "wave2-1",
+  "atoms": [
+    {
+      "key": "action.add_position",
+      "category": "action",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "rule-block-action:ADD_LONG",
+        "rule-block:probe-action-rule"
+      ]
+    },
+    {
+      "key": "action.grid_ladder",
+      "category": "action",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "action atom 不映射到单一 CanonicalRuleAction.type（orderProgram / 组合 action）"
+    },
+    {
+      "key": "action.reduce_position",
+      "category": "action",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "rule-block-action:REDUCE_LONG",
+        "rule-block:probe-action-rule"
+      ]
+    },
+    {
+      "key": "action.reverse_position",
+      "category": "action",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:LT",
+        "rule-block-action:CLOSE_LONG",
+        "rule-block-action:OPEN_SHORT",
+        "rule-block:probe-action-rule"
+      ]
+    },
+    {
+      "key": "bollinger.touch_lower",
+      "category": "trigger",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:bollinger.touch_lower"
+    },
+    {
+      "key": "bollinger.touch_middle",
+      "category": "trigger",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:bollinger.touch_middle"
+    },
+    {
+      "key": "bollinger.touch_upper",
+      "category": "trigger",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:bollinger.touch_upper"
+    },
+    {
+      "key": "close_long",
+      "category": "action",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "rule-block-action:CLOSE_LONG",
+        "rule-block:probe-action-rule"
+      ]
+    },
+    {
+      "key": "close_position",
+      "category": "action",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "rule-block-action:CLOSE_LONG",
+        "rule-block:probe-action-rule"
+      ]
+    },
+    {
+      "key": "close_short",
+      "category": "action",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "rule-block-action:CLOSE_SHORT",
+        "rule-block:probe-action-rule"
+      ]
+    },
+    {
+      "key": "condition.expression",
+      "category": "trigger",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "当前模板无法以 condition.atom 形式独立注入；由专用 spec 覆盖"
+    },
+    {
+      "key": "condition.sequence",
+      "category": "trigger",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "当前模板无法以 condition.atom 形式独立注入；由专用 spec 覆盖"
+    },
+    {
+      "key": "confirmation.rebound",
+      "category": "trigger",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "当前模板无法以 condition.atom 形式独立注入；由专用 spec 覆盖"
+    },
+    {
+      "key": "execution.on_start",
+      "category": "trigger",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:EQ",
+        "rule-block:probe-entry-rule",
+        "series:BAR_INDEX",
+        "series:CONST"
+      ]
+    },
+    {
+      "key": "grid.fixed_range",
+      "category": "trigger",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "当前模板无法以 condition.atom 形式独立注入；由专用 spec 覆盖"
+    },
+    {
+      "key": "grid.price_levels",
+      "category": "trigger",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "当前模板无法以 condition.atom 形式独立注入；由专用 spec 覆盖"
+    },
+    {
+      "key": "grid.range_rebalance",
+      "category": "trigger",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "当前模板无法以 condition.atom 形式独立注入；由专用 spec 覆盖"
+    },
+    {
+      "key": "indicator.boundary_cross",
+      "category": "trigger",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:indicator.boundary_cross"
+    },
+    {
+      "key": "indicator.boundary_touch",
+      "category": "trigger",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:indicator.boundary_touch"
+    },
+    {
+      "key": "indicator.cross_over",
+      "category": "trigger",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:indicator.cross_over"
+    },
+    {
+      "key": "indicator.cross_under",
+      "category": "trigger",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:indicator.cross_under"
+    },
+    {
+      "key": "indicator.divergence",
+      "category": "trigger",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:EQ",
+        "series:CONST",
+        "series:INDICATOR_DIVERGENCE"
+      ]
+    },
+    {
+      "key": "indicator.threshold_gte",
+      "category": "trigger",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:indicator.threshold_gte"
+    },
+    {
+      "key": "indicator.threshold_lte",
+      "category": "trigger",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:indicator.threshold_lte"
+    },
+    {
+      "key": "liquidity.sweep",
+      "category": "trigger",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:EQ",
+        "series:CONST",
+        "series:LIQUIDITY_SWEEP"
+      ]
+    },
+    {
+      "key": "logical.any_of",
+      "category": "trigger",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "当前模板无法以 condition.atom 形式独立注入；由专用 spec 覆盖"
+    },
+    {
+      "key": "market.regime",
+      "category": "trigger",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:EQ",
+        "series:CONST",
+        "series:MARKET_REGIME"
+      ]
+    },
+    {
+      "key": "market.volatility_state",
+      "category": "trigger",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:market.volatility_state"
+    },
+    {
+      "key": "open_long",
+      "category": "action",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "rule-block:probe-action-rule"
+      ]
+    },
+    {
+      "key": "open_short",
+      "category": "action",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "rule-block-action:OPEN_SHORT",
+        "rule-block:probe-action-rule"
+      ]
+    },
+    {
+      "key": "oscillator.rsi_gte",
+      "category": "trigger",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:oscillator.rsi_gte"
+    },
+    {
+      "key": "oscillator.rsi_lte",
+      "category": "trigger",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:oscillator.rsi_lte"
+    },
+    {
+      "key": "place_limit_grid",
+      "category": "action",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "action atom 不映射到单一 CanonicalRuleAction.type（orderProgram / 组合 action）"
+    },
+    {
+      "key": "position.dca_schedule",
+      "category": "position",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
+      "key": "position.fixed_notional",
+      "category": "position",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
+      "key": "position.fixed_pct",
+      "category": "position",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
+      "key": "position.fixed_quantity",
+      "category": "position",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
+      "key": "position.has_position",
+      "category": "trigger",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:position.has_position"
+    },
+    {
+      "key": "position.max_exposure_pct",
+      "category": "position",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
+      "key": "position.no_position",
+      "category": "trigger",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "guard.kind:MAX_POSITION_PCT",
+        "guard:guard_probe-gate-rule"
+      ]
+    },
+    {
+      "key": "position.pyramiding_limit",
+      "category": "position",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
+      "key": "price.breakout_down",
+      "category": "trigger",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:price.breakout_down"
+    },
+    {
+      "key": "price.breakout_up",
+      "category": "trigger",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:price.breakout_up"
+    },
+    {
+      "key": "price.candle_pattern",
+      "category": "trigger",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:EQ",
+        "series:CANDLE_PATTERN",
+        "series:CONST"
+      ]
+    },
+    {
+      "key": "price.chart_pattern",
+      "category": "trigger",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:EQ",
+        "series:CHART_PATTERN",
+        "series:CONST"
+      ]
+    },
+    {
+      "key": "price.detect.indicator_boundary",
+      "category": "trigger",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:price.detect.indicator_boundary"
+    },
+    {
+      "key": "price.percent_change",
+      "category": "trigger",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:price.percent_change"
+    },
+    {
+      "key": "price.range_position_gte",
+      "category": "trigger",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:GTE",
+        "series:CONST",
+        "series:HIGHEST_HIGH",
+        "series:LOWEST_LOW",
+        "series:RANGE_POSITION_PCT"
+      ]
+    },
+    {
+      "key": "price.range_position_lte",
+      "category": "trigger",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:LTE",
+        "series:CONST",
+        "series:HIGHEST_HIGH",
+        "series:LOWEST_LOW",
+        "series:RANGE_POSITION_PCT"
+      ]
+    },
+    {
+      "key": "price.rolling_extrema_breakout",
+      "category": "trigger",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:compare",
+        "series:HIGHEST_HIGH"
+      ]
+    },
+    {
+      "key": "reduce_long",
+      "category": "action",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "rule-block-action:REDUCE_LONG",
+        "rule-block:probe-action-rule"
+      ]
+    },
+    {
+      "key": "reduce_short",
+      "category": "action",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "rule-block-action:REDUCE_SHORT",
+        "rule-block:probe-action-rule"
+      ]
+    },
+    {
+      "key": "risk.atr_multiple_stop",
+      "category": "risk",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:risk.atr_multiple_stop"
+    },
+    {
+      "key": "risk.atr_multiple_take_profit",
+      "category": "risk",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:risk.atr_multiple_take_profit"
+    },
+    {
+      "key": "risk.boundary_guard",
+      "category": "risk",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "risk atom 非 condition.atom 形态（reduceAction-shape 或 memory-bound）"
+    },
+    {
+      "key": "risk.condition_expression",
+      "category": "risk",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "risk atom 非 condition.atom 形态（reduceAction-shape 或 memory-bound）"
+    },
+    {
+      "key": "risk.cooldown_bars",
+      "category": "risk",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:risk.cooldown_bars"
+    },
+    {
+      "key": "risk.max_drawdown_pct",
+      "category": "risk",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "portfolio-risk:probe-risk-rule"
+      ]
+    },
+    {
+      "key": "risk.max_single_loss_pct",
+      "category": "risk",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:risk.max_single_loss_pct"
+    },
+    {
+      "key": "risk.protective_exit",
+      "category": "risk",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "risk atom 非 condition.atom 形态（reduceAction-shape 或 memory-bound）"
+    },
+    {
+      "key": "risk.remembered_level_stop",
+      "category": "risk",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "risk atom 非 condition.atom 形态（reduceAction-shape 或 memory-bound）"
+    },
+    {
+      "key": "risk.stop_loss",
+      "category": "risk",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "risk atom 非 condition.atom 形态（reduceAction-shape 或 memory-bound）"
+    },
+    {
+      "key": "risk.stop_loss_pct",
+      "category": "risk",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:risk.stop_loss_pct"
+    },
+    {
+      "key": "risk.take_profit",
+      "category": "risk",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "risk atom 非 condition.atom 形态（reduceAction-shape 或 memory-bound）"
+    },
+    {
+      "key": "risk.take_profit_pct",
+      "category": "risk",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "guard.kind:TAKE_PROFIT_PCT",
+        "guard:guard_probe-risk-rule"
+      ]
+    },
+    {
+      "key": "risk.time_stop_bars",
+      "category": "risk",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:GTE",
+        "rule-block-action:CLOSE_LONG",
+        "rule-block-action:CLOSE_SHORT",
+        "rule-block:probe-risk-rule",
+        "series:CONST",
+        "series:POSITION_BARS_HELD"
+      ]
+    },
+    {
+      "key": "risk.trailing_stop_pct",
+      "category": "risk",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "guard.kind:TRAILING_STOP_PCT",
+        "guard:guard_probe-risk-rule"
+      ]
+    },
+    {
+      "key": "semantic.missing_entry_atom",
+      "category": "trigger",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "当前模板无法以 condition.atom 形式独立注入；由专用 spec 覆盖"
+    },
+    {
+      "key": "semantic.missing_exit_atom",
+      "category": "trigger",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "当前模板无法以 condition.atom 形式独立注入；由专用 spec 覆盖"
+    },
+    {
+      "key": "strategy.time_window",
+      "category": "trigger",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "guard.kind:EXPRESSION_GUARD",
+        "guard:guard_probe-gate-rule",
+        "predicate:EQ",
+        "series:CONST",
+        "series:IN_TIME_WINDOW"
+      ]
+    },
+    {
+      "key": "trend.direction",
+      "category": "trigger",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:EQ",
+        "series:CONST",
+        "series:TREND_DIRECTION"
+      ]
+    },
+    {
+      "key": "volatility.atr_threshold",
+      "category": "trigger",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "guard.kind:EXPRESSION_GUARD",
+        "guard:guard_probe-gate-rule",
+        "predicate:LTE",
+        "series:ATR",
+        "series:CONST"
+      ]
+    },
+    {
+      "key": "volatility.state",
+      "category": "trigger",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:EQ",
+        "series:CONST",
+        "series:VOLATILITY_STATE"
+      ]
+    },
+    {
+      "key": "volume.relative_average",
+      "category": "trigger",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:compare",
+        "series:SMA_VOLUME",
+        "series:VOLUME"
+      ]
+    },
+    {
+      "key": "volume.threshold",
+      "category": "trigger",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "guard.kind:EXPRESSION_GUARD",
+        "guard:guard_probe-gate-rule",
+        "predicate:LTE",
+        "series:CONST",
+        "series:VOLUME"
+      ]
+    }
+  ]
+}
