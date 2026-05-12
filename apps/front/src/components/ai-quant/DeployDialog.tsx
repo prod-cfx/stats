@@ -85,9 +85,14 @@ export function DeployDialog({
     ? t('aiQuant.deployDialog.confirmRedeploy', { defaultValue: '确认重新部署' })
     : t('aiQuant.deployDialog.confirmDeploy')
   const submittingLabel = t('aiQuant.deployDialog.deploying', { defaultValue: '部署中' })
+  const handleDialogClose = () => {
+    if (!deploySubmitting) {
+      onClose()
+    }
+  }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4" onClick={handleDialogClose}>
       <div
         className="w-full max-w-[520px] rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
         onClick={event => event.stopPropagation()}
@@ -204,7 +209,7 @@ export function DeployDialog({
           </button>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleDialogClose}
             disabled={deploySubmitting}
             className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-50"
           >

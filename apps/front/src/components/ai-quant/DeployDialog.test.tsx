@@ -178,6 +178,8 @@ describe('DeployDialog', () => {
   })
 
   it('shows button loading state and disables close while deployment is submitting', async () => {
+    const onClose = jest.fn()
+
     await act(async () => {
       root.render(
         <DeployDialog
@@ -198,7 +200,7 @@ describe('DeployDialog', () => {
           lng="zh"
           onSelectAccount={() => {}}
           onConfirmDeploy={() => {}}
-          onClose={() => {}}
+          onClose={onClose}
         />,
       )
     })
@@ -211,5 +213,10 @@ describe('DeployDialog', () => {
     expect(confirmButton?.disabled).toBe(true)
     expect(confirmButton?.querySelector('[data-testid="deploy-loading-icon"]')).not.toBeNull()
     expect(closeButton?.disabled).toBe(true)
+
+    await act(async () => {
+      container.firstElementChild?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(onClose).not.toHaveBeenCalled()
   })
 })
