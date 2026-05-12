@@ -388,12 +388,18 @@ export class SemanticStateProjectionService {
   } {
     const triggerSummary = this.buildTriggerSummary(state.triggers, true)
     const riskSummary = this.buildRiskSummary(state.risk)
-    // #1217 follow-up：clarification 路径下"我当前理解的策略是"这条提示长期只渲染
+    // #1238：clarification 路径下"我当前理解的策略是"这条提示长期只渲染
     // trigger + risk，遗漏 position 段（含 sizing、dca_schedule / pyramiding_limit
     // 等 constraint 显示），导致用户给出 DCA / 加仓配置时即使 state.position.constraints
-    // 里已 locked，UI 也不会回显，看起来像"DCA 没识别"。与 buildConversationView 对齐
-    // 让 clarification summary 也包含 position 段。actionSummary / orchestrationSummary
-    // 暂不并入，避免破坏现有 not-toContain 类断言；如后续需要可同步对齐。
+    // 里已 locked，UI 也不会回显，看起来像"DCA 没识别"（#1217 误判为 merge 层 bug，
+    // 实际根因在此处 summary 渲染函数）。与 buildConversationView 对齐让 clarification
+    // summary 也包含 position 段。
+    // 未并入项 follow-up：
+    //   - actionSummary / orchestrationSummary 与 buildTriggerSummary 的 deterministic
+    //     过滤未与 conversation 路径完全对齐 → #1243（抽 shared summary helper）
+    //   - position locked 时 nextQuestion 仍可能追问已被 summary 覆盖的 position open slot
+    //     → #1244（dedupe nextQuestion vs summary）
+    //   - buildPositionSummary 内 presentationRegistry try/catch 吞错变沉默失败 → #1245
     const positionSummary = this.buildPositionSummary(state.position)
     const summaryItems = [triggerSummary, riskSummary, positionSummary].filter(item => item.length > 0)
 
