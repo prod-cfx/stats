@@ -1256,14 +1256,25 @@ describe('evaluateExprPool', () => {
       // 2024-03-10 02:00 EST → 03:00 EDT; local 02:00-03:00 is skipped that day.
       // A UTC timestamp landing in that gap should map to 03:xx EDT not throw.
       // 2024-03-10T07:30:00Z = either 02:30 EST (didn't happen) or 03:30 EDT (real).
-      // ICU consistently resolves to EDT (03:30), so a window 03:00-04:00 should match.
+      // ICU consistently resolves to EDT (03:30).
       const SPRING_FORWARD_UTC = new Date('2024-03-10T07:30:00Z').getTime()
-      const values = evaluateExprPool(
+
+      // Forward assertion: 03:00-04:00 EDT window matches (real local time)
+      const matched = evaluateExprPool(
         { timestamp: SPRING_FORWARD_UTC, bars: [] },
         [buildNode('America/New_York', [{ start: '03:00', end: '04:00' }])],
         ['in_time_window_node'],
       )
-      expect(values.in_time_window_node).toBe(true)
+      expect(matched.in_time_window_node).toBe(true)
+
+      // Reverse assertion: 02:00-03:00 "vanished" window does NOT match —
+      // proves ICU resolves to EDT (post-jump) not EST (pre-jump phantom)
+      const skipped = evaluateExprPool(
+        { timestamp: SPRING_FORWARD_UTC, bars: [] },
+        [buildNode('America/New_York', [{ start: '02:00', end: '03:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(skipped.in_time_window_node).toBe(false)
     })
 
     it('falls back to last bar timestamp when ctx.timestamp is NaN (not just absent)', () => {

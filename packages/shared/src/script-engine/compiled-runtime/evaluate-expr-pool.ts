@@ -1271,6 +1271,12 @@ const WEEKDAY_MAP: Readonly<Record<string, number>> = {
 // (typically 1 per strategy), so caching formatters avoids creating a new
 // Intl.DateTimeFormat instance on every bar (hot path, 1m-level strategies).
 // Stores `null` for timezones that throw (invalid IANA name) so we don't retry.
+//
+// Test isolation: Jest resets module state across test *files* (via --resetModules
+// or fresh require), but NOT between `describe` / `it` within a single file. Tests
+// that mutate this cache (e.g. "invalid timezone" path) share the null-sentinel
+// with later tests in the same file. Add a manual cache clear in `beforeEach` if a
+// future test needs to verify "recover after invalid timezone".
 const TIME_WINDOW_FORMATTER_CACHE = new Map<string, Intl.DateTimeFormat | null>()
 
 function getTimeWindowFormatter(timezone: string): Intl.DateTimeFormat | null {
