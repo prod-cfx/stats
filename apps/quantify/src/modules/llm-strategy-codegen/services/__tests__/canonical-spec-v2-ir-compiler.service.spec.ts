@@ -4317,6 +4317,89 @@ describe('canonicalSpecV2IrCompilerService risk.max_drawdown_pct', () => {
     expect(guardIds).not.toContain('guard_risk-max-drawdown')
   })
 
+  it('isolates risk.max_drawdown_pct from sibling position-scope risk atoms (stop_loss_pct coexistence)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push(
+      {
+        id: 'risk-max-drawdown',
+        phase: 'risk',
+        sideScope: 'both',
+        priority: 100,
+        condition: {
+          kind: 'atom',
+          key: 'risk.max_drawdown_pct',
+          semanticScope: 'portfolio',
+          op: 'GTE',
+          value: 0.15,
+        },
+        actions: [{ type: 'FORCE_EXIT' }],
+      },
+      {
+        id: 'risk-stop-loss',
+        phase: 'risk',
+        sideScope: 'long',
+        priority: 90,
+        condition: {
+          kind: 'atom',
+          key: 'position_loss_pct',
+          semanticScope: 'position',
+          op: 'GTE',
+          value: 0.05,
+        },
+        actions: [{ type: 'FORCE_EXIT' }],
+      },
+    )
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+
+    // Drawdown lives in orchestrationPortfolioRisks only
+    const portfolioRiskIds = (result.ir.orchestrationPortfolioRisks ?? []).map(r => r.id)
+    expect(portfolioRiskIds).toContain('risk-max-drawdown')
+    expect(portfolioRiskIds).not.toContain('risk-stop-loss')
+
+    // Stop-loss lives in riskPolicy.guards only
+    const guardIds = result.ir.riskPolicy.guards.map(g => g.id)
+    expect(guardIds).toContain('guard_risk-stop-loss')
+    expect(guardIds).not.toContain('guard_risk-max-drawdown')
+
+    // Neither rule leaks into ruleBlocks
+    const ruleIds = result.ir.ruleBlocks.map(b => b.id)
+    expect(ruleIds).not.toContain('risk-max-drawdown')
+    expect(ruleIds).not.toContain('risk-stop-loss')
+  })
+
+  it('emits one node per max_drawdown_pct rule when the spec carries multiple rules (OR semantics, no merge)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    for (const [id, valuePct] of [
+      ['risk-max-drawdown-tight', 10],
+      ['risk-max-drawdown-loose', 20],
+    ] as const) {
+      spec.rules.push({
+        id,
+        phase: 'risk',
+        sideScope: 'both',
+        priority: 100,
+        condition: {
+          kind: 'atom',
+          key: 'risk.max_drawdown_pct',
+          semanticScope: 'portfolio',
+          op: 'GTE',
+          value: Number((valuePct / 100).toFixed(4)),
+        },
+        actions: [{ type: 'FORCE_EXIT' }],
+      })
+    }
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const risks = result.ir.orchestrationPortfolioRisks ?? []
+    const tight = risks.find(r => r.id === 'risk-max-drawdown-tight')
+    const loose = risks.find(r => r.id === 'risk-max-drawdown-loose')
+    expect(tight).toBeDefined()
+    expect(loose).toBeDefined()
+    if (tight?.scope === 'portfolio') expect(tight.thresholdPct).toBeCloseTo(10, 2)
+    if (loose?.scope === 'portfolio') expect(loose.thresholdPct).toBeCloseTo(20, 2)
+  })
+
   it('accepts already-percentage values (>1) without double-converting — mirrors tryCompileRiskGuard contract', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
     const spec = buildBaseSpec()
