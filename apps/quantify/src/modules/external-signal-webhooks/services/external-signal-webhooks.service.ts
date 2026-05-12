@@ -42,13 +42,23 @@ export class ExternalSignalWebhooksService {
     dto: CreateExternalSignalWebhookSubscriptionDto,
   ): Promise<ExternalSignalWebhookSubscriptionSecretResponseDto> {
     await this.assertOwner(userId, strategyInstanceId)
+    const signalId = dto.signalId.trim()
+    const existingSubscription = await this.repo.findActiveSubscription(strategyInstanceId, signalId)
+    if (existingSubscription) {
+      throw new DomainException('external_signal.subscription_conflict', {
+        code: ErrorCode.EXTERNAL_SIGNAL_WEBHOOK_SUBSCRIPTION_CONFLICT,
+        status: HttpStatus.CONFLICT,
+        args: { strategyInstanceId, signalId },
+      })
+    }
+
     const secret = this.generateSecret()
     try {
       const record = await this.repo.createSubscription({
         userId,
         strategyInstanceId,
         provider: this.normalizeOptionalString(dto.provider),
-        signalId: dto.signalId.trim(),
+        signalId,
         secretCiphertext: this.crypto.encryptConfig<SecretEnvelope>({ secret }),
         metadata: this.toJsonObject(dto.metadata),
       })
@@ -62,7 +72,7 @@ export class ExternalSignalWebhooksService {
         throw new DomainException('external_signal.subscription_conflict', {
           code: ErrorCode.EXTERNAL_SIGNAL_WEBHOOK_SUBSCRIPTION_CONFLICT,
           status: HttpStatus.CONFLICT,
-          args: { strategyInstanceId, signalId: dto.signalId.trim() },
+          args: { strategyInstanceId, signalId },
         })
       }
       throw error
@@ -215,6 +225,25 @@ export class ExternalSignalWebhooksService {
     }
     catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const existingEvent = await this.repo.findEventByDedupeKey(dedupeKey)
+        if (existingEvent) {
+          await this.repo.createAudit({
+            subscriptionId: subscription.id,
+            eventId: existingEvent.id,
+            strategyInstanceId: input.strategyInstanceId,
+            provider: subscription.provider ?? provider,
+            signalId,
+            dedupeKey,
+            signatureStatus: 'ACCEPTED',
+            reason: 'duplicate_event',
+            requestHeaders: headers,
+            rawBodySha256,
+            remoteIp,
+            userAgent,
+          })
+          return { accepted: true, eventId: existingEvent.id }
+        }
+
         await this.auditRejected({
           subscriptionId: subscription.id,
           strategyInstanceId: input.strategyInstanceId,
@@ -333,9 +362,23 @@ export class ExternalSignalWebhooksService {
       if (value === null) {
         continue
       }
-      sanitized[key.toLowerCase()] = key.toLowerCase().includes('signature') ? '[redacted]' : value
+      const normalizedKey = key.toLowerCase()
+      sanitized[normalizedKey] = this.isSensitiveHeader(normalizedKey) ? '[redacted]' : value
     }
     return sanitized
+  }
+
+  private isSensitiveHeader(key: string): boolean {
+    const compactKey = key.replace(/[^a-z0-9]/g, '')
+    return key === 'cookie'
+      || key === 'set-cookie'
+      || key.includes('authorization')
+      || key.includes('signature')
+      || key.includes('token')
+      || key.includes('secret')
+      || key.includes('credential')
+      || key.includes('password')
+      || compactKey.includes('apikey')
   }
 
   private readHeader(value: string | string[] | undefined): string | null {

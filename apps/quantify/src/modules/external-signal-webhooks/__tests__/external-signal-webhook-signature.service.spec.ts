@@ -23,6 +23,10 @@ describe('ExternalSignalWebhookSignatureService', () => {
       ok: false,
       reason: 'invalid_signature',
     })
+    expect(service.verify({ secret, timestamp, signature: 'sha256=not-hex', rawBody, nowMs })).toEqual({
+      ok: false,
+      reason: 'invalid_signature',
+    })
   })
 
   it('rejects replay timestamps outside the five minute window', () => {

@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator'
+import { Transform } from 'class-transformer'
+import { IsNotEmpty, IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator'
 
 export class CreateExternalSignalWebhookSubscriptionDto {
   @ApiPropertyOptional({ example: 'tradingview' })
@@ -9,7 +10,9 @@ export class CreateExternalSignalWebhookSubscriptionDto {
   provider?: string
 
   @ApiProperty({ example: 'BTC_PERP_LONG_01' })
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
   @IsString()
+  @IsNotEmpty()
   @MinLength(1)
   @MaxLength(160)
   signalId!: string
@@ -30,7 +33,7 @@ export class ExternalSignalWebhookSubscriptionResponseDto {
   @ApiProperty()
   strategyInstanceId!: string
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   provider?: string | null
 
   @ApiProperty()
@@ -42,13 +45,13 @@ export class ExternalSignalWebhookSubscriptionResponseDto {
   @ApiProperty()
   status!: string
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   lastAcceptedAt?: string | null
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   rotatedAt?: string | null
 
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ type: 'object', additionalProperties: true, nullable: true })
   metadata?: Record<string, unknown> | null
 
   @ApiProperty()

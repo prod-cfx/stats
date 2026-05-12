@@ -27,7 +27,7 @@ export class AccountExternalSignalWebhooksController {
     @Headers('authorization') authorization?: string,
     @Headers('x-user-id') forwardedUserId?: string,
   ): Promise<ExternalSignalWebhookSubscriptionResponseDto[]> {
-    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
+    const userId = await this.callerIdentityService.resolveVerifiedCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.service.listSubscriptions(userId, strategyInstanceId)
   }
 
@@ -43,7 +43,7 @@ export class AccountExternalSignalWebhooksController {
     @Headers('authorization') authorization?: string,
     @Headers('x-user-id') forwardedUserId?: string,
   ): Promise<ExternalSignalWebhookSubscriptionSecretResponseDto> {
-    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
+    const userId = await this.callerIdentityService.resolveVerifiedCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.service.createSubscription(userId, strategyInstanceId, dto)
   }
 }

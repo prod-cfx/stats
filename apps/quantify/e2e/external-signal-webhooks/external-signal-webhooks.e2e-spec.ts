@@ -5,6 +5,10 @@ import { TOPIC_EXTERNAL_SIGNAL_RECEIVED } from '@/modules/message-bus/message-bu
 import { createApiClient, createTestingApp } from '../fixtures/fixtures'
 
 function bearerForUser(userId: string): string {
+  return `test-token:${userId}`
+}
+
+function forgedBearerForUser(userId: string): string {
   const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url')
   const payload = Buffer.from(JSON.stringify({ sub: userId, principalType: 'user' })).toString('base64url')
   return `${header}.${payload}.signature`
@@ -20,12 +24,26 @@ function sign(secret: string, timestamp: string, rawBody: string): string {
 describe('External signal webhooks (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
+  let originalFetch: typeof globalThis.fetch
   const ownerId = 'external-signal-owner'
   const otherUserId = 'external-signal-other'
   const templateId = 'external-signal-template'
   const instanceId = 'external-signal-instance'
 
   beforeAll(async () => {
+    originalFetch = globalThis.fetch
+    globalThis.fetch = jest.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const authorization = init?.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)
+        ? (init.headers as Record<string, string>).authorization
+        : undefined
+      const token = authorization?.replace(/^Bearer\s+/i, '')
+      const userId = token?.startsWith('test-token:') ? token.slice('test-token:'.length) : null
+      if (!userId) {
+        return new Response(JSON.stringify({ message: 'unauthorized' }), { status: 401 })
+      }
+      return new Response(JSON.stringify({ data: { id: userId } }), { status: 200 })
+    }) as typeof globalThis.fetch
+
     const context = await createTestingApp()
     app = context.app
     prisma = context.prisma!
@@ -87,6 +105,7 @@ describe('External signal webhooks (E2E)', () => {
     await prisma.strategyTemplate.deleteMany({ where: { id: templateId } })
     await prisma.user.deleteMany({ where: { id: { in: [ownerId, otherUserId] } } })
     await app.close()
+    globalThis.fetch = originalFetch
   })
 
   it('creates, lists, rotates, accepts, rejects, and audits signed webhook attempts', async () => {
@@ -104,10 +123,30 @@ describe('External signal webhooks (E2E)', () => {
     expect(created.webhookUrl).toBe(`/api/v1/webhook/strategy/${instanceId}/signal`)
 
     await client
+      .post(`account/ai-quant/strategies/${instanceId}/external-signal-subscriptions`)
+      .set('authorization', `Bearer ${bearerForUser(ownerId)}`)
+      .set('x-user-id', ownerId)
+      .send({ provider: 'tradingview', signalId: '   ' })
+      .expect(400)
+
+    await client
+      .post(`account/ai-quant/strategies/${instanceId}/external-signal-subscriptions`)
+      .set('authorization', `Bearer ${bearerForUser(ownerId)}`)
+      .set('x-user-id', ownerId)
+      .send({ provider: 'tradingview', signalId: 'BTC_PERP_LONG_01' })
+      .expect(409)
+
+    await client
       .get(`account/ai-quant/strategies/${instanceId}/external-signal-subscriptions`)
       .set('authorization', `Bearer ${bearerForUser(otherUserId)}`)
       .set('x-user-id', otherUserId)
       .expect(403)
+
+    await client
+      .get(`account/ai-quant/strategies/${instanceId}/external-signal-subscriptions`)
+      .set('authorization', `Bearer ${forgedBearerForUser(ownerId)}`)
+      .set('x-user-id', ownerId)
+      .expect(401)
 
     await client
       .get(`account/ai-quant/strategies/${instanceId}/external-signal-subscriptions`)
@@ -140,6 +179,7 @@ describe('External signal webhooks (E2E)', () => {
 
     const timestamp = String(Date.now())
     const rawBody = JSON.stringify({ signalId: 'BTC_PERP_LONG_01', provider: 'tradingview', side: 'long' })
+    let acceptedEventId = ''
     await client
       .post(`webhook/strategy/${instanceId}/signal`)
       .set('content-type', 'application/json')
@@ -149,11 +189,29 @@ describe('External signal webhooks (E2E)', () => {
       .expect(202)
       .expect(res => {
         expect(res.body.data).toEqual(expect.objectContaining({ accepted: true, eventId: expect.any(String) }))
+        acceptedEventId = res.body.data.eventId as string
       })
 
     await client
       .post(`webhook/strategy/${instanceId}/signal`)
       .set('content-type', 'application/json')
+      .set('x-external-signal-timestamp', timestamp)
+      .set('x-external-signal-signature', sign(rotated.secret, timestamp, rawBody))
+      .send(rawBody)
+      .expect(202)
+      .expect(res => {
+        expect(res.body.data).toEqual({ accepted: true, eventId: acceptedEventId })
+      })
+
+    await client
+      .post(`webhook/strategy/${instanceId}/signal`)
+      .set('content-type', 'application/json')
+      .set('authorization', 'Bearer leaked-token')
+      .set('proxy-authorization', 'Bearer leaked-proxy-token')
+      .set('cookie', 'session=leaked-cookie')
+      .set('x-api-key', 'leaked-api-key')
+      .set('x_api_key', 'leaked-underscore-api-key')
+      .set('x-secret-key', 'leaked-secret')
       .set('x-external-signal-timestamp', String(Date.now()))
       .send(JSON.stringify({ signalId: 'BTC_PERP_LONG_01' }))
       .expect(400)
@@ -185,8 +243,16 @@ describe('External signal webhooks (E2E)', () => {
     ])
 
     expect(events).toHaveLength(1)
-    expect(audits.filter(audit => audit.signatureStatus === 'ACCEPTED')).toHaveLength(1)
+    expect(audits.filter(audit => audit.signatureStatus === 'ACCEPTED')).toHaveLength(2)
     expect(audits.filter(audit => audit.signatureStatus === 'REJECTED')).toHaveLength(3)
+    expect(audits.find(audit => audit.reason === 'missing_signature')?.requestHeaders).toEqual(expect.objectContaining({
+      authorization: '[redacted]',
+      'proxy-authorization': '[redacted]',
+      cookie: '[redacted]',
+      'x-api-key': '[redacted]',
+      x_api_key: '[redacted]',
+      'x-secret-key': '[redacted]',
+    }))
     expect(outbox).toHaveLength(1)
     expect(outbox[0].payload).toEqual(expect.objectContaining({
       eventId: events[0].id,

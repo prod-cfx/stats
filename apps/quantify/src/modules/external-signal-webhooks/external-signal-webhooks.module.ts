@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common'
+import { ThrottlerModule } from '@nestjs/throttler'
 import { ConfigCryptoService } from '@/common/services/config-crypto.service'
 import { AccountStrategyCallerIdentityService } from '@/modules/account-strategy-view/services/account-strategy-caller-identity.service'
 import { StrategySignalsExecutionModule } from '@/modules/strategy-signals/strategy-signals-execution.module'
@@ -12,7 +13,7 @@ import { ExternalSignalWebhookSignatureService } from './services/external-signa
 import { ExternalSignalWebhooksService } from './services/external-signal-webhooks.service'
 
 @Module({
-  imports: [StrategySignalsExecutionModule],
+  imports: [ThrottlerModule.forRoot(), StrategySignalsExecutionModule],
   controllers: [
     AccountExternalSignalWebhooksController,
     AccountExternalSignalWebhookRotationController,

@@ -25,7 +25,7 @@ export class AccountExternalSignalWebhookRotationController {
     @Headers('authorization') authorization?: string,
     @Headers('x-user-id') forwardedUserId?: string,
   ): Promise<ExternalSignalWebhookSubscriptionSecretResponseDto> {
-    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
+    const userId = await this.callerIdentityService.resolveVerifiedCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.service.rotateSubscription(userId, subscriptionId)
   }
 }

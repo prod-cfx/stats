@@ -5864,6 +5864,804 @@ describe('canonicalSpecV2IrCompilerService action.reverse_position', () => {
 })
 
 // ---------------------------------------------------------------------------
+// P3 ghost-atom 修复 (Issue #1262): indicator.cross_over / indicator.cross_under
+// indicator.threshold_gte / indicator.threshold_lte — phase='gate' IR-compiler
+// 直接识别（绕过 canonical-spec-builder rewrite）。
+// ---------------------------------------------------------------------------
+describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 ghost-atom #1262)', () => {
+  const fallback = {
+    exchange: 'binance' as const,
+    symbol: 'BTCUSDT',
+    baseTimeframe: '1m',
+    positionPct: 10,
+  }
+
+  function buildBaseSpec(): CanonicalStrategySpecV2 {
+    return {
+      version: 2,
+      market: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        defaultTimeframe: '1m',
+      },
+      indicators: [],
+      sizing: { mode: 'RATIO', value: 0.1 },
+      executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+      dataRequirements: { requiredTimeframes: ['1m'] },
+      rules: [
+        {
+          id: 'entry-close-above-open',
+          phase: 'entry',
+          sideScope: 'long',
+          priority: 200,
+          condition: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'series', source: 'bar', field: 'open' },
+          },
+          actions: [{ type: 'OPEN_LONG' }],
+        },
+      ],
+    } satisfies CanonicalStrategySpecV2
+  }
+
+  function buildSpecWithIndicatorGate(
+    ruleId: string,
+    atomKey:
+      | 'indicator.cross_over'
+      | 'indicator.cross_under'
+      | 'indicator.threshold_gte'
+      | 'indicator.threshold_lte',
+    params: Record<string, string | number | boolean>,
+    value: number,
+    op: 'GTE' | 'LTE' | 'GT' | 'LT' = 'GTE',
+  ): CanonicalStrategySpecV2 {
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: ruleId,
+      phase: 'gate',
+      sideScope: 'both',
+      priority: 100,
+      condition: {
+        kind: 'atom',
+        key: atomKey,
+        semanticScope: 'market',
+        op,
+        value,
+        params,
+      },
+      actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+    })
+    return spec
+  }
+
+  function expectGuardBreachWrapsCross(
+    result: { ir: CanonicalStrategyIrV1 },
+    guardId: string,
+    passKind: Extract<PredicateDef['kind'], 'CROSS_OVER' | 'CROSS_UNDER'>,
+  ): PredicateDef {
+    const guard = result.ir.riskPolicy.guards.find(g => g.id === guardId)
+    expect(guard).toBeDefined()
+    expect(guard?.kind).toBe('EXPRESSION_GUARD')
+    expect(guard?.onBreach).toBe('BLOCK_NEW_ENTRY')
+    const breachPredicate = findPredicate(
+      result.ir.signalCatalog.predicates,
+      p => p.id === (guard as { predicateRef?: string }).predicateRef,
+    )
+    expect(breachPredicate.kind).toBe('NOT')
+    const passPredicate = findPredicate(
+      result.ir.signalCatalog.predicates,
+      p => p.id === breachPredicate.args[0],
+    )
+    expect(passPredicate.kind).toBe(passKind)
+    return passPredicate
+  }
+
+  it('preserves rule sideScope on indicator gate guard appliesTo', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithIndicatorGate(
+      'gate-long-only-cross',
+      'indicator.cross_over',
+      { indicator: 'sma', fastPeriod: 20, slowPeriod: 50 },
+      1,
+    )
+    const gateRule = spec.rules.find(rule => rule.id === 'gate-long-only-cross')
+    if (gateRule) {
+      gateRule.sideScope = 'long'
+    }
+
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_gate-long-only-cross')
+    expect(guard?.appliesTo).toBe('long')
+  })
+
+  // -------------------------------------------------------------------------
+  // indicator.cross_over
+  // -------------------------------------------------------------------------
+  describe('indicator.cross_over', () => {
+    it('compile() entry — SMA cross_over 产生 EXPRESSION_GUARD + CROSS_OVER predicate + SMA fast/slow series', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-sma-cross-over',
+        'indicator.cross_over',
+        { indicator: 'sma', fastPeriod: 20, slowPeriod: 50 },
+        1,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      expectGuardBreachWrapsCross(result, 'guard_gate-sma-cross-over', 'CROSS_OVER')
+      const smaSeries = result.ir.signalCatalog.series.filter(s => s.kind === 'SMA')
+      expect(smaSeries.length).toBe(2)
+      expect(smaSeries.map(s => s.params?.period as number).sort((a, b) => a - b)).toEqual([20, 50])
+    })
+
+    it('indicator=ema 路由到 EMA series', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-ema-cross-over',
+        'indicator.cross_over',
+        { indicator: 'ema', fastPeriod: 12, slowPeriod: 26 },
+        1,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const emaSeries = result.ir.signalCatalog.series.filter(s => s.kind === 'EMA')
+      expect(emaSeries.length).toBe(2)
+      expect(emaSeries.map(s => s.params?.period as number).sort((a, b) => a - b)).toEqual([12, 26])
+    })
+
+    it('indicator cross 使用 atom timeframe 编译对应周期的 series', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-ema-cross-timeframe',
+        'indicator.cross_over',
+        { indicator: 'ema', fastPeriod: 12, slowPeriod: 26, timeframe: '5m' },
+        1,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const emaSeries = result.ir.signalCatalog.series.filter(s => s.kind === 'EMA')
+      expect(emaSeries).toHaveLength(2)
+      expect(emaSeries.every(s => s.timeframe === '5m')).toBe(true)
+    })
+
+    it('indicator=rsi 路由到 RSI × const(value)', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-rsi-cross-over',
+        'indicator.cross_over',
+        { indicator: 'rsi', period: 14 },
+        30,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const rsi = result.ir.signalCatalog.series.find(s => s.kind === 'RSI')
+      expect(rsi).toBeDefined()
+      expect(rsi?.params?.period).toBe(14)
+      const constSeries = result.ir.signalCatalog.series.filter(s => s.kind === 'CONST')
+      expect(constSeries.some(s => (s as { value?: number }).value === 30)).toBe(true)
+    })
+
+    it('indicator=macd 路由到 MACD_LINE × MACD_SIGNAL + CROSS_OVER predicate', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-macd-cross-over',
+        'indicator.cross_over',
+        { indicator: 'macd' },
+        1,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const line = result.ir.signalCatalog.series.find(s => s.kind === 'MACD_LINE')
+      const sig = result.ir.signalCatalog.series.find(s => s.kind === 'MACD_SIGNAL')
+      expect(line).toBeDefined()
+      expect(sig).toBeDefined()
+      expectGuardBreachWrapsCross(result, 'guard_gate-macd-cross-over', 'CROSS_OVER')
+    })
+
+    it('indicator=macd 使用 atom 自定义 MACD 参数而不是默认参数', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-macd-custom-cross-over',
+        'indicator.cross_over',
+        { indicator: 'macd', fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 },
+        1,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const line = result.ir.signalCatalog.series.find(s => s.kind === 'MACD_LINE')
+      const signal = result.ir.signalCatalog.series.find(s => s.kind === 'MACD_SIGNAL')
+      expect(line?.params).toEqual(expect.objectContaining({ fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 }))
+      expect(signal?.params).toEqual(expect.objectContaining({ fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 }))
+    })
+
+    it('fail-closed — macd fastPeriod=0 抛 invalid_fast_period', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-macd-bad-fast',
+        'indicator.cross_over',
+        { indicator: 'macd', fastPeriod: 0, slowPeriod: 34, signalPeriod: 12 },
+        1,
+      )
+      expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+        /codegen\.canonical_spec_v2_indicator_cross_invalid_fast_period/,
+      )
+    })
+
+    it('fail-closed — macd slowPeriod=-1 抛 invalid_slow_period', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-macd-bad-slow',
+        'indicator.cross_over',
+        { indicator: 'macd', fastPeriod: 16, slowPeriod: -1, signalPeriod: 12 },
+        1,
+      )
+      expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+        /codegen\.canonical_spec_v2_indicator_cross_invalid_slow_period/,
+      )
+    })
+
+    it('fail-closed — macd signalPeriod 非数字抛 invalid_signal_period', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-macd-bad-signal',
+        'indicator.cross_over',
+        { indicator: 'macd', fastPeriod: 16, slowPeriod: 34, signalPeriod: 'bad' },
+        1,
+      )
+      expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+        /codegen\.canonical_spec_v2_indicator_cross_invalid_signal_period/,
+      )
+    })
+
+    it('multi-rule 不互盖 — 两条 indicator.cross_over 各落各的 guard', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildBaseSpec()
+      spec.rules.push(
+        {
+          id: 'gate-sma-fast',
+          phase: 'gate',
+          sideScope: 'both',
+          priority: 100,
+          condition: {
+            kind: 'atom',
+            key: 'indicator.cross_over',
+            semanticScope: 'market',
+            op: 'GTE',
+            value: 1,
+            params: { indicator: 'sma', fastPeriod: 5, slowPeriod: 13 },
+          },
+          actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+        },
+        {
+          id: 'gate-sma-slow',
+          phase: 'gate',
+          sideScope: 'both',
+          priority: 100,
+          condition: {
+            kind: 'atom',
+            key: 'indicator.cross_over',
+            semanticScope: 'market',
+            op: 'GTE',
+            value: 1,
+            params: { indicator: 'sma', fastPeriod: 20, slowPeriod: 60 },
+          },
+          actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+        },
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const guardIds = result.ir.riskPolicy.guards.map(g => g.id)
+      expect(guardIds).toContain('guard_gate-sma-fast')
+      expect(guardIds).toContain('guard_gate-sma-slow')
+      const smaPeriods = result.ir.signalCatalog.series
+        .filter(s => s.kind === 'SMA')
+        .map(s => s.params?.period as number)
+        .sort((a, b) => a - b)
+      expect(smaPeriods).toEqual([5, 13, 20, 60])
+    })
+
+    it('混合隔离 — 与 volume.threshold gate 共存互不串味', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildBaseSpec()
+      spec.rules.push(
+        {
+          id: 'gate-cross',
+          phase: 'gate',
+          sideScope: 'both',
+          priority: 100,
+          condition: {
+            kind: 'atom',
+            key: 'indicator.cross_over',
+            semanticScope: 'market',
+            op: 'GTE',
+            value: 1,
+            params: { indicator: 'sma', fastPeriod: 20, slowPeriod: 50 },
+          },
+          actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+        },
+        {
+          id: 'gate-volume',
+          phase: 'gate',
+          sideScope: 'both',
+          priority: 100,
+          condition: {
+            kind: 'atom',
+            key: 'volume.threshold',
+            semanticScope: 'market',
+            op: 'GT',
+            value: 1000,
+            params: { metric: 'base_volume' },
+          },
+          actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+        },
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const guardIds = result.ir.riskPolicy.guards.map(g => g.id)
+      expect(guardIds).toContain('guard_gate-cross')
+      expect(guardIds).toContain('guard_gate-volume')
+      expect(result.ir.signalCatalog.series.some(s => s.kind === 'VOLUME')).toBe(true)
+      expect(result.ir.signalCatalog.series.some(s => s.kind === 'SMA')).toBe(true)
+    })
+
+    it('fail-closed — indicator 缺 fastPeriod 抛 invalid_fast_period', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-bad',
+        'indicator.cross_over',
+        { indicator: 'sma', slowPeriod: 50 },
+        1,
+      )
+      expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+        /codegen\.canonical_spec_v2_indicator_cross_invalid_fast_period/,
+      )
+    })
+
+    it('fail-closed — indicator 名未知抛 invalid_indicator', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-bad-ind',
+        'indicator.cross_over',
+        { indicator: 'unknown_kind', fastPeriod: 20, slowPeriod: 50 },
+        1,
+      )
+      expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+        /codegen\.canonical_spec_v2_indicator_cross_invalid_indicator/,
+      )
+    })
+
+    it('fail-closed — rsi 路由 value 缺失抛 invalid_value', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildBaseSpec()
+      spec.rules.push({
+        id: 'gate-rsi-no-value',
+        phase: 'gate',
+        sideScope: 'both',
+        priority: 100,
+        condition: {
+          kind: 'atom',
+          key: 'indicator.cross_over',
+          semanticScope: 'market',
+          op: 'GTE',
+          params: { indicator: 'rsi', period: 14 },
+        } as CanonicalStrategySpecV2['rules'][number]['condition'],
+        actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+      })
+      expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+        /codegen\.canonical_spec_v2_indicator_cross_invalid_value/,
+      )
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // indicator.cross_under
+  // -------------------------------------------------------------------------
+  describe('indicator.cross_under', () => {
+    it('compile() entry — SMA cross_under 产生 CROSS_UNDER predicate', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-sma-cross-under',
+        'indicator.cross_under',
+        { indicator: 'sma', fastPeriod: 20, slowPeriod: 50 },
+        1,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      expectGuardBreachWrapsCross(result, 'guard_gate-sma-cross-under', 'CROSS_UNDER')
+    })
+
+    it('indicator=ema 路由 EMA', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-ema-cross-under',
+        'indicator.cross_under',
+        { indicator: 'ema', fastPeriod: 9, slowPeriod: 21 },
+        1,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const ema = result.ir.signalCatalog.series.filter(s => s.kind === 'EMA')
+      expect(ema.length).toBe(2)
+    })
+
+    it('indicator=rsi 路由到 RSI × const(value) + CROSS_UNDER predicate', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-rsi-cross-under',
+        'indicator.cross_under',
+        { indicator: 'rsi', period: 14 },
+        70,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      expectGuardBreachWrapsCross(result, 'guard_gate-rsi-cross-under', 'CROSS_UNDER')
+      const rsi = result.ir.signalCatalog.series.find(s => s.kind === 'RSI')
+      expect(rsi?.params?.period).toBe(14)
+      expect(result.ir.signalCatalog.series.some(s => s.kind === 'CONST' && (s as { value?: number }).value === 70)).toBe(true)
+    })
+
+    it('indicator=macd 路由 MACD_LINE × MACD_SIGNAL + CROSS_UNDER predicate', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-macd-cross-under',
+        'indicator.cross_under',
+        { indicator: 'macd' },
+        1,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      expect(result.ir.signalCatalog.series.some(s => s.kind === 'MACD_LINE')).toBe(true)
+      expect(result.ir.signalCatalog.series.some(s => s.kind === 'MACD_SIGNAL')).toBe(true)
+      expectGuardBreachWrapsCross(result, 'guard_gate-macd-cross-under', 'CROSS_UNDER')
+    })
+
+    it('multi-rule 不互盖 — cross_under 与 cross_over 共存', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildBaseSpec()
+      spec.rules.push(
+        {
+          id: 'gate-cross-over',
+          phase: 'gate',
+          sideScope: 'both',
+          priority: 100,
+          condition: {
+            kind: 'atom',
+            key: 'indicator.cross_over',
+            semanticScope: 'market',
+            op: 'GTE',
+            value: 1,
+            params: { indicator: 'sma', fastPeriod: 20, slowPeriod: 50 },
+          },
+          actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+        },
+        {
+          id: 'gate-cross-under',
+          phase: 'gate',
+          sideScope: 'both',
+          priority: 100,
+          condition: {
+            kind: 'atom',
+            key: 'indicator.cross_under',
+            semanticScope: 'market',
+            op: 'GTE',
+            value: 1,
+            params: { indicator: 'sma', fastPeriod: 20, slowPeriod: 50 },
+          },
+          actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+        },
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const predicateKinds = result.ir.signalCatalog.predicates.map(p => p.kind).sort()
+      expect(predicateKinds).toContain('CROSS_OVER')
+      expect(predicateKinds).toContain('CROSS_UNDER')
+    })
+
+    it('precision — SMA series period 数值精确，未被默认值污染', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-sma-precision',
+        'indicator.cross_under',
+        { indicator: 'sma', fastPeriod: 7, slowPeriod: 99 },
+        1,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const periods = result.ir.signalCatalog.series
+        .filter(s => s.kind === 'SMA')
+        .map(s => s.params?.period as number)
+        .sort((a, b) => a - b)
+      expect(periods).toEqual([7, 99])
+    })
+
+    it('fail-closed — slowPeriod=0 抛 invalid_slow_period', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-bad',
+        'indicator.cross_under',
+        { indicator: 'sma', fastPeriod: 20, slowPeriod: 0 },
+        1,
+      )
+      expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+        /codegen\.canonical_spec_v2_indicator_cross_invalid_slow_period/,
+      )
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // indicator.threshold_gte
+  // -------------------------------------------------------------------------
+  describe('indicator.threshold_gte', () => {
+    it('compile() entry — RSI threshold_gte 产生 EXPRESSION_GUARD + flipped LT predicate', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-rsi-th-gte',
+        'indicator.threshold_gte',
+        { indicator: 'rsi', period: 14 },
+        70,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_gate-rsi-th-gte')
+      expect(guard).toBeDefined()
+      const predicate = result.ir.signalCatalog.predicates.find(
+        p => p.id === (guard as { predicateRef?: string }).predicateRef,
+      )
+      // gate "通过条件 GTE" → guard 触发条件 LT（flipGateOperator）
+      expect(predicate?.kind).toBe('LT')
+      const rsi = result.ir.signalCatalog.series.find(s => s.kind === 'RSI')
+      expect(rsi?.params?.period).toBe(14)
+      expect(result.ir.signalCatalog.series.some(s => s.kind === 'CONST' && (s as { value?: number }).value === 70)).toBe(true)
+    })
+
+    it('indicator=sma 路由 SMA × const', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-sma-th-gte',
+        'indicator.threshold_gte',
+        { indicator: 'sma', period: 50 },
+        100,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const sma = result.ir.signalCatalog.series.find(s => s.kind === 'SMA')
+      expect(sma?.params?.period).toBe(50)
+      expect(result.ir.signalCatalog.series.some(s => s.kind === 'CONST' && (s as { value?: number }).value === 100)).toBe(true)
+    })
+
+    it('indicator threshold 使用 atom timeframe 编译对应周期的 RSI series', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-rsi-th-gte-timeframe',
+        'indicator.threshold_gte',
+        { indicator: 'rsi', period: 14, timeframe: '15m' },
+        70,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const rsi = result.ir.signalCatalog.series.find(s => s.kind === 'RSI')
+      expect(rsi?.timeframe).toBe('15m')
+      expect(rsi?.params?.period).toBe(14)
+    })
+
+    it('indicator=ema 路由 EMA × const', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-ema-th-gte',
+        'indicator.threshold_gte',
+        { indicator: 'ema', period: 21 },
+        50,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const ema = result.ir.signalCatalog.series.find(s => s.kind === 'EMA')
+      expect(ema?.params?.period).toBe(21)
+    })
+
+    it('multi-rule — 两条 threshold_gte 各落各 guard + 各产生独立 RSI series（不同 period）', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildBaseSpec()
+      for (const [ruleId, period, value] of [
+        ['gate-th-a', 14, 70],
+        ['gate-th-b', 21, 80],
+      ] as const) {
+        spec.rules.push({
+          id: ruleId,
+          phase: 'gate',
+          sideScope: 'both',
+          priority: 100,
+          condition: {
+            kind: 'atom',
+            key: 'indicator.threshold_gte',
+            semanticScope: 'market',
+            op: 'GTE',
+            value,
+            params: { indicator: 'rsi', period },
+          },
+          actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+        })
+      }
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const guardIds = result.ir.riskPolicy.guards.map(g => g.id)
+      expect(guardIds).toContain('guard_gate-th-a')
+      expect(guardIds).toContain('guard_gate-th-b')
+      const rsiPeriods = result.ir.signalCatalog.series
+        .filter(s => s.kind === 'RSI')
+        .map(s => s.params?.period as number)
+        .sort((a, b) => a - b)
+      expect(rsiPeriods).toEqual([14, 21])
+    })
+
+    it('fail-closed — value 缺失抛 invalid_value', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildBaseSpec()
+      spec.rules.push({
+        id: 'gate-bad',
+        phase: 'gate',
+        sideScope: 'both',
+        priority: 100,
+        condition: {
+          kind: 'atom',
+          key: 'indicator.threshold_gte',
+          semanticScope: 'market',
+          op: 'GTE',
+          params: { indicator: 'rsi', period: 14 },
+        } as CanonicalStrategySpecV2['rules'][number]['condition'],
+        actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+      })
+      expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+        /codegen\.canonical_spec_v2_indicator_threshold_invalid_value/,
+      )
+    })
+
+    it('fail-closed — indicator=macd 拒绝（不支持 threshold 语义）', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-bad-macd-th',
+        'indicator.threshold_gte',
+        { indicator: 'macd' },
+        50,
+      )
+      expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+        /codegen\.canonical_spec_v2_indicator_threshold_invalid_indicator/,
+      )
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // indicator.threshold_lte
+  // -------------------------------------------------------------------------
+  describe('indicator.threshold_lte', () => {
+    it('compile() entry — RSI threshold_lte 产生 flipped GT predicate', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-rsi-th-lte',
+        'indicator.threshold_lte',
+        { indicator: 'rsi', period: 14 },
+        30,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_gate-rsi-th-lte')
+      const predicate = result.ir.signalCatalog.predicates.find(
+        p => p.id === (guard as { predicateRef?: string }).predicateRef,
+      )
+      // gate "通过条件 LTE" → guard 触发条件 GT
+      expect(predicate?.kind).toBe('GT')
+      const rsi = result.ir.signalCatalog.series.find(s => s.kind === 'RSI')
+      expect(rsi?.params?.period).toBe(14)
+    })
+
+    it('indicator=sma 路由 SMA × const', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-sma-th-lte',
+        'indicator.threshold_lte',
+        { indicator: 'sma', period: 200 },
+        50,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const sma = result.ir.signalCatalog.series.find(s => s.kind === 'SMA')
+      expect(sma?.params?.period).toBe(200)
+    })
+
+    it('multi-rule 不互盖 — threshold_gte 与 threshold_lte 共存', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildBaseSpec()
+      spec.rules.push(
+        {
+          id: 'gate-th-gte',
+          phase: 'gate',
+          sideScope: 'both',
+          priority: 100,
+          condition: {
+            kind: 'atom',
+            key: 'indicator.threshold_gte',
+            semanticScope: 'market',
+            op: 'GTE',
+            value: 70,
+            params: { indicator: 'rsi', period: 14 },
+          },
+          actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+        },
+        {
+          id: 'gate-th-lte',
+          phase: 'gate',
+          sideScope: 'both',
+          priority: 100,
+          condition: {
+            kind: 'atom',
+            key: 'indicator.threshold_lte',
+            semanticScope: 'market',
+            op: 'LTE',
+            value: 30,
+            params: { indicator: 'rsi', period: 14 },
+          },
+          actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+        },
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const kinds = result.ir.signalCatalog.predicates.map(p => p.kind)
+      expect(kinds).toContain('LT')
+      expect(kinds).toContain('GT')
+    })
+
+    it('precision — value=29.5 fractional 不被丢失（toFixed(4) 友好）', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-rsi-th-precision',
+        'indicator.threshold_lte',
+        { indicator: 'rsi', period: 14 },
+        29.5,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const constSeries = result.ir.signalCatalog.series.filter(s => s.kind === 'CONST')
+      expect(
+        constSeries.some(s => Number(Number((s as { value?: number }).value).toFixed(4)) === 29.5),
+      ).toBe(true)
+    })
+
+    it('混合隔离 — 与 indicator.cross_over 共存', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildBaseSpec()
+      spec.rules.push(
+        {
+          id: 'gate-cross',
+          phase: 'gate',
+          sideScope: 'both',
+          priority: 100,
+          condition: {
+            kind: 'atom',
+            key: 'indicator.cross_over',
+            semanticScope: 'market',
+            op: 'GTE',
+            value: 1,
+            params: { indicator: 'sma', fastPeriod: 20, slowPeriod: 50 },
+          },
+          actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+        },
+        {
+          id: 'gate-th-lte',
+          phase: 'gate',
+          sideScope: 'both',
+          priority: 100,
+          condition: {
+            kind: 'atom',
+            key: 'indicator.threshold_lte',
+            semanticScope: 'market',
+            op: 'LTE',
+            value: 30,
+            params: { indicator: 'rsi', period: 14 },
+          },
+          actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+        },
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const guardIds = result.ir.riskPolicy.guards.map(g => g.id)
+      expect(guardIds).toContain('guard_gate-cross')
+      expect(guardIds).toContain('guard_gate-th-lte')
+    })
+
+    it('fail-closed — period=-1 抛 invalid_period', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-bad-period',
+        'indicator.threshold_lte',
+        { indicator: 'rsi', period: -1 },
+        30,
+      )
+      expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+        /codegen\.canonical_spec_v2_indicator_threshold_invalid_period/,
+      )
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
 // risk.stop_loss_pct ghost-atom fix (P3, #1264): canonical→IR compile branch
 // ---------------------------------------------------------------------------
 describe('canonicalSpecV2IrCompilerService risk.stop_loss_pct', () => {

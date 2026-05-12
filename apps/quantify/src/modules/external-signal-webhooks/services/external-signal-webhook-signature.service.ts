@@ -34,9 +34,14 @@ export class ExternalSignalWebhookSignatureService {
       return { ok: false, reason: 'timestamp_out_of_window' }
     }
 
-    const signature = this.normalizeSignature(input.signature)
-    if (!signature) {
+    const rawSignature = input.signature?.trim()
+    if (!rawSignature) {
       return { ok: false, reason: 'missing_signature' }
+    }
+
+    const signature = this.normalizeSignature(rawSignature)
+    if (!signature) {
+      return { ok: false, reason: 'invalid_signature' }
     }
 
     const expected = createHmac('sha256', input.secret)
@@ -58,11 +63,7 @@ export class ExternalSignalWebhookSignatureService {
       .digest('hex')
   }
 
-  private normalizeSignature(signature: string | undefined): string | null {
-    const value = signature?.trim()
-    if (!value) {
-      return null
-    }
+  private normalizeSignature(value: string): string | null {
     const normalized = value.startsWith('sha256=') ? value.slice('sha256='.length) : value
     return /^[0-9a-f]{64}$/i.test(normalized) ? normalized.toLowerCase() : null
   }
