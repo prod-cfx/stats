@@ -76,7 +76,7 @@ export class PositionSyncService {
 
     try {
       const resolvedExchangeAccountId = exchangeAccountId
-        ?? await this.resolveSyncExchangeAccountId(userId, accountId)
+        ?? await this.resolveSyncExchangeAccountId(userId, accountId, exchangeId)
 
       // 1. 从交易所获取实际仓位
       const exchangePositions = await this.tradingService.getPositions(userId, exchangeId, marketType, resolvedExchangeAccountId ?? undefined)
@@ -526,12 +526,16 @@ export class PositionSyncService {
     return { quantities, realTradeKeys, syntheticTradeKeys }
   }
 
-  private async resolveSyncExchangeAccountId(userId: string, accountId: string): Promise<string | null> {
+  private async resolveSyncExchangeAccountId(
+    userId: string,
+    accountId: string,
+    exchangeId: ExchangeId,
+  ): Promise<string | null> {
     if (typeof this.positionsRepository.findExchangeAccountIdForStrategyAccount !== 'function') {
       return null
     }
 
-    return this.positionsRepository.findExchangeAccountIdForStrategyAccount(userId, accountId)
+    return this.positionsRepository.findExchangeAccountIdForStrategyAccount(userId, accountId, exchangeId)
   }
 
   private async syncSharedAccountPosition(params: {

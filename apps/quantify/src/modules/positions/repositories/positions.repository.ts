@@ -168,7 +168,7 @@ export class PositionsRepository {
     return strategyKeys.size
   }
 
-  async findExchangeAccountIdForStrategyAccount(userId: string, accountId: string) {
+  async findExchangeAccountIdForStrategyAccount(userId: string, accountId: string, exchangeId: ExchangeId) {
     const account = await this.txHost.tx.userStrategyAccount.findUnique({
       where: { id: accountId },
       select: { strategyId: true },
@@ -183,6 +183,7 @@ export class PositionsRepository {
           userId,
           status: 'active',
           exchangeAccountId: { not: null },
+          exchangeAccount: { exchangeId },
           strategyInstance: {
             strategyTemplateId: account.strategyId,
           },
@@ -194,6 +195,7 @@ export class PositionsRepository {
           userId,
           status: 'active',
           exchangeAccountId: { not: null },
+          exchangeAccount: { exchangeId },
           llmStrategyInstance: {
             strategyId: account.strategyId,
           },
