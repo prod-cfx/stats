@@ -62,6 +62,19 @@ describe('parsePerOrderSizing', () => {
     const result = parsePerOrderSizing('每次下单 9999999 USDT')
     expect(result).toEqual({ mode: 'notional_quote', value: 9999999 })
   })
+
+  // #1232 Round 1 m4 — 零值边界守卫
+  it('零值 notional_quote 被 value>0 守卫拦截 → null', () => {
+    expect(parsePerOrderSizing('每次下单 0 USDT')).toBeNull()
+  })
+
+  it('零值 equity_ratio 被 value>0 守卫拦截 → null', () => {
+    expect(parsePerOrderSizing('账户 0%')).toBeNull()
+  })
+
+  it('零值 fixed_base_qty 被 value>0 守卫拦截 → null', () => {
+    expect(parsePerOrderSizing('0 张合约')).toBeNull()
+  })
 })
 
 describe('toPerOrderBudgetCapabilityShape', () => {
