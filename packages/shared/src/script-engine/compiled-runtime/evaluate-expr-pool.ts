@@ -13,6 +13,12 @@ export type CompiledRuntimeValue =
     levels: number[]
   }
 
+interface CompiledTimeWindow {
+  readonly daysOfWeek?: readonly number[]
+  readonly start: string
+  readonly end: string
+}
+
 interface CompiledExprNode {
   id: string
   nodeType: 'series' | 'level_set' | 'predicate'
@@ -29,6 +35,7 @@ interface CompiledExprNode {
     memoryKey?: string
     path?: string[]
     timezone?: string
+    windows?: ReadonlyArray<CompiledTimeWindow>
   }
 }
 
@@ -127,9 +134,7 @@ function evaluateSeries(
           : null
       if (typeof nowRaw !== 'number' || !Number.isFinite(nowRaw)) return false
       const timezone = readStringValue(node.payload.timezone) ?? 'UTC'
-      const windows = Array.isArray((node.payload as Record<string, unknown>).windows)
-        ? (node.payload as Record<string, unknown>).windows as ReadonlyArray<unknown>
-        : []
+      const windows = node.payload.windows ?? []
       return evaluateInTimeWindow(nowRaw, timezone, windows)
     }
     default: {
@@ -1242,7 +1247,7 @@ function parseHHMM(value: string): number | null {
 function evaluateInTimeWindow(
   nowMs: number,
   timezone: string,
-  windows: ReadonlyArray<unknown>,
+  windows: ReadonlyArray<CompiledTimeWindow>,
 ): boolean {
   if (windows.length === 0) return false
 
@@ -1278,17 +1283,21 @@ function evaluateInTimeWindow(
   }
 
   for (const window of windows) {
-    if (!window || typeof window !== 'object' || Array.isArray(window)) continue
-    const w = window as Record<string, unknown>
-    const start = typeof w.start === 'string' ? parseHHMM(w.start) : null
-    const end = typeof w.end === 'string' ? parseHHMM(w.end) : null
+    if (!window || typeof window !== 'object') continue
+    const start = typeof window.start === 'string' ? parseHHMM(window.start) : null
+    const end = typeof window.end === 'string' ? parseHHMM(window.end) : null
     if (start === null || end === null) continue
 
-    const daysOfWeek = Array.isArray(w.daysOfWeek) ? w.daysOfWeek : null
-    if (daysOfWeek !== null) {
-      const allowed = daysOfWeek.every((d: unknown) => typeof d === 'number')
+    const daysOfWeek = window.daysOfWeek
+    if (daysOfWeek !== undefined) {
+      if (!Array.isArray(daysOfWeek)) continue
+      // fail-closed: every day must be a finite integer in [0, 6]; NaN / 7 / strings reject the window
+      const allowed = daysOfWeek.every(
+        (d): d is number =>
+          typeof d === 'number' && Number.isFinite(d) && Number.isInteger(d) && d >= 0 && d <= 6,
+      )
       if (!allowed) continue
-      if (!(daysOfWeek as number[]).includes(localDayOfWeek)) continue
+      if (!daysOfWeek.includes(localDayOfWeek)) continue
     }
 
     // Window spans midnight (e.g. 22:00–02:00) — split into two sub-ranges
