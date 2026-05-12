@@ -157,6 +157,15 @@ describe('external.signal atom 五层 parity', () => {
       expect(telegramSlotKeys).toContain('external.signal.secret')
     })
 
+    it('does not treat plain direction words after external signal as signalId', () => {
+      const patch = seedExtractor.extract('OKX BTCUSDT 15m, external signal buy triggers long entry, stop loss 5%.')
+      const trigger = patch.triggers?.find(t => t.key === 'external.signal')
+      const slotKeys = trigger?.openSlots?.map(slot => slot.slotKey) ?? []
+
+      expect(trigger?.params?.signalId).toBeUndefined()
+      expect(slotKeys).toContain('external.signal.signalId')
+    })
+
     // critic round 1 P4-5 B2 回归：provider 关键词必须与 signal-semantic 词共现
     it('B2 negative: bare provider keyword without signal context → 不产生 external.signal trigger', () => {
       const noSignalUtterances = [

@@ -5193,7 +5193,7 @@ export class SemanticSeedExtractorService {
   }
 
   private isExternalSignalReservedWord(value: string): boolean {
-    return /^(?:after|arrives?|configured|event|hook|open|secret|signal|signals?|trigger|触发|开多|开空)$/iu.test(value)
+    return /^(?:after|arrives?|bearish|bullish|buy|configured|event|hook|long|open|secret|sell|short|signal|signals?|trigger|when|with|触发|开多|开空)$/iu.test(value)
   }
 
   private hasExternalSignalSecretConfigured(clause: string): boolean {
