@@ -1818,6 +1818,55 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 
+  it('fails closed when position_loss_pct threshold is 0', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const canonicalSpec = {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '1h',
+        },
+        indicators: [],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['1h'],
+        },
+        rules: [
+          {
+            id: 'entry-stop-loss-invalid',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'position_loss_pct',
+              semanticScope: 'position',
+              op: 'GTE',
+              value: 0,
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      } satisfies CanonicalStrategySpecV2
+
+    expect(() => compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    })).toThrow(/codegen\.canonical_spec_v2_position_loss_pct_invalid_pct/)
+  })
+
   it('keeps price.change_pct thresholds in ratio units', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
@@ -5695,6 +5744,21 @@ describe('canonicalSpecV2IrCompilerService risk.stop_loss_pct', () => {
     })
     return spec
   }
+
+  it('fails closed when legacy position_loss_pct risk guard value is 0', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'risk-position-loss-invalid',
+      phase: 'risk',
+      sideScope: 'both',
+      priority: 100,
+      condition: { kind: 'atom', key: 'position_loss_pct', semanticScope: 'position', op: 'GTE', value: 0 },
+      actions: [{ type: 'FORCE_EXIT' }],
+    })
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback }))
+      .toThrow(/codegen\.canonical_spec_v2_position_loss_pct_invalid_pct/)
+  })
 
   it('emits STOP_LOSS_PCT guard into riskPolicy.guards for valuePct:5', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()

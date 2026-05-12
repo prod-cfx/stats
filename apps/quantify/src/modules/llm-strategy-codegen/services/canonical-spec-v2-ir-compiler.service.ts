@@ -1653,7 +1653,11 @@ export class CanonicalSpecV2IrCompilerService {
           })
         }
         const threshold = -Math.abs(
-          this.normalizePositionPnlPctThreshold(this.readNumber([atom.value], 0)),
+          this.normalizeRiskGuardPctThreshold(
+            this.readNumber([atom.value, atom.params?.valuePct], Number.NaN),
+            'canonical_spec_v2_position_loss_pct_invalid_pct',
+            seed,
+          ),
         )
         const thresholdRef = this.ensureConstSeries(
           context,
@@ -2539,12 +2543,17 @@ export class CanonicalSpecV2IrCompilerService {
     const hasReduceAction = rule.actions.some(action => action.type === 'REDUCE_LONG' || action.type === 'REDUCE_SHORT')
 
     if (rule.condition.key === 'position_loss_pct') {
+      const thresholdPct = this.normalizeRiskGuardPctThreshold(
+        percentRiskThreshold,
+        'canonical_spec_v2_position_loss_pct_invalid_pct',
+        rule.id,
+      )
       return {
         id: `guard_${rule.id}`,
         kind: 'STOP_LOSS_PCT',
         scope: 'position',
         appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
-        value: threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold,
+        value: thresholdPct,
         onBreach,
       }
     }
