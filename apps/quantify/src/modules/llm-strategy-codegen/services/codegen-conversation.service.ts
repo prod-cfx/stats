@@ -260,6 +260,7 @@ export class CodegenConversationService {
     const seedSemanticState = this.mergeSemanticPatchIntoState(
       this.createEmptySemanticState(),
       this.extractSemanticPatchFromMessage(dto.initialMessage),
+      dto.initialMessage ?? undefined,
     )
     const plan = await this.planConversationByLlm(dto.initialMessage ?? '', seedSemanticState, {
       providerCode: this.resolveProviderCode(undefined),
@@ -268,6 +269,7 @@ export class CodegenConversationService {
     let initialSemanticState = this.applyConversationPlanToSemanticState({
       currentState: seedSemanticState,
       plan,
+      message: dto.initialMessage ?? undefined,
     })
     initialSemanticState = this.reconcileSemanticMissingPlaceholders(initialSemanticState)
     const initialStrategyVersion = this.currentStrategyVersion()
@@ -1467,6 +1469,7 @@ export class CodegenConversationService {
       this.mergeSemanticPatchIntoState(
         baseSemanticState,
         this.extractSemanticPatchFromMessage(dto.message),
+        dto.message,
       ),
     )
     const constraintPack = inferredConfirmation.constraintPack
@@ -1479,6 +1482,7 @@ export class CodegenConversationService {
       this.applyConversationPlanToSemanticState({
         currentState: preMergedSemanticState,
         plan,
+        message: dto.message,
       }),
     )
     const supportGateResponse = await this.handleSemanticSupportGateForExistingSession({
@@ -2012,6 +2016,7 @@ export class CodegenConversationService {
       const plannedSemanticState = this.applyConversationPlanToSemanticState({
         currentState: seedSemanticState,
         plan,
+        message: args.decision.seedText,
       })
       const replacementCandidateState = this.reconcileSemanticMissingPlaceholders(
         buildReplacementSemanticState({
@@ -3929,9 +3934,10 @@ export class CodegenConversationService {
   private applyConversationPlanToSemanticState(input: {
     currentState: SemanticState
     plan: ConversationPlan
+    message?: string
   }): SemanticState {
     let nextState = input.currentState
-    const semanticPatchState = this.buildSemanticStateFromPlannerPatch(input.plan.semanticPatch)
+    const semanticPatchState = this.buildSemanticStateFromPlannerPatch(input.plan.semanticPatch, input.message)
 
     if (semanticPatchState) {
       nextState = this.semanticStateMerge.merge({
@@ -3954,8 +3960,9 @@ export class CodegenConversationService {
   private mergeSemanticPatchIntoState(
     currentState: SemanticState,
     semanticPatch?: CodegenSemanticPatch,
+    message?: string,
   ): SemanticState {
-    const semanticPatchState = this.buildSemanticStateFromPlannerPatch(semanticPatch)
+    const semanticPatchState = this.buildSemanticStateFromPlannerPatch(semanticPatch, message)
     if (!semanticPatchState) {
       return currentState
     }
@@ -7201,6 +7208,7 @@ export class CodegenConversationService {
     const replacementSeedState = this.mergeSemanticPatchIntoState(
       this.createEmptySemanticState(),
       replacementPatchResult.patch,
+      args.message,
     )
     const replacementState = buildReplacementSemanticState({
       previous: args.semanticState,
@@ -7231,6 +7239,7 @@ export class CodegenConversationService {
     const seedState = this.mergeSemanticPatchIntoState(
       this.createEmptySemanticState(),
       this.extractSemanticPatchFromMessage(normalized),
+      normalized,
     )
     const hasExtractedStrategy = seedState.triggers.length > 0
       && seedState.actions.length > 0
@@ -8950,8 +8959,9 @@ export class CodegenConversationService {
 
   private buildSemanticStateFromPlannerPatch(
     semanticPatch: unknown,
+    message?: string,
   ): SemanticState | null {
-    const nextState = this.semanticSeedStateBuilder.build(semanticPatch)
+    const nextState = this.semanticSeedStateBuilder.build(semanticPatch, message)
     return nextState ? this.normalizeRiskState(nextState) : null
   }
 
