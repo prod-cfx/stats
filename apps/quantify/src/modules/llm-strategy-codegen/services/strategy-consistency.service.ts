@@ -1326,6 +1326,8 @@ export class StrategyConsistencyService {
       || action === 'CLOSE_SHORT'
       || action === 'REDUCE_LONG'
       || action === 'REDUCE_SHORT'
+      || action === 'ADD_LONG'
+      || action === 'ADD_SHORT'
       || action === 'FORCE_EXIT'
       || action === 'BLOCK_NEW_ENTRY'
       || action === 'ADJUST_POSITION'
@@ -1864,8 +1866,8 @@ export class StrategyConsistencyService {
     fallbackScope: StrategySemanticRuleProfile['sideScope'],
     action: CanonicalAction,
   ): StrategySemanticRuleProfile['sideScope'] {
-    if (action === 'OPEN_LONG' || action === 'CLOSE_LONG' || action === 'REDUCE_LONG') return 'long'
-    if (action === 'OPEN_SHORT' || action === 'CLOSE_SHORT' || action === 'REDUCE_SHORT') return 'short'
+    if (action === 'OPEN_LONG' || action === 'CLOSE_LONG' || action === 'REDUCE_LONG' || action === 'ADD_LONG') return 'long'
+    if (action === 'OPEN_SHORT' || action === 'CLOSE_SHORT' || action === 'REDUCE_SHORT' || action === 'ADD_SHORT') return 'short'
     return fallbackScope
   }
 
@@ -1963,7 +1965,7 @@ export class StrategyConsistencyService {
   }
 
   private resolvePhaseFromAction(action: CanonicalAction): StrategySemanticRuleProfile['phase'] {
-    if (action === 'OPEN_LONG' || action === 'OPEN_SHORT') return 'entry'
+    if (action === 'OPEN_LONG' || action === 'OPEN_SHORT' || action === 'ADD_LONG' || action === 'ADD_SHORT') return 'entry'
     if (action === 'CLOSE_LONG' || action === 'CLOSE_SHORT' || action === 'ADJUST_POSITION') return 'exit'
     if (action === 'REDUCE_LONG' || action === 'REDUCE_SHORT' || action === 'FORCE_EXIT' || action === 'BLOCK_NEW_ENTRY') {
       return 'risk'
