@@ -2040,12 +2040,14 @@ export class CodegenConversationService {
     }
 
     const constraintPack = this.readConstraintPack(args.session.constraintPack)
+    const responseLocale = this.resolveResponseLocale(undefined, constraintPack.locale)
 
     if (args.decision.kind === 'REPLACE_STRATEGY_DRAFT') {
       const seedSemanticState = this.createEmptySemanticState()
       const plan = await this.planConversationByLlm(args.decision.seedText, seedSemanticState, {
         providerCode: this.resolveProviderCode(args.providerCode),
         model: args.model,
+        locale: responseLocale,
       }, [])
       const plannedSemanticState = this.applyConversationPlanToSemanticState({
         currentState: seedSemanticState,
@@ -2079,7 +2081,7 @@ export class CodegenConversationService {
         this.reconcileSemanticMissingPlaceholders(supportGate.semanticState),
         supportGate.strategyVersion,
       )
-      const semanticArtifacts = this.resolveSemanticClarificationArtifacts(replacementState)
+      const semanticArtifacts = this.resolveSemanticClarificationArtifacts(replacementState, responseLocale)
       const clarificationState = semanticArtifacts.clarificationState
       const semanticReadyForGenerate = this.findNextOpenSemanticSlot(replacementState) === null
       const normalization = semanticArtifacts.normalization
@@ -2098,7 +2100,7 @@ export class CodegenConversationService {
         constraintPack: nextConstraintPack,
       })
       const decisionPrompt = strategyDecision.kind === 'CONFIRM_INFERRED'
-        ? this.clarificationQuestion.buildFromDecision(strategyDecision)
+        ? this.clarificationQuestion.buildFromDecision(strategyDecision, responseLocale)
         : semanticArtifacts.clarificationPrompt
       const deterministicAuthority = this.resolveContinueSessionDeterministicAuthority({
         semanticState: replacementState,
@@ -2108,14 +2110,18 @@ export class CodegenConversationService {
         semanticReadyForGenerate,
       })
       const assistantPrompt = deterministicAuthority === 'clarification'
-        ? (semanticArtifacts.clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。')
+        ? (semanticArtifacts.clarificationPrompt || this.localizedText(responseLocale, 'Please clarify this rule first, then I will continue refining the logic graph.', '请先澄清这条规则，我再继续完善逻辑图。'))
         : deterministicAuthority === 'decision'
-          ? (decisionPrompt || '请先确认当前推断，我再继续整理逻辑图。')
+          ? (decisionPrompt || this.localizedText(responseLocale, 'Please confirm the current inference first, then I will continue refining the logic graph.', '请先确认当前推断，我再继续整理逻辑图。'))
           : deterministicAuthority === 'normalization'
-            ? this.buildSemanticNormalizationAssistantPrompt(replacementState, normalization)
+            ? this.buildSemanticNormalizationAssistantPrompt(replacementState, normalization, responseLocale)
             : deterministicAuthority === 'confirm_gate'
-              ? this.buildSemanticLogicGateAssistantPrompt(replacementState)
-              : (plan.assistantPrompt || '我已按你的新描述重新创建策略草稿，请继续补充缺失语义。')
+              ? this.buildSemanticLogicGateAssistantPrompt(replacementState, responseLocale)
+              : (this.localizePlannerPromptForResponse({
+                  assistantPrompt: plan.assistantPrompt,
+                  locale: responseLocale,
+                  clarificationState,
+                }) || this.localizedText(responseLocale, 'I recreated the strategy draft from your new description. Please continue filling in the missing semantics.', '我已按你的新描述重新创建策略草稿，请继续补充缺失语义。'))
       const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
       const historyAfterReplacement = this.appendConversationHistory(
         [],
@@ -2171,7 +2177,7 @@ export class CodegenConversationService {
       const nextState = this.reconcileSemanticMissingPlaceholders(
         withPendingSemanticEdit(args.currentSemanticState, args.decision.pendingEdit),
       )
-      const semanticArtifacts = this.resolveSemanticClarificationArtifacts(nextState)
+      const semanticArtifacts = this.resolveSemanticClarificationArtifacts(nextState, responseLocale)
       const shouldClearFailedArtifacts = args.session.status === 'REJECTED'
         || args.session.status === 'CONSISTENCY_FAILED'
       const historyAfterQuestion = this.appendConversationHistory(
@@ -2240,7 +2246,7 @@ export class CodegenConversationService {
       this.reconcileSemanticMissingPlaceholders(supportGate.semanticState),
       supportGate.strategyVersion,
     )
-    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const clarificationState = semanticArtifacts.clarificationState
     const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
     const normalization = semanticArtifacts.normalization
@@ -2259,7 +2265,7 @@ export class CodegenConversationService {
       constraintPack: nextConstraintPack,
     })
     const decisionPrompt = strategyDecision.kind === 'CONFIRM_INFERRED'
-      ? this.clarificationQuestion.buildFromDecision(strategyDecision)
+      ? this.clarificationQuestion.buildFromDecision(strategyDecision, responseLocale)
       : semanticArtifacts.clarificationPrompt
     const deterministicAuthority = this.resolveContinueSessionDeterministicAuthority({
       semanticState: reducedSemanticState,
@@ -2269,14 +2275,14 @@ export class CodegenConversationService {
       semanticReadyForGenerate,
     })
     const baseAssistantPrompt = deterministicAuthority === 'clarification'
-      ? (semanticArtifacts.clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。')
+      ? (semanticArtifacts.clarificationPrompt || this.localizedText(responseLocale, 'Please clarify this rule first, then I will continue refining the logic graph.', '请先澄清这条规则，我再继续完善逻辑图。'))
       : deterministicAuthority === 'decision'
-        ? (decisionPrompt || '请先确认当前推断，我再继续整理逻辑图。')
+        ? (decisionPrompt || this.localizedText(responseLocale, 'Please confirm the current inference first, then I will continue refining the logic graph.', '请先确认当前推断，我再继续整理逻辑图。'))
         : deterministicAuthority === 'normalization'
-          ? this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization)
+          ? this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization, responseLocale)
           : deterministicAuthority === 'confirm_gate'
-            ? this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState)
-            : `已更新策略语义：${this.buildSemanticClarificationSummary(reducedSemanticState)}`
+            ? this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState, responseLocale)
+            : this.localizedText(responseLocale, `Updated strategy semantics: ${this.buildSemanticClarificationSummary(reducedSemanticState)}`, `已更新策略语义：${this.buildSemanticClarificationSummary(reducedSemanticState)}`)
     const assistantPrompt = this.withAppliedSemanticEditSummary(args.decision, baseAssistantPrompt)
     const targetStatus = shouldRestorePublishedOnCancel
       ? 'PUBLISHED'
@@ -5125,6 +5131,7 @@ export class CodegenConversationService {
   private async continueWithStructuredClarificationAnswers(
     args: StructuredClarificationContinuationArgs,
   ): Promise<CodegenSessionResponseDto> {
+    const responseLocale = this.resolveResponseLocale(undefined, args.constraintPack.locale)
     const semanticState = this.reconcileSemanticMissingPlaceholders(args.semanticState)
     const strategyVersion = await this.resolveStrategyVersionForRuntimeGate(args.session.strategyInstanceId)
     const historyAfterAnswer = this.appendConversationHistory(
@@ -5141,14 +5148,14 @@ export class CodegenConversationService {
       ),
       strategyVersion,
     )
-    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const semanticClarificationState = this.buildClarificationFromSemanticState(reducedSemanticState)
 
     if (semanticClarificationState.status === 'NEEDS_CLARIFICATION') {
-      const assistantPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
-        || this.clarificationQuestion.build(semanticClarificationState)
+      const assistantPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState, responseLocale)
+        || this.clarificationQuestion.build(semanticClarificationState, responseLocale)
         || semanticArtifacts.clarificationPrompt
-        || '请先澄清这条规则，我再继续完善逻辑图。'
+        || this.localizedText(responseLocale, 'Please clarify this rule first, then I will continue refining the logic graph.', '请先澄清这条规则，我再继续完善逻辑图。')
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         semanticState: reducedSemanticState,
@@ -5185,7 +5192,7 @@ export class CodegenConversationService {
     })
 
     if (decision.kind === 'CONFIRM_INFERRED') {
-      const assistantPrompt = this.clarificationQuestion.buildFromDecision(decision)
+      const assistantPrompt = this.clarificationQuestion.buildFromDecision(decision, responseLocale)
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         semanticState: reducedSemanticState,
@@ -5225,14 +5232,14 @@ export class CodegenConversationService {
         id: args.session.id,
         status: 'DRAFTING',
         missingFields: [],
-        assistantPrompt: this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization),
+        assistantPrompt: this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization, responseLocale),
         clarificationState: semanticClarificationState,
         specDesc,
       })
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
 
-    const logicGateAssistantPrompt = this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState)
+    const logicGateAssistantPrompt = this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState, responseLocale)
     const historyAfterLogicGate = this.appendConversationHistory(
       args.constraintPack.conversationHistory ?? [],
       args.message,
