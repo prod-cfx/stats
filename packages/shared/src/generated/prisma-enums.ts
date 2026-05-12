@@ -334,4 +334,3 @@ export const WebhookSignalSignatureStatus = {
   REJECTED: 'REJECTED',
 } as const
 export type WebhookSignalSignatureStatus = (typeof WebhookSignalSignatureStatus)[keyof typeof WebhookSignalSignatureStatus]
-
