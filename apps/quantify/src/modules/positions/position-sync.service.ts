@@ -120,20 +120,28 @@ export class PositionSyncService {
         const localQty = localPos ? new Decimal(localPos.quantity) : new Decimal(0)
 
         if (sharedAccountAttribution) {
-          const handled = await this.syncSharedAccountPosition({
-            accountId,
-            key,
-            exchangePos,
-            exchangeQty,
-            localPos,
-            localQty,
-            localInSyncScope: localPos ? localPositions.includes(localPos) : false,
-            exchangeId,
-            marketType,
-            attribution: sharedAccountAttribution,
-            differences,
-          })
-          if (handled) {
+          try {
+            const handled = await this.syncSharedAccountPosition({
+              accountId,
+              key,
+              exchangePos,
+              exchangeQty,
+              localPos,
+              localQty,
+              localInSyncScope: localPos ? localPositions.includes(localPos) : false,
+              exchangeId,
+              marketType,
+              attribution: sharedAccountAttribution,
+              differences,
+            })
+            if (handled) {
+              continue
+            }
+          }
+          catch (error) {
+            const errorMsg = `Failed to sync shared account position ${exchangePos.symbol}: ${(error as Error).message}`
+            errors.push(errorMsg)
+            this.logger.error(errorMsg, (error as Error).stack)
             continue
           }
         }

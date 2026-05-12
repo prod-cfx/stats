@@ -460,6 +460,73 @@ describe('positionSyncService', () => {
     }))
   })
 
+  it('continues syncing shared exchange account positions when one reconciliation write fails', async () => {
+    const positionsRepository = {
+      countActiveStrategyBindingsByExchangeAccount: jest.fn().mockResolvedValue(3),
+      findTradesByAccount: jest.fn().mockResolvedValue([{
+        symbol: 'ETHUSDT:PERP',
+        market: 'okx:perp',
+        side: 'BUY',
+        positionSide: 'LONG',
+        quantity: '0.305',
+        orderId: '3559343634595618816',
+        externalTradeId: '3559343634595618816',
+        provider: 'okx',
+        metadata: { runtimeProvenance: { runtimeStrategyInstanceId: 'strategy-1' } },
+      }]),
+      findOpenByAccount: jest.fn().mockResolvedValue([]),
+      saveSyncLog: jest.fn().mockResolvedValue(undefined),
+    }
+    const tradingService = {
+      getPositions: jest.fn().mockResolvedValue([
+        {
+          symbol: 'ETH/USDT:PERP',
+          side: 'long',
+          size: '1.069',
+          entryPrice: '2287.03',
+        },
+        {
+          symbol: 'BTC/USDT:PERP',
+          side: 'long',
+          size: '0.01',
+          entryPrice: '95000',
+        },
+      ]),
+    }
+    const positionsService = {
+      recordTrade: jest.fn().mockRejectedValue(new Error('ledger unavailable')),
+    }
+
+    const service = new PositionSyncService(
+      positionsRepository as any,
+      tradingService as any,
+      positionsService as any,
+    )
+
+    const result = await service.syncUserPositions(
+      'user-1',
+      'strategy-account-1',
+      'okx',
+      'perp',
+      'auto',
+      'position-sync',
+      'exchange-account-1',
+    )
+
+    expect(result.success).toBe(false)
+    expect(result.errors).toEqual([
+      'Failed to sync shared account position ETH/USDT:PERP: ledger unavailable',
+    ])
+    expect(result.differences).toEqual([{
+      symbol: 'BTC/USDT:PERP',
+      positionSide: 'LONG',
+      exchangeQuantity: '0.01',
+      localQuantity: '0',
+      difference: '0.01',
+      action: 'skipped',
+    }])
+  })
+
   it('does not close spot positions when exchange positions are empty', async () => {
     const positionsRepository = {
       findOpenByAccount: jest.fn().mockResolvedValue([{
