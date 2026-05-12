@@ -64,7 +64,7 @@ export function AiQuantPlazaPageClient() {
         if (!cancelled) setTemplates(data)
       } catch (error) {
         if (!cancelled) {
-          setLoadError(getErrorMessage(error, '获取策略广场模板失败'))
+          setLoadError(getErrorMessage(error, t('aiQuant.plazaPage.loadFailed')))
         }
       } finally {
         if (!cancelled) setLoadingTemplates(false)
@@ -76,7 +76,7 @@ export function AiQuantPlazaPageClient() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [t])
 
   const runTemplate = async (templateId: string) => {
     if (!session) {
@@ -97,7 +97,7 @@ export function AiQuantPlazaPageClient() {
         router.push(`/${lng}/account?tab=settings&redirect=${encodeURIComponent(`/${lng}/ai-quant/plaza`)}#exchange-api`)
         return
       }
-      setActionError(getErrorMessage(error, '运行策略广场模板失败'))
+      setActionError(getErrorMessage(error, t('aiQuant.plazaPage.runFailed')))
     } finally {
       setRunningTemplateId(null)
       setPendingAction(null)
@@ -119,7 +119,7 @@ export function AiQuantPlazaPageClient() {
       setIntent({ type: 'plaza-chat-session', sessionId: editSession.sessionId })
       router.push(`/${lng}/ai-quant`)
     } catch (error) {
-      setActionError(getErrorMessage(error, '创建策略广场编辑会话失败'))
+      setActionError(getErrorMessage(error, t('aiQuant.plazaPage.editSessionFailed')))
     } finally {
       setRunningTemplateId(null)
       setPendingAction(null)
@@ -152,7 +152,7 @@ export function AiQuantPlazaPageClient() {
         className="inline-flex w-fit items-center gap-2 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
       >
         <ArrowLeft className="h-4 w-4" />
-        <span>{lng === 'en' ? 'Back' : '返回'}</span>
+        <span>{t('aiQuant.plazaPage.back')}</span>
       </Link>
 
       <div>
@@ -164,7 +164,7 @@ export function AiQuantPlazaPageClient() {
 
       {!isLoading && !session && (
         <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 text-sm text-[color:var(--cf-muted)]">
-          登录后可以一键运行或编辑策略模板，未登录也可以先浏览策略广场。
+          {t('aiQuant.plazaPage.guestHint')}
         </div>
       )}
 

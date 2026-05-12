@@ -156,7 +156,7 @@ export function getStrategyRuntimeActionLabel(
   t: StrategyListTranslation,
 ): string {
   if (status === 'running') {
-    return t('aiQuant.actions.stopStrategy', { defaultValue: '停止策略' })
+    return t('aiQuant.actions.stopStrategy')
   }
   return t('aiQuant.actions.run')
 }
@@ -544,8 +544,8 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                   >
                     <Trash2 className="h-3 w-3" />
                     {accountDeleteDialog?.strategy.id === item.id && accountDeleteDialog.pending
-                      ? t('aiQuant.deleting', { defaultValue: 'Deleting...' })
-                      : t('aiQuant.actions.delete', { defaultValue: 'Delete' })}
+                      ? t('aiQuant.actions.deleting')
+                      : t('aiQuant.actions.delete')}
                   </button>
                 )}
 
