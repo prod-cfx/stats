@@ -3391,10 +3391,9 @@ export class CanonicalSpecV2IrCompilerService {
           ? condition.params.confirmationMode
           : undefined
         const isTouchKey = condition.key === 'bollinger.touch_upper'
-        const isTouch = condition.op === 'GTE' || (isTouchKey && (confirmationMode === undefined || confirmationMode === 'touch'))
-        return isTouch
-          ? `GTE(CLOSE,UPPER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
-          : `CROSS_OVER(CLOSE,UPPER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
+        const usesTouchSemantics = isTouchKey && (confirmationMode === undefined || confirmationMode === 'touch')
+        const operator = condition.op ?? (usesTouchSemantics ? 'GTE' : 'CROSS_OVER')
+        return this.describeBollingerBandOperator(operator, 'UPPER_BAND', config)
       }
 
       case 'bollinger.lower_break':
@@ -3403,10 +3402,9 @@ export class CanonicalSpecV2IrCompilerService {
           ? condition.params.confirmationMode
           : undefined
         const isTouchKey = condition.key === 'bollinger.touch_lower'
-        const isTouch = condition.op === 'LTE' || (isTouchKey && (confirmationMode === undefined || confirmationMode === 'touch'))
-        return isTouch
-          ? `LTE(CLOSE,LOWER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
-          : `CROSS_UNDER(CLOSE,LOWER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
+        const usesTouchSemantics = isTouchKey && (confirmationMode === undefined || confirmationMode === 'touch')
+        const operator = condition.op ?? (usesTouchSemantics ? 'LTE' : 'CROSS_UNDER')
+        return this.describeBollingerBandOperator(operator, 'LOWER_BAND', config)
       }
 
       case 'bollinger.middle_revert':
@@ -3560,6 +3558,14 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     return 'GTE'
+  }
+
+  private describeBollingerBandOperator(
+    operator: NonNullable<CanonicalConditionAtom['op']>,
+    band: 'UPPER_BAND' | 'LOWER_BAND',
+    config: { bollinger: CompileContext['bollinger'] },
+  ): string {
+    return `${operator}(CLOSE,${band}(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
   }
 
   private isConditionAtom(node: CanonicalConditionNode): node is CanonicalConditionAtom {

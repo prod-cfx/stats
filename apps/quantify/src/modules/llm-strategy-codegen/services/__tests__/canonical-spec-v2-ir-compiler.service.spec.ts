@@ -2426,6 +2426,9 @@ describe('canonicalSpecV2IrCompilerService', () => {
       const touchPred = predicates.find(p => p.id?.includes('touch_upper'))
       expect(touchPred).toBeDefined()
       expect(touchPred?.params).toMatchObject({ op: 'GT' })
+      expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({ phase: 'entry', operator: 'GT(CLOSE,UPPER_BAND(CLOSE,20,2))' }),
+      ]))
     })
   })
 
