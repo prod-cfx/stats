@@ -185,6 +185,7 @@ export class CanonicalSpecV2IrCompilerService {
     const ruleBlocks: RuleBlock[] = []
     const guards: RiskGuard[] = []
     const riskPredicates: RiskPredicateDef[] = []
+    const rulePortfolioRisks: IrOrchestrationPortfolioRisk[] = []
 
     // Phase 5 S2/S3/S9/S10/S11: 收集 supported scope id 集合，供 toRuleBlockMetadata silent-skip
     const specScopes = input.canonicalSpec.orchestration?.scopes ?? []
@@ -214,6 +215,12 @@ export class CanonicalSpecV2IrCompilerService {
       const partialTakeProfitBlock = this.tryCompileReduceActionRule(rule, input.canonicalSpec, input.fallback.positionPct, context)
       if (partialTakeProfitBlock) {
         ruleBlocks.push(partialTakeProfitBlock)
+        continue
+      }
+
+      const maxDrawdownRisk = this.tryCompileRiskMaxDrawdownPct(rule)
+      if (maxDrawdownRisk) {
+        rulePortfolioRisks.push(maxDrawdownRisk)
         continue
       }
 
@@ -258,7 +265,10 @@ export class CanonicalSpecV2IrCompilerService {
     const orchestrationScopes = this.compileOrchestrationScopes(input.canonicalSpec)
     const orchestrationLegScopes = this.compileOrchestrationLegScopes(input.canonicalSpec)
     const orchestrationGates = this.compileOrchestrationGates(input.canonicalSpec, context)
-    const orchestrationPortfolioRisks = this.compileOrchestrationPortfolioRisks(input.canonicalSpec)
+    const orchestrationPortfolioRisks = [
+      ...this.compileOrchestrationPortfolioRisks(input.canonicalSpec),
+      ...rulePortfolioRisks,
+    ]
     const orchestrationPrograms = this.compileOrchestrationPrograms(input.canonicalSpec, orchestrationGates)
 
     const maxLookback = this.resolveMaxLookback(seriesMap)
@@ -2509,6 +2519,68 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     return null
+  }
+
+  /**
+   * risk.max_drawdown_pct ghost-atom fix (#1242).
+   *
+   * canonical-spec-builder emits this atom as a rule (phase:'risk',
+   * condition.kind:'atom', condition.key:'risk.max_drawdown_pct',
+   * condition.value = valuePct/100 as fraction).
+   * The runtime evaluator lives in evaluate-orchestration-portfolio-risks.ts
+   * and expects a CompiledPortfolioDrawdownRisk (scope:'portfolio').
+   *
+   * Dispatch fall-through: returns null when the rule does not match this atom,
+   * letting downstream compilers handle it.
+   *
+   * Fail-closed: when the rule matches but valuePct lies outside (0, 100),
+   * throws `codegen.canonical_spec_v2_max_drawdown_invalid_pct`. The upstream
+   * canonical-spec-builder already validates valuePct; reaching this branch
+   * indicates a contract violation (hand-written canonical spec, LLM direct
+   * injection). Silent skip is forbidden — it would let users believe the
+   * drawdown guard is in effect when it is not.
+   */
+  private tryCompileRiskMaxDrawdownPct(
+    rule: CanonicalRuleV2,
+  ): IrOrchestrationPortfolioRisk | null {
+    if (
+      rule.phase !== 'risk'
+      || rule.condition.kind !== 'atom'
+      || rule.condition.key !== 'risk.max_drawdown_pct'
+    ) {
+      return null
+    }
+
+    // canonical-spec-builder currently stores valuePct as a fraction (valuePct / 100),
+    // but other risk atoms (stop_loss_pct, take_profit_pct, trailing_stop_pct) accept
+    // both fraction (≤1) and percentage (>1) via the same heuristic — see
+    // tryCompileRiskGuard. Mirror that contract here so upstream changes do not silently
+    // produce a 1500% threshold (which would never trigger and would not throw either).
+    //
+    // Boundary semantics:
+    //   rawValue ∈ (0, 1] → treated as fraction, multiplied by 100 (so rawValue=1 maps
+    //                       to 100% and is rejected by the (0, 100) guard below)
+    //   rawValue > 1     → treated as already-percentage, passed through verbatim
+    // Trade-off: fractional 99.99% drawdown (rawValue=0.9999) is the largest expressible
+    // fraction; users wanting 99.x% must use percentage form (rawValue=99.x).
+    const rawValue = this.readNumber([rule.condition.value], Number.NaN)
+    const thresholdPct = Number.isFinite(rawValue) && rawValue <= 1
+      ? Number((rawValue * 100).toFixed(4))
+      : rawValue
+
+    if (!Number.isFinite(thresholdPct) || thresholdPct <= 0 || thresholdPct >= 100) {
+      throw new Error(
+        `codegen.canonical_spec_v2_max_drawdown_invalid_pct:${rule.id}:${thresholdPct}`,
+      )
+    }
+
+    return {
+      id: rule.id,
+      scope: 'portfolio',
+      mode: 'enforce',
+      thresholdPct,
+      effectWhenTriggered: 'block_new_entries',
+    }
   }
 
   private tryCompileReduceActionRule(
