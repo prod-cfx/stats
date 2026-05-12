@@ -247,4 +247,18 @@ describe('OKX private WS execution matching (E2E, DB)', () => {
 
     expect(execution).toBeNull()
   })
+
+  it('does not overwrite terminal executions through pending-only OKX transitions', async () => {
+    const changed = await repository.markPendingStage('e2e-okx-ws-exec-executed', 'ORDER_ACKED', {
+      providerStatus: 'late_live',
+    })
+
+    const execution = await prisma.userSignalExecution.findUniqueOrThrow({
+      where: { id: 'e2e-okx-ws-exec-executed' },
+    })
+    const metadata = execution.metadata as Record<string, unknown>
+    expect(changed).toBe(false)
+    expect(execution.status).toBe('EXECUTED')
+    expect(metadata.providerStatus).toBeUndefined()
+  })
 })

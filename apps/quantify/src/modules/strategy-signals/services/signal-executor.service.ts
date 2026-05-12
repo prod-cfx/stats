@@ -176,7 +176,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
 
       const metadata = this.buildOkxPrivateOrderMetadata(event)
       if (this.isFilledOkxPrivateOrderEvent(event)) {
-        await this.executionRepository.markExecuted(execution.id, {
+        await this.executionRepository.markPendingExecuted(execution.id, {
           executedPrice: event.avgPrice ?? event.fillPrice,
           executedQuantity: event.filledSize,
           fee: event.fee,
@@ -189,11 +189,11 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       }
 
       if (this.isFailedOkxPrivateOrderEvent(event)) {
-        await this.executionRepository.markFailed(execution.id, `OKX_ORDER_${event.state.toUpperCase()}`)
+        await this.executionRepository.markPendingFailed(execution.id, `OKX_ORDER_${event.state.toUpperCase()}`)
         return
       }
 
-      await this.executionRepository.markStage(execution.id, 'ORDER_ACKED', metadata)
+      await this.executionRepository.markPendingStage(execution.id, 'ORDER_ACKED', metadata)
     }
     catch (error) {
       this.logger.error(

@@ -45,8 +45,11 @@ describe('signalExecutorService', () => {
     const executionRepository = {
       findPendingByOkxOrderIds: jest.fn(),
       markStage: jest.fn(),
+      markPendingStage: jest.fn(),
       markExecuted: jest.fn(),
+      markPendingExecuted: jest.fn(),
       markFailed: jest.fn(),
+      markPendingFailed: jest.fn(),
       markSkipped: jest.fn(),
     }
     const telemetry = { recordExecutionSummary: jest.fn() }
@@ -106,7 +109,7 @@ describe('signalExecutorService', () => {
       exchangeAccountId: 'exchange-account-okx-1',
     })
     expect((service as any).txEvents.withAfterCommit).toHaveBeenCalled()
-    expect(executionRepository.markExecuted).toHaveBeenCalledWith('exec-okx-ws-1', {
+    expect(executionRepository.markPendingExecuted).toHaveBeenCalledWith('exec-okx-ws-1', {
       executedPrice: 60123.45,
       executedQuantity: 0.01,
       fee: 0.12,
@@ -121,7 +124,7 @@ describe('signalExecutorService', () => {
         raw,
       },
     })
-    expect(executionRepository.markStage).not.toHaveBeenCalled()
+    expect(executionRepository.markPendingStage).not.toHaveBeenCalled()
   })
 
   it('does not throw when an OKX private filled order event has no pending execution match', async () => {
@@ -144,6 +147,8 @@ describe('signalExecutorService', () => {
 
     expect(executionRepository.markExecuted).not.toHaveBeenCalled()
     expect(executionRepository.markStage).not.toHaveBeenCalled()
+    expect(executionRepository.markPendingExecuted).not.toHaveBeenCalled()
+    expect(executionRepository.markPendingStage).not.toHaveBeenCalled()
   })
 
   it('acks a non-terminal OKX private order event without marking execution complete', async () => {
@@ -166,7 +171,7 @@ describe('signalExecutorService', () => {
     })
 
     expect(executionRepository.markExecuted).not.toHaveBeenCalled()
-    expect(executionRepository.markStage).toHaveBeenCalledWith('exec-okx-open', 'ORDER_ACKED', {
+    expect(executionRepository.markPendingStage).toHaveBeenCalledWith('exec-okx-open', 'ORDER_ACKED', {
       providerOrderId: 'okx-order-open',
       providerStatus: 'live',
       exchangeAccountId: 'exchange-account-okx-1',
@@ -194,7 +199,7 @@ describe('signalExecutorService', () => {
     })
 
     expect(executionRepository.markExecuted).not.toHaveBeenCalled()
-    expect(executionRepository.markStage).toHaveBeenCalledWith('exec-okx-partial', 'ORDER_ACKED', {
+    expect(executionRepository.markPendingStage).toHaveBeenCalledWith('exec-okx-partial', 'ORDER_ACKED', {
       providerOrderId: 'okx-order-partial',
       providerStatus: 'partially_filled',
       exchangeAccountId: 'exchange-account-okx-1',
@@ -222,7 +227,7 @@ describe('signalExecutorService', () => {
 
     expect(executionRepository.markExecuted).not.toHaveBeenCalled()
     expect(executionRepository.markStage).not.toHaveBeenCalled()
-    expect(executionRepository.markFailed).toHaveBeenCalledWith('exec-okx-canceled', 'OKX_ORDER_CANCELED')
+    expect(executionRepository.markPendingFailed).toHaveBeenCalledWith('exec-okx-canceled', 'OKX_ORDER_CANCELED')
   })
 
   it('rejects hyperliquid spot entries below minimum notional after precision rounding', () => {
