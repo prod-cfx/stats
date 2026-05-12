@@ -4430,6 +4430,8 @@ export class SemanticSeedExtractorService {
       // P4-2: price.candle_pattern — 白名单 4 patterns：engulfing / hammer / doji / consecutive_body
       // 主观文本（"看起来像锤子"/"疑似吞没"）→ 不产生 trigger
       // 缺 pattern 或 direction → open_slot；consecutive_body 缺 minBars → open_slot
+      let candlePatternMatched = false
+      let liquiditySweepMatched = false
       if (/(?:吞没|engulfing|锤子|hammer|十字星|doji|连续实体|consecutive[\s_]body)/iu.test(clause)) {
         // A-M2 防御：主观词必须锚定在 pattern 名词之前才视为主观
         const isSubjective = /(?:像|疑似|看起来\s*像)\s*(?:吞没|锤子|十字星|连续实体|engulfing|hammer|doji|consecutive[\s_]body)|(?:feels?|looks?)\s+like\s+(?:a\s+)?(?:bullish\s+|bearish\s+)?(?:engulfing|hammer|doji|consecutive[\s_]body)|kind\s+of\s+(?:a\s+)?(?:bullish\s+|bearish\s+)?(?:engulfing|hammer|doji|consecutive[\s_]body)|maybe\s+(?:bullish\s+|bearish\s+)?(?:engulfing|hammer|doji|consecutive[\s_]body)/iu.test(clause)
@@ -4489,6 +4491,10 @@ export class SemanticSeedExtractorService {
               questionHint: '连续实体形态需要指定最少连续根数（minBars），例如 3。',
               affectsExecution: true,
             })
+          }
+
+          if (patternRaw) {
+            candlePatternMatched = true
           }
 
           this.pushTrigger(triggers, seen, {
@@ -4655,6 +4661,9 @@ export class SemanticSeedExtractorService {
 
           // critic round 1 A1 修复：sideScope 在缺方向时回退 undefined，避免静默归类为 long
           const lsSideScope = lsDirection === 'bearish' ? 'short' : lsDirection === 'bullish' ? 'long' : undefined
+          if (lsReference) {
+            liquiditySweepMatched = true
+          }
           this.pushTrigger(triggers, seen, {
             key: 'liquidity.sweep',
             phase: segment === 'exit' ? 'exit' : 'entry',
@@ -4674,7 +4683,9 @@ export class SemanticSeedExtractorService {
 
       if (
         !chartPatternMatched
-        && /(?:头肩|双底|双顶|三角形|楔形|旗形|形态|pattern)/iu.test(clause)
+        && !candlePatternMatched
+        && !liquiditySweepMatched
+        && /(?:头肩|双底|双顶|三角形|楔形|旗形|head\s+and\s+shoulders|h&s|double\s+top|double\s+bottom|triangle|wedge|flag|pennant|三只乌鸦|three\s+(?:black|white)\s+(?:crows|soldiers))/iu.test(clause)
         && !/(?:截图|screenshot|image)/iu.test(clause)
       ) {
         this.pushTrigger(triggers, seen, {

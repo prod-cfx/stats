@@ -14,9 +14,10 @@ describe('UnsupportedFallbackService', () => {
       },
     ])
 
-    expect(fallback.prompt).toContain('我听懂了，你要的是 ATR 动态止损')
-    expect(fallback.prompt).toContain('是否改用这个策略继续')
-    expect(fallback.recommendedStrategy.patch.risk).toEqual(expect.arrayContaining([
+    expect(fallback).not.toBeNull()
+    expect(fallback!.prompt).toContain('我听懂了，你要的是 ATR 动态止损')
+    expect(fallback!.prompt).toContain('是否改用这个策略继续')
+    expect(fallback!.recommendedStrategy.patch.risk).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'risk.stop_loss_pct' }),
       expect.objectContaining({ key: 'risk.take_profit_pct' }),
     ]))
@@ -76,9 +77,11 @@ describe('UnsupportedFallbackService', () => {
       },
     ])
 
-    first.recommendedStrategy.patch.risk?.push({ key: 'risk.cooldown_bars', params: { bars: 3 } })
+    expect(first).not.toBeNull()
+    expect(second).not.toBeNull()
+    first!.recommendedStrategy.patch.risk?.push({ key: 'risk.cooldown_bars', params: { bars: 3 } })
 
-    expect(second.recommendedStrategy.patch.risk).not.toEqual(expect.arrayContaining([
+    expect(second!.recommendedStrategy.patch.risk).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'risk.cooldown_bars' }),
     ]))
   })
@@ -99,7 +102,8 @@ describe('UnsupportedFallbackService', () => {
       },
     ])
 
-    expect(fallback.prompt.match(/成交量放大/gu)).toHaveLength(1)
+    expect(fallback).not.toBeNull()
+    expect(fallback!.prompt.match(/成交量放大/gu)).toHaveLength(1)
   })
 
   it('returns unclear for empty or ambiguous message', () => {
