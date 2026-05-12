@@ -25,6 +25,18 @@ describe('SemanticSeedExtractorService — unsupported price.pattern fallback is
     expect(candle?.params).toMatchObject({ pattern: 'engulfing', direction: 'bullish' })
   })
 
+  // 原始 bug report 用户表达："出现看涨吞没形态后开多"（无"K 线"二字），
+  // 与上一条仅差"K 线"字面量但走同一识别分支。两条都锁住，防止任一表达回归。
+  it('看涨吞没形态（无 K 线二字）→ 只产 price.candle_pattern，不再误降为 price.pattern', () => {
+    const patch = extractor.extract('OKX 合约 BTCUSDT 15m，出现看涨吞没形态后开多，5% 止损，单笔 10%。')
+    const keys = triggerKeys(patch)
+    expect(keys).toContain('price.candle_pattern')
+    expect(keys).not.toContain('price.pattern')
+
+    const candle = (patch.triggers ?? []).find(trigger => trigger.key === 'price.candle_pattern')
+    expect(candle?.params).toMatchObject({ pattern: 'engulfing', direction: 'bullish' })
+  })
+
   it('锤子线形态 → 只产 price.candle_pattern，不再误降为 price.pattern', () => {
     const patch = extractor.extract('OKX 合约 BTCUSDT 15m，出现看涨锤子线形态后开多，5% 止损，单笔 10%。')
     const keys = triggerKeys(patch)
