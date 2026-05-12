@@ -506,6 +506,11 @@ describe('atom coverage IR end-to-end contract (Wave 2)', () => {
 
     // ATOM_COVERAGE_REGENERATE=1 模式：把实测结果直接写回 snapshot 文件，跳过断言。
     // 仅在新增 atom / 修 ghost atom / 调整契约模板时使用。CI/常规 dx test 严禁开启。
+    // 硬约束：CI 环境（process.env.CI === 'true'）+ REGENERATE 同时打开 → 直接 fail，
+    // 防止 CI pipeline 误用后门绕过覆盖回归。Review Round 1 M2 修复。
+    if (process.env.ATOM_COVERAGE_REGENERATE === '1' && process.env.CI === 'true') {
+      throw new Error('atom-coverage-ir-end-to-end: ATOM_COVERAGE_REGENERATE 禁止在 CI 环境启用')
+    }
     if (process.env.ATOM_COVERAGE_REGENERATE === '1') {
       const regenerated: AtomCoverageSnapshot = {
         description: 'Wave 2 atom-coverage IR 端到端契约快照。每条记录 atom 在 IR-compiler 层的覆盖状态 + 失败层 + 痕迹集合。新 atom 落地或 ghost atom 修复 → 此文件应同步更新。',
