@@ -99,7 +99,7 @@ export class SemanticSeedStateBuilderService {
     private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
   ) {}
 
-  build(semanticPatch: unknown): SemanticState | null {
+  build(semanticPatch: unknown, message?: string): SemanticState | null {
     if (!this.isRecord(semanticPatch)) {
       return null
     }
@@ -113,19 +113,55 @@ export class SemanticSeedStateBuilderService {
     const riskItems = Array.isArray(semanticPatch.risk)
       ? semanticPatch.risk
       : (Array.isArray(semanticPatch.riskUpdates) ? semanticPatch.riskUpdates : [])
+
+    // Issue #1223: 出口 evidence invariant — 仅在调用方显式提供 message 时启用
+    //   - source === 'system_default' 跳过（系统默认占位 atom 不要求 evidence）
+    //   - 其余 atom 必须带 evidence.text 且为 message 子串
+    //   - test/dev: throw fail-loud；prod: drop 违规 atom + 记 normalizationNote
+    const evidenceInvariantViolations: string[] = []
+    const isProduction = process.env.NODE_ENV === 'production'
+    const filterByEvidenceInvariant = (
+      items: unknown[],
+      kind: 'trigger' | 'action' | 'risk',
+    ): unknown[] => {
+      if (typeof message !== 'string') return items
+      return items.filter((item) => {
+        if (!this.isRecord(item)) return true
+        if (item.source === 'system_default') return true
+        const evidence = this.isRecord(item.evidence) ? item.evidence : null
+        const evidenceText = evidence && typeof evidence.text === 'string' ? evidence.text : null
+        if (evidenceText && message.includes(evidenceText)) return true
+        const key = typeof item.key === 'string' ? item.key : '<unknown-key>'
+        const phase = typeof item.phase === 'string' ? `/${item.phase}` : ''
+        const reason = !evidenceText
+          ? 'missing evidence.text'
+          : 'evidence.text not a substring of message'
+        const violation = `${kind}[${key}${phase}]: ${reason}`
+        evidenceInvariantViolations.push(violation)
+        return isProduction ? false : true
+      })
+    }
+    const filteredTriggerItems = filterByEvidenceInvariant(triggerItems, 'trigger')
+    const filteredActionItems = filterByEvidenceInvariant(actionItems, 'action')
+    const filteredRiskItems = filterByEvidenceInvariant(riskItems, 'risk')
+    if (evidenceInvariantViolations.length > 0 && !isProduction) {
+      throw new Error(
+        `SemanticSeedStateBuilderService evidence invariant violated (#1223): ${evidenceInvariantViolations.join('; ')}`,
+      )
+    }
     const positionUpdate = this.toPositionState(semanticPatch.position ?? semanticPatch.positionUpdate)
     const contextSlots = this.toContextSlots(
       semanticPatch.contextSlots ?? semanticPatch.contextUpdates ?? semanticPatch.context,
     )
 
-    const triggerUpdates = triggerItems
+    const triggerUpdates = filteredTriggerItems
       .map((item, index) => this.toTriggerState(item, index))
       .filter((item): item is SemanticTriggerState => item !== null)
     const groupedTriggerUpdates = this.withMovingAverageStackCombinationContracts(triggerUpdates)
-    const actionUpdates = actionItems
+    const actionUpdates = filteredActionItems
       .map((item, index) => this.toActionState(item, index))
       .filter((item): item is SemanticActionState => item !== null)
-    const riskUpdates = riskItems
+    const riskUpdates = filteredRiskItems
       .map((item, index) => this.toRiskState(item, index))
       .filter((item): item is SemanticRiskState => item !== null)
     const orchestration = this.toOrchestrationState(semanticPatch.orchestration)
@@ -141,6 +177,13 @@ export class SemanticSeedStateBuilderService {
       return null
     }
 
+    const normalizationNotes: string[] = []
+    if (isProduction && evidenceInvariantViolations.length > 0) {
+      for (const violation of evidenceInvariantViolations) {
+        normalizationNotes.push(`evidence_invariant_dropped: ${violation}`)
+      }
+    }
+
     return this.withRequiredSeedOpenSlots({
       version: 1,
       families: [],
@@ -149,7 +192,7 @@ export class SemanticSeedStateBuilderService {
       risk: riskUpdates,
       position: positionUpdate,
       contextSlots,
-      normalizationNotes: [],
+      normalizationNotes,
       updatedAt: new Date().toISOString(),
       ...(orchestration ? { orchestration } : {}),
     })

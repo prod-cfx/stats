@@ -2080,6 +2080,8 @@ export class SemanticSeedExtractorService {
           effect: 'close_position',
           scope: 'current_position',
         },
+        // Issue #1223: 出口 evidence invariant — stopLossClause 来自 splitRiskClauses(text)
+        evidence: { text: stopLossClause, source: 'user_explicit' },
       })
     }
 
@@ -2783,6 +2785,13 @@ export class SemanticSeedExtractorService {
         continue
       }
 
+      // Issue #1223: MA stack 副产路径屏蔽
+      //   clause 中出现 ≥2 个 MA/EMA 周期（如"价格在 EMA20、EMA60、EMA144 上方"）属于 stack 语义，
+      //   已由 indicator.above 路径正确覆盖；继续 emit condition.expression 只能挑首/末一个周期，
+      //   等价凭空构造"close > EMA{last}"，污染 state 且无 evidence。直接跳过。
+      const maReferenceCount = (clause.match(/\b(?:MA|EMA)\s*\d{1,4}/giu) ?? []).length
+      if (maReferenceCount >= 2) continue
+
       const period = Number(priceAbove[2])
       if (!Number.isFinite(period)) continue
 
@@ -2790,6 +2799,9 @@ export class SemanticSeedExtractorService {
       const key = /价格|收盘价/u.test(clause) && /MACD|或/u.test(segment)
         ? 'indicator.above'
         : 'condition.expression'
+
+      // Issue #1223: 出口 evidence invariant — 非默认 atom 必须挂可定位的 message 子串
+      const evidenceText = priceAbove[0].trim()
 
       this.pushTrigger(triggers, seen, {
         key,
@@ -2811,6 +2823,7 @@ export class SemanticSeedExtractorService {
                 right: { kind: 'indicator', name: indicator === 'ema' ? 'ema' : 'sma', params: { period } },
               },
             },
+        ...(evidenceText ? { evidence: { text: evidenceText, source: 'user_explicit' as const } } : {}),
       })
     }
   }
@@ -3036,6 +3049,8 @@ export class SemanticSeedExtractorService {
           ...(confirmationMode ? { confirmationMode } : {}),
           sourceText: clause,
         },
+        // Issue #1223: 出口 evidence invariant — clause 已是 message 子串
+        evidence: { text: clause, source: 'user_explicit' },
       })
       if (intent.phase === 'entry' && intent.sideScope !== 'both') {
         previousEntrySideScope = intent.sideScope
