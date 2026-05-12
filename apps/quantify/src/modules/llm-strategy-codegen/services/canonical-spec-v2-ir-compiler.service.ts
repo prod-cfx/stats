@@ -155,6 +155,7 @@ export class CanonicalSpecV2IrCompilerService {
     const ruleBlocks: RuleBlock[] = []
     const guards: RiskGuard[] = []
     const riskPredicates: RiskPredicateDef[] = []
+    const rulePortfolioRisks: IrOrchestrationPortfolioRisk[] = []
 
     // Phase 5 S2/S3/S9/S10/S11: 收集 supported scope id 集合，供 toRuleBlockMetadata silent-skip
     const specScopes = input.canonicalSpec.orchestration?.scopes ?? []
@@ -184,6 +185,12 @@ export class CanonicalSpecV2IrCompilerService {
       const partialTakeProfitBlock = this.tryCompileReduceActionRule(rule, input.canonicalSpec, input.fallback.positionPct, context)
       if (partialTakeProfitBlock) {
         ruleBlocks.push(partialTakeProfitBlock)
+        continue
+      }
+
+      const maxDrawdownRisk = this.tryCompileMaxDrawdownPortfolioRisk(rule)
+      if (maxDrawdownRisk) {
+        rulePortfolioRisks.push(maxDrawdownRisk)
         continue
       }
 
@@ -228,7 +235,10 @@ export class CanonicalSpecV2IrCompilerService {
     const orchestrationScopes = this.compileOrchestrationScopes(input.canonicalSpec)
     const orchestrationLegScopes = this.compileOrchestrationLegScopes(input.canonicalSpec)
     const orchestrationGates = this.compileOrchestrationGates(input.canonicalSpec, context)
-    const orchestrationPortfolioRisks = this.compileOrchestrationPortfolioRisks(input.canonicalSpec)
+    const orchestrationPortfolioRisks = [
+      ...this.compileOrchestrationPortfolioRisks(input.canonicalSpec),
+      ...rulePortfolioRisks,
+    ]
     const orchestrationPrograms = this.compileOrchestrationPrograms(input.canonicalSpec, orchestrationGates)
 
     const maxLookback = this.resolveMaxLookback(seriesMap)
@@ -2479,6 +2489,46 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     return null
+  }
+
+  /**
+   * risk.max_drawdown_pct ghost-atom fix (#<issue>).
+   *
+   * canonical-spec-builder emits this atom as a rule (phase:'risk',
+   * condition.kind:'atom', condition.key:'risk.max_drawdown_pct',
+   * condition.value = valuePct/100 as fraction).
+   * The runtime evaluator lives in evaluate-orchestration-portfolio-risks.ts
+   * and expects a CompiledPortfolioDrawdownRisk (scope:'portfolio').
+   * Fail-closed: invalid valuePct → enforce block (runtime handles it);
+   * we simply skip emitting the node so runtime falls through to no-op.
+   */
+  private tryCompileMaxDrawdownPortfolioRisk(
+    rule: CanonicalRuleV2,
+  ): IrOrchestrationPortfolioRisk | null {
+    if (
+      rule.phase !== 'risk'
+      || rule.condition.kind !== 'atom'
+      || rule.condition.key !== 'risk.max_drawdown_pct'
+    ) {
+      return null
+    }
+
+    // condition.value is stored as a fraction (valuePct / 100) by canonical-spec-builder
+    const rawValue = this.readNumber([rule.condition.value], Number.NaN)
+    // Convert fraction back to percentage for the runtime evaluator
+    const thresholdPct = Number((rawValue * 100).toFixed(4))
+
+    if (!Number.isFinite(thresholdPct) || thresholdPct <= 0 || thresholdPct >= 100) {
+      return null
+    }
+
+    return {
+      id: rule.id,
+      scope: 'portfolio',
+      mode: 'enforce',
+      thresholdPct,
+      effectWhenTriggered: 'block_new_entries',
+    }
   }
 
   private tryCompileReduceActionRule(

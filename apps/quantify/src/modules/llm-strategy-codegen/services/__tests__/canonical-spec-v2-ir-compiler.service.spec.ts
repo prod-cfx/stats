@@ -4223,3 +4223,197 @@ describe('canonicalSpecV2IrCompilerService orchestration gates', () => {
     expect(program.sizing).toEqual({ mode: 'fixed_pct', value: 5 })
   })
 })
+
+// ---------------------------------------------------------------------------
+// risk.max_drawdown_pct ghost-atom fix: canonical→IR compile branch
+// ---------------------------------------------------------------------------
+describe('canonicalSpecV2IrCompilerService risk.max_drawdown_pct', () => {
+  const fallback = {
+    exchange: 'binance' as const,
+    symbol: 'BTCUSDT',
+    baseTimeframe: '1m',
+    positionPct: 10,
+  }
+
+  function buildBaseSpec(): CanonicalStrategySpecV2 {
+    return {
+      version: 2,
+      market: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        defaultTimeframe: '1m',
+      },
+      indicators: [],
+      sizing: { mode: 'QUOTE', value: 10 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['1m'],
+      },
+      rules: [
+        {
+          id: 'entry-close-above-open',
+          phase: 'entry',
+          sideScope: 'long',
+          priority: 200,
+          condition: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'series', source: 'bar', field: 'open' },
+          },
+          actions: [{ type: 'OPEN_LONG' }],
+        },
+      ],
+    } satisfies CanonicalStrategySpecV2
+  }
+
+  function buildSpecWithMaxDrawdown(valuePct: number): CanonicalStrategySpecV2 {
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'risk-max-drawdown',
+      phase: 'risk',
+      sideScope: 'both',
+      priority: 100,
+      condition: {
+        kind: 'atom',
+        key: 'risk.max_drawdown_pct',
+        semanticScope: 'portfolio',
+        op: 'GTE',
+        // canonical-spec-builder stores as fraction (valuePct / 100)
+        value: Number((valuePct / 100).toFixed(4)),
+      },
+      actions: [{ type: 'FORCE_EXIT' }],
+    })
+    return spec
+  }
+
+  it('emits a portfolio drawdown risk into orchestrationPortfolioRisks for valuePct:15', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithMaxDrawdown(15)
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const risks = result.ir.orchestrationPortfolioRisks ?? []
+    expect(risks.length).toBeGreaterThanOrEqual(1)
+    const drawdown = risks.find(r => r.id === 'risk-max-drawdown')
+    expect(drawdown).toBeDefined()
+    expect(drawdown?.scope).toBe('portfolio')
+    expect(drawdown?.mode).toBe('enforce')
+    expect(drawdown?.effectWhenTriggered).toBe('block_new_entries')
+    if (drawdown?.scope === 'portfolio') {
+      expect(drawdown.thresholdPct).toBeCloseTo(15, 2)
+    }
+  })
+
+  it('does not add risk.max_drawdown_pct rule to ruleBlocks or riskPolicy.guards', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithMaxDrawdown(10)
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const ruleIds = result.ir.ruleBlocks.map(b => b.id)
+    expect(ruleIds).not.toContain('risk-max-drawdown')
+    const guardIds = result.ir.riskPolicy.guards.map(g => g.id)
+    expect(guardIds).not.toContain('guard_risk-max-drawdown')
+  })
+
+  it('coexists with spec.orchestration.portfolioRisks — both appear in output', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithMaxDrawdown(20)
+    spec.orchestration = {
+      portfolioRisks: [
+        {
+          id: 'portfolio-drawdown-explicit',
+          scope: 'portfolio',
+          mode: 'observe',
+          thresholdPct: 5,
+          effectWhenTriggered: 'block_new_entries',
+        },
+      ],
+    }
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const risks = result.ir.orchestrationPortfolioRisks ?? []
+    expect(risks.length).toBe(2)
+    expect(risks.some(r => r.id === 'portfolio-drawdown-explicit')).toBe(true)
+    expect(risks.some(r => r.id === 'risk-max-drawdown')).toBe(true)
+  })
+
+  it('skips emission when valuePct fraction rounds to ≤0 pct (value=0)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    // Use a spec without the drawdown rule — verify it's absent
+    // value=0 → 0*100=0 pct → invalid; but passing 0 as condition.value and compiling
+    // would fall through to compileCondition which throws for unrecognised atom keys.
+    // We verify at the method boundary: tryCompileMaxDrawdownPortfolioRisk must return null for value=0.
+    // Access via cast to test internal guard without going through full compile.
+    const compilerAsAny = compiler as unknown as {
+      tryCompileMaxDrawdownPortfolioRisk: (rule: unknown) => unknown
+    }
+    const nullResult = compilerAsAny.tryCompileMaxDrawdownPortfolioRisk({
+      phase: 'risk',
+      condition: { kind: 'atom', key: 'risk.max_drawdown_pct', op: 'GTE', value: 0 },
+    })
+    expect(nullResult).toBeNull()
+  })
+
+  it('skips emission when valuePct fraction converts to ≥100 pct (value=1)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const compilerAsAny = compiler as unknown as {
+      tryCompileMaxDrawdownPortfolioRisk: (rule: unknown) => unknown
+    }
+    // value=1 → 1*100=100 pct → invalid (≥100)
+    const nullResult = compilerAsAny.tryCompileMaxDrawdownPortfolioRisk({
+      phase: 'risk',
+      condition: { kind: 'atom', key: 'risk.max_drawdown_pct', op: 'GTE', value: 1 },
+    })
+    expect(nullResult).toBeNull()
+  })
+
+  it('skips emission when valuePct is not a number (missing/undefined)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const compilerAsAny = compiler as unknown as {
+      tryCompileMaxDrawdownPortfolioRisk: (rule: unknown) => unknown
+    }
+    // no value field
+    const nullResult = compilerAsAny.tryCompileMaxDrawdownPortfolioRisk({
+      phase: 'risk',
+      condition: { kind: 'atom', key: 'risk.max_drawdown_pct', op: 'GTE' },
+    })
+    expect(nullResult).toBeNull()
+  })
+
+  it('skips emission for non-risk phase rules', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const compilerAsAny = compiler as unknown as {
+      tryCompileMaxDrawdownPortfolioRisk: (rule: unknown) => unknown
+    }
+    const nullResult = compilerAsAny.tryCompileMaxDrawdownPortfolioRisk({
+      phase: 'gate',
+      condition: { kind: 'atom', key: 'risk.max_drawdown_pct', op: 'GTE', value: 0.15 },
+    })
+    expect(nullResult).toBeNull()
+  })
+
+  it('runtime: emitted IR node causes evaluateOrchestrationPortfolioRisks to block entry when drawdownPct exceeds threshold', async () => {
+    // Integration: verify the emitted IR node feeds correctly into the runtime evaluator.
+    // Import directly from the source file since the function is not re-exported by the barrel.
+    const { evaluateOrchestrationPortfolioRisks } = await import(
+      '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-portfolio-risks'
+    )
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithMaxDrawdown(15)
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const risks = result.ir.orchestrationPortfolioRisks ?? []
+    const drawdown = risks.find(r => r.id === 'risk-max-drawdown')
+    expect(drawdown).toBeDefined()
+
+    // drawdownPct=16 > threshold=15 → should block both long and short
+    const blocked = evaluateOrchestrationPortfolioRisks([drawdown], { drawdownPct: 16 })
+    expect(blocked.blockEntryLong).toBe(true)
+    expect(blocked.blockEntryShort).toBe(true)
+
+    // drawdownPct=14 < threshold=15 → should not block
+    const ok = evaluateOrchestrationPortfolioRisks([drawdown], { drawdownPct: 14 })
+    expect(ok.blockEntryLong).toBe(false)
+    expect(ok.blockEntryShort).toBe(false)
+  })
+})
