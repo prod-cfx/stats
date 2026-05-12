@@ -118,6 +118,20 @@ function evaluateSeries(
       return readStringContextValue(ctx.volatilityState)
     case 'MEMORY':
       return evaluateMemoryOperand(node, ctx)
+    case 'IN_TIME_WINDOW': {
+      const bars = Array.isArray(ctx.bars) ? ctx.bars as Array<{ timestamp?: unknown }> : []
+      const nowRaw = typeof ctx.timestamp === 'number' && Number.isFinite(ctx.timestamp)
+        ? ctx.timestamp
+        : bars.length > 0
+          ? (bars[bars.length - 1]?.timestamp ?? null)
+          : null
+      if (typeof nowRaw !== 'number' || !Number.isFinite(nowRaw)) return false
+      const timezone = readStringValue(node.payload.timezone) ?? 'UTC'
+      const windows = Array.isArray((node.payload as Record<string, unknown>).windows)
+        ? (node.payload as Record<string, unknown>).windows as ReadonlyArray<unknown>
+        : []
+      return evaluateInTimeWindow(nowRaw, timezone, windows)
+    }
     default: {
       const firstDep = node.deps?.[0]
       return typeof firstDep === 'string' ? values[firstDep] ?? null : null
@@ -1202,6 +1216,91 @@ function evaluateMemoryOperand(
     return cur
   }
   return null
+}
+
+// ---------------------------------------------------------------------------
+// IN_TIME_WINDOW evaluator
+// ---------------------------------------------------------------------------
+// Converts a UTC ms timestamp to local time in the given IANA timezone using
+// Intl.DateTimeFormat, then checks whether the local time falls inside any of
+// the configured windows.  Each window specifies:
+//   start / end  — "HH:MM" 24-hour local time strings (inclusive start, exclusive end)
+//   daysOfWeek   — optional array of 0-6 (0=Sunday); omit to allow all days
+// Returns true if the timestamp falls inside at least one window; false otherwise.
+// Non-parseable payload or missing timestamp → false (fail-closed).
+// ---------------------------------------------------------------------------
+
+function parseHHMM(value: string): number | null {
+  const matched = value.match(/^(\d{1,2}):(\d{2})$/)
+  if (!matched) return null
+  const hours = Number(matched[1])
+  const minutes = Number(matched[2])
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null
+  return hours * 60 + minutes
+}
+
+function evaluateInTimeWindow(
+  nowMs: number,
+  timezone: string,
+  windows: ReadonlyArray<unknown>,
+): boolean {
+  if (windows.length === 0) return false
+
+  let localMinutes: number
+  let localDayOfWeek: number
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour: 'numeric',
+      minute: 'numeric',
+      weekday: 'short',
+      hour12: false,
+    })
+    const parts = formatter.formatToParts(new Date(nowMs))
+    const hourPart = parts.find(p => p.type === 'hour')?.value
+    const minutePart = parts.find(p => p.type === 'minute')?.value
+    const weekdayPart = parts.find(p => p.type === 'weekday')?.value
+    if (!hourPart || !minutePart || !weekdayPart) return false
+    // hour12: false returns '24' for midnight — normalize to 0
+    const localHour = Number(hourPart) % 24
+    const localMinute = Number(minutePart)
+    if (!Number.isFinite(localHour) || !Number.isFinite(localMinute)) return false
+    localMinutes = localHour * 60 + localMinute
+    const weekdayMap: Record<string, number> = {
+      Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+    }
+    const mapped = weekdayMap[weekdayPart]
+    if (mapped === undefined) return false
+    localDayOfWeek = mapped
+  }
+  catch {
+    return false
+  }
+
+  for (const window of windows) {
+    if (!window || typeof window !== 'object' || Array.isArray(window)) continue
+    const w = window as Record<string, unknown>
+    const start = typeof w.start === 'string' ? parseHHMM(w.start) : null
+    const end = typeof w.end === 'string' ? parseHHMM(w.end) : null
+    if (start === null || end === null) continue
+
+    const daysOfWeek = Array.isArray(w.daysOfWeek) ? w.daysOfWeek : null
+    if (daysOfWeek !== null) {
+      const allowed = daysOfWeek.every((d: unknown) => typeof d === 'number')
+      if (!allowed) continue
+      if (!(daysOfWeek as number[]).includes(localDayOfWeek)) continue
+    }
+
+    // Window spans midnight (e.g. 22:00–02:00) — split into two sub-ranges
+    if (end <= start) {
+      if (localMinutes >= start || localMinutes < end) return true
+    }
+    else {
+      if (localMinutes >= start && localMinutes < end) return true
+    }
+  }
+
+  return false
 }
 
 export function invalidateMemoryOperand(

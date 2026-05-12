@@ -1016,4 +1016,178 @@ describe('evaluateExprPool', () => {
       expect(Object.prototype.hasOwnProperty.call(ctx.semanticRuntimeState, 'beta')).toBe(true)
     })
   })
+
+  describe('IN_TIME_WINDOW series', () => {
+    // 2024-01-15T14:30:00Z = Monday
+    //   UTC          → Mon 14:30
+    //   Asia/Tokyo   → Tue 23:30  (UTC+9)
+    //   America/New_York → Mon 09:30 (UTC-5, January = EST)
+    const MON_1430_UTC = new Date('2024-01-15T14:30:00Z').getTime()
+
+    function buildNode(timezone: string, windows: Array<{ daysOfWeek?: number[]; start: string; end: string }>) {
+      return {
+        id: 'in_time_window_node',
+        nodeType: 'series' as const,
+        sourceRef: 'in_time_window_node',
+        payload: { kind: 'IN_TIME_WINDOW', timezone, windows },
+      }
+    }
+
+    it('returns true when timestamp is inside a UTC window', () => {
+      const values = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('UTC', [{ start: '14:00', end: '15:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(true)
+    })
+
+    it('returns false when timestamp is outside the UTC window', () => {
+      const values = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('UTC', [{ start: '10:00', end: '12:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(false)
+    })
+
+    it('uses timezone conversion — Asia/Tokyo shifts Mon 14:30 UTC to Tue 23:30', () => {
+      // In Tokyo, 14:30 UTC = 23:30 local (Tuesday)
+      const values = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('Asia/Tokyo', [{ start: '23:00', end: '24:00' }])],
+        ['in_time_window_node'],
+      )
+      // 24:00 is not valid HH:MM so window is skipped; use 23:59 instead
+      const values2 = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('Asia/Tokyo', [{ start: '23:00', end: '23:59' }])],
+        ['in_time_window_node'],
+      )
+      expect(values2.in_time_window_node).toBe(true)
+    })
+
+    it('uses timezone conversion — America/New_York shifts Mon 14:30 UTC to Mon 09:30', () => {
+      const values = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('America/New_York', [{ start: '09:00', end: '10:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(true)
+    })
+
+    it('respects daysOfWeek — allows matching day', () => {
+      // Monday = 1; timestamp is Monday UTC → Monday New_York (09:30)
+      const values = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('America/New_York', [{ daysOfWeek: [1], start: '09:00', end: '10:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(true)
+    })
+
+    it('respects daysOfWeek — rejects non-matching day', () => {
+      // Wednesday = 3; timestamp is Monday → rejected
+      const values = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('America/New_York', [{ daysOfWeek: [3, 4, 5], start: '09:00', end: '10:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(false)
+    })
+
+    it('handles overnight window (end < start) — inside', () => {
+      // 22:00–02:00 window; timestamp UTC 14:30 falls outside overnight window
+      // But 23:30 Tokyo time falls inside 22:00–24:00 → use 22:00–02:00
+      const tokyoTs = MON_1430_UTC // 23:30 Tokyo
+      const values = evaluateExprPool(
+        { timestamp: tokyoTs, bars: [] },
+        [buildNode('Asia/Tokyo', [{ start: '22:00', end: '02:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(true)
+    })
+
+    it('handles overnight window (end < start) — outside the gap', () => {
+      // 22:00–02:00 overnight; 09:30 NY (Monday) falls outside
+      const values = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('America/New_York', [{ start: '22:00', end: '02:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(false)
+    })
+
+    it('falls back to last bar timestamp when ctx.timestamp is absent', () => {
+      const values = evaluateExprPool(
+        {
+          bars: [
+            { open: 1, high: 1, low: 1, close: 1, volume: 1, timestamp: MON_1430_UTC },
+          ],
+        },
+        [buildNode('UTC', [{ start: '14:00', end: '15:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(true)
+    })
+
+    it('returns false when no timestamp is available', () => {
+      const values = evaluateExprPool(
+        { bars: [] },
+        [buildNode('UTC', [{ start: '00:00', end: '23:59' }])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(false)
+    })
+
+    it('returns false when windows array is empty', () => {
+      const values = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('UTC', [])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(false)
+    })
+
+    it('returns false when window has invalid start/end', () => {
+      const values = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('UTC', [{ start: 'not-a-time', end: 'also-bad' }])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(false)
+    })
+
+    it('returns false when timezone is invalid', () => {
+      const values = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('Not/A/Timezone', [{ start: '00:00', end: '23:59' }])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(false)
+    })
+
+    it('returns true for the first matching window among multiple', () => {
+      const values = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('UTC', [
+          { start: '10:00', end: '11:00' }, // not matching
+          { start: '14:00', end: '15:00' }, // matches
+          { start: '16:00', end: '17:00' }, // not matching
+        ])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(true)
+    })
+
+    it('window end is exclusive — exactly at end time returns false', () => {
+      // 14:30 is not inside [13:00, 14:30) since end is exclusive
+      const values = evaluateExprPool(
+        { timestamp: MON_1430_UTC, bars: [] },
+        [buildNode('UTC', [{ start: '13:00', end: '14:30' }])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(false)
+    })
+  })
 })
