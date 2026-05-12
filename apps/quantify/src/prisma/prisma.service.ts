@@ -12,7 +12,7 @@ import { defaultEnvAccessor } from '../common/env/env.accessor'
 import { DomainException } from '../common/exceptions/domain.exception'
 import { EnvService as EnvServiceToken } from '../common/services/env.service'
 import { PRISMA_OPTIONS } from './prisma.constants'
-import { withPrismaPoolParams } from './prisma-url.util'
+import { prismaPoolParamsFromEnv, withPrismaPoolParams } from './prisma-url.util'
 
 type ExtendedPrismaClient = PrismaClient
 
@@ -64,10 +64,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           args: { key: 'DATABASE_URL' },
         })
       }
-      connectionString = withPrismaPoolParams(dbUrl, {
-        connectionLimit: 50,
-        poolTimeout: 10,
-      })
+      connectionString = withPrismaPoolParams(dbUrl, prismaPoolParamsFromEnv())
     }
     const adapter = new PrismaPg({ connectionString })
 

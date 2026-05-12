@@ -1,4 +1,4 @@
-import { withPrismaPoolParams } from './prisma-url.util'
+import { prismaPoolParamsFromEnv, withPrismaPoolParams } from './prisma-url.util'
 
 describe('withPrismaPoolParams', () => {
   it('appends Prisma pool parameters to PostgreSQL URLs', () => {
@@ -33,5 +33,27 @@ describe('withPrismaPoolParams', () => {
         poolTimeout: 10,
       }),
     ).toBe(url)
+  })
+})
+
+describe('prismaPoolParamsFromEnv', () => {
+  it('reads positive Prisma pool values from quantify env', () => {
+    expect(prismaPoolParamsFromEnv({
+      QUANTIFY_PRISMA_CONNECTION_LIMIT: '64',
+      QUANTIFY_PRISMA_POOL_TIMEOUT: '12',
+    })).toEqual({
+      connectionLimit: 64,
+      poolTimeout: 12,
+    })
+  })
+
+  it('falls back to production defaults for invalid values', () => {
+    expect(prismaPoolParamsFromEnv({
+      QUANTIFY_PRISMA_CONNECTION_LIMIT: '0',
+      QUANTIFY_PRISMA_POOL_TIMEOUT: 'nope',
+    })).toEqual({
+      connectionLimit: 50,
+      poolTimeout: 10,
+    })
   })
 })

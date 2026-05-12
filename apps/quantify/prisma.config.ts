@@ -3,7 +3,7 @@ import path from 'node:path'
 import { loadEnvironment } from '../../packages/config/src'
 import { defineConfig } from 'prisma/config'
 import { applyQuantifyEnvOverrides } from './src/config/quantify-env'
-import { withPrismaPoolParams } from './src/prisma/prisma-url.util'
+import { prismaPoolParamsFromEnv, withPrismaPoolParams } from './src/prisma/prisma-url.util'
 
 // Prisma 7 不再自动加载环境变量，统一使用 loadEnvironment 加载
 const rootDir = path.resolve(__dirname, '../..')
@@ -18,10 +18,7 @@ export default defineConfig({
   },
   // Prisma 7: datasource URL 必须在这里配置
   datasource: {
-    url: withPrismaPoolParams(process.env.DATABASE_URL, {
-      connectionLimit: 50,
-      poolTimeout: 10,
-    }),
+    url: withPrismaPoolParams(process.env.DATABASE_URL, prismaPoolParamsFromEnv()),
   },
   // Prisma 7: generator 配置也需要在这里声明
   generators: {

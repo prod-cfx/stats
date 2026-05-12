@@ -3,6 +3,13 @@ export interface PrismaPoolParams {
   poolTimeout?: number
 }
 
+export function prismaPoolParamsFromEnv(env: Record<string, string | undefined> = process.env): Required<PrismaPoolParams> {
+  return {
+    connectionLimit: parsePositiveEnvInt(env.QUANTIFY_PRISMA_CONNECTION_LIMIT, 50),
+    poolTimeout: parsePositiveEnvInt(env.QUANTIFY_PRISMA_POOL_TIMEOUT, 10),
+  }
+}
+
 export function withPrismaPoolParams<T extends string | null | undefined>(url: T, params: PrismaPoolParams): T {
   if (!url || url === '__SET_IN_env.local__') return url
 
@@ -22,4 +29,9 @@ export function withPrismaPoolParams<T extends string | null | undefined>(url: T
   } catch {
     return url
   }
+}
+
+function parsePositiveEnvInt(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? '', 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
