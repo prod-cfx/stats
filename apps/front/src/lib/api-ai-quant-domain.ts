@@ -420,6 +420,7 @@ export async function recoverAiQuantEditConversation(
       conversationId: payload.conversationId?.trim() || undefined,
       sessionId: payload.sessionId?.trim() || undefined,
       source: payload.source,
+      locale: payload.locale,
     }),
   })
   let json: unknown = null

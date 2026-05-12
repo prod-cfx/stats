@@ -326,6 +326,7 @@ export function AiQuantPageClient({
                 conversationId: intent.conversationId,
                 sessionId: intent.sessionId,
                 source: intent.source,
+                locale: lng,
               })
               if (cancelled) return
 

@@ -223,6 +223,7 @@ describe('llm codegen session transport handling', () => {
       conversationId: ' conversation-1 ',
       sessionId: ' session-1 ',
       source: 'account-detail',
+      locale: 'en',
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -239,6 +240,7 @@ describe('llm codegen session transport handling', () => {
           conversationId: 'conversation-1',
           sessionId: 'session-1',
           source: 'account-detail',
+          locale: 'en',
         }),
       }),
     )

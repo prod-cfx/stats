@@ -1438,6 +1438,7 @@ const RecoverAiQuantEditConversationRequestDto = z
     conversationId: z.string().optional(),
     sessionId: z.string().optional(),
     source: z.enum(['account-detail', 'backtest', 'plaza', 'ai-quant']).optional(),
+    locale: z.enum(['zh', 'en']).optional(),
   })
   .passthrough()
 const AiQuantConversationBacktestDraftConfigRequestDto = z
