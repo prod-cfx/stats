@@ -4640,25 +4640,27 @@ describe('canonicalSpecV2IrCompilerService position.dca_schedule', () => {
   it('metadata.dcaSchedule carries maxCount and stateKey verbatim', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
     const spec = buildBaseSpec()
-    pushDcaRule(spec, { maxCount: 4, capitalCap: 2000, stateKey: 'dca_fired_count', exitRule: { type: 'cap_only' } })
+    // 用非 helper 默认值（'custom_dca_state'）才能真测到「透传」语义
+    pushDcaRule(spec, { maxCount: 4, capitalCap: 2000, stateKey: 'custom_dca_state', exitRule: { type: 'cap_only' } })
     const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
     const dcaBlock = ir.ruleBlocks.find(b => b.metadata?.dcaSchedule)
     expect(dcaBlock).toBeDefined()
     expect(dcaBlock?.metadata?.dcaSchedule?.maxCount).toBe(4)
-    expect(dcaBlock?.metadata?.dcaSchedule?.stateKey).toBe('dca_fired_count')
+    expect(dcaBlock?.metadata?.dcaSchedule?.stateKey).toBe('custom_dca_state')
   })
 
   // ── 3. triggerMode + priceIntervalPct 精确透传 ───────────────────────────
 
-  it('metadata.dcaSchedule carries triggerMode and priceIntervalPct with precision toFixed(4)', () => {
+  it('metadata.dcaSchedule carries triggerMode and priceIntervalPct with 4-decimal precision', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
     const spec = buildBaseSpec()
-    // priceIntervalPct stored as toFixed(4) float: 5.1234
+    // 断言 priceIntervalPct toBeCloseTo 4 位小数（IR compiler 仅透传，
+    // toFixed 由上游 spec-builder 负责；此处直接给 4 位小数字面量）
     pushDcaRule(spec, {
       maxCount: 3,
       capitalCap: 1000,
       triggerMode: 'price_interval',
-      priceIntervalPct: Number((5.1234).toFixed(4)),
+      priceIntervalPct: 5.1234,
       exitRule: { type: 'cap_only' },
     })
     const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
