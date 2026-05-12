@@ -2122,8 +2122,8 @@ describe('SemanticSeedStateBuilderService — evidence invariant (throw mode)', 
       error = err as Error
     }
     expect(error).not.toBeNull()
-    expect(error?.message).toContain('trigger[indicator.above/entry]')
-    expect(error?.message).toContain('action[open_long')
+    expect(error?.message).toContain('trigger[0:indicator.above/entry]')
+    expect(error?.message).toContain('action[0:open_long')
   })
 
   it('skips invariant when source === system_default', () => {

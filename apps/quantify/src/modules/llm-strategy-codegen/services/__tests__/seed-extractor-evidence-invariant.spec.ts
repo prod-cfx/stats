@@ -8,7 +8,8 @@ import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.
 // 测试期违反则 throw，生产期 drop + 记 normalizationNote。
 describe('SemanticSeedStateBuilderService — evidence invariant (Issue #1223)', () => {
   const extractor = new SemanticSeedExtractorService()
-  const buildState = (patch: unknown, message?: string) => new SemanticSeedStateBuilderService().build(patch, message)
+  // 显式传 'throw' 模式：验收[1][2]期望违规立即抛出；全环境默认是 'drop'，spec 必须显式指定
+  const buildState = (patch: unknown, message?: string) => new SemanticSeedStateBuilderService(undefined, undefined, undefined, 'throw').build(patch, message)
 
   describe('验收 [1]: 非默认 trigger 缺 evidence → 测试模式 throw', () => {
     it('throws when a non-default trigger has no evidence', () => {

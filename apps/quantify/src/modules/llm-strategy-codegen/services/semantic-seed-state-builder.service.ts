@@ -43,8 +43,8 @@ import { buildTriggerCombinationContract, isTriggerPredicateGroupContract, norma
 import { validateSemanticRiskContract } from './strategy-semantic-contracts'
 
 // Issue #1223: 出口 evidence invariant 模式
-//   throw  — 违规立即抛出（test / dev 默认）
-//   drop   — 违规静默丢弃 + logger.warn（prod 默认）
+//   throw  — 违规立即抛出（spec 测试需显式传入）
+//   drop   — 违规静默丢弃 + logger.warn（全环境默认；测试 fixture 含无 evidence atom，兼容存量）
 //   off    — 关闭检查（跳过 invariant）
 export type EvidenceInvariantMode = 'throw' | 'drop' | 'off'
 
@@ -152,7 +152,10 @@ export class SemanticSeedStateBuilderService {
         const evidenceText = evidence && typeof evidence.text === 'string' ? evidence.text : null
         const key = typeof item.key === 'string' ? item.key : '<unknown-key>'
         const phase = typeof item.phase === 'string' ? `/${item.phase}` : ''
-        const atomId = `${kind}[${key}${phase}]`
+        // Include array index to avoid atomId collision when multiple atoms share the same key+phase
+        // (e.g. multi-MA strategies with several indicator.above/entry triggers)
+        const itemIndex = items.indexOf(item)
+        const atomId = `${kind}[${itemIndex}:${key}${phase}]`
         let reason: string | null = null
         if (!hasEvidenceField || evidenceText === null) {
           reason = 'missing evidence.text'
@@ -189,12 +192,12 @@ export class SemanticSeedStateBuilderService {
       kind: 'trigger' | 'action' | 'risk',
     ): unknown[] => {
       if (evidenceMode !== 'drop' || typeof message !== 'string' || dropViolations.size === 0) return items
-      return items.filter((item) => {
+      return items.filter((item, index) => {
         if (!this.isRecord(item)) return true
         if (item.source === 'system_default') return true
         const key = typeof item.key === 'string' ? item.key : '<unknown-key>'
         const phase = typeof item.phase === 'string' ? `/${item.phase}` : ''
-        return !dropViolations.has(`${kind}[${key}${phase}]`)
+        return !dropViolations.has(`${kind}[${index}:${key}${phase}]`)
       })
     }
     const positionUpdate = this.toPositionState(semanticPatch.position ?? semanticPatch.positionUpdate)
