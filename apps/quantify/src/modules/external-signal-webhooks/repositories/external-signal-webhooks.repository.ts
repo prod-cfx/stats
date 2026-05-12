@@ -4,6 +4,7 @@ import { OutboxStatus } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires value import with emitDecoratorMetadata
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
+import { normalizeRequestedCode } from '@/modules/market-data/utils/market-symbol-code.util'
 
 export interface CreateWebhookSignalEventInput {
   subscriptionId: string
@@ -80,6 +81,37 @@ export class ExternalSignalWebhooksRepository {
     return this.txHost.tx.webhookSignalSubscription.findFirst({
       where: { strategyInstanceId, signalId, status: 'ACTIVE' },
     })
+  }
+
+  async findAcceptedEventForRuntime(eventId: string) {
+    return this.txHost.tx.webhookSignalEvent.findUnique({
+      where: { id: eventId },
+      include: {
+        subscription: true,
+        strategyInstance: {
+          include: {
+            strategyTemplate: true,
+          },
+        },
+      },
+    })
+  }
+
+  async findSymbolByCode(code: string) {
+    return this.txHost.tx.symbol.findUnique({
+      where: { code: normalizeRequestedCode(code) },
+    })
+  }
+
+  async findTradingSignalById(id: string) {
+    return this.txHost.tx.tradingSignal.findUnique({
+      where: { id },
+      select: { id: true },
+    })
+  }
+
+  async createExternalSignalTradingSignal(data: Prisma.TradingSignalCreateInput) {
+    return this.txHost.tx.tradingSignal.create({ data })
   }
 
   async rotateSubscription(subscriptionId: string, secretCiphertext: string): Promise<WebhookSignalSubscription> {
