@@ -5490,7 +5490,7 @@ export class SemanticSeedExtractorService {
   private splitLogicClausesWithParent(segment: string): Array<{ clause: string; parentClause: string }> {
     return this.splitCommaClauses(segment).flatMap(parentClause =>
       parentClause
-        .split(/[、]|(?:并且|同时|以及|且)/u)
+        .split(/并且|同时|以及|且|、/u)
         .map(clause => clause.trim())
         .filter(Boolean)
         .map(clause => ({ clause, parentClause })),
