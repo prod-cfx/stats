@@ -741,7 +741,15 @@ export class SemanticAtomInvariantService {
   private readAstOpenActionPositionSizings(ast: StrategyAstV1): PositionSizingSnapshot[] {
     const openActionSizings = ast.decisionPrograms.flatMap(program =>
       program.actions
-        .filter(action => action.kind === 'OPEN_LONG' || action.kind === 'OPEN_SHORT')
+        // #1238 follow-up：DCA 策略入场动作由 ADD_LONG / ADD_SHORT 表达，原过滤
+        //   只收 OPEN_*，导致 astCandidates=[] → drift critical reject。与
+        //   evaluateCanonicalCompileability 同口径，纳入 ADD_LONG / ADD_SHORT。
+        .filter(action =>
+          action.kind === 'OPEN_LONG'
+          || action.kind === 'OPEN_SHORT'
+          || action.kind === 'ADD_LONG'
+          || action.kind === 'ADD_SHORT',
+        )
         .map(action => action.quantity),
     )
     return [

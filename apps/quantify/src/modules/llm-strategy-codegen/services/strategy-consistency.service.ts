@@ -390,7 +390,15 @@ export class StrategyConsistencyService {
 
     const firstOpenAction = projection.decisionPrograms
       .flatMap(program => program.actions)
-      .find(action => action.kind === 'OPEN_LONG' || action.kind === 'OPEN_SHORT')
+      // #1238 follow-up：DCA 策略入场动作由 ADD_LONG / ADD_SHORT 表达，与
+      //   OPEN_* 同口径参与 sizing 推导，否则 firstOpenAction=undefined → sizing=null
+      //   下游一致性校验失败
+      .find(action =>
+        action.kind === 'OPEN_LONG'
+        || action.kind === 'OPEN_SHORT'
+        || action.kind === 'ADD_LONG'
+        || action.kind === 'ADD_SHORT',
+      )
 
     return {
       indicators,
