@@ -29,6 +29,9 @@ export class OkxPrivateWsClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OkxPrivateWsClient.name)
   private readonly sockets = new Map<string, WebSocket>()
   private readonly accounts = new Map<string, OkxConfig>()
+  private readonly reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly reconnectAttempts = new Map<string, number>()
+  private stopping = false
 
   constructor(
     private readonly configService: ConfigService,
@@ -52,13 +55,19 @@ export class OkxPrivateWsClient implements OnModuleInit, OnModuleDestroy {
       return
     }
 
+    this.stopping = false
     const socket = new WebSocket(this.wsBaseUrl)
     this.sockets.set(account.apiKey, socket)
     this.accounts.set(account.apiKey, account)
+    this.clearReconnectTimer(account.apiKey)
     this.bindSocket(socket, account.apiKey)
   }
 
   async disconnect(): Promise<void> {
+    this.stopping = true
+    for (const apiKey of this.reconnectTimers.keys()) {
+      this.clearReconnectTimer(apiKey)
+    }
     const sockets = [...this.sockets.values()]
     this.sockets.clear()
     this.accounts.clear()
@@ -74,6 +83,7 @@ export class OkxPrivateWsClient implements OnModuleInit, OnModuleDestroy {
 
   private bindSocket(socket: WebSocket, apiKey: string): void {
     socket.on('open', () => {
+      this.reconnectAttempts.set(apiKey, 0)
       socket.send(JSON.stringify(this.buildLoginPayload(apiKey)))
     })
 
@@ -87,6 +97,10 @@ export class OkxPrivateWsClient implements OnModuleInit, OnModuleDestroy {
 
     socket.on('close', () => {
       this.logger.warn(`metric=okx_ws_disconnect_total value=1 apiKeyFingerprint=${this.fingerprint(apiKey)}`)
+      if (this.sockets.get(apiKey) === socket) {
+        this.sockets.delete(apiKey)
+      }
+      this.scheduleReconnect(apiKey)
     })
 
     socket.on('error', error => {
@@ -230,5 +244,30 @@ export class OkxPrivateWsClient implements OnModuleInit, OnModuleDestroy {
       .update(value)
       .digest('hex')
       .slice(0, 12)
+  }
+
+  private scheduleReconnect(apiKey: string): void {
+    if (this.stopping || !this.isEnabled()) return
+    if (!this.accounts.has(apiKey)) return
+    if (this.reconnectTimers.has(apiKey)) return
+
+    const attempt = this.reconnectAttempts.get(apiKey) ?? 0
+    const delayMs = Math.min(30_000, 1_000 * 2 ** attempt)
+    this.reconnectAttempts.set(apiKey, attempt + 1)
+
+    const timer = setTimeout(() => {
+      this.reconnectTimers.delete(apiKey)
+      const account = this.accounts.get(apiKey)
+      if (!account || this.stopping || !this.isEnabled()) return
+      void this.connect(account)
+    }, delayMs)
+    this.reconnectTimers.set(apiKey, timer)
+  }
+
+  private clearReconnectTimer(apiKey: string): void {
+    const timer = this.reconnectTimers.get(apiKey)
+    if (!timer) return
+    clearTimeout(timer)
+    this.reconnectTimers.delete(apiKey)
   }
 }

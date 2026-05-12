@@ -198,6 +198,37 @@ describe('OkxPrivateWsClient', () => {
     expect(warn).toHaveBeenCalledWith('metric=okx_ws_disconnect_total value=1 apiKeyFingerprint=d61ecb9c529c')
   })
 
+  it('reconnects after an unexpected close and resubscribes after login', async () => {
+    const client = new OkxPrivateWsClient(configService as ConfigService, eventEmitter, accountStore as never)
+
+    await client.connect(account)
+    sockets[0].emit('close')
+
+    await jest.advanceTimersByTimeAsync(1_000)
+
+    expect(MockWebSocket).toHaveBeenCalledTimes(2)
+    sockets[1].emit('message', JSON.stringify({ event: 'login', code: '0' }))
+
+    expect(JSON.parse(sockets[1].sent[0])).toEqual({
+      op: 'subscribe',
+      args: [
+        { channel: 'orders', instType: 'ANY' },
+        { channel: 'account' },
+        { channel: 'positions', instType: 'ANY' },
+      ],
+    })
+  })
+
+  it('does not reconnect when the client is disconnecting', async () => {
+    const client = new OkxPrivateWsClient(configService as ConfigService, eventEmitter, accountStore as never)
+
+    await client.connect(account)
+    await client.disconnect()
+    await jest.advanceTimersByTimeAsync(30_000)
+
+    expect(MockWebSocket).toHaveBeenCalledTimes(1)
+  })
+
   it('connects all stored OKX accounts on module init when the rollout flag is on', async () => {
     accountStore.listOkxAccountConfigs.mockResolvedValue([
       account,
