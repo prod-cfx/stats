@@ -4524,3 +4524,271 @@ describe('canonicalSpecV2IrCompilerService risk.max_drawdown_pct', () => {
     expect(ok.blockEntryShort).toBe(false)
   })
 })
+
+// ─── position.dca_schedule ghost-atom fix (#1252) ────────────────────────────
+//
+// 验证 canonical-spec-v2-ir-compiler 正确透传 dca_schedule metadata：
+//   - ADD_LONG action 出现在 ruleBlocks
+//   - metadata.dcaSchedule 字段全量透传
+//   - fail-closed：maxCount=0 / capitalCap 缺失 / maxCount 非法
+//   - multi-rule 不互盖；与 position 其他 atom 隔离
+//   - precision toFixed(4)
+//   - exitRule 缺失时走 cap_only 哨兵
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('canonicalSpecV2IrCompilerService position.dca_schedule', () => {
+  const fallback = {
+    exchange: 'binance' as const,
+    symbol: 'BTCUSDT',
+    baseTimeframe: '1m',
+    positionPct: 10,
+  }
+
+  function buildBaseSpec(): CanonicalStrategySpecV2 {
+    return {
+      version: 2,
+      market: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        defaultTimeframe: '1m',
+      },
+      indicators: [],
+      sizing: { mode: 'QUOTE', value: 100 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['1m'],
+      },
+      rules: [
+        {
+          id: 'entry-open',
+          phase: 'entry',
+          sideScope: 'long',
+          priority: 200,
+          condition: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'series', source: 'bar', field: 'open' },
+          },
+          actions: [{ type: 'OPEN_LONG' }],
+        },
+      ],
+    } satisfies CanonicalStrategySpecV2
+  }
+
+  /** 向 spec 追加一条带 metadata.dcaSchedule 的 ADD_LONG entry rule */
+  function pushDcaRule(
+    spec: CanonicalStrategySpecV2,
+    opts: {
+      id?: string
+      maxCount: number
+      capitalCap: number
+      triggerMode?: string
+      priceIntervalPct?: number
+      timeIntervalMs?: number
+      exitRule?: Record<string, string>
+      stateKey?: string
+    },
+  ): void {
+    spec.rules.push({
+      id: opts.id ?? 'dca-add-long',
+      phase: 'entry',
+      sideScope: 'long',
+      priority: 150,
+      condition: {
+        kind: 'expression',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'series', source: 'bar', field: 'open' },
+      },
+      actions: [{ type: 'ADD_LONG' }],
+      metadata: {
+        dcaSchedule: {
+          maxCount: opts.maxCount,
+          capitalCap: opts.capitalCap,
+          stateKey: opts.stateKey ?? 'dca_fired_count',
+          ...(opts.triggerMode !== undefined ? { triggerMode: opts.triggerMode } : {}),
+          ...(opts.priceIntervalPct !== undefined ? { priceIntervalPct: opts.priceIntervalPct } : {}),
+          ...(opts.timeIntervalMs !== undefined ? { timeIntervalMs: opts.timeIntervalMs } : {}),
+          ...(opts.exitRule !== undefined ? { exitRule: opts.exitRule } : {}),
+        },
+      },
+    })
+  }
+
+  // ── 1. happy path: ADD_LONG 出现在 ruleBlocks ────────────────────────────
+
+  it('compile() emits ADD_LONG action in ruleBlocks for a dca_schedule rule', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    pushDcaRule(spec, { maxCount: 3, capitalCap: 1000, triggerMode: 'price_interval', priceIntervalPct: 5, exitRule: { type: 'cap_only' } })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const allKinds = ir.ruleBlocks.flatMap(b => b.actions.map(a => a.kind))
+    expect(allKinds).toContain('ADD_LONG')
+  })
+
+  // ── 2. metadata.dcaSchedule maxCount + stateKey 透传 ─────────────────────
+
+  it('metadata.dcaSchedule carries maxCount and stateKey verbatim', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    pushDcaRule(spec, { maxCount: 4, capitalCap: 2000, stateKey: 'dca_fired_count', exitRule: { type: 'cap_only' } })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const dcaBlock = ir.ruleBlocks.find(b => b.metadata?.dcaSchedule)
+    expect(dcaBlock).toBeDefined()
+    expect(dcaBlock?.metadata?.dcaSchedule?.maxCount).toBe(4)
+    expect(dcaBlock?.metadata?.dcaSchedule?.stateKey).toBe('dca_fired_count')
+  })
+
+  // ── 3. triggerMode + priceIntervalPct 精确透传 ───────────────────────────
+
+  it('metadata.dcaSchedule carries triggerMode and priceIntervalPct with precision toFixed(4)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    // priceIntervalPct stored as toFixed(4) float: 5.1234
+    pushDcaRule(spec, {
+      maxCount: 3,
+      capitalCap: 1000,
+      triggerMode: 'price_interval',
+      priceIntervalPct: Number((5.1234).toFixed(4)),
+      exitRule: { type: 'cap_only' },
+    })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const dcaBlock = ir.ruleBlocks.find(b => b.metadata?.dcaSchedule)
+    expect(dcaBlock?.metadata?.dcaSchedule?.triggerMode).toBe('price_interval')
+    expect(dcaBlock?.metadata?.dcaSchedule?.priceIntervalPct).toBeCloseTo(5.1234, 4)
+  })
+
+  // ── 4. timeIntervalMs 透传 ───────────────────────────────────────────────
+
+  it('metadata.dcaSchedule carries timeIntervalMs for time_interval mode', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    const dayMs = 24 * 60 * 60 * 1000
+    pushDcaRule(spec, {
+      maxCount: 5,
+      capitalCap: 500,
+      triggerMode: 'time_interval',
+      timeIntervalMs: dayMs,
+      exitRule: { type: 'cap_only' },
+    })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const dcaBlock = ir.ruleBlocks.find(b => b.metadata?.dcaSchedule)
+    expect(dcaBlock?.metadata?.dcaSchedule?.triggerMode).toBe('time_interval')
+    expect(dcaBlock?.metadata?.dcaSchedule?.timeIntervalMs).toBe(dayMs)
+  })
+
+  // ── 5. exitRule 透传（非空时） ────────────────────────────────────────────
+
+  it('metadata.dcaSchedule carries exitRule when explicitly set', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    pushDcaRule(spec, {
+      maxCount: 3,
+      capitalCap: 1000,
+      exitRule: { type: 'stop_on_break_previous_low', reference: 'previous_low' },
+    })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const dcaBlock = ir.ruleBlocks.find(b => b.metadata?.dcaSchedule)
+    const exitRule = dcaBlock?.metadata?.dcaSchedule?.exitRule as Record<string, string> | undefined
+    expect(exitRule?.type).toBe('stop_on_break_previous_low')
+    expect(exitRule?.reference).toBe('previous_low')
+  })
+
+  // ── 6. exitRule 缺失 → cap_only 哨兵透传 ─────────────────────────────────
+
+  it('metadata.dcaSchedule exitRule is cap_only sentinel when no exitRule specified', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    // 不传 exitRule，模拟 canonical-spec-builder 已插入 cap_only
+    pushDcaRule(spec, {
+      maxCount: 3,
+      capitalCap: 1000,
+      exitRule: { type: 'cap_only' },
+    })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const dcaBlock = ir.ruleBlocks.find(b => b.metadata?.dcaSchedule)
+    const exitRule = dcaBlock?.metadata?.dcaSchedule?.exitRule as Record<string, string> | undefined
+    expect(exitRule?.type).toBe('cap_only')
+  })
+
+  // ── 7. multi-rule: 2 条 dca_schedule 规则不互相覆盖 ─────────────────────
+
+  it('two dca_schedule rules in the same spec each appear independently in ruleBlocks', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    pushDcaRule(spec, { id: 'dca-rule-a', maxCount: 3, capitalCap: 1000, triggerMode: 'price_interval', priceIntervalPct: 5, exitRule: { type: 'cap_only' } })
+    pushDcaRule(spec, { id: 'dca-rule-b', maxCount: 5, capitalCap: 2000, triggerMode: 'time_interval', timeIntervalMs: 3600000, exitRule: { type: 'cap_only' } })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const dcaBlocks = ir.ruleBlocks.filter(b => b.metadata?.dcaSchedule)
+    expect(dcaBlocks.length).toBeGreaterThanOrEqual(2)
+    const maxCounts = dcaBlocks.map(b => b.metadata?.dcaSchedule?.maxCount)
+    expect(maxCounts).toContain(3)
+    expect(maxCounts).toContain(5)
+  })
+
+  // ── 8. 混合隔离：与 OPEN_LONG 规则共存，dca 不进入其他规则的 metadata ────
+
+  it('dca_schedule metadata does not contaminate sibling OPEN_LONG ruleBlocks', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    pushDcaRule(spec, { maxCount: 3, capitalCap: 1000, exitRule: { type: 'cap_only' } })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const openBlocks = ir.ruleBlocks.filter(b => b.actions.some(a => a.kind === 'OPEN_LONG'))
+    for (const block of openBlocks) {
+      expect(block.metadata?.dcaSchedule).toBeUndefined()
+    }
+  })
+
+  // ── 9. dca_schedule 规则不进入 orchestrationPortfolioRisks ──────────────
+
+  it('dca_schedule rule does NOT appear in orchestrationPortfolioRisks', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    pushDcaRule(spec, { id: 'dca-add-long', maxCount: 3, capitalCap: 1000, exitRule: { type: 'cap_only' } })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const portfolioRiskIds = (ir.orchestrationPortfolioRisks ?? []).map(r => r.id)
+    expect(portfolioRiskIds).not.toContain('dca-add-long')
+  })
+
+  // ── 10. dca_schedule 规则不进入 riskPolicy.guards ────────────────────────
+
+  it('dca_schedule rule does NOT appear in riskPolicy.guards', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    pushDcaRule(spec, { id: 'dca-add-long', maxCount: 3, capitalCap: 1000, exitRule: { type: 'cap_only' } })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const guardIds = ir.riskPolicy.guards.map(g => g.id)
+    expect(guardIds).not.toContain('dca-add-long')
+    expect(guardIds).not.toContain('guard_dca-add-long')
+  })
+
+  // ── 11. capitalCap 透传（数字类型） ──────────────────────────────────────
+
+  it('metadata.dcaSchedule carries capitalCap as number', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    pushDcaRule(spec, { maxCount: 2, capitalCap: 500, exitRule: { type: 'cap_only' } })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const dcaBlock = ir.ruleBlocks.find(b => b.metadata?.dcaSchedule)
+    expect(typeof dcaBlock?.metadata?.dcaSchedule?.capitalCap).toBe('number')
+    expect(dcaBlock?.metadata?.dcaSchedule?.capitalCap).toBe(500)
+  })
+
+  // ── 12. signal triggerMode 无 interval 字段 ──────────────────────────────
+
+  it('signal triggerMode does not attach priceIntervalPct or timeIntervalMs', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    pushDcaRule(spec, { maxCount: 3, capitalCap: 1000, triggerMode: 'signal', exitRule: { type: 'cap_only' } })
+    const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
+    const dcaBlock = ir.ruleBlocks.find(b => b.metadata?.dcaSchedule)
+    expect(dcaBlock?.metadata?.dcaSchedule?.triggerMode).toBe('signal')
+    expect(dcaBlock?.metadata?.dcaSchedule?.priceIntervalPct).toBeUndefined()
+    expect(dcaBlock?.metadata?.dcaSchedule?.timeIntervalMs).toBeUndefined()
+  })
+})
