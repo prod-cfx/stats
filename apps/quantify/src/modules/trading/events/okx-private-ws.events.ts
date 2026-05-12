@@ -3,6 +3,7 @@ export const OKX_PRIVATE_POSITION_EVENT = 'trading.okx.private.position'
 
 export interface OkxPrivateOrderEvent {
   exchangeId: 'okx'
+  exchangeAccountId: string
   apiKey: string
   instId: string
   orderId: string
@@ -22,6 +23,7 @@ export interface OkxPrivateOrderEvent {
 
 export interface OkxPrivatePositionEvent {
   exchangeId: 'okx'
+  exchangeAccountId: string
   apiKey: string
   instId: string
   positionSide?: string

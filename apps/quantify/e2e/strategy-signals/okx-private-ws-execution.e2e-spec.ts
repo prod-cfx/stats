@@ -26,6 +26,9 @@ describe('OKX private WS execution matching (E2E, DB)', () => {
 
   const userId = 'e2e-okx-ws-user'
   const accountId = 'e2e-okx-ws-account'
+  const exchangeAccountId = 'e2e-okx-ws-exchange-account'
+  const otherAccountId = 'e2e-okx-ws-other-account'
+  const otherExchangeAccountId = 'e2e-okx-ws-other-exchange-account'
   const symbolId = 'e2e-okx-ws-symbol'
   const signalIds = [
     'e2e-okx-ws-signal-order',
@@ -33,6 +36,7 @@ describe('OKX private WS execution matching (E2E, DB)', () => {
     'e2e-okx-ws-signal-executed',
     'e2e-okx-ws-signal-failed',
     'e2e-okx-ws-signal-skipped',
+    'e2e-okx-ws-signal-other-account',
   ]
 
   beforeAll(async () => {
@@ -80,6 +84,19 @@ describe('OKX private WS execution matching (E2E, DB)', () => {
         equity: '1000',
       },
     })
+    await prisma.userStrategyAccount.create({
+      data: {
+        id: otherAccountId,
+        userId,
+        strategyId: 'e2e-okx-ws-other-strategy',
+        strategyName: 'E2E OKX private WS other account',
+        strategyVersion: 'v1',
+        baseCurrency: 'USDT',
+        initialBalance: '1000',
+        balance: '1000',
+        equity: '1000',
+      },
+    })
 
     for (const signalId of signalIds) {
       await prisma.tradingSignal.create({
@@ -109,8 +126,23 @@ describe('OKX private WS execution matching (E2E, DB)', () => {
           metadata: {
             orderResponse: { id: 'okx-order-1' },
             orderRequest: { clientOrderId: 'okx-client-1' },
+            exchangeAccountId,
           },
           createdAt: new Date('2026-05-12T00:00:01.000Z'),
+        },
+        {
+          id: 'e2e-okx-ws-exec-other-account',
+          signalId: signalIds[5],
+          userId,
+          userStrategyAccountId: otherAccountId,
+          status: 'PENDING',
+          orderSide: 'BUY',
+          positionSide: 'LONG',
+          metadata: {
+            providerOrderId: 'okx-order-1',
+            exchangeAccountId: otherExchangeAccountId,
+          },
+          createdAt: new Date('2026-05-12T00:00:06.000Z'),
         },
         {
           id: 'e2e-okx-ws-exec-client',
@@ -122,6 +154,7 @@ describe('OKX private WS execution matching (E2E, DB)', () => {
           positionSide: 'LONG',
           metadata: {
             tradingExecution: {
+              exchangeAccountId,
               normalizedRequest: { clientOrderId: 'okx-client-nested' },
             },
           },
@@ -172,24 +205,34 @@ describe('OKX private WS execution matching (E2E, DB)', () => {
 
   afterAll(async () => {
     if (!prisma) return
-    await prisma.userSignalExecution.deleteMany({ where: { userStrategyAccountId: accountId } })
+    await prisma.userSignalExecution.deleteMany({ where: { userStrategyAccountId: { in: [accountId, otherAccountId] } } })
     await prisma.tradingSignal.deleteMany({ where: { id: { in: signalIds } } })
-    await prisma.userStrategyAccount.deleteMany({ where: { id: accountId } })
+    await prisma.userStrategyAccount.deleteMany({ where: { id: { in: [accountId, otherAccountId] } } })
     await prisma.symbol.deleteMany({ where: { id: symbolId } })
     await prisma.user.deleteMany({ where: { id: userId } })
     await app?.close()
   })
 
   it('finds pending executions by OKX order id JSON path', async () => {
-    const execution = await repository.findPendingByOkxOrderIds({ orderId: 'okx-order-1' })
+    const execution = await repository.findPendingByOkxOrderIds({ orderId: 'okx-order-1', exchangeAccountId })
 
     expect(execution?.id).toBe('e2e-okx-ws-exec-order')
+  })
+
+  it('does not match a pending OKX order from another exchange account', async () => {
+    const execution = await repository.findPendingByOkxOrderIds({
+      orderId: 'okx-order-1',
+      exchangeAccountId: otherExchangeAccountId,
+    })
+
+    expect(execution?.id).toBe('e2e-okx-ws-exec-other-account')
   })
 
   it('finds pending executions by nested OKX client order id JSON path', async () => {
     const execution = await repository.findPendingByOkxOrderIds({
       orderId: 'missing-order',
       clientOrderId: 'okx-client-nested',
+      exchangeAccountId,
     })
 
     expect(execution?.id).toBe('e2e-okx-ws-exec-client')

@@ -84,6 +84,7 @@ describe('signalExecutorService', () => {
 
     await (service as any).handleOkxPrivateOrderEvent({
       exchangeId: 'okx',
+      exchangeAccountId: 'exchange-account-okx-1',
       apiKey: 'masked-key',
       instId: 'BTC-USDT-SWAP',
       orderId: 'okx-order-1',
@@ -102,6 +103,7 @@ describe('signalExecutorService', () => {
     expect(executionRepository.findPendingByOkxOrderIds).toHaveBeenCalledWith({
       orderId: 'okx-order-1',
       clientOrderId: 'client-order-1',
+      exchangeAccountId: 'exchange-account-okx-1',
     })
     expect((service as any).txEvents.withAfterCommit).toHaveBeenCalled()
     expect(executionRepository.markExecuted).toHaveBeenCalledWith('exec-okx-ws-1', {
@@ -114,6 +116,7 @@ describe('signalExecutorService', () => {
       metadata: {
         providerOrderId: 'okx-order-1',
         providerStatus: 'filled',
+        exchangeAccountId: 'exchange-account-okx-1',
         source: 'okx_private_ws',
         raw,
       },
@@ -128,6 +131,7 @@ describe('signalExecutorService', () => {
 
     await expect((service as any).handleOkxPrivateOrderEvent({
       exchangeId: 'okx',
+      exchangeAccountId: 'exchange-account-okx-1',
       apiKey: 'masked-key',
       instId: 'BTC-USDT-SWAP',
       orderId: 'already-executed-order',
@@ -150,6 +154,7 @@ describe('signalExecutorService', () => {
 
     await (service as any).handleOkxPrivateOrderEvent({
       exchangeId: 'okx',
+      exchangeAccountId: 'exchange-account-okx-1',
       apiKey: 'masked-key',
       instId: 'BTC-USDT-SWAP',
       orderId: 'okx-order-open',
@@ -164,6 +169,7 @@ describe('signalExecutorService', () => {
     expect(executionRepository.markStage).toHaveBeenCalledWith('exec-okx-open', 'ORDER_ACKED', {
       providerOrderId: 'okx-order-open',
       providerStatus: 'live',
+      exchangeAccountId: 'exchange-account-okx-1',
       source: 'okx_private_ws',
       raw,
     })
@@ -177,6 +183,7 @@ describe('signalExecutorService', () => {
 
     await (service as any).handleOkxPrivateOrderEvent({
       exchangeId: 'okx',
+      exchangeAccountId: 'exchange-account-okx-1',
       apiKey: 'masked-key',
       instId: 'BTC-USDT-SWAP',
       orderId: 'okx-order-partial',
@@ -190,6 +197,7 @@ describe('signalExecutorService', () => {
     expect(executionRepository.markStage).toHaveBeenCalledWith('exec-okx-partial', 'ORDER_ACKED', {
       providerOrderId: 'okx-order-partial',
       providerStatus: 'partially_filled',
+      exchangeAccountId: 'exchange-account-okx-1',
       source: 'okx_private_ws',
       raw,
     })
@@ -202,6 +210,7 @@ describe('signalExecutorService', () => {
 
     await (service as any).handleOkxPrivateOrderEvent({
       exchangeId: 'okx',
+      exchangeAccountId: 'exchange-account-okx-1',
       apiKey: 'masked-key',
       instId: 'BTC-USDT-SWAP',
       orderId: 'okx-order-canceled',

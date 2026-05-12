@@ -26,6 +26,7 @@ interface ExecutionStageMetadata extends Prisma.JsonObject {
 interface FindPendingByOkxOrderIdsInput {
   orderId: string
   clientOrderId?: string
+  exchangeAccountId?: string
 }
 
 @Injectable()
@@ -93,10 +94,40 @@ export class SignalExecutionRepository {
       )
     }
 
+    const where: Prisma.UserSignalExecutionWhereInput = {
+      status: ExecutionStatus.PENDING,
+      OR: or,
+    }
+    if (input.exchangeAccountId) {
+      where.AND = [
+        {
+          OR: [
+            {
+              metadata: {
+                path: ['exchangeAccountId'],
+                equals: input.exchangeAccountId,
+              },
+            },
+            {
+              metadata: {
+                path: ['tradingExecution', 'exchangeAccountId'],
+                equals: input.exchangeAccountId,
+              },
+            },
+            {
+              metadata: {
+                path: ['tradingExecution', 'normalizedRequest', 'exchangeAccountId'],
+                equals: input.exchangeAccountId,
+              },
+            },
+          ],
+        },
+      ]
+    }
+
     return this.txHost.tx.userSignalExecution.findFirst({
       where: {
-        status: ExecutionStatus.PENDING,
-        OR: or,
+        ...where,
       },
       orderBy: {
         createdAt: 'desc',

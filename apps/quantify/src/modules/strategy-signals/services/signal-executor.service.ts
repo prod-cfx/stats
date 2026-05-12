@@ -164,6 +164,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       const execution = await this.executionRepository.findPendingByOkxOrderIds({
         orderId: event.orderId,
         clientOrderId: event.clientOrderId,
+        exchangeAccountId: event.exchangeAccountId,
       })
 
       if (!execution) {
@@ -1857,6 +1858,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     return {
       providerOrderId: event.orderId,
       providerStatus: event.state,
+      exchangeAccountId: event.exchangeAccountId,
       source: 'okx_private_ws',
       raw: this.toJsonObject(event.raw),
     }

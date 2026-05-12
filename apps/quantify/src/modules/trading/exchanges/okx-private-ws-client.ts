@@ -1,6 +1,6 @@
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import type { OkxPrivateOrderEvent, OkxPrivatePositionEvent } from '../events/okx-private-ws.events'
-import type { ExchangeAccountStore, OkxConfig } from '../factory/account-store'
+import type { ExchangeAccountStore, OkxAccountConfig } from '../factory/account-store'
 import { createHmac } from 'node:crypto'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 ConfigService
@@ -28,7 +28,7 @@ interface OkxWsPayload {
 export class OkxPrivateWsClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OkxPrivateWsClient.name)
   private readonly sockets = new Map<string, WebSocket>()
-  private readonly accounts = new Map<string, OkxConfig>()
+  private readonly accounts = new Map<string, OkxAccountConfig>()
   private readonly reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly reconnectAttempts = new Map<string, number>()
   private stopping = false
@@ -49,7 +49,7 @@ export class OkxPrivateWsClient implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async connect(account: OkxConfig): Promise<void> {
+  async connect(account: OkxAccountConfig): Promise<void> {
     if (!this.isEnabled()) {
       this.logger.log('OKX private WebSocket disabled by feature flag')
       return
@@ -167,6 +167,7 @@ export class OkxPrivateWsClient implements OnModuleInit, OnModuleDestroy {
   private toOrderEvent(apiKey: string, row: OkxWsRow): OkxPrivateOrderEvent {
     return {
       exchangeId: 'okx',
+      exchangeAccountId: this.requireAccount(apiKey).exchangeAccountId,
       apiKey: this.requireAccount(apiKey).apiKey,
       instId: this.readString(row.instId),
       orderId: this.readString(row.ordId),
@@ -188,6 +189,7 @@ export class OkxPrivateWsClient implements OnModuleInit, OnModuleDestroy {
   private toPositionEvent(apiKey: string, row: OkxWsRow): OkxPrivatePositionEvent {
     return {
       exchangeId: 'okx',
+      exchangeAccountId: this.requireAccount(apiKey).exchangeAccountId,
       apiKey: this.requireAccount(apiKey).apiKey,
       instId: this.readString(row.instId),
       positionSide: this.readOptionalString(row.posSide),
@@ -219,7 +221,7 @@ export class OkxPrivateWsClient implements OnModuleInit, OnModuleDestroy {
     return Number.isFinite(parsed) ? parsed : undefined
   }
 
-  private requireAccount(apiKey: string): OkxConfig {
+  private requireAccount(apiKey: string): OkxAccountConfig {
     const account = this.accounts.get(apiKey)
     if (!account) {
       throw new Error('OKX private WebSocket account is not configured')

@@ -29,6 +29,7 @@ const MockWebSocket = WebSocket as jest.MockedFunction<typeof WebSocket>
 
 describe('OkxPrivateWsClient', () => {
   const account = {
+    exchangeAccountId: 'exchange-account-1',
     apiKey: 'test-api-key',
     secret: 'test-secret',
     passphrase: 'test-passphrase',
@@ -140,6 +141,7 @@ describe('OkxPrivateWsClient', () => {
 
     expect(listener).toHaveBeenCalledWith(expect.objectContaining({
       exchangeId: 'okx',
+      exchangeAccountId: account.exchangeAccountId,
       apiKey: account.apiKey,
       instId: 'BTC-USDT-SWAP',
       orderId: 'order-1',
@@ -176,6 +178,7 @@ describe('OkxPrivateWsClient', () => {
 
     expect(listener).toHaveBeenCalledWith(expect.objectContaining({
       exchangeId: 'okx',
+      exchangeAccountId: account.exchangeAccountId,
       apiKey: account.apiKey,
       instId: 'ETH-USDT-SWAP',
       positionSide: 'long',
