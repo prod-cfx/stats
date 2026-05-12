@@ -3228,7 +3228,7 @@ export class SemanticSeedExtractorService {
       const cross = this.parseMovingAverageCrossClause(clause) ?? this.parseGenericMovingAverageCrossClause(clause, segment)
       if (!cross) continue
 
-      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      const intent = this.resolveLogicClauseTradeIntent(clause, segment)
       if (!intent) continue
 
       // evidence.text 缩到精确命中子句，避免 hetero AND 分桶定位错位（Issue #1220）。
@@ -3725,8 +3725,7 @@ export class SemanticSeedExtractorService {
 
       // Issue #1219: phase / sideScope 由子句动词决定，与阈值方向解耦；
       // 子句无动词时跟随父级 segment 的动词，不用"低于→exit"硬编码兜底。
-      const intent = this.resolvePhaseByClauseVerb(clause)
-        ?? this.resolvePhaseByClauseVerb(segment)
+      const intent = this.resolveLogicClauseTradeIntent(clause, segment)
       if (!intent) continue
 
       const period = this.extractLastRsiPeriod(clause) ?? segmentPeriod
@@ -5330,6 +5329,23 @@ export class SemanticSeedExtractorService {
 
     // 其余情况委托 resolveTradeIntent，保持两套 resolver 词汇集统一
     return this.resolveTradeIntent(clause)
+  }
+
+  private resolveLogicClauseTradeIntent(
+    clause: string,
+    segment: string,
+  ): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' } | null {
+    const direct = this.resolvePhaseByClauseVerb(clause)
+    if (direct) return direct
+
+    const parentCommaClause = this.splitCommaClauses(segment)
+      .find(candidate => candidate === clause || candidate.includes(clause))
+    if (parentCommaClause && parentCommaClause !== segment) {
+      const parentIntent = this.resolvePhaseByClauseVerb(parentCommaClause)
+      if (parentIntent) return parentIntent
+    }
+
+    return this.resolvePhaseByClauseVerb(segment)
   }
 
   /**

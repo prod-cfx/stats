@@ -13,6 +13,7 @@
  */
 import type { SemanticAtomContract, SemanticState } from '../../types/semantic-state'
 import { isTriggerPredicateGroupContract } from '../semantic-state-normalization'
+import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticTriggerCombinationContractService } from '../semantic-trigger-combination-contract.service'
@@ -233,6 +234,44 @@ it('[#1b] resolveExecutableGroups → AND 组合并后 1 个 group 含 N members
   expect(andGroups.length).toBeGreaterThanOrEqual(1)
   expect(andGroups[0]!.join).toBe('AND')
   expect(andGroups[0]!.members.length).toBeGreaterThanOrEqual(2)
+})
+
+it('[#1c] 完整策略中逗号后的平多不污染前置 AND 入场组', () => {
+  const state = buildState(
+    'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 且 RSI14 低于 35 且 EMA7 上穿 EMA21 开多，MA20 下穿 MA50 平多，单笔 10%，止损 5%。',
+  )
+
+  const longEntryTriggers = state.triggers.filter(
+    t => t.phase === 'entry' && (t.sideScope ?? 'long') === 'long' && t.key !== 'logical.any_of',
+  )
+  expect(longEntryTriggers).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ key: 'indicator.cross_over', params: expect.objectContaining({ indicator: 'ma', fastPeriod: 20, slowPeriod: 50 }) }),
+      expect.objectContaining({ key: 'oscillator.rsi_lte', params: expect.objectContaining({ period: 14, value: 35 }) }),
+      expect.objectContaining({ key: 'indicator.cross_over', params: expect.objectContaining({ indicator: 'ema', fastPeriod: 7, slowPeriod: 21 }) }),
+    ]),
+  )
+
+  const entryGroups = combinationResolver.resolveExecutableGroups(state.triggers)
+    .filter(g => g.phase === 'entry' && g.sideScope === 'long')
+  expect(entryGroups).toHaveLength(1)
+  expect(entryGroups[0]).toEqual(expect.objectContaining({ join: 'AND' }))
+  expect(entryGroups[0]!.members).toHaveLength(3)
+
+  const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+  const entryRules = spec.rules.filter(rule => rule.phase === 'entry')
+  const exitRules = spec.rules.filter(rule => rule.phase === 'exit')
+
+  expect(entryRules).toHaveLength(1)
+  expect(entryRules[0]).toEqual(expect.objectContaining({
+    condition: expect.objectContaining({ kind: 'AND' }),
+    actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+  }))
+  expect(exitRules).toHaveLength(1)
+  expect(exitRules[0]).toEqual(expect.objectContaining({
+    condition: expect.objectContaining({ key: 'ma.death_cross' }),
+    actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+  }))
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
