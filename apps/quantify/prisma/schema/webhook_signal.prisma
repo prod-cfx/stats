@@ -45,7 +45,7 @@ model WebhookSignalEvent {
   signalId           String                       @map("signal_id")
   dedupeKey          String                       @map("dedupe_key")
   payload            Json
-  headers            Json?
+  sanitizedHeaders   Json?                        @map("sanitized_headers")
   rawBodySha256      String?                      @map("raw_body_sha256")
   signatureStatus    WebhookSignalSignatureStatus @default(ACCEPTED) @map("signature_status")
   sourceTimestamp    DateTime?                    @map("source_timestamp")
@@ -73,7 +73,7 @@ model WebhookSignalAudit {
   dedupeKey          String?                      @map("dedupe_key")
   signatureStatus    WebhookSignalSignatureStatus @map("signature_status")
   reason             String?                      @db.Text
-  requestHeaders     Json?                        @map("request_headers")
+  requestHeadersRedacted Json?                    @map("request_headers_redacted")
   rawBodySha256      String?                      @map("raw_body_sha256")
   remoteIp           String?                      @map("remote_ip")
   userAgent          String?                      @map("user_agent")
