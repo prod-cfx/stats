@@ -1261,6 +1261,12 @@ function parseHHMM(value: string): number | null {
   return hours * 60 + minutes
 }
 
+// Module-level constants for IN_TIME_WINDOW evaluator hot path —
+// avoid re-allocating per-bar
+const WEEKDAY_MAP: Readonly<Record<string, number>> = {
+  Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+}
+
 // Module-level cache: timezones are a finite set fixed at strategy compile time
 // (typically 1 per strategy), so caching formatters avoids creating a new
 // Intl.DateTimeFormat instance on every bar (hot path, 1m-level strategies).
@@ -1311,10 +1317,7 @@ function evaluateInTimeWindow(
     const localMinute = Number(minutePart)
     if (!Number.isFinite(localHour) || !Number.isFinite(localMinute)) return false
     localMinutes = localHour * 60 + localMinute
-    const weekdayMap: Record<string, number> = {
-      Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
-    }
-    const mapped = weekdayMap[weekdayPart]
+    const mapped = WEEKDAY_MAP[weekdayPart]
     if (mapped === undefined) return false
     localDayOfWeek = mapped
   }
