@@ -31,6 +31,8 @@ describe('OKX private WS execution matching (E2E, DB)', () => {
     'e2e-okx-ws-signal-order',
     'e2e-okx-ws-signal-client',
     'e2e-okx-ws-signal-executed',
+    'e2e-okx-ws-signal-failed',
+    'e2e-okx-ws-signal-skipped',
   ]
 
   beforeAll(async () => {
@@ -138,6 +140,32 @@ describe('OKX private WS execution matching (E2E, DB)', () => {
           },
           createdAt: new Date('2026-05-12T00:00:03.000Z'),
         },
+        {
+          id: 'e2e-okx-ws-exec-failed',
+          signalId: signalIds[3],
+          userId,
+          userStrategyAccountId: accountId,
+          status: 'FAILED',
+          orderSide: 'BUY',
+          positionSide: 'LONG',
+          metadata: {
+            providerOrderId: 'okx-order-failed',
+          },
+          createdAt: new Date('2026-05-12T00:00:04.000Z'),
+        },
+        {
+          id: 'e2e-okx-ws-exec-skipped',
+          signalId: signalIds[4],
+          userId,
+          userStrategyAccountId: accountId,
+          status: 'SKIPPED',
+          orderSide: 'BUY',
+          positionSide: 'LONG',
+          metadata: {
+            providerOrderId: 'okx-order-skipped',
+          },
+          createdAt: new Date('2026-05-12T00:00:05.000Z'),
+        },
       ],
     })
   })
@@ -167,8 +195,12 @@ describe('OKX private WS execution matching (E2E, DB)', () => {
     expect(execution?.id).toBe('e2e-okx-ws-exec-client')
   })
 
-  it('does not return executions that are already terminal', async () => {
-    const execution = await repository.findPendingByOkxOrderIds({ orderId: 'okx-order-executed' })
+  it.each([
+    ['executed', 'okx-order-executed'],
+    ['failed', 'okx-order-failed'],
+    ['skipped', 'okx-order-skipped'],
+  ])('does not return %s executions that are already terminal', async (_status, orderId) => {
+    const execution = await repository.findPendingByOkxOrderIds({ orderId })
 
     expect(execution).toBeNull()
   })

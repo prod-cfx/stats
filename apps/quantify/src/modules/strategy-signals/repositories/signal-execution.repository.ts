@@ -95,9 +95,7 @@ export class SignalExecutionRepository {
 
     return this.txHost.tx.userSignalExecution.findFirst({
       where: {
-        status: {
-          not: ExecutionStatus.EXECUTED,
-        },
+        status: ExecutionStatus.PENDING,
         OR: or,
       },
       orderBy: {
