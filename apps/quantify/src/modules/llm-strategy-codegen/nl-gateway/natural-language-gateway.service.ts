@@ -8,6 +8,10 @@
  *
  * 识别成功后调用方可 emit `capital.allocate.per_order_budget` capability。
  *
+ * @internal nl-gateway 内部 API。本 PR (#1230) 仅落地 parser；接入主流程
+ * 由后续 PR #1237 / #1248 完成。**禁止在 nl-gateway 目录外直接导入**，
+ * 避免绕过 codegen pipeline 路由规划。
+ *
  * Refs: #1230
  */
 
