@@ -5788,7 +5788,7 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
       expect(constSeries.some(s => (s as { value?: number }).value === 30)).toBe(true)
     })
 
-    it('indicator=macd 路由到 MACD_LINE × MACD_SIGNAL', () => {
+    it('indicator=macd 路由到 MACD_LINE × MACD_SIGNAL + CROSS_OVER predicate', () => {
       const compiler = new CanonicalSpecV2IrCompilerService()
       const spec = buildSpecWithIndicatorGate(
         'gate-macd-cross-over',
@@ -5801,6 +5801,11 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
       const sig = result.ir.signalCatalog.series.find(s => s.kind === 'MACD_SIGNAL')
       expect(line).toBeDefined()
       expect(sig).toBeDefined()
+      const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_gate-macd-cross-over')
+      const predicate = result.ir.signalCatalog.predicates.find(
+        p => p.id === (guard as { predicateRef?: string }).predicateRef,
+      )
+      expect(predicate?.kind).toBe('CROSS_OVER')
     })
 
     it('multi-rule 不互盖 — 两条 indicator.cross_over 各落各的 guard', () => {
@@ -5901,7 +5906,7 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
         1,
       )
       expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
-        /codegen\.canonical_spec_v2_(indicator_cross_invalid_fast_period|condition_unsupported)/,
+        /codegen\.canonical_spec_v2_indicator_cross_invalid_fast_period/,
       )
     })
 
@@ -5914,7 +5919,29 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
         1,
       )
       expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
-        /codegen\.canonical_spec_v2_(indicator_cross_invalid_indicator|condition_unsupported)/,
+        /codegen\.canonical_spec_v2_indicator_cross_invalid_indicator/,
+      )
+    })
+
+    it('fail-closed — rsi 路由 value 缺失抛 invalid_value', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildBaseSpec()
+      spec.rules.push({
+        id: 'gate-rsi-no-value',
+        phase: 'gate',
+        sideScope: 'both',
+        priority: 100,
+        condition: {
+          kind: 'atom',
+          key: 'indicator.cross_over',
+          semanticScope: 'market',
+          op: 'GTE',
+          params: { indicator: 'rsi', period: 14 },
+        } as CanonicalStrategySpecV2['rules'][number]['condition'],
+        actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+      })
+      expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+        /codegen\.canonical_spec_v2_indicator_cross_invalid_value/,
       )
     })
   })
@@ -5953,7 +5980,27 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
       expect(ema.length).toBe(2)
     })
 
-    it('indicator=macd 路由 MACD_LINE × MACD_SIGNAL', () => {
+    it('indicator=rsi 路由到 RSI × const(value) + CROSS_UNDER predicate', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-rsi-cross-under',
+        'indicator.cross_under',
+        { indicator: 'rsi', period: 14 },
+        70,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_gate-rsi-cross-under')
+      expect(guard).toBeDefined()
+      const predicate = result.ir.signalCatalog.predicates.find(
+        p => p.id === (guard as { predicateRef?: string }).predicateRef,
+      )
+      expect(predicate?.kind).toBe('CROSS_UNDER')
+      const rsi = result.ir.signalCatalog.series.find(s => s.kind === 'RSI')
+      expect(rsi?.params?.period).toBe(14)
+      expect(result.ir.signalCatalog.series.some(s => s.kind === 'CONST' && (s as { value?: number }).value === 70)).toBe(true)
+    })
+
+    it('indicator=macd 路由 MACD_LINE × MACD_SIGNAL + CROSS_UNDER predicate', () => {
       const compiler = new CanonicalSpecV2IrCompilerService()
       const spec = buildSpecWithIndicatorGate(
         'gate-macd-cross-under',
@@ -5964,6 +6011,11 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
       const result = compiler.compile({ canonicalSpec: spec, fallback })
       expect(result.ir.signalCatalog.series.some(s => s.kind === 'MACD_LINE')).toBe(true)
       expect(result.ir.signalCatalog.series.some(s => s.kind === 'MACD_SIGNAL')).toBe(true)
+      const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_gate-macd-cross-under')
+      const predicate = result.ir.signalCatalog.predicates.find(
+        p => p.id === (guard as { predicateRef?: string }).predicateRef,
+      )
+      expect(predicate?.kind).toBe('CROSS_UNDER')
     })
 
     it('multi-rule 不互盖 — cross_under 与 cross_over 共存', () => {
@@ -6032,7 +6084,7 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
         1,
       )
       expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
-        /codegen\.canonical_spec_v2_(indicator_cross_invalid_slow_period|condition_unsupported)/,
+        /codegen\.canonical_spec_v2_indicator_cross_invalid_slow_period/,
       )
     })
   })
@@ -6089,7 +6141,7 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
       expect(ema?.params?.period).toBe(21)
     })
 
-    it('multi-rule 不互盖 — 两条 threshold_gte', () => {
+    it('multi-rule — 两条 threshold_gte 各落各 guard + 各产生独立 RSI series（不同 period）', () => {
       const compiler = new CanonicalSpecV2IrCompilerService()
       const spec = buildBaseSpec()
       for (const [ruleId, period, value] of [
@@ -6116,6 +6168,11 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
       const guardIds = result.ir.riskPolicy.guards.map(g => g.id)
       expect(guardIds).toContain('guard_gate-th-a')
       expect(guardIds).toContain('guard_gate-th-b')
+      const rsiPeriods = result.ir.signalCatalog.series
+        .filter(s => s.kind === 'RSI')
+        .map(s => s.params?.period as number)
+        .sort((a, b) => a - b)
+      expect(rsiPeriods).toEqual([14, 21])
     })
 
     it('fail-closed — value 缺失抛 invalid_value', () => {
@@ -6136,7 +6193,7 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
         actions: [{ type: 'BLOCK_NEW_ENTRY' }],
       })
       expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
-        /codegen\.canonical_spec_v2_(indicator_threshold_invalid_value|condition_unsupported)/,
+        /codegen\.canonical_spec_v2_indicator_threshold_invalid_value/,
       )
     })
 
@@ -6149,7 +6206,7 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
         50,
       )
       expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
-        /codegen\.canonical_spec_v2_(indicator_threshold_invalid_indicator|condition_unsupported)/,
+        /codegen\.canonical_spec_v2_indicator_threshold_invalid_indicator/,
       )
     })
   })
@@ -6296,7 +6353,7 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
         30,
       )
       expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
-        /codegen\.canonical_spec_v2_(indicator_threshold_invalid_period|condition_unsupported)/,
+        /codegen\.canonical_spec_v2_indicator_threshold_invalid_period/,
       )
     })
   })
