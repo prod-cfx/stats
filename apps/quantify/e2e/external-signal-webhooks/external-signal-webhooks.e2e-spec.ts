@@ -5,6 +5,10 @@ import { TOPIC_EXTERNAL_SIGNAL_RECEIVED } from '@/modules/message-bus/message-bu
 import { createApiClient, createTestingApp } from '../fixtures/fixtures'
 
 function bearerForUser(userId: string): string {
+  return `test-token:${userId}`
+}
+
+function forgedBearerForUser(userId: string): string {
   const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url')
   const payload = Buffer.from(JSON.stringify({ sub: userId, principalType: 'user' })).toString('base64url')
   return `${header}.${payload}.signature`
@@ -20,12 +24,26 @@ function sign(secret: string, timestamp: string, rawBody: string): string {
 describe('External signal webhooks (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
+  let originalFetch: typeof globalThis.fetch
   const ownerId = 'external-signal-owner'
   const otherUserId = 'external-signal-other'
   const templateId = 'external-signal-template'
   const instanceId = 'external-signal-instance'
 
   beforeAll(async () => {
+    originalFetch = globalThis.fetch
+    globalThis.fetch = jest.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const authorization = init?.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)
+        ? (init.headers as Record<string, string>).authorization
+        : undefined
+      const token = authorization?.replace(/^Bearer\s+/i, '')
+      const userId = token?.startsWith('test-token:') ? token.slice('test-token:'.length) : null
+      if (!userId) {
+        return new Response(JSON.stringify({ message: 'unauthorized' }), { status: 401 })
+      }
+      return new Response(JSON.stringify({ data: { id: userId } }), { status: 200 })
+    }) as typeof globalThis.fetch
+
     const context = await createTestingApp()
     app = context.app
     prisma = context.prisma!
@@ -87,6 +105,7 @@ describe('External signal webhooks (E2E)', () => {
     await prisma.strategyTemplate.deleteMany({ where: { id: templateId } })
     await prisma.user.deleteMany({ where: { id: { in: [ownerId, otherUserId] } } })
     await app.close()
+    globalThis.fetch = originalFetch
   })
 
   it('creates, lists, rotates, accepts, rejects, and audits signed webhook attempts', async () => {
@@ -108,6 +127,12 @@ describe('External signal webhooks (E2E)', () => {
       .set('authorization', `Bearer ${bearerForUser(otherUserId)}`)
       .set('x-user-id', otherUserId)
       .expect(403)
+
+    await client
+      .get(`account/ai-quant/strategies/${instanceId}/external-signal-subscriptions`)
+      .set('authorization', `Bearer ${forgedBearerForUser(ownerId)}`)
+      .set('x-user-id', ownerId)
+      .expect(401)
 
     await client
       .get(`account/ai-quant/strategies/${instanceId}/external-signal-subscriptions`)
