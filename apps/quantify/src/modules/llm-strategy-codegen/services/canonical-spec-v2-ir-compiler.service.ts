@@ -42,6 +42,8 @@ import { CanonicalStrategyIrCanonicalizerService } from './canonical-strategy-ir
 import { CanonicalStrategyIrValidatorService } from './canonical-strategy-ir-validator.service'
 import { CodegenGraphSnapshotService } from './codegen-graph-snapshot.service'
 import { SpecDescBuilderService } from './spec-desc-builder.service'
+import { SizingEvidenceMissingException } from '../exceptions/sizing-evidence-missing.exception'
+import { ACTIONABLE_RULE_ACTION_TYPES } from '../types/canonical-strategy-spec-v2'
 
 interface CompileCanonicalSpecV2ToIrInput {
   canonicalSpec: CanonicalStrategySpecV2
@@ -104,6 +106,8 @@ export class CanonicalSpecV2IrCompilerService {
       throw new Error('canonical_spec_v2_required')
     }
 
+    this.assertSizingEvidence(input)
+
     const specHash = this.digest.hash(input.canonicalSpec)
     const graphSnapshot = this.buildGraphSnapshot(input)
     const rawIr = this.buildIr(input, specHash, specHash, graphSnapshot.version)
@@ -117,6 +121,32 @@ export class CanonicalSpecV2IrCompilerService {
       graphSnapshot,
       semanticView: this.specDescBuilder.buildFromCanonicalSpec(input.canonicalSpec, ''),
       ir,
+    }
+  }
+
+  /**
+   * #1230 — compile-time sizing evidence guard.
+   * actionable rule action（来自 ACTIONABLE_RULE_ACTION_TYPES）必须有 sizing 来源：
+   *   action.sizing > spec.sizing > fallback.positionPct(>0)
+   * 三者皆缺即 fail-closed，避免下游 runtime 静默回退 defaultQuoteAmount。
+   *
+   * 单一来源：判定集合在 canonical-strategy-spec-v2.ts 集中维护，新增需要
+   * sizing 的 action type 时只改一处。
+   */
+  private assertSizingEvidence(input: CompileCanonicalSpecV2ToIrInput): void {
+    const spec = input.canonicalSpec
+    const fallbackPositionPct = input.fallback.positionPct ?? 0
+    const rules = Array.isArray(spec.rules) ? spec.rules : []
+    for (const rule of rules) {
+      const actions = Array.isArray(rule?.actions) ? rule.actions : []
+      for (const action of actions) {
+        if (action?.type && ACTIONABLE_RULE_ACTION_TYPES.has(action.type)) {
+          const effectiveSizing = action.sizing ?? spec.sizing
+          if (!effectiveSizing && !fallbackPositionPct) {
+            throw new SizingEvidenceMissingException({ ruleId: rule.id, actionType: action.type })
+          }
+        }
+      }
     }
   }
 
