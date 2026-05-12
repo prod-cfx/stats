@@ -210,20 +210,52 @@ export class SignalGenerationDecisionStage {
 
     const filledPrompt = fillPromptTemplate(strategy.promptTemplate ?? '', promptData)
 
-    const systemPrompt =
-      'You are a quantitative trading assistant. Analyze the provided market data and respond with a strict JSON object. ' +
-      'The JSON must include direction (BUY, SELL, CLOSE_LONG, CLOSE_SHORT), signalType (ENTRY or EXIT), confidence (0-100), ' +
-      'entryPrice, stopLoss, takeProfit, and reasoning. ' +
-      'You can optionally specify position size: either positionSizeQuote (absolute amount in quote currency like USDT) ' +
-      'or positionSizeRatio (fraction of account balance, 0-1). If not specified, system defaults will be used.'
+    // #1230 — 读取策略层 sizing 约束（优先 quote，其次 ratio）
+    const instanceParams = instance.params as Record<string, unknown> | null | undefined
+    const paramsSizeQuote = this.readNumeric(instanceParams?.positionSizeQuote)
+    const paramsSizeRatio = this.readNumeric(instanceParams?.positionSizeRatio)
+    const hasParamsSizeQuote = typeof paramsSizeQuote === 'number' && paramsSizeQuote > 0
+    const hasParamsSizeRatio = typeof paramsSizeRatio === 'number' && paramsSizeRatio > 0
+    const hasStrategyLevelSizing = hasParamsSizeQuote || hasParamsSizeRatio
+
+    let systemPrompt: string
+    let sizingExampleFragment: string
+    if (hasStrategyLevelSizing) {
+      if (hasParamsSizeQuote) {
+        systemPrompt =
+          'You are a quantitative trading assistant. Analyze the provided market data and respond with a strict JSON object. ' +
+          'The JSON must include direction (BUY, SELL, CLOSE_LONG, CLOSE_SHORT), signalType (ENTRY or EXIT), confidence (0-100), ' +
+          'entryPrice, stopLoss, takeProfit, and reasoning. ' +
+          `You MUST use exactly positionSizeQuote=${paramsSizeQuote} in your response. Do not omit or change this value.`
+        sizingExampleFragment = `"positionSizeQuote":${paramsSizeQuote}`
+      } else {
+        systemPrompt =
+          'You are a quantitative trading assistant. Analyze the provided market data and respond with a strict JSON object. ' +
+          'The JSON must include direction (BUY, SELL, CLOSE_LONG, CLOSE_SHORT), signalType (ENTRY or EXIT), confidence (0-100), ' +
+          'entryPrice, stopLoss, takeProfit, and reasoning. ' +
+          `You MUST use exactly positionSizeRatio=${paramsSizeRatio} in your response. Do not omit or change this value.`
+        sizingExampleFragment = `"positionSizeRatio":${paramsSizeRatio}`
+      }
+    } else {
+      systemPrompt =
+        'You are a quantitative trading assistant. Analyze the provided market data and respond with a strict JSON object. ' +
+        'The JSON must include direction (BUY, SELL, CLOSE_LONG, CLOSE_SHORT), signalType (ENTRY or EXIT), confidence (0-100), ' +
+        'entryPrice, stopLoss, takeProfit, and reasoning. ' +
+        'You can optionally specify position size: either positionSizeQuote (absolute amount in quote currency like USDT) ' +
+        'or positionSizeRatio (fraction of account balance, 0-1). If not specified, system defaults will be used.'
+      sizingExampleFragment = '"positionSizeRatio":0.15'
+    }
 
     const userPrompt = [
       `Strategy: ${strategy.name}`,
       strategy.description ? `Description: ${strategy.description}` : null,
       `Symbol: ${symbol.code}`,
       `Timeframe: ${timeframe}`,
+      hasStrategyLevelSizing
+        ? `Position size requirement: ${hasParamsSizeQuote ? `${paramsSizeQuote} USDT per trade (positionSizeQuote)` : `ratio ${paramsSizeRatio} of account balance (positionSizeRatio)`}`
+        : null,
       '',
-      'Respond with JSON only, for example: {"direction":"BUY","signalType":"ENTRY","confidence":80,"entryPrice":62000,"stopLoss":60000,"takeProfit":65000,"positionSizeRatio":0.15,"reasoning":"text"}',
+      `Respond with JSON only, for example: {"direction":"BUY","signalType":"ENTRY","confidence":80,"entryPrice":62000,"stopLoss":60000,"takeProfit":65000,${sizingExampleFragment},"reasoning":"text"}`,
     ]
       .filter(Boolean)
       .join('\n')
@@ -248,6 +280,33 @@ export class SignalGenerationDecisionStage {
             `AI response for strategy ${strategy.id} could not be parsed (attempt ${attempt})`,
           )
           continue
+        }
+
+        // #1230 — sizing 校验：策略层指定了 sizing 时检查 LLM 响应是否匹配
+        if (hasStrategyLevelSizing) {
+          const llmSizeQuote = this.readNumeric(parsed.positionSizeQuote)
+          const llmSizeRatio = this.readNumeric(parsed.positionSizeRatio)
+          let sizingMismatch = false
+
+          if (hasParamsSizeQuote) {
+            const expected = paramsSizeQuote!
+            const actual = typeof llmSizeQuote === 'number' && llmSizeQuote > 0 ? llmSizeQuote : null
+            sizingMismatch = actual === null || Math.abs(actual - expected) / expected > 0.001
+          } else {
+            const expected = paramsSizeRatio!
+            const actual = typeof llmSizeRatio === 'number' && llmSizeRatio > 0 ? llmSizeRatio : null
+            sizingMismatch = actual === null || Math.abs(actual - expected) / expected > 0.001
+          }
+
+          if (sizingMismatch && config.execution.requireExplicitSizing) {
+            this.logger.warn(
+              `[SIZING_MISMATCH] Strategy ${strategy.id} (attempt ${attempt}): ` +
+              `expected ${hasParamsSizeQuote ? `positionSizeQuote=${paramsSizeQuote}` : `positionSizeRatio=${paramsSizeRatio}`}, ` +
+              `got positionSizeQuote=${parsed.positionSizeQuote} positionSizeRatio=${parsed.positionSizeRatio}. ` +
+              `Rejecting signal (requireExplicitSizing=true).`,
+            )
+            continue
+          }
         }
 
         return {

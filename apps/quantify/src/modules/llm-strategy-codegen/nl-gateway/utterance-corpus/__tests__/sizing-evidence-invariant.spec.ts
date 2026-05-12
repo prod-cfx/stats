@@ -6,71 +6,104 @@ import {
 } from '../sizing-evidence-invariant'
 
 describe('INVARIANT-J: Sizing evidence registration', () => {
-  it('SIZING_BEARING_ATOMS 内 atom 均在 ATOM_CONTRACT_REGISTRY 声明非空 sizingEvidence', () => {
+  // ── 基础不变式 ──────────────────────────────────────────────────────────────
+
+  it('整个 registry 满足 INVARIANT-J：non-actionable atom 不携带 sizingEvidence', () => {
     expect(() => assertSizingEvidenceRegistered()).not.toThrow()
   })
 
-  it('position.dca_schedule sizingEvidence 指向 capital.allocate.per_order_budget + perOrderSizing 参数源', () => {
-    const evidence = ATOM_CONTRACT_REGISTRY['position.dca_schedule'].sizingEvidence
-    expect(evidence).not.toBeNull()
-    expect(evidence?.capability).toEqual({
-      domain: 'capital',
-      verb: 'allocate',
-      object: 'per_order_budget',
-    })
-    expect(evidence?.paramSource).toBe('perOrderSizing')
-  })
+  // ── SIZING_BEARING_ATOMS 派生正确 ───────────────────────────────────────────
 
-  it('故意破坏 ATOM_CONTRACT_REGISTRY 触发 assertSizingEvidenceRegistered 真函数 throw', () => {
-    // 临时把生产 registry 的 DCA sizingEvidence 改 null，调真守门函数，验证 throw
-    const dcaEntry = ATOM_CONTRACT_REGISTRY['position.dca_schedule'] as AtomContract & {
-      sizingEvidence: AtomContract['sizingEvidence']
-    }
-    const original = dcaEntry.sizingEvidence
-    try {
-      // 直接 mutate 验证运行期守门生产函数（非本地副本）
-      ;(dcaEntry as { sizingEvidence: AtomContract['sizingEvidence'] }).sizingEvidence = null
-      expect(() => assertSizingEvidenceRegistered()).toThrow(/INVARIANT-J violated/)
-    }
-    finally {
-      // 恢复，避免污染其它 spec
-      ;(dcaEntry as { sizingEvidence: AtomContract['sizingEvidence'] }).sizingEvidence = original
-    }
-  })
-
-  it('SIZING_BEARING_ATOMS 当前包含 position.dca_schedule', () => {
+  it('SIZING_BEARING_ATOMS 包含 position.dca_schedule', () => {
     expect(SIZING_BEARING_ATOMS.has('position.dca_schedule')).toBe(true)
-  })
-
-  // Issue #1191：pyramiding sizing-evidence emit 已上线，加入白名单
-  it('position.pyramiding_limit sizingEvidence 指向 capital.allocate.per_order_budget + layerSizing 参数源', () => {
-    const evidence = ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].sizingEvidence
-    expect(evidence).not.toBeNull()
-    expect(evidence?.capability).toEqual({
-      domain: 'capital',
-      verb: 'allocate',
-      object: 'per_order_budget',
-    })
-    expect(evidence?.paramSource).toBe('layerSizing')
   })
 
   it('SIZING_BEARING_ATOMS 包含 position.pyramiding_limit', () => {
     expect(SIZING_BEARING_ATOMS.has('position.pyramiding_limit')).toBe(true)
   })
 
-  // Issue #1198：grid 路径 sizing-evidence emit 已恢复（PR #1197 补顶层 kind），加入白名单
-  it('grid.range_rebalance sizingEvidence 指向 capital.allocate.per_order_budget + perGridSizing 参数源', () => {
+  it('SIZING_BEARING_ATOMS 包含 grid.range_rebalance', () => {
+    expect(SIZING_BEARING_ATOMS.has('grid.range_rebalance')).toBe(true)
+  })
+
+  it('SIZING_BEARING_ATOMS 与 registry sizingEvidence 非空集合完全一致', () => {
+    const fromRegistry = new Set(
+      Object.entries(ATOM_CONTRACT_REGISTRY)
+        .filter(([, c]) => c.sizingEvidence !== null)
+        .map(([k]) => k),
+    )
+    expect(new Set(SIZING_BEARING_ATOMS)).toEqual(fromRegistry)
+  })
+
+  // ── sizingEvidence 内容验证 ─────────────────────────────────────────────────
+
+  it('position.dca_schedule sizingEvidence 指向 capital.allocate.per_order_budget + perOrderSizing', () => {
+    const evidence = ATOM_CONTRACT_REGISTRY['position.dca_schedule'].sizingEvidence
+    expect(evidence).not.toBeNull()
+    expect(evidence?.capability).toEqual({ domain: 'capital', verb: 'allocate', object: 'per_order_budget' })
+    expect(evidence?.paramSource).toBe('perOrderSizing')
+  })
+
+  it('position.pyramiding_limit sizingEvidence 指向 capital.allocate.per_order_budget + layerSizing', () => {
+    const evidence = ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].sizingEvidence
+    expect(evidence).not.toBeNull()
+    expect(evidence?.capability).toEqual({ domain: 'capital', verb: 'allocate', object: 'per_order_budget' })
+    expect(evidence?.paramSource).toBe('layerSizing')
+  })
+
+  it('grid.range_rebalance sizingEvidence 指向 capital.allocate.per_order_budget + perGridSizing', () => {
     const evidence = ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].sizingEvidence
     expect(evidence).not.toBeNull()
-    expect(evidence?.capability).toEqual({
-      domain: 'capital',
-      verb: 'allocate',
-      object: 'per_order_budget',
-    })
+    expect(evidence?.capability).toEqual({ domain: 'capital', verb: 'allocate', object: 'per_order_budget' })
     expect(evidence?.paramSource).toBe('perGridSizing')
   })
 
-  it('SIZING_BEARING_ATOMS 包含 grid.range_rebalance', () => {
-    expect(SIZING_BEARING_ATOMS.has('grid.range_rebalance')).toBe(true)
+  // ── isActionable 标记验证 ───────────────────────────────────────────────────
+
+  it('actionable atom 携带 sizingEvidence 合法（position.dca_schedule）', () => {
+    const contract = ATOM_CONTRACT_REGISTRY['position.dca_schedule']
+    expect(contract.isActionable).toBe(true)
+    expect(contract.sizingEvidence).not.toBeNull()
+  })
+
+  it('actionable atom 不携带 sizingEvidence 也合法（action.add_position）', () => {
+    const contract = ATOM_CONTRACT_REGISTRY['action.add_position']
+    expect(contract.isActionable).toBe(true)
+    expect(contract.sizingEvidence).toBeNull()
+    // 整体不变式仍通过（actionable 无 sizingEvidence 不违反）
+    expect(() => assertSizingEvidenceRegistered()).not.toThrow()
+  })
+
+  it('non-actionable atom 携带 sizingEvidence 触发 INVARIANT-J throw', () => {
+    // 临时把 non-actionable atom 的 sizingEvidence 改为非空，验证守门函数抛出
+    const entry = ATOM_CONTRACT_REGISTRY['volume.threshold'] as AtomContract & {
+      sizingEvidence: AtomContract['sizingEvidence']
+    }
+    const original = entry.sizingEvidence
+    try {
+      ;(entry as { sizingEvidence: AtomContract['sizingEvidence'] }).sizingEvidence = {
+        capability: { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+        paramSource: 'test',
+      }
+      expect(() => assertSizingEvidenceRegistered()).toThrow(/INVARIANT-J violated/)
+    } finally {
+      ;(entry as { sizingEvidence: AtomContract['sizingEvidence'] }).sizingEvidence = original
+    }
+  })
+
+  // ── 历史兼容：故意破坏 actionable atom 的 registry，守门函数不应因此 throw ──
+
+  it('actionable atom sizingEvidence 置 null 不触发 INVARIANT-J throw', () => {
+    const entry = ATOM_CONTRACT_REGISTRY['position.dca_schedule'] as AtomContract & {
+      sizingEvidence: AtomContract['sizingEvidence']
+    }
+    const original = entry.sizingEvidence
+    try {
+      ;(entry as { sizingEvidence: AtomContract['sizingEvidence'] }).sizingEvidence = null
+      // isActionable=true + sizingEvidence=null 是合法状态，不应 throw
+      expect(() => assertSizingEvidenceRegistered()).not.toThrow()
+    } finally {
+      ;(entry as { sizingEvidence: AtomContract['sizingEvidence'] }).sizingEvidence = original
+    }
   })
 })

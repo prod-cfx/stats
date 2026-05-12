@@ -2344,4 +2344,131 @@ describe('signalExecutorService', () => {
 
     expect(fee).toEqual({ amount: 0.003, currency: 'BNB' })
   })
+
+  describe('requireExplicitSizing flag', () => {
+    const baseSymbol = {
+      exchange: 'OKX',
+      instrumentType: 'PERPETUAL',
+      baseAsset: 'BTC',
+      quoteAsset: 'USDT',
+      precisionPrice: 2,
+      precisionQuantity: 4,
+      lotSize: '0.0001',
+    }
+
+    const baseAccount = {
+      id: 'account-1',
+      userId: 'user-1',
+      baseCurrency: 'USDT',
+      balance: new Prisma.Decimal(1000),
+      equity: new Prisma.Decimal(1000),
+      initialBalance: new Prisma.Decimal(1000),
+    }
+
+    it('flag=false + signal 无 sizing → 走 fallback 使用 defaultQuoteAmount', () => {
+      const service = createService()
+
+      const result = (service as any).buildOrderParamsWithLockedAccount(
+        {
+          signalType: 'ENTRY',
+          direction: 'BUY',
+          entryPrice: '50000',
+          symbol: baseSymbol,
+        },
+        baseAccount,
+        {
+          ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+          execution: {
+            ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+            requireExplicitSizing: false,
+            defaultQuoteAmount: 100,
+            maxRiskFraction: 1,
+          },
+        } as any,
+      )
+
+      expect(result).toMatchObject({ ok: true })
+    })
+
+    it('flag=true + signal 无 sizing → ok:false，reason 含 SIZING_REQUIRED', () => {
+      const service = createService()
+
+      const result = (service as any).buildOrderParamsWithLockedAccount(
+        {
+          signalType: 'ENTRY',
+          direction: 'BUY',
+          entryPrice: '50000',
+          symbol: baseSymbol,
+        },
+        baseAccount,
+        {
+          ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+          execution: {
+            ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+            requireExplicitSizing: true,
+          },
+        } as any,
+      )
+
+      expect(result).toEqual({
+        ok: false,
+        reason: expect.stringContaining('SIZING_REQUIRED'),
+      })
+    })
+
+    it('flag=true + signal 有 positionSizeQuote=100 → 正常下单', () => {
+      const service = createService()
+
+      const result = (service as any).buildOrderParamsWithLockedAccount(
+        {
+          signalType: 'ENTRY',
+          direction: 'BUY',
+          entryPrice: '50000',
+          positionSizeQuote: '100',
+          symbol: baseSymbol,
+        },
+        baseAccount,
+        {
+          ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+          execution: {
+            ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+            requireExplicitSizing: true,
+            maxRiskFraction: 1,
+          },
+        } as any,
+      )
+
+      expect(result).toMatchObject({ ok: true })
+    })
+
+    it('close signal 不受 requireExplicitSizing=true 影响', () => {
+      const service = createService()
+
+      const result = (service as any).buildOrderParamsWithLockedAccount(
+        {
+          signalType: 'EXIT',
+          direction: 'CLOSE_LONG',
+          entryPrice: '50000',
+          symbol: baseSymbol,
+        },
+        {
+          ...baseAccount,
+          balance: new Prisma.Decimal(0),
+        },
+        {
+          ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+          execution: {
+            ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+            requireExplicitSizing: true,
+          },
+        } as any,
+        new Prisma.Decimal('0.002'),
+      )
+
+      expect(result).toMatchObject({
+        ok: true,
+        params: expect.objectContaining({ reduceOnly: true }),
+      })
+    })
+  })
 })

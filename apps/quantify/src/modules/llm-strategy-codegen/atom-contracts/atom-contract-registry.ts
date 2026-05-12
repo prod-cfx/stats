@@ -66,6 +66,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    isActionable: false,
     sizingEvidence: null,
   },
 
@@ -74,6 +75,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    isActionable: false,
     sizingEvidence: null,
   },
 
@@ -82,6 +84,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    isActionable: false,
     sizingEvidence: null,
   },
 
@@ -90,6 +93,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    isActionable: false,
     sizingEvidence: null,
   },
 
@@ -98,6 +102,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    isActionable: false,
     sizingEvidence: null,
   },
 
@@ -106,6 +111,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    isActionable: false,
     sizingEvidence: null,
   },
 
@@ -114,6 +120,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    isActionable: false,
     sizingEvidence: null,
   },
 
@@ -122,6 +129,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    isActionable: false,
     sizingEvidence: null,
   },
 
@@ -131,6 +139,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: ['position.no_position'],
+    isActionable: false,
     sizingEvidence: null,
   },
 
@@ -139,6 +148,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: ['position.has_position'],
+    isActionable: false,
     sizingEvidence: null,
   },
 
@@ -174,6 +184,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
       return '请补充加仓条件的缺失信息。'
     },
     mutex: [],
+    isActionable: true,
     sizingEvidence: null,
   },
 
@@ -191,6 +202,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    isActionable: true,
     sizingEvidence: null,
   },
 
@@ -204,6 +216,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: UNSUPPORTED_SKIP,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: ATOM_MUTEX['risk.partial_take_profit'] ?? [],
+    isActionable: false,
     sizingEvidence: null,
   },
 
@@ -213,6 +226,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    isActionable: false,
     sizingEvidence: null,
   },
 
@@ -222,6 +236,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    isActionable: true,
     sizingEvidence: DCA_SIZING_EVIDENCE,
   },
 
@@ -234,6 +249,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    isActionable: true,
     sizingEvidence: PYRAMIDING_SIZING_EVIDENCE,
   },
 
@@ -247,6 +263,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    isActionable: true,
     sizingEvidence: GRID_SIZING_EVIDENCE,
   },
 } satisfies Record<SupportedExecutableUtteranceAtom, AtomContract>
