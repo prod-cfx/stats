@@ -369,13 +369,15 @@ export class ExternalSignalWebhooksService {
   }
 
   private isSensitiveHeader(key: string): boolean {
-    return key.includes('signature')
-      || key === 'authorization'
-      || key === 'cookie'
+    return key === 'cookie'
       || key === 'set-cookie'
-      || key === 'x-api-key'
-      || key === 'x-auth-token'
-      || key === 'x-access-token'
+      || key.includes('authorization')
+      || key.includes('signature')
+      || key.includes('api-key')
+      || key.includes('token')
+      || key.includes('secret')
+      || key.includes('credential')
+      || key.includes('password')
   }
 
   private readHeader(value: string | string[] | undefined): string | null {

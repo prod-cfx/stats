@@ -207,8 +207,10 @@ describe('External signal webhooks (E2E)', () => {
       .post(`webhook/strategy/${instanceId}/signal`)
       .set('content-type', 'application/json')
       .set('authorization', 'Bearer leaked-token')
+      .set('proxy-authorization', 'Bearer leaked-proxy-token')
       .set('cookie', 'session=leaked-cookie')
       .set('x-api-key', 'leaked-api-key')
+      .set('x-secret-key', 'leaked-secret')
       .set('x-external-signal-timestamp', String(Date.now()))
       .send(JSON.stringify({ signalId: 'BTC_PERP_LONG_01' }))
       .expect(400)
@@ -244,8 +246,10 @@ describe('External signal webhooks (E2E)', () => {
     expect(audits.filter(audit => audit.signatureStatus === 'REJECTED')).toHaveLength(3)
     expect(audits.find(audit => audit.reason === 'missing_signature')?.requestHeaders).toEqual(expect.objectContaining({
       authorization: '[redacted]',
+      'proxy-authorization': '[redacted]',
       cookie: '[redacted]',
       'x-api-key': '[redacted]',
+      'x-secret-key': '[redacted]',
     }))
     expect(outbox).toHaveLength(1)
     expect(outbox[0].payload).toEqual(expect.objectContaining({
