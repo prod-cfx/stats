@@ -121,44 +121,59 @@ export const ATOM_BUCKETS = {
   'grid.range_rebalance': 'positionConstraint',
 } as const satisfies Record<AtomContractKey, AtomContractBucket>
 
+// Issue #1279 PR1c: 36 atom 的 display.publicName 单一 Record<key, {zh, en}> 真相源
+// （review M1：消除 zh / en 双表漂移；review H1：zh 端"卫语句"统一为"护栏"）。
+//
+// 翻译来源优先级：
+//   1. apps/front/public/locales/{zh,en}/common.json 已有 ai-quant 术语（"Max Drawdown" / "Breakout" / "Grid" 等）
+//   2. 通用金融术语对照表（"上穿"→"cross above" / "突破"→"breakout" / "区间"→"range" /
+//      "网格"→"grid" / "止盈"→"take profit" / "止损"→"stop loss" / "护栏"→"guard"）
+//   3. atom semantics 上下文（护栏 = guard、补仓 = DCA schedule、反手 = position reversal）
+//
+// 不变量（display-publicname-en-coverage.spec.ts 运行时断言）：
+//   (1) zh 与 en 均非空  (2) en !== zh  (3) en 不含 CJK 字符
+//
+// renderer / paramRenderers / summaryTemplate 完整迁移在 PR3c 与 display-token-table 删除原子完成。
 const ATOM_PUBLIC_NAMES = {
-  'volume.threshold': '成交量阈值',
-  'volatility.atr_threshold': 'ATR 波动率阈值',
-  'strategy.time_window': '交易时间窗口',
-  'oscillator.rsi_lte': 'RSI 低于阈值',
-  'oscillator.rsi_gte': 'RSI 高于阈值',
-  'indicator.divergence': '指标背离',
-  'price.candle_pattern': 'K 线形态',
-  'price.chart_pattern': '图形形态',
-  'liquidity.sweep': '流动性扫荡',
-  'external.signal': '外部喊单 / Webhook 信号',
-  'position.has_position': '已有仓位卫语句',
-  'position.no_position': '无仓位卫语句',
-  'bollinger.touch_upper': '触及布林上轨',
-  'bollinger.touch_lower': '触及布林下轨',
-  'bollinger.touch_middle': '触及布林中轨',
-  'price.percent_change': '价格百分比变化',
-  'price.breakout_up': '向上突破',
-  'price.breakout_down': '向下跌破',
-  'price.detect.indicator_boundary': '价格触及指标边界',
-  'indicator.cross_over': '指标上穿',
-  'indicator.cross_under': '指标下穿',
-  'indicator.above': '指标高于阈值',
-  'indicator.below': '指标低于阈值',
-  'execution.on_start': '启动后执行',
-  'trend.direction': '趋势方向',
-  'market.regime': '市场状态',
-  'volatility.state': '波动率状态',
-  'price.range_position_lte': '区间低位',
-  'price.range_position_gte': '区间高位',
-  'action.add_position': '加仓',
-  'action.reverse_position': '反手',
-  'risk.partial_take_profit': '分批止盈',
-  'portfolioRisk.drawdown_block': '组合回撤护栏',
-  'position.dca_schedule': 'DCA 补仓计划',
-  'position.pyramiding_limit': '金字塔加仓限制',
-  'grid.range_rebalance': '网格区间再平衡',
-} as const satisfies Record<AtomContractKey, string>
+  'volume.threshold': { zh: '成交量阈值', en: 'Volume threshold' },
+  'volatility.atr_threshold': { zh: 'ATR 波动率阈值', en: 'ATR volatility threshold' },
+  'strategy.time_window': { zh: '交易时间窗口', en: 'Trading time window' },
+  'oscillator.rsi_lte': { zh: 'RSI 低于阈值', en: 'RSI below threshold' },
+  'oscillator.rsi_gte': { zh: 'RSI 高于阈值', en: 'RSI above threshold' },
+  'indicator.divergence': { zh: '指标背离', en: 'Indicator divergence' },
+  'price.candle_pattern': { zh: 'K 线形态', en: 'Candlestick pattern' },
+  'price.chart_pattern': { zh: '图形形态', en: 'Chart pattern' },
+  'liquidity.sweep': { zh: '流动性扫荡', en: 'Liquidity sweep' },
+  'external.signal': { zh: '外部喊单 / Webhook 信号', en: 'Third-party call / Webhook signal' },
+  'position.has_position': { zh: '已有仓位护栏', en: 'Has position guard' },
+  'position.no_position': { zh: '无仓位护栏', en: 'No position guard' },
+  'bollinger.touch_upper': { zh: '触及布林上轨', en: 'Touch Bollinger upper band' },
+  'bollinger.touch_lower': { zh: '触及布林下轨', en: 'Touch Bollinger lower band' },
+  'bollinger.touch_middle': { zh: '触及布林中轨', en: 'Touch Bollinger middle band' },
+  'price.percent_change': { zh: '价格百分比变化', en: 'Price percent change' },
+  'price.breakout_up': { zh: '向上突破', en: 'Upside breakout' },
+  'price.breakout_down': { zh: '向下跌破', en: 'Downside breakdown' },
+  'price.detect.indicator_boundary': { zh: '价格触及指标边界', en: 'Price touch on indicator boundary' },
+  'indicator.cross_over': { zh: '指标上穿', en: 'Indicator cross above' },
+  'indicator.cross_under': { zh: '指标下穿', en: 'Indicator cross below' },
+  'indicator.above': { zh: '指标高于阈值', en: 'Indicator above threshold' },
+  'indicator.below': { zh: '指标低于阈值', en: 'Indicator below threshold' },
+  'execution.on_start': { zh: '启动后执行', en: 'Run on strategy start' },
+  'trend.direction': { zh: '趋势方向', en: 'Trend direction' },
+  'market.regime': { zh: '市场状态', en: 'Market regime' },
+  'volatility.state': { zh: '波动率状态', en: 'Volatility state' },
+  'price.range_position_lte': { zh: '区间低位', en: 'Below range low' },
+  'price.range_position_gte': { zh: '区间高位', en: 'Above range high' },
+  'action.add_position': { zh: '加仓', en: 'Add to position' },
+  'action.reverse_position': { zh: '反手', en: 'Reverse position' },
+  'risk.partial_take_profit': { zh: '分批止盈', en: 'Partial take profit' },
+  'portfolioRisk.drawdown_block': { zh: '组合回撤护栏', en: 'Portfolio drawdown guard' },
+  'position.dca_schedule': { zh: 'DCA 补仓计划', en: 'DCA schedule' },
+  'position.pyramiding_limit': { zh: '金字塔加仓限制', en: 'Pyramiding limit' },
+  'grid.range_rebalance': { zh: '网格区间再平衡', en: 'Grid range rebalance' },
+} as const satisfies Record<AtomContractKey, { zh: string; en: string }>
+
+export { ATOM_PUBLIC_NAMES }
 
 function createPr1bStubIrShape(key: AtomContractKey): Pr1bStubIrShapeBuilder {
   return Object.assign(
@@ -169,11 +184,13 @@ function createPr1bStubIrShape(key: AtomContractKey): Pr1bStubIrShapeBuilder {
   )
 }
 
-function createPr1bDisplay(publicName: string): AtomContractDisplay {
+// Issue #1279 PR1c: createPr1bDisplay 接受 {zh, en} 对象解构（review M2：消除位置参数顺序错陷阱）。
+// paramRenderers / summaryTemplate 仍保留 PR1b stub 结构（{} / () => zh）—— renderer 迁移见 PR3c。
+function createPr1bDisplay({ zh, en }: { zh: string; en: string }): AtomContractDisplay {
   return {
-    publicName: { zh: publicName, en: publicName },
+    publicName: { zh, en },
     paramRenderers: {},
-    summaryTemplate: () => publicName,
+    summaryTemplate: () => zh,
   }
 }
 
