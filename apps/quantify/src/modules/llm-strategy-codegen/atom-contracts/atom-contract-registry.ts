@@ -9,20 +9,20 @@
  */
 
 import type { SupportedExecutableUtteranceAtom } from '../nl-gateway/utterance-corpus/utterance-corpus.types'
-import {
-  ATOM_MUTEX,
-} from '../nl-gateway/utterance-corpus/corpus-invariants'
+import type {
+  AtomContract,
+  AtomContractBucket,
+  AtomContractDisplay,
+  AtomContractEmit,
+  AtomContractKey,
+  SizingEvidence,
+} from './atom-contract-types'
+import { ATOM_MUTEX } from '../nl-gateway/utterance-corpus/corpus-invariants'
 import {
   COMMON_PIPELINE,
   NO_SUMMARY,
   UNSUPPORTED_SKIP,
   VIA_PRESENTATION_DISPLAY,
-  type AtomContract,
-  type AtomContractBucket,
-  type AtomContractKey,
-  type AtomContractDisplay,
-  type AtomContractEmit,
-  type SizingEvidence,
 } from './atom-contract-types'
 
 type AtomContractSeed = Omit<AtomContract, 'key' | 'bucket' | 'display' | 'emit'> & {
@@ -924,6 +924,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       phaseResolver: 'by-clause-verb',
       sideResolver: 'inherit',
+      // external.signal 命中时 evidence.source 应为 'webhook'（而非 'user_explicit'）。
+      // dispatcher 读 surface.evidenceProvenance 赋值，无需 atom-key 字面量比较（AC-13 合规）。
+      evidenceProvenance: 'webhook',
     },
   },
 

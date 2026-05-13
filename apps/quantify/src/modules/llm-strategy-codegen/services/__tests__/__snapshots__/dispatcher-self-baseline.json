@@ -557,6 +557,43 @@
               "openSlots": []
             }
           ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 3
+          },
+          "evidence": {
+            "text": "最多加仓 3 次",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-3-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 3
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 3
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -863,6 +900,43 @@
               "requires": [],
               "params": {
                 "sideScope": "long"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 2
+          },
+          "evidence": {
+            "text": "最多加仓 2 次",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-3-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 2
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 2
               },
               "runtimeRequirements": [],
               "stateRequirements": [],
@@ -1498,6 +1572,43 @@
               "openSlots": []
             }
           ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 2
+          },
+          "evidence": {
+            "text": "max 2 times",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 2
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 2
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ],
       "risk": [
@@ -2082,6 +2193,43 @@
               "openSlots": []
             }
           ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 3
+          },
+          "evidence": {
+            "text": "最多 3 次",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 3
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 3
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -2592,6 +2740,43 @@
               "openSlots": []
             }
           ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 3
+          },
+          "evidence": {
+            "text": "max 3 times",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 3
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 3
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -2916,6 +3101,49 @@
           ]
         },
         {
+          "key": "position.dca_schedule",
+          "params": {
+            "dropPct": 0.2,
+            "perOrderBudget": 20,
+            "maxOrders": 20
+          },
+          "evidence": {
+            "text": "每次加仓 20%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-3-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "dropPct": 0.2,
+                    "perOrderBudget": 20,
+                    "maxOrders": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "dropPct": 0.2,
+                "perOrderBudget": 20,
+                "maxOrders": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
           "key": "action.add_position",
           "params": {
             "sideScope": "long"
@@ -2926,7 +3154,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-action-3-action-add-position",
+              "id": "contract-seed-action-4-action-add-position",
               "kind": "action",
               "capabilities": [
                 {
@@ -2943,6 +3171,43 @@
               "requires": [],
               "params": {
                 "sideScope": "long"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 3
+          },
+          "evidence": {
+            "text": "最多加仓 3 次",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-5-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 3
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 3
               },
               "runtimeRequirements": [],
               "stateRequirements": [],
@@ -3229,7 +3494,7 @@
           },
           "evidence": {
             "text": "信号反转时由多翻空",
-            "source": "user_explicit"
+            "source": "webhook"
           },
           "contracts": [
             {
@@ -5080,6 +5345,40 @@
           "phase": "entry",
           "sideScope": "both"
         }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {},
+          "evidence": {
+            "text": "布林带20周期2倍标准差触及下轨买入",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -5537,6 +5836,48 @@
           "phase": "entry",
           "sideScope": "both"
         }
+      ],
+      "actions": [
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 20,
+            "maxOrders": 20
+          },
+          "evidence": {
+            "text": "布林带20周期2倍标准差跌破下轨做多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 20,
+                    "maxOrders": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 20,
+                "maxOrders": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -5743,6 +6084,40 @@
           ],
           "phase": "entry",
           "sideScope": "both"
+        }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {},
+          "evidence": {
+            "text": "布林带20周期2倍标准差触及下轨 enter long",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -6169,6 +6544,40 @@
           "phase": "exit",
           "sideScope": "both"
         }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {},
+          "evidence": {
+            "text": "布林带20周期2倍标准差触及中轨卖出",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -6375,6 +6784,40 @@
           ],
           "phase": "exit",
           "sideScope": "both"
+        }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {},
+          "evidence": {
+            "text": "布林带20周期2倍标准差触及中轨 close long",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -6616,6 +7059,40 @@
           ],
           "phase": "exit",
           "sideScope": "both"
+        }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {},
+          "evidence": {
+            "text": "布林带20周期2倍标准差触及上轨卖出平仓",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -7146,6 +7623,40 @@
           "phase": "exit",
           "sideScope": "both"
         }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {},
+          "evidence": {
+            "text": "布林带20周期2倍标准差触及上轨平多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -7453,7 +7964,7 @@
           },
           "evidence": {
             "text": "收到 webhook 事件 signalId 为 whale_buy 且 secret 已配置时开多",
-            "source": "user_explicit"
+            "source": "webhook"
           },
           "contracts": [
             {
@@ -7529,6 +8040,48 @@
           "phase": "gate",
           "sideScope": "both"
         }
+      ],
+      "actions": [
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 100,
+            "maxOrders": 100
+          },
+          "evidence": {
+            "text": "每次 100 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 100,
+                    "maxOrders": 100
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 100,
+                "maxOrders": 100
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -7561,7 +8114,7 @@
           },
           "evidence": {
             "text": "on webhook signalId whale_buy with secret configured",
-            "source": "user_explicit"
+            "source": "webhook"
           },
           "contracts": [
             {
@@ -7632,7 +8185,7 @@
           },
           "evidence": {
             "text": "收到 webhook 信号且 secret 已配置时开多",
-            "source": "user_explicit"
+            "source": "webhook"
           },
           "contracts": [
             {
@@ -7708,6 +8261,48 @@
           "phase": "gate",
           "sideScope": "both"
         }
+      ],
+      "actions": [
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 100,
+            "maxOrders": 100
+          },
+          "evidence": {
+            "text": "每次 100 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 100,
+                    "maxOrders": 100
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 100,
+                "maxOrders": 100
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -7739,7 +8334,7 @@
           },
           "evidence": {
             "text": "when webhook signalId=whale_sell arrives",
-            "source": "user_explicit"
+            "source": "webhook"
           },
           "contracts": [
             {
@@ -7882,7 +8477,7 @@
           },
           "evidence": {
             "text": "外部信号 whale_buy 触发后开多",
-            "source": "user_explicit"
+            "source": "webhook"
           },
           "contracts": [
             {
@@ -8018,6 +8613,247 @@
           "phase": "entry",
           "sideScope": "both"
         }
+      ],
+      "actions": [
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 60000,
+            "rangeUpper": 60000,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 60000
+          },
+          "evidence": {
+            "text": "区间 60000-70000",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 60000,
+                    "rangeUpper": 60000,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 60000
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 60000,
+                "rangeUpper": 60000,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 60000
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 100,
+            "maxOrders": 100
+          },
+          "evidence": {
+            "text": "每格 100 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 100,
+                    "maxOrders": 100
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 100,
+                "maxOrders": 100
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 100,
+            "rangeUpper": 100,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 100
+          },
+          "evidence": {
+            "text": "每格 100 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-3-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 100,
+                    "rangeUpper": 100,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 100
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 100,
+                "rangeUpper": 100,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 100
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 20,
+            "rangeUpper": 20,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 20
+          },
+          "evidence": {
+            "text": "挂 20 格",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-4-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 20,
+                    "rangeUpper": 20,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 20,
+                "rangeUpper": 20,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue"
+          },
+          "evidence": {
+            "text": "双向网格",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-5-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -8117,6 +8953,164 @@
           ],
           "phase": "entry",
           "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 60000,
+            "rangeUpper": 60000,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 60000
+          },
+          "evidence": {
+            "text": "grid range 60000-70000",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 60000,
+                    "rangeUpper": 60000,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 60000
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 60000,
+                "rangeUpper": 60000,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 60000
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 100,
+            "rangeUpper": 100,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 100
+          },
+          "evidence": {
+            "text": "each grid 100 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 100,
+                    "rangeUpper": 100,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 100
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 100,
+                "rangeUpper": 100,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 100
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 20,
+            "rangeUpper": 20,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 20
+          },
+          "evidence": {
+            "text": "20 grids",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-3-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 20,
+                    "rangeUpper": 20,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 20,
+                "rangeUpper": 20,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -8385,6 +9379,204 @@
           ],
           "phase": "entry",
           "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 2000,
+            "rangeUpper": 2000,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 2000
+          },
+          "evidence": {
+            "text": "区间 2000-2500",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 2000,
+                    "rangeUpper": 2000,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 2000
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 2000,
+                "rangeUpper": 2000,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 2000
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 50,
+            "maxOrders": 50
+          },
+          "evidence": {
+            "text": "每格 50 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 50,
+                    "maxOrders": 50
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 50,
+                "maxOrders": 50
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 50,
+            "rangeUpper": 50,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 50
+          },
+          "evidence": {
+            "text": "每格 50 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-3-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 50,
+                    "rangeUpper": 50,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 50
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 50,
+                "rangeUpper": 50,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 50
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 10,
+            "rangeUpper": 10,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 10
+          },
+          "evidence": {
+            "text": "挂 10 格",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-4-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 10,
+                    "rangeUpper": 10,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 10
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 10,
+                "rangeUpper": 10,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 10
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -9925,6 +11117,48 @@
           "phase": "exit",
           "sideScope": "both"
         }
+      ],
+      "actions": [
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 50,
+            "maxOrders": 50
+          },
+          "evidence": {
+            "text": "价格跌破 MA50 平多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 50,
+                    "maxOrders": 50
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 50,
+                "maxOrders": 50
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -10652,6 +11886,48 @@
           ],
           "phase": "exit",
           "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 100,
+            "maxOrders": 100
+          },
+          "evidence": {
+            "text": "价格跌破 MA100 close long",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 100,
+                    "maxOrders": 100
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 100,
+                "maxOrders": 100
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -14402,6 +15678,51 @@
           "phase": "gate",
           "sideScope": "both"
         }
+      ],
+      "actions": [
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue"
+          },
+          "evidence": {
+            "text": "震荡区间时启用区间交易",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -14528,6 +15849,51 @@
           ],
           "phase": "entry",
           "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue"
+          },
+          "evidence": {
+            "text": "区间震荡行情中只做网格",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -14703,6 +16069,51 @@
           ],
           "phase": "gate",
           "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue"
+          },
+          "evidence": {
+            "text": "BTCUSDT range-bound 时使用区间策略",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -15531,6 +16942,46 @@
       ],
       "actions": [
         {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 14,
+            "maxOrders": 14
+          },
+          "evidence": {
+            "text": "RSI14 低于 30 开始 DCA",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 14,
+                    "maxOrders": 14
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 14,
+                "maxOrders": 14
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
           "key": "action.add_position",
           "params": {
             "sideScope": "long",
@@ -15544,7 +16995,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-action-1-action-add-position",
+              "id": "contract-seed-action-2-action-add-position",
               "kind": "action",
               "capabilities": [
                 {
@@ -15568,6 +17019,192 @@
                 "profitThreshold": -0.05,
                 "drawdownThreshold": -0.05
               },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "dropPct": -0.05,
+            "perOrderBudget": 5,
+            "maxOrders": 5
+          },
+          "evidence": {
+            "text": "价格每跌 5% 补仓一次",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-3-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "dropPct": -0.05,
+                    "perOrderBudget": 5,
+                    "maxOrders": 5
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "dropPct": -0.05,
+                "perOrderBudget": 5,
+                "maxOrders": 5
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 100,
+            "maxOrders": 100
+          },
+          "evidence": {
+            "text": "每次 100 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-4-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 100,
+                    "maxOrders": 100
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 100,
+                "maxOrders": 100
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 4
+          },
+          "evidence": {
+            "text": "最多 4 次",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-5-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 4
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 4
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {},
+          "evidence": {
+            "text": "总投入不超过 500 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-6-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {},
+          "evidence": {
+            "text": "总投入不超过 500 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
               "runtimeRequirements": [],
               "stateRequirements": [],
               "orderRequirements": [],
@@ -16267,6 +17904,111 @@
           "phase": "exit",
           "sideScope": "long"
         }
+      ],
+      "actions": [
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 3
+          },
+          "evidence": {
+            "text": "最多 3 次",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 3
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 3
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {},
+          "evidence": {
+            "text": "总投入不超过 600 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {},
+          "evidence": {
+            "text": "总投入不超过 600 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -16853,6 +18595,83 @@
               "requires": [],
               "params": {
                 "sideScope": "long"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 100,
+            "maxOrders": 100
+          },
+          "evidence": {
+            "text": "每次 100 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 100,
+                    "maxOrders": 100
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 100,
+                "maxOrders": 100
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 5
+          },
+          "evidence": {
+            "text": "最多 5 次",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-3-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 5
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 5
               },
               "runtimeRequirements": [],
               "stateRequirements": [],
@@ -19413,6 +21232,45 @@
             }
           ]
         }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {
+            "thresholdPct": -0.1
+          },
+          "evidence": {
+            "text": "账户回撤超过 10% 停止开新仓",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both",
+                    "thresholdPct": -0.1
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "thresholdPct": -0.1
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -19828,6 +21686,45 @@
             }
           ]
         }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {
+            "thresholdPct": -0.08
+          },
+          "evidence": {
+            "text": "账户回撤超过 8% 仅记录",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both",
+                    "thresholdPct": -0.08
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "thresholdPct": -0.08
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -20031,6 +21928,45 @@
                 "addRatio": -0.15,
                 "profitThreshold": -0.15,
                 "drawdownThreshold": -0.15
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {
+            "thresholdPct": -0.15
+          },
+          "evidence": {
+            "text": "账户回撤超过 15% 停止开新仓",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both",
+                    "thresholdPct": -0.15
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "thresholdPct": -0.15
               },
               "runtimeRequirements": [],
               "stateRequirements": [],
@@ -20446,6 +22382,45 @@
                 "addRatio": -0.12,
                 "profitThreshold": -0.12,
                 "drawdownThreshold": -0.12
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {
+            "thresholdPct": -0.12
+          },
+          "evidence": {
+            "text": "账户回撤超过 12% 停止开新仓",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both",
+                    "thresholdPct": -0.12
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "thresholdPct": -0.12
               },
               "runtimeRequirements": [],
               "stateRequirements": [],
@@ -21006,6 +22981,224 @@
                 "profitThreshold": -0.05,
                 "drawdownThreshold": -0.05
               },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "dropPct": -0.05,
+            "perOrderBudget": 5,
+            "maxOrders": 5
+          },
+          "evidence": {
+            "text": "每跌 5% 补仓一次",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "dropPct": -0.05,
+                    "perOrderBudget": 5,
+                    "maxOrders": 5
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "dropPct": -0.05,
+                "perOrderBudget": 5,
+                "maxOrders": 5
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 100,
+            "maxOrders": 100
+          },
+          "evidence": {
+            "text": "每次 100 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-3-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 100,
+                    "maxOrders": 100
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 100,
+                "maxOrders": 100
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 3
+          },
+          "evidence": {
+            "text": "最多 3 次",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-4-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 3
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 3
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {},
+          "evidence": {
+            "text": "总投入不超过 500 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-5-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.dca_schedule",
+          "params": {},
+          "evidence": {
+            "text": "跌破前低停止",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-6-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {},
+          "evidence": {
+            "text": "总投入不超过 500 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
               "runtimeRequirements": [],
               "stateRequirements": [],
               "orderRequirements": [],
@@ -21739,6 +23932,147 @@
           ]
         },
         {
+          "key": "position.dca_schedule",
+          "params": {},
+          "evidence": {
+            "text": "定投补仓",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {},
+          "evidence": {
+            "text": "总投入不超过 500 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-3-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 4
+          },
+          "evidence": {
+            "text": "最多 4 次",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-4-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 4
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 4
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 100,
+            "maxOrders": 100
+          },
+          "evidence": {
+            "text": "每次 100 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-5-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 100,
+                    "maxOrders": 100
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 100,
+                "maxOrders": 100
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
           "key": "action.add_position",
           "params": {
             "sideScope": "long"
@@ -21749,7 +24083,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-action-2-action-add-position",
+              "id": "contract-seed-action-6-action-add-position",
               "kind": "action",
               "capabilities": [
                 {
@@ -21767,6 +24101,72 @@
               "params": {
                 "sideScope": "long"
               },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.dca_schedule",
+          "params": {},
+          "evidence": {
+            "text": "跌破前低停止补仓",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-7-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {},
+          "evidence": {
+            "text": "总投入不超过 500 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
               "runtimeRequirements": [],
               "stateRequirements": [],
               "orderRequirements": [],
@@ -22067,6 +24467,88 @@
           "phase": "gate",
           "sideScope": "both"
         }
+      ],
+      "actions": [
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "dropPct": 0.02,
+            "perOrderBudget": 2,
+            "maxOrders": 2
+          },
+          "evidence": {
+            "text": "DCA every time price drops 2%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "dropPct": 0.02,
+                    "perOrderBudget": 2,
+                    "maxOrders": 2
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "dropPct": 0.02,
+                "perOrderBudget": 2,
+                "maxOrders": 2
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 3
+          },
+          "evidence": {
+            "text": "max 3 times",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 3
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 3
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -22324,6 +24806,83 @@
               "requires": [],
               "params": {
                 "sideScope": "long"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 3,
+            "maxOrders": 3
+          },
+          "evidence": {
+            "text": "定投补仓最多 3 次",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 3,
+                    "maxOrders": 3
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 3,
+                "maxOrders": 3
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 3
+          },
+          "evidence": {
+            "text": "定投补仓最多 3 次",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-3-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 3
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 3
               },
               "runtimeRequirements": [],
               "stateRequirements": [],
@@ -22923,6 +25482,83 @@
           ]
         },
         {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 100,
+            "maxOrders": 100
+          },
+          "evidence": {
+            "text": "每天定投补仓 100 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 100,
+                    "maxOrders": 100
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 100,
+                "maxOrders": 100
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 30
+          },
+          "evidence": {
+            "text": "最多 30 次",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-3-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 30
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 30
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
           "key": "action.add_position",
           "params": {
             "sideScope": "long"
@@ -22933,7 +25569,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-action-2-action-add-position",
+              "id": "contract-seed-action-4-action-add-position",
               "kind": "action",
               "capabilities": [
                 {
@@ -22951,6 +25587,38 @@
               "params": {
                 "sideScope": "long"
               },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.dca_schedule",
+          "params": {},
+          "evidence": {
+            "text": "跌破前低停止补仓",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-5-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
               "runtimeRequirements": [],
               "stateRequirements": [],
               "orderRequirements": [],
@@ -23785,6 +26453,46 @@
       ],
       "actions": [
         {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 14,
+            "maxOrders": 14
+          },
+          "evidence": {
+            "text": "RSI14 低于 30 开始 DCA",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 14,
+                    "maxOrders": 14
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 14,
+                "maxOrders": 14
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
           "key": "action.add_position",
           "params": {
             "sideScope": "long",
@@ -23798,7 +26506,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-action-1-action-add-position",
+              "id": "contract-seed-action-2-action-add-position",
               "kind": "action",
               "capabilities": [
                 {
@@ -23822,6 +26530,192 @@
                 "profitThreshold": -0.05,
                 "drawdownThreshold": -0.05
               },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "dropPct": -0.05,
+            "perOrderBudget": 5,
+            "maxOrders": 5
+          },
+          "evidence": {
+            "text": "价格每跌 5% 补仓一次",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-3-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "dropPct": -0.05,
+                    "perOrderBudget": 5,
+                    "maxOrders": 5
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "dropPct": -0.05,
+                "perOrderBudget": 5,
+                "maxOrders": 5
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 100,
+            "maxOrders": 100
+          },
+          "evidence": {
+            "text": "每次 100 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-4-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 100,
+                    "maxOrders": 100
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 100,
+                "maxOrders": 100
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 4
+          },
+          "evidence": {
+            "text": "最多 4 次",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-5-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 4
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 4
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {},
+          "evidence": {
+            "text": "总投入不超过 500 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-6-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {},
+          "evidence": {
+            "text": "总投入不超过 500 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
               "runtimeRequirements": [],
               "stateRequirements": [],
               "orderRequirements": [],
@@ -26866,6 +29760,49 @@
           ]
         },
         {
+          "key": "position.dca_schedule",
+          "params": {
+            "dropPct": 0.2,
+            "perOrderBudget": 20,
+            "maxOrders": 20
+          },
+          "evidence": {
+            "text": "每次加仓 20%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "dropPct": 0.2,
+                    "perOrderBudget": 20,
+                    "maxOrders": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "dropPct": 0.2,
+                "perOrderBudget": 20,
+                "maxOrders": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
           "key": "action.add_position",
           "params": {
             "sideScope": "long"
@@ -26876,7 +29813,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-action-2-action-add-position",
+              "id": "contract-seed-action-3-action-add-position",
               "kind": "action",
               "capabilities": [
                 {
@@ -26893,6 +29830,43 @@
               "requires": [],
               "params": {
                 "sideScope": "long"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 3
+          },
+          "evidence": {
+            "text": "最多加仓 3 层",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-4-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 3
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 3
               },
               "runtimeRequirements": [],
               "stateRequirements": [],
@@ -27250,6 +30224,45 @@
           "phase": "gate",
           "sideScope": "both"
         }
+      ],
+      "actions": [
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 4
+          },
+          "evidence": {
+            "text": "pyramiding up to 4 layers",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 4
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 4
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -27529,6 +30542,43 @@
                 "addRatio": 0.03,
                 "profitThreshold": 0.03,
                 "drawdownThreshold": 0.03
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 3
+          },
+          "evidence": {
+            "text": "金字塔最多 3 层",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 3
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 3
               },
               "runtimeRequirements": [],
               "stateRequirements": [],
@@ -27839,6 +30889,48 @@
           ],
           "phase": "gate",
           "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 12,
+            "maxOrders": 12
+          },
+          "evidence": {
+            "text": "价格跌回最近 12 根 K 线低点时平多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 12,
+                    "maxOrders": 12
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 12,
+                "maxOrders": 12
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -28200,6 +31292,48 @@
           ],
           "phase": "entry",
           "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 30,
+            "maxOrders": 30
+          },
+          "evidence": {
+            "text": "跌破最近 30 根 K 线最低价做空",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 30,
+                    "maxOrders": 30
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 30,
+                "maxOrders": 30
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -28572,6 +31706,48 @@
           ],
           "phase": "entry",
           "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 10,
+            "maxOrders": 10
+          },
+          "evidence": {
+            "text": "跌破最近 10 根 K 线低点 open short",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 10,
+                    "maxOrders": 10
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 10,
+                "maxOrders": 10
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -29994,6 +33170,40 @@
           ],
           "phase": "entry",
           "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "position.dca_schedule",
+          "params": {},
+          "evidence": {
+            "text": "hammer 形态确认且市场整体看跌",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -32217,6 +35427,54 @@
           "phase": "gate",
           "sideScope": "both"
         }
+      ],
+      "actions": [
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "interval": "undefined",
+            "dropPct": -0.01,
+            "perOrderBudget": 3,
+            "maxOrders": 3
+          },
+          "evidence": {
+            "text": "BTCUSDT 3m 当前K线收盘价相对上一根K线收盘价下跌 1% 时买入",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "interval": "undefined",
+                    "dropPct": -0.01,
+                    "perOrderBudget": 3,
+                    "maxOrders": 3
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "interval": "undefined",
+                "dropPct": -0.01,
+                "perOrderBudget": 3,
+                "maxOrders": 3
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -32501,6 +35759,51 @@
           ],
           "phase": "gate",
           "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "dropPct": -0.03,
+            "perOrderBudget": 3,
+            "maxOrders": 3
+          },
+          "evidence": {
+            "text": "price 下跌 3% 做多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "dropPct": -0.03,
+                    "perOrderBudget": 3,
+                    "maxOrders": 3
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "dropPct": -0.03,
+                "perOrderBudget": 3,
+                "maxOrders": 3
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -32850,6 +36153,60 @@
           "phase": "gate",
           "sideScope": "both"
         }
+      ],
+      "actions": [
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 36,
+            "rangeUpper": 36,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 36
+          },
+          "evidence": {
+            "text": "价格回到最近 36 根 K 线区间上 55% 时卖出平仓",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 36,
+                    "rangeUpper": 36,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 36
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 36,
+                "rangeUpper": 36,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 36
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -33114,6 +36471,60 @@
           ],
           "phase": "entry",
           "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 20,
+            "rangeUpper": 20,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 20
+          },
+          "evidence": {
+            "text": "价格在最近 20 根 K 线区间高位 80% 做空",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 20,
+                    "rangeUpper": 20,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 20,
+                "rangeUpper": 20,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -33390,6 +36801,60 @@
           ],
           "phase": "entry",
           "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 50,
+            "rangeUpper": 50,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 50
+          },
+          "evidence": {
+            "text": "价格在最近 50 根 K 线区间上 75% open short",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 50,
+                    "rangeUpper": 50,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 50
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 50,
+                "rangeUpper": 50,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 50
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -33694,6 +37159,60 @@
           "phase": "gate",
           "sideScope": "both"
         }
+      ],
+      "actions": [
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 36,
+            "rangeUpper": 36,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 36
+          },
+          "evidence": {
+            "text": "价格位于最近 36 根 K 线区间下 20% 时买入",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 36,
+                    "rangeUpper": 36,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 36
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 36,
+                "rangeUpper": 36,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 36
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -33958,6 +37477,60 @@
           ],
           "phase": "entry",
           "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 20,
+            "rangeUpper": 20,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 20
+          },
+          "evidence": {
+            "text": "价格在最近 20 根 K 线区间低位 15% 做多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 20,
+                    "rangeUpper": 20,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 20,
+                "rangeUpper": 20,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -34234,6 +37807,60 @@
           ],
           "phase": "entry",
           "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 50,
+            "rangeUpper": 50,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 50
+          },
+          "evidence": {
+            "text": "价格在最近 50 根 K 线区间下 25% enter long",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 50,
+                    "rangeUpper": 50,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 50
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 50,
+                "rangeUpper": 50,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 50
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -39595,6 +43222,51 @@
           "phase": "gate",
           "sideScope": "both"
         }
+      ],
+      "actions": [
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue"
+          },
+          "evidence": {
+            "text": "低波动时启用网格策略",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -40255,6 +43927,40 @@
           "phase": "gate",
           "sideScope": "both"
         }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {},
+          "evidence": {
+            "text": "成交量超过阈值时允许入场",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -40394,6 +44100,40 @@
           ],
           "phase": "gate",
           "sideScope": "both"
+        }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {},
+          "evidence": {
+            "text": "enter long when volume exceeds threshold",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -41312,6 +45052,48 @@
           "phase": "exit",
           "sideScope": "both"
         }
+      ],
+      "actions": [
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 30,
+            "maxOrders": 30
+          },
+          "evidence": {
+            "text": "RSI 跌破 30 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 30,
+                    "maxOrders": 30
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 30,
+                "maxOrders": 30
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -41909,6 +45691,38 @@
       ],
       "risk": [
         {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {},
+          "evidence": {
+            "text": "价格触及布林下轨开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
           "key": "risk.partial_take_profit",
           "params": {},
           "evidence": {
@@ -41917,7 +45731,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-risk-1-risk-partial-take-profit",
+              "id": "contract-seed-risk-2-risk-partial-take-profit",
               "kind": "risk",
               "capabilities": [
                 {
@@ -41927,6 +45741,38 @@
                   "shape": {
                     "key": "risk.partial_take_profit",
                     "phase": "exit",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {},
+          "evidence": {
+            "text": "触及上轨开空",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-3-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
                     "sideScope": "both"
                   }
                 }
@@ -42375,6 +46221,45 @@
             }
           ]
         }
+      ],
+      "risk": [
+        {
+          "key": "portfolioRisk.drawdown_block",
+          "params": {
+            "thresholdPct": -0.15
+          },
+          "evidence": {
+            "text": "最大回撤 15% 熔断",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-portfolioRisk-drawdown-block",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "drawdown_block",
+                  "shape": {
+                    "key": "portfolioRisk.drawdown_block",
+                    "phase": "gate",
+                    "sideScope": "both",
+                    "thresholdPct": -0.15
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "thresholdPct": -0.15
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
       ]
     }
   },
@@ -42660,6 +46545,43 @@
               "openSlots": []
             }
           ]
+        },
+        {
+          "key": "position.pyramiding_limit",
+          "params": {
+            "maxLayers": 3
+          },
+          "evidence": {
+            "text": "最多加 3 层",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-position-pyramiding-limit",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "pyramiding_limit",
+                  "shape": {
+                    "key": "position.pyramiding_limit",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "maxLayers": 3
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "maxLayers": 3
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ],
       "risk": [
@@ -42724,6 +46646,46 @@
       },
       "actions": [
         {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 100,
+            "maxOrders": 100
+          },
+          "evidence": {
+            "text": "ETH 现货每天定投 100 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 100,
+                    "maxOrders": 100
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 100,
+                "maxOrders": 100
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
           "key": "action.add_position",
           "params": {
             "sideScope": "long",
@@ -42738,7 +46700,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-action-1-action-add-position",
+              "id": "contract-seed-action-2-action-add-position",
               "kind": "action",
               "capabilities": [
                 {
@@ -42867,6 +46829,204 @@
           ],
           "phase": "entry",
           "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 60000,
+            "rangeUpper": 60000,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 60000
+          },
+          "evidence": {
+            "text": "BTC 区间 60000-70000",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 60000,
+                    "rangeUpper": 60000,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 60000
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 60000,
+                "rangeUpper": 60000,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 60000
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "position.dca_schedule",
+          "params": {
+            "perOrderBudget": 100,
+            "maxOrders": 100
+          },
+          "evidence": {
+            "text": "每格 100 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-position-dca-schedule",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "dca_schedule",
+                  "shape": {
+                    "key": "position.dca_schedule",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "perOrderBudget": 100,
+                    "maxOrders": 100
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "perOrderBudget": 100,
+                "maxOrders": 100
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 100,
+            "rangeUpper": 100,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 100
+          },
+          "evidence": {
+            "text": "每格 100 USDT",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-3-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 100,
+                    "rangeUpper": 100,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 100
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 100,
+                "rangeUpper": 100,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 100
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "grid.range_rebalance",
+          "params": {
+            "rangeLower": 20,
+            "rangeUpper": 20,
+            "sideMode": "both",
+            "recycle": "true",
+            "breakoutAction": "continue",
+            "perGridSizing": 20
+          },
+          "evidence": {
+            "text": "挂 20 格",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-4-grid-range-rebalance",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "positionConstraint",
+                  "verb": "emit",
+                  "object": "range_rebalance",
+                  "shape": {
+                    "key": "grid.range_rebalance",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "rangeLower": 20,
+                    "rangeUpper": 20,
+                    "sideMode": "both",
+                    "recycle": "true",
+                    "breakoutAction": "continue",
+                    "perGridSizing": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "rangeLower": 20,
+                "rangeUpper": 20,
+                "sideMode": "both",
+                "recycle": "true",
+                "breakoutAction": "continue",
+                "perGridSizing": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -43107,7 +47267,7 @@
           },
           "evidence": {
             "text": "接 TradingView webhook 信号 BTCUSDT 突破上轨 进场做多",
-            "source": "user_explicit"
+            "source": "webhook"
           },
           "contracts": [
             {
@@ -43172,7 +47332,7 @@
           },
           "evidence": {
             "text": "收到 webhook：ETHUSDT side=sell 卖出离场",
-            "source": "user_explicit"
+            "source": "webhook"
           },
           "contracts": [
             {

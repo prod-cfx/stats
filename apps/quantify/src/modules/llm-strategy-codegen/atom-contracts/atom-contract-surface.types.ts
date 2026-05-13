@@ -163,4 +163,16 @@ export interface AtomContractSurface {
   readonly phaseResolver: PhaseResolverSpec
   /** sideScope 推断策略 */
   readonly sideResolver: SideResolverSpec
+  /**
+   * 命中时 evidence.source 的来源声明（可选，按需声明，缺省视为 'user_explicit'）。
+   *
+   * atom 在 surface 层声明自身被命中时应填写的 evidence.source 值；dispatcher 读表赋值，
+   * 无需 atom-key 字面量比较（满足 AC-13 红线）。
+   *
+   * 命名为 evidenceProvenance（而非 evidenceSource）以避免与
+   * AtomContractEmit.evidenceSource（'segment' | 'clause'）产生命名空间冲突。
+   *
+   * 目前仅 external.signal 声明 'webhook'；其余 atom 省略（等价于 'user_explicit'）。
+   */
+  readonly evidenceProvenance?: 'webhook' | 'user_explicit'
 }

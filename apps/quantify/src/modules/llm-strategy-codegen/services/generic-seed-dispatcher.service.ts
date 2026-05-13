@@ -1,4 +1,5 @@
 import type { CapabilityTriple } from '../atom-contracts/atom-contract-emit.types'
+import type { AtomContract } from '../atom-contracts/atom-contract-types'
 import type {
   AtomContractSurface,
   Direction,
@@ -430,8 +431,11 @@ const BUCKET_TO_PATCH_SLOT: Readonly<Record<string, 'triggers' | 'actions' | 'ri
   trigger: 'triggers',
   action: 'actions',
   risk: 'risk',
-  // positionConstraint / orchestration buckets：未来 PR 接入 position.constraints[]
-  // / orchestration.nodes[] 时按相同表查
+  // positionConstraint → actions：DCA / pyramiding / grid 本质是"如何执行仓位"，
+  //   isActionable=true，映射 actions 而非独立 position 段（PR2c5）。
+  positionConstraint: 'actions',
+  // orchestration → risk：portfolioRisk 类守门节点归入 risk 段（PR2c5）。
+  orchestration: 'risk',
 }
 
 // review m1：显式映射表替代 endsWith('s') chop——后者在新增 'positions'/'metrics' 等 slot 时
@@ -522,21 +526,19 @@ export class GenericSeedDispatcher {
     for (const clause of clauses) {
       const matches = this.matchClauseAgainstRegistry(clause)
       for (const m of matches) {
-        const contract = (ATOM_CONTRACT_REGISTRY as Record<string, {
-          bucket: string
-          emit: { capability: CapabilityTriple }
-        }>)[m.atomKey]
+        const contract = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract>)[m.atomKey]
         if (!contract) continue
         const slot = BUCKET_TO_PATCH_SLOT[contract.bucket]
-        if (!slot) continue // bucket 不在 patch 顶层（如 positionConstraint / orchestration）—— 留给后续 PR
+        if (!slot) continue // bucket 不在 BUCKET_TO_PATCH_SLOT —— 未知 bucket 跳过，不 throw
 
         slotIdx[slot] += 1
         const params = { ...m.params }
         const phase = m.phase ?? 'entry'
         const sideScope = m.sideScope ?? 'both'
-        // TODO(#1279 PR2c)：source 当前硬编码 'user_explicit'，webhook AC-12 case 应为 'webhook'。
-        // 修复路径：caller wire dispatcher 时通过 dispatch(message, {source}) 注入；同步重录 baseline。
-        const evidence = { text: m.clauseText, source: 'user_explicit' as const }
+        // evidence.source 由 atom surface.evidenceProvenance 声明（数据驱动，无 atom-key 字面量比较）。
+        // external.signal 声明 'webhook'；其余 atom 省略，默认 'user_explicit'。
+        const evidenceSource: NonNullable<AtomContractSurface['evidenceProvenance']> = contract.surface?.evidenceProvenance ?? 'user_explicit'
+        const evidence = { text: m.clauseText, source: evidenceSource }
         const shape = { key: m.atomKey, phase, sideScope, ...params }
         const envelope = buildContractEnvelope(
           slot,
@@ -582,8 +584,8 @@ export class GenericSeedDispatcher {
 
   matchClauseAgainstRegistry(clause: string): readonly AtomMatch[] {
     const out: AtomMatch[] = []
-    for (const [atomKey, contract] of Object.entries(ATOM_CONTRACT_REGISTRY)) {
-      const surface = (contract as { surface?: AtomContractSurface }).surface
+    for (const [atomKey, contract] of Object.entries(ATOM_CONTRACT_REGISTRY as Record<string, AtomContract>)) {
+      const surface = contract.surface
       if (!surface) continue
       const m = this.matchSurface(surface, clause, atomKey)
       if (m) out.push({ atomKey, ...m })
