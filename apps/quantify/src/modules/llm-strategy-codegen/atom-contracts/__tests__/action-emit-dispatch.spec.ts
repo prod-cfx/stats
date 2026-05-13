@@ -142,12 +142,11 @@ describe('Issue #1313 PR5c action atom emit decision', () => {
       expect(result).toEqual([{ kind: 'ADD_SHORT', quantity: { mode: 'pct_equity', value: 20 } }])
     })
 
-    it('守门：action.type 非 ADD_* 时返回空数组（让 compileActions enum 兜底；实际不会发生，因为 builder 仅在 ADD_* 挂载 atomKey）', () => {
-      const result = invokeShape('action.add_position', {
+    it('PR6 fail-loud：action.type 非 ADD_* 时抛错（不再 silent 回落 enum）', () => {
+      expect(() => invokeShape('action.add_position', {
         type: 'OPEN_LONG',
         atomKey: 'action.add_position',
-      })
-      expect(result).toEqual([])
+      })).toThrow(/PR6.*action\.add_position/)
     })
   })
 
@@ -186,12 +185,11 @@ describe('Issue #1313 PR5c action atom emit decision', () => {
       expect(result).toEqual([{ kind: 'OPEN_SHORT', quantity: { mode: 'pct_equity', value: 80 } }])
     })
 
-    it('守门：action.type 非 OPEN/CLOSE 时返回空数组', () => {
-      const result = invokeShape('action.reverse_position', {
+    it('PR6 fail-loud：action.type 非 OPEN/CLOSE 时抛错', () => {
+      expect(() => invokeShape('action.reverse_position', {
         type: 'ADD_LONG',
         atomKey: 'action.reverse_position',
-      })
-      expect(result).toEqual([])
+      })).toThrow(/PR6.*action\.reverse_position/)
     })
   })
 

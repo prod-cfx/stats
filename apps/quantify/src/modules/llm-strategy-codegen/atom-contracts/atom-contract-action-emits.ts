@@ -92,10 +92,13 @@ const closeShortActionShape: ActionShape = () => [
 const addPositionActionShape: ActionShape = (_atom, actionInput, _rule, spec, fallback, { helpers }) => {
   const action = actionInput as unknown as CanonicalRuleAction
   if (action.type !== 'ADD_LONG' && action.type !== 'ADD_SHORT') {
-    // dispatcher 反查 atomKey='action.add_position' 但 action.type 不是 ADD_* —— 守门返回
-    // 空数组让 compileActions enum 兜底（实际不会发生：builder
-    // `buildActionsForSemanticLifecycleAction` 仅在 ADD_* 时挂载本 atomKey）。
-    return []
+    // PR6 fail-loud：dispatcher 反查 atomKey='action.add_position' 但 action.type 不是
+    // ADD_* —— builder `buildActionsForSemanticLifecycleAction` 仅在 ADD_* 挂载本
+    // atomKey，到达此分支说明 spec 漂移或 builder 透传被破坏，立即抛错而非 silent
+    // 回落 enum（PR5c 兜底返回 `[]` 会被 dispatcher continue 吞掉 → IR 少 emit action）。
+    throw new Error(
+      `[#1313 PR6] action.add_position shape received unexpected action.type='${action.type}'`,
+    )
   }
   return [{
     kind: action.type,
@@ -120,8 +123,11 @@ const reversePositionActionShape: ActionShape = (_atom, actionInput, _rule, spec
       quantity: resolveOpenOrAddQuantity(actionInput, spec, fallback, helpers.resolveActionQuantity),
     }]
   }
-  // 守门返回空数组让 enum 兜底（builder 永远只挂在 OPEN/CLOSE 两类 action.type 上）。
-  return []
+  // PR6 fail-loud：builder 永远只在 OPEN/CLOSE 4 种 action.type 挂载本 atomKey；
+  // 到达此分支说明 spec 漂移或 builder 透传被破坏（同 add_position 守门）。
+  throw new Error(
+    `[#1313 PR6] action.reverse_position shape received unexpected action.type='${action.type}'`,
+  )
 }
 
 export const ACTION_ATOM_EMITS = {

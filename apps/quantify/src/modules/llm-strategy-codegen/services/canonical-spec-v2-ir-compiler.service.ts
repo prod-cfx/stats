@@ -3404,6 +3404,10 @@ export class CanonicalSpecV2IrCompilerService {
     for (const action of rule.actions) {
       // PR5c：atomKey 反查 REGISTRY 优先；未命中 / 未挂 shape → 落 enum 兜底（保持
       //   启发式 / risk 路径下"无 atomKey 时 IR 不变"的 byte-equal 不变量）。
+      // PR6 fail-loud：仅当 atomKey 以 `action.` 开头时，必须命中 pr3e-action shape；
+      //   否则 spec 漂移或 REGISTRY 漂移（PR5d invariant 已类型层守门，此处是 runtime
+      //   兜底）。非 action.* atomKey（如 risk.* / portfolioRisk.*）由各自 rule-level /
+      //   spec-level shape 承担，本 dispatcher 不识别，正常落 enum 兜底。
       const atomKey = action.atomKey
       if (typeof atomKey === 'string') {
         const entry = ATOM_CONTRACT_REGISTRY[atomKey as AtomContractKey] as
@@ -3427,6 +3431,13 @@ export class CanonicalSpecV2IrCompilerService {
           ) as unknown as readonly ActionDef[]
           actions.push(...emitted)
           continue
+        }
+        if (atomKey.startsWith('action.')) {
+          throw new Error(
+            `[#1313 PR6] action atomKey '${atomKey}' did not resolve to a pr3e-action shape `
+            + `(entry=${entry ? 'present' : 'missing'}, capabilityStatus=${emit?.capabilityStatus ?? 'undefined'}). `
+            + `spec 漂移或 REGISTRY 漂移；不允许 silent 回落 enum。`,
+          )
         }
       }
 
