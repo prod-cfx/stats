@@ -7,7 +7,7 @@ import type {
 } from './atom-contract-types'
 import { FIRST_WAVE_TRIGGER_ATOMS } from '../constants/canonical-strategy-capabilities'
 import { CONDITION_ATOM_EMITS } from './atom-contract-condition-emits'
-import { ATOM_CONTRACT_REGISTRY, type Pr1bStubIrShapeBuilder } from './atom-contract-registry'
+import { ATOM_CONTRACT_REGISTRY, type NotApplicableIrShapeBuilder } from './atom-contract-registry'
 
 type Registry = typeof ATOM_CONTRACT_REGISTRY
 type RegistryKey = keyof Registry
@@ -53,9 +53,13 @@ type MissingCapabilityKeys = {
 }[RegistryKey]
 
 // Issue #1279 PR3a Phase 2：condition predicate 类 atom（trigger 与 grid.range_rebalance）
-// 在本 PR 内逐个兑现 `emit.irShape` 为真实实现，因此被显式从 stub 守门集合排除；
-// 仍保留 stub 的 action / risk / positionConstraint(除 grid) / orchestration 类 atom
-// 走 `NonConditionRegistryKey` 检查，保证 PR3d/PR3e 之前不被绕过。
+// 兑现 `emit.irShape` 为真实实现（capabilityStatus = 'pr3a-condition'）；
+// 见下方 `_ConditionIrShapeAllReal` 守门。
+// Issue #1279 PR3e：non-condition bucket atom（action / risk / orchestration / 非
+// grid 的 positionConstraint）走 rule-level / spec-level IR 编译路径，**不参与**
+// `compileAtom` 的 emit.irShape 调度；其 capabilityStatus 显式声明为
+// 'irshape-not-applicable'，与「未兑现 stub」语义严格分离。
+// 见下方 `_NonConditionIrShapeNotApplicable` 守门。
 type ConditionAtomKey =
   | 'execution.on_start'
   | 'indicator.above'
@@ -83,12 +87,19 @@ type ConditionAtomKey =
 
 type NonConditionRegistryKey = Exclude<RegistryKey, ConditionAtomKey>
 
-type NonStubIrShapeKeys = {
-  [K in NonConditionRegistryKey]: Registry[K]['emit']['irShape'] extends Pr1bStubIrShapeBuilder ? never : K
+// Issue #1279 PR3e：non-condition bucket atom（action / risk / orchestration / 非
+// grid 的 positionConstraint）走 rule-level / spec-level IR 编译路径，不参与
+// `compileAtom` 的 `emit.irShape` 调度。invariant 显式守门：所有
+// NonConditionRegistryKey 必须 `capabilityStatus === 'irshape-not-applicable'` 且
+// `emit.irShape` 携带 `__notApplicable: true` brand。
+// 「未兑现 stub」语义保留为 `'pr1b-stub'`（PR3e 后不再被默认构造，仅留作未来
+// 潜在 condition atom 迁移的临时占位），违规即触发 invariant 编译挂。
+type WrongStatusNonConditionKeys = {
+  [K in NonConditionRegistryKey]: Registry[K]['emit']['capabilityStatus'] extends 'irshape-not-applicable' ? never : K
 }[NonConditionRegistryKey]
 
-type NonStubCapabilityKeys = {
-  [K in NonConditionRegistryKey]: Registry[K]['emit']['capabilityStatus'] extends 'pr1b-stub' ? never : K
+type WrongBrandNonConditionKeys = {
+  [K in NonConditionRegistryKey]: Registry[K]['emit']['irShape'] extends NotApplicableIrShapeBuilder ? never : K
 }[NonConditionRegistryKey]
 
 // Issue #1279 PR3a Phase 2-3：condition atom 全量兑现守门。
@@ -113,8 +124,8 @@ export type AtomContractInvariantReport = {
   readonly mutexBidirectional: [MutexNotBidirectionalKeys] extends [never] ? true : false
   readonly firstWaveCovered: [FirstWaveCoverageMissingKeys | FirstWaveNonTriggerKeys] extends [never] ? true : false
   readonly capabilityCovered: [MissingCapabilityKeys] extends [never] ? true : false
-  readonly nonConditionIrShapeAllStub: [NonStubIrShapeKeys] extends [never] ? true : false
-  readonly nonConditionCapabilityAllStub: [NonStubCapabilityKeys] extends [never] ? true : false
+  readonly nonConditionIrShapeNotApplicable: [WrongBrandNonConditionKeys] extends [never] ? true : false
+  readonly nonConditionCapabilityNotApplicable: [WrongStatusNonConditionKeys] extends [never] ? true : false
   readonly conditionIrShapeAllReal: [StubConditionIrShapeKeys] extends [never] ? true : false
 }
 
@@ -126,6 +137,6 @@ export type _AtomContractEmitComplete = AssertTrue<AtomContractInvariantReport['
 export type _AtomContractMutexBidirectional = AssertTrue<AtomContractInvariantReport['mutexBidirectional']>
 export type _FirstWaveTriggerAtomsCovered = AssertTrue<AtomContractInvariantReport['firstWaveCovered']>
 export type _AtomContractCapabilityCovered = AssertTrue<AtomContractInvariantReport['capabilityCovered']>
-export type _NonConditionIrShapeAllStub = AssertTrue<AtomContractInvariantReport['nonConditionIrShapeAllStub']>
-export type _NonConditionCapabilityAllStub = AssertTrue<AtomContractInvariantReport['nonConditionCapabilityAllStub']>
+export type _NonConditionIrShapeNotApplicable = AssertTrue<AtomContractInvariantReport['nonConditionIrShapeNotApplicable']>
+export type _NonConditionCapabilityNotApplicable = AssertTrue<AtomContractInvariantReport['nonConditionCapabilityNotApplicable']>
 export type _ConditionIrShapeAllReal = AssertTrue<AtomContractInvariantReport['conditionIrShapeAllReal']>

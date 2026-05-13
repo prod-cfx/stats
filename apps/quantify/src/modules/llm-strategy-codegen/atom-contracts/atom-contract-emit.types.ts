@@ -175,24 +175,20 @@ export type EvidenceSource = 'clause' | 'segment' | 'param'
  * AtomContractEmit —— atom IR emit 层契约
  *
  * `capabilityStatus`:
- *   'pr1b-stub' —— irShape 仍是 stub，调用会抛 `[#1279 PR1b stub]`
- *   'pr3a-condition' —— 本 PR 兑现：condition predicate 类 atom，返回 predicate id
- *   （后续 PR3d/PR3e 引入 'pr3d-action' / 'pr3e-portfolio' / ... 用于其它分类的兑现状态）
+ *   'pr1b-stub' —— irShape 仍是 stub，调用会抛 `[#1279 PR1b stub]`（占位状态，
+ *     PR3a Phase 2 落地后不再被默认使用；保留以兼容未来 condition atom 迁移中的临时状态）
+ *   'pr3a-condition' —— PR3a Phase 2 兑现：condition predicate 类 atom，返回 predicate id
+ *   'irshape-not-applicable' —— PR3e 兑现：本 atom 走 rule-level / spec-level IR 编译路径
+ *     （tryCompileRiskGuard / tryCompileReduceActionRule / compileOrchestrationPortfolioRisks /
+ *     resolveLifecyclePyramiding / compileActions 等），不参与 `compileAtom` 内的
+ *     `emit.irShape` predicate id 调度。声明该状态等价于"已审计并显式标注：本 atom
+ *     emit.irShape 接口不适用"，与 `'pr1b-stub'`（未兑现）语义严格分离。
+ *   'ready' —— 兜底字面量，给后续可能引入的真实兑现状态预留
  */
 export interface AtomContractEmit {
   readonly capability: CapabilityTriple
-  readonly capabilityStatus?: 'pr1b-stub' | 'pr3a-condition' | 'ready'
+  readonly capabilityStatus?: 'pr1b-stub' | 'pr3a-condition' | 'irshape-not-applicable' | 'ready'
   readonly irShape: IrShapeBuilder
   readonly evidenceSource: EvidenceSource
 }
 
-/**
- * @deprecated 自 PR3a 起 `IrShapeBuilder` 直接返回 predicate id `string`。
- *   此类型仅保留给 `invariant-counter-examples.spec.ts` 等历史 spec 引用，不会出现在 production 代码路径。
- */
-export interface CanonicalIrNode {
-  readonly kind: string
-  readonly atomKey: string
-  readonly params: Readonly<Record<string, unknown>>
-  readonly children?: readonly CanonicalIrNode[]
-}

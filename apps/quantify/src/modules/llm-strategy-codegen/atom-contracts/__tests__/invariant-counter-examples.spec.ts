@@ -1,4 +1,4 @@
-import type { Pr1bStubIrShapeBuilder } from '../atom-contract-registry'
+import type { NotApplicableIrShapeBuilder, Pr1bStubIrShapeBuilder } from '../atom-contract-registry'
 import type { AtomContract, AtomContractDisplay, AtomContractEmit, AtomContractSurface } from '../atom-contract-types'
 import {
   COMMON_PIPELINE,
@@ -79,11 +79,17 @@ describe('atom contract invariant counter examples', () => {
     // @ts-expect-error PR3a：缺 `__pr1bStub: true` 品牌 → 不能赋给 Pr1bStubIrShapeBuilder（用于守护 stub vs real 分流）
     const nonStubIrShape: Pr1bStubIrShapeBuilder = () => 'real-predicate-id'
 
+    // @ts-expect-error PR3e：缺 `__notApplicable: true` 品牌 → 不能赋给 NotApplicableIrShapeBuilder
+    //   （守护 `irshape-not-applicable` 状态的 sentinel 与真实 irShape 不混淆，
+    //   防止 non-condition bucket atom 被错误注入 condition predicate 实现）。
+    const nonNotApplicableIrShape: NotApplicableIrShapeBuilder = () => 'real-predicate-id'
+
     expect([
       missingSurface,
       missingDisplay,
       missingEmit,
       nonStubIrShape,
+      nonNotApplicableIrShape,
     ]).toBeDefined()
   })
 })

@@ -32,25 +32,42 @@ type AtomContractSeed = Omit<AtomContract, 'key' | 'bucket' | 'display' | 'emit'
   readonly emit?: AtomContractEmit
 }
 
+// Issue #1279 PR3a：保留给历史 condition atom 未兑现状态使用；当前所有 condition atom
+//   均已迁移为 'pr3a-condition'（CONDITION_ATOM_EMITS 全量覆盖），Pr1bStubIrShapeBuilder
+//   不再被默认构造，但保留 brand 型以兼容 counter-example 测试（invariant-counter-examples.spec.ts）。
 export type Pr1bStubIrShapeBuilder = AtomContractEmit['irShape'] & {
   readonly __pr1bStub: true
 }
 
-type Pr1bStubEmit = Omit<AtomContractEmit, 'irShape'> & {
-  readonly capabilityStatus: 'pr1b-stub'
-  readonly irShape: Pr1bStubIrShapeBuilder
+// Issue #1279 PR3e：non-condition bucket atom（action / risk / orchestration /
+//   positionConstraint 中除 grid.range_rebalance 外的 atom）走 rule-level / spec-level
+//   IR 编译路径，不通过 compileAtom 的 emit.irShape 调度。
+//   `__notApplicable: true` brand 与 `Pr1bStubIrShapeBuilder` 严格分离：
+//     - `pr1b-stub` 表达"未兑现，等待 PR3a/PR3d/PR3e 迁移"
+//     - `irshape-not-applicable` 表达"已审计并显式声明：emit.irShape 接口不适用"
+//   两者的 stub function 都会在被错误调用时抛错（fail-loud），但出现路径与契约语义不同。
+export type NotApplicableIrShapeBuilder = AtomContractEmit['irShape'] & {
+  readonly __notApplicable: true
 }
 
-// Issue #1279 PR3a Phase 2：seed 的 `emit` 字段若被显式指定（已兑现为 real 'pr3a-condition'），
-// 编译期保留其原始字面量类型；未指定时由 `completePr1bRegistry` 注入 `Pr1bStubEmit`。
-// 该条件类型让 invariant `irShapeAllStub` / `capabilityAllStub` 仍能精确分流 stub vs real。
+type NotApplicableEmit = Omit<AtomContractEmit, 'irShape'> & {
+  readonly capabilityStatus: 'irshape-not-applicable'
+  readonly irShape: NotApplicableIrShapeBuilder
+}
+
+// Issue #1279 PR3a Phase 2 + PR3e：seed 的 `emit` 字段若被显式指定（已兑现为 real
+// 'pr3a-condition'），编译期保留其原始字面量类型；未指定时由 `completePr1bRegistry`
+// 注入 `NotApplicableEmit`（PR3e 起非 condition bucket atom 默认状态）。
+// 条件 atom（在 CONDITION_ATOM_EMITS 内）由 completePr1bRegistry 运行时合并把
+// capabilityStatus 改为 'pr3a-condition'；类型推断仍以 fallback NotApplicableEmit
+// 守门 invariant —— 见 atom-contract-invariants.ts 内 `_NonConditionIrShapeNotApplicable`。
 type CompletedPr1bRegistry<T extends Record<AtomContractKey, AtomContractSeed>> = {
   readonly [K in keyof T]: Omit<T[K], 'display' | 'emit'> & {
     readonly key: K
     readonly bucket: AtomContractBucket
     readonly canonicalWave: 'canonicalWave' extends keyof T[K] ? T[K]['canonicalWave'] : undefined
     readonly display: AtomContractDisplay
-    readonly emit: T[K] extends { readonly emit: infer E extends AtomContractEmit } ? E : Pr1bStubEmit
+    readonly emit: T[K] extends { readonly emit: infer E extends AtomContractEmit } ? E : NotApplicableEmit
   }
 }
 
@@ -188,11 +205,18 @@ const ATOM_PUBLIC_NAMES = {
 
 export { ATOM_PUBLIC_NAMES }
 
-function createPr1bStubIrShape(key: AtomContractKey): Pr1bStubIrShapeBuilder {
-  const stub = ((): string => {
-    throw new Error(`[#1279 PR1b stub] emit.irShape for ${key} pending PR3a/PR3d/PR3e IR compiler refactor`)
+// Issue #1279 PR3e：non-condition bucket atom 的 sentinel irShape。
+//   被错误调用时 fail-loud 抛 PR3e 错误，指引到 followup issue 的 emit.* 多接口设计。
+//   实际上 dispatcher `compileAtom`（canonical-spec-v2-ir-compiler.service.ts L1331）
+//   先按 `capabilityStatus === 'pr3a-condition'` 分流，'irshape-not-applicable' 永远
+//   走不到 `emit.irShape(atom, ctx)` 路径，本 sentinel 仅作为 fail-closed 兜底。
+function createNotApplicableIrShape(key: AtomContractKey): NotApplicableIrShapeBuilder {
+  const sentinel = ((): string => {
+    throw new Error(
+      `[#1279 PR3e] emit.irShape not applicable for ${key} — atom routes via rule-level / spec-level IR compile paths; see followup issue for emit.* multi-shape design`,
+    )
   }) as AtomContractEmit['irShape']
-  return Object.assign(stub, { __pr1bStub: true as const })
+  return Object.assign(sentinel, { __notApplicable: true as const })
 }
 
 // Issue #1279 PR1c: createPr1bDisplay 接受 {zh, en} 对象解构（review M2：消除位置参数顺序错陷阱）。
@@ -205,7 +229,14 @@ function createPr1bDisplay({ zh, en }: { zh: string; en: string }): AtomContract
   }
 }
 
-function createPr1bEmit(key: AtomContractKey, bucket: AtomContractBucket): Pr1bStubEmit {
+// Issue #1279 PR3e：默认 emit 状态 = `irshape-not-applicable`。
+//   condition predicate 类 atom 由 `completePr1bRegistry` 用 `CONDITION_ATOM_EMITS[key]`
+//   覆盖（capabilityStatus → 'pr3a-condition'，irShape → 真实实现），其余 atom 保持
+//   `irshape-not-applicable`，显式声明 emit.irShape 接口不适用（参见
+//   atom-contract-emit.types.ts `capabilityStatus` 字段注释）。
+//   函数名保留 `createPr1bEmit` 以维持上游调用点稳定；未来在 emit.* 多接口设计落地后
+//   可改名为 `createBaseEmit`。
+function createPr1bEmit(key: AtomContractKey, bucket: AtomContractBucket): NotApplicableEmit {
   const [domain, ...objectParts] = key.split('.')
   return {
     capability: {
@@ -213,8 +244,8 @@ function createPr1bEmit(key: AtomContractKey, bucket: AtomContractBucket): Pr1bS
       verb: 'emit',
       object: objectParts.length > 0 ? objectParts.join('.') : domain,
     },
-    capabilityStatus: 'pr1b-stub',
-    irShape: createPr1bStubIrShape(key),
+    capabilityStatus: 'irshape-not-applicable',
+    irShape: createNotApplicableIrShape(key),
     evidenceSource: bucket === 'positionConstraint' || bucket === 'orchestration' ? 'segment' : 'clause',
   }
 }

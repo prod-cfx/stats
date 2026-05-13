@@ -31,7 +31,6 @@ export type {
   AtomContractEmit,
   CapabilityTriple,
   IrBuildContext,
-  CanonicalIrNode,
   IrShapeBuilder,
   EvidenceSource,
 } from './atom-contract-emit.types'
