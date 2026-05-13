@@ -33,6 +33,20 @@ export type {
   IrBuildContext,
   IrShapeBuilder,
   EvidenceSource,
+  // Issue #1313 PR1: rule-level / spec-level atom IR emit shape 接口骨架
+  RuleLevelEmitContext,
+  SpecLevelEmitContext,
+  RuleLikeInput,
+  SpecLikeInput,
+  OrchestrationPortfolioRiskLikeInput,
+  RiskGuardShape,
+  RiskGuardShapeOutput,
+  RuleBlockShape,
+  RuleBlockShapeOutput,
+  OrchestrationPortfolioRiskShape,
+  OrchestrationPortfolioRiskShapeOutput,
+  LifecyclePyramidingShape,
+  LifecyclePyramidingShapeOutput,
 } from './atom-contract-emit.types'
 
 // =========================================================

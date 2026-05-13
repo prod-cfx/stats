@@ -172,23 +172,171 @@ export type IrShapeBuilder = (
 export type EvidenceSource = 'clause' | 'segment' | 'param'
 
 /**
+ * Issue #1313 PR1：rule-level / spec-level atom IR emit shape 接口骨架。
+ *
+ * 仅声明类型签名 + 在 `AtomContractEmit` 上挂 optional 字段；本 PR 0 atom 实际迁移，
+ * 真实类型（`CanonicalRuleV2` / `CanonicalStrategySpecV2` /
+ * `CanonicalOrchestrationPortfolioRisk` / `RiskGuard` / `RuleBlock` /
+ * `IrOrchestrationPortfolioRisk`）由后续 atom 迁移 PR 替换占位 `Record<string, unknown>`。
+ *
+ * 4 shape ↔ service helper ↔ 消费 atom 映射：
+ *   - RiskGuardShape                  ← `tryCompileRiskGuard` (canonical-spec-v2-ir-compiler.service.ts L2521-L2724)
+ *     真实 sig: (rule: CanonicalRuleV2, ctx: CompileContext) => RiskGuard | null
+ *     消费 atom: `position.has_position` / `position.no_position` → capabilityStatus 'pr3e-risk-guard'
+ *   - RuleBlockShape                  ← `tryCompileReduceActionRule` (L2964-L3023)
+ *     真实 sig: (rule, spec, fallbackPositionPct, ctx) => RuleBlock | null
+ *     消费 atom: `risk.partial_take_profit` → capabilityStatus 'pr3e-rule-block'
+ *   - OrchestrationPortfolioRiskShape ← `compileOrchestrationPortfolioRisks` (L1051-L1086)
+ *     真实 sig: (orchRisk, ctx) => IrOrchestrationPortfolioRisk
+ *     注：源头是 `spec.orchestration.portfolioRisks[]`，非 atom 自身；dispatcher 反查 atom
+ *     后调度，per-risk emit。消费 atom: `portfolioRisk.drawdown_block` → 'pr3e-orchestration-portfolio'
+ *   - LifecyclePyramidingShape        ← `resolveLifecyclePyramiding` (L3631-L3646)
+ *     真实 sig: (rules: CanonicalRuleV2[]) => { allow, maxLayers }
+ *     注：输入是 rules 数组聚合，非单 atom emit；dispatcher 在 IR 编译末段单次调用。
+ *     消费 atom: `position.pyramiding_limit` → 'pr3e-lifecycle'
+ *
+ * `position.dca_schedule` IR compiler 内零 case：IR 编译阶段无独立产出（影响透过
+ *   `position.constraints[]` 由 `per-trade-sizing-resolver` 派生），不引入第 5 类 shape；
+ *   保持 capabilityStatus = 'irshape-not-applicable' 显式声明已审计。
+ */
+
+/**
+ * RuleLevelEmitContext —— rule-level atom emit shape（RiskGuard / RuleBlock）调用上下文。
+ *
+ * 与 `IrBuildContext` 同形：暴露 `compileContext` 与 `helpers`，让 atom 通过 `helpers.*`
+ * 完成 series / predicate / runtimeRequirements 写入，与现有 `IrShapeBuilder` 调用约定一致。
+ */
+export interface RuleLevelEmitContext {
+  readonly compileContext: IrCompileContext
+  readonly helpers: IrCompileHelpers
+  readonly seed: string
+  readonly extra?: Readonly<Record<string, unknown>>
+}
+
+/**
+ * SpecLevelEmitContext —— spec-level atom emit shape（OrchestrationPortfolioRisk /
+ * LifecyclePyramiding）调用上下文。
+ *
+ * 与 RuleLevelEmitContext 同形，独立别名标记"调用来源 = IR 编译末段 spec-level 聚合"，
+ * 与 rule-by-rule iteration 区分；后续 atom 迁移 PR 可视需要分化为不同形状。
+ */
+export interface SpecLevelEmitContext {
+  readonly compileContext: IrCompileContext
+  readonly helpers: IrCompileHelpers
+  readonly extra?: Readonly<Record<string, unknown>>
+}
+
+/**
+ * 占位输入/输出类型。
+ *
+ * Issue #1313 PR1 阶段，rule / spec / orchestrationPortfolioRisk / RiskGuard / RuleBlock /
+ * IrOrchestrationPortfolioRisk 真实类型不引入（避免 atom-contracts → canonical-strategy-ir
+ * 反向 import）。后续 atom 迁移 PR 替换为对应 canonical 类型并保持 service 私有 helper
+ * 同 shape（双向 `extends` 编译期断言守门）。
+ */
+export type RuleLikeInput = Readonly<Record<string, unknown>>
+export type SpecLikeInput = Readonly<Record<string, unknown>>
+export type OrchestrationPortfolioRiskLikeInput = Readonly<Record<string, unknown>>
+export type RiskGuardShapeOutput = Readonly<Record<string, unknown>> | null
+export type RuleBlockShapeOutput = Readonly<Record<string, unknown>> | null
+export type OrchestrationPortfolioRiskShapeOutput = Readonly<Record<string, unknown>>
+export interface LifecyclePyramidingShapeOutput {
+  readonly allow: boolean
+  readonly maxLayers: number
+}
+
+/**
+ * RiskGuardShape —— mirror `canonical-spec-v2-ir-compiler.service.ts#tryCompileRiskGuard`。
+ *   atom: CanonicalConditionAtom（dispatcher 已持有的实例）
+ *   rule: CanonicalRuleV2（占位 RuleLikeInput，需透出 `phase / actions / sideScope / condition`）
+ *   ctx:  RuleLevelEmitContext
+ *   → RiskGuard | null（不可生成时返回 null，dispatcher 兜底）
+ */
+export type RiskGuardShape = (
+  atom: AtomIrCompileInput,
+  rule: RuleLikeInput,
+  context: RuleLevelEmitContext,
+) => RiskGuardShapeOutput
+
+/**
+ * RuleBlockShape —— mirror `canonical-spec-v2-ir-compiler.service.ts#tryCompileReduceActionRule`。
+ *   spec: CanonicalStrategySpecV2（透出给 `compileActions(rule, spec, fallbackPct)`）
+ *   fallbackPositionPct: number（spec.sizing.value 兜底）
+ *   → RuleBlock | null
+ */
+export type RuleBlockShape = (
+  atom: AtomIrCompileInput,
+  rule: RuleLikeInput,
+  spec: SpecLikeInput,
+  fallbackPositionPct: number,
+  context: RuleLevelEmitContext,
+) => RuleBlockShapeOutput
+
+/**
+ * OrchestrationPortfolioRiskShape —— mirror
+ * `canonical-spec-v2-ir-compiler.service.ts#compileOrchestrationPortfolioRisks` 内单条
+ * portfolioRisk 的 emit。源头是 `spec.orchestration.portfolioRisks[]`，per-risk emit。
+ *   orchRisk: CanonicalOrchestrationPortfolioRisk（占位）
+ *   → IrOrchestrationPortfolioRisk
+ */
+export type OrchestrationPortfolioRiskShape = (
+  orchRisk: OrchestrationPortfolioRiskLikeInput,
+  context: SpecLevelEmitContext,
+) => OrchestrationPortfolioRiskShapeOutput
+
+/**
+ * LifecyclePyramidingShape —— mirror
+ * `canonical-spec-v2-ir-compiler.service.ts#resolveLifecyclePyramiding`。
+ *   rules: CanonicalRuleV2[]（聚合整个 spec.rules，dispatcher 在 IR 编译末段单次调用）
+ *   → { allow: boolean, maxLayers: number }
+ */
+export type LifecyclePyramidingShape = (
+  rules: readonly RuleLikeInput[],
+  context: SpecLevelEmitContext,
+) => LifecyclePyramidingShapeOutput
+
+/**
  * AtomContractEmit —— atom IR emit 层契约
  *
  * `capabilityStatus`:
  *   'pr1b-stub' —— irShape 仍是 stub，调用会抛 `[#1279 PR1b stub]`（占位状态，
  *     PR3a Phase 2 落地后不再被默认使用；保留以兼容未来 condition atom 迁移中的临时状态）
  *   'pr3a-condition' —— PR3a Phase 2 兑现：condition predicate 类 atom，返回 predicate id
+ *   'pr3e-risk-guard' —— Issue #1313 兑现（后续 PR）：本 atom 通过 `emit.riskGuardShape`
+ *     完成 rule-level RiskGuard emit；本 PR 仅声明字面量，0 atom 实际进入此状态。
+ *   'pr3e-rule-block' —— 本 atom 通过 `emit.ruleBlockShape` 完成 rule-level RuleBlock emit。
+ *   'pr3e-orchestration-portfolio' —— 本 atom 通过 `emit.orchestrationPortfolioRiskShape`
+ *     完成 spec-level IrOrchestrationPortfolioRisk emit。
+ *   'pr3e-lifecycle' —— 本 atom 通过 `emit.lifecyclePyramidingShape` 完成 spec-level
+ *     pyramiding 聚合 emit。
  *   'irshape-not-applicable' —— PR3e 兑现：本 atom 走 rule-level / spec-level IR 编译路径
  *     （tryCompileRiskGuard / tryCompileReduceActionRule / compileOrchestrationPortfolioRisks /
  *     resolveLifecyclePyramiding / compileActions 等），不参与 `compileAtom` 内的
  *     `emit.irShape` predicate id 调度。声明该状态等价于"已审计并显式标注：本 atom
  *     emit.irShape 接口不适用"，与 `'pr1b-stub'`（未兑现）语义严格分离。
  *   'ready' —— 兜底字面量，给后续可能引入的真实兑现状态预留
+ *
+ * `riskGuardShape / ruleBlockShape / orchestrationPortfolioRiskShape /
+ * lifecyclePyramidingShape`:
+ *   Issue #1313 PR1 接口骨架，optional + nullable；本 PR 全为 undefined，
+ *   后续 atom 迁移 PR 按 atom 分组兑现并配合 capabilityStatus 反转 invariant。
  */
 export interface AtomContractEmit {
   readonly capability: CapabilityTriple
-  readonly capabilityStatus?: 'pr1b-stub' | 'pr3a-condition' | 'irshape-not-applicable' | 'ready'
+  readonly capabilityStatus?:
+    | 'pr1b-stub'
+    | 'pr3a-condition'
+    | 'pr3e-risk-guard'
+    | 'pr3e-rule-block'
+    | 'pr3e-orchestration-portfolio'
+    | 'pr3e-lifecycle'
+    | 'irshape-not-applicable'
+    | 'ready'
   readonly irShape: IrShapeBuilder
+  readonly riskGuardShape?: RiskGuardShape | null
+  readonly ruleBlockShape?: RuleBlockShape | null
+  readonly orchestrationPortfolioRiskShape?: OrchestrationPortfolioRiskShape | null
+  readonly lifecyclePyramidingShape?: LifecyclePyramidingShape | null
   readonly evidenceSource: EvidenceSource
 }
 
