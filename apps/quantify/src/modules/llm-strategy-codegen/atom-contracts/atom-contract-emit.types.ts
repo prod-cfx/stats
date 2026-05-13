@@ -302,8 +302,10 @@ export type LifecyclePyramidingShape = (
  *   'pr1b-stub' —— irShape 仍是 stub，调用会抛 `[#1279 PR1b stub]`（占位状态，
  *     PR3a Phase 2 落地后不再被默认使用；保留以兼容未来 condition atom 迁移中的临时状态）
  *   'pr3a-condition' —— PR3a Phase 2 兑现：condition predicate 类 atom，返回 predicate id
- *   'pr3e-risk-guard' —— Issue #1313 兑现（后续 PR）：本 atom 通过 `emit.riskGuardShape`
- *     完成 rule-level RiskGuard emit；本 PR 仅声明字面量，0 atom 实际进入此状态。
+ *   'pr3e-risk-guard' —— Issue #1313 PR2 兑现：本 atom 通过 `emit.riskGuardShape`
+ *     完成 rule-level RiskGuard emit。`position.has_position` / `position.no_position`
+ *     已进入此状态，dispatcher `tryCompileRiskGuard` 内 atom-specific 分支退化为
+ *     REGISTRY 调度；`_RiskGuardEmitAllReal` invariant 守门。
  *   'pr3e-rule-block' —— 本 atom 通过 `emit.ruleBlockShape` 完成 rule-level RuleBlock emit。
  *   'pr3e-orchestration-portfolio' —— 本 atom 通过 `emit.orchestrationPortfolioRiskShape`
  *     完成 spec-level IrOrchestrationPortfolioRisk emit。

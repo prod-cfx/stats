@@ -20,6 +20,8 @@ import type {
 import { ATOM_MUTEX } from '../nl-gateway/utterance-corpus/corpus-invariants'
 import type { ConditionEmitOverride } from './atom-contract-condition-emits'
 import { CONDITION_ATOM_EMITS } from './atom-contract-condition-emits'
+import type { RiskGuardEmitOverride } from './atom-contract-risk-guard-emits'
+import { RISK_GUARD_ATOM_EMITS } from './atom-contract-risk-guard-emits'
 import {
   COMMON_PIPELINE,
   NO_SUMMARY,
@@ -264,9 +266,15 @@ function completePr1bRegistry<const T extends Record<AtomContractKey, AtomContra
     //   3. 纯 `createPr1bEmit` 生成的 stub emit（仍未兑现 atom 兜底，调用即抛 PR1b stub 错误）
     const baseEmit = createPr1bEmit(key, bucket)
     const conditionOverride = (CONDITION_ATOM_EMITS as Partial<Record<AtomContractKey, ConditionEmitOverride>>)[key]
+    // Issue #1313 PR2：rule-level RiskGuard 类 atom 注入 `riskGuardShape` override，
+    //   capabilityStatus 改写为 'pr3e-risk-guard'；irShape 仍保留 NotApplicable sentinel
+    //   （compileAtom dispatcher 内 'pr3e-*' 状态不会走 emit.irShape 路径）。
+    const riskGuardOverride = (RISK_GUARD_ATOM_EMITS as Partial<Record<AtomContractKey, RiskGuardEmitOverride>>)[key]
     const mergedEmit: AtomContractEmit = conditionOverride
       ? { ...baseEmit, ...conditionOverride }
-      : baseEmit
+      : riskGuardOverride
+        ? { ...baseEmit, ...riskGuardOverride }
+        : baseEmit
     completed[key] = {
       ...registry[key],
       key,

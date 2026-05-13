@@ -2565,29 +2565,32 @@ export class CanonicalSpecV2IrCompilerService {
       return null
     }
 
-    if (
-      rule.phase === 'gate'
-      && (rule.condition.key === 'position.has_position' || rule.condition.key === 'position.no_position')
-      && rule.condition.op === 'EQ'
-      && rule.condition.value === false
-      && rule.actions.some(action => action.type === 'BLOCK_NEW_ENTRY')
-    ) {
-      // critic round 1 C-A2 修复：必须传 appliesTo 以保留 sideScope 语义
-      // ("已有多头仓位时不再开多" 必须只阻止做多，不能阻止做空)；
-      // 没传时 silent collapse 为全方向 block。
-      // sideScope 优先从 condition.params.side 取（builder 写入），
-      // fallback 到 rule.sideScope（顶层规则方向）。
-      const conditionSide = (rule.condition.params as { side?: string } | undefined)?.side
-      const effectiveSide = (conditionSide === 'long' || conditionSide === 'short' || conditionSide === 'both')
-        ? conditionSide as CanonicalRuleSideScope
-        : rule.sideScope
-      return {
-        id: `guard_${rule.id}`,
-        kind: 'MAX_POSITION_PCT',
-        scope: 'position',
-        value: 0,
-        onBreach: 'BLOCK_NEW_ENTRY',
-        appliesTo: this.toRiskGuardAppliesTo(effectiveSide),
+    // Issue #1313 PR2：rule-level RiskGuard 类 atom（capabilityStatus = 'pr3e-risk-guard'）
+    //   走 REGISTRY 调度。命中 atom 的 `emit.riskGuardShape` 实现返回 RiskGuard | null：
+    //     - 返回 RiskGuard → 等价于原 atom-specific case body 的命中分支；
+    //     - 返回 null → 守门不命中（如 phase / op / value / actions 任一不匹配），
+    //       继续走下方 legacy 兜底（与原行为 100% 等价：原 case body 守门不命中
+    //       时也是 fall-through 到后续分支）。
+    //
+    //   IR snapshot byte-equal 由 canonical-spec-v2-ir-compiler.service.spec.ts 守门。
+    //   capabilityStatus 字面量联合在 PR3a 阶段被收窄为 'pr3a-condition'，此处仍用
+    //   `as AtomContractEmit` 拓宽（与 compileAtom dispatcher L1346 同因素）。
+    const riskGuardEntry = ATOM_CONTRACT_REGISTRY[rule.condition.key as AtomContractKey]
+    const riskGuardEmit = riskGuardEntry?.emit as AtomContractEmit | undefined
+    if (riskGuardEmit?.capabilityStatus === 'pr3e-risk-guard' && riskGuardEmit.riskGuardShape) {
+      const guard = riskGuardEmit.riskGuardShape(
+        rule.condition,
+        rule as unknown as Readonly<Record<string, unknown>>,
+        {
+          compileContext: context,
+          helpers: this.irHelpers,
+          seed: rule.id,
+        },
+      )
+      if (guard !== null) {
+        // `RiskGuardShapeOutput` 在 PR1 阶段是占位 `Readonly<Record<string, unknown>> | null`，
+        //   未来 atom-contract-emit.types.ts 替换为 RiskGuard 真实类型后此 cast 可移除。
+        return guard as unknown as RiskGuard
       }
     }
 
