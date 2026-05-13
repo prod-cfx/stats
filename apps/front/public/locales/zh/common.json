@@ -174,7 +174,7 @@
     "consoleTitle": "AI 量化控制台",
     "consoleSubtitle": "管理运行中的自动化策略、交易所连接和执行状态。",
     "consoleApiReady": "交易所 API 已配置后即可部署运行策略。",
-    "consoleTotalReturn": "累计收益",
+    "consoleAvgReturn": "平均收益",
     "consoleAvgWinRate": "平均胜率",
     "consoleListHint": "查看策略状态、表现指标和最近执行入口。",
     "filter": {

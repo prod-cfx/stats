@@ -174,7 +174,7 @@
     "consoleTitle": "AI Quant Console",
     "consoleSubtitle": "Manage running automated strategies, exchange connections, and execution status.",
     "consoleApiReady": "Configure exchange API credentials before deploying live strategies.",
-    "consoleTotalReturn": "Total Return",
+    "consoleAvgReturn": "Avg Return",
     "consoleAvgWinRate": "Avg Win Rate",
     "consoleListHint": "Review strategy status, performance metrics, and runtime actions.",
     "filter": {

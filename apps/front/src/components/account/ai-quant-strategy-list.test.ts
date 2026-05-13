@@ -378,6 +378,23 @@ describe('AiQuantStrategyList primary summary', () => {
     expect(container.textContent).toContain('74')
   })
 
+  it('shows average return in the console overview instead of summing return percentages', async () => {
+    await renderStrategyListWithItems([
+      listItem({
+        id: 'stg-return-1',
+        metrics: { returnPct: 10, maxDrawdownPct: 0, winRatePct: 40, tradeCount: 1 },
+      }),
+      listItem({
+        id: 'stg-return-2',
+        metrics: { returnPct: 30, maxDrawdownPct: 0, winRatePct: 60, tradeCount: 1 },
+      }),
+    ])
+
+    expect(container.textContent).toContain('平均收益')
+    expect(container.textContent).toContain('+20%')
+    expect(container.textContent).not.toContain('+40%')
+  })
+
   it('calls liquidate_and_stop from the list stop dialog when user chooses liquidation', async () => {
     mockPerformAccountAiQuantStrategyAction.mockResolvedValue({})
     mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(detailItem({

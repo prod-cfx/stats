@@ -91,12 +91,14 @@ function formatMetricNumber(value: number) {
 
 function computeMetricSummary(items: AiQuantStrategyRecord[]) {
   const activeItems = items.filter(item => !isHistory(item))
-  const returnPct = activeItems.reduce((sum, item) => sum + item.metrics.returnPct, 0)
+  const averageReturnPct = activeItems.length
+    ? activeItems.reduce((sum, item) => sum + item.metrics.returnPct, 0) / activeItems.length
+    : 0
   const averageWinRate = activeItems.length
     ? activeItems.reduce((sum, item) => sum + item.metrics.winRatePct, 0) / activeItems.length
     : 0
 
-  return { returnPct, averageWinRate }
+  return { averageReturnPct, averageWinRate }
 }
 
 function StrategyFilterTabs({
@@ -485,9 +487,9 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
           { label: t('aiQuant.filter.running'), value: counts.running, tone: 'text-emerald-500' },
           { label: t('aiQuant.filter.stopped'), value: counts.stopped, tone: 'text-[color:var(--cf-text-strong)]' },
           {
-            label: t('aiQuant.consoleTotalReturn', { defaultValue: '累计收益' }),
-            value: formatPct(metricSummary.returnPct, true),
-            tone: metricSummary.returnPct >= 0 ? 'text-emerald-500' : 'text-red-500',
+            label: t('aiQuant.consoleAvgReturn', { defaultValue: '平均收益' }),
+            value: formatPct(metricSummary.averageReturnPct, true),
+            tone: metricSummary.averageReturnPct >= 0 ? 'text-emerald-500' : 'text-red-500',
           },
           {
             label: t('aiQuant.consoleAvgWinRate', { defaultValue: '平均胜率' }),
