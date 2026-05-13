@@ -286,6 +286,52 @@ const EXCHANGE_RE = /\b(okx|binance|bybit|coinbase|kraken|huobi|gate|bitget)\b/i
 // quote 枚举从 SYMBOL_QUOTES 派生，两处保持单一真相源（M1）
 const SYMBOL_RE = new RegExp(`([A-Z]{2,10})[\\s/]?(${SYMBOL_QUOTES.join('|')})\\b`)
 const TIMEFRAME_RE = /\b(1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w)\b/i
+/**
+ * PR2c-final-2 Step1：复合 timeframe 形态识别（短 token surface 精度补齐）。
+ *
+ * 覆盖：
+ *   - "15min" / "15 min" / "15分钟" / "15 分钟" → '15m'
+ *   - "4 小时" / "4小时" / "4hours"            → '4h'
+ *   - "1 天" / "1天" / "1day"                  → '1d'
+ *   - "1 周" / "1周" / "1week"                 → '1w'
+ *
+ * 单位归一是通用 NL 知识，与 atom-key 无关；表内 token 都是物理时间单位字面量，
+ * 与 BUCKET_LITERALS / atom-key prefix 集合不交叉，AC-13 / no-atom-key-literal
+ * 不会误报。
+ */
+const TIMEFRAME_COMPOUND_RE = /\b(\d{1,3})\s*(分钟|小时|天|周|min(?:ute)?s?|hours?|days?|weeks?|m|h|d|w)\b/i
+const TIMEFRAME_UNIT_TO_CANONICAL: Readonly<Record<string, 'm' | 'h' | 'd' | 'w'>> = {
+  '分钟': 'm',
+  'min': 'm',
+  'mins': 'm',
+  'minute': 'm',
+  'minutes': 'm',
+  'm': 'm',
+  '小时': 'h',
+  'hour': 'h',
+  'hours': 'h',
+  'h': 'h',
+  '天': 'd',
+  'day': 'd',
+  'days': 'd',
+  'd': 'd',
+  '周': 'w',
+  'week': 'w',
+  'weeks': 'w',
+  'w': 'w',
+}
+function tryNormalizeTimeframe(text: string): string | undefined {
+  // 优先匹配标准简写（避免 '15分钟' 中的 '15m' 子串先被命中产生错位）
+  const direct = text.match(TIMEFRAME_RE)
+  if (direct) return direct[1].toLowerCase()
+  const compound = text.match(TIMEFRAME_COMPOUND_RE)
+  if (!compound) return undefined
+  const value = Number.parseInt(compound[1], 10)
+  if (Number.isNaN(value) || value <= 0) return undefined
+  const unit = TIMEFRAME_UNIT_TO_CANONICAL[compound[2].toLowerCase()]
+  if (!unit) return undefined
+  return `${value}${unit}`
+}
 const MARKET_TYPE_PERP_RE = /合约|永续|perp/i
 const MARKET_TYPE_SPOT_RE = /现货|spot/i
 
@@ -364,8 +410,8 @@ function extractContextSlots(text: string): ContextSlots | undefined {
     const inferred = tryInferShortSymbol(text)
     if (inferred) slots.symbol = inferred
   }
-  const tfMatch = text.match(TIMEFRAME_RE)
-  if (tfMatch) slots.timeframe = tfMatch[1].toLowerCase()
+  const tf = tryNormalizeTimeframe(text)
+  if (tf) slots.timeframe = tf
   if (MARKET_TYPE_PERP_RE.test(text)) slots.marketType = 'perp'
   else if (MARKET_TYPE_SPOT_RE.test(text)) slots.marketType = 'spot'
   if (Object.keys(slots).length === 0) return undefined
