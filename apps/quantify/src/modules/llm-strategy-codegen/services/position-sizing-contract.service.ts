@@ -2,6 +2,28 @@ import { Injectable } from '@nestjs/common'
 
 import type { SemanticEvidence, SemanticPositionSizingContract } from '../types/semantic-state'
 
+/**
+ * PositionSizingContractService — NL → SemanticPositionSizingContract 解析器
+ *
+ * Issue #1279 PR2 C-sizing audit 结论：
+ *
+ *   本 service 是纯 NL 文本 → sizing contract 解析器（"单笔 10%" / "每次 100 USDT"
+ *   / "买 0.5 BTC" 等），不持有任何 atom-key 集合常量、不依赖 ATOM_CONTRACT_REGISTRY。
+ *   sizing-bearing 的 atom 集合判定不在本文件，而在：
+ *
+ *     packages: nl-gateway/utterance-corpus/sizing-evidence-invariant.ts
+ *     export const SIZING_BEARING_ATOMS = new Set(
+ *       Object.entries(ATOM_CONTRACT_REGISTRY)
+ *         .filter(([, contract]) => contract.sizingEvidence !== null)
+ *         .map(([key]) => key),
+ *     )
+ *
+ *   该派生已由 Issue #1230 完成；PR2 turn 4 audit 确认无新的硬编码 sizing
+ *   atom-key 集合需要迁移。
+ *
+ * Refs: #1279
+ */
+
 export interface ParsedPositionSizingContract {
   sizing: SemanticPositionSizingContract
   evidence: SemanticEvidence

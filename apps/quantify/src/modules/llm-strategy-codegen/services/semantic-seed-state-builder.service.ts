@@ -33,7 +33,7 @@ import type {
   SemanticTriggerState,
 } from '../types/semantic-state'
 import { FIRST_WAVE_TRIGGER_ATOMS } from '../constants/canonical-strategy-capabilities'
-import { DCA_PER_ORDER_BUDGET_CAPABILITY } from '../atom-contracts/atom-contract-registry'
+import { ATOM_CONTRACT_REGISTRY, DCA_PER_ORDER_BUDGET_CAPABILITY } from '../atom-contracts/atom-contract-registry'
 import { toSemanticSupportOpenSlot } from '../types/semantic-atom-support'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
 import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
@@ -61,11 +61,50 @@ const CONTEXT_QUESTION_HINTS: Record<ContextField, string> = {
   marketType: '请确认市场类型（现货或合约/perp）。',
   timeframe: '请确认策略主周期（例如 15m 或 1h）。',
 }
+// Issue #1279 PR2 C-state-builder: SYNTHESIZABLE_* 集合 REGISTRY 派生 / 文档化
+//
+// SYNTHESIZABLE_TRIGGER_KEYS：已经从 FIRST_WAVE_TRIGGER_ATOMS 派生（FIRST_WAVE
+//   本身从 ATOM_CONTRACT_REGISTRY 过滤 canonicalWave === 'first-wave'），属于
+//   REGISTRY 派生路径。保持原样。
 const SYNTHESIZABLE_TRIGGER_KEYS = new Set<string>(FIRST_WAVE_TRIGGER_ATOMS)
-const SYNTHESIZABLE_ACTION_KEYS = new Set(['open_long', 'close_long', 'open_short', 'close_short'])
-const SYNTHESIZABLE_POSITION_LIFECYCLE_ACTION_KEYS = new Set(['action.reduce_position', 'action.add_position', 'action.reverse_position'])
-const SYNTHESIZABLE_GRID_ACTION_KEYS = new Set(['place_limit_grid', 'grid_ladder', 'grid.ladder', 'action.grid_ladder', 'maintain_limit_ladder'])
-const SYNTHESIZABLE_POSITION_MODES = new Set(['fixed_ratio', 'fixed_quote', 'fixed_qty'])
+
+// SYNTHESIZABLE_ACTION_KEYS：verb-derived 硬编码 action 标签（open_long /
+//   close_long / open_short / close_short），**不是** atom-key —— ATOM_CONTRACT_
+//   REGISTRY 中不存在以这些为 key 的 entry。无法 REGISTRY 派生。保持字面量集合，
+//   显式标注 non-registry 性质。
+const SYNTHESIZABLE_ACTION_KEYS = new Set<string>([
+  'open_long',
+  'close_long',
+  'open_short',
+  'close_short',
+])
+
+// SYNTHESIZABLE_POSITION_LIFECYCLE_ACTION_KEYS：bucket === 'action' 的 atom-key 派生
+//   + 显式 union 'action.reduce_position'（legacy 接收的虚拟 atom，registry 暂未声明）。
+//   PR2c cleanup 时若 registry 补齐 action.reduce_position，可去掉 union。
+const SYNTHESIZABLE_POSITION_LIFECYCLE_ACTION_KEYS: ReadonlySet<string> = new Set<string>([
+  ...Object.entries(ATOM_CONTRACT_REGISTRY)
+    .filter(([, contract]) => (contract as { bucket: string }).bucket === 'action')
+    .map(([key]) => key),
+  'action.reduce_position', // legacy virtual atom；registry 未声明 → PR2c 补齐后可去掉
+])
+
+// SYNTHESIZABLE_GRID_ACTION_KEYS：grid 相关的虚拟 action 标签集合（place_limit_grid /
+//   grid_ladder / grid.ladder / action.grid_ladder / maintain_limit_ladder），**不是**
+//   atom-key —— registry 中只有 grid.range_rebalance（bucket: 'positionConstraint'）。
+//   这些 key 是 IR compiler 与 trading-execution 之间的中间合约 ID，不在 registry 范围内。
+//   保持字面量集合。
+const SYNTHESIZABLE_GRID_ACTION_KEYS = new Set<string>([
+  'place_limit_grid',
+  'grid_ladder',
+  'grid.ladder',
+  'action.grid_ladder',
+  'maintain_limit_ladder',
+])
+
+// SYNTHESIZABLE_POSITION_MODES：position sizing mode 字符串枚举，与 atom-key 体系
+//   完全无关；属于 SemanticPositionSizingContract 的 mode 字段值域。保持字面量。
+const SYNTHESIZABLE_POSITION_MODES = new Set<string>(['fixed_ratio', 'fixed_quote', 'fixed_qty'])
 const LEVEL_SET_DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
 const MARKET_INSTRUMENT_QUOTES: readonly MarketInstrumentQuote[] = ['FDUSD', 'USDT', 'USDC', 'BUSD', 'TUSD', 'USD']
 

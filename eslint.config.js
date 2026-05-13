@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs'
 import antfu from '@antfu/eslint-config'
+import noAtomKeyLiteral from './eslint-rules/no-atom-key-literal.js'
+import noBusinessRuleInDispatcher from './eslint-rules/no-business-rule-in-dispatcher.js'
 
 // pnpm generate:enums 自动维护，无需手动同步
 let prismaEnumNames = []
@@ -168,6 +170,100 @@ export default antfu(
           message: '枚举必须从 @ai/shared 导入，不要从 prisma.types 或 generated/prisma 导入。参见 ruler/conventions.md 枚举 SSOT 约定。',
         }],
       }],
+    },
+  },
+  // ─────────────────────────────────────────────────────────────────────────
+  // Issue #1279 AC-4: 阻断 atom key 字面量比较
+  // 唯一真相源: ATOM_CONTRACT_REGISTRY；任何按 atom 分流的代码必须查注册表
+  // Plugin: eslint-rules/no-atom-key-literal.js (flat config)
+  //
+  // 启用域: apps/quantify/src/modules/llm-strategy-codegen/**
+  // 永久豁免:
+  //   - atom-contract-registry.ts 自身（真相源）
+  //   - constants/canonical-strategy-capabilities.ts（FIRST_WAVE 派生器）
+  //   - utterance-corpus 目录（NL fixture）
+  //   - 所有 .spec.ts / .e2e-spec.ts（测试可写 atom 字面量做断言）
+  // PR2 ratchet allowlist（PR3a/3b/3c 逐文件清空）:
+  //   - 命中文件清单见下方 ignores 列表
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    files: ['apps/quantify/src/modules/llm-strategy-codegen/**/*.ts'],
+    ignores: [
+      // 永久豁免
+      'apps/quantify/src/modules/llm-strategy-codegen/atom-contracts/**',
+      'apps/quantify/src/modules/llm-strategy-codegen/constants/canonical-strategy-capabilities.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/nl-gateway/utterance-corpus/**',
+      'apps/quantify/src/modules/llm-strategy-codegen/**/*.spec.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/**/*.e2e-spec.ts',
+      // PR3a ratchet（canonical IR compiler — 切到 emit.irShape 后移除）
+      'apps/quantify/src/modules/llm-strategy-codegen/services/canonical-spec-v2-ir-compiler.service.ts',
+      // PR3b ratchet（conversation + spec-builder — 切到 REGISTRY 查表后移除）
+      'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-conversation.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/canonical-spec-builder.service.ts',
+      // PR3c ratchet（剩余 23 个文件 — 字面量清零后移除）
+      // review M8：canonical-spec-builder 已在 PR3b 段第 202 行声明，此处不重复
+      'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-graph-snapshot.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-publication-generation.stage.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/compiled-publication-gate.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/conversation-semantic-edit.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-atom-invariant.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-atom-registry.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-clarification-metadata.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-contract-readiness.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-open-slot-answer-resolver.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-presentation-registry.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-seed-extractor.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-seed-state-builder.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-merge.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-normalization.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-projection.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-reducer.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-support-classifier.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-consistency.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-execution-context.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-intent-normalizer.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-ir-canonical-adapter.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-semantic-contracts.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-semantic-profile-normalizer.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-summary-builder.service.ts',
+    ],
+    plugins: {
+      'atom-keys': {
+        rules: {
+          'no-atom-key-literal': noAtomKeyLiteral,
+        },
+      },
+    },
+    rules: {
+      'atom-keys/no-atom-key-literal': 'error',
+    },
+  },
+  // ─────────────────────────────────────────────────────────────────────────
+  // Issue #1279 AC-13: 阻断 dispatcher 内业务规则 if/switch
+  // 红线：入口（dispatcher）永远只读 ATOM_CONTRACT_REGISTRY，业务规则全部
+  //       沉淀到 atom contract。dispatcher 不允许"一个策略一个 if"。
+  // Plugin: eslint-rules/no-business-rule-in-dispatcher.js
+  //
+  // 启用域: dispatcher 全部文件 glob（review M1：覆盖未来新增的 dispatcher-utils.ts
+  //         等 helper 文件，防止把分流逻辑挪到新文件跳过守门）
+  // Known limitation（review M2，文档化已知 bypass）：
+  //   - identifier 重写绕过（`const k = 'trigger'; if (bucket === k)`）需要符号
+  //     tracking 才能 catch，超出 ESLint flat plugin 单文件 AST 扫描能力，由 PR
+  //     review 流程兜底
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    files: [
+      'apps/quantify/src/modules/llm-strategy-codegen/services/generic-seed-dispatcher*.ts',
+    ],
+    plugins: {
+      dispatcher: {
+        rules: {
+          'no-business-rule-in-dispatcher': noBusinessRuleInDispatcher,
+        },
+      },
+    },
+    rules: {
+      'dispatcher/no-business-rule-in-dispatcher': 'error',
     },
   },
 )

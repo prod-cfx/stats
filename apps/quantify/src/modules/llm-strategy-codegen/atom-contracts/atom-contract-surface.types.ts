@@ -40,6 +40,10 @@ export type Direction =
  *   kind=duration    时长（如 strategy.time_window 的"9:00-15:00"或"4h"）
  *   kind=enum        枚举（如 sideScope 'long' | 'short' | 'both'）
  *   kind=symbol      交易对符号（如 BTCUSDT）
+ *
+ *   extractor —— 半-closure 抽取声明（Issue #1279 PR2a）。dispatcher 拥有
+ *     `Record<extractor.kind, parserFn>` 与 `Record<extractor.derive, deriveFn>`
+ *     两张内置表，registry 仍是纯数据。详见 `ExtractorSpec`。
  */
 export interface ParamSlotSchema {
   readonly kind: 'number' | 'percent' | 'duration' | 'enum' | 'symbol'
@@ -50,23 +54,78 @@ export interface ParamSlotSchema {
   readonly enum?: readonly string[]
   /** 缺省值（仅 required=false 时生效） */
   readonly default?: unknown
+  /** 抽取声明：dispatcher 按 extractor.kind 查内置 parser 表，按 extractor.derive 查内置 derive 表。 */
+  readonly extractor?: ExtractorSpec
 }
 
 /**
- * PhaseResolver —— phase（entry / exit）推断策略
+ * ExtractorSpec —— 半-closure 参数抽取声明（Issue #1279 PR2a）
+ *
+ *   kind                解析器 ID（dispatcher 内置 generic parsers 表的 key）
+ *     'number-int'        纯整数（默认 pattern: \d+）
+ *     'number-decimal'    带小数（默认 pattern: \d+(\.\d+)?）
+ *     'percent'           百分号数值（含正负号感知）
+ *     'duration'          时长（'4h' / '15m' 等）
+ *     'enum-zh-map'       中文枚举映射，搭配 enumMap 使用
+ *     'time-window-list'  业务化：抽取 [{start, end}] 时间段数组
+ *     'symbol-base-quote' 业务化：拆 BTCUSDT → {base, quote}
+ *     其它扩展用 string 兜底（dispatcher 实现时补内置表）
+ *
+ *   pattern             可选 regex 字符串（含 lookahead 时由 atom 声明，覆盖 kind 默认 pattern）
+ *   enumMap             enum-zh-map 的中文 → 规范化值映射
+ *   default             抽取不到时的兜底值（与 ParamSlotSchema.default 等价；保留以便派生函数复用）
+ *   derive              派生函数 ID（dispatcher 内置 derive 函数表的 key，例如 'period-range'）
+ *   range               number-* 边界检查（覆盖 ParamSlotSchema.range）
+ */
+export interface ExtractorSpec {
+  readonly kind:
+    | 'number-int'
+    | 'number-decimal'
+    | 'percent'
+    | 'duration'
+    | 'enum-zh-map'
+    | 'time-window-list'
+    | 'symbol-base-quote'
+    | string
+  readonly pattern?: string
+  readonly enumMap?: Readonly<Record<string, string>>
+  readonly default?: unknown
+  readonly derive?: string
+  readonly range?: readonly [number, number]
+}
+
+/**
+ * ResolveCtx —— phaseResolver / sideResolver fn 形态的运行时上下文（Issue #1279 PR2a）
+ *
+ * dispatcher 在派发匹配时把当前 atomKey、已抽取的 params 透传给自定义 fn，
+ * 让 fn 可以根据已知信息做派生判断（如 indicator.above.referenceRole 看 period 大小）。
+ */
+export interface ResolveCtx {
+  readonly atomKey: string
+  readonly params: Readonly<Record<string, unknown>>
+}
+
+/**
+ * PhaseResolver —— phase（entry / exit / gate）推断策略
  *
  *   by-clause-verb       从子句动词（开多/平多/止盈/止损）派生 phase
  *   fixed-entry          固定 entry（如 grid.range_rebalance）
  *   fixed-exit           固定 exit（如 risk.partial_take_profit）
+ *   fixed-gate           固定 gate（如 portfolioRisk.drawdown_block，PR2a Issue #1279）
  *   { kind: 'fn', fn }   自定义函数（少数复杂 atom）
+ *
+ * PR2a 起新增 'gate' 出场：portfolioRisk.drawdown_block / position.has_position /
+ *   position.no_position / market.regime / volatility.state 等条件守门 atom 没有
+ *   入场/出场二元概念，而是"是否放行后续动作"，统一归为 phase='gate'。
  */
 export type PhaseResolverSpec =
   | 'by-clause-verb'
   | 'fixed-entry'
   | 'fixed-exit'
+  | 'fixed-gate'
   | { readonly kind: 'fn'; readonly fn: PhaseResolverFn }
 
-export type PhaseResolverFn = (clause: string) => 'entry' | 'exit' | null
+export type PhaseResolverFn = (clause: string, ctx: ResolveCtx) => 'entry' | 'exit' | 'gate' | null
 
 /**
  * SideResolver —— sideScope（long / short / both）推断策略
