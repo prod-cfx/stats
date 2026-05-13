@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import type {
   SemanticActionState,
   SemanticAtomContract,
@@ -686,14 +687,14 @@ export class SemanticStateMergeService {
     trigger: SemanticTriggerState,
   ): { role: string, period: number | null, stdDev: number | null } | null {
     if (
-      trigger.key === 'bollinger.touch_upper'
-      || trigger.key === 'bollinger.touch_lower'
-      || trigger.key === 'bollinger.touch_middle'
+      trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key
+      || trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key
+      || trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key
     ) {
       return {
-        role: trigger.key === 'bollinger.touch_upper'
+        role: trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key
           ? 'upper'
-          : trigger.key === 'bollinger.touch_lower'
+          : trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key
             ? 'lower'
             : 'middle',
         period: this.readFiniteNumber(trigger.params.period),
@@ -701,7 +702,7 @@ export class SemanticStateMergeService {
       }
     }
 
-    if (trigger.key !== 'price.detect.indicator_boundary') {
+    if (trigger.key !== ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key) {
       return null
     }
 

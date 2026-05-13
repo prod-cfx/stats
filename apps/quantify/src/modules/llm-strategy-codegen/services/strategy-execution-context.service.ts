@@ -2,6 +2,7 @@ import type { StrategyLogicSnapshot } from '../types/strategy-logic-snapshot'
 import type { SemanticSlotState, SemanticState } from '../types/semantic-state'
 import type { StrategyExecutionContext, StrategyExecutionContextResolution } from '../types/strategy-execution-context'
 import { Injectable } from '@nestjs/common'
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { resolveStrategyDefaultTimeframe } from './rule-draft-projection'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 
@@ -123,7 +124,7 @@ export class StrategyExecutionContextService {
   }
 
   private hasSemanticGridTrigger(state: SemanticState): boolean {
-    return state.triggers.some(trigger => trigger.status !== 'superseded' && trigger.key === 'grid.range_rebalance')
+    return state.triggers.some(trigger => trigger.status !== 'superseded' && trigger.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
   }
 
   private readPrimaryValue(values: string[] | undefined): string | null {

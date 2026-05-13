@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import { buildSemanticSlotId } from '../types/semantic-state'
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import type {
   SemanticAtomContract,
   SemanticCapability,
@@ -157,7 +158,7 @@ export class SemanticStateReducerService {
         source: 'user_explicit',
       }
       action.status = (action.openSlots ?? []).every(item => item.status !== 'open') ? 'locked' : 'open'
-      if (action.key === 'action.add_position' && paramKey === 'constraint') {
+      if (action.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key && paramKey === 'constraint') {
         this.applyAddPositionConstraintAnswer(nextState, answerText, input.messageIndex)
       }
       break
@@ -171,6 +172,7 @@ export class SemanticStateReducerService {
       return item.slotKey === input.targetSlotKey
         && (input.targetFieldPath ? item.fieldPath === input.targetFieldPath : true)
       })
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- position.sizing is a slot key label, not an atom key routing comparison
     if (nextState.position && positionSlot?.slotKey === 'position.sizing' && positionSlot.status === 'open') {
       const parsed = this.parsePositionSizingContractAnswer(answerText, input.messageIndex)
       if (parsed) {
@@ -250,6 +252,7 @@ export class SemanticStateReducerService {
         break
       }
 
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.protective_exit not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (risk.key !== 'risk.protective_exit' && slot?.status === 'open') {
         const paramKey = this.resolveRiskParamKey(slot)
         if (paramKey) {
@@ -266,7 +269,9 @@ export class SemanticStateReducerService {
         }
       }
 
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.protective_exit not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (risk.key !== 'risk.protective_exit') continue
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.protective_exit slot key routing (follow-up #1329)
       if (slot?.slotKey !== 'risk.protective_exit' || slot.status !== 'open') continue
 
       const percentValue = this.parsePercentAnswer(answerText)
@@ -285,6 +290,7 @@ export class SemanticStateReducerService {
         break
       }
 
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.max_drawdown_pct / risk.max_single_loss_pct / risk.condition_expression not yet in REGISTRY (follow-up #1329)
       risk.key = riskKey === 'risk.max_drawdown_pct' || riskKey === 'risk.max_single_loss_pct'
         ? 'risk.condition_expression'
         : riskKey
@@ -361,6 +367,7 @@ export class SemanticStateReducerService {
       return paramsPath[1]
     }
 
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- position.dca_schedule.exit_rule is a slot key label (sub-field path), not atom key routing
     if (slot.slotKey === 'position.dca_schedule.exit_rule') {
       return 'exitRule'
     }
@@ -437,7 +444,7 @@ export class SemanticStateReducerService {
       existing.evidence = evidence
     } else {
       constraints.push({
-        id: parsed.key === 'position.pyramiding_limit'
+        id: parsed.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
           ? 'clarified-position-pyramiding-limit'
           : 'clarified-position-max-exposure',
         key: parsed.key,
@@ -921,14 +928,17 @@ export class SemanticStateReducerService {
       }
     }
 
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- grid.range.lower / grid.range.upper / grid.stepPct are slot key labels, not atom key routing
     if (normalizedGridSlotKey === 'grid.range.lower' || normalizedGridSlotKey === 'grid.range.upper' || normalizedGridSlotKey === 'grid.stepPct') {
       const value = this.parseGridNumericAnswer(normalizedGridSlotKey, answerText)
       if (value === null) {
         return null
       }
 
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- slot key labels (follow-up #1329)
       const paramKey = normalizedGridSlotKey === 'grid.range.lower'
         ? 'rangeLower'
+        // eslint-disable-next-line atom-keys/no-atom-key-literal -- slot key labels (follow-up #1329)
         : (normalizedGridSlotKey === 'grid.range.upper' ? 'rangeUpper' : 'stepPct')
 
       return {
@@ -938,6 +948,7 @@ export class SemanticStateReducerService {
       }
     }
 
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- grid.sideMode is a slot key label, not atom key routing
     if (normalizedGridSlotKey === 'grid.sideMode') {
       const sideMode = this.parseGridSideModeAnswer(answerText)
       if (!sideMode) {
@@ -1011,18 +1022,22 @@ export class SemanticStateReducerService {
   }
 
   private normalizeGridSlotKey(slotKey: string): 'grid.range.lower' | 'grid.range.upper' | 'grid.stepPct' | 'grid.sideMode' | null {
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- grid.* slot key labels, not atom key routing
     if (slotKey === 'grid.range.lower' || slotKey === 'grid.lower') {
       return 'grid.range.lower'
     }
 
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- grid.* slot key labels, not atom key routing
     if (slotKey === 'grid.range.upper' || slotKey === 'grid.upper') {
       return 'grid.range.upper'
     }
 
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- grid.* slot key labels, not atom key routing
     if (slotKey === 'grid.stepPct') {
       return 'grid.stepPct'
     }
 
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- grid.* slot key labels, not atom key routing
     if (slotKey === 'grid.sideMode') {
       return 'grid.sideMode'
     }
@@ -1031,6 +1046,7 @@ export class SemanticStateReducerService {
   }
 
   private parseGridNumericAnswer(slotKey: string, answerText: string): number | null {
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- grid.stepPct is a slot key label, not atom key routing
     if (slotKey === 'grid.stepPct') {
       const percentMatch = answerText.match(/(\d+(?:\.\d+)?)\s*%/u)
       if (percentMatch?.[1]) {
@@ -1255,6 +1271,7 @@ export class SemanticStateReducerService {
     return Number.isFinite(value) && value > 0 && value <= 100
   }
 
+  /* eslint-disable atom-keys/no-atom-key-literal -- risk.max_drawdown_pct / risk.max_single_loss_pct / risk.stop_loss_pct not yet in REGISTRY (follow-up #1329) */
   private buildProtectiveRiskParams(
     riskKey: 'risk.stop_loss_pct' | 'risk.max_drawdown_pct' | 'risk.max_single_loss_pct' | 'risk.trailing_stop_pct',
     valuePct: number,
@@ -1285,6 +1302,7 @@ export class SemanticStateReducerService {
       basis: 'entry_avg_price',
     }
   }
+  /* eslint-enable atom-keys/no-atom-key-literal */
 
   private resolveProtectiveRiskAnswerKey(answerText: string): 'risk.stop_loss_pct' | 'risk.max_drawdown_pct' | 'risk.max_single_loss_pct' | 'risk.trailing_stop_pct' | null {
     if (/最大回撤|max\s*drawdown/iu.test(answerText)) {

@@ -8,6 +8,7 @@ import type {
 import type { SemanticGraphExpressionOperand, SemanticPredicateGraphNode, SemanticPredicateStrategyGraph } from '../types/semantic-strategy-graph'
 import type { StrategyLogicGraphActionNode, StrategyLogicGraphSnapshot, StrategyLogicGraphTriggerNode } from '../types/strategy-logic-graph-snapshot'
 import { Injectable } from '@nestjs/common'
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { semanticStrategyPredicateGraphSchema } from '../types/semantic-strategy-graph.zod'
 
 interface GraphSpecMarket {
@@ -154,6 +155,7 @@ export class CodegenGraphSnapshotService {
   }
 
   private buildAtomGraphLeftOperand(condition: CanonicalConditionAtom): SemanticGraphExpressionOperand {
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- legacy atom key not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     if (condition.key === 'price.change_pct') {
       return {
         kind: 'atom',
@@ -173,7 +175,7 @@ export class CodegenGraphSnapshotService {
       }
     }
 
-    if (condition.key === 'position.has_position') {
+    if (condition.key === ATOM_CONTRACT_REGISTRY['position.has_position'].key) {
       return {
         kind: 'position',
         field: 'has_position',

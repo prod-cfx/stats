@@ -8,6 +8,7 @@ import { CANONICAL_RULE_KEYS } from '../constants/canonical-strategy-capabilitie
 @Injectable()
 export class StrategyIrCanonicalAdapterService {
   adapt(strategyIr: StrategyIR): CanonicalStrategySpecV2 {
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- .kind is StrategyIR intent type discriminant, not atom key routing
     if (strategyIr.intent.kind !== 'grid.range_rebalance') {
       throw new Error('strategy_ir_intent_not_supported')
     }

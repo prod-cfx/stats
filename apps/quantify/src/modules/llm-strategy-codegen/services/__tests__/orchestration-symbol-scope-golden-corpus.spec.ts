@@ -15,7 +15,7 @@ import { NaturalLanguageGatewayService } from '../natural-language-gateway.servi
 import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
 import { SemanticFrameNormalizerService } from '../semantic-frame-normalizer.service'
 import { SemanticOrchestrationRegistryService } from '../semantic-orchestration-registry.service'
-import { SemanticPresentationRegistryService } from '../semantic-presentation-registry.service'
+
 
 /**
  * Phase 5 S2 (#1104): scope.symbol substrate 5 段集成 golden corpus

@@ -132,7 +132,7 @@ export interface AtomContract<TParams = Record<string, unknown>> {
    */
   clarificationQuestion:
     | typeof VIA_PRESENTATION_DISPLAY
-    | ((slotKey: string, params: TParams) => string)
+    | ((slotKey: string, params: TParams, locale?: 'zh' | 'en') => string)
 
   /**
    * 互斥 atom key 列表（融合 corpus-invariants ATOM_MUTEX）；无互斥时显式 []

@@ -1,4 +1,5 @@
 import type { SemanticAtomContract, SemanticRiskState, SemanticSlotState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 
 import type {
   NormalizedTriggerAtom,
@@ -61,7 +62,7 @@ function buildGridIntent(
   triggers: SemanticTriggerState[],
 ): StrategyNormalizedIntent['grid'] {
   const activeGrid = triggers.find(trigger =>
-    trigger.key === 'grid.range_rebalance'
+    trigger.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key
     && trigger.status !== 'superseded'
     && typeof trigger.params.rangeLower === 'number'
     && typeof trigger.params.rangeUpper === 'number'
@@ -159,6 +160,7 @@ export function normalizeTriggerCombinationContracts(
 // memoryKey（cross-atom remembered level 复用前置）。仅在 trigger.key === 'price.previous_extrema'
 // 且 memoryKey 缺失时介入，避免污染其他 trigger 流程。
 function normalizePreviousExtremaMemoryKey(trigger: SemanticTriggerState): SemanticTriggerState {
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- price.previous_extrema not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   if (trigger.key !== 'price.previous_extrema') return trigger
   const params = trigger.params ?? {}
   if (typeof params.memoryKey === 'string' && params.memoryKey.trim().length > 0) return trigger
@@ -425,10 +427,13 @@ export function normalizeRiskSemantics(risks: SemanticRiskState[]): SemanticRisk
 
 export function normalizeRiskSemantic(risk: SemanticRiskState, index = 0): SemanticRiskState {
   const params = { ...risk.params }
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   const isStopLoss = risk.key === 'risk.stop_loss_pct'
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   const isTakeProfit = risk.key === 'risk.take_profit_pct'
 
   if (!isStopLoss && !isTakeProfit) {
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     if (risk.key === 'risk.condition_expression') {
       return {
         ...risk,
@@ -440,7 +445,7 @@ export function normalizeRiskSemantic(risk: SemanticRiskState, index = 0): Seman
       }
     }
 
-    if (risk.key === 'risk.partial_take_profit' && typeof params.memoryKey !== 'string') {
+    if (risk.key === ATOM_CONTRACT_REGISTRY['risk.partial_take_profit'].key && typeof params.memoryKey !== 'string') {
       const rawTiers = Array.isArray(params.tiers) ? params.tiers : []
       // Sort by trigger.threshold so equivalent tier sets — regardless of LLM
       // insertion order — produce identical memoryKey and reuse runtime state.

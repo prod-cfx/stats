@@ -1,4 +1,8 @@
-import type { DisplayToken } from './display-token.types'
+/* transition data: 30+ slot label + scope.* + enum token，迁入 REGISTRY 留 follow-up #1329。
+ * 原路径 nl-gateway/display-registry/display-token-table.ts，PR3c.8a 改名至此。
+ * 消费方：display-registry.ts（通过 DISPLAY_TOKENS 构建 TOKEN_BY_ID map）。
+ */
+import type { DisplayToken } from '../nl-gateway/display-registry/display-token.types'
 
 export const DISPLAY_TOKENS = [
   { token: 'atom.execution.on_start.name', kind: 'atom', zh: '启动后执行' },

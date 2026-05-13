@@ -221,7 +221,7 @@ describe('orchestration scope.subStrategy — golden corpus (Phase 5 S10 #1111)'
   describe('Section C: Display 不泄漏内部 key', () => {
     it('C1 display token table contains all S10 tokens', () => {
       // 通过引用 display-token-table 间接验证
-      const { DISPLAY_TOKENS } = require('../../nl-gateway/display-registry/display-token-table')
+      const { DISPLAY_TOKENS } = require('../legacy-display-tokens')
       const tokenIds = DISPLAY_TOKENS.map((t: { token: string }) => t.token)
       expect(tokenIds).toContain('atom.scope.subStrategy.name')
       expect(tokenIds).toContain('atom.scope.subStrategy.display.with_handling')

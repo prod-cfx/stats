@@ -1,15 +1,16 @@
 /**
- * Invariant spec（Issue #1179）：
- *   所有 entry/exitPredicate 角色 trigger key 必须在 presentationRegistry 有
- *   displayRenderer，且对最小 valid params 输出非空字符串。
+ * Invariant spec（Issue #1179 / #1279 PR3c.7c）：
+ *   所有 entry/exitPredicate 角色 trigger key 必须在 legacy presentation data 有
+ *   displayRenderer（via getLegacyEntry），且对最小 valid params 输出非空字符串。
  *
  * 此 spec 作为 CI 红线守门——新增或重命名 entryPredicate / exitPredicate key 时
  * 若未补 displayRenderer，本 spec 立即 fail，强制修复。
+ *
+ * 3c.7c 改造：从 SemanticPresentationRegistryService class 实例 → pure helper getLegacyEntry
  */
 
 import { NORMALIZED_TRIGGER_ATOM_KEYS } from '../../types/strategy-normalized-intent'
-import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
-import { SemanticPresentationRegistryService } from '../semantic-presentation-registry.service'
+import { getLegacyEntry, renderLegacyDisplay } from '../legacy-presentation-data'
 
 // ── entry / exitPredicate 角色的最小有效 params fixture ──
 // 每个 key 只需能让 displayRenderer 返回非空字符串即可
@@ -50,29 +51,22 @@ const MINIMAL_PARAMS: Partial<Record<(typeof NORMALIZED_TRIGGER_ATOM_KEYS)[numbe
   'grid.range_rebalance': {},
 }
 
-// 这些 key 在 presentationRegistry 中未注册（unsupported trigger keys 不需要 displayRenderer）
+// 这些 key 在 legacy presentation data 中未注册（unsupported trigger keys 不需要 displayRenderer）
 const SKIP_UNREGISTERED_KEYS = new Set<string>([
   'indicator.above',
   'indicator.below',
 ])
 
-describe('presentationRegistry display coverage invariant (Issue #1179)', () => {
-  const atomRegistry = new SemanticAtomRegistryService()
-  const registry = new SemanticPresentationRegistryService(atomRegistry)
-
-  it('所有 NORMALIZED_TRIGGER_ATOM_KEYS 中注册于 presentationRegistry 的 key 必须有 displayRenderer', () => {
+describe('legacy-presentation-data display coverage invariant (Issue #1179)', () => {
+  it('所有 NORMALIZED_TRIGGER_ATOM_KEYS 中注册于 legacy data 的 key 必须有 displayRenderer', () => {
     const missing: string[] = []
 
     for (const key of NORMALIZED_TRIGGER_ATOM_KEYS) {
       if (SKIP_UNREGISTERED_KEYS.has(key)) continue
-      try {
-        const entry = registry.getEntry(key)
-        if (!entry.displayRenderer) {
-          missing.push(`${key}: displayRenderer is falsy`)
-        }
-      }
-      catch {
-        // key 不在 registry（unregistered），跳过
+      const entry = getLegacyEntry(key)
+      if (!entry) continue // key 不在 legacy data（REGISTRY-only atom），跳过
+      if (!entry.displayRenderer) {
+        missing.push(`${key}: displayRenderer is falsy`)
       }
     }
 
@@ -83,37 +77,30 @@ describe('presentationRegistry display coverage invariant (Issue #1179)', () => 
     }
   })
 
-  it('每个注册 trigger key 的 displayRenderer 对最小 valid params 输出非空字符串', () => {
+  it('每个注册 trigger key 的 renderLegacyDisplay 对最小 valid params 输出非空字符串', () => {
     const failures: string[] = []
 
     for (const key of NORMALIZED_TRIGGER_ATOM_KEYS) {
       if (SKIP_UNREGISTERED_KEYS.has(key)) continue
-
-      let entry: ReturnType<typeof registry.getEntry> | null = null
-      try {
-        entry = registry.getEntry(key)
-      }
-      catch {
-        continue
-      }
-
-      if (!entry.displayRenderer) continue
+      // 只测试 legacy data 中存在的 key（REGISTRY-first path 在 display-parity.spec 覆盖）
+      const entry = getLegacyEntry(key)
+      if (!entry) continue
 
       const params = MINIMAL_PARAMS[key] ?? {}
       try {
-        const output = entry.displayRenderer({ params })
+        const output = renderLegacyDisplay(key, params)
         if (!output || output.trim().length === 0) {
-          failures.push(`${key}: displayRenderer 对最小 params 输出空字符串`)
+          failures.push(`${key}: renderLegacyDisplay 对最小 params 输出空字符串`)
         }
       }
       catch (err) {
-        failures.push(`${key}: displayRenderer 抛出异常 — ${String(err)}`)
+        failures.push(`${key}: renderLegacyDisplay 抛出异常 — ${String(err)}`)
       }
     }
 
     if (failures.length > 0) {
       throw new Error(
-        `以下 trigger key 的 displayRenderer 输出为空或抛出异常：\n${failures.map(f => `  - ${f}`).join('\n')}`,
+        `以下 trigger key 的 renderLegacyDisplay 输出为空或抛出异常：\n${failures.map(f => `  - ${f}`).join('\n')}`,
       )
     }
   })

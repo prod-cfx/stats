@@ -13,7 +13,7 @@ import { NaturalLanguageGatewayService } from '../natural-language-gateway.servi
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
 import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
 import { SemanticOrchestrationRegistryService } from '../semantic-orchestration-registry.service'
-import { SemanticPresentationRegistryService } from '../semantic-presentation-registry.service'
+import { getLegacyEntry } from '../legacy-presentation-data'
 
 /**
  * Phase 5 S11 (#1112): scope.leg substrate 5 段集成 golden corpus
@@ -266,10 +266,8 @@ describe('orchestration scope.leg — golden corpus (Phase 5 S11 #1112)', () => 
   // Section C: Display 不泄漏内部 key
   // ============================================================
   describe('Section C: Display tokens 不泄漏内部 key', () => {
-    const presentation = new SemanticPresentationRegistryService(new SemanticAtomRegistryService())
-
-    it('publicName "策略腿" 通过 presentation entry', () => {
-      const entry = presentation.getEntry('scope.leg')
+    it('publicName "策略腿" 通过 legacy entry', () => {
+      const entry = getLegacyEntry('scope.leg')
       expect(entry?.publicName).toBe('策略腿')
     })
 
@@ -285,7 +283,7 @@ describe('orchestration scope.leg — golden corpus (Phase 5 S11 #1112)', () => 
     })
 
     it('clarification 输出不包含内部 key', () => {
-      const entry = presentation.getEntry('scope.leg')
+      const entry = getLegacyEntry('scope.leg')
       const text = entry?.clarificationRenderer?.('orchestration.scope.leg.missing_binding', {}) ?? ''
       expect(text).toContain('策略腿')
       expect(text).not.toContain('scope.leg')

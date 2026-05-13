@@ -195,34 +195,25 @@ export default antfu(
       'apps/quantify/src/modules/llm-strategy-codegen/nl-gateway/utterance-corpus/**',
       'apps/quantify/src/modules/llm-strategy-codegen/**/*.spec.ts',
       'apps/quantify/src/modules/llm-strategy-codegen/**/*.e2e-spec.ts',
+      // 永久豁免：atom-key 真相源定义自身（semantic-atom-registry.service.ts）
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-atom-registry.service.ts',
       // PR3a ratchet（canonical IR compiler — 切到 emit.irShape 后移除）
       'apps/quantify/src/modules/llm-strategy-codegen/services/canonical-spec-v2-ir-compiler.service.ts',
-      // PR3b ratchet（conversation + spec-builder — 已切到 REGISTRY/FIELD_KEY，本 PR 移除）
-      // PR3c ratchet（剩余 23 个文件 — 字面量清零后移除）
-      'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-graph-snapshot.service.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-publication-generation.stage.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/compiled-publication-gate.service.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/conversation-semantic-edit.service.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-atom-invariant.service.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-atom-registry.service.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-clarification-metadata.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-contract-readiness.service.ts',
-      // PR2c-final-1bc review fix Major #2: resolver 已切到 dispatcher，0 atom 字面量，移出 ratchet
-      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-presentation-registry.service.ts',
-      // PR2c-final-1bc: semantic-seed-extractor.service.ts 已物理删除，移除死 ratchet 项
-      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-seed-state-builder.service.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-merge.service.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-normalization.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-projection.service.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-reducer.service.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-support-classifier.service.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-consistency.service.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-execution-context.service.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-intent-normalizer.service.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-ir-canonical-adapter.service.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-semantic-contracts.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-semantic-profile-normalizer.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-summary-builder.service.ts',
+      // PR3b ratchet（conversation + spec-builder）已切到 REGISTRY/FIELD_KEY，PR3b 已移除
+      // PR3c ratchet（22 服务文件 — batch 1-5 全部清零，本 PR 移除）
+      // codegen-publication-generation.stage.ts: PR3c.9b batch 2 已清零
+      // semantic-contract-readiness.service.ts: PR3c.9e batch 5 已清零
+      // semantic-seed-state-builder.service.ts: PR3c.9e batch 5 已清零
+      // semantic-state-merge.service.ts: PR3c.9b batch 2 已清零
+      // semantic-state-normalization.ts: PR3c.9b batch 2 已清零
+      // semantic-state-projection.service.ts: PR3c.9d batch 4 已清零
+      // semantic-state-reducer.service.ts: PR3c.9c batch 3 已清零
+      // semantic-support-classifier.service.ts: PR3c.9b batch 2 已清零
+      // strategy-consistency.service.ts: PR3c.9d batch 4 已清零
+      // strategy-intent-normalizer.service.ts: PR3c.9c batch 3 已清零
+      // strategy-ir-canonical-adapter.service.ts: PR3c.9b batch 2 已清零
+      // strategy-semantic-contracts.ts: PR3c.9d batch 4 已清零
+      // strategy-summary-builder.service.ts: PR3c.9c batch 3 已清零
     ],
     plugins: {
       'atom-keys': {
@@ -252,8 +243,7 @@ export default antfu(
   //   - constants/ 派生器 + utterance-corpus（数据/fixture）
   //   - 所有 .spec.ts / .e2e-spec.ts（测试可比较 bucket 字面量做断言）
   //
-  // PR2 ratchet allowlist（剩 18 个文件 / 58 处历史字面量比较 — 留给 PR3c
-  // 业务清零；本 PR 不引入新违规）：见下方 ignores
+  // PR3c ratchet allowlist（业务规则字面量历史遗留文件，持续消化中）：见下方 ignores
   //
   // Known limitation（review M2，文档化已知 bypass）：
   //   - identifier 重写绕过（`const k = 'trigger'; if (bucket === k)`）需要符号
@@ -279,7 +269,6 @@ export default antfu(
       'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-atom-invariant.service.ts',
       'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-contract-readiness.service.ts',
       'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-graph-compiler.service.ts',
-      // PR2c-final-1bc review fix Major #2: resolver 已切到 dispatcher，无业务规则字面量，移出 ratchet
       'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-seed-state-builder.service.ts',
       'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-normalization.ts',
       'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-projection.service.ts',

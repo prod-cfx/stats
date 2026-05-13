@@ -36,6 +36,8 @@ import {
   UNSUPPORTED_SKIP,
   VIA_PRESENTATION_DISPLAY,
 } from './atom-contract-types'
+import { SHARED_ENUM_DISPLAY } from './shared-display-tokens'
+import { ATOM_PRIVATE_DISPLAY } from './atom-private-display-tokens'
 
 type AtomContractSeed = Omit<AtomContract, 'key' | 'bucket' | 'display' | 'emit'> & {
   readonly display?: AtomContractDisplay
@@ -325,10 +327,33 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'volume.threshold': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'volume.threshold.value') return '请给出成交量阈值，例如 1000（成交量单位：张/枚）或 500000（成交额单位：USDT）。'
+      if (slotKey === 'volume.threshold.operator') return '请指明比较方向：GT（大于）/ GTE（不低于）/ LT（小于）/ LTE（不高于）。'
+      if (slotKey === 'volume.threshold.metric') return '请指明量的类型：base_volume（成交量）或 quote_volume（成交额）。'
+      return '请补充成交量阈值条件的缺失信息。'
+    },
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['volume.threshold'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        operator: (v, locale) => SHARED_ENUM_DISPLAY.operator[v as keyof typeof SHARED_ENUM_DISPLAY.operator]?.[locale] ?? String(v),
+        metric: (v, locale) => ATOM_PRIVATE_DISPLAY.volumeMetric[v as keyof typeof ATOM_PRIVATE_DISPLAY.volumeMetric]?.[locale] ?? String(v),
+        value: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['volume.threshold'].en
+        const metric = typeof params.metric === 'string' ? params.metric : 'base_volume'
+        const op = typeof params.operator === 'string' ? params.operator : 'GT'
+        const value = typeof params.value === 'number' ? params.value : 0
+        const metricLabel = ATOM_PRIVATE_DISPLAY.volumeMetric[metric as keyof typeof ATOM_PRIVATE_DISPLAY.volumeMetric]?.zh ?? metric
+        const opLabel = SHARED_ENUM_DISPLAY.operator[op as keyof typeof SHARED_ENUM_DISPLAY.operator]?.zh ?? op
+        return `${metricLabel}${opLabel}${value}`
+      },
+    },
     surface: {
       intent: {
         keywords: ['成交量', '量能', '放量', 'volume'] as const,
@@ -349,10 +374,35 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'volatility.atr_threshold': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'volatility.atr_threshold.period') return '请指定 ATR 计算周期，例如 14（常用默认值）。'
+      if (slotKey === 'volatility.atr_threshold.threshold') return '请给出 ATR 阈值数值，例如 50。'
+      if (slotKey === 'volatility.atr_threshold.thresholdUnit') return '请指定阈值单位：quote_currency（价格单位，如 USDT）或 pct（百分比）。'
+      if (slotKey === 'volatility.atr_threshold.operator') return '请指明比较方向：GT（大于）/ GTE（不低于）/ LT（小于）/ LTE（不高于）。'
+      return '请补充 ATR 波动率阈值条件的缺失信息。'
+    },
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['volatility.atr_threshold'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        operator: (v, locale) => SHARED_ENUM_DISPLAY.operator[v as keyof typeof SHARED_ENUM_DISPLAY.operator]?.[locale] ?? String(v),
+        period: (v) => String(v),
+        threshold: (v) => String(v),
+        thresholdUnit: (v, locale) => locale === 'zh' ? (v === 'percent' ? '%' : '报价币') : (v === 'percent' ? '%' : 'quote currency'),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['volatility.atr_threshold'].en
+        const op = typeof params.operator === 'string' ? params.operator : 'GT'
+        const period = typeof params.period === 'number' ? params.period : 0
+        const threshold = typeof params.threshold === 'number' ? params.threshold : 0
+        const periodStr = period > 0 ? `ATR${period}` : 'ATR'
+        const opLabel = SHARED_ENUM_DISPLAY.operator[op as keyof typeof SHARED_ENUM_DISPLAY.operator]?.zh ?? op
+        return `${periodStr}${opLabel}${threshold}`
+      },
+    },
     surface: {
       intent: {
         keywords: ['ATR', 'atr', '波动率'] as const,
@@ -375,10 +425,38 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'strategy.time_window': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'strategy.time_window.timezone') return '请指定时区，例如 Asia/Shanghai（北京时间）或 UTC。'
+      if (slotKey === 'strategy.time_window.windows') return '请指定允许开仓的时间段，例如 09:30-11:30（24小时制，可有多段）。'
+      return '请补充交易时间窗口条件的缺失信息。'
+    },
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['strategy.time_window'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        timezone: (v) => String(v),
+        windows: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['strategy.time_window'].en
+        const timezone = typeof params.timezone === 'string' ? params.timezone : 'UTC'
+        const windowsRaw = typeof params.windows === 'string' ? params.windows : null
+        let windowsStr = ''
+        if (windowsRaw) {
+          try {
+            const arr = JSON.parse(windowsRaw) as Array<{ start: string; end: string }>
+            windowsStr = arr.map(w => `${w.start}-${w.end}`).join(', ')
+          }
+          catch {
+            windowsStr = windowsRaw
+          }
+        }
+        return windowsStr ? `交易时间窗口（${timezone}）：${windowsStr}` : `交易时间窗口（${timezone}）`
+      },
+    },
     surface: {
       intent: {
         keywords: ['时间窗口', '北京时间', 'time window', 'allow entries', 'trade during'] as const,
@@ -399,10 +477,25 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充 RSI 阈值（0-100，常用：超卖 30 / 超买 70）。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['oscillator.rsi_lte'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        period: (v) => String(v),
+        value: (v) => String(v),
+        thresholdRole: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['oscillator.rsi_lte'].en
+        const period = typeof params.period === 'number' ? params.period : 14
+        const value = typeof params.value === 'number' ? params.value : null
+        return value !== null ? `RSI${period} 低于或等于 ${value}` : `RSI${period} 低于或等于阈值`
+      },
+    },
     surface: {
       intent: {
         keywords: ['RSI', 'rsi'] as const,
@@ -424,10 +517,25 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充 RSI 阈值（0-100，常用：超卖 30 / 超买 70）。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['oscillator.rsi_gte'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        period: (v) => String(v),
+        value: (v) => String(v),
+        thresholdRole: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['oscillator.rsi_gte'].en
+        const period = typeof params.period === 'number' ? params.period : 14
+        const value = typeof params.value === 'number' ? params.value : null
+        return value !== null ? `RSI${period} 高于或等于 ${value}` : `RSI${period} 高于或等于阈值`
+      },
+    },
     surface: {
       intent: {
         keywords: ['RSI', 'rsi', '超买'] as const,
@@ -449,10 +557,26 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充布林带触及条件的缺失信息。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['bollinger.touch_upper'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        band: (v, locale) => SHARED_ENUM_DISPLAY.boundaryRole[v as keyof typeof SHARED_ENUM_DISPLAY.boundaryRole]?.[locale] ?? String(v),
+        period: (v) => String(v),
+        stdDev: (v) => String(v),
+        confirmationMode: (v, locale) => locale === 'zh' ? (v === 'touch' ? '触及' : v === 'breakout' ? '突破' : v === 'close' ? '收盘确认' : String(v)) : (v === 'touch' ? 'touch' : v === 'breakout' ? 'breakout' : v === 'close' ? 'close confirmation' : String(v)),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['bollinger.touch_upper'].en
+        const period = typeof params.period === 'number' ? params.period : 20
+        const stdDev = typeof params.stdDev === 'number' ? params.stdDev : 2
+        return `BOLL（${period}, ${stdDev}）上轨触及`
+      },
+    },
     surface: {
       intent: {
         keywords: ['布林带', '布林线', 'bollinger', '上轨'] as const,
@@ -476,10 +600,26 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充布林带触及条件的缺失信息。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['bollinger.touch_lower'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        band: (v, locale) => SHARED_ENUM_DISPLAY.boundaryRole[v as keyof typeof SHARED_ENUM_DISPLAY.boundaryRole]?.[locale] ?? String(v),
+        period: (v) => String(v),
+        stdDev: (v) => String(v),
+        confirmationMode: (v, locale) => locale === 'zh' ? (v === 'touch' ? '触及' : v === 'breakout' ? '突破' : v === 'close' ? '收盘确认' : String(v)) : (v === 'touch' ? 'touch' : v === 'breakout' ? 'breakout' : v === 'close' ? 'close confirmation' : String(v)),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['bollinger.touch_lower'].en
+        const period = typeof params.period === 'number' ? params.period : 20
+        const stdDev = typeof params.stdDev === 'number' ? params.stdDev : 2
+        return `BOLL（${period}, ${stdDev}）下轨触及`
+      },
+    },
     surface: {
       intent: {
         keywords: ['布林带', '布林线', 'bollinger', '下轨'] as const,
@@ -503,10 +643,26 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充布林带触及条件的缺失信息。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['bollinger.touch_middle'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        band: (v, locale) => SHARED_ENUM_DISPLAY.boundaryRole[v as keyof typeof SHARED_ENUM_DISPLAY.boundaryRole]?.[locale] ?? String(v),
+        period: (v) => String(v),
+        stdDev: (v) => String(v),
+        confirmationMode: (v, locale) => locale === 'zh' ? (v === 'touch' ? '触及' : v === 'breakout' ? '突破' : v === 'close' ? '收盘确认' : String(v)) : (v === 'touch' ? 'touch' : v === 'breakout' ? 'breakout' : v === 'close' ? 'close confirmation' : String(v)),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['bollinger.touch_middle'].en
+        const period = typeof params.period === 'number' ? params.period : 20
+        const stdDev = typeof params.stdDev === 'number' ? params.stdDev : 2
+        return `BOLL（${period}, ${stdDev}）中轨触及`
+      },
+    },
     surface: {
       intent: {
         keywords: ['布林带', '布林线', 'bollinger', '中轨', '中线'] as const,
@@ -529,10 +685,21 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充价格百分比变化条件的缺失信息。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['price.percent_change'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        direction: (v, locale) => SHARED_ENUM_DISPLAY.directionBias[v as keyof typeof SHARED_ENUM_DISPLAY.directionBias]?.[locale] ?? String(v),
+        valuePct: (v) => `${v}%`,
+        basis: (v, locale) => locale === 'zh' ? (v === 'prev_close' ? '上一根收盘价' : v === 'entry_avg_price' ? '入场均价' : v === 'current_price' ? '当前价' : String(v)) : (v === 'prev_close' ? 'prev close' : v === 'entry_avg_price' ? 'avg entry price' : v === 'current_price' ? 'current price' : String(v)),
+        window: (v) => String(v),
+      },
+      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['price.percent_change'][locale],
+    },
     surface: {
       intent: {
         keywords: ['价格', '收盘价', '涨跌幅', '百分比', 'price', 'percent change'] as const,
@@ -556,10 +723,20 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充向上突破条件的缺失信息。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['price.breakout_up'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        period: (v) => String(v),
+        reference: (v, locale) => locale === 'zh' ? (v === 'channel_high' ? '通道高点' : String(v)) : (v === 'channel_high' ? 'channel high' : String(v)),
+        bufferPct: (v) => `${v}%`,
+      },
+      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['price.breakout_up'][locale],
+    },
     surface: {
       intent: {
         keywords: ['突破', '前高', '高点', 'channel high', 'breakout'] as const,
@@ -581,10 +758,20 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充向下跌破条件的缺失信息。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['price.breakout_down'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        period: (v) => String(v),
+        reference: (v, locale) => locale === 'zh' ? (v === 'channel_low' ? '通道低点' : String(v)) : (v === 'channel_low' ? 'channel low' : String(v)),
+        bufferPct: (v) => `${v}%`,
+      },
+      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['price.breakout_down'][locale],
+    },
     surface: {
       intent: {
         keywords: ['跌破', '前低', '低点', 'channel low', 'breakdown'] as const,
@@ -606,10 +793,34 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充价格触及指标边界条件的缺失信息。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['price.detect.indicator_boundary'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        boundaryRole: (v, locale) => SHARED_ENUM_DISPLAY.boundaryRole[v as keyof typeof SHARED_ENUM_DISPLAY.boundaryRole]?.[locale] ?? String(v),
+        confirmationMode: (v, locale) => locale === 'zh' ? (v === 'touch' ? '触及' : v === 'breakout' ? '突破' : v === 'close' ? '收盘确认' : String(v)) : (v === 'touch' ? 'touch' : v === 'breakout' ? 'breakout' : v === 'close' ? 'close confirmation' : String(v)),
+        sourceText: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['price.detect.indicator_boundary'].en
+        // params.indicator is runtime IR-projected nested object (see service renderIndicatorBoundaryTouch)
+        const indicator = params.indicator !== null && typeof params.indicator === 'object' ? params.indicator as Record<string, unknown> : null
+        const indicatorName = indicator !== null && typeof indicator.name === 'string' ? indicator.name : ''
+        const boundaryRole = typeof params.boundaryRole === 'string' ? params.boundaryRole : 'boundary'
+        const boundaryLabel = SHARED_ENUM_DISPLAY.boundaryRole[boundaryRole as keyof typeof SHARED_ENUM_DISPLAY.boundaryRole]?.zh ?? boundaryRole
+        if (indicatorName === 'bollinger') {
+          const period = indicator !== null && typeof indicator.period === 'number' ? indicator.period : 20
+          const stdDev = indicator !== null && typeof indicator.stdDev === 'number' ? indicator.stdDev : 2
+          return `触及 BOLL（${period}, ${stdDev}）${boundaryLabel}`
+        }
+        const displayName = indicatorName ? indicatorName.toUpperCase() : '指标'
+        return `触及 ${displayName} ${boundaryLabel}`
+      },
+    },
     surface: {
       intent: {
         // Issue #1279 PR2b：补 '上边界'/'下边界'/'中线' 与英文 'channel' 关键词，覆盖
@@ -637,10 +848,44 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充指标上穿条件的缺失信息（指标类型、周期）。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['indicator.cross_over'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        indicator: (v, locale) => SHARED_ENUM_DISPLAY.indicatorAlgo[v as keyof typeof SHARED_ENUM_DISPLAY.indicatorAlgo]?.[locale] ?? String(v).toUpperCase(),
+        semantic: (v) => String(v),
+        value: (v) => String(v),
+        period: (v) => String(v),
+        fastPeriod: (v) => String(v),
+        slowPeriod: (v) => String(v),
+        signalPeriod: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['indicator.cross_over'].en
+        const indicator = typeof params.indicator === 'string' ? params.indicator.trim().toLowerCase() : ''
+        if (indicator === 'macd') {
+          const fast = typeof params.fastPeriod === 'number' ? params.fastPeriod : 12
+          const slow = typeof params.slowPeriod === 'number' ? params.slowPeriod : 26
+          const signal = typeof params.signalPeriod === 'number' ? params.signalPeriod : 9
+          return `MACD ${fast}/${slow}/${signal} 金叉`
+        }
+        if (indicator === 'rsi') {
+          const period = typeof params.period === 'number' ? params.period : 14
+          const value = typeof params.value === 'number' ? params.value : null
+          return value === null ? `RSI${period} 上穿阈值` : `RSI${period} 上穿 ${value}`
+        }
+        const label = indicator === 'ema' ? 'EMA' : 'MA'
+        const fast = typeof params.fastPeriod === 'number' ? params.fastPeriod : null
+        const slow = typeof params.slowPeriod === 'number' ? params.slowPeriod : null
+        const fastLabel = fast === null ? `${label}短周期` : `${label}${fast}`
+        const slowLabel = slow === null ? `${label}长周期` : `${label}${slow}`
+        return `${fastLabel} 上穿 ${slowLabel}`
+      },
+    },
     surface: {
       intent: {
         keywords: ['均线', 'MA', 'EMA', 'RSI', 'MACD', 'DIF', 'DEA', 'indicator'] as const,
@@ -666,10 +911,44 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充指标下穿条件的缺失信息（指标类型、周期）。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['indicator.cross_under'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        indicator: (v, locale) => SHARED_ENUM_DISPLAY.indicatorAlgo[v as keyof typeof SHARED_ENUM_DISPLAY.indicatorAlgo]?.[locale] ?? String(v).toUpperCase(),
+        semantic: (v) => String(v),
+        value: (v) => String(v),
+        period: (v) => String(v),
+        fastPeriod: (v) => String(v),
+        slowPeriod: (v) => String(v),
+        signalPeriod: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['indicator.cross_under'].en
+        const indicator = typeof params.indicator === 'string' ? params.indicator.trim().toLowerCase() : ''
+        if (indicator === 'macd') {
+          const fast = typeof params.fastPeriod === 'number' ? params.fastPeriod : 12
+          const slow = typeof params.slowPeriod === 'number' ? params.slowPeriod : 26
+          const signal = typeof params.signalPeriod === 'number' ? params.signalPeriod : 9
+          return `MACD ${fast}/${slow}/${signal} 死叉`
+        }
+        if (indicator === 'rsi') {
+          const period = typeof params.period === 'number' ? params.period : 14
+          const value = typeof params.value === 'number' ? params.value : null
+          return value === null ? `RSI${period} 下穿阈值` : `RSI${period} 下穿 ${value}`
+        }
+        const label = indicator === 'ema' ? 'EMA' : 'MA'
+        const fast = typeof params.fastPeriod === 'number' ? params.fastPeriod : null
+        const slow = typeof params.slowPeriod === 'number' ? params.slowPeriod : null
+        const fastLabel = fast === null ? `${label}短周期` : `${label}${fast}`
+        const slowLabel = slow === null ? `${label}长周期` : `${label}${slow}`
+        return `${fastLabel} 下穿 ${slowLabel}`
+      },
+    },
     surface: {
       intent: {
         keywords: ['均线', 'MA', 'EMA', 'RSI', 'MACD', 'DIF', 'DEA', 'indicator'] as const,
@@ -695,10 +974,21 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充指标高于阈值条件的缺失信息。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['indicator.above'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        indicator: (v, locale) => SHARED_ENUM_DISPLAY.indicatorAlgo[v as keyof typeof SHARED_ENUM_DISPLAY.indicatorAlgo]?.[locale] ?? String(v).toUpperCase(),
+        referenceRole: (v, locale) => locale === 'zh' ? (v === 'short_term' ? '短期' : v === 'mid_term' ? '中期' : v === 'long_term' ? '长期' : String(v)) : (v === 'short_term' ? 'short term' : v === 'mid_term' ? 'mid term' : v === 'long_term' ? 'long term' : String(v)),
+        'reference.period': (v) => String(v),
+        timeframeOverride: (v) => String(v),
+      },
+      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['indicator.above'][locale],
+    },
     surface: {
       intent: {
         keywords: ['价格', '收盘价', 'MA', 'EMA', '均线', 'indicator'] as const,
@@ -721,10 +1011,21 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充指标低于阈值条件的缺失信息。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['indicator.below'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        indicator: (v, locale) => SHARED_ENUM_DISPLAY.indicatorAlgo[v as keyof typeof SHARED_ENUM_DISPLAY.indicatorAlgo]?.[locale] ?? String(v).toUpperCase(),
+        referenceRole: (v, locale) => locale === 'zh' ? (v === 'short_term' ? '短期' : v === 'mid_term' ? '中期' : v === 'long_term' ? '长期' : String(v)) : (v === 'short_term' ? 'short term' : v === 'mid_term' ? 'mid term' : v === 'long_term' ? 'long term' : String(v)),
+        'reference.period': (v) => String(v),
+        timeframeOverride: (v) => String(v),
+      },
+      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['indicator.below'][locale],
+    },
     surface: {
       intent: {
         keywords: ['价格', '收盘价', 'MA', 'EMA', '均线', 'indicator'] as const,
@@ -747,10 +1048,20 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充启动后执行条件的缺失信息。',
     mutex: [],
     isActionable: true,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['execution.on_start'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        timing: (v) => String(v),
+        orderType: (v, locale) => locale === 'zh' ? (v === 'market' ? '市价' : String(v)) : (v === 'market' ? 'market' : String(v)),
+        occurrence: (v) => String(v),
+      },
+      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['execution.on_start'][locale],
+    },
     surface: {
       intent: {
         keywords: ['立即', '立刻', '开始时', '启动时', 'on start', 'immediately'] as const,
@@ -772,10 +1083,24 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请指定趋势方向：up（向上）或 down（向下）。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['trend.direction'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        value: (v, locale) => locale === 'zh' ? (v === 'up' ? '向上' : v === 'down' ? '向下' : String(v)) : (v === 'up' ? 'up' : v === 'down' ? 'down' : String(v)),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['trend.direction'].en
+        const value = typeof params.value === 'string' ? params.value : ''
+        if (value === 'up') return '趋势向上'
+        if (value === 'down') return '趋势向下'
+        return '趋势方向过滤'
+      },
+    },
     surface: {
       intent: {
         keywords: ['趋势', '大趋势', '市场趋势', 'trend'] as const,
@@ -795,10 +1120,25 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请指定市场状态：trend（趋势市场）/ range（震荡市场）/ volatile（高波动市场）。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['market.regime'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        value: (v, locale) => locale === 'zh' ? (v === 'range' ? '震荡区间' : v === 'trend' ? '趋势' : v === 'volatile' ? '高波动' : String(v)) : (v === 'range' ? 'ranging' : v === 'trend' ? 'trending' : v === 'volatile' ? 'volatile' : String(v)),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['market.regime'].en
+        const regime = typeof params.regime === 'string' ? params.regime : (typeof params.value === 'string' ? params.value : '')
+        if (regime === 'trend') return '趋势市场'
+        if (regime === 'range') return '震荡市场'
+        if (regime === 'volatile') return '高波动市场'
+        return ATOM_PUBLIC_NAMES['market.regime'].zh
+      },
+    },
     surface: {
       intent: {
         keywords: ['市场状态', '行情', '震荡', '盘整', 'regime', 'range-bound'] as const,
@@ -818,10 +1158,24 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请指定波动率状态：high（高波动率）或 low（低波动率）。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['volatility.state'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        value: (v, locale) => locale === 'zh' ? (v === 'high' ? '高波动' : v === 'low' ? '低波动' : String(v)) : (v === 'high' ? 'high' : v === 'low' ? 'low' : String(v)),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['volatility.state'].en
+        const state = typeof params.state === 'string' ? params.state : (typeof params.value === 'string' ? params.value : '')
+        if (state === 'high') return '高波动率状态'
+        if (state === 'low') return '低波动率状态'
+        return ATOM_PUBLIC_NAMES['volatility.state'].zh
+      },
+    },
     surface: {
       intent: {
         keywords: ['波动率', '高波动', '低波动', 'volatility'] as const,
@@ -841,10 +1195,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充区间低位条件的缺失信息（如区间百分比阈值）。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['price.range_position_lte'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        lookbackBars: (v) => String(v),
+        thresholdPct: (v) => `${v}%`,
+      },
+      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['price.range_position_lte'][locale],
+    },
     surface: {
       intent: {
         keywords: ['区间', '区间低位', '区间底部', 'range'] as const,
@@ -865,10 +1228,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充区间高位条件的缺失信息（如区间百分比阈值）。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['price.range_position_gte'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        lookbackBars: (v) => String(v),
+        thresholdPct: (v) => `${v}%`,
+      },
+      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['price.range_position_gte'][locale],
+    },
     surface: {
       intent: {
         keywords: ['区间', '区间高位', '区间顶部', 'range'] as const,
@@ -888,10 +1260,29 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'indicator.divergence': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充指标背离条件的缺失信息（指标类型、背离方向）。',
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['indicator.divergence'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        indicator: (v) => String(v).toUpperCase(),
+        // divergence uses atom-private display (底/顶背离), not shared directionBias (看涨/看跌)
+        direction: (v, locale) => ATOM_PRIVATE_DISPLAY.divergenceDirection[v as keyof typeof ATOM_PRIVATE_DISPLAY.divergenceDirection]?.[locale] ?? String(v),
+        pivotWindow: (v) => String(v),
+        confirmationBars: (v) => String(v),
+        sourceText: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['indicator.divergence'].en
+        const indicator = typeof params.indicator === 'string' ? params.indicator.toUpperCase() : 'RSI'
+        const direction = typeof params.direction === 'string' ? params.direction : ''
+        const directionLabel = ATOM_PRIVATE_DISPLAY.divergenceDirection[direction as keyof typeof ATOM_PRIVATE_DISPLAY.divergenceDirection]?.zh ?? '背离'
+        return `${indicator} ${directionLabel}`
+      },
+    },
     surface: {
       intent: {
         keywords: ['背离', '顶背离', '底背离', 'divergence', 'bullish divergence', 'bearish divergence'] as const,
@@ -914,10 +1305,35 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'price.candle_pattern': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'price.candle_pattern.pattern') return '请选择 K 线形态：engulfing（吞没）、hammer（锤子线）、doji（十字星）或 consecutive_body（连续实体）。'
+      if (slotKey === 'price.candle_pattern.direction') return '请指明形态方向：bullish（看涨）或 bearish（看跌）。'
+      if (slotKey === 'price.candle_pattern.minBars') return '连续实体形态需要指定最少连续根数（minBars），例如 3。'
+      return '请补充 K 线形态条件的缺失信息。'
+    },
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['price.candle_pattern'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        pattern: (v, locale) => ATOM_PRIVATE_DISPLAY.candlePattern[v as keyof typeof ATOM_PRIVATE_DISPLAY.candlePattern]?.[locale] ?? String(v),
+        direction: (v, locale) => SHARED_ENUM_DISPLAY.directionBias[v as keyof typeof SHARED_ENUM_DISPLAY.directionBias]?.[locale] ?? String(v),
+        minBars: (v) => String(v),
+        sourceText: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['price.candle_pattern'].en
+        const pattern = typeof params.pattern === 'string' ? params.pattern : 'engulfing'
+        const direction = typeof params.direction === 'string' ? params.direction : ''
+        const minBars = typeof params.minBars === 'number' ? params.minBars : undefined
+        const directionLabel = direction ? (SHARED_ENUM_DISPLAY.directionBias[direction as keyof typeof SHARED_ENUM_DISPLAY.directionBias]?.zh ?? direction) : ''
+        const patternLabel = ATOM_PRIVATE_DISPLAY.candlePattern[pattern as keyof typeof ATOM_PRIVATE_DISPLAY.candlePattern]?.zh ?? pattern
+        const minBarsLabel = minBars !== undefined ? `（≥${minBars} 根）` : ''
+        return `${directionLabel}${patternLabel}形态${minBarsLabel}`
+      },
+    },
     surface: {
       intent: {
         // Issue #1279 PR2b：补 '连续' / 'consecutive' / 'body' 关键词，覆盖
@@ -941,10 +1357,31 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'price.chart_pattern': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'price.chart_pattern.pattern') return '请选择图形形态：head_and_shoulders（头肩）、double_top（双顶）、double_bottom（双底）或 triangle（三角形）。'
+      if (slotKey === 'price.chart_pattern.direction') return '请指明形态突破方向：bullish（看涨）或 bearish（看跌）。'
+      return '请补充图形形态条件的缺失信息。'
+    },
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['price.chart_pattern'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        pattern: (v, locale) => ATOM_PRIVATE_DISPLAY.chartPattern[v as keyof typeof ATOM_PRIVATE_DISPLAY.chartPattern]?.[locale] ?? String(v),
+        direction: (v, locale) => SHARED_ENUM_DISPLAY.directionBias[v as keyof typeof SHARED_ENUM_DISPLAY.directionBias]?.[locale] ?? String(v),
+        sourceText: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['price.chart_pattern'].en
+        const pattern = typeof params.pattern === 'string' ? params.pattern : 'head_and_shoulders'
+        const direction = typeof params.direction === 'string' ? params.direction : ''
+        const directionLabel = direction ? (SHARED_ENUM_DISPLAY.directionBias[direction as keyof typeof SHARED_ENUM_DISPLAY.directionBias]?.zh ?? direction) : ''
+        const patternLabel = ATOM_PRIVATE_DISPLAY.chartPattern[pattern as keyof typeof ATOM_PRIVATE_DISPLAY.chartPattern]?.zh ?? pattern
+        return `${directionLabel}${patternLabel}形态`
+      },
+    },
     surface: {
       intent: {
         keywords: ['头肩', '双顶', '双底', '三角形', 'chart pattern', 'head and shoulders', 'double top', 'double bottom', 'triangle'] as const,
@@ -966,10 +1403,35 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'liquidity.sweep': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'liquidity.sweep.direction') return '请指明扫荡反转方向：bullish（看涨，扫前低后反弹）或 bearish（看跌，扫前高后回落）。'
+      if (slotKey === 'liquidity.sweep.reference') return '请选择被扫荡的关键位：prev_low（前低）、prev_high（前高）、session_low（日内低）或 session_high（日内高）。'
+      if (slotKey === 'liquidity.sweep.reclaimBars') return '请指明 reclaim 的最大确认根数（reclaimBars），例如 3。'
+      return '请补充流动性扫荡条件的缺失信息。'
+    },
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['liquidity.sweep'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        direction: (v, locale) => SHARED_ENUM_DISPLAY.directionBias[v as keyof typeof SHARED_ENUM_DISPLAY.directionBias]?.[locale] ?? String(v),
+        reference: (v, locale) => SHARED_ENUM_DISPLAY.extremaReference[v as keyof typeof SHARED_ENUM_DISPLAY.extremaReference]?.[locale] ?? String(v),
+        reclaimBars: (v) => String(v),
+        sourceText: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['liquidity.sweep'].en
+        const direction = typeof params.direction === 'string' ? params.direction : ''
+        const reference = typeof params.reference === 'string' ? params.reference : ''
+        const reclaimBars = typeof params.reclaimBars === 'number' ? params.reclaimBars : undefined
+        const directionLabel = direction ? (SHARED_ENUM_DISPLAY.directionBias[direction as keyof typeof SHARED_ENUM_DISPLAY.directionBias]?.zh ?? direction) : ''
+        const referenceLabel = reference ? (SHARED_ENUM_DISPLAY.extremaReference[reference as keyof typeof SHARED_ENUM_DISPLAY.extremaReference]?.zh ?? reference) : ''
+        const reclaimLabel = reclaimBars !== undefined ? `（${reclaimBars} 根内 reclaim）` : ''
+        return `${directionLabel}流动性扫荡 ${referenceLabel}${reclaimLabel}`
+      },
+    },
     surface: {
       intent: {
         // Issue #1279 PR2b：补 '假突破' / 'fake breakout' 关键词，覆盖
@@ -995,10 +1457,31 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'external.signal': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'external.signal.provider') return '请指明外部信号来源：tradingview / discord / telegram / webhook。'
+      if (slotKey === 'external.signal.signalId') return '请提供外部信号订阅 ID（用于过滤推送）。'
+      if (slotKey === 'external.signal.secret') return '请提供 HMAC 校验 secret，避免冒名信号触发开仓（可由系统生成后回填）。'
+      return '请补充外部信号触发条件的缺失信息。'
+    },
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['external.signal'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        provider: (v, locale) => ATOM_PRIVATE_DISPLAY.signalProvider[v as keyof typeof ATOM_PRIVATE_DISPLAY.signalProvider]?.[locale] ?? String(v),
+        signalId: (v) => String(v),
+        secret: (v) => String(v),
+        sourceText: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['external.signal'].en
+        const provider = typeof params.provider === 'string' ? params.provider : ''
+        const providerLabel = provider ? (ATOM_PRIVATE_DISPLAY.signalProvider[provider as keyof typeof ATOM_PRIVATE_DISPLAY.signalProvider]?.zh ?? provider) : '外部信号'
+        return `${providerLabel} 喊单信号`
+      },
+    },
     surface: {
       intent: {
         // critic m1 fix: 'whale_buy'/'whale_sell' 是事件名而非 utterance 同义词，移除；'on'/'when' 是连接词非触发动词，移除
@@ -1025,10 +1508,26 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'position.has_position': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'position.has_position.sideScope') return '请明确仓位方向：多头（long）、空头（short）或双向（both）。'
+      return '请补充仓位检查条件的缺失信息。'
+    },
     mutex: ['position.no_position'],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['position.has_position'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        sideScope: (v, locale) => SHARED_ENUM_DISPLAY.side[v as keyof typeof SHARED_ENUM_DISPLAY.side]?.[locale] ?? String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['position.has_position'].en
+        const side = typeof params.sideScope === 'string' ? params.sideScope : 'both'
+        const sideLabel = SHARED_ENUM_DISPLAY.side[side as keyof typeof SHARED_ENUM_DISPLAY.side]?.zh ?? side
+        return `已有${sideLabel}仓位 → 阻止新开仓`
+      },
+    },
     surface: {
       intent: {
         keywords: ['已有', '已持有', '持仓时', 'has position', 'in position', 'when in'] as const,
@@ -1047,10 +1546,26 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'position.no_position': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'position.no_position.sideScope') return '请明确仓位方向：多头（long）、空头（short）或双向（both）。'
+      return '请补充无仓位检查条件的缺失信息。'
+    },
     mutex: ['position.has_position'],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['position.no_position'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        sideScope: (v, locale) => SHARED_ENUM_DISPLAY.side[v as keyof typeof SHARED_ENUM_DISPLAY.side]?.[locale] ?? String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['position.no_position'].en
+        const side = typeof params.sideScope === 'string' ? params.sideScope : 'both'
+        const sideLabel = SHARED_ENUM_DISPLAY.side[side as keyof typeof SHARED_ENUM_DISPLAY.side]?.zh ?? side
+        return `无${sideLabel}仓位 → 允许新开仓`
+      },
+    },
     surface: {
       intent: {
         keywords: ['无仓位', '无多头', '无空头', '空仓', 'flat', 'only when flat', 'enter only when'] as const,
@@ -1068,6 +1583,18 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
 
   // ── 行动（actions）
   'action.add_position': {
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['action.add_position'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        sideScope: (v, locale) => SHARED_ENUM_DISPLAY.side[v as keyof typeof SHARED_ENUM_DISPLAY.side]?.[locale] ?? String(v),
+        addMode: (v, locale) => locale === 'zh' ? (v === 'signal_confirm' ? '信号确认' : v === 'profit_pct' ? '盈利触发' : v === 'drawdown_pct' ? '回撤触发' : String(v)) : (v === 'signal_confirm' ? 'signal confirm' : v === 'profit_pct' ? 'profit trigger' : v === 'drawdown_pct' ? 'drawdown trigger' : String(v)),
+        addRatio: (v) => `${v}`,
+        profitThreshold: (v) => `${v}%`,
+        drawdownThreshold: (v) => `${v}%`,
+      },
+      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['action.add_position'][locale],
+    },
     summaryContribution: ({ params }) => {
       // inline 自定义：addMode + addRatio 精简摘要
       const addRatio = typeof params.addRatio === 'number' ? params.addRatio : null
@@ -1122,6 +1649,17 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'action.reverse_position': {
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['action.reverse_position'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        fromSide: (v, locale) => SHARED_ENUM_DISPLAY.side[v as keyof typeof SHARED_ENUM_DISPLAY.side]?.[locale] ?? String(v),
+        toSide: (v, locale) => SHARED_ENUM_DISPLAY.side[v as keyof typeof SHARED_ENUM_DISPLAY.side]?.[locale] ?? String(v),
+        sameBarPolicy: (v, locale) => locale === 'zh' ? (v === 'next_bar_only' ? '下根K线' : v === 'allow' ? '允许同根' : String(v)) : (v === 'next_bar_only' ? 'next bar' : v === 'allow' ? 'allow same bar' : String(v)),
+        sizingSource: (v, locale) => locale === 'zh' ? (v === 'fixed' ? '固定' : v === 'current_position' ? '原仓位' : String(v)) : (v === 'fixed' ? 'fixed' : v === 'current_position' ? 'current position' : String(v)),
+      },
+      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['action.reverse_position'][locale],
+    },
     summaryContribution: ({ params }) => {
       const fromSide = typeof params.fromSide === 'string' ? params.fromSide : null
       const toSide = typeof params.toSide === 'string' ? params.toSide : null
@@ -1133,7 +1671,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       return '反手'
     },
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充反手动作的方向信息（fromSide / toSide）。',
     mutex: [],
     isActionable: true,
     sizingEvidence: null,
@@ -1159,10 +1697,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'action.open_long': {
     summaryContribution: () => '开多',
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充开多动作条件的缺失信息。',
     mutex: [],
     isActionable: true,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['action.open_long'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {},
+      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['action.open_long'][locale],
+    },
     surface: {
       intent: {
         keywords: ['开多', '做多', '入场多', 'open long', 'go long'] as const,
@@ -1179,10 +1723,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'action.close_long': {
     summaryContribution: () => '平多',
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充平多动作条件的缺失信息。',
     mutex: [],
     isActionable: true,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['action.close_long'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {},
+      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['action.close_long'][locale],
+    },
     surface: {
       intent: {
         keywords: ['平多', '平仓多', '出场多', 'close long', 'exit long'] as const,
@@ -1201,10 +1751,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'action.open_short': {
     summaryContribution: () => '开空',
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充开空动作条件的缺失信息。',
     mutex: [],
     isActionable: true,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['action.open_short'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {},
+      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['action.open_short'][locale],
+    },
     surface: {
       intent: {
         keywords: ['开空', '做空', '入场空', 'open short', 'go short'] as const,
@@ -1221,10 +1777,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'action.close_short': {
     summaryContribution: () => '平空',
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充平空动作条件的缺失信息。',
     mutex: [],
     isActionable: true,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['action.close_short'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {},
+      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['action.close_short'][locale],
+    },
     surface: {
       intent: {
         keywords: ['平空', '平仓空', '出场空', 'close short', 'exit short'] as const,
@@ -1246,10 +1808,32 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'risk.partial_take_profit': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: UNSUPPORTED_SKIP,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'risk.partial_take_profit.tiers') return '请补充止盈档位，例如：盈利 5% 平 50%、盈利 10% 平 50%。'
+      return '请补充分批止盈的缺失信息。'
+    },
     mutex: ATOM_MUTEX['risk.partial_take_profit'] ?? [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.partial_take_profit'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        profitPct: (v) => `${v}%`,
+        ratio: (v) => `${v}`,
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.partial_take_profit'].en
+        const tiers = params.tiers
+        if (!Array.isArray(tiers) || tiers.length === 0) return '分批止盈'
+        const parts = (tiers as Array<{ trigger?: { threshold?: number }; reduceRatio?: number }>).map((tier, i) => {
+          const pct = typeof tier.trigger?.threshold === 'number' ? `+${tier.trigger.threshold}%` : '?%'
+          const ratio = typeof tier.reduceRatio === 'number' ? `减 ${Math.round(tier.reduceRatio * 100)}%` : ''
+          return `第${i + 1}档 ${pct} ${ratio}`.trim()
+        })
+        return `分批止盈：${parts.join('，')}`
+      },
+    },
     surface: {
       intent: {
         // Issue #1279 PR2b：补 '档' / '减' / '平' 关键词，覆盖中文分档语法
@@ -1272,10 +1856,29 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'portfolioRisk.drawdown_block': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'orchestration.portfolio_drawdown.threshold_pct') return '请确认账户回撤百分比阈值（0..100）'
+      return '请补全账户回撤护栏参数'
+    },
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['portfolioRisk.drawdown_block'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        thresholdPct: (v) => `${v}%`,
+        lookbackWindow: (v) => String(v),
+        mode: (v, locale) => ATOM_PRIVATE_DISPLAY.drawdownMode[v as keyof typeof ATOM_PRIVATE_DISPLAY.drawdownMode]?.[locale] ?? String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['portfolioRisk.drawdown_block'].en
+        const thresholdPct = typeof params.thresholdPct === 'number' ? params.thresholdPct : 0
+        const mode = typeof params.mode === 'string' ? params.mode : 'enforce'
+        if (mode === 'observe') return `账户回撤超过 ${thresholdPct}% 时仅记录`
+        return `账户回撤超过 ${thresholdPct}% 时阻止开新仓`
+      },
+    },
     surface: {
       intent: {
         keywords: ['账户回撤', '最大回撤', '组合回撤', '熔断', 'drawdown', 'account drawdown', 'max drawdown'] as const,
@@ -1318,10 +1921,38 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'position.dca_schedule': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'position.dca_schedule.max_count') return '请确认 DCA 最多执行几次，例如 3。'
+      if (slotKey === 'position.dca_schedule.capital_cap') return '请确认 DCA 总资金上限，例如 1000 USDT。'
+      if (slotKey === 'position.dca_schedule.per_order_sizing') return '请确认每次 DCA 补仓金额或比例，例如 100 USDT 或 10%。'
+      if (slotKey === 'position.dca_schedule.trigger_mode') return '请确认 DCA 触发方式：price_interval（价格间隔）/ time_interval（时间间隔）/ signal（信号触发）。'
+      if (slotKey === 'position.dca_schedule.exit_rule') return '请确认 DCA 停止规则，例如跌破前低停止或达到止损退出。'
+      return '请补充 DCA 补仓计划的缺失信息。'
+    },
     mutex: [],
     isActionable: true,
     sizingEvidence: DCA_SIZING_EVIDENCE,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['position.dca_schedule'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        interval: (v) => String(v),
+        dropPct: (v) => `${v}%`,
+        perOrderBudget: (v) => String(v),
+        maxOrders: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['position.dca_schedule'].en
+        const maxCountVal = params.maxCount
+        const maxCount = typeof maxCountVal === 'number' ? `最多 ${maxCountVal} 次` : ''
+        const triggerModeVal = params.triggerMode
+        const triggerMode = typeof triggerModeVal === 'string'
+          ? (ATOM_PRIVATE_DISPLAY.dcaTriggerMode[triggerModeVal as keyof typeof ATOM_PRIVATE_DISPLAY.dcaTriggerMode]?.zh ?? triggerModeVal)
+          : ''
+        const parts = [triggerMode, maxCount].filter(Boolean)
+        return parts.length > 0 ? `DCA 补仓计划：${parts.join('，')}` : 'DCA 补仓计划'
+      },
+    },
     surface: {
       intent: {
         keywords: ['定投', 'DCA', 'dca', '每跌', '分批入场', 'price drops', 'each interval'] as const,
@@ -1347,10 +1978,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'position.pyramiding_limit': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充金字塔加仓上限的缺失信息（如最多加仓层数）。',
     mutex: [],
     isActionable: true,
     sizingEvidence: PYRAMIDING_SIZING_EVIDENCE,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['position.pyramiding_limit'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        maxLayers: (v) => String(v),
+        layerSizing: (v) => `${v}%`,
+      },
+      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['position.pyramiding_limit'][locale],
+    },
     surface: {
       intent: {
         keywords: ['最多加仓', '金字塔', '加仓层数', 'pyramiding', 'max adds', 'max layers'] as const,
@@ -1375,10 +2015,23 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   'grid.range_rebalance': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
-    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充网格区间再平衡的触发条件（如越界后是否重置区间）。',
     mutex: [],
     isActionable: true,
     sizingEvidence: GRID_SIZING_EVIDENCE,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['grid.range_rebalance'],
+      // per-slot renderers; consumed by future UI debug surface (not by current summary path)
+      paramRenderers: {
+        rangeLower: (v) => String(v),
+        rangeUpper: (v) => String(v),
+        sideMode: (v, locale) => locale === 'zh' ? (v === 'long_only' ? '只做多' : v === 'short_only' ? '只做空' : v === 'both' ? '双向' : String(v)) : (v === 'long_only' ? 'long only' : v === 'short_only' ? 'short only' : v === 'both' ? 'both' : String(v)),
+        recycle: (v, locale) => locale === 'zh' ? (v === 'true' ? '循环' : '不循环') : (v === 'true' ? 'recycle' : 'no recycle'),
+        breakoutAction: (v, locale) => locale === 'zh' ? (v === 'continue' ? '继续' : v === 'stop' ? '停止' : String(v)) : (v === 'continue' ? 'continue' : v === 'stop' ? 'stop' : String(v)),
+        perGridSizing: (v) => String(v),
+      },
+      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['grid.range_rebalance'][locale],
+    },
     surface: {
       intent: {
         keywords: ['网格', '区间网格', '区间', '挂格', 'grid', 'range', 'rebalance'] as const,

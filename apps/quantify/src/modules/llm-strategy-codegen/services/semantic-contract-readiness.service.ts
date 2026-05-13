@@ -26,6 +26,7 @@ import { SemanticContractShapeNormalizerService } from './semantic-contract-shap
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
 import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
 import { SemanticOrchestrationRegistryService } from './semantic-orchestration-registry.service'
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
 import { validateSemanticExpressionContract } from './strategy-semantic-contracts'
 
@@ -370,7 +371,7 @@ export class SemanticContractReadinessService {
 
   private resolveOwnerSupport(owner: SemanticContractOwnerRef): ReturnType<SemanticAtomRegistryService['resolve']> {
     if (isExecutableIndicatorReferenceAlias(owner)) {
-      const registryKey = owner.atomKey === 'indicator.above' ? 'indicator.threshold_gte' : 'indicator.threshold_lte'
+      const registryKey = owner.atomKey === ATOM_CONTRACT_REGISTRY['indicator.above'].key ? 'indicator.threshold_gte' : 'indicator.threshold_lte'
       return {
         ...this.semanticAtomRegistry.get(registryKey),
         key: owner.atomKey,
@@ -400,10 +401,12 @@ function normalizePhase0Orchestration(
   //   Pass 3: scope.leg 节点二轮（pairedLegId 见 Pass 2 leg 状态）
   //   Pass 4: gate/program/portfolioRisk 维持 S2 原 single-pass 行为
   const initialNodes = orchestration.nodes
+  /* eslint-disable atom-keys/no-atom-key-literal -- scope.leg / scope.symbol node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
   const isLegScopeNode = (n: SemanticOrchestrationNode): boolean =>
     n.kind === 'scope' && (n.key === 'scope.leg' || n.legScopeKind === 'leg')
   const isSymbolScopeNode = (n: SemanticOrchestrationNode): boolean =>
     n.kind === 'scope' && n.key === 'scope.symbol' && !isLegScopeNode(n)
+  /* eslint-enable atom-keys/no-atom-key-literal */
 
   const afterSymbol = initialNodes.map((node) =>
     isSymbolScopeNode(node)
@@ -524,6 +527,7 @@ function isSupportedSymbolScope(
   siblingNodes: readonly SemanticOrchestrationNode[],
 ): boolean {
   if (node.kind !== 'scope') return false
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- scope.symbol node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   if (node.key !== 'scope.symbol') return false
   if (node.symbolScopeKind !== 'symbol') return false
 
@@ -551,6 +555,7 @@ function isSupportedSymbolScope(
     (other) =>
       other.id !== node.id
       && other.kind === 'scope'
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- scope.symbol node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       && other.key === 'scope.symbol'
       && other.status === 'locked',
   )
@@ -597,6 +602,7 @@ function isSupportedLegScope(
   siblingNodes: readonly SemanticOrchestrationNode[],
 ): boolean {
   if (node.kind !== 'scope') return false
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- scope.leg node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   if (node.key !== 'scope.leg') return false
   if (node.legScopeKind !== 'leg') return false
   if (node.symbolScopeKind === 'symbol') return false  // 互斥
@@ -611,6 +617,7 @@ function isSupportedLegScope(
   if (
     !referenced
     || referenced.kind !== 'scope'
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- scope.symbol node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     || referenced.key !== 'scope.symbol'
     || referenced.status !== 'locked'
   ) {
@@ -622,6 +629,7 @@ function isSupportedLegScope(
     (other) =>
       other.id !== node.id
       && other.kind === 'scope'
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- scope.leg node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       && other.key === 'scope.leg',
   )
   if (otherLegNodes.some((other) => typeof other.legId === 'string' && other.legId.trim() === legId)) {
@@ -784,6 +792,7 @@ function isSupportedTimeframeScope(
   siblingNodes: readonly SemanticOrchestrationNode[],
 ): boolean {
   if (node.kind !== 'scope') return false
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- scope.timeframe node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   if (node.key !== 'scope.timeframe') return false
   if (node.timeframeScopeKind !== 'timeframe') return false
 
@@ -816,6 +825,7 @@ function isSupportedTimeframeScope(
     (other) =>
       other.id !== node.id
       && other.kind === 'scope'
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- scope.timeframe node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       && other.key === 'scope.timeframe'
       && other.status === 'locked',
   )
@@ -860,6 +870,7 @@ function isSupportedFixedGridGated(
   if (!isProgramNode(node)) {
     return false
   }
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- program.fixed_grid_gated node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   if (node.key !== 'program.fixed_grid_gated') {
     return false
   }
@@ -932,6 +943,7 @@ function isSupportedFixedGridGated(
   if (!referenced) {
     return false
   }
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- gate.regime node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   if (referenced.kind !== 'gate' || referenced.key !== 'gate.regime') {
     return false
   }
@@ -978,6 +990,7 @@ function isSupportedDynamicGrid(
   if (!isProgramNode(node)) {
     return false
   }
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- program.dynamic_grid node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   if (node.key !== 'program.dynamic_grid') {
     return false
   }
@@ -1071,6 +1084,7 @@ function isSupportedDynamicGrid(
   if (!referenced) {
     return false
   }
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- gate.regime node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   if (referenced.kind !== 'gate' || referenced.key !== 'gate.regime') {
     return false
   }
@@ -1117,6 +1131,7 @@ function isSupportedAdaptiveVolatilityGrid(
   siblingNodes: readonly SemanticOrchestrationNode[],
 ): boolean {
   if (!isProgramNode(node)) return false
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- program.adaptive_volatility_grid node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   if (node.key !== 'program.adaptive_volatility_grid') return false
   if (node.programKind !== 'adaptive_volatility_grid') return false
   if (node.onDeactivate !== 'cancel' && node.onDeactivate !== 'keep' && node.onDeactivate !== 'close') return false
@@ -1162,6 +1177,7 @@ function isSupportedAdaptiveVolatilityGrid(
   if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '') return false
   const referenced = siblingNodes.find(n => n.id === node.activeWhenRef)
   if (!referenced) return false
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- gate.regime node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   if (referenced.kind !== 'gate' || referenced.key !== 'gate.regime') return false
   if (referenced.status !== 'locked') return false
   if (!isSupportedRegimeGate(referenced, registry, strategyVersion, siblingNodes)) return false
@@ -1203,6 +1219,7 @@ function isSupportedEventListener(
   siblingNodes: readonly SemanticOrchestrationNode[],
 ): boolean {
   if (!isProgramNode(node)) return false
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- program.event_listener node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   if (node.key !== 'program.event_listener') return false
   if (node.programKind !== 'event_listener') return false
   if (node.onDeactivate !== 'cancel' && node.onDeactivate !== 'keep') return false
@@ -1246,6 +1263,7 @@ function isSupportedEventListener(
   if (sourceRef === '') return false
   const sourceNode = siblingNodes.find(n => n.id === sourceRef)
   if (!sourceNode) return false
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- scope.dataSource node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   if (sourceNode.kind !== 'scope' || sourceNode.key !== 'scope.dataSource') return false
   if (sourceNode.status !== 'locked') return false
   if (sourceNode.dataSourceRole !== 'event') return false
@@ -1255,6 +1273,7 @@ function isSupportedEventListener(
   if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '') return false
   const referenced = siblingNodes.find(n => n.id === node.activeWhenRef)
   if (!referenced) return false
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- gate.regime node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   if (referenced.kind !== 'gate' || referenced.key !== 'gate.regime') return false
   if (referenced.status !== 'locked') return false
   if (!isSupportedRegimeGate(referenced, registry, strategyVersion, siblingNodes)) return false
@@ -1366,6 +1385,7 @@ function isSupportedPortfolioSymbolExposureCap(
   // (10) boundSymbolScopeRef ∈ locked scope.symbol sibling ids
   const trimmedRef = ref.trim()
   const hasMatchingScope = siblingNodes.some(
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- scope.symbol node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     (s) => s.id === trimmedRef && s.kind === 'scope' && s.key === 'scope.symbol' && s.status === 'locked',
   )
   if (!hasMatchingScope) return false
@@ -1447,6 +1467,7 @@ function isSupportedRegimeGate(
   if (node.kind !== 'gate') {
     return false
   }
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- gate.regime node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   if (node.key !== 'gate.regime') {
     return false
   }
@@ -1515,6 +1536,7 @@ function applySymbolScopeBindingFailClosed(
   for (const node of orchestration.nodes) {
     if (
       node.kind === 'scope'
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- scope.symbol node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       && node.key === 'scope.symbol'
       && node.status === 'locked'
     ) {
@@ -1617,6 +1639,7 @@ function applyLegScopeBindingFailClosed(
   for (const node of orchestration.nodes) {
     if (
       node.kind === 'scope'
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- scope.leg node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       && node.key === 'scope.leg'
       && node.status === 'locked'
     ) {
@@ -1713,6 +1736,7 @@ function applyTimeframeScopeBindingFailClosed(
   for (const node of orchestration.nodes) {
     if (
       node.kind === 'scope'
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- scope.timeframe node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       && node.key === 'scope.timeframe'
       && node.status === 'locked'
     ) {
@@ -2133,7 +2157,7 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
 }
 
 function isExecutableIndicatorReferenceAlias(owner: SemanticContractOwnerRef): boolean {
-  if (owner.ownerKind !== 'trigger' || (owner.atomKey !== 'indicator.above' && owner.atomKey !== 'indicator.below')) {
+  if (owner.ownerKind !== 'trigger' || (owner.atomKey !== ATOM_CONTRACT_REGISTRY['indicator.above'].key && owner.atomKey !== ATOM_CONTRACT_REGISTRY['indicator.below'].key)) {
     return false
   }
 
@@ -2340,7 +2364,7 @@ function buildAddPositionConstraintRelationshipSlots(state: SemanticState): Map<
   }
 
   for (const action of state.actions) {
-    if (action.status === 'superseded' || action.key !== 'action.add_position') {
+    if (action.status === 'superseded' || action.key !== ATOM_CONTRACT_REGISTRY['action.add_position'].key) {
       continue
     }
 
@@ -2364,7 +2388,8 @@ function buildAddPositionConstraintRelationshipSlots(state: SemanticState): Map<
 function hasActiveAddPositionConstraint(position: SemanticPositionState | null): boolean {
   return position?.constraints?.some(constraint =>
     constraint.status !== 'superseded'
-    && (constraint.key === 'position.pyramiding_limit' || constraint.key === 'position.max_exposure_pct'),
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- position.max_exposure_pct not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
+    && (constraint.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key || constraint.key === 'position.max_exposure_pct'),
   ) ?? false
 }
 
@@ -2693,7 +2718,9 @@ function toPositionAtomKey(mode: string): string {
 }
 
 function isPositionLifecycleConstraintKey(mode: string): boolean {
-  return mode === 'position.pyramiding_limit'
+  /* eslint-disable atom-keys/no-atom-key-literal -- position.max_exposure_pct / position.dca_schedule not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
+  return mode === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
     || mode === 'position.max_exposure_pct'
     || mode === 'position.dca_schedule'
+  /* eslint-enable atom-keys/no-atom-key-literal */
 }

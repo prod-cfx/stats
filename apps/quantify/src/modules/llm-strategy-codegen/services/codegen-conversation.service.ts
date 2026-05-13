@@ -29,7 +29,7 @@ import type {ConversationMessage, GuidePromptConfig, RecommendationStyle} from '
 import type {PublishedSnapshotProjection} from './codegen-conversation-response-mapper.helper';
 import type {CanonicalCompileabilityReport, ConversationPlan} from './codegen-conversation-start-session.helper';
 import type {InferredConfirmationDecisionKey, InferredConfirmationSemanticDefaults} from './inferred-confirmation-classifier.service';
-import type { StrategyCompileabilityDecisionService } from './strategy-compileability-decision.service'
+import { StrategyCompileabilityDecisionService } from './strategy-compileability-decision.service'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
@@ -7764,8 +7764,12 @@ export class CodegenConversationService {
     unknownAtoms: readonly string[],
     locale: CodegenConversationLocale = 'zh',
   ): string {
-    const atomText = unknownAtoms.length > 0
-      ? this.localizedText(locale, `: ${unknownAtoms.join(', ')}`, `：${unknownAtoms.join('、')}`)
+    const publicNames = unknownAtoms.map((key) => {
+      const entry = ATOM_CONTRACT_REGISTRY[key as keyof typeof ATOM_CONTRACT_REGISTRY]
+      return entry?.display?.publicName?.[locale] ?? entry?.display?.publicName?.zh ?? key
+    })
+    const atomText = publicNames.length > 0
+      ? this.localizedText(locale, `: ${publicNames.join(', ')}`, `：${publicNames.join('、')}`)
       : ''
     if (locale === 'en') {
       return `I cannot map this description to currently supported trading atom semantics${atomText}. Please describe the entry, exit, risk, and position rules more clearly, then I will organize it into a testable strategy.`

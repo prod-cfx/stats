@@ -1091,6 +1091,7 @@ export class ConversationSemanticEditService {
     pendingEdit: PendingSemanticEdit,
   ): pendingEdit is Extract<PendingSemanticEdit, { op: 'replace_trigger' }> {
     return pendingEdit.op === 'replace_trigger'
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- legacy atom key not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       && pendingEdit.candidate.key === 'indicator.rsi_threshold'
   }
 

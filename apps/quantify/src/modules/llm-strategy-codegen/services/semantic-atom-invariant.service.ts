@@ -1279,6 +1279,7 @@ export class SemanticAtomInvariantService {
 
   private isBlockingPricePercentChangeTrigger(trigger: SemanticTriggerState): boolean {
     const basis = typeof trigger.params.basis === 'string' ? trigger.params.basis : 'prev_close'
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- legacy atom key not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     return trigger.key === 'price.percent_change'
       && trigger.status === 'locked'
       && trigger.source === 'user_explicit'
@@ -1427,6 +1428,7 @@ export class SemanticAtomInvariantService {
     ruleId: string,
   ): PriceChangeSnapshot[] {
     if (condition.kind === 'atom') {
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- legacy atom key not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (condition.key !== 'price.change_pct') return []
       return [{
         id: ruleId,

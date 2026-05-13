@@ -1791,6 +1791,7 @@ export class StrategyConsistencyService {
   ): StrategySemanticRuleProfile['phase'] {
     if (
       rule.phase === 'risk'
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.take_profit_pct / risk.atr_multiple_take_profit not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       && (key === 'risk.take_profit_pct' || key === 'risk.atr_multiple_take_profit')
       && (action === 'CLOSE_LONG' || action === 'CLOSE_SHORT')
     ) {
@@ -1990,6 +1991,7 @@ export class StrategyConsistencyService {
   }
 
   private isSupportedRuleKey(key: string): key is StrategySemanticRuleKey {
+    /* eslint-disable atom-keys/no-atom-key-literal -- dispatcher-routing allowlist: most keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
     return key === 'execution.on_start'
       || key === 'price.change_pct'
       || key === 'bollinger.upper_break'
@@ -2015,5 +2017,6 @@ export class StrategyConsistencyService {
       || key === 'risk.trailing_stop_pct'
       || key === 'risk.cooldown_bars'
       || key === 'risk.time_stop_bars'
+    /* eslint-enable atom-keys/no-atom-key-literal */
   }
 }

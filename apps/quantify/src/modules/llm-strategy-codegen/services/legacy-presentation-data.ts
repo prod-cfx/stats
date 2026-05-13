@@ -1,19 +1,33 @@
-import { Injectable } from '@nestjs/common'
-
+/**
+ * Issue #1279 PR3c.7b — legacy presentation data + pure helpers（transition shim）。
+ *
+ * 历史背景：原 `semantic-presentation-registry.service.ts`（94 个 `presentation({...})` 条目）
+ *   是 atom 渲染层并行真相源。PR3c.5 完成后，36 个已迁入 `ATOM_CONTRACT_REGISTRY[*].display`
+ *   的 atom 数据在 REGISTRY 中已有单一真相；本文件保留全部 94 个 PRESENTATIONS entry 作为
+ *   transition data，通过 4 个顶层 pure helper 对外暴露（REGISTRY-first，fallback PRESENTATIONS）。
+ *   @Injectable class 壳已于 PR3c.7d 删除。
+ *
+ * 60 个尚未迁入 REGISTRY 的 transition entry（follow-up #1329 负责迁入）：
+ *   - orchestration 域：gate.regime / gate.subStrategy /
+ *     portfolioRisk.{symbol,substrategy}_exposure_cap /
+ *     program.{fixed_grid_gated,dynamic_grid,adaptive_volatility_grid,event_listener} /
+ *     scope.{leg,symbol,timeframe,dataSource,subStrategy}
+ *   - 30+ slot label / clarification 描述 / risk.* / position.* / indicator.* stub
+ *
+ * follow-up #1329：迁入完成后删除 PRESENTATIONS 数组及本文件。
+ */
 import type {
   SemanticPresentationMetadata,
 } from '../types/semantic-presentation'
-import { InternalKeyLeakDetectedException } from '../exceptions/internal-key-leak.exception'
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+import type { AtomContractKey } from '../atom-contracts/atom-contract-types'
 import { SemanticPresentationTokenNotFoundException } from '../exceptions/semantic-presentation-token-not-found.exception'
 import {
   getDisplayToken,
   renderDisplayToken,
   renderEnumDisplayToken,
 } from '../nl-gateway/display-registry'
-import {
-  buildInternalIdentifierKeys,
-  buildInternalIdentifierPattern,
-} from '../nl-gateway/internal-key-leak-guard/internal-key-identifiers'
+import { guardPublicText } from '../nl-gateway/internal-key-leak-guard/internal-key-leak-guard.pure'
 import { getGoldenUtterancesForAtom } from '../nl-gateway/utterance-corpus'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 
@@ -1297,80 +1311,100 @@ const SLOT_LABELS: Record<string, string> = {
   'risk.stop_loss_pct.valuePct': '止损比例',
 }
 
-@Injectable()
-export class SemanticPresentationRegistryService {
-  private readonly presentations = new Map(PRESENTATIONS.map(metadata => [metadata.key, metadata]))
-  private internalIdentifierLeakPattern?: RegExp
+const PRESENTATIONS_BY_KEY: ReadonlyMap<string, SemanticPresentationMetadata> = new Map(
+  PRESENTATIONS.map(metadata => [metadata.key, metadata]),
+)
 
-  constructor(private readonly atomRegistry: SemanticAtomRegistryService) {}
+// module-load fail-loud：对全部 legacy entry 执行 guardLegacyMetadata，
+// 确保静态文案（publicName / aliases / examples）在模块初始化时即触发 leak 检测，
+// 不等到首次运行时调用才暴露问题。
+;(() => {
+  for (const metadata of PRESENTATIONS_BY_KEY.values()) {
+    guardLegacyMetadata(metadata)
+  }
+})()
 
-  get(key: string): SemanticPresentationMetadata {
-    const metadata = this.presentations.get(key)
-    if (!metadata) {
-      throw new SemanticPresentationTokenNotFoundException({ token: key })
+/**
+ * 仅查 PRESENTATIONS（94 entry transition 全集），不合成 REGISTRY 形态。
+ * 供需要完整 SemanticPresentationMetadata（aliases / examples / goldenUtterances）的调用方使用。
+ */
+export function getLegacyEntry(atomKey: string): SemanticPresentationMetadata | undefined {
+  return PRESENTATIONS_BY_KEY.get(atomKey)
+}
+
+/**
+ * 渲染 atom display 文案。优先级：
+ *   1. ATOM_CONTRACT_REGISTRY[atomKey].display.summaryTemplate(params, 'zh') —— 36 已迁入 atom
+ *   2. PRESENTATIONS[atomKey].displayRenderer({ params }) —— 60 transition entry fallback
+ *   3. 都未命中 → throw SemanticPresentationTokenNotFoundException
+ * 输出统一经 guardPublicText 兜底（internal-key leak fail-loud）。
+ */
+export function renderLegacyDisplay(atomKey: string, params: Record<string, unknown>): string {
+  const registryEntry = ATOM_CONTRACT_REGISTRY[atomKey as AtomContractKey]
+  if (registryEntry !== undefined) {
+    if (typeof registryEntry.display?.summaryTemplate !== 'function') {
+      throw new Error(
+        `[legacy-presentation-data] REGISTRY entry ${atomKey} missing display.summaryTemplate (fail-closed contract violation)`,
+      )
     }
-    this.guardSupportedAtomNameToken(metadata.key)
-    this.guardMetadata(metadata)
-    return metadata
+    return guardPublicText(atomKey, registryEntry.display.summaryTemplate(params, 'zh'))
   }
-
-  getEntry(key: string): SemanticPresentationMetadata {
-    return this.get(key)
+  const legacy = PRESENTATIONS_BY_KEY.get(atomKey)
+  if (!legacy) {
+    throw new SemanticPresentationTokenNotFoundException({ token: atomKey })
   }
+  return guardPublicText(atomKey, legacy.displayRenderer({ params }))
+}
 
-  renderDisplay(key: string, params: Record<string, unknown>): string {
-    const output = this.get(key).displayRenderer({ params })
-    return this.guardPublicText(key, output)
+/**
+ * 渲染 atom clarification 文案。优先级：
+ *   1. ATOM_CONTRACT_REGISTRY[atomKey].clarificationQuestion(slotKey, params, 'zh')（函数时）
+ *   2. PRESENTATIONS[atomKey].clarificationRenderer(slotKey, params)
+ *   3. 都未命中 → throw SemanticPresentationTokenNotFoundException
+ */
+export function renderLegacyClarification(
+  atomKey: string,
+  slotKey: string,
+  params: Record<string, unknown>,
+): string {
+  const registryEntry = ATOM_CONTRACT_REGISTRY[atomKey as AtomContractKey]
+  const clarificationFn = registryEntry?.clarificationQuestion
+  if (typeof clarificationFn === 'function') {
+    const output = clarificationFn(slotKey, params, 'zh')
+    return guardPublicText(atomKey, output)
   }
-
-  /**
-   * Issue #1179：暴露"是否显式声明 displayRenderer"给 inline-condition 调用方。
-   * 默认 displayRenderer 只输出 publicName（来自 token 表），不是条件文案；调用方需要据此
-   * 决定是否走"未显式渲染 → placeholder fallback"路径，避免 publicName 误用作条件 inline。
-   */
-  hasExplicitDisplayRenderer(key: string): boolean {
-    const metadata = this.presentations.get(key)
-    return metadata?.hasExplicitDisplayRenderer ?? false
+  const legacy = PRESENTATIONS_BY_KEY.get(atomKey)
+  if (!legacy) {
+    throw new SemanticPresentationTokenNotFoundException({ token: atomKey })
   }
+  guardLegacyMetadata(legacy)
+  return guardPublicText(atomKey, legacy.clarificationRenderer(slotKey, params))
+}
 
-  renderClarification(key: string, slotKey: string, params: Record<string, unknown>): string {
-    const output = this.get(key).clarificationRenderer(slotKey, params)
-    return this.guardPublicText(key, output)
+/**
+ * "是否显式声明 displayRenderer" 探测：
+ *   - REGISTRY 内 atom 一律视为已显式（summaryTemplate 是必选契约）
+ *   - PRESENTATIONS entry 走 hasExplicitDisplayRenderer 字段
+ *   - 都不在 → false
+ */
+export function hasExplicitLegacyDisplayRenderer(atomKey: string): boolean {
+  const registryEntry = ATOM_CONTRACT_REGISTRY[atomKey as AtomContractKey]
+  if (registryEntry !== undefined) {
+    return typeof registryEntry.display?.summaryTemplate === 'function'
   }
+  return PRESENTATIONS_BY_KEY.get(atomKey)?.hasExplicitDisplayRenderer ?? false
+}
 
-  private guardMetadata(metadata: SemanticPresentationMetadata): void {
-    const fields = [
-      metadata.publicName,
-      ...metadata.aliases,
-      ...metadata.positiveExamples,
-      ...metadata.negativeExamples,
-      ...metadata.goldenUtterances,
-    ]
-    for (const field of fields) {
-      this.guardPublicText(metadata.key, field)
-    }
-  }
-
-  private guardSupportedAtomNameToken(key: string): void {
-    const atom = this.atomRegistry.resolve(key)
-    if (atom.supportStatus.startsWith('supported_')) {
-      getDisplayToken(`atom.${key}.name`)
-    }
-  }
-
-  private guardPublicText(key: string, output: string): string {
-    if (this.getInternalIdentifierLeakPattern().test(output)) {
-      throw new InternalKeyLeakDetectedException({
-        key,
-        details: `semantic_presentation_internal_key_leak:${key}`,
-      })
-    }
-    return output
-  }
-
-  private getInternalIdentifierLeakPattern(): RegExp {
-    this.internalIdentifierLeakPattern ??= buildSemanticPresentationInternalIdentifierPattern(this.atomRegistry)
-    return this.internalIdentifierLeakPattern
+function guardLegacyMetadata(metadata: SemanticPresentationMetadata): void {
+  const fields = [
+    metadata.publicName,
+    ...metadata.aliases,
+    ...metadata.positiveExamples,
+    ...metadata.negativeExamples,
+    ...metadata.goldenUtterances,
+  ]
+  for (const field of fields) {
+    guardPublicText(metadata.key, field)
   }
 }
 
@@ -1936,11 +1970,7 @@ function formatPercentLikeValue(value: number): number {
   return value > 1 ? value : value * 100
 }
 
-function buildSemanticPresentationInternalIdentifierPattern(atomRegistry: SemanticAtomRegistryService): RegExp {
-  return buildInternalIdentifierPattern(buildInternalIdentifierKeys(atomRegistry))
-}
-
-// ── 新增纯函数：由 service 私有 ad-hoc renderer 迁移而来（Issue #1179）──
+// ── 纯函数：由 service 私有 ad-hoc renderer 迁移而来（Issue #1179）──
 
 function renderCrossCondition(params: Record<string, unknown>, direction: '上穿' | '下穿'): string {
   const indicator = typeof params.indicator === 'string' ? params.indicator.trim().toLowerCase() : ''

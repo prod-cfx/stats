@@ -650,6 +650,7 @@ export class CompiledPublicationGateService {
     if (!condition || typeof condition !== 'object' || Array.isArray(condition)) return []
     const record = condition as Record<string, unknown>
 
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- legacy atom key not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     if (record.kind === 'atom' && record.key === 'bollinger.bars_outside') {
       const params = record.params
       const paramBars = params && typeof params === 'object' && !Array.isArray(params)

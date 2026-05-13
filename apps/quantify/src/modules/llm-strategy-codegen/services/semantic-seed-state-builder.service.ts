@@ -294,7 +294,7 @@ export class SemanticSeedStateBuilderService {
       if (
         period === null
         || !indicator
-        || (trigger.key !== 'indicator.above' && trigger.key !== 'indicator.below')
+        || (trigger.key !== ATOM_CONTRACT_REGISTRY['indicator.above'].key && trigger.key !== ATOM_CONTRACT_REGISTRY['indicator.below'].key)
         || (trigger.phase !== 'entry' && trigger.phase !== 'exit')
       ) {
         return
@@ -321,7 +321,7 @@ export class SemanticSeedStateBuilderService {
       const indicator = this.readMovingAverageIndicator(first.params)
       if (!indicator) continue
 
-      const direction = first.key === 'indicator.above' ? 'above' : 'below'
+      const direction = first.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key ? 'above' : 'below'
       const timeframe = this.readTrimmedString(first.params.timeframe)
       const groupId = `${first.phase}-${sideScope}-${indicator}-${direction}-stack${timeframe ? `-${timeframe}` : ''}-${periods.join('-')}`
       for (const member of members) {
@@ -773,7 +773,7 @@ export class SemanticSeedStateBuilderService {
     const evidence = this.readEvidence(update.evidence)
     const supersedes = this.readStringArray(update.supersedes)
     const rawParams = this.readParams(update.params)
-    const mergedParams = key === 'risk.partial_take_profit'
+    const mergedParams = key === ATOM_CONTRACT_REGISTRY['risk.partial_take_profit'].key
       ? this.attachPartialTakeProfitMemoryKey(rawParams)
       : rawParams
     const contracts = this.readContracts(update.contracts)
@@ -991,9 +991,11 @@ export class SemanticSeedStateBuilderService {
   }
 
   private isPositionConstraintKey(value: string | null): value is SemanticPositionConstraintState['key'] {
-    return value === 'position.pyramiding_limit'
+    /* eslint-disable atom-keys/no-atom-key-literal -- position.max_exposure_pct / position.dca_schedule not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
+    return value === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
       || value === 'position.max_exposure_pct'
       || value === 'position.dca_schedule'
+    /* eslint-enable atom-keys/no-atom-key-literal */
   }
 
   private isSupportedPositionSideMode(positionMode: string): boolean {
@@ -1022,43 +1024,44 @@ export class SemanticSeedStateBuilderService {
   }
 
   private canSynthesizeTriggerContract(key: string, params: Record<string, unknown>): boolean {
+    /* eslint-disable atom-keys/no-atom-key-literal -- trigger-key dispatch allowlist: condition.expression / volume.spike / volume.relative_average / condition.sequence / confirmation.rebound / market.trend / market.range not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
     if (key === 'condition.expression') {
       return this.isRecord(params.expression)
     }
 
-    if (key === 'price.percent_change') {
+    if (key === ATOM_CONTRACT_REGISTRY['price.percent_change'].key) {
       return this.isFiniteNonZeroNumber(params.valuePct)
     }
 
-    if (key === 'indicator.cross_over' || key === 'indicator.cross_under') {
+    if (key === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key || key === ATOM_CONTRACT_REGISTRY['indicator.cross_under'].key) {
       return this.hasIndicatorIdentity(params)
         && (this.hasFiniteNumber(params.fastPeriod) || this.hasFiniteNumber(params.slowPeriod))
     }
 
-    if (key === 'indicator.above' || key === 'indicator.below') {
+    if (key === ATOM_CONTRACT_REGISTRY['indicator.above'].key || key === ATOM_CONTRACT_REGISTRY['indicator.below'].key) {
       return this.hasIndicatorIdentity(params) && this.hasIndicatorReference(params)
     }
 
-    if (key === 'oscillator.rsi_gte' || key === 'oscillator.rsi_lte') {
+    if (key === ATOM_CONTRACT_REGISTRY['oscillator.rsi_gte'].key || key === ATOM_CONTRACT_REGISTRY['oscillator.rsi_lte'].key) {
       return this.hasFiniteNumber(params.value)
     }
 
-    if (key === 'bollinger.touch_upper' || key === 'bollinger.touch_lower' || key === 'bollinger.touch_middle') {
+    if (key === ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key || key === ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key || key === ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key) {
       return this.hasFiniteNumber(params.period) && this.hasFiniteNumber(params.stdDev)
     }
 
-    if (key === 'price.detect.indicator_boundary') {
+    if (key === ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key) {
       return this.isSupportedBollingerBoundaryParams(params)
     }
 
     if (
       key === 'volume.spike'
-      || key === 'volume.threshold'
+      || key === ATOM_CONTRACT_REGISTRY['volume.threshold'].key
       || key === 'volume.relative_average'
-      || key === 'volatility.atr_threshold'
-      || key === 'strategy.time_window'
-      || key === 'position.has_position'
-      || key === 'position.no_position'
+      || key === ATOM_CONTRACT_REGISTRY['volatility.atr_threshold'].key
+      || key === ATOM_CONTRACT_REGISTRY['strategy.time_window'].key
+      || key === ATOM_CONTRACT_REGISTRY['position.has_position'].key
+      || key === ATOM_CONTRACT_REGISTRY['position.no_position'].key
     ) {
       return true
     }
@@ -1071,29 +1074,30 @@ export class SemanticSeedStateBuilderService {
       return true
     }
 
-    if (key === 'price.breakout_up' || key === 'price.breakout_down') {
+    if (key === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key || key === ATOM_CONTRACT_REGISTRY['price.breakout_down'].key) {
       return this.hasBreakoutReference(params)
     }
 
-    if (key === 'price.range_position_lte' || key === 'price.range_position_gte') {
+    if (key === ATOM_CONTRACT_REGISTRY['price.range_position_lte'].key || key === ATOM_CONTRACT_REGISTRY['price.range_position_gte'].key) {
       return this.hasPositiveInteger(params.lookbackBars) && this.isPercentThreshold(params.thresholdPct)
     }
 
-    if (key === 'grid.range_rebalance') {
+    if (key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) {
       return this.resolveGridRange(params) !== null
     }
 
     if (
-      key === 'trend.direction'
+      key === ATOM_CONTRACT_REGISTRY['trend.direction'].key
       || key === 'market.trend'
       || key === 'market.range'
-      || key === 'market.regime'
-      || key === 'volatility.state'
+      || key === ATOM_CONTRACT_REGISTRY['market.regime'].key
+      || key === ATOM_CONTRACT_REGISTRY['volatility.state'].key
     ) {
       return Object.keys(params).length > 0
     }
 
-    return key === 'execution.on_start' && SYNTHESIZABLE_TRIGGER_KEYS.has(key)
+    return key === ATOM_CONTRACT_REGISTRY['execution.on_start'].key && SYNTHESIZABLE_TRIGGER_KEYS.has(key)
+    /* eslint-enable atom-keys/no-atom-key-literal */
   }
 
   private hasIndicatorIdentity(params: Record<string, unknown>): boolean {
@@ -1196,7 +1200,8 @@ export class SemanticSeedStateBuilderService {
     sideScope: SemanticTriggerState['sideScope'] | null,
     params: Record<string, unknown>,
   ): SemanticCapability {
-    if (key === 'volume.spike' || key === 'volume.threshold') {
+    /* eslint-disable atom-keys/no-atom-key-literal -- trigger-capability dispatch: volume.spike / volume.relative_average / condition.sequence / confirmation.rebound not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
+    if (key === 'volume.spike' || key === ATOM_CONTRACT_REGISTRY['volume.threshold'].key) {
       return {
         domain: 'market',
         verb: 'detect',
@@ -1224,7 +1229,7 @@ export class SemanticSeedStateBuilderService {
       }
     }
 
-    if (key === 'volatility.atr_threshold') {
+    if (key === ATOM_CONTRACT_REGISTRY['volatility.atr_threshold'].key) {
       return {
         domain: 'market',
         verb: 'detect',
@@ -1265,8 +1270,9 @@ export class SemanticSeedStateBuilderService {
         }),
       }
     }
+    /* eslint-enable atom-keys/no-atom-key-literal */
 
-    if (key === 'execution.on_start') {
+    if (key === ATOM_CONTRACT_REGISTRY['execution.on_start'].key) {
       return {
         domain: 'order_program',
         verb: 'schedule',
@@ -1280,7 +1286,7 @@ export class SemanticSeedStateBuilderService {
       }
     }
 
-    if (key === 'grid.range_rebalance') {
+    if (key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) {
       const range = this.resolveGridRange(params)
       return {
         domain: 'price',
@@ -1315,7 +1321,7 @@ export class SemanticSeedStateBuilderService {
     contracts: SemanticAtomContract[] | null
     triggerIndex: number
   }): SemanticSlotState[] {
-    if (input.key !== 'grid.range_rebalance' || !input.contracts?.length) {
+    if (input.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key || !input.contracts?.length) {
       return input.openSlots
     }
 
@@ -1454,6 +1460,7 @@ export class SemanticSeedStateBuilderService {
       params,
     }))
 
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- action.reduce_position not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     if (key === 'action.reduce_position') {
       return {
         ...contract,
@@ -1467,7 +1474,7 @@ export class SemanticSeedStateBuilderService {
       }
     }
 
-    if (key === 'action.add_position') {
+    if (key === ATOM_CONTRACT_REGISTRY['action.add_position'].key) {
       return {
         ...contract,
         effects: [
@@ -1486,11 +1493,12 @@ export class SemanticSeedStateBuilderService {
   }
 
   private resolvePositionLifecycleActionIntent(key: string): 'reduce' | 'add' | 'reverse' {
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- action.reduce_position not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     if (key === 'action.reduce_position') {
       return 'reduce'
     }
 
-    if (key === 'action.add_position') {
+    if (key === ATOM_CONTRACT_REGISTRY['action.add_position'].key) {
       return 'add'
     }
 
@@ -1526,7 +1534,7 @@ export class SemanticSeedStateBuilderService {
       params,
     })
 
-    if (key === 'risk.partial_take_profit' && !Array.isArray(params.tiers)) {
+    if (key === ATOM_CONTRACT_REGISTRY['risk.partial_take_profit'].key && !Array.isArray(params.tiers)) {
       return [contract]
     }
 
@@ -1534,11 +1542,12 @@ export class SemanticSeedStateBuilderService {
   }
 
   private canSynthesizeRiskContract(key: string, params: Record<string, unknown>): boolean {
+    /* eslint-disable atom-keys/no-atom-key-literal -- risk.atr_stop / risk.stop_loss_pct / risk.take_profit_pct / risk.trailing_stop_pct / risk.max_drawdown_pct / risk.max_single_loss_pct / risk.condition_expression not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
     if (key === 'risk.atr_stop') {
       return true
     }
 
-    if (key === 'risk.partial_take_profit') {
+    if (key === ATOM_CONTRACT_REGISTRY['risk.partial_take_profit'].key) {
       return true
     }
 
@@ -1561,12 +1570,14 @@ export class SemanticSeedStateBuilderService {
         },
       }).ok
     }
+    /* eslint-enable atom-keys/no-atom-key-literal */
 
     const resolved = this.semanticAtomRegistry.resolve(key)
     return resolved.category === 'risk' && resolved.supportStatus === 'supported_requires_slot'
   }
 
   private resolveRiskContractObject(key: string): string | null {
+    /* eslint-disable atom-keys/no-atom-key-literal -- risk.stop_loss_pct / risk.take_profit_pct / risk.trailing_stop_pct / risk.max_drawdown_pct / risk.max_single_loss_pct / risk.condition_expression / risk.atr_stop / risk.falling_knife_guard not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
     if (key === 'risk.stop_loss_pct') {
       return 'stop_loss'
     }
@@ -1588,12 +1599,13 @@ export class SemanticSeedStateBuilderService {
     if (key === 'risk.atr_stop') {
       return 'atr_stop'
     }
-    if (key === 'risk.partial_take_profit') {
+    if (key === ATOM_CONTRACT_REGISTRY['risk.partial_take_profit'].key) {
       return 'partial_take_profit'
     }
     if (key === 'risk.falling_knife_guard') {
       return 'falling_knife_guard'
     }
+    /* eslint-enable atom-keys/no-atom-key-literal */
     return null
   }
 
@@ -1768,11 +1780,12 @@ export class SemanticSeedStateBuilderService {
     params: Record<string, unknown>,
     index: number,
   ): SemanticAtomContract[] | null {
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- position.dca_schedule not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     if (key === 'position.dca_schedule') {
       return [this.synthesizeDcaScheduleContract(key, params, index)]
     }
 
-    const object = key === 'position.pyramiding_limit'
+    const object = key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
       ? 'pyramiding_layers'
       : 'max_exposure_pct'
     const contract = this.withRegistryContractSubstrate(key, this.buildAtomContract({
@@ -1793,7 +1806,7 @@ export class SemanticSeedStateBuilderService {
     // Issue #1191: pyramiding 原子 emit capital.allocate.per_order_budget capability，
     //   形态对齐 DCA：顶层 kind/value/asset/unit + triggerSource。仅当 layerSizing.value
     //   为有限数字时 emit，避免半成品 capability 触发下游 sizing 守门。
-    const layerSizingShape = key === 'position.pyramiding_limit'
+    const layerSizingShape = key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
       ? this.readUnknownShape(params.layerSizing)
       : null
     const extraCapabilities: SemanticCapability[] = (layerSizingShape !== null
@@ -1897,6 +1910,7 @@ export class SemanticSeedStateBuilderService {
     params: Record<string, unknown>,
   ): SemanticSlotState[] {
     return openSlots.filter((slot) => {
+      /* eslint-disable atom-keys/no-atom-key-literal -- position.dca_schedule.* slot keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
       if (slot.slotKey === 'position.dca_schedule.max_count') {
         return this.readFiniteNumber(params.maxCount) === null
       }
@@ -1913,6 +1927,7 @@ export class SemanticSeedStateBuilderService {
         return false
       }
 
+      /* eslint-enable atom-keys/no-atom-key-literal */
       return true
     })
   }
@@ -1967,11 +1982,11 @@ export class SemanticSeedStateBuilderService {
   }
 
   private resolveContractSubstrateAtomKey(atomKey: string, params: Record<string, unknown>): string {
-    if ((atomKey !== 'indicator.above' && atomKey !== 'indicator.below') || !this.isMovingAverageIndicatorAlias(params)) {
+    if ((atomKey !== ATOM_CONTRACT_REGISTRY['indicator.above'].key && atomKey !== ATOM_CONTRACT_REGISTRY['indicator.below'].key) || !this.isMovingAverageIndicatorAlias(params)) {
       return atomKey
     }
 
-    return atomKey === 'indicator.above' ? 'indicator.threshold_gte' : 'indicator.threshold_lte'
+    return atomKey === ATOM_CONTRACT_REGISTRY['indicator.above'].key ? 'indicator.threshold_gte' : 'indicator.threshold_lte'
   }
 
   private isMovingAverageIndicatorAlias(params: Record<string, unknown>): boolean {
@@ -2422,7 +2437,7 @@ export class SemanticSeedStateBuilderService {
     params: Record<string, unknown>,
   ): Record<string, unknown> {
     if (
-      (key === 'indicator.cross_over' || key === 'indicator.cross_under')
+      (key === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key || key === ATOM_CONTRACT_REGISTRY['indicator.cross_under'].key)
       && this.readTrimmedString(params.indicator)?.toLowerCase() === 'macd'
     ) {
       return {
@@ -2433,7 +2448,7 @@ export class SemanticSeedStateBuilderService {
       }
     }
 
-    if (key !== 'price.percent_change' || typeof params.valuePct !== 'number' || !Number.isFinite(params.valuePct)) {
+    if (key !== ATOM_CONTRACT_REGISTRY['price.percent_change'].key || typeof params.valuePct !== 'number' || !Number.isFinite(params.valuePct)) {
       return params
     }
 
@@ -2507,7 +2522,7 @@ export class SemanticSeedStateBuilderService {
       return true
     }
 
-    if (key !== 'price.detect.indicator_boundary') {
+    if (key !== ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key) {
       return false
     }
 

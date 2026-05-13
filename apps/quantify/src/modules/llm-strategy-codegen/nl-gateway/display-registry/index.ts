@@ -1,4 +1,4 @@
-export { DISPLAY_TOKENS } from './display-token-table'
+export { DISPLAY_TOKENS } from '../../services/legacy-display-tokens'
 export {
   getDisplayToken,
   listDisplayTokens,

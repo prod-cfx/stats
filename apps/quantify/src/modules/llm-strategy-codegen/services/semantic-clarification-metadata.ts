@@ -3,6 +3,7 @@ import type { StrategyClarificationItem } from '../types/strategy-clarification'
 export function resolveSemanticClarificationMetadata(
   slotKey: string,
 ): Pick<StrategyClarificationItem, 'reason' | 'field'> {
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- slot key routing, not atom key comparison
   if (slotKey === 'position.sizing') {
     return {
       reason: 'missing_semantic_position_sizing',
@@ -10,6 +11,7 @@ export function resolveSemanticClarificationMetadata(
     }
   }
 
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- slot key routing, not atom key comparison
   if (slotKey === 'position.mode' || slotKey === 'exposure.position_mode') {
     return {
       reason: 'missing_semantic_position_mode',
@@ -17,6 +19,7 @@ export function resolveSemanticClarificationMetadata(
     }
   }
 
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- slot key routing, not atom key comparison
   if (slotKey === 'risk.falling_knife_guard.definition') {
     return {
       reason: 'missing_risk_atom',
@@ -24,6 +27,7 @@ export function resolveSemanticClarificationMetadata(
     }
   }
 
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- slot key routing, not atom key comparison
   if (slotKey === 'risk.protective_exit' || slotKey.startsWith('risk.')) {
     return {
       reason: 'missing_semantic_risk',
@@ -31,6 +35,7 @@ export function resolveSemanticClarificationMetadata(
     }
   }
 
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- slot key routing, not atom key comparison
   if (slotKey === 'grid.sideMode' || slotKey.startsWith('action.') || slotKey.includes('order.intent')) {
     return {
       reason: 'missing_semantic_action',

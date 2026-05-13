@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import type {
   SemanticSlotIdentity,
   SemanticActionState,
@@ -295,12 +296,12 @@ export class SemanticSupportClassifierService {
 }
 
 function toExecutableIndicatorReferenceAliasRegistryKey(trigger: SemanticTriggerState): 'indicator.threshold_gte' | 'indicator.threshold_lte' {
-  return trigger.key === 'indicator.above' ? 'indicator.threshold_gte' : 'indicator.threshold_lte'
+  return trigger.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key ? 'indicator.threshold_gte' : 'indicator.threshold_lte'
 }
 
 // MA/SMA/EMA price-vs-reference aliases are projection-supported; non-MA static compares remain recognized unsupported.
 function isExecutableIndicatorReferenceAlias(trigger: SemanticTriggerState): boolean {
-  if (trigger.key !== 'indicator.above' && trigger.key !== 'indicator.below') {
+  if (trigger.key !== ATOM_CONTRACT_REGISTRY['indicator.above'].key && trigger.key !== ATOM_CONTRACT_REGISTRY['indicator.below'].key) {
     return false
   }
 
@@ -371,7 +372,7 @@ function withAddPositionConstraintOpenSlot(
   action: SemanticActionState,
   position: SemanticPositionState | null,
 ): SemanticActionState {
-  if (action.key !== 'action.add_position' || action.status === 'superseded') {
+  if (action.key !== ATOM_CONTRACT_REGISTRY['action.add_position'].key || action.status === 'superseded') {
     return action
   }
 
@@ -409,7 +410,8 @@ function withAddPositionConstraintOpenSlot(
 function hasActiveAddPositionConstraint(position: SemanticPositionState | null): boolean {
   return position?.constraints?.some(constraint =>
     constraint.status !== 'superseded'
-    && (constraint.key === 'position.pyramiding_limit' || constraint.key === 'position.max_exposure_pct'),
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- position.max_exposure_pct not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
+    && (constraint.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key || constraint.key === 'position.max_exposure_pct'),
   ) ?? false
 }
 
@@ -491,9 +493,10 @@ function toPositionAtomKey(mode: string): string {
 }
 
 function isPositionLifecycleConstraintKey(mode: string): boolean {
-  return mode === 'position.pyramiding_limit'
+  return mode === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- position.max_exposure_pct not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     || mode === 'position.max_exposure_pct'
-    || mode === 'position.dca_schedule'
+    || mode === ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key
 }
 
 function toSupportMetadata(resolved: ResolvedSemanticAtom): SemanticAtomSupportMetadata {

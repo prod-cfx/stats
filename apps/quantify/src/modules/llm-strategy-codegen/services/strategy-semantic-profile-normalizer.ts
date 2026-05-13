@@ -17,7 +17,9 @@ function dedupeIndicators(indicators: StrategySemanticIndicator[]): StrategySema
 export function normalizeStrategySemanticProfile(
   profile: StrategySemanticProfile,
 ): StrategySemanticProfile {
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- legacy atom key not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   const hasBollingerMiddleRevert = profile.ruleMappings.some(item => item.key === 'bollinger.middle_revert')
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- legacy atom key not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     || profile.rules.some(item => item.key === 'bollinger.middle_revert')
   const bollingerPeriods = new Set(
     profile.indicators

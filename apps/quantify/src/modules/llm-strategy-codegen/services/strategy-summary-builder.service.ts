@@ -335,8 +335,10 @@ export class StrategySummaryBuilderService {
     profile: StrategySemanticProfile,
     indicators: StrategySummaryIndicator[],
   ): string {
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- bollinger.upper_break not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     const upper = profile.ruleMappings.find(item => item.key === 'bollinger.upper_break')
     if (upper?.action === 'OPEN_SHORT') return 'bollinger.upper_break_short'
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- bollinger.lower_break not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     const lower = profile.ruleMappings.find(item => item.key === 'bollinger.lower_break')
     if (lower?.action === 'OPEN_LONG') return 'bollinger.lower_break_long'
     if (indicators.includes('sma') || indicators.includes('ema')) {
@@ -354,6 +356,7 @@ export class StrategySummaryBuilderService {
     profile: StrategySemanticProfile,
     indicators: StrategySummaryIndicator[],
   ): string {
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- bollinger.middle_revert not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     if (profile.ruleMappings.some(item => item.key === 'bollinger.middle_revert')) {
       return 'bollinger.middle_revert'
     }

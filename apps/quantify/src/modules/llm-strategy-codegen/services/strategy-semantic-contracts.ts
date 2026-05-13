@@ -387,6 +387,7 @@ export function validateSemanticRiskContract(risk: unknown): SemanticContractVal
   if (!isRecord(risk.params)) {
     return invalid('invalid_risk_params')
   }
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.condition_expression not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   if (risk.key === 'risk.condition_expression') {
     const expressionResult = validateSemanticExpressionContract(risk.params.condition)
     if (!expressionResult.ok) {

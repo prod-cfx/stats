@@ -33,6 +33,10 @@ export type ParamRenderer = (value: unknown, locale: 'zh' | 'en') => string
  *
  * 输入参数 map + locale，返回 conversation summary 段使用的一句话描述
  * （取代现有 `summaryContribution` symbol sentinel + presentation-registry displayRenderer 链路）。
+ *
+ * params 是 **runtime IR-projected** 形态（来自 dispatcher / state-projection 输出），
+ * 结构面允许宽于 surface.paramSlots —— surface 是 NL 解析侧契约，summaryTemplate 是 UI
+ * 渲染侧契约，两者解耦。consumer 自行类型守卫。
  */
 export type SummaryTemplateFn = (params: Readonly<Record<string, unknown>>, locale: 'zh' | 'en') => string
 

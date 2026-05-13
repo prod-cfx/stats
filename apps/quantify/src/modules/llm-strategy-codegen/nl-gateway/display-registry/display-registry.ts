@@ -4,7 +4,7 @@ import type {
   DisplayTokenTemplateValues,
 } from './display-token.types'
 import { SemanticPresentationTokenNotFoundException } from '../../exceptions/semantic-presentation-token-not-found.exception'
-import { DISPLAY_TOKENS } from './display-token-table'
+import { DISPLAY_TOKENS } from '../../services/legacy-display-tokens'
 
 const TOKEN_BY_ID = new Map<string, DisplayToken>(DISPLAY_TOKENS.map(token => [token.token, token]))
 

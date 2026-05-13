@@ -2,9 +2,15 @@ import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticOrchestrationNode, SemanticSlotState, SemanticState } from '../types/semantic-state'
 import { isEntryPredicateTriggerKey, isExitPredicateTriggerKey, isTimeframeGroupableTriggerKey } from '../atom-contracts/trigger-display-contract'
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
-import { SemanticPresentationRegistryService } from './semantic-presentation-registry.service'
+import {
+  getLegacyEntry,
+  hasExplicitLegacyDisplayRenderer,
+  renderLegacyClarification,
+  renderLegacyDisplay,
+} from './legacy-presentation-data'
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
 
 export interface SemanticConversationView {
@@ -93,9 +99,7 @@ const INTERNAL_SEMANTIC_DISPLAY_KEY_PATTERN
 
 @Injectable()
 export class SemanticStateProjectionService {
-  constructor(
-    private readonly presentationRegistry: SemanticPresentationRegistryService = createDefaultPresentationRegistry(),
-  ) {}
+  constructor() {}
 
   buildConversationView(state: SemanticState): SemanticConversationView {
     const deterministicTriggers = this.filterDeterministicTriggers(state.triggers)
@@ -183,10 +187,11 @@ export class SemanticStateProjectionService {
       if (node.status !== 'locked') {
         continue
       }
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- gate.regime not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (node.kind === 'gate' && node.key === 'gate.regime') {
         let entry
         try {
-          entry = this.presentationRegistry.getEntry('gate.regime')
+          entry = getLegacyEntry('gate.regime')
         }
         catch {
           continue
@@ -209,7 +214,7 @@ export class SemanticStateProjectionService {
       if (node.kind === 'portfolioRisk' && node.key === 'portfolioRisk.drawdown_block') {
         let entry
         try {
-          entry = this.presentationRegistry.getEntry('portfolioRisk.drawdown_block')
+          entry = getLegacyEntry('portfolioRisk.drawdown_block')
         }
         catch {
           continue
@@ -233,7 +238,7 @@ export class SemanticStateProjectionService {
       if (node.kind === 'portfolioRisk' && node.key === 'portfolioRisk.symbol_exposure_cap') {
         let entry
         try {
-          entry = this.presentationRegistry.getEntry('portfolioRisk.symbol_exposure_cap')
+          entry = getLegacyEntry('portfolioRisk.symbol_exposure_cap')
         }
         catch {
           continue
@@ -257,7 +262,7 @@ export class SemanticStateProjectionService {
       if (node.kind === 'portfolioRisk' && node.key === 'portfolioRisk.substrategy_exposure_cap') {
         let entry
         try {
-          entry = this.presentationRegistry.getEntry('portfolioRisk.substrategy_exposure_cap')
+          entry = getLegacyEntry('portfolioRisk.substrategy_exposure_cap')
         }
         catch {
           continue
@@ -277,10 +282,11 @@ export class SemanticStateProjectionService {
         })
         continue
       }
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- program.fixed_grid_gated not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (node.kind === 'program' && node.key === 'program.fixed_grid_gated') {
         let entry
         try {
-          entry = this.presentationRegistry.getEntry('program.fixed_grid_gated')
+          entry = getLegacyEntry('program.fixed_grid_gated')
         }
         catch {
           continue
@@ -301,10 +307,11 @@ export class SemanticStateProjectionService {
         continue
       }
       // Phase 5 S5 (#984)
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- program.dynamic_grid not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (node.kind === 'program' && node.key === 'program.dynamic_grid') {
         let entry
         try {
-          entry = this.presentationRegistry.getEntry('program.dynamic_grid')
+          entry = getLegacyEntry('program.dynamic_grid')
         }
         catch {
           continue
@@ -325,10 +332,11 @@ export class SemanticStateProjectionService {
         continue
       }
       // Phase 5 S6 (#984)
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- program.adaptive_volatility_grid not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (node.kind === 'program' && node.key === 'program.adaptive_volatility_grid') {
         let entry
         try {
-          entry = this.presentationRegistry.getEntry('program.adaptive_volatility_grid')
+          entry = getLegacyEntry('program.adaptive_volatility_grid')
         }
         catch {
           continue
@@ -349,10 +357,11 @@ export class SemanticStateProjectionService {
         continue
       }
       // Phase 5 S12 (#1118)
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- program.event_listener not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (node.kind === 'program' && node.key === 'program.event_listener') {
         let entry
         try {
-          entry = this.presentationRegistry.getEntry('program.event_listener')
+          entry = getLegacyEntry('program.event_listener')
         }
         catch {
           continue
@@ -525,8 +534,10 @@ export class SemanticStateProjectionService {
     if (
       previous.phase !== next.phase
       || (previous.phase !== 'entry' && previous.phase !== 'exit')
+      /* eslint-disable atom-keys/no-atom-key-literal -- logical.any_of not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
       || previous.key === 'logical.any_of'
       || next.key === 'logical.any_of'
+      /* eslint-enable atom-keys/no-atom-key-literal */
       || (previous.sideScope ?? 'long') !== (next.sideScope ?? 'long')
     ) {
       return false
@@ -543,6 +554,7 @@ export class SemanticStateProjectionService {
     if (index === 0) {
       return 'IF'
     }
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- logical.any_of not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     if (group.some(trigger => trigger.key === 'logical.any_of')) {
       return 'OR_THEN'
     }
@@ -602,7 +614,7 @@ export class SemanticStateProjectionService {
   }
 
   private isBollingerBoundaryTrigger(trigger: SemanticState['triggers'][number]): boolean {
-    return trigger.key === 'price.detect.indicator_boundary'
+    return trigger.key === ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key
       && this.readIndicatorBoundaryIndicator(trigger.params)?.name === 'bollinger'
   }
 
@@ -613,6 +625,7 @@ export class SemanticStateProjectionService {
   ): string {
     const conditionText = groupedTriggers && groupedTriggers.length > 1
       ? this.formatGroupedDisplayTriggerCondition(trigger, groupedTriggers)
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- condition.expression not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       : trigger.key === 'condition.expression'
       ? this.formatSemanticExpression(trigger.params.expression)
       : this.formatDisplayTriggerCondition(trigger)
@@ -641,11 +654,11 @@ export class SemanticStateProjectionService {
     //   默认 fallback（publicName via atom.${key}.name token）不构成条件 inline，调用方应走
     //   sanitizeDisplayFallbackText / placeholder 路径，否则 UI 会看到"指标高于阈值"这类
     //   名称误用作条件文本。
-    if (!this.presentationRegistry.hasExplicitDisplayRenderer(trigger.key)) {
+    if (!hasExplicitLegacyDisplayRenderer(trigger.key)) {
       return ''
     }
     try {
-      return this.presentationRegistry.renderDisplay(trigger.key, trigger.params) ?? ''
+      return renderLegacyDisplay(trigger.key, trigger.params) ?? ''
     }
     catch {
       return ''
@@ -659,7 +672,7 @@ export class SemanticStateProjectionService {
       return ''
     }
 
-    return this.presentationRegistry.renderDisplay('price.detect.indicator_boundary', {
+    return renderLegacyDisplay('price.detect.indicator_boundary', {
       indicator,
       boundaryRole,
       confirmationMode: trigger.params.confirmationMode,
@@ -761,6 +774,7 @@ export class SemanticStateProjectionService {
     }
     const record = item as Record<string, unknown>
     const key = this.readString(record.key)
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- logical.any_of not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     if (!key || key === 'logical.any_of') {
       return ''
     }
@@ -816,6 +830,7 @@ export class SemanticStateProjectionService {
       .filter(trigger => this.isDisplayGateCompatibleWithEntry(entryTrigger, trigger))
       .filter(trigger => !(
         entrySuppressesIndicatorGate
+        // eslint-disable-next-line atom-keys/no-atom-key-literal -- condition.expression not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
         && trigger.key === 'condition.expression'
         && (trigger.sideScope ?? '') === (entryTrigger.sideScope ?? '')
       ))
@@ -1197,7 +1212,7 @@ export class SemanticStateProjectionService {
           return groupedSummary
         }
 
-        if (trigger.key === 'grid.range_rebalance') {
+        if (trigger.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) {
           const lower = this.readGridRangeValue(trigger.params, 'lower')
           const upper = this.readGridRangeValue(trigger.params, 'upper')
           const stepPct = trigger.params.stepPct
@@ -1213,12 +1228,13 @@ export class SemanticStateProjectionService {
           ].join(' ')
         }
 
-        if (trigger.key === 'execution.on_start') {
+        if (trigger.key === ATOM_CONTRACT_REGISTRY['execution.on_start'].key) {
           return trigger.phase === 'entry'
             ? '入场：立即开始时市价执行一次'
             : '出场：立即开始时市价执行一次'
         }
 
+        // eslint-disable-next-line atom-keys/no-atom-key-literal -- condition.expression not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
         if (trigger.key === 'condition.expression') {
           const condition = this.formatSemanticExpression(trigger.params.expression)
           if (!condition) return ''
@@ -1230,7 +1246,7 @@ export class SemanticStateProjectionService {
           return `${phase}：${condition}${this.formatActionSuffix(trigger, condition)}`
         }
 
-        if (trigger.key === 'price.percent_change') {
+        if (trigger.key === ATOM_CONTRACT_REGISTRY['price.percent_change'].key) {
           const basis = typeof trigger.params.basis === 'string' ? trigger.params.basis : 'prev_close'
           const basisLabel = basis === 'entry_avg_price' || basis === 'position_pnl'
             ? '开仓均价'
@@ -1240,18 +1256,18 @@ export class SemanticStateProjectionService {
           return `${trigger.phase === 'entry' ? '入场' : '出场'}：价格相对${basisLabel}${direction}${pctText}`
         }
 
-        if (trigger.key === 'indicator.above' && trigger.params['reference.period']) {
+        if (trigger.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key && trigger.params['reference.period']) {
           return this.formatIndicatorCompareTriggerSummary(trigger)
         }
 
-        if (trigger.key === 'indicator.below' && trigger.params['reference.period']) {
+        if (trigger.key === ATOM_CONTRACT_REGISTRY['indicator.below'].key && trigger.params['reference.period']) {
           return this.formatIndicatorCompareTriggerSummary(trigger)
         }
 
-        if (trigger.key === 'price.range_position_lte' || trigger.key === 'price.range_position_gte') {
+        if (trigger.key === ATOM_CONTRACT_REGISTRY['price.range_position_lte'].key || trigger.key === ATOM_CONTRACT_REGISTRY['price.range_position_gte'].key) {
           const lookbackBars = typeof trigger.params.lookbackBars === 'number' ? trigger.params.lookbackBars : null
           const thresholdPct = typeof trigger.params.thresholdPct === 'number' ? trigger.params.thresholdPct : null
-          const side = trigger.key === 'price.range_position_lte' ? '下' : '上'
+          const side = trigger.key === ATOM_CONTRACT_REGISTRY['price.range_position_lte'].key ? '下' : '上'
           const phase = trigger.phase === 'entry' ? '入场' : '出场'
           const rangeText = lookbackBars === null ? '最近区间' : `最近 ${lookbackBars} 根 K 线区间`
           const thresholdText = thresholdPct === null ? '阈值待补充' : `${this.formatPercent(thresholdPct)}%`
@@ -1259,12 +1275,12 @@ export class SemanticStateProjectionService {
           return `${phase}：${condition}${this.formatActionSuffix(trigger, condition)}`
         }
 
-        if (trigger.key === 'price.breakout_up' || trigger.key === 'price.breakout_down') {
+        if (trigger.key === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key || trigger.key === ATOM_CONTRACT_REGISTRY['price.breakout_down'].key) {
           const period = typeof trigger.params.period === 'number' ? trigger.params.period : null
           const bufferPct = typeof trigger.params.bufferPct === 'number' ? trigger.params.bufferPct : null
           const phase = trigger.phase === 'entry' ? '入场' : '出场'
-          const direction = trigger.key === 'price.breakout_up' ? '突破' : '跌回'
-          const target = trigger.key === 'price.breakout_up' ? '高点' : '低点'
+          const direction = trigger.key === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key ? '突破' : '跌回'
+          const target = trigger.key === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key ? '高点' : '低点'
           const periodText = period === null ? `近期${target}` : `最近 ${period} 根 K 线${target}`
           const bufferText = bufferPct === null ? '' : `，突破缓冲 ${this.formatNumber(bufferPct)}%`
           const condition = `价格${direction}${periodText}${bufferText}`
@@ -1274,7 +1290,7 @@ export class SemanticStateProjectionService {
         // price.detect.indicator_boundary 在 conversation summary 视图保留长描述形态
         //   （"触及布林带 X 周期 Y 倍标准差<band>"），与 clarification view / display graph 走
         //   presentationRegistry 的 "触及 BOLL <band>（X, Y）" 短形态并存——两路文案承载不同 UI 上下文
-        if (trigger.key === 'price.detect.indicator_boundary') {
+        if (trigger.key === ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key) {
           return this.formatIndicatorBoundaryTriggerSummary(trigger)
         }
 
@@ -1500,7 +1516,7 @@ export class SemanticStateProjectionService {
     const periods = this.uniqueSortedIndicatorPeriods(group)
     if (timeframes.length === 1 && periods.length > 1) {
       return this.renderMultiPeriodIndicatorCompareCondition(
-        first.key === 'indicator.above' ? 'above' : 'below',
+        first.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key ? 'above' : 'below',
         this.formatIndicatorName(first),
         periods,
         timeframes[0],
@@ -1509,7 +1525,7 @@ export class SemanticStateProjectionService {
     // marker-grouped 且 per-trigger timeframe 缺失（context 层级已声明）：去掉 timeframe 前缀
     if (timeframes.length === 0 && periods.length > 1 && allMarkerGroupable) {
       return this.renderMultiPeriodIndicatorCompareCondition(
-        first.key === 'indicator.above' ? 'above' : 'below',
+        first.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key ? 'above' : 'below',
         this.formatIndicatorName(first),
         periods,
       )
@@ -1615,6 +1631,7 @@ export class SemanticStateProjectionService {
     const groups = new Map<string, Array<SemanticState['triggers'][number]>>()
 
     for (const trigger of triggers) {
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- logical.any_of not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (trigger.key === 'logical.any_of') {
         continue
       }
@@ -1702,7 +1719,7 @@ export class SemanticStateProjectionService {
       : String(trigger.params['reference.period'] ?? '')
     const indicator = this.formatIndicatorName(trigger)
     const reference = `${indicator}${period}`
-    return trigger.key === 'indicator.above'
+    return trigger.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key
       ? `价格在 ${reference} 上方`
       : `价格低于 ${reference}`
   }
@@ -1840,7 +1857,7 @@ export class SemanticStateProjectionService {
       ? trigger.params.indicator.trim().toLowerCase()
       : ''
     const phase = trigger.phase === 'entry' ? '入场' : '出场'
-    const direction = trigger.key === 'indicator.cross_over' ? '上穿' : '下穿'
+    const direction = trigger.key === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key ? '上穿' : '下穿'
 
     if (indicator === 'macd') {
       const fast = typeof trigger.params.fastPeriod === 'number' ? trigger.params.fastPeriod : 12
@@ -2141,6 +2158,7 @@ export class SemanticStateProjectionService {
           return contractSummary
         }
 
+        /* eslint-disable atom-keys/no-atom-key-literal -- risk.condition_expression / risk.atr_multiple_stop / risk.atr_multiple_take_profit / risk.remembered_level_stop not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
         if (risk.key === 'risk.condition_expression') {
           const condition = this.formatSemanticExpression(risk.params.condition)
           if (!condition) {
@@ -2163,8 +2181,9 @@ export class SemanticStateProjectionService {
           const levelKey = this.readString(risk.params.levelKey)
           return levelKey ? `跌破记录位 ${levelKey} 止损` : this.buildRiskFallbackSummary(risk)
         }
+        /* eslint-enable atom-keys/no-atom-key-literal */
 
-        if (risk.key === 'risk.partial_take_profit') {
+        if (risk.key === ATOM_CONTRACT_REGISTRY['risk.partial_take_profit'].key) {
           const tiers = risk.params.tiers
           if (Array.isArray(tiers) && tiers.length > 0) {
             const tierTexts = tiers
@@ -2194,6 +2213,7 @@ export class SemanticStateProjectionService {
           return this.buildRiskFallbackSummary(risk)
         }
 
+        /* eslint-disable atom-keys/no-atom-key-literal -- risk.stop_loss_pct / risk.take_profit_pct / risk.max_drawdown_pct / risk.max_single_loss_pct not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
         if (risk.key === 'risk.stop_loss_pct') {
           const basis = this.describeRiskBasis(risk.params.basis)
           return `止损：价格相对${basis}下跌${this.formatPercent(valuePct)}% 强制平仓`
@@ -2211,6 +2231,7 @@ export class SemanticStateProjectionService {
         if (risk.key === 'risk.max_single_loss_pct') {
           return `单笔止损：下跌${this.formatPercent(valuePct)}%`
         }
+        /* eslint-enable atom-keys/no-atom-key-literal */
 
         return this.buildRiskFallbackSummary(risk)
       })
@@ -2234,7 +2255,7 @@ export class SemanticStateProjectionService {
   }
 
   private buildAddPositionSummary(action: SemanticState['actions'][number]): string {
-    if (action.key !== 'action.add_position') {
+    if (action.key !== ATOM_CONTRACT_REGISTRY['action.add_position'].key) {
       return ''
     }
     const addMode = this.readString(action.params?.addMode as unknown)
@@ -2455,7 +2476,7 @@ export class SemanticStateProjectionService {
       const pyramidingLimit = (position.constraints ?? [])
         // #1238 follow-up：open status 也接受，避免 readiness 因软性 requirement 缺失
         //   把用户已显式给出的 constraint 降级后整段不显示。superseded 仍跳过。
-        .find(c => c.status !== 'superseded' && c.key === 'position.pyramiding_limit')
+        .find(c => c.status !== 'superseded' && c.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key)
       if (pyramidingLimit) {
         const maxLayers = this.readFiniteNumber((pyramidingLimit.params as Record<string, unknown>)?.maxLayers as unknown)
         if (maxLayers !== null) {
@@ -2475,7 +2496,7 @@ export class SemanticStateProjectionService {
     for (const constraint of position.constraints ?? []) {
       if (constraint.status === 'superseded') continue
       try {
-        const entry = this.presentationRegistry.getEntry(constraint.key)
+        const entry = getLegacyEntry(constraint.key)
         const renderer = entry?.displayRenderer
         if (typeof renderer === 'function') {
           const rendered = renderer({ params: (constraint.params ?? {}) as Record<string, unknown> })
@@ -2542,7 +2563,7 @@ export class SemanticStateProjectionService {
       .some(trigger => trigger.sideScope === 'both')
 
     const hasBidirectionalGridSideMode = input.triggers
-      .some(trigger => trigger.key === 'grid.range_rebalance' && trigger.params.sideMode === 'bidirectional')
+      .some(trigger => trigger.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && trigger.params.sideMode === 'bidirectional')
 
     const hasLongIntent = hasLongIntentFromActions || hasLongIntentFromTrigger
     const hasShortIntent = hasShortIntentFromActions || hasShortIntentFromTrigger
@@ -2590,7 +2611,7 @@ export class SemanticStateProjectionService {
       }
       let text: string | undefined
       try {
-        const entry = this.presentationRegistry.getEntry(node.key)
+        const entry = getLegacyEntry(node.key)
         if (entry?.displayRenderer) {
           const rendered = entry.displayRenderer({ params: (node.params ?? {}) as Record<string, unknown> })
           text = rendered ?? entry.publicName ?? node.key
@@ -2698,11 +2719,13 @@ export class SemanticStateProjectionService {
         continue
       }
 
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.stop_loss_pct not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (risk.key === 'risk.stop_loss_pct' && !inferred.inferredKeys.includes('risk.stopLossBasis')) {
         inferred.inferredKeys.push('risk.stopLossBasis')
         inferred.stopLossBasis = basis
       }
 
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.take_profit_pct not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (risk.key === 'risk.take_profit_pct' && !inferred.inferredKeys.includes('risk.takeProfitBasis')) {
         inferred.inferredKeys.push('risk.takeProfitBasis')
         inferred.takeProfitBasis = basis
@@ -2814,6 +2837,3 @@ export class SemanticStateProjectionService {
   }
 }
 
-function createDefaultPresentationRegistry(): SemanticPresentationRegistryService {
-  return new SemanticPresentationRegistryService(new SemanticAtomRegistryService())
-}

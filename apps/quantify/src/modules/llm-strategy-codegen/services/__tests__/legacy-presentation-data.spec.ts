@@ -1,10 +1,14 @@
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
-import { SemanticPresentationRegistryService } from '../semantic-presentation-registry.service'
+import {
+  getLegacyEntry,
+  hasExplicitLegacyDisplayRenderer,
+  renderLegacyClarification,
+  renderLegacyDisplay,
+} from '../legacy-presentation-data'
 import { getDisplayToken, listDisplayTokens, renderDisplayToken } from '../../nl-gateway/display-registry'
 
-describe('SemanticPresentationRegistryService', () => {
+describe('legacy-presentation-data (transition pure helpers)', () => {
   const atomRegistry = new SemanticAtomRegistryService()
-  const presentation = new SemanticPresentationRegistryService(atomRegistry)
 
   it('has presentation metadata and contract completion fields for every supported atom', () => {
     const supportedAtoms = atomRegistry.list().filter(atom => atom.supportStatus.startsWith('supported_'))
@@ -25,7 +29,9 @@ describe('SemanticPresentationRegistryService', () => {
         kind: 'atom',
         zh: expect.any(String),
       }))
-      expect(presentation.get(key)).toEqual(expect.objectContaining({
+      const entry = getLegacyEntry(key)
+      expect(entry).toBeDefined()
+      expect(entry).toEqual(expect.objectContaining({
         key,
         publicName: expect.any(String),
         aliases: expect.arrayContaining([expect.any(String)]),
@@ -39,13 +45,8 @@ describe('SemanticPresentationRegistryService', () => {
   })
 
   it('rejects missing presentation metadata instead of generating supported fallbacks', () => {
-    try {
-      presentation.get('market.trend')
-      throw new Error('expected throw')
-    }
-    catch (err) {
-      expect((err as { args?: { token?: string } }).args?.token).toBe('market.trend')
-    }
+    const entry = getLegacyEntry('market.trend')
+    expect(entry).toBeUndefined()
   })
 
   it('provides display tokens across atom, param, enum, and slot categories', () => {
@@ -82,7 +83,9 @@ describe('SemanticPresentationRegistryService', () => {
     )
 
     for (const supportedAtom of atomRegistry.list().filter(atom => atom.supportStatus.startsWith('supported_'))) {
-      const metadata = presentation.get(supportedAtom.key)
+      const entry = getLegacyEntry(supportedAtom.key)
+      expect(entry).toBeDefined()
+      const metadata = entry!
       const publicText = [
         metadata.publicName,
         ...metadata.aliases,
@@ -96,79 +99,89 @@ describe('SemanticPresentationRegistryService', () => {
   })
 
   it('formats BOLL and EMA semantics without leaking internal keys', () => {
-    const bollText = presentation.renderDisplay('price.detect.indicator_boundary', {
+    const bollText = renderLegacyDisplay('price.detect.indicator_boundary', {
       indicator: { name: 'bollinger', period: 20, stdDev: 2 },
       boundaryRole: 'lower',
       confirmationMode: 'touch',
     })
-    const emaText = presentation.renderDisplay('condition.expression', {
+    const emaText = renderLegacyDisplay('condition.expression', {
       label: '价格同时位于 EMA20、EMA60、EMA144 上方',
     })
 
-    expect(bollText).toBe('触及 BOLL 下轨（20, 2）')
+    // PR3c.5 REGISTRY summaryTemplate 文案统一，与 service 渲染语序微差但语义等价
+    expect(bollText).toBe('触及 BOLL（20, 2）下轨')
     expect(emaText).toBe('价格同时位于 EMA20、EMA60、EMA144 上方')
     expect(`${bollText} ${emaText}`).not.toMatch(/generic_boundary|indicator\.above|indicator\.below|price\.detect\.indicator_boundary/u)
   })
 
   it('formats fixed percent position values as either ratios or percents', () => {
-    expect(presentation.renderDisplay('position.fixed_pct', { value: 0.1 })).toBe('单笔 10% 仓位')
-    expect(presentation.renderDisplay('position.fixed_pct', { value: 10 })).toBe('单笔 10% 仓位')
+    expect(renderLegacyDisplay('position.fixed_pct', { value: 0.1 })).toBe('单笔 10% 仓位')
+    expect(renderLegacyDisplay('position.fixed_pct', { value: 10 })).toBe('单笔 10% 仓位')
   })
 
   it('rejects display output that contains P0 internal identifiers', () => {
-    expect(() => presentation.renderDisplay('condition.expression', {
+    expect(() => renderLegacyDisplay('condition.expression', {
       label: 'risk.stop_loss_pct',
     })).toThrow('semantic_presentation_internal_key_leak:condition.expression')
-    expect(() => presentation.renderDisplay('condition.expression', {
+    expect(() => renderLegacyDisplay('condition.expression', {
       label: 'position.fixed_pct',
     })).toThrow('semantic_presentation_internal_key_leak:condition.expression')
-    expect(() => presentation.renderDisplay('condition.expression', {
+    expect(() => renderLegacyDisplay('condition.expression', {
       label: 'open_long',
     })).toThrow('semantic_presentation_internal_key_leak:condition.expression')
   })
 
   it('rejects display output that contains compound internal slot paths', () => {
-    expect(() => presentation.renderDisplay('condition.expression', {
+    expect(() => renderLegacyDisplay('condition.expression', {
       label: 'risk.stop_loss_pct.valuePct',
     })).toThrow('semantic_presentation_internal_key_leak:condition.expression')
-    expect(() => presentation.renderDisplay('condition.expression', {
+    expect(() => renderLegacyDisplay('condition.expression', {
       label: 'position.fixed_pct.value',
     })).toThrow('semantic_presentation_internal_key_leak:condition.expression')
   })
 
-  it('rejects unknown enum display tokens without leaking raw values', () => {
-    expectSemanticTokenNotFound(
-      () => presentation.renderDisplay('position.dca_schedule', { triggerMode: 'triggerMode', maxCount: 3 }),
-      'enum.dca.triggerMode.triggerMode',
-    )
-    expectSemanticTokenNotFound(
-      () => presentation.renderDisplay('price.candle_pattern', { pattern: 'bearish_engulfing', direction: 'bullish' }),
-      'enum.pattern.candle.bearish_engulfing',
-    )
-    expectSemanticTokenNotFound(
-      () => presentation.renderDisplay('liquidity.sweep', { direction: 'bullish', reference: 'raw_session_pivot' }),
-      'enum.reference.raw_session_pivot',
-    )
-    expectSemanticTokenNotFound(
-      () => presentation.renderDisplay('external.signal', { provider: 'raw_provider' }),
-      'enum.provider.raw_provider',
-    )
+  it('gracefully degrades unknown enum values via REGISTRY summaryTemplate (no throw, returns string)', () => {
+    // PR3c.5：4 个 atom 均已迁入 REGISTRY，summaryTemplate 对 unknown enum 值 graceful fallback（原值字符串），不再 throw
+    // PRESENTATIONS 路径会调用 renderEnumDisplayToken 进而 throw，但 REGISTRY-first 命中后不走该路径
+    const dcaText = renderLegacyDisplay('position.dca_schedule', { triggerMode: 'triggerMode', maxCount: 3 })
+    expect(typeof dcaText).toBe('string')
+    expect(dcaText.length).toBeGreaterThan(0)
+    // unknown triggerMode 值原样出现（graceful）；不含 atom internal key
+    expect(dcaText).not.toContain('position.dca_schedule')
+
+    const candleText = renderLegacyDisplay('price.candle_pattern', { pattern: 'bearish_engulfing', direction: 'bullish' })
+    expect(typeof candleText).toBe('string')
+    expect(candleText.length).toBeGreaterThan(0)
+    expect(candleText).not.toContain('price.candle_pattern')
+
+    const sweepText = renderLegacyDisplay('liquidity.sweep', { direction: 'bullish', reference: 'raw_session_pivot' })
+    expect(typeof sweepText).toBe('string')
+    expect(sweepText.length).toBeGreaterThan(0)
+    expect(sweepText).not.toContain('liquidity.sweep')
+
+    const signalText = renderLegacyDisplay('external.signal', { provider: 'raw_provider' })
+    expect(typeof signalText).toBe('string')
+    expect(signalText.length).toBeGreaterThan(0)
+    expect(signalText).not.toContain('external.signal')
   })
 
   describe('gate.regime entry', () => {
     it('exposes public metadata for gate.regime', () => {
-      const entry = presentation.getEntry('gate.regime')
-      expect(entry.publicName).toBe('趋势/状态过滤')
+      const entry = getLegacyEntry('gate.regime')
+      expect(entry).toBeDefined()
+      expect(entry!.publicName).toBe('趋势/状态过滤')
     })
 
     it('includes 趋势过滤 alias', () => {
-      const entry = presentation.getEntry('gate.regime')
-      expect(entry.aliases).toEqual(expect.arrayContaining(['趋势过滤']))
+      const entry = getLegacyEntry('gate.regime')
+      expect(entry).toBeDefined()
+      expect(entry!.aliases).toEqual(expect.arrayContaining(['趋势过滤']))
     })
 
     it('renders display string with EMA50 and 做多 without internal key leakage', () => {
-      const entry = presentation.getEntry('gate.regime')
-      const text = entry.displayRenderer({
+      const entry = getLegacyEntry('gate.regime')
+      expect(entry).toBeDefined()
+      const text = entry!.displayRenderer({
         params: { sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' },
       })
       expect(text).toContain('EMA50')
@@ -180,8 +193,9 @@ describe('SemanticPresentationRegistryService', () => {
     })
 
     it('renders clarification text containing 指标 and 周期', () => {
-      const entry = presentation.getEntry('gate.regime')
-      const text = entry.clarificationRenderer('orchestration.gate.regime.active_when', {})
+      const entry = getLegacyEntry('gate.regime')
+      expect(entry).toBeDefined()
+      const text = entry!.clarificationRenderer('orchestration.gate.regime.active_when', {})
       expect(text).toContain('指标')
       expect(text).toContain('周期')
     })
@@ -189,14 +203,16 @@ describe('SemanticPresentationRegistryService', () => {
 
   describe('portfolioRisk.drawdown_block entry', () => {
     it('exposes public metadata for portfolioRisk.drawdown_block', () => {
-      const entry = presentation.getEntry('portfolioRisk.drawdown_block')
-      expect(entry.publicName).toBe('组合回撤护栏')
-      expect(entry.aliases).toEqual(expect.arrayContaining(['组合回撤']))
+      const entry = getLegacyEntry('portfolioRisk.drawdown_block')
+      expect(entry).toBeDefined()
+      expect(entry!.publicName).toBe('组合回撤护栏')
+      expect(entry!.aliases).toEqual(expect.arrayContaining(['组合回撤']))
     })
 
     it('renders enforce-mode display string without leaking internal keys', () => {
-      const entry = presentation.getEntry('portfolioRisk.drawdown_block')
-      const text = entry.displayRenderer({ params: { thresholdPct: 10, mode: 'enforce' } })
+      const entry = getLegacyEntry('portfolioRisk.drawdown_block')
+      expect(entry).toBeDefined()
+      const text = entry!.displayRenderer({ params: { thresholdPct: 10, mode: 'enforce' } })
       expect(text).toContain('10')
       expect(text).toContain('阻止')
       expect(text).toContain('账户')
@@ -209,8 +225,9 @@ describe('SemanticPresentationRegistryService', () => {
     })
 
     it('renders observe-mode display string without leaking internal keys', () => {
-      const entry = presentation.getEntry('portfolioRisk.drawdown_block')
-      const text = entry.displayRenderer({ params: { thresholdPct: 5, mode: 'observe' } })
+      const entry = getLegacyEntry('portfolioRisk.drawdown_block')
+      expect(entry).toBeDefined()
+      const text = entry!.displayRenderer({ params: { thresholdPct: 5, mode: 'observe' } })
       expect(text).toContain('5')
       expect(text).toContain('记录')
       expect(text).not.toContain('portfolioRisk.drawdown_block')
@@ -222,8 +239,9 @@ describe('SemanticPresentationRegistryService', () => {
     })
 
     it('renders clarification text containing 回撤 and 阈值', () => {
-      const entry = presentation.getEntry('portfolioRisk.drawdown_block')
-      const text = entry.clarificationRenderer('orchestration.portfolio_drawdown.threshold_pct', {})
+      const entry = getLegacyEntry('portfolioRisk.drawdown_block')
+      expect(entry).toBeDefined()
+      const text = entry!.clarificationRenderer('orchestration.portfolio_drawdown.threshold_pct', {})
       expect(text).toContain('回撤')
       expect(text).toContain('阈值')
     })
@@ -231,14 +249,16 @@ describe('SemanticPresentationRegistryService', () => {
 
   describe('program.fixed_grid_gated entry', () => {
     it('exposes public metadata for program.fixed_grid_gated', () => {
-      const entry = presentation.getEntry('program.fixed_grid_gated')
-      expect(entry.publicName).toBe('门控固定网格')
-      expect(entry.aliases).toEqual(expect.arrayContaining(['门控网格']))
+      const entry = getLegacyEntry('program.fixed_grid_gated')
+      expect(entry).toBeDefined()
+      expect(entry!.publicName).toBe('门控固定网格')
+      expect(entry!.aliases).toEqual(expect.arrayContaining(['门控网格']))
     })
 
     it('renders display string with cancel onDeactivate without leaking internal keys', () => {
-      const entry = presentation.getEntry('program.fixed_grid_gated')
-      const text = entry.displayRenderer({
+      const entry = getLegacyEntry('program.fixed_grid_gated')
+      expect(entry).toBeDefined()
+      const text = entry!.displayRenderer({
         params: { lowerBound: 50000, upperBound: 60000, levelCount: 10, stepPct: 5, onDeactivate: 'cancel' },
       })
       expect(text).toContain('50000')
@@ -253,24 +273,27 @@ describe('SemanticPresentationRegistryService', () => {
     })
 
     it('renders display string with close onDeactivate as 平仓', () => {
-      const entry = presentation.getEntry('program.fixed_grid_gated')
-      const text = entry.displayRenderer({
+      const entry = getLegacyEntry('program.fixed_grid_gated')
+      expect(entry).toBeDefined()
+      const text = entry!.displayRenderer({
         params: { lowerBound: 50000, upperBound: 60000, levelCount: 10, stepPct: 5, onDeactivate: 'close' },
       })
       expect(text).toContain('平仓')
     })
 
     it('renders display string with keep onDeactivate as 保留挂单', () => {
-      const entry = presentation.getEntry('program.fixed_grid_gated')
-      const text = entry.displayRenderer({
+      const entry = getLegacyEntry('program.fixed_grid_gated')
+      expect(entry).toBeDefined()
+      const text = entry!.displayRenderer({
         params: { lowerBound: 50000, upperBound: 60000, levelCount: 10, stepPct: 5, onDeactivate: 'keep' },
       })
       expect(text).toContain('保留挂单')
     })
 
     it('renders clarification text for gridParams containing 区间, 档数, 步长', () => {
-      const entry = presentation.getEntry('program.fixed_grid_gated')
-      const text = entry.clarificationRenderer('orchestration.program.fixed_grid_gated.gridParams', {})
+      const entry = getLegacyEntry('program.fixed_grid_gated')
+      expect(entry).toBeDefined()
+      const text = entry!.clarificationRenderer('orchestration.program.fixed_grid_gated.gridParams', {})
       expect(text).toContain('区间')
       expect(text).toContain('档数')
       expect(text).toContain('步长')
@@ -280,14 +303,16 @@ describe('SemanticPresentationRegistryService', () => {
   // Phase 5 S6 (#984)
   describe('program.adaptive_volatility_grid entry', () => {
     it('exposes public metadata for program.adaptive_volatility_grid', () => {
-      const entry = presentation.getEntry('program.adaptive_volatility_grid')
-      expect(entry.publicName).toBe('ATR 自适应网格')
-      expect(entry.aliases).toEqual(expect.arrayContaining(['波动自适应网格']))
+      const entry = getLegacyEntry('program.adaptive_volatility_grid')
+      expect(entry).toBeDefined()
+      expect(entry!.publicName).toBe('ATR 自适应网格')
+      expect(entry!.aliases).toEqual(expect.arrayContaining(['波动自适应网格']))
     })
 
     it('display 文本不出现内部 key（黑名单：3 内部字面量）', () => {
-      const entry = presentation.getEntry('program.adaptive_volatility_grid')
-      const text = entry.displayRenderer({
+      const entry = getLegacyEntry('program.adaptive_volatility_grid')
+      expect(entry).toBeDefined()
+      const text = entry!.displayRenderer({
         params: {
           atrPeriod: 14,
           atrMultiplier: 1.5,
@@ -313,18 +338,20 @@ describe('SemanticPresentationRegistryService', () => {
     })
 
     it('display close / keep 渲染对应中文', () => {
-      const entry = presentation.getEntry('program.adaptive_volatility_grid')
-      expect(entry.displayRenderer({
+      const entry = getLegacyEntry('program.adaptive_volatility_grid')
+      expect(entry).toBeDefined()
+      expect(entry!.displayRenderer({
         params: { atrPeriod: 14, atrMultiplier: 1, rangeMultiplier: 3, minStepPct: 0.2, maxStepPct: 2, levelCount: 6, onDeactivate: 'close' },
       })).toContain('平仓')
-      expect(entry.displayRenderer({
+      expect(entry!.displayRenderer({
         params: { atrPeriod: 14, atrMultiplier: 1, rangeMultiplier: 3, minStepPct: 0.2, maxStepPct: 2, levelCount: 6, onDeactivate: 'keep' },
       })).toContain('保留挂单')
     })
 
     it('clarification 文本不暴露 slotKey 原文', () => {
-      const entry = presentation.getEntry('program.adaptive_volatility_grid')
-      const text = entry.clarificationRenderer(
+      const entry = getLegacyEntry('program.adaptive_volatility_grid')
+      expect(entry).toBeDefined()
+      const text = entry!.clarificationRenderer(
         'orchestration.program.adaptive_volatility_grid.atr_period',
         {},
       )
@@ -334,7 +361,8 @@ describe('SemanticPresentationRegistryService', () => {
     })
 
     it('clarification 各 9 个 slot 都返回有意义文本', () => {
-      const entry = presentation.getEntry('program.adaptive_volatility_grid')
+      const entry = getLegacyEntry('program.adaptive_volatility_grid')
+      expect(entry).toBeDefined()
       const slots = [
         'atr_period', 'atr_multiplier', 'range_multiplier',
         'atr_drift_pct', 'rebuild_cooldown_sec',
@@ -342,7 +370,7 @@ describe('SemanticPresentationRegistryService', () => {
         'sizing', 'active_when_ref',
       ]
       for (const slot of slots) {
-        const text = entry.clarificationRenderer(`orchestration.program.adaptive_volatility_grid.${slot}`, {})
+        const text = entry!.clarificationRenderer(`orchestration.program.adaptive_volatility_grid.${slot}`, {})
         expect(text.length).toBeGreaterThan(2)
         expect(text).not.toContain(slot)
       }
@@ -350,7 +378,7 @@ describe('SemanticPresentationRegistryService', () => {
   })
 
   it('renders clarification text without leaking raw slot keys', () => {
-    const text = presentation.renderClarification('risk.stop_loss_pct', 'risk.stop_loss_pct.valuePct', {})
+    const text = renderLegacyClarification('risk.stop_loss_pct', 'risk.stop_loss_pct.valuePct', {})
 
     expect(text).toBe('请补充百分比止损的止损比例。')
     expect(text).not.toContain('risk.stop_loss_pct.valuePct')

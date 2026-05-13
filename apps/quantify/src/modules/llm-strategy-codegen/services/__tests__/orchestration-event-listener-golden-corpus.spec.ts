@@ -10,8 +10,7 @@ import type { SemanticOrchestrationNode, SemanticState } from '../../types/seman
 import { NaturalLanguageGatewayService } from '../natural-language-gateway.service'
 import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
 import { SemanticFrameNormalizerService } from '../semantic-frame-normalizer.service'
-import { SemanticPresentationRegistryService } from '../semantic-presentation-registry.service'
-import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
+import { renderLegacyDisplay } from '../legacy-presentation-data'
 
 /**
  * Phase 5 S12 Task 16 (#1118) — program.event_listener golden corpus.
@@ -213,9 +212,7 @@ describe('orchestration program.event_listener — golden corpus (Phase 5 S12 #1
   // ============ Section C — Display 黑名单（不污染 + 正向 grep）============
   describe('Section C: display 黑名单', () => {
     it('C.1 display 文本不泄漏内部 key（负 grep）+ 保留 provider 友好标签（正 grep）', () => {
-      const atomRegistry = new SemanticAtomRegistryService()
-      const presentation = new SemanticPresentationRegistryService(atomRegistry)
-      const display = presentation.renderDisplay('program.event_listener', {
+      const display = renderLegacyDisplay('program.event_listener', {
         permissionScope: 'tradingview:alpha',
       })
       // 负 grep

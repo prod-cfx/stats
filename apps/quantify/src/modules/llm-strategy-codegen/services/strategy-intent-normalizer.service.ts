@@ -10,6 +10,7 @@ import type {
 } from '../types/strategy-normalized-intent'
 import { Injectable } from '@nestjs/common'
 import { GRID_STRATEGY_FAMILY } from '../constants/canonical-strategy-capabilities'
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 
 interface NormalizeResult {
   normalizedIntent: StrategyNormalizedIntent
@@ -982,7 +983,7 @@ export class StrategyIntentNormalizerService {
     triggers: NormalizedTriggerAtom[],
   ): NormalizedTriggerAtom[] {
     const reference = triggers.find(trigger => (
-      (trigger.key === 'bollinger.touch_upper' || trigger.key === 'bollinger.touch_lower')
+      (trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key || trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key)
       && typeof trigger.params.period === 'number'
       && typeof trigger.params.stdDev === 'number'
     ))
