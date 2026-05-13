@@ -47,6 +47,10 @@ export type {
   OrchestrationPortfolioRiskShapeOutput,
   LifecyclePyramidingShape,
   LifecyclePyramidingShapeOutput,
+  // Issue #1313 PR5a: action atom IR emit shape 接口骨架
+  ActionShape,
+  ActionDefLikeOutput,
+  ActionLikeInput,
 } from './atom-contract-emit.types'
 
 // =========================================================
