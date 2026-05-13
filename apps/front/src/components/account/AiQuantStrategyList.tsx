@@ -60,15 +60,17 @@ export function computeTabCounts(items: AiQuantStrategyRecord[]): StrategyFilter
   let running = 0
   let stopped = 0
   let history = 0
+  let active = 0
   for (const item of items) {
     if (isHistory(item)) {
       history++
       continue
     }
+    active++
     if (item.status === 'running') running++
     else if (item.status === 'stopped') stopped++
   }
-  return { all: running + stopped, running, stopped, history }
+  return { all: active, running, stopped, history }
 }
 
 const TAB_ORDER: StrategyFilterTabKey[] = ['all', 'running', 'stopped', 'history']

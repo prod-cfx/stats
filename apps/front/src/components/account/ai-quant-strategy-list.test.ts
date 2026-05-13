@@ -663,12 +663,13 @@ describe('AiQuantStrategyList primary summary', () => {
 describe('filterStrategiesByTab / computeTabCounts', () => {
   const running = makeListRecord({ id: 'r', status: 'running', viewOnlyAt: null })
   const stopped = makeListRecord({ id: 's', status: 'stopped', viewOnlyAt: null })
+  const draft = makeListRecord({ id: 'd', status: 'draft', viewOnlyAt: null })
   const historyStopped = makeListRecord({ id: 'h1', status: 'stopped', viewOnlyAt: '2026-04-01T00:00:00.000Z' })
   const historyRunning = makeListRecord({ id: 'h2', status: 'running', viewOnlyAt: '2026-04-02T00:00:00.000Z' })
-  const all = [running, stopped, historyStopped, historyRunning]
+  const all = [running, stopped, draft, historyStopped, historyRunning]
 
   it('all tab excludes view-only', () => {
-    expect(filterStrategiesByTab(all, 'all').map(x => x.id)).toEqual(['r', 's'])
+    expect(filterStrategiesByTab(all, 'all').map(x => x.id)).toEqual(['r', 's', 'd'])
   })
 
   it('running tab excludes view-only running', () => {
@@ -683,8 +684,8 @@ describe('filterStrategiesByTab / computeTabCounts', () => {
     expect(filterStrategiesByTab(all, 'history').map(x => x.id).sort()).toEqual(['h1', 'h2'])
   })
 
-  it('computeTabCounts splits all = running + stopped, history independent', () => {
-    expect(computeTabCounts(all)).toEqual({ all: 2, running: 1, stopped: 1, history: 2 })
+  it('computeTabCounts keeps all aligned with every non-history strategy', () => {
+    expect(computeTabCounts(all)).toEqual({ all: 3, running: 1, stopped: 1, history: 2 })
   })
 })
 
