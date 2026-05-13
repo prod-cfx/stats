@@ -1,5 +1,5 @@
+import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
-import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticSupportClassifierService } from '../semantic-support-classifier.service'
 import { phase3MtfCases } from './fixtures/phase3-mtf-cases'
@@ -30,7 +30,7 @@ const allCases = [
 ]
 
 describe('Phase 3 三能力联调 corpus (#1021)', () => {
-  const extractor = new SemanticSeedExtractorService()
+  const dispatcher = new GenericSeedDispatcher()
   const builder = new SemanticSeedStateBuilderService()
   const classifier = new SemanticSupportClassifierService(new SemanticAtomRegistryService())
 
@@ -47,8 +47,8 @@ describe('Phase 3 三能力联调 corpus (#1021)', () => {
   })
 
   it.each(allCases)('$group / $name → readiness 三段链路不抛异常', (goldenCase) => {
-    // step 1: seed extractor — message → semantic patch
-    const patch = extractor.extract(goldenCase.message)
+    // step 1: dispatcher — message → semantic patch
+    const patch = dispatcher.dispatch(goldenCase.message)
     expect(patch).toBeDefined()
 
     // step 2: state builder — patch → SemanticState
