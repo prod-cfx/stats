@@ -381,7 +381,7 @@ export function QuantChatPanel({
             data-testid="run-backtest"
             onClick={onRunBacktest}
             disabled={!canRunBacktest || hasDraftChanges}
-            className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-all hover:from-violet-600 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="cf-primary-cta flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-all"
           >
             <Play className="h-4 w-4 fill-current" />
             <span>{t('aiQuant.startBacktest')}</span>

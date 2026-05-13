@@ -1,6 +1,7 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import type { ElementType, ReactNode } from 'react'
+import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react'
 import { createContext, useCallback, use, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -61,7 +62,7 @@ function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: 
   if (!mounted) return null
 
   return createPortal(
-    <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
+    <div className="pointer-events-none fixed right-4 top-5 z-[9999] flex w-[calc(100vw-2rem)] max-w-[360px] flex-col gap-2 sm:right-6">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onRemove={onRemove} />
       ))}
@@ -71,67 +72,57 @@ function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: 
 }
 
 function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) => void }) {
-  const typeStyles = {
-    success: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
-    error: 'bg-red-500/10 border-red-500/30 text-red-400',
-    warning: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
-    info: 'bg-primary/10 border-primary/30 text-primary',
+  const typeStyles: Record<Toast['type'], { icon: ElementType; iconClassName: string; accentClassName: string }> = {
+    success: {
+      icon: CheckCircle2,
+      iconClassName: 'bg-emerald-500/10 text-emerald-500',
+      accentClassName: 'bg-emerald-500',
+    },
+    error: {
+      icon: XCircle,
+      iconClassName: 'bg-red-500/10 text-red-500',
+      accentClassName: 'bg-red-500',
+    },
+    warning: {
+      icon: AlertTriangle,
+      iconClassName: 'bg-amber-500/10 text-amber-500',
+      accentClassName: 'bg-amber-500',
+    },
+    info: {
+      icon: Info,
+      iconClassName: 'bg-primary/10 text-primary',
+      accentClassName: 'bg-primary',
+    },
   }
 
-  const iconPaths = {
-    success: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
-    error: 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z',
-    warning: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
-    info: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-  }
+  const style = typeStyles[toast.type]
+  const Icon = style.icon
 
   return (
     <div
-      className={`
-        pointer-events-auto
-        min-w-[320px] max-w-md
-        rounded-lg border backdrop-blur-sm
-        px-4 py-3
-        shadow-lg
-        animate-in slide-in-from-top-2 fade-in duration-200
-        ${typeStyles[toast.type]}
-      `}
+      role="status"
+      className="pointer-events-auto relative overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-3 text-[color:var(--cf-text)] shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-200 dark:shadow-black/30"
     >
-      <div className="flex items-start gap-3">
-        <svg
-          className="h-5 w-5 flex-shrink-0 mt-0.5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d={iconPaths[toast.type]}
-          />
-        </svg>
+      <div className={`absolute inset-y-2 left-0 w-0.5 rounded-full ${style.accentClassName}`} />
+      <div className="flex items-start gap-2.5">
+        <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${style.iconClassName}`}>
+          <Icon className="h-4 w-4" />
+        </span>
 
-        <div className="flex-1">
-          <p className="text-sm font-medium">{toast.message}</p>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-[color:var(--cf-text-strong)]">{toast.message}</p>
           {toast.description && (
-            <p className="mt-1 text-xs opacity-90">{toast.description}</p>
+            <p className="mt-1 line-clamp-2 text-xs leading-5 text-[color:var(--cf-muted)]">{toast.description}</p>
           )}
         </div>
 
         <button
           type="button"
+          aria-label="Dismiss notification"
           onClick={() => onRemove(toast.id)}
-          className="flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity"
+          className="-mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
         >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
+          <X className="h-4 w-4" />
         </button>
       </div>
     </div>

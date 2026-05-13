@@ -96,7 +96,7 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
 
   return (
     <main className="mx-auto flex w-full max-w-[1224px] flex-1 flex-col gap-8 px-4 py-8 md:px-8">
-      <div className="flex gap-8 overflow-x-auto border-b border-[color:var(--cf-border)]">
+      <div className="mx-auto flex w-full max-w-[960px] gap-8 overflow-x-auto border-b border-[color:var(--cf-border)]">
         <button
           type="button"
           onClick={() => router.replace(`/${lng}/account?tab=settings`)}
@@ -261,7 +261,7 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
       )}
 
       {currentTab === 'ai-quant' && (
-        <div className="mx-auto w-full max-w-[920px]">
+        <div className="mx-auto w-full max-w-[960px]">
           <AiQuantSection lng={lng} />
         </div>
       )}

@@ -208,6 +208,34 @@ describe('AiQuantStrategyList primary summary', () => {
     expect(out).toEqual(['暂无参数'])
   })
 
+  it('localizes system field labels in dynamic summaries', () => {
+    const record = makeListRecord({
+      paramSchema: {
+        type: 'object',
+        properties: {
+          symbol: { type: 'string' },
+          timeframe: { type: 'string' },
+          marketType: { type: 'string' },
+          leverage: { type: 'number' },
+        },
+      },
+      paramValues: {
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        marketType: 'spot',
+        leverage: 2,
+      },
+    })
+    const out = buildPrimarySummary(record, mockT)
+
+    expect(out).toEqual([
+      '交易对: BTCUSDT',
+      '时间周期: 15m',
+      '市场类型: 现货',
+    ])
+    expect(out.join(' / ')).not.toContain('marketType')
+  })
+
   it('uses a stop-specific label for running strategies to avoid duplicate detail actions', () => {
     const t = mockT
 
@@ -329,6 +357,25 @@ describe('AiQuantStrategyList primary summary', () => {
       userId: 'user-1',
       action: 'stop',
     })
+  })
+
+  it('renders strategy cards with performance metrics for the console overview', async () => {
+    await renderStrategyListWithItems([
+      listItem({
+        name: 'BTC Momentum',
+        metrics: { returnPct: 21.8, maxDrawdownPct: 12.3, winRatePct: 58.4, tradeCount: 74 },
+      }),
+    ])
+
+    expect(container.textContent).toContain('BTC Momentum')
+    expect(container.textContent).toContain('收益')
+    expect(container.textContent).toContain('+21.8%')
+    expect(container.textContent).toContain('回撤')
+    expect(container.textContent).toContain('12.3%')
+    expect(container.textContent).toContain('胜率')
+    expect(container.textContent).toContain('58.4%')
+    expect(container.textContent).toContain('交易')
+    expect(container.textContent).toContain('74')
   })
 
   it('calls liquidate_and_stop from the list stop dialog when user chooses liquidation', async () => {

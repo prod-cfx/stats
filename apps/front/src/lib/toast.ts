@@ -15,10 +15,10 @@ function createToastElement(type: ToastType, options: ToastOptions): HTMLDivElem
   const toast = document.createElement('div')
   
   const typeStyles = {
-    success: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
-    error: 'bg-red-500/10 border-red-500/30 text-red-400',
-    warning: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
-    info: 'bg-primary/10 border-primary/30 text-primary',
+    success: { icon: 'bg-emerald-500/10 text-emerald-500', accent: 'bg-emerald-500' },
+    error: { icon: 'bg-red-500/10 text-red-500', accent: 'bg-red-500' },
+    warning: { icon: 'bg-amber-500/10 text-amber-500', accent: 'bg-amber-500' },
+    info: { icon: 'bg-primary/10 text-primary', accent: 'bg-primary' },
   }
 
   const iconPaths = {
@@ -28,31 +28,68 @@ function createToastElement(type: ToastType, options: ToastOptions): HTMLDivElem
     info: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
   }
 
-  toast.className = `
-    min-w-[320px] max-w-md
-    rounded-lg border backdrop-blur-sm
-    px-4 py-3
-    shadow-lg
-    animate-in slide-in-from-top-2 fade-in duration-200
-    ${typeStyles[type]}
-  `.trim().replace(/\s+/g, ' ')
+  toast.className = 'pointer-events-auto relative overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-3 text-[color:var(--cf-text)] shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-200 dark:shadow-black/30'
+  toast.setAttribute('role', 'status')
 
-  toast.innerHTML = `
-    <div class="flex items-start gap-3">
-      <svg class="h-5 w-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${iconPaths[type]}" />
-      </svg>
-      <div class="flex-1">
-        <p class="text-sm font-medium">${options.title}</p>
-        ${options.description ? `<p class="mt-1 text-xs opacity-90">${options.description}</p>` : ''}
-      </div>
-      <button type="button" class="flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity toast-close">
-        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
-  `
+  const accent = document.createElement('div')
+  accent.className = `absolute inset-y-2 left-0 w-0.5 rounded-full ${typeStyles[type].accent}`
+
+  const row = document.createElement('div')
+  row.className = 'flex items-start gap-2.5'
+
+  const iconWrap = document.createElement('span')
+  iconWrap.className = `mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${typeStyles[type].icon}`
+
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  icon.setAttribute('class', 'h-4 w-4')
+  icon.setAttribute('fill', 'none')
+  icon.setAttribute('stroke', 'currentColor')
+  icon.setAttribute('viewBox', '0 0 24 24')
+
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  path.setAttribute('stroke-linecap', 'round')
+  path.setAttribute('stroke-linejoin', 'round')
+  path.setAttribute('stroke-width', '2')
+  path.setAttribute('d', iconPaths[type])
+  icon.appendChild(path)
+  iconWrap.appendChild(icon)
+
+  const content = document.createElement('div')
+  content.className = 'min-w-0 flex-1'
+
+  const title = document.createElement('p')
+  title.className = 'truncate text-sm font-semibold text-[color:var(--cf-text-strong)]'
+  title.textContent = options.title
+  content.appendChild(title)
+
+  if (options.description) {
+    const description = document.createElement('p')
+    description.className = 'mt-1 line-clamp-2 text-xs leading-5 text-[color:var(--cf-muted)]'
+    description.textContent = options.description
+    content.appendChild(description)
+  }
+
+  const close = document.createElement('button')
+  close.type = 'button'
+  close.className = '-mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)] toast-close'
+  close.setAttribute('aria-label', 'Dismiss notification')
+
+  const closeIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  closeIcon.setAttribute('class', 'h-4 w-4')
+  closeIcon.setAttribute('fill', 'none')
+  closeIcon.setAttribute('stroke', 'currentColor')
+  closeIcon.setAttribute('viewBox', '0 0 24 24')
+
+  const closePath = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  closePath.setAttribute('stroke-linecap', 'round')
+  closePath.setAttribute('stroke-linejoin', 'round')
+  closePath.setAttribute('stroke-width', '2')
+  closePath.setAttribute('d', 'M6 18L18 6M6 6l12 12')
+  closeIcon.appendChild(closePath)
+  close.appendChild(closeIcon)
+
+  row.append(iconWrap, content, close)
+  toast.append(accent, row)
 
   return toast
 }
@@ -63,7 +100,7 @@ function showToast(type: ToastType, options: ToastOptions) {
   if (!container) {
     container = document.createElement('div')
     container.id = 'toast-container'
-    container.className = 'fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none'
+    container.className = 'pointer-events-none fixed right-4 top-5 z-[9999] flex w-[calc(100vw-2rem)] max-w-[360px] flex-col gap-2 sm:right-6'
     document.body.appendChild(container)
   }
 

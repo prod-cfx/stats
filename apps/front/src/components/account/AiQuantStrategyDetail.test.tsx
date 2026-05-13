@@ -1327,4 +1327,51 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('约 2,767.64 USDT')
     expect(container.textContent).not.toContain('0.04')
   })
+
+  it('localizes system fields in the parameter snapshot', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({
+            paramSchema: {
+              type: 'object',
+              properties: {
+                symbol: { type: 'string' },
+                exchange: { type: 'string' },
+                leverage: { type: 'number' },
+                timeframe: { type: 'string' },
+                marketType: { type: 'string' },
+                positionPct: { type: 'number' },
+                parameterSearchId: { type: 'string' },
+                accountBalanceQuote: { type: 'number' },
+                initialBalanceQuote: { type: 'number' },
+                executionConfigVersion: { type: 'number' },
+              },
+            },
+            paramValues: {
+              symbol: 'ETH-USDT-SWAP',
+              exchange: 'okx',
+              leverage: 2,
+              timeframe: '15m',
+              marketType: 'perp',
+              positionPct: 35,
+              parameterSearchId: 'official-template-search:long-id',
+              accountBalanceQuote: 8736.95,
+              initialBalanceQuote: 8736.95,
+              executionConfigVersion: 1,
+            },
+          })}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('交易对')
+    expect(container.textContent).toContain('市场类型')
+    expect(container.textContent).toContain('参数搜索 ID')
+    expect(container.textContent).toContain('账户报价余额')
+    expect(container.textContent).toContain('执行配置版本')
+    expect(container.textContent).not.toContain('accountBalanceQuote')
+    expect(container.textContent).not.toContain('executionConfigVersion')
+  })
 })
