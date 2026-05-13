@@ -7,7 +7,7 @@ import type {
   ResolveCtx,
   SideResolverSpec,
 } from '../atom-contracts/atom-contract-surface.types'
-import type { AtomContract } from '../atom-contracts/atom-contract-types'
+import type { AtomContract, AtomContractBucket } from '../atom-contracts/atom-contract-types'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 /**
  * GenericSeedDispatcher — Issue #1279 PR2 唯一真相源 NL→seed 分发器
@@ -476,7 +476,9 @@ function extractParams(
  * 改 patch schema 时（PR3+）才会动；新增 atom 不会动。
  * ────────────────────────────────────────────────────────────────────────── */
 
-const BUCKET_TO_PATCH_SLOT: Readonly<Record<string, 'triggers' | 'actions' | 'risk'>> = {
+// #1298：key 改 AtomContractBucket 联合类型——新增 bucket 必须在此表显式声明，
+// 否则 TS exhaustive check 编译报错；不再依赖运行时 `if (!slot) continue` silent skip。
+const BUCKET_TO_PATCH_SLOT: Readonly<Record<AtomContractBucket, 'triggers' | 'actions' | 'risk'>> = {
   trigger: 'triggers',
   action: 'actions',
   risk: 'risk',
