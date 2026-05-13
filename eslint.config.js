@@ -210,9 +210,9 @@ export default antfu(
       'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-atom-registry.service.ts',
       'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-clarification-metadata.ts',
       'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-contract-readiness.service.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-open-slot-answer-resolver.service.ts',
+      // PR2c-final-1bc review fix Major #2: resolver 已切到 dispatcher，0 atom 字面量，移出 ratchet
       'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-presentation-registry.service.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-seed-extractor.service.ts',
+      // PR2c-final-1bc: semantic-seed-extractor.service.ts 已物理删除，移除死 ratchet 项
       'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-seed-state-builder.service.ts',
       'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-merge.service.ts',
       'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-normalization.ts',
@@ -244,8 +244,20 @@ export default antfu(
   //       沉淀到 atom contract。dispatcher 不允许"一个策略一个 if"。
   // Plugin: eslint-rules/no-business-rule-in-dispatcher.js
   //
-  // 启用域: dispatcher 全部文件 glob（review M1：覆盖未来新增的 dispatcher-utils.ts
-  //         等 helper 文件，防止把分流逻辑挪到新文件跳过守门）
+  // 启用域（PR2c-final-1bc 收敛）：
+  //   apps/quantify/src/modules/llm-strategy-codegen/services/**/*.ts 全目录
+  //   不只 dispatcher 单文件 —— 守门覆盖 service 层 helper / projection 等所有
+  //   可能"一个策略一个 if"的位置，防止业务规则从 dispatcher 挪到隔壁 service
+  //   绕过守门。
+  //
+  // 永久豁免:
+  //   - atom-contract-registry.ts 自身（真相源，可显式枚举 bucket）
+  //   - constants/ 派生器 + utterance-corpus（数据/fixture）
+  //   - 所有 .spec.ts / .e2e-spec.ts（测试可比较 bucket 字面量做断言）
+  //
+  // PR2 ratchet allowlist（剩 18 个文件 / 58 处历史字面量比较 — 留给 PR3c
+  // 业务清零；本 PR 不引入新违规）：见下方 ignores
+  //
   // Known limitation（review M2，文档化已知 bypass）：
   //   - identifier 重写绕过（`const k = 'trigger'; if (bucket === k)`）需要符号
   //     tracking 才能 catch，超出 ESLint flat plugin 单文件 AST 扫描能力，由 PR
@@ -253,7 +265,31 @@ export default antfu(
   // ─────────────────────────────────────────────────────────────────────────
   {
     files: [
-      'apps/quantify/src/modules/llm-strategy-codegen/services/generic-seed-dispatcher*.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/**/*.ts',
+    ],
+    ignores: [
+      // 永久豁免
+      'apps/quantify/src/modules/llm-strategy-codegen/services/**/*.spec.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/**/*.e2e-spec.ts',
+      // PR3c ratchet（18 个文件 / 58 处 bucket 字面量比较 — 业务清零后移除）
+      'apps/quantify/src/modules/llm-strategy-codegen/services/canonical-spec-builder.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/canonical-spec-v2-ir-compiler.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/canonical-spec-v2-validator.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-conversation-response-mapper.helper.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-conversation.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-graph-snapshot.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/per-trade-sizing-resolver.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-atom-invariant.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-contract-readiness.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-graph-compiler.service.ts',
+      // PR2c-final-1bc review fix Major #2: resolver 已切到 dispatcher，无业务规则字面量，移出 ratchet
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-seed-state-builder.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-normalization.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-projection.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-trigger-combination-contract.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-consistency.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-intent-resolution.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-semantic-contracts.ts',
     ],
     plugins: {
       dispatcher: {
