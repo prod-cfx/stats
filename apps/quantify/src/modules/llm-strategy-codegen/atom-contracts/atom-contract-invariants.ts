@@ -8,6 +8,7 @@ import type {
 import { FIRST_WAVE_TRIGGER_ATOMS } from '../constants/canonical-strategy-capabilities'
 import { CONDITION_ATOM_EMITS } from './atom-contract-condition-emits'
 import { RISK_GUARD_ATOM_EMITS } from './atom-contract-risk-guard-emits'
+import { LIFECYCLE_ATOM_EMITS } from './atom-contract-lifecycle-emits'
 import { ATOM_CONTRACT_REGISTRY, type NotApplicableIrShapeBuilder } from './atom-contract-registry'
 
 type Registry = typeof ATOM_CONTRACT_REGISTRY
@@ -86,14 +87,16 @@ type ConditionAtomKey =
   | 'price.breakout_up'
   | 'price.breakout_down'
 
-// Issue #1313 PR2：rule-level RiskGuard 类 atom（`position.has_position` /
-//   `position.no_position`）的 emit.irShape 也已迁出 `'irshape-not-applicable'`
-//   领域 —— 改为通过 `emit.riskGuardShape` 在 ir-compiler `tryCompileRiskGuard`
-//   dispatcher 调度。RiskGuardAtomKey 从 NonConditionRegistryKey 排除，
-//   `_NonConditionIrShapeNotApplicable` 守门不再要求其 capabilityStatus =
-//   'irshape-not-applicable'；新的 `_RiskGuardEmitAllReal` AssertTrue 守门接管，
-//   要求其 capabilityStatus === 'pr3e-risk-guard'。
-type NonConditionRegistryKey = Exclude<RegistryKey, ConditionAtomKey | RiskGuardAtomKey>
+// Issue #1313 PR2 + PR4 反转：rule-level RiskGuard 与 spec-level Lifecycle pyramiding
+//   两组 atom 都已迁出 `'irshape-not-applicable'` 领域：
+//   - `position.has_position` / `position.no_position` → `emit.riskGuardShape`
+//     ↔ ir-compiler `tryCompileRiskGuard` dispatcher（capabilityStatus = 'pr3e-risk-guard'）
+//   - `position.pyramiding_limit` → `emit.lifecyclePyramidingShape`
+//     ↔ ir-compiler `resolveLifecyclePyramiding` dispatcher（capabilityStatus = 'pr3e-lifecycle'）
+//   两组 atom 从 NonConditionRegistryKey 同时排除，让 `_NonConditionIrShapeNotApplicable` /
+//   `_NonConditionCapabilityNotApplicable` 不再约束其 irShape brand 与 capabilityStatus；
+//   正向守门由 `_RiskGuardEmitAllReal` + `_LifecyclePyramidingEmitAllReal` AssertTrue 接管。
+type NonConditionRegistryKey = Exclude<RegistryKey, ConditionAtomKey | RiskGuardAtomKey | LifecyclePyramidingAtomKey>
 
 // Issue #1279 PR3e：non-condition bucket atom（action / risk / orchestration / 非
 // grid 的 positionConstraint）走 rule-level / spec-level IR 编译路径，不参与
@@ -202,8 +205,16 @@ type StubOrchestrationPortfolioRiskKeys = {
   [K in OrchestrationPortfolioRiskAtomKey]: Registry[K]['emit']['capabilityStatus'] extends 'pr3e-orchestration-portfolio' ? never : K
 }[OrchestrationPortfolioRiskAtomKey]
 
+// 直接从 `LIFECYCLE_ATOM_EMITS` 字面量类型推导（mirror condition 守门思路）：
+//   `Registry[K]['emit']` 经 `completePr1bRegistry` 的 `mergedEmit: AtomContractEmit` 显式
+//   cast 后丢失 override 字面量；查源头 LIFECYCLE_ATOM_EMITS 才能看到真实的
+//   `'pr3e-lifecycle'` + `lifecyclePyramidingShape` 字段类型。
+type LifecycleEmits = typeof LIFECYCLE_ATOM_EMITS
+
 type StubLifecyclePyramidingKeys = {
-  [K in LifecyclePyramidingAtomKey]: Registry[K]['emit']['capabilityStatus'] extends 'pr3e-lifecycle' ? never : K
+  [K in LifecyclePyramidingAtomKey]: K extends keyof LifecycleEmits
+    ? LifecycleEmits[K] extends { readonly capabilityStatus: 'pr3e-lifecycle' } ? never : K
+    : K
 }[LifecyclePyramidingAtomKey]
 
 // Issue #1313 PR5a：同形派生 `StubActionKeys` —— 任一 ActionAtomKey 的 capabilityStatus
@@ -215,12 +226,22 @@ type StubActionKeys = {
   [K in ActionAtomKey]: Registry[K]['emit']['capabilityStatus'] extends 'pr3e-action' ? never : K
 }[ActionAtomKey]
 
+// Issue #1313 PR4 反转：额外要求迁移到 'pr3e-lifecycle' 的 atom 必须挂载
+// 真实 `emit.lifecyclePyramidingShape` 函数。combined 与 `StubLifecyclePyramidingKeys`
+// 共同收敛为 `never` 才放行；防止"只改 capabilityStatus 字面量、未挂 shape"漂移。
+type MissingLifecyclePyramidingShapeKeys = {
+  [K in LifecyclePyramidingAtomKey]: K extends keyof LifecycleEmits
+    ? LifecycleEmits[K] extends { readonly lifecyclePyramidingShape: (...args: never[]) => unknown } ? never : K
+    : K
+}[LifecyclePyramidingAtomKey]
+
 // 编译期 self-test：确保 5 组 *AtomKey 与 ConditionAtomKey 不相交、且属于 RegistryKey
 // （即未误把 condition atom 拉入 rule-level / spec-level emit 集合）。
-// Issue #1313 PR2：`NonConditionRegistryKey` 不再包含已迁出的 RiskGuardAtomKey，
-// 自检改用「与 ConditionAtomKey 不相交 ∧ 属于 RegistryKey」的不变形态，与后续 PR
-// 反转过程持续兼容；PR5a 第 5 组 ActionAtomKey 沿用此不变形态，避免依赖
-// `NonConditionRegistryKey` 在 PR5d 反转时再修一次。
+// Issue #1313 PR2 + PR4 + PR5a：`NonConditionRegistryKey` 已陆续移出 RiskGuardAtomKey
+// 与 LifecyclePyramidingAtomKey，自检改用「与 ConditionAtomKey 不相交 ∧ 属于 RegistryKey」
+// 的不变形态（PR2 引入），与后续 PR 反转过程持续兼容；PR5a 第 5 组 ActionAtomKey
+// 沿用此不变形态。LifecyclePyramidingAtomKey 虽已迁出 NonConditionRegistryKey，
+// self-test 在新形态下仍然成立（不依赖 NonConditionRegistryKey）。
 type _RiskGuardAtomsAreNonCondition = AssertTrue<
   [Extract<RiskGuardAtomKey, ConditionAtomKey>] extends [never]
     ? RiskGuardAtomKey extends RegistryKey ? true : false
@@ -248,11 +269,12 @@ type _ActionAtomsAreNonCondition = AssertTrue<
 >
 
 // 防 "已声明但完全未引用" tsc / eslint 警告：聚合为 unused-type 链。
+// `StubLifecyclePyramidingKeys` / `MissingLifecyclePyramidingShapeKeys` 已在
+// `_LifecyclePyramidingEmitAllReal` 中被实际消费，无需再列入 aggregate。
 type _Pr1ShapeAtomKeysAggregate =
   | StubRiskGuardKeys
   | StubRuleBlockKeys
   | StubOrchestrationPortfolioRiskKeys
-  | StubLifecyclePyramidingKeys
   | StubActionKeys
 
 export type _Pr1ShapeAtomKeysSkeleton =
@@ -280,6 +302,11 @@ export type AtomContractInvariantReport = {
   //   任一 atom 退化（emit override 漏挂 / status 误写）→ `StubRiskGuardKeys` 不再为
   //   never → AssertTrue 编译挂；与 `conditionIrShapeAllReal` 同形守门。
   readonly riskGuardEmitAllReal: [StubRiskGuardKeys] extends [never] ? true : false
+  // Issue #1313 PR4 反转：lifecycle pyramiding emit 全量真实兑现 +
+  //   `emit.lifecyclePyramidingShape` 字段实际挂载（双重收窄至 never）。
+  readonly lifecyclePyramidingEmitAllReal: [
+    StubLifecyclePyramidingKeys | MissingLifecyclePyramidingShapeKeys,
+  ] extends [never] ? true : false
 }
 
 export type _AtomContractExhaustive = AssertTrue<AtomContractInvariantReport['exhaustive']>
@@ -294,3 +321,4 @@ export type _NonConditionIrShapeNotApplicable = AssertTrue<AtomContractInvariant
 export type _NonConditionCapabilityNotApplicable = AssertTrue<AtomContractInvariantReport['nonConditionCapabilityNotApplicable']>
 export type _ConditionIrShapeAllReal = AssertTrue<AtomContractInvariantReport['conditionIrShapeAllReal']>
 export type _RiskGuardEmitAllReal = AssertTrue<AtomContractInvariantReport['riskGuardEmitAllReal']>
+export type _LifecyclePyramidingEmitAllReal = AssertTrue<AtomContractInvariantReport['lifecyclePyramidingEmitAllReal']>

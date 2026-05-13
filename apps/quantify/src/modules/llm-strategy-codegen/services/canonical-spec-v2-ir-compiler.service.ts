@@ -36,6 +36,9 @@ import type {
   IrBuildContext,
   IrCompileContext,
   IrCompileHelpers,
+  LifecyclePyramidingShapeOutput,
+  RuleLikeInput,
+  SpecLevelEmitContext,
 } from '../atom-contracts/atom-contract-emit.types'
 import type { AtomContractEmit, AtomContractKey } from '../atom-contracts/atom-contract-types'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
@@ -319,7 +322,7 @@ export class CanonicalSpecV2IrCompilerService {
     const positionMode = hasOrderPrograms
       ? this.resolveOrderProgramPositionMode(input.canonicalSpec.orderPrograms ?? [])
       : this.resolvePositionMode(input.canonicalSpec.rules)
-    const lifecyclePyramiding = this.resolveLifecyclePyramiding(input.canonicalSpec.rules)
+    const lifecyclePyramiding = this.resolveLifecyclePyramiding(input.canonicalSpec.rules, context)
 
     return {
       irVersion: 'csi.v1',
@@ -3631,21 +3634,27 @@ export class CanonicalSpecV2IrCompilerService {
     }
   }
 
-  private resolveLifecyclePyramiding(rules: CanonicalRuleV2[]): { allow: boolean, maxLayers: number } {
-    const addPositionMetadata = rules
-      .map(rule => rule.metadata?.addPosition)
-      .filter((metadata): metadata is NonNullable<NonNullable<CanonicalRuleV2['metadata']>['addPosition']> => metadata !== undefined)
-    const hasAddAction = rules.some(rule => rule.actions.some(action => action.type === 'ADD_LONG' || action.type === 'ADD_SHORT'))
-    const maxLayers = Math.max(1, ...addPositionMetadata.map(metadata =>
-      typeof metadata.maxLayers === 'number' && Number.isFinite(metadata.maxLayers) && metadata.maxLayers > 0
-        ? Math.floor(metadata.maxLayers)
-        : 1,
-    ))
-
-    return {
-      allow: hasAddAction || addPositionMetadata.length > 0,
-      maxLayers,
+  /**
+   * Issue #1313 PR4：lifecycle pyramiding 聚合改走 REGISTRY 调度，
+   * 行为沉淀到 `position.pyramiding_limit` atom 的 `emit.lifecyclePyramidingShape`
+   * （`atom-contract-lifecycle-emits.ts`）。本方法退化为通过 REGISTRY 查找并调用。
+   *
+   * 类型守门（atom-contract-invariants.ts `_LifecyclePyramidingEmitAllReal`）保证
+   * `position.pyramiding_limit` 的 `capabilityStatus === 'pr3e-lifecycle'`，
+   * `lifecyclePyramidingShape` 字段在编译期必然挂载；运行时若意外缺失则
+   * fail-loud（与原 service helper "永远返回值" 的契约一致）。
+   */
+  private resolveLifecyclePyramiding(rules: CanonicalRuleV2[], context: CompileContext): LifecyclePyramidingShapeOutput {
+    const pyramidingEmit = ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].emit
+    const shape = pyramidingEmit.lifecyclePyramidingShape
+    if (!shape) {
+      throw new Error('[#1313 PR4] position.pyramiding_limit emit.lifecyclePyramidingShape missing — REGISTRY invariant violated')
     }
+    // `RuleLikeInput` 是 atom-contracts 内的占位 `Record<string, unknown>`，
+    // 避免 atom-contracts → canonical-strategy-ir 反向 import 形成环；
+    // `CanonicalRuleV2` 不实现 string index signature，需要双 cast 显式声明 widening
+    // 是有意的（接口语义已在 emit.types `LifecyclePyramidingShape` doc 锁定）。
+    return shape(rules as unknown as readonly RuleLikeInput[], this.buildSpecLevelEmitContext(context))
   }
 
   private mapRulePhase(rule: CanonicalRuleV2, actions: ActionDef[]): RuleBlock['phase'] {
@@ -4039,6 +4048,19 @@ export class CanonicalSpecV2IrCompilerService {
       compileContext: context,
       helpers: this.irHelpers,
       closeRef,
+    }
+  }
+
+  /**
+   * Issue #1313 PR4：spec-level atom emit shape（`lifecyclePyramidingShape`，
+   * 后续可能扩展 `orchestrationPortfolioRiskShape`）的调用上下文。
+   * 与 `IrBuildContext` 同形但不携带 `seed` / `closeRef`（spec-level emit 在 IR 编译
+   * 末段单次调用，无 per-atom seed 派生需求）。
+   */
+  private buildSpecLevelEmitContext(context: CompileContext): SpecLevelEmitContext {
+    return {
+      compileContext: context,
+      helpers: this.irHelpers,
     }
   }
 }

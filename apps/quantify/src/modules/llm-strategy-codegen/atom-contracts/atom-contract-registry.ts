@@ -22,6 +22,8 @@ import type { ConditionEmitOverride } from './atom-contract-condition-emits'
 import { CONDITION_ATOM_EMITS } from './atom-contract-condition-emits'
 import type { RiskGuardEmitOverride } from './atom-contract-risk-guard-emits'
 import { RISK_GUARD_ATOM_EMITS } from './atom-contract-risk-guard-emits'
+import type { LifecycleEmitOverride } from './atom-contract-lifecycle-emits'
+import { LIFECYCLE_ATOM_EMITS } from './atom-contract-lifecycle-emits'
 import {
   COMMON_PIPELINE,
   NO_SUMMARY,
@@ -270,11 +272,19 @@ function completePr1bRegistry<const T extends Record<AtomContractKey, AtomContra
     //   capabilityStatus 改写为 'pr3e-risk-guard'；irShape 仍保留 NotApplicable sentinel
     //   （compileAtom dispatcher 内 'pr3e-*' 状态不会走 emit.irShape 路径）。
     const riskGuardOverride = (RISK_GUARD_ATOM_EMITS as Partial<Record<AtomContractKey, RiskGuardEmitOverride>>)[key]
-    const mergedEmit: AtomContractEmit = conditionOverride
-      ? { ...baseEmit, ...conditionOverride }
-      : riskGuardOverride
-        ? { ...baseEmit, ...riskGuardOverride }
-        : baseEmit
+    // Issue #1313 PR4：lifecycle-level atom（`position.pyramiding_limit`）通过独立 override
+    //   注入 `emit.lifecyclePyramidingShape` + `capabilityStatus = 'pr3e-lifecycle'`；
+    //   irShape 升级为非 brand sentinel（dispatcher 不会调度此 atom 走 irShape）。
+    //   condition / riskGuard / lifecycle override 三组互斥（不同 atom），合并优先级
+    //   显式按 bucket 区分；同一 atom 只会命中其中一组。
+    const lifecycleOverride = (LIFECYCLE_ATOM_EMITS as Partial<Record<AtomContractKey, LifecycleEmitOverride>>)[key]
+    const mergedEmit: AtomContractEmit = lifecycleOverride
+      ? { ...baseEmit, ...lifecycleOverride }
+      : conditionOverride
+        ? { ...baseEmit, ...conditionOverride }
+        : riskGuardOverride
+          ? { ...baseEmit, ...riskGuardOverride }
+          : baseEmit
     completed[key] = {
       ...registry[key],
       key,
@@ -1263,6 +1273,28 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   // ── 仓位约束（positionConstraint）
+  // Issue #1313 PR4 决策（方案 B：保持 capabilityStatus = 'irshape-not-applicable'）
+  // ----------------------------------------------------------------------------
+  // `position.dca_schedule` IR 编译阶段无独立产出：`canonical-spec-v2-ir-compiler.service.ts`
+  // 内零 case 引用此 atom key（已 grep 验证）。实际消费者：
+  //   - `semantic-state-projection.service.ts` —— display token / 状态投影
+  //   - `per-trade-sizing-resolver.service.ts` —— sizing 派生（DCA_SIZING_EVIDENCE）
+  // 两者均在 IR 编译路径之外，本 atom 不需要 `irShape` / `lifecyclePyramidingShape` /
+  // `riskGuardShape` / `ruleBlockShape` / `orchestrationPortfolioRiskShape` 任一接口。
+  //
+  // 因此本 PR 不为 dca_schedule 引入第 5 类 emit shape，保持
+  // `capabilityStatus = 'irshape-not-applicable'`（由 `createPr1bEmit` 默认注入），
+  // 显式声明"已审计：IR 编译期无产出"。
+  //
+  // 与 `position.pyramiding_limit`（'pr3e-lifecycle'）严格分离：
+  //   - pyramiding 影响 `portfolio.allowPyramiding` / `maxPyramidingLayers`
+  //     → IR 编译末段聚合 → 走 emit.lifecyclePyramidingShape
+  //   - dca_schedule 影响 sizing param / runtime constraint
+  //     → 走 sizing resolver 派生 → 不进入 IR shape 调度
+  //
+  // 未来 follow-up（不属于本 PR 范围）：若后续把 per-trade-sizing-resolver 内的
+  // DCA 派生逻辑也下沉到 atom 自身，需新增 `sizingShape` 接口（第 5 类 emit shape）；
+  // 届时再升级本 atom 的 capabilityStatus，与本次 spec-level shape 设计正交。
   'position.dca_schedule': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
