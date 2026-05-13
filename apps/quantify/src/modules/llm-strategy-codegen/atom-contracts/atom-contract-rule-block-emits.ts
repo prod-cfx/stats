@@ -76,6 +76,7 @@ const partialTakeProfitRuleBlockShape: RuleBlockShape = (
     { ...rule, actions: reduceActions },
     spec,
     fallbackPositionPct,
+    c,
   )
   if (compiledActions.length === 0) {
     return null

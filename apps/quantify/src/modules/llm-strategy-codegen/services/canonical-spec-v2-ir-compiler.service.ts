@@ -37,6 +37,7 @@ import type {
   IrCompileContext,
   IrCompileHelpers,
   LifecyclePyramidingShapeOutput,
+  RuleLevelEmitContext,
   RuleLikeInput,
   SpecLevelEmitContext,
 } from '../atom-contracts/atom-contract-emit.types'
@@ -282,7 +283,7 @@ export class CanonicalSpecV2IrCompilerService {
       }
 
       const when = this.compileCondition(rule.condition, context, rule.id)
-      const actions = this.compileActions(rule, input.canonicalSpec, input.fallback.positionPct)
+      const actions = this.compileActions(rule, input.canonicalSpec, input.fallback.positionPct, context)
       if (actions.length === 0) {
         continue
       }
@@ -2924,7 +2925,7 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     const when = this.compileCondition(rule.condition, context, rule.id)
-    const actions = this.compileActions(rule, spec, fallbackPositionPct)
+    const actions = this.compileActions(rule, spec, fallbackPositionPct, context)
     if (actions.length === 0) {
       return null
     }
@@ -3374,14 +3375,61 @@ export class CanonicalSpecV2IrCompilerService {
     return 'both'
   }
 
+  /**
+   * Issue #1313 PR5c：6 个 action atom 的 emit 沉淀到
+   *   ATOM_CONTRACT_REGISTRY['action.*'].emit.actionShape
+   *   （atom-contracts/atom-contract-action-emits.ts，行为与本方法原 enum case body
+   *    严格等价，IR snapshot byte-equal）。
+   *
+   * 调度优先级：
+   *   1. action.atomKey 命中 REGISTRY + emit.capabilityStatus === 'pr3e-action' +
+   *      emit.actionShape 挂载 → 走 REGISTRY shape；
+   *   2. 其它 case（启发式 / risk / fallback 路径无 atomKey，或 REDUCE_* /
+   *      FORCE_EXIT / BLOCK_NEW_ENTRY 4 case 不在本 6 atom 集合内）→ 走 enum 兜底。
+   *
+   * 兜底 case 一律保留：reduce / force_exit / block_new_entry 仍由本方法内 enum
+   * 直接 emit，分别归属 `action.reduce_position` / `risk.partial_take_profit` /
+   * `portfolioRisk.drawdown_block` 等 atom 各自的 rule-level / spec-level shape；
+   * 此处不依赖 REGISTRY 反查。
+   */
   private compileActions(
     rule: CanonicalRuleV2,
     spec: CanonicalStrategySpecV2,
     fallbackPositionPct: number,
+    context: CompileContext,
   ): ActionDef[] {
     const actions: ActionDef[] = []
+    const emitContext = this.buildRuleLevelEmitContext(context, rule.id)
 
     for (const action of rule.actions) {
+      // PR5c：atomKey 反查 REGISTRY 优先；未命中 / 未挂 shape → 落 enum 兜底（保持
+      //   启发式 / risk 路径下"无 atomKey 时 IR 不变"的 byte-equal 不变量）。
+      const atomKey = action.atomKey
+      if (typeof atomKey === 'string') {
+        const entry = ATOM_CONTRACT_REGISTRY[atomKey as AtomContractKey] as
+          | { readonly emit?: AtomContractEmit }
+          | undefined
+        const emit = entry?.emit
+        if (emit?.capabilityStatus === 'pr3e-action' && emit.actionShape) {
+          // ActionShape 的 `atom` 第一参用于与现有 IrShapeBuilder / RiskGuardShape /
+          //   RuleBlockShape 等 dispatch 入参形态保持一致；compileActions 路径无真实
+          //   CanonicalConditionAtom（dispatch key 来自 action.atomKey），传 synthetic
+          //   `{ kind: 'atom', key: atomKey }` 即可（emit body 不消费 atom 字段，详见
+          //   atom-contract-emit.types.ts ActionShape doc）。
+          const syntheticAtom: CanonicalConditionAtom = { kind: 'atom', key: atomKey }
+          const emitted = emit.actionShape(
+            syntheticAtom,
+            action as unknown as Readonly<Record<string, unknown>>,
+            rule as unknown as Readonly<Record<string, unknown>>,
+            spec as unknown as Readonly<Record<string, unknown>>,
+            fallbackPositionPct,
+            emitContext,
+          ) as unknown as readonly ActionDef[]
+          actions.push(...emitted)
+          continue
+        }
+      }
+
       switch (action.type) {
         case 'OPEN_LONG':
         case 'OPEN_SHORT':
@@ -3424,6 +3472,20 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     return actions
+  }
+
+  /**
+   * Issue #1313 PR5c：rule-level emit shape（RiskGuard / RuleBlock / Action）共用入口的
+   * 上下文构造 helper。与 `buildSpecLevelEmitContext` 同形，额外携带 `seed = rule.id`
+   * 供 shape 派生 predicate id 命名（compileActions 路径暂无 series/predicate 写入
+   * 需求，seed 仍按现有 RuleLevelEmitContext 接口透传）。
+   */
+  private buildRuleLevelEmitContext(context: CompileContext, seed: string): RuleLevelEmitContext {
+    return {
+      compileContext: context,
+      helpers: this.irHelpers,
+      seed,
+    }
   }
 
   private collectPositionLifecycleRuntimeRequirements(
@@ -3997,6 +4059,9 @@ export class CanonicalSpecV2IrCompilerService {
         // Issue #1313 PR3：rule-level emit shape 真实兑现需要的额外 helper（risk.partial_take_profit 等）
         ensurePositionSeries: this.ensurePositionSeries.bind(this),
         compileActions: this.compileActions.bind(this),
+        // Issue #1313 PR5c：action atom 的 `emit.actionShape` 真实兑现需要 sizing 解析 helper
+        //   mirror service 私有 `resolveActionQuantity`，用于 OPEN/ADD 路径的 sizing 解析。
+        resolveActionQuantity: this.resolveActionQuantity.bind(this),
       }
     }
     return this.__irHelpers

@@ -29,6 +29,7 @@ import type {
 import type {
   CanonicalConditionAtom,
   CanonicalOrchestrationPortfolioRisk,
+  CanonicalRuleAction,
   CanonicalRuleV2,
   CanonicalStrategySpecV2,
 } from '../types/canonical-strategy-spec-v2'
@@ -148,7 +149,16 @@ export interface IrCompileHelpers {
     rule: CanonicalRuleV2,
     spec: CanonicalStrategySpecV2,
     fallbackPositionPct: number,
+    ctx: IrCompileContext,
   ) => ActionDef[]
+  // Issue #1313 PR5c：6 个 action atom 的 `emit.actionShape` 真实兑现需要透出
+  //   `resolveActionQuantity`（mirror service 私有方法），用于 OPEN/ADD 路径的 sizing 解析。
+  //   CLOSE 路径的 `{ mode: 'position_pct', value: 100 }` 是字面量常量，无需 helper。
+  resolveActionQuantity: (
+    action: CanonicalRuleAction,
+    defaultSizing: CanonicalStrategySpecV2['sizing'],
+    fallbackPositionPct: number,
+  ) => ActionDef['quantity']
 }
 
 /**

@@ -28,6 +28,8 @@ import type { RuleBlockEmitOverride } from './atom-contract-rule-block-emits'
 import { RULE_BLOCK_ATOM_EMITS } from './atom-contract-rule-block-emits'
 import type { OrchestrationEmitOverride } from './atom-contract-orchestration-emits'
 import { ORCHESTRATION_ATOM_EMITS } from './atom-contract-orchestration-emits'
+import type { ActionEmitOverride } from './atom-contract-action-emits'
+import { ACTION_ATOM_EMITS } from './atom-contract-action-emits'
 import {
   COMMON_PIPELINE,
   NO_SUMMARY,
@@ -288,6 +290,12 @@ function completePr1bRegistry<const T extends Record<AtomContractKey, AtomContra
     const lifecycleOverride = (LIFECYCLE_ATOM_EMITS as Partial<Record<AtomContractKey, LifecycleEmitOverride>>)[key]
     const ruleBlockOverride = (RULE_BLOCK_ATOM_EMITS as Partial<Record<AtomContractKey, RuleBlockEmitOverride>>)[key]
     const orchestrationOverride = (ORCHESTRATION_ATOM_EMITS as Partial<Record<AtomContractKey, OrchestrationEmitOverride>>)[key]
+    // Issue #1313 PR5c：6 个 action atom（`action.open_long` / `action.close_long` /
+    //   `action.open_short` / `action.close_short` / `action.add_position` /
+    //   `action.reverse_position`）通过 ACTION_ATOM_EMITS 注入 `emit.actionShape` +
+    //   `capabilityStatus = 'pr3e-action'`。与其余四组 override 互斥（atom 不重叠），
+    //   spread 合并顺序不会冲突。
+    const actionOverride = (ACTION_ATOM_EMITS as Partial<Record<AtomContractKey, ActionEmitOverride>>)[key]
     const mergedEmit: AtomContractEmit = {
       ...baseEmit,
       ...(conditionOverride ?? {}),
@@ -295,6 +303,7 @@ function completePr1bRegistry<const T extends Record<AtomContractKey, AtomContra
       ...(lifecycleOverride ?? {}),
       ...(ruleBlockOverride ?? {}),
       ...(orchestrationOverride ?? {}),
+      ...(actionOverride ?? {}),
     }
     completed[key] = {
       ...registry[key],

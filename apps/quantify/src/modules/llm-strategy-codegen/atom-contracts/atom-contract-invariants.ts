@@ -11,6 +11,7 @@ import { RISK_GUARD_ATOM_EMITS } from './atom-contract-risk-guard-emits'
 import { LIFECYCLE_ATOM_EMITS } from './atom-contract-lifecycle-emits'
 import { RULE_BLOCK_ATOM_EMITS } from './atom-contract-rule-block-emits'
 import { ORCHESTRATION_ATOM_EMITS } from './atom-contract-orchestration-emits'
+import { ACTION_ATOM_EMITS } from './atom-contract-action-emits'
 import { ATOM_CONTRACT_REGISTRY, type NotApplicableIrShapeBuilder } from './atom-contract-registry'
 
 type Registry = typeof ATOM_CONTRACT_REGISTRY
@@ -89,7 +90,7 @@ type ConditionAtomKey =
   | 'price.breakout_up'
   | 'price.breakout_down'
 
-// Issue #1313 PR2 / PR3 / PR4 反转：以下 atom 都已迁出 `'irshape-not-applicable'` 领域，
+// Issue #1313 PR2 / PR3 / PR4 / PR5c 反转：以下 atom 都已迁出 `'irshape-not-applicable'` 领域，
 //   分别通过专用 emit shape 在 ir-compiler 对应 dispatcher 调度：
 //   - `position.has_position` / `position.no_position` (PR2) → `emit.riskGuardShape`
 //     ↔ `tryCompileRiskGuard`（capabilityStatus = 'pr3e-risk-guard'）
@@ -99,11 +100,16 @@ type ConditionAtomKey =
 //     ↔ `compileOrchestrationPortfolioRisks`（capabilityStatus = 'pr3e-orchestration-portfolio'）
 //   - `position.pyramiding_limit` (PR4) → `emit.lifecyclePyramidingShape`
 //     ↔ `resolveLifecyclePyramiding`（capabilityStatus = 'pr3e-lifecycle'）
-//   四组 atom 从 NonConditionRegistryKey 同时排除，让 `_NonConditionIrShapeNotApplicable` /
+//   - 6 个 action atom (`action.open_long` / `action.close_long` /
+//     `action.open_short` / `action.close_short` / `action.add_position` /
+//     `action.reverse_position`) (PR5c) → `emit.actionShape`
+//     ↔ `compileActions` REGISTRY 调度（capabilityStatus = 'pr3e-action'）
+//   五组 atom 从 NonConditionRegistryKey 同时排除，让 `_NonConditionIrShapeNotApplicable` /
 //   `_NonConditionCapabilityNotApplicable` 不再约束其 irShape brand 与 capabilityStatus；
 //   正向守门由 `_RiskGuardEmitAllReal` / `_RuleBlockEmitAllReal` /
 //   `_OrchestrationPortfolioRiskEmitAllReal` / `_LifecyclePyramidingEmitAllReal`
-//   AssertTrue 接管。
+//   接管；`_ActionEmitAllReal` AssertTrue 在 PR5c 仅声明 report 字段、暂不导出，
+//   PR5d 启用（与 PR5b 注释里的 PR5d 计划一致）。
 type NonConditionRegistryKey = Exclude<
   RegistryKey,
   | ConditionAtomKey
@@ -111,6 +117,7 @@ type NonConditionRegistryKey = Exclude<
   | RuleBlockAtomKey
   | OrchestrationPortfolioRiskAtomKey
   | LifecyclePyramidingAtomKey
+  | ActionAtomKey
 >
 
 // Issue #1279 PR3e：non-condition bucket atom（action / risk / orchestration / 非
@@ -238,13 +245,29 @@ type StubLifecyclePyramidingKeys = {
     : K
 }[LifecyclePyramidingAtomKey]
 
-// Issue #1313 PR5a：同形派生 `StubActionKeys` —— 任一 ActionAtomKey 的 capabilityStatus
-// 不是 'pr3e-action' → 暴露在 StubActionKeys 中；当本 6 atom 全部迁移完成（PR5c）后
-// 类型自动收窄为 `never`，PR5d 启用 `_ActionEmitAllReal` AssertTrue 锁死。
-// 本 PR 内 6 个 action atom 均处 'irshape-not-applicable'，故 StubActionKeys =
-// ActionAtomKey 完整联合（0 atom 已迁移），**不**导出 AssertTrue。
+// Issue #1313 PR5a + PR5c：同形派生 `StubActionKeys` —— 任一 ActionAtomKey 的
+// `capabilityStatus` 不是 'pr3e-action' → 暴露在 StubActionKeys 中。
+// PR5c 兑现后 6 个 action atom 全部 `capabilityStatus === 'pr3e-action'`，类型收窄到
+// `never`。与 LIFECYCLE_ATOM_EMITS 守门同模式：直接从源头 ACTION_ATOM_EMITS 字面量
+// 类型派生（registry merge 走运行时，`Registry[K]['emit']` 静态类型推断仍是 fallback，
+// 无法收窄到 'pr3e-action'）。`_ActionEmitAllReal` AssertTrue 在 PR5c 暂不导出（按
+// PR5b 注释里的 "PR5d 启用" 计划），仅在 invariant report 内声明 `actionEmitAllReal`
+// 字段以便 PR5d 一行翻转。
+type ActionEmits = typeof ACTION_ATOM_EMITS
+
 type StubActionKeys = {
-  [K in ActionAtomKey]: Registry[K]['emit']['capabilityStatus'] extends 'pr3e-action' ? never : K
+  [K in ActionAtomKey]: K extends keyof ActionEmits
+    ? ActionEmits[K] extends { readonly capabilityStatus: 'pr3e-action' } ? never : K
+    : K
+}[ActionAtomKey]
+
+// PR4 同形：额外要求迁移到 'pr3e-action' 的 atom 必须挂载真实 `emit.actionShape`
+// 函数。combined 与 `StubActionKeys` 共同收敛为 `never` 才放行；防止"只改
+// `capabilityStatus` 字面量、未挂 shape"漂移。
+type MissingActionShapeKeys = {
+  [K in ActionAtomKey]: K extends keyof ActionEmits
+    ? ActionEmits[K] extends { readonly actionShape: (...args: never[]) => unknown } ? never : K
+    : K
 }[ActionAtomKey]
 
 // Issue #1313 PR4 反转：额外要求迁移到 'pr3e-lifecycle' 的 atom 必须挂载
@@ -290,13 +313,14 @@ type _ActionAtomsAreNonCondition = AssertTrue<
 >
 
 // 防 "已声明但完全未引用" tsc / eslint 警告：聚合为 unused-type 链。
-// `StubLifecyclePyramidingKeys` / `MissingLifecyclePyramidingShapeKeys` 已在
-// `_LifecyclePyramidingEmitAllReal` 中被实际消费，无需再列入 aggregate。
+// `StubLifecyclePyramidingKeys` / `MissingLifecyclePyramidingShapeKeys` /
+// `StubActionKeys` / `MissingActionShapeKeys` 已在
+// `_LifecyclePyramidingEmitAllReal` / `actionEmitAllReal` 中被实际消费，无需再列入
+// aggregate。
 type _Pr1ShapeAtomKeysAggregate =
   | StubRiskGuardKeys
   | StubRuleBlockKeys
   | StubOrchestrationPortfolioRiskKeys
-  | StubActionKeys
 
 export type _Pr1ShapeAtomKeysSkeleton =
   | _RiskGuardAtomsAreNonCondition
@@ -333,6 +357,13 @@ export type AtomContractInvariantReport = {
   //   AssertTrue 编译挂。
   readonly ruleBlockEmitAllReal: [StubRuleBlockKeys] extends [never] ? true : false
   readonly orchestrationPortfolioRiskEmitAllReal: [StubOrchestrationPortfolioRiskKeys] extends [never] ? true : false
+  // Issue #1313 PR5c：6 个 action atom 全部 `capabilityStatus === 'pr3e-action'` +
+  //   `emit.actionShape` 实际挂载（双重收窄至 never）。本 PR 仅声明字段、暂不导出
+  //   `_ActionEmitAllReal` AssertTrue 别名（按 PR5b 注释里的 "PR5d 启用" 计划，
+  //   留一行翻转给 PR5d 收尾）。
+  readonly actionEmitAllReal: [
+    StubActionKeys | MissingActionShapeKeys,
+  ] extends [never] ? true : false
 }
 
 export type _AtomContractExhaustive = AssertTrue<AtomContractInvariantReport['exhaustive']>
