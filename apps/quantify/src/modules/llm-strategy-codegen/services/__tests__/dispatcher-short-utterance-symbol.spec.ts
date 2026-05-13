@@ -84,7 +84,7 @@ describe('dispatcher 短句 symbol 推断（PR2c3-A）', () => {
     ['DCA', 'DCAUSDT'],
     ['EMA', 'EMAUSDT'],
     ['VWAP', 'VWAPUSDT'],
-  ] as const)('指标关键词 "%s" 不应产出 symbol 推断（不得输出 %s）', (token) => {
+  ] as const)('指标关键词 "%s" 不应产出 symbol 推断（不得输出 %s）', (token, _expectedShouldNotAppear) => {
     const patch = dispatcher.dispatch(token)
     expect(contextSymbol(patch)).toBeUndefined()
   })

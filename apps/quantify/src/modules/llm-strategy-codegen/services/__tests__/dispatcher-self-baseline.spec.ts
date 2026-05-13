@@ -157,12 +157,15 @@ describe('issue #1279 PR2 — dispatcher self-baseline', () => {
     })
   })
 
-  it('应该精确 155 case（36 atom×≥3 + corpus 多出 + AC-7 六条 + AC-12 两条）', () => {
+  it('应该精确 167 case（40 atom×≥3 + corpus 多出 + AC-7 六条 + AC-12 两条）', () => {
     // review M4：从 ≥116 改精确 155——下界过松，corpus 文件误删导致 case 数
     // 从 155 跌到 120 时该断言仍 pass。锁死精确数字让 case 数下降立刻 fail。
+    // PR2c-final-1a：新增 action.open_long + action.close_long 各 3 条 corpus utterance。
+    // PR2c-final-1a M2：补 action.open_short + action.close_short 各 3 条 corpus utterance
+    //   （消除 isExitActionKey/isEntryActionKey white-list 与 registry 的死代码不对称）。
     // 实际分布（与 baseline.json metadata 一致）：
-    //   corpus 141 + synthesized 6（grid×3 + pyramiding×3）+ ac-7 6 + ac-12 2 = 155
-    expect(cases.length).toBe(155)
+    //   corpus 153 + synthesized 6（grid×3 + pyramiding×3）+ ac-7 6 + ac-12 2 = 167
+    expect(cases.length).toBe(167)
   })
 
   it('应该覆盖 ATOM_CONTRACT_REGISTRY 所有 atom（≥3 条/atom）', () => {

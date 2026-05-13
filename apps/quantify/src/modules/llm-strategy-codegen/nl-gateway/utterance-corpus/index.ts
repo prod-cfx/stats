@@ -71,6 +71,10 @@ export type {
 export const INDIRECTLY_COVERED_ATOMS: ReadonlySet<SupportedExecutableUtteranceAtom> = new Set([
   'position.pyramiding_limit',
   'grid.range_rebalance',
+  // dispatcher-only action atoms (PR2c-final-1a): legacy extractor unaware; fixture files
+  // are auto-picked by dispatcher-self-baseline.spec via readdirSync('atoms/').
+  'action.open_long',
+  'action.close_long',
 ])
 
 /**

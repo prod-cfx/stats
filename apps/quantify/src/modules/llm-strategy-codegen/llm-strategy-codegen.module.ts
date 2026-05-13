@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common'
 
-import { AiModule } from '@/modules/ai/ai.module'
 import { AccountStrategyViewModule } from '@/modules/account-strategy-view/account-strategy-view.module'
+import { AiModule } from '@/modules/ai/ai.module'
 import { LlmStrategiesModule } from '@/modules/llm-strategies/llm-strategies.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { AccountAiQuantConversationsController } from './controllers/account-ai-quant-conversations.controller'
 import { LiveLlmStrategyCodegenController } from './controllers/live-llm-strategy-codegen.controller'
+import { NlGatewayModule } from './nl-gateway/nl-gateway.module'
 import { AiQuantConversationsRepository } from './repositories/ai-quant-conversations.repository'
 import { CodegenSessionsRepository } from './repositories/codegen-sessions.repository'
 import { PublishedStrategySnapshotsRepository } from './repositories/published-strategy-snapshots.repository'
@@ -25,8 +26,10 @@ import { CompiledScriptEmitterService } from './services/compiled-script-emitter
 import { CompiledScriptExecutionEnvelopeService } from './services/compiled-script-execution-envelope.service'
 import { CompiledScriptParserService } from './services/compiled-script-parser.service'
 import { ConversationSemanticEditService } from './services/conversation-semantic-edit.service'
+import { GenericSeedDispatcher } from './services/generic-seed-dispatcher.service'
 import { MarketInstrumentSymbolResolverService } from './services/market-instrument-symbol-resolver.service'
 import { NaturalLanguageGatewayService } from './services/natural-language-gateway.service'
+import { PerTradeSizingResolver } from './services/per-trade-sizing-resolver.service'
 import { PositionSizingContractService } from './services/position-sizing-contract.service'
 import { RecommendationIndexService } from './services/recommendation-index.service'
 import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
@@ -43,12 +46,12 @@ import { SemanticMissingPlaceholderReconcilerService } from './services/semantic
 import { SemanticOpenSlotAnswerResolverService } from './services/semantic-open-slot-answer-resolver.service'
 import { SemanticOrchestrationRegistryService } from './services/semantic-orchestration-registry.service'
 import { SemanticPresentationRegistryService } from './services/semantic-presentation-registry.service'
-import { SemanticSeedExtractorService } from './services/semantic-seed-extractor.service'
+// M3: SemanticSeedExtractorService import 已移除（PR2c-final-1bc 清理：caller 切 GenericSeedDispatcher 后字段 0 引用）
 import { SemanticSeedStateBuilderService } from './services/semantic-seed-state-builder.service'
-import { SemanticSupportClassifierService } from './services/semantic-support-classifier.service'
-import { SemanticStateProjectionService } from './services/semantic-state-projection.service'
 import { SemanticStateMergeService } from './services/semantic-state-merge.service'
+import { SemanticStateProjectionService } from './services/semantic-state-projection.service'
 import { SemanticStateReducerService } from './services/semantic-state-reducer.service'
+import { SemanticSupportClassifierService } from './services/semantic-support-classifier.service'
 import { SemanticTriggerCombinationContractService } from './services/semantic-trigger-combination-contract.service'
 import { SpecDescBuilderService } from './services/spec-desc-builder.service'
 import { StaticGuardrailService } from './services/static-guardrail.service'
@@ -64,8 +67,6 @@ import { StrategyIrCanonicalAdapterService } from './services/strategy-ir-canoni
 import { StrategySummaryBuilderService } from './services/strategy-summary-builder.service'
 import { StrategySummaryObservationService } from './services/strategy-summary-observation.service'
 import { UnsupportedFallbackService } from './services/unsupported-fallback.service'
-import { PerTradeSizingResolver } from './services/per-trade-sizing-resolver.service'
-import { NlGatewayModule } from './nl-gateway/nl-gateway.module'
 
 @Module({
   imports: [PrismaModule, AiModule, AccountStrategyViewModule, NlGatewayModule, LlmStrategiesModule],
@@ -76,9 +77,11 @@ import { NlGatewayModule } from './nl-gateway/nl-gateway.module'
     PublishedStrategySnapshotsRepository,
     StaticGuardrailService,
     RuntimeGuardrailService,
+    // M4: GenericSeedDispatcher + SemanticSeedStateBuilderService 为 PR2c-final-1bc 双 provider 过渡态；
+    // SemanticSeedExtractorService 已于 PR2c-final-1bc 删除（M3），legacy provider 不再注册。
+    GenericSeedDispatcher,
     SemanticEventFrameParserService,
     SemanticEventFrameProjectorService,
-    SemanticSeedExtractorService,
     SemanticSeedStateBuilderService,
     SemanticStateMergeService,
     SemanticStateReducerService,

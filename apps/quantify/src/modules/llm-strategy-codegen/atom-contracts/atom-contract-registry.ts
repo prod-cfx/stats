@@ -114,6 +114,10 @@ export const ATOM_BUCKETS = {
   'price.range_position_gte': 'trigger',
   'action.add_position': 'action',
   'action.reverse_position': 'action',
+  'action.open_long': 'action',
+  'action.close_long': 'action',
+  'action.open_short': 'action',
+  'action.close_short': 'action',
   'risk.partial_take_profit': 'risk',
   'portfolioRisk.drawdown_block': 'orchestration',
   'position.dca_schedule': 'positionConstraint',
@@ -166,6 +170,10 @@ const ATOM_PUBLIC_NAMES = {
   'price.range_position_gte': { zh: '区间高位', en: 'Above range high' },
   'action.add_position': { zh: '加仓', en: 'Add to position' },
   'action.reverse_position': { zh: '反手', en: 'Reverse position' },
+  'action.open_long': { zh: '开多', en: 'Open long' },
+  'action.close_long': { zh: '平多', en: 'Close long' },
+  'action.open_short': { zh: '开空', en: 'Open short' },
+  'action.close_short': { zh: '平空', en: 'Close short' },
   'risk.partial_take_profit': { zh: '分批止盈', en: 'Partial take profit' },
   'portfolioRisk.drawdown_block': { zh: '组合回撤护栏', en: 'Portfolio drawdown guard' },
   'position.dca_schedule': { zh: 'DCA 补仓计划', en: 'DCA schedule' },
@@ -1061,6 +1069,89 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       phaseResolver: 'by-clause-verb',
       sideResolver: 'inherit',
+    },
+  },
+
+  // ── 开多 / 平多 action（PR2c-final-1a：解 caller 切换后 open-slot-resolver spec 3 fail）
+  'action.open_long': {
+    summaryContribution: () => '开多',
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: true,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['开多', '做多', '入场多', 'open long', 'go long'] as const,
+        verbs: {
+          fixed: ['开多', '做多', 'open long', 'go long'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: { kind: 'fn', fn: () => 'long' },
+    },
+  },
+
+  'action.close_long': {
+    summaryContribution: () => '平多',
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: true,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['平多', '平仓多', '出场多', 'close long', 'exit long'] as const,
+        verbs: {
+          fixed: ['平多', '平仓多', 'close long', 'exit long'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: { kind: 'fn', fn: () => 'long' },
+    },
+  },
+
+  // ── 开空 / 平空 action（M2: 镜像 long 补 short atom，消除 isEntryActionKey/isExitActionKey 死代码中
+  //   已识别 action.open_short/action.close_short 但 registry 无对应 atom 的不对称）
+  'action.open_short': {
+    summaryContribution: () => '开空',
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: true,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['开空', '做空', '入场空', 'open short', 'go short'] as const,
+        verbs: {
+          fixed: ['开空', '做空', 'open short', 'go short'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: { kind: 'fn', fn: () => 'short' },
+    },
+  },
+
+  'action.close_short': {
+    summaryContribution: () => '平空',
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: true,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['平空', '平仓空', '出场空', 'close short', 'exit short'] as const,
+        verbs: {
+          fixed: ['平空', '平仓空', 'close short', 'exit short'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: { kind: 'fn', fn: () => 'short' },
     },
   },
 

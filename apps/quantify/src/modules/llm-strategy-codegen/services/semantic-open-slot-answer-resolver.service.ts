@@ -19,7 +19,7 @@ import { buildSemanticSlotId } from '../types/semantic-state'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
 import { renderSemanticClarificationQuestion } from './semantic-clarification-question-renderer.service'
 import { SemanticContractShapeNormalizerService } from './semantic-contract-shape-normalizer.service'
-import { SemanticSeedExtractorService } from './semantic-seed-extractor.service'
+import { GenericSeedDispatcher } from './generic-seed-dispatcher.service'
 import { pickPendingClarificationTarget } from './strategy-clarification-question.service'
 
 const DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
@@ -82,7 +82,7 @@ interface OwnerSlotUpdateResult<T> {
 export class SemanticOpenSlotAnswerResolverService {
   constructor(
     private readonly shapeNormalizer: SemanticContractShapeNormalizerService = new SemanticContractShapeNormalizerService(),
-    private readonly seedExtractor: SemanticSeedExtractorService = new SemanticSeedExtractorService(),
+    private readonly seedExtractor: GenericSeedDispatcher = new GenericSeedDispatcher(),
     private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
   ) {}
 
@@ -109,7 +109,7 @@ export class SemanticOpenSlotAnswerResolverService {
       return symbolAnswer
     }
 
-    return fulfillSemanticFragment(input.currentState, this.seedExtractor.extract(input.message), this.symbolResolver)
+    return fulfillSemanticFragment(input.currentState, this.seedExtractor.dispatch(input.message), this.symbolResolver)
   }
 
   private resolveSymbolAnswer(
@@ -284,30 +284,22 @@ function shouldMergeFragmentTrigger(
   return false
 }
 
+// M1（PR2c-final-1a）：改用 action.phase 字段判定，消除 atom-key 字面量 white-list。
+// dispatcher 在解析时通过 surface.phaseResolver 派生 phase 并写入 action 节点；
+// 若 phase 缺失（legacy patch 或尚未迁移路径）则保守保留，不过滤。
 function actionMatchesFulfilledPhases(
   action: FragmentAction,
   fulfilledPhases: ReadonlySet<FulfilledTriggerPhase>,
 ): boolean {
-  if (isEntryActionKey(action.key)) {
-    return fulfilledPhases.has('entry')
+  if (isFulfilledTriggerPhase(action.phase)) {
+    return fulfilledPhases.has(action.phase)
   }
-  if (isExitActionKey(action.key)) {
-    return fulfilledPhases.has('exit')
-  }
-
+  // phase 未知（'risk'/'gate'/undefined）时保守保留，避免误过滤合法 action。
   return true
 }
 
-function isFulfilledTriggerPhase(phase: SemanticTriggerState['phase']): phase is FulfilledTriggerPhase {
+function isFulfilledTriggerPhase(phase: FragmentAction['phase']): phase is FulfilledTriggerPhase {
   return phase === 'entry' || phase === 'exit'
-}
-
-function isEntryActionKey(key: string): boolean {
-  return key === 'open_long' || key === 'open_short'
-}
-
-function isExitActionKey(key: string): boolean {
-  return key === 'close_long' || key === 'close_short'
 }
 
 function triggerPhaseSlotKey(phase: FulfilledTriggerPhase): typeof ENTRY_TRIGGER_SLOT_KEY | typeof EXIT_TRIGGER_SLOT_KEY {

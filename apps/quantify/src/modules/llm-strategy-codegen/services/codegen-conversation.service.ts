@@ -10,22 +10,27 @@ import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-
 import type { RecoverAiQuantEditConversationRequestDto } from '../dto/recover-ai-quant-edit-conversation.request.dto'
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
+import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gate.types'
 import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant-conversations.repository'
 import type { EditablePublishedStrategySnapshotRecord } from '../repositories/published-strategy-snapshots.repository'
-import type { StrategyLogicSnapshot, StrategyRuleBasis, StrategyRuleDraft } from '../types/strategy-logic-snapshot'
+import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
-import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
+import type { SemanticEditDecision } from '../types/semantic-edit'
+import type {SemanticActionState, SemanticPositionState, SemanticRiskState, SemanticSlotState, SemanticState, SemanticTriggerState} from '../types/semantic-state';
 import type { StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyBlockingReason, StrategyInferredAssumption } from '../types/strategy-decision'
-import type { SemanticEditDecision } from '../types/semantic-edit'
 import type { StrategyExecutionContextResolution } from '../types/strategy-execution-context'
+import type { StrategyLogicSnapshot, StrategyRuleBasis, StrategyRuleDraft } from '../types/strategy-logic-snapshot'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
-import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gate.types'
-import { buildSemanticSlotId, type SemanticActionState, type SemanticPositionState, type SemanticRiskState, type SemanticSlotState, type SemanticState, type SemanticTriggerState } from '../types/semantic-state'
-import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
+import type {ConversationMessage, GuidePromptConfig, RecommendationStyle} from './codegen-conversation-context.helper';
 
+import type {PublishedSnapshotProjection} from './codegen-conversation-response-mapper.helper';
+import type {CanonicalCompileabilityReport, ConversationPlan} from './codegen-conversation-start-session.helper';
+import type {InferredConfirmationDecisionKey, InferredConfirmationSemanticDefaults} from './inferred-confirmation-classifier.service';
+import type { StrategyCompileabilityDecisionService } from './strategy-compileability-decision.service'
+import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { getHelperDocs } from '@ai/shared/script-engine/helpers'
@@ -33,9 +38,9 @@ import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common'
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
-import { AiService } from '@/modules/ai/ai.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { AccountStrategyViewService } from '@/modules/account-strategy-view/services/account-strategy-view.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { AiService } from '@/modules/ai/ai.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { LlmStrategyInstancesService } from '@/modules/llm-strategies/services/llm-strategy-instances.service'
 import { createDefaultConstraintPack } from '../constants/constraint-pack'
@@ -48,46 +53,62 @@ import { AiQuantConversationsRepository } from '../repositories/ai-quant-convers
 import { CodegenSessionsRepository } from '../repositories/codegen-sessions.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
+import { buildReplacementSemanticState, readPendingSemanticEdit, withPendingSemanticEdit } from '../types/semantic-edit'
+import { buildSemanticSlotId       } from '../types/semantic-state'
 import {
   STRATEGY_CLARIFICATION_FIELDS,
   STRATEGY_CLARIFICATION_ITEM_STATUSES,
   STRATEGY_CLARIFICATION_REASONS,
   STRATEGY_CLARIFICATION_STATUSES,
 } from '../types/strategy-clarification'
-import { buildReplacementSemanticState, readPendingSemanticEdit, withPendingSemanticEdit } from '../types/semantic-edit'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
-import { buildStrategyRuleDrafts, resolveStrategyDefaultTimeframe } from './rule-draft-projection'
 import {
   CodegenConversationContextHelper,
-  MAX_PLANNER_HISTORY_LINES,
-  type ConversationMessage,
-  type GuidePromptConfig,
-  type RecommendationStyle,
+  MAX_PLANNER_HISTORY_LINES
+  
+  
+  
 } from './codegen-conversation-context.helper'
-import { CodegenConversationResponseMapperHelper, type PublishedSnapshotProjection } from './codegen-conversation-response-mapper.helper'
+import { CodegenConversationResponseMapperHelper  } from './codegen-conversation-response-mapper.helper'
 import {
-  buildStartSessionBootstrap,
-  type CanonicalCompileabilityReport,
-  type ConversationPlan,
+  buildStartSessionBootstrap
+  
+  
 } from './codegen-conversation-start-session.helper'
+ 
 import { CodegenConversationStateMachine } from './codegen-conversation-state-machine'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CodegenSessionPublicationPipelineService } from './codegen-session-publication-pipeline.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { ConversationSemanticEditService } from './conversation-semantic-edit.service'
+import { GenericSeedDispatcher } from './generic-seed-dispatcher.service'
+import {
+  InferredConfirmationClassifierService
+  
+  
+} from './inferred-confirmation-classifier.service'
 import { canonicalizeStrategySymbolInput, isEquivalentMarketScopeValue } from './market-scope-equivalence'
+import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
+import { PositionSizingContractService } from './position-sizing-contract.service'
+import { buildStrategyRuleDrafts, resolveStrategyDefaultTimeframe } from './rule-draft-projection'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RuntimeGuardrailService } from './runtime-guardrail.service'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
-import { SemanticOrchestrationRegistryService } from './semantic-orchestration-registry.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { resolveSemanticClarificationMetadata } from './semantic-clarification-metadata'
+ 
+import { SemanticClarificationQuestionRendererService } from './semantic-clarification-question-renderer.service'
 import { SemanticContractReadinessService } from './semantic-contract-readiness.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { SemanticMissingPlaceholderReconcilerService } from './semantic-missing-placeholder-reconciler.service'
+import { SemanticOpenSlotAnswerResolverService } from './semantic-open-slot-answer-resolver.service'
+import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
+ 
+import { SemanticOrchestrationRegistryService } from './semantic-orchestration-registry.service'
 import { SemanticSeedStateBuilderService } from './semantic-seed-state-builder.service'
-import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
-import { SemanticSeedExtractorService } from './semantic-seed-extractor.service'
+import { SemanticStateMergeService } from './semantic-state-merge.service'
+import { buildNormalizedIntentFromSemanticState, normalizeRiskSemantics } from './semantic-state-normalization'
+import { SemanticStateProjectionService } from './semantic-state-projection.service'
+import { SemanticStateReducerService } from './semantic-state-reducer.service'
 import { SemanticSupportClassifierService } from './semantic-support-classifier.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { SpecDescBuilderService } from './spec-desc-builder.service'
@@ -100,27 +121,11 @@ import {
 } from './strategy-clarification-question.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StrategyClarificationRulesService } from './strategy-clarification-rules.service'
-import { StrategyCompileabilityDecisionService } from './strategy-compileability-decision.service'
 import { StrategyExecutionContextService } from './strategy-execution-context.service'
 import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.service'
 import { StrategyIntentResolutionService } from './strategy-intent-resolution.service'
-import { SemanticStateMergeService } from './semantic-state-merge.service'
-import { buildNormalizedIntentFromSemanticState, normalizeRiskSemantics } from './semantic-state-normalization'
-import { SemanticStateProjectionService } from './semantic-state-projection.service'
-import { SemanticStateReducerService } from './semantic-state-reducer.service'
-import { PositionSizingContractService } from './position-sizing-contract.service'
-import { UnsupportedFallbackService } from './unsupported-fallback.service'
-import {
-  InferredConfirmationClassifierService,
-  type InferredConfirmationDecisionKey,
-  type InferredConfirmationSemanticDefaults,
-} from './inferred-confirmation-classifier.service'
-import { resolveSemanticClarificationMetadata } from './semantic-clarification-metadata'
-import { SemanticClarificationQuestionRendererService } from './semantic-clarification-question-renderer.service'
-import { SemanticMissingPlaceholderReconcilerService } from './semantic-missing-placeholder-reconciler.service'
-import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
-import { SemanticOpenSlotAnswerResolverService } from './semantic-open-slot-answer-resolver.service'
 import { validateSemanticPositionContract } from './strategy-semantic-contracts'
+import { UnsupportedFallbackService } from './unsupported-fallback.service'
 
 interface GenerationOptions {
   providerCode?: string
@@ -235,7 +240,7 @@ export class CodegenConversationService {
     private readonly semanticStateReducer: SemanticStateReducerService = new SemanticStateReducerService(),
     private readonly semanticStateProjection: SemanticStateProjectionService = new SemanticStateProjectionService(),
     private readonly semanticStateMerge: SemanticStateMergeService = new SemanticStateMergeService(),
-    private readonly semanticSeedExtractor: SemanticSeedExtractorService = new SemanticSeedExtractorService(),
+    private readonly genericSeedDispatcher: GenericSeedDispatcher = new GenericSeedDispatcher(),
     private readonly semanticSeedStateBuilder: SemanticSeedStateBuilderService = new SemanticSeedStateBuilderService(),
     private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
     private readonly semanticSupportClassifier: SemanticSupportClassifierService = new SemanticSupportClassifierService(new SemanticAtomRegistryService(), new SemanticOrchestrationRegistryService()),
@@ -2672,7 +2677,7 @@ export class CodegenConversationService {
     }
 
     return /^(?:对|对的|是|是的|确认|确定|无误|没问题|可以|可以了|就这样|按这个|按此生成|确认生成|确认并生成|直接生成|生成脚本|生成代码|开始生成|继续生成)$/u.test(text)
-      || /^(?:确认|确定|无误|对的|是的).*(?:生成|编译|脚本|代码|继续)?$/u.test(text)
+      || /^(?:确认|确定|无误|对的|是的).*$/u.test(text)
       || /^(?:yes|yep|yeah|ok|okay|confirm|confirmed|looks good|go ahead|proceed|continue|do it|generate|generate script|generate code|start generation)$/iu.test(text)
   }
 
@@ -4238,7 +4243,7 @@ export class CodegenConversationService {
   private isLikelyUserSubmittedScriptCode(message: string): boolean {
     const text = message.trim()
     if (text.length < 20) return false
-    return /(?:export\s+default\s+function|function\s+strategy|const\s+strategy|let\s+strategy|var\s+strategy|protocolVersion\s*:|onBar\s*:|action\s*:|module\.exports|return\s*\{)/u.test(text)
+    return /export\s+default\s+function|function\s+strategy|const\s+strategy|let\s+strategy|var\s+strategy|protocolVersion\s*:|onBar\s*:|action\s*:|module\.exports|return\s*\{/u.test(text)
       && /[{}();=]/u.test(text)
   }
 
@@ -5582,7 +5587,7 @@ export class CodegenConversationService {
     if (!normalized) return false
 
     if (field === 'timeframe') {
-      return /^\d{1,4}\s*(?:m|min|分钟|h|小时|d|天|w|周)$/iu.test(normalized)
+      return /^\d{1,4}\s*(?:[mhd天w周]|min|分钟|小时)$/iu.test(normalized)
     }
 
     if (field === 'marketType') {
@@ -6288,7 +6293,7 @@ export class CodegenConversationService {
           ? projected
           : `${fallbackTimeframe} ${projected}`.trim()
       })
-    if (projectedSummaries.some(item => item === null)) {
+    if (projectedSummaries.includes(null)) {
       return ''
     }
 
@@ -7400,7 +7405,7 @@ export class CodegenConversationService {
 
   private shouldRoutePendingFallbackReplyToMainFlow(message: string): boolean {
     const normalized = message.trim()
-    if (!/(?:改成|改为|换成|重新|做一个|用)/u.test(normalized)) {
+    if (!/改成|改为|换成|重新|做一个|用/u.test(normalized)) {
       return false
     }
 
@@ -7416,9 +7421,9 @@ export class CodegenConversationService {
       return true
     }
 
-    const hasKnownTrigger = /(?:\bRSI\b|\bMACD\b|\bEMA\b|\bSMA\b|\bMA\b|均线|布林|突破|跌破|通道|价格)/iu.test(normalized)
-    const hasAction = /(?:开多|开空|平多|平空|平仓|买入|卖出|做多|做空)/u.test(normalized)
-    const hasRiskOrPosition = /(?:止损|止盈|仓位|单笔|资金|杠杆)/u.test(normalized)
+    const hasKnownTrigger = /\bRSI\b|\bMACD\b|\bEMA\b|\bSMA\b|\bMA\b|均线|布林|突破|跌破|通道|价格/iu.test(normalized)
+    const hasAction = /开多|开空|平多|平空|平仓|买入|卖出|做多|做空/u.test(normalized)
+    const hasRiskOrPosition = /止损|止盈|仓位|单笔|资金|杠杆/u.test(normalized)
     return hasKnownTrigger && hasAction && hasRiskOrPosition
   }
 
@@ -7639,7 +7644,7 @@ export class CodegenConversationService {
       return '1d'
     }
 
-    const match = normalized.match(/(?:(\d{1,3})\s*(m|min|h|d)\b)|(?:(\d{1,3})\s*(分钟|分|小时|天|日))/u)
+    const match = normalized.match(/(\d{1,3})\s*([mhd]|min)\b|(\d{1,3})\s*(分钟|[分天日]|小时)/u)
     const rawValue = match?.[1] ?? match?.[3]
     const unit = match?.[2] ?? match?.[4]
     if (!rawValue || !unit) {
@@ -8737,7 +8742,7 @@ export class CodegenConversationService {
   }
 
   private containsCjkText(value: string): boolean {
-    return /[\u3400-\u9fff]/u.test(value)
+    return /[\u3400-\u9FFF]/u.test(value)
   }
 
   private renderEnglishClarificationQuestion(item: StrategyClarificationItem): string {
@@ -9119,7 +9124,7 @@ export class CodegenConversationService {
   }
 
   private extractSemanticPatchFromMessage(message?: string): CodegenSemanticPatch | undefined {
-    const patch = this.semanticSeedExtractor.extract(message)
+    const patch = this.genericSeedDispatcher.dispatch(message)
     return patch.contextSlots || patch.triggers || patch.actions || patch.risk || patch.position
       ? patch
       : undefined

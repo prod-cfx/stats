@@ -47,6 +47,11 @@ export type SupportedExecutableUtteranceAtom =
   | 'volatility.state'
   | 'price.range_position_lte'
   | 'price.range_position_gte'
+  // ── position lifecycle actions (PR2c-final-1a / M2) ──
+  | 'action.open_long'
+  | 'action.close_long'
+  | 'action.open_short'
+  | 'action.close_short'
 
 export interface UtteranceCorpusExpected {
   owner: UtteranceCorpusOwner

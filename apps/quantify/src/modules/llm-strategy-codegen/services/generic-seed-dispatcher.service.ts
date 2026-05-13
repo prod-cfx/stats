@@ -1,5 +1,4 @@
 import type { CapabilityTriple } from '../atom-contracts/atom-contract-emit.types'
-import type { AtomContract } from '../atom-contracts/atom-contract-types'
 import type {
   AtomContractSurface,
   Direction,
@@ -8,6 +7,7 @@ import type {
   ResolveCtx,
   SideResolverSpec,
 } from '../atom-contracts/atom-contract-surface.types'
+import type { AtomContract } from '../atom-contracts/atom-contract-types'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 /**
  * GenericSeedDispatcher — Issue #1279 PR2 唯一真相源 NL→seed 分发器
@@ -549,18 +549,17 @@ export class GenericSeedDispatcher {
           params,
         )
 
-        // 顶层 node 字段一致；具体语义字段（phase/sideScope）只对 trigger 有意义，
-        // 其它 slot 的 node 在 patch schema 中也接受这些字段，类型 cast 到 never
-        // 是因为 CodegenSemanticPatch 的 union 类型对 contracts[] 内部 unknown
-        // 元素友好。
+        // phase は resolver が解決した後に全 slot に記録する（M1: actionMatchesFulfilledPhases が
+        // action.phase を参照できるよう action にも phase を付与）。
+        // sideScope は triggers のみ意味を持つため引き続き trigger 限定。
         const node: Record<string, unknown> = {
           key: m.atomKey,
+          phase,
           params,
           evidence,
           contracts: [envelope],
         }
         if (slot === 'triggers') {
-          node.phase = phase
           node.sideScope = sideScope
         }
         slotItems[slot].push(node)
