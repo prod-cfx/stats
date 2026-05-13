@@ -302,18 +302,22 @@
     {
       "key": "oscillator.rsi_gte",
       "category": "trigger",
-      "status": "uncovered",
-      "failureLayer": "compile-throw",
-      "trace": [],
-      "note": "codegen.canonical_spec_v2_condition_unsupported:oscillator.rsi_gte"
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "series:CONST",
+        "series:RSI"
+      ]
     },
     {
       "key": "oscillator.rsi_lte",
       "category": "trigger",
-      "status": "uncovered",
-      "failureLayer": "compile-throw",
-      "trace": [],
-      "note": "codegen.canonical_spec_v2_condition_unsupported:oscillator.rsi_lte"
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "series:CONST",
+        "series:RSI"
+      ]
     },
     {
       "key": "place_limit_grid",
@@ -392,18 +396,22 @@
     {
       "key": "price.breakout_down",
       "category": "trigger",
-      "status": "uncovered",
-      "failureLayer": "compile-throw",
-      "trace": [],
-      "note": "codegen.canonical_spec_v2_condition_unsupported:price.breakout_down"
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:CROSS_UNDER",
+        "series:LOWEST_LOW"
+      ]
     },
     {
       "key": "price.breakout_up",
       "category": "trigger",
-      "status": "uncovered",
-      "failureLayer": "compile-throw",
-      "trace": [],
-      "note": "codegen.canonical_spec_v2_condition_unsupported:price.breakout_up"
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:CROSS_OVER",
+        "series:HIGHEST_HIGH"
+      ]
     },
     {
       "key": "price.candle_pattern",
@@ -438,10 +446,12 @@
     {
       "key": "price.percent_change",
       "category": "trigger",
-      "status": "uncovered",
-      "failureLayer": "compile-throw",
-      "trace": [],
-      "note": "codegen.canonical_spec_v2_condition_unsupported:price.percent_change"
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "series:CONST",
+        "series:PRICE_CHANGE_PCT"
+      ]
     },
     {
       "key": "price.range_position_gte",

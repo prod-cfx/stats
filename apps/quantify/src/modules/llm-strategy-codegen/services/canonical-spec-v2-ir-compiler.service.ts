@@ -37,6 +37,8 @@ import type {
   IrCompileContext,
   IrCompileHelpers,
 } from '../atom-contracts/atom-contract-emit.types'
+import type { AtomContractEmit, AtomContractKey } from '../atom-contracts/atom-contract-types'
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
@@ -1328,6 +1330,24 @@ export class CanonicalSpecV2IrCompilerService {
 
   private compileAtom(atom: CanonicalConditionAtom, context: CompileContext, seed: string): string {
     const closeRef = this.ensurePriceSeries(context, 'close')
+
+    // Issue #1279 PR3a Phase 2：condition predicate 类 atom 已迁移至 atom-contract-registry
+    //   `emit.irShape` 真实实现。命中 'pr3a-condition' 状态的 atom 走 REGISTRY 调度；
+    //   未迁移的 atom（包括重命名前的旧 key，如 `price.change_pct` / `rsi.threshold_*` /
+    //   `ma.golden_cross` / `breakout.channel_*_break`）继续走下方 legacy switch 兜底，
+    //   100% 行为不变。
+    //
+    // 类型注：CompletedPr1bRegistry 在所有 atom 均为 stub 时把 `capabilityStatus` 收窄为
+    //   `'pr1b-stub'` 字面量，直接 `=== 'pr3a-condition'` 会触发 TS2367；通过
+    //   AtomContractEmit 父类型拓宽再做运行时分流，等迁移完成后字面量联合会自然回退。
+    // TODO Issue #1279 PR3d/PR3e：当 action/risk/portfolio atom 也走 REGISTRY 真实兑现后，
+    //   capabilityStatus 字面量联合会自然包含 'pr3a-condition'，此处的 `as AtomContractEmit`
+    //   拓宽 cast 应一并移除。
+    const registryEntry = ATOM_CONTRACT_REGISTRY[atom.key as AtomContractKey]
+    const emit = registryEntry?.emit as AtomContractEmit | undefined
+    if (emit?.capabilityStatus === 'pr3a-condition') {
+      return emit.irShape(atom, this.buildAtomIrShapeContext(context, seed, closeRef))
+    }
 
     switch (atom.key) {
       case 'execution.on_start': {

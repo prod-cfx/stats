@@ -22,7 +22,16 @@ describe('ATOM_CONTRACT_REGISTRY full PR1b registration', () => {
       expect(contract.emit.capability.domain.length).toBeGreaterThan(0)
       expect(contract.emit.capability.verb.length).toBeGreaterThan(0)
       expect(contract.emit.capability.object.length).toBeGreaterThan(0)
-      expect(contract.emit.irShape.__pr1bStub).toBe(true)
+      // PR3a Phase 2：condition atom 已兑现真实 irShape（无 `__pr1bStub` 品牌），
+      //   其它分类仍是 stub。两类共存，断言按 `capabilityStatus` 分流。
+      const status = contract.emit.capabilityStatus ?? 'pr1b-stub'
+      expect(['pr1b-stub', 'pr3a-condition', 'ready']).toContain(status)
+      if (status === 'pr1b-stub') {
+        expect((contract.emit.irShape as { __pr1bStub?: true }).__pr1bStub).toBe(true)
+      }
+      else {
+        expect((contract.emit.irShape as { __pr1bStub?: true }).__pr1bStub).toBeUndefined()
+      }
       expect(['clause', 'segment', 'param']).toContain(contract.emit.evidenceSource)
     }
   })

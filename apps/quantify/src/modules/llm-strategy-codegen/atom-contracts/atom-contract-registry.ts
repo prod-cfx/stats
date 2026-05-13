@@ -18,6 +18,8 @@ import type {
   SizingEvidence,
 } from './atom-contract-types'
 import { ATOM_MUTEX } from '../nl-gateway/utterance-corpus/corpus-invariants'
+import type { ConditionEmitOverride } from './atom-contract-condition-emits'
+import { CONDITION_ATOM_EMITS } from './atom-contract-condition-emits'
 import {
   COMMON_PIPELINE,
   NO_SUMMARY,
@@ -39,13 +41,16 @@ type Pr1bStubEmit = Omit<AtomContractEmit, 'irShape'> & {
   readonly irShape: Pr1bStubIrShapeBuilder
 }
 
+// Issue #1279 PR3a Phase 2：seed 的 `emit` 字段若被显式指定（已兑现为 real 'pr3a-condition'），
+// 编译期保留其原始字面量类型；未指定时由 `completePr1bRegistry` 注入 `Pr1bStubEmit`。
+// 该条件类型让 invariant `irShapeAllStub` / `capabilityAllStub` 仍能精确分流 stub vs real。
 type CompletedPr1bRegistry<T extends Record<AtomContractKey, AtomContractSeed>> = {
   readonly [K in keyof T]: Omit<T[K], 'display' | 'emit'> & {
     readonly key: K
     readonly bucket: AtomContractBucket
     readonly canonicalWave: 'canonicalWave' extends keyof T[K] ? T[K]['canonicalWave'] : undefined
     readonly display: AtomContractDisplay
-    readonly emit: Pr1bStubEmit
+    readonly emit: T[K] extends { readonly emit: infer E extends AtomContractEmit } ? E : Pr1bStubEmit
   }
 }
 
@@ -220,12 +225,23 @@ function completePr1bRegistry<const T extends Record<AtomContractKey, AtomContra
   const completed: Partial<Record<AtomContractKey, AtomContract>> = {}
   for (const key of Object.keys(registry) as Array<keyof T & AtomContractKey>) {
     const bucket = ATOM_BUCKETS[key]
+    // Issue #1279 PR3a Phase 2：emit 兑现优先级：
+    //   1. seed 显式 `emit`（PR3d/PR3e 的 action/risk 类 atom 走此路）
+    //   2. `createPr1bEmit` 基底 + `CONDITION_ATOM_EMITS[key]` 覆盖 capabilityStatus/irShape
+    //      （本 PR 兑现的 23 个 condition predicate 类 atom；capability 三元组与
+    //      evidenceSource 由 base 继承，与 dispatcher self-baseline snapshot 一致）
+    //   3. 纯 `createPr1bEmit` 生成的 stub emit（仍未兑现 atom 兜底，调用即抛 PR1b stub 错误）
+    const baseEmit = createPr1bEmit(key, bucket)
+    const conditionOverride = (CONDITION_ATOM_EMITS as Partial<Record<AtomContractKey, ConditionEmitOverride>>)[key]
+    const mergedEmit: AtomContractEmit = conditionOverride
+      ? { ...baseEmit, ...conditionOverride }
+      : baseEmit
     completed[key] = {
       ...registry[key],
       key,
       bucket,
       display: registry[key].display ?? createPr1bDisplay(ATOM_PUBLIC_NAMES[key]),
-      emit: createPr1bEmit(key, bucket),
+      emit: registry[key].emit ?? mergedEmit,
     } as AtomContract
   }
   return completed as CompletedPr1bRegistry<T>
