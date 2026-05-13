@@ -24,6 +24,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { ATOM_CONTRACT_REGISTRY } from '../../atom-contracts/atom-contract-registry'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
+import { AC7_USER_PROMPTS, AC12_WEBHOOK_PROMPTS } from './fixtures/ac-prompts'
 
 // ── utterance-corpus 导入 ──
 interface UtteranceCase { atomKey: string, utterance: string, id?: string }
@@ -82,21 +83,8 @@ function synthesizeForAtom(atomKey: string): string[] {
   ]
 }
 
-// ── AC-7 六条用户测试策略 prompt ──
-const AC7_PROMPTS = [
-  'BTC/USDT 4h，RSI 跌破 30 开多，RSI 回到 70 平仓，止损 2%',
-  'ETH 1h，价格触及布林下轨开多，回到中轨止盈，触及上轨开空',
-  'SOL 1d，EMA20 上穿 EMA60 开多，下穿平仓，最大回撤 15% 熔断',
-  'BTC 1h 突破前高开多，盈利 3% 后加仓 50%，最多加 3 层',
-  'ETH 现货每天定投 100 USDT，回撤 5% 加投 200 USDT',
-  'BTC 区间 60000-70000，每格 100 USDT，挂 20 格',
-]
-
-// ── AC-12 webhook prompt ──
-const AC12_WEBHOOK_PROMPTS = [
-  '接 TradingView webhook 信号 BTCUSDT 突破上轨 进场做多',
-  '收到 webhook：ETHUSDT side=sell 卖出离场',
-]
+// AC-7 / AC-12 prompt 共享自 ./fixtures/ac-prompts.ts，与
+// dispatcher-semantic-equivalence.spec.ts 校准同一组语料。
 
 // ── baseline case 结构 ──
 interface BaselineCase {
@@ -150,19 +138,19 @@ describe('issue #1279 PR2 — dispatcher self-baseline', () => {
     }
   }
 
-  // 3) AC-7
-  AC7_PROMPTS.forEach((utterance, i) => {
+  // 3) AC-7（来源：./fixtures/ac-prompts.ts）
+  AC7_USER_PROMPTS.forEach(({ id, utterance }) => {
     cases.push({
-      id: `ac-7-user-${i + 1}`,
+      id,
       source: 'ac-7-user',
       utterance,
     })
   })
 
-  // 4) AC-12
-  AC12_WEBHOOK_PROMPTS.forEach((utterance, i) => {
+  // 4) AC-12（来源：./fixtures/ac-prompts.ts）
+  AC12_WEBHOOK_PROMPTS.forEach(({ id, utterance }) => {
     cases.push({
-      id: `ac-12-webhook-${i + 1}`,
+      id,
       source: 'ac-12-webhook',
       atomKey: 'external.signal',
       utterance,

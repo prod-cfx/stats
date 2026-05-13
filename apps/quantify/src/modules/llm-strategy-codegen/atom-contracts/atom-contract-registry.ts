@@ -521,7 +521,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     sizingEvidence: null,
     surface: {
       intent: {
-        keywords: ['指标边界', '布林带', '通道', '上轨', '下轨', '中轨', 'boundary'] as const,
+        // Issue #1279 PR2b：补 '上边界'/'下边界'/'中线' 与英文 'channel' 关键词，覆盖
+        //   "突破上边界开空"、"price touch channel lower" 这类真实 utterance（baseline 修复）
+        keywords: ['指标边界', '布林带', '通道', '上轨', '下轨', '中轨', '上边界', '下边界', '中线', 'boundary', 'channel'] as const,
         verbs: {
           touch_upper: ['触及上轨', '触及上边界', 'touch upper'] as const,
           touch_lower: ['触及下轨', '触及下边界', 'touch lower'] as const,
@@ -827,13 +829,15 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     sizingEvidence: null,
     surface: {
       intent: {
-        keywords: ['吞没', '锤子', '十字星', 'candle pattern', 'engulfing', 'hammer', 'doji'] as const,
+        // Issue #1279 PR2b：补 '连续' / 'consecutive' / 'body' 关键词，覆盖
+        //   "bullish consecutive body 连续 3 根" 这类真实 utterance（baseline 修复）
+        keywords: ['吞没', '锤子', '十字星', '连续', 'candle pattern', 'engulfing', 'hammer', 'doji', 'consecutive', 'body'] as const,
         verbs: {
-          fixed: ['出现', '形态', 'pattern', 'confirmed'] as const,
+          fixed: ['出现', '形态', '根', 'pattern', 'confirmed'] as const,
         },
       },
       paramSlots: {
-        pattern: { kind: 'enum', required: true, enum: ['engulfing', 'hammer', 'doji', 'consecutive_body'], extractor: { kind: 'enum-zh-map', enumMap: { '吞没': 'engulfing', 'engulfing': 'engulfing', '锤子': 'hammer', 'hammer': 'hammer', '十字星': 'doji', 'doji': 'doji', '连续阳线': 'consecutive_body', '连续阴线': 'consecutive_body', 'consecutive body': 'consecutive_body' } } },
+        pattern: { kind: 'enum', required: true, enum: ['engulfing', 'hammer', 'doji', 'consecutive_body'], extractor: { kind: 'enum-zh-map', enumMap: { '吞没': 'engulfing', 'engulfing': 'engulfing', '锤子': 'hammer', 'hammer': 'hammer', '十字星': 'doji', 'doji': 'doji', '连续阳线': 'consecutive_body', '连续阴线': 'consecutive_body', 'consecutive body': 'consecutive_body', '连续': 'consecutive_body' } } },
         direction: { kind: 'enum', required: false, enum: ['bullish', 'bearish'], extractor: { kind: 'enum-zh-map', enumMap: { '看涨': 'bullish', 'bullish': 'bullish', '看跌': 'bearish', 'bearish': 'bearish' } } },
         minBars: { kind: 'number', required: false, range: [1, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 100] } },
         sourceText: { kind: 'enum', required: false, extractor: { kind: 'verbatim-clause' } },
@@ -877,7 +881,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     sizingEvidence: null,
     surface: {
       intent: {
-        keywords: ['流动性', '前低', '前高', '扫', 'sweep', 'liquidity', 'prev low', 'prev high', 'session low', 'session high'] as const,
+        // Issue #1279 PR2b：补 '假突破' / 'fake breakout' 关键词，覆盖
+        //   "假突破后入场" 这类真实 utterance（baseline 修复）
+        keywords: ['流动性', '前低', '前高', '扫', '假突破', 'sweep', 'liquidity', 'prev low', 'prev high', 'session low', 'session high', 'fake breakout', 'stop hunt'] as const,
         verbs: {
           // critic m1 fix: '扫前低'/'扫前高' 在 extractor 中仅作为提示文本出现，PR1b 加 fixture 后再决定保留
           touch_lower: ['sweep at prev low'] as const,
@@ -1069,9 +1075,11 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     sizingEvidence: null,
     surface: {
       intent: {
-        keywords: ['止盈', '分批止盈', '部分平仓', 'take profit', 'partial take profit', 'scale out'] as const,
+        // Issue #1279 PR2b：补 '档' / '减' / '平' 关键词，覆盖中文分档语法
+        //   "第一档 +5% 减 30%" / "盈利 5% 平一半" 等真实 utterance（baseline 修复）
+        keywords: ['止盈', '分批止盈', '部分平仓', '档', '减仓', '减', 'take profit', 'partial take profit', 'scale out', 'tier'] as const,
         verbs: {
-          gte: ['盈利', '达到', 'profit', 'at'] as const,
+          gte: ['盈利', '达到', '第一档', '第二档', '第三档', 'profit', 'at', 'tier'] as const,
         },
       },
       paramSlots: {

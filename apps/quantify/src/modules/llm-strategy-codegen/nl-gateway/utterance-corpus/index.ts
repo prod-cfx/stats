@@ -1,3 +1,17 @@
+/**
+ * 注意（review m1，#1279 PR2b）：以下 atom 在 `atoms/` 目录下有 `*.utterance.ts`
+ * fixture，但**故意不**在此 index 导入：
+ *
+ *   - grid.range_rebalance       → atoms/grid.range_rebalance.utterance.ts
+ *   - position.pyramiding_limit  → atoms/position.pyramiding_limit.utterance.ts
+ *
+ * 原因：这两 atom 由 INDIRECTLY_COVERED_ATOMS 全面豁免 corpus invariants A-I，其
+ * fixture 仅供 dispatcher-self-baseline.spec.ts 通过 `readdirSync('atoms/')`
+ * 自动拾取消费；接入 utteranceCorpus 总线会要求 seed-extractor 直接输出对应
+ * atomKey，破坏 PR2b 不动 legacy extractor 的红线。
+ *
+ * 新增此类 dispatcher-only fixture 时，请在此白名单追加一行；不要直接 import。
+ */
 import type { SupportedExecutableUtteranceAtom, UtteranceCorpusCase } from './utterance-corpus.types'
 import { oscillatorRsiLteUtterances } from './atoms/oscillator.rsi_lte.utterance'
 import { oscillatorRsiGteUtterances } from './atoms/oscillator.rsi_gte.utterance'

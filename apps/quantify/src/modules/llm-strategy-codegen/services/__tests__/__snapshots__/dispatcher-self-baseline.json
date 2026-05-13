@@ -3790,6 +3790,45 @@
           ],
           "phase": "gate",
           "sideScope": "both"
+        },
+        {
+          "key": "price.candle_pattern",
+          "params": {
+            "sourceText": "允许同一根 K 线反手"
+          },
+          "evidence": {
+            "text": "允许同一根 K 线反手",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-7-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "sourceText": "允许同一根 K 线反手"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "sourceText": "允许同一根 K 线反手"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
         }
       ],
       "actions": [
@@ -7869,6 +7908,458 @@
                 "provider": "webhook",
                 "signalId": "外部信号 whale_buy 触发后开多",
                 "sourceText": "外部信号 whale_buy 触发后开多"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        }
+      ]
+    }
+  },
+  {
+    "id": "grid-range-rebalance-zh-locked-spot-grid",
+    "source": "corpus",
+    "atomKey": "grid.range_rebalance",
+    "utterance": "BTC 现货 1h，区间 60000-70000，每格 100 USDT，挂 20 格，双向网格。",
+    "patch": {
+      "contextSlots": {
+        "timeframe": "1h",
+        "marketType": "spot"
+      },
+      "triggers": [
+        {
+          "key": "price.range_position_lte",
+          "params": {
+            "lookbackBars": 20
+          },
+          "evidence": {
+            "text": "区间 60000-70000",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-1-price-range-position-lte",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "range_position_lte",
+                  "shape": {
+                    "key": "price.range_position_lte",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "lookbackBars": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "lookbackBars": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "price.range_position_gte",
+          "params": {
+            "lookbackBars": 20
+          },
+          "evidence": {
+            "text": "区间 60000-70000",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-2-price-range-position-gte",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "range_position_gte",
+                  "shape": {
+                    "key": "price.range_position_gte",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "lookbackBars": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "lookbackBars": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        }
+      ]
+    }
+  },
+  {
+    "id": "grid-range-rebalance-en-locked-perp-grid",
+    "source": "corpus",
+    "atomKey": "grid.range_rebalance",
+    "utterance": "OKX BTCUSDT 15m, grid range 60000-70000, each grid 100 USDT, 20 grids, recycle on.",
+    "patch": {
+      "contextSlots": {
+        "exchange": "okx",
+        "symbol": {
+          "value": "BTCUSDT",
+          "source": "user_explicit",
+          "evidenceText": "BTCUSDT",
+          "base": "BTC",
+          "quote": "USDT",
+          "quoteSource": "explicit"
+        },
+        "timeframe": "15m"
+      },
+      "triggers": [
+        {
+          "key": "price.range_position_lte",
+          "params": {
+            "lookbackBars": 20
+          },
+          "evidence": {
+            "text": "grid range 60000-70000",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-1-price-range-position-lte",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "range_position_lte",
+                  "shape": {
+                    "key": "price.range_position_lte",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "lookbackBars": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "lookbackBars": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "price.range_position_gte",
+          "params": {
+            "lookbackBars": 20
+          },
+          "evidence": {
+            "text": "grid range 60000-70000",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-2-price-range-position-gte",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "range_position_gte",
+                  "shape": {
+                    "key": "price.range_position_gte",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "lookbackBars": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "lookbackBars": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        }
+      ]
+    }
+  },
+  {
+    "id": "grid-range-rebalance-zh-locked-narrow-range-long-only",
+    "source": "corpus",
+    "atomKey": "grid.range_rebalance",
+    "utterance": "ETH 现货 4h，区间 2000-2500，每格 50 USDT，挂 10 格，仅做多，突破停止。",
+    "patch": {
+      "contextSlots": {
+        "timeframe": "4h",
+        "marketType": "spot"
+      },
+      "triggers": [
+        {
+          "key": "price.range_position_lte",
+          "params": {
+            "lookbackBars": 2000
+          },
+          "evidence": {
+            "text": "区间 2000-2500",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-1-price-range-position-lte",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "range_position_lte",
+                  "shape": {
+                    "key": "price.range_position_lte",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "lookbackBars": 2000
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "lookbackBars": 2000
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "price.range_position_gte",
+          "params": {
+            "lookbackBars": 2000
+          },
+          "evidence": {
+            "text": "区间 2000-2500",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-2-price-range-position-gte",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "range_position_gte",
+                  "shape": {
+                    "key": "price.range_position_gte",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "lookbackBars": 2000
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "lookbackBars": 2000
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "bollinger.touch_upper",
+          "params": {
+            "band": "upper",
+            "period": 20,
+            "stdDev": 2,
+            "confirmationMode": "breakout"
+          },
+          "evidence": {
+            "text": "突破停止",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-3-bollinger-touch-upper",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "touch_upper",
+                  "shape": {
+                    "key": "bollinger.touch_upper",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "band": "upper",
+                    "period": 20,
+                    "stdDev": 2,
+                    "confirmationMode": "breakout"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "band": "upper",
+                "period": 20,
+                "stdDev": 2,
+                "confirmationMode": "breakout"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "price.breakout_up",
+          "params": {
+            "reference": "channel_high"
+          },
+          "evidence": {
+            "text": "突破停止",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-4-price-breakout-up",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "breakout_up",
+                  "shape": {
+                    "key": "price.breakout_up",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "reference": "channel_high"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "reference": "channel_high"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.above",
+          "params": {
+            "referenceRole": "short_term",
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "突破停止",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-5-indicator-above",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "above",
+                  "shape": {
+                    "key": "indicator.above",
+                    "phase": "entry",
+                    "sideScope": "long",
+                    "referenceRole": "short_term",
+                    "timeframeOverride": "true"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "referenceRole": "short_term",
+                "timeframeOverride": "true"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "long"
+        },
+        {
+          "key": "price.chart_pattern",
+          "params": {
+            "sourceText": "突破停止"
+          },
+          "evidence": {
+            "text": "突破停止",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-6-price-chart-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "chart_pattern",
+                  "shape": {
+                    "key": "price.chart_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "sourceText": "突破停止"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "sourceText": "突破停止"
               },
               "runtimeRequirements": [],
               "stateRequirements": [],
@@ -12705,6 +13196,48 @@
           "sideScope": "both"
         },
         {
+          "key": "price.candle_pattern",
+          "params": {
+            "minBars": 3,
+            "sourceText": "扫前低后 3 根内反弹做多"
+          },
+          "evidence": {
+            "text": "扫前低后 3 根内反弹做多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-2-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "minBars": 3,
+                    "sourceText": "扫前低后 3 根内反弹做多"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "minBars": 3,
+                "sourceText": "扫前低后 3 根内反弹做多"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
           "key": "liquidity.sweep",
           "params": {
             "direction": "bullish",
@@ -12718,7 +13251,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-2-liquidity-sweep",
+              "id": "contract-seed-trigger-3-liquidity-sweep",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -12994,6 +13527,48 @@
           "sideScope": "both"
         },
         {
+          "key": "price.candle_pattern",
+          "params": {
+            "minBars": 5,
+            "sourceText": "session low 流动性扫荡 reclaim 5 根后做多"
+          },
+          "evidence": {
+            "text": "session low 流动性扫荡 reclaim 5 根后做多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-2-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "minBars": 5,
+                    "sourceText": "session low 流动性扫荡 reclaim 5 根后做多"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "minBars": 5,
+                "sourceText": "session low 流动性扫荡 reclaim 5 根后做多"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
           "key": "liquidity.sweep",
           "params": {
             "direction": "bullish",
@@ -13006,7 +13581,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-2-liquidity-sweep",
+              "id": "contract-seed-trigger-3-liquidity-sweep",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -13389,6 +13964,45 @@
                   "object": "chart_pattern",
                   "shape": {
                     "key": "price.chart_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "sourceText": "假突破后入场"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "sourceText": "假突破后入场"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "liquidity.sweep",
+          "params": {
+            "sourceText": "假突破后入场"
+          },
+          "evidence": {
+            "text": "假突破后入场",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-5-liquidity-sweep",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "sweep",
+                  "shape": {
+                    "key": "liquidity.sweep",
                     "phase": "entry",
                     "sideScope": "both",
                     "sourceText": "假突破后入场"
@@ -25935,6 +26549,986 @@
     }
   },
   {
+    "id": "position-pyramiding-limit-zh-locked-max-layers-fixed-pct",
+    "source": "corpus",
+    "atomKey": "position.pyramiding_limit",
+    "utterance": "OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，每次加仓 20%，最多加仓 3 层。",
+    "patch": {
+      "contextSlots": {
+        "exchange": "okx",
+        "symbol": {
+          "value": "BTCUSDT",
+          "source": "user_explicit",
+          "evidenceText": "BTCUSDT",
+          "base": "BTC",
+          "quote": "USDT",
+          "quoteSource": "explicit"
+        },
+        "timeframe": "15m",
+        "marketType": "perp"
+      },
+      "triggers": [
+        {
+          "key": "indicator.cross_over",
+          "params": {
+            "indicator": "ma",
+            "value": 20,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 20,
+            "signalPeriod": 20
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-1-indicator-cross-over",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "cross_over",
+                  "shape": {
+                    "key": "indicator.cross_over",
+                    "phase": "entry",
+                    "sideScope": "long",
+                    "indicator": "ma",
+                    "value": 20,
+                    "period": 20,
+                    "fastPeriod": 20,
+                    "slowPeriod": 20,
+                    "signalPeriod": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "value": 20,
+                "period": 20,
+                "fastPeriod": 20,
+                "slowPeriod": 20,
+                "signalPeriod": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "long"
+        },
+        {
+          "key": "indicator.cross_under",
+          "params": {
+            "indicator": "ma",
+            "value": 20,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 20,
+            "signalPeriod": 20
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-2-indicator-cross-under",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "cross_under",
+                  "shape": {
+                    "key": "indicator.cross_under",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "value": 20,
+                    "period": 20,
+                    "fastPeriod": 20,
+                    "slowPeriod": 20,
+                    "signalPeriod": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "value": 20,
+                "period": 20,
+                "fastPeriod": 20,
+                "slowPeriod": 20,
+                "signalPeriod": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.above",
+          "params": {
+            "indicator": "ma",
+            "referenceRole": "mid_term",
+            "reference.period": 20,
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-3-indicator-above",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "above",
+                  "shape": {
+                    "key": "indicator.above",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "referenceRole": "mid_term",
+                    "reference.period": 20,
+                    "timeframeOverride": "true"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "referenceRole": "mid_term",
+                "reference.period": 20,
+                "timeframeOverride": "true"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.below",
+          "params": {
+            "indicator": "ma",
+            "referenceRole": "mid_term",
+            "reference.period": 20,
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-4-indicator-below",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "below",
+                  "shape": {
+                    "key": "indicator.below",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "referenceRole": "mid_term",
+                    "reference.period": 20,
+                    "timeframeOverride": "true"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "referenceRole": "mid_term",
+                "reference.period": 20,
+                "timeframeOverride": "true"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "action.add_position",
+          "params": {
+            "sideScope": "long",
+            "addRatio": 0.2,
+            "profitThreshold": 0.2,
+            "drawdownThreshold": 0.2
+          },
+          "evidence": {
+            "text": "每次加仓 20%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-action-add-position",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "action",
+                  "verb": "emit",
+                  "object": "add_position",
+                  "shape": {
+                    "key": "action.add_position",
+                    "phase": "entry",
+                    "sideScope": "long",
+                    "addRatio": 0.2,
+                    "profitThreshold": 0.2,
+                    "drawdownThreshold": 0.2
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "sideScope": "long",
+                "addRatio": 0.2,
+                "profitThreshold": 0.2,
+                "drawdownThreshold": 0.2
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "action.add_position",
+          "params": {
+            "sideScope": "long"
+          },
+          "evidence": {
+            "text": "最多加仓 3 层",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-action-add-position",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "action",
+                  "verb": "emit",
+                  "object": "add_position",
+                  "shape": {
+                    "key": "action.add_position",
+                    "phase": "entry",
+                    "sideScope": "long"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "sideScope": "long"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "position-pyramiding-limit-en-locked-pyramiding-keyword",
+    "source": "corpus",
+    "atomKey": "position.pyramiding_limit",
+    "utterance": "OKX BTCUSDT 1h, MA20 cross above MA50 open long, pyramiding up to 4 layers, each layer 25%.",
+    "patch": {
+      "contextSlots": {
+        "exchange": "okx",
+        "symbol": {
+          "value": "BTCUSDT",
+          "source": "user_explicit",
+          "evidenceText": "BTCUSDT",
+          "base": "BTC",
+          "quote": "USDT",
+          "quoteSource": "explicit"
+        },
+        "timeframe": "1h"
+      },
+      "triggers": [
+        {
+          "key": "oscillator.rsi_gte",
+          "params": {
+            "period": 20,
+            "value": 20,
+            "thresholdRole": "upper_threshold"
+          },
+          "evidence": {
+            "text": "MA20 cross above MA50 open long",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-1-oscillator-rsi-gte",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "rsi_gte",
+                  "shape": {
+                    "key": "oscillator.rsi_gte",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "period": 20,
+                    "value": 20,
+                    "thresholdRole": "upper_threshold"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "period": 20,
+                "value": 20,
+                "thresholdRole": "upper_threshold"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.cross_over",
+          "params": {
+            "indicator": "ma",
+            "value": 20,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 20,
+            "signalPeriod": 20
+          },
+          "evidence": {
+            "text": "MA20 cross above MA50 open long",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-2-indicator-cross-over",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "cross_over",
+                  "shape": {
+                    "key": "indicator.cross_over",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "value": 20,
+                    "period": 20,
+                    "fastPeriod": 20,
+                    "slowPeriod": 20,
+                    "signalPeriod": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "value": 20,
+                "period": 20,
+                "fastPeriod": 20,
+                "slowPeriod": 20,
+                "signalPeriod": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.cross_under",
+          "params": {
+            "indicator": "ma",
+            "value": 20,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 20,
+            "signalPeriod": 20
+          },
+          "evidence": {
+            "text": "MA20 cross above MA50 open long",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-3-indicator-cross-under",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "cross_under",
+                  "shape": {
+                    "key": "indicator.cross_under",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "value": 20,
+                    "period": 20,
+                    "fastPeriod": 20,
+                    "slowPeriod": 20,
+                    "signalPeriod": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "value": 20,
+                "period": 20,
+                "fastPeriod": 20,
+                "slowPeriod": 20,
+                "signalPeriod": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.above",
+          "params": {
+            "indicator": "ma",
+            "referenceRole": "mid_term",
+            "reference.period": 20,
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "MA20 cross above MA50 open long",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-4-indicator-above",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "above",
+                  "shape": {
+                    "key": "indicator.above",
+                    "phase": "entry",
+                    "sideScope": "long",
+                    "indicator": "ma",
+                    "referenceRole": "mid_term",
+                    "reference.period": 20,
+                    "timeframeOverride": "true"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "referenceRole": "mid_term",
+                "reference.period": 20,
+                "timeframeOverride": "true"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "long"
+        },
+        {
+          "key": "indicator.below",
+          "params": {
+            "indicator": "ma",
+            "referenceRole": "mid_term",
+            "reference.period": 20,
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "MA20 cross above MA50 open long",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-5-indicator-below",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "below",
+                  "shape": {
+                    "key": "indicator.below",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "referenceRole": "mid_term",
+                    "reference.period": 20,
+                    "timeframeOverride": "true"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "referenceRole": "mid_term",
+                "reference.period": 20,
+                "timeframeOverride": "true"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "price.percent_change",
+          "params": {
+            "direction": "up"
+          },
+          "evidence": {
+            "text": "pyramiding up to 4 layers",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-6-price-percent-change",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "percent_change",
+                  "shape": {
+                    "key": "price.percent_change",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "direction": "up"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "direction": "up"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "trend.direction",
+          "params": {
+            "value": "up"
+          },
+          "evidence": {
+            "text": "pyramiding up to 4 layers",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-7-trend-direction",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "direction",
+                  "shape": {
+                    "key": "trend.direction",
+                    "phase": "gate",
+                    "sideScope": "both",
+                    "value": "up"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "value": "up"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "gate",
+          "sideScope": "both"
+        }
+      ]
+    }
+  },
+  {
+    "id": "position-pyramiding-limit-zh-locked-jinzita",
+    "source": "corpus",
+    "atomKey": "position.pyramiding_limit",
+    "utterance": "BTC 1h 突破前高开多，盈利 3% 后加仓 50%，金字塔最多 3 层。",
+    "patch": {
+      "contextSlots": {
+        "timeframe": "1h"
+      },
+      "triggers": [
+        {
+          "key": "bollinger.touch_upper",
+          "params": {
+            "band": "upper",
+            "period": 1,
+            "stdDev": 1,
+            "confirmationMode": "breakout"
+          },
+          "evidence": {
+            "text": "BTC 1h 突破前高开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-1-bollinger-touch-upper",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "touch_upper",
+                  "shape": {
+                    "key": "bollinger.touch_upper",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "band": "upper",
+                    "period": 1,
+                    "stdDev": 1,
+                    "confirmationMode": "breakout"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "band": "upper",
+                "period": 1,
+                "stdDev": 1,
+                "confirmationMode": "breakout"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "price.breakout_up",
+          "params": {
+            "period": 1,
+            "reference": "channel_high"
+          },
+          "evidence": {
+            "text": "BTC 1h 突破前高开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-2-price-breakout-up",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "breakout_up",
+                  "shape": {
+                    "key": "price.breakout_up",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "period": 1,
+                    "reference": "channel_high"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "period": 1,
+                "reference": "channel_high"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.above",
+          "params": {
+            "referenceRole": "short_term",
+            "reference.period": 1,
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "BTC 1h 突破前高开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-3-indicator-above",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "above",
+                  "shape": {
+                    "key": "indicator.above",
+                    "phase": "entry",
+                    "sideScope": "long",
+                    "referenceRole": "short_term",
+                    "reference.period": 1,
+                    "timeframeOverride": "true"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "referenceRole": "short_term",
+                "reference.period": 1,
+                "timeframeOverride": "true"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "long"
+        },
+        {
+          "key": "price.chart_pattern",
+          "params": {
+            "sourceText": "BTC 1h 突破前高开多"
+          },
+          "evidence": {
+            "text": "BTC 1h 突破前高开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-4-price-chart-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "chart_pattern",
+                  "shape": {
+                    "key": "price.chart_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "sourceText": "BTC 1h 突破前高开多"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "sourceText": "BTC 1h 突破前高开多"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "liquidity.sweep",
+          "params": {
+            "reference": "prev_high",
+            "sourceText": "BTC 1h 突破前高开多"
+          },
+          "evidence": {
+            "text": "BTC 1h 突破前高开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-5-liquidity-sweep",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "sweep",
+                  "shape": {
+                    "key": "liquidity.sweep",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "reference": "prev_high",
+                    "sourceText": "BTC 1h 突破前高开多"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "reference": "prev_high",
+                "sourceText": "BTC 1h 突破前高开多"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "action.add_position",
+          "params": {
+            "sideScope": "long",
+            "addMode": "profit_pct",
+            "addRatio": 0.03,
+            "profitThreshold": 0.03,
+            "drawdownThreshold": 0.03
+          },
+          "evidence": {
+            "text": "盈利 3% 后加仓 50%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-action-add-position",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "action",
+                  "verb": "emit",
+                  "object": "add_position",
+                  "shape": {
+                    "key": "action.add_position",
+                    "phase": "entry",
+                    "sideScope": "long",
+                    "addMode": "profit_pct",
+                    "addRatio": 0.03,
+                    "profitThreshold": 0.03,
+                    "drawdownThreshold": 0.03
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "sideScope": "long",
+                "addMode": "profit_pct",
+                "addRatio": 0.03,
+                "profitThreshold": 0.03,
+                "drawdownThreshold": 0.03
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ],
+      "risk": [
+        {
+          "key": "risk.partial_take_profit",
+          "params": {
+            "profitPct": 0.03,
+            "ratio": 0.03
+          },
+          "evidence": {
+            "text": "盈利 3% 后加仓 50%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-risk-partial-take-profit",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "risk",
+                  "verb": "emit",
+                  "object": "partial_take_profit",
+                  "shape": {
+                    "key": "risk.partial_take_profit",
+                    "phase": "exit",
+                    "sideScope": "both",
+                    "profitPct": 0.03,
+                    "ratio": 0.03
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "profitPct": 0.03,
+                "ratio": 0.03
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
     "id": "price-breakout-down-zh-channel-low",
     "source": "corpus",
     "atomKey": "price.breakout_down",
@@ -26113,6 +27707,48 @@
           "sideScope": "both"
         },
         {
+          "key": "price.candle_pattern",
+          "params": {
+            "minBars": 12,
+            "sourceText": "价格跌回最近 12 根 K 线低点时平多"
+          },
+          "evidence": {
+            "text": "价格跌回最近 12 根 K 线低点时平多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-5-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "exit",
+                    "sideScope": "both",
+                    "minBars": 12,
+                    "sourceText": "价格跌回最近 12 根 K 线低点时平多"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "minBars": 12,
+                "sourceText": "价格跌回最近 12 根 K 线低点时平多"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "exit",
+          "sideScope": "both"
+        },
+        {
           "key": "position.no_position",
           "params": {
             "sideScope": "both"
@@ -26123,7 +27759,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-5-position-no-position",
+              "id": "contract-seed-trigger-6-position-no-position",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -26431,6 +28067,48 @@
           "sideScope": "short"
         },
         {
+          "key": "price.candle_pattern",
+          "params": {
+            "minBars": 30,
+            "sourceText": "跌破最近 30 根 K 线最低价做空"
+          },
+          "evidence": {
+            "text": "跌破最近 30 根 K 线最低价做空",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-7-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "minBars": 30,
+                    "sourceText": "跌破最近 30 根 K 线最低价做空"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "minBars": 30,
+                "sourceText": "跌破最近 30 根 K 线最低价做空"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
           "key": "price.chart_pattern",
           "params": {
             "sourceText": "跌破最近 30 根 K 线最低价做空"
@@ -26441,7 +28119,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-7-price-chart-pattern",
+              "id": "contract-seed-trigger-8-price-chart-pattern",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -26761,6 +28439,48 @@
           "sideScope": "short"
         },
         {
+          "key": "price.candle_pattern",
+          "params": {
+            "minBars": 10,
+            "sourceText": "跌破最近 10 根 K 线低点 open short"
+          },
+          "evidence": {
+            "text": "跌破最近 10 根 K 线低点 open short",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-7-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "minBars": 10,
+                    "sourceText": "跌破最近 10 根 K 线低点 open short"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "minBars": 10,
+                "sourceText": "跌破最近 10 根 K 线低点 open short"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
           "key": "price.chart_pattern",
           "params": {
             "sourceText": "跌破最近 10 根 K 线低点 open short"
@@ -26771,7 +28491,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-7-price-chart-pattern",
+              "id": "contract-seed-trigger-8-price-chart-pattern",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -27024,6 +28744,48 @@
           "sideScope": "both"
         },
         {
+          "key": "price.candle_pattern",
+          "params": {
+            "minBars": 24,
+            "sourceText": "价格突破最近 24 根 K 线高点且突破缓冲 0"
+          },
+          "evidence": {
+            "text": "价格突破最近 24 根 K 线高点且突破缓冲 0",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-6-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "minBars": 24,
+                    "sourceText": "价格突破最近 24 根 K 线高点且突破缓冲 0"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "minBars": 24,
+                "sourceText": "价格突破最近 24 根 K 线高点且突破缓冲 0"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
           "key": "price.chart_pattern",
           "params": {
             "sourceText": "价格突破最近 24 根 K 线高点且突破缓冲 0"
@@ -27034,7 +28796,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-6-price-chart-pattern",
+              "id": "contract-seed-trigger-7-price-chart-pattern",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -27075,7 +28837,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-7-execution-on-start",
+              "id": "contract-seed-trigger-8-execution-on-start",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -27118,7 +28880,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-8-position-no-position",
+              "id": "contract-seed-trigger-9-position-no-position",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -27291,6 +29053,48 @@
           "sideScope": "long"
         },
         {
+          "key": "price.candle_pattern",
+          "params": {
+            "minBars": 20,
+            "sourceText": "突破最近 20 根 K 线最高价买入"
+          },
+          "evidence": {
+            "text": "突破最近 20 根 K 线最高价买入",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-4-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "minBars": 20,
+                    "sourceText": "突破最近 20 根 K 线最高价买入"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "minBars": 20,
+                "sourceText": "突破最近 20 根 K 线最高价买入"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
           "key": "price.chart_pattern",
           "params": {
             "sourceText": "突破最近 20 根 K 线最高价买入"
@@ -27301,7 +29105,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-4-price-chart-pattern",
+              "id": "contract-seed-trigger-5-price-chart-pattern",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -27486,6 +29290,48 @@
           "sideScope": "long"
         },
         {
+          "key": "price.candle_pattern",
+          "params": {
+            "minBars": 12,
+            "sourceText": "突破最近 12 根 K 线高点 enter long"
+          },
+          "evidence": {
+            "text": "突破最近 12 根 K 线高点 enter long",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-4-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "minBars": 12,
+                    "sourceText": "突破最近 12 根 K 线高点 enter long"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "minBars": 12,
+                "sourceText": "突破最近 12 根 K 线高点 enter long"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
           "key": "price.chart_pattern",
           "params": {
             "sourceText": "突破最近 12 根 K 线高点 enter long"
@@ -27496,7 +29342,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-4-price-chart-pattern",
+              "id": "contract-seed-trigger-5-price-chart-pattern",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -27939,6 +29785,54 @@
           ],
           "phase": "gate",
           "sideScope": "both"
+        },
+        {
+          "key": "price.candle_pattern",
+          "params": {
+            "pattern": "consecutive_body",
+            "direction": "bullish",
+            "minBars": 3,
+            "sourceText": "bullish consecutive body 连续 3 根后做多"
+          },
+          "evidence": {
+            "text": "bullish consecutive body 连续 3 根后做多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-2-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "pattern": "consecutive_body",
+                    "direction": "bullish",
+                    "minBars": 3,
+                    "sourceText": "bullish consecutive body 连续 3 根后做多"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "pattern": "consecutive_body",
+                "direction": "bullish",
+                "minBars": 3,
+                "sourceText": "bullish consecutive body 连续 3 根后做多"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
         }
       ]
     }
@@ -28107,6 +30001,51 @@
             }
           ],
           "phase": "gate",
+          "sideScope": "both"
+        },
+        {
+          "key": "price.candle_pattern",
+          "params": {
+            "pattern": "consecutive_body",
+            "direction": "bullish",
+            "sourceText": "bullish consecutive body 后做多"
+          },
+          "evidence": {
+            "text": "bullish consecutive body 后做多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-2-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "pattern": "consecutive_body",
+                    "direction": "bullish",
+                    "sourceText": "bullish consecutive body 后做多"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "pattern": "consecutive_body",
+                "direction": "bullish",
+                "sourceText": "bullish consecutive body 后做多"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
           "sideScope": "both"
         }
       ]
@@ -29396,6 +31335,48 @@
           "sideScope": "both"
         },
         {
+          "key": "price.detect.indicator_boundary",
+          "params": {
+            "boundaryRole": "upper",
+            "confirmationMode": "breakout"
+          },
+          "evidence": {
+            "text": "突破上边界开空",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-3-price-detect-indicator-boundary",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "detect.indicator_boundary",
+                  "shape": {
+                    "key": "price.detect.indicator_boundary",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "boundaryRole": "upper",
+                    "confirmationMode": "breakout"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "boundaryRole": "upper",
+                "confirmationMode": "breakout"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
           "key": "indicator.above",
           "params": {
             "referenceRole": "short_term",
@@ -29407,7 +31388,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-3-indicator-above",
+              "id": "contract-seed-trigger-4-indicator-above",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -29448,7 +31429,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-4-price-chart-pattern",
+              "id": "contract-seed-trigger-5-price-chart-pattern",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -29489,7 +31470,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-5-bollinger-touch-middle",
+              "id": "contract-seed-trigger-6-bollinger-touch-middle",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -29522,6 +31503,45 @@
           "sideScope": "both"
         },
         {
+          "key": "price.detect.indicator_boundary",
+          "params": {
+            "boundaryRole": "middle"
+          },
+          "evidence": {
+            "text": "回到中线平仓",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-7-price-detect-indicator-boundary",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "detect.indicator_boundary",
+                  "shape": {
+                    "key": "price.detect.indicator_boundary",
+                    "phase": "exit",
+                    "sideScope": "both",
+                    "boundaryRole": "middle"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "boundaryRole": "middle"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "exit",
+          "sideScope": "both"
+        },
+        {
           "key": "execution.on_start",
           "params": {
             "timing": "on_start",
@@ -29534,7 +31554,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-6-execution-on-start",
+              "id": "contract-seed-trigger-8-execution-on-start",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -29796,6 +31816,40 @@
           "sideScope": "both"
         },
         {
+          "key": "price.detect.indicator_boundary",
+          "params": {},
+          "evidence": {
+            "text": "price touch channel lower 后 enter long",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-6-price-detect-indicator-boundary",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "detect.indicator_boundary",
+                  "shape": {
+                    "key": "price.detect.indicator_boundary",
+                    "phase": "entry",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
           "key": "volatility.state",
           "params": {
             "value": "low"
@@ -29806,7 +31860,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-6-volatility-state",
+              "id": "contract-seed-trigger-7-volatility-state",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -30030,6 +32084,48 @@
           "sideScope": "both"
         },
         {
+          "key": "price.candle_pattern",
+          "params": {
+            "minBars": 3,
+            "sourceText": "BTCUSDT 3m 当前K线收盘价相对上一根K线收盘价下跌 1% 时买入"
+          },
+          "evidence": {
+            "text": "BTCUSDT 3m 当前K线收盘价相对上一根K线收盘价下跌 1% 时买入",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-5-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "minBars": 3,
+                    "sourceText": "BTCUSDT 3m 当前K线收盘价相对上一根K线收盘价下跌 1% 时买入"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "minBars": 3,
+                "sourceText": "BTCUSDT 3m 当前K线收盘价相对上一根K线收盘价下跌 1% 时买入"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
           "key": "position.no_position",
           "params": {
             "sideScope": "both"
@@ -30040,7 +32136,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-5-position-no-position",
+              "id": "contract-seed-trigger-6-position-no-position",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -30621,6 +32717,48 @@
           "sideScope": "both"
         },
         {
+          "key": "price.candle_pattern",
+          "params": {
+            "minBars": 36,
+            "sourceText": "价格回到最近 36 根 K 线区间上 55% 时卖出平仓"
+          },
+          "evidence": {
+            "text": "价格回到最近 36 根 K 线区间上 55% 时卖出平仓",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-7-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "exit",
+                    "sideScope": "both",
+                    "minBars": 36,
+                    "sourceText": "价格回到最近 36 根 K 线区间上 55% 时卖出平仓"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "minBars": 36,
+                "sourceText": "价格回到最近 36 根 K 线区间上 55% 时卖出平仓"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "exit",
+          "sideScope": "both"
+        },
+        {
           "key": "position.no_position",
           "params": {
             "sideScope": "both"
@@ -30631,7 +32769,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-7-position-no-position",
+              "id": "contract-seed-trigger-8-position-no-position",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -30880,6 +33018,48 @@
           ],
           "phase": "entry",
           "sideScope": "both"
+        },
+        {
+          "key": "price.candle_pattern",
+          "params": {
+            "minBars": 20,
+            "sourceText": "价格在最近 20 根 K 线区间高位 80% 做空"
+          },
+          "evidence": {
+            "text": "价格在最近 20 根 K 线区间高位 80% 做空",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-6-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "minBars": 20,
+                    "sourceText": "价格在最近 20 根 K 线区间高位 80% 做空"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "minBars": 20,
+                "sourceText": "价格在最近 20 根 K 线区间高位 80% 做空"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
         }
       ]
     }
@@ -31114,6 +33294,48 @@
           ],
           "phase": "entry",
           "sideScope": "both"
+        },
+        {
+          "key": "price.candle_pattern",
+          "params": {
+            "minBars": 50,
+            "sourceText": "价格在最近 50 根 K 线区间上 75% open short"
+          },
+          "evidence": {
+            "text": "价格在最近 50 根 K 线区间上 75% open short",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-6-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "minBars": 50,
+                    "sourceText": "价格在最近 50 根 K 线区间上 75% open short"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "minBars": 50,
+                "sourceText": "价格在最近 50 根 K 线区间上 75% open short"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
         }
       ]
     }
@@ -31339,6 +33561,48 @@
           "sideScope": "both"
         },
         {
+          "key": "price.candle_pattern",
+          "params": {
+            "minBars": 36,
+            "sourceText": "价格位于最近 36 根 K 线区间下 20% 时买入"
+          },
+          "evidence": {
+            "text": "价格位于最近 36 根 K 线区间下 20% 时买入",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-6-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "minBars": 36,
+                    "sourceText": "价格位于最近 36 根 K 线区间下 20% 时买入"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "minBars": 36,
+                "sourceText": "价格位于最近 36 根 K 线区间下 20% 时买入"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
           "key": "position.no_position",
           "params": {
             "sideScope": "both"
@@ -31349,7 +33613,7 @@
           },
           "contracts": [
             {
-              "id": "contract-seed-trigger-6-position-no-position",
+              "id": "contract-seed-trigger-7-position-no-position",
               "kind": "trigger",
               "capabilities": [
                 {
@@ -31598,6 +33862,48 @@
           ],
           "phase": "entry",
           "sideScope": "both"
+        },
+        {
+          "key": "price.candle_pattern",
+          "params": {
+            "minBars": 20,
+            "sourceText": "价格在最近 20 根 K 线区间低位 15% 做多"
+          },
+          "evidence": {
+            "text": "价格在最近 20 根 K 线区间低位 15% 做多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-6-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "minBars": 20,
+                    "sourceText": "价格在最近 20 根 K 线区间低位 15% 做多"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "minBars": 20,
+                "sourceText": "价格在最近 20 根 K 线区间低位 15% 做多"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
         }
       ]
     }
@@ -31823,6 +34129,48 @@
               "params": {
                 "lookbackBars": 50,
                 "thresholdPct": 0.25
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "phase": "entry",
+          "sideScope": "both"
+        },
+        {
+          "key": "price.candle_pattern",
+          "params": {
+            "minBars": 50,
+            "sourceText": "价格在最近 50 根 K 线区间下 25% enter long"
+          },
+          "evidence": {
+            "text": "价格在最近 50 根 K 线区间下 25% enter long",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-6-price-candle-pattern",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "candle_pattern",
+                  "shape": {
+                    "key": "price.candle_pattern",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "minBars": 50,
+                    "sourceText": "价格在最近 50 根 K 线区间下 25% enter long"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "minBars": 50,
+                "sourceText": "价格在最近 50 根 K 线区间下 25% enter long"
               },
               "runtimeRequirements": [],
               "stateRequirements": [],
@@ -32059,6 +34407,128 @@
           ],
           "phase": "entry",
           "sideScope": "both"
+        }
+      ],
+      "risk": [
+        {
+          "key": "risk.partial_take_profit",
+          "params": {
+            "profitPct": 0.05,
+            "ratio": 0.05
+          },
+          "evidence": {
+            "text": "第一档 +5% 减 30%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-risk-partial-take-profit",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "risk",
+                  "verb": "emit",
+                  "object": "partial_take_profit",
+                  "shape": {
+                    "key": "risk.partial_take_profit",
+                    "phase": "exit",
+                    "sideScope": "both",
+                    "profitPct": 0.05,
+                    "ratio": 0.05
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "profitPct": 0.05,
+                "ratio": 0.05
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "risk.partial_take_profit",
+          "params": {
+            "profitPct": 0.1,
+            "ratio": 0.1
+          },
+          "evidence": {
+            "text": "第二档 +10% 减 30%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-2-risk-partial-take-profit",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "risk",
+                  "verb": "emit",
+                  "object": "partial_take_profit",
+                  "shape": {
+                    "key": "risk.partial_take_profit",
+                    "phase": "exit",
+                    "sideScope": "both",
+                    "profitPct": 0.1,
+                    "ratio": 0.1
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "profitPct": 0.1,
+                "ratio": 0.1
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "risk.partial_take_profit",
+          "params": {
+            "profitPct": 0.15,
+            "ratio": 0.15
+          },
+          "evidence": {
+            "text": "第三档 +15% 减 40%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-3-risk-partial-take-profit",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "risk",
+                  "verb": "emit",
+                  "object": "partial_take_profit",
+                  "shape": {
+                    "key": "risk.partial_take_profit",
+                    "phase": "exit",
+                    "sideScope": "both",
+                    "profitPct": 0.15,
+                    "ratio": 0.15
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "profitPct": 0.15,
+                "ratio": 0.15
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
         }
       ]
     }
@@ -38088,336 +40558,6 @@
           "contracts": [
             {
               "id": "contract-seed-trigger-5-position-no-position",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "no_position",
-                  "shape": {
-                    "key": "position.no_position",
-                    "phase": "gate",
-                    "sideScope": "both"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "sideScope": "both"
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
-          "phase": "gate",
-          "sideScope": "both"
-        }
-      ]
-    }
-  },
-  {
-    "id": "synthesized-position.pyramiding_limit-1",
-    "source": "synthesized",
-    "atomKey": "position.pyramiding_limit",
-    "utterance": "最多加仓 最多 30 开多",
-    "patch": {
-      "actions": [
-        {
-          "key": "action.add_position",
-          "params": {
-            "sideScope": "long"
-          },
-          "evidence": {
-            "text": "最多加仓 最多 30 开多",
-            "source": "user_explicit"
-          },
-          "contracts": [
-            {
-              "id": "contract-seed-action-1-action-add-position",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "action",
-                  "verb": "emit",
-                  "object": "add_position",
-                  "shape": {
-                    "key": "action.add_position",
-                    "phase": "entry",
-                    "sideScope": "long"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "sideScope": "long"
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
-        }
-      ]
-    }
-  },
-  {
-    "id": "synthesized-position.pyramiding_limit-2",
-    "source": "synthesized",
-    "atomKey": "position.pyramiding_limit",
-    "utterance": "检测到 最多加仓 最多 50 进场",
-    "patch": {
-      "actions": [
-        {
-          "key": "action.add_position",
-          "params": {
-            "sideScope": "long"
-          },
-          "evidence": {
-            "text": "检测到 最多加仓 最多 50 进场",
-            "source": "user_explicit"
-          },
-          "contracts": [
-            {
-              "id": "contract-seed-action-1-action-add-position",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "action",
-                  "verb": "emit",
-                  "object": "add_position",
-                  "shape": {
-                    "key": "action.add_position",
-                    "phase": "entry",
-                    "sideScope": "long"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "sideScope": "long"
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
-        }
-      ]
-    }
-  },
-  {
-    "id": "synthesized-position.pyramiding_limit-3",
-    "source": "synthesized",
-    "atomKey": "position.pyramiding_limit",
-    "utterance": "最多加仓 最多 阈值时执行平仓",
-    "patch": {
-      "triggers": [
-        {
-          "key": "execution.on_start",
-          "params": {
-            "timing": "on_start",
-            "orderType": "market",
-            "occurrence": "once"
-          },
-          "evidence": {
-            "text": "最多加仓 最多 阈值时执行平仓",
-            "source": "user_explicit"
-          },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-1-execution-on-start",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "on_start",
-                  "shape": {
-                    "key": "execution.on_start",
-                    "phase": "exit",
-                    "sideScope": "both",
-                    "timing": "on_start",
-                    "orderType": "market",
-                    "occurrence": "once"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "timing": "on_start",
-                "orderType": "market",
-                "occurrence": "once"
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
-          "phase": "exit",
-          "sideScope": "both"
-        },
-        {
-          "key": "position.no_position",
-          "params": {
-            "sideScope": "both"
-          },
-          "evidence": {
-            "text": "最多加仓 最多 阈值时执行平仓",
-            "source": "user_explicit"
-          },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-2-position-no-position",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "no_position",
-                  "shape": {
-                    "key": "position.no_position",
-                    "phase": "gate",
-                    "sideScope": "both"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "sideScope": "both"
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
-          "phase": "gate",
-          "sideScope": "both"
-        }
-      ],
-      "actions": [
-        {
-          "key": "action.add_position",
-          "params": {
-            "sideScope": "long"
-          },
-          "evidence": {
-            "text": "最多加仓 最多 阈值时执行平仓",
-            "source": "user_explicit"
-          },
-          "contracts": [
-            {
-              "id": "contract-seed-action-1-action-add-position",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "action",
-                  "verb": "emit",
-                  "object": "add_position",
-                  "shape": {
-                    "key": "action.add_position",
-                    "phase": "exit",
-                    "sideScope": "long"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "sideScope": "long"
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
-        }
-      ]
-    }
-  },
-  {
-    "id": "synthesized-grid.range_rebalance-1",
-    "source": "synthesized",
-    "atomKey": "grid.range_rebalance",
-    "utterance": "网格 网格 30 开多",
-    "patch": {}
-  },
-  {
-    "id": "synthesized-grid.range_rebalance-2",
-    "source": "synthesized",
-    "atomKey": "grid.range_rebalance",
-    "utterance": "检测到 网格 网格 50 进场",
-    "patch": {}
-  },
-  {
-    "id": "synthesized-grid.range_rebalance-3",
-    "source": "synthesized",
-    "atomKey": "grid.range_rebalance",
-    "utterance": "网格 网格 阈值时执行平仓",
-    "patch": {
-      "triggers": [
-        {
-          "key": "execution.on_start",
-          "params": {
-            "timing": "on_start",
-            "orderType": "market",
-            "occurrence": "once"
-          },
-          "evidence": {
-            "text": "网格 网格 阈值时执行平仓",
-            "source": "user_explicit"
-          },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-1-execution-on-start",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "on_start",
-                  "shape": {
-                    "key": "execution.on_start",
-                    "phase": "exit",
-                    "sideScope": "both",
-                    "timing": "on_start",
-                    "orderType": "market",
-                    "occurrence": "once"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "timing": "on_start",
-                "orderType": "market",
-                "occurrence": "once"
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
-          "phase": "exit",
-          "sideScope": "both"
-        },
-        {
-          "key": "position.no_position",
-          "params": {
-            "sideScope": "both"
-          },
-          "evidence": {
-            "text": "网格 网格 阈值时执行平仓",
-            "source": "user_explicit"
-          },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-2-position-no-position",
               "kind": "trigger",
               "capabilities": [
                 {
