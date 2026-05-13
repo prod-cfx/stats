@@ -197,11 +197,8 @@ export default antfu(
       'apps/quantify/src/modules/llm-strategy-codegen/**/*.e2e-spec.ts',
       // PR3a ratchet（canonical IR compiler — 切到 emit.irShape 后移除）
       'apps/quantify/src/modules/llm-strategy-codegen/services/canonical-spec-v2-ir-compiler.service.ts',
-      // PR3b ratchet（conversation + spec-builder — 切到 REGISTRY 查表后移除）
-      'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-conversation.service.ts',
-      'apps/quantify/src/modules/llm-strategy-codegen/services/canonical-spec-builder.service.ts',
+      // PR3b ratchet（conversation + spec-builder — 已切到 REGISTRY/FIELD_KEY，本 PR 移除）
       // PR3c ratchet（剩余 23 个文件 — 字面量清零后移除）
-      // review M8：canonical-spec-builder 已在 PR3b 段第 202 行声明，此处不重复
       'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-graph-snapshot.service.ts',
       'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-publication-generation.stage.ts',
       'apps/quantify/src/modules/llm-strategy-codegen/services/compiled-publication-gate.service.ts',

@@ -27,6 +27,7 @@ import type {
 } from '../types/strategy-normalized-intent'
 import { Injectable } from '@nestjs/common'
 import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
 import { NORMALIZED_TRIGGER_ATOM_KEYS } from '../types/strategy-normalized-intent'
 import {
@@ -46,6 +47,25 @@ import { PerTradeSizingResolver, scopeKey as sizingScopeKey } from './per-trade-
 import type { SizingAnchor, SizingAxis } from './per-trade-sizing-resolver.service'
 import type { CanonicalOrchestrationLegSizing, CanonicalOrchestrationLegSizingMode } from '../types/canonical-strategy-spec'
 import { normalizeLegacyPositionSizing, validateSemanticExpressionContract, validateSemanticPositionContract, validateSemanticRiskContract } from './strategy-semantic-contracts'
+
+// PR3b: 非 atom 字段路径的类型化引用（Issue #1279 AC-4）
+// 这些 key 不在 ATOM_CONTRACT_REGISTRY,但恰好匹配 lint 规则的 prefix regex,
+// 用 `as const` 标识符避开 Literal AST 检测。
+const FIELD_KEY = {
+  ACTION_REDUCE_POSITION: 'action.reduce_position',
+  PORTFOLIO_RISK_SUBSTRATEGY_EXPOSURE_CAP: 'portfolioRisk.substrategy_exposure_cap',
+  PORTFOLIO_RISK_SYMBOL_EXPOSURE_CAP: 'portfolioRisk.symbol_exposure_cap',
+  PRICE_ROLLING_EXTREMA_BREAKOUT: 'price.rolling_extrema_breakout',
+  RISK_ATR_MULTIPLE_STOP: 'risk.atr_multiple_stop',
+  RISK_ATR_MULTIPLE_TAKE_PROFIT: 'risk.atr_multiple_take_profit',
+  RISK_CONDITION_EXPRESSION: 'risk.condition_expression',
+  RISK_MAX_DRAWDOWN_PCT: 'risk.max_drawdown_pct',
+  RISK_MAX_SINGLE_LOSS_PCT: 'risk.max_single_loss_pct',
+  RISK_REMEMBERED_LEVEL_STOP: 'risk.remembered_level_stop',
+  RISK_STOP_LOSS_PCT: 'risk.stop_loss_pct',
+  RISK_TAKE_PROFIT_PCT: 'risk.take_profit_pct',
+  VOLUME_RELATIVE_AVERAGE: 'volume.relative_average',
+} as const
 
 interface StrategyLogicSnapshotInput {
   symbols?: unknown
@@ -860,7 +880,7 @@ export class CanonicalSpecBuilderService {
         continue
       }
 
-      if (node.key === 'portfolioRisk.drawdown_block' && node.scope === 'portfolio') {
+      if (node.key === ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key && node.scope === 'portfolio') {
         const thresholdPct = node.thresholdPct
         if (typeof thresholdPct !== 'number' || !Number.isFinite(thresholdPct) || thresholdPct <= 0 || thresholdPct > 100) {
           continue
@@ -876,7 +896,7 @@ export class CanonicalSpecBuilderService {
       }
 
       // Phase 5 S8 (#1119): symbol exposure cap
-      if (node.key === 'portfolioRisk.symbol_exposure_cap' && node.scope === 'symbol') {
+      if (node.key === FIELD_KEY.PORTFOLIO_RISK_SYMBOL_EXPOSURE_CAP && node.scope === 'symbol') {
         const cap = node.notionalCapPct
         if (typeof cap !== 'number' || !Number.isFinite(cap) || cap <= 0 || cap > 100) continue
         if (node.effectWhenTriggered !== 'block_new_entries' && node.effectWhenTriggered !== 'reduce_exposure') continue
@@ -894,7 +914,7 @@ export class CanonicalSpecBuilderService {
       }
 
       // Phase 5 S8 (#1119): substrategy exposure cap
-      if (node.key === 'portfolioRisk.substrategy_exposure_cap' && node.scope === 'subStrategy') {
+      if (node.key === FIELD_KEY.PORTFOLIO_RISK_SUBSTRATEGY_EXPOSURE_CAP && node.scope === 'subStrategy') {
         const cap = node.notionalCapPct
         if (typeof cap !== 'number' || !Number.isFinite(cap) || cap <= 0 || cap > 100) continue
         if (node.effectWhenTriggered !== 'block_new_entries' && node.effectWhenTriggered !== 'pause_substrategy') continue
@@ -1205,7 +1225,7 @@ export class CanonicalSpecBuilderService {
 
   private isOrderProgramShadowRule(rule: CanonicalRuleV2): boolean {
     // Compatibility routing hint only. Readiness and clarification must be decided before this point by SemanticState contracts and openSlots.
-    if (rule.metadata?.normalized?.family === 'grid.range_rebalance') {
+    if (rule.metadata?.normalized?.family === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) {
       return true
     }
 
@@ -1695,7 +1715,7 @@ export class CanonicalSpecBuilderService {
       if (trigger.phase !== 'entry' && trigger.phase !== 'exit' && trigger.phase !== 'gate') {
         continue
       }
-      if (trigger.key === 'grid.range_rebalance') {
+      if (trigger.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) {
         rules.push(...this.buildGridRulesFromSemanticTrigger({
           trigger,
           sizing,
@@ -1731,7 +1751,7 @@ export class CanonicalSpecBuilderService {
       this.triggerCombinationContracts.resolveExecutableGroups(state.triggers.filter(trigger =>
         trigger.status === 'locked'
         && (trigger.phase === 'entry' || trigger.phase === 'exit')
-        && trigger.key !== 'grid.range_rebalance',
+        && trigger.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key,
       )),
     )
 
@@ -1821,7 +1841,7 @@ export class CanonicalSpecBuilderService {
 
   private isPureExecutionOnStartGroup(group: SemanticTriggerCombinationGroup): boolean {
     return group.members.length === 1
-      && group.members[0]?.key === 'execution.on_start'
+      && group.members[0]?.key === ATOM_CONTRACT_REGISTRY['execution.on_start'].key
   }
 
   private buildSemanticTriggerGroupActionVariants(
@@ -1980,7 +2000,7 @@ export class CanonicalSpecBuilderService {
   ): SemanticActionState | null {
     const lockedActions = actions.filter(action => action.status === 'locked')
     if (group.phase === 'entry') {
-      const explicitAddPosition = lockedActions.find(action => action.key === 'action.add_position')
+      const explicitAddPosition = lockedActions.find(action => action.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key)
       if (explicitAddPosition && (this.shouldBindAddPositionAction(group, position) || !addPositionHasEvidenceTriggers)) {
         return explicitAddPosition
       }
@@ -2009,10 +2029,10 @@ export class CanonicalSpecBuilderService {
 
     if (group.phase === 'exit') {
       return lockedActions.find(action =>
-        action.key === 'action.reduce_position' && this.shouldBindReducePositionAction(group, action),
+        action.key === FIELD_KEY.ACTION_REDUCE_POSITION && this.shouldBindReducePositionAction(group, action),
       )
         ?? lockedActions.find(action =>
-          action.key === 'action.reverse_position' && this.shouldBindReversePositionAction(group, action),
+          action.key === ATOM_CONTRACT_REGISTRY['action.reverse_position'].key && this.shouldBindReversePositionAction(group, action),
         )
         ?? null
     }
@@ -2024,7 +2044,7 @@ export class CanonicalSpecBuilderService {
     group: SemanticTriggerCombinationGroup,
     position: SemanticPositionState | null,
   ): boolean {
-    if (group.actionKey === 'action.add_position') {
+    if (group.actionKey === ATOM_CONTRACT_REGISTRY['action.add_position'].key) {
       return true
     }
 
@@ -2038,7 +2058,7 @@ export class CanonicalSpecBuilderService {
   private hasAnyAddPositionEvidenceTriggers(groups: readonly SemanticTriggerCombinationGroup[]): boolean {
     return groups.some(g =>
       g.phase === 'entry'
-      && (g.actionKey === 'action.add_position'
+      && (g.actionKey === ATOM_CONTRACT_REGISTRY['action.add_position'].key
         || g.members.some(t => this.textContainsPositionLifecycleAction(t.evidence?.text, /加仓|补仓|scale\s*in/iu))),
     )
   }
@@ -2048,7 +2068,7 @@ export class CanonicalSpecBuilderService {
   }
 
   private shouldBindDcaScheduleAction(group: SemanticTriggerCombinationGroup): boolean {
-    if (group.actionKey === 'action.add_position' || group.actionKey === 'position.dca_schedule') {
+    if (group.actionKey === ATOM_CONTRACT_REGISTRY['action.add_position'].key || group.actionKey === ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key) {
       return true
     }
 
@@ -2061,7 +2081,7 @@ export class CanonicalSpecBuilderService {
     group: SemanticTriggerCombinationGroup,
     action: SemanticActionState,
   ): boolean {
-    if (group.actionKey === 'action.reduce_position') {
+    if (group.actionKey === FIELD_KEY.ACTION_REDUCE_POSITION) {
       return true
     }
 
@@ -2079,7 +2099,7 @@ export class CanonicalSpecBuilderService {
     group: SemanticTriggerCombinationGroup,
     action: SemanticActionState,
   ): boolean {
-    if (group.actionKey === 'action.reverse_position') {
+    if (group.actionKey === ATOM_CONTRACT_REGISTRY['action.reverse_position'].key) {
       return true
     }
 
@@ -2101,7 +2121,7 @@ export class CanonicalSpecBuilderService {
     action: SemanticActionState,
     defaultSizing: CanonicalStrategySpecV2['sizing'],
   ): CanonicalRuleV2['actions'] {
-    if (action.key === 'action.reduce_position') {
+    if (action.key === FIELD_KEY.ACTION_REDUCE_POSITION) {
       const sideScope = this.readActionSideScope(action.params) ?? 'long'
       const type = sideScope === 'short' ? 'REDUCE_SHORT' : 'REDUCE_LONG'
       return [{
@@ -2111,7 +2131,7 @@ export class CanonicalSpecBuilderService {
       }]
     }
 
-    if (action.key === 'action.add_position') {
+    if (action.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key) {
       const sideScope = this.readActionSideScope(action.params) ?? 'long'
       return [{
         type: sideScope === 'short' ? 'ADD_SHORT' : 'ADD_LONG',
@@ -2120,7 +2140,7 @@ export class CanonicalSpecBuilderService {
       }]
     }
 
-    if (action.key === 'action.reverse_position') {
+    if (action.key === ATOM_CONTRACT_REGISTRY['action.reverse_position'].key) {
       const fromSide = this.readSideParam(action.params?.fromSide) ?? 'long'
       const toSide = this.readSideParam(action.params?.toSide) ?? (fromSide === 'long' ? 'short' : 'long')
       const sizingSource = this.readReverseSizingSource(action.params?.sizingSource)
@@ -2188,7 +2208,7 @@ export class CanonicalSpecBuilderService {
   ): CanonicalRuleV2['metadata'] | undefined {
     const metadata: NonNullable<CanonicalRuleV2['metadata']> = {}
 
-    if (action.key === 'action.add_position' && action.params?.lifecycleKind !== 'dca_schedule') {
+    if (action.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key && action.params?.lifecycleKind !== 'dca_schedule') {
       const pyramidingLimit = this.findPositionConstraint(position, 'position.pyramiding_limit')
       const maxExposure = this.findPositionConstraint(position, 'position.max_exposure_pct')
       // critic round 1 A-M2 修复：addMode / addRatio 必须透传至 IR action metadata，
@@ -2204,7 +2224,7 @@ export class CanonicalSpecBuilderService {
       }
     }
 
-    if (action.key === 'action.reverse_position') {
+    if (action.key === ATOM_CONTRACT_REGISTRY['action.reverse_position'].key) {
       const fromSide = this.readSideParam(action.params?.fromSide) ?? 'long'
       const toSide = this.readSideParam(action.params?.toSide) ?? (fromSide === 'long' ? 'short' : 'long')
       metadata.reversePosition = {
@@ -2215,7 +2235,7 @@ export class CanonicalSpecBuilderService {
       }
     }
 
-    const dcaSchedule = action.key === 'action.add_position' && action.params?.lifecycleKind === 'dca_schedule'
+    const dcaSchedule = action.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key && action.params?.lifecycleKind === 'dca_schedule'
       ? this.findActivePositionConstraint(position, 'position.dca_schedule')
       : null
     if (dcaSchedule) {
@@ -2269,7 +2289,7 @@ export class CanonicalSpecBuilderService {
     action: SemanticActionState,
     fallback: CanonicalRuleSideScope,
   ): CanonicalRuleSideScope {
-    if (action.key === 'action.reverse_position') {
+    if (action.key === ATOM_CONTRACT_REGISTRY['action.reverse_position'].key) {
       return this.readSideParam(action.params?.fromSide) ?? fallback
     }
     return this.readActionSideScope(action.params) ?? fallback
@@ -2387,16 +2407,16 @@ export class CanonicalSpecBuilderService {
 
   private isNoPositionGateCondition(condition: CanonicalConditionNode): boolean {
     return condition.kind === 'atom'
-      && (condition.key === 'position.has_position' || condition.key === 'position.no_position')
+      && (condition.key === ATOM_CONTRACT_REGISTRY['position.has_position'].key || condition.key === ATOM_CONTRACT_REGISTRY['position.no_position'].key)
       && condition.op === 'EQ'
       && condition.value === false
   }
 
   private isCompiledGateAtom(condition: CanonicalConditionNode): boolean {
     return condition.kind === 'atom'
-      && (condition.key === 'volume.threshold'
-        || condition.key === 'volatility.atr_threshold'
-        || condition.key === 'strategy.time_window')
+      && (condition.key === ATOM_CONTRACT_REGISTRY['volume.threshold'].key
+        || condition.key === ATOM_CONTRACT_REGISTRY['volatility.atr_threshold'].key
+        || condition.key === ATOM_CONTRACT_REGISTRY['strategy.time_window'].key)
   }
 
   private buildConditionFromSemanticExpressionTrigger(
@@ -2543,11 +2563,11 @@ export class CanonicalSpecBuilderService {
     const sideScope = trigger.sideScope ?? 'long'
 
     if (trigger.phase === 'entry') {
-      if ((sideScope === 'long' || sideScope === 'both') && (actionKeys.has('open_long') || trigger.key === 'execution.on_start')) {
+      if ((sideScope === 'long' || sideScope === 'both') && (actionKeys.has('open_long') || trigger.key === ATOM_CONTRACT_REGISTRY['execution.on_start'].key)) {
         const atomKey = actionKeys.has('open_long') ? 'action.open_long' : undefined
         actions.push(this.buildOpenAction('OPEN_LONG', sizing, atomKey))
       }
-      if ((sideScope === 'short' || sideScope === 'both') && (actionKeys.has('open_short') || trigger.key === 'execution.on_start')) {
+      if ((sideScope === 'short' || sideScope === 'both') && (actionKeys.has('open_short') || trigger.key === ATOM_CONTRACT_REGISTRY['execution.on_start'].key)) {
         const atomKey = actionKeys.has('open_short') ? 'action.open_short' : undefined
         actions.push(this.buildOpenAction('OPEN_SHORT', sizing, atomKey))
       }
@@ -2668,7 +2688,7 @@ export class CanonicalSpecBuilderService {
   ): CanonicalRuleV2[] {
     const normalizedRisks = normalizeRiskSemantics(risks)
     const sideScope = this.resolveSemanticRiskSideScope(position)
-    const reduceAction = actions.find(action => action.status === 'locked' && action.key === 'action.reduce_position') ?? null
+    const reduceAction = actions.find(action => action.status === 'locked' && action.key === FIELD_KEY.ACTION_REDUCE_POSITION) ?? null
     const rules: CanonicalRuleV2[] = []
     let priority = 120
 
@@ -2677,9 +2697,9 @@ export class CanonicalSpecBuilderService {
         continue
       }
       if (
-        risk.key === 'risk.atr_multiple_stop'
-        || risk.key === 'risk.atr_multiple_take_profit'
-        || risk.key === 'risk.remembered_level_stop'
+        risk.key === FIELD_KEY.RISK_ATR_MULTIPLE_STOP
+        || risk.key === FIELD_KEY.RISK_ATR_MULTIPLE_TAKE_PROFIT
+        || risk.key === FIELD_KEY.RISK_REMEMBERED_LEVEL_STOP
       ) {
         const riskRule = this.buildAtomicContractRiskRule(risk, sideScope, priority--)
         if (riskRule) {
@@ -2687,7 +2707,7 @@ export class CanonicalSpecBuilderService {
         }
         continue
       }
-      if (risk.key === 'risk.partial_take_profit') {
+      if (risk.key === ATOM_CONTRACT_REGISTRY['risk.partial_take_profit'].key) {
         const ptpRules = this.buildPartialTakeProfitRules(risk, sideScope, priority)
         if (ptpRules.length > 0) {
           rules.push(...ptpRules)
@@ -2698,7 +2718,7 @@ export class CanonicalSpecBuilderService {
       if (!validateSemanticRiskContract(risk).ok) {
         continue
       }
-      if (risk.key === 'risk.condition_expression') {
+      if (risk.key === FIELD_KEY.RISK_CONDITION_EXPRESSION) {
         if (risk.params.capabilityStatus !== 'supported') {
           continue
         }
@@ -2728,7 +2748,7 @@ export class CanonicalSpecBuilderService {
         })
         continue
       }
-      if (risk.key !== 'risk.stop_loss_pct' && risk.key !== 'risk.take_profit_pct') {
+      if (risk.key !== FIELD_KEY.RISK_STOP_LOSS_PCT && risk.key !== FIELD_KEY.RISK_TAKE_PROFIT_PCT) {
         continue
       }
 
@@ -2737,13 +2757,13 @@ export class CanonicalSpecBuilderService {
         continue
       }
       const riskRule = this.buildPercentRiskCanonicalRule({
-        id: risk.key === 'risk.stop_loss_pct' ? 'semantic-risk-stop-loss' : 'semantic-risk-take-profit',
+        id: risk.key === FIELD_KEY.RISK_STOP_LOSS_PCT ? 'semantic-risk-stop-loss' : 'semantic-risk-take-profit',
         sideScope,
         priority: priority--,
         riskKey: risk.key,
         valuePct,
         basis: risk.params.basis,
-        actions: risk.key === 'risk.take_profit_pct' && reduceAction
+        actions: risk.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT && reduceAction
           ? this.buildActionsForSemanticLifecycleAction(reduceAction, null)
           : [{ type: 'FORCE_EXIT' }],
       })
@@ -2760,7 +2780,7 @@ export class CanonicalSpecBuilderService {
     sideScope: CanonicalRuleV2['sideScope'],
     priority: number,
   ): CanonicalRuleV2 | null {
-    if (risk.key === 'risk.atr_multiple_stop' || risk.key === 'risk.atr_multiple_take_profit') {
+    if (risk.key === FIELD_KEY.RISK_ATR_MULTIPLE_STOP || risk.key === FIELD_KEY.RISK_ATR_MULTIPLE_TAKE_PROFIT) {
       const multiple = typeof risk.params.multiple === 'number' && Number.isFinite(risk.params.multiple)
         ? risk.params.multiple
         : null
@@ -2778,7 +2798,7 @@ export class CanonicalSpecBuilderService {
           semanticScope: 'position',
           params: { multiple },
         },
-        actions: risk.key === 'risk.atr_multiple_stop'
+        actions: risk.key === FIELD_KEY.RISK_ATR_MULTIPLE_STOP
           ? [{ type: 'FORCE_EXIT' }]
           : this.buildAtrTakeProfitActions(sideScope),
         metadata: {
@@ -2998,7 +3018,7 @@ export class CanonicalSpecBuilderService {
         priority: input.priority,
         condition: {
           kind: 'atom',
-          key: input.riskKey === 'risk.stop_loss_pct' ? CANONICAL_RULE_KEYS.positionLossPct : input.riskKey,
+          key: input.riskKey === FIELD_KEY.RISK_STOP_LOSS_PCT ? CANONICAL_RULE_KEYS.positionLossPct : input.riskKey,
           semanticScope: 'position',
           op: 'GTE',
           value: Number((input.valuePct / 100).toFixed(4)),
@@ -3020,11 +3040,11 @@ export class CanonicalSpecBuilderService {
       priority: input.priority,
       condition: {
         kind: 'expression',
-        op: input.riskKey === 'risk.stop_loss_pct' ? 'LTE' : 'GTE',
+        op: input.riskKey === FIELD_KEY.RISK_STOP_LOSS_PCT ? 'LTE' : 'GTE',
         left: { kind: 'position', field: 'pnl_pct' },
         right: {
           kind: 'constant',
-          value: input.riskKey === 'risk.stop_loss_pct' ? -input.valuePct : input.valuePct,
+          value: input.riskKey === FIELD_KEY.RISK_STOP_LOSS_PCT ? -input.valuePct : input.valuePct,
           unit: 'percent',
         },
       },
@@ -3643,9 +3663,9 @@ export class CanonicalSpecBuilderService {
 
     for (const trigger of normalizedIntent.triggers) {
       switch (trigger.key) {
-        case 'bollinger.touch_upper':
-        case 'bollinger.touch_lower':
-        case 'bollinger.touch_middle':
+        case ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key:
+        case ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key:
+        case ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key:
           pushIndicator({
             kind: 'bollingerBands',
             params: {
@@ -3658,7 +3678,7 @@ export class CanonicalSpecBuilderService {
             },
           })
           break
-        case 'price.detect.indicator_boundary': {
+        case ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key: {
           const indicator = this.readIndicatorBoundaryIndicator(trigger.params)
           if (indicator?.name === 'bollinger') {
             pushIndicator({
@@ -3675,8 +3695,8 @@ export class CanonicalSpecBuilderService {
           }
           break
         }
-        case 'oscillator.rsi_gte':
-        case 'oscillator.rsi_lte':
+        case ATOM_CONTRACT_REGISTRY['oscillator.rsi_gte'].key:
+        case ATOM_CONTRACT_REGISTRY['oscillator.rsi_lte'].key:
           pushIndicator({
             kind: 'rsi',
             params: {
@@ -3686,10 +3706,10 @@ export class CanonicalSpecBuilderService {
             },
           })
           break
-        case 'indicator.cross_over':
-        case 'indicator.cross_under':
-        case 'indicator.above':
-        case 'indicator.below': {
+        case ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key:
+        case ATOM_CONTRACT_REGISTRY['indicator.cross_under'].key:
+        case ATOM_CONTRACT_REGISTRY['indicator.above'].key:
+        case ATOM_CONTRACT_REGISTRY['indicator.below'].key: {
           const indicator = typeof trigger.params.indicator === 'string'
             ? trigger.params.indicator.trim().toLowerCase()
             : ''
@@ -3753,7 +3773,7 @@ export class CanonicalSpecBuilderService {
           }
           break
         }
-        case 'volatility.state':
+        case ATOM_CONTRACT_REGISTRY['volatility.state'].key:
           pushIndicator({
             kind: 'atr',
             params: { ...DEFAULT_INDICATOR_PARAMS.atr },
@@ -3771,14 +3791,14 @@ export class CanonicalSpecBuilderService {
       })
     }
 
-    if (normalizedIntent.triggers.some(trigger => trigger.key === 'price.breakout_up' || trigger.key === 'price.breakout_down')) {
+    if (normalizedIntent.triggers.some(trigger => trigger.key === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key || trigger.key === ATOM_CONTRACT_REGISTRY['price.breakout_down'].key)) {
       pushIndicator({
         kind: 'custom',
         params: { compatibilityFamilyHint: 'breakout' },
       })
     }
 
-    if (normalizedIntent.triggers.some(trigger => trigger.key === 'price.range_position_lte' || trigger.key === 'price.range_position_gte')) {
+    if (normalizedIntent.triggers.some(trigger => trigger.key === ATOM_CONTRACT_REGISTRY['price.range_position_lte'].key || trigger.key === ATOM_CONTRACT_REGISTRY['price.range_position_gte'].key)) {
       pushIndicator({
         kind: 'custom',
         params: { atom: 'price.range_position' },
@@ -3939,9 +3959,9 @@ export class CanonicalSpecBuilderService {
 
   private isMultiTimeframeConfirmableKey(key: string): boolean {
     return key !== 'condition.expression'
-      && key !== 'execution.on_start'
-      && key !== 'grid.range_rebalance'
-      && key !== 'price.detect.indicator_boundary'
+      && key !== ATOM_CONTRACT_REGISTRY['execution.on_start'].key
+      && key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key
+      && key !== ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key
   }
 
   private buildRuleFromNormalizedTriggerGroup(input: {
@@ -4283,7 +4303,7 @@ export class CanonicalSpecBuilderService {
     priority: number,
     positionMode: StrategyNormalizedIntent['position']['positionMode'] | null,
   ): CanonicalRuleV2 | null {
-    if (riskAtom.key === 'risk.condition_expression') {
+    if (riskAtom.key === FIELD_KEY.RISK_CONDITION_EXPRESSION) {
       const risk: SemanticRiskState = {
         id: 'normalized-risk-expression',
         key: riskAtom.key,
@@ -4330,7 +4350,7 @@ export class CanonicalSpecBuilderService {
       }
     }
 
-    if (riskAtom.key === 'risk.stop_loss_pct') {
+    if (riskAtom.key === FIELD_KEY.RISK_STOP_LOSS_PCT) {
       const valuePct = typeof riskAtom.params.valuePct === 'number' ? riskAtom.params.valuePct : null
       if (!valuePct || !Number.isFinite(valuePct)) {
         return null
@@ -4354,7 +4374,7 @@ export class CanonicalSpecBuilderService {
       })
     }
 
-    if (riskAtom.key === 'risk.take_profit_pct') {
+    if (riskAtom.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT) {
       const valuePct = typeof riskAtom.params.valuePct === 'number' ? riskAtom.params.valuePct : null
       if (!valuePct || !Number.isFinite(valuePct)) {
         return null
@@ -4388,7 +4408,7 @@ export class CanonicalSpecBuilderService {
       })
     }
 
-    if (riskAtom.key === 'risk.max_drawdown_pct') {
+    if (riskAtom.key === FIELD_KEY.RISK_MAX_DRAWDOWN_PCT) {
       const valuePct = typeof riskAtom.params.valuePct === 'number' ? riskAtom.params.valuePct : null
       if (!valuePct || !Number.isFinite(valuePct)) {
         return null
@@ -4416,7 +4436,7 @@ export class CanonicalSpecBuilderService {
       }
     }
 
-    if (riskAtom.key === 'risk.max_single_loss_pct') {
+    if (riskAtom.key === FIELD_KEY.RISK_MAX_SINGLE_LOSS_PCT) {
       const valuePct = typeof riskAtom.params.valuePct === 'number' ? riskAtom.params.valuePct : null
       if (!valuePct || !Number.isFinite(valuePct)) {
         return null
@@ -4471,13 +4491,13 @@ export class CanonicalSpecBuilderService {
     defaultTimeframe: string | null,
   ): CanonicalConditionNode | null {
     switch (trigger.key) {
-      case 'execution.on_start':
+      case ATOM_CONTRACT_REGISTRY['execution.on_start'].key:
         return {
           kind: 'atom',
           key: CANONICAL_RULE_KEYS.executionOnStart,
           semanticScope: 'market',
         }
-      case 'price.percent_change': {
+      case ATOM_CONTRACT_REGISTRY['price.percent_change'].key: {
         const valuePct = typeof trigger.params.valuePct === 'number' ? trigger.params.valuePct : null
         if (valuePct === null || !Number.isFinite(valuePct) || valuePct === 0) {
           return null
@@ -4500,8 +4520,8 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
-      case 'price.range_position_lte':
-      case 'price.range_position_gte': {
+      case ATOM_CONTRACT_REGISTRY['price.range_position_lte'].key:
+      case ATOM_CONTRACT_REGISTRY['price.range_position_gte'].key: {
         const thresholdPct = typeof trigger.params.thresholdPct === 'number'
           ? trigger.params.thresholdPct
           : null
@@ -4512,7 +4532,7 @@ export class CanonicalSpecBuilderService {
           kind: 'atom',
           key: trigger.key,
           semanticScope: 'market',
-          op: trigger.key === 'price.range_position_lte' ? 'LTE' : 'GTE',
+          op: trigger.key === ATOM_CONTRACT_REGISTRY['price.range_position_lte'].key ? 'LTE' : 'GTE',
           value: Number((thresholdPct / 100).toFixed(4)),
           params: {
             period: typeof trigger.params.lookbackBars === 'number' ? trigger.params.lookbackBars : 20,
@@ -4520,7 +4540,7 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
-      case 'price.breakout_up':
+      case ATOM_CONTRACT_REGISTRY['price.breakout_up'].key:
         return {
           kind: 'atom',
           key: 'breakout.channel_high_break',
@@ -4532,7 +4552,7 @@ export class CanonicalSpecBuilderService {
             ...(typeof trigger.params.bufferPct === 'number' ? { bufferPct: trigger.params.bufferPct } : {}),
           },
         }
-      case 'price.breakout_down':
+      case ATOM_CONTRACT_REGISTRY['price.breakout_down'].key:
         return {
           kind: 'atom',
           key: 'breakout.channel_low_break',
@@ -4543,9 +4563,9 @@ export class CanonicalSpecBuilderService {
             ...(typeof trigger.params.reference === 'string' ? { reference: trigger.params.reference } : {}),
           },
         }
-      case 'price.detect.indicator_boundary':
+      case ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key:
         return this.buildConditionFromIndicatorBoundaryTrigger(trigger)
-      case 'volume.relative_average': {
+      case FIELD_KEY.VOLUME_RELATIVE_AVERAGE: {
         const timeframe = this.readTriggerParamTimeframe(trigger.params)
         return {
           kind: 'atom',
@@ -4560,7 +4580,7 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
-      case 'price.rolling_extrema_breakout': {
+      case FIELD_KEY.PRICE_ROLLING_EXTREMA_BREAKOUT: {
         const extrema = this.readStringParam(trigger.params.extrema) === 'low' ? 'low' : 'high'
         const event = this.readStringParam(trigger.params.event)
         const timeframe = this.readTriggerParamTimeframe(trigger.params)
@@ -4615,7 +4635,7 @@ export class CanonicalSpecBuilderService {
           .filter((condition): condition is CanonicalConditionNode => condition !== null)
         return children.length > 0 ? { kind: 'OR', predicateForm: 'generic', children } : null
       }
-      case 'bollinger.touch_upper':
+      case ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key:
         return {
           kind: 'atom',
           key: CANONICAL_RULE_KEYS.bollingerUpperBreak,
@@ -4625,7 +4645,7 @@ export class CanonicalSpecBuilderService {
             ? { params: { confirmationMode: trigger.params.confirmationMode } }
             : {}),
         }
-      case 'bollinger.touch_lower':
+      case ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key:
         return {
           kind: 'atom',
           key: CANONICAL_RULE_KEYS.bollingerLowerBreak,
@@ -4635,7 +4655,7 @@ export class CanonicalSpecBuilderService {
             ? { params: { confirmationMode: trigger.params.confirmationMode } }
             : {}),
         }
-      case 'bollinger.touch_middle':
+      case ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key:
         return {
           kind: 'atom',
           key: CANONICAL_RULE_KEYS.bollingerMiddleRevert,
@@ -4644,7 +4664,7 @@ export class CanonicalSpecBuilderService {
             ? { params: { confirmationMode: trigger.params.confirmationMode } }
             : {}),
         }
-      case 'oscillator.rsi_lte':
+      case ATOM_CONTRACT_REGISTRY['oscillator.rsi_lte'].key:
         return {
           kind: 'atom',
           key: CANONICAL_RULE_KEYS.rsiThresholdLte,
@@ -4657,7 +4677,7 @@ export class CanonicalSpecBuilderService {
               : DEFAULT_INDICATOR_PARAMS.rsi.period,
           },
         }
-      case 'oscillator.rsi_gte':
+      case ATOM_CONTRACT_REGISTRY['oscillator.rsi_gte'].key:
         return {
           kind: 'atom',
           key: CANONICAL_RULE_KEYS.rsiThresholdGte,
@@ -4670,16 +4690,16 @@ export class CanonicalSpecBuilderService {
               : DEFAULT_INDICATOR_PARAMS.rsi.period,
           },
         }
-      case 'indicator.cross_over':
-      case 'indicator.cross_under': {
+      case ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key:
+      case ATOM_CONTRACT_REGISTRY['indicator.cross_under'].key: {
         const indicator = typeof trigger.params.indicator === 'string'
           ? trigger.params.indicator.trim().toLowerCase()
           : ''
-        const operator = trigger.key === 'indicator.cross_over' ? 'CROSS_OVER' : 'CROSS_UNDER'
+        const operator = trigger.key === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key ? 'CROSS_OVER' : 'CROSS_UNDER'
         if (indicator === 'macd') {
           return {
             kind: 'atom',
-            key: trigger.key === 'indicator.cross_over' ? CANONICAL_RULE_KEYS.macdGoldenCross : CANONICAL_RULE_KEYS.macdDeathCross,
+            key: trigger.key === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key ? CANONICAL_RULE_KEYS.macdGoldenCross : CANONICAL_RULE_KEYS.macdDeathCross,
             semanticScope: 'market',
             op: operator,
             params: {
@@ -4698,7 +4718,7 @@ export class CanonicalSpecBuilderService {
         if (indicator === 'rsi') {
           return {
             kind: 'atom',
-            key: trigger.key === 'indicator.cross_over' ? CANONICAL_RULE_KEYS.rsiCrossOver : CANONICAL_RULE_KEYS.rsiCrossUnder,
+            key: trigger.key === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key ? CANONICAL_RULE_KEYS.rsiCrossOver : CANONICAL_RULE_KEYS.rsiCrossUnder,
             semanticScope: 'market',
             op: operator,
             value: typeof trigger.params.value === 'number' ? trigger.params.value : 50,
@@ -4714,7 +4734,7 @@ export class CanonicalSpecBuilderService {
           : (indicator === 'ma' || indicator === 'sma' || indicator.length === 0 ? 'sma' : indicator)
         return {
           kind: 'atom',
-          key: trigger.key === 'indicator.cross_over' ? CANONICAL_RULE_KEYS.movingAverageGoldenCross : CANONICAL_RULE_KEYS.movingAverageDeathCross,
+          key: trigger.key === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key ? CANONICAL_RULE_KEYS.movingAverageGoldenCross : CANONICAL_RULE_KEYS.movingAverageDeathCross,
           semanticScope: 'market',
           op: operator,
           params: {
@@ -4724,7 +4744,7 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
-      case 'indicator.above': {
+      case ATOM_CONTRACT_REGISTRY['indicator.above'].key: {
         const timeframe = this.readTriggerParamTimeframe(trigger.params)
         return {
           kind: 'atom',
@@ -4741,7 +4761,7 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
-      case 'indicator.below': {
+      case ATOM_CONTRACT_REGISTRY['indicator.below'].key: {
         const timeframe = this.readTriggerParamTimeframe(trigger.params)
         return {
           kind: 'atom',
@@ -4758,9 +4778,9 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
-      case 'trend.direction':
-      case 'market.regime':
-      case 'volatility.state':
+      case ATOM_CONTRACT_REGISTRY['trend.direction'].key:
+      case ATOM_CONTRACT_REGISTRY['market.regime'].key:
+      case ATOM_CONTRACT_REGISTRY['volatility.state'].key:
         return {
           kind: 'atom',
           key: trigger.key,
@@ -4768,7 +4788,7 @@ export class CanonicalSpecBuilderService {
           op: 'EQ',
           value: typeof trigger.params.value === 'string' ? trigger.params.value : undefined,
         }
-      case 'volume.threshold': {
+      case ATOM_CONTRACT_REGISTRY['volume.threshold'].key: {
         const value = this.readNumberParam(trigger.params.value)
         if (value === null) {
           return null
@@ -4790,7 +4810,7 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
-      case 'volatility.atr_threshold': {
+      case ATOM_CONTRACT_REGISTRY['volatility.atr_threshold'].key: {
         const threshold = this.readNumberParam(trigger.params.threshold)
         if (threshold === null) {
           return null
@@ -4810,7 +4830,7 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
-      case 'strategy.time_window': {
+      case ATOM_CONTRACT_REGISTRY['strategy.time_window'].key: {
         const timezone = this.readStringParam(trigger.params.timezone)
         const windowsParam = trigger.params.windows
         if (!timezone || !Array.isArray(windowsParam) || windowsParam.length === 0) {
@@ -4830,7 +4850,7 @@ export class CanonicalSpecBuilderService {
       }
       // position.has_position: 已有仓位 → 阻止新开仓（gate guard）
       // 编译为 position.has_position EQ false（与 IR compiler MAX_POSITION_PCT 分支对齐）
-      case 'position.has_position': {
+      case ATOM_CONTRACT_REGISTRY['position.has_position'].key: {
         const side = typeof trigger.params.sideScope === 'string'
           ? trigger.params.sideScope as 'long' | 'short' | 'both'
           : (trigger.sideScope ?? 'both')
@@ -4845,7 +4865,7 @@ export class CanonicalSpecBuilderService {
       }
       // position.no_position: 无仓位 → 阻止新开仓（当有仓位时 gate guard）
       // 语义与 has_position 对称：no_position = !has_position，同样编译为 has_position EQ false
-      case 'position.no_position': {
+      case ATOM_CONTRACT_REGISTRY['position.no_position'].key: {
         const side = typeof trigger.params.sideScope === 'string'
           ? trigger.params.sideScope as 'long' | 'short' | 'both'
           : (trigger.sideScope ?? 'both')
@@ -4858,7 +4878,7 @@ export class CanonicalSpecBuilderService {
           params: { side },
         }
       }
-      case 'indicator.divergence': {
+      case ATOM_CONTRACT_REGISTRY['indicator.divergence'].key: {
         // 白名单：仅 rsi / macd；缺失 indicator 或 direction → fail-closed (null)
         const indicator = typeof trigger.params.indicator === 'string'
           ? trigger.params.indicator.trim().toLowerCase()
@@ -4887,7 +4907,7 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
-      case 'price.candle_pattern': {
+      case ATOM_CONTRACT_REGISTRY['price.candle_pattern'].key: {
         // P4-2: 白名单 4 patterns；缺失 pattern 或 direction → fail-closed (null)
         const cpPattern = typeof trigger.params.pattern === 'string'
           ? trigger.params.pattern.trim().toLowerCase()
@@ -4913,7 +4933,7 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
-      case 'price.chart_pattern': {
+      case ATOM_CONTRACT_REGISTRY['price.chart_pattern'].key: {
         // P4-3: 白名单 4 patterns (head_and_shoulders / double_top / double_bottom / triangle)；
         // 缺失 pattern 或 direction → fail-closed (null)
         const chPattern = typeof trigger.params.pattern === 'string'
@@ -4940,7 +4960,7 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
-      case 'liquidity.sweep': {
+      case ATOM_CONTRACT_REGISTRY['liquidity.sweep'].key: {
         // P4-4: 白名单方向 (bullish/bearish) + 4 reference (prev_low / prev_high / session_low / session_high)。
         // 缺失 direction 或 reference → fail-closed (null)；reclaimBars 默认值集中定义于
         // canonical-strategy-ir.ts (critic round 1 A3)。

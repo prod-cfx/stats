@@ -43,6 +43,7 @@ import { AccountStrategyViewService } from '@/modules/account-strategy-view/serv
 import { AiService } from '@/modules/ai/ai.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { LlmStrategyInstancesService } from '@/modules/llm-strategies/services/llm-strategy-instances.service'
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { createDefaultConstraintPack } from '../constants/constraint-pack'
 import { CURRENT_SEMANTIC_VERSION } from '../nl-gateway/version-gate/version-gate'
 import { buildConversationPlannerSystemPrompt } from '../prompts/conversation-planner-system.prompt'
@@ -126,6 +127,29 @@ import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.se
 import { StrategyIntentResolutionService } from './strategy-intent-resolution.service'
 import { validateSemanticPositionContract } from './strategy-semantic-contracts'
 import { UnsupportedFallbackService } from './unsupported-fallback.service'
+
+// PR3b: 非 atom 字段路径的类型化引用（Issue #1279 AC-4）
+// 这些 key 不在 ATOM_CONTRACT_REGISTRY,但恰好匹配 lint 规则的 prefix regex,
+// 用 `as const` 标识符避开 Literal AST 检测。
+const FIELD_KEY = {
+  GRID_LOWER: 'grid.lower',
+  GRID_UPPER: 'grid.upper',
+  GRID_RANGE_LOWER: 'grid.range.lower',
+  GRID_RANGE_UPPER: 'grid.range.upper',
+  GRID_SIDEMODE: 'grid.sidemode',
+  GRID_STEPPCT: 'grid.steppct',
+  MARKET_EXCHANGE: 'market.exchange',
+  MARKET_SYMBOL: 'market.symbol',
+  MARKET_TIMEFRAME: 'market.timeframe',
+  POSITION_SIZING: 'position.sizing',
+  RISK_EFFECT: 'risk.effect',
+  RISK_STOP_LOSS_PCT: 'risk.stop_loss_pct',
+  RISK_TAKE_PROFIT_PCT: 'risk.take_profit_pct',
+  RISK_MAX_DRAWDOWN_PCT: 'risk.max_drawdown_pct',
+  RISK_MAX_SINGLE_LOSS_PCT: 'risk.max_single_loss_pct',
+  RISK_CONDITION_EXPRESSION: 'risk.condition_expression',
+  RISK_PROTECTIVE_EXIT: 'risk.protective_exit',
+} as const
 
 interface GenerationOptions {
   providerCode?: string
@@ -1082,7 +1106,7 @@ export class CodegenConversationService {
       key,
       params: {
         valuePct,
-        direction: key === 'risk.stop_loss_pct' ? 'loss' : 'profit',
+        direction: key === FIELD_KEY.RISK_STOP_LOSS_PCT ? 'loss' : 'profit',
         basis: 'entry_avg_price',
         basisSource: 'system_default',
         effect: 'close_position',
@@ -2785,7 +2809,7 @@ export class CodegenConversationService {
       }
 
       const legacyPositionSizingSlot = isLegacyPositionSizingAnswer
-        ? nextState.position?.openSlots?.find(slot => slot.slotKey === 'position.sizing' && slot.status === 'open')
+        ? nextState.position?.openSlots?.find(slot => slot.slotKey === FIELD_KEY.POSITION_SIZING && slot.status === 'open')
         : undefined
       const targetSlotKey = isLegacyPositionSizingAnswer
         ? 'position.sizing'
@@ -3310,7 +3334,7 @@ export class CodegenConversationService {
     return {
       ...state,
       risk: [
-        ...state.risk.filter(risk => !(risk.key === 'risk.protective_exit' && risk.status === 'open')),
+        ...state.risk.filter(risk => !(risk.key === FIELD_KEY.RISK_PROTECTIVE_EXIT && risk.status === 'open')),
         {
           id: `risk-stop-loss-${state.risk.length + 1}`,
           key: 'risk.stop_loss_pct',
@@ -3386,9 +3410,9 @@ export class CodegenConversationService {
 
     if (
       state.risk.some(risk =>
-        risk.key === 'risk.protective_exit'
+        risk.key === FIELD_KEY.RISK_PROTECTIVE_EXIT
         && risk.status === 'open'
-        && risk.openSlots.some(slot => slot.slotKey === 'risk.protective_exit' && slot.status === 'open'),
+        && risk.openSlots.some(slot => slot.slotKey === FIELD_KEY.RISK_PROTECTIVE_EXIT && slot.status === 'open'),
       )
     ) {
       return state
@@ -3423,11 +3447,11 @@ export class CodegenConversationService {
         return false
       }
 
-      if (risk.key === 'risk.take_profit_pct') {
+      if (risk.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT) {
         return false
       }
 
-      if (risk.key === 'risk.condition_expression') {
+      if (risk.key === FIELD_KEY.RISK_CONDITION_EXPRESSION) {
         const effect = risk.params.effect
         const effectType = effect && typeof effect === 'object' && 'type' in effect
           ? (effect as { type?: unknown }).type
@@ -3446,9 +3470,9 @@ export class CodegenConversationService {
         return false
       }
 
-      return risk.key === 'risk.stop_loss_pct'
-        || risk.key === 'risk.max_drawdown_pct'
-        || risk.key === 'risk.max_single_loss_pct'
+      return risk.key === FIELD_KEY.RISK_STOP_LOSS_PCT
+        || risk.key === FIELD_KEY.RISK_MAX_DRAWDOWN_PCT
+        || risk.key === FIELD_KEY.RISK_MAX_SINGLE_LOSS_PCT
     })
   }
 
@@ -3466,7 +3490,7 @@ export class CodegenConversationService {
 
   private hasStopLossRisk(riskItems: SemanticState['risk']): boolean {
     return riskItems.some((risk) => {
-      if (risk.status !== 'locked' || risk.key !== 'risk.stop_loss_pct') {
+      if (risk.status !== 'locked' || risk.key !== FIELD_KEY.RISK_STOP_LOSS_PCT) {
         return false
       }
 
@@ -3515,7 +3539,7 @@ export class CodegenConversationService {
     return {
       ...state,
       risk: state.risk.filter(risk =>
-        !(risk.key === 'risk.protective_exit' && risk.status === 'open'),
+        !(risk.key === FIELD_KEY.RISK_PROTECTIVE_EXIT && risk.status === 'open'),
       ),
     }
   }
@@ -3708,7 +3732,7 @@ export class CodegenConversationService {
     if (this.isTakeProfitClarificationItem(item)) {
       return this.hasLockedExitSemantics(semanticState)
         || semanticState.risk.some(risk =>
-          risk.key === 'risk.take_profit_pct'
+          risk.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT
           && risk.status === 'locked'
           && typeof risk.params.valuePct === 'number'
           && Number.isFinite(risk.params.valuePct)
@@ -3777,9 +3801,9 @@ export class CodegenConversationService {
     return item.reason === 'missing_position_pct'
       || item.field === 'riskRules.positionPct'
       || item.key === 'riskRules.positionPct'
-      || item.key === 'position.sizing'
+      || item.key === FIELD_KEY.POSITION_SIZING
       || item.key === 'sizing.positionPct'
-      || item.slotKey === 'position.sizing'
+      || item.slotKey === FIELD_KEY.POSITION_SIZING
   }
 
   private isProtectiveRiskClarificationItem(item: StrategyClarificationItem): boolean {
@@ -3787,8 +3811,8 @@ export class CodegenConversationService {
       || item.field === 'riskRules.stopLossPct'
       || item.key === 'riskRules.stopLossPct'
       || item.key === 'risk.stopLoss.rule'
-      || item.key === 'risk.protective_exit'
-      || item.slotKey === 'risk.protective_exit'
+      || item.key === FIELD_KEY.RISK_PROTECTIVE_EXIT
+      || item.slotKey === FIELD_KEY.RISK_PROTECTIVE_EXIT
   }
 
   private isTakeProfitClarificationItem(item: StrategyClarificationItem): boolean {
@@ -4193,10 +4217,10 @@ export class CodegenConversationService {
   private toCanonicalGridClarificationSlotKey(
     item: StrategyClarificationItem,
   ): 'grid.range.lower' | 'grid.range.upper' | 'grid.stepPct' | 'grid.sideMode' | null {
-    if (item.key === 'grid.range.lower' || item.key === 'grid.lower') {
+    if (item.key === FIELD_KEY.GRID_RANGE_LOWER || item.key === FIELD_KEY.GRID_LOWER) {
       return 'grid.range.lower'
     }
-    if (item.key === 'grid.range.upper' || item.key === 'grid.upper') {
+    if (item.key === FIELD_KEY.GRID_RANGE_UPPER || item.key === FIELD_KEY.GRID_UPPER) {
       return 'grid.range.upper'
     }
     if (item.key === 'grid.stepPct') {
@@ -4206,13 +4230,13 @@ export class CodegenConversationService {
       return 'grid.sideMode'
     }
 
-    if (item.slotKey === 'grid.range.lower') return 'grid.range.lower'
-    if (item.slotKey === 'grid.range.upper') return 'grid.range.upper'
+    if (item.slotKey === FIELD_KEY.GRID_RANGE_LOWER) return 'grid.range.lower'
+    if (item.slotKey === FIELD_KEY.GRID_RANGE_UPPER) return 'grid.range.upper'
     if (item.slotKey === 'grid.stepPct') return 'grid.stepPct'
     if (item.slotKey === 'grid.sideMode') return 'grid.sideMode'
 
-    if (item.field === 'grid.range.lower' || item.field === 'grid.lower') return 'grid.range.lower'
-    if (item.field === 'grid.range.upper' || item.field === 'grid.upper') return 'grid.range.upper'
+    if (item.field === FIELD_KEY.GRID_RANGE_LOWER || item.field === FIELD_KEY.GRID_LOWER) return 'grid.range.lower'
+    if (item.field === FIELD_KEY.GRID_RANGE_UPPER || item.field === FIELD_KEY.GRID_UPPER) return 'grid.range.upper'
     if (item.field === 'grid.stepPct') return 'grid.stepPct'
     if (item.field === 'grid.sideMode') return 'grid.sideMode'
 
@@ -4303,10 +4327,10 @@ export class CodegenConversationService {
       if (!isSystemDefault || basis !== 'entry_avg_price') {
         continue
       }
-      if (riskEntry.key === 'risk.stop_loss_pct') {
+      if (riskEntry.key === FIELD_KEY.RISK_STOP_LOSS_PCT) {
         inferredAssumptions.add('risk.stopLossBasis')
       }
-      if (riskEntry.key === 'risk.take_profit_pct') {
+      if (riskEntry.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT) {
         inferredAssumptions.add('risk.takeProfitBasis')
       }
     }
@@ -4750,7 +4774,7 @@ export class CodegenConversationService {
       })
     }
 
-    if (item.key === 'market.symbol' || item.field === 'symbol') {
+    if (item.key === FIELD_KEY.MARKET_SYMBOL || item.field === 'symbol') {
       const symbol = normalizePublishedSymbol(normalizedAnswer)
       return this.normalizeLogicSnapshot({
         ...checklist,
@@ -4759,7 +4783,7 @@ export class CodegenConversationService {
       })
     }
 
-    if (item.key === 'market.timeframe' || item.field === 'timeframe') {
+    if (item.key === FIELD_KEY.MARKET_TIMEFRAME || item.field === 'timeframe') {
       const timeframe = normalizedAnswer
       return this.normalizeLogicSnapshot({
         ...checklist,
@@ -4768,7 +4792,7 @@ export class CodegenConversationService {
       })
     }
 
-    if (item.key === 'market.exchange' || item.field === 'exchange') {
+    if (item.key === FIELD_KEY.MARKET_EXCHANGE || item.field === 'exchange') {
       const exchange = this.normalizeExchangeClarificationAnswer(normalizedAnswer)
       if (!exchange) return checklist
       return this.normalizeLogicSnapshot({
@@ -4978,28 +5002,28 @@ export class CodegenConversationService {
     }
     const key = item.key.toLowerCase()
 
-    if (key === 'grid.range.lower' || key === 'grid.lower') {
+    if (key === FIELD_KEY.GRID_RANGE_LOWER || key === FIELD_KEY.GRID_LOWER) {
       const value = this.parseGridLogicNumericAnswer('grid.range.lower', answer)
       if (value === null) return null
       nextGrid.lower = value
       return nextGrid
     }
 
-    if (key === 'grid.range.upper' || key === 'grid.upper') {
+    if (key === FIELD_KEY.GRID_RANGE_UPPER || key === FIELD_KEY.GRID_UPPER) {
       const value = this.parseGridLogicNumericAnswer('grid.range.upper', answer)
       if (value === null) return null
       nextGrid.upper = value
       return nextGrid
     }
 
-    if (key === 'grid.steppct') {
+    if (key === FIELD_KEY.GRID_STEPPCT) {
       const value = this.parseGridLogicNumericAnswer('grid.stepPct', answer)
       if (value === null) return null
       nextGrid.stepPct = value
       return nextGrid
     }
 
-    if (key === 'grid.sidemode') {
+    if (key === FIELD_KEY.GRID_SIDEMODE) {
       const sideMode = this.normalizeGridLogicSideMode(answer)
       if (!sideMode) return null
       nextGrid.sideMode = sideMode
@@ -5959,7 +5983,7 @@ export class CodegenConversationService {
     clarificationState: StrategyClarificationStateWithSummary,
     normalization: NormalizationResult,
   ): StrategyClarificationStateWithSummary {
-    const hasActiveGrid = normalization.normalizedIntent.triggers.some(trigger => trigger.key === 'grid.range_rebalance')
+    const hasActiveGrid = normalization.normalizedIntent.triggers.some(trigger => trigger.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
     const items = clarificationState.items.filter(item => {
       if (
         hasActiveGrid
@@ -5993,10 +6017,10 @@ export class CodegenConversationService {
     }
 
     const isGoldenSupportedTriggerSet = triggers.every(trigger =>
-      trigger.key === 'price.percent_change'
-      || trigger.key === 'bollinger.touch_upper'
-      || trigger.key === 'bollinger.touch_lower'
-      || trigger.key === 'bollinger.touch_middle',
+      trigger.key === ATOM_CONTRACT_REGISTRY['price.percent_change'].key
+      || trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key
+      || trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key
+      || trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key,
     )
     if (!isGoldenSupportedTriggerSet) return false
 
@@ -6118,13 +6142,13 @@ export class CodegenConversationService {
     for (const risk of semanticState.risk) {
       if (risk.status !== 'locked' || risk.openSlots.length > 0) continue
       if (
-        risk.key === 'risk.condition_expression'
+        risk.key === FIELD_KEY.RISK_CONDITION_EXPRESSION
         && risk.params.capabilityStatus !== 'supported'
       ) {
         reasons.push(`unsupported:${risk.key}`)
         continue
       }
-      if (risk.key === 'risk.condition_expression' && !projectedSemanticKeys.has(risk.key)) {
+      if (risk.key === FIELD_KEY.RISK_CONDITION_EXPRESSION && !projectedSemanticKeys.has(risk.key)) {
         reasons.push(`unprojected:${risk.key}`)
       }
     }
@@ -6380,7 +6404,7 @@ export class CodegenConversationService {
     if (input.reason === 'atomic_semantic_fork' || input.key.toLowerCase().includes('trigger.confirmation')) {
       return ['touch', 'close_confirm']
     }
-    if (input.key.toLowerCase() === 'risk.effect') {
+    if (input.key.toLowerCase() === FIELD_KEY.RISK_EFFECT) {
       return ['reduce', 'close']
     }
     return undefined
@@ -6798,26 +6822,26 @@ export class CodegenConversationService {
     } as Record<string, unknown>
 
     for (const risk of state.risk) {
-      if (risk.key === 'risk.stop_loss_pct' && typeof risk.params.valuePct === 'number') {
+      if (risk.key === FIELD_KEY.RISK_STOP_LOSS_PCT && typeof risk.params.valuePct === 'number') {
         riskRules.stopLossPct = risk.params.valuePct
       }
-      if (risk.key === 'risk.take_profit_pct' && typeof risk.params.valuePct === 'number') {
+      if (risk.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT && typeof risk.params.valuePct === 'number') {
         riskRules.takeProfitPct = risk.params.valuePct
       }
-      if (risk.key === 'risk.max_drawdown_pct' && typeof risk.params.valuePct === 'number') {
+      if (risk.key === FIELD_KEY.RISK_MAX_DRAWDOWN_PCT && typeof risk.params.valuePct === 'number') {
         riskRules.maxDrawdownPct = risk.params.valuePct
       }
-      if (risk.key === 'risk.max_single_loss_pct' && typeof risk.params.valuePct === 'number') {
+      if (risk.key === FIELD_KEY.RISK_MAX_SINGLE_LOSS_PCT && typeof risk.params.valuePct === 'number') {
         riskRules.maxSingleLossPct = risk.params.valuePct
       }
       if (
-        (risk.key === 'risk.stop_loss_pct' || risk.key === 'risk.take_profit_pct')
+        (risk.key === FIELD_KEY.RISK_STOP_LOSS_PCT || risk.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT)
         && typeof risk.params.basis === 'string'
       ) {
-        if (risk.key === 'risk.stop_loss_pct') {
+        if (risk.key === FIELD_KEY.RISK_STOP_LOSS_PCT) {
           riskRules.stopLossBasis = risk.params.basis
         }
-        if (risk.key === 'risk.take_profit_pct') {
+        if (risk.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT) {
           riskRules.takeProfitBasis = risk.params.basis
         }
       }
@@ -6864,7 +6888,7 @@ export class CodegenConversationService {
     triggers: SemanticTriggerState[],
   ): StrategyLogicSnapshot['grid'] | undefined {
     const activeGrid = triggers.find(trigger =>
-      trigger.key === 'grid.range_rebalance'
+      trigger.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key
       && trigger.status !== 'superseded'
     )
     if (!activeGrid) {
@@ -6909,13 +6933,13 @@ export class CodegenConversationService {
     for (const trigger of state.triggers) {
       if (trigger.phase !== 'gate') continue
 
-      if (trigger.key === 'market.regime' && typeof trigger.params.value === 'string') {
+      if (trigger.key === ATOM_CONTRACT_REGISTRY['market.regime'].key && typeof trigger.params.value === 'string') {
         nextStateGates.marketRegime = trigger.params.value as NonNullable<StrategyLogicSnapshot['stateGates']>['marketRegime']
       }
-      if (trigger.key === 'trend.direction' && typeof trigger.params.value === 'string') {
+      if (trigger.key === ATOM_CONTRACT_REGISTRY['trend.direction'].key && typeof trigger.params.value === 'string') {
         nextStateGates.trendDirection = trigger.params.value as NonNullable<StrategyLogicSnapshot['stateGates']>['trendDirection']
       }
-      if (trigger.key === 'volatility.state' && typeof trigger.params.value === 'string') {
+      if (trigger.key === ATOM_CONTRACT_REGISTRY['volatility.state'].key && typeof trigger.params.value === 'string') {
         nextStateGates.volatilityState = trigger.params.value as NonNullable<StrategyLogicSnapshot['stateGates']>['volatilityState']
       }
     }
@@ -6934,25 +6958,25 @@ export class CodegenConversationService {
   }
 
   private buildProjectedRuleText(trigger: SemanticTriggerState): string | null {
-    if (trigger.key === 'execution.on_start') {
+    if (trigger.key === ATOM_CONTRACT_REGISTRY['execution.on_start'].key) {
       return this.buildProjectedExecutionRule(trigger)
     }
 
-    if (trigger.key === 'price.percent_change') {
+    if (trigger.key === ATOM_CONTRACT_REGISTRY['price.percent_change'].key) {
       return this.buildProjectedPercentChangeRule(trigger)
     }
 
     if (
-      (trigger.key === 'indicator.above' || trigger.key === 'indicator.below')
+      (trigger.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key || trigger.key === ATOM_CONTRACT_REGISTRY['indicator.below'].key)
       && trigger.params.indicator === 'ma'
     ) {
       return this.buildProjectedMovingAverageRule(trigger)
     }
 
     if (
-      trigger.key === 'bollinger.touch_upper'
-      || trigger.key === 'bollinger.touch_lower'
-      || trigger.key === 'bollinger.touch_middle'
+      trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key
+      || trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key
+      || trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key
     ) {
       return this.buildProjectedBollingerRule(trigger)
     }
@@ -7010,7 +7034,7 @@ export class CodegenConversationService {
     const confirmationPrefix = trigger.params.confirmationMode === 'close_confirm'
       ? '收盘确认'
       : (trigger.params.confirmationMode === 'touch' ? '盘中' : '')
-    const verb = trigger.key === 'indicator.above' ? '突破' : '跌破'
+    const verb = trigger.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key ? '突破' : '跌破'
     const action = trigger.phase === 'entry'
       ? (trigger.sideScope === 'short' ? '做空' : '买入')
       : (trigger.sideScope === 'short' ? '平空' : '卖出')
@@ -7026,16 +7050,16 @@ export class CodegenConversationService {
       : '触及'
 
     if (trigger.phase === 'entry') {
-      const band = trigger.key === 'bollinger.touch_upper'
+      const band = trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key
         ? '上轨'
-        : trigger.key === 'bollinger.touch_lower'
+        : trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key
           ? '下轨'
           : '中轨'
       const action = trigger.sideScope === 'short' ? '做空' : '做多'
       return `${confirmationPrefix}突破布林带(${period},${this.formatPositiveNumber(stdDev)})${band}时${action}`
     }
 
-    if (trigger.phase === 'exit' && trigger.key === 'bollinger.touch_middle') {
+    if (trigger.phase === 'exit' && trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key) {
       const action = this.resolveProjectedExitAction(trigger, {
         long: '平多',
         short: '平空',
@@ -8210,7 +8234,7 @@ export class CodegenConversationService {
 
     let changed = false
     const nextRisk = semanticState.risk.map(item => {
-      if (item.key === 'risk.stop_loss_pct' && nextStopLossBasis) {
+      if (item.key === FIELD_KEY.RISK_STOP_LOSS_PCT && nextStopLossBasis) {
         const currentBasis = this.readStrategyRuleBasisKind(item.params?.basis)
         if (currentBasis !== nextStopLossBasis) {
           changed = true
@@ -8224,7 +8248,7 @@ export class CodegenConversationService {
           }
         }
       }
-      if (item.key === 'risk.take_profit_pct' && nextTakeProfitBasis) {
+      if (item.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT && nextTakeProfitBasis) {
         const currentBasis = this.readStrategyRuleBasisKind(item.params?.basis)
         if (currentBasis !== nextTakeProfitBasis) {
           changed = true
