@@ -1838,10 +1838,12 @@ export class CanonicalSpecBuilderService {
       const variants: Array<{ sideScope: CanonicalRuleSideScope, actions: CanonicalRuleV2['actions'] }> = []
       const allowDefaultOnStartAction = this.isPureExecutionOnStartGroup(group)
       if (actionKeys.has('open_long') || allowDefaultOnStartAction) {
-        variants.push({ sideScope: 'long', actions: [this.buildOpenAction('OPEN_LONG', sizing)] })
+        const atomKey = actionKeys.has('open_long') ? 'action.open_long' : undefined
+        variants.push({ sideScope: 'long', actions: [this.buildOpenAction('OPEN_LONG', sizing, atomKey)] })
       }
       if (actionKeys.has('open_short') || allowDefaultOnStartAction) {
-        variants.push({ sideScope: 'short', actions: [this.buildOpenAction('OPEN_SHORT', sizing)] })
+        const atomKey = actionKeys.has('open_short') ? 'action.open_short' : undefined
+        variants.push({ sideScope: 'short', actions: [this.buildOpenAction('OPEN_SHORT', sizing, atomKey)] })
       }
       return variants
     }
@@ -1849,10 +1851,10 @@ export class CanonicalSpecBuilderService {
     if (group.phase === 'exit') {
       const closeActions: CanonicalRuleV2['actions'] = []
       if (actionKeys.has('close_long')) {
-        closeActions.push({ type: 'CLOSE_LONG' })
+        closeActions.push({ type: 'CLOSE_LONG', atomKey: 'action.close_long' })
       }
       if (actionKeys.has('close_short')) {
-        closeActions.push({ type: 'CLOSE_SHORT' })
+        closeActions.push({ type: 'CLOSE_SHORT', atomKey: 'action.close_short' })
       }
       return closeActions.length > 0
         ? [{ sideScope: 'both', actions: closeActions }]
@@ -1957,13 +1959,13 @@ export class CanonicalSpecBuilderService {
   ): CanonicalRuleV2['actions'] {
     switch (actionKey) {
       case 'open_long':
-        return [this.buildOpenAction('OPEN_LONG', sizing)]
+        return [this.buildOpenAction('OPEN_LONG', sizing, 'action.open_long')]
       case 'open_short':
-        return [this.buildOpenAction('OPEN_SHORT', sizing)]
+        return [this.buildOpenAction('OPEN_SHORT', sizing, 'action.open_short')]
       case 'close_long':
-        return [{ type: 'CLOSE_LONG' }]
+        return [{ type: 'CLOSE_LONG', atomKey: 'action.close_long' }]
       case 'close_short':
-        return [{ type: 'CLOSE_SHORT' }]
+        return [{ type: 'CLOSE_SHORT', atomKey: 'action.close_short' }]
       default:
         return []
     }
@@ -2114,6 +2116,7 @@ export class CanonicalSpecBuilderService {
       return [{
         type: sideScope === 'short' ? 'ADD_SHORT' : 'ADD_LONG',
         sizing: this.resolveSemanticActionSizing(action.params?.sizing) ?? defaultSizing ?? undefined,
+        atomKey: 'action.add_position',
       }]
     }
 
@@ -2122,7 +2125,7 @@ export class CanonicalSpecBuilderService {
       const toSide = this.readSideParam(action.params?.toSide) ?? (fromSide === 'long' ? 'short' : 'long')
       const sizingSource = this.readReverseSizingSource(action.params?.sizingSource)
       return [
-        { type: fromSide === 'long' ? 'CLOSE_LONG' : 'CLOSE_SHORT' },
+        { type: fromSide === 'long' ? 'CLOSE_LONG' : 'CLOSE_SHORT', atomKey: 'action.reverse_position' },
         {
           type: toSide === 'long' ? 'OPEN_LONG' : 'OPEN_SHORT',
           sizing: sizingSource === 'current_position'
@@ -2131,6 +2134,7 @@ export class CanonicalSpecBuilderService {
           ...(sizingSource === 'current_position'
             ? { params: { quantityMode: 'position_pct' } }
             : {}),
+          atomKey: 'action.reverse_position',
         },
       ]
     }
@@ -2540,19 +2544,21 @@ export class CanonicalSpecBuilderService {
 
     if (trigger.phase === 'entry') {
       if ((sideScope === 'long' || sideScope === 'both') && (actionKeys.has('open_long') || trigger.key === 'execution.on_start')) {
-        actions.push(this.buildOpenAction('OPEN_LONG', sizing))
+        const atomKey = actionKeys.has('open_long') ? 'action.open_long' : undefined
+        actions.push(this.buildOpenAction('OPEN_LONG', sizing, atomKey))
       }
       if ((sideScope === 'short' || sideScope === 'both') && (actionKeys.has('open_short') || trigger.key === 'execution.on_start')) {
-        actions.push(this.buildOpenAction('OPEN_SHORT', sizing))
+        const atomKey = actionKeys.has('open_short') ? 'action.open_short' : undefined
+        actions.push(this.buildOpenAction('OPEN_SHORT', sizing, atomKey))
       }
     }
 
     if (trigger.phase === 'exit') {
       if ((sideScope === 'long' || sideScope === 'both') && actionKeys.has('close_long')) {
-        actions.push({ type: 'CLOSE_LONG' })
+        actions.push({ type: 'CLOSE_LONG', atomKey: 'action.close_long' })
       }
       if ((sideScope === 'short' || sideScope === 'both') && actionKeys.has('close_short')) {
-        actions.push({ type: 'CLOSE_SHORT' })
+        actions.push({ type: 'CLOSE_SHORT', atomKey: 'action.close_short' })
       }
     }
 
@@ -3276,15 +3282,13 @@ export class CanonicalSpecBuilderService {
   private buildOpenAction(
     type: 'OPEN_LONG' | 'OPEN_SHORT',
     sizing: CanonicalStrategySpecV2['sizing'],
+    atomKey?: string,
   ): CanonicalRuleV2['actions'][number] {
     if (!sizing) {
-      return { type }
+      return atomKey ? { type, atomKey } : { type }
     }
 
-    return {
-      type,
-      sizing,
-    }
+    return atomKey ? { type, sizing, atomKey } : { type, sizing }
   }
 
   private isMovingAverageRule(text: string): boolean {

@@ -79,6 +79,13 @@ export interface CanonicalRuleAction {
     asset?: string
   }
   params?: Record<string, number | string | boolean>
+  /**
+   * Issue #1313 PR5b — 透传触发该 action 的语义 atom key（如 `action.open_long`）。
+   * 仅在 builder 从 semantic action atom 派生 action 时挂载；启发式 / risk / fallback
+   * 路径下不挂。IR-compiler.compileActions 重建 ActionDef 时不携带本字段，故 IR / 编译产物 / digest
+   * 对启发式路径维持 byte-equal；本字段仅为 PR5c+ 在 IR 层反查 REGISTRY 调度提供输入。
+   */
+  readonly atomKey?: string
 }
 
 export interface CanonicalRuleNormalizedMetadata {
