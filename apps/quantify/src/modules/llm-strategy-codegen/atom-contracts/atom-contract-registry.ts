@@ -184,12 +184,10 @@ const ATOM_PUBLIC_NAMES = {
 export { ATOM_PUBLIC_NAMES }
 
 function createPr1bStubIrShape(key: AtomContractKey): Pr1bStubIrShapeBuilder {
-  return Object.assign(
-    (() => {
-      throw new Error(`[#1279 PR1b stub] emit.irShape for ${key} pending PR3a IR compiler refactor`)
-    }) as AtomContractEmit['irShape'],
-    { __pr1bStub: true as const },
-  )
+  const stub = ((): string => {
+    throw new Error(`[#1279 PR1b stub] emit.irShape for ${key} pending PR3a/PR3d/PR3e IR compiler refactor`)
+  }) as AtomContractEmit['irShape']
+  return Object.assign(stub, { __pr1bStub: true as const })
 }
 
 // Issue #1279 PR1c: createPr1bDisplay 接受 {zh, en} 对象解构（review M2：消除位置参数顺序错陷阱）。

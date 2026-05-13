@@ -24,8 +24,9 @@ const validDisplay: AtomContractDisplay = {
 
 const validEmit: AtomContractEmit = {
   capability: { domain: 'trigger', verb: 'emit', object: 'rsi_lte' },
+  // PR3a: irShape 返回 predicate id `string`；stub 形态调用即抛错，与 createPr1bStubIrShape 等价
   irShape: Object.assign(
-    (() => ({ kind: 'stub', atomKey: 'oscillator.rsi_lte', params: {} })),
+    ((): string => { throw new Error('[#1279 PR1b stub] counter-example placeholder') }) as AtomContractEmit['irShape'],
     { __pr1bStub: true as const },
   ),
   evidenceSource: 'clause',
@@ -75,8 +76,8 @@ describe('atom contract invariant counter examples', () => {
       display: validDisplay,
     }
 
-    // @ts-expect-error PR1b irShape values must carry the stub marker until PR3a.
-    const nonStubIrShape: Pr1bStubIrShapeBuilder = () => ({ kind: 'real', atomKey: 'x', params: {} })
+    // @ts-expect-error PR3a：缺 `__pr1bStub: true` 品牌 → 不能赋给 Pr1bStubIrShapeBuilder（用于守护 stub vs real 分流）
+    const nonStubIrShape: Pr1bStubIrShapeBuilder = () => 'real-predicate-id'
 
     expect([
       missingSurface,

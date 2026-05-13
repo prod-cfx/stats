@@ -32,6 +32,11 @@ import type {
 } from '../types/canonical-strategy-spec'
 import type { SemanticExpressionOperand } from '../types/semantic-state'
 import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
+import type {
+  IrBuildContext,
+  IrCompileContext,
+  IrCompileHelpers,
+} from '../atom-contracts/atom-contract-emit.types'
 import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
@@ -62,6 +67,15 @@ interface CompileCanonicalSpecV2ToIrResult {
   ir: CanonicalStrategyIrV1
 }
 
+/**
+ * Issue #1279 PR3a：private CompileContext 与 atom-contracts 共享 shape
+ *   `IrCompileContext` 同形（结构兼容），atom 的 emit.irShape 通过 ctx.compileContext
+ *   读写 seriesMap / predicateMap / runtimeRequirements。
+ *
+ * 双向 `extends` 编译期断言（见 _compileContextShapeGuard）兜底，避免日后字段漂移：
+ * CompileContext 缺字段 / 类型缩窄 / IrCompileContext 单边扩字段 → 编译失败，
+ * 提示同步更新两侧定义。
+ */
 interface CompileContext {
   timeframe: string
   seriesMap: Map<string, SeriesDef>
@@ -90,6 +104,12 @@ interface CompileContext {
     stateKeys: Set<string>
   }
 }
+
+// 编译期守门：CompileContext 与 IrCompileContext 必须保持兼容（双向赋值）
+type _CompileContextAssignableToIr = CompileContext extends IrCompileContext ? true : never
+type _IrContextAssignableToCompile = IrCompileContext extends CompileContext ? true : never
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _compileContextShapeGuard: [_CompileContextAssignableToIr, _IrContextAssignableToCompile] = [true, true]
 
 @Injectable()
 export class CanonicalSpecV2IrCompilerService {
@@ -3955,5 +3975,47 @@ export class CanonicalSpecV2IrCompilerService {
     if (!Number.isFinite(value)) return 0.5
     const normalized = value > 1 ? value / 100 : value
     return Number(Math.min(1, Math.max(0, normalized)).toFixed(4))
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Issue #1279 PR3a — IR shape helper exposure
+  //
+  // 把 service 内 private ensure*/upsertPredicate/readNumber/resolveComparisonKind
+  // 等 helper 绑定成 IrCompileHelpers，供 atom-contract-registry 内 emit.irShape
+  // 真实实现消费。helpers 对象在第一次访问时缓存，避免每个 atom 重复 bind。
+  // ─────────────────────────────────────────────────────────────
+
+  private __irHelpers?: IrCompileHelpers
+
+  private get irHelpers(): IrCompileHelpers {
+    if (!this.__irHelpers) {
+      this.__irHelpers = {
+        ensurePriceSeries: this.ensurePriceSeries.bind(this),
+        ensureMovingAverageSeries: this.ensureMovingAverageSeries.bind(this),
+        ensureRsiSeries: this.ensureRsiSeries.bind(this),
+        ensureBollingerSeries: this.ensureBollingerSeries.bind(this),
+        ensureChannelSeries: this.ensureChannelSeries.bind(this),
+        ensureRangePositionSeries: this.ensureRangePositionSeries.bind(this),
+        ensureGridLevelSet: this.ensureGridLevelSet.bind(this),
+        ensureStateContextSeries: this.ensureStateContextSeries.bind(this),
+        ensureConstSeries: this.ensureConstSeries.bind(this),
+        ensureIndicatorReferenceSeries: this.ensureIndicatorReferenceSeries.bind(this),
+        upsertPredicate: this.upsertPredicate.bind(this),
+        readNumber: this.readNumber.bind(this),
+        resolveComparisonKind: this.resolveComparisonKind.bind(this),
+        normalizeRangePositionThreshold: this.normalizeRangePositionThreshold.bind(this),
+        resolveMovingAverageAtomConfig: this.resolveMovingAverageAtomConfig.bind(this),
+      }
+    }
+    return this.__irHelpers
+  }
+
+  private buildAtomIrShapeContext(context: CompileContext, seed: string, closeRef: string): IrBuildContext {
+    return {
+      seed,
+      compileContext: context,
+      helpers: this.irHelpers,
+      closeRef,
+    }
   }
 }
