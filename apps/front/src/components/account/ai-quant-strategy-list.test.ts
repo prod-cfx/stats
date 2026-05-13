@@ -208,6 +208,34 @@ describe('AiQuantStrategyList primary summary', () => {
     expect(out).toEqual(['暂无参数'])
   })
 
+  it('localizes system field labels in dynamic summaries', () => {
+    const record = makeListRecord({
+      paramSchema: {
+        type: 'object',
+        properties: {
+          symbol: { type: 'string' },
+          timeframe: { type: 'string' },
+          marketType: { type: 'string' },
+          leverage: { type: 'number' },
+        },
+      },
+      paramValues: {
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        marketType: 'spot',
+        leverage: 2,
+      },
+    })
+    const out = buildPrimarySummary(record, mockT)
+
+    expect(out).toEqual([
+      '交易对: BTCUSDT',
+      '时间周期: 15m',
+      '市场类型: 现货',
+    ])
+    expect(out.join(' / ')).not.toContain('marketType')
+  })
+
   it('uses a stop-specific label for running strategies to avoid duplicate detail actions', () => {
     const t = mockT
 
@@ -329,6 +357,42 @@ describe('AiQuantStrategyList primary summary', () => {
       userId: 'user-1',
       action: 'stop',
     })
+  })
+
+  it('renders strategy cards with performance metrics for the console overview', async () => {
+    await renderStrategyListWithItems([
+      listItem({
+        name: 'BTC Momentum',
+        metrics: { returnPct: 21.8, maxDrawdownPct: 12.3, winRatePct: 58.4, tradeCount: 74 },
+      }),
+    ])
+
+    expect(container.textContent).toContain('BTC Momentum')
+    expect(container.textContent).toContain('收益')
+    expect(container.textContent).toContain('+21.8%')
+    expect(container.textContent).toContain('回撤')
+    expect(container.textContent).toContain('12.3%')
+    expect(container.textContent).toContain('胜率')
+    expect(container.textContent).toContain('58.4%')
+    expect(container.textContent).toContain('交易')
+    expect(container.textContent).toContain('74')
+  })
+
+  it('shows average return in the console overview instead of summing return percentages', async () => {
+    await renderStrategyListWithItems([
+      listItem({
+        id: 'stg-return-1',
+        metrics: { returnPct: 10, maxDrawdownPct: 0, winRatePct: 40, tradeCount: 1 },
+      }),
+      listItem({
+        id: 'stg-return-2',
+        metrics: { returnPct: 30, maxDrawdownPct: 0, winRatePct: 60, tradeCount: 1 },
+      }),
+    ])
+
+    expect(container.textContent).toContain('平均收益')
+    expect(container.textContent).toContain('+20%')
+    expect(container.textContent).not.toContain('+40%')
   })
 
   it('calls liquidate_and_stop from the list stop dialog when user chooses liquidation', async () => {
@@ -599,12 +663,13 @@ describe('AiQuantStrategyList primary summary', () => {
 describe('filterStrategiesByTab / computeTabCounts', () => {
   const running = makeListRecord({ id: 'r', status: 'running', viewOnlyAt: null })
   const stopped = makeListRecord({ id: 's', status: 'stopped', viewOnlyAt: null })
+  const draft = makeListRecord({ id: 'd', status: 'draft', viewOnlyAt: null })
   const historyStopped = makeListRecord({ id: 'h1', status: 'stopped', viewOnlyAt: '2026-04-01T00:00:00.000Z' })
   const historyRunning = makeListRecord({ id: 'h2', status: 'running', viewOnlyAt: '2026-04-02T00:00:00.000Z' })
-  const all = [running, stopped, historyStopped, historyRunning]
+  const all = [running, stopped, draft, historyStopped, historyRunning]
 
   it('all tab excludes view-only', () => {
-    expect(filterStrategiesByTab(all, 'all').map(x => x.id)).toEqual(['r', 's'])
+    expect(filterStrategiesByTab(all, 'all').map(x => x.id)).toEqual(['r', 's', 'd'])
   })
 
   it('running tab excludes view-only running', () => {
@@ -619,8 +684,8 @@ describe('filterStrategiesByTab / computeTabCounts', () => {
     expect(filterStrategiesByTab(all, 'history').map(x => x.id).sort()).toEqual(['h1', 'h2'])
   })
 
-  it('computeTabCounts splits all = running + stopped, history independent', () => {
-    expect(computeTabCounts(all)).toEqual({ all: 2, running: 1, stopped: 1, history: 2 })
+  it('computeTabCounts keeps all aligned with every non-history strategy', () => {
+    expect(computeTabCounts(all)).toEqual({ all: 3, running: 1, stopped: 1, history: 2 })
   })
 })
 

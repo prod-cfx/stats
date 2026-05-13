@@ -36,7 +36,7 @@ export function ConversationSidebar({ items, activeId, onSwitch, onCreate, onRen
       <button
         type="button"
         onClick={onCreate}
-        className="mb-3 w-full rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 px-3 py-2 text-sm font-bold text-white transition-all hover:from-violet-600 hover:to-purple-700"
+        className="cf-primary-cta mb-3 min-h-11 w-full rounded-xl px-3 text-sm font-bold transition-all"
       >
         {t('aiQuant.createChat')}
       </button>

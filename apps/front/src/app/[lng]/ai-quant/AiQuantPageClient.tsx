@@ -6,7 +6,7 @@ import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capabi
 import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ShieldCheck, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -1584,14 +1584,16 @@ export function AiQuantPageClient({
         <div className="flex items-center gap-2">
           <Link
             href={`/${lng}/ai-quant/plaza`}
-            className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+            className="cf-ai-action-button cf-ai-action-neutral inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
+            <Sparkles className="h-4 w-4" />
             {t('aiQuant.plaza')}
           </Link>
           <Link
             href={`/${lng}/account?tab=settings#exchange-api`}
-            className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+            className="cf-ai-action-button cf-ai-action-neutral inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
+            <ShieldCheck className="h-4 w-4" />
             {t('aiQuant.configApi')}
           </Link>
         </div>

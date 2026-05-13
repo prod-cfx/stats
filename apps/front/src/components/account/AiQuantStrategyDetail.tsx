@@ -107,6 +107,11 @@ function formatMarketTypeLabel(marketType: AiQuantStrategyRecord['marketType'], 
   }
 }
 
+function formatParamSnapshotLabel(key: string, fallback: string, t: DetailTranslation) {
+  const translated = t(`aiQuant.paramLabels.${key}`, { defaultValue: fallback })
+  return translated || fallback
+}
+
 function isContractMarket(marketType: AiQuantStrategyRecord['marketType']) {
   return marketType === 'perp' || marketType === 'swap' || marketType === 'futures'
 }
@@ -532,8 +537,12 @@ export function AiQuantStrategyDetail({
   const adjacentChangePct = hoverIndex !== null ? deriveAdjacentChangePct(series, hoverIndex) : null
   const baseCurrency = strategy?.accountOverview?.baseCurrency ?? 'USDT'
   const dynamicParamRows = useMemo(
-    () => buildDynamicParamRows(strategy?.paramSchema ?? null, strategy?.paramValues ?? null),
-    [strategy?.paramSchema, strategy?.paramValues],
+    () => buildDynamicParamRows(strategy?.paramSchema ?? null, strategy?.paramValues ?? null)
+      .map(row => ({
+        ...row,
+        label: formatParamSnapshotLabel(row.key, row.label, t),
+      })),
+    [strategy?.paramSchema, strategy?.paramValues, t],
   )
   const isSpotMarket = strategy?.marketType === 'spot'
   // viewOnlyAt 非空 = 用户已主动把该策略转为只读：详情页仅作历史审计展示，
@@ -1203,26 +1212,26 @@ export function AiQuantStrategyDetail({
               <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
                 <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.paramSnapshotTitle')}</h2>
                 <div className="mt-3 space-y-2 text-sm text-[color:var(--cf-text)]">
-                  {dynamicParamRows.length > 0
-                    ? dynamicParamRows.map(row => (
-                        <p key={row.key} className="flex items-start gap-2">
-                          <span className="text-[color:var(--cf-muted)]">{row.label}</span>
-                          <span>{row.value}</span>
-                        </p>
-                      ))
-                    : <p className="text-[color:var(--cf-muted)]">{t('aiQuant.paramSummaryEmpty')}</p>}
-                  {strategy.deploy && (
-                    <>
-                      <p className="flex items-start gap-2">
-                        <span className="text-[color:var(--cf-muted)]">{t('aiQuant.deployAccountLabel')}</span>
-                        <span>{strategy.deploy.accountName}</span>
-                      </p>
-                      <p className="flex items-start gap-2">
-                        <span className="text-[color:var(--cf-muted)]">{t('aiQuant.deployTimeLabel')}</span>
-                        <span>{strategy.deploy.at.replace('T', ' ').slice(0, 16)}</span>
-                      </p>
-                    </>
-                  )}
+	                  {dynamicParamRows.length > 0
+	                    ? dynamicParamRows.map(row => (
+	                        <p key={row.key} className="grid gap-2 sm:grid-cols-[8rem_minmax(0,1fr)]">
+	                          <span className="text-[color:var(--cf-muted)]">{row.label}</span>
+	                          <span className="min-w-0 break-words">{row.value}</span>
+	                        </p>
+	                      ))
+	                    : <p className="text-[color:var(--cf-muted)]">{t('aiQuant.paramSummaryEmpty')}</p>}
+	                  {strategy.deploy && (
+	                    <>
+	                      <p className="grid gap-2 sm:grid-cols-[8rem_minmax(0,1fr)]">
+	                        <span className="text-[color:var(--cf-muted)]">{t('aiQuant.deployAccountLabel')}</span>
+	                        <span className="min-w-0 break-words">{strategy.deploy.accountName}</span>
+	                      </p>
+	                      <p className="grid gap-2 sm:grid-cols-[8rem_minmax(0,1fr)]">
+	                        <span className="text-[color:var(--cf-muted)]">{t('aiQuant.deployTimeLabel')}</span>
+	                        <span className="min-w-0 break-words">{strategy.deploy.at.replace('T', ' ').slice(0, 16)}</span>
+	                      </p>
+	                    </>
+	                  )}
                 </div>
               </article>
             )

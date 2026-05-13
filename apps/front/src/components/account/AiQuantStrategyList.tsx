@@ -18,7 +18,7 @@ import {
   performAccountAiQuantStrategyAction,
 } from '@/lib/api'
 import { mapAccountStrategyDetailToRecord, mapAccountStrategyListItemToRecord } from './ai-quant-strategy-api-adapter'
-import { buildDynamicParamSummary } from './dynamic-param-summary'
+import { buildDynamicParamRows } from './dynamic-param-summary'
 
 export const STRATEGY_LIST_FETCH_LIMIT = 100
 
@@ -60,20 +60,48 @@ export function computeTabCounts(items: AiQuantStrategyRecord[]): StrategyFilter
   let running = 0
   let stopped = 0
   let history = 0
+  let active = 0
   for (const item of items) {
     if (isHistory(item)) {
       history++
       continue
     }
+    active++
     if (item.status === 'running') running++
     else if (item.status === 'stopped') stopped++
   }
-  return { all: running + stopped, running, stopped, history }
+  return { all: active, running, stopped, history }
 }
 
 const TAB_ORDER: StrategyFilterTabKey[] = ['all', 'running', 'stopped', 'history']
 
 type StrategyListTranslation = (key: string, options?: { defaultValue?: string }) => string
+
+function formatPct(value: number, signed = false) {
+  const normalized = Number.isFinite(value) ? value : 0
+  const formatted = Number(normalized.toFixed(2)).toLocaleString('en-US', {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: normalized % 1 === 0 ? 0 : 1,
+  })
+  return `${signed && normalized > 0 ? '+' : ''}${formatted}%`
+}
+
+function formatMetricNumber(value: number) {
+  if (!Number.isFinite(value)) return '--'
+  return Number(value.toFixed(2)).toLocaleString('en-US', { maximumFractionDigits: 2 })
+}
+
+function computeMetricSummary(items: AiQuantStrategyRecord[]) {
+  const activeItems = items.filter(item => !isHistory(item))
+  const averageReturnPct = activeItems.length
+    ? activeItems.reduce((sum, item) => sum + item.metrics.returnPct, 0) / activeItems.length
+    : 0
+  const averageWinRate = activeItems.length
+    ? activeItems.reduce((sum, item) => sum + item.metrics.winRatePct, 0) / activeItems.length
+    : 0
+
+  return { averageReturnPct, averageWinRate }
+}
 
 function StrategyFilterTabs({
   active,
@@ -87,7 +115,7 @@ function StrategyFilterTabs({
   t: StrategyListTranslation
 }) {
   return (
-    <div role="tablist" className="flex items-center gap-1 border-b border-[color:var(--cf-border)] px-1">
+    <div role="tablist" className="cf-strategy-filter-tabs no-scrollbar flex items-center gap-1 overflow-x-auto rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-1">
       {TAB_ORDER.map((key) => {
         const isActive = key === active
         return (
@@ -100,14 +128,14 @@ function StrategyFilterTabs({
             data-active={isActive ? 'true' : 'false'}
             data-count={counts[key]}
             onClick={() => onChange(key)}
-            className={`-mb-px flex items-center gap-1.5 px-3 py-2 text-sm transition-colors ${
+            className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm transition-colors ${
               isActive
-                ? 'border-b-2 border-primary font-semibold text-[color:var(--cf-text-strong)]'
-                : 'border-b-2 border-transparent text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
+                ? 'bg-[color:var(--cf-surface)] font-semibold text-[color:var(--cf-text-strong)] shadow-sm'
+                : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]'
             }`}
           >
             <span>{t(`aiQuant.filter.${key}`)}</span>
-            <span className="rounded-full bg-[color:var(--cf-surface)] px-2 py-0.5 text-xs font-medium text-[color:var(--cf-muted)] border border-[color:var(--cf-border)]">
+            <span className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2 py-0.5 text-xs font-medium text-[color:var(--cf-muted)]">
               {counts[key]}
             </span>
           </button>
@@ -130,16 +158,33 @@ function fmtTime(ts: string, lng: string) {
 export function buildParamSummary(
   paramSchema: Record<string, unknown> | null,
   paramValues: Record<string, unknown> | null,
+  t?: StrategyListTranslation,
 ): string[] {
-  return buildDynamicParamSummary(paramSchema, paramValues, 3)
+  return buildDynamicParamRows(paramSchema, paramValues)
+    .slice(0, 3)
+    .map(row => `${formatParamSummaryLabel(row.key, row.label, t)}: ${formatParamSummaryValue(row.key, row.value, t)}`)
+}
+
+function formatParamSummaryLabel(key: string, fallback: string, t?: StrategyListTranslation) {
+  if (!t) return fallback
+  const translationKey = `aiQuant.paramLabels.${key}`
+  const translated = t(translationKey, { defaultValue: fallback })
+  return translated === translationKey ? fallback : translated
+}
+
+function formatParamSummaryValue(key: string, value: string, t?: StrategyListTranslation) {
+  if (!t || key !== 'marketType') return value
+  const translationKey = `aiQuant.detail.marketTypes.${value}`
+  const translated = t(translationKey, { defaultValue: value })
+  return translated === translationKey ? value : translated
 }
 
 export function buildPrimarySummary(
   item: Pick<AiQuantStrategyRecord, 'exchange' | 'symbol' | 'timeframe' | 'positionPct' | 'paramSchema' | 'paramValues'>,
-  t: (key: string) => string,
+  t: StrategyListTranslation,
 ): string[] {
   if (item.paramSchema) {
-    const dynamicSummary = buildParamSummary(item.paramSchema, item.paramValues)
+    const dynamicSummary = buildParamSummary(item.paramSchema, item.paramValues, t)
     return dynamicSummary.length ? dynamicSummary : [t('aiQuant.paramSummaryEmpty')]
   }
 
@@ -167,7 +212,7 @@ export function AiQuantStrategyPrimarySummary({
   keyPrefix,
 }: {
   item: Pick<AiQuantStrategyRecord, 'exchange' | 'symbol' | 'timeframe' | 'positionPct' | 'paramSchema' | 'paramValues'>
-  t: (key: string) => string
+  t: StrategyListTranslation
   keyPrefix: string
 }) {
   const entries = buildPrimarySummary(item, t)
@@ -211,6 +256,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
     () => filterStrategiesByTab(strategies, activeTab),
     [strategies, activeTab],
   )
+  const metricSummary = useMemo(() => computeMetricSummary(strategies), [strategies])
 
   const loadStrategies = useCallback(async () => {
     if (!session) return
@@ -428,7 +474,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
         </p>
         <Link
           href={`/${lng}/ai-quant`}
-          className="mt-6 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 px-6 py-2.5 text-sm font-bold !text-white shadow-sm transition-transform hover:scale-105 active:scale-95"
+          className="cf-primary-cta mt-6 rounded-xl px-6 py-2.5 text-sm font-bold !text-white transition-transform hover:scale-105 active:scale-95"
         >
           {t('aiQuant.createStrategy')}
         </Link>
@@ -437,15 +483,41 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
   }
 
   return (
-    <section className="space-y-4">
-      <div className="flex items-center justify-between px-1">
-        <h3 className="text-lg font-bold text-[color:var(--cf-text-strong)]">{t('aiQuant.myStrategies')}</h3>
-        <span className="rounded-full bg-[color:var(--cf-surface)] px-2.5 py-0.5 text-xs font-medium text-[color:var(--cf-muted)] border border-[color:var(--cf-border)]">
-          {counts.all}
-        </span>
+    <section className="space-y-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[
+          { label: t('aiQuant.filter.running'), value: counts.running, tone: 'text-emerald-500' },
+          { label: t('aiQuant.filter.stopped'), value: counts.stopped, tone: 'text-[color:var(--cf-text-strong)]' },
+          {
+            label: t('aiQuant.consoleAvgReturn', { defaultValue: '平均收益' }),
+            value: formatPct(metricSummary.averageReturnPct, true),
+            tone: metricSummary.averageReturnPct >= 0 ? 'text-emerald-500' : 'text-red-500',
+          },
+          {
+            label: t('aiQuant.consoleAvgWinRate', { defaultValue: '平均胜率' }),
+            value: formatPct(metricSummary.averageWinRate),
+            tone: 'text-[color:var(--cf-text-strong)]',
+          },
+        ].map(item => (
+          <div
+            key={item.label}
+            className="cf-ai-overview-card rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4"
+          >
+            <p className="text-xs font-medium text-[color:var(--cf-muted)]">{item.label}</p>
+            <p className={`mt-2 text-xl font-semibold tabular-nums ${item.tone}`}>{item.value}</p>
+          </div>
+        ))}
       </div>
 
-      <StrategyFilterTabs active={activeTab} counts={counts} onChange={setActiveTab} t={t} />
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h3 className="text-lg font-bold text-[color:var(--cf-text-strong)]">{t('aiQuant.myStrategies')}</h3>
+          <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+            {t('aiQuant.consoleListHint', { defaultValue: '查看策略状态、表现指标和最近执行入口。' })}
+          </p>
+        </div>
+        <StrategyFilterTabs active={activeTab} counts={counts} onChange={setActiveTab} t={t} />
+      </div>
 
       {strategies.length >= STRATEGY_LIST_FETCH_LIMIT && (
         <div
@@ -472,94 +544,132 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
           {t('aiQuant.filter.emptyForTab', { defaultValue: '当前分类下暂无策略' })}
         </div>
       ) : (
-      <div className="space-y-3">
-        {filteredStrategies.map(item => {
-          const statusConfig = STATUS_CONFIG[item.status]
-          const StatusIcon = statusConfig.icon
-          // viewOnlyAt 非空即只读：Run/Stop/Delete 全部隐藏，仅留「查看详情」入口。
-          // running + viewOnlyAt 这种异常组合也走只读分支；用户进入详情后自行处理 running。
-          const isViewOnly = Boolean(item.viewOnlyAt)
+        <div className="space-y-3">
+          {filteredStrategies.map(item => {
+            const statusConfig = STATUS_CONFIG[item.status]
+            const StatusIcon = statusConfig.icon
+            // viewOnlyAt 非空即只读：Run/Stop/Delete 全部隐藏，仅留「查看详情」入口。
+            // running + viewOnlyAt 这种异常组合也走只读分支；用户进入详情后自行处理 running。
+            const isViewOnly = Boolean(item.viewOnlyAt)
 
-          return (
-            <div
-              key={item.id}
-              className="group flex items-center justify-between rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 transition-all hover:border-primary/50 hover:shadow-sm"
-            >
-              <Link href={`/${lng}/account/ai-quant/strategy/${item.id}`} className="flex items-center gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-bold text-[color:var(--cf-text-strong)] group-hover:text-primary transition-colors">
-                      {item.name}
-                    </h4>
-                    <div className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusConfig.className}`}>
-                      <StatusIcon className="h-3 w-3" />
-                      {statusConfig.label}
+            return (
+              <div
+                key={item.id}
+                className="cf-ai-strategy-card group rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 transition-all hover:border-primary/50 hover:shadow-sm"
+              >
+                <div className="space-y-4">
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+                    <Link href={`/${lng}/account/ai-quant/strategy/${item.id}`} className="block min-w-0">
+                      <div className="min-w-0 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-bold text-[color:var(--cf-text-strong)] transition-colors group-hover:text-primary">
+                            {item.name}
+                          </h4>
+                          <div className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusConfig.className}`}>
+                            <StatusIcon className="h-3 w-3" />
+                            {statusConfig.label}
+                          </div>
+                          <div className="flex items-center gap-1 text-xs text-[color:var(--cf-muted)]">
+                            <Clock className="h-3 w-3" />
+                            <span>{t('aiQuant.updatedAt')}</span>
+                            <span>{fmtTime(item.updatedAt, lng)}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-5 text-[color:var(--cf-muted)]">
+                          <AiQuantStrategyPrimarySummary item={item} t={t} keyPrefix={item.id} />
+                        </div>
+                      </div>
+                    </Link>
+
+                    <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap lg:justify-end">
+
+                      {!isViewOnly && (
+                        item.status === 'running' ? (
+                          <button
+                            type="button"
+                            onClick={e => { void openStopDialog(e, item) }}
+                            disabled={pendingActionId === item.id}
+                            className="cf-ai-action-button cf-ai-action-danger flex min-h-10 min-w-[104px] items-center justify-center gap-1.5 rounded-md border border-red-500/25 bg-red-500/[0.06] px-3 text-xs font-semibold text-red-500 transition hover:border-red-500/40 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
+                          >
+                            <StopCircle className="h-3 w-3" />
+                            {getStrategyRuntimeActionLabel(item.status, t)}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={e => handleStatusChange(e, item.id, 'running')}
+                            disabled={pendingActionId === item.id}
+                            className="cf-ai-action-button cf-ai-action-success flex min-h-10 min-w-[72px] items-center justify-center gap-1.5 rounded-md border border-emerald-500/25 bg-emerald-500/[0.06] px-3 text-xs font-semibold text-emerald-500 transition hover:border-emerald-500/40 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-400"
+                          >
+                            <Play className="h-3 w-3 fill-current" />
+                            {t('aiQuant.actions.run')}
+                          </button>
+                        )
+                      )}
+
+                      {!isViewOnly && (
+                        <button
+                        type="button"
+                        onClick={e => { void openDeleteDialog(e, item) }}
+                        disabled={accountDeleteDialog?.strategy.id === item.id && accountDeleteDialog.pending}
+                        className="cf-ai-action-button cf-ai-action-danger-muted flex min-h-10 min-w-[76px] items-center justify-center gap-1.5 rounded-md border border-red-500/20 bg-transparent px-3 text-xs font-semibold text-red-500 transition hover:border-red-500/35 hover:bg-red-500/[0.06] disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        {accountDeleteDialog?.strategy.id === item.id && accountDeleteDialog.pending
+                            ? t('aiQuant.actions.deleting')
+                            : t('aiQuant.actions.delete')}
+                        </button>
+                      )}
+
+                      <Link
+                        href={`/${lng}/account/ai-quant/strategy/${item.id}`}
+                        className="cf-ai-action-button cf-ai-action-neutral inline-flex min-h-10 min-w-[96px] items-center justify-center rounded-md border border-[color:var(--cf-border)] bg-transparent px-3 text-xs font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-bg)] group-hover:border-primary/30 group-hover:text-primary"
+                      >
+                        {t('aiQuant.viewDetail')}
+                      </Link>
+                      </div>
                     </div>
-                  </div>
-                  <div className="mt-1 flex items-center gap-2 text-xs text-[color:var(--cf-muted)]">
-                    <AiQuantStrategyPrimarySummary item={item} t={t} keyPrefix={item.id} />
-                  </div>
-                </div>
-              </Link>
 
-              <div className="flex items-center gap-4">
-                <div className="hidden text-right text-xs text-[color:var(--cf-muted)] sm:block">
-                  <div className="flex items-center justify-end gap-1">
-                    <Clock className="h-3 w-3" />
-                    {t('aiQuant.updatedAt')}
-                  </div>
-                  <div className="mt-0.5">{fmtTime(item.updatedAt, lng)}</div>
-                </div>
-
-                {!isViewOnly && (
-                  item.status === 'running' ? (
-                    <button
-                      type="button"
-                      onClick={e => { void openStopDialog(e, item) }}
-                      disabled={pendingActionId === item.id}
-                      className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-500/20 dark:text-red-400"
-                    >
-                      <StopCircle className="h-3 w-3" />
-                      {getStrategyRuntimeActionLabel(item.status, t)}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={e => handleStatusChange(e, item.id, 'running')}
-                      disabled={pendingActionId === item.id}
-                      className="flex items-center gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20 dark:text-emerald-400"
-                    >
-                      <Play className="h-3 w-3 fill-current" />
-                      {t('aiQuant.actions.run')}
-                    </button>
-                  )
-                )}
-
-                {!isViewOnly && (
-                  <button
-                    type="button"
-                    onClick={e => { void openDeleteDialog(e, item) }}
-                    disabled={accountDeleteDialog?.strategy.id === item.id && accountDeleteDialog.pending}
-                    className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
+                  <Link
+                    href={`/${lng}/account/ai-quant/strategy/${item.id}`}
+                    className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-4"
                   >
-                    <Trash2 className="h-3 w-3" />
-                    {accountDeleteDialog?.strategy.id === item.id && accountDeleteDialog.pending
-                      ? t('aiQuant.actions.deleting')
-                      : t('aiQuant.actions.delete')}
-                  </button>
-                )}
-
-                <Link
-                  href={`/${lng}/account/ai-quant/strategy/${item.id}`}
-                  className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--cf-text-strong)] transition group-hover:border-primary/30 group-hover:text-primary"
-                >
-                  {t('aiQuant.viewDetail')}
-                </Link>
+                      {[
+                        {
+                          label: t('aiQuant.totalReturn', { defaultValue: '收益' }),
+                          value: formatPct(item.metrics.returnPct, true),
+                          tone: item.metrics.returnPct >= 0 ? 'text-emerald-500' : 'text-red-500',
+                        },
+                        {
+                          label: t('aiQuant.maxDrawdown', { defaultValue: '回撤' }),
+                          value: formatPct(item.metrics.maxDrawdownPct),
+                          tone: 'text-[color:var(--cf-text-strong)]',
+                        },
+                        {
+                          label: t('aiQuant.winRate', { defaultValue: '胜率' }),
+                          value: formatPct(item.metrics.winRatePct),
+                          tone: 'text-[color:var(--cf-text-strong)]',
+                        },
+                        {
+                          label: t('aiQuant.tradeCount', { defaultValue: '交易' }),
+                          value: formatMetricNumber(item.metrics.tradeCount),
+                          tone: 'text-[color:var(--cf-text-strong)]',
+                        },
+                      ].map(metric => (
+                        <div
+                          key={metric.label}
+                          className="cf-ai-metric-cell min-h-[64px] rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2.5"
+                        >
+                          <div className="text-[11px] text-[color:var(--cf-muted)]">{metric.label}</div>
+                          <div className={`mt-1 text-sm font-semibold tabular-nums ${metric.tone}`}>{metric.value}</div>
+                        </div>
+                      ))}
+                  </Link>
+                </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
       )}
 
       <StopRunningStrategyDialog
