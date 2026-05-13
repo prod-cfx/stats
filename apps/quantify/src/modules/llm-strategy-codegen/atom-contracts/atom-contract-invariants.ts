@@ -250,9 +250,9 @@ type StubLifecyclePyramidingKeys = {
 // PR5c 兑现后 6 个 action atom 全部 `capabilityStatus === 'pr3e-action'`，类型收窄到
 // `never`。与 LIFECYCLE_ATOM_EMITS 守门同模式：直接从源头 ACTION_ATOM_EMITS 字面量
 // 类型派生（registry merge 走运行时，`Registry[K]['emit']` 静态类型推断仍是 fallback，
-// 无法收窄到 'pr3e-action'）。`_ActionEmitAllReal` AssertTrue 在 PR5c 暂不导出（按
-// PR5b 注释里的 "PR5d 启用" 计划），仅在 invariant report 内声明 `actionEmitAllReal`
-// 字段以便 PR5d 一行翻转。
+// 无法收窄到 'pr3e-action'）。PR5d 翻转：导出 `_ActionEmitAllReal` AssertTrue 锁死
+// `StubActionKeys | MissingActionShapeKeys` 收窄至 never；与
+// `_LifecyclePyramidingEmitAllReal` 同模式（PR4 已落地）。
 type ActionEmits = typeof ACTION_ATOM_EMITS
 
 type StubActionKeys = {
@@ -357,10 +357,10 @@ export type AtomContractInvariantReport = {
   //   AssertTrue 编译挂。
   readonly ruleBlockEmitAllReal: [StubRuleBlockKeys] extends [never] ? true : false
   readonly orchestrationPortfolioRiskEmitAllReal: [StubOrchestrationPortfolioRiskKeys] extends [never] ? true : false
-  // Issue #1313 PR5c：6 个 action atom 全部 `capabilityStatus === 'pr3e-action'` +
-  //   `emit.actionShape` 实际挂载（双重收窄至 never）。本 PR 仅声明字段、暂不导出
-  //   `_ActionEmitAllReal` AssertTrue 别名（按 PR5b 注释里的 "PR5d 启用" 计划，
-  //   留一行翻转给 PR5d 收尾）。
+  // Issue #1313 PR5c/PR5d：6 个 action atom 全部 `capabilityStatus === 'pr3e-action'` +
+  //   `emit.actionShape` 实际挂载（双重收窄至 never）。PR5c 仅声明字段；PR5d
+  //   导出 `_ActionEmitAllReal` AssertTrue 锁死，任一 atom 字面量回退或 shape
+  //   override 文件被误删即触发编译挂。
   readonly actionEmitAllReal: [
     StubActionKeys | MissingActionShapeKeys,
   ] extends [never] ? true : false
@@ -383,3 +383,6 @@ export type _LifecyclePyramidingEmitAllReal = AssertTrue<AtomContractInvariantRe
 //   两个 atom 的 capabilityStatus 字面量必须严格匹配对应 'pr3e-*' 字面量。
 export type _RuleBlockEmitAllReal = AssertTrue<AtomContractInvariantReport['ruleBlockEmitAllReal']>
 export type _OrchestrationPortfolioRiskEmitAllReal = AssertTrue<AtomContractInvariantReport['orchestrationPortfolioRiskEmitAllReal']>
+// Issue #1313 PR5d 翻转：6 个 action atom 全部 `capabilityStatus === 'pr3e-action'`
+//   且 `emit.actionShape` 实际挂载（双重收窄）。任一漂移 → AssertTrue 编译挂。
+export type _ActionEmitAllReal = AssertTrue<AtomContractInvariantReport['actionEmitAllReal']>
