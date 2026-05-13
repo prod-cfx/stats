@@ -24,6 +24,10 @@ import type { RiskGuardEmitOverride } from './atom-contract-risk-guard-emits'
 import { RISK_GUARD_ATOM_EMITS } from './atom-contract-risk-guard-emits'
 import type { LifecycleEmitOverride } from './atom-contract-lifecycle-emits'
 import { LIFECYCLE_ATOM_EMITS } from './atom-contract-lifecycle-emits'
+import type { RuleBlockEmitOverride } from './atom-contract-rule-block-emits'
+import { RULE_BLOCK_ATOM_EMITS } from './atom-contract-rule-block-emits'
+import type { OrchestrationEmitOverride } from './atom-contract-orchestration-emits'
+import { ORCHESTRATION_ATOM_EMITS } from './atom-contract-orchestration-emits'
 import {
   COMMON_PIPELINE,
   NO_SUMMARY,
@@ -271,20 +275,27 @@ function completePr1bRegistry<const T extends Record<AtomContractKey, AtomContra
     // Issue #1313 PR2：rule-level RiskGuard 类 atom 注入 `riskGuardShape` override，
     //   capabilityStatus 改写为 'pr3e-risk-guard'；irShape 仍保留 NotApplicable sentinel
     //   （compileAtom dispatcher 内 'pr3e-*' 状态不会走 emit.irShape 路径）。
+    // Issue #1313 PR3：rule-level RuleBlock 类 atom 注入 `ruleBlockShape` override，
+    //   capabilityStatus 改写为 'pr3e-rule-block'。三类 override（condition / risk-guard /
+    //   rule-block）在 ATOM_CONTRACT_REGISTRY 层面互斥，spread 顺序不会出现字段冲突。
     const riskGuardOverride = (RISK_GUARD_ATOM_EMITS as Partial<Record<AtomContractKey, RiskGuardEmitOverride>>)[key]
     // Issue #1313 PR4：lifecycle-level atom（`position.pyramiding_limit`）通过独立 override
-    //   注入 `emit.lifecyclePyramidingShape` + `capabilityStatus = 'pr3e-lifecycle'`；
-    //   irShape 升级为非 brand sentinel（dispatcher 不会调度此 atom 走 irShape）。
-    //   condition / riskGuard / lifecycle override 三组互斥（不同 atom），合并优先级
-    //   显式按 bucket 区分；同一 atom 只会命中其中一组。
+    //   注入 `emit.lifecyclePyramidingShape` + `capabilityStatus = 'pr3e-lifecycle'`。
+    // Issue #1313 PR3：rule-block atom（`risk.partial_take_profit`）通过 RULE_BLOCK_ATOM_EMITS
+    //   注入 `emit.ruleBlockShape` + `capabilityStatus = 'pr3e-rule-block'`。
+    //   condition / riskGuard / lifecycle / ruleBlock 四组互斥（不同 atom），同一 atom
+    //   只会命中其中一组,spread 合并顺序不会冲突。
     const lifecycleOverride = (LIFECYCLE_ATOM_EMITS as Partial<Record<AtomContractKey, LifecycleEmitOverride>>)[key]
-    const mergedEmit: AtomContractEmit = lifecycleOverride
-      ? { ...baseEmit, ...lifecycleOverride }
-      : conditionOverride
-        ? { ...baseEmit, ...conditionOverride }
-        : riskGuardOverride
-          ? { ...baseEmit, ...riskGuardOverride }
-          : baseEmit
+    const ruleBlockOverride = (RULE_BLOCK_ATOM_EMITS as Partial<Record<AtomContractKey, RuleBlockEmitOverride>>)[key]
+    const orchestrationOverride = (ORCHESTRATION_ATOM_EMITS as Partial<Record<AtomContractKey, OrchestrationEmitOverride>>)[key]
+    const mergedEmit: AtomContractEmit = {
+      ...baseEmit,
+      ...(conditionOverride ?? {}),
+      ...(riskGuardOverride ?? {}),
+      ...(lifecycleOverride ?? {}),
+      ...(ruleBlockOverride ?? {}),
+      ...(orchestrationOverride ?? {}),
+    }
     completed[key] = {
       ...registry[key],
       key,

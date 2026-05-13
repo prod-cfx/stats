@@ -12,8 +12,14 @@
  * 本 spec 仅做契约状态守门，避免后续 PR 误改 capabilityStatus。
  */
 
+import type { CanonicalRuleV2 } from '../../types/canonical-strategy-spec-v2'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contract-registry'
 import { LIFECYCLE_ATOM_EMITS } from '../atom-contract-lifecycle-emits'
+
+// Issue #1313 PR3：RuleLikeInput 收窄为 `CanonicalRuleV2` 后，partial mock 需要
+//   显式 unknown→CanonicalRuleV2[] cast。lifecyclePyramidingShape impl 内部仅访问
+//   `actions / metadata` 两个字段，缺 `id / phase / priority / condition` 不影响行为。
+type RuleMockArray = readonly CanonicalRuleV2[]
 
 describe('Issue #1313 PR4 lifecycle pyramiding emit decision', () => {
   const pyramidingEmit = ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].emit
@@ -42,7 +48,7 @@ describe('Issue #1313 PR4 lifecycle pyramiding emit decision', () => {
         [
           { actions: [{ type: 'ADD_LONG' }], metadata: {} },
         ],
-        { compileContext: {} as never, helpers: {} as never },
+        { compileContext: {} as never, helpers: {} as never } as never,
       )
       expect(result).toEqual({ allow: true, maxLayers: 1 })
     })
@@ -53,7 +59,7 @@ describe('Issue #1313 PR4 lifecycle pyramiding emit decision', () => {
           { actions: [], metadata: { addPosition: { maxLayers: 3.7 } } },
           { actions: [], metadata: { addPosition: { maxLayers: 2 } } },
         ],
-        { compileContext: {} as never, helpers: {} as never },
+        { compileContext: {} as never, helpers: {} as never } as never,
       )
       expect(result).toEqual({ allow: true, maxLayers: 3 })
     })
@@ -61,7 +67,7 @@ describe('Issue #1313 PR4 lifecycle pyramiding emit decision', () => {
     it('shape allow=false + maxLayers=1 当 rules 既无 ADD action 也无 addPosition metadata', () => {
       const result = pyramidingEmit.lifecyclePyramidingShape!(
         [{ actions: [{ type: 'OPEN_LONG' }], metadata: {} }],
-        { compileContext: {} as never, helpers: {} as never },
+        { compileContext: {} as never, helpers: {} as never } as never,
       )
       expect(result).toEqual({ allow: false, maxLayers: 1 })
     })
@@ -73,7 +79,7 @@ describe('Issue #1313 PR4 lifecycle pyramiding emit decision', () => {
           { actions: [], metadata: { addPosition: { maxLayers: 0 } } },
           { actions: [], metadata: { addPosition: { maxLayers: '5' } } },
         ],
-        { compileContext: {} as never, helpers: {} as never },
+        { compileContext: {} as never, helpers: {} as never } as never,
       )
       expect(result).toEqual({ allow: true, maxLayers: 1 })
     })
@@ -88,7 +94,7 @@ describe('Issue #1313 PR4 lifecycle pyramiding emit decision', () => {
     it('shape 顺手挡住 addPosition: null（原 helper 会抛 TypeError）', () => {
       const result = pyramidingEmit.lifecyclePyramidingShape!(
         [{ actions: [{ type: 'ADD_LONG' }], metadata: { addPosition: null } }],
-        { compileContext: {} as never, helpers: {} as never },
+        { compileContext: {} as never, helpers: {} as never } as never,
       )
       expect(result).toEqual({ allow: true, maxLayers: 1 })
     })

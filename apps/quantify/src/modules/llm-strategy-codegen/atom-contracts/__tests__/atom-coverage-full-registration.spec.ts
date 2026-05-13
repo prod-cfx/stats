@@ -62,6 +62,11 @@ describe('ATOM_CONTRACT_REGISTRY full PR1b registration', () => {
         expect((contract.emit.irShape as { __notApplicable?: true }).__notApplicable).toBeUndefined()
       }
       else if (isNotApplicableShape) {
+        // Issue #1313 PR3：`pr3e-*` atom 走 rule-level / spec-level emit shape，
+        //   irShape 仍是 sentinel（带 `__notApplicable: true` brand），与
+        //   'irshape-not-applicable' 共用 sentinel 形态——capabilityStatus 字面量是
+        //   "本 atom 通过哪个 emit shape 兑现"的唯一真相源，sentinel brand 仅锁
+        //   compileAtom 路径不可调用 emit.irShape。
         expect((contract.emit.irShape as { __notApplicable?: true }).__notApplicable).toBe(true)
         expect((contract.emit.irShape as { __pr1bStub?: true }).__pr1bStub).toBeUndefined()
       }

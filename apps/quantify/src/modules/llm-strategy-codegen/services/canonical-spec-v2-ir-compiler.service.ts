@@ -313,7 +313,7 @@ export class CanonicalSpecV2IrCompilerService {
     const orchestrationLegScopes = this.compileOrchestrationLegScopes(input.canonicalSpec)
     const orchestrationGates = this.compileOrchestrationGates(input.canonicalSpec, context)
     const orchestrationPortfolioRisks = [
-      ...this.compileOrchestrationPortfolioRisks(input.canonicalSpec),
+      ...this.compileOrchestrationPortfolioRisks(input.canonicalSpec, context),
       ...rulePortfolioRisks,
     ]
     const orchestrationPrograms = this.compileOrchestrationPrograms(input.canonicalSpec, orchestrationGates)
@@ -1053,39 +1053,26 @@ export class CanonicalSpecV2IrCompilerService {
    */
   private compileOrchestrationPortfolioRisks(
     spec: CanonicalStrategySpecV2,
+    context: CompileContext,
   ): IrOrchestrationPortfolioRisk[] {
+    // Issue #1313 PR3：per-risk emit 沉淀至
+    //   ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].emit.orchestrationPortfolioRiskShape
+    //   （atom-contracts/atom-contract-orchestration-emits.ts，行为与原 inline body
+    //    严格等价，Phase 5 S8 portfolioRisk union 三变体逐字段透传）。
+    //   atom 实例是模板查询 key，运行期数据来自 spec.orchestration.portfolioRisks[]。
     const risks = spec.orchestration?.portfolioRisks ?? []
-    const result: IrOrchestrationPortfolioRisk[] = []
-    for (const risk of risks as readonly CanonicalOrchestrationPortfolioRisk[]) {
-      if (risk.scope === 'portfolio') {
-        result.push({
-          id: risk.id,
-          scope: 'portfolio',
-          mode: risk.mode,
-          thresholdPct: risk.thresholdPct,
-          effectWhenTriggered: risk.effectWhenTriggered,
-        })
-      } else if (risk.scope === 'symbol') {
-        result.push({
-          id: risk.id,
-          scope: 'symbol',
-          mode: risk.mode,
-          notionalCapPct: risk.notionalCapPct,
-          symbolScopeRef: risk.symbolScopeRef,
-          effectWhenTriggered: risk.effectWhenTriggered,
-        })
-      } else if (risk.scope === 'subStrategy') {
-        result.push({
-          id: risk.id,
-          scope: 'subStrategy',
-          mode: risk.mode,
-          notionalCapPct: risk.notionalCapPct,
-          subStrategyScopeRef: risk.subStrategyScopeRef,
-          effectWhenTriggered: risk.effectWhenTriggered,
-        })
-      }
-    }
-    return result
+    if (risks.length === 0) return []
+    const registryEntry = ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block']
+    const emit = registryEntry.emit as AtomContractEmit
+    const shape = emit.orchestrationPortfolioRiskShape
+    if (!shape) return []
+    const ctx = { compileContext: context, helpers: this.irHelpers }
+    // `OrchestrationPortfolioRiskLikeInput` 仍是 `Readonly<Record<string, unknown>>`
+    //   占位（PR2 / PR4 兼容）；shape 实现内部 cast 回 canonical union 类型。返回
+    //   类型同样占位，dispatcher 端 cast 回 IR 真实类型聚合到 IR 输出。
+    return (risks as readonly CanonicalOrchestrationPortfolioRisk[]).map(
+      risk => shape(risk as unknown as Readonly<Record<string, unknown>>, ctx) as unknown as IrOrchestrationPortfolioRisk,
+    )
   }
 
   private compileOrchestrationPrograms(
@@ -2973,59 +2960,29 @@ export class CanonicalSpecV2IrCompilerService {
     fallbackPositionPct: number,
     context: CompileContext,
   ): RuleBlock | null {
-    const ptpMeta = rule.metadata?.partialTakeProfit
-    if (
-      !ptpMeta
-      || rule.phase !== 'risk'
-      || rule.condition.kind !== 'atom'
-      || rule.condition.key !== 'risk.partial_take_profit'
-    ) {
+    // Issue #1313 PR3：partial-take-profit rule-block emit 沉淀至
+    //   ATOM_CONTRACT_REGISTRY['risk.partial_take_profit'].emit.ruleBlockShape
+    //   （atom-contracts/atom-contract-rule-block-emits.ts，行为与原 inline body
+    //    严格等价，IR snapshot byte-equal）。
+    //   rule.condition.kind 必须是 'atom' 才能拿到 atom key 反查 registry；
+    //   非 partial_take_profit rule 直接 null 兜底（与原 fail-fast 守门等价）。
+    if (rule.condition.kind !== 'atom') {
       return null
     }
-
-    const reduceActions = rule.actions.filter(action =>
-      action.type === 'REDUCE_LONG' || action.type === 'REDUCE_SHORT',
-    )
-    if (reduceActions.length === 0) {
+    const registryEntry = ATOM_CONTRACT_REGISTRY[rule.condition.key as AtomContractKey]
+    const emit = registryEntry?.emit as AtomContractEmit | undefined
+    if (emit?.capabilityStatus !== 'pr3e-rule-block' || !emit.ruleBlockShape) {
       return null
     }
-
-    const threshold = this.readNumber([rule.condition.value], Number.NaN)
-    if (!Number.isFinite(threshold)) {
-      return null
-    }
-
-    const pnlSeriesId = this.ensurePositionSeries(context, 'POSITION_PNL_PCT', 'position_pnl_pct')
-    const constSeriesId = this.ensureConstSeries(context, threshold)
-    const predicateRef = this.upsertPredicate(
-      context.predicateMap,
-      `${rule.id}_pnl_gte`,
-      'GTE',
-      [pnlSeriesId, constSeriesId],
-    )
-
-    const compiledActions = this.compileActions(
-      { ...rule, actions: reduceActions },
-      spec,
+    // `RuleLikeInput` / `SpecLikeInput` 仍是 `Readonly<Record<string, unknown>>` 占位
+    //   （PR2 / PR4 兼容），shape 实现内部再 cast 回 canonical 真实类型。
+    return emit.ruleBlockShape(
+      rule.condition,
+      rule as unknown as Readonly<Record<string, unknown>>,
+      spec as unknown as Readonly<Record<string, unknown>>,
       fallbackPositionPct,
-    )
-    if (compiledActions.length === 0) {
-      return null
-    }
-
-    context.runtimeRequirements.stateKeys.add(ptpMeta.memoryKey)
-
-    // Partial take profit firing is gated by tier_*_fired flags in
-    // semanticRuntimeState (see run-decision-programs.ts), so cooldownBars
-    // would be redundant and could only mask a real bug. Intentionally drop it.
-    return {
-      id: rule.id,
-      phase: 'exit',
-      when: predicateRef,
-      priority: rule.priority,
-      actions: compiledActions,
-      metadata: { partialTakeProfit: { ...ptpMeta } },
-    }
+      { compileContext: context, helpers: this.irHelpers, seed: rule.id },
+    ) as RuleBlock | null
   }
 
   private tryCompileRiskGuards(rule: CanonicalRuleV2, context: CompileContext): RiskGuard[] {
@@ -4037,6 +3994,9 @@ export class CanonicalSpecV2IrCompilerService {
         resolveComparisonKind: this.resolveComparisonKind.bind(this),
         normalizeRangePositionThreshold: this.normalizeRangePositionThreshold.bind(this),
         resolveMovingAverageAtomConfig: this.resolveMovingAverageAtomConfig.bind(this),
+        // Issue #1313 PR3：rule-level emit shape 真实兑现需要的额外 helper（risk.partial_take_profit 等）
+        ensurePositionSeries: this.ensurePositionSeries.bind(this),
+        compileActions: this.compileActions.bind(this),
       }
     }
     return this.__irHelpers

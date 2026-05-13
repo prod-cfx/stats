@@ -9,6 +9,8 @@ import { FIRST_WAVE_TRIGGER_ATOMS } from '../constants/canonical-strategy-capabi
 import { CONDITION_ATOM_EMITS } from './atom-contract-condition-emits'
 import { RISK_GUARD_ATOM_EMITS } from './atom-contract-risk-guard-emits'
 import { LIFECYCLE_ATOM_EMITS } from './atom-contract-lifecycle-emits'
+import { RULE_BLOCK_ATOM_EMITS } from './atom-contract-rule-block-emits'
+import { ORCHESTRATION_ATOM_EMITS } from './atom-contract-orchestration-emits'
 import { ATOM_CONTRACT_REGISTRY, type NotApplicableIrShapeBuilder } from './atom-contract-registry'
 
 type Registry = typeof ATOM_CONTRACT_REGISTRY
@@ -87,16 +89,29 @@ type ConditionAtomKey =
   | 'price.breakout_up'
   | 'price.breakout_down'
 
-// Issue #1313 PR2 + PR4 反转：rule-level RiskGuard 与 spec-level Lifecycle pyramiding
-//   两组 atom 都已迁出 `'irshape-not-applicable'` 领域：
-//   - `position.has_position` / `position.no_position` → `emit.riskGuardShape`
-//     ↔ ir-compiler `tryCompileRiskGuard` dispatcher（capabilityStatus = 'pr3e-risk-guard'）
-//   - `position.pyramiding_limit` → `emit.lifecyclePyramidingShape`
-//     ↔ ir-compiler `resolveLifecyclePyramiding` dispatcher（capabilityStatus = 'pr3e-lifecycle'）
-//   两组 atom 从 NonConditionRegistryKey 同时排除，让 `_NonConditionIrShapeNotApplicable` /
+// Issue #1313 PR2 / PR3 / PR4 反转：以下 atom 都已迁出 `'irshape-not-applicable'` 领域，
+//   分别通过专用 emit shape 在 ir-compiler 对应 dispatcher 调度：
+//   - `position.has_position` / `position.no_position` (PR2) → `emit.riskGuardShape`
+//     ↔ `tryCompileRiskGuard`（capabilityStatus = 'pr3e-risk-guard'）
+//   - `risk.partial_take_profit` (PR3) → `emit.ruleBlockShape`
+//     ↔ `tryCompileReduceActionRule`（capabilityStatus = 'pr3e-rule-block'）
+//   - `portfolioRisk.drawdown_block` (PR3) → `emit.orchestrationPortfolioRiskShape`
+//     ↔ `compileOrchestrationPortfolioRisks`（capabilityStatus = 'pr3e-orchestration-portfolio'）
+//   - `position.pyramiding_limit` (PR4) → `emit.lifecyclePyramidingShape`
+//     ↔ `resolveLifecyclePyramiding`（capabilityStatus = 'pr3e-lifecycle'）
+//   四组 atom 从 NonConditionRegistryKey 同时排除，让 `_NonConditionIrShapeNotApplicable` /
 //   `_NonConditionCapabilityNotApplicable` 不再约束其 irShape brand 与 capabilityStatus；
-//   正向守门由 `_RiskGuardEmitAllReal` + `_LifecyclePyramidingEmitAllReal` AssertTrue 接管。
-type NonConditionRegistryKey = Exclude<RegistryKey, ConditionAtomKey | RiskGuardAtomKey | LifecyclePyramidingAtomKey>
+//   正向守门由 `_RiskGuardEmitAllReal` / `_RuleBlockEmitAllReal` /
+//   `_OrchestrationPortfolioRiskEmitAllReal` / `_LifecyclePyramidingEmitAllReal`
+//   AssertTrue 接管。
+type NonConditionRegistryKey = Exclude<
+  RegistryKey,
+  | ConditionAtomKey
+  | RiskGuardAtomKey
+  | RuleBlockAtomKey
+  | OrchestrationPortfolioRiskAtomKey
+  | LifecyclePyramidingAtomKey
+>
 
 // Issue #1279 PR3e：non-condition bucket atom（action / risk / orchestration / 非
 // grid 的 positionConstraint）走 rule-level / spec-level IR 编译路径，不参与
@@ -180,16 +195,18 @@ type ActionAtomKey =
   | 'action.reverse_position'
 
 // PR1 派生集合：`capabilityStatus !== 'pr3e-*'` 的 atom（即尚未迁移到对应 emit shape 的 atom）。
-// 本 PR 内 4 组集合各自等于完整 *AtomKey 联合（0 atom 已迁移）。
+// 本 PR 内 5 组集合各自等于完整 *AtomKey 联合，再随 atom 迁移逐组反转。
 // 后续 atom 迁移 PR 兑现某 atom 后，对应 `Stub*Keys` 类型自动收窄；当某组 `Stub*Keys`
 // 收窄为 `never` 时，启用对应 `_*EmitAllReal` AssertTrue 守门。
-// Issue #1313 PR2：与 `StubConditionIrShapeKeys` 同模式 —— 直接从
-//   `RISK_GUARD_ATOM_EMITS` 字面量类型派生（registry merge 走运行时，
-//   `ATOM_CONTRACT_REGISTRY[K]['emit']` 静态类型推断仍是 `NotApplicableEmit`
-//   fallback，无法收窄到 'pr3e-risk-guard'）。任一 RiskGuard atom 在
-//   RISK_GUARD_ATOM_EMITS 中缺失，或其 `capabilityStatus` 不是 'pr3e-risk-guard'
-//   → 在 `StubRiskGuardKeys` 中暴露 → `_RiskGuardEmitAllReal` AssertTrue 编译挂。
+// Issue #1313 PR2 / PR3：与 `StubConditionIrShapeKeys` 同模式 —— 直接从
+//   `RISK_GUARD_ATOM_EMITS` / `RULE_BLOCK_ATOM_EMITS` / `ORCHESTRATION_ATOM_EMITS`
+//   字面量类型派生（registry merge 走运行时，`ATOM_CONTRACT_REGISTRY[K]['emit']`
+//   静态类型推断仍是 `NotApplicableEmit` fallback，无法收窄到 'pr3e-*'）。
+//   任一对应 atom 在 *_ATOM_EMITS 中缺失，或其 `capabilityStatus` 不是对应字面量
+//   → 在 `Stub*Keys` 中暴露 → `_*EmitAllReal` AssertTrue 编译挂。
 type RiskGuardEmits = typeof RISK_GUARD_ATOM_EMITS
+type RuleBlockEmits = typeof RULE_BLOCK_ATOM_EMITS
+type OrchestrationEmits = typeof ORCHESTRATION_ATOM_EMITS
 
 type StubRiskGuardKeys = {
   [K in RiskGuardAtomKey]: K extends keyof RiskGuardEmits
@@ -198,11 +215,15 @@ type StubRiskGuardKeys = {
 }[RiskGuardAtomKey]
 
 type StubRuleBlockKeys = {
-  [K in RuleBlockAtomKey]: Registry[K]['emit']['capabilityStatus'] extends 'pr3e-rule-block' ? never : K
+  [K in RuleBlockAtomKey]: K extends keyof RuleBlockEmits
+    ? RuleBlockEmits[K] extends { readonly capabilityStatus: 'pr3e-rule-block' } ? never : K
+    : K
 }[RuleBlockAtomKey]
 
 type StubOrchestrationPortfolioRiskKeys = {
-  [K in OrchestrationPortfolioRiskAtomKey]: Registry[K]['emit']['capabilityStatus'] extends 'pr3e-orchestration-portfolio' ? never : K
+  [K in OrchestrationPortfolioRiskAtomKey]: K extends keyof OrchestrationEmits
+    ? OrchestrationEmits[K] extends { readonly capabilityStatus: 'pr3e-orchestration-portfolio' } ? never : K
+    : K
 }[OrchestrationPortfolioRiskAtomKey]
 
 // 直接从 `LIFECYCLE_ATOM_EMITS` 字面量类型推导（mirror condition 守门思路）：
@@ -237,11 +258,11 @@ type MissingLifecyclePyramidingShapeKeys = {
 
 // 编译期 self-test：确保 5 组 *AtomKey 与 ConditionAtomKey 不相交、且属于 RegistryKey
 // （即未误把 condition atom 拉入 rule-level / spec-level emit 集合）。
-// Issue #1313 PR2 + PR4 + PR5a：`NonConditionRegistryKey` 已陆续移出 RiskGuardAtomKey
-// 与 LifecyclePyramidingAtomKey，自检改用「与 ConditionAtomKey 不相交 ∧ 属于 RegistryKey」
-// 的不变形态（PR2 引入），与后续 PR 反转过程持续兼容；PR5a 第 5 组 ActionAtomKey
-// 沿用此不变形态。LifecyclePyramidingAtomKey 虽已迁出 NonConditionRegistryKey，
-// self-test 在新形态下仍然成立（不依赖 NonConditionRegistryKey）。
+// Issue #1313 PR2 / PR3 / PR4 / PR5a：`NonConditionRegistryKey` 已陆续移出 RiskGuard /
+// RuleBlock / OrchestrationPortfolioRisk / LifecyclePyramiding atom，自检改用
+// 「与 ConditionAtomKey 不相交 ∧ 属于 RegistryKey」的不变形态（PR2 引入）；PR5a
+// 第 5 组 ActionAtomKey 沿用此不变形态,避免依赖 NonConditionRegistryKey 在 PR5d
+// 反转时再修一次。
 type _RiskGuardAtomsAreNonCondition = AssertTrue<
   [Extract<RiskGuardAtomKey, ConditionAtomKey>] extends [never]
     ? RiskGuardAtomKey extends RegistryKey ? true : false
@@ -299,14 +320,19 @@ export type AtomContractInvariantReport = {
   readonly conditionIrShapeAllReal: [StubConditionIrShapeKeys] extends [never] ? true : false
   // Issue #1313 PR2：rule-level RiskGuard 类 atom（`position.has_position` /
   //   `position.no_position`）必须全部 `capabilityStatus === 'pr3e-risk-guard'`。
-  //   任一 atom 退化（emit override 漏挂 / status 误写）→ `StubRiskGuardKeys` 不再为
-  //   never → AssertTrue 编译挂；与 `conditionIrShapeAllReal` 同形守门。
   readonly riskGuardEmitAllReal: [StubRiskGuardKeys] extends [never] ? true : false
   // Issue #1313 PR4 反转：lifecycle pyramiding emit 全量真实兑现 +
   //   `emit.lifecyclePyramidingShape` 字段实际挂载（双重收窄至 never）。
   readonly lifecyclePyramidingEmitAllReal: [
     StubLifecyclePyramidingKeys | MissingLifecyclePyramidingShapeKeys,
   ] extends [never] ? true : false
+  // Issue #1313 PR3：rule-block / spec-level orchestration emit shape 兑现的正向 invariant。
+  //   `risk.partial_take_profit` 必须 `capabilityStatus === 'pr3e-rule-block'` 且
+  //   `portfolioRisk.drawdown_block` 必须 `capabilityStatus === 'pr3e-orchestration-portfolio'`。
+  //   任一 atom 字面量回退或 emit shape override 文件被误删 → 对应 Stub 集合非空 →
+  //   AssertTrue 编译挂。
+  readonly ruleBlockEmitAllReal: [StubRuleBlockKeys] extends [never] ? true : false
+  readonly orchestrationPortfolioRiskEmitAllReal: [StubOrchestrationPortfolioRiskKeys] extends [never] ? true : false
 }
 
 export type _AtomContractExhaustive = AssertTrue<AtomContractInvariantReport['exhaustive']>
@@ -322,3 +348,7 @@ export type _NonConditionCapabilityNotApplicable = AssertTrue<AtomContractInvari
 export type _ConditionIrShapeAllReal = AssertTrue<AtomContractInvariantReport['conditionIrShapeAllReal']>
 export type _RiskGuardEmitAllReal = AssertTrue<AtomContractInvariantReport['riskGuardEmitAllReal']>
 export type _LifecyclePyramidingEmitAllReal = AssertTrue<AtomContractInvariantReport['lifecyclePyramidingEmitAllReal']>
+// Issue #1313 PR3：positive existence invariant —— rule-block / orchestration
+//   两个 atom 的 capabilityStatus 字面量必须严格匹配对应 'pr3e-*' 字面量。
+export type _RuleBlockEmitAllReal = AssertTrue<AtomContractInvariantReport['ruleBlockEmitAllReal']>
+export type _OrchestrationPortfolioRiskEmitAllReal = AssertTrue<AtomContractInvariantReport['orchestrationPortfolioRiskEmitAllReal']>

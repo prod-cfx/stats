@@ -19,11 +19,19 @@
  */
 
 import type {
+  ActionDef,
+  IrOrchestrationPortfolioRisk,
   LevelSetDef,
   PredicateDef,
+  RuleBlock,
   SeriesDef,
 } from '../types/canonical-strategy-ir'
-import type { CanonicalConditionAtom } from '../types/canonical-strategy-spec-v2'
+import type {
+  CanonicalConditionAtom,
+  CanonicalOrchestrationPortfolioRisk,
+  CanonicalRuleV2,
+  CanonicalStrategySpecV2,
+} from '../types/canonical-strategy-spec-v2'
 
 /**
  * CapabilityTriple —— atom 行为能力三元组
@@ -128,6 +136,19 @@ export interface IrCompileHelpers {
     atom: AtomIrCompileInput,
     fallback: IrCompileContext['movingAverage'],
   ) => IrCompileContext['movingAverage']
+  // Issue #1313 PR3：rule-level emit shape 真实兑现需要的额外 helper。
+  //   `ensurePositionSeries` 与 `compileActions` 是 ir-compiler service 私有方法，
+  //   通过 service.irHelpers 暴露给 emit shape 实现使用。
+  ensurePositionSeries: (
+    ctx: IrCompileContext,
+    kind: Extract<SeriesDef['kind'], 'POSITION_AVG_PRICE' | 'POSITION_PNL_PCT'>,
+    id: string,
+  ) => string
+  compileActions: (
+    rule: CanonicalRuleV2,
+    spec: CanonicalStrategySpecV2,
+    fallbackPositionPct: number,
+  ) => ActionDef[]
 }
 
 /**
@@ -255,10 +276,14 @@ export interface SpecLevelEmitContext {
 /**
  * 占位输入/输出类型。
  *
- * Issue #1313 PR1 阶段，rule / spec / orchestrationPortfolioRisk / RiskGuard / RuleBlock /
- * IrOrchestrationPortfolioRisk 真实类型不引入（避免 atom-contracts → canonical-strategy-ir
- * 反向 import）。后续 atom 迁移 PR 替换为对应 canonical 类型并保持 service 私有 helper
- * 同 shape（双向 `extends` 编译期断言守门）。
+ * Issue #1313 PR1 阶段以 `Record<string, unknown>` 占位声明并保持松散；
+ *   - RiskGuard / LifecyclePyramiding 类 atom 的 shape 已落地在 PR2 / PR4,
+ *     spec mocks 使用部分构造,需要 RuleLikeInput 维持松散结构兼容。
+ *   - RuleBlock / OrchestrationPortfolioRisk 类 shape 在 PR3（本 PR）兑现,
+ *     内部通过各自 `*RuleLike` interface 收窄到所需字段（rule.metadata /
+ *     rule.actions / orchRisk.thresholdPct 等）,无需在外部 RuleLikeInput 联合
+ *     里强行收窄到 CanonicalRuleV2。
+ *   - 真实 canonical 类型导入仅供注释 / 后续可选收窄；当前实现走结构性接口。
  */
 export type RuleLikeInput = Readonly<Record<string, unknown>>
 export type SpecLikeInput = Readonly<Record<string, unknown>>
@@ -270,8 +295,8 @@ export type OrchestrationPortfolioRiskLikeInput = Readonly<Record<string, unknow
  */
 export type ActionLikeInput = Readonly<Record<string, unknown>>
 export type RiskGuardShapeOutput = Readonly<Record<string, unknown>> | null
-export type RuleBlockShapeOutput = Readonly<Record<string, unknown>> | null
-export type OrchestrationPortfolioRiskShapeOutput = Readonly<Record<string, unknown>>
+export type RuleBlockShapeOutput = RuleBlock | null
+export type OrchestrationPortfolioRiskShapeOutput = IrOrchestrationPortfolioRisk
 export interface LifecyclePyramidingShapeOutput {
   readonly allow: boolean
   readonly maxLayers: number
