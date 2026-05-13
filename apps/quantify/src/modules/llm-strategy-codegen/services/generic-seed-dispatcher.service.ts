@@ -332,8 +332,11 @@ function tryNormalizeTimeframe(text: string): string | undefined {
   if (!unit) return undefined
   return `${value}${unit}`
 }
-const MARKET_TYPE_PERP_RE = /合约|永续|perp/i
-const MARKET_TYPE_SPOT_RE = /现货|spot/i
+// #1296：加 \b 边界，避免 'perpetual swap' / 'perplexity' 等英文长词被前缀误命中；
+// 中文 '合约' / '永续' 不需要边界（CJK 字符默认无 word char 邻接歧义）。
+// 'spot' 同理避免 'spotlight' 等前缀误命中。
+const MARKET_TYPE_PERP_RE = /合约|永续|\bperp\b/i
+const MARKET_TYPE_SPOT_RE = /现货|\bspot\b/i
 
 export interface ExplicitSymbolSlot {
   value: string
