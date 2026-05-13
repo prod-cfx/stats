@@ -56,6 +56,60 @@ export interface AtomMatch {
 export type DispatchResult = CodegenSemanticPatch
 
 /* ──────────────────────────────────────────────────────────────────────────
+ * 共享 symbol 校验常量（被 Parser + contextSlots 两处共用，需在两者之前声明）
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * SYMBOL_RE / PARSER_SYMBOL_BASE_QUOTE 支持的显式 quote 货币（explicit 路径）。
+ * 修改这里会同时更新 regex 和 parser，避免两处手动同步。
+ *
+ * 注意：BTC/ETH 在 explicit 路径可作为 quote（如 ETHBTC），但在推断路径
+ * 应保留作为合法 base（"BTC" → BTCUSDT）。两者集合语义不同，不直接合并。
+ */
+const SYMBOL_QUOTES = ['USDT', 'USDC', 'USD', 'BTC', 'ETH', 'BUSD'] as const
+
+/**
+ * 推断路径（inferred）的 base 排除集：仅含稳定币/法币 quote，
+ * 不含 BTC/ETH（它们在推断路径仍是合法 base）。
+ * 另补 TUSD/FDUSD（市场存在但不在 SYMBOL_QUOTES 的 explicit 枚举中）。
+ */
+const QUOTE_TOKENS = new Set(['USDT', 'USDC', 'USD', 'BUSD', 'TUSD', 'FDUSD'])
+
+/**
+ * 技术指标/策略类型/英文停用词黑名单（纯数据表，不是业务分流）：
+ * 这些全大写 token 形似 base symbol，但实为指标缩写、策略名称或常见停用词，
+ * 不应被推断为 base。
+ */
+const INDICATOR_KEYWORDS = new Set([
+  // 技术指标
+  'MACD', 'RSI', 'KDJ', 'MA', 'EMA', 'SMA', 'WMA', 'BOLL', 'BB',
+  'ATR', 'ADX', 'CCI', 'OBV', 'MFI', 'DMI', 'SAR', 'ROC', 'WR',
+  'STOCH', 'STOCRSI', 'STOCHRSI',
+  // 策略/执行类型
+  'DCA', 'TWAP', 'VWAP', 'ICT', 'SMC',
+  // 英文常见停用词（3 字母，避免 'AND'/'FOR'/'BUY'/'THE' 被推为 base）
+  'AND', 'FOR', 'THE', 'BUY', 'SEL', 'GET', 'SET', 'PUT', 'OFF', 'OUT',
+  'ALL', 'ANY', 'ARE', 'CAN', 'DID', 'HAS', 'HAD', 'LET', 'MAY', 'NEW',
+  'NOT', 'NOW', 'OLD', 'OUR', 'OWN', 'RUN', 'SAY', 'SEE', 'TOP', 'TRY',
+  'TWO', 'USE', 'WAY', 'WHO', 'YOU', 'AGO', 'API', 'APP', 'BOT',
+])
+
+/** 短句 token 形态：3-10 位大写字母 */
+const SHORT_SYMBOL_RE = /^[A-Z]{3,10}$/
+
+/**
+ * 判断 token 是否看起来像合法 base symbol（纯数据查表，无业务分流）：
+ *   - 3-10 位大写字母
+ *   - 不在 QUOTE_TOKENS（quote 货币本身）
+ *   - 不在 INDICATOR_KEYWORDS（技术指标/策略/停用词）
+ */
+function looksLikeBaseToken(token: string): boolean {
+  return SHORT_SYMBOL_RE.test(token)
+    && !QUOTE_TOKENS.has(token)
+    && !INDICATOR_KEYWORDS.has(token)
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
  * Generic Parser Registry
  *
  * 每个 ExtractorSpec.kind 对应一个纯函数 parser；dispatcher 通过 spec.kind
@@ -128,10 +182,15 @@ const PARSER_TIME_WINDOW_LIST: ParserFn = (clause) => {
   return out.length > 0 ? out : undefined
 }
 
+// quote 枚举从 SYMBOL_QUOTES 派生，与 SYMBOL_RE 共享单一真相源（M1）
+const SYMBOL_BASE_QUOTE_RE = new RegExp(`([A-Z]{2,10})(${SYMBOL_QUOTES.join('|')})`, 'i')
 const PARSER_SYMBOL_BASE_QUOTE: ParserFn = (clause) => {
-  const m = clause.match(/([A-Z]{2,10})(USDT|USDC|USD|BTC|ETH|BUSD)/i)
+  const m = clause.match(SYMBOL_BASE_QUOTE_RE)
   if (!m) return undefined
-  return { base: m[1].toUpperCase(), quote: m[2].toUpperCase() }
+  const base = m[1].toUpperCase()
+  // H2: base 二次校验——防止 MACD/RSI 等指标词被误作 base
+  if (!looksLikeBaseToken(base)) return undefined
+  return { base, quote: m[2].toUpperCase() }
 }
 
 const PARSER_VERBATIM: ParserFn = (clause) => clause
@@ -223,23 +282,59 @@ function splitClauses(text: string): string[] {
  * ────────────────────────────────────────────────────────────────────────── */
 
 const EXCHANGE_RE = /\b(okx|binance|bybit|coinbase|kraken|huobi|gate|bitget)\b/i
-const SYMBOL_RE = /([A-Z]{2,10})[\s/]?(USDT|USDC|USD|BTC|ETH|BUSD)\b/
+// quote 枚举从 SYMBOL_QUOTES 派生，两处保持单一真相源（M1）
+const SYMBOL_RE = new RegExp(`([A-Z]{2,10})[\\s/]?(${SYMBOL_QUOTES.join('|')})\\b`)
 const TIMEFRAME_RE = /\b(1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w)\b/i
 const MARKET_TYPE_PERP_RE = /合约|永续|perp/i
 const MARKET_TYPE_SPOT_RE = /现货|spot/i
 
+export interface ExplicitSymbolSlot {
+  value: string
+  source: 'user_explicit'
+  evidenceText: string
+  base: string
+  quote: string
+  quoteSource: 'explicit'
+}
+
+export interface InferredSymbolSlot {
+  value: string
+  source: 'inferred'
+  evidenceText: string
+  base: string
+  quote: string
+  quoteSource: 'default_usdt'
+}
+
 interface ContextSlots {
   exchange?: string
-  symbol?: {
-    value: string
-    source: 'user_explicit'
-    evidenceText: string
-    base: string
-    quote: string
-    quoteSource: 'explicit'
-  }
+  symbol?: ExplicitSymbolSlot | InferredSymbolSlot
   marketType?: 'perp' | 'spot'
   timeframe?: string
+}
+
+/**
+ * 短句 symbol 推断（pure data-lookup, no business-rule branching）:
+ * 将整条文本按空白/标点切分后，找第一个通过 looksLikeBaseToken 的 token。
+ * 产出 source='inferred' + quoteSource='default_usdt'（quote 默认 USDT）。
+ */
+function tryInferShortSymbol(text: string): InferredSymbolSlot | undefined {
+  const tokens = text.split(/[\s,，。.；;:：!！?？()（）、/\\]+/)
+  for (const token of tokens) {
+    const upper = token.toUpperCase()
+    if (looksLikeBaseToken(upper)) {
+      const value = `${upper}USDT`
+      return {
+        value,
+        source: 'inferred',
+        evidenceText: token,
+        base: upper,
+        quote: 'USDT',
+        quoteSource: 'default_usdt',
+      }
+    }
+  }
+  return undefined
 }
 
 function extractContextSlots(text: string): ContextSlots | undefined {
@@ -250,15 +345,23 @@ function extractContextSlots(text: string): ContextSlots | undefined {
   if (symMatch) {
     const base = symMatch[1].toUpperCase()
     const quote = symMatch[2].toUpperCase()
-    const value = `${base}${quote}`
-    slots.symbol = {
-      value,
-      source: 'user_explicit',
-      evidenceText: value,
-      base,
-      quote,
-      quoteSource: 'explicit',
+    // H1: base 二次校验——防止 MACD/RSI 等指标词被 SYMBOL_RE 误匹配为 base
+    if (looksLikeBaseToken(base)) {
+      const value = `${base}${quote}`
+      slots.symbol = {
+        value,
+        source: 'user_explicit',
+        evidenceText: value,
+        base,
+        quote,
+        quoteSource: 'explicit',
+      }
     }
+  }
+  if (!slots.symbol) {
+    // 短句 fallback：'BTC' / 'ETH' / 'SOL' 等单 base token → 推断 USDT
+    const inferred = tryInferShortSymbol(text)
+    if (inferred) slots.symbol = inferred
   }
   const tfMatch = text.match(TIMEFRAME_RE)
   if (tfMatch) slots.timeframe = tfMatch[1].toLowerCase()
