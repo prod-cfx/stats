@@ -1,6 +1,6 @@
 {
   "setup-worktree": [
-    "cp $ROOT_WORKTREE_PATH/.env.*.local ./",
+    "find \"$ROOT_WORKTREE_PATH\" -maxdepth 1 -type f \\( -name \"*.local\" -o -name \".*.local\" \\) -exec cp {} ./ \\;",
     "pnpm install",
     "./scripts/dx build all --dev --offline"
   ]
