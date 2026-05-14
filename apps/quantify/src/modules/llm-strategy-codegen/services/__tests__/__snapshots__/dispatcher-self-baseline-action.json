@@ -1109,7 +1109,7 @@
                   "shape": {
                     "key": "indicator.below",
                     "phase": "exit",
-                    "sideScope": "short",
+                    "sideScope": "long",
                     "indicator": "ema",
                     "referenceRole": "mid_term",
                     "reference.period": 20,
@@ -1130,7 +1130,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "short"
+          "sideScope": "long"
         }
       ],
       "actions": [
@@ -1214,7 +1214,7 @@
                   "shape": {
                     "key": "oscillator.rsi_gte",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "period": 70,
                     "value": 70,
                     "thresholdRole": "upper_threshold"
@@ -1233,7 +1233,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         }
       ],
       "actions": [
@@ -1423,7 +1423,7 @@
                   "shape": {
                     "key": "indicator.above",
                     "phase": "exit",
-                    "sideScope": "long",
+                    "sideScope": "short",
                     "indicator": "ema",
                     "referenceRole": "mid_term",
                     "reference.period": 20,
@@ -1444,7 +1444,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "long"
+          "sideScope": "short"
         }
       ],
       "actions": [
@@ -1528,7 +1528,7 @@
                   "shape": {
                     "key": "oscillator.rsi_lte",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "short",
                     "period": 30,
                     "value": 30,
                     "thresholdRole": "lower_threshold"
@@ -1547,7 +1547,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "short"
         }
       ],
       "actions": [
@@ -2421,7 +2421,7 @@
                   "shape": {
                     "key": "action.open_long",
                     "phase": "exit",
-                    "sideScope": "long"
+                    "sideScope": "short"
                   }
                 }
               ],

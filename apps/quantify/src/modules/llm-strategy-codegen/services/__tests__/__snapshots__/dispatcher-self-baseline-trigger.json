@@ -1222,7 +1222,7 @@
                   "shape": {
                     "key": "bollinger.touch_upper",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "band": "upper",
                     "period": 20,
                     "stdDev": 2,
@@ -1243,7 +1243,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         },
         {
           "key": "bollinger.touch_lower",
@@ -1270,7 +1270,7 @@
                   "shape": {
                     "key": "bollinger.touch_lower",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "band": "lower",
                     "period": 20,
                     "stdDev": 2,
@@ -1291,7 +1291,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         },
         {
           "key": "bollinger.touch_middle",
@@ -1318,7 +1318,7 @@
                   "shape": {
                     "key": "bollinger.touch_middle",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "band": "middle",
                     "period": 20,
                     "stdDev": 2,
@@ -1339,7 +1339,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         },
         {
           "key": "price.detect.indicator_boundary",
@@ -1364,7 +1364,7 @@
                   "shape": {
                     "key": "price.detect.indicator_boundary",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "boundaryRole": "middle",
                     "confirmationMode": "touch"
                   }
@@ -1381,7 +1381,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         }
       ],
       "actions": [
@@ -1529,7 +1529,7 @@
                   "shape": {
                     "key": "bollinger.touch_middle",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "band": "middle",
                     "period": 20,
                     "stdDev": 2
@@ -1548,7 +1548,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         }
       ],
       "actions": [
@@ -2004,7 +2004,7 @@
                   "shape": {
                     "key": "bollinger.touch_upper",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "band": "upper",
                     "period": 20,
                     "stdDev": 2,
@@ -2025,7 +2025,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         },
         {
           "key": "bollinger.touch_lower",
@@ -2052,7 +2052,7 @@
                   "shape": {
                     "key": "bollinger.touch_lower",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "band": "lower",
                     "period": 20,
                     "stdDev": 2,
@@ -2073,7 +2073,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         },
         {
           "key": "bollinger.touch_middle",
@@ -2100,7 +2100,7 @@
                   "shape": {
                     "key": "bollinger.touch_middle",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "band": "middle",
                     "period": 20,
                     "stdDev": 2,
@@ -2121,7 +2121,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         },
         {
           "key": "price.detect.indicator_boundary",
@@ -2146,7 +2146,7 @@
                   "shape": {
                     "key": "price.detect.indicator_boundary",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "boundaryRole": "upper",
                     "confirmationMode": "touch"
                   }
@@ -2163,7 +2163,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         }
       ],
       "actions": [
@@ -2532,7 +2532,7 @@
                   "shape": {
                     "key": "bollinger.touch_upper",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "band": "upper",
                     "period": 20,
                     "stdDev": 2
@@ -2551,7 +2551,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         },
         {
           "key": "bollinger.touch_lower",
@@ -2577,7 +2577,7 @@
                   "shape": {
                     "key": "bollinger.touch_lower",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "band": "lower",
                     "period": 20,
                     "stdDev": 2
@@ -2596,7 +2596,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         }
       ],
       "actions": [
@@ -3555,7 +3555,7 @@
                   "shape": {
                     "key": "price.percent_change",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "direction": "down"
                   }
                 }
@@ -3570,7 +3570,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         },
         {
           "key": "price.breakout_down",
@@ -3595,7 +3595,7 @@
                   "shape": {
                     "key": "price.breakout_down",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "period": 50,
                     "reference": "channel_low"
                   }
@@ -3612,7 +3612,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         },
         {
           "key": "indicator.cross_under",
@@ -3638,7 +3638,7 @@
                   "shape": {
                     "key": "indicator.cross_under",
                     "phase": "exit",
-                    "sideScope": "short",
+                    "sideScope": "long",
                     "indicator": "ma",
                     "period": 50,
                     "fastPeriod": 50
@@ -3657,7 +3657,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "short"
+          "sideScope": "long"
         },
         {
           "key": "indicator.below",
@@ -3684,7 +3684,7 @@
                   "shape": {
                     "key": "indicator.below",
                     "phase": "exit",
-                    "sideScope": "short",
+                    "sideScope": "long",
                     "indicator": "ma",
                     "referenceRole": "long_term",
                     "reference.period": 50,
@@ -3705,7 +3705,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "short"
+          "sideScope": "long"
         }
       ],
       "actions": [
@@ -3875,7 +3875,7 @@
                   "shape": {
                     "key": "price.percent_change",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "direction": "down"
                   }
                 }
@@ -3890,7 +3890,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         },
         {
           "key": "price.breakout_down",
@@ -3915,7 +3915,7 @@
                   "shape": {
                     "key": "price.breakout_down",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "period": 100,
                     "reference": "channel_low"
                   }
@@ -3932,7 +3932,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         },
         {
           "key": "indicator.cross_under",
@@ -3958,7 +3958,7 @@
                   "shape": {
                     "key": "indicator.cross_under",
                     "phase": "exit",
-                    "sideScope": "short",
+                    "sideScope": "long",
                     "indicator": "ma",
                     "period": 100,
                     "fastPeriod": 100
@@ -3977,7 +3977,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "short"
+          "sideScope": "long"
         },
         {
           "key": "indicator.below",
@@ -4004,7 +4004,7 @@
                   "shape": {
                     "key": "indicator.below",
                     "phase": "exit",
-                    "sideScope": "short",
+                    "sideScope": "long",
                     "indicator": "ma",
                     "referenceRole": "long_term",
                     "reference.period": 100,
@@ -4025,7 +4025,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "short"
+          "sideScope": "long"
         }
       ],
       "actions": [
@@ -4615,7 +4615,7 @@
                   "shape": {
                     "key": "indicator.cross_under",
                     "phase": "exit",
-                    "sideScope": "short",
+                    "sideScope": "long",
                     "indicator": "ema",
                     "value": 21,
                     "period": 7,
@@ -4638,7 +4638,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "short"
+          "sideScope": "long"
         }
       ],
       "actions": [
@@ -4778,7 +4778,7 @@
                   "shape": {
                     "key": "indicator.cross_under",
                     "phase": "exit",
-                    "sideScope": "short",
+                    "sideScope": "long",
                     "indicator": "macd"
                   }
                 }
@@ -4793,7 +4793,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "short"
+          "sideScope": "long"
         }
       ],
       "actions": [
@@ -4875,7 +4875,7 @@
                   "shape": {
                     "key": "indicator.cross_under",
                     "phase": "exit",
-                    "sideScope": "short",
+                    "sideScope": "long",
                     "value": 20,
                     "period": 60,
                     "fastPeriod": 60,
@@ -4896,7 +4896,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "short"
+          "sideScope": "long"
         }
       ],
       "actions": [
@@ -4979,7 +4979,7 @@
                   "shape": {
                     "key": "indicator.cross_under",
                     "phase": "exit",
-                    "sideScope": "short",
+                    "sideScope": "long",
                     "value": 7,
                     "period": 21,
                     "fastPeriod": 21,
@@ -5000,7 +5000,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "short"
+          "sideScope": "long"
         },
         {
           "key": "indicator.below",
@@ -5026,7 +5026,7 @@
                   "shape": {
                     "key": "indicator.below",
                     "phase": "exit",
-                    "sideScope": "short",
+                    "sideScope": "long",
                     "referenceRole": "mid_term",
                     "reference.period": 21,
                     "timeframeOverride": "true"
@@ -5045,7 +5045,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "short"
+          "sideScope": "long"
         }
       ],
       "actions": [
@@ -9025,7 +9025,7 @@
                   "shape": {
                     "key": "price.percent_change",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "direction": "down"
                   }
                 }
@@ -9040,7 +9040,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         },
         {
           "key": "price.breakout_down",
@@ -9065,7 +9065,7 @@
                   "shape": {
                     "key": "price.breakout_down",
                     "phase": "exit",
-                    "sideScope": "both",
+                    "sideScope": "long",
                     "period": 12,
                     "reference": "channel_low"
                   }
@@ -9082,7 +9082,7 @@
               "openSlots": []
             }
           ],
-          "sideScope": "both"
+          "sideScope": "long"
         }
       ],
       "actions": [

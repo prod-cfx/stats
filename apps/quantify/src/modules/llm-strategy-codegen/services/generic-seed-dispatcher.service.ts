@@ -263,6 +263,39 @@ const DIRECTION_TO_SIDE: Readonly<Record<string, 'long' | 'short' | 'both'>> = {
   fixed: 'both',
 }
 
+/**
+ * Issue #1338 review M1 修复：close-verb → sideScope 派生表（exit phase 优先）。
+ *
+ * 现象：'EMA20 下穿 EMA50 时市价平多' 的 phase=exit，但 from-direction 仅按
+ *   cross_under direction 派生 short，与"平多"语义矛盾——平的是 long 仓，
+ *   sideScope 应为 long。dispatcher 在 exit phase 探测 close-verb 命中即覆盖
+ *   direction-derived side，保证 issue #1338 AC："cross_under@exit@long" 不变量。
+ *
+ * 仅在 phase==='exit' 时启用；entry phase 仍由 direction 派生（'EMA20 上穿 EMA50
+ *   开多'：cross_over → long，正确）。
+ */
+const CLOSE_VERB_TO_SIDE: Readonly<Record<string, 'long' | 'short'>> = {
+  '平多': 'long',
+  '平多仓': 'long',
+  '关多': 'long',
+  '平空': 'short',
+  '平空仓': 'short',
+  '关空': 'short',
+  'close long': 'long',
+  'close short': 'short',
+}
+
+function detectCloseSide(clause: string): 'long' | 'short' | null {
+  const lower = clause.toLowerCase()
+  // 长 key 优先，避免 '平多仓' 被 '平多' 提前 short-circuit（虽然结果相同，但保持
+  // matchKeyword 风格一致）
+  const entries = Object.entries(CLOSE_VERB_TO_SIDE).sort(([a], [b]) => b.length - a.length)
+  for (const [verb, side] of entries) {
+    if (lower.includes(verb.toLowerCase())) return side
+  }
+  return null
+}
+
 function resolveSide(
   spec: SideResolverSpec,
   clause: string,
@@ -694,7 +727,14 @@ export class GenericSeedDispatcher {
 
     const params = extractParams(surface.paramSlots, clause, atomKey)
     const phase = resolvePhaseFromClause(clause, surface.phaseResolver, { atomKey, params })
-    const sideScope = resolveSide(surface.sideResolver, clause, direction)
+    let sideScope = resolveSide(surface.sideResolver, clause, direction)
+    // Issue #1338 M1：exit phase 下若 clause 含 close-verb（平多/平空），用 close-verb
+    //   推导的目标仓位方向覆盖 direction-derived side——'EMA20 下穿 平多' 应 long
+    //   单边（平的是多仓），而非 cross_under → short。
+    if (phase === 'exit') {
+      const closeSide = detectCloseSide(clause)
+      if (closeSide) sideScope = closeSide
+    }
 
     return {
       clauseText: clause,
