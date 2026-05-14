@@ -34,7 +34,7 @@ describe('Issue #1313 PR4 lifecycle pyramiding emit decision', () => {
       expect(typeof pyramidingEmit.lifecyclePyramidingShape).toBe('function')
     })
 
-    it('irShape 退化为 NotApplicable brand sentinel（fail-loud；与 Pr1bStub 分离）', () => {
+    it('irShape 是 NotApplicable brand sentinel（与 Pr1bStub brand 分离）', () => {
       // Issue #1343：pr3e-* atom 的 irShape sentinel 统一带 `__notApplicable: true`
       // brand，与 'irshape-not-applicable' 状态共用 sentinel 形态；
       // capabilityStatus 字面量是"通过哪个 emit shape 兑现"的唯一真相源。
