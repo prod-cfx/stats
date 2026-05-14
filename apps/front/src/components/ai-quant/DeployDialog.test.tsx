@@ -86,6 +86,37 @@ describe('DeployDialog', () => {
     expect(onSelectLeverage).toHaveBeenCalledWith(5)
   })
 
+  it('uses a viewport-bounded scrollable layout on mobile', async () => {
+    await act(async () => {
+      root.render(
+        <DeployDialog
+          open
+          canDeploy
+          deploySubmitting={false}
+          apiConfigured={false}
+          exchange="okx"
+          marketType="perp"
+          accounts={[]}
+          selectedAccountId=""
+          lng="en"
+          onSelectAccount={() => {}}
+          onConfirmDeploy={() => {}}
+          onClose={() => {}}
+        />,
+      )
+    })
+
+    const overlay = container.firstElementChild
+    const panel = overlay?.firstElementChild
+    const actions = container.querySelector('[data-testid="deploy-dialog-actions"]')
+
+    expect(overlay?.className).toContain('py-4')
+    expect(panel?.className).toContain('max-h-[calc(100dvh-2rem)]')
+    expect(panel?.className).toContain('overflow-y-auto')
+    expect(actions?.className).toContain('grid')
+    expect(actions?.className).toContain('sm:flex')
+  })
+
   it('disables confirm when snapshot market type truth is missing', async () => {
     await act(async () => {
       root.render(

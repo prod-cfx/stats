@@ -45,4 +45,12 @@ describe('AiQuantSection', () => {
     expect(html).toContain('管理运行中的自动化策略、交易所连接和执行状态。')
     expect(html).toContain('交易所 API 已配置后即可部署运行策略。')
   })
+
+  it('stacks account AI quant calls to action at mobile width', () => {
+    const html = renderToStaticMarkup(React.createElement(AiQuantSection, { lng: 'zh' }))
+
+    expect(html).toContain('data-testid="ai-quant-section-actions"')
+    expect(html).toContain('w-full')
+    expect(html).toContain('sm:w-auto')
+  })
 })

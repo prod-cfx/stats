@@ -65,4 +65,30 @@ describe('ConversationSidebar', () => {
     expect(activeItem?.textContent).not.toContain('当前')
     expect(activeItem?.className).toContain('bg-[#f3e8ff]')
   })
+
+  it('keeps the conversation list compact and scrollable on narrow screens', async () => {
+    await act(async () => {
+      root.render(
+        <ConversationSidebar
+          items={[
+            { id: 'active', title: '基于 OKX 模拟盘 BTC-U', updatedAt: 1_714_471_520_000 },
+            { id: 'other-1', title: '另一个会话', updatedAt: 1_714_471_500_000 },
+            { id: 'other-2', title: '第三个会话', updatedAt: 1_714_471_400_000 },
+          ]}
+          activeId="active"
+          onCreate={() => undefined}
+          onDelete={() => undefined}
+          onRename={() => undefined}
+          onSwitch={() => undefined}
+        />,
+      )
+    })
+
+    const sidebar = container.querySelector('aside')
+    const list = sidebar?.querySelector('[data-testid="conversation-sidebar-list"]')
+
+    expect(sidebar?.className).toContain('max-h-[42dvh]')
+    expect(sidebar?.className).toContain('md:max-h-none')
+    expect(list?.className).toContain('overflow-y-auto')
+  })
 })

@@ -36,7 +36,10 @@ export function BacktestEquityChart({ lng, data }: BacktestEquityChartProps) {
 
   if (!data || data.length === 0) {
     return (
-      <div className="flex h-[480px] items-center justify-center rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 backdrop-blur-sm">
+      <div
+        data-testid="backtest-equity-empty"
+        className="flex h-[280px] items-center justify-center rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 backdrop-blur-sm sm:h-[360px] sm:p-6 lg:h-[480px]"
+      >
         <p className="text-[color:var(--cf-muted)]">
           {lng === 'en' ? 'No backtest data available' : '暂无回测数据'}
         </p>
@@ -67,11 +70,14 @@ export function BacktestEquityChart({ lng, data }: BacktestEquityChartProps) {
   const tooltipText = isDark ? '#fff' : '#000'
 
   return (
-    <div className="rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 backdrop-blur-sm">
-      <h3 className="mb-6 text-base font-medium text-[color:var(--cf-text-strong)]">
+    <div
+      data-testid="backtest-equity-chart-frame"
+      className="rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 backdrop-blur-sm sm:p-6"
+    >
+      <h3 className="mb-4 text-base font-medium text-[color:var(--cf-text-strong)] sm:mb-6">
         {lng === 'en' ? 'Equity & Backtest Performance' : '净值与回测表现'}
       </h3>
-      <div className="h-[400px] w-full" key={themeTick}>
+      <div data-testid="backtest-equity-chart-body" className="h-[300px] w-full sm:h-[360px] lg:h-[400px]" key={themeTick}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
             <defs>

@@ -97,15 +97,15 @@ export function DeployDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4" onClick={handleDialogClose}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4 py-4" onClick={handleDialogClose}>
       <div
-        className="w-full max-w-[520px] rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-[520px] overflow-y-auto rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 sm:p-5"
         onClick={event => event.stopPropagation()}
       >
         <h3 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{title}</h3>
         <p className="mt-1 text-sm text-[color:var(--cf-muted)]">{description}</p>
 
-        <div className="mt-4 flex items-center justify-between rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+        <div className="mt-4 flex flex-col gap-2 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-sm text-[color:var(--cf-text)]">{t('aiQuant.deployDialog.apiStatus')}</span>
           <ApiKeyStatusBadge configured={apiConfigured} />
         </div>
@@ -193,11 +193,11 @@ export function DeployDialog({
           </div>
         )}
 
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div data-testid="deploy-dialog-actions" className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
           {!apiConfigured && (
             <Link
               href={`/${lng}/account?tab=settings#exchange-api`}
-              className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+              className="inline-flex min-h-10 items-center justify-center rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
             >
               {t('aiQuant.deployDialog.goConfig')}
             </Link>
@@ -207,7 +207,7 @@ export function DeployDialog({
             onClick={onConfirmDeploy}
             disabled={!apiConfigured || !canDeploy || !marketTypeReady || !accountReady || !leverageReady || deploySubmitting}
             aria-busy={deploySubmitting}
-            className="from-primary to-secondary inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="from-primary to-secondary inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-gradient-to-r px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
             {deploySubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
             {deploySubmitting ? submittingLabel : confirmLabel}
@@ -216,7 +216,7 @@ export function DeployDialog({
             type="button"
             onClick={handleDialogClose}
             disabled={deploySubmitting}
-            className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-10 items-center justify-center rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {t('common.close')}
           </button>

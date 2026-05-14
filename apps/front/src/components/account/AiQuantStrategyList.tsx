@@ -562,7 +562,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                     <Link href={`/${lng}/account/ai-quant/strategy/${item.id}`} className="block min-w-0">
                       <div className="min-w-0 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h4 className="font-bold text-[color:var(--cf-text-strong)] transition-colors group-hover:text-primary">
+                          <h4 className="min-w-0 break-words font-bold text-[color:var(--cf-text-strong)] transition-colors group-hover:text-primary">
                             {item.name}
                           </h4>
                           <div className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusConfig.className}`}>
@@ -581,7 +581,10 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                       </div>
                     </Link>
 
-                    <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap lg:justify-end">
+                    <div
+                      data-testid="ai-quant-strategy-card-actions"
+                      className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:w-auto lg:justify-end"
+                    >
 
                       {!isViewOnly && (
                         item.status === 'running' ? (
@@ -632,7 +635,8 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
 
                   <Link
                     href={`/${lng}/account/ai-quant/strategy/${item.id}`}
-                    className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-4"
+                    data-testid="ai-quant-strategy-card-metrics"
+                    className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-4"
                   >
                       {[
                         {

@@ -211,6 +211,31 @@ describe('StrategyPlaza API rendering', () => {
     expect(onEditStrategy).toHaveBeenCalledWith('ma-cross')
   })
 
+  it('keeps card metadata and actions from overflowing on mobile', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template]}
+          loading={false}
+          pendingTemplateId="ma-cross"
+          pendingAction="edit"
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const article = container.querySelector('article')
+    const metadataRows = container.querySelectorAll('[data-testid="strategy-plaza-meta-row"]')
+    const actions = container.querySelector('[data-testid="strategy-plaza-actions"]')
+
+    expect(article?.className).toContain('min-w-0')
+    expect(metadataRows[0]?.className).toContain('grid')
+    expect(metadataRows[0]?.className).toContain('sm:flex')
+    expect(actions?.className).toContain('grid-cols-1')
+    expect(actions?.className).toContain('sm:grid-cols-2')
+  })
+
   it('keeps loaded templates visible when showing an action error', async () => {
     await act(async () => {
       root.render(

@@ -160,6 +160,26 @@ describe('AiQuantDeletionDialog', () => {
     expect(secondary?.disabled).toBe(true)
   })
 
+  it('uses a viewport-bounded scrollable layout with mobile action stacking', async () => {
+    await render({
+      kind: 'with-conversation',
+      conversation: { title: '超长会话标题用于验证移动端换行不撑破弹框' },
+      strategy: { name: '超长策略名称用于验证移动端换行不撑破弹框', id: 'stg-1' },
+    })
+
+    const overlay = container.firstElementChild
+    const dialog = container.querySelector('[role="dialog"]')
+    const infoRows = container.querySelectorAll('[data-testid="ai-quant-deletion-info-row"]')
+    const actions = container.querySelector('[data-testid="ai-quant-deletion-actions"]')
+
+    expect(overlay?.className).toContain('py-4')
+    expect(dialog?.className).toContain('max-h-[calc(100dvh-2rem)]')
+    expect(dialog?.className).toContain('overflow-y-auto')
+    expect(infoRows[0]?.className).toContain('flex-col')
+    expect(actions?.className).toContain('grid')
+    expect(actions?.className).toContain('sm:flex')
+  })
+
   it('calls onClose on Escape when not pending', async () => {
     const onClose = jest.fn()
     await render({ onClose })

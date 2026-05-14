@@ -219,7 +219,7 @@ export function AiQuantDeletionDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[95] flex items-center justify-center bg-black/50 px-4"
+      className="fixed inset-0 z-[95] flex items-center justify-center bg-black/50 px-4 py-4"
       onClick={handleBackdropClick}
     >
       <div
@@ -227,7 +227,7 @@ export function AiQuantDeletionDialog({
         aria-modal="true"
         aria-labelledby="ai-quant-deletion-dialog-title"
         ref={dialogRef}
-        className="w-full max-w-[560px] rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-[560px] overflow-y-auto rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 sm:p-5"
         onClick={event => event.stopPropagation()}
       >
         <h3
@@ -243,17 +243,17 @@ export function AiQuantDeletionDialog({
         {showInfoBlock && (conversation || strategy) && (
           <div className="mt-4 grid gap-2 rounded-xl border border-[color:var(--cf-border)] bg-black/10 p-3 text-sm text-[color:var(--cf-text)]">
             {conversation && (
-              <div className="flex justify-between gap-3">
+              <div data-testid="ai-quant-deletion-info-row" className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
                 <span className="text-[color:var(--cf-muted)]">{t('aiQuant.deleteDialog.conversation')}</span>
-                <span className="text-right text-[color:var(--cf-text-strong)]">
+                <span className="break-words text-[color:var(--cf-text-strong)] sm:text-right">
                   {conversation.title}
                 </span>
               </div>
             )}
             {strategy && (
-              <div className="flex justify-between gap-3">
+              <div data-testid="ai-quant-deletion-info-row" className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
                 <span className="text-[color:var(--cf-muted)]">{t('aiQuant.deleteDialog.strategy')}</span>
-                <span className="text-right text-[color:var(--cf-text-strong)]">
+                <span className="break-words text-[color:var(--cf-text-strong)] sm:text-right">
                   {strategy.name?.trim() || strategy.id}
                 </span>
               </div>
@@ -302,7 +302,7 @@ export function AiQuantDeletionDialog({
           </div>
         )}
 
-        <div className="mt-5 flex flex-wrap gap-2">
+        <div data-testid="ai-quant-deletion-actions" className="mt-5 grid gap-2 sm:flex sm:flex-wrap">
           {primaryLabel && primaryHandler && (
             <button
               ref={primaryButtonRef}

@@ -1072,8 +1072,8 @@ describe('AiQuantStrategyDetail', () => {
     expect(panel?.className).toContain('gap-4')
     expect(actions).toBeTruthy()
     expect(actions?.className).toContain('border-t')
-    expect(actions?.className).toContain('sm:flex-row')
-    expect(actions?.className).toContain('sm:justify-end')
+    expect(actions?.className).toContain('md:flex-row')
+    expect(actions?.className).toContain('md:justify-end')
     expect(actionLabels).toEqual(['停止策略', '返回对话'])
     expect(returnLink?.className).toContain('h-9')
     expect(returnLink?.className).toContain('min-w-max')
@@ -1086,6 +1086,51 @@ describe('AiQuantStrategyDetail', () => {
     expect(stopButton?.className).toContain('text-red-600')
     expect(stopButton?.className).toContain('dark:text-red-400')
     expect(actions?.textContent).not.toContain('平仓并停止')
+  })
+
+  it('keeps the detail header, tables, metrics, and equity tooltip mobile-contained', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({
+            name: 'Very long strategy name for mobile detail header',
+            symbol: 'BTC-USDT-SWAP-LONG-SYMBOL',
+            hasActiveConversation: true,
+            latestOrders: [
+              {
+                executedAt: '2026-04-25 12:00',
+                symbol: 'BTC-USDT-SWAP-LONG-SYMBOL',
+                side: 'BUY',
+                price: 100,
+                quantity: 1,
+                notional: 100,
+                fee: 0.1,
+                feeCurrency: 'USDT',
+                orderId: 'order-1',
+              },
+            ],
+            equitySeries: [
+              { ts: '2026-04-24', value: 10000 },
+              { ts: '2026-04-25', value: 10100 },
+            ],
+          })}
+        />,
+      )
+    })
+
+    const title = Array.from(container.querySelectorAll('h1')).find(node => node.textContent === 'Very long strategy name for mobile detail header')
+    const header = title?.closest('section')
+    const metrics = container.querySelector('[data-testid="strategy-detail-metric-grid"]')
+    const tradesTable = container.querySelector('[data-testid="strategy-detail-latest-trades-table"]')
+    const equityPanel = container.querySelector('[data-testid="strategy-detail-equity-chart-panel"]')
+
+    expect(header?.className).toContain('overflow-hidden')
+    expect(title?.className).toContain('break-words')
+    expect(metrics?.className).toContain('grid-cols-1')
+    expect(metrics?.className).toContain('sm:grid-cols-2')
+    expect(tradesTable?.className).toContain('min-w-[760px]')
+    expect(equityPanel?.className).toContain('overflow-hidden')
   })
 
   it('shows the liquidate failure message and keeps the strategy running when action fails', async () => {
