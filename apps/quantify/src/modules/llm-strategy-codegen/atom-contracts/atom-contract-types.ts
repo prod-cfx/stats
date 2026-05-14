@@ -93,6 +93,36 @@ export interface SizingEvidence {
   readonly paramSource: string
 }
 
+// =========================================================
+// AtomClassifier — classifier metadata (Issue #1334 PR1)
+// =========================================================
+
+export interface AtomClassifier {
+  /**
+   * 运行时支持状态：
+   *   supported_executable                            → 当前可执行
+   *   unsupported_unknown                             → 未知/未注册
+   *   unsupported_${reasonCode}_public_beta_unsupported → 已知但公测阶段不支持
+   */
+  supportStatus:
+    | 'supported_executable'
+    | 'unsupported_unknown'
+    | `unsupported_${string}_public_beta_unsupported`
+  /** 版本门控；仅 supported_executable 时有意义，如 '2026.05.W02' */
+  executableSinceVersion?: string
+  /** 不支持原因元数据；仅 unsupported_* 时填写 */
+  unsupportedMeta?: {
+    reasonCode: string
+    publicReasonZh: string
+    publicReasonEn?: string
+  }
+  /**
+   * 运行时所需合约基底；
+   * 默认从 emit.* 推导；与 emit 派生不一致时需显式声明。
+   */
+  contractSubstrate?: 'default' | 'custom'
+}
+
 export interface AtomContract<TParams = Record<string, unknown>> {
   /** atom 自身 key；PR1b 起导出 registry 时由单一真相源补齐 */
   key: AtomContractKey
@@ -192,6 +222,13 @@ export interface AtomContract<TParams = Record<string, unknown>> {
    * PR3a 阶段：在 IR compiler refactor 时真实兑现，反转 `_IrShapeAllStub` invariant。
    */
   emit: AtomContractEmit
+
+  /**
+   * Classifier 元数据（Issue #1334 PR1）——
+   * 取代 SemanticAtomRegistryService.ATOMS 内的 supportStatus / executableSinceVersion 等字段。
+   * PR1 默认值全部填 supported_executable；PR2 迁移 legacy ATOMS 非默认值条目。
+   */
+  classifier: AtomClassifier
 }
 
 export type AtomContractKey = SupportedAtomKey
