@@ -17,10 +17,13 @@ export function DashboardViewClient() {
   const searchParams = useSearchParams()
   const dashboardId = searchParams?.get('id') || ''
   const [dashboard, setDashboard] = useState<DashboardDoc | null>(null)
+  const [dashboardLoaded, setDashboardLoaded] = useState(false)
 
   useEffect(() => {
+    setDashboardLoaded(false)
     const refresh = () => {
       setDashboard(dashboardId ? getDashboard(dashboardId) : null)
+      setDashboardLoaded(true)
     }
     refresh()
     if (!dashboardId) return
@@ -40,6 +43,15 @@ export function DashboardViewClient() {
             <div className="text-[#8b949e]">{t('dashboard.view.missingId')}</div>
           </div>
         </div>
+      </main>
+    )
+  }
+
+  if (!dashboardLoaded) {
+    return (
+      <main className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <DashboardEditorSidebar dashboardId={dashboardId} mode="view" />
+        <div className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-4 py-4 md:p-8" />
       </main>
     )
   }

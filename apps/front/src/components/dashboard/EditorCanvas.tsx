@@ -32,14 +32,17 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
   const lng = (params?.lng as string) || 'zh'
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [doc, setDoc] = useState<DashboardDoc | null>(null)
+  const [docLoaded, setDocLoaded] = useState(false)
 
   useEffect(() => {
+    setDocLoaded(false)
     const refresh = () => {
       setDoc(
         dashboardId === DEFAULT_DASHBOARD_ID
           ? ensureDashboard(DEFAULT_DASHBOARD_ID)
           : getDashboard(dashboardId),
       )
+      setDocLoaded(true)
     }
     refresh()
     window.addEventListener(DASHBOARD_UPDATED_EVENT, refresh)
@@ -52,9 +55,10 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
 
   useEffect(() => {
     if (dashboardId === DEFAULT_DASHBOARD_ID) return
+    if (!docLoaded) return
     if (doc) return
     router.replace(`/${lng}/dashboard/?tab=saved`)
-  }, [dashboardId, doc, lng, router])
+  }, [dashboardId, doc, docLoaded, lng, router])
 
   return (
     <div className="flex min-w-0 flex-col gap-6 pb-20 md:gap-8">
@@ -94,7 +98,7 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
       </div>
 
       <div className="bg-grid-pattern relative min-h-[420px] min-w-0 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3 md:min-h-[600px] md:p-4">
-        {doc ? (
+        {!docLoaded ? null : doc ? (
           <DashboardCanvas dashboardId={dashboardId} />
         ) : (
           <div className="py-20 text-center text-[color:var(--cf-muted)]">
