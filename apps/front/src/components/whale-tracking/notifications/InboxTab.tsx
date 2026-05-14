@@ -33,11 +33,11 @@ export function InboxTab({ items, loading, onRead, onReadAll }: InboxTabProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex justify-stretch sm:justify-end">
         <button
           type="button"
           onClick={onReadAll}
-          className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-1.5 text-sm text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)]"
+          className="w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-1.5 text-sm text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)] sm:w-auto"
         >
           {t('whaleTracking.notifications.actions.markAllRead')}
         </button>
@@ -54,23 +54,23 @@ export function InboxTab({ items, loading, onRead, onReadAll }: InboxTabProps) {
           key={item.id}
           className={`rounded-xl border p-4 ${item.read ? 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]' : 'border-primary/40 bg-primary/5'}`}
         >
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div>
-              <div className="text-sm font-semibold text-[color:var(--cf-text-strong)]">{item.title}</div>
+          <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="break-words text-sm font-semibold text-[color:var(--cf-text-strong)]">{item.title}</div>
               <div className="mt-1 text-xs text-[color:var(--cf-muted)]">{new Date(item.createdAt).toLocaleString()}</div>
             </div>
             {!item.read && (
               <button
                 type="button"
                 onClick={() => onRead(item.id)}
-                className="rounded-md px-2 py-1 text-xs text-primary transition-colors hover:bg-primary/10"
+                className="w-full rounded-md px-2 py-1 text-xs text-primary transition-colors hover:bg-primary/10 sm:w-auto"
               >
                 {t('whaleTracking.notifications.actions.markRead')}
               </button>
             )}
           </div>
 
-          <div className="mb-3 text-sm text-[color:var(--cf-text)]">{item.content}</div>
+          <div className="mb-3 break-words text-sm text-[color:var(--cf-text)]">{item.content}</div>
 
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="text-[color:var(--cf-muted)]">{t('whaleTracking.notifications.channels.web')}:</span>

@@ -168,8 +168,8 @@ export const TraderCard = ({
 
   const content = variant === 'recommended' ? (
     <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-2xl p-4 md:p-6 flex flex-col gap-6 gradient-border-hover group cursor-pointer h-full" onClick={() => onShowStats?.(address)}>
-      <div className="flex justify-between items-start">
-        <div className="flex items-center gap-3 md:gap-4 overflow-visible">
+      <div className="flex justify-between items-start gap-3">
+        <div className="flex min-w-0 items-center gap-3 overflow-visible md:gap-4">
           <div className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center font-bold text-lg md:text-xl flex-shrink-0" style={avatarStyle}>
             {address.substring(2, 4).toUpperCase() || 'WH'}
           </div>
@@ -228,12 +228,12 @@ export const TraderCard = ({
       </div>
     </div>
   ) : (
-    <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-2xl p-6 flex flex-col gap-6 gradient-border-hover group cursor-pointer h-full" onClick={() => onShowStats?.(address)}>
-      <div className="flex justify-between items-start">
-        <div className="flex items-center gap-2 relative group/address">
+    <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-2xl p-4 md:p-6 flex flex-col gap-5 md:gap-6 gradient-border-hover group cursor-pointer h-full" onClick={() => onShowStats?.(address)}>
+      <div className="flex justify-between items-start gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 relative group/address">
           <Link 
             href={`/${lng}/whale-tracking/profile/?address=${address}`}
-            className="text-[color:var(--cf-text-strong)] font-bold text-h2 hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
+            className="text-[color:var(--cf-text-strong)] font-bold text-xl md:text-h2 hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
             onClick={handleAddressClick}
           >
             {address.length > 15 ? `${address.substring(0, 6)}...${address.substring(address.length - 4)}` : address}
@@ -243,14 +243,14 @@ export const TraderCard = ({
             {address}
             <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
           </div>
-          <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors" onClick={copyAddress}>
+          <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors flex-shrink-0" onClick={copyAddress}>
             {hasCopied ? <Check className="w-4.5 h-4.5 text-green-500" /> : <Copy className="w-4.5 h-4.5" />}
           </button>
-          {handle && <span className="text-[color:var(--cf-muted)] text-body font-medium ml-2">{handle}</span>}
+          {handle && <span className="min-w-0 break-all text-[color:var(--cf-muted)] text-sm md:text-body font-medium md:ml-2">{handle}</span>}
         </div>
         <button 
           type="button"
-          className="w-9 h-9 flex items-center justify-center bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-xl text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-surface-hover)] active:scale-95 transition-all"
+          className="w-9 h-9 flex flex-shrink-0 items-center justify-center bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-xl text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-surface-hover)] active:scale-95 transition-all"
           onClick={(e) => {
             e.stopPropagation();
             onShowStats?.(address);
@@ -265,7 +265,7 @@ export const TraderCard = ({
         <span className="text-[color:var(--cf-text-strong)] text-h2 font-bold tracking-tight">{resolvedTotalValue}</span>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 border-b border-[color:var(--cf-border)] pb-6">
+      <div className="grid grid-cols-1 gap-3 border-b border-[color:var(--cf-border)] pb-5 sm:grid-cols-3 md:gap-2 md:pb-6">
         <div className="flex flex-col gap-1">
           <span className="text-[color:var(--cf-muted)] text-caption font-bold uppercase tracking-wider">{resolvedPnlLabel}</span>
           <span className={`font-bold text-body ${isPnlPositive ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
@@ -296,7 +296,7 @@ export const TraderCard = ({
                   <Info className="w-3 h-3 opacity-50" />
                 </span>
                 {/* Simple CSS Tooltip */}
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-2xl text-[10px] text-[color:var(--cf-text)] whitespace-nowrap opacity-0 invisible group-hover/tag:opacity-100 group-hover/tag:visible transition-all z-20 pointer-events-none">
+                <div className="absolute bottom-full left-0 mb-2 max-w-[220px] px-3 py-2 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-2xl text-[10px] text-[color:var(--cf-text)] whitespace-normal opacity-0 invisible group-hover/tag:opacity-100 group-hover/tag:visible transition-all z-20 pointer-events-none md:left-1/2 md:-translate-x-1/2 md:whitespace-nowrap md:max-w-none">
                   {resolveAiTagDescription(tag.key, tag.descriptionKey)}
                   <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-[color:var(--cf-border)]" />
                 </div>

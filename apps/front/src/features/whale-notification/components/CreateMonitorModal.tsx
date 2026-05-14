@@ -144,7 +144,7 @@ export function CreateMonitorModal({
             type="button"
             onClick={handleSubmit}
             disabled={submitting}
-            className="from-primary to-secondary rounded-full bg-gradient-to-r px-6 py-2 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="from-primary to-secondary w-full sm:w-auto rounded-full bg-gradient-to-r px-6 py-2 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? t('common.loading') : (submitText ?? t('whaleTracking.notifications.modal.create'))}
           </button>
@@ -162,7 +162,7 @@ export function CreateMonitorModal({
                 value={presetAddress ?? address}
                 onChange={e => setAddress(e.target.value)}
                 readOnly={Boolean(presetAddress)}
-                className="w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-sm text-[color:var(--cf-text-strong)]"
+                className="w-full min-w-0 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-sm text-[color:var(--cf-text-strong)]"
               />
             </div>
             <div className="space-y-2">

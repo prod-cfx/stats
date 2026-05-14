@@ -63,7 +63,7 @@ export const ProfileHeader = ({
   return (
     <div className="flex flex-col justify-between gap-6 md:flex-row md:items-center">
       <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 items-center gap-3 md:gap-4">
           <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]">
             <img
               src={`https://api.dicebear.com/7.x/identicon/svg?seed=${address}`}
@@ -71,7 +71,7 @@ export const ProfileHeader = ({
               className="h-full w-full"
             />
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <div className="group/address relative">
               <PageTitle className="cursor-default text-xl md:text-2xl">
                 {formatAddress(address)}
@@ -119,7 +119,7 @@ export const ProfileHeader = ({
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:flex md:items-center">
         {onFollow && (
           <button
             type="button"

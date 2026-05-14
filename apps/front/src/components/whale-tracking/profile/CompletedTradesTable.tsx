@@ -211,7 +211,46 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
   }
 
   return (
-    <table className="w-full border-collapse">
+    <>
+      <div className="space-y-3 p-3 md:hidden">
+        {paginatedCompletedTrades.map((trade, idx) => (
+          <article key={`${trade.fillTime}-${idx}-mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">{trade.asset}</div>
+                <div className="text-xs text-[color:var(--cf-muted)]">{formatRelativeTime(trade.fillTime)}</div>
+              </div>
+              {renderSideBadge(trade.side)}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.duration')}</div><div className="text-[color:var(--cf-text-strong)]">{formatDurationLabel(trade.duration)}</div></div>
+              <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.netPnl')}</div><div className={trade.netPnl.includes('+') ? 'font-bold text-green-500 dark:text-green-400' : 'font-bold text-red-500 dark:text-red-400'}>{trade.netPnl}</div></div>
+              <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.size')}</div><div className="text-[color:var(--cf-muted)]">{trade.size}</div></div>
+              <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.exitPrice')}</div><div className="text-[color:var(--cf-text-strong)]">{trade.exitPrice}</div></div>
+              <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.fee')}</div><div className="text-[color:var(--cf-muted)]">{trade.fee}</div></div>
+            </div>
+          </article>
+        ))}
+        {paginatedCompletedTrades.length === 0 && (
+          <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-8 text-center text-sm text-[color:var(--cf-muted)]">
+            {sortedCompletedTrades.length === 0
+              ? t('whaleTracking.profile.empty.completedTrades')
+              : t('whaleTracking.profile.empty.filteredResults')}
+          </div>
+        )}
+        {paginatedCompletedTrades.length > 0 &&
+        (historyPage + 1) * HISTORY_PAGE_SIZE < sortedCompletedTrades.length && (
+          <button
+            type="button"
+            onClick={() => setHistoryPage(historyPage + 1)}
+            className="w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-6 py-2 text-sm font-medium text-[color:var(--cf-text-strong)]"
+          >
+            {t('whaleTracking.profile.loadMore', '加载更多')}
+          </button>
+        )}
+      </div>
+      <div className="hidden md:block">
+        <table className="w-full border-collapse">
       <thead>
         <tr className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[10px] font-bold tracking-wider text-[color:var(--cf-muted)] uppercase">
           <th className="min-w-[120px] px-6 py-4 text-left">
@@ -344,6 +383,8 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
           ) : null,
         ]}
       </tbody>
-    </table>
+        </table>
+      </div>
+    </>
   )
 }

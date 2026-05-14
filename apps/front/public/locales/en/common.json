@@ -1439,12 +1439,17 @@
         "telegramBindRequired": "Please log in/bind Telegram first to enable Telegram notifications",
         "editAddressTitle": "Edit Address Monitor"
       },
+      "confirmDelete": {
+        "title": "Remove address monitor?",
+        "description": "This will stop notifications for {{address}}. You can create the monitor again later."
+      },
       "errors": {
         "invalidThreshold": "Please enter a valid threshold amount",
         "invalidAddress": "Invalid address, please retry from profile page"
       },
       "toast": {
         "ruleCreated": "Monitor rule created",
+        "deleteFailed": "Failed to remove monitor",
         "webPermissionDeniedTitle": "Browser notification permission is disabled",
         "webPermissionDeniedDesc": "Rule is still saved and in-site messages continue to work",
         "authRequiredTitle": "Please log in",
@@ -1523,6 +1528,11 @@
       "loadMore": "Load more",
       "invalidAddressTitle": "Invalid wallet address",
       "invalidAddressDescription": "Please provide a valid EVM-compatible wallet address to view the profile.",
+      "recentTrades": {
+        "loading": "Loading...",
+        "loadFailed": "Failed to load recent trades",
+        "empty": "No recent trades"
+      },
       "header": {
         "copyAddress": "Copy address",
         "refreshing": "Refreshing...",

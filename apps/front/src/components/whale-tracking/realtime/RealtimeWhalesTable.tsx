@@ -317,7 +317,7 @@ export const RealtimeWhalesTable = () => {
             {t('whaleTracking.realtime.subtitle')}
           </p>
         </div>
-        <div className="flex w-full items-center gap-4 md:w-auto">
+        <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 md:flex md:w-auto md:items-center md:gap-4">
           <button
             type="button"
             onClick={() => {
@@ -350,10 +350,93 @@ export const RealtimeWhalesTable = () => {
         </div>
       </div>
 
-      <div className="relative min-h-[600px] overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl">
+      <div className="relative min-h-[400px] overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl md:min-h-[600px]">
         {/* Loading indicator removed per UX request (kept data fetching + logs) */}
 
-        <div className="cf-scrollbar overflow-x-auto">
+        <div data-testid="realtime-mobile-card-list" className="space-y-3 p-3 md:hidden">
+          {displayedTransactions.map(tx => (
+            <article
+              key={`${tx.address}-${tx.asset}-${tx.side}-${tx.timestamp}-mobile`}
+              className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3"
+              onClick={() => handleShowStats(tx.address)}
+            >
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <button
+                    type="button"
+                    className="font-mono text-sm font-semibold text-[color:var(--cf-text-strong)]"
+                    onClick={e => {
+                      e.stopPropagation()
+                      handleGoProfile(tx.address)
+                    }}
+                  >
+                    {`${tx.address.slice(0, 6)}...${tx.address.slice(-4)}`}
+                  </button>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span
+                      className="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                      style={{ color: tx.tagColor, backgroundColor: tx.tagBg }}
+                    >
+                      {t(`whaleTracking.tags.${tx.tagKey}`)}
+                    </span>
+                    <span className="text-xs text-[color:var(--cf-muted)]">{formatRelativeTime(tx.timestamp)}</span>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    data-testid="realtime-mobile-copy"
+                    type="button"
+                    className={`rounded-lg border border-[color:var(--cf-border)] p-2 ${copiedAddress === tx.address ? 'text-green-500' : 'text-[color:var(--cf-muted)]'}`}
+                    onClick={e => {
+                      e.stopPropagation()
+                      handleCopy(tx.address)
+                    }}
+                  >
+                    {copiedAddress === tx.address ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </button>
+                  <button
+                    data-testid="realtime-mobile-stats"
+                    type="button"
+                    className="rounded-lg border border-[color:var(--cf-border)] p-2 text-[color:var(--cf-muted)]"
+                    onClick={e => {
+                      e.stopPropagation()
+                      handleShowStats(tx.address)
+                    }}
+                  >
+                    <TrendingUp className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.realtime.table.asset')}</div>
+                  <div className="mt-0.5 flex items-center gap-2 font-bold text-[color:var(--cf-text-strong)]">
+                    {tx.asset}
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] ${tx.side === 'Long' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                      {tx.side === 'Long' ? t('whaleTracking.side.long') : t('whaleTracking.side.short')}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.holdings.table.leverage')}</div>
+                  <div className="mt-0.5 font-bold text-[color:var(--cf-text-strong)]">{tx.leverage}</div>
+                </div>
+                <div>
+                  <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.realtime.table.positionValue')}</div>
+                  <div className="mt-0.5 font-bold text-[color:var(--cf-text-strong)]">{tx.positionValueUSD}</div>
+                  <div className="text-[color:var(--cf-muted)]">{tx.positionValueAsset}</div>
+                </div>
+                <div>
+                  <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.realtime.table.entryPrice')}</div>
+                  <div className="mt-0.5 font-mono text-[color:var(--cf-text-strong)]">{tx.entryPrice}</div>
+                  <div className="font-bold text-[#4ade80]">{tx.winRate}</div>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <div className="cf-scrollbar hidden md:block overflow-x-auto">
           <table className="w-full min-w-[1160px] border-collapse">
             <thead>
               <tr className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/50 text-[color:var(--cf-muted)]">

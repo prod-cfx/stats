@@ -270,13 +270,13 @@ export const WhalePositionsTable = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-2">
           <PageTitle>{t('whaleTracking.holdings.title')}</PageTitle>
           <BodyText>{t('whaleTracking.holdings.subtitle')}</BodyText>
           <div className="flex items-center gap-4">{/* Removed standalone sort buttons */}</div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <FilterButton
             value={assetFilter}
             options={[
@@ -315,7 +315,105 @@ export const WhalePositionsTable = () => {
           isEmpty={!loading && sortedPositions.length === 0}
           onRetry={execute}
         >
-          <div className="overflow-x-auto">
+          <div className="space-y-3 p-3 md:hidden">
+            {sortedPositions.map((pos, idx) => (
+              <article
+                key={`${idx}-${pos.address}-mobile`}
+                className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3"
+                onClick={() => handleShowStats(pos.address)}
+              >
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/${lng}/whale-tracking/profile/?address=${pos.address}`}
+                        className="font-mono text-sm font-semibold text-[color:var(--cf-text-strong)]"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        {pos.address.substring(0, 6)}...{pos.address.substring(pos.address.length - 4)}
+                      </Link>
+                      <button
+                        data-testid="holdings-mobile-copy"
+                        type="button"
+                        className={`rounded-lg border border-[color:var(--cf-border)] p-2 ${copiedAddress === pos.address ? 'text-green-500' : 'text-[color:var(--cf-muted)]'}`}
+                        onClick={e => {
+                          e.stopPropagation()
+                          handleCopy(pos.address)
+                        }}
+                      >
+                        {copiedAddress === pos.address ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {pos.tags.map((tag, tIdx) => (
+                        <span
+                          key={tIdx}
+                          className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+                          style={{ color: tag.color, backgroundColor: tag.bg }}
+                        >
+                          {t(`whaleTracking.tags.${tag.key}`)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    data-testid="holdings-mobile-stats"
+                    type="button"
+                    className="shrink-0 rounded-lg border border-[color:var(--cf-border)] p-2 text-[color:var(--cf-muted)]"
+                    onClick={e => {
+                      e.stopPropagation()
+                      handleShowStats(pos.address)
+                    }}
+                  >
+                    <TrendingUp className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.holdings.table.asset')}</div>
+                    <div className="mt-0.5 flex items-center gap-2 font-bold text-[color:var(--cf-text-strong)]">
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] ${pos.side === 'Long' ? 'bg-[#22c55e33] text-[#4ade80]' : 'bg-[#ef444433] text-[#f87171]'}`}>
+                        {pos.side === 'Long' ? t('whaleTracking.side.longAbbr') : t('whaleTracking.side.shortAbbr')}
+                      </span>
+                      {pos.asset}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.holdings.table.leverage')}</div>
+                    <div className="mt-0.5 text-[color:var(--cf-text-strong)]">{pos.leverage} · {pos.marginType}</div>
+                  </div>
+                  <div>
+                    <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.holdings.table.positionValue')}</div>
+                    <div className="mt-0.5 font-bold text-[color:var(--cf-text-strong)]">{pos.positionValueUSD}</div>
+                    <div className="text-[color:var(--cf-muted)]">{pos.positionValueAsset}</div>
+                  </div>
+                  <div>
+                    <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.holdings.table.unrealizedPnl')}</div>
+                    <div className={pos.pnlUSD.includes('+') ? 'font-bold text-[#4ade80]' : 'font-bold text-[#f87171]'}>{pos.pnlUSD}</div>
+                    <div className={pos.pnlPercent.includes('+') ? 'text-[#4ade80]' : 'text-[#f87171]'}>{pos.pnlPercent}</div>
+                  </div>
+                  <div>
+                    <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.holdings.table.margin')}</div>
+                    <div className="text-[color:var(--cf-text-strong)]">{pos.margin}</div>
+                  </div>
+                  <div>
+                    <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.holdings.table.createdTime')}</div>
+                    <div className="text-[color:var(--cf-text-strong)]">{formatRelativeMinutes(pos.createdMinutesAgo)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.holdings.table.entryPrice')}</div>
+                    <div className="text-[color:var(--cf-text-strong)]">{pos.entryPrice}</div>
+                  </div>
+                  <div>
+                    <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.holdings.table.liqPrice')}</div>
+                    <div className="text-[color:var(--cf-text-strong)]">{pos.liqPrice}</div>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)]">

@@ -35,18 +35,18 @@ const StatCard = ({
   unit2,
   subStats,
 }: StatCardProps) => (
-  <div className="flex h-full flex-col justify-between gap-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4">
+  <div className="flex h-full min-w-0 flex-col justify-between gap-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4">
     <div className="flex flex-col gap-1">
       <span className="text-caption font-medium text-[color:var(--cf-muted)]">{label}</span>
-      <div className="flex items-baseline gap-1">
-        <span className={`text-h2 font-bold ${valueColor}`}>{value}</span>
+      <div className="flex flex-wrap items-baseline gap-1">
+        <span className={`break-words text-2xl font-bold md:text-h2 ${valueColor}`}>{value}</span>
         {unit && (
           <span className="text-caption font-medium text-[color:var(--cf-text-strong)]">
             {unit}
           </span>
         )}
         {value2 && (
-          <span className="text-h2 ml-2 font-bold text-[color:var(--cf-text-strong)]">
+          <span className="ml-2 text-2xl font-bold text-[color:var(--cf-text-strong)] md:text-h2">
             {value2}
           </span>
         )}
@@ -553,21 +553,21 @@ export const WhaleTradingStatsModal = ({
     >
       <div className="flex flex-col gap-8">
         {/* Header Extra Info */}
-        <div className="-mt-4 mb-0 flex items-center justify-between">
+        <div className="-mt-4 mb-0 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-2">
             <div className="h-5 w-5 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600" />
             <span className="text-base font-semibold text-[color:var(--cf-text-strong)]">
               {formatAddress(address)}
             </span>
           </div>
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <button
               type="button"
               onClick={e => {
                 e.stopPropagation()
                 setTimeRangeOpen(v => !v)
               }}
-              className="hover:border-primary/50 flex items-center gap-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-bold text-[color:var(--cf-text)] transition-all"
+              className="hover:border-primary/50 flex w-full items-center justify-between gap-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-bold text-[color:var(--cf-text)] transition-all sm:w-auto"
             >
               {t(`whaleTracking.modal.timeRange.${timeRange}`)}
               <ChevronDown
@@ -657,7 +657,7 @@ export const WhaleTradingStatsModal = ({
 
         {/* Performance Tabs */}
         <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-8 border-b border-[color:var(--cf-border)]">
+          <div className="flex overflow-x-auto border-b border-[color:var(--cf-border)] sm:gap-8">
             <button
               type="button"
               onClick={() => setActiveTab('asset')}

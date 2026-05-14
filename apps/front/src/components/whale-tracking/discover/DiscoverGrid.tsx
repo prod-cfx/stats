@@ -97,8 +97,8 @@ export const DiscoverGrid = () => {
       </LoadingState>
 
       {/* Filters Section */}
-      <div className="flex flex-wrap items-center justify-between border-y border-[color:var(--cf-border)] py-6">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-3 border-y border-[color:var(--cf-border)] py-6 md:flex-row md:flex-wrap md:items-center md:justify-between">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center md:gap-4">
           <span className="text-[color:var(--cf-muted)] text-sm font-medium">{t('whaleTracking.discover.sortBy')}:</span>
           {([
             { id: 'winRate', label: t('whaleTracking.discover.sortFields.winRate') },
@@ -111,7 +111,7 @@ export const DiscoverGrid = () => {
               onClick={() => {
                 handleSort(field.id as Exclude<typeof sortField, null>);
               }}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors group ${
+              className={`flex min-w-0 items-center justify-center gap-1 rounded-lg px-3 py-1.5 text-sm font-bold transition-colors group ${
                 sortField === field.id ? 'text-[color:var(--cf-text-strong)] bg-[color:var(--cf-surface-2)]' : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
               }`}
             >

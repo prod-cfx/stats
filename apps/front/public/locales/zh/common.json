@@ -1442,12 +1442,17 @@
         "telegramBindRequired": "请先完成 Telegram 登录/绑定后再开启 Telegram 推送",
         "editAddressTitle": "编辑地址监控"
       },
+      "confirmDelete": {
+        "title": "移除地址监控？",
+        "description": "将停止接收 {{address}} 的监控通知，之后仍可重新创建。"
+      },
       "errors": {
         "invalidThreshold": "请输入正确的阈值金额",
         "invalidAddress": "地址无效，请返回详情页重试"
       },
       "toast": {
         "ruleCreated": "监控规则创建成功",
+        "deleteFailed": "移除监控失败",
         "webPermissionDeniedTitle": "浏览器通知权限未开启",
         "webPermissionDeniedDesc": "规则仍会通过站内消息发送，可稍后在浏览器设置中开启权限",
         "authRequiredTitle": "请先登录",
@@ -1526,6 +1531,11 @@
       "loadMore": "加载更多",
       "invalidAddressTitle": "无效的钱包地址",
       "invalidAddressDescription": "请提供正确的 EVM 兼容钱包地址以查看深度档案。",
+      "recentTrades": {
+        "loading": "加载中...",
+        "loadFailed": "加载最近成交失败",
+        "empty": "暂无最近成交"
+      },
       "header": {
         "copyAddress": "复制地址",
         "refreshing": "更新中...",
