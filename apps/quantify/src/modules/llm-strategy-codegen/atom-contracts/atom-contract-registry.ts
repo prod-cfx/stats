@@ -1982,9 +1982,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
           // Issue #1338：dispatcher 新规要求 kw && verb 同时命中；补中文 webhook 触发动词。
           // 单字 '接' 经 review C1/C2 移除——matchVerbDirection 用 String.includes，
           // 会误命中 '直接/间接/连接/对接/接下来' 等高频词。
-          // '接 '（带尾空格）覆盖 AC-12 'ac-12-webhook-1: 接 TradingView webhook…' 真实语料，
-          // 且不会命中 '紧接着' 等无空格连写，避免子串误命中爆炸。
-          fixed: ['收到', '触发', '接到', '接收', '接入', '接 ', '订阅'] as const,
+          fixed: ['收到', '触发', '接到', '接收', '接入', '接', '订阅'] as const,
         },
       },
       paramSlots: {

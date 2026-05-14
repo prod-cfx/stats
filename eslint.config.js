@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import antfu from '@antfu/eslint-config'
 import noAtomKeyLiteral from './eslint-rules/no-atom-key-literal.js'
 import noBusinessRuleInDispatcher from './eslint-rules/no-business-rule-in-dispatcher.js'
+import noSecondAtomRegistry from './eslint-rules/no-second-atom-registry.js'
 
 // pnpm generate:enums 自动维护，无需手动同步
 let prismaEnumNames = []
@@ -224,6 +225,37 @@ export default antfu(
     },
     rules: {
       'atom-keys/no-atom-key-literal': 'error',
+    },
+  },
+  // ─────────────────────────────────────────────────────────────────────────
+  // Issue #1334 AC-8: 阻断在 llm-strategy-codegen 内新建第二个 atom 数据源
+  // 唯一真相源: atom-contracts/atom-contract-registry.ts (ATOM_CONTRACT_REGISTRY)
+  // Plugin: eslint-rules/no-second-atom-registry.js
+  //
+  // 启用域:
+  //   apps/quantify/src/modules/llm-strategy-codegen/**/*.ts
+  //
+  // 永久豁免:
+  //   - atom-contract-registry.ts 自身（真相源）
+  //   - semantic-atom-registry.service.ts（唯一合法适配层，含 STANDALONE_ATOM_MAP）
+  //   - 所有 .spec.ts 测试文件
+  {
+    files: ['apps/quantify/src/modules/llm-strategy-codegen/**/*.ts'],
+    ignores: [
+      'apps/quantify/src/modules/llm-strategy-codegen/atom-contracts/atom-contract-registry.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-atom-registry.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/**/*.spec.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/**/*.invariant.spec.ts',
+    ],
+    plugins: {
+      'atom-registry': {
+        rules: {
+          'no-second-atom-registry': noSecondAtomRegistry,
+        },
+      },
+    },
+    rules: {
+      'atom-registry/no-second-atom-registry': 'error',
     },
   },
   // ─────────────────────────────────────────────────────────────────────────
