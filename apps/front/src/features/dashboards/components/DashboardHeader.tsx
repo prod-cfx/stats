@@ -35,10 +35,15 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const lastSavedStateRef = useRef(JSON.stringify(dashboard))
 
+  useEffect(() => {
+    if (isEditingTitle) return
+    setTitleValue(dashboard.name)
+  }, [dashboard.id, dashboard.name, isEditingTitle])
+
   // 监听看板变化，检测是否有未保存的修改
   useEffect(() => {
     const currentState = JSON.stringify(dashboard)
-     
+
     setHasUnsavedChanges(currentState !== lastSavedStateRef.current)
   }, [dashboard])
 
@@ -169,9 +174,9 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
   }
 
   return (
-    <div className="mb-6 flex items-center justify-between">
+    <div className="mb-6 flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       {/* Title */}
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         {/* Thumbnail Preview */}
         {dashboard.thumbnail && (
           <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg border-2 border-[color:var(--cf-border)]">
@@ -197,10 +202,10 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
               }
             }}
             autoFocus
-            className="border-b border-[color:var(--cf-border)] bg-transparent px-2 text-4xl font-bold text-[color:var(--cf-text-strong)] focus:outline-none"
+            className="min-w-0 border-b border-[color:var(--cf-border)] bg-transparent px-2 text-2xl font-bold text-[color:var(--cf-text-strong)] focus:outline-none md:text-4xl"
           />
         ) : (
-          <h1 className="text-4xl font-bold text-[color:var(--cf-text-strong)]">
+          <h1 className="min-w-0 break-words text-2xl font-bold text-[color:var(--cf-text-strong)] md:text-4xl">
             {dashboard.name}
           </h1>
         )}
@@ -215,14 +220,17 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-3">
+      <div
+        data-testid="dashboard-header-actions"
+        className="flex w-full min-w-0 flex-wrap items-center gap-3 sm:w-auto sm:justify-end"
+      >
         {/* Thumbnail Upload */}
         <div className="relative">
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploadStatus === 'uploading'}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium shadow-lg transition-all active:scale-95 ${
+            className={`flex min-h-10 items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium shadow-lg transition-all active:scale-95 ${
               uploadStatus === 'uploading'
                 ? 'cursor-not-allowed bg-gray-500'
                 : uploadStatus === 'success'
@@ -289,7 +297,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
               disabled={
                 savePublishStatus === 'saving' || savePublishStatus === 'success' || !canSave
               }
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium shadow-lg transition-all active:scale-95 ${
+              className={`flex min-h-10 items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium shadow-lg transition-all active:scale-95 ${
                 savePublishStatus === 'saving'
                   ? 'cursor-not-allowed bg-gray-600 text-white'
                   : savePublishStatus === 'success'

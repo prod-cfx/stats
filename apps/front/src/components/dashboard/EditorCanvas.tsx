@@ -3,11 +3,12 @@
 import { Layout as LayoutIcon, Plus } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { useParams, useRouter } from 'next/navigation'
-import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DashboardCanvas } from '@/features/dashboards/components/DashboardCanvas'
 import {
   DASHBOARD_UPDATED_EVENT,
+  type DashboardDoc,
   ensureDashboard,
   getDashboard,
   updateDashboard,
@@ -30,31 +31,34 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
   const params = useParams()
   const lng = (params?.lng as string) || 'zh'
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [doc, setDoc] = useState<DashboardDoc | null>(null)
+  const [docLoaded, setDocLoaded] = useState(false)
 
-  const subscribeDashboards = useCallback((onStoreChange: () => void) => {
-    if (typeof window === 'undefined') {
-      return () => {}
+  useEffect(() => {
+    setDocLoaded(false)
+    const refresh = () => {
+      setDoc(
+        dashboardId === DEFAULT_DASHBOARD_ID
+          ? ensureDashboard(DEFAULT_DASHBOARD_ID)
+          : getDashboard(dashboardId),
+      )
+      setDocLoaded(true)
     }
-    window.addEventListener(DASHBOARD_UPDATED_EVENT, onStoreChange as EventListener)
-    window.addEventListener('storage', onStoreChange)
+    refresh()
+    window.addEventListener(DASHBOARD_UPDATED_EVENT, refresh)
+    window.addEventListener('storage', refresh)
     return () => {
-      window.removeEventListener(DASHBOARD_UPDATED_EVENT, onStoreChange as EventListener)
-      window.removeEventListener('storage', onStoreChange)
+      window.removeEventListener(DASHBOARD_UPDATED_EVENT, refresh)
+      window.removeEventListener('storage', refresh)
     }
-  }, [])
-
-  const getDocSnapshot = useCallback(() => {
-    if (dashboardId === DEFAULT_DASHBOARD_ID) return ensureDashboard(DEFAULT_DASHBOARD_ID)
-    return getDashboard(dashboardId)
   }, [dashboardId])
-
-  const doc = useSyncExternalStore(subscribeDashboards, getDocSnapshot, getDocSnapshot)
 
   useEffect(() => {
     if (dashboardId === DEFAULT_DASHBOARD_ID) return
+    if (!docLoaded) return
     if (doc) return
     router.replace(`/${lng}/dashboard/?tab=saved`)
-  }, [dashboardId, doc, lng, router])
+  }, [dashboardId, doc, docLoaded, lng, router])
 
   return (
     <div className="flex min-w-0 flex-col gap-6 pb-20 md:gap-8">
@@ -94,7 +98,7 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
       </div>
 
       <div className="bg-grid-pattern relative min-h-[420px] min-w-0 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3 md:min-h-[600px] md:p-4">
-        {doc ? (
+        {!docLoaded ? null : doc ? (
           <DashboardCanvas dashboardId={dashboardId} />
         ) : (
           <div className="py-20 text-center text-[color:var(--cf-muted)]">
