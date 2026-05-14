@@ -725,10 +725,17 @@ export class SemanticSeedStateBuilderService {
       return null
     }
 
-    const key = this.readTrimmedString(update.key)
-    if (!key) {
+    const rawKey = this.readTrimmedString(update.key)
+    if (!rawKey) {
       return null
     }
+    // #1354：LLM patch 用 `action.open_long` 全 atom-key，但 SemanticState 对 4 个
+    // lifecycle action 用 unprefixed 存储（SYNTHESIZABLE_ACTION_KEYS）以匹配
+    // canonical-spec-builder 的 `actionKeys.has('open_long')`；review M1 follow-up：
+    // 大小写归一化（`Action.OPEN_LONG` 也要识别），防 LLM 输出漂移。
+    const lcKey = rawKey.toLowerCase()
+    const strippedKey = lcKey.startsWith('action.') ? lcKey.slice('action.'.length) : lcKey
+    const key = SYNTHESIZABLE_ACTION_KEYS.has(strippedKey) ? strippedKey : rawKey
 
     const evidence = this.readEvidence(update.evidence)
     const supersedes = this.readStringArray(update.supersedes)

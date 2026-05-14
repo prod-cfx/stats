@@ -2260,3 +2260,46 @@ describe('SemanticSeedStateBuilderService — evidence invariant (off mode)', ()
     expect(state?.triggers).toHaveLength(1)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Issue #1354：toActionState action.* 前缀剥离边界
+// review M2/w1：补 isolated unit case，三条等价类锚定 boundary normalizer 语义
+// ─────────────────────────────────────────────────────────────────────────────
+describe('SemanticSeedStateBuilderService.toActionState — action.* 前缀归一化 (#1354)', () => {
+  const svc = new SemanticSeedStateBuilderService()
+  const MSG = 'unit-spec evidence carrier text，避免 evidence_invariant_drop'
+
+  function buildPatchWithAction(actionKey: string): Record<string, unknown> {
+    return {
+      contextSlots: {
+        symbol: { value: 'BTCUSDT', source: 'user_explicit' },
+        timeframe: { value: '1h', source: 'user_explicit' },
+      },
+      actions: [{ key: actionKey, phase: 'entry', params: { orderType: 'market' }, evidence: { text: MSG, source: 'user_explicit' } }],
+    }
+  }
+
+  it('"action.open_long" 剥前缀 → state.actions[0].key = "open_long"', () => {
+    const state = svc.build(buildPatchWithAction('action.open_long'), MSG)
+    expect(state?.actions).toHaveLength(1)
+    expect(state?.actions[0]?.key).toBe('open_long')
+  })
+
+  it('"action.add_position" 不剥（非 lifecycle）→ 保留全 atom-key', () => {
+    const state = svc.build(buildPatchWithAction('action.add_position'), MSG)
+    expect(state?.actions).toHaveLength(1)
+    expect(state?.actions[0]?.key).toBe('action.add_position')
+  })
+
+  it('"open_long" 已 unprefixed → idempotent 透传', () => {
+    const state = svc.build(buildPatchWithAction('open_long'), MSG)
+    expect(state?.actions).toHaveLength(1)
+    expect(state?.actions[0]?.key).toBe('open_long')
+  })
+
+  it('"Action.OPEN_LONG" 大小写漂移 → lowercase 后剥前缀，存 "open_long"', () => {
+    const state = svc.build(buildPatchWithAction('Action.OPEN_LONG'), MSG)
+    expect(state?.actions).toHaveLength(1)
+    expect(state?.actions[0]?.key).toBe('open_long')
+  })
+})
