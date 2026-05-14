@@ -3,11 +3,12 @@
 import { Layout as LayoutIcon, Plus } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { useParams, useRouter } from 'next/navigation'
-import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DashboardCanvas } from '@/features/dashboards/components/DashboardCanvas'
 import {
   DASHBOARD_UPDATED_EVENT,
+  type DashboardDoc,
   ensureDashboard,
   getDashboard,
   updateDashboard,
@@ -30,25 +31,26 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
   const params = useParams()
   const lng = (params?.lng as string) || 'zh'
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [doc, setDoc] = useState<DashboardDoc | null>(() =>
+    dashboardId === DEFAULT_DASHBOARD_ID ? ensureDashboard(DEFAULT_DASHBOARD_ID) : getDashboard(dashboardId),
+  )
 
-  const subscribeDashboards = useCallback((onStoreChange: () => void) => {
-    if (typeof window === 'undefined') {
-      return () => {}
+  useEffect(() => {
+    const refresh = () => {
+      setDoc(
+        dashboardId === DEFAULT_DASHBOARD_ID
+          ? ensureDashboard(DEFAULT_DASHBOARD_ID)
+          : getDashboard(dashboardId),
+      )
     }
-    window.addEventListener(DASHBOARD_UPDATED_EVENT, onStoreChange as EventListener)
-    window.addEventListener('storage', onStoreChange)
+    refresh()
+    window.addEventListener(DASHBOARD_UPDATED_EVENT, refresh)
+    window.addEventListener('storage', refresh)
     return () => {
-      window.removeEventListener(DASHBOARD_UPDATED_EVENT, onStoreChange as EventListener)
-      window.removeEventListener('storage', onStoreChange)
+      window.removeEventListener(DASHBOARD_UPDATED_EVENT, refresh)
+      window.removeEventListener('storage', refresh)
     }
-  }, [])
-
-  const getDocSnapshot = useCallback(() => {
-    if (dashboardId === DEFAULT_DASHBOARD_ID) return ensureDashboard(DEFAULT_DASHBOARD_ID)
-    return getDashboard(dashboardId)
   }, [dashboardId])
-
-  const doc = useSyncExternalStore(subscribeDashboards, getDocSnapshot, getDocSnapshot)
 
   useEffect(() => {
     if (dashboardId === DEFAULT_DASHBOARD_ID) return

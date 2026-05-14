@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import React, { useCallback, useState, useSyncExternalStore } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
@@ -57,30 +57,9 @@ export const DashboardSidebar = ({
     return raw
   }
 
-  const subscribeDashboards = useCallback((onStoreChange: () => void) => {
-    if (typeof window === 'undefined') {
-      return () => {}
-    }
-    window.addEventListener(DASHBOARD_UPDATED_EVENT, onStoreChange as EventListener)
-    window.addEventListener('storage', onStoreChange)
-    return () => {
-      window.removeEventListener(DASHBOARD_UPDATED_EVENT, onStoreChange as EventListener)
-      window.removeEventListener('storage', onStoreChange)
-    }
-  }, [])
-
-  const getDashboardsSnapshot = useCallback(
-    () => ({
-      myDashboards: getMyDashboards(),
-      savedDashboards: getSavedDashboards(),
-    }),
-    [],
-  )
-
-  const { myDashboards, savedDashboards } = useSyncExternalStore(
-    subscribeDashboards,
-    getDashboardsSnapshot,
-    getDashboardsSnapshot,
+  const [myDashboards, setMyDashboards] = useState<DashboardDoc[]>(() => getMyDashboards())
+  const [savedDashboards, setSavedDashboards] = useState<DashboardDoc[]>(() =>
+    getSavedDashboards(),
   )
   const [showMyDashboards, setShowMyDashboards] = useState(true)
   const [showSavedDashboards, setShowSavedDashboards] = useState(false)
@@ -88,6 +67,20 @@ export const DashboardSidebar = ({
   const [renameTarget, setRenameTarget] = useState<DashboardDoc | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<DashboardDoc | null>(null)
+
+  useEffect(() => {
+    const refresh = () => {
+      setMyDashboards(getMyDashboards())
+      setSavedDashboards(getSavedDashboards())
+    }
+    refresh()
+    window.addEventListener(DASHBOARD_UPDATED_EVENT, refresh)
+    window.addEventListener('storage', refresh)
+    return () => {
+      window.removeEventListener(DASHBOARD_UPDATED_EVENT, refresh)
+      window.removeEventListener('storage', refresh)
+    }
+  }, [])
 
   const handleDashboardClick = (dashboardId: string, isPublished: boolean) => {
     if (onDashboardClick) {

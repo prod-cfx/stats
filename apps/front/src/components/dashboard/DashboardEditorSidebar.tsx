@@ -3,7 +3,7 @@
 import type { DashboardDoc } from '@/features/dashboards/store/dashboard-store'
 import { Bookmark, Check, ChevronDown, Layout, Loader2, Plus, Send, Trash2 } from 'lucide-react'
 import { useParams, useRouter } from 'next/navigation'
-import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import {
@@ -33,38 +33,13 @@ export const DashboardEditorSidebar = ({
   const params = useParams()
   const lng = (params?.lng as string) || 'zh'
 
-  const subscribeDashboards = useCallback((onStoreChange: () => void) => {
-    if (typeof window === 'undefined') {
-      return () => {}
-    }
-    window.addEventListener(DASHBOARD_UPDATED_EVENT, onStoreChange as EventListener)
-    window.addEventListener('storage', onStoreChange)
-    return () => {
-      window.removeEventListener(DASHBOARD_UPDATED_EVENT, onStoreChange as EventListener)
-      window.removeEventListener('storage', onStoreChange)
-    }
-  }, [])
-
-  const getDashboardsSnapshot = useCallback(
-    () => ({
-      myDashboards: getMyDashboards(),
-      savedDashboards: getSavedDashboards(),
-    }),
-    [],
+  const [myDashboards, setMyDashboards] = useState<DashboardDoc[]>(() => getMyDashboards())
+  const [savedDashboards, setSavedDashboards] = useState<DashboardDoc[]>(() =>
+    getSavedDashboards(),
   )
-
-  const { myDashboards, savedDashboards } = useSyncExternalStore(
-    subscribeDashboards,
-    getDashboardsSnapshot,
-    getDashboardsSnapshot,
+  const [doc, setDoc] = useState<DashboardDoc | null>(() =>
+    dashboardId === 'draft' ? ensureDashboard('draft') : getDashboard(dashboardId),
   )
-
-  const getDocSnapshot = useCallback(() => {
-    if (dashboardId === 'draft') return ensureDashboard('draft')
-    return getDashboard(dashboardId)
-  }, [dashboardId])
-
-  const doc = useSyncExternalStore(subscribeDashboards, getDocSnapshot, getDocSnapshot)
   const [error, setError] = useState<string | null>(null)
   const [publishStatus, setPublishStatus] = useState<'idle' | 'publishing' | 'success'>('idle')
   const [deleteStatus, setDeleteStatus] = useState<'idle' | 'deleting'>('idle')
@@ -73,6 +48,21 @@ export const DashboardEditorSidebar = ({
   const [showSavedDashboards, setShowSavedDashboards] = useState(true)
   const [showAllMyDashboards, setShowAllMyDashboards] = useState(false)
   const [showAllSavedDashboards, setShowAllSavedDashboards] = useState(false)
+
+  useEffect(() => {
+    const refresh = () => {
+      setMyDashboards(getMyDashboards())
+      setSavedDashboards(getSavedDashboards())
+      setDoc(dashboardId === 'draft' ? ensureDashboard('draft') : getDashboard(dashboardId))
+    }
+    refresh()
+    window.addEventListener(DASHBOARD_UPDATED_EVENT, refresh)
+    window.addEventListener('storage', refresh)
+    return () => {
+      window.removeEventListener(DASHBOARD_UPDATED_EVENT, refresh)
+      window.removeEventListener('storage', refresh)
+    }
+  }, [dashboardId])
 
   const resolveDashboardName = (name?: string) => {
     const raw = (name ?? '').trim()

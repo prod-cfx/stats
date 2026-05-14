@@ -4,7 +4,7 @@ import type { DashboardDoc } from '@/features/dashboards/store/dashboard-store'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useSearchParams } from 'next/navigation'
-import React, { useSyncExternalStore } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DashboardEditorSidebar } from '@/components/dashboard/DashboardEditorSidebar'
 import { DashboardReadOnlyCanvas } from '@/features/dashboards/components/DashboardReadOnlyCanvas'
@@ -16,19 +16,23 @@ export function DashboardViewClient() {
   const lng = (params?.lng as string) || 'zh'
   const searchParams = useSearchParams()
   const dashboardId = searchParams?.get('id') || ''
-  const dashboard = useSyncExternalStore<DashboardDoc | null>(
-    onStoreChange => {
-      if (!dashboardId) return () => {}
-      window.addEventListener(DASHBOARD_UPDATED_EVENT, onStoreChange)
-      window.addEventListener('storage', onStoreChange)
-      return () => {
-        window.removeEventListener(DASHBOARD_UPDATED_EVENT, onStoreChange)
-        window.removeEventListener('storage', onStoreChange)
-      }
-    },
-    () => (dashboardId ? (getDashboard(dashboardId) ?? null) : null),
-    () => (dashboardId ? (getDashboard(dashboardId) ?? null) : null),
+  const [dashboard, setDashboard] = useState<DashboardDoc | null>(() =>
+    dashboardId ? getDashboard(dashboardId) : null,
   )
+
+  useEffect(() => {
+    const refresh = () => {
+      setDashboard(dashboardId ? getDashboard(dashboardId) : null)
+    }
+    refresh()
+    if (!dashboardId) return
+    window.addEventListener(DASHBOARD_UPDATED_EVENT, refresh)
+    window.addEventListener('storage', refresh)
+    return () => {
+      window.removeEventListener(DASHBOARD_UPDATED_EVENT, refresh)
+      window.removeEventListener('storage', refresh)
+    }
+  }, [dashboardId])
 
   if (!dashboardId) {
     return (
