@@ -81,7 +81,7 @@ describe('PR2c4: dispatcher 隐式字段契约（codegen-conversation 消费侧�
     expect(hits.length).toBeGreaterThanOrEqual(Math.ceil(AC7_USER_PROMPTS.length / 2))
   })
 
-  it('AC-7 prompts 至少 1 条 contextSlots 命中 symbol 槽位（dispatcher 真实正向覆盖）', () => {
+  it('AC-7 prompts 至少 1 条 contextSlots 命中真实非空 symbol 槽位（dispatcher 真实正向覆盖）', () => {
     // Issue #1342：原断言写在"top-level patch.symbols / patch.riskRules.exchange"
     // 维度，但 dispatcher 真实输出是 `contextSlots.symbol`（单数槽位）+
     // `contextSlots.exchange`——top-level symbols[] / riskRules{} 是下游
@@ -89,12 +89,19 @@ describe('PR2c4: dispatcher 隐式字段契约（codegen-conversation 消费侧�
     // 投影出的 StrategyLogicSnapshot 字段，并非 dispatcher 的契约。
     //
     // 本断言对齐 dispatcher 真实契约：AC-7 prompts 中至少 1 条命中 contextSlots.symbol
-    // （单数槽位）。review M1 原意（防 dispatcher 退化为 `() => ({})` 也能通过 9/9
-    // 形态断言）继续生效：symbol 槽位是 dispatcher NL→ctx 的最强正向信号。
+    // （单数槽位，object 形态含非空 `value` 字段）。review M1 原意（防 dispatcher
+    // 退化为 `() => ({})` 或 `() => ({ contextSlots: { symbol: null } })` 也能通过
+    // 9/9 形态断言）继续生效：symbol 槽位是 dispatcher NL→ctx 的最强正向信号，
+    // 校验到 `value` 非空字符串这一层避免空对象 / null 钻空。
     const realHits = AC7_USER_PROMPTS.filter((p) => {
       const patch = dispatcher.dispatch(p.utterance) as UnknownRecord
       const contextSlots = patch.contextSlots as UnknownRecord | undefined
-      return contextSlots !== undefined && contextSlots.symbol !== undefined
+      if (contextSlots === undefined) return false
+      const symbolSlot = contextSlots.symbol
+      if (symbolSlot === null || symbolSlot === undefined) return false
+      if (typeof symbolSlot !== 'object') return false
+      const value = (symbolSlot as UnknownRecord).value
+      return typeof value === 'string' && value.length > 0
     })
     expect(realHits.length).toBeGreaterThanOrEqual(1)
   })
