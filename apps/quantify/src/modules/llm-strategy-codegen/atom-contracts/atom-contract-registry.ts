@@ -124,9 +124,10 @@ const GRID_SIZING_EVIDENCE: SizingEvidence = {
 }
 
 // Issue #1334 PR1：所有 atom 默认 classifier 元数据；PR2 迁移 legacy ATOMS 非默认值条目时覆盖。
-export const DEFAULT_CLASSIFIER_META: AtomClassifier = {
+// freeze 防御消费方误写常量本体（53 个 atom 仍各自 `{ ...DEFAULT_CLASSIFIER_META, ... }` 浅拷贝注入）。
+export const DEFAULT_CLASSIFIER_META: AtomClassifier = Object.freeze({
   supportStatus: 'supported_executable',
-}
+}) as AtomClassifier
 
 export const ATOM_BUCKETS = {
   'volume.threshold': 'trigger',
