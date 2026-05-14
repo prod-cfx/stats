@@ -3,18 +3,22 @@
  *
  * 历史背景：原 `semantic-presentation-registry.service.ts`（94 个 `presentation({...})` 条目）
  *   是 atom 渲染层并行真相源。PR3c.5 完成后，36 个已迁入 `ATOM_CONTRACT_REGISTRY[*].display`
- *   的 atom 数据在 REGISTRY 中已有单一真相；本文件保留全部 94 个 PRESENTATIONS entry 作为
+ *   的 atom 数据在 REGISTRY 中已有单一真相；本文件保留剩余 PRESENTATIONS entry 作为
  *   transition data，通过 4 个顶层 pure helper 对外暴露（REGISTRY-first，fallback PRESENTATIONS）。
  *   @Injectable class 壳已于 PR3c.7d 删除。
  *
- * 60 个尚未迁入 REGISTRY 的 transition entry（follow-up #1329 负责迁入）：
- *   - orchestration 域：gate.regime / gate.subStrategy /
- *     portfolioRisk.{symbol,substrategy}_exposure_cap /
- *     program.{fixed_grid_gated,dynamic_grid,adaptive_volatility_grid,event_listener} /
- *     scope.{leg,symbol,timeframe,dataSource,subStrategy}
+ * #1329 follow-up Phase 1/2/3：再迁入 11 个 orchestration atom 至 ATOM_CONTRACT_REGISTRY，
+ *   Phase 3c 删除对应的 PRESENTATIONS entry + dead render helper：
+ *   - gate.regime
+ *   - portfolioRisk.{symbol,substrategy}_exposure_cap
+ *   - program.{dynamic_grid,fixed_grid_gated,adaptive_volatility_grid,event_listener}
+ *   - scope.{symbol,leg,timeframe,dataSource}
+ *
+ * 剩余 transition entry（待 future follow-up 迁入）：
+ *   - orchestration 域：gate.subStrategy / scope.subStrategy
  *   - 30+ slot label / clarification 描述 / risk.* / position.* / indicator.* stub
  *
- * follow-up #1329：迁入完成后删除 PRESENTATIONS 数组及本文件。
+ * follow-up：剩余 entry 迁入完成后删除 PRESENTATIONS 数组及本文件。
  */
 import type {
   SemanticPresentationMetadata,
@@ -399,255 +403,12 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
       return '趋势方向过滤'
     },
   }),
-  presentation({
-    key: 'gate.regime',
-    publicName: '趋势/状态过滤',
-    aliases: ['趋势过滤', '状态过滤', 'regime gate', 'trend gate'],
-    positiveExamples: [
-      '上涨趋势才允许做多',
-      '价格高于 EMA50 才做多',
-      '价格低于 EMA60 才做空',
-    ],
-    negativeExamples: ['形态像头肩顶', '感觉走势不太对'],
-    goldenUtterances: [
-      '上涨趋势才允许做多',
-      '价格高于 EMA50 才做多',
-      '价格低于 EMA60 才做空',
-    ],
-    displayRenderer: ({ params }) => renderRegimeGate(params),
-    clarificationRenderer: (slotKey) => renderRegimeGateClarification(slotKey),
-  }),
-  presentation({
-    key: 'portfolioRisk.drawdown_block',
-    publicName: '组合回撤护栏',
-    aliases: ['组合回撤', '账户回撤护栏', 'portfolio drawdown', 'drawdown block'],
-    positiveExamples: [
-      '账户回撤超过 10% 停止开新仓',
-      '回撤 5% 仅记录不停',
-      '账户回撤超过 15% 阻止开仓',
-    ],
-    negativeExamples: ['感觉亏了', '风控大概在 10%', '形态像头肩顶'],
-    goldenUtterances: [
-      '账户回撤超过 10% 停止开新仓',
-      '回撤 5% 仅记录不停',
-      '账户回撤超过 15% 阻止开仓',
-    ],
-    displayRenderer: ({ params }) => renderPortfolioDrawdown(params),
-    clarificationRenderer: (slotKey) => renderPortfolioDrawdownClarification(slotKey),
-  }),
-  // Phase 5 S8 (#1119): symbol exposure cap
-  presentation({
-    key: 'portfolioRisk.symbol_exposure_cap',
-    publicName: '标的敞口护栏',
-    aliases: ['标的敞口', 'symbol exposure cap', 'per-symbol cap', '单标的仓位限制'],
-    positiveExamples: [
-      'BTCUSDT 单标的敞口不超过 30%',
-      'BTCUSDT 仓位超 30% 时缩减敞口',
-      '标的敞口超 20% 仅记录',
-    ],
-    negativeExamples: ['感觉仓位重', '全仓', '随便买'],
-    goldenUtterances: [
-      'BTCUSDT 单标的敞口不超过 30%',
-      '标的敞口超 20% 时阻止开仓',
-      '标的敞口超 25% 时缩到上限',
-    ],
-    displayRenderer: ({ params }) => renderPortfolioSymbolExposureCap(params),
-    clarificationRenderer: (slotKey) => renderPortfolioSymbolExposureCapClarification(slotKey),
-  }),
-  // Phase 5 S8 (#1119): substrategy exposure cap（实盘 enforce 灰度中，follow-up #1120 接入 live exposure feed）
-  presentation({
-    key: 'portfolioRisk.substrategy_exposure_cap',
-    publicName: '子策略敞口护栏',
-    aliases: ['子策略敞口', 'substrategy exposure cap', 'per-substrategy cap', '子策略仓位限制'],
-    positiveExamples: [
-      '趋势子策略仓位上限 50%',
-      '震荡子策略敞口超 40% 暂停',
-      '子策略敞口超 30% 仅记录',
-    ],
-    negativeExamples: ['感觉子策略仓位重', '暂停所有', '随便'],
-    goldenUtterances: [
-      '趋势子策略仓位上限 50%',
-      '子策略敞口超 40% 时暂停',
-      '子策略敞口超 30% 时阻止开仓',
-    ],
-    displayRenderer: ({ params }) => renderPortfolioSubStrategyExposureCap(params),
-    clarificationRenderer: (slotKey) => renderPortfolioSubStrategyExposureCapClarification(slotKey),
-  }),
-  presentation({
-    key: 'program.dynamic_grid',
-    publicName: '动态网格',
-    aliases: ['跟随网格', '漂移网格', 'dynamic grid'],
-    positiveExamples: [
-      '在 BTCUSDT 用最近 50 根 K 线高点为锚的动态网格，5 档每档 0.5%，趋势上涨时启用，停用时撤单',
-      '围绕近 30 根 K 线中点挂 8 档动态网格，每档 100 USDT，停用时保留挂单',
-      'ETHUSDT 最近 100 根 K 线低点动态网格，3 档 1% 步长，趋势下跌启用，停用平仓',
-    ],
-    negativeExamples: ['感觉网格策略', '随便挂', '区间网格不变'],
-    goldenUtterances: [
-      '在 BTCUSDT 用最近 50 根 K 线高点为锚的动态网格，5 档每档 0.5%，趋势上涨时启用，停用时撤单',
-      '动态网格围绕近 60 根 K 线高点，5 档 0.8%，drift 1% 时重建，每次至少间隔 120 秒',
-      'ETHUSDT 最近 100 根 K 线低点动态网格，3 档 1% 步长，趋势下跌启用，停用平仓',
-    ],
-    displayRenderer: ({ params }) => renderDynamicGrid(params),
-    clarificationRenderer: (slotKey) => renderDynamicGridClarification(slotKey),
-  }),
-  presentation({
-    key: 'program.fixed_grid_gated',
-    publicName: '门控固定网格',
-    aliases: ['门控网格', '区间网格', 'gated grid', 'fixed grid program'],
-    positiveExamples: [
-      'BTCUSDT 50000-60000 区间挂 10 档网格，5% 步长，趋势上涨时启用',
-      '锚定 50000 挂 10 档 5% 步长，失活时撤单',
-      '区间网格趋势上涨启用，失活时平仓',
-    ],
-    negativeExamples: ['感觉网格策略', '挂网格', '随便挂'],
-    goldenUtterances: [
-      'BTCUSDT 50000-60000 区间挂 10 档网格，5% 步长，趋势上涨时启用',
-      '锚定 50000 挂 10 档 5% 步长，失活时撤单',
-      '区间网格趋势上涨启用，失活时平仓',
-    ],
-    displayRenderer: ({ params }) => renderFixedGridGated(params),
-    clarificationRenderer: (slotKey) => renderFixedGridGatedClarification(slotKey),
-  }),
-  // Phase 5 S6 (#984): adaptive_volatility_grid
-  presentation({
-    key: 'program.adaptive_volatility_grid',
-    publicName: 'ATR 自适应网格',
-    aliases: ['波动自适应网格', 'atr grid', 'adaptive grid', '波动率网格'],
-    positiveExamples: [
-      '用 ATR(14) 的 1.5 倍为步长、3 倍为区间的自适应网格',
-      'ATR 自适应网格，6 档，每档不少于 0.2% 不超过 2%',
-      '波动率 14 自适应网格，1 倍步长 5 倍区间',
-    ],
-    negativeExamples: ['挂个自适应网格', '随便用 ATR'],
-    goldenUtterances: [
-      'ATR(14) 1.5 倍步长 3 倍区间自适应网格 6 档，趋势上涨时启用',
-      'ATR(20) 自适应网格 5 档每档钳制 0.1%-1.5%，停用平仓',
-    ],
-    displayRenderer: ({ params }) => renderAdaptiveVolatilityGrid(params),
-    clarificationRenderer: (slotKey) => renderAdaptiveVolatilityGridClarification(slotKey),
-  }),
-  // Phase 5 S12 (#1118): event_listener
-  presentation({
-    key: 'program.event_listener',
-    publicName: '事件监听',
-    aliases: ['事件监听', 'webhook 监听', '外部事件订阅', 'event listener'],
-    positiveExamples: [
-      'OKX 合约 BTCUSDT 15m，订阅 binance webhook 事件源，趋势上涨时启用 tradingview 喊单监听',
-      'discord 事件监听，按 signalId 去重 5 秒，过期 60 秒丢弃',
-      'telegram 信号监听，每 10 秒去重，过期 60 秒上报告警',
-    ],
-    negativeExamples: ['挂个网格策略', '随便接 webhook'],
-    goldenUtterances: [
-      'OKX BTCUSDT 15m 订阅 tradingview 事件源，趋势上涨时启用事件监听，按 signalId 去重 5 秒',
-      'discord 事件监听 webhook 信号触发，过期 60 秒丢弃',
-      'telegram 信号监听，按字段 data.signalId 去重 10 秒，过期 60 秒上报',
-    ],
-    displayRenderer: ({ params }) => renderEventListener(params),
-    clarificationRenderer: (slotKey) => renderEventListenerClarification(slotKey),
-  }),
-  // Phase 5 S2 (#1104): scope.symbol substrate
-  presentation({
-    key: 'scope.symbol',
-    publicName: '标的范围',
-    aliases: ['多标的范围', '多币种作用域', '标的作用域', 'symbol scope'],
-    positiveExamples: [
-      'BTCUSDT 和 ETHUSDT 同时跑相同策略',
-      '在 BTC 和 ETH 上挂网格',
-      'BTCUSDT、ETHUSDT、SOLUSDT 多个标的同时跑',
-    ],
-    negativeExamples: ['只交易 BTCUSDT', '感觉多个币都行', '随便几个币'],
-    goldenUtterances: [
-      'BTCUSDT 和 ETHUSDT 同时跑相同策略，均线金叉开多',
-      '在 BTC 和 ETH 上挂网格',
-      'BTCUSDT 主标的，ETHUSDT 跟随，均线金叉',
-    ],
-    displayRenderer: ({ params }) => renderSymbolScope(params),
-    clarificationRenderer: (slotKey) => renderSymbolScopeClarification(slotKey),
-  }),
-  // Phase 5 S11 (#1112): scope.leg substrate
-  presentation({
-    key: 'scope.leg',
-    publicName: '策略腿',
-    aliases: ['对冲腿', '多空腿', 'hedge legs', 'strategy legs', '腿'],
-    positiveExamples: [
-      '做多 BTC 同时做空 ETH，等比对冲',
-      '三条腿：多 BTC、多 ETH、空 SOL',
-      'BTCUSDT 多头腿、ETHUSDT 空头腿，1:2 对冲',
-    ],
-    negativeExamples: ['做多 BTCUSDT 和 ETHUSDT', '随便对冲一下'],
-    goldenUtterances: [
-      '做多 BTC 同时做空 ETH，等比对冲',
-      '对冲组合：BTC 做多 1000U、ETH 做空 500U',
-      'delta neutral：BTC 多 ETH 空 等比',
-    ],
-    displayRenderer: ({ params }) => renderLegScope(params),
-    clarificationRenderer: (slotKey) => renderLegScopeClarification(slotKey),
-  }),
-  // Phase 5 S3 (#1109): scope.timeframe substrate
-  presentation({
-    key: 'scope.timeframe',
-    publicName: '周期范围',
-    aliases: ['多周期范围', '多时间框架', 'timeframe scope', '周期作用域'],
-    positiveExamples: [
-      '15 分钟主周期，1 小时和 4 小时做 scope 依赖周期',
-      '执行周期 5m，参考 15m 1h 多时间框架 scope',
-      '主周期 1h，依赖 4h 1d 严格对齐',
-    ],
-    negativeExamples: ['只用 15 分钟一个周期', '随便几个周期都行'],
-    goldenUtterances: [
-      '15m 主周期 + 1h 4h 依赖周期严格对齐',
-      'Primary timeframe 15m, required timeframes 1h and 4h',
-    ],
-    displayRenderer: ({ params }) => renderTimeframeScope(params),
-    clarificationRenderer: (slotKey) => renderTimeframeScopeClarification(slotKey),
-  }),
-  // Phase 5 S9 (#1110): scope.dataSource substrate
-  presentation({
-    key: 'scope.dataSource',
-    publicName: '数据源',
-    aliases: ['数据源作用域', '行情源作用域', 'data source scope', 'feed scope'],
-    positiveExamples: [
-      '主行情源 binance.spot.btcusdt 用 OHLCV',
-      '事件源 webhook tradingview.alpha 接收信号',
-      'primary feed binance.spot.ethusdt OHLCV, confirmation feed okx.spot.ethusdt orderbook',
-    ],
-    negativeExamples: ['随便选个数据源', '看市场情况', '只交易 BTC'],
-    goldenUtterances: [
-      '主行情源 binance.spot.btcusdt 同时订阅 binance.perp.btcusdt 作为确认源',
-      '事件源使用 webhook tradingview.alert',
-    ],
-    displayRenderer: ({ params }) => renderDataSourceScope(params),
-    clarificationRenderer: (slotKey) => renderDataSourceScopeClarification(slotKey),
-  }),
-  // Phase 5 S10 (#1111): scope.subStrategy substrate
-  presentation({
-    key: 'scope.subStrategy',
-    publicName: '子策略范围',
-    aliases: ['多子策略', '策略切换范围', 'sub-strategy scope', 'sub strategy scope'],
-    positiveExamples: [
-      '趋势行情用趋势子策略，震荡行情用震荡子策略',
-      '上涨时跑策略 A，下跌时跑策略 B',
-      '在 BTCUSDT 上跑两套子策略，根据 ATR 切换',
-    ],
-    negativeExamples: ['只跑一个策略', '不需要切换', '策略不行'],
-    goldenUtterances: [
-      '趋势行情用趋势子策略，震荡行情用震荡子策略，切换时平掉旧仓位',
-      'Use sub-strategy A in trend regime, sub-strategy B in range',
-    ],
-    displayRenderer: ({ params }) => renderSubStrategyScope(params),
-    clarificationRenderer: (slotKey) => renderSubStrategyScopeClarification(slotKey),
-  }),
-  presentation({
-    key: 'gate.subStrategy',
-    publicName: '子策略 gate',
-    aliases: ['子策略切换', '子策略暂停', 'sub-strategy gate'],
-    positiveExamples: ['RSI > 70 切到震荡子策略，<30 切回趋势子策略', '盘整时暂停趋势子策略'],
-    negativeExamples: ['不需要切换'],
-    goldenUtterances: ['趋势成立时切到趋势子策略；震荡时切到震荡子策略'],
-    displayRenderer: ({ params }) => renderSubStrategyGate(params),
-    clarificationRenderer: (slotKey) => renderSubStrategyGateClarification(slotKey),
-  }),
+  // #1329 follow-up Phase 3c: gate.regime PRESENTATIONS entry 已迁入 ATOM_CONTRACT_REGISTRY.display
+  // #1329 follow-up Phase 3d: portfolioRisk.drawdown_block PRESENTATIONS entry 已迁入 ATOM_CONTRACT_REGISTRY.display
+  // #1329 follow-up Phase 3c: portfolioRisk.{symbol,substrategy}_exposure_cap PRESENTATIONS 已迁入 ATOM_CONTRACT_REGISTRY.display
+  // #1329 follow-up Phase 3c: program.{dynamic_grid,fixed_grid_gated,adaptive_volatility_grid,event_listener} PRESENTATIONS 已迁入 ATOM_CONTRACT_REGISTRY.display
+  // #1329 follow-up Phase 3c: scope.{symbol,leg,timeframe,dataSource} PRESENTATIONS 已迁入 ATOM_CONTRACT_REGISTRY.display
+  // #1329 follow-up Phase 3e: scope.subStrategy / gate.subStrategy PRESENTATIONS 已迁入 ATOM_CONTRACT_REGISTRY.display
   presentation({
     key: 'market.regime',
     publicName: '市场状态',
@@ -1298,7 +1059,15 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
   }),
 ]
 
-const SLOT_LABELS: Record<string, string> = {
+/**
+ * 不可由 REGISTRY 派生的 legacy slot label 残留。
+ *
+ * 历史上 PRESENTATIONS 时代不同 atom 共享 slot label 文案，迁入 REGISTRY 时无对应字段
+ * 承载（#1331 M2：撤回 ParamSlotSchema.label dead field——13 atom clarificationQuestion
+ * 已自定义、无人填充 label 占位，YAGNI）。当所有 atom clarificationQuestion 全覆盖后
+ * 此 map 可清空并删除 helper。
+ */
+const SLOT_LABEL_FALLBACK: Record<string, string> = {
   'action.add_position.constraint': '加仓约束',
   'action.reverse_position.same_bar_policy': '同一根 K 线反手规则',
   'action.reverse_position.sizing_source': '反手仓位来源',
@@ -1309,6 +1078,20 @@ const SLOT_LABELS: Record<string, string> = {
   'position.dca_schedule.exit_rule': '补仓退出规则',
   'risk.falling_knife_guard.definition': '急跌保护判定方式',
   'risk.stop_loss_pct.valuePct': '止损比例',
+}
+
+/**
+ * resolveSlotLabel —— 根据 atomKey + 完整 slotKey 解析短中文 label。
+ *
+ * #1331 M2：REGISTRY label 接入待 future（atom 内部 clarificationQuestion 已自定义，
+ * 不依赖 fallback label）。当前两级 fallback：
+ *   1. SLOT_LABEL_FALLBACK[fullSlotKey]（PRESENTATIONS-only legacy 残留）
+ *   2. '缺失信息'（兜底通用文案，避免暴露内部 key）
+ *
+ * 完整 slotKey 形如 `atom.key.bareKey`。
+ */
+export function resolveSlotLabel(_atomKey: string, fullSlotKey: string): string {
+  return SLOT_LABEL_FALLBACK[fullSlotKey] ?? '缺失信息'
 }
 
 const PRESENTATIONS_BY_KEY: ReadonlyMap<string, SemanticPresentationMetadata> = new Map(
@@ -1330,6 +1113,17 @@ const PRESENTATIONS_BY_KEY: ReadonlyMap<string, SemanticPresentationMetadata> = 
  */
 export function getLegacyEntry(atomKey: string): SemanticPresentationMetadata | undefined {
   return PRESENTATIONS_BY_KEY.get(atomKey)
+}
+
+/**
+ * 暴露 PRESENTATIONS 全集 key 列表，**仅供 invariant spec 使用**，避免外部直接持有 PRESENTATIONS。
+ * 用于断言 REGISTRY vs PRESENTATIONS 集合不重叠（#1329 Phase 4c）。
+ *
+ * #1331 m3：前缀 `__forSpecOnly_` 强调本函数不应被生产代码消费；任何 production import
+ * 都应直接走 `getLegacyEntry` 或迁入 REGISTRY。
+ */
+export function __forSpecOnly_getAllLegacyPresentationKeys(): readonly string[] {
+  return Array.from(PRESENTATIONS_BY_KEY.keys())
 }
 
 /**
@@ -1421,16 +1215,17 @@ function presentation(
       ?? (() => renderDisplayToken(`atom.${metadata.key}.name`)),
     hasExplicitDisplayRenderer,
     clarificationRenderer: metadata.clarificationRenderer
-      ?? ((slotKey, params) => defaultClarificationRenderer(metadata.publicName, slotKey, params)),
+      ?? ((slotKey, params) => defaultClarificationRenderer(metadata.key, metadata.publicName, slotKey, params)),
   }
 }
 
 function defaultClarificationRenderer(
+  atomKey: string,
   publicName: string,
   slotKey: string,
   _params: Record<string, unknown>,
 ): string {
-  return `请补充${publicName}的${SLOT_LABELS[slotKey] ?? '缺失信息'}。`
+  return `请补充${publicName}的${resolveSlotLabel(atomKey, slotKey)}。`
 }
 
 function renderIndicatorBoundaryTouch(params: Record<string, unknown>): string {
@@ -1459,496 +1254,8 @@ function renderBoundaryRole(boundaryRole: string): string {
   return renderEnumDisplayToken('enum.boundaryRole', boundaryRole)
 }
 
-function renderRegimeGate(params: Record<string, unknown>): string {
-  const sideScope = stringParam(params, 'sideScope', 'both')
-  const indicator = stringParam(params, 'indicator', 'ema')
-  const period = numberParam(params, 'period', 0)
-  const operator = stringParam(params, 'operator', 'GT')
-  const indicatorLabel = renderRegimeIndicator(indicator)
-  const periodLabel = period > 0 ? `${period}` : ''
-  const indicatorWithPeriod = `${indicatorLabel}${periodLabel}`
-
-  const longLine = renderDisplayToken('atom.gate.regime.long.display', { indicator: indicatorWithPeriod })
-  const shortLine = renderDisplayToken('atom.gate.regime.short.display', { indicator: indicatorWithPeriod })
-
-  if (sideScope === 'long') {
-    return operator === 'LT' ? shortLine : longLine
-  }
-  if (sideScope === 'short') {
-    return operator === 'GT' ? longLine : shortLine
-  }
-  return renderDisplayToken('atom.gate.regime.both.display', { longLine, shortLine })
-}
-
-function renderRegimeIndicator(indicator: string): string {
-  const normalized = indicator.toLowerCase()
-  return renderEnumDisplayToken('enum.indicator', normalized)
-}
-
 function renderDcaTriggerMode(triggerMode: string): string {
   return renderEnumDisplayToken('enum.dca.triggerMode', triggerMode)
-}
-
-function renderRegimeGateClarification(slotKey: string): string {
-  if (slotKey === 'orchestration.gate.regime.active_when') {
-    return '请确认趋势过滤的指标（EMA/SMA/MA）与周期'
-  }
-  return '请补全趋势过滤参数'
-}
-
-function renderPortfolioDrawdown(params: Record<string, unknown>): string {
-  const thresholdPct = numberParam(params, 'thresholdPct', 0)
-  const mode = stringParam(params, 'mode', 'enforce')
-  if (mode === 'observe') {
-    return renderDisplayToken('atom.portfolioRisk.drawdown_block.display.observe', { thresholdPct })
-  }
-  return renderDisplayToken('atom.portfolioRisk.drawdown_block.display.enforce', { thresholdPct })
-}
-
-function renderPortfolioDrawdownClarification(slotKey: string): string {
-  if (slotKey === 'orchestration.portfolio_drawdown.threshold_pct') {
-    return '请确认账户回撤百分比阈值（0..100）'
-  }
-  return '请补全账户回撤护栏参数'
-}
-
-// Phase 5 S8 (#1119): symbol exposure cap render
-function renderPortfolioSymbolExposureCap(params: Record<string, unknown>): string {
-  const notionalCapPct = numberParam(params, 'notionalCapPct', 0)
-  const mode = stringParam(params, 'mode', 'enforce')
-  const effect = stringParam(params, 'effectWhenTriggered', 'block_new_entries')
-  const symbolLabel = typeof params['symbolLabel'] === 'string' && params['symbolLabel'].trim() !== ''
-    ? `${params['symbolLabel'].trim()} `
-    : ''
-  if (mode === 'observe') {
-    return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.display.observe', { symbolLabel, notionalCapPct })
-  }
-  if (effect === 'reduce_exposure') {
-    return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.display.enforce.reduce', { symbolLabel, notionalCapPct })
-  }
-  return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.display.enforce.block', { symbolLabel, notionalCapPct })
-}
-
-function renderPortfolioSymbolExposureCapClarification(slotKey: string): string {
-  if (slotKey.includes('notional_cap_pct')) {
-    return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.clarify.notional_cap_pct', {})
-  }
-  if (slotKey.includes('bound_symbol_scope_ref')) {
-    return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.clarify.bound_symbol_scope_ref', {})
-  }
-  if (slotKey.includes('effect')) {
-    return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.clarify.effect', {})
-  }
-  return '请补全标的敞口护栏参数'
-}
-
-// Phase 5 S8 (#1119): substrategy exposure cap render
-function renderPortfolioSubStrategyExposureCap(params: Record<string, unknown>): string {
-  const notionalCapPct = numberParam(params, 'notionalCapPct', 0)
-  const mode = stringParam(params, 'mode', 'enforce')
-  const effect = stringParam(params, 'effectWhenTriggered', 'block_new_entries')
-  if (mode === 'observe') {
-    return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.display.observe', { notionalCapPct })
-  }
-  if (effect === 'pause_substrategy') {
-    return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.display.enforce.pause', { notionalCapPct })
-  }
-  return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.display.enforce.block', { notionalCapPct })
-}
-
-function renderPortfolioSubStrategyExposureCapClarification(slotKey: string): string {
-  if (slotKey.includes('notional_cap_pct')) {
-    return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.clarify.notional_cap_pct', {})
-  }
-  if (slotKey.includes('bound_substrategy_scope_ref')) {
-    return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.clarify.bound_substrategy_scope_ref', {})
-  }
-  if (slotKey.includes('effect')) {
-    return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.clarify.effect', {})
-  }
-  return '请补全子策略敞口护栏参数'
-}
-
-// Phase 5 S5：dynamic_grid 显式黑名单（critic round 1 M5 + critic round 2 m1）。
-// 用户可见 display 文本绝不能出现这些字面量；publicName 用中文 "高点 / 低点 / 中点 / 动态网格"。
-const DYNAMIC_GRID_DISPLAY_BLACKLIST = [
-  'program.dynamic_grid',
-  'dynamic_grid',
-  'anchor_on_state_change',
-  'high',
-  'low',
-  'mid',
-] as const
-
-function renderDynamicGrid(params: Record<string, unknown>): string {
-  const inner = objectParam(params, 'params')
-  const source = Object.keys(inner).length > 0 ? inner : params
-  const lookback = numberParam(source, 'anchorLookbackBars', 0)
-  const anchorSide = stringParam(source, 'anchorSide', 'high')
-  const levels = numberParam(source, 'levelCount', 0)
-  const step = objectParam(source, 'step')
-  const stepMode = stringParam(step, 'mode', 'pct')
-  const stepValue = numberParam(step, 'value', 0)
-  const onDeactivate = stringParam(source, 'onDeactivate', 'cancel')
-
-  const sideLabel: Record<string, string> = { high: '高点', low: '低点', mid: '中点' }
-  const deactivateLabel: Record<string, string> = {
-    cancel: '撤单',
-    keep: '保留挂单',
-    close: '平仓',
-  }
-  const stepLabel = stepMode === 'pct' ? `${stepValue}%` : `${stepValue}`
-  const text = `围绕最近 ${lookback} 根 K 线${sideLabel[anchorSide] ?? '高点'}的 ${levels} 档动态网格（每档 ${stepLabel}），失活时${deactivateLabel[onDeactivate] ?? '撤单'}`
-  // critic round 1 M5：display 输出绝不能含黑名单字面量
-  for (const banned of DYNAMIC_GRID_DISPLAY_BLACKLIST) {
-    if (text.includes(banned)) {
-      throw new Error(`dynamic_grid display leaked blacklisted token: ${banned}`)
-    }
-  }
-  return text
-}
-
-function renderDynamicGridClarification(slotKey: string): string {
-  if (slotKey === 'orchestration.program.dynamic_grid.anchor_lookback_bars') {
-    return '请确认动态网格的 anchor lookback K 线根数（10..1000 整数）'
-  }
-  if (slotKey === 'orchestration.program.dynamic_grid.anchor_side') {
-    return '请确认 anchor 取值方向：高点 / 低点 / 中点'
-  }
-  if (slotKey === 'orchestration.program.dynamic_grid.dynamic_grid_step.mode'
-    || slotKey === 'orchestration.program.dynamic_grid.dynamic_grid_step.value') {
-    return '请确认网格步长（mode = pct/absolute；value > 0）'
-  }
-  if (slotKey === 'orchestration.program.dynamic_grid.level_count') {
-    return '请确认网格档位数量（2..100 整数）'
-  }
-  if (slotKey === 'orchestration.program.dynamic_grid.anchor_drift_pct') {
-    return '请确认 anchor 漂移阈值百分比（>0 ≤100）'
-  }
-  if (slotKey === 'orchestration.program.dynamic_grid.rebuild_min_interval_sec') {
-    return '请确认 rebuild 最小间隔秒数（≥60）'
-  }
-  if (slotKey === 'orchestration.program.dynamic_grid.active_when_ref') {
-    return '请确认动态网格的启用/失活条件（引用哪个趋势/状态过滤）'
-  }
-  if (slotKey === 'orchestration.program.dynamic_grid.sizing.mode'
-    || slotKey === 'orchestration.program.dynamic_grid.sizing.value') {
-    return '请确认每档下单数量（fixed_quote / fixed_base / fixed_pct）'
-  }
-  return '请补全动态网格策略参数'
-}
-
-function renderFixedGridGated(params: Record<string, unknown>): string {
-  const inner = objectParam(params, 'params')
-  const source = Object.keys(inner).length > 0 ? inner : params
-  const lower = numberParam(source, 'lowerBound', 0)
-  const upper = numberParam(source, 'upperBound', 0)
-  const anchor = numberParam(source, 'anchorPrice', 0)
-  const levels = numberParam(source, 'levelCount', 0)
-  const step = numberParam(source, 'stepPct', 0)
-  const onDeactivate = stringParam(source, 'onDeactivate', 'cancel')
-  const rangeLabel = lower > 0 && upper > 0
-    ? `在 ${lower}-${upper} 区间`
-    : anchor > 0
-      ? `锚定 ${anchor}`
-      : '在指定区间'
-  return renderDisplayToken('atom.program.fixed_grid_gated.display', {
-    range: rangeLabel,
-    levels,
-    step,
-    onDeactivate: renderEnumDisplayToken('enum.onDeactivate', onDeactivate),
-  })
-}
-
-function renderFixedGridGatedClarification(slotKey: string): string {
-  if (slotKey === 'orchestration.program.fixed_grid_gated.gridParams') {
-    return '请确认网格区间、档数、步长'
-  }
-  if (slotKey === 'orchestration.program.fixed_grid_gated.activeWhenRef') {
-    return '请确认网格的启用/失活条件（引用哪个趋势/状态过滤）'
-  }
-  if (slotKey === 'orchestration.program.fixed_grid_gated.sizing') {
-    return '请确认每档下单数量'
-  }
-  return '请补全网格策略参数'
-}
-
-// Phase 5 S6 (#984): adaptive_volatility_grid
-//
-// 注意（critic round 2 Q8 黑名单 + 双向 grep）：
-//   - 必须不出现内部 key 字面量：`program.adaptive_volatility_grid` /
-//     `atr_window` / `adaptive_volatility_grid`（snake_case 内部标识）
-//   - 必须保留用户友好 fragment：`ATR(N)` / `自适应网格` / `波动率` / `钳制`
-function renderAdaptiveVolatilityGrid(params: Record<string, unknown>): string {
-  const inner = objectParam(params, 'params')
-  const source = Object.keys(inner).length > 0 ? inner : params
-  const atrPeriod = numberParam(source, 'atrPeriod', 14)
-  const atrMultiplier = numberParam(source, 'atrMultiplier', 1.5)
-  const rangeMultiplier = numberParam(source, 'rangeMultiplier', 3)
-  const minStepPct = numberParam(source, 'minStepPct', 0.2)
-  const maxStepPct = numberParam(source, 'maxStepPct', 2)
-  const levelCount = numberParam(source, 'levelCount', 6)
-  const onDeactivate = stringParam(source, 'onDeactivate', 'cancel')
-  const deactivateLabel: Record<string, string> = {
-    cancel: '撤单',
-    keep: '保留挂单',
-    close: '平仓',
-  }
-  return (
-    `ATR(${atrPeriod}) 的 ${atrMultiplier} 倍为步长、${rangeMultiplier} 倍为区间的自适应网格，`
-    + `${levelCount} 档，每档 ${minStepPct}%-${maxStepPct}% 钳制，失活时${deactivateLabel[onDeactivate] ?? '撤单'}`
-  )
-}
-
-// Phase 5 S12 (#1118): event_listener 显式黑名单（plan A16）。
-//   用户可见 display 文本绝不能出现这些字面量；publicName 用中文 "事件监听 / 数据源 / 命名空间"。
-const EVENT_LISTENER_DISPLAY_BLACKLIST = [
-  'program.event_listener',
-  'event_listener',
-  'webhook_event',
-  'on_schema_version_bump',
-  'dedupWindowMs',
-  'expirationTtlMs',
-  'permissionScope',
-] as const
-
-function renderEventListener(params: Record<string, unknown>): string {
-  const inner = objectParam(params, 'params')
-  const source = Object.keys(inner).length > 0 ? inner : params
-  const permissionScope = stringParam(source, 'permissionScope', '')
-  // permissionScope 形如 `tradingview:alpha`；只露 provider 段
-  const provider = permissionScope.split(':')[0] || '外部信号'
-  const providerLabel: Record<string, string> = {
-    tradingview: 'TradingView 喊单',
-    discord: 'Discord 喊单',
-    telegram: 'Telegram 喊单',
-    webhook: 'Webhook 信号',
-  }
-  const text = `事件监听 — ${providerLabel[provider] ?? '外部事件'}`
-  for (const banned of EVENT_LISTENER_DISPLAY_BLACKLIST) {
-    if (text.includes(banned)) {
-      throw new Error(`event_listener display leaked blacklisted token: ${banned}`)
-    }
-  }
-  return text
-}
-
-function renderEventListenerClarification(slotKey: string): string {
-  if (slotKey === 'orchestration.program.event_listener.event_schema_ref') {
-    return '请确认事件 schema（仅支持 webhook 事件）'
-  }
-  if (slotKey === 'orchestration.program.event_listener.source_ref') {
-    return '请确认事件源数据节点 id（引用一个 role=event 的数据源）'
-  }
-  if (slotKey === 'orchestration.program.event_listener.permission_scope') {
-    return '请确认事件权限命名空间（如 tradingview:alpha；小写字母开头，3-64 字符）'
-  }
-  if (slotKey === 'orchestration.program.event_listener.idempotency_key.field_path') {
-    return '请确认幂等字段名（仅允许 0-1 层路径，如 signalId 或 data.signalId）'
-  }
-  if (slotKey === 'orchestration.program.event_listener.dedup_window_ms') {
-    return '请确认去重窗口毫秒（100..3600000 整数）'
-  }
-  if (slotKey === 'orchestration.program.event_listener.expiration_ttl_ms') {
-    return '请确认事件过期时长毫秒（100..86400000 整数；必须严格大于去重窗口）'
-  }
-  if (slotKey === 'orchestration.program.event_listener.expiration_policy') {
-    return '请确认过期事件处理策略（丢弃 / 上报）'
-  }
-  if (slotKey === 'orchestration.program.event_listener.on_deactivate') {
-    return '请确认停用时行为（撤单 / 保留监听）'
-  }
-  if (slotKey === 'orchestration.program.event_listener.active_when_ref') {
-    return '请确认事件监听的启用/失活条件（引用哪个趋势/状态过滤）'
-  }
-  if (slotKey === 'orchestration.program.event_listener.rebuild_policy') {
-    return '请确认重建策略（始终保留 / schema 版本变更时清空）'
-  }
-  if (slotKey === 'orchestration.program.event_listener.program_kind') {
-    return '请确认 programKind 为事件监听类型'
-  }
-  return '请补全事件监听参数'
-}
-
-function renderAdaptiveVolatilityGridClarification(slotKey: string): string {
-  if (slotKey === 'orchestration.program.adaptive_volatility_grid.atr_period') return '请确认 ATR 周期（2..200 整数）'
-  if (slotKey === 'orchestration.program.adaptive_volatility_grid.atr_multiplier') return '请确认 ATR 步长系数（>0）'
-  if (slotKey === 'orchestration.program.adaptive_volatility_grid.range_multiplier') return '请确认 ATR 区间系数（>0）'
-  if (slotKey === 'orchestration.program.adaptive_volatility_grid.atr_drift_pct') return '请确认 ATR 漂移百分比（>0 且 ≤100）'
-  if (slotKey === 'orchestration.program.adaptive_volatility_grid.rebuild_cooldown_sec') return '请确认重建冷却时长（≥300 整数秒）'
-  if (slotKey === 'orchestration.program.adaptive_volatility_grid.min_step_pct') return '请确认最小步长百分比（>0）'
-  if (slotKey === 'orchestration.program.adaptive_volatility_grid.max_step_pct') return '请确认最大步长百分比（>0 且 ≥ 最小步长）'
-  if (slotKey === 'orchestration.program.adaptive_volatility_grid.level_count') return '请确认档位数量（2..100 整数）'
-  if (slotKey === 'orchestration.program.adaptive_volatility_grid.sizing') return '请确认每档下单数量'
-  if (slotKey === 'orchestration.program.adaptive_volatility_grid.active_when_ref') return '请确认网格启用/失活条件（引用哪个趋势过滤）'
-  return '请补全自适应网格参数'
-}
-
-// Phase 5 S2 (#1104): scope.symbol render
-function renderSymbolScope(params: Record<string, unknown>): string {
-  const symbolsRaw = params.symbols
-  const symbols = Array.isArray(symbolsRaw)
-    ? symbolsRaw.filter((s): s is string => typeof s === 'string').join('、')
-    : ''
-  if (symbols === '') return ''
-  const primary = stringParam(params, 'primarySymbol', '')
-  if (primary !== '') {
-    return renderDisplayToken('atom.scope.symbol.display.with_primary', { symbols, primarySymbol: primary })
-  }
-  return renderDisplayToken('atom.scope.symbol.display.no_primary', { symbols })
-}
-
-function renderSymbolScopeClarification(slotKey: string): string {
-  if (slotKey === 'orchestration.scope.symbol.symbols') return '请确认要绑定的标的列表'
-  if (slotKey === 'orchestration.scope.symbol.primary_symbol') return '主标的必须在标的列表中'
-  if (slotKey === 'orchestration.scope.symbol.symbols_overlap') return '多 scope 之间标的不能重叠'
-  if (slotKey === 'orchestration.scope.symbol.primary_symbol_collision') return '多 scope 主标的必须各自唯一'
-  if (slotKey === 'orchestration.scope.symbol.missing_binding') return '请确认该规则绑定到哪个 symbol scope'
-  if (slotKey === 'orchestration.scope.unsupported_kind') return '当前仅支持 scope.symbol / scope.leg / scope.timeframe / scope.dataSource / scope.subStrategy'
-  return '请补全标的范围参数'
-}
-
-// Phase 5 S11 (#1112): scope.leg render
-function renderLegScope(params: Record<string, unknown>): string {
-  const direction = stringParam(params, 'direction', '')
-  const instrument = stringParam(params, 'instrumentSymbol', '') || stringParam(params, 'instrumentRef', '')
-  if (direction === 'long' && instrument !== '') {
-    return renderDisplayToken('atom.scope.leg.display.long', { instrument })
-  }
-  if (direction === 'short' && instrument !== '') {
-    return renderDisplayToken('atom.scope.leg.display.short', { instrument })
-  }
-  // 多 leg 聚合渲染
-  const legsRaw = params.legs
-  if (Array.isArray(legsRaw)) {
-    const parts: string[] = []
-    for (const item of legsRaw) {
-      if (typeof item !== 'object' || item === null) continue
-      const r = item as Record<string, unknown>
-      const d = typeof r.direction === 'string' ? r.direction : ''
-      const sym = typeof r.instrumentSymbol === 'string' ? r.instrumentSymbol : ''
-      if (sym === '') continue
-      parts.push(d === 'short' ? `空 ${sym}` : `多 ${sym}`)
-    }
-    if (parts.length > 0) {
-      return renderDisplayToken('atom.scope.leg.display.hedge', { legs: parts.join('、') })
-    }
-  }
-  return ''
-}
-
-function renderLegScopeClarification(slotKey: string): string {
-  if (slotKey === 'orchestration.scope.leg.unsupported_kind') return '当前仅支持 scope.leg 子类型'
-  if (slotKey === 'orchestration.scope.leg.leg_scope_kind') return '请确认 legScopeKind 为 leg'
-  if (slotKey === 'orchestration.scope.leg.leg_id') return '请确认腿 id（字母开头、字母数字下划线点、长度 ≤ 64）'
-  if (slotKey === 'orchestration.scope.leg.direction') return '请确认腿方向（long/short）'
-  if (slotKey === 'orchestration.scope.leg.instrument_ref') return '该腿引用的 scope.symbol 节点必须已存在且 readiness 已通过'
-  if (slotKey === 'orchestration.scope.leg.leg_sizing.mode') return '请确认 legSizing.mode（fixed_pct/fixed_quote/fixed_ratio）'
-  if (slotKey === 'orchestration.scope.leg.leg_sizing.value') return '请确认 legSizing.value（>0 有限数）'
-  if (slotKey === 'orchestration.scope.leg.paired_leg_id') return 'fixed_ratio 模式必须指定 pairedLegId'
-  if (slotKey === 'orchestration.scope.leg.direction_collision') return 'paired leg 必须方向相反（对冲腿）'
-  if (slotKey === 'orchestration.scope.leg.missing_binding') return '请确认该规则绑定到哪个策略腿'
-  return '请补全策略腿参数'
-}
-
-// Phase 5 S3 (#1109): scope.timeframe render
-function renderTimeframeScope(params: Record<string, unknown>): string {
-  const primary = stringParam(params, 'primaryTimeframe', '')
-  const requiredRaw = params.requiredTimeframes
-  const required = Array.isArray(requiredRaw)
-    ? requiredRaw.filter((tf): tf is string => typeof tf === 'string').join('、')
-    : ''
-  const alignmentPolicy = stringParam(params, 'alignmentPolicy', 'strict')
-  if (primary === '' || required === '') return ''
-  return renderDisplayToken('atom.scope.timeframe.display.with_required', {
-    primaryTimeframe: primary,
-    requiredTimeframes: required,
-    alignmentPolicy,
-  })
-}
-
-function renderTimeframeScopeClarification(slotKey: string): string {
-  if (slotKey === 'orchestration.scope.timeframe.primary_timeframe') return '请确认执行周期（主周期）'
-  if (slotKey === 'orchestration.scope.timeframe.required_timeframes') return '请确认依赖周期列表（≥1 个，且与主周期不同）'
-  if (slotKey === 'orchestration.scope.timeframe.required_length') return '依赖周期数量必须在 1..8 之间'
-  if (slotKey === 'orchestration.scope.timeframe.primary_granularity') return '主周期粒度必须严格细于所有依赖周期'
-  if (slotKey === 'orchestration.scope.timeframe.alignment_policy') return '请确认对齐严格度（strict / tolerant）'
-  if (slotKey === 'orchestration.scope.timeframe.duplicate_definition') return '多 scope.timeframe 之间 (主周期, 依赖周期集合) 不能完全相同'
-  if (slotKey === 'orchestration.scope.timeframe.missing_binding') return '请确认该规则绑定到哪个 timeframe scope（必须显式声明）'
-  if (slotKey === 'orchestration.scope.timeframe.unsupported_key') return '当前仅支持 scope.timeframe'
-  if (slotKey === 'orchestration.scope.timeframe.scope_kind') return '请确认 scopeKind 为 timeframe'
-  return '请补全周期范围参数'
-}
-
-// Phase 5 S9 (#1110): scope.dataSource render — role 直出英文 enum（与 S2 风格一致）
-function renderDataSourceScope(params: Record<string, unknown>): string {
-  const role = stringParam(params, 'role', '')
-  const feedId = stringParam(params, 'feedId', '')
-  const schema = stringParam(params, 'schemaRef', '') || stringParam(params, 'schema', '')
-  if (role === '' || feedId === '') return ''
-  return renderDisplayToken('atom.scope.dataSource.display', { role, feedId, schema })
-}
-
-function renderDataSourceScopeClarification(slotKey: string): string {
-  if (slotKey === 'orchestration.scope.dataSource.role') return '请确认数据源角色（primary/confirmation/event）'
-  if (slotKey === 'orchestration.scope.dataSource.feed_id') return '请确认数据源 feedId（如 binance.spot.btcusdt）'
-  if (slotKey === 'orchestration.scope.dataSource.schema_ref') return '请确认数据源 schema（ohlcv/orderbook/liquidation/webhook_event）'
-  if (slotKey === 'orchestration.scope.dataSource.feed_id_overlap') return '多 scope 间 feedId 不能重复'
-  if (slotKey === 'orchestration.scope.dataSource.primary_collision') return 'primary 数据源最多一个'
-  if (slotKey === 'orchestration.scope.dataSource.missing_binding') return '请确认该规则绑定到哪个 dataSource scope'
-  if (slotKey === 'orchestration.scope.dataSource.scope_kind') return '请确认 scopeKind 为 dataSource'
-  return '请补全数据源参数'
-}
-
-// Phase 5 S10 (#1111): scope.subStrategy render
-function renderSubStrategyScope(params: Record<string, unknown>): string {
-  const label = stringParam(params, 'subStrategyLabel', '') || stringParam(params, 'subStrategyId', '')
-  if (label === '') return ''
-  const positionHandling = stringParam(params, 'positionHandlingOnDeactivate', '')
-  const orderHandling = stringParam(params, 'orderHandlingOnDeactivate', '')
-  if (positionHandling !== '' && orderHandling !== '') {
-    return renderDisplayToken('atom.scope.subStrategy.display.with_handling', {
-      label,
-      positionHandling,
-      orderHandling,
-    })
-  }
-  return renderDisplayToken('atom.scope.subStrategy.display.no_handling', { label })
-}
-
-function renderSubStrategyScopeClarification(slotKey: string): string {
-  if (slotKey === 'orchestration.scope.subStrategy.scope_kind') return '请确认 scopeKind 为 subStrategy'
-  if (slotKey === 'orchestration.scope.subStrategy.substrategy_id') return '请确认子策略 ID（非空且长度 ≤ 64）'
-  if (slotKey === 'orchestration.scope.subStrategy.position_handling') return '请确认子策略切换时是否平仓（close/keep）'
-  if (slotKey === 'orchestration.scope.subStrategy.order_handling') return '请确认子策略切换时是否取消挂单（cancel/keep）'
-  if (slotKey === 'orchestration.scope.subStrategy.id_collision') return '多 scope 子策略 ID 必须唯一'
-  if (slotKey === 'orchestration.scope.subStrategy.missing_binding') return '请确认该规则绑定到哪个 sub-strategy scope'
-  return '请补全子策略范围参数'
-}
-
-// Phase 5 S10 (#1111): gate.subStrategy render
-function renderSubStrategyGate(params: Record<string, unknown>): string {
-  const effect = stringParam(params, 'effectWhenFalse', '')
-  if (effect === 'pause_substrategy') {
-    const label = stringParam(params, 'subStrategyScopeRef', '')
-    return renderDisplayToken('atom.gate.subStrategy.pause', { label })
-  }
-  if (effect === 'switch_substrategy') {
-    const toLabel = stringParam(params, 'toSubStrategyScopeRef', '')
-    return renderDisplayToken('atom.gate.subStrategy.switch', { toLabel })
-  }
-  return ''
-}
-
-function renderSubStrategyGateClarification(slotKey: string): string {
-  if (slotKey === 'orchestration.gate.subStrategy.scope_ref_unknown') return 'gate 引用的子策略 scope 未声明'
-  if (slotKey === 'orchestration.gate.subStrategy.effect_phase_mismatch') return 'phase=subStrategy 仅支持 pause_substrategy / switch_substrategy'
-  if (slotKey === 'orchestration.gate.subStrategy.switch_target_required') return 'switch_substrategy gate 必须指定切换目标 scope'
-  if (slotKey === 'orchestration.gate.subStrategy.switch_target_self') return '切换目标不能与源 scope 相同'
-  if (slotKey === 'orchestration.gate.subStrategy.active_when') return '请确认 gate 的判定条件'
-  if (slotKey === 'orchestration.gate.unsupported_phase') return '当前不支持 phase=strategy 的 gate'
-  if (slotKey === 'orchestration.gate.regime.effect_phase_mismatch') return 'phase=entry 仅支持 block_new_entries effect'
-  return '请补全子策略 gate 参数'
 }
 
 function objectParam(params: Record<string, unknown>, key: string): Record<string, unknown> {

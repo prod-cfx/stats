@@ -165,54 +165,21 @@ describe('legacy-presentation-data (transition pure helpers)', () => {
     expect(signalText).not.toContain('external.signal')
   })
 
-  describe('gate.regime entry', () => {
-    it('exposes public metadata for gate.regime', () => {
-      const entry = getLegacyEntry('gate.regime')
-      expect(entry).toBeDefined()
-      expect(entry!.publicName).toBe('趋势/状态过滤')
-    })
+  // #1329 follow-up Phase 3c: gate.regime PRESENTATIONS entry 已迁入 ATOM_CONTRACT_REGISTRY.display；
+  //   renderLegacyDisplay / renderLegacyClarification 仍是入口（REGISTRY-first），渲染契约由
+  //   atom-coverage-full-registration.spec.ts + orchestration-gate-regime-golden-corpus.spec.ts 覆盖。
 
-    it('includes 趋势过滤 alias', () => {
-      const entry = getLegacyEntry('gate.regime')
-      expect(entry).toBeDefined()
-      expect(entry!.aliases).toEqual(expect.arrayContaining(['趋势过滤']))
-    })
-
-    it('renders display string with EMA50 and 做多 without internal key leakage', () => {
-      const entry = getLegacyEntry('gate.regime')
-      expect(entry).toBeDefined()
-      const text = entry!.displayRenderer({
-        params: { sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' },
-      })
-      expect(text).toContain('EMA50')
-      expect(text).toContain('做多')
-      expect(text).not.toContain('gate.regime')
-      expect(text).not.toContain('orchestration')
-      expect(text).not.toContain('activeWhen')
-      expect(text).not.toContain('block_new_entries')
-    })
-
-    it('renders clarification text containing 指标 and 周期', () => {
-      const entry = getLegacyEntry('gate.regime')
-      expect(entry).toBeDefined()
-      const text = entry!.clarificationRenderer('orchestration.gate.regime.active_when', {})
-      expect(text).toContain('指标')
-      expect(text).toContain('周期')
-    })
-  })
-
+  // #1329 follow-up Phase 3d: portfolioRisk.drawdown_block 已迁入 ATOM_CONTRACT_REGISTRY.display；
+  //   getLegacyEntry 不再返回该 atom（PRESENTATIONS 已删）。
+  //   渲染契约通过 renderLegacyDisplay REGISTRY-first 路径验证。
   describe('portfolioRisk.drawdown_block entry', () => {
-    it('exposes public metadata for portfolioRisk.drawdown_block', () => {
+    it('getLegacyEntry returns undefined (entry moved to REGISTRY)', () => {
       const entry = getLegacyEntry('portfolioRisk.drawdown_block')
-      expect(entry).toBeDefined()
-      expect(entry!.publicName).toBe('组合回撤护栏')
-      expect(entry!.aliases).toEqual(expect.arrayContaining(['组合回撤']))
+      expect(entry).toBeUndefined()
     })
 
-    it('renders enforce-mode display string without leaking internal keys', () => {
-      const entry = getLegacyEntry('portfolioRisk.drawdown_block')
-      expect(entry).toBeDefined()
-      const text = entry!.displayRenderer({ params: { thresholdPct: 10, mode: 'enforce' } })
+    it('renders enforce-mode display string without leaking internal keys (REGISTRY-first)', () => {
+      const text = renderLegacyDisplay('portfolioRisk.drawdown_block', { thresholdPct: 10, mode: 'enforce' })
       expect(text).toContain('10')
       expect(text).toContain('阻止')
       expect(text).toContain('账户')
@@ -224,10 +191,8 @@ describe('legacy-presentation-data (transition pure helpers)', () => {
       expect(text).not.toContain('observe')
     })
 
-    it('renders observe-mode display string without leaking internal keys', () => {
-      const entry = getLegacyEntry('portfolioRisk.drawdown_block')
-      expect(entry).toBeDefined()
-      const text = entry!.displayRenderer({ params: { thresholdPct: 5, mode: 'observe' } })
+    it('renders observe-mode display string without leaking internal keys (REGISTRY-first)', () => {
+      const text = renderLegacyDisplay('portfolioRisk.drawdown_block', { thresholdPct: 5, mode: 'observe' })
       expect(text).toContain('5')
       expect(text).toContain('记录')
       expect(text).not.toContain('portfolioRisk.drawdown_block')
@@ -238,144 +203,17 @@ describe('legacy-presentation-data (transition pure helpers)', () => {
       expect(text).not.toContain('observe')
     })
 
-    it('renders clarification text containing 回撤 and 阈值', () => {
-      const entry = getLegacyEntry('portfolioRisk.drawdown_block')
-      expect(entry).toBeDefined()
-      const text = entry!.clarificationRenderer('orchestration.portfolio_drawdown.threshold_pct', {})
+    it('renders clarification text containing 回撤 and 阈值 (REGISTRY-first)', () => {
+      const text = renderLegacyClarification('portfolioRisk.drawdown_block', 'orchestration.portfolio_drawdown.threshold_pct', {})
       expect(text).toContain('回撤')
       expect(text).toContain('阈值')
     })
   })
 
-  describe('program.fixed_grid_gated entry', () => {
-    it('exposes public metadata for program.fixed_grid_gated', () => {
-      const entry = getLegacyEntry('program.fixed_grid_gated')
-      expect(entry).toBeDefined()
-      expect(entry!.publicName).toBe('门控固定网格')
-      expect(entry!.aliases).toEqual(expect.arrayContaining(['门控网格']))
-    })
-
-    it('renders display string with cancel onDeactivate without leaking internal keys', () => {
-      const entry = getLegacyEntry('program.fixed_grid_gated')
-      expect(entry).toBeDefined()
-      const text = entry!.displayRenderer({
-        params: { lowerBound: 50000, upperBound: 60000, levelCount: 10, stepPct: 5, onDeactivate: 'cancel' },
-      })
-      expect(text).toContain('50000')
-      expect(text).toContain('60000')
-      expect(text).toContain('10')
-      expect(text).toContain('5%')
-      expect(text).toContain('撤单')
-      expect(text).not.toContain('program.fixed_grid_gated')
-      expect(text).not.toContain('orchestration')
-      expect(text).not.toContain('fixed_grid_gated')
-      expect(text).not.toMatch(/\bcancel\b|\bkeep\b|\bclose\b/u)
-    })
-
-    it('renders display string with close onDeactivate as 平仓', () => {
-      const entry = getLegacyEntry('program.fixed_grid_gated')
-      expect(entry).toBeDefined()
-      const text = entry!.displayRenderer({
-        params: { lowerBound: 50000, upperBound: 60000, levelCount: 10, stepPct: 5, onDeactivate: 'close' },
-      })
-      expect(text).toContain('平仓')
-    })
-
-    it('renders display string with keep onDeactivate as 保留挂单', () => {
-      const entry = getLegacyEntry('program.fixed_grid_gated')
-      expect(entry).toBeDefined()
-      const text = entry!.displayRenderer({
-        params: { lowerBound: 50000, upperBound: 60000, levelCount: 10, stepPct: 5, onDeactivate: 'keep' },
-      })
-      expect(text).toContain('保留挂单')
-    })
-
-    it('renders clarification text for gridParams containing 区间, 档数, 步长', () => {
-      const entry = getLegacyEntry('program.fixed_grid_gated')
-      expect(entry).toBeDefined()
-      const text = entry!.clarificationRenderer('orchestration.program.fixed_grid_gated.gridParams', {})
-      expect(text).toContain('区间')
-      expect(text).toContain('档数')
-      expect(text).toContain('步长')
-    })
-  })
-
-  // Phase 5 S6 (#984)
-  describe('program.adaptive_volatility_grid entry', () => {
-    it('exposes public metadata for program.adaptive_volatility_grid', () => {
-      const entry = getLegacyEntry('program.adaptive_volatility_grid')
-      expect(entry).toBeDefined()
-      expect(entry!.publicName).toBe('ATR 自适应网格')
-      expect(entry!.aliases).toEqual(expect.arrayContaining(['波动自适应网格']))
-    })
-
-    it('display 文本不出现内部 key（黑名单：3 内部字面量）', () => {
-      const entry = getLegacyEntry('program.adaptive_volatility_grid')
-      expect(entry).toBeDefined()
-      const text = entry!.displayRenderer({
-        params: {
-          atrPeriod: 14,
-          atrMultiplier: 1.5,
-          rangeMultiplier: 3,
-          minStepPct: 0.2,
-          maxStepPct: 2,
-          levelCount: 6,
-          onDeactivate: 'cancel',
-        },
-      })
-      // 负 grep（critic round 2 Q8）：禁内部 key 字面量
-      expect(text).not.toMatch(/program\.adaptive_volatility_grid/)
-      expect(text).not.toMatch(/atr_window/)
-      expect(text).not.toMatch(/adaptive_volatility_grid/)
-      // 正 grep（critic round 2 Q8）：保留用户友好 fragment
-      expect(text).toMatch(/ATR/)
-      expect(text).toMatch(/自适应网格/)
-      expect(text).toContain('14')
-      expect(text).toContain('1.5')
-      expect(text).toContain('6 档')
-      expect(text).toContain('钳制')
-      expect(text).toContain('撤单')
-    })
-
-    it('display close / keep 渲染对应中文', () => {
-      const entry = getLegacyEntry('program.adaptive_volatility_grid')
-      expect(entry).toBeDefined()
-      expect(entry!.displayRenderer({
-        params: { atrPeriod: 14, atrMultiplier: 1, rangeMultiplier: 3, minStepPct: 0.2, maxStepPct: 2, levelCount: 6, onDeactivate: 'close' },
-      })).toContain('平仓')
-      expect(entry!.displayRenderer({
-        params: { atrPeriod: 14, atrMultiplier: 1, rangeMultiplier: 3, minStepPct: 0.2, maxStepPct: 2, levelCount: 6, onDeactivate: 'keep' },
-      })).toContain('保留挂单')
-    })
-
-    it('clarification 文本不暴露 slotKey 原文', () => {
-      const entry = getLegacyEntry('program.adaptive_volatility_grid')
-      expect(entry).toBeDefined()
-      const text = entry!.clarificationRenderer(
-        'orchestration.program.adaptive_volatility_grid.atr_period',
-        {},
-      )
-      expect(text).toContain('ATR 周期')
-      expect(text).not.toContain('atr_period')
-      expect(text).not.toContain('orchestration.program')
-    })
-
-    it('clarification 各 9 个 slot 都返回有意义文本', () => {
-      const entry = getLegacyEntry('program.adaptive_volatility_grid')
-      expect(entry).toBeDefined()
-      const slots = [
-        'atr_period', 'atr_multiplier', 'range_multiplier',
-        'atr_drift_pct', 'rebuild_cooldown_sec',
-        'min_step_pct', 'max_step_pct', 'level_count',
-        'sizing', 'active_when_ref',
-      ]
-      for (const slot of slots) {
-        const text = entry!.clarificationRenderer(`orchestration.program.adaptive_volatility_grid.${slot}`, {})
-        expect(text.length).toBeGreaterThan(2)
-        expect(text).not.toContain(slot)
-      }
-    })
-  })
+  // #1329 follow-up Phase 3c: program.fixed_grid_gated / program.adaptive_volatility_grid
+  //   PRESENTATIONS entry 已迁入 ATOM_CONTRACT_REGISTRY.display；
+  //   渲染契约由对应 orchestration-*-golden-corpus.spec.ts 通过
+  //   renderLegacyDisplay（REGISTRY-first）覆盖。
 
   it('renders clarification text without leaking raw slot keys', () => {
     const text = renderLegacyClarification('risk.stop_loss_pct', 'risk.stop_loss_pct.valuePct', {})

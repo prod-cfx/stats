@@ -1,0 +1,27 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁 summaryTemplate(params, zh) 非空且为 string：gate.regime (mode=enforce): gate.regime {"mode":"enforce"} 1`] = `"只在价格高于 EMA 时允许做多；只在价格低于 EMA 时允许做空"`;
+
+exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁 summaryTemplate(params, zh) 非空且为 string：portfolioRisk.drawdown_block (mode=enforce thresholdPct=10): portfolioRisk.drawdown_block {"mode":"enforce","thresholdPct":10} 1`] = `"账户回撤超过 10% 时阻止开新仓"`;
+
+exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁 summaryTemplate(params, zh) 非空且为 string：portfolioRisk.substrategy_exposure_cap (空 params): portfolioRisk.substrategy_exposure_cap {} 1`] = `"子策略敞口超过 0% 时阻止开新仓"`;
+
+exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁 summaryTemplate(params, zh) 非空且为 string：portfolioRisk.symbol_exposure_cap (空 params): portfolioRisk.symbol_exposure_cap {} 1`] = `"单标的敞口超过 0% 时阻止开新仓"`;
+
+exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁 summaryTemplate(params, zh) 非空且为 string：program.adaptive_volatility_grid (空 params): program.adaptive_volatility_grid {} 1`] = `"ATR(14) 的 1.5 倍为步长、3 倍为区间的自适应网格，6 档，每档 0.2%-2% 钳制，失活时撤单"`;
+
+exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁 summaryTemplate(params, zh) 非空且为 string：program.dynamic_grid (空 params): program.dynamic_grid {} 1`] = `"围绕最近 0 根 K 线高点的 0 档动态网格（每档 0%），失活时撤单"`;
+
+exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁 summaryTemplate(params, zh) 非空且为 string：program.event_listener (空 params): program.event_listener {} 1`] = `"事件监听 — 外部事件"`;
+
+exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁 summaryTemplate(params, zh) 非空且为 string：program.fixed_grid_gated (空 params): program.fixed_grid_gated {} 1`] = `"在指定区间挂 0 档网格（步长 0%），失活时撤单"`;
+
+exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁 summaryTemplate(params, zh) 非空且为 string：scope.dataSource (空 params): scope.dataSource {} 1`] = `"数据源"`;
+
+exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁 summaryTemplate(params, zh) 非空且为 string：scope.leg (空 params): scope.leg {} 1`] = `"策略腿"`;
+
+exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁 summaryTemplate(params, zh) 非空且为 string：scope.subStrategy (空 params): scope.subStrategy {} 1`] = `"子策略范围"`;
+
+exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁 summaryTemplate(params, zh) 非空且为 string：scope.symbol (空 params): scope.symbol {} 1`] = `"标的范围"`;
+
+exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁 summaryTemplate(params, zh) 非空且为 string：scope.timeframe (空 params): scope.timeframe {} 1`] = `"周期范围"`;

@@ -187,196 +187,84 @@ export class SemanticStateProjectionService {
       if (node.status !== 'locked') {
         continue
       }
-      // eslint-disable-next-line atom-keys/no-atom-key-literal -- gate.regime not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
+      // #1329 follow-up Phase 1-3: gate.regime 已迁入 ATOM_CONTRACT_REGISTRY.display
+      // #1331 C2: summaryTemplate throw → continue（token 缺失 graceful skip，与旧 getLegacyEntry catch 等价；防 projection 端点 500）
       if (node.kind === 'gate' && node.key === 'gate.regime') {
-        let entry
+        const registryEntry = ATOM_CONTRACT_REGISTRY['gate.regime']
+        let text: string
         try {
-          entry = getLegacyEntry('gate.regime')
+          text = registryEntry.display.summaryTemplate(node.params, 'zh')
         }
         catch {
           continue
         }
-        if (!entry) {
-          continue
-        }
-        const text = entry.displayRenderer({ params: node.params })
         if (!text) {
           continue
         }
         items.push({
           kind: 'gate',
           id: `orchestration-gate-${node.id}`,
-          publicName: entry.publicName,
+          publicName: registryEntry.display.publicName.zh,
           text,
         })
         continue
       }
       if (node.kind === 'portfolioRisk' && node.key === 'portfolioRisk.drawdown_block') {
-        let entry
+        // #1329 follow-up Phase 3d: drawdown_block 已迁入 ATOM_CONTRACT_REGISTRY.display，走 REGISTRY-first 路径
+        // #1331 C2: summaryTemplate throw → continue
+        const registryEntry = ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block']
+        let text: string
         try {
-          entry = getLegacyEntry('portfolioRisk.drawdown_block')
+          text = registryEntry.display.summaryTemplate(node.params, 'zh')
         }
         catch {
           continue
         }
-        if (!entry) {
-          continue
-        }
-        const text = entry.displayRenderer({ params: node.params })
         if (!text) {
           continue
         }
         items.push({
           kind: 'portfolioRisk',
           id: `orchestration-portfolio-risk-${node.id}`,
-          publicName: entry.publicName,
+          publicName: registryEntry.display.publicName.zh,
           text,
         })
         continue
       }
-      // Phase 5 S8 (#1119): symbol_exposure_cap display
-      if (node.kind === 'portfolioRisk' && node.key === 'portfolioRisk.symbol_exposure_cap') {
-        let entry
+      // #1329 follow-up Phase 1-3：以下 6 个 orchestration atom 已迁入 ATOM_CONTRACT_REGISTRY.display
+      //   portfolioRisk.{symbol,substrategy}_exposure_cap
+      //   program.{fixed_grid_gated,dynamic_grid,adaptive_volatility_grid,event_listener}
+      // #1329 follow-up Phase 3e: scope.subStrategy / gate.subStrategy 亦已迁入 ATOM_CONTRACT_REGISTRY.display
+      // #1331 C2: summaryTemplate throw → continue（token 缺失 graceful skip）
+      if (
+        (node.kind === 'portfolioRisk' && (node.key === 'portfolioRisk.symbol_exposure_cap' || node.key === 'portfolioRisk.substrategy_exposure_cap'))
+        || (node.kind === 'program' && (node.key === 'program.fixed_grid_gated' || node.key === 'program.dynamic_grid' || node.key === 'program.adaptive_volatility_grid' || node.key === 'program.event_listener'))
+        || (node.kind === 'scope' && node.key === 'scope.subStrategy')
+        || (node.kind === 'gate' && node.key === 'gate.subStrategy')
+      ) {
+        const registryEntry = ATOM_CONTRACT_REGISTRY[node.key]
+        let text: string
         try {
-          entry = getLegacyEntry('portfolioRisk.symbol_exposure_cap')
+          text = registryEntry.display.summaryTemplate(node.params, 'zh')
         }
         catch {
           continue
         }
-        if (!entry) {
-          continue
-        }
-        const text = entry.displayRenderer({ params: node.params })
         if (!text) {
           continue
         }
+        // #1331 M4：scope.subStrategy 概念上等价于 gate.subStrategy（UI 渲染时归 gate，
+        //   是 gate-level 限定符的 alias），映射到 SemanticDisplayGateItem 联合；
+        //   id 也对齐 'orchestration-gate-*' 与 kind 'gate' 一致，避免 UI 端 group key 漂移。
+        const itemKind = node.kind === 'scope' ? 'gate' : node.kind
         items.push({
-          kind: 'portfolioRisk',
-          id: `orchestration-portfolio-risk-${node.id}`,
-          publicName: entry.publicName,
-          text,
-        })
-        continue
-      }
-      // Phase 5 S8 (#1119): substrategy_exposure_cap display
-      if (node.kind === 'portfolioRisk' && node.key === 'portfolioRisk.substrategy_exposure_cap') {
-        let entry
-        try {
-          entry = getLegacyEntry('portfolioRisk.substrategy_exposure_cap')
-        }
-        catch {
-          continue
-        }
-        if (!entry) {
-          continue
-        }
-        const text = entry.displayRenderer({ params: node.params })
-        if (!text) {
-          continue
-        }
-        items.push({
-          kind: 'portfolioRisk',
-          id: `orchestration-portfolio-risk-${node.id}`,
-          publicName: entry.publicName,
-          text,
-        })
-        continue
-      }
-      // eslint-disable-next-line atom-keys/no-atom-key-literal -- program.fixed_grid_gated not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
-      if (node.kind === 'program' && node.key === 'program.fixed_grid_gated') {
-        let entry
-        try {
-          entry = getLegacyEntry('program.fixed_grid_gated')
-        }
-        catch {
-          continue
-        }
-        if (!entry) {
-          continue
-        }
-        const text = entry.displayRenderer({ params: node.params })
-        if (!text) {
-          continue
-        }
-        items.push({
-          kind: 'program',
-          id: `orchestration-program-${node.id}`,
-          publicName: entry.publicName,
-          text,
-        })
-        continue
-      }
-      // Phase 5 S5 (#984)
-      // eslint-disable-next-line atom-keys/no-atom-key-literal -- program.dynamic_grid not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
-      if (node.kind === 'program' && node.key === 'program.dynamic_grid') {
-        let entry
-        try {
-          entry = getLegacyEntry('program.dynamic_grid')
-        }
-        catch {
-          continue
-        }
-        if (!entry) {
-          continue
-        }
-        const text = entry.displayRenderer({ params: node.params })
-        if (!text) {
-          continue
-        }
-        items.push({
-          kind: 'program',
-          id: `orchestration-program-${node.id}`,
-          publicName: entry.publicName,
-          text,
-        })
-        continue
-      }
-      // Phase 5 S6 (#984)
-      // eslint-disable-next-line atom-keys/no-atom-key-literal -- program.adaptive_volatility_grid not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
-      if (node.kind === 'program' && node.key === 'program.adaptive_volatility_grid') {
-        let entry
-        try {
-          entry = getLegacyEntry('program.adaptive_volatility_grid')
-        }
-        catch {
-          continue
-        }
-        if (!entry) {
-          continue
-        }
-        const text = entry.displayRenderer({ params: node.params })
-        if (!text) {
-          continue
-        }
-        items.push({
-          kind: 'program',
-          id: `orchestration-program-${node.id}`,
-          publicName: entry.publicName,
-          text,
-        })
-        continue
-      }
-      // Phase 5 S12 (#1118)
-      // eslint-disable-next-line atom-keys/no-atom-key-literal -- program.event_listener not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
-      if (node.kind === 'program' && node.key === 'program.event_listener') {
-        let entry
-        try {
-          entry = getLegacyEntry('program.event_listener')
-        }
-        catch {
-          continue
-        }
-        if (!entry) {
-          continue
-        }
-        const text = entry.displayRenderer({ params: node.params })
-        if (!text) {
-          continue
-        }
-        items.push({
-          kind: 'program',
-          id: `orchestration-program-${node.id}`,
-          publicName: entry.publicName,
+          kind: itemKind,
+          id: node.kind === 'portfolioRisk'
+            ? `orchestration-portfolio-risk-${node.id}`
+            : node.kind === 'program'
+              ? `orchestration-program-${node.id}`
+              : `orchestration-gate-${node.id}`,
+          publicName: registryEntry.display.publicName.zh,
           text,
         })
         continue
@@ -2611,17 +2499,12 @@ export class SemanticStateProjectionService {
       }
       let text: string | undefined
       try {
-        const entry = getLegacyEntry(node.key)
-        if (entry?.displayRenderer) {
-          const rendered = entry.displayRenderer({ params: (node.params ?? {}) as Record<string, unknown> })
-          text = rendered ?? entry.publicName ?? node.key
-        }
-        else {
-          text = entry?.publicName ?? node.key
-        }
+        // #1329 follow-up Phase 3d/3e: 已迁入 REGISTRY 的 atom 走 renderLegacyDisplay REGISTRY-first 路径
+        const rendered = renderLegacyDisplay(node.key, (node.params ?? {}) as Record<string, unknown>)
+        text = rendered || getLegacyEntry(node.key)?.publicName || node.key
       }
       catch {
-        text = node.key
+        text = getLegacyEntry(node.key)?.publicName ?? node.key
       }
       parts.push(text)
     }

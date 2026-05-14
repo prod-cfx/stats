@@ -52,6 +52,20 @@ export type SupportedExecutableUtteranceAtom =
   | 'action.close_long'
   | 'action.open_short'
   | 'action.close_short'
+  // ── orchestration / scope（#1329 follow-up：从 legacy-presentation-data.ts PRESENTATIONS 迁入）──
+  | 'gate.regime'
+  | 'portfolioRisk.symbol_exposure_cap'
+  | 'portfolioRisk.substrategy_exposure_cap'
+  | 'program.dynamic_grid'
+  | 'program.fixed_grid_gated'
+  | 'program.adaptive_volatility_grid'
+  | 'program.event_listener'
+  | 'scope.symbol'
+  | 'scope.leg'
+  | 'scope.timeframe'
+  | 'scope.dataSource'
+  | 'scope.subStrategy'
+  | 'gate.subStrategy'
 
 export interface UtteranceCorpusExpected {
   owner: UtteranceCorpusOwner

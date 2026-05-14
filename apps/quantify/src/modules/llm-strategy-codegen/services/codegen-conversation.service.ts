@@ -7764,9 +7764,12 @@ export class CodegenConversationService {
     unknownAtoms: readonly string[],
     locale: CodegenConversationLocale = 'zh',
   ): string {
+    // AC-9 leak guard：unknown atom 若不在 REGISTRY，禁止把内部 atomKey 字面量
+    // 透出到 assistant prompt；统一回退到 generic '该策略类型' / 'this strategy type'。
+    const genericLabel = locale === 'en' ? 'this strategy type' : '该策略类型'
     const publicNames = unknownAtoms.map((key) => {
       const entry = ATOM_CONTRACT_REGISTRY[key as keyof typeof ATOM_CONTRACT_REGISTRY]
-      return entry?.display?.publicName?.[locale] ?? entry?.display?.publicName?.zh ?? key
+      return entry?.display?.publicName?.[locale] ?? entry?.display?.publicName?.zh ?? genericLabel
     })
     const atomText = publicNames.length > 0
       ? this.localizedText(locale, `: ${publicNames.join(', ')}`, `：${publicNames.join('、')}`)

@@ -38,6 +38,7 @@ import {
 } from './atom-contract-types'
 import { SHARED_ENUM_DISPLAY } from './shared-display-tokens'
 import { ATOM_PRIVATE_DISPLAY } from './atom-private-display-tokens'
+import { renderDisplayToken, renderEnumDisplayToken } from '../nl-gateway/display-registry'
 
 type AtomContractSeed = Omit<AtomContract, 'key' | 'bucket' | 'display' | 'emit'> & {
   readonly display?: AtomContractDisplay
@@ -157,6 +158,20 @@ export const ATOM_BUCKETS = {
   'position.dca_schedule': 'positionConstraint',
   'position.pyramiding_limit': 'positionConstraint',
   'grid.range_rebalance': 'positionConstraint',
+  // ── orchestration / scope（#1329 follow-up：从 legacy-presentation-data.ts PRESENTATIONS 迁入）──
+  'gate.regime': 'orchestration',
+  'portfolioRisk.symbol_exposure_cap': 'orchestration',
+  'portfolioRisk.substrategy_exposure_cap': 'orchestration',
+  'program.dynamic_grid': 'orchestration',
+  'program.fixed_grid_gated': 'orchestration',
+  'program.adaptive_volatility_grid': 'orchestration',
+  'program.event_listener': 'orchestration',
+  'scope.symbol': 'orchestration',
+  'scope.leg': 'orchestration',
+  'scope.timeframe': 'orchestration',
+  'scope.dataSource': 'orchestration',
+  'scope.subStrategy': 'orchestration',
+  'gate.subStrategy': 'orchestration',
 } as const satisfies Record<AtomContractKey, AtomContractBucket>
 
 // Issue #1279 PR1c: 36 atom 的 display.publicName 单一 Record<key, {zh, en}> 真相源
@@ -213,6 +228,20 @@ const ATOM_PUBLIC_NAMES = {
   'position.dca_schedule': { zh: 'DCA 补仓计划', en: 'DCA schedule' },
   'position.pyramiding_limit': { zh: '金字塔加仓限制', en: 'Pyramiding limit' },
   'grid.range_rebalance': { zh: '网格区间再平衡', en: 'Grid range rebalance' },
+  // ── orchestration / scope（#1329 follow-up：stub publicName，Phase 2 完整实现 paramRenderers / summaryTemplate）──
+  'gate.regime': { zh: '趋势/状态过滤', en: 'Regime/Trend gate' },
+  'portfolioRisk.symbol_exposure_cap': { zh: '标的敞口护栏', en: 'Symbol exposure cap' },
+  'portfolioRisk.substrategy_exposure_cap': { zh: '子策略敞口护栏', en: 'Substrategy exposure cap' },
+  'program.dynamic_grid': { zh: '动态网格', en: 'Dynamic grid program' },
+  'program.fixed_grid_gated': { zh: '门控固定网格', en: 'Fixed grid (gated)' },
+  'program.adaptive_volatility_grid': { zh: 'ATR 自适应网格', en: 'Adaptive volatility grid' },
+  'program.event_listener': { zh: '事件监听', en: 'Event listener program' },
+  'scope.symbol': { zh: '标的范围', en: 'Symbol scope' },
+  'scope.leg': { zh: '策略腿', en: 'Leg scope' },
+  'scope.timeframe': { zh: '周期范围', en: 'Timeframe scope' },
+  'scope.dataSource': { zh: '数据源', en: 'Data source scope' },
+  'scope.subStrategy': { zh: '子策略范围', en: 'Sub-strategy scope' },
+  'gate.subStrategy': { zh: '子策略 gate', en: 'Sub-strategy gate' },
 } as const satisfies Record<AtomContractKey, { zh: string; en: string }>
 
 export { ATOM_PUBLIC_NAMES }
@@ -2049,6 +2078,850 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       phaseResolver: 'fixed-entry',
       sideResolver: 'both',
+    },
+  },
+
+  // ── orchestration / scope stubs（#1329 follow-up Phase 1）
+  // 11 atom key 从 legacy-presentation-data.ts PRESENTATIONS 迁入；Phase 1 仅落地 seed 骨架
+  // （surface.keywords/verbs/paramSlots 全部为 stub 占位），display.publicName 走 ATOM_PUBLIC_NAMES
+  // 的真实双语，display.paramRenderers / display.summaryTemplate / emit.* 由
+  // createPr1bDisplay + createPr1bEmit 注入 stub 兜底；Phase 2 三 stream 分别完整化：
+  //   - stream A: portfolioRisk.* + gate.regime
+  //   - stream B: program.*
+  //   - stream C: scope.*
+  // TODO #1329 follow-up Phase 2：完整 surface 同义词 + paramSlots + emit shape。
+  'gate.regime': {
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'orchestration.gate.regime.active_when') {
+        return '请确认趋势过滤的指标（EMA/SMA/MA）与周期'
+      }
+      return '请补全趋势过滤参数'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['gate.regime'],
+      paramRenderers: {
+        indicator: (v) => renderEnumDisplayToken('enum.indicator', String(v).toLowerCase()),
+        period: (v) => String(v),
+        operator: (v, locale) => SHARED_ENUM_DISPLAY.operator[v as keyof typeof SHARED_ENUM_DISPLAY.operator]?.[locale] ?? String(v),
+        sideScope: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['gate.regime'].en
+        const sideScope = typeof params.sideScope === 'string' ? params.sideScope : 'both'
+        const indicator = typeof params.indicator === 'string' ? params.indicator : 'ema'
+        const period = typeof params.period === 'number' ? params.period : 0
+        const operator = typeof params.operator === 'string' ? params.operator : 'GT'
+        const indicatorLabel = renderEnumDisplayToken('enum.indicator', indicator.toLowerCase())
+        const periodLabel = period > 0 ? `${period}` : ''
+        const indicatorWithPeriod = `${indicatorLabel}${periodLabel}`
+        const longLine = renderDisplayToken('atom.gate.regime.long.display', { indicator: indicatorWithPeriod })
+        const shortLine = renderDisplayToken('atom.gate.regime.short.display', { indicator: indicatorWithPeriod })
+        if (sideScope === 'long') {
+          return operator === 'LT' ? shortLine : longLine
+        }
+        if (sideScope === 'short') {
+          return operator === 'GT' ? longLine : shortLine
+        }
+        return renderDisplayToken('atom.gate.regime.both.display', { longLine, shortLine })
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['趋势过滤', '状态过滤', 'regime gate', 'trend gate', '上涨趋势', '下跌趋势'] as const,
+        verbs: {
+          fixed: ['才允许', '高于', '低于', 'above', 'below'] as const,
+        },
+      },
+      paramSlots: {
+        indicator: { kind: 'enum', required: false, enum: ['ema', 'sma', 'ma'], default: 'ema', extractor: { kind: 'enum-zh-map', enumMap: { 'EMA': 'ema', 'ema': 'ema', 'SMA': 'sma', 'sma': 'sma', 'MA': 'ma', 'ma': 'ma' } } },
+        period: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
+        operator: { kind: 'enum', required: false, enum: ['GT', 'LT'], default: 'GT', extractor: { kind: 'enum-zh-map', enumMap: { '高于': 'GT', '上方': 'GT', '低于': 'LT', '下方': 'LT' } } },
+        sideScope: { kind: 'enum', required: false, enum: ['long', 'short', 'both'], default: 'both', extractor: { kind: 'enum-zh-map', enumMap: { '做多': 'long', '做空': 'short', '双向': 'both' } } },
+      },
+      phaseResolver: 'fixed-gate',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'portfolioRisk.symbol_exposure_cap': {
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey.includes('notional_cap_pct')) {
+        return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.clarify.notional_cap_pct', {})
+      }
+      if (slotKey.includes('bound_symbol_scope_ref')) {
+        return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.clarify.bound_symbol_scope_ref', {})
+      }
+      if (slotKey.includes('effect')) {
+        return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.clarify.effect', {})
+      }
+      return '请补全标的敞口护栏参数'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['portfolioRisk.symbol_exposure_cap'],
+      paramRenderers: {
+        notionalCapPct: (v) => `${v}%`,
+        mode: (v) => String(v),
+        effectWhenTriggered: (v) => String(v),
+        symbolLabel: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['portfolioRisk.symbol_exposure_cap'].en
+        const notionalCapPct = typeof params.notionalCapPct === 'number' ? params.notionalCapPct : 0
+        const mode = typeof params.mode === 'string' ? params.mode : 'enforce'
+        const effect = typeof params.effectWhenTriggered === 'string' ? params.effectWhenTriggered : 'block_new_entries'
+        const symbolLabelRaw = params['symbolLabel']
+        const symbolLabel = typeof symbolLabelRaw === 'string' && symbolLabelRaw.trim() !== ''
+          ? `${symbolLabelRaw.trim()} `
+          : ''
+        if (mode === 'observe') {
+          return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.display.observe', { symbolLabel, notionalCapPct })
+        }
+        if (effect === 'reduce_exposure') {
+          return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.display.enforce.reduce', { symbolLabel, notionalCapPct })
+        }
+        return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.display.enforce.block', { symbolLabel, notionalCapPct })
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['标的敞口', 'symbol exposure cap', 'per-symbol cap', '单标的仓位限制', '单标的敞口'] as const,
+        verbs: {
+          gte: ['超过', '超', 'exceeds'] as const,
+        },
+      },
+      paramSlots: {
+        notionalCapPct: { kind: 'percent', required: false, range: [0, 100], extractor: { kind: 'percent', pattern: '\\d+(\\.\\d+)?%', range: [0, 100] } },
+        mode: { kind: 'enum', required: false, enum: ['enforce', 'observe'], default: 'enforce', extractor: { kind: 'enum-zh-map', enumMap: { '仅记录': 'observe', '记录': 'observe', '阻止': 'enforce', '强制': 'enforce' } } },
+        effectWhenTriggered: { kind: 'enum', required: false, enum: ['block_new_entries', 'reduce_exposure'], default: 'block_new_entries', extractor: { kind: 'enum-zh-map', enumMap: { '阻止开仓': 'block_new_entries', '阻止开新仓': 'block_new_entries', '缩减敞口': 'reduce_exposure', '缩到上限': 'reduce_exposure' } } },
+      },
+      phaseResolver: 'fixed-gate',
+      sideResolver: 'both',
+    },
+  },
+
+  'portfolioRisk.substrategy_exposure_cap': {
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey.includes('notional_cap_pct')) {
+        return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.clarify.notional_cap_pct', {})
+      }
+      if (slotKey.includes('bound_substrategy_scope_ref')) {
+        return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.clarify.bound_substrategy_scope_ref', {})
+      }
+      if (slotKey.includes('effect')) {
+        return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.clarify.effect', {})
+      }
+      return '请补全子策略敞口护栏参数'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['portfolioRisk.substrategy_exposure_cap'],
+      paramRenderers: {
+        notionalCapPct: (v) => `${v}%`,
+        mode: (v) => String(v),
+        effectWhenTriggered: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['portfolioRisk.substrategy_exposure_cap'].en
+        const notionalCapPct = typeof params.notionalCapPct === 'number' ? params.notionalCapPct : 0
+        const mode = typeof params.mode === 'string' ? params.mode : 'enforce'
+        const effect = typeof params.effectWhenTriggered === 'string' ? params.effectWhenTriggered : 'block_new_entries'
+        if (mode === 'observe') {
+          return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.display.observe', { notionalCapPct })
+        }
+        if (effect === 'pause_substrategy') {
+          return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.display.enforce.pause', { notionalCapPct })
+        }
+        return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.display.enforce.block', { notionalCapPct })
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['子策略敞口', 'substrategy exposure cap', 'per-substrategy cap', '子策略仓位限制'] as const,
+        verbs: {
+          gte: ['超过', '超', 'exceeds'] as const,
+        },
+      },
+      paramSlots: {
+        notionalCapPct: { kind: 'percent', required: false, range: [0, 100], extractor: { kind: 'percent', pattern: '\\d+(\\.\\d+)?%', range: [0, 100] } },
+        mode: { kind: 'enum', required: false, enum: ['enforce', 'observe'], default: 'enforce', extractor: { kind: 'enum-zh-map', enumMap: { '仅记录': 'observe', '记录': 'observe', '阻止': 'enforce', '强制': 'enforce' } } },
+        effectWhenTriggered: { kind: 'enum', required: false, enum: ['block_new_entries', 'pause_substrategy'], default: 'block_new_entries', extractor: { kind: 'enum-zh-map', enumMap: { '阻止开仓': 'block_new_entries', '阻止开新仓': 'block_new_entries', '暂停': 'pause_substrategy', '暂停子策略': 'pause_substrategy' } } },
+      },
+      phaseResolver: 'fixed-gate',
+      sideResolver: 'both',
+    },
+  },
+
+  'program.dynamic_grid': {
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'orchestration.program.dynamic_grid.anchor_lookback_bars') {
+        return '请确认动态网格的 anchor lookback K 线根数（10..1000 整数）'
+      }
+      if (slotKey === 'orchestration.program.dynamic_grid.anchor_side') {
+        return '请确认 anchor 取值方向：高点 / 低点 / 中点'
+      }
+      if (slotKey === 'orchestration.program.dynamic_grid.dynamic_grid_step.mode'
+        || slotKey === 'orchestration.program.dynamic_grid.dynamic_grid_step.value') {
+        return '请确认网格步长（mode = pct/absolute；value > 0）'
+      }
+      if (slotKey === 'orchestration.program.dynamic_grid.level_count') {
+        return '请确认网格档位数量（2..100 整数）'
+      }
+      if (slotKey === 'orchestration.program.dynamic_grid.anchor_drift_pct') {
+        return '请确认 anchor 漂移阈值百分比（>0 ≤100）'
+      }
+      if (slotKey === 'orchestration.program.dynamic_grid.rebuild_min_interval_sec') {
+        return '请确认 rebuild 最小间隔秒数（≥60）'
+      }
+      if (slotKey === 'orchestration.program.dynamic_grid.active_when_ref') {
+        return '请确认动态网格的启用/失活条件（引用哪个趋势/状态过滤）'
+      }
+      if (slotKey === 'orchestration.program.dynamic_grid.sizing.mode'
+        || slotKey === 'orchestration.program.dynamic_grid.sizing.value') {
+        return '请确认每档下单数量（fixed_quote / fixed_base / fixed_pct）'
+      }
+      return '请补全动态网格策略参数'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['program.dynamic_grid'],
+      paramRenderers: {
+        anchorLookbackBars: (v) => String(v),
+        anchorSide: (v) => String(v),
+        levelCount: (v) => String(v),
+        stepValue: (v) => String(v),
+        onDeactivate: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['program.dynamic_grid'].en
+        const innerRaw = params.params
+        const inner = typeof innerRaw === 'object' && innerRaw !== null && !Array.isArray(innerRaw)
+          ? innerRaw as Record<string, unknown>
+          : {}
+        const source = Object.keys(inner).length > 0 ? inner : params
+        const lookback = typeof source.anchorLookbackBars === 'number' && Number.isFinite(source.anchorLookbackBars) ? source.anchorLookbackBars : 0
+        const anchorSide = typeof source.anchorSide === 'string' && source.anchorSide.length > 0 ? source.anchorSide : 'high'
+        const levels = typeof source.levelCount === 'number' && Number.isFinite(source.levelCount) ? source.levelCount : 0
+        const stepRaw = source.step
+        const step = typeof stepRaw === 'object' && stepRaw !== null && !Array.isArray(stepRaw)
+          ? stepRaw as Record<string, unknown>
+          : {}
+        const stepMode = typeof step.mode === 'string' && step.mode.length > 0 ? step.mode : 'pct'
+        const stepValue = typeof step.value === 'number' && Number.isFinite(step.value) ? step.value : 0
+        const onDeactivate = typeof source.onDeactivate === 'string' && source.onDeactivate.length > 0 ? source.onDeactivate : 'cancel'
+        const sideLabel: Record<string, string> = { high: '高点', low: '低点', mid: '中点' }
+        const deactivateLabel: Record<string, string> = { cancel: '撤单', keep: '保留挂单', close: '平仓' }
+        const stepLabel = stepMode === 'pct' ? `${stepValue}%` : `${stepValue}`
+        return `围绕最近 ${lookback} 根 K 线${sideLabel[anchorSide] ?? '高点'}的 ${levels} 档动态网格（每档 ${stepLabel}），失活时${deactivateLabel[onDeactivate] ?? '撤单'}`
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['动态网格', '跟随网格', '漂移网格', 'dynamic grid'] as const,
+        verbs: {
+          fixed: ['围绕', '锚定', '动态'] as const,
+        },
+      },
+      paramSlots: {
+        anchorLookbackBars: { kind: 'number', required: false, range: [10, 1000], extractor: { kind: 'number-int', pattern: '\\d+', range: [10, 1000] } },
+        anchorSide: { kind: 'enum', required: false, enum: ['high', 'low', 'mid'], default: 'high', extractor: { kind: 'enum-zh-map', enumMap: { '高点': 'high', '低点': 'low', '中点': 'mid' } } },
+        levelCount: { kind: 'number', required: false, range: [2, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [2, 100] } },
+        onDeactivate: { kind: 'enum', required: false, enum: ['cancel', 'keep', 'close'], default: 'cancel', extractor: { kind: 'enum-zh-map', enumMap: { '撤单': 'cancel', '保留挂单': 'keep', '保留': 'keep', '平仓': 'close' } } },
+      },
+      phaseResolver: 'fixed-entry',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'program.fixed_grid_gated': {
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'orchestration.program.fixed_grid_gated.gridParams') {
+        return '请确认网格区间、档数、步长'
+      }
+      if (slotKey === 'orchestration.program.fixed_grid_gated.activeWhenRef') {
+        return '请确认网格的启用/失活条件（引用哪个趋势/状态过滤）'
+      }
+      if (slotKey === 'orchestration.program.fixed_grid_gated.sizing') {
+        return '请确认每档下单数量'
+      }
+      return '请补全网格策略参数'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['program.fixed_grid_gated'],
+      paramRenderers: {
+        lowerBound: (v) => String(v),
+        upperBound: (v) => String(v),
+        anchorPrice: (v) => String(v),
+        levelCount: (v) => String(v),
+        stepPct: (v) => String(v),
+        onDeactivate: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['program.fixed_grid_gated'].en
+        const innerRaw = params.params
+        const inner = typeof innerRaw === 'object' && innerRaw !== null && !Array.isArray(innerRaw)
+          ? innerRaw as Record<string, unknown>
+          : {}
+        const source = Object.keys(inner).length > 0 ? inner : params
+        const lower = typeof source.lowerBound === 'number' && Number.isFinite(source.lowerBound) ? source.lowerBound : 0
+        const upper = typeof source.upperBound === 'number' && Number.isFinite(source.upperBound) ? source.upperBound : 0
+        const anchor = typeof source.anchorPrice === 'number' && Number.isFinite(source.anchorPrice) ? source.anchorPrice : 0
+        const levels = typeof source.levelCount === 'number' && Number.isFinite(source.levelCount) ? source.levelCount : 0
+        const step = typeof source.stepPct === 'number' && Number.isFinite(source.stepPct) ? source.stepPct : 0
+        const onDeactivate = typeof source.onDeactivate === 'string' && source.onDeactivate.length > 0 ? source.onDeactivate : 'cancel'
+        const rangeLabel = lower > 0 && upper > 0
+          ? `在 ${lower}-${upper} 区间`
+          : anchor > 0
+            ? `锚定 ${anchor}`
+            : '在指定区间'
+        return renderDisplayToken('atom.program.fixed_grid_gated.display', {
+          range: rangeLabel,
+          levels,
+          step,
+          onDeactivate: renderEnumDisplayToken('enum.onDeactivate', onDeactivate),
+        })
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['门控网格', '区间网格', '门控固定网格', 'gated grid', 'fixed grid program'] as const,
+        verbs: {
+          fixed: ['挂', '锚定', '区间'] as const,
+        },
+      },
+      paramSlots: {
+        lowerBound: { kind: 'number', required: false, range: [0, Number.MAX_SAFE_INTEGER], extractor: { kind: 'number-int', pattern: '\\d+(\\.\\d+)?', range: [0, Number.MAX_SAFE_INTEGER] } },
+        upperBound: { kind: 'number', required: false, range: [0, Number.MAX_SAFE_INTEGER], extractor: { kind: 'number-int', pattern: '\\d+(\\.\\d+)?', range: [0, Number.MAX_SAFE_INTEGER] } },
+        levelCount: { kind: 'number', required: false, range: [2, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [2, 100] } },
+        stepPct: { kind: 'percent', required: false, range: [0, 100], extractor: { kind: 'percent', pattern: '\\d+(\\.\\d+)?%', range: [0, 100] } },
+        onDeactivate: { kind: 'enum', required: false, enum: ['cancel', 'keep', 'close'], default: 'cancel', extractor: { kind: 'enum-zh-map', enumMap: { '撤单': 'cancel', '保留挂单': 'keep', '保留': 'keep', '平仓': 'close' } } },
+      },
+      phaseResolver: 'fixed-entry',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'program.adaptive_volatility_grid': {
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'orchestration.program.adaptive_volatility_grid.atr_period') return '请确认 ATR 周期（2..200 整数）'
+      if (slotKey === 'orchestration.program.adaptive_volatility_grid.atr_multiplier') return '请确认 ATR 步长系数（>0）'
+      if (slotKey === 'orchestration.program.adaptive_volatility_grid.range_multiplier') return '请确认 ATR 区间系数（>0）'
+      if (slotKey === 'orchestration.program.adaptive_volatility_grid.atr_drift_pct') return '请确认 ATR 漂移百分比（>0 且 ≤100）'
+      if (slotKey === 'orchestration.program.adaptive_volatility_grid.rebuild_cooldown_sec') return '请确认重建冷却时长（≥300 整数秒）'
+      if (slotKey === 'orchestration.program.adaptive_volatility_grid.min_step_pct') return '请确认最小步长百分比（>0）'
+      if (slotKey === 'orchestration.program.adaptive_volatility_grid.max_step_pct') return '请确认最大步长百分比（>0 且 ≥ 最小步长）'
+      if (slotKey === 'orchestration.program.adaptive_volatility_grid.level_count') return '请确认档位数量（2..100 整数）'
+      if (slotKey === 'orchestration.program.adaptive_volatility_grid.sizing') return '请确认每档下单数量'
+      if (slotKey === 'orchestration.program.adaptive_volatility_grid.active_when_ref') return '请确认网格启用/失活条件（引用哪个趋势过滤）'
+      return '请补全自适应网格参数'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['program.adaptive_volatility_grid'],
+      paramRenderers: {
+        atrPeriod: (v) => String(v),
+        atrMultiplier: (v) => String(v),
+        rangeMultiplier: (v) => String(v),
+        minStepPct: (v) => String(v),
+        maxStepPct: (v) => String(v),
+        levelCount: (v) => String(v),
+        onDeactivate: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['program.adaptive_volatility_grid'].en
+        const innerRaw = params.params
+        const inner = typeof innerRaw === 'object' && innerRaw !== null && !Array.isArray(innerRaw)
+          ? innerRaw as Record<string, unknown>
+          : {}
+        const source = Object.keys(inner).length > 0 ? inner : params
+        const atrPeriod = typeof source.atrPeriod === 'number' && Number.isFinite(source.atrPeriod) ? source.atrPeriod : 14
+        const atrMultiplier = typeof source.atrMultiplier === 'number' && Number.isFinite(source.atrMultiplier) ? source.atrMultiplier : 1.5
+        const rangeMultiplier = typeof source.rangeMultiplier === 'number' && Number.isFinite(source.rangeMultiplier) ? source.rangeMultiplier : 3
+        const minStepPct = typeof source.minStepPct === 'number' && Number.isFinite(source.minStepPct) ? source.minStepPct : 0.2
+        const maxStepPct = typeof source.maxStepPct === 'number' && Number.isFinite(source.maxStepPct) ? source.maxStepPct : 2
+        const levelCount = typeof source.levelCount === 'number' && Number.isFinite(source.levelCount) ? source.levelCount : 6
+        const onDeactivate = typeof source.onDeactivate === 'string' && source.onDeactivate.length > 0 ? source.onDeactivate : 'cancel'
+        const deactivateLabel: Record<string, string> = { cancel: '撤单', keep: '保留挂单', close: '平仓' }
+        return (
+          `ATR(${atrPeriod}) 的 ${atrMultiplier} 倍为步长、${rangeMultiplier} 倍为区间的自适应网格，`
+          + `${levelCount} 档，每档 ${minStepPct}%-${maxStepPct}% 钳制，失活时${deactivateLabel[onDeactivate] ?? '撤单'}`
+        )
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['ATR 自适应网格', '波动自适应网格', 'atr grid', 'adaptive grid', '波动率网格'] as const,
+        verbs: {
+          fixed: ['ATR', '自适应', '波动率'] as const,
+        },
+      },
+      paramSlots: {
+        atrPeriod: { kind: 'number', required: false, range: [2, 200], extractor: { kind: 'number-int', pattern: '\\d+', range: [2, 200] } },
+        atrMultiplier: { kind: 'number', required: false, range: [0.01, 100], extractor: { kind: 'number-int', pattern: '\\d+(\\.\\d+)?', range: [0.01, 100] } },
+        rangeMultiplier: { kind: 'number', required: false, range: [0.01, 100], extractor: { kind: 'number-int', pattern: '\\d+(\\.\\d+)?', range: [0.01, 100] } },
+        minStepPct: { kind: 'percent', required: false, range: [0, 100], extractor: { kind: 'percent', pattern: '\\d+(\\.\\d+)?%', range: [0, 100] } },
+        maxStepPct: { kind: 'percent', required: false, range: [0, 100], extractor: { kind: 'percent', pattern: '\\d+(\\.\\d+)?%', range: [0, 100] } },
+        levelCount: { kind: 'number', required: false, range: [2, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [2, 100] } },
+        onDeactivate: { kind: 'enum', required: false, enum: ['cancel', 'keep', 'close'], default: 'cancel', extractor: { kind: 'enum-zh-map', enumMap: { '撤单': 'cancel', '保留挂单': 'keep', '保留': 'keep', '平仓': 'close' } } },
+      },
+      phaseResolver: 'fixed-entry',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'program.event_listener': {
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'orchestration.program.event_listener.event_schema_ref') {
+        return '请确认事件 schema（仅支持 webhook 事件）'
+      }
+      if (slotKey === 'orchestration.program.event_listener.source_ref') {
+        return '请确认事件源数据节点 id（引用一个 role=event 的数据源）'
+      }
+      if (slotKey === 'orchestration.program.event_listener.permission_scope') {
+        return '请确认事件权限命名空间（如 tradingview:alpha；小写字母开头，3-64 字符）'
+      }
+      if (slotKey === 'orchestration.program.event_listener.idempotency_key.field_path') {
+        return '请确认幂等字段名（仅允许 0-1 层路径，如 signalId 或 data.signalId）'
+      }
+      if (slotKey === 'orchestration.program.event_listener.dedup_window_ms') {
+        return '请确认去重窗口毫秒（100..3600000 整数）'
+      }
+      if (slotKey === 'orchestration.program.event_listener.expiration_ttl_ms') {
+        return '请确认事件过期时长毫秒（100..86400000 整数；必须严格大于去重窗口）'
+      }
+      if (slotKey === 'orchestration.program.event_listener.expiration_policy') {
+        return '请确认过期事件处理策略（丢弃 / 上报）'
+      }
+      if (slotKey === 'orchestration.program.event_listener.on_deactivate') {
+        return '请确认停用时行为（撤单 / 保留监听）'
+      }
+      if (slotKey === 'orchestration.program.event_listener.active_when_ref') {
+        return '请确认事件监听的启用/失活条件（引用哪个趋势/状态过滤）'
+      }
+      if (slotKey === 'orchestration.program.event_listener.rebuild_policy') {
+        return '请确认重建策略（始终保留 / schema 版本变更时清空）'
+      }
+      if (slotKey === 'orchestration.program.event_listener.program_kind') {
+        return '请确认 programKind 为事件监听类型'
+      }
+      return '请补全事件监听参数'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['program.event_listener'],
+      paramRenderers: {
+        permissionScope: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['program.event_listener'].en
+        const innerRaw = params.params
+        const inner = typeof innerRaw === 'object' && innerRaw !== null && !Array.isArray(innerRaw)
+          ? innerRaw as Record<string, unknown>
+          : {}
+        const source = Object.keys(inner).length > 0 ? inner : params
+        const permissionScope = typeof source.permissionScope === 'string' && source.permissionScope.length > 0 ? source.permissionScope : ''
+        const provider = permissionScope.split(':')[0] || '外部信号'
+        const providerLabel: Record<string, string> = {
+          tradingview: 'TradingView 喊单',
+          discord: 'Discord 喊单',
+          telegram: 'Telegram 喊单',
+          webhook: 'Webhook 信号',
+        }
+        return `事件监听 — ${providerLabel[provider] ?? '外部事件'}`
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['事件监听', 'webhook 监听', '外部事件订阅', 'event listener'] as const,
+        verbs: {
+          fixed: ['订阅', '监听', '触发'] as const,
+        },
+      },
+      paramSlots: {
+        permissionScope: { kind: 'enum', required: false, enum: ['tradingview', 'discord', 'telegram', 'webhook'], extractor: { kind: 'enum-zh-map', enumMap: { 'tradingview': 'tradingview', 'TradingView': 'tradingview', 'discord': 'discord', 'Discord': 'discord', 'telegram': 'telegram', 'Telegram': 'telegram', 'webhook': 'webhook', 'Webhook': 'webhook' } } },
+        dedupWindowMs: { kind: 'number', required: false, range: [100, 3600000], extractor: { kind: 'number-int', pattern: '\\d+', range: [100, 3600000] } },
+        expirationTtlMs: { kind: 'number', required: false, range: [100, 86400000], extractor: { kind: 'number-int', pattern: '\\d+', range: [100, 86400000] } },
+      },
+      phaseResolver: 'fixed-entry',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'scope.symbol': {
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'orchestration.scope.symbol.symbols') return '请确认要绑定的标的列表'
+      if (slotKey === 'orchestration.scope.symbol.primary_symbol') return '主标的必须在标的列表中'
+      if (slotKey === 'orchestration.scope.symbol.symbols_overlap') return '多 scope 之间标的不能重叠'
+      if (slotKey === 'orchestration.scope.symbol.primary_symbol_collision') return '多 scope 主标的必须各自唯一'
+      if (slotKey === 'orchestration.scope.symbol.missing_binding') return '请确认该规则绑定到哪个 symbol scope'
+      if (slotKey === 'orchestration.scope.unsupported_kind') return '当前仅支持 scope.symbol / scope.leg / scope.timeframe / scope.dataSource / scope.subStrategy'
+      return '请补全标的范围参数'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['scope.symbol'],
+      paramRenderers: {
+        symbols: (v) => Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string').join('、') : String(v),
+        primarySymbol: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['scope.symbol'].en
+        const symbolsRaw = params.symbols
+        const symbols = Array.isArray(symbolsRaw)
+          ? symbolsRaw.filter((s): s is string => typeof s === 'string').join('、')
+          : ''
+        if (symbols === '') return ATOM_PUBLIC_NAMES['scope.symbol'].zh
+        const primary = typeof params.primarySymbol === 'string' ? params.primarySymbol : ''
+        if (primary !== '') {
+          return renderDisplayToken('atom.scope.symbol.display.with_primary', { symbols, primarySymbol: primary })
+        }
+        return renderDisplayToken('atom.scope.symbol.display.no_primary', { symbols })
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['标的范围', '多标的范围', '多币种作用域', '标的作用域', 'symbol scope'] as const,
+        verbs: {
+          fixed: ['标的范围', 'symbol scope'] as const,
+        },
+      },
+      paramSlots: {
+        symbols: { kind: 'symbol', required: false },
+        primarySymbol: { kind: 'symbol', required: false },
+      },
+      phaseResolver: 'fixed-gate',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'scope.leg': {
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'orchestration.scope.leg.unsupported_kind') return '当前仅支持 scope.leg 子类型'
+      if (slotKey === 'orchestration.scope.leg.leg_scope_kind') return '请确认 legScopeKind 为 leg'
+      if (slotKey === 'orchestration.scope.leg.leg_id') return '请确认腿 id（字母开头、字母数字下划线点、长度 ≤ 64）'
+      if (slotKey === 'orchestration.scope.leg.direction') return '请确认腿方向（long/short）'
+      if (slotKey === 'orchestration.scope.leg.instrument_ref') return '该腿引用的 scope.symbol 节点必须已存在且 readiness 已通过'
+      if (slotKey === 'orchestration.scope.leg.leg_sizing.mode') return '请确认 legSizing.mode（fixed_pct/fixed_quote/fixed_ratio）'
+      if (slotKey === 'orchestration.scope.leg.leg_sizing.value') return '请确认 legSizing.value（>0 有限数）'
+      if (slotKey === 'orchestration.scope.leg.paired_leg_id') return 'fixed_ratio 模式必须指定 pairedLegId'
+      if (slotKey === 'orchestration.scope.leg.direction_collision') return 'paired leg 必须方向相反（对冲腿）'
+      if (slotKey === 'orchestration.scope.leg.missing_binding') return '请确认该规则绑定到哪个策略腿'
+      return '请补全策略腿参数'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['scope.leg'],
+      paramRenderers: {
+        direction: (v) => String(v),
+        instrumentSymbol: (v) => String(v),
+        instrumentRef: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['scope.leg'].en
+        const direction = typeof params.direction === 'string' ? params.direction : ''
+        const instrumentSym = typeof params.instrumentSymbol === 'string' ? params.instrumentSymbol : ''
+        const instrumentRefRaw = typeof params.instrumentRef === 'string' ? params.instrumentRef : ''
+        const instrument = instrumentSym !== '' ? instrumentSym : instrumentRefRaw
+        if (direction === 'long' && instrument !== '') {
+          return renderDisplayToken('atom.scope.leg.display.long', { instrument })
+        }
+        if (direction === 'short' && instrument !== '') {
+          return renderDisplayToken('atom.scope.leg.display.short', { instrument })
+        }
+        const legsRaw = params.legs
+        if (Array.isArray(legsRaw)) {
+          const parts: string[] = []
+          for (const item of legsRaw) {
+            if (typeof item !== 'object' || item === null) continue
+            const r = item as Record<string, unknown>
+            const d = typeof r.direction === 'string' ? r.direction : ''
+            const sym = typeof r.instrumentSymbol === 'string' ? r.instrumentSymbol : ''
+            if (sym === '') continue
+            parts.push(d === 'short' ? `空 ${sym}` : `多 ${sym}`)
+          }
+          if (parts.length > 0) {
+            return renderDisplayToken('atom.scope.leg.display.hedge', { legs: parts.join('、') })
+          }
+        }
+        return ATOM_PUBLIC_NAMES['scope.leg'].zh
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['策略腿', '对冲腿', '多空腿', 'hedge legs', 'strategy legs'] as const,
+        verbs: {
+          fixed: ['对冲腿', 'hedge leg'] as const,
+        },
+      },
+      paramSlots: {
+        direction: { kind: 'enum', required: false, enum: ['long', 'short'] },
+        instrumentSymbol: { kind: 'symbol', required: false },
+      },
+      phaseResolver: 'fixed-gate',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'scope.timeframe': {
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'orchestration.scope.timeframe.primary_timeframe') return '请确认执行周期（主周期）'
+      if (slotKey === 'orchestration.scope.timeframe.required_timeframes') return '请确认依赖周期列表（≥1 个，且与主周期不同）'
+      if (slotKey === 'orchestration.scope.timeframe.required_length') return '依赖周期数量必须在 1..8 之间'
+      if (slotKey === 'orchestration.scope.timeframe.primary_granularity') return '主周期粒度必须严格细于所有依赖周期'
+      if (slotKey === 'orchestration.scope.timeframe.alignment_policy') return '请确认对齐严格度（strict / tolerant）'
+      if (slotKey === 'orchestration.scope.timeframe.duplicate_definition') return '多 scope.timeframe 之间 (主周期, 依赖周期集合) 不能完全相同'
+      if (slotKey === 'orchestration.scope.timeframe.missing_binding') return '请确认该规则绑定到哪个 timeframe scope（必须显式声明）'
+      if (slotKey === 'orchestration.scope.timeframe.unsupported_key') return '当前仅支持 scope.timeframe'
+      if (slotKey === 'orchestration.scope.timeframe.scope_kind') return '请确认 scopeKind 为 timeframe'
+      return '请补全周期范围参数'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['scope.timeframe'],
+      paramRenderers: {
+        primaryTimeframe: (v) => String(v),
+        requiredTimeframes: (v) => Array.isArray(v) ? v.filter((tf): tf is string => typeof tf === 'string').join('、') : String(v),
+        alignmentPolicy: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['scope.timeframe'].en
+        const primary = typeof params.primaryTimeframe === 'string' ? params.primaryTimeframe : ''
+        const requiredRaw = params.requiredTimeframes
+        const required = Array.isArray(requiredRaw)
+          ? requiredRaw.filter((tf): tf is string => typeof tf === 'string').join('、')
+          : ''
+        const alignmentPolicy = typeof params.alignmentPolicy === 'string' && params.alignmentPolicy.length > 0
+          ? params.alignmentPolicy
+          : 'strict'
+        if (primary === '' || required === '') return ATOM_PUBLIC_NAMES['scope.timeframe'].zh
+        return renderDisplayToken('atom.scope.timeframe.display.with_required', {
+          primaryTimeframe: primary,
+          requiredTimeframes: required,
+          alignmentPolicy,
+        })
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['周期范围', '多周期范围', '多时间框架', 'timeframe scope', '周期作用域'] as const,
+        verbs: {
+          fixed: ['周期范围', 'timeframe scope'] as const,
+        },
+      },
+      paramSlots: {
+        primaryTimeframe: { kind: 'duration', required: false },
+        alignmentPolicy: { kind: 'enum', required: false, enum: ['strict', 'tolerant'], default: 'strict' },
+      },
+      phaseResolver: 'fixed-gate',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'scope.dataSource': {
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'orchestration.scope.dataSource.role') return '请确认数据源角色（primary/confirmation/event）'
+      if (slotKey === 'orchestration.scope.dataSource.feed_id') return '请确认数据源 feedId（如 binance.spot.btcusdt）'
+      if (slotKey === 'orchestration.scope.dataSource.schema_ref') return '请确认数据源 schema（ohlcv/orderbook/liquidation/webhook_event）'
+      if (slotKey === 'orchestration.scope.dataSource.feed_id_overlap') return '多 scope 间 feedId 不能重复'
+      if (slotKey === 'orchestration.scope.dataSource.primary_collision') return 'primary 数据源最多一个'
+      if (slotKey === 'orchestration.scope.dataSource.missing_binding') return '请确认该规则绑定到哪个 dataSource scope'
+      if (slotKey === 'orchestration.scope.dataSource.scope_kind') return '请确认 scopeKind 为 dataSource'
+      return '请补全数据源参数'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['scope.dataSource'],
+      paramRenderers: {
+        role: (v) => String(v),
+        feedId: (v) => String(v),
+        schemaRef: (v) => String(v),
+        schema: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['scope.dataSource'].en
+        const role = typeof params.role === 'string' ? params.role : ''
+        const feedId = typeof params.feedId === 'string' ? params.feedId : ''
+        const schemaRefRaw = typeof params.schemaRef === 'string' ? params.schemaRef : ''
+        const schemaPlain = typeof params.schema === 'string' ? params.schema : ''
+        const schema = schemaRefRaw !== '' ? schemaRefRaw : schemaPlain
+        if (role === '' || feedId === '') return ATOM_PUBLIC_NAMES['scope.dataSource'].zh
+        return renderDisplayToken('atom.scope.dataSource.display', { role, feedId, schema })
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['数据源作用域', '行情源作用域', 'data source scope', 'feed scope'] as const,
+        verbs: {
+          fixed: ['数据源作用域', 'data source scope'] as const,
+        },
+      },
+      paramSlots: {
+        role: { kind: 'enum', required: false, enum: ['primary', 'confirmation', 'event'] },
+        feedId: { kind: 'symbol', required: false },
+        schemaRef: { kind: 'enum', required: false, enum: ['ohlcv', 'orderbook', 'liquidation', 'webhook_event'] },
+      },
+      phaseResolver: 'fixed-gate',
+      sideResolver: 'inherit',
+    },
+  },
+
+  // #1329 follow-up Phase 3e: scope.subStrategy 完整迁入 ATOM_CONTRACT_REGISTRY.display
+  'scope.subStrategy': {
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'orchestration.scope.subStrategy.scope_kind') return '请确认 scopeKind 为 subStrategy'
+      if (slotKey === 'orchestration.scope.subStrategy.substrategy_id') return '请确认子策略 ID（非空且长度 ≤ 64）'
+      if (slotKey === 'orchestration.scope.subStrategy.position_handling') return '请确认子策略切换时是否平仓（close/keep）'
+      if (slotKey === 'orchestration.scope.subStrategy.order_handling') return '请确认子策略切换时是否取消挂单（cancel/keep）'
+      if (slotKey === 'orchestration.scope.subStrategy.id_collision') return '多 scope 子策略 ID 必须唯一'
+      if (slotKey === 'orchestration.scope.subStrategy.missing_binding') return '请确认该规则绑定到哪个 sub-strategy scope'
+      return '请补全子策略范围参数'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['scope.subStrategy'],
+      paramRenderers: {
+        subStrategyId: (v) => String(v),
+        subStrategyLabel: (v) => String(v),
+        positionHandlingOnDeactivate: (v) => String(v),
+        orderHandlingOnDeactivate: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['scope.subStrategy'].en
+        const labelRaw = typeof params.subStrategyLabel === 'string' ? params.subStrategyLabel : ''
+        const idRaw = typeof params.subStrategyId === 'string' ? params.subStrategyId : ''
+        const label = labelRaw !== '' ? labelRaw : idRaw
+        if (label === '') return ATOM_PUBLIC_NAMES['scope.subStrategy'].zh
+        const positionHandling = typeof params.positionHandlingOnDeactivate === 'string' ? params.positionHandlingOnDeactivate : ''
+        const orderHandling = typeof params.orderHandlingOnDeactivate === 'string' ? params.orderHandlingOnDeactivate : ''
+        if (positionHandling !== '' && orderHandling !== '') {
+          return renderDisplayToken('atom.scope.subStrategy.display.with_handling', {
+            label,
+            positionHandling,
+            orderHandling,
+          })
+        }
+        return renderDisplayToken('atom.scope.subStrategy.display.no_handling', { label })
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['子策略范围', '多子策略', '策略切换范围', 'sub-strategy scope', 'sub strategy scope'] as const,
+        verbs: {
+          fixed: ['子策略范围', 'sub-strategy scope'] as const,
+        },
+      },
+      paramSlots: {
+        subStrategyId: { kind: 'symbol', required: false },
+        positionHandlingOnDeactivate: { kind: 'enum', required: false, enum: ['close', 'keep'] },
+        orderHandlingOnDeactivate: { kind: 'enum', required: false, enum: ['cancel', 'keep'] },
+      },
+      phaseResolver: 'fixed-gate',
+      sideResolver: 'inherit',
+    },
+  },
+
+  // #1329 follow-up Phase 3e: gate.subStrategy 完整迁入 ATOM_CONTRACT_REGISTRY.display
+  'gate.subStrategy': {
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'orchestration.gate.subStrategy.scope_ref_unknown') return 'gate 引用的子策略 scope 未声明'
+      if (slotKey === 'orchestration.gate.subStrategy.effect_phase_mismatch') return 'phase=subStrategy 仅支持 pause_substrategy / switch_substrategy'
+      if (slotKey === 'orchestration.gate.subStrategy.switch_target_required') return 'switch_substrategy gate 必须指定切换目标 scope'
+      if (slotKey === 'orchestration.gate.subStrategy.switch_target_self') return '切换目标不能与源 scope 相同'
+      if (slotKey === 'orchestration.gate.subStrategy.active_when') return '请确认 gate 的判定条件'
+      if (slotKey === 'orchestration.gate.unsupported_phase') return '当前不支持 phase=strategy 的 gate'
+      if (slotKey === 'orchestration.gate.regime.effect_phase_mismatch') return 'phase=entry 仅支持 block_new_entries effect'
+      return '请补全子策略 gate 参数'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['gate.subStrategy'],
+      paramRenderers: {
+        effectWhenFalse: (v) => String(v),
+        subStrategyScopeRef: (v) => String(v),
+        toSubStrategyScopeRef: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['gate.subStrategy'].en
+        const effect = typeof params.effectWhenFalse === 'string' ? params.effectWhenFalse : ''
+        if (effect === 'pause_substrategy') {
+          const label = typeof params.subStrategyScopeRef === 'string' ? params.subStrategyScopeRef : ''
+          return renderDisplayToken('atom.gate.subStrategy.pause', { label })
+        }
+        if (effect === 'switch_substrategy') {
+          const toLabel = typeof params.toSubStrategyScopeRef === 'string' ? params.toSubStrategyScopeRef : ''
+          return renderDisplayToken('atom.gate.subStrategy.switch', { toLabel })
+        }
+        return ATOM_PUBLIC_NAMES['gate.subStrategy'].zh
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['子策略 gate', '子策略切换', '子策略暂停', 'sub-strategy gate'] as const,
+        verbs: {
+          fixed: ['子策略 gate', 'sub-strategy gate'] as const,
+        },
+      },
+      paramSlots: {
+        effectWhenFalse: { kind: 'enum', required: false, enum: ['pause_substrategy', 'switch_substrategy'] },
+        subStrategyScopeRef: { kind: 'symbol', required: false },
+        toSubStrategyScopeRef: { kind: 'symbol', required: false },
+      },
+      phaseResolver: 'fixed-gate',
+      sideResolver: 'inherit',
     },
   },
 })
