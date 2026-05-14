@@ -120,21 +120,35 @@ function looksLikeBaseToken(token: string): boolean {
 
 type ParserFn = (clause: string, spec: ExtractorSpec) => unknown
 
+/**
+ * matchNumberAtIndex —— 按 spec.index 取第 N 个匹配的字符串（Issue #1338）。
+ * 默认 index=0（首个匹配，保持原行为）。同 pattern 多命中场景（如 "EMA20 上穿 EMA50"）
+ * 用此区分位置语义：fastPeriod index=0 → "20"，slowPeriod index=1 → "50"。
+ */
+function matchNumberAtIndex(clause: string, pattern: string | undefined, fallback: RegExp, index: number): string | undefined {
+  if (index === 0) {
+    const re = pattern ? new RegExp(pattern) : fallback
+    const m = clause.match(re)
+    return m?.[0]
+  }
+  const globalRe = pattern ? new RegExp(pattern, 'g') : new RegExp(fallback.source, 'g')
+  const all = [...clause.matchAll(globalRe)]
+  return all[index]?.[0]
+}
+
 const PARSER_NUMBER_INT: ParserFn = (clause, spec) => {
-  const re = spec.pattern ? new RegExp(spec.pattern) : /\d+/
-  const m = clause.match(re)
-  if (!m) return undefined
-  const n = Number.parseInt(m[0], 10)
+  const raw = matchNumberAtIndex(clause, spec.pattern, /\d+/, spec.index ?? 0)
+  if (raw === undefined) return undefined
+  const n = Number.parseInt(raw, 10)
   if (Number.isNaN(n)) return undefined
   if (spec.range && (n < spec.range[0] || n > spec.range[1])) return undefined
   return n
 }
 
 const PARSER_NUMBER_DECIMAL: ParserFn = (clause, spec) => {
-  const re = spec.pattern ? new RegExp(spec.pattern) : /\d+(?:\.\d+)?/
-  const m = clause.match(re)
-  if (!m) return undefined
-  const n = Number.parseFloat(m[0])
+  const raw = matchNumberAtIndex(clause, spec.pattern, /\d+(?:\.\d+)?/, spec.index ?? 0)
+  if (raw === undefined) return undefined
+  const n = Number.parseFloat(raw)
   if (Number.isNaN(n)) return undefined
   if (spec.range && (n < spec.range[0] || n > spec.range[1])) return undefined
   return n
@@ -573,6 +587,15 @@ export class GenericSeedDispatcher {
       actions: 0,
       risk: 0,
     }
+    // Issue #1338 Phase 4：跨 clause 命中去重——同一 atom 在多个 clause 命中且
+    // (phase, sideScope, params) 完全相同时，只保留首条。例如 'EMA20 上穿 EMA50
+    // 时市价开多；EMA20 下穿 EMA50 时市价平多' 中 position.no_position 因 verb '时'
+    // 两次命中产生重复 gate 规则；dedupe 后只保留 1 条。
+    const slotDedupeKeys: Record<'triggers' | 'actions' | 'risk', Set<string>> = {
+      triggers: new Set(),
+      actions: new Set(),
+      risk: new Set(),
+    }
 
     for (const clause of clauses) {
       const matches = this.matchClauseAgainstRegistry(clause)
@@ -582,10 +605,20 @@ export class GenericSeedDispatcher {
         const slot = BUCKET_TO_PATCH_SLOT[contract.bucket]
         if (!slot) continue // bucket 不在 BUCKET_TO_PATCH_SLOT —— 未知 bucket 跳过，不 throw
 
-        slotIdx[slot] += 1
         const params = { ...m.params }
         const phase = m.phase ?? 'entry'
         const sideScope = m.sideScope ?? 'both'
+
+        // Issue #1338 Phase 4：dedupe key 用 (atomKey, phase, sideScope, sorted params JSON)，
+        // 跨 clause 等价命中只保留首条。在 slotIdx +=1 之前判定避免空洞计数。
+        const sortedParams = Object.fromEntries(
+          Object.entries(params).sort(([a], [b]) => a.localeCompare(b)),
+        )
+        const dedupeKey = `${m.atomKey}|${phase}|${sideScope}|${JSON.stringify(sortedParams)}`
+        if (slotDedupeKeys[slot].has(dedupeKey)) continue
+        slotDedupeKeys[slot].add(dedupeKey)
+
+        slotIdx[slot] += 1
         // evidence.source 由 atom surface.evidenceProvenance 声明（数据驱动，无 atom-key 字面量比较）。
         // external.signal 声明 'webhook'；其余 atom 省略，默认 'user_explicit'。
         const evidenceSource: NonNullable<AtomContractSurface['evidenceProvenance']> = contract.surface?.evidenceProvenance ?? 'user_explicit'
@@ -650,7 +683,14 @@ export class GenericSeedDispatcher {
   ): Omit<AtomMatch, 'atomKey'> | null {
     const kw = matchKeyword(clause, surface.intent.keywords)
     const direction = matchVerbDirection(clause, surface.intent.verbs)
-    if (!kw && !direction) return null
+    // Issue #1338：require BOTH kw AND verb-direction to fire. 旧逻辑 `!kw && !direction`
+    // 表示"两者皆无才拒"——只要 kw 或 verb 任一命中即匹配，导致：
+    //   - 'EMA20 上穿 EMA50' 同时命中 indicator.cross_over (kw+verb)、indicator.above/below (仅 kw)；
+    //   - 'EMA20 下穿 EMA50' 又命中 cross_over (仅 kw '上穿' 未中、'EMA' kw 仍中)；
+    //   - 'EMA20 上穿 EMA50 时' 命中 position.no_position (仅 verb '时')。
+    // 改成 kw && direction 后，关键词标识"主题"、动词标识"关系"，两者缺一不命中，
+    // 自然消除并行原子规则爆炸；同时 sideScope 由真实命中的 direction 派生，不再回落 'both'。
+    if (!kw || !direction) return null
 
     const params = extractParams(surface.paramSlots, clause, atomKey)
     const phase = resolvePhaseFromClause(clause, surface.phaseResolver, { atomKey, params })
