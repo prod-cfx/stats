@@ -35,10 +35,15 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const lastSavedStateRef = useRef(JSON.stringify(dashboard))
 
+  useEffect(() => {
+    if (isEditingTitle) return
+    setTitleValue(dashboard.name)
+  }, [dashboard.id, dashboard.name, isEditingTitle])
+
   // 监听看板变化，检测是否有未保存的修改
   useEffect(() => {
     const currentState = JSON.stringify(dashboard)
-     
+
     setHasUnsavedChanges(currentState !== lastSavedStateRef.current)
   }, [dashboard])
 
