@@ -191,6 +191,63 @@ describe('BacktestReportClient', () => {
     expect(container.querySelector('[data-testid="dynamic-equity-chart"]')).not.toBeNull()
   })
 
+  it('keeps the report header, metrics, and tables contained on mobile', async () => {
+    await act(async () => {
+      root.render(
+        <BacktestReportClient
+          lng="en"
+          id="btjob-mobile"
+          symbol="BTCUSDT"
+          marketType="perp"
+          rangeDisplay="2026-03-01 ~ 2026-03-02"
+          metrics={{
+            maxDrawdownPct: 2.4,
+            totalReturnPct: 3.2,
+            winRatePct: 50,
+            tradeCount: 1,
+          }}
+          report={{
+            equityCurve: [
+              { ts: Date.parse('2026-03-01T00:00:00.000Z'), equity: 10000 },
+              { ts: Date.parse('2026-03-02T00:00:00.000Z'), equity: 10320 },
+            ],
+            trades: [
+              {
+                id: 'trade-1',
+                side: 'LONG',
+                entryTs: Date.parse('2026-03-01T08:00:00.000Z'),
+                entryPrice: 100.5,
+                exitTs: Date.parse('2026-03-02T12:00:00.000Z'),
+                exitPrice: 103.2,
+                returnPct: 3.2,
+              },
+            ],
+            openPositions: [
+              {
+                symbol: 'BTCUSDT:PERP-LONG-WITH-LONG-LABEL',
+                qty: 0.0013702196462092872,
+                avgEntryPrice: 72238.52313,
+                unrealizedPnl: 2.3882611501623687,
+              },
+            ],
+          }}
+        />,
+      )
+    })
+
+    const heading = Array.from(container.querySelectorAll('h1')).find(node => node.textContent === 'Backtest Analysis Report')
+    const header = heading?.closest('div')?.parentElement
+    const metricGrid = container.querySelector('[data-testid="backtest-metric-grid"]')
+    const tables = Array.from(container.querySelectorAll('table'))
+
+    expect(header?.className).toContain('flex-col')
+    expect(header?.className).toContain('sm:flex-row')
+    expect(metricGrid?.className).toContain('grid-cols-1')
+    expect(metricGrid?.className).toContain('sm:grid-cols-2')
+    expect(tables.length).toBeGreaterThanOrEqual(2)
+    expect(tables.every(table => table.className.includes('min-w-'))).toBe(true)
+  })
+
   it('explains closed-trade metrics and renders open positions when a backtest ends with unclosed positions', async () => {
     mockGetBacktestJobResult.mockResolvedValue({
       summary: {

@@ -29,17 +29,17 @@ export function AiQuantSection({ lng }: { lng: 'zh' | 'en' }) {
             </p>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div data-testid="ai-quant-section-actions" className="flex flex-col gap-3 sm:flex-row">
             <Link
               href={`/${lng}/ai-quant/plaza`}
-              className="cf-primary-cta inline-flex min-h-12 items-center justify-center gap-2 rounded-lg px-5 text-sm font-semibold !text-white transition"
+              className="cf-primary-cta inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-5 text-sm font-semibold !text-white transition sm:w-auto"
             >
               <Sparkles className="h-4 w-4" />
               {t('aiQuant.plaza')}
             </Link>
             <Link
               href={`/${lng}/ai-quant`}
-              className="cf-primary-cta inline-flex min-h-12 items-center justify-center gap-2 rounded-lg px-5 text-sm font-semibold !text-white transition"
+              className="cf-primary-cta inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-5 text-sm font-semibold !text-white transition sm:w-auto"
             >
               <Plus className="h-4 w-4" />
               {t('aiQuant.createStrategy')}

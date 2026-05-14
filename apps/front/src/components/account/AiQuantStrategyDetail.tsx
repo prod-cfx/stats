@@ -668,14 +668,14 @@ export function AiQuantStrategyDetail({
 
   return (
     <main className="mx-auto flex w-full max-w-[920px] flex-1 flex-col gap-4 px-4 py-8 md:px-8">
-      <section className="flex items-center justify-between rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-        <div>
-          <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">{strategy.name}</h1>
+      <section className="flex flex-col items-start justify-between gap-4 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 sm:flex-row sm:items-center">
+        <div className="min-w-0">
+          <h1 className="break-words text-2xl font-bold text-[color:var(--cf-text-strong)]">{strategy.name}</h1>
           <p className="mt-1 text-sm text-[color:var(--cf-muted)]">
             {strategy.exchange.toUpperCase()} / {strategy.symbol} / {strategy.timeframe}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           <span className={`rounded-lg border px-2 py-1 text-xs ${STATUS_CLASS[strategy.status]}`}>
             {semanticHeadline ?? t(`aiQuant.status.${strategy.status}`)}
           </span>
@@ -735,9 +735,9 @@ export function AiQuantStrategyDetail({
 
             <div
               data-testid="strategy-runtime-control-actions"
-              className="flex w-full flex-col gap-3 border-t border-[color:var(--cf-border)] pt-4 sm:flex-row sm:items-center sm:justify-end"
+              className="flex w-full flex-col gap-3 border-t border-[color:var(--cf-border)] pt-4 md:flex-row md:items-center md:justify-end"
             >
-              <div className="flex flex-row flex-wrap items-center gap-2 sm:justify-end">
+              <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
                 {strategy.status === 'running' && (
                   <button
                     type="button"
@@ -1026,7 +1026,7 @@ export function AiQuantStrategyDetail({
         </section>
       )}
 
-      <section className="grid gap-3 md:grid-cols-5">
+      <section data-testid="strategy-detail-metric-grid" className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-5">
         <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4">
           <p className="text-xs text-[color:var(--cf-muted)]">{t('aiQuant.detail.returnPct')}</p>
           <p className="mt-1 text-xl font-semibold text-[color:var(--cf-text-strong)]">{strategy.metrics.returnPct}%</p>
@@ -1095,7 +1095,7 @@ export function AiQuantStrategyDetail({
         {strategy.latestOrders && strategy.latestOrders.length > 0
           ? (
               <div className="mt-3 overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
+                <table data-testid="strategy-detail-latest-trades-table" className="min-w-[760px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)]">
                       <th className="py-2 pr-3">{t('aiQuant.detail.time')}</th>
@@ -1148,7 +1148,7 @@ export function AiQuantStrategyDetail({
         <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
           {formatEquitySeriesSource(strategy.marketType, t)}
         </p>
-        <div className="relative mt-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+        <div data-testid="strategy-detail-equity-chart-panel" className="relative mt-3 overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
           <svg
             viewBox="0 0 900 220"
             className="h-56 w-full"
@@ -1195,7 +1195,9 @@ export function AiQuantStrategyDetail({
               className="pointer-events-none absolute rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-2 text-xs text-[color:var(--cf-text)] shadow-lg"
               style={{
                 top: '20px',
-                left: hoverCoord.x > 700 ? `calc(${(hoverCoord.x / 900) * 100}% - 160px)` : `calc(${(hoverCoord.x / 900) * 100}% + 8px)`,
+                right: hoverCoord.x > 700 ? '8px' : undefined,
+                left: hoverCoord.x > 700 ? undefined : `calc(${(hoverCoord.x / 900) * 100}% + 8px)`,
+                maxWidth: 'calc(100% - 16px)',
               }}
             >
               <p className="text-[color:var(--cf-muted)]">{hoverPoint.ts}</p>

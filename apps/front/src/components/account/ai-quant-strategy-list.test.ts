@@ -31,8 +31,8 @@ jest.mock('lucide-react', () => ({
 
 jest.mock('next/link', () => ({
   __esModule: true,
-  default: ({ children, href, className }: { children: React.ReactNode; href: string; className?: string }) => (
-    React.createElement('a', { href, className }, children)
+  default: ({ children, href, className, ...props }: { children: React.ReactNode; href: string; className?: string } & Record<string, unknown>) => (
+    React.createElement('a', { href, className, ...props }, children)
   ),
 }))
 
@@ -816,5 +816,33 @@ describe('AiQuantStrategyList tabs UI', () => {
     expect(rowButtons.find(b => b.textContent?.includes('Run'))).toBeUndefined()
     expect(rowButtons.find(b => b.textContent?.includes('停止策略'))).toBeUndefined()
     expect(rowButtons.find(b => b.textContent?.includes('删除'))).toBeUndefined()
+  })
+
+  it('keeps strategy card actions and metric cells stable on mobile', async () => {
+    mockFetchAccountAiQuantStrategies.mockResolvedValue({
+      items: [
+        tabsListItem({
+          id: 'mobile-layout',
+          name: 'Very long mobile layout strategy name',
+          symbol: 'BTC-USDT-SWAP-LONG-SYMBOL',
+          status: 'running',
+          viewOnlyAt: null,
+        }),
+      ],
+    })
+    await act(async () => {
+      root.render(React.createElement(AiQuantStrategyList, { lng: 'zh' }))
+    })
+    await act(async () => {})
+
+    const actions = container.querySelector('[data-testid="ai-quant-strategy-card-actions"]')
+    const metricGrid = container.querySelector('[data-testid="ai-quant-strategy-card-metrics"]')
+
+    expect(actions?.className).toContain('grid')
+    expect(actions?.className).toContain('grid-cols-2')
+    expect(actions?.className).toContain('sm:flex')
+    expect(metricGrid?.className).toContain('grid-cols-1')
+    expect(metricGrid?.className).toContain('sm:grid-cols-2')
+    expect(metricGrid?.className).toContain('md:grid-cols-4')
   })
 })

@@ -581,7 +581,10 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                       </div>
                     </Link>
 
-                    <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap lg:justify-end">
+                    <div
+                      data-testid="ai-quant-strategy-card-actions"
+                      className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:w-auto lg:justify-end"
+                    >
 
                       {!isViewOnly && (
                         item.status === 'running' ? (
@@ -632,7 +635,8 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
 
                   <Link
                     href={`/${lng}/account/ai-quant/strategy/${item.id}`}
-                    className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-4"
+                    data-testid="ai-quant-strategy-card-metrics"
+                    className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-4"
                   >
                       {[
                         {

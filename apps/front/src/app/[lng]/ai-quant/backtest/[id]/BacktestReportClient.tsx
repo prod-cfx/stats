@@ -159,9 +159,9 @@ function MetricCard({
         : 'text-[color:var(--cf-text-strong)]'
 
   return (
-    <div className="rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 backdrop-blur-sm transition-all duration-300 hover:bg-[color:var(--cf-surface-hover)]">
+    <div className="rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 backdrop-blur-sm transition-all duration-300 hover:bg-[color:var(--cf-surface-hover)] sm:p-5 lg:p-6">
       <p className="text-sm font-medium text-[color:var(--cf-muted)]">{title}</p>
-      <p className={`mt-2 text-[28px] font-bold tracking-tight md:text-[32px] ${colorClass}`}>
+      <p className={`mt-2 break-words text-2xl font-bold tracking-tight md:text-[32px] ${colorClass}`}>
         {value}
       </p>
     </div>
@@ -329,7 +329,7 @@ function TradeDetailsSection({
 
       {hasTrades ? (
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          <table className="min-w-[720px] text-left text-sm">
             <thead>
               <tr className="border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)]">
                 <th className="pb-3 font-normal">{lng === 'en' ? 'Entry Time' : '开仓时间'}</th>
@@ -418,8 +418,8 @@ function OpenPositionsSection({
     metrics: null,
   })
   return (
-    <div className="rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 backdrop-blur-sm">
-      <div className="mb-6 flex items-center justify-between gap-4">
+    <div className="rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 backdrop-blur-sm sm:p-6">
+      <div className="mb-4 flex flex-col items-start justify-between gap-2 sm:mb-6 sm:flex-row sm:items-center sm:gap-4">
         <h3 className="text-base font-medium text-[color:var(--cf-text-strong)]">
           {presentation.openPositionsTitle}
         </h3>
@@ -429,7 +429,7 @@ function OpenPositionsSection({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
+        <table className="min-w-[640px] text-left text-sm">
           <thead>
             <tr className="border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)]">
               <th className="pb-3 font-normal">{presentation.openPositionsColumns.symbol}</th>
@@ -585,7 +585,7 @@ export function BacktestReportClient({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">
             {lng === 'en' ? 'Backtest Analysis Report' : '回测分析报告'}
@@ -630,7 +630,7 @@ export function BacktestReportClient({
       <StrategyConclusionCard status={status} summary={summary} lng={lng} />
 
       {/* 2. 核心指标卡 */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+      <div data-testid="backtest-metric-grid" className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
         {presentation.summaryCards.map(card => (
           <MetricCard
             key={card.key}
