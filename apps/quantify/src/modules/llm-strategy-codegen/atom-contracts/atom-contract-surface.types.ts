@@ -76,6 +76,12 @@ export interface ParamSlotSchema {
  *   default             抽取不到时的兜底值（与 ParamSlotSchema.default 等价；保留以便派生函数复用）
  *   derive              派生函数 ID（dispatcher 内置 derive 函数表的 key，例如 'period-range'）
  *   range               number-* 边界检查（覆盖 ParamSlotSchema.range）
+ *   index               number-* 位置索引（Issue #1338）：clause 内同一 pattern 多次命中时，
+ *                       按 matchAll 顺序取第 N 个（0-based）。用于 cross_over 等需要区分
+ *                       "第 1 个数字 = fast、第 2 个数字 = slow" 的双数字场景。缺省 0。
+ *                       约束（review C1/m2）：必须为非负整数；dispatcher 取整段 m[0]，
+ *                       pattern 含 capture group 不会按 group 索引——若要 group 抽取，
+ *                       请新增独立 extractor.kind 而非复用 index。
  */
 export interface ExtractorSpec {
   readonly kind:
@@ -92,6 +98,7 @@ export interface ExtractorSpec {
   readonly default?: unknown
   readonly derive?: string
   readonly range?: readonly [number, number]
+  readonly index?: number
 }
 
 /**

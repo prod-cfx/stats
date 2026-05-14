@@ -1128,11 +1128,14 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       paramSlots: {
         indicator: { kind: 'enum', required: true, enum: ['ma', 'ema', 'rsi', 'macd'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema', 'RSI': 'rsi', 'MACD': 'macd', 'DIF': 'macd', 'DEA': 'macd' } } },
         semantic: { kind: 'enum', required: false, enum: ['cross_up'] },
-        value: { kind: 'number', required: false, range: [0, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [0, 100] } },
+        // Issue #1338：value/slowPeriod 取第 2 个数字，period/fastPeriod 取第 1 个；
+        // signalPeriod 取第 3 个。'EMA20 上穿 EMA50' → fastPeriod=20, slowPeriod=50。
+        // 'RSI14 上穿 70' → period=14, value=70。
+        value: { kind: 'number', required: false, range: [0, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [0, 100], index: 1 } },
         period: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
         fastPeriod: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
-        slowPeriod: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
-        signalPeriod: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
+        slowPeriod: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500], index: 1 } },
+        signalPeriod: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500], index: 2 } },
       },
       phaseResolver: 'by-clause-verb',
       sideResolver: 'from-direction',
@@ -1205,11 +1208,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       paramSlots: {
         indicator: { kind: 'enum', required: true, enum: ['ma', 'ema', 'rsi', 'macd'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema', 'RSI': 'rsi', 'MACD': 'macd', 'DIF': 'macd', 'DEA': 'macd' } } },
         semantic: { kind: 'enum', required: false, enum: ['cross_down'] },
-        value: { kind: 'number', required: false, range: [0, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [0, 100] } },
+        // Issue #1338：与 cross_over 对称——双数字按位置 disambiguate。
+        value: { kind: 'number', required: false, range: [0, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [0, 100], index: 1 } },
         period: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
         fastPeriod: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
-        slowPeriod: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
-        signalPeriod: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
+        slowPeriod: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500], index: 1 } },
+        signalPeriod: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500], index: 2 } },
       },
       phaseResolver: 'by-clause-verb',
       sideResolver: 'from-direction',
@@ -1304,7 +1308,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       intent: {
         keywords: ['价格', '收盘价', 'MA', 'EMA', '均线', 'indicator'] as const,
         verbs: {
-          lte: ['跌破', '下穿', '低于', '下方', 'below', 'under'] as const,
+          // Issue #1338：移除 '下穿'——其语义属 indicator.cross_under（瞬时穿越事件），
+          // 不应与静态 below（'低于/下方'）并行命中。同从句 'EMA20 下穿 EMA50' 不再误触此原子。
+          lte: ['跌破', '低于', '下方', 'below', 'under'] as const,
         },
       },
       paramSlots: {
@@ -1973,7 +1979,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         // critic m1 fix: 'whale_buy'/'whale_sell' 是事件名而非 utterance 同义词，移除；'on'/'when' 是连接词非触发动词，移除
         keywords: ['webhook', '外部信号', '信号', 'signal', 'signalId'] as const,
         verbs: {
-          fixed: ['收到', '触发'] as const,
+          // Issue #1338：dispatcher 新规要求 kw && verb 同时命中；补中文 webhook 触发动词。
+          // 单字 '接' 经 review C1/C2 移除——matchVerbDirection 用 String.includes，
+          // 会误命中 '直接/间接/连接/对接/接下来' 等高频词。
+          // '接 '（带尾空格）覆盖 AC-12 'ac-12-webhook-1: 接 TradingView webhook…' 真实语料，
+          // 且不会命中 '紧接着' 等无空格连写，避免子串误命中爆炸。
+          fixed: ['收到', '触发', '接到', '接收', '接入', '接 ', '订阅'] as const,
         },
       },
       paramSlots: {
