@@ -4,7 +4,7 @@
  * 防止 prompt 退化为 #1345 之前的 "让 LLM 自由造 schema" 形态。
  */
 
-import { ATOM_BUCKETS } from '../../atom-contracts/atom-contract-registry'
+import { ATOM_CONTRACT_REGISTRY, getAllRegisteredAtomKeys, getAtomKeysByBucket } from '../../atom-contracts/atom-contract-registry'
 import { resetAtomCatalogCacheForTest } from '../atom-catalog-projection'
 import { buildConversationPlannerSystemPrompt, IN_CONTEXT_EXAMPLE_ATOM_KEYS } from '../conversation-planner-system.prompt'
 
@@ -14,8 +14,8 @@ describe('conversationPlannerSystemPrompt — atom catalog injection (issue #134
   describe('zh locale', () => {
     const prompt = buildConversationPlannerSystemPrompt('zh')
 
-    it('包含所有 ATOM_BUCKETS 注册的 atom key（动态派生，不写死数量）', () => {
-      for (const key of Object.keys(ATOM_BUCKETS)) {
+    it('包含所有注册表 atom key（动态派生，不写死数量）', () => {
+      for (const key of getAllRegisteredAtomKeys()) {
         expect(prompt).toContain(key)
       }
     })
@@ -47,8 +47,8 @@ describe('conversationPlannerSystemPrompt — atom catalog injection (issue #134
       expect(prompt).toContain('position.pyramiding_limit')
     })
 
-    it('包含动态 atom 总数（绝不写死，断言数值与 ATOM_BUCKETS 长度一致）', () => {
-      const total = Object.keys(ATOM_BUCKETS).length
+    it('包含动态 atom 总数（绝不写死，断言数值与注册表长度一致）', () => {
+      const total = getAllRegisteredAtomKeys().length
       expect(prompt).toContain(`${total} 个原子枚举`)
     })
 
@@ -63,8 +63,8 @@ describe('conversationPlannerSystemPrompt — atom catalog injection (issue #134
   describe('en locale', () => {
     const prompt = buildConversationPlannerSystemPrompt('en')
 
-    it('包含所有 ATOM_BUCKETS 注册的 atom key（en locale 同样覆盖）', () => {
-      for (const key of Object.keys(ATOM_BUCKETS)) {
+    it('包含所有注册表 atom key（en locale 同样覆盖）', () => {
+      for (const key of getAllRegisteredAtomKeys()) {
         expect(prompt).toContain(key)
       }
     })
@@ -84,18 +84,16 @@ describe('conversationPlannerSystemPrompt — atom catalog injection (issue #134
     const prompt = buildConversationPlannerSystemPrompt('zh')
     const buckets = ['trigger', 'action', 'risk', 'positionConstraint', 'orchestration'] as const
     for (const bucket of buckets) {
-      const keysInBucket = Object.entries(ATOM_BUCKETS)
-        .filter(([, b]) => b === bucket)
-        .map(([k]) => k)
+      const keysInBucket = getAtomKeysByBucket(bucket)
       // 至少有 1 个 key 出现在 prompt 中（被 catalog 段渲染）
       expect(keysInBucket.some(k => prompt.includes(k))).toBe(true)
     }
   })
 
-  it('In-context 示例段使用的 atom key 全部 ∈ ATOM_BUCKETS（防 atom 重命名静默退化）', () => {
+  it('In-context 示例段使用的 atom key 全部 ∈ ATOM_CONTRACT_REGISTRY（防 atom 重命名静默退化）', () => {
     // review m3 follow-up：5 条 in-context 示例硬编码 atom key，必须由反向不变量守门
     for (const key of IN_CONTEXT_EXAMPLE_ATOM_KEYS) {
-      expect(Object.keys(ATOM_BUCKETS)).toContain(key)
+      expect(key in ATOM_CONTRACT_REGISTRY).toBe(true)
     }
   })
 })

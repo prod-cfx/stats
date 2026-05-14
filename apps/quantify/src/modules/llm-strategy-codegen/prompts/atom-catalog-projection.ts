@@ -14,7 +14,7 @@
  */
 
 import type { AtomContractKey, AtomContractBucket } from '../atom-contracts/atom-contract-types'
-import { ATOM_BUCKETS, ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+import { ATOM_CONTRACT_REGISTRY, getAllRegisteredAtomKeys } from '../atom-contracts/atom-contract-registry'
 
 const PHASE_ENUM = ['entry', 'exit', 'gate'] as const
 export type PromptPhase = typeof PHASE_ENUM[number]
@@ -64,7 +64,7 @@ let cachedEntries: readonly AtomCatalogEntry[] | null = null
 const cachedPrompt: Partial<Record<'zh' | 'en', string>> = {}
 
 export function getRegisteredAtomKeys(): readonly AtomContractKey[] {
-  return Object.keys(ATOM_BUCKETS) as AtomContractKey[]
+  return getAllRegisteredAtomKeys()
 }
 
 export function getPhaseEnum(): typeof PHASE_ENUM {
@@ -74,9 +74,9 @@ export function getPhaseEnum(): typeof PHASE_ENUM {
 export function buildAtomCatalogEntries(): readonly AtomCatalogEntry[] {
   if (cachedEntries) return cachedEntries
 
-  const entries = (Object.keys(ATOM_BUCKETS) as AtomContractKey[]).map((key): AtomCatalogEntry => {
+  const entries = getAllRegisteredAtomKeys().map((key): AtomCatalogEntry => {
     const atom = ATOM_CONTRACT_REGISTRY[key]
-    const bucket = ATOM_BUCKETS[key]
+    const bucket = atom.bucket
     const surface = atom.surface
     const phaseResolver = surface.phaseResolver
     // M5 修复：查表 + 显式类型 narrowing；非字符串字面量（如 { kind: 'fn', fn }）落入

@@ -1,10 +1,11 @@
-import { ATOM_BUCKETS, ATOM_CONTRACT_REGISTRY } from '../atom-contract-registry'
+import { ATOM_CONTRACT_REGISTRY, getAllRegisteredAtomKeys } from '../atom-contract-registry'
 
 describe('ATOM_CONTRACT_REGISTRY full PR1b registration', () => {
   it('registers all supported atoms with PR1b contract fields', () => {
     const entries = Object.entries(ATOM_CONTRACT_REGISTRY)
 
-    expect(entries).toHaveLength(Object.keys(ATOM_BUCKETS).length)
+    // #1364 PR1：注册表自身长度即真相（ATOM_BUCKETS 已 private 化，由 contract.bucket 派生）
+    expect(entries).toHaveLength(getAllRegisteredAtomKeys().length)
 
     for (const [key, contract] of entries) {
       expect(contract.key).toBe(key)

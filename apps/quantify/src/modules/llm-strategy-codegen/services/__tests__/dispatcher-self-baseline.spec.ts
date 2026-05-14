@@ -22,7 +22,8 @@ import type { CodegenSemanticPatch } from '../../types/codegen-semantic-patch'
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
-import { ATOM_BUCKETS, ATOM_CONTRACT_REGISTRY } from '../../atom-contracts/atom-contract-registry'
+import { ATOM_CONTRACT_REGISTRY, getAtomBucket } from '../../atom-contracts/atom-contract-registry'
+import type { AtomContractKey } from '../../atom-contracts/atom-contract-types'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { AC7_USER_PROMPTS, AC12_WEBHOOK_PROMPTS } from './fixtures/ac-prompts'
 
@@ -108,8 +109,9 @@ const BASELINE_BUCKETS = [
 type BaselineBucket = (typeof BASELINE_BUCKETS)[number]
 
 function bucketForCase(c: Omit<BaselineCase, 'patch'>): BaselineBucket {
-  if (c.atomKey && c.atomKey in ATOM_BUCKETS) {
-    return (ATOM_BUCKETS as Record<string, BaselineBucket>)[c.atomKey]
+  // #1364 PR1：bucket 从 contract.bucket 单一真相源读（复用 getAtomBucket helper 去掉一层 cast）
+  if (c.atomKey && c.atomKey in ATOM_CONTRACT_REGISTRY) {
+    return getAtomBucket(c.atomKey as AtomContractKey) as BaselineBucket
   }
   // AC-7 user prompts（无 atomKey，多 atom 复合）归 orchestration。
   return 'orchestration'

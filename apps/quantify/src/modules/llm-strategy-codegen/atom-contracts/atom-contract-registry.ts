@@ -129,7 +129,20 @@ export const DEFAULT_CLASSIFIER_META: AtomClassifier = Object.freeze({
   supportStatus: 'supported_executable',
 }) as AtomClassifier
 
-export const ATOM_BUCKETS = {
+// Issue #1364 PR1：bucket 真相源唯一性。
+//
+// `ATOM_BUCKETS` 表退化为模块 private const（**不再 export**），仅供
+// `completePr1bRegistry` 内部把 bucket 字段注入到每个 contract entry 上。
+// 所有模块外消费方必须读 `ATOM_CONTRACT_REGISTRY[key].bucket`（即 `contract.bucket`，
+// 必填字段，atom-contract-types.ts:140）；不可再读 `ATOM_BUCKETS`。
+//
+// AC-1 例外条款允许此形态：「`ATOM_BUCKETS` 表已删除（**或退化为派生 view**）；
+//   所有引用点改为读 `ATOM_CONTRACT_REGISTRY[key].bucket`」。
+//
+// 守门：本模块仅在 `completePr1bRegistry` 函数内读 `ATOM_BUCKETS[key]`；
+//   `atom-bucket-derivation.spec.ts` 反向不变量保证 `contract.bucket` 与 `ATOM_BUCKETS`
+//   始终一致。
+const ATOM_BUCKETS = {
   'volume.threshold': 'trigger',
   'volatility.atr_threshold': 'trigger',
   'strategy.time_window': 'trigger',
@@ -185,6 +198,19 @@ export const ATOM_BUCKETS = {
   'scope.subStrategy': 'orchestration',
   'gate.subStrategy': 'orchestration',
 } as const satisfies Record<AtomContractKey, AtomContractBucket>
+
+// Public bucket helpers — 单一对外 API，模块外消费方禁止再读 ATOM_BUCKETS（已 private）
+export function getAllRegisteredAtomKeys(): readonly AtomContractKey[] {
+  return Object.keys(ATOM_CONTRACT_REGISTRY) as AtomContractKey[]
+}
+
+export function getAtomBucket(key: AtomContractKey): AtomContractBucket {
+  return ATOM_CONTRACT_REGISTRY[key].bucket
+}
+
+export function getAtomKeysByBucket(bucket: AtomContractBucket): readonly AtomContractKey[] {
+  return getAllRegisteredAtomKeys().filter(k => ATOM_CONTRACT_REGISTRY[k].bucket === bucket)
+}
 
 // Issue #1279 PR1c: 36 atom 的 display.publicName 单一 Record<key, {zh, en}> 真相源
 // （review M1：消除 zh / en 双表漂移；review H1：zh 端"卫语句"统一为"护栏"）。

@@ -17,7 +17,7 @@
  *     'orchestration' 在两侧相同。
  */
 
-import { ATOM_CONTRACT_REGISTRY, ATOM_BUCKETS, DEFAULT_CLASSIFIER_META } from '../../atom-contracts/atom-contract-registry'
+import { ATOM_CONTRACT_REGISTRY, DEFAULT_CLASSIFIER_META } from '../../atom-contracts/atom-contract-registry'
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
 
 type AtomContractEntry = (typeof ATOM_CONTRACT_REGISTRY)[keyof typeof ATOM_CONTRACT_REGISTRY]
@@ -51,8 +51,9 @@ function adaptFromContractRegistry(entry: AtomContractEntry) {
     reasonCode: classifier.supportStatus === 'supported_executable'
       ? undefined
       : classifier.unsupportedMeta.reasonCode,
-    bucket: (ATOM_BUCKETS as Record<string, string>)[entry.key],
-    legacyCategory: bucketToLegacyCategory((ATOM_BUCKETS as Record<string, string>)[entry.key]),
+    // #1364 PR1：bucket 从 contract.bucket 单一真相源读
+    bucket: entry.bucket,
+    legacyCategory: bucketToLegacyCategory(entry.bucket),
   }
 }
 

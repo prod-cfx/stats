@@ -2,14 +2,20 @@
  * Issue #1345 PR1.1 — atom-catalog-projection helper unit tests
  *
  * 验证：
- *   1) 动态派生 53 atom（绝不写死数字 — 用 Object.keys(ATOM_BUCKETS).length 校验）
+ *   1) 动态派生 53 atom（绝不写死数字 — 用 getAllRegisteredAtomKeys().length 校验）
  *   2) 每个 entry 字段完整：key / bucket / paramFields
  *   3) fixedPhase 仅在 phaseResolver === 'fixed-*' 时出现
  *   4) formatAtomCatalogForPrompt 包含所有 atom key + zh/en locale 双覆盖
  *   5) memoize：连调 2 次返回同一引用
+ *
+ * #1364 PR1：bucket 真相源唯一性 — 删 ATOM_BUCKETS 二级表，统一读 ATOM_CONTRACT_REGISTRY[key].bucket。
  */
 
-import { ATOM_BUCKETS, ATOM_CONTRACT_REGISTRY } from '../../atom-contracts/atom-contract-registry'
+import {
+  ATOM_CONTRACT_REGISTRY,
+  getAllRegisteredAtomKeys,
+  getAtomKeysByBucket,
+} from '../../atom-contracts/atom-contract-registry'
 import {
   buildAtomCatalogEntries,
   formatAtomCatalogForPrompt,
@@ -22,15 +28,15 @@ describe('atom-catalog-projection (issue #1345 PR1.1)', () => {
   beforeEach(() => resetAtomCatalogCacheForTest())
 
   describe('buildAtomCatalogEntries', () => {
-    it('动态派生 entry 数 == ATOM_BUCKETS 长度（绝不写死）', () => {
+    it('动态派生 entry 数 == 注册表长度（绝不写死）', () => {
       const entries = buildAtomCatalogEntries()
-      expect(entries.length).toBe(Object.keys(ATOM_BUCKETS).length)
+      expect(entries.length).toBe(getAllRegisteredAtomKeys().length)
     })
 
-    it('覆盖 ATOM_BUCKETS 中每个 key（无遗漏、无多余）', () => {
+    it('覆盖注册表中每个 key（无遗漏、无多余）', () => {
       const entries = buildAtomCatalogEntries()
       const entryKeys = new Set(entries.map(e => e.key))
-      const registryKeys = new Set(Object.keys(ATOM_BUCKETS))
+      const registryKeys = new Set(getAllRegisteredAtomKeys())
       expect(entryKeys).toEqual(registryKeys)
     })
 
@@ -94,14 +100,14 @@ describe('atom-catalog-projection (issue #1345 PR1.1)', () => {
   describe('formatAtomCatalogForPrompt', () => {
     it('zh locale 字符串包含所有 atom key', () => {
       const formatted = formatAtomCatalogForPrompt('zh')
-      for (const key of Object.keys(ATOM_BUCKETS)) {
+      for (const key of getAllRegisteredAtomKeys()) {
         expect(formatted).toContain(key)
       }
     })
 
     it('en locale 字符串包含所有 atom key', () => {
       const formatted = formatAtomCatalogForPrompt('en')
-      for (const key of Object.keys(ATOM_BUCKETS)) {
+      for (const key of getAllRegisteredAtomKeys()) {
         expect(formatted).toContain(key)
       }
     })
@@ -124,7 +130,7 @@ describe('atom-catalog-projection (issue #1345 PR1.1)', () => {
 
     it('每个 bucket 标题带 atom 数量', () => {
       const formatted = formatAtomCatalogForPrompt('zh')
-      const triggerCount = Object.values(ATOM_BUCKETS).filter(b => b === 'trigger').length
+      const triggerCount = getAtomKeysByBucket('trigger').length
       expect(formatted).toMatch(new RegExp(`触发原子.*?${triggerCount}`))
     })
 
@@ -144,7 +150,7 @@ describe('atom-catalog-projection (issue #1345 PR1.1)', () => {
 
     it('空 paramSlots 的 atom 渲染 "params: {}" 占位（review M6）', () => {
       const formatted = formatAtomCatalogForPrompt('zh')
-      // 注：当前 ATOM_BUCKETS 内每个 atom 都有 ≥ 1 个 paramSlot（surface invariant 守门
+      // 注：当前注册表内每个 atom 都有 ≥ 1 个 paramSlot（surface invariant 守门
       // 见 atom-contract-surface.types.ts:159 "paramSlots 中至少一个 required=true"）。
       // 此测试覆盖空 paramFields 输出分支以防未来 atom 设计变更引入无参 atom：
       // 直接验 formatEntry 内 length === 0 分支的字符串形态稳定性。
@@ -159,8 +165,8 @@ describe('atom-catalog-projection (issue #1345 PR1.1)', () => {
   })
 
   describe('getRegisteredAtomKeys / getPhaseEnum', () => {
-    it('getRegisteredAtomKeys 等于 ATOM_BUCKETS keys', () => {
-      expect([...getRegisteredAtomKeys()].sort()).toEqual(Object.keys(ATOM_BUCKETS).sort())
+    it('getRegisteredAtomKeys 等于 ATOM_CONTRACT_REGISTRY keys', () => {
+      expect([...getRegisteredAtomKeys()].sort()).toEqual([...getAllRegisteredAtomKeys()].sort())
     })
 
     it('phase enum 是 entry / exit / gate（无 risk — phase 不含 risk，risk 是 bucket）', () => {

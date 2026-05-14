@@ -11,7 +11,7 @@ import type {
   SemanticUnknownAtomDefinition,
 } from '../types/semantic-atom-support'
 import { Injectable } from '@nestjs/common'
-import { ATOM_CONTRACT_REGISTRY, ATOM_BUCKETS, ATOM_PUBLIC_NAMES } from '../atom-contracts/atom-contract-registry'
+import { ATOM_CONTRACT_REGISTRY, ATOM_PUBLIC_NAMES } from '../atom-contracts/atom-contract-registry'
 
 type UnknownSemanticAtomDefinition = SemanticUnknownAtomDefinition
 
@@ -743,7 +743,10 @@ function adaptContractToRegistryShape(
   entryKey: string,
 ): SemanticRegisteredAtomDefinition {
   const entry = (ATOM_CONTRACT_REGISTRY as Record<string, typeof ATOM_CONTRACT_REGISTRY[keyof typeof ATOM_CONTRACT_REGISTRY]>)[entryKey]
-  const bucket = (ATOM_BUCKETS as Record<string, string>)[entryKey] ?? 'trigger'
+  // #1364 PR1：bucket 从 contract.bucket 单点读（已删除独立 ATOM_BUCKETS 表导出）。
+  // entry 缺失场景由下一行 `const { classifier } = entry` 解构隐式 throw —— 调用方契约
+  // 保证 entryKey ∈ ATOM_CONTRACT_REGISTRY，无 fallback。
+  const bucket = entry.bucket
   const category = bucketToCategory(bucket)
   const { classifier } = entry
   const isUnsupported = classifier.supportStatus !== 'supported_executable'

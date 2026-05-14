@@ -15,7 +15,7 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
-import { ATOM_BUCKETS, ATOM_CONTRACT_REGISTRY } from '../../atom-contracts/atom-contract-registry'
+import { ATOM_CONTRACT_REGISTRY } from '../../atom-contracts/atom-contract-registry'
 import { buildConversationPlannerSystemPrompt } from '../conversation-planner-system.prompt'
 
 interface UserMessageFixture {
@@ -108,7 +108,7 @@ function extractAtoms(parsed: PlannerResponse | null): AtomEntry[] {
 }
 
 function getRequiredSlots(atomKey: string): string[] {
-  if (!(atomKey in ATOM_BUCKETS)) return []
+  if (!(atomKey in ATOM_CONTRACT_REGISTRY)) return []
   const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { surface?: { paramSlots?: Record<string, { required?: boolean }> } }>)[atomKey]
   const slots = contract?.surface?.paramSlots
   if (!slots) return []
@@ -126,7 +126,7 @@ interface AtomAnalysis {
 }
 
 function analyze(atom: AtomEntry): AtomAnalysis {
-  const registered = atom.key in ATOM_BUCKETS
+  const registered = atom.key in ATOM_CONTRACT_REGISTRY
   const required = getRequiredSlots(atom.key)
   const filled = required.filter(s => atom.params[s] !== undefined && atom.params[s] !== null && atom.params[s] !== '')
   const missing = required.filter(s => !filled.includes(s))

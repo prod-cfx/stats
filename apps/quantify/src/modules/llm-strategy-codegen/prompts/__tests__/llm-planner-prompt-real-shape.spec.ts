@@ -4,7 +4,7 @@
  * 跑真实 OpenAI（gpt-5.4-nano）对 9 条用户实测 + 补充策略，断言：
  *   1) LLM 返回合法 JSON
  *   2) semanticPatch.triggers[]/actions[]/risk[]/position.constraints[] 元素满足 schema：
- *        - key ∈ ATOM_BUCKETS keys（来自 ATOM_CONTRACT_REGISTRY 单一真相源）
+ *        - key ∈ ATOM_CONTRACT_REGISTRY 注册表（contract.bucket 单一真相源；#1364 PR1 已删 ATOM_BUCKETS 二级表）
  *        - phase ∈ ['entry', 'exit', 'gate']（position.constraints 不校验 phase）
  *        - params 必须是 object（与 prompt "每条必填 key+phase+params" 契约一致）
  *   3) 至少有 1 个 atom 被识别（不能 triggers=[] 且 actions=[] 且 risk=[] 且 position.constraints=[]）
@@ -23,7 +23,7 @@
  * 完整 codegen→publication 链路验证留给 backtest/deploy 阶段的 e2e（PR2/PR3）。
  */
 
-import { ATOM_BUCKETS } from '../../atom-contracts/atom-contract-registry'
+import { getAllRegisteredAtomKeys } from '../../atom-contracts/atom-contract-registry'
 import { buildConversationPlannerSystemPrompt } from '../conversation-planner-system.prompt'
 
 interface UserMessageFixture {
@@ -37,7 +37,7 @@ interface UserMessageFixture {
   expectedPhases?: readonly ('entry' | 'exit' | 'gate')[]
 }
 
-const REGISTERED_KEYS = new Set<string>(Object.keys(ATOM_BUCKETS))
+const REGISTERED_KEYS = new Set<string>(getAllRegisteredAtomKeys())
 const PHASE_ENUM = new Set(['entry', 'exit', 'gate'])
 
 const STRATEGIES: readonly UserMessageFixture[] = [
@@ -168,7 +168,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * 校验单条 trigger / action / risk 元素是否符合升级后 prompt 契约。
  *
  * 契约（来自 conversation-planner-system.prompt.ts 注入段）：
- *   - key ∈ ATOM_BUCKETS（注册表枚举，禁止自由文本）
+ *   - key ∈ ATOM_CONTRACT_REGISTRY（注册表枚举，禁止自由文本）
  *   - phase ∈ ['entry', 'exit', 'gate']
  *   - params 必须是 object（与"每条必填 key+phase+params"一致）。
  *     `undefined` / `null` / 数组 / 原始值 均判 fail（C3 修复，与 prompt 严格一致）。
@@ -176,7 +176,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function validateTriggerLike(t: TriggerLike, label: string): { ok: boolean, reasons: string[] } {
   const reasons: string[] = []
   if (typeof t.key !== 'string') reasons.push(`${label}.key 不是 string`)
-  else if (!REGISTERED_KEYS.has(t.key)) reasons.push(`${label}.key='${t.key}' 不在 ATOM_BUCKETS 注册表`)
+  else if (!REGISTERED_KEYS.has(t.key)) reasons.push(`${label}.key='${t.key}' 不在 ATOM_CONTRACT_REGISTRY 注册表`)
   if (typeof t.phase !== 'string') reasons.push(`${label}.phase 不是 string`)
   else if (!PHASE_ENUM.has(t.phase)) reasons.push(`${label}.phase='${t.phase}' 不在 [entry,exit,gate]`)
   if (!isRecord(t.params)) reasons.push(`${label}.params 不是 object（received ${JSON.stringify(t.params)}）`)
@@ -231,7 +231,7 @@ if (!SHOULD_RUN) {
         if (typeof pc.key !== 'string') {
           allFailures.push(`position.constraints[${i}].key 不是 string`)
         } else if (!REGISTERED_KEYS.has(pc.key)) {
-          allFailures.push(`position.constraints[${i}].key='${pc.key}' 不在 ATOM_BUCKETS 注册表`)
+          allFailures.push(`position.constraints[${i}].key='${pc.key}' 不在 ATOM_CONTRACT_REGISTRY 注册表`)
         }
       })
 
