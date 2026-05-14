@@ -48,6 +48,12 @@ interface Fixture {
    * 是另两个独立缺口，挂 follow-up）。
    */
   expectExecutableScript: boolean
+  /**
+   * #1357 扩展：program.* orchestration 路径（如 adaptive_volatility_grid）
+   * 不产出 DECISION_PROGRAMS，但必须产出非空 ORCHESTRATION_PROGRAMS。
+   * 设为 true 时替换 DECISION_PROGRAMS 断言为 ORCHESTRATION_PROGRAMS 断言。
+   */
+  expectOrchestrationPrograms?: boolean
 }
 
 const FIXTURES: readonly Fixture[] = [
@@ -99,7 +105,8 @@ const FIXTURES: readonly Fixture[] = [
   {
     id: 'U3',
     description: '区间分位自适应网格',
-    expectExecutableScript: false, // follow-up: #1357 — action 走 program.* orchestration 路径
+    expectExecutableScript: true, // #1357 fixed: program.* action 提升到 orchestration gate+program 对
+    expectOrchestrationPrograms: true, // grid 路径：检查 ORCHESTRATION_PROGRAMS 而非 DECISION_PROGRAMS
     message: 'SOL 现货，30 分钟。价格在最近 24 小时区间的 0.3–0.7 分位之间运行时，启用自适应波动率网格。',
     patch: {
       contextSlots: {
@@ -256,13 +263,19 @@ describe('U1-U5 batch real-patch → codegen pipeline diagnostic (issue #1345)',
     // 与 DECISION_PROGRAMS，否则 toActionState 前缀剥离回退或 canonical pipeline
     // 又把 trigger-based atom 丢成空壳。
     // review m3：除 regex 形态检查外，抽 JSON 数组长度 ≥ 1 防"`[{}]` 空对象退化"
+    // #1357 扩展：program.* grid 路径不产出 DECISION_PROGRAMS，改查 ORCHESTRATION_PROGRAMS
     if (fx.expectExecutableScript) {
       expect(script.ok).toBe(true)
       const scriptText = script.data as string
       const exprPoolLen = extractConstArrayLength(scriptText, 'EXPR_POOL')
-      const decisionLen = extractConstArrayLength(scriptText, 'DECISION_PROGRAMS')
       expect(exprPoolLen).toBeGreaterThan(0)
-      expect(decisionLen).toBeGreaterThan(0)
+      if (fx.expectOrchestrationPrograms) {
+        const orchLen = extractConstArrayLength(scriptText, 'ORCHESTRATION_PROGRAMS')
+        expect(orchLen).toBeGreaterThan(0)
+      } else {
+        const decisionLen = extractConstArrayLength(scriptText, 'DECISION_PROGRAMS')
+        expect(decisionLen).toBeGreaterThan(0)
+      }
     } else {
       // review m7：U3/U5 已知缺口暂走 false 占位；若未来 canonical pipeline 升级把
       // program.* / phase=gate 路径接通，本断言会"意外通过"——console.log 提示翻 true。

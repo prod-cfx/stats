@@ -575,9 +575,19 @@ export class CanonicalSpecBuilderService {
       orderPrograms,
     )
     const baseRequiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
-    const orchestrationGates = this.buildOrchestrationGates(normalizedState)
+    const defaultTimeframe = this.readLockedContextSlotString(normalizedState.contextSlots.timeframe)
+    // #1357: program.* actions（如 program.adaptive_volatility_grid）从 state.actions 提升到
+    // orchestration 层；pair = 合成 gate（用 entry trigger 条件） + program（用 action params）
+    const promotedPairs = this.buildOrchestrationPairsFromProgramActions(normalizedState, defaultTimeframe)
+    const orchestrationGates = [
+      ...this.buildOrchestrationGates(normalizedState),
+      ...promotedPairs.map(p => p.gate),
+    ]
     const orchestrationPortfolioRisks = this.buildOrchestrationPortfolioRisks(normalizedState)
-    const orchestrationPrograms = this.buildOrchestrationPrograms(normalizedState)
+    const orchestrationPrograms = [
+      ...this.buildOrchestrationPrograms(normalizedState),
+      ...promotedPairs.map(p => p.program),
+    ]
     const orchestrationScopes = this.buildOrchestrationScopes(normalizedState)
     const orchestrationLegScopes = this.buildOrchestrationLegScopes(normalizedState)
     // Phase 5 S3 (#1109): 把 scope.timeframe 声明的 tf 合并到 dataRequirements
@@ -1033,6 +1043,110 @@ export class CanonicalSpecBuilderService {
     }
 
     return programs
+  }
+
+  // #1357: LLM 把 program.adaptive_volatility_grid 放到 actions[] 而非 orchestration.nodes 时，
+  //        从 state.actions 提升为 canonical gate + program 对。
+  //        gate 条件 = 所有 locked entry trigger 的 AND；
+  //        program 参数 = action.params，缺失字段补充安全默认值。
+  private buildOrchestrationPairsFromProgramActions(
+    state: SemanticState,
+    defaultTimeframe: string | null,
+  ): Array<{ gate: CanonicalOrchestrationGate; program: CanonicalOrchestrationProgram }> {
+    const isPositiveFinite = (v: unknown): v is number =>
+      typeof v === 'number' && Number.isFinite(v) && v > 0
+    const isPositiveInt = (v: unknown): v is number =>
+      isPositiveFinite(v) && Number.isInteger(v)
+
+    // program.* actions 没有 contract 体系，toActionState 始终把它们留在 'open' 状态；
+    // 此处不过滤 status，只要 key 命中即提升。
+    const programActions = state.actions.filter(
+      a => a.key === 'program.adaptive_volatility_grid',
+    )
+    if (programActions.length === 0) {
+      return []
+    }
+
+    // Build AND condition from all locked entry triggers
+    const entryTriggers = state.triggers.filter(
+      t => t.status === 'locked' && t.phase === 'entry',
+    )
+    if (entryTriggers.length === 0) {
+      return []
+    }
+
+    const triggerConditions = entryTriggers
+      .map(t => this.buildConditionFromSemanticTriggerContract(t, defaultTimeframe))
+      .filter((c): c is CanonicalConditionNode => c !== null)
+    if (triggerConditions.length === 0) {
+      return []
+    }
+
+    const gateCondition: CanonicalConditionNode =
+      triggerConditions.length === 1
+        ? triggerConditions[0]!
+        : { kind: 'AND', children: triggerConditions }
+
+    const pairs: Array<{ gate: CanonicalOrchestrationGate; program: CanonicalOrchestrationProgram }> = []
+
+    for (let i = 0; i < programActions.length; i++) {
+      const action = programActions[i]!
+      const p = action.params ?? {}
+      const gateId = `promoted-program-gate-${i + 1}`
+      const programId = action.id ?? `promoted-program-${i + 1}`
+
+      const atrPeriod = isPositiveInt(p.atrPeriod) && (p.atrPeriod as number) >= 2 && (p.atrPeriod as number) <= 200
+        ? (p.atrPeriod as number)
+        : 14
+      const atrMultiplier = isPositiveFinite(p.atrMultiplier) ? (p.atrMultiplier as number) : 1.5
+      const rangeMultiplier = isPositiveFinite(p.rangeMultiplier) ? (p.rangeMultiplier as number) : 3
+      const atrDriftPct = isPositiveFinite(p.atrDriftPct) && (p.atrDriftPct as number) <= 100
+        ? (p.atrDriftPct as number)
+        : 25
+      const rebuildCooldownSec = isPositiveInt(p.rebuildCooldownSec) && (p.rebuildCooldownSec as number) >= 300
+        ? (p.rebuildCooldownSec as number)
+        : 600
+      const minStepPct = isPositiveFinite(p.minStepPct) ? (p.minStepPct as number) : 0.1
+      const rawMaxStepPct = isPositiveFinite(p.maxStepPct) ? (p.maxStepPct as number) : 1
+      const maxStepPct = rawMaxStepPct >= minStepPct ? rawMaxStepPct : minStepPct
+      const levelCount = isPositiveInt(p.levelCount) && (p.levelCount as number) >= 2 && (p.levelCount as number) <= 100
+        ? (p.levelCount as number)
+        : 6
+      const onDeactivate: 'cancel' | 'keep' | 'close' =
+        p.onDeactivate === 'cancel' || p.onDeactivate === 'keep' || p.onDeactivate === 'close'
+          ? p.onDeactivate
+          : 'close'
+
+      const gate: CanonicalOrchestrationGate = {
+        id: gateId,
+        target: { phase: 'entry', sideScope: 'long' },
+        activeWhen: gateCondition,
+        effectWhenFalse: 'block_new_entries',
+      }
+
+      const program: CanonicalOrchestrationProgram = {
+        id: programId,
+        programKind: 'adaptive_volatility_grid',
+        activeWhenRef: gateId,
+        onDeactivate,
+        rebuildPolicy: 'atr_window',
+        adaptiveGridParams: {
+          atrPeriod,
+          atrMultiplier,
+          rangeMultiplier,
+          atrDriftPct,
+          rebuildCooldownSec,
+          minStepPct,
+          maxStepPct,
+          levelCount,
+        },
+        sizing: { mode: 'fixed_pct', value: 0.1 },
+      }
+
+      pairs.push({ gate, program })
+    }
+
+    return pairs
   }
 
   private buildFixedGridGatedProgram(node: SemanticOrchestrationNode): CanonicalOrchestrationProgram | null {
