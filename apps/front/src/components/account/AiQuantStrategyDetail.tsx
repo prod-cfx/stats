@@ -5,7 +5,7 @@ import type {
   StrategyEquityPoint,
   AiQuantStrategyViewState,
 } from './ai-quant-strategy-store'
-import { Play } from 'lucide-react'
+import { Check, Copy, Play } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -30,7 +30,7 @@ const EQUITY_CHART_PADDING_Y = 16
 const TIMELINE_PREVIEW_LIMIT = 3
 type RuntimeAction = 'run' | 'stop' | 'liquidate_and_stop'
 type DetailTranslation = (key: string, options?: Record<string, unknown>) => string
-type DetailInfoTab = 'rules' | 'config' | 'backtest' | 'timeline' | 'diagnostics'
+type DetailInfoTab = 'trades' | 'rules' | 'config' | 'backtest' | 'timeline' | 'diagnostics'
 
 function resolveEquityY(value: number, min: number, max: number) {
   if (max === min) return EQUITY_CHART_HEIGHT / 2
@@ -110,17 +110,6 @@ function formatCompactId(value: string | null | undefined) {
 function formatPercentValue(value: number | null | undefined) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '--'
   return `${Number(value.toFixed(2)).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`
-}
-
-function resolveLeverageProgress(
-  current: number | null | undefined,
-  range: AiQuantStrategyRecord['deploymentLeverageRange'],
-) {
-  if (typeof current !== 'number' || !Number.isFinite(current) || !range) return 0
-  const min = range.min
-  const max = range.max
-  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return 0
-  return Math.min(100, Math.max(0, ((current - min) / (max - min)) * 100))
 }
 
 function pnlToneClass(value: number | null | undefined) {
@@ -614,7 +603,8 @@ export function AiQuantStrategyDetail({
   const [pendingRuntimeAction, setPendingRuntimeAction] = useState<RuntimeAction | null>(null)
   const [stopDialogOpen, setStopDialogOpen] = useState(false)
   const [showFullTimeline, setShowFullTimeline] = useState(false)
-  const [activeInfoTab, setActiveInfoTab] = useState<DetailInfoTab>('rules')
+  const [activeInfoTab, setActiveInfoTab] = useState<DetailInfoTab>('trades')
+  const [copiedField, setCopiedField] = useState<'strategy' | 'snapshot' | null>(null)
 
   useEffect(() => {
     setStrategy(initialStrategy)
@@ -726,6 +716,16 @@ export function AiQuantStrategyDetail({
   const semanticNextAction = semanticSummary
     ? formatRuntimeSemanticNextAction(semanticSummary, strategy.status, t)
     : null
+
+  const copyIdentifier = async (
+    field: 'strategy' | 'snapshot',
+    value: string | null | undefined,
+  ) => {
+    if (!value || !navigator.clipboard?.writeText) return
+    await navigator.clipboard.writeText(value)
+    setCopiedField(field)
+    window.setTimeout(() => setCopiedField(current => (current === field ? null : current)), 1500)
+  }
   const timelineItems = showFullTimeline
     ? strategy.timeline
     : strategy.timeline.slice(0, TIMELINE_PREVIEW_LIMIT)
@@ -734,15 +734,21 @@ export function AiQuantStrategyDetail({
     strategy.deploymentExecutionCurrent?.leverage ??
     strategy.deploymentExecutionBaseline?.leverage ??
     null
-  const leverageProgress = resolveLeverageProgress(
-    currentLeverage,
-    strategy.deploymentLeverageRange,
-  )
   const latestOrderPreview = strategy.latestOrders?.[0] ?? null
   const activeInfoTabClass =
     'border-primary bg-primary/10 text-primary dark:border-primary dark:bg-primary/20 dark:text-white'
   const idleInfoTabClass =
     'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]'
+  const detailInfoTabs: Array<[DetailInfoTab, string]> = [
+    ['trades', t('aiQuant.detail.latestTrades')],
+    ['rules', t('aiQuant.detail.tabs.rules')],
+    ['config', t('aiQuant.detail.tabs.config')],
+    ['backtest', t('aiQuant.detail.tabs.backtest')],
+    ['timeline', t('aiQuant.detail.tabs.timeline')],
+    ['diagnostics', t('aiQuant.detail.tabs.diagnostics')],
+  ]
+  const activeInfoTabLabel =
+    detailInfoTabs.find(([tab]) => tab === activeInfoTab)?.[1] ?? t('aiQuant.detail.latestTrades')
 
   const handleRuntimeAction = async (action: RuntimeAction) => {
     if (!session?.userId || pendingRuntimeAction || !strategy) return
@@ -809,81 +815,88 @@ export function AiQuantStrategyDetail({
           {t('aiQuant.detail.backToList')}
         </Link>
       </div>
-      <section className="relative overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]">
-        <div
-          className="pointer-events-none absolute -top-24 right-[-88px] h-64 w-64 rounded-full bg-emerald-500/10"
-          aria-hidden="true"
-        />
-        <div className="flex flex-col gap-5 border-b border-[color:var(--cf-border)] p-5 lg:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${STATUS_CLASS[strategy.status]}`}
-                >
-                  <span className="h-2 w-2 rounded-full bg-current" aria-hidden="true" />
-                  {semanticHeadline ?? t(`aiQuant.status.${strategy.status}`)}
-                </span>
-                <span className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2.5 py-1 text-xs font-semibold text-[color:var(--cf-muted)]">
-                  {strategy.exchange.toUpperCase()}
-                </span>
-                <span className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2.5 py-1 text-xs font-semibold text-[color:var(--cf-muted)]">
-                  {strategy.symbol}
-                </span>
-                <span className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2.5 py-1 text-xs font-semibold text-[color:var(--cf-muted)]">
-                  {strategy.timeframe}
-                </span>
-              </div>
-              <h1 className="mt-4 text-3xl font-bold tracking-normal text-[color:var(--cf-text-strong)] md:text-4xl">
-                {strategy.name}
-              </h1>
-              <p className="mt-2 text-sm font-medium text-[color:var(--cf-muted)]">
-                {strategy.exchange.toUpperCase()} / {strategy.symbol} / {strategy.timeframe}
-              </p>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-[color:var(--cf-muted)] md:text-base">
-                {semanticExplanation ??
-                  `${strategy.exchange.toUpperCase()} / ${strategy.symbol} / ${strategy.timeframe}`}
-              </p>
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] leading-5 text-[color:var(--cf-muted)]">
-                <span>
-                  {t('aiQuant.detail.strategyInstance')}
-                  <span className="ml-1 font-mono text-[color:var(--cf-text)]" title={strategy.id}>
-                    {formatCompactId(strategy.id)}
-                  </span>
-                </span>
-                <span>
-                  {t('aiQuant.detail.publishedSnapshot')}
-                  <span
-                    className="ml-1 font-mono text-[color:var(--cf-text)]"
-                    title={strategy.publishedSnapshotId ?? undefined}
-                  >
-                    {formatCompactId(strategy.publishedSnapshotId)}
-                  </span>
-                </span>
-              </div>
-            </div>
-            <aside
-              className="min-w-0 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 lg:w-[280px]"
-              aria-label={t('aiQuant.detail.nextExpectedAction')}
-            >
-              <p className="text-[11px] font-bold tracking-normal text-[color:var(--cf-muted)] uppercase">
-                {t('aiQuant.detail.nextExpectedAction')}
-              </p>
-              <strong className="mt-2 block text-lg leading-6 text-emerald-600 dark:text-emerald-400">
-                {semanticNextAction ?? t('aiQuant.detail.evidenceSource')}
-              </strong>
-              <p className="mt-2 text-xs leading-5 text-[color:var(--cf-muted)]">
-                {strategy.status === 'running'
-                  ? t('aiQuant.detail.runningDescription')
-                  : t('aiQuant.detail.stoppedDescription')}
-              </p>
-            </aside>
-          </div>
-        </div>
-      </section>
-
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <section className="min-w-0 space-y-4">
+          <section className="relative overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]">
+            <div
+              className="pointer-events-none absolute -top-24 right-[-88px] h-64 w-64 rounded-full bg-emerald-500/10"
+              aria-hidden="true"
+            />
+            <div className="flex flex-col gap-5 border-b border-[color:var(--cf-border)] p-5 lg:p-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${STATUS_CLASS[strategy.status]}`}
+                    >
+                      <span className="h-2 w-2 rounded-full bg-current" aria-hidden="true" />
+                      {semanticHeadline ?? t(`aiQuant.status.${strategy.status}`)}
+                    </span>
+                  </div>
+                  <h1 className="mt-4 text-3xl font-bold tracking-normal text-[color:var(--cf-text-strong)] md:text-4xl">
+                    {strategy.name}
+                  </h1>
+                  <p className="mt-2 text-sm font-medium text-[color:var(--cf-muted)]">
+                    {strategy.exchange.toUpperCase()} / {strategy.symbol} / {strategy.timeframe}
+                  </p>
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-[color:var(--cf-muted)] md:text-base">
+                    {semanticExplanation ??
+                      `${strategy.exchange.toUpperCase()} / ${strategy.symbol} / ${strategy.timeframe}`}
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] leading-5 text-[color:var(--cf-muted)]">
+                    <span className="inline-flex items-center gap-1">
+                      {t('aiQuant.detail.strategyInstance')}
+                      <span
+                        className="ml-1 font-mono text-[color:var(--cf-text)]"
+                        title={strategy.id}
+                      >
+                        {formatCompactId(strategy.id)}
+                      </span>
+                      <button
+                        type="button"
+                        className="inline-flex h-5 w-5 items-center justify-center rounded text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
+                        aria-label="复制策略实例 ID"
+                        title="复制策略实例 ID"
+                        onClick={() => void copyIdentifier('strategy', strategy.id)}
+                      >
+                        {copiedField === 'strategy' ? (
+                          <Check className="h-3 w-3" aria-hidden="true" />
+                        ) : (
+                          <Copy className="h-3 w-3" aria-hidden="true" />
+                        )}
+                      </button>
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      {t('aiQuant.detail.publishedSnapshot')}
+                      <span
+                        className="ml-1 font-mono text-[color:var(--cf-text)]"
+                        title={strategy.publishedSnapshotId ?? undefined}
+                      >
+                        {formatCompactId(strategy.publishedSnapshotId)}
+                      </span>
+                      <button
+                        type="button"
+                        className="inline-flex h-5 w-5 items-center justify-center rounded text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+                        aria-label="复制发布快照 ID"
+                        title="复制发布快照 ID"
+                        disabled={!strategy.publishedSnapshotId}
+                        onClick={() =>
+                          void copyIdentifier('snapshot', strategy.publishedSnapshotId)
+                        }
+                      >
+                        {copiedField === 'snapshot' ? (
+                          <Check className="h-3 w-3" aria-hidden="true" />
+                        ) : (
+                          <Copy className="h-3 w-3" aria-hidden="true" />
+                        )}
+                      </button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section className="grid gap-3 md:grid-cols-4">
             <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4">
               <p className="text-xs text-[color:var(--cf-muted)]">{t('aiQuant.detail.totalPnl')}</p>
@@ -1205,160 +1218,103 @@ export function AiQuantStrategyDetail({
             </div>
           </section>
 
-          <section className="grid gap-4">
-            <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-              <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
-                {isSpotMarket
-                  ? t('aiQuant.detail.holdingOverview')
-                  : t('aiQuant.detail.positionOverview')}
-              </h2>
-              <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
-                {t('aiQuant.detail.positionOverviewSource')}
-              </p>
-              <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                <p className="text-[color:var(--cf-muted)]">
-                  {isSpotMarket
-                    ? t('aiQuant.detail.currentHoldings')
-                    : t('aiQuant.detail.currentPositionCount')}
-                </p>
-                <p className="text-right text-[color:var(--cf-text-strong)]">
-                  {isSpotMarket
-                    ? formatSpotHolding(strategy, t)
-                    : (strategy.positionOverview?.openPositionsCount ?? '--')}
-                </p>
-                <p className="text-[color:var(--cf-muted)]">
-                  {isSpotMarket
-                    ? t('aiQuant.detail.completedSpotCycles')
-                    : t('aiQuant.detail.closedPositions')}
-                </p>
-                <p className="text-right text-[color:var(--cf-text-strong)]">
-                  {strategy.positionOverview?.closedPositionsCount ?? '--'}
-                </p>
-                <p className="text-[color:var(--cf-muted)]">
-                  {t('aiQuant.detail.totalRealizedPnl')}
-                </p>
-                <p className="text-right text-[color:var(--cf-text-strong)]">
-                  {formatOptionalAmount(strategy.positionOverview?.totalRealizedPnl)} {baseCurrency}
-                </p>
-                <p className="text-[color:var(--cf-muted)]">
-                  {isSpotMarket
-                    ? t('aiQuant.detail.currentFloatingPnl')
-                    : t('aiQuant.detail.currentUnrealizedPnl')}
-                </p>
-                <p className="text-right text-[color:var(--cf-text-strong)]">
-                  {formatOptionalAmount(strategy.positionOverview?.totalUnrealizedPnl)}{' '}
-                  {baseCurrency}
-                </p>
-                <p className="text-[color:var(--cf-muted)]">{t('aiQuant.detail.openOrders')}</p>
-                <p className="text-right text-[color:var(--cf-text-strong)]">
-                  {hasUnknownOpenOrders ? t('aiQuant.detail.unknown') : openOrdersCount}
-                </p>
-              </div>
-            </article>
-          </section>
-
           <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-            <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
-              {t('aiQuant.detail.latestTrades')}
-            </h2>
-            <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
-              {t('aiQuant.detail.latestTradesSource')}
-            </p>
-            {strategy.latestOrders && strategy.latestOrders.length > 0 ? (
-              <div className="mt-3 overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)]">
-                      <th className="py-2 pr-3">{t('aiQuant.detail.time')}</th>
-                      <th className="py-2 pr-3">{t('aiQuant.detail.side')}</th>
-                      <th className="py-2 pr-3">{t('aiQuant.detail.semanticAction')}</th>
-                      <th className="py-2 pr-3">{t('aiQuant.symbol')}</th>
-                      <th className="py-2 pr-3">{t('aiQuant.detail.price')}</th>
-                      <th className="py-2 pr-3">{t('aiQuant.detail.quantityNotional')}</th>
-                      <th className="py-2 pr-3">{t('aiQuant.detail.fee')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {strategy.latestOrders.map(order => {
-                      const quantityDisplay = formatLatestOrderQuantity(
-                        order,
-                        strategy.symbol,
-                        baseCurrency,
-                        t,
-                      )
-                      return (
-                        <tr
-                          key={`${order.executedAt}-${order.symbol}-${order.side}-${order.orderId ?? ''}`}
-                          className="border-b border-[color:var(--cf-border)]/60"
-                        >
-                          <td className="py-2 pr-3 text-[color:var(--cf-text)]">
-                            {order.executedAt}
-                          </td>
-                          <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.side}</td>
-                          <td className="py-2 pr-3 text-[color:var(--cf-text)]">
-                            <div>{formatOrderSemanticAction(order, t)}</div>
-                            {order.reconcileRequired ? (
-                              <div className="mt-0.5 text-xs text-amber-300">
-                                {t('aiQuant.detail.localReconcilePending')}
-                              </div>
-                            ) : null}
-                          </td>
-                          <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.symbol}</td>
-                          <td className="py-2 pr-3 text-[color:var(--cf-text)]">
-                            {formatOptionalPrice(order.price)}
-                          </td>
-                          <td className="py-2 pr-3 text-[color:var(--cf-text)]">
-                            <div>{quantityDisplay.quantityLabel}</div>
-                            {quantityDisplay.notionalLabel ? (
-                              <div className="mt-0.5 text-xs text-[color:var(--cf-muted)]">
-                                {quantityDisplay.notionalLabel}
-                              </div>
-                            ) : null}
-                          </td>
-                          <td className="py-2 pr-3 text-[color:var(--cf-text)]">
-                            {formatOrderFee(order, t)}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+            <div className="flex flex-col gap-3">
+              <div
+                className="flex gap-2 overflow-x-auto pb-1"
+                role="tablist"
+                aria-label={activeInfoTabLabel}
+              >
+                {detailInfoTabs.map(([tab, label]) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeInfoTab === tab}
+                    onClick={() => setActiveInfoTab(tab)}
+                    className={`h-8 min-w-[5.5rem] rounded-lg border px-3 text-xs font-semibold whitespace-nowrap transition ${activeInfoTab === tab ? activeInfoTabClass : idleInfoTabClass}`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
-            ) : (
-              <p className="mt-3 text-sm text-[color:var(--cf-muted)]">
-                {t('aiQuant.detail.noTrades')}
-              </p>
-            )}
-          </section>
-
-          <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-2">
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-              {(
-                [
-                  ['rules', t('aiQuant.detail.tabs.rules')],
-                  ['config', t('aiQuant.detail.tabs.config')],
-                  ['backtest', t('aiQuant.detail.tabs.backtest')],
-                  ['timeline', t('aiQuant.detail.tabs.timeline')],
-                  ['diagnostics', t('aiQuant.detail.tabs.diagnostics')],
-                ] as Array<[DetailInfoTab, string]>
-              ).map(([tab, label]) => (
-                <button
-                  key={tab}
-                  type="button"
-                  aria-pressed={activeInfoTab === tab}
-                  onClick={() => setActiveInfoTab(tab)}
-                  className={`h-10 rounded-xl border px-3 text-sm font-semibold transition ${activeInfoTab === tab ? activeInfoTabClass : idleInfoTabClass}`}
-                >
-                  {label}
-                </button>
-              ))}
+              {activeInfoTab === 'trades' && (
+                <p className="text-xs text-[color:var(--cf-muted)]">
+                  {t('aiQuant.detail.latestTradesSource')}
+                </p>
+              )}
             </div>
-          </section>
-
-          <section className="grid gap-4">
+            {activeInfoTab === 'trades' &&
+              (strategy.latestOrders && strategy.latestOrders.length > 0 ? (
+                <div className="mt-3 overflow-x-auto">
+                  <table className="min-w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)]">
+                        <th className="py-2 pr-3">{t('aiQuant.detail.time')}</th>
+                        <th className="py-2 pr-3">{t('aiQuant.detail.side')}</th>
+                        <th className="py-2 pr-3">{t('aiQuant.detail.semanticAction')}</th>
+                        <th className="py-2 pr-3">{t('aiQuant.symbol')}</th>
+                        <th className="py-2 pr-3">{t('aiQuant.detail.price')}</th>
+                        <th className="py-2 pr-3">{t('aiQuant.detail.quantityNotional')}</th>
+                        <th className="py-2 pr-3">{t('aiQuant.detail.fee')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {strategy.latestOrders.map(order => {
+                        const quantityDisplay = formatLatestOrderQuantity(
+                          order,
+                          strategy.symbol,
+                          baseCurrency,
+                          t,
+                        )
+                        return (
+                          <tr
+                            key={`${order.executedAt}-${order.symbol}-${order.side}-${order.orderId ?? ''}`}
+                            className="border-b border-[color:var(--cf-border)]/60"
+                          >
+                            <td className="py-2 pr-3 text-[color:var(--cf-text)]">
+                              {order.executedAt}
+                            </td>
+                            <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.side}</td>
+                            <td className="py-2 pr-3 text-[color:var(--cf-text)]">
+                              <div>{formatOrderSemanticAction(order, t)}</div>
+                              {order.reconcileRequired ? (
+                                <div className="mt-0.5 text-xs text-amber-300">
+                                  {t('aiQuant.detail.localReconcilePending')}
+                                </div>
+                              ) : null}
+                            </td>
+                            <td className="py-2 pr-3 text-[color:var(--cf-text)]">
+                              {order.symbol}
+                            </td>
+                            <td className="py-2 pr-3 text-[color:var(--cf-text)]">
+                              {formatOptionalPrice(order.price)}
+                            </td>
+                            <td className="py-2 pr-3 text-[color:var(--cf-text)]">
+                              <div>{quantityDisplay.quantityLabel}</div>
+                              {quantityDisplay.notionalLabel ? (
+                                <div className="mt-0.5 text-xs text-[color:var(--cf-muted)]">
+                                  {quantityDisplay.notionalLabel}
+                                </div>
+                              ) : null}
+                            </td>
+                            <td className="py-2 pr-3 text-[color:var(--cf-text)]">
+                              {formatOrderFee(order, t)}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-[color:var(--cf-muted)]">
+                  {t('aiQuant.detail.noTrades')}
+                </p>
+              ))}
             {activeInfoTab === 'rules' &&
               (strategy.ruleSummary?.rules?.length ? (
-                <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+                <div className="mt-5">
                   <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
                     {t('aiQuant.detail.publishedSnapshotRuleSummary')}
                   </h2>
@@ -1375,20 +1331,20 @@ export function AiQuantStrategyDetail({
                       </article>
                     ))}
                   </div>
-                </article>
+                </div>
               ) : (
-                <article className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5">
+                <div className="mt-5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
                   <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
                     {t('aiQuant.legacyUnsupportedTitle')}
                   </h2>
                   <p className="mt-3 text-sm text-amber-300">
                     {t('aiQuant.legacyUnsupportedMessage')}
                   </p>
-                </article>
+                </div>
               ))}
 
             {activeInfoTab === 'config' && (
-              <section className="grid gap-4 md:grid-cols-2">
+              <section className="mt-5 grid gap-4 md:grid-cols-2">
                 {strategy.paramSchema ? (
                   <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
                     <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
@@ -1493,7 +1449,7 @@ export function AiQuantStrategyDetail({
             )}
 
             {activeInfoTab === 'backtest' && (
-              <section className="grid gap-4 md:grid-cols-2">
+              <section className="mt-5 grid gap-4 md:grid-cols-2">
                 <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
                   <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
                     {t('aiQuant.detail.backtestBaseline')}
@@ -1564,7 +1520,7 @@ export function AiQuantStrategyDetail({
             )}
 
             {activeInfoTab === 'timeline' && (
-              <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+              <article className="mt-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
@@ -1611,7 +1567,7 @@ export function AiQuantStrategyDetail({
             )}
 
             {activeInfoTab === 'diagnostics' && (
-              <section className="grid gap-4">
+              <section className="mt-5 grid gap-4">
                 {semanticSummary && (
                   <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
                     <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
@@ -1953,6 +1909,16 @@ export function AiQuantStrategyDetail({
                     : (strategy.positionOverview?.openPositionsCount ?? '--')}
                 </strong>
               </p>
+              {showsDeploymentLeverage && (
+                <p className="flex justify-between gap-3 border-b border-[color:var(--cf-border)] pb-3">
+                  <span className="font-medium text-[color:var(--cf-muted)]">
+                    {t('aiQuant.detail.currentExecutionLeverage')}
+                  </span>
+                  <strong className="text-right text-[color:var(--cf-text-strong)]">
+                    {formatExecutionValue(currentLeverage, 'x')}
+                  </strong>
+                </p>
+              )}
               <p className="flex justify-between gap-3">
                 <span className="text-[color:var(--cf-muted)]">
                   {t('aiQuant.detail.todayPnlLabel')}
@@ -1967,148 +1933,52 @@ export function AiQuantStrategyDetail({
                 </strong>
               </p>
             </div>
-            {showsDeploymentLeverage && (
-              <div className="mt-5 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-[color:var(--cf-text-strong)]">
-                    {t('aiQuant.detail.currentExecutionLeverage')}
-                  </h3>
-                  <span className="rounded-full border border-[color:var(--cf-border)] px-2.5 py-1 text-xs font-semibold text-[color:var(--cf-text-strong)]">
-                    {formatExecutionValue(currentLeverage, 'x')}
-                  </span>
-                </div>
-                <p className="mt-2 text-xs text-[color:var(--cf-muted)]">
-                  {strategy.deploymentLeverageRange
-                    ? `${t('aiQuant.detail.allowedLeverageRange')} ${strategy.deploymentLeverageRange.min}x-${strategy.deploymentLeverageRange.max}x`
-                    : t('aiQuant.detail.allowedLeverageRange')}
-                </p>
-                <div className="relative mt-4 h-12">
-                  <div className="absolute inset-x-0 top-4 h-2 rounded-full bg-[color:var(--cf-surface-2)]" />
-                  <div
-                    className="to-primary absolute top-4 left-0 h-2 rounded-full bg-gradient-to-r from-emerald-500 via-cyan-500"
-                    style={{ width: `${leverageProgress}%` }}
-                  />
-                  <div
-                    className="bg-primary shadow-primary/25 absolute top-2 h-6 w-6 -translate-x-1/2 rounded-full border-[3px] border-[color:var(--cf-surface)] shadow-lg"
-                    style={{ left: `${leverageProgress}%` }}
-                  />
-                  {strategy.deploymentLeverageRange && (
-                    <>
-                      <span className="absolute bottom-0 left-0 text-[11px] font-semibold text-[color:var(--cf-muted)]">
-                        {strategy.deploymentLeverageRange.min}x
-                      </span>
-                      <span className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[11px] font-semibold text-[color:var(--cf-muted)]">
-                        {Math.round(
-                          (strategy.deploymentLeverageRange.min +
-                            strategy.deploymentLeverageRange.max) /
-                            2,
-                        )}
-                        x
-                      </span>
-                      <span className="absolute right-0 bottom-0 text-[11px] font-semibold text-[color:var(--cf-muted)]">
-                        {strategy.deploymentLeverageRange.max}x
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-          </article>
-
-          <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
-                  {t('aiQuant.detail.strategyService')}
-                </h2>
-                <p className="mt-1 text-sm leading-6 text-[color:var(--cf-muted)]">
-                  {t('aiQuant.detail.evidenceSource')}
-                </p>
-              </div>
-              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                READY
-              </span>
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
-                <p className="text-xs text-[color:var(--cf-muted)]">
-                  {t('aiQuant.detail.strategyService')}
-                </p>
-                <p className="mt-1 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                  {strategy.status === 'running'
-                    ? t('aiQuant.detail.runtimeOnline')
-                    : t('aiQuant.detail.runtimeOffline')}
-                </p>
-              </div>
-              <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
-                <p className="text-xs text-[color:var(--cf-muted)]">
-                  {t('aiQuant.detail.maxDrawdown')}
-                </p>
-                <p className="mt-1 text-sm font-semibold text-[color:var(--cf-text-strong)]">
-                  {formatPercentValue(strategy.metrics.maxDrawdownPct)}
-                </p>
-              </div>
-            </div>
           </article>
 
           <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
             <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
-              {t('aiQuant.detail.backtestBaseline')}
+              {isSpotMarket
+                ? t('aiQuant.detail.holdingOverview')
+                : t('aiQuant.detail.positionOverview')}
             </h2>
-            <p className="mt-1 text-sm leading-6 text-[color:var(--cf-muted)]">
-              {t('aiQuant.detail.backtestBaseline')} /{' '}
-              {formatMarketTypeLabel(strategy.marketType, t)}
+            <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+              {t('aiQuant.detail.positionOverviewSource')}
             </p>
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
-                <p className="text-xs text-[color:var(--cf-muted)]">
-                  {t('aiQuant.detail.returnPct')}
-                </p>
-                <p
-                  className={`mt-1 text-sm font-bold tabular-nums ${pnlToneClass(strategy.metrics.returnPct)}`}
-                >
-                  {formatPercentValue(strategy.metrics.returnPct)}
-                </p>
-              </div>
-              <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
-                <p className="text-xs text-[color:var(--cf-muted)]">
-                  {t('aiQuant.detail.maxDrawdown')}
-                </p>
-                <p className="mt-1 text-sm font-bold text-[color:var(--cf-text-strong)] tabular-nums">
-                  {formatPercentValue(strategy.metrics.maxDrawdownPct)}
-                </p>
-              </div>
-              <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
-                <p className="text-xs text-[color:var(--cf-muted)]">
-                  {t('aiQuant.detail.winRate')}
-                </p>
-                <p className="mt-1 text-sm font-bold text-[color:var(--cf-text-strong)] tabular-nums">
-                  {formatPercentValue(strategy.metrics.winRatePct)}
-                </p>
-              </div>
-            </div>
-            <div className="mt-4 space-y-3 text-sm">
-              <p className="flex justify-between gap-3 border-b border-[color:var(--cf-border)] pb-3">
-                <span className="text-[color:var(--cf-muted)]">
-                  {t('aiQuant.detail.initialCash')}
-                </span>
-                <strong className="text-right text-[color:var(--cf-text-strong)]">
-                  {formatExecutionValue(
-                    strategy.snapshotBacktestConfigDefaults?.initialCash,
-                    ' USDT',
-                  )}
-                </strong>
+            <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+              <p className="text-[color:var(--cf-muted)]">
+                {isSpotMarket
+                  ? t('aiQuant.detail.currentHoldings')
+                  : t('aiQuant.detail.currentPositionCount')}
               </p>
-              {!isSpotMarket && (
-                <p className="flex justify-between gap-3">
-                  <span className="text-[color:var(--cf-muted)]">
-                    {t('aiQuant.detail.backtestLeverage')}
-                  </span>
-                  <strong className="text-right text-[color:var(--cf-text-strong)]">
-                    {formatExecutionValue(strategy.snapshotBacktestConfigDefaults?.leverage, 'x')}
-                  </strong>
-                </p>
-              )}
+              <p className="text-right text-[color:var(--cf-text-strong)]">
+                {isSpotMarket
+                  ? formatSpotHolding(strategy, t)
+                  : (strategy.positionOverview?.openPositionsCount ?? '--')}
+              </p>
+              <p className="text-[color:var(--cf-muted)]">
+                {isSpotMarket
+                  ? t('aiQuant.detail.completedSpotCycles')
+                  : t('aiQuant.detail.closedPositions')}
+              </p>
+              <p className="text-right text-[color:var(--cf-text-strong)]">
+                {strategy.positionOverview?.closedPositionsCount ?? '--'}
+              </p>
+              <p className="text-[color:var(--cf-muted)]">{t('aiQuant.detail.totalRealizedPnl')}</p>
+              <p className="text-right text-[color:var(--cf-text-strong)]">
+                {formatOptionalAmount(strategy.positionOverview?.totalRealizedPnl)} {baseCurrency}
+              </p>
+              <p className="text-[color:var(--cf-muted)]">
+                {isSpotMarket
+                  ? t('aiQuant.detail.currentFloatingPnl')
+                  : t('aiQuant.detail.currentUnrealizedPnl')}
+              </p>
+              <p className="text-right text-[color:var(--cf-text-strong)]">
+                {formatOptionalAmount(strategy.positionOverview?.totalUnrealizedPnl)} {baseCurrency}
+              </p>
+              <p className="text-[color:var(--cf-muted)]">{t('aiQuant.detail.openOrders')}</p>
+              <p className="text-right text-[color:var(--cf-text-strong)]">
+                {hasUnknownOpenOrders ? t('aiQuant.detail.unknown') : openOrdersCount}
+              </p>
             </div>
           </article>
         </aside>

@@ -42,6 +42,8 @@ jest.mock('@/hooks/use-auth', () => ({
 jest.mock(
   'lucide-react',
   () => ({
+    Check: () => <svg data-testid="check-icon" />,
+    Copy: () => <svg data-testid="copy-icon" />,
     Play: () => <svg data-testid="play-icon" />,
   }),
   { virtual: true },
