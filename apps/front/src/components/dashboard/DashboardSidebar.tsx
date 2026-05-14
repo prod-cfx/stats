@@ -57,10 +57,8 @@ export const DashboardSidebar = ({
     return raw
   }
 
-  const [myDashboards, setMyDashboards] = useState<DashboardDoc[]>(() => getMyDashboards())
-  const [savedDashboards, setSavedDashboards] = useState<DashboardDoc[]>(() =>
-    getSavedDashboards(),
-  )
+  const [myDashboards, setMyDashboards] = useState<DashboardDoc[]>([])
+  const [savedDashboards, setSavedDashboards] = useState<DashboardDoc[]>([])
   const [showMyDashboards, setShowMyDashboards] = useState(true)
   const [showSavedDashboards, setShowSavedDashboards] = useState(false)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)

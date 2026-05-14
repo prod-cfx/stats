@@ -31,9 +31,7 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
   const params = useParams()
   const lng = (params?.lng as string) || 'zh'
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [doc, setDoc] = useState<DashboardDoc | null>(() =>
-    dashboardId === DEFAULT_DASHBOARD_ID ? ensureDashboard(DEFAULT_DASHBOARD_ID) : getDashboard(dashboardId),
-  )
+  const [doc, setDoc] = useState<DashboardDoc | null>(null)
 
   useEffect(() => {
     const refresh = () => {

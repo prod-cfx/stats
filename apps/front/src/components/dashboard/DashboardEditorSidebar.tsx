@@ -33,13 +33,9 @@ export const DashboardEditorSidebar = ({
   const params = useParams()
   const lng = (params?.lng as string) || 'zh'
 
-  const [myDashboards, setMyDashboards] = useState<DashboardDoc[]>(() => getMyDashboards())
-  const [savedDashboards, setSavedDashboards] = useState<DashboardDoc[]>(() =>
-    getSavedDashboards(),
-  )
-  const [doc, setDoc] = useState<DashboardDoc | null>(() =>
-    dashboardId === 'draft' ? ensureDashboard('draft') : getDashboard(dashboardId),
-  )
+  const [myDashboards, setMyDashboards] = useState<DashboardDoc[]>([])
+  const [savedDashboards, setSavedDashboards] = useState<DashboardDoc[]>([])
+  const [doc, setDoc] = useState<DashboardDoc | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [publishStatus, setPublishStatus] = useState<'idle' | 'publishing' | 'success'>('idle')
   const [deleteStatus, setDeleteStatus] = useState<'idle' | 'deleting'>('idle')

@@ -16,9 +16,7 @@ export function DashboardViewClient() {
   const lng = (params?.lng as string) || 'zh'
   const searchParams = useSearchParams()
   const dashboardId = searchParams?.get('id') || ''
-  const [dashboard, setDashboard] = useState<DashboardDoc | null>(() =>
-    dashboardId ? getDashboard(dashboardId) : null,
-  )
+  const [dashboard, setDashboard] = useState<DashboardDoc | null>(null)
 
   useEffect(() => {
     const refresh = () => {
