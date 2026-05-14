@@ -1125,8 +1125,8 @@ describe('AiQuantStrategyDetail', () => {
     const tradesTable = container.querySelector('[data-testid="strategy-detail-latest-trades-table"]')
     const equityPanel = container.querySelector('[data-testid="strategy-detail-equity-chart-panel"]')
 
-    expect(header?.className).toContain('flex-col')
-    expect(header?.className).toContain('sm:flex-row')
+    expect(header?.className).toContain('overflow-hidden')
+    expect(title?.className).toContain('break-words')
     expect(metrics?.className).toContain('grid-cols-1')
     expect(metrics?.className).toContain('sm:grid-cols-2')
     expect(tradesTable?.className).toContain('min-w-[760px]')
