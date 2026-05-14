@@ -61,7 +61,7 @@ export function ConfirmDialog({
       {/* Dialog */}
       <div className="pointer-events-none fixed inset-0 z-[9999] flex items-center justify-center p-4">
         <div
-          className="animate-in zoom-in-95 fade-in pointer-events-auto w-full max-w-md rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 shadow-2xl duration-200"
+          className="animate-in zoom-in-95 fade-in pointer-events-auto max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-md overflow-y-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 shadow-2xl duration-200"
           onClick={e => e.stopPropagation()}
         >
           {/* Icon */}
@@ -78,18 +78,18 @@ export function ConfirmDialog({
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={onCancel}
-              className="flex-1 rounded-lg bg-[color:var(--cf-surface-2)] px-4 py-2.5 text-sm font-medium text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)]"
+              className="min-h-10 w-full rounded-lg bg-[color:var(--cf-surface-2)] px-4 py-2.5 text-sm font-medium text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)] sm:w-auto"
             >
               {cancelText}
             </button>
             <button
               type="button"
               onClick={onConfirm}
-              className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg transition-all active:scale-95 ${confirmButtonClass}`}
+              className={`min-h-10 w-full rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg transition-all active:scale-95 sm:w-auto ${confirmButtonClass}`}
             >
               {confirmText}
             </button>
