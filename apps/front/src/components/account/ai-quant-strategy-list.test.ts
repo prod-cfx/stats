@@ -837,10 +837,14 @@ describe('AiQuantStrategyList tabs UI', () => {
 
     const actions = container.querySelector('[data-testid="ai-quant-strategy-card-actions"]')
     const metricGrid = container.querySelector('[data-testid="ai-quant-strategy-card-metrics"]')
+    const title = Array.from(container.querySelectorAll('h4')).find(
+      node => node.textContent === 'Very long mobile layout strategy name',
+    )
 
     expect(actions?.className).toContain('grid')
     expect(actions?.className).toContain('grid-cols-2')
     expect(actions?.className).toContain('sm:flex')
+    expect(title?.className).toContain('break-words')
     expect(metricGrid?.className).toContain('grid-cols-1')
     expect(metricGrid?.className).toContain('sm:grid-cols-2')
     expect(metricGrid?.className).toContain('md:grid-cols-4')

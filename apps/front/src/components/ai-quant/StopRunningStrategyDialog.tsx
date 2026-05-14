@@ -91,27 +91,31 @@ export function StopRunningStrategyDialog({
         <div className="mt-4 grid gap-2 rounded-xl border border-[color:var(--cf-border)] bg-black/10 p-3 text-sm text-[color:var(--cf-text)]">
           <div data-testid="stop-dialog-detail-row" className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
             <span className="text-[color:var(--cf-muted)]">{t('aiQuant.stopDialog.strategy')}</span>
-            <span className="text-right text-[color:var(--cf-text-strong)]">{strategy?.name ?? '--'}</span>
+            <span className="break-words text-[color:var(--cf-text-strong)] sm:text-right">
+              {strategy?.name ?? '--'}
+            </span>
           </div>
           <div data-testid="stop-dialog-detail-row" className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
             <span className="text-[color:var(--cf-muted)]">{t('aiQuant.stopDialog.exchangeSymbol')}</span>
-            <span className="text-right text-[color:var(--cf-text-strong)]">
+            <span className="break-words text-[color:var(--cf-text-strong)] sm:text-right">
               {[strategy?.exchange, strategy?.symbol].filter(Boolean).join(' · ') || '--'}
             </span>
           </div>
           <div data-testid="stop-dialog-detail-row" className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
             <span className="text-[color:var(--cf-muted)]">{exposureLabel}</span>
-            <span className="text-right text-[color:var(--cf-text-strong)]">{exposureValue}</span>
+            <span className="break-words text-[color:var(--cf-text-strong)] sm:text-right">
+              {exposureValue}
+            </span>
           </div>
           <div data-testid="stop-dialog-detail-row" className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
             <span className="text-[color:var(--cf-muted)]">{t('aiQuant.stopDialog.unrealizedPnl')}</span>
-            <span className="text-right text-[color:var(--cf-text-strong)]">
+            <span className="break-words text-[color:var(--cf-text-strong)] sm:text-right">
               {formatOptionalNumber(strategy?.positionOverview?.totalUnrealizedPnl)}
             </span>
           </div>
           <div data-testid="stop-dialog-detail-row" className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
             <span className="text-[color:var(--cf-muted)]">{t('aiQuant.stopDialog.openOrders')}</span>
-            <span className="text-right text-[color:var(--cf-text-strong)]">
+            <span className="break-words text-[color:var(--cf-text-strong)] sm:text-right">
               {hasUnknownOpenOrders ? t('aiQuant.stopDialog.unknown') : openOrdersCount}
             </span>
           </div>

@@ -278,5 +278,7 @@ describe('StopRunningStrategyDialog', () => {
     expect(actions?.className).toContain('grid')
     expect(actions?.className).toContain('sm:flex')
     expect(detailRows[0]?.className).toContain('flex-col')
+    expect(detailRows[0]?.lastElementChild?.className).toContain('break-words')
+    expect(detailRows[1]?.lastElementChild?.className).toContain('break-words')
   })
 })

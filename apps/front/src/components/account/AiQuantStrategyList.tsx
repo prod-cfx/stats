@@ -562,7 +562,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                     <Link href={`/${lng}/account/ai-quant/strategy/${item.id}`} className="block min-w-0">
                       <div className="min-w-0 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h4 className="font-bold text-[color:var(--cf-text-strong)] transition-colors group-hover:text-primary">
+                          <h4 className="min-w-0 break-words font-bold text-[color:var(--cf-text-strong)] transition-colors group-hover:text-primary">
                             {item.name}
                           </h4>
                           <div className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusConfig.className}`}>
