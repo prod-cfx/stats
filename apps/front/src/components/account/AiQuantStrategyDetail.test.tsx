@@ -14,9 +14,15 @@ const mockFetchAccountAiQuantStrategyDetail = jest.fn()
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, unknown>) => {
-      const value = key.split('.').reduce<unknown>((curr, segment) => (
-        curr && typeof curr === 'object' ? (curr as Record<string, unknown>)[segment] : undefined
-      ), mockZhCommon)
+      const value = key
+        .split('.')
+        .reduce<unknown>(
+          (curr, segment) =>
+            curr && typeof curr === 'object'
+              ? (curr as Record<string, unknown>)[segment]
+              : undefined,
+          mockZhCommon,
+        )
       const template = typeof value === 'string' ? value : key
       return Object.entries(options ?? {}).reduce(
         (text, [name, replacement]) => text.replaceAll(`{{${name}}}`, String(replacement)),
@@ -33,27 +39,44 @@ jest.mock('@/hooks/use-auth', () => ({
   }),
 }))
 
-jest.mock('lucide-react', () => ({
-  Play: () => <svg data-testid="play-icon" />,
-}), { virtual: true })
+jest.mock(
+  'lucide-react',
+  () => ({
+    Check: () => <svg data-testid="check-icon" />,
+    Copy: () => <svg data-testid="copy-icon" />,
+    Play: () => <svg data-testid="play-icon" />,
+  }),
+  { virtual: true },
+)
 
-jest.mock('next/link', () => ({
-  __esModule: true,
-  default: ({ href, children, onClick, className }: {
-    href: string
-    children: React.ReactNode
-    onClick?: () => void
-    className?: string
-  }) => (
-    <a href={href} onClick={onClick} className={className}>
-      {children}
-    </a>
-  ),
-}), { virtual: true })
+jest.mock(
+  'next/link',
+  () => ({
+    __esModule: true,
+    default: ({
+      href,
+      children,
+      onClick,
+      className,
+    }: {
+      href: string
+      children: React.ReactNode
+      onClick?: () => void
+      className?: string
+    }) => (
+      <a href={href} onClick={onClick} className={className}>
+        {children}
+      </a>
+    ),
+  }),
+  { virtual: true },
+)
 
 jest.mock('@/lib/api', () => ({
-  fetchAccountAiQuantStrategyDetail: (...args: unknown[]) => mockFetchAccountAiQuantStrategyDetail(...args),
-  performAccountAiQuantStrategyAction: (...args: unknown[]) => mockPerformAccountAiQuantStrategyAction(...args),
+  fetchAccountAiQuantStrategyDetail: (...args: unknown[]) =>
+    mockFetchAccountAiQuantStrategyDetail(...args),
+  performAccountAiQuantStrategyAction: (...args: unknown[]) =>
+    mockPerformAccountAiQuantStrategyAction(...args),
 }))
 
 function buildStrategy(overrides: Partial<AiQuantStrategyRecord> = {}): AiQuantStrategyRecord {
@@ -96,7 +119,9 @@ function buildStrategy(overrides: Partial<AiQuantStrategyRecord> = {}): AiQuantS
   }
 }
 
-function buildActionDetail(overrides: Partial<AccountAiQuantStrategyDetail> = {}): AccountAiQuantStrategyDetail {
+function buildActionDetail(
+  overrides: Partial<AccountAiQuantStrategyDetail> = {},
+): AccountAiQuantStrategyDetail {
   return {
     id: 'inst-runtime-control',
     name: 'Runtime control strategy',
@@ -169,6 +194,12 @@ function findButton(label: string): HTMLButtonElement | undefined {
   ) as HTMLButtonElement | undefined
 }
 
+async function selectTab(label: string) {
+  await act(async () => {
+    findButton(label)?.click()
+  })
+}
+
 function findLink(label: string): HTMLAnchorElement | undefined {
   return Array.from(document.querySelectorAll('a')).find(
     link => link.textContent?.trim() === label,
@@ -188,10 +219,14 @@ describe('AiQuantStrategyDetail', () => {
   let root: ReturnType<typeof createRoot>
 
   beforeEach(() => {
-    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    ;(
+      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true
     mockPerformAccountAiQuantStrategyAction.mockReset()
     mockFetchAccountAiQuantStrategyDetail.mockReset()
-    mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(buildActionDetail({ status: 'running' }))
+    mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(
+      buildActionDetail({ status: 'running' }),
+    )
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -222,18 +257,20 @@ describe('AiQuantStrategyDetail', () => {
             metrics: { returnPct: -0.03, maxDrawdownPct: 0.03, winRatePct: 0, tradeCount: 1 },
             equitySeries: [],
             timeline: [],
-            runtimeExecutionStates: [{
-              executionSemanticKey: 'on_start.entry.primary',
-              status: 'consumed',
-              failureFamily: null,
-              failureReason: null,
-              failureCode: null,
-              lastAttemptAt: '2026-04-24T14:45:01.824Z',
-              consumedAt: '2026-04-24T14:45:01.824Z',
-              cooldownUntil: null,
-              publishedSnapshotId: 'snapshot-okx-1',
-              snapshotHash: 'hash-okx-1',
-            }],
+            runtimeExecutionStates: [
+              {
+                executionSemanticKey: 'on_start.entry.primary',
+                status: 'consumed',
+                failureFamily: null,
+                failureReason: null,
+                failureCode: null,
+                lastAttemptAt: '2026-04-24T14:45:01.824Z',
+                consumedAt: '2026-04-24T14:45:01.824Z',
+                cooldownUntil: null,
+                publishedSnapshotId: 'snapshot-okx-1',
+                snapshotHash: 'hash-okx-1',
+              },
+            ],
             paramSchema: null,
             paramValues: null,
             schemaVersion: null,
@@ -294,7 +331,8 @@ describe('AiQuantStrategyDetail', () => {
               positionStatusLabel: '空仓',
               cycleStatusLabel: '本轮已完成',
               headline: '运行中 · 空仓 · 本轮已完成',
-              explanation: '本轮现货交易已完成，当前未持有 DOGEUSDT。策略服务仍在运行，等待下一次入场条件。',
+              explanation:
+                '本轮现货交易已完成，当前未持有 DOGEUSDT。策略服务仍在运行，等待下一次入场条件。',
               nextExpectedAction: '等待下一次入场条件',
               marketType: 'spot',
               positionState: 'flat',
@@ -305,29 +343,36 @@ describe('AiQuantStrategyDetail', () => {
                 latestExitOrderId: 'sync-close-1777042803366',
                 latestSyncOrderId: 'sync-close-1777042803366',
                 entryOrders: [{ orderId: '3507763615427895296', executedAt: '2026-04-24 14:45' }],
-                exitOrders: [{ orderId: 'sync-close-1777042803366', executedAt: '2026-04-24 15:00' }],
-                syncOrders: [{ orderId: 'sync-close-1777042803366', executedAt: '2026-04-24 15:00' }],
+                exitOrders: [
+                  { orderId: 'sync-close-1777042803366', executedAt: '2026-04-24 15:00' },
+                ],
+                syncOrders: [
+                  { orderId: 'sync-close-1777042803366', executedAt: '2026-04-24 15:00' },
+                ],
                 latestEntryAt: '2026-04-24 14:45',
                 latestExitAt: '2026-04-24 15:00',
                 latestSemanticAction: '卖出',
               },
             },
             ruleSummary: {
-              rules: [{
-                id: 'entry',
-                phase: 'entry',
-                conditionKey: 'execution.on_start',
-                operator: null,
-                value: null,
-                actions: ['OPEN_LONG'],
-              }, {
-                id: 'exit',
-                phase: 'exit',
-                conditionKey: 'price.change_pct',
-                operator: 'GTE',
-                value: 0.05,
-                actions: ['CLOSE_LONG'],
-              }],
+              rules: [
+                {
+                  id: 'entry',
+                  phase: 'entry',
+                  conditionKey: 'execution.on_start',
+                  operator: null,
+                  value: null,
+                  actions: ['OPEN_LONG'],
+                },
+                {
+                  id: 'exit',
+                  phase: 'exit',
+                  conditionKey: 'price.change_pct',
+                  operator: 'GTE',
+                  value: 0.05,
+                  actions: ['CLOSE_LONG'],
+                },
+              ],
             },
             updatedAt: '2026-04-24T14:45:00.000Z',
           }}
@@ -339,13 +384,12 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('OKX / DOGEUSDT / 1h')
     expect(container.textContent).toContain('运行中 · 空仓 · 本轮已完成')
     expect(container.textContent).toContain('本轮现货交易已完成，当前未持有 DOGEUSDT')
-    expect(container.textContent).toContain('当前状态解释')
-    expect(container.textContent).toContain('最近入场：2026-04-24 14:45 / 3507763615427895296')
-    expect(container.textContent).toContain('最近出场：2026-04-24 15:00 / sync-close-1777042803366')
-    expect(container.textContent).toContain('发布快照规则摘要')
-    expect(container.textContent).toContain('启动时执行：OPEN_LONG')
-    expect(container.textContent).toContain('价格变化 GTE 5%：CLOSE_LONG')
-    expect(container.textContent).toContain('本地账户台账 + 最新行情估值')
+    expect(container.textContent).toContain('总收益')
+    expect(container.textContent).toContain('今日盈亏')
+    expect(container.textContent).toContain('最大回撤')
+    expect(container.textContent).toContain('胜率')
+    expect(container.textContent).toContain('策略收益曲线')
+    expect(container.textContent).toContain('最新成交')
     expect(container.textContent).toContain('手续费优先展示 OKX 原始 fee / feeCcy')
     expect(container.textContent).toContain('0.09794982')
     expect(container.textContent).not.toContain('0.10')
@@ -358,19 +402,39 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('已完成买卖轮次')
     expect(container.textContent).not.toContain('当前持仓数')
     expect(container.textContent).not.toContain('已平仓数')
+    expect(container.textContent).not.toContain('当前状态解释')
+    expect(container.textContent).not.toContain('最近入场：2026-04-24 14:45 / 3507763615427895296')
+    expect(container.textContent).not.toContain(
+      '最近出场：2026-04-24 15:00 / sync-close-1777042803366',
+    )
+    expect(container.textContent).not.toContain('真实性审计')
+    expect(container.textContent).not.toContain('高级运行诊断')
+    expect(container.textContent).not.toContain('已执行 1 个运行诊断项，待执行/冷却/失败 0 个')
+
+    await selectTab('诊断')
+    expect(container.textContent).toContain('当前状态解释')
+    expect(container.textContent).toContain('最近入场：2026-04-24 14:45 / 3507763615427895296')
+    expect(container.textContent).toContain('最近出场：2026-04-24 15:00 / sync-close-1777042803366')
     expect(container.textContent).toContain('真实性审计')
     expect(container.textContent).toContain('3507763615427895296')
     expect(container.textContent).toContain('出场订单证据')
     expect(container.textContent).toContain('sync-close-1777042803366')
     expect(container.textContent).toContain('高级运行诊断')
     expect(container.textContent).toContain('已执行 1 个运行诊断项，待执行/冷却/失败 0 个')
-    const statusHeading = Array.from(container.querySelectorAll('h2'))
-      .find(heading => heading.textContent === '当前状态解释')
-    const statusSection = statusHeading?.closest('section')
+
+    const statusHeading = Array.from(container.querySelectorAll('h2')).find(
+      heading => heading.textContent === '当前状态解释',
+    )
+    const statusSection = statusHeading?.closest('article')
     expect(statusSection?.className).toContain('bg-[color:var(--cf-surface)]')
     expect(statusSection?.className).not.toContain('cyan')
     expect(statusSection?.querySelector('p')?.className).toContain('text-[color:var(--cf-text)]')
     expect(statusSection?.querySelector('p')?.className).not.toContain('cyan')
+
+    await selectTab('规则')
+    expect(container.textContent).toContain('发布快照规则摘要')
+    expect(container.textContent).toContain('启动时执行：OPEN_LONG')
+    expect(container.textContent).toContain('价格变化 GTE 5%：CLOSE_LONG')
   })
 
   it('keeps the runtime timeline compact by default and expands on demand', async () => {
@@ -385,6 +449,8 @@ describe('AiQuantStrategyDetail', () => {
       )
     })
 
+    expect(container.textContent).not.toContain('运行时间线')
+    await selectTab('运行记录')
     expect(container.textContent).toContain('运行时间线')
     expect(container.textContent).toContain('共 5 条，默认显示最近 3 条')
     expect(container.textContent).toContain('运行事件 1')
@@ -412,71 +478,75 @@ describe('AiQuantStrategyDetail', () => {
       root.render(
         <AiQuantStrategyDetail
           lng="zh"
-        strategy={{
-          id: 'inst-1',
-          name: 'Execution truth strategy',
-          status: 'running',
-          exchange: 'okx',
-          symbol: 'BTC-USDT-SWAP',
-          timeframe: '15m',
-          positionPct: 10,
-          initialCapital: 10000,
-          metrics: { returnPct: 12, maxDrawdownPct: 6, winRatePct: 51, tradeCount: 22 },
-          equitySeries: [],
-          timeline: [],
-          paramSchema: null,
-          paramValues: null,
-          schemaVersion: null,
-          supportsDynamicParams: false,
-          publishedSnapshotId: 'snapshot-1',
-          snapshotHash: 'hash-1',
-          snapshotBacktestConfigDefaults: {
-            initialCash: 10000,
-            leverage: 2,
-            slippageBps: 8,
-            feeBps: 4,
-            priceSource: 'close',
-            allowPartial: false,
-          },
-          deploymentExecutionBaseline: {
-            leverage: 2,
-            priceSource: 'mark',
-            orderType: 'market',
-            timeInForce: 'IOC',
-          },
-          deploymentExecutionCurrent: {
-            leverage: 4,
-            priceSource: 'mark',
-            orderType: 'market',
-            timeInForce: 'IOC',
-          },
-          executionConfigVersion: 2,
-          deploymentLeverageRange: {
-            min: 1,
-            max: 5,
-          },
-          deploymentConstraintExplanation: '交易所支持 10x，但平台风控和策略区间最终只允许 1-5x。',
-          compatibilityMetadata: {
-            isLegacySnapshot: true,
-            missingBacktestConfigDefaults: true,
-            missingDeploymentExecutionDefaults: false,
-            missingDeploymentExecutionConstraints: false,
-            requiresRepublishForBacktest: true,
-            requiresRepublishForDeploy: false,
-          },
-          consistencySummary: {
-            isConsistent: false,
-            driftReasons: ['leverage drift'],
-          },
-          canEditDeploymentLeverage: true,
-        }}
-      />,
+          strategy={{
+            id: 'inst-1',
+            name: 'Execution truth strategy',
+            status: 'running',
+            exchange: 'okx',
+            symbol: 'BTC-USDT-SWAP',
+            timeframe: '15m',
+            positionPct: 10,
+            initialCapital: 10000,
+            metrics: { returnPct: 12, maxDrawdownPct: 6, winRatePct: 51, tradeCount: 22 },
+            equitySeries: [],
+            timeline: [],
+            paramSchema: null,
+            paramValues: null,
+            schemaVersion: null,
+            supportsDynamicParams: false,
+            publishedSnapshotId: 'snapshot-1',
+            snapshotHash: 'hash-1',
+            snapshotBacktestConfigDefaults: {
+              initialCash: 10000,
+              leverage: 2,
+              slippageBps: 8,
+              feeBps: 4,
+              priceSource: 'close',
+              allowPartial: false,
+            },
+            deploymentExecutionBaseline: {
+              leverage: 2,
+              priceSource: 'mark',
+              orderType: 'market',
+              timeInForce: 'IOC',
+            },
+            deploymentExecutionCurrent: {
+              leverage: 4,
+              priceSource: 'mark',
+              orderType: 'market',
+              timeInForce: 'IOC',
+            },
+            executionConfigVersion: 2,
+            deploymentLeverageRange: {
+              min: 1,
+              max: 5,
+            },
+            deploymentConstraintExplanation:
+              '交易所支持 10x，但平台风控和策略区间最终只允许 1-5x。',
+            compatibilityMetadata: {
+              isLegacySnapshot: true,
+              missingBacktestConfigDefaults: true,
+              missingDeploymentExecutionDefaults: false,
+              missingDeploymentExecutionConstraints: false,
+              requiresRepublishForBacktest: true,
+              requiresRepublishForDeploy: false,
+            },
+            consistencySummary: {
+              isConsistent: false,
+              driftReasons: ['leverage drift'],
+            },
+            canEditDeploymentLeverage: true,
+          }}
+        />,
       )
     })
 
     expect(container.textContent).toContain('需要重新发布')
     expect(container.textContent).toContain('当前执行杠杆')
     expect(container.textContent).toContain('4x')
+    expect(container.textContent).not.toContain('基线执行杠杆')
+
+    await selectTab('配置')
     expect(container.textContent).toContain('基线执行杠杆')
     expect(container.textContent).toContain('允许杠杆范围')
     expect(container.textContent).toContain('1x - 5x')
@@ -484,7 +554,11 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).not.toContain('运行回测')
     expect(container.textContent).not.toContain('部署杠杆')
     expect(container.textContent).not.toContain('选择杠杆')
-    expect(Array.from(container.querySelectorAll('button')).some(button => button.textContent?.includes('更新杠杆'))).toBe(false)
+    expect(
+      Array.from(container.querySelectorAll('button')).some(button =>
+        button.textContent?.includes('更新杠杆'),
+      ),
+    ).toBe(false)
     expect(container.querySelector('select[name="deployment-leverage"]')).toBeNull()
   })
 
@@ -517,6 +591,8 @@ describe('AiQuantStrategyDetail', () => {
       )
     })
 
+    expect(container.textContent).not.toContain('200x - 1x')
+    await selectTab('配置')
     expect(container.textContent).toContain('200x - 1x')
     expect(container.textContent).not.toContain('部署杠杆')
     expect(container.textContent).not.toContain('选择杠杆')
@@ -582,7 +658,12 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).not.toContain('基线执行杠杆')
     expect(container.textContent).not.toContain('当前执行杠杆')
     expect(container.textContent).not.toContain('允许杠杆范围')
-    expect(Array.from(container.querySelectorAll('button')).some(button => button.textContent?.includes('更新杠杆'))).toBe(false)
+    expect(
+      Array.from(container.querySelectorAll('button')).some(button =>
+        button.textContent?.includes('更新杠杆'),
+      ),
+    ).toBe(false)
+    await selectTab('配置')
     expect(container.textContent).toContain('价格来源')
   })
 
@@ -638,6 +719,10 @@ describe('AiQuantStrategyDetail', () => {
       )
     })
 
+    expect(container.textContent).not.toContain('高级运行诊断')
+    expect(container.textContent).not.toContain('on_start.entry.primary')
+
+    await selectTab('诊断')
     expect(container.textContent).toContain('高级运行诊断')
     expect(container.textContent).toContain('on_start.entry.primary')
     expect(container.textContent).toContain('失败')
@@ -704,6 +789,9 @@ describe('AiQuantStrategyDetail', () => {
       )
     })
 
+    expect(container.textContent).not.toContain('部署绑定异常，请重新发布并重新部署')
+
+    await selectTab('诊断')
     expect(container.textContent).toContain('部署绑定异常，请重新发布并重新部署')
     expect(container.textContent).toContain('绑定')
     expect(container.textContent).toContain('当前执行条件未满足（缺少参考K线）')
@@ -837,12 +925,7 @@ describe('AiQuantStrategyDetail', () => {
     mockPerformAccountAiQuantStrategyAction.mockResolvedValue(buildActionDetail())
 
     await act(async () => {
-      root.render(
-        <AiQuantStrategyDetail
-          lng="zh"
-          strategy={buildStrategy()}
-        />,
-      )
+      root.render(<AiQuantStrategyDetail lng="zh" strategy={buildStrategy()} />)
     })
 
     expect(container.textContent).toContain('停止策略')
@@ -856,9 +939,9 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('确认停止')
 
     await act(async () => {
-      container.querySelector('[data-testid="confirm-stop-strategy"]')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true }),
-      )
+      container
+        .querySelector('[data-testid="confirm-stop-strategy"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     expect(mockPerformAccountAiQuantStrategyAction).toHaveBeenCalledWith('inst-runtime-control', {
@@ -873,18 +956,22 @@ describe('AiQuantStrategyDetail', () => {
 
   it('keeps liquidate_and_stop inside the stop dialog when open positions exist and disables controls while pending', async () => {
     let resolveAction: ((value: AccountAiQuantStrategyDetail) => void) | null = null
-    mockPerformAccountAiQuantStrategyAction.mockReturnValue(new Promise<AccountAiQuantStrategyDetail>((resolve) => {
-      resolveAction = resolve
-    }))
-    mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(buildActionDetail({
-      status: 'running',
-      positionOverview: {
-        openPositionsCount: 2,
-        closedPositionsCount: 0,
-        totalRealizedPnl: 0,
-        totalUnrealizedPnl: 12,
-      },
-    }))
+    mockPerformAccountAiQuantStrategyAction.mockReturnValue(
+      new Promise<AccountAiQuantStrategyDetail>(resolve => {
+        resolveAction = resolve
+      }),
+    )
+    mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(
+      buildActionDetail({
+        status: 'running',
+        positionOverview: {
+          openPositionsCount: 2,
+          closedPositionsCount: 0,
+          totalRealizedPnl: 0,
+          totalUnrealizedPnl: 12,
+        },
+      }),
+    )
 
     await act(async () => {
       root.render(
@@ -905,7 +992,9 @@ describe('AiQuantStrategyDetail', () => {
 
     const stopButton = findButton('停止策略')
 
-    expect(container.querySelector('[data-testid="strategy-runtime-control-actions"]')?.textContent).not.toContain('平仓并停止')
+    expect(
+      container.querySelector('[data-testid="strategy-runtime-control-actions"]')?.textContent,
+    ).not.toContain('平仓并停止')
     expect(stopButton?.disabled).toBe(false)
     expect(findLink('返回对话')).toBeDefined()
 
@@ -918,9 +1007,9 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('平仓并停止')
 
     await act(async () => {
-      container.querySelector('[data-testid="liquidate-and-stop-strategy"]')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true }),
-      )
+      container
+        .querySelector('[data-testid="liquidate-and-stop-strategy"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     expect(mockPerformAccountAiQuantStrategyAction).toHaveBeenCalledWith('inst-runtime-control', {
@@ -928,17 +1017,25 @@ describe('AiQuantStrategyDetail', () => {
       action: 'liquidate_and_stop',
     })
     expect(findButton('停止策略')?.disabled).toBe(true)
-    expect((container.querySelector('[data-testid="liquidate-and-stop-strategy"]') as HTMLButtonElement | null)?.disabled).toBe(true)
+    expect(
+      (
+        container.querySelector(
+          '[data-testid="liquidate-and-stop-strategy"]',
+        ) as HTMLButtonElement | null
+      )?.disabled,
+    ).toBe(true)
 
     await act(async () => {
-      resolveAction?.(buildActionDetail({
-        positionOverview: {
-          openPositionsCount: 0,
-          closedPositionsCount: 2,
-          totalRealizedPnl: 15,
-          totalUnrealizedPnl: 0,
-        },
-      }))
+      resolveAction?.(
+        buildActionDetail({
+          positionOverview: {
+            openPositionsCount: 0,
+            closedPositionsCount: 2,
+            totalRealizedPnl: 15,
+            totalUnrealizedPnl: 0,
+          },
+        }),
+      )
     })
 
     expect(container.textContent).toContain('策略已平仓并停止。')
@@ -967,7 +1064,9 @@ describe('AiQuantStrategyDetail', () => {
     const actions = container.querySelector('[data-testid="strategy-runtime-control-actions"]')
     const returnLink = findLink('返回对话')
     const stopButton = findButton('停止策略')
-    const actionLabels = Array.from(actions?.querySelectorAll('button, a') ?? []).map(item => item.textContent?.trim())
+    const actionLabels = Array.from(actions?.querySelectorAll('button, a') ?? []).map(item =>
+      item.textContent?.trim(),
+    )
 
     expect(panel).toBeTruthy()
     expect(panel?.className).toContain('gap-4')
@@ -1036,15 +1135,17 @@ describe('AiQuantStrategyDetail', () => {
 
   it('shows the liquidate failure message and keeps the strategy running when action fails', async () => {
     mockPerformAccountAiQuantStrategyAction.mockRejectedValue(new Error(' '))
-    mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(buildActionDetail({
-      status: 'running',
-      positionOverview: {
-        openPositionsCount: 1,
-        closedPositionsCount: 0,
-        totalRealizedPnl: 0,
-        totalUnrealizedPnl: 9,
-      },
-    }))
+    mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(
+      buildActionDetail({
+        status: 'running',
+        positionOverview: {
+          openPositionsCount: 1,
+          closedPositionsCount: 0,
+          totalRealizedPnl: 0,
+          totalUnrealizedPnl: 9,
+        },
+      }),
+    )
 
     await act(async () => {
       root.render(
@@ -1067,9 +1168,9 @@ describe('AiQuantStrategyDetail', () => {
     })
 
     await act(async () => {
-      container.querySelector('[data-testid="liquidate-and-stop-strategy"]')?.dispatchEvent(
-        new MouseEvent('click', { bubbles: true }),
-      )
+      container
+        .querySelector('[data-testid="liquidate-and-stop-strategy"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     expect(container.textContent).toContain('平仓并停止失败，请检查模拟盘账户状态后重试。')
@@ -1113,7 +1214,9 @@ describe('AiQuantStrategyDetail', () => {
   })
 
   it('runs a stopped strategy from detail and refreshes the runtime controls', async () => {
-    mockPerformAccountAiQuantStrategyAction.mockResolvedValue(buildActionDetail({ status: 'running' }))
+    mockPerformAccountAiQuantStrategyAction.mockResolvedValue(
+      buildActionDetail({ status: 'running' }),
+    )
 
     await act(async () => {
       root.render(
@@ -1125,7 +1228,11 @@ describe('AiQuantStrategyDetail', () => {
     })
 
     const actions = container.querySelector('[data-testid="strategy-runtime-control-actions"]')
-    expect(Array.from(actions?.querySelectorAll('button, a') ?? []).map(item => item.textContent?.trim())).toEqual(['运行', '返回对话'])
+    expect(
+      Array.from(actions?.querySelectorAll('button, a') ?? []).map(item =>
+        item.textContent?.trim(),
+      ),
+    ).toEqual(['运行', '返回对话'])
     expect(findButton('运行')?.className).toContain('emerald')
     expect(container.querySelector('[data-testid="play-icon"]')).toBeTruthy()
 
@@ -1163,10 +1270,16 @@ describe('AiQuantStrategyDetail', () => {
     expect(headings).not.toContain('运行控制')
 
     // 同时确认 stopped 状态下原本会出现的可交互按钮全部消失。
-    const buttonTexts = Array.from(container.querySelectorAll('button')).map(b => b.textContent ?? '')
+    const buttonTexts = Array.from(container.querySelectorAll('button')).map(
+      b => b.textContent ?? '',
+    )
     const linkTexts = Array.from(container.querySelectorAll('a')).map(a => a.textContent ?? '')
-    expect(buttonTexts.some(text => text.includes('停止策略') || text.includes('平仓并停止'))).toBe(false)
-    expect(linkTexts.some(text => text.trim() === '重新部署' || text.trim() === '返回对话')).toBe(false)
+    expect(buttonTexts.some(text => text.includes('停止策略') || text.includes('平仓并停止'))).toBe(
+      false,
+    )
+    expect(linkTexts.some(text => text.trim() === '重新部署' || text.trim() === '返回对话')).toBe(
+      false,
+    )
   })
 
   it('stores strategy edit session intent before returning to chat for stopped strategy', async () => {
@@ -1176,12 +1289,18 @@ describe('AiQuantStrategyDetail', () => {
       root.render(
         <AiQuantStrategyDetail
           lng="zh"
-          strategy={buildStrategy({ status: 'stopped', publishedSnapshotId: 'snapshot-1', hasActiveConversation: true })}
+          strategy={buildStrategy({
+            status: 'stopped',
+            publishedSnapshotId: 'snapshot-1',
+            hasActiveConversation: true,
+          })}
         />,
       )
     })
 
-    const link = Array.from(container.querySelectorAll('a')).find(item => item.textContent?.trim() === '返回对话')
+    const link = Array.from(container.querySelectorAll('a')).find(
+      item => item.textContent?.trim() === '返回对话',
+    )
     expect(link).toBeTruthy()
 
     const preventNavigation = (event: Event) => event.preventDefault()
@@ -1208,10 +1327,17 @@ describe('AiQuantStrategyDetail', () => {
     localStorage.clear()
 
     await act(async () => {
-      root.render(<AiQuantStrategyDetail lng="zh" strategy={buildStrategy({ status: 'running', hasActiveConversation: true })} />)
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({ status: 'running', hasActiveConversation: true })}
+        />,
+      )
     })
 
-    const link = Array.from(container.querySelectorAll('a')).find(item => item.textContent?.trim() === '返回对话')
+    const link = Array.from(container.querySelectorAll('a')).find(
+      item => item.textContent?.trim() === '返回对话',
+    )
     expect(link).toBeTruthy()
 
     const preventNavigation = (event: Event) => event.preventDefault()
@@ -1247,18 +1373,20 @@ describe('AiQuantStrategyDetail', () => {
               totalRealizedPnl: 0,
               totalUnrealizedPnl: 0,
             },
-            latestOrders: [{
-              executedAt: '2026-04-25 20:00',
-              side: 'BUY',
-              semanticAction: '买入',
-              semanticRole: 'entry',
-              symbol: 'BTCUSDT',
-              price: 1,
-              quantity: 1,
-              fee: 0,
-              feeCurrency: 'USDT',
-              orderId: 'order-1',
-            }],
+            latestOrders: [
+              {
+                executedAt: '2026-04-25 20:00',
+                side: 'BUY',
+                semanticAction: '买入',
+                semanticRole: 'entry',
+                symbol: 'BTCUSDT',
+                price: 1,
+                quantity: 1,
+                fee: 0,
+                feeCurrency: 'USDT',
+                orderId: 'order-1',
+              },
+            ],
             openOrdersCount: 1,
           })}
         />,
@@ -1308,26 +1436,23 @@ describe('AiQuantStrategyDetail', () => {
       },
       openOrdersCount: 0,
     })
-    mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(buildActionDetail({
-      status: 'running',
-      symbol: 'BTC-USDT',
-      snapshot: {
-        ...buildActionDetail().snapshot,
+    mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(
+      buildActionDetail({
+        status: 'running',
         symbol: 'BTC-USDT',
-        strategyConfig: { exchange: 'okx', symbol: 'BTC-USDT', marketType: 'spot' },
-      },
-      positionOverview: spotStrategy.positionOverview,
-      spotHoldingSummary: spotStrategy.spotHoldingSummary,
-      openOrdersCount: 0,
-    }))
+        snapshot: {
+          ...buildActionDetail().snapshot,
+          symbol: 'BTC-USDT',
+          strategyConfig: { exchange: 'okx', symbol: 'BTC-USDT', marketType: 'spot' },
+        },
+        positionOverview: spotStrategy.positionOverview,
+        spotHoldingSummary: spotStrategy.spotHoldingSummary,
+        openOrdersCount: 0,
+      }),
+    )
 
     await act(async () => {
-      root.render(
-        <AiQuantStrategyDetail
-          lng="zh"
-          strategy={spotStrategy}
-        />,
-      )
+      root.render(<AiQuantStrategyDetail lng="zh" strategy={spotStrategy} />)
     })
 
     expect(container.textContent).toContain('现货持币 0.02161279 BTC')
@@ -1350,18 +1475,20 @@ describe('AiQuantStrategyDetail', () => {
           lng="zh"
           strategy={buildStrategy({
             symbol: 'BTC-USDT-SWAP',
-            latestOrders: [{
-              executedAt: '2026-04-29 14:25',
-              side: 'BUY',
-              semanticAction: '开多',
-              semanticRole: 'entry',
-              symbol: 'BTCUSDT',
-              price: 77093,
-              quantity: 0.0359,
-              fee: 1.38381935,
-              feeCurrency: 'USDT',
-              orderId: 'okx-order-1',
-            }],
+            latestOrders: [
+              {
+                executedAt: '2026-04-29 14:25',
+                side: 'BUY',
+                semanticAction: '开多',
+                semanticRole: 'entry',
+                symbol: 'BTCUSDT',
+                price: 77093,
+                quantity: 0.0359,
+                fee: 1.38381935,
+                feeCurrency: 'USDT',
+                orderId: 'okx-order-1',
+              },
+            ],
           })}
         />,
       )
@@ -1411,6 +1538,8 @@ describe('AiQuantStrategyDetail', () => {
       )
     })
 
+    expect(container.textContent).not.toContain('交易对')
+    await selectTab('配置')
     expect(container.textContent).toContain('交易对')
     expect(container.textContent).toContain('市场类型')
     expect(container.textContent).toContain('参数搜索 ID')
