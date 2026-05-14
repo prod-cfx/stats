@@ -50,4 +50,32 @@ describe('issue #1350 whale mobile layouts', () => {
     expect(createMonitorModal).toContain('w-full sm:w-auto')
     expect(statsModal).toContain('flex-col gap-3 sm:flex-row')
   })
+
+  it('keeps mobile and desktop history sentinels independent', () => {
+    const profileTabs = readFrontSource('components/whale-tracking/profile/ProfileDataTabs.tsx')
+
+    expect(profileTabs).toContain('mobileHistorySentinelRef')
+    expect(profileTabs).toContain('desktopHistorySentinelRef')
+    expect(profileTabs).toContain('sentinelEls.forEach(el => observer.observe(el))')
+  })
+
+  it('keeps destructive address monitor actions behind confirmation', () => {
+    const addressMonitor = readFrontSource('components/whale-tracking/notifications/AddressMonitorSection.tsx')
+
+    expect(addressMonitor).toContain('ConfirmDialog')
+    expect(addressMonitor).toContain('setDeleteRule(rule)')
+    expect(addressMonitor).toContain('handleConfirmDelete')
+    expect(addressMonitor).not.toContain('void onDelete(rule.id)')
+  })
+
+  it('uses i18n keys for recent trade mobile and desktop states', () => {
+    const profileTabs = readFrontSource('components/whale-tracking/profile/ProfileDataTabs.tsx')
+
+    expect(profileTabs).toContain('whaleTracking.profile.recentTrades.loading')
+    expect(profileTabs).toContain('whaleTracking.profile.recentTrades.loadFailed')
+    expect(profileTabs).toContain('whaleTracking.profile.recentTrades.empty')
+    expect(profileTabs).not.toContain('加载中…')
+    expect(profileTabs).not.toContain('加载最近成交失败')
+    expect(profileTabs).not.toContain('暂无最近成交')
+  })
 })
