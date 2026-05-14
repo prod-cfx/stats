@@ -34,7 +34,11 @@ function findMeta(type: string) {
   return null
 }
 
-export function WidgetRenderer(props: { widget: DashboardWidgetInstance; onRemove?: () => void }) {
+export function WidgetRenderer(props: {
+  widget: DashboardWidgetInstance
+  onRemove?: () => void
+  draggable?: boolean
+}) {
   const { t } = useTranslation()
   const normalizedType = normalizeWidgetType(String((props.widget as any).type))
   const meta = findMeta(normalizedType)
@@ -45,6 +49,7 @@ export function WidgetRenderer(props: { widget: DashboardWidgetInstance; onRemov
       title={meta?.title ? t(meta.title) : props.widget.type}
       description={meta?.description ? t(meta.description) : undefined}
       onRemove={props.onRemove}
+      draggable={props.draggable}
       // Let kline widget fully use grid height (it has its own header/toolbars inside).
       contentStyle={undefined}
     >
@@ -100,4 +105,3 @@ export function WidgetRenderer(props: { widget: DashboardWidgetInstance; onRemov
     </WidgetShell>
   )
 }
-

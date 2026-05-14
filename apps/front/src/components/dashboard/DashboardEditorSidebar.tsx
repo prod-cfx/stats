@@ -282,8 +282,8 @@ export const DashboardEditorSidebar = ({
   }
 
   return (
-    <aside className="flex w-64 flex-none flex-col gap-10 border-r border-[color:var(--cf-border)] p-6">
-      <div className="flex h-full flex-col gap-8">
+    <aside className="flex w-full flex-none flex-col gap-6 border-b border-[color:var(--cf-border)] p-4 md:w-64 md:gap-10 md:border-r md:border-b-0 md:p-6">
+      <div className="flex h-full min-w-0 flex-col gap-6 md:gap-8">
         {/* Navigation Section */}
         <div className="space-y-6">
           {/* My Dashboards Section */}
@@ -293,7 +293,7 @@ export const DashboardEditorSidebar = ({
               onClick={() => setShowMyDashboards(!showMyDashboards)}
               className="group flex w-full items-center justify-between"
             >
-              <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                 <Layout className="h-4 w-4 text-[color:var(--cf-muted)] transition-colors group-hover:text-[color:var(--cf-text-strong)]" />
                 <span className="text-sm font-semibold text-[color:var(--cf-muted)] transition-colors group-hover:text-[color:var(--cf-text-strong)]">
                   {t('dashboard.sidebar.myDashboards')}
@@ -349,7 +349,7 @@ export const DashboardEditorSidebar = ({
               onClick={() => setShowSavedDashboards(!showSavedDashboards)}
               className="group flex w-full items-center justify-between"
             >
-              <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                 <Bookmark className="h-4 w-4 text-[color:var(--cf-muted)] transition-colors group-hover:text-[color:var(--cf-text-strong)]" />
                 <span className="text-sm font-semibold text-[color:var(--cf-muted)] transition-colors group-hover:text-[color:var(--cf-text-strong)]">
                   {t('dashboard.sidebar.savedDashboards')}
@@ -406,7 +406,7 @@ export const DashboardEditorSidebar = ({
         </div>
 
         {/* Action Buttons Section just below saved list */}
-        <div className="space-y-4 border-t border-[color:var(--cf-border)] pt-4">
+        <div className="grid grid-cols-1 gap-3 border-t border-[color:var(--cf-border)] pt-4 sm:grid-cols-2 md:block md:space-y-4">
           <button
             type="button"
             onClick={handleCreateDashboard}
