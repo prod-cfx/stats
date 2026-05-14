@@ -1518,6 +1518,11 @@
       "loadMore": "Load more",
       "invalidAddressTitle": "Invalid wallet address",
       "invalidAddressDescription": "Please provide a valid EVM-compatible wallet address to view the profile.",
+      "recentTrades": {
+        "loading": "Loading...",
+        "loadFailed": "Failed to load recent trades",
+        "empty": "No recent trades"
+      },
       "header": {
         "copyAddress": "Copy address",
         "refreshing": "Refreshing...",

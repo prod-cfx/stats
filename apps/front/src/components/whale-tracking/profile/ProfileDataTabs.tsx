@@ -496,7 +496,7 @@ export const ProfileDataTabs = ({
       setTradesState('success')
     } catch (e) {
       setRecentTrades([])
-      setTradesError(e instanceof Error ? e.message : '加载最近成交失败')
+      setTradesError(e instanceof Error ? e.message : t('whaleTracking.profile.recentTrades.loadFailed'))
       setTradesState('error')
     }
   }
@@ -764,11 +764,11 @@ export const ProfileDataTabs = ({
       <div data-testid="profile-mobile-card-list" className="space-y-3 p-3 md:hidden">
         {activeTab === 'trades' && tradesState === 'loading' ? (
           <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-6 text-center text-sm text-[color:var(--cf-muted)]">
-            加载中…
+            {t('whaleTracking.profile.recentTrades.loading')}
           </div>
         ) : activeTab === 'trades' && tradesState === 'error' ? (
           <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-6 text-center text-sm text-[color:var(--cf-muted)]">
-            {tradesError || '加载最近成交失败'}
+            {tradesError || t('whaleTracking.profile.recentTrades.loadFailed')}
             <button
               type="button"
               className="ml-2 underline"
@@ -777,12 +777,12 @@ export const ProfileDataTabs = ({
                 void loadRecentTrades()
               }}
             >
-              重试
+              {t('common.retry')}
             </button>
           </div>
         ) : activeTab === 'trades' && tradesState === 'empty' ? (
           <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-6 text-center text-sm text-[color:var(--cf-muted)]">
-            暂无最近成交
+            {t('whaleTracking.profile.recentTrades.empty')}
           </div>
         ) : activeTab === 'spot' ? (
           filteredSpotData.map((pos, idx) => (
@@ -1234,13 +1234,13 @@ export const ProfileDataTabs = ({
             {activeTab === 'trades' && tradesState === 'loading' ? (
               <tr>
                 <td colSpan={10} className="px-6 py-10 text-center text-sm text-[color:var(--cf-muted)]">
-                  加载中…
+                  {t('whaleTracking.profile.recentTrades.loading')}
                 </td>
               </tr>
             ) : activeTab === 'trades' && tradesState === 'error' ? (
               <tr>
                 <td colSpan={10} className="px-6 py-10 text-center text-sm text-[color:var(--cf-muted)]">
-                  {tradesError || '加载最近成交失败'}
+                  {tradesError || t('whaleTracking.profile.recentTrades.loadFailed')}
                   <button
                     type="button"
                     className="ml-2 underline"
@@ -1249,14 +1249,14 @@ export const ProfileDataTabs = ({
                       void loadRecentTrades()
                     }}
                   >
-                    重试
+                    {t('common.retry')}
                   </button>
                 </td>
               </tr>
             ) : activeTab === 'trades' && tradesState === 'empty' ? (
               <tr>
                 <td colSpan={10} className="px-6 py-10 text-center text-sm text-[color:var(--cf-muted)]">
-                  暂无最近成交
+                  {t('whaleTracking.profile.recentTrades.empty')}
                 </td>
               </tr>
             ) : activeTab === 'spot' ? (

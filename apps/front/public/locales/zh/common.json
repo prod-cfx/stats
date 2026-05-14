@@ -1521,6 +1521,11 @@
       "loadMore": "加载更多",
       "invalidAddressTitle": "无效的钱包地址",
       "invalidAddressDescription": "请提供正确的 EVM 兼容钱包地址以查看深度档案。",
+      "recentTrades": {
+        "loading": "加载中...",
+        "loadFailed": "加载最近成交失败",
+        "empty": "暂无最近成交"
+      },
       "header": {
         "copyAddress": "复制地址",
         "refreshing": "更新中...",
