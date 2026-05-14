@@ -1440,6 +1440,7 @@
       },
       "toast": {
         "ruleCreated": "Monitor rule created",
+        "deleteFailed": "Failed to remove monitor",
         "webPermissionDeniedTitle": "Browser notification permission is disabled",
         "webPermissionDeniedDesc": "Rule is still saved and in-site messages continue to work",
         "authRequiredTitle": "Please log in",

@@ -11,6 +11,7 @@ interface ConfirmDialogProps {
   confirmText?: string
   cancelText?: string
   confirmVariant?: 'danger' | 'primary'
+  disabled?: boolean
   onConfirm: () => void
   onCancel: () => void
 }
@@ -22,6 +23,7 @@ export function ConfirmDialog({
   confirmText = '确认',
   cancelText = '取消',
   confirmVariant = 'danger',
+  disabled = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -55,7 +57,7 @@ export function ConfirmDialog({
       {/* Backdrop */}
       <div
         className="animate-in fade-in fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm duration-200"
-        onClick={onCancel}
+        onClick={disabled ? undefined : onCancel}
       />
 
       {/* Dialog */}
@@ -81,15 +83,17 @@ export function ConfirmDialog({
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button
               type="button"
+              disabled={disabled}
               onClick={onCancel}
-              className="min-h-10 w-full rounded-lg bg-[color:var(--cf-surface-2)] px-4 py-2.5 text-sm font-medium text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)] sm:w-auto"
+              className="min-h-10 w-full rounded-lg bg-[color:var(--cf-surface-2)] px-4 py-2.5 text-sm font-medium text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               {cancelText}
             </button>
             <button
               type="button"
+              disabled={disabled}
               onClick={onConfirm}
-              className={`min-h-10 w-full rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg transition-all active:scale-95 sm:w-auto ${confirmButtonClass}`}
+              className={`min-h-10 w-full rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto ${confirmButtonClass}`}
             >
               {confirmText}
             </button>

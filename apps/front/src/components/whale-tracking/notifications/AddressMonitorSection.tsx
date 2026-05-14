@@ -42,7 +42,7 @@ interface AddressMonitorSectionProps {
   loading: boolean
   onCreate: () => void
   onUpdate: (id: string, input: UpdateWhaleNotificationRuleInput) => Promise<void> | void
-  onDelete: (id: string) => Promise<void> | void
+  onDelete: (id: string) => Promise<void>
 }
 
 function formatCompactUsd(value: number): string {
@@ -65,6 +65,7 @@ export function AddressMonitorSection({
   const [statsAddress, setStatsAddress] = useState<string | null>(null)
   const [editingRule, setEditingRule] = useState<WhaleNotificationRule | null>(null)
   const [deleteRule, setDeleteRule] = useState<WhaleNotificationRule | null>(null)
+  const [isDeletingRule, setIsDeletingRule] = useState(false)
 
   const addressRules = useMemo(
     () => rules.filter(rule => rule.type === 'ADDRESS' && rule.address),
@@ -122,9 +123,19 @@ export function AddressMonitorSection({
   }
 
   const handleConfirmDelete = async () => {
-    if (!deleteRule) return
-    await onDelete(deleteRule.id)
-    setDeleteRule(null)
+    if (!deleteRule || isDeletingRule) return
+    setIsDeletingRule(true)
+    try {
+      await onDelete(deleteRule.id)
+      setDeleteRule(null)
+    } catch {
+      toast.error({
+        title: t('whaleTracking.notifications.toast.deleteFailed'),
+        description: t('common.tryAgain'),
+      })
+    } finally {
+      setIsDeletingRule(false)
+    }
   }
 
   return (
@@ -411,13 +422,20 @@ export function AddressMonitorSection({
         description={t('whaleTracking.notifications.confirmDelete.description', {
           address: deleteRule?.address ?? '',
         })}
-        confirmText={t('whaleTracking.notifications.actions.removeMonitor')}
+        confirmText={
+          isDeletingRule
+            ? t('common.loading')
+            : t('whaleTracking.notifications.actions.removeMonitor')
+        }
         cancelText={t('common.cancel')}
         confirmVariant="danger"
+        disabled={isDeletingRule}
         onConfirm={() => {
           void handleConfirmDelete()
         }}
-        onCancel={() => setDeleteRule(null)}
+        onCancel={() => {
+          if (!isDeletingRule) setDeleteRule(null)
+        }}
       />
     </section>
   )

@@ -57,8 +57,8 @@ export function NotificationsClient() {
         onUpdate={async (id, input) => {
           await updateRule(id, input)
         }}
-        onDelete={id => {
-          void deleteRule(id)
+        onDelete={async id => {
+          await deleteRule(id)
         }}
       />
 

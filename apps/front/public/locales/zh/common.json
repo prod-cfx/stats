@@ -1443,6 +1443,7 @@
       },
       "toast": {
         "ruleCreated": "监控规则创建成功",
+        "deleteFailed": "移除监控失败",
         "webPermissionDeniedTitle": "浏览器通知权限未开启",
         "webPermissionDeniedDesc": "规则仍会通过站内消息发送，可稍后在浏览器设置中开启权限",
         "authRequiredTitle": "请先登录",
