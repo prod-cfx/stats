@@ -520,14 +520,20 @@ export const PublicCompaniesTable = () => {
           onRetry={reload}
           isEmpty={!loading && sortedData.length === 0}
         >
-          <div className="animate-in fade-in cf-scrollbar overflow-x-auto duration-500">
-            <table className="w-full min-w-[1000px] border-collapse md:min-w-[1200px]">
+          <div className="animate-in fade-in cf-scrollbar relative overflow-x-auto duration-500">
+            <div
+              aria-label="Swipe horizontally"
+              className="pointer-events-none sticky left-0 top-0 z-20 h-0 md:hidden"
+            >
+              <div className="absolute right-0 top-0 h-12 w-8 bg-gradient-to-l from-[color:var(--cf-surface)] to-transparent" />
+            </div>
+            <table className="w-full min-w-[840px] md:min-w-[1200px] border-collapse">
               <thead>
                 <tr className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/70 text-[10px] font-bold text-[color:var(--cf-muted)] md:text-xs">
-                  <th className="sticky left-0 z-10 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-4 text-left md:px-6 md:py-6">
+                  <th className="sticky left-0 z-10 w-14 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 py-4 text-left md:w-[88px] md:px-6 md:py-6">
                     {t('publicCompanies.columns.asset')}
                   </th>
-                  <th className="sticky left-[70px] z-10 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-4 text-left md:left-[88px] md:px-6 md:py-6">
+                  <th className="sticky left-[56px] md:left-[88px] z-10 w-48 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-4 text-left md:w-auto md:px-6 md:py-6">
                     {t('publicCompanies.columns.company')}
                   </th>
                   <th className="px-2 py-4 font-bold md:px-4 md:py-6">
@@ -616,8 +622,8 @@ export const PublicCompaniesTable = () => {
                     className="cursor-pointer transition-colors hover:bg-[color:var(--cf-surface-hover)]"
                     onClick={() => setSelectedCompany(row)}
                   >
-                    <td className="sticky left-0 z-10 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-3 group-hover:bg-[color:var(--cf-surface-hover)] md:px-6 md:py-4">
-                      <div className="flex items-center justify-start gap-2 md:gap-3">
+                    <td className="sticky left-0 z-10 w-14 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 py-3 group-hover:bg-[color:var(--cf-surface-hover)] md:w-[88px] md:px-6 md:py-4">
+                      <div className="flex items-center justify-start gap-1 md:gap-3">
                         <div className="h-5 w-5 flex-none md:h-6 md:w-6">
                           <img
                             src={row.assetLogo}
@@ -625,12 +631,12 @@ export const PublicCompaniesTable = () => {
                             className="h-full w-full rounded-full object-contain"
                           />
                         </div>
-                        <span className="min-w-[40px] font-medium text-[color:var(--cf-text-strong)] md:min-w-[50px]">
+                        <span className="min-w-0 truncate font-medium text-[color:var(--cf-text-strong)] md:min-w-[50px]">
                           {row.asset}
                         </span>
                       </div>
                     </td>
-                    <td className="sticky left-[70px] z-10 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-3 group-hover:bg-[color:var(--cf-surface-hover)] md:left-[88px] md:px-6 md:py-4">
+                    <td className="sticky left-[56px] md:left-[88px] z-10 w-48 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-3 group-hover:bg-[color:var(--cf-surface-hover)] md:w-auto md:px-6 md:py-4">
                       <div className="flex min-w-0 items-center justify-start gap-2 md:gap-3">
                         <div className="h-6 w-6 flex-none overflow-hidden rounded-full bg-white p-0.5 md:h-8 md:w-8 md:p-1">
                           <img
@@ -719,7 +725,7 @@ export const PublicCompaniesTable = () => {
               <img src={selectedCompany?.logo} className="h-full w-full object-contain" alt="" />
             </div>
             <div className="min-w-0">
-              <h3 className="truncate text-xl leading-tight font-bold text-[color:var(--cf-text-strong)]">
+              <h3 className="break-words text-lg leading-tight font-bold text-[color:var(--cf-text-strong)] md:text-xl">
                 {selectedCompany?.name}
               </h3>
               <div className="mt-2 flex flex-wrap gap-3">
@@ -743,7 +749,7 @@ export const PublicCompaniesTable = () => {
             <p className="text-sm font-bold tracking-wider text-[color:var(--cf-muted)] uppercase">
               {t('publicCompanies.modal.sectionTitle')}
             </p>
-            <div className="px-1 text-sm leading-relaxed text-[color:var(--cf-text)]">
+            <div className="min-w-0 px-1 text-sm leading-relaxed break-words text-[color:var(--cf-text)]">
               {selectedCompanyInfoParagraphs.map((p, idx) => (
                 <React.Fragment key={idx}>
                   <p>{p}</p>

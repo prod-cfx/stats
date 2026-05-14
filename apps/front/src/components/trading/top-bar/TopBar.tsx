@@ -534,14 +534,14 @@ export const TopBar = ({
 
   return (
     <div
-      className={`${isCompact ? 'h-[48px]' : 'h-[61px]'} flex w-full items-center border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]`}
+      className={`${isCompact ? 'min-h-[48px] md:h-[48px]' : 'min-h-[72px] md:h-[61px]'} flex w-full items-center border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]`}
     >
       {/* Left Area: Removed Navigation */}
 
       {/* Center & Right Area: Full width now */}
-      <div className="relative flex h-full min-w-0 flex-1 items-center gap-2 px-2 md:gap-6 md:px-4">
+      <div className="relative flex h-full min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1 md:flex-nowrap md:gap-6 md:px-4 md:py-0">
         {wsConnectionStatus === 'error' && (
-          <div className="absolute top-0 right-0 mt-2 mr-2">
+          <div className="order-3 ml-auto md:absolute md:top-0 md:right-0 md:order-none md:mt-2 md:mr-2">
             <div className="flex items-center gap-1 rounded bg-red-500/10 px-2 py-1 text-xs text-red-500">
               <span className="h-2 w-2 rounded-full bg-red-500" />
               <span>实时数据连接失败</span>
@@ -550,7 +550,7 @@ export const TopBar = ({
         )}
 
         {wsConnectionStatus === 'connecting' && (
-          <div className="absolute top-0 right-0 mt-2 mr-2">
+          <div className="order-3 ml-auto md:absolute md:top-0 md:right-0 md:order-none md:mt-2 md:mr-2">
             <div className="flex items-center gap-1 rounded bg-yellow-500/10 px-2 py-1 text-xs text-yellow-500">
               <span className="h-2 w-2 animate-pulse rounded-full bg-yellow-500" />
               <span>连接中...</span>
@@ -558,7 +558,7 @@ export const TopBar = ({
           </div>
         )}
         {/* Symbol and Main Price */}
-        <div className="relative flex flex-none items-center gap-2 md:gap-4" ref={menuRef}>
+        <div className="relative flex min-w-0 flex-none items-center gap-2 md:gap-4" ref={menuRef}>
           <button
             type="button"
             className={`group flex cursor-pointer items-center gap-2 rounded transition-colors hover:bg-[color:var(--cf-surface-hover)] ${isCompact ? 'p-1' : 'p-1'}`}
@@ -569,9 +569,9 @@ export const TopBar = ({
             >
               ₿
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex min-w-0 items-center gap-1">
               <span
-                className={`font-bold whitespace-nowrap ${isCompact ? 'text-sm' : 'text-base'}`}
+                className={`max-w-[48vw] truncate font-bold whitespace-nowrap md:max-w-none ${isCompact ? 'text-sm' : 'text-base'}`}
               >
                 {t('trade.symbolWithType', {
                   symbol: selectedDisplaySymbol,
@@ -587,7 +587,7 @@ export const TopBar = ({
           {/* Symbol Selector Dropdown */}
           {isSymbolMenuOpen && (
             <div
-              className={`animate-in fade-in zoom-in-95 absolute top-full left-0 z-50 mt-2 flex w-[90vw] max-w-[480px] flex-col overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl duration-100 md:w-[480px]`}
+              className={`animate-in fade-in zoom-in-95 absolute top-full left-0 z-50 mt-2 flex w-[calc(100vw-1rem)] max-w-[480px] flex-col overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl duration-100 md:w-[480px]`}
             >
               {/* Header / Tabs */}
               <div className="flex items-center border-b border-[color:var(--cf-border)]">
@@ -685,7 +685,7 @@ export const TopBar = ({
         {/* 顶部主价格 + 24h 涨跌幅展示：
             - 价格：displayLastPrice（ticker last 优先；ticker 缺失时回退到 mock；不再使用 klineClosePrice 覆盖展示）
             - 涨跌幅：displayChangePct（ticker 24h 涨跌幅优先；ticker 缺失时回退到 mock 百分比） */}
-        <div className="flex flex-col">
+        <div className="flex min-w-0 flex-col">
           <span
             className={`${isCompact ? 'text-base' : 'text-lg'} leading-tight font-semibold text-[#ef4444]`}
           >
@@ -703,7 +703,7 @@ export const TopBar = ({
 
         {/* Market Stats - Flexible list with reduced gap for small screens */}
         <div
-          className={`flex flex-1 items-center gap-3 md:gap-6 ${isCompact ? 'text-[10px]' : 'text-[11px]'} no-scrollbar overflow-x-auto`}
+          className={`no-scrollbar order-4 flex w-full min-w-0 flex-none items-center gap-3 overflow-x-auto md:order-none md:w-auto md:flex-1 md:gap-6 ${isCompact ? 'text-[10px]' : 'text-[11px]'}`}
         >
           <div className="flex min-w-fit flex-col">
             <span className="whitespace-nowrap text-[color:var(--cf-muted)]">

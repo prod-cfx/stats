@@ -12,8 +12,9 @@ export function AggregatedOrderBookClient() {
   const [activeTab, setActiveTab] = useState('aggregated-orderbook')
 
   return (
-    <div className="flex flex-col w-full h-full p-4 md:p-8">
-      <div className="flex border-b border-[color:var(--cf-border)] w-full md:w-fit overflow-x-auto no-scrollbar">
+    <div className="flex h-full w-full flex-col px-0 py-0 md:p-8">
+      <div className="relative">
+        <div className="flex w-full overflow-x-auto border-b border-[color:var(--cf-border)] no-scrollbar md:w-fit">
         {[
           { id: 'aggregated-orderbook', name: t('aggregatedOrderbook.tabs.orderbook') },
           { id: 'aggregated-oi', name: t('aggregatedOrderbook.tabs.openInterest') },
@@ -36,9 +37,14 @@ export function AggregatedOrderBookClient() {
             )}
           </button>
         ))}
+        </div>
+        <div
+          aria-label="Swipe horizontally"
+          className="pointer-events-none absolute top-0 right-0 h-full w-8 bg-gradient-to-l from-[color:var(--cf-bg)] to-transparent md:hidden"
+        />
       </div>
 
-      <div className="relative min-h-[750px] mt-6">
+      <div className="relative mt-6 min-h-[560px] md:min-h-[750px]">
         {activeTab === 'aggregated-orderbook' ? (
           <AggregatedOrderbookView />
           ) : activeTab === 'aggregated-oi' ? (

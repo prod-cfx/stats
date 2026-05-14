@@ -30,7 +30,7 @@ export function MarketPageClient() {
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="flex-none">
+        <div className="sticky top-0 z-40 md:static flex-none">
           <TopBar
             isAggregated={isAggregated}
             selectedExchange={selectedExchange}
@@ -43,7 +43,7 @@ export function MarketPageClient() {
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex min-h-0 w-full flex-col md:flex-row">
-            <div className="relative flex h-[50vh] min-w-0 flex-none flex-col overflow-hidden border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] md:h-[calc(100vh-120px)] md:flex-1 md:border-b-0">
+            <div className="relative flex h-[58vh] min-h-[360px] min-w-0 flex-none flex-col overflow-hidden border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] md:h-[calc(100vh-120px)] md:min-h-0 md:flex-1 md:border-b-0">
               <CenterChartPanel
                 isAggregated={isAggregated}
                 setIsAggregated={setIsAggregated}

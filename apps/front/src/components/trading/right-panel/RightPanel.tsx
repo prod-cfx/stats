@@ -670,7 +670,7 @@ export const RightPanel = ({
     marketType === 'spot' && symbol.endsWith('USDT') ? `${symbol.slice(0, -4)}/USDT` : symbol
 
   return (
-    <div className="relative flex w-full flex-col rounded-xl border-l border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]">
+    <div className="relative flex w-full min-w-0 flex-col rounded-none border-l-0 md:rounded-xl md:border-l border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]">
       {loading && (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-[color:var(--cf-surface)]/80 backdrop-blur-sm">
           <Spinner size="md" className="text-primary" />
@@ -787,7 +787,7 @@ export const RightPanel = ({
         </div>
 
         <div className="flex flex-col">
-          <div ref={sellsRef} className="cf-scrollbar h-[200px] overflow-y-auto pr-1">
+          <div ref={sellsRef} className="cf-scrollbar h-[160px] md:h-[200px] overflow-y-auto pr-1">
             {orderbook.sells.map((s, i) => (
               <OrderbookRow
                 key={`sell-${i}`}
@@ -826,7 +826,7 @@ export const RightPanel = ({
             </div>
           </div>
 
-          <div className="cf-scrollbar h-[200px] overflow-y-auto pr-1">
+          <div className="cf-scrollbar h-[160px] md:h-[200px] overflow-y-auto pr-1">
             {orderbook.buys.map((b, i) => (
               <OrderbookRow
                 key={`buy-${i}`}
@@ -842,7 +842,7 @@ export const RightPanel = ({
       </div>
 
       {/* --- MODULE 3: Trades --- */}
-      <div className="flex h-[420px] flex-none flex-col border-t-4 border-[color:var(--cf-bg)]">
+      <div className="flex h-[360px] md:h-[420px] flex-none flex-col border-t-4 border-[color:var(--cf-bg)]">
         <div className="flex items-center justify-between border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2">
           <div className="flex gap-4">
             {['latest', 'large'].map(id => (

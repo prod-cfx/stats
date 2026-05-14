@@ -36,15 +36,15 @@ export const PredictionCard = ({
   volume 
 }: PredictionCardProps) => {
   return (
-    <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-5 flex flex-col h-full relative group gradient-border-hover">
+    <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-4 md:p-5 flex flex-col h-full min-w-0 relative group gradient-border-hover">
       <div className="flex justify-between items-start mb-4">
-        <div className="flex gap-3 items-start">
+        <div className="flex min-w-0 gap-3 items-start">
           {icon && (
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBgColor || 'bg-[#374151]'}`}>
               {icon}
             </div>
           )}
-          <SubTitle className="leading-snug line-clamp-2 pr-6 text-[color:var(--cf-text-strong)]">
+          <SubTitle className="min-w-0 leading-snug line-clamp-2 pr-6 text-[color:var(--cf-text-strong)]">
             {title}
           </SubTitle>
         </div>
@@ -56,9 +56,9 @@ export const PredictionCard = ({
       <div className="flex-1 space-y-3 mb-6">
         {options ? (
           options.map((option, idx) => (
-            <div key={idx} className="flex justify-between items-center text-sm">
-              <span className="text-[color:var(--cf-text)]">{option.label}</span>
-              <span className="text-[color:var(--cf-text-strong)] font-medium">{option.probability}</span>
+            <div key={idx} className="flex min-w-0 items-center justify-between gap-3 text-sm">
+              <span className="min-w-0 truncate text-[color:var(--cf-text)]">{option.label}</span>
+              <span className="flex-none text-[color:var(--cf-text-strong)] font-medium">{option.probability}</span>
             </div>
           ))
         ) : probability ? (
@@ -69,8 +69,8 @@ export const PredictionCard = ({
         ) : null}
       </div>
 
-      <div className="flex justify-between items-center mt-auto">
-        <div className="flex items-center gap-2">
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {(status === 'LIVE' || status === 'OPEN' || status === 'ACTIVE') && (
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-[#f87171] animate-pulse" />
@@ -78,7 +78,7 @@ export const PredictionCard = ({
             </div>
           )}
           {volume && (
-            <span className="text-[color:var(--cf-muted)] text-xs font-medium">{volume} Vol.</span>
+            <span className="truncate text-[color:var(--cf-muted)] text-xs font-medium">{volume} Vol.</span>
           )}
         </div>
         <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors">
@@ -88,5 +88,4 @@ export const PredictionCard = ({
     </div>
   );
 };
-
 
