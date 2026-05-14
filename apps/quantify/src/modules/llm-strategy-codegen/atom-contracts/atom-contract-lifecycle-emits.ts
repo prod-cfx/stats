@@ -30,21 +30,21 @@ import type {
 /**
  * lifecyclePyramidingIrShape —— pr3e-lifecycle 状态的 `emit.irShape` sentinel。
  *
- * 与 `NotApplicableIrShapeBuilder` 分离（无 `__notApplicable` brand）：本 atom
- * capabilityStatus 已升级为 `'pr3e-lifecycle'`，emit 通过 `lifecyclePyramidingShape`
- * 而非 `irShape` 完成；运行时若被 compileAtom 误调度（不应发生，因为
- * `position.pyramiding_limit` bucket 是 positionConstraint，不参与 condition 调度）
- * 即抛错 fail-loud，与 `NotApplicableIrShapeBuilder` 语义保持一致。
- *
- * atom-coverage spec 内 else 分支（status !== 'irshape-not-applicable' &&
- * status !== 'pr1b-stub'）要求 irShape 既不带 `__pr1bStub` 也不带 `__notApplicable`
- * brand，本 sentinel 满足该约束。
+ * Issue #1343：pr3e-* atom 的 irShape sentinel 必须带 `__notApplicable: true`
+ * brand，与 `'irshape-not-applicable'` 状态共用 sentinel 形态。atom-coverage spec
+ * (`atom-coverage-full-registration.spec.ts`) 将 pr3e-* 状态归入 isNotApplicableShape
+ * 分支，要求 `irShape.__notApplicable === true`。运行时若被 compileAtom 误调度
+ * （不应发生，因为 `position.pyramiding_limit` bucket 是 positionConstraint，不参与
+ * condition 调度）即抛错 fail-loud。
  */
-const lifecyclePyramidingIrShape: IrShapeBuilder = () => {
-  throw new Error(
-    '[#1313 PR4] position.pyramiding_limit emits via emit.lifecyclePyramidingShape, not emit.irShape (capabilityStatus = pr3e-lifecycle)',
-  )
-}
+const lifecyclePyramidingIrShape: IrShapeBuilder = Object.assign(
+  (() => {
+    throw new Error(
+      '[#1313 PR4] position.pyramiding_limit emits via emit.lifecyclePyramidingShape, not emit.irShape (capabilityStatus = pr3e-lifecycle)',
+    )
+  }) as IrShapeBuilder,
+  { __notApplicable: true as const },
+)
 
 /**
  * lifecyclePyramidingShape —— mirror

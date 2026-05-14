@@ -34,13 +34,16 @@ describe('Issue #1313 PR4 lifecycle pyramiding emit decision', () => {
       expect(typeof pyramidingEmit.lifecyclePyramidingShape).toBe('function')
     })
 
-    it('irShape 退化为非 brand sentinel（fail-loud；与 NotApplicable / Pr1bStub 分离）', () => {
+    it('irShape 是 NotApplicable brand sentinel（与 Pr1bStub brand 分离）', () => {
+      // Issue #1343：pr3e-* atom 的 irShape sentinel 统一带 `__notApplicable: true`
+      // brand，与 'irshape-not-applicable' 状态共用 sentinel 形态；
+      // capabilityStatus 字面量是"通过哪个 emit shape 兑现"的唯一真相源。
       const irShape = pyramidingEmit.irShape as {
         __pr1bStub?: true
         __notApplicable?: true
       }
       expect(irShape.__pr1bStub).toBeUndefined()
-      expect(irShape.__notApplicable).toBeUndefined()
+      expect(irShape.__notApplicable).toBe(true)
     })
 
     it('shape allow=true 当 rules 含 ADD_LONG action（无 metadata）', () => {
@@ -121,7 +124,10 @@ describe('Issue #1313 PR4 lifecycle pyramiding emit decision', () => {
       expect(dcaScheduleEmit.orchestrationPortfolioRiskShape).toBeUndefined()
     })
 
-    it('irShape 是 NotApplicable brand（与 pyramiding_limit 的 PR4 sentinel 分离）', () => {
+    it('irShape 是 NotApplicable brand（与 pyramiding_limit 共用 sentinel 形态；capabilityStatus 字面量区分）', () => {
+      // Issue #1343 后：pr3e-* atom 与 'irshape-not-applicable' 状态的 irShape sentinel
+      //   统一带 `__notApplicable: true` brand；capabilityStatus 字面量是"本 atom 通过
+      //   哪个 emit shape 兑现"的唯一真相源。
       const irShape = dcaScheduleEmit.irShape as { __notApplicable?: true }
       expect(irShape.__notApplicable).toBe(true)
     })
