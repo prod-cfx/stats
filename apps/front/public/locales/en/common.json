@@ -1430,6 +1430,10 @@
         "telegramBindRequired": "Please log in/bind Telegram first to enable Telegram notifications",
         "editAddressTitle": "Edit Address Monitor"
       },
+      "confirmDelete": {
+        "title": "Remove address monitor?",
+        "description": "This will stop notifications for {{address}}. You can create the monitor again later."
+      },
       "errors": {
         "invalidThreshold": "Please enter a valid threshold amount",
         "invalidAddress": "Invalid address, please retry from profile page"

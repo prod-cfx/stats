@@ -9,6 +9,7 @@ import { BellOff, Copy, Pencil, TrendingUp, Trash2 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { fetchTraderPositions, fetchTraderSnapshot } from '@/lib/api'
 import { toast } from '@/lib/toast'
 
@@ -63,6 +64,7 @@ export function AddressMonitorSection({
   const [metrics, setMetrics] = useState<Record<string, AddressMetrics | null>>({})
   const [statsAddress, setStatsAddress] = useState<string | null>(null)
   const [editingRule, setEditingRule] = useState<WhaleNotificationRule | null>(null)
+  const [deleteRule, setDeleteRule] = useState<WhaleNotificationRule | null>(null)
 
   const addressRules = useMemo(
     () => rules.filter(rule => rule.type === 'ADDRESS' && rule.address),
@@ -117,6 +119,12 @@ export function AddressMonitorSection({
     } catch {
       toast.error({ title: t('common.error'), description: t('common.tryAgain') })
     }
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteRule) return
+    await onDelete(deleteRule.id)
+    setDeleteRule(null)
   }
 
   return (
@@ -212,9 +220,7 @@ export function AddressMonitorSection({
                     <button
                       data-testid="address-monitor-mobile-delete"
                       type="button"
-                      onClick={() => {
-                        void onDelete(rule.id)
-                      }}
+                      onClick={() => setDeleteRule(rule)}
                       className="rounded-lg border border-[color:var(--cf-border)] p-2 text-rose-400"
                       title={t('whaleTracking.notifications.actions.removeMonitor')}
                     >
@@ -352,9 +358,7 @@ export function AddressMonitorSection({
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
-                            void onDelete(rule.id)
-                          }}
+                          onClick={() => setDeleteRule(rule)}
                           className="rounded-lg border border-[color:var(--cf-border)] p-1.5 text-rose-400 hover:bg-rose-500/10"
                           title={t('whaleTracking.notifications.actions.removeMonitor')}
                         >
@@ -400,6 +404,21 @@ export function AddressMonitorSection({
           }}
         />
       )}
+
+      <ConfirmDialog
+        isOpen={Boolean(deleteRule)}
+        title={t('whaleTracking.notifications.confirmDelete.title')}
+        description={t('whaleTracking.notifications.confirmDelete.description', {
+          address: deleteRule?.address ?? '',
+        })}
+        confirmText={t('whaleTracking.notifications.actions.removeMonitor')}
+        cancelText={t('common.cancel')}
+        confirmVariant="danger"
+        onConfirm={() => {
+          void handleConfirmDelete()
+        }}
+        onCancel={() => setDeleteRule(null)}
+      />
     </section>
   )
 }
