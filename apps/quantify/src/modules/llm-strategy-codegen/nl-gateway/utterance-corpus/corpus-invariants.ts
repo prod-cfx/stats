@@ -16,7 +16,7 @@ import type {
   SemanticOrchestrationNode,
   SemanticState,
 } from '../../types/semantic-state'
-import type { SupportedExecutableUtteranceAtom } from './utterance-corpus.types'
+import type { SupportedAtomKey } from './utterance-corpus.types'
 
 // =========================================================
 // 不变量 A — NLG → state parity（全 frame kind）
@@ -93,7 +93,7 @@ export const FRAME_KIND_TO_STATE_LOOKUP: Record<FrameKind, AtomLookup | 'no_stat
 // 新加 atom 应在此处声明与既有 atom 的互斥关系；不声明 = 不互斥。
 // =========================================================
 
-export const ATOM_MUTEX: Partial<Record<SupportedExecutableUtteranceAtom, readonly string[]>> = {
+export const ATOM_MUTEX: Partial<Record<SupportedAtomKey, readonly string[]>> = {
   // 分批止盈胜过单值止盈：同 state 不得并存，否则 UI 单值兜底导致档位丢失
   'risk.partial_take_profit': ['risk.take_profit_pct'],
 }
@@ -188,12 +188,12 @@ export function readParamPath(obj: unknown, path: readonly string[]): unknown {
 // 新增需要渲染完整性保障的 atom 只需在此表声明，spec 会自动驱动断言。
 // =========================================================
 
-// #1160：RENDER_CONTRACT_ATOM_FIELDS 允许声明 atom 不属于 corpus 顶层 SupportedExecutableUtteranceAtom
+// #1160：RENDER_CONTRACT_ATOM_FIELDS 允许声明 atom 不属于 corpus 顶层 SupportedAtomKey
 //   联合（如间接通过其他 atom 子句触发的渲染原子，无独立 atomKey fixture）。
 //   故引入 RenderContractAtomKey 超集类型，保持类型守门的同时容纳此类间接渲染原子。
-//   #1191：position.pyramiding_limit 已纳入 SupportedExecutableUtteranceAtom union，
+//   #1191：position.pyramiding_limit 已纳入 SupportedAtomKey union，
 //   此处 alias 保留为后续扩展锚点。
-export type RenderContractAtomKey = SupportedExecutableUtteranceAtom
+export type RenderContractAtomKey = SupportedAtomKey
 
 export const RENDER_CONTRACT_ATOM_FIELDS: Partial<Record<RenderContractAtomKey, ReadonlyArray<{
   field: string

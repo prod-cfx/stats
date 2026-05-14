@@ -34,7 +34,7 @@ export {
   utteranceCorpus,
 } from './utterance-corpus'
 export type {
-  SupportedExecutableUtteranceAtom,
+  SupportedAtomKey,
   UtteranceCorpusCase,
   UtteranceCorpusCoverage,
   UtteranceCorpusExpected,

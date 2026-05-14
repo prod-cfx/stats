@@ -7,11 +7,13 @@
  *   - AtomContract<> 用 TS exhaustive Record 守门；新增 atom → 编译失败
  */
 
-import type { SupportedExecutableUtteranceAtom } from '../nl-gateway/utterance-corpus/utterance-corpus.types'
+import type { SupportedAtomKey } from '../nl-gateway/utterance-corpus/utterance-corpus.types'
 import type { AtomContractSurface } from './atom-contract-surface.types'
 import type { AtomContractDisplay } from './atom-contract-display.types'
 import type { AtomContractEmit } from './atom-contract-emit.types'
+import type { AtomContractCorpus } from './atom-contract-corpus.types'
 
+export type { AtomContractCorpus } from './atom-contract-corpus.types'
 export type {
   AtomContractSurface,
   Direction,
@@ -175,6 +177,14 @@ export interface AtomContract<TParams = Record<string, unknown>> {
   display: AtomContractDisplay
 
   /**
+   * NL corpus 字段（#1329 follow-up：取代 PRESENTATIONS）。
+   * 每个 atom 必填；aliases/examples/golden 必非空字符串数组（允许 [] 表示无）。
+   *
+   * 不变量：corpus 4 字段不允许全部为空，除非该 atom 在 seed 处显式 stub 注释。
+   */
+  corpus: AtomContractCorpus
+
+  /**
    * IR emit 层契约（Issue #1279 PR1a）—— 取代 canonical-spec-v2-ir-compiler.service.ts
    * 内 40+ case 分支。
    *
@@ -184,7 +194,7 @@ export interface AtomContract<TParams = Record<string, unknown>> {
   emit: AtomContractEmit
 }
 
-export type AtomContractKey = SupportedExecutableUtteranceAtom
+export type AtomContractKey = SupportedAtomKey
 export type AtomContractBucket =
   | 'trigger'
   | 'action'

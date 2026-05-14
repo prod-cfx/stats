@@ -66,7 +66,7 @@ quantify ai-quant 模块当前 sizing 证据散落在 4 个挂载点，3 个判�
 
 **编译期守门**：
 
-- `AtomContract` interface 在 `apps/quantify/src/modules/llm-strategy-codegen/atom-contracts/atom-contract-types.ts` 添加 `sizingEvidence: SizingEvidence | null` 必填字段（非 optional），由现有 `satisfies Record<SupportedExecutableUtteranceAtom, AtomContract>` exhaustive 守门强制每个 atom 显式声明。
+- `AtomContract` interface 在 `apps/quantify/src/modules/llm-strategy-codegen/atom-contracts/atom-contract-types.ts` 添加 `sizingEvidence: SizingEvidence | null` 必填字段（非 optional），由现有 `satisfies Record<SupportedAtomKey, AtomContract>` exhaustive 守门强制每个 atom 显式声明。
 
 **运行期守门**：
 

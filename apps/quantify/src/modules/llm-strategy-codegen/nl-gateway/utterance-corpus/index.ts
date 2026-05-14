@@ -12,7 +12,7 @@
  *
  * 新增此类 dispatcher-only fixture 时，请在此白名单追加一行；不要直接 import。
  */
-import type { SupportedExecutableUtteranceAtom, UtteranceCorpusCase } from './utterance-corpus.types'
+import type { SupportedAtomKey, UtteranceCorpusCase } from './utterance-corpus.types'
 import { oscillatorRsiLteUtterances } from './atoms/oscillator.rsi_lte.utterance'
 import { oscillatorRsiGteUtterances } from './atoms/oscillator.rsi_gte.utterance'
 import { bollingerTouchUpperUtterances } from './atoms/bollinger.touch_upper.utterance'
@@ -46,10 +46,25 @@ import { priceChartPatternUtterances } from './atoms/price.chart_pattern.utteran
 import { riskPartialTakeProfitUtterances } from './atoms/risk.partial_take_profit.utterance'
 import { strategyTimeWindowUtterances } from './atoms/strategy.time_window.utterance'
 import { volatilityAtrThresholdUtterances } from './atoms/volatility.atr_threshold.utterance'
+import { actionOpenShortUtterances } from './atoms/action.open_short.utterance'
+import { actionCloseShortUtterances } from './atoms/action.close_short.utterance'
+import { gateRegimeUtterances } from './atoms/gate.regime.utterance'
+import { portfolioRiskSymbolExposureCapUtterances } from './atoms/portfolioRisk.symbol_exposure_cap.utterance'
+import { portfolioRiskSubstrategyExposureCapUtterances } from './atoms/portfolioRisk.substrategy_exposure_cap.utterance'
+import { programDynamicGridUtterances } from './atoms/program.dynamic_grid.utterance'
+import { programFixedGridGatedUtterances } from './atoms/program.fixed_grid_gated.utterance'
+import { programAdaptiveVolatilityGridUtterances } from './atoms/program.adaptive_volatility_grid.utterance'
+import { programEventListenerUtterances } from './atoms/program.event_listener.utterance'
+import { scopeSymbolUtterances } from './atoms/scope.symbol.utterance'
+import { scopeLegUtterances } from './atoms/scope.leg.utterance'
+import { scopeTimeframeUtterances } from './atoms/scope.timeframe.utterance'
+import { scopeDataSourceUtterances } from './atoms/scope.dataSource.utterance'
+import { scopeSubStrategyUtterances } from './atoms/scope.subStrategy.utterance'
+import { gateSubStrategyUtterances } from './atoms/gate.subStrategy.utterance'
 import { volumeThresholdUtterances } from './atoms/volume.threshold.utterance'
 
 export type {
-  SupportedExecutableUtteranceAtom,
+  SupportedAtomKey,
   UtteranceCorpusCase,
   UtteranceCorpusCoverage,
   UtteranceCorpusExpected,
@@ -68,7 +83,7 @@ export type {
  * Single source of truth：utterance-corpus.spec.ts 与 atom-coverage-contract.spec.ts
  * 必须共享同一份豁免清单，禁止任一侧自行硬编码扩展。
  */
-export const INDIRECTLY_COVERED_ATOMS: ReadonlySet<SupportedExecutableUtteranceAtom> = new Set([
+export const INDIRECTLY_COVERED_ATOMS: ReadonlySet<SupportedAtomKey> = new Set([
   'position.pyramiding_limit',
   'grid.range_rebalance',
   // dispatcher-only action atoms (PR2c-final-1a): legacy extractor unaware; fixture files
@@ -88,7 +103,7 @@ export const CANONICAL_CORPUS_ALIASES = {
   'bollinger.touch_upper': 'price.detect.indicator_boundary',
   'bollinger.touch_lower': 'price.detect.indicator_boundary',
   'bollinger.touch_middle': 'price.detect.indicator_boundary',
-} as const satisfies Partial<Record<SupportedExecutableUtteranceAtom, SupportedExecutableUtteranceAtom>>
+} as const satisfies Partial<Record<SupportedAtomKey, SupportedAtomKey>>
 
 export const SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS = [
   'volume.threshold',
@@ -126,16 +141,31 @@ export const SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS = [
   'volatility.state',
   'price.range_position_lte',
   'price.range_position_gte',
-] as const satisfies readonly SupportedExecutableUtteranceAtom[]
+  'action.open_short',
+  'action.close_short',
+  'gate.regime',
+  'portfolioRisk.symbol_exposure_cap',
+  'portfolioRisk.substrategy_exposure_cap',
+  'program.dynamic_grid',
+  'program.fixed_grid_gated',
+  'program.adaptive_volatility_grid',
+  'program.event_listener',
+  'scope.symbol',
+  'scope.leg',
+  'scope.timeframe',
+  'scope.dataSource',
+  'scope.subStrategy',
+  'gate.subStrategy',
+] as const satisfies readonly SupportedAtomKey[]
 
 export const SUPPORTED_REQUIRES_SLOT_UTTERANCE_ATOMS = [
   'external.signal',
-] as const satisfies readonly SupportedExecutableUtteranceAtom[]
+] as const satisfies readonly SupportedAtomKey[]
 
 export const SUPPORTED_UTTERANCE_CORPUS_ATOMS = [
   ...SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS,
   ...SUPPORTED_REQUIRES_SLOT_UTTERANCE_ATOMS,
-] as const satisfies readonly SupportedExecutableUtteranceAtom[]
+] as const satisfies readonly SupportedAtomKey[]
 
 export const utteranceCorpus = [
   ...volumeThresholdUtterances,
@@ -172,12 +202,27 @@ export const utteranceCorpus = [
   ...priceRangePositionLteUtterances,
   ...priceRangePositionGteUtterances,
   ...externalSignalUtterances,
+  ...actionOpenShortUtterances,
+  ...actionCloseShortUtterances,
+  ...gateRegimeUtterances,
+  ...portfolioRiskSymbolExposureCapUtterances,
+  ...portfolioRiskSubstrategyExposureCapUtterances,
+  ...programDynamicGridUtterances,
+  ...programFixedGridGatedUtterances,
+  ...programAdaptiveVolatilityGridUtterances,
+  ...programEventListenerUtterances,
+  ...scopeSymbolUtterances,
+  ...scopeLegUtterances,
+  ...scopeTimeframeUtterances,
+  ...scopeDataSourceUtterances,
+  ...scopeSubStrategyUtterances,
+  ...gateSubStrategyUtterances,
 ] as const satisfies readonly UtteranceCorpusCase[]
 
-export function getUtteranceCorpusForAtom(atomKey: SupportedExecutableUtteranceAtom): UtteranceCorpusCase[] {
+export function getUtteranceCorpusForAtom(atomKey: SupportedAtomKey): UtteranceCorpusCase[] {
   return utteranceCorpus.filter(item => item.atomKey === atomKey)
 }
 
-export function getGoldenUtterancesForAtom(atomKey: SupportedExecutableUtteranceAtom): string[] {
+export function getGoldenUtterancesForAtom(atomKey: SupportedAtomKey): string[] {
   return getUtteranceCorpusForAtom(atomKey).map(item => item.utterance)
 }

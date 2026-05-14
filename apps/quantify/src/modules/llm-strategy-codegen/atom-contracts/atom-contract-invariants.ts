@@ -1,8 +1,9 @@
-import type { SupportedExecutableUtteranceAtom } from '../nl-gateway/utterance-corpus/utterance-corpus.types'
+import type { SupportedAtomKey } from '../nl-gateway/utterance-corpus/utterance-corpus.types'
 import type { FirstWaveTriggerAtom } from '../constants/canonical-strategy-capabilities'
 import type {
   AtomContractDisplay,
   AtomContractEmit,
+  AtomContractKey,
   AtomContractSurface,
 } from './atom-contract-types'
 import { FIRST_WAVE_TRIGGER_ATOMS } from '../constants/canonical-strategy-capabilities'
@@ -13,6 +14,60 @@ import { RULE_BLOCK_ATOM_EMITS } from './atom-contract-rule-block-emits'
 import { ORCHESTRATION_ATOM_EMITS } from './atom-contract-orchestration-emits'
 import { ACTION_ATOM_EMITS } from './atom-contract-action-emits'
 import { ATOM_CONTRACT_REGISTRY, type NotApplicableIrShapeBuilder } from './atom-contract-registry'
+
+// =========================================================
+// #1329 PR3c Round 1 C2：corpus 4 字段空值 invariant 守门
+// =========================================================
+// 单一真相源契约：所有 atom 的 corpus 4 字段（aliases / positiveExamples /
+// negativeExamples / goldenUtterances）不允许同时为空，除非该 atom 显式纳入
+// STUB_CORPUS_WHITELIST。后者用于 inline summaryContribution 覆盖渲染、不依赖
+// corpus 字段的 atom（如 portfolioRisk.drawdown_block 有 inline 渲染函数）。
+//
+// 配合 #1329b follow-up：6 个高频 actionable atom（action.{open,close}_{long,short} +
+// indicator.{above,below}）已在 C2 内补真实 corpus；剩余 1 个 stub atom
+// (portfolioRisk.drawdown_block) 显式 whitelist 标记，避免裸 stub 漂移。
+export const STUB_CORPUS_WHITELIST: ReadonlySet<AtomContractKey> = new Set<AtomContractKey>([
+  // portfolioRisk.drawdown_block 有 inline summaryContribution + clarificationQuestion
+  // 函数自带语料表达，corpus 4 字段允许空（仍可派生于 utterance-corpus / dispatcher
+  // 间接覆盖）。见 #1329b follow-up。
+  'portfolioRisk.drawdown_block',
+])
+
+/**
+ * #1329 C2：corpus invariant runtime 守门。
+ *
+ * 任一 atom 的 corpus 4 字段（aliases / positiveExamples / negativeExamples /
+ * goldenUtterances）全部为空，且不在 STUB_CORPUS_WHITELIST 内，即抛错。
+ *
+ * 由 atom-contracts 模块在加载时自动调用一次（见模块底部 IIFE）。
+ * 单测 / E2E 启动时若 registry 状态违反契约，立即 fail-loud；防止生产代码
+ * 进入"corpus 空、依赖 PRESENTATIONS 遗留派生"的隐式静默状态。
+ */
+export function checkCorpusInvariants(
+  registry: typeof ATOM_CONTRACT_REGISTRY = ATOM_CONTRACT_REGISTRY,
+): void {
+  const violations: AtomContractKey[] = []
+  for (const key of Object.keys(registry) as AtomContractKey[]) {
+    const corpus = registry[key].corpus
+    const empty =
+      corpus.aliases.length === 0
+      && corpus.positiveExamples.length === 0
+      && corpus.negativeExamples.length === 0
+      && corpus.goldenUtterances.length === 0
+    if (empty && !STUB_CORPUS_WHITELIST.has(key)) {
+      violations.push(key)
+    }
+  }
+  if (violations.length > 0) {
+    throw new Error(
+      `[corpus invariant] atoms with 4-field empty corpus but not in STUB_CORPUS_WHITELIST: `
+      + `${violations.join(', ')}. Either add real corpus data or whitelist explicitly.`,
+    )
+  }
+}
+
+// 模块加载即执行：违反契约即 fail-loud，单测 / E2E / 生产 boot 都会立即报错。
+checkCorpusInvariants(ATOM_CONTRACT_REGISTRY)
 
 type Registry = typeof ATOM_CONTRACT_REGISTRY
 type RegistryKey = keyof Registry
@@ -331,8 +386,8 @@ export type _Pr1ShapeAtomKeysSkeleton =
   | _Pr1ShapeAtomKeysAggregate
 
 export type AtomContractInvariantReport = {
-  readonly exhaustive: SupportedExecutableUtteranceAtom extends RegistryKey ? true : false
-  readonly reverse: RegistryKey extends SupportedExecutableUtteranceAtom ? true : false
+  readonly exhaustive: SupportedAtomKey extends RegistryKey ? true : false
+  readonly reverse: RegistryKey extends SupportedAtomKey ? true : false
   readonly surfaceComplete: [MissingSurfaceKeys] extends [never] ? true : false
   readonly displayComplete: [MissingDisplayKeys] extends [never] ? true : false
   readonly emitComplete: [MissingEmitKeys] extends [never] ? true : false

@@ -235,6 +235,29 @@ function normalizePublishedSymbol(raw: string): string {
   return raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
 }
 
+/**
+ * #1279 #1329 M3：module-level pure export，供 spec 真实 import 直接测试（无需实例化 service）。
+ *
+ * AC-9 leak guard：unknown atom 若不在 REGISTRY，禁止把内部 atomKey 字面量
+ * 透出到 assistant prompt；统一回退到 generic '该策略类型' / 'this strategy type'。
+ */
+export function buildUnknownSemanticSupportAssistantPrompt(
+  unknownAtoms: readonly string[],
+  locale: CodegenConversationLocale = 'zh',
+): string {
+  const genericLabel = locale === 'en' ? 'this strategy type' : '该策略类型'
+  const publicNames = unknownAtoms.map((key) => {
+    const entry = ATOM_CONTRACT_REGISTRY[key as keyof typeof ATOM_CONTRACT_REGISTRY]
+    return entry?.display?.publicName?.[locale] ?? entry?.display?.publicName?.zh ?? genericLabel
+  })
+  const atomText = publicNames.length > 0
+    ? (locale === 'en' ? `: ${publicNames.join(', ')}` : `：${publicNames.join('、')}`)
+    : ''
+  if (locale === 'en') {
+    return `I cannot map this description to currently supported trading atom semantics${atomText}. Please describe the entry, exit, risk, and position rules more clearly, then I will organize it into a testable strategy.`
+  }
+  return `当前还没把该描述映射到可支持交易原子语义${atomText}。请更明确描述入场、出场、风控、仓位，我再继续整理成可测试策略。`
+}
 
 @Injectable()
 export class CodegenConversationService {
@@ -7764,20 +7787,8 @@ export class CodegenConversationService {
     unknownAtoms: readonly string[],
     locale: CodegenConversationLocale = 'zh',
   ): string {
-    // AC-9 leak guard：unknown atom 若不在 REGISTRY，禁止把内部 atomKey 字面量
-    // 透出到 assistant prompt；统一回退到 generic '该策略类型' / 'this strategy type'。
-    const genericLabel = locale === 'en' ? 'this strategy type' : '该策略类型'
-    const publicNames = unknownAtoms.map((key) => {
-      const entry = ATOM_CONTRACT_REGISTRY[key as keyof typeof ATOM_CONTRACT_REGISTRY]
-      return entry?.display?.publicName?.[locale] ?? entry?.display?.publicName?.zh ?? genericLabel
-    })
-    const atomText = publicNames.length > 0
-      ? this.localizedText(locale, `: ${publicNames.join(', ')}`, `：${publicNames.join('、')}`)
-      : ''
-    if (locale === 'en') {
-      return `I cannot map this description to currently supported trading atom semantics${atomText}. Please describe the entry, exit, risk, and position rules more clearly, then I will organize it into a testable strategy.`
-    }
-    return `当前还没把该描述映射到可支持交易原子语义${atomText}。请更明确描述入场、出场、风控、仓位，我再继续整理成可测试策略。`
+    // M3：delegate to module-level pure export（spec 真实 import 调用；class 内保持 this.* 调用点稳定）
+    return buildUnknownSemanticSupportAssistantPrompt(unknownAtoms, locale)
   }
 
   private buildUnsupportedFallbackClarificationState(): StrategyClarificationStateWithSummary {

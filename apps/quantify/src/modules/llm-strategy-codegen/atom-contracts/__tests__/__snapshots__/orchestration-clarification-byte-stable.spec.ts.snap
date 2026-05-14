@@ -1,0 +1,775 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：gate.regime / indicator / en 1`] = `
+{
+  "atomKey": "gate.regime",
+  "locale": "en",
+  "output": "请补全趋势过滤参数",
+  "slotKey": "indicator",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：gate.regime / indicator / zh 1`] = `
+{
+  "atomKey": "gate.regime",
+  "locale": "zh",
+  "output": "请补全趋势过滤参数",
+  "slotKey": "indicator",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：gate.regime / operator / en 1`] = `
+{
+  "atomKey": "gate.regime",
+  "locale": "en",
+  "output": "请补全趋势过滤参数",
+  "slotKey": "operator",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：gate.regime / operator / zh 1`] = `
+{
+  "atomKey": "gate.regime",
+  "locale": "zh",
+  "output": "请补全趋势过滤参数",
+  "slotKey": "operator",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：gate.regime / period / en 1`] = `
+{
+  "atomKey": "gate.regime",
+  "locale": "en",
+  "output": "请补全趋势过滤参数",
+  "slotKey": "period",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：gate.regime / period / zh 1`] = `
+{
+  "atomKey": "gate.regime",
+  "locale": "zh",
+  "output": "请补全趋势过滤参数",
+  "slotKey": "period",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：gate.regime / sideScope / en 1`] = `
+{
+  "atomKey": "gate.regime",
+  "locale": "en",
+  "output": "请补全趋势过滤参数",
+  "slotKey": "sideScope",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：gate.regime / sideScope / zh 1`] = `
+{
+  "atomKey": "gate.regime",
+  "locale": "zh",
+  "output": "请补全趋势过滤参数",
+  "slotKey": "sideScope",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：portfolioRisk.drawdown_block / lookbackWindow / en 1`] = `
+{
+  "atomKey": "portfolioRisk.drawdown_block",
+  "locale": "en",
+  "output": "请补全账户回撤护栏参数",
+  "slotKey": "lookbackWindow",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：portfolioRisk.drawdown_block / lookbackWindow / zh 1`] = `
+{
+  "atomKey": "portfolioRisk.drawdown_block",
+  "locale": "zh",
+  "output": "请补全账户回撤护栏参数",
+  "slotKey": "lookbackWindow",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：portfolioRisk.drawdown_block / thresholdPct / en 1`] = `
+{
+  "atomKey": "portfolioRisk.drawdown_block",
+  "locale": "en",
+  "output": "请补全账户回撤护栏参数",
+  "slotKey": "thresholdPct",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：portfolioRisk.drawdown_block / thresholdPct / zh 1`] = `
+{
+  "atomKey": "portfolioRisk.drawdown_block",
+  "locale": "zh",
+  "output": "请补全账户回撤护栏参数",
+  "slotKey": "thresholdPct",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：portfolioRisk.substrategy_exposure_cap / effectWhenTriggered / en 1`] = `
+{
+  "atomKey": "portfolioRisk.substrategy_exposure_cap",
+  "locale": "en",
+  "output": "请确认超限效果（暂停子策略 / 阻止开仓）",
+  "slotKey": "effectWhenTriggered",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：portfolioRisk.substrategy_exposure_cap / effectWhenTriggered / zh 1`] = `
+{
+  "atomKey": "portfolioRisk.substrategy_exposure_cap",
+  "locale": "zh",
+  "output": "请确认超限效果（暂停子策略 / 阻止开仓）",
+  "slotKey": "effectWhenTriggered",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：portfolioRisk.substrategy_exposure_cap / mode / en 1`] = `
+{
+  "atomKey": "portfolioRisk.substrategy_exposure_cap",
+  "locale": "en",
+  "output": "请补全子策略敞口护栏参数",
+  "slotKey": "mode",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：portfolioRisk.substrategy_exposure_cap / mode / zh 1`] = `
+{
+  "atomKey": "portfolioRisk.substrategy_exposure_cap",
+  "locale": "zh",
+  "output": "请补全子策略敞口护栏参数",
+  "slotKey": "mode",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：portfolioRisk.substrategy_exposure_cap / notionalCapPct / en 1`] = `
+{
+  "atomKey": "portfolioRisk.substrategy_exposure_cap",
+  "locale": "en",
+  "output": "请补全子策略敞口护栏参数",
+  "slotKey": "notionalCapPct",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：portfolioRisk.substrategy_exposure_cap / notionalCapPct / zh 1`] = `
+{
+  "atomKey": "portfolioRisk.substrategy_exposure_cap",
+  "locale": "zh",
+  "output": "请补全子策略敞口护栏参数",
+  "slotKey": "notionalCapPct",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：portfolioRisk.symbol_exposure_cap / effectWhenTriggered / en 1`] = `
+{
+  "atomKey": "portfolioRisk.symbol_exposure_cap",
+  "locale": "en",
+  "output": "请确认超限效果（阻止开仓 / 缩减敞口）",
+  "slotKey": "effectWhenTriggered",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：portfolioRisk.symbol_exposure_cap / effectWhenTriggered / zh 1`] = `
+{
+  "atomKey": "portfolioRisk.symbol_exposure_cap",
+  "locale": "zh",
+  "output": "请确认超限效果（阻止开仓 / 缩减敞口）",
+  "slotKey": "effectWhenTriggered",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：portfolioRisk.symbol_exposure_cap / mode / en 1`] = `
+{
+  "atomKey": "portfolioRisk.symbol_exposure_cap",
+  "locale": "en",
+  "output": "请补全标的敞口护栏参数",
+  "slotKey": "mode",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：portfolioRisk.symbol_exposure_cap / mode / zh 1`] = `
+{
+  "atomKey": "portfolioRisk.symbol_exposure_cap",
+  "locale": "zh",
+  "output": "请补全标的敞口护栏参数",
+  "slotKey": "mode",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：portfolioRisk.symbol_exposure_cap / notionalCapPct / en 1`] = `
+{
+  "atomKey": "portfolioRisk.symbol_exposure_cap",
+  "locale": "en",
+  "output": "请补全标的敞口护栏参数",
+  "slotKey": "notionalCapPct",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：portfolioRisk.symbol_exposure_cap / notionalCapPct / zh 1`] = `
+{
+  "atomKey": "portfolioRisk.symbol_exposure_cap",
+  "locale": "zh",
+  "output": "请补全标的敞口护栏参数",
+  "slotKey": "notionalCapPct",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.adaptive_volatility_grid / atrMultiplier / en 1`] = `
+{
+  "atomKey": "program.adaptive_volatility_grid",
+  "locale": "en",
+  "output": "请补全自适应网格参数",
+  "slotKey": "atrMultiplier",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.adaptive_volatility_grid / atrMultiplier / zh 1`] = `
+{
+  "atomKey": "program.adaptive_volatility_grid",
+  "locale": "zh",
+  "output": "请补全自适应网格参数",
+  "slotKey": "atrMultiplier",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.adaptive_volatility_grid / atrPeriod / en 1`] = `
+{
+  "atomKey": "program.adaptive_volatility_grid",
+  "locale": "en",
+  "output": "请补全自适应网格参数",
+  "slotKey": "atrPeriod",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.adaptive_volatility_grid / atrPeriod / zh 1`] = `
+{
+  "atomKey": "program.adaptive_volatility_grid",
+  "locale": "zh",
+  "output": "请补全自适应网格参数",
+  "slotKey": "atrPeriod",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.adaptive_volatility_grid / levelCount / en 1`] = `
+{
+  "atomKey": "program.adaptive_volatility_grid",
+  "locale": "en",
+  "output": "请补全自适应网格参数",
+  "slotKey": "levelCount",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.adaptive_volatility_grid / levelCount / zh 1`] = `
+{
+  "atomKey": "program.adaptive_volatility_grid",
+  "locale": "zh",
+  "output": "请补全自适应网格参数",
+  "slotKey": "levelCount",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.adaptive_volatility_grid / maxStepPct / en 1`] = `
+{
+  "atomKey": "program.adaptive_volatility_grid",
+  "locale": "en",
+  "output": "请补全自适应网格参数",
+  "slotKey": "maxStepPct",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.adaptive_volatility_grid / maxStepPct / zh 1`] = `
+{
+  "atomKey": "program.adaptive_volatility_grid",
+  "locale": "zh",
+  "output": "请补全自适应网格参数",
+  "slotKey": "maxStepPct",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.adaptive_volatility_grid / minStepPct / en 1`] = `
+{
+  "atomKey": "program.adaptive_volatility_grid",
+  "locale": "en",
+  "output": "请补全自适应网格参数",
+  "slotKey": "minStepPct",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.adaptive_volatility_grid / minStepPct / zh 1`] = `
+{
+  "atomKey": "program.adaptive_volatility_grid",
+  "locale": "zh",
+  "output": "请补全自适应网格参数",
+  "slotKey": "minStepPct",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.adaptive_volatility_grid / onDeactivate / en 1`] = `
+{
+  "atomKey": "program.adaptive_volatility_grid",
+  "locale": "en",
+  "output": "请补全自适应网格参数",
+  "slotKey": "onDeactivate",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.adaptive_volatility_grid / onDeactivate / zh 1`] = `
+{
+  "atomKey": "program.adaptive_volatility_grid",
+  "locale": "zh",
+  "output": "请补全自适应网格参数",
+  "slotKey": "onDeactivate",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.adaptive_volatility_grid / rangeMultiplier / en 1`] = `
+{
+  "atomKey": "program.adaptive_volatility_grid",
+  "locale": "en",
+  "output": "请补全自适应网格参数",
+  "slotKey": "rangeMultiplier",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.adaptive_volatility_grid / rangeMultiplier / zh 1`] = `
+{
+  "atomKey": "program.adaptive_volatility_grid",
+  "locale": "zh",
+  "output": "请补全自适应网格参数",
+  "slotKey": "rangeMultiplier",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.dynamic_grid / anchorLookbackBars / en 1`] = `
+{
+  "atomKey": "program.dynamic_grid",
+  "locale": "en",
+  "output": "请补全动态网格策略参数",
+  "slotKey": "anchorLookbackBars",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.dynamic_grid / anchorLookbackBars / zh 1`] = `
+{
+  "atomKey": "program.dynamic_grid",
+  "locale": "zh",
+  "output": "请补全动态网格策略参数",
+  "slotKey": "anchorLookbackBars",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.dynamic_grid / anchorSide / en 1`] = `
+{
+  "atomKey": "program.dynamic_grid",
+  "locale": "en",
+  "output": "请补全动态网格策略参数",
+  "slotKey": "anchorSide",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.dynamic_grid / anchorSide / zh 1`] = `
+{
+  "atomKey": "program.dynamic_grid",
+  "locale": "zh",
+  "output": "请补全动态网格策略参数",
+  "slotKey": "anchorSide",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.dynamic_grid / levelCount / en 1`] = `
+{
+  "atomKey": "program.dynamic_grid",
+  "locale": "en",
+  "output": "请补全动态网格策略参数",
+  "slotKey": "levelCount",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.dynamic_grid / levelCount / zh 1`] = `
+{
+  "atomKey": "program.dynamic_grid",
+  "locale": "zh",
+  "output": "请补全动态网格策略参数",
+  "slotKey": "levelCount",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.dynamic_grid / onDeactivate / en 1`] = `
+{
+  "atomKey": "program.dynamic_grid",
+  "locale": "en",
+  "output": "请补全动态网格策略参数",
+  "slotKey": "onDeactivate",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.dynamic_grid / onDeactivate / zh 1`] = `
+{
+  "atomKey": "program.dynamic_grid",
+  "locale": "zh",
+  "output": "请补全动态网格策略参数",
+  "slotKey": "onDeactivate",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.event_listener / dedupWindowMs / en 1`] = `
+{
+  "atomKey": "program.event_listener",
+  "locale": "en",
+  "output": "请补全事件监听参数",
+  "slotKey": "dedupWindowMs",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.event_listener / dedupWindowMs / zh 1`] = `
+{
+  "atomKey": "program.event_listener",
+  "locale": "zh",
+  "output": "请补全事件监听参数",
+  "slotKey": "dedupWindowMs",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.event_listener / expirationTtlMs / en 1`] = `
+{
+  "atomKey": "program.event_listener",
+  "locale": "en",
+  "output": "请补全事件监听参数",
+  "slotKey": "expirationTtlMs",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.event_listener / expirationTtlMs / zh 1`] = `
+{
+  "atomKey": "program.event_listener",
+  "locale": "zh",
+  "output": "请补全事件监听参数",
+  "slotKey": "expirationTtlMs",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.event_listener / permissionScope / en 1`] = `
+{
+  "atomKey": "program.event_listener",
+  "locale": "en",
+  "output": "请补全事件监听参数",
+  "slotKey": "permissionScope",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.event_listener / permissionScope / zh 1`] = `
+{
+  "atomKey": "program.event_listener",
+  "locale": "zh",
+  "output": "请补全事件监听参数",
+  "slotKey": "permissionScope",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.fixed_grid_gated / levelCount / en 1`] = `
+{
+  "atomKey": "program.fixed_grid_gated",
+  "locale": "en",
+  "output": "请补全网格策略参数",
+  "slotKey": "levelCount",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.fixed_grid_gated / levelCount / zh 1`] = `
+{
+  "atomKey": "program.fixed_grid_gated",
+  "locale": "zh",
+  "output": "请补全网格策略参数",
+  "slotKey": "levelCount",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.fixed_grid_gated / lowerBound / en 1`] = `
+{
+  "atomKey": "program.fixed_grid_gated",
+  "locale": "en",
+  "output": "请补全网格策略参数",
+  "slotKey": "lowerBound",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.fixed_grid_gated / lowerBound / zh 1`] = `
+{
+  "atomKey": "program.fixed_grid_gated",
+  "locale": "zh",
+  "output": "请补全网格策略参数",
+  "slotKey": "lowerBound",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.fixed_grid_gated / onDeactivate / en 1`] = `
+{
+  "atomKey": "program.fixed_grid_gated",
+  "locale": "en",
+  "output": "请补全网格策略参数",
+  "slotKey": "onDeactivate",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.fixed_grid_gated / onDeactivate / zh 1`] = `
+{
+  "atomKey": "program.fixed_grid_gated",
+  "locale": "zh",
+  "output": "请补全网格策略参数",
+  "slotKey": "onDeactivate",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.fixed_grid_gated / stepPct / en 1`] = `
+{
+  "atomKey": "program.fixed_grid_gated",
+  "locale": "en",
+  "output": "请补全网格策略参数",
+  "slotKey": "stepPct",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.fixed_grid_gated / stepPct / zh 1`] = `
+{
+  "atomKey": "program.fixed_grid_gated",
+  "locale": "zh",
+  "output": "请补全网格策略参数",
+  "slotKey": "stepPct",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.fixed_grid_gated / upperBound / en 1`] = `
+{
+  "atomKey": "program.fixed_grid_gated",
+  "locale": "en",
+  "output": "请补全网格策略参数",
+  "slotKey": "upperBound",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：program.fixed_grid_gated / upperBound / zh 1`] = `
+{
+  "atomKey": "program.fixed_grid_gated",
+  "locale": "zh",
+  "output": "请补全网格策略参数",
+  "slotKey": "upperBound",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.dataSource / feedId / en 1`] = `
+{
+  "atomKey": "scope.dataSource",
+  "locale": "en",
+  "output": "请补全数据源参数",
+  "slotKey": "feedId",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.dataSource / feedId / zh 1`] = `
+{
+  "atomKey": "scope.dataSource",
+  "locale": "zh",
+  "output": "请补全数据源参数",
+  "slotKey": "feedId",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.dataSource / role / en 1`] = `
+{
+  "atomKey": "scope.dataSource",
+  "locale": "en",
+  "output": "请补全数据源参数",
+  "slotKey": "role",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.dataSource / role / zh 1`] = `
+{
+  "atomKey": "scope.dataSource",
+  "locale": "zh",
+  "output": "请补全数据源参数",
+  "slotKey": "role",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.dataSource / schemaRef / en 1`] = `
+{
+  "atomKey": "scope.dataSource",
+  "locale": "en",
+  "output": "请补全数据源参数",
+  "slotKey": "schemaRef",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.dataSource / schemaRef / zh 1`] = `
+{
+  "atomKey": "scope.dataSource",
+  "locale": "zh",
+  "output": "请补全数据源参数",
+  "slotKey": "schemaRef",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.leg / direction / en 1`] = `
+{
+  "atomKey": "scope.leg",
+  "locale": "en",
+  "output": "请补全策略腿参数",
+  "slotKey": "direction",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.leg / direction / zh 1`] = `
+{
+  "atomKey": "scope.leg",
+  "locale": "zh",
+  "output": "请补全策略腿参数",
+  "slotKey": "direction",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.leg / instrumentSymbol / en 1`] = `
+{
+  "atomKey": "scope.leg",
+  "locale": "en",
+  "output": "请补全策略腿参数",
+  "slotKey": "instrumentSymbol",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.leg / instrumentSymbol / zh 1`] = `
+{
+  "atomKey": "scope.leg",
+  "locale": "zh",
+  "output": "请补全策略腿参数",
+  "slotKey": "instrumentSymbol",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.subStrategy / orderHandlingOnDeactivate / en 1`] = `
+{
+  "atomKey": "scope.subStrategy",
+  "locale": "en",
+  "output": "请补全子策略范围参数",
+  "slotKey": "orderHandlingOnDeactivate",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.subStrategy / orderHandlingOnDeactivate / zh 1`] = `
+{
+  "atomKey": "scope.subStrategy",
+  "locale": "zh",
+  "output": "请补全子策略范围参数",
+  "slotKey": "orderHandlingOnDeactivate",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.subStrategy / positionHandlingOnDeactivate / en 1`] = `
+{
+  "atomKey": "scope.subStrategy",
+  "locale": "en",
+  "output": "请补全子策略范围参数",
+  "slotKey": "positionHandlingOnDeactivate",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.subStrategy / positionHandlingOnDeactivate / zh 1`] = `
+{
+  "atomKey": "scope.subStrategy",
+  "locale": "zh",
+  "output": "请补全子策略范围参数",
+  "slotKey": "positionHandlingOnDeactivate",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.subStrategy / subStrategyId / en 1`] = `
+{
+  "atomKey": "scope.subStrategy",
+  "locale": "en",
+  "output": "请补全子策略范围参数",
+  "slotKey": "subStrategyId",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.subStrategy / subStrategyId / zh 1`] = `
+{
+  "atomKey": "scope.subStrategy",
+  "locale": "zh",
+  "output": "请补全子策略范围参数",
+  "slotKey": "subStrategyId",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.symbol / primarySymbol / en 1`] = `
+{
+  "atomKey": "scope.symbol",
+  "locale": "en",
+  "output": "请补全标的范围参数",
+  "slotKey": "primarySymbol",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.symbol / primarySymbol / zh 1`] = `
+{
+  "atomKey": "scope.symbol",
+  "locale": "zh",
+  "output": "请补全标的范围参数",
+  "slotKey": "primarySymbol",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.symbol / symbols / en 1`] = `
+{
+  "atomKey": "scope.symbol",
+  "locale": "en",
+  "output": "请补全标的范围参数",
+  "slotKey": "symbols",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.symbol / symbols / zh 1`] = `
+{
+  "atomKey": "scope.symbol",
+  "locale": "zh",
+  "output": "请补全标的范围参数",
+  "slotKey": "symbols",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.timeframe / alignmentPolicy / en 1`] = `
+{
+  "atomKey": "scope.timeframe",
+  "locale": "en",
+  "output": "请补全周期范围参数",
+  "slotKey": "alignmentPolicy",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.timeframe / alignmentPolicy / zh 1`] = `
+{
+  "atomKey": "scope.timeframe",
+  "locale": "zh",
+  "output": "请补全周期范围参数",
+  "slotKey": "alignmentPolicy",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.timeframe / primaryTimeframe / en 1`] = `
+{
+  "atomKey": "scope.timeframe",
+  "locale": "en",
+  "output": "请补全周期范围参数",
+  "slotKey": "primaryTimeframe",
+}
+`;
+
+exports[`#1279 #1329 Wave 2B：13 orchestration atom clarificationQuestion 字节稳定锁 clarificationQuestion 非空 string：scope.timeframe / primaryTimeframe / zh 1`] = `
+{
+  "atomKey": "scope.timeframe",
+  "locale": "zh",
+  "output": "请补全周期范围参数",
+  "slotKey": "primaryTimeframe",
+}
+`;

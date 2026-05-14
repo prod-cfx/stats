@@ -9,7 +9,11 @@ export type UtteranceCorpusOwner =
   | 'positionConstraint'
   | 'orchestrationPortfolioRisk'
 
-export type SupportedExecutableUtteranceAtom =
+/**
+ * Atom Key 联合（含 trigger/action/risk/positionConstraint/orchestration/scope/gate/program 共 47+ key）。
+ * 历史名 SupportedExecutableUtteranceAtom 已不再精确（不仅是 executable atom），#1329 统一改为 SupportedAtomKey。
+ */
+export type SupportedAtomKey =
   | 'volume.threshold'
   | 'volatility.atr_threshold'
   | 'strategy.time_window'
@@ -67,9 +71,12 @@ export type SupportedExecutableUtteranceAtom =
   | 'scope.subStrategy'
   | 'gate.subStrategy'
 
+/** @deprecated #1329 已更名 SupportedAtomKey，本 alias 保留兼容 in-flight branch；下个 PR 删 */
+export type SupportedExecutableUtteranceAtom = SupportedAtomKey
+
 export interface UtteranceCorpusExpected {
   owner: UtteranceCorpusOwner
-  key: SupportedExecutableUtteranceAtom
+  key: SupportedAtomKey
   status?: 'locked' | 'open'
   params?: Record<string, unknown>
   openSlotKeys?: readonly string[]
@@ -77,7 +84,7 @@ export interface UtteranceCorpusExpected {
 
 export interface UtteranceCorpusCase {
   id: string
-  atomKey: SupportedExecutableUtteranceAtom
+  atomKey: SupportedAtomKey
   locale: UtteranceCorpusLocale
   coverage: UtteranceCorpusCoverage
   utterance: string

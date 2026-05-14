@@ -22,7 +22,7 @@ import type { CodegenSemanticPatch } from '../../types/codegen-semantic-patch'
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
-import { ATOM_CONTRACT_REGISTRY } from '../../atom-contracts/atom-contract-registry'
+import { ATOM_BUCKETS, ATOM_CONTRACT_REGISTRY } from '../../atom-contracts/atom-contract-registry'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { AC7_USER_PROMPTS, AC12_WEBHOOK_PROMPTS } from './fixtures/ac-prompts'
 
@@ -95,10 +95,32 @@ interface BaselineCase {
   patch: CodegenSemanticPatch
 }
 
-const BASELINE_JSON_PATH = resolve(
-  __dirname,
-  '__snapshots__/dispatcher-self-baseline.json',
-)
+// #1329 Wave 1C：原单一 ~71k 行 dispatcher-self-baseline.json 按 atom bucket 拆分为
+// 5 个子 snapshot（trigger / action / risk / positionConstraint / orchestration），
+// git blame / diff 友好，单文件 ≤ ~1800 行量级。
+const BASELINE_BUCKETS = [
+  'trigger',
+  'action',
+  'risk',
+  'positionConstraint',
+  'orchestration',
+] as const
+type BaselineBucket = (typeof BASELINE_BUCKETS)[number]
+
+function bucketForCase(c: Omit<BaselineCase, 'patch'>): BaselineBucket {
+  if (c.atomKey && c.atomKey in ATOM_BUCKETS) {
+    return (ATOM_BUCKETS as Record<string, BaselineBucket>)[c.atomKey]
+  }
+  // AC-7 user prompts（无 atomKey，多 atom 复合）归 orchestration。
+  return 'orchestration'
+}
+
+function baselinePathFor(bucket: BaselineBucket): string {
+  return resolve(
+    __dirname,
+    `__snapshots__/dispatcher-self-baseline-${bucket}.json`,
+  )
+}
 
 describe('issue #1279 PR2 — dispatcher self-baseline', () => {
   const dispatcher = new GenericSeedDispatcher()
@@ -240,45 +262,98 @@ describe('issue #1279 PR2 — dispatcher self-baseline', () => {
     expect(drift).toEqual([])
   })
 
-  it('录制或验证 dispatcher self-baseline（首次写盘 / 后续严格 deepEqual）', () => {
+  /**
+   * M2 跨 bucket ID 一致性断言：
+   * 加载所有已写盘的 bucket baseline JSON，断言全局 ID 唯一——
+   * 同一 ID 不允许出现在两个不同 bucket 文件中，防止 bucketForCase 分桶逻辑
+   * 静默将同一 case 路由到多桶或 ID 冲突导致 byId.get() 查询结果不确定。
+   */
+  it('已写盘 baseline：各 bucket 之间 case ID 全局唯一（无跨 bucket 重复）', () => {
+    // 仅当所有 baseline 文件均已写盘时才做断言；未写盘（首次录制前）直接 skip
+    const allExist = BASELINE_BUCKETS.every(b => existsSync(baselinePathFor(b)))
+    if (!allExist) {
+      return
+    }
+    const seen = new Map<string, BaselineBucket>()
+    const duplicates: Array<{ id: string, buckets: [BaselineBucket, BaselineBucket] }> = []
+    for (const bucket of BASELINE_BUCKETS) {
+      const cases = JSON.parse(readFileSync(baselinePathFor(bucket), 'utf-8')) as BaselineCase[]
+      for (const c of cases) {
+        const prev = seen.get(c.id)
+        if (prev !== undefined) {
+          duplicates.push({ id: c.id, buckets: [prev, bucket] })
+        }
+        else {
+          seen.set(c.id, bucket)
+        }
+      }
+    }
+    expect(duplicates).toEqual([])
+  })
+
+  it('录制或验证 dispatcher self-baseline（首次写盘 / 后续严格 deepEqual，#1329 Wave 1C 按 bucket 拆 5 子 snapshot）', () => {
     const recorded: BaselineCase[] = cases.map((c) => {
       const patch = dispatcher.dispatch(c.utterance)
       return { ...c, patch }
     })
 
-    if (!existsSync(BASELINE_JSON_PATH)) {
-      // review M6：CI 环境必须有 baseline 才能 verify——任何 PR 删 baseline.json
-      // 让该测试无脑 pass 是 silent foot-gun。dev/local 允许首次写盘录制。
-      if (process.env.CI) {
-        throw new Error(
-          `[dispatcher-self-baseline] BASELINE_JSON_PATH does not exist in CI environment: ${BASELINE_JSON_PATH}. `
-          + `Baseline must be committed; do not delete it in CI.`,
-        )
-      }
-      mkdirSync(dirname(BASELINE_JSON_PATH), { recursive: true })
-      writeFileSync(
-        BASELINE_JSON_PATH,
-        `${JSON.stringify(recorded, null, 2)}\n`,
-        'utf-8',
-      )
-
-      console.log(
-        `[dispatcher-self-baseline] recorded ${recorded.length} cases → ${BASELINE_JSON_PATH}`,
-      )
-      return
+    // 按 bucket 分桶
+    const byBucket: Record<BaselineBucket, BaselineCase[]> = {
+      trigger: [],
+      action: [],
+      risk: [],
+      positionConstraint: [],
+      orchestration: [],
+    }
+    for (const r of recorded) {
+      byBucket[bucketForCase(r)].push(r)
     }
 
-    // 后续验证：严格 deepEqual（regression-proof）
-    const existing = JSON.parse(readFileSync(BASELINE_JSON_PATH, 'utf-8')) as BaselineCase[]
-    expect(recorded.length).toBe(existing.length)
-    const byId = new Map(existing.map(b => [b.id, b]))
-    for (const r of recorded) {
-      const base = byId.get(r.id)
-      expect(base).toBeDefined()
-      expect(r.patch).toEqual(base!.patch)
-      expect(r.utterance).toBe(base!.utterance)
-      expect(r.source).toBe(base!.source)
-      expect(r.atomKey).toBe(base!.atomKey)
+    // 总 case 数不变：跨 bucket 累加 = recorded.length（双源记账，防漏桶）
+    const totalAcrossBuckets = BASELINE_BUCKETS.reduce(
+      (sum, b) => sum + byBucket[b].length,
+      0,
+    )
+    expect(totalAcrossBuckets).toBe(recorded.length)
+
+    for (const bucket of BASELINE_BUCKETS) {
+      const bucketPath = baselinePathFor(bucket)
+      const bucketCases = byBucket[bucket]
+
+      if (!existsSync(bucketPath)) {
+        // review M6：CI 环境必须有 baseline 才能 verify——任何 PR 删 baseline 子文件
+        // 让该测试无脑 pass 是 silent foot-gun。dev/local 允许首次写盘录制。
+        if (process.env.CI) {
+          throw new Error(
+            `[dispatcher-self-baseline] bucket baseline does not exist in CI environment: ${bucketPath}. `
+            + `Baseline must be committed; do not delete it in CI.`,
+          )
+        }
+        mkdirSync(dirname(bucketPath), { recursive: true })
+        writeFileSync(
+          bucketPath,
+          `${JSON.stringify(bucketCases, null, 2)}\n`,
+          'utf-8',
+        )
+
+        console.log(
+          `[dispatcher-self-baseline] recorded ${bucketCases.length} cases (bucket=${bucket}) → ${bucketPath}`,
+        )
+        continue
+      }
+
+      // 后续验证：严格 deepEqual（regression-proof）
+      const existing = JSON.parse(readFileSync(bucketPath, 'utf-8')) as BaselineCase[]
+      expect(bucketCases.length).toBe(existing.length)
+      const byId = new Map(existing.map(b => [b.id, b]))
+      for (const r of bucketCases) {
+        const base = byId.get(r.id)
+        expect(base).toBeDefined()
+        expect(r.patch).toEqual(base!.patch)
+        expect(r.utterance).toBe(base!.utterance)
+        expect(r.source).toBe(base!.source)
+        expect(r.atomKey).toBe(base!.atomKey)
+      }
     }
   })
 })

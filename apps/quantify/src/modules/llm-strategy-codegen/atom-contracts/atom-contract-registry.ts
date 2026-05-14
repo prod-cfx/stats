@@ -1,14 +1,14 @@
 /**
  * ATOM_CONTRACT_REGISTRY — per-atom 全链路强契约注册表（Issue #1162）
  *
- * 每个 SupportedExecutableUtteranceAtom 必须声明 4 个 hook：
+ * 每个 SupportedAtomKey（含 orchestration/scope/gate/program 共 47+ key）必须声明 4 个 hook：
  *   summaryContribution / readinessCheck / clarificationQuestion / mutex
  *
  * TS exhaustive：新增 atom → Record 索引缺失 → 编译失败（守门）
  * 产品决策：risk.partial_take_profit 保持 unsupported 标签（公测），本 registry 仅声明现有 hooks
  */
 
-import type { SupportedExecutableUtteranceAtom } from '../nl-gateway/utterance-corpus/utterance-corpus.types'
+import type { SupportedAtomKey } from '../nl-gateway/utterance-corpus/utterance-corpus.types'
 import type {
   AtomContract,
   AtomContractBucket,
@@ -39,10 +39,14 @@ import {
 import { SHARED_ENUM_DISPLAY } from './shared-display-tokens'
 import { ATOM_PRIVATE_DISPLAY } from './atom-private-display-tokens'
 import { renderDisplayToken, renderEnumDisplayToken } from '../nl-gateway/display-registry'
+import { getGoldenUtterancesForAtom } from '../nl-gateway/utterance-corpus'
 
-type AtomContractSeed = Omit<AtomContract, 'key' | 'bucket' | 'display' | 'emit'> & {
+type AtomContractSeed = Omit<AtomContract, 'key' | 'bucket' | 'display' | 'emit' | 'corpus'> & {
   readonly display?: AtomContractDisplay
   readonly emit?: AtomContractEmit
+  // #1329 PR3c Round 1 M5：corpus 改为 required。所有 seed 必须显式提供 corpus；
+  // stub atom 需明确提供空字段（配合 STUB_CORPUS_WHITELIST 允许通过 invariant）。
+  readonly corpus: AtomContract['corpus']
 }
 
 // Issue #1279 PR3a：保留给历史 condition atom 未兑现状态使用；当前所有 condition atom
@@ -75,11 +79,12 @@ type NotApplicableEmit = Omit<AtomContractEmit, 'irShape'> & {
 // capabilityStatus 改为 'pr3a-condition'；类型推断仍以 fallback NotApplicableEmit
 // 守门 invariant —— 见 atom-contract-invariants.ts 内 `_NonConditionIrShapeNotApplicable`。
 type CompletedPr1bRegistry<T extends Record<AtomContractKey, AtomContractSeed>> = {
-  readonly [K in keyof T]: Omit<T[K], 'display' | 'emit'> & {
+  readonly [K in keyof T]: Omit<T[K], 'display' | 'emit' | 'corpus'> & {
     readonly key: K
     readonly bucket: AtomContractBucket
     readonly canonicalWave: 'canonicalWave' extends keyof T[K] ? T[K]['canonicalWave'] : undefined
     readonly display: AtomContractDisplay
+    readonly corpus: AtomContract['corpus']
     readonly emit: T[K] extends { readonly emit: infer E extends AtomContractEmit } ? E : NotApplicableEmit
   }
 }
@@ -341,6 +346,7 @@ function completePr1bRegistry<const T extends Record<AtomContractKey, AtomContra
       key,
       bucket,
       display: registry[key].display ?? createPr1bDisplay(ATOM_PUBLIC_NAMES[key]),
+      corpus: registry[key].corpus,
       emit: registry[key].emit ?? mergedEmit,
     } as AtomContract
   }
@@ -354,6 +360,21 @@ function completePr1bRegistry<const T extends Record<AtomContractKey, AtomContra
 export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   // ── 触发信号（triggers）── 通用流水线 + presentationRegistry 文案
   'volume.threshold': {
+    corpus: {
+      aliases: [
+        '成交量过滤',
+        '成交量条件',
+        '量能阈值',
+      ],
+      positiveExamples: [
+        '成交量大于 1000 时允许入场',
+        '成交额超过 500 万时开多',
+      ],
+      negativeExamples: [
+        '只用均量倍数过滤',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('volume.threshold'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -401,6 +422,22 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'volatility.atr_threshold': {
+    corpus: {
+      aliases: [
+        'ATR 过滤',
+        'ATR 条件',
+        'ATR 大于阈值',
+        '平均真实波幅阈值',
+      ],
+      positiveExamples: [
+        'ATR14 大于 50 才允许入场',
+        'ATR 小于 100 时禁止开仓',
+      ],
+      negativeExamples: [
+        '只用固定止损',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('volatility.atr_threshold'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -452,6 +489,22 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'strategy.time_window': {
+    corpus: {
+      aliases: [
+        '时间段过滤',
+        '交易时段',
+        '开仓时间',
+        '允许开仓时间',
+      ],
+      positiveExamples: [
+        '北京时间 9:30-11:30 内允许开仓',
+        'allow entries between 09:30-11:30 UTC',
+      ],
+      negativeExamples: [
+        '不限制开仓时间',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('strategy.time_window'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -503,6 +556,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'oscillator.rsi_lte': {
+    corpus: {
+      aliases: [
+        'RSI 超卖',
+        'RSI 不高于',
+      ],
+      positiveExamples: [
+        'RSI 小于 30',
+      ],
+      negativeExamples: [
+        'RSI 大于 70',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('oscillator.rsi_lte'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -543,6 +609,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'oscillator.rsi_gte': {
+    corpus: {
+      aliases: [
+        'RSI 超买',
+        'RSI 不低于',
+      ],
+      positiveExamples: [
+        'RSI 大于 70',
+      ],
+      negativeExamples: [
+        'RSI 小于 30',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('oscillator.rsi_gte'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -583,6 +662,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'bollinger.touch_upper': {
+    corpus: {
+      aliases: [
+        '碰到上轨',
+        '布林上轨触发',
+      ],
+      positiveExamples: [
+        '触及 BOLL 上轨',
+      ],
+      negativeExamples: [
+        '触及布林下轨',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('bollinger.touch_upper'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -626,6 +718,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'bollinger.touch_lower': {
+    corpus: {
+      aliases: [
+        '碰到下轨',
+        '布林下轨触发',
+      ],
+      positiveExamples: [
+        '触及 BOLL 下轨',
+      ],
+      negativeExamples: [
+        '触及布林上轨',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('bollinger.touch_lower'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -669,6 +774,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'bollinger.touch_middle': {
+    corpus: {
+      aliases: [
+        '碰到中轨',
+        '布林中轨触发',
+      ],
+      positiveExamples: [
+        '触及 BOLL 中轨',
+      ],
+      negativeExamples: [
+        '突破布林上轨',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('bollinger.touch_middle'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -711,6 +829,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'price.percent_change': {
+    corpus: {
+      aliases: [
+        '涨跌幅条件',
+        '价格变化比例',
+      ],
+      positiveExamples: [
+        '价格上涨 3% 后开多',
+      ],
+      negativeExamples: [
+        '价格接近均线',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('price.percent_change'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -749,6 +880,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'price.breakout_up': {
+    corpus: {
+      aliases: [
+        '突破上方',
+        '上破关键位',
+      ],
+      positiveExamples: [
+        '突破前高后开多',
+      ],
+      negativeExamples: [
+        '回踩前低但未突破',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('price.breakout_up'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -784,6 +928,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'price.breakout_down': {
+    corpus: {
+      aliases: [
+        '跌破下方',
+        '下破关键位',
+      ],
+      positiveExamples: [
+        '跌破前低后开空',
+      ],
+      negativeExamples: [
+        '价格仍在区间中间',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('price.breakout_down'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -819,6 +976,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'price.detect.indicator_boundary': {
+    corpus: {
+      aliases: [
+        '价格碰线',
+        '触及指标边界',
+      ],
+      positiveExamples: [
+        '触及 BOLL 下轨（20, 2）',
+      ],
+      negativeExamples: [
+        '只描述价格上涨，没有指标边界',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('price.detect.indicator_boundary'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -874,6 +1044,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'indicator.cross_over': {
+    corpus: {
+      aliases: [
+        '金叉',
+        '向上交叉',
+      ],
+      positiveExamples: [
+        'MA20 上穿 MA60',
+      ],
+      negativeExamples: [
+        'MA20 一直在 MA60 上方',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('indicator.cross_over'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -937,6 +1120,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'indicator.cross_under': {
+    corpus: {
+      aliases: [
+        '死叉',
+        '向下交叉',
+      ],
+      positiveExamples: [
+        'MA20 下穿 MA60',
+      ],
+      negativeExamples: [
+        'MA20 一直在 MA60 下方',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('indicator.cross_under'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -1000,6 +1196,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'indicator.above': {
+    corpus: {
+      aliases: ['指标高于', '突破均线', '站上 MA', '价格高于均线', 'indicator above', 'price above MA'],
+      positiveExamples: [
+        '收盘价站上 EMA20',
+        '价格突破 50 日均线',
+        '指标高于 MA(100) 时入场',
+      ],
+      negativeExamples: ['感觉行情不错', '随便入场', '价格在均线附近'],
+      goldenUtterances: getGoldenUtterancesForAtom('indicator.above'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -1037,6 +1243,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'indicator.below': {
+    corpus: {
+      aliases: ['指标低于', '跌破均线', '跌穿 MA', '价格低于均线', 'indicator below', 'price below MA'],
+      positiveExamples: [
+        '收盘价跌破 EMA20',
+        '价格跌破 50 日均线',
+        '指标低于 MA(100) 时止损',
+      ],
+      negativeExamples: ['感觉要跌', '随便止损', '价格在均线附近'],
+      goldenUtterances: getGoldenUtterancesForAtom('indicator.below'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -1074,6 +1290,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'execution.on_start': {
+    corpus: {
+      aliases: [
+        '策略启动',
+        '开始运行',
+      ],
+      positiveExamples: [
+        '策略启动后立即检查一次条件',
+      ],
+      negativeExamples: [
+        '只在固定时间段交易',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('execution.on_start'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -1109,6 +1338,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'trend.direction': {
+    corpus: {
+      aliases: [
+        '趋势判断',
+        '行情方向',
+      ],
+      positiveExamples: [
+        '只在上升趋势做多',
+      ],
+      negativeExamples: [
+        '无视趋势方向',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('trend.direction'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -1146,6 +1388,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'market.regime': {
+    corpus: {
+      aliases: [
+        '行情结构',
+        '市场环境',
+      ],
+      positiveExamples: [
+        '震荡行情使用网格',
+      ],
+      negativeExamples: [
+        '只描述单个价格条件',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('market.regime'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -1184,6 +1439,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'volatility.state': {
+    corpus: {
+      aliases: [
+        '波动环境',
+        '波动强弱',
+      ],
+      positiveExamples: [
+        '高波动时降低仓位',
+      ],
+      negativeExamples: [
+        '成交量放大但波动不变',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('volatility.state'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -1221,6 +1489,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'price.range_position_lte': {
+    corpus: {
+      aliases: [
+        '接近区间底部',
+        '区间下沿',
+      ],
+      positiveExamples: [
+        '价格位于近 100 根区间下 20%',
+      ],
+      negativeExamples: [
+        '价格处在区间顶部',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('price.range_position_lte'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -1254,6 +1535,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'price.range_position_gte': {
+    corpus: {
+      aliases: [
+        '接近区间顶部',
+        '区间上沿',
+      ],
+      positiveExamples: [
+        '价格位于近 100 根区间上 20%',
+      ],
+      negativeExamples: [
+        '价格处在区间底部',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('price.range_position_gte'),
+    },
     canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
@@ -1287,6 +1581,28 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'indicator.divergence': {
+    corpus: {
+      aliases: [
+        '背离',
+        '顶背离',
+        '底背离',
+        'RSI 背离',
+        'MACD 背离',
+        'bullish divergence',
+        'bearish divergence',
+      ],
+      positiveExamples: [
+        'RSI 顶背离后开空',
+        'MACD 底背离后开多',
+        'RSI 底背离 + 确认 3 根 K 线',
+      ],
+      negativeExamples: [
+        '像背离',
+        '疑似背离',
+        '看起来像背离',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('indicator.divergence'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (_slotKey, _params, _locale) => '请补充指标背离条件的缺失信息（指标类型、背离方向）。',
@@ -1332,6 +1648,32 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'price.candle_pattern': {
+    corpus: {
+      aliases: [
+        '吞没形态',
+        '锤子线',
+        '十字星',
+        '连续实体',
+        'engulfing',
+        'hammer',
+        'doji',
+        'consecutive body',
+        'bullish engulfing',
+        'bearish engulfing',
+      ],
+      positiveExamples: [
+        '出现看涨吞没形态后开多',
+        '锤子线确认后做多',
+        '十字星出现后开空',
+        '连续 3 根阳线后加多',
+      ],
+      negativeExamples: [
+        '像吞没',
+        '疑似锤子',
+        '看起来像十字星',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('price.candle_pattern'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -1384,6 +1726,34 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'price.chart_pattern': {
+    corpus: {
+      aliases: [
+        '头肩',
+        '头肩顶',
+        '头肩底',
+        '双顶',
+        '双底',
+        '三角形',
+        'head and shoulders',
+        'inverse head and shoulders',
+        'h&s',
+        'double top',
+        'double bottom',
+        'triangle',
+      ],
+      positiveExamples: [
+        '出现头肩底形态后开多',
+        '双顶形成后开空',
+        '双底形成后做多',
+        '三角形向上突破后开多',
+      ],
+      negativeExamples: [
+        '看起来像头肩',
+        '疑似双顶',
+        'looks like a triangle',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('price.chart_pattern'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -1430,6 +1800,31 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'liquidity.sweep': {
+    corpus: {
+      aliases: [
+        '流动性扫荡',
+        '流动性猎杀',
+        '扫止损',
+        '扫单',
+        '假突破',
+        'liquidity sweep',
+        'liquidity grab',
+        'stop hunt',
+        'sweep and reclaim',
+      ],
+      positiveExamples: [
+        '扫前低后反弹做多',
+        '扫前高后回落做空',
+        'sweep prev low then reclaim within 3 bars',
+        'liquidity grab at session high, open short',
+      ],
+      negativeExamples: [
+        '看起来像扫荡',
+        '疑似 sweep',
+        'looks like a stop hunt',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('liquidity.sweep'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -1484,6 +1879,28 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'external.signal': {
+    corpus: {
+      aliases: [
+        '外部喊单',
+        '喊单群',
+        'KOL 信号',
+        '外部信号',
+        'tradingview 信号',
+        'discord 信号',
+        'telegram 信号',
+        'webhook',
+        'external signal',
+      ],
+      positiveExamples: [
+        '收到 TradingView webhook 信号后开多',
+        'discord 喊单群发出 buy 信号就开仓',
+        'telegram bot 推送外部信号触发开多',
+      ],
+      negativeExamples: [
+        '看群里讨论后随手开仓',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('external.signal'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -1535,6 +1952,23 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
 
   // ── 持仓条件（positionConstraint 以 trigger 身份出现）
   'position.has_position': {
+    corpus: {
+      aliases: [
+        '已有仓位不再开仓',
+        '持仓中禁止开仓',
+        '仓位存在时阻止入场',
+        '有仓位',
+      ],
+      positiveExamples: [
+        '已有多头仓位时不再开多',
+        '当持仓中禁止同向重复开仓',
+      ],
+      negativeExamples: [
+        '无仓位时开仓',
+        '加仓',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('position.has_position'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -1573,6 +2007,23 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'position.no_position': {
+    corpus: {
+      aliases: [
+        '无仓位才开仓',
+        '空仓时才开仓',
+        '没有持仓时允许入场',
+        '未开仓',
+      ],
+      positiveExamples: [
+        '无多头仓位才开多',
+        '当前无仓时才允许入场',
+      ],
+      negativeExamples: [
+        '已有仓位时开仓',
+        '加仓',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('position.no_position'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -1612,6 +2063,24 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
 
   // ── 行动（actions）
   'action.add_position': {
+    corpus: {
+      aliases: [
+        '追加仓位',
+        '顺势加码',
+        '金字塔加仓',
+        'scale in',
+        'pyramid',
+      ],
+      positiveExamples: [
+        '突破后再加一笔仓位',
+        '信号再次出现时加仓 50%',
+        '盈利 5% 后加仓 30%',
+      ],
+      negativeExamples: [
+        '只开第一笔仓位',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('action.add_position'),
+    },
     display: {
       publicName: ATOM_PUBLIC_NAMES['action.add_position'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1678,6 +2147,23 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'action.reverse_position': {
+    corpus: {
+      aliases: [
+        '反向开仓',
+        '平仓后反向',
+        '反转持仓',
+        '翻仓',
+      ],
+      positiveExamples: [
+        '多单止损后反手开空',
+        '信号反转时由多翻空，使用当前仓位',
+        '由空翻多，下根 K 线执行',
+      ],
+      negativeExamples: [
+        '只平仓不反向',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('action.reverse_position'),
+    },
     display: {
       publicName: ATOM_PUBLIC_NAMES['action.reverse_position'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1724,6 +2210,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
 
   // ── 开多 / 平多 action（PR2c-final-1a：解 caller 切换后 open-slot-resolver spec 3 fail）
   'action.open_long': {
+    corpus: {
+      aliases: ['开多', '做多', '入场多', '开多仓', 'open long', 'go long'],
+      positiveExamples: [
+        '满足条件时开多 1000U',
+        '金叉时开多仓',
+        '突破均线时做多',
+      ],
+      negativeExamples: ['平多', '开空', '随便买'],
+      goldenUtterances: [
+        'EMA20 金叉时开多 1000U',
+        '价格突破阻力位时开多仓',
+      ],
+    },
     summaryContribution: () => '开多',
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (_slotKey, _params, _locale) => '请补充开多动作条件的缺失信息。',
@@ -1750,6 +2249,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'action.close_long': {
+    corpus: {
+      aliases: ['平多', '平仓多', '出场多', '止盈平多', 'close long', 'exit long'],
+      positiveExamples: [
+        '止盈时平多',
+        '跌破均线时平多仓',
+        'EMA20 死叉时平多',
+      ],
+      negativeExamples: ['开多', '平空', '随便平'],
+      goldenUtterances: [
+        '价格跌破 EMA20 时平多仓',
+        '止盈 5% 时平多',
+      ],
+    },
     summaryContribution: () => '平多',
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (_slotKey, _params, _locale) => '请补充平多动作条件的缺失信息。',
@@ -1778,6 +2290,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   // ── 开空 / 平空 action（M2: 镜像 long 补 short atom，消除 isEntryActionKey/isExitActionKey 死代码中
   //   已识别 action.open_short/action.close_short 但 registry 无对应 atom 的不对称）
   'action.open_short': {
+    corpus: {
+      aliases: ['开空', '做空', '入场空', '开空仓', 'open short', 'go short'],
+      positiveExamples: [
+        '满足条件时开空 1000U',
+        '死叉时开空仓',
+        '跌破均线时做空',
+      ],
+      negativeExamples: ['平空', '开多', '随便卖'],
+      goldenUtterances: getGoldenUtterancesForAtom('action.open_short'),
+    },
     summaryContribution: () => '开空',
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (_slotKey, _params, _locale) => '请补充开空动作条件的缺失信息。',
@@ -1804,6 +2326,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'action.close_short': {
+    corpus: {
+      aliases: ['平空', '平仓空', '出场空', '止盈平空', 'close short', 'exit short'],
+      positiveExamples: [
+        '止盈时平空',
+        '突破均线时平空仓',
+        'EMA20 金叉时平空',
+      ],
+      negativeExamples: ['开空', '平多', '随便平'],
+      goldenUtterances: getGoldenUtterancesForAtom('action.close_short'),
+    },
     summaryContribution: () => '平空',
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (_slotKey, _params, _locale) => '请补充平空动作条件的缺失信息。',
@@ -1835,6 +2367,21 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   //   避免与 COMMON_PIPELINE 混淆。summaryContribution 仍 VIA_PRESENTATION_DISPLAY
   //   是为了 partial_take_profit fallback 到 unsupported 路径时仍能渲染 publicName 给用户看
   'risk.partial_take_profit': {
+    corpus: {
+      aliases: [
+        '分档止盈',
+        '多档止盈',
+        '部分止盈',
+        '阶梯止盈',
+      ],
+      positiveExamples: [
+        '盈利 5% 减仓 30%, 10% 再减 30%, 15% 全部平仓',
+      ],
+      negativeExamples: [
+        '盈利 10% 全部止盈',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('risk.partial_take_profit'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: UNSUPPORTED_SKIP,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -1883,6 +2430,13 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
 
   // ── 组合风险 orchestration（portfolioRisk）
   'portfolioRisk.drawdown_block': {
+    // TODO #1329b corpus stub，待补真实 NL 语料
+    corpus: {
+      aliases: [],
+      positiveExamples: [],
+      negativeExamples: [],
+      goldenUtterances: [],
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -1948,6 +2502,24 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   // DCA 派生逻辑也下沉到 atom 自身，需新增 `sizingShape` 接口（第 5 类 emit shape）；
   // 届时再升级本 atom 的 capabilityStatus，与本次 spec-level shape 设计正交。
   'position.dca_schedule': {
+    corpus: {
+      aliases: [
+        '定投补仓',
+        '分批补仓计划',
+        'DCA',
+        '网格补仓',
+        '定期补仓',
+      ],
+      positiveExamples: [
+        '每跌 2% 补仓一次，最多 3 次',
+        '定投补仓，总资金上限 1000 USDT',
+      ],
+      negativeExamples: [
+        '只开一次固定仓位',
+        '单次加仓',
+      ],
+      goldenUtterances: getGoldenUtterancesForAtom('position.dca_schedule'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -2005,6 +2577,21 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   //   触发，无独立 utterance fixture（已在 utterance-corpus.spec
   //   RENDER_CONTRACT_ALLOWED_MISSING_FIXTURE 显式登记）。
   'position.pyramiding_limit': {
+    corpus: {
+      aliases: [
+        '最大加仓层数',
+        '分层加仓上限',
+      ],
+      positiveExamples: [
+        '最多加仓 3 层',
+      ],
+      negativeExamples: [
+        '无限制连续加仓',
+      ],
+      goldenUtterances: [
+        '同方向最多保留 3 层仓位',
+      ],
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (_slotKey, _params, _locale) => '请补充金字塔加仓上限的缺失信息（如最多加仓层数）。',
@@ -2042,6 +2629,21 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   //   atom 通过 grid 触发器子句（"区间 X-Y, 每格 N USDT"）间接落位，无独立 utterance fixture
   //   （已在 utterance-corpus.spec 的 atomsExemptFromOpenSlotCoverage + 顶层 for-skip 显式登记）。
   'grid.range_rebalance': {
+    corpus: {
+      aliases: [
+        '调整网格区间',
+        '网格重置',
+      ],
+      positiveExamples: [
+        '价格离开区间后重新计算网格',
+      ],
+      negativeExamples: [
+        '区间不变一直挂单',
+      ],
+      goldenUtterances: [
+        '突破网格边界后重置交易区间',
+      ],
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (_slotKey, _params, _locale) => '请补充网格区间再平衡的触发条件（如越界后是否重置区间）。',
@@ -2091,6 +2693,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   //   - stream C: scope.*
   // TODO #1329 follow-up Phase 2：完整 surface 同义词 + paramSlots + emit shape。
   'gate.regime': {
+    corpus: {
+      aliases: ['趋势过滤', '状态过滤', 'regime gate', 'trend gate'],
+      positiveExamples: [
+        '上涨趋势才允许做多',
+        '价格高于 EMA50 才做多',
+        '价格低于 EMA60 才做空',
+      ],
+      negativeExamples: ['形态像头肩顶', '感觉走势不太对'],
+      goldenUtterances: getGoldenUtterancesForAtom('gate.regime'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -2111,13 +2723,24 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         sideScope: (v) => String(v),
       },
       summaryTemplate: (params, locale) => {
-        if (locale === 'en') return ATOM_PUBLIC_NAMES['gate.regime'].en
         const sideScope = typeof params.sideScope === 'string' ? params.sideScope : 'both'
         const indicator = typeof params.indicator === 'string' ? params.indicator : 'ema'
         const period = typeof params.period === 'number' ? params.period : 0
         const operator = typeof params.operator === 'string' ? params.operator : 'GT'
-        const indicatorLabel = renderEnumDisplayToken('enum.indicator', indicator.toLowerCase())
         const periodLabel = period > 0 ? `${period}` : ''
+        if (locale === 'en') {
+          const indicatorWithPeriodEn = `${indicator.toUpperCase()}${periodLabel}`
+          const longLineEn = `allow long only when price is above ${indicatorWithPeriodEn}`
+          const shortLineEn = `allow short only when price is below ${indicatorWithPeriodEn}`
+          if (sideScope === 'long') {
+            return operator === 'LT' ? shortLineEn : longLineEn
+          }
+          if (sideScope === 'short') {
+            return operator === 'GT' ? longLineEn : shortLineEn
+          }
+          return `${longLineEn}; ${shortLineEn}`
+        }
+        const indicatorLabel = renderEnumDisplayToken('enum.indicator', indicator.toLowerCase())
         const indicatorWithPeriod = `${indicatorLabel}${periodLabel}`
         const longLine = renderDisplayToken('atom.gate.regime.long.display', { indicator: indicatorWithPeriod })
         const shortLine = renderDisplayToken('atom.gate.regime.short.display', { indicator: indicatorWithPeriod })
@@ -2149,6 +2772,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'portfolioRisk.symbol_exposure_cap': {
+    corpus: {
+      aliases: ['标的敞口', 'symbol exposure cap', 'per-symbol cap', '单标的仓位限制'],
+      positiveExamples: [
+        'BTCUSDT 单标的敞口不超过 30%',
+        'BTCUSDT 仓位超 30% 时缩减敞口',
+        '标的敞口超 20% 仅记录',
+      ],
+      negativeExamples: ['感觉仓位重', '全仓', '随便买'],
+      goldenUtterances: getGoldenUtterancesForAtom('portfolioRisk.symbol_exposure_cap'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -2175,11 +2808,22 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         symbolLabel: (v) => String(v),
       },
       summaryTemplate: (params, locale) => {
-        if (locale === 'en') return ATOM_PUBLIC_NAMES['portfolioRisk.symbol_exposure_cap'].en
         const notionalCapPct = typeof params.notionalCapPct === 'number' ? params.notionalCapPct : 0
         const mode = typeof params.mode === 'string' ? params.mode : 'enforce'
         const effect = typeof params.effectWhenTriggered === 'string' ? params.effectWhenTriggered : 'block_new_entries'
         const symbolLabelRaw = params['symbolLabel']
+        if (locale === 'en') {
+          const symbolPrefixEn = typeof symbolLabelRaw === 'string' && symbolLabelRaw.trim() !== ''
+            ? `${symbolLabelRaw.trim()} `
+            : ''
+          if (mode === 'observe') {
+            return `observe only: ${symbolPrefixEn}symbol exposure exceeding ${notionalCapPct}%`
+          }
+          if (effect === 'reduce_exposure') {
+            return `reduce ${symbolPrefixEn}symbol exposure back to ${notionalCapPct}% when exceeded`
+          }
+          return `block new entries when ${symbolPrefixEn}symbol exposure exceeds ${notionalCapPct}%`
+        }
         const symbolLabel = typeof symbolLabelRaw === 'string' && symbolLabelRaw.trim() !== ''
           ? `${symbolLabelRaw.trim()} `
           : ''
@@ -2210,6 +2854,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'portfolioRisk.substrategy_exposure_cap': {
+    corpus: {
+      aliases: ['子策略敞口', 'substrategy exposure cap', 'per-substrategy cap', '子策略仓位限制'],
+      positiveExamples: [
+        '趋势子策略仓位上限 50%',
+        '震荡子策略敞口超 40% 暂停',
+        '子策略敞口超 30% 仅记录',
+      ],
+      negativeExamples: ['感觉子策略仓位重', '暂停所有', '随便'],
+      goldenUtterances: getGoldenUtterancesForAtom('portfolioRisk.substrategy_exposure_cap'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -2235,10 +2889,18 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         effectWhenTriggered: (v) => String(v),
       },
       summaryTemplate: (params, locale) => {
-        if (locale === 'en') return ATOM_PUBLIC_NAMES['portfolioRisk.substrategy_exposure_cap'].en
         const notionalCapPct = typeof params.notionalCapPct === 'number' ? params.notionalCapPct : 0
         const mode = typeof params.mode === 'string' ? params.mode : 'enforce'
         const effect = typeof params.effectWhenTriggered === 'string' ? params.effectWhenTriggered : 'block_new_entries'
+        if (locale === 'en') {
+          if (mode === 'observe') {
+            return `observe only: sub-strategy exposure exceeding ${notionalCapPct}%`
+          }
+          if (effect === 'pause_substrategy') {
+            return `pause sub-strategy when its exposure exceeds ${notionalCapPct}%`
+          }
+          return `block new entries when sub-strategy exposure exceeds ${notionalCapPct}%`
+        }
         if (mode === 'observe') {
           return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.display.observe', { notionalCapPct })
         }
@@ -2266,6 +2928,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'program.dynamic_grid': {
+    corpus: {
+      aliases: ['跟随网格', '漂移网格', 'dynamic grid'],
+      positiveExamples: [
+        '在 BTCUSDT 用最近 50 根 K 线高点为锚的动态网格，5 档每档 0.5%，趋势上涨时启用，停用时撤单',
+        '围绕近 30 根 K 线中点挂 8 档动态网格，每档 100 USDT，停用时保留挂单',
+        'ETHUSDT 最近 100 根 K 线低点动态网格，3 档 1% 步长，趋势下跌启用，停用平仓',
+      ],
+      negativeExamples: ['感觉网格策略', '随便挂', '区间网格不变'],
+      goldenUtterances: getGoldenUtterancesForAtom('program.dynamic_grid'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -2310,7 +2982,6 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         onDeactivate: (v) => String(v),
       },
       summaryTemplate: (params, locale) => {
-        if (locale === 'en') return ATOM_PUBLIC_NAMES['program.dynamic_grid'].en
         const innerRaw = params.params
         const inner = typeof innerRaw === 'object' && innerRaw !== null && !Array.isArray(innerRaw)
           ? innerRaw as Record<string, unknown>
@@ -2326,9 +2997,14 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         const stepMode = typeof step.mode === 'string' && step.mode.length > 0 ? step.mode : 'pct'
         const stepValue = typeof step.value === 'number' && Number.isFinite(step.value) ? step.value : 0
         const onDeactivate = typeof source.onDeactivate === 'string' && source.onDeactivate.length > 0 ? source.onDeactivate : 'cancel'
+        const stepLabel = stepMode === 'pct' ? `${stepValue}%` : `${stepValue}`
+        if (locale === 'en') {
+          const sideLabelEn: Record<string, string> = { high: 'high', low: 'low', mid: 'mid' }
+          const deactivateLabelEn: Record<string, string> = { cancel: 'cancel orders', keep: 'keep orders', close: 'close positions' }
+          return `dynamic grid anchored at recent ${lookback}-bar ${sideLabelEn[anchorSide] ?? 'high'}, ${levels} levels (${stepLabel} each), on deactivate ${deactivateLabelEn[onDeactivate] ?? 'cancel orders'}`
+        }
         const sideLabel: Record<string, string> = { high: '高点', low: '低点', mid: '中点' }
         const deactivateLabel: Record<string, string> = { cancel: '撤单', keep: '保留挂单', close: '平仓' }
-        const stepLabel = stepMode === 'pct' ? `${stepValue}%` : `${stepValue}`
         return `围绕最近 ${lookback} 根 K 线${sideLabel[anchorSide] ?? '高点'}的 ${levels} 档动态网格（每档 ${stepLabel}），失活时${deactivateLabel[onDeactivate] ?? '撤单'}`
       },
     },
@@ -2351,6 +3027,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'program.fixed_grid_gated': {
+    corpus: {
+      aliases: ['门控网格', '区间网格', 'gated grid', 'fixed grid program'],
+      positiveExamples: [
+        'BTCUSDT 50000-60000 区间挂 10 档网格，5% 步长，趋势上涨时启用',
+        '锚定 50000 挂 10 档 5% 步长，失活时撤单',
+        '区间网格趋势上涨启用，失活时平仓',
+      ],
+      negativeExamples: ['感觉网格策略', '挂网格', '随便挂'],
+      goldenUtterances: getGoldenUtterancesForAtom('program.fixed_grid_gated'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -2379,7 +3065,6 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         onDeactivate: (v) => String(v),
       },
       summaryTemplate: (params, locale) => {
-        if (locale === 'en') return ATOM_PUBLIC_NAMES['program.fixed_grid_gated'].en
         const innerRaw = params.params
         const inner = typeof innerRaw === 'object' && innerRaw !== null && !Array.isArray(innerRaw)
           ? innerRaw as Record<string, unknown>
@@ -2391,6 +3076,15 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         const levels = typeof source.levelCount === 'number' && Number.isFinite(source.levelCount) ? source.levelCount : 0
         const step = typeof source.stepPct === 'number' && Number.isFinite(source.stepPct) ? source.stepPct : 0
         const onDeactivate = typeof source.onDeactivate === 'string' && source.onDeactivate.length > 0 ? source.onDeactivate : 'cancel'
+        if (locale === 'en') {
+          const rangeLabelEn = lower > 0 && upper > 0
+            ? `in range ${lower}-${upper}`
+            : anchor > 0
+              ? `anchored at ${anchor}`
+              : 'in the configured range'
+          const deactivateLabelEn: Record<string, string> = { cancel: 'cancel orders', keep: 'keep orders', close: 'close positions' }
+          return `place ${levels}-level grid ${rangeLabelEn} (step ${step}%), on deactivate ${deactivateLabelEn[onDeactivate] ?? 'cancel orders'}`
+        }
         const rangeLabel = lower > 0 && upper > 0
           ? `在 ${lower}-${upper} 区间`
           : anchor > 0
@@ -2424,6 +3118,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'program.adaptive_volatility_grid': {
+    corpus: {
+      aliases: ['波动自适应网格', 'atr grid', 'adaptive grid', '波动率网格'],
+      positiveExamples: [
+        '用 ATR(14) 的 1.5 倍为步长、3 倍为区间的自适应网格',
+        'ATR 自适应网格，6 档，每档不少于 0.2% 不超过 2%',
+        '波动率 14 自适应网格，1 倍步长 5 倍区间',
+      ],
+      negativeExamples: ['挂个自适应网格', '随便用 ATR'],
+      goldenUtterances: getGoldenUtterancesForAtom('program.adaptive_volatility_grid'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -2454,7 +3158,6 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         onDeactivate: (v) => String(v),
       },
       summaryTemplate: (params, locale) => {
-        if (locale === 'en') return ATOM_PUBLIC_NAMES['program.adaptive_volatility_grid'].en
         const innerRaw = params.params
         const inner = typeof innerRaw === 'object' && innerRaw !== null && !Array.isArray(innerRaw)
           ? innerRaw as Record<string, unknown>
@@ -2467,6 +3170,13 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         const maxStepPct = typeof source.maxStepPct === 'number' && Number.isFinite(source.maxStepPct) ? source.maxStepPct : 2
         const levelCount = typeof source.levelCount === 'number' && Number.isFinite(source.levelCount) ? source.levelCount : 6
         const onDeactivate = typeof source.onDeactivate === 'string' && source.onDeactivate.length > 0 ? source.onDeactivate : 'cancel'
+        if (locale === 'en') {
+          const deactivateLabelEn: Record<string, string> = { cancel: 'cancel orders', keep: 'keep orders', close: 'close positions' }
+          return (
+            `adaptive grid with step ${atrMultiplier}x ATR(${atrPeriod}) and range ${rangeMultiplier}x ATR(${atrPeriod}), `
+            + `${levelCount} levels, each clamped to ${minStepPct}%-${maxStepPct}%, on deactivate ${deactivateLabelEn[onDeactivate] ?? 'cancel orders'}`
+          )
+        }
         const deactivateLabel: Record<string, string> = { cancel: '撤单', keep: '保留挂单', close: '平仓' }
         return (
           `ATR(${atrPeriod}) 的 ${atrMultiplier} 倍为步长、${rangeMultiplier} 倍为区间的自适应网格，`
@@ -2496,6 +3206,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'program.event_listener': {
+    corpus: {
+      aliases: ['事件监听', 'webhook 监听', '外部事件订阅', 'event listener'],
+      positiveExamples: [
+        'OKX 合约 BTCUSDT 15m，订阅 binance webhook 事件源，趋势上涨时启用 tradingview 喊单监听',
+        'discord 事件监听，按 signalId 去重 5 秒，过期 60 秒丢弃',
+        'telegram 信号监听，每 10 秒去重，过期 60 秒上报告警',
+      ],
+      negativeExamples: ['挂个网格策略', '随便接 webhook'],
+      goldenUtterances: getGoldenUtterancesForAtom('program.event_listener'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -2543,13 +3263,22 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         permissionScope: (v) => String(v),
       },
       summaryTemplate: (params, locale) => {
-        if (locale === 'en') return ATOM_PUBLIC_NAMES['program.event_listener'].en
         const innerRaw = params.params
         const inner = typeof innerRaw === 'object' && innerRaw !== null && !Array.isArray(innerRaw)
           ? innerRaw as Record<string, unknown>
           : {}
         const source = Object.keys(inner).length > 0 ? inner : params
         const permissionScope = typeof source.permissionScope === 'string' && source.permissionScope.length > 0 ? source.permissionScope : ''
+        if (locale === 'en') {
+          const providerEn = permissionScope.split(':')[0] || 'external'
+          const providerLabelEn: Record<string, string> = {
+            tradingview: 'TradingView alerts',
+            discord: 'Discord signals',
+            telegram: 'Telegram signals',
+            webhook: 'Webhook signals',
+          }
+          return `event listener — ${providerLabelEn[providerEn] ?? 'external event'}`
+        }
         const provider = permissionScope.split(':')[0] || '外部信号'
         const providerLabel: Record<string, string> = {
           tradingview: 'TradingView 喊单',
@@ -2578,6 +3307,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'scope.symbol': {
+    corpus: {
+      aliases: ['多标的范围', '多币种作用域', '标的作用域', 'symbol scope'],
+      positiveExamples: [
+        'BTCUSDT 和 ETHUSDT 同时跑相同策略',
+        '在 BTC 和 ETH 上挂网格',
+        'BTCUSDT、ETHUSDT、SOLUSDT 多个标的同时跑',
+      ],
+      negativeExamples: ['只交易 BTCUSDT', '感觉多个币都行', '随便几个币'],
+      goldenUtterances: getGoldenUtterancesForAtom('scope.symbol'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -2599,13 +3338,22 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         primarySymbol: (v) => String(v),
       },
       summaryTemplate: (params, locale) => {
-        if (locale === 'en') return ATOM_PUBLIC_NAMES['scope.symbol'].en
         const symbolsRaw = params.symbols
+        const primary = typeof params.primarySymbol === 'string' ? params.primarySymbol : ''
+        if (locale === 'en') {
+          const symbolsEn = Array.isArray(symbolsRaw)
+            ? symbolsRaw.filter((s): s is string => typeof s === 'string').join(', ')
+            : ''
+          if (symbolsEn === '') return ATOM_PUBLIC_NAMES['scope.symbol'].en
+          if (primary !== '') {
+            return `Symbol scope: ${symbolsEn} (primary ${primary})`
+          }
+          return `Symbol scope: ${symbolsEn}`
+        }
         const symbols = Array.isArray(symbolsRaw)
           ? symbolsRaw.filter((s): s is string => typeof s === 'string').join('、')
           : ''
         if (symbols === '') return ATOM_PUBLIC_NAMES['scope.symbol'].zh
-        const primary = typeof params.primarySymbol === 'string' ? params.primarySymbol : ''
         if (primary !== '') {
           return renderDisplayToken('atom.scope.symbol.display.with_primary', { symbols, primarySymbol: primary })
         }
@@ -2629,6 +3377,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'scope.leg': {
+    corpus: {
+      aliases: ['对冲腿', '多空腿', 'hedge legs', 'strategy legs', '腿'],
+      positiveExamples: [
+        '做多 BTC 同时做空 ETH，等比对冲',
+        '三条腿：多 BTC、多 ETH、空 SOL',
+        'BTCUSDT 多头腿、ETHUSDT 空头腿，1:2 对冲',
+      ],
+      negativeExamples: ['做多 BTCUSDT 和 ETHUSDT', '随便对冲一下'],
+      goldenUtterances: getGoldenUtterancesForAtom('scope.leg'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -2655,11 +3413,34 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         instrumentRef: (v) => String(v),
       },
       summaryTemplate: (params, locale) => {
-        if (locale === 'en') return ATOM_PUBLIC_NAMES['scope.leg'].en
         const direction = typeof params.direction === 'string' ? params.direction : ''
         const instrumentSym = typeof params.instrumentSymbol === 'string' ? params.instrumentSymbol : ''
         const instrumentRefRaw = typeof params.instrumentRef === 'string' ? params.instrumentRef : ''
         const instrument = instrumentSym !== '' ? instrumentSym : instrumentRefRaw
+        if (locale === 'en') {
+          if (direction === 'long' && instrument !== '') {
+            return `Long leg (${instrument})`
+          }
+          if (direction === 'short' && instrument !== '') {
+            return `Short leg (${instrument})`
+          }
+          const legsRawEn = params.legs
+          if (Array.isArray(legsRawEn)) {
+            const partsEn: string[] = []
+            for (const item of legsRawEn) {
+              if (typeof item !== 'object' || item === null) continue
+              const r = item as Record<string, unknown>
+              const d = typeof r.direction === 'string' ? r.direction : ''
+              const sym = typeof r.instrumentSymbol === 'string' ? r.instrumentSymbol : ''
+              if (sym === '') continue
+              partsEn.push(d === 'short' ? `short ${sym}` : `long ${sym}`)
+            }
+            if (partsEn.length > 0) {
+              return `Hedge combo: ${partsEn.join(', ')}`
+            }
+          }
+          return ATOM_PUBLIC_NAMES['scope.leg'].en
+        }
         if (direction === 'long' && instrument !== '') {
           return renderDisplayToken('atom.scope.leg.display.long', { instrument })
         }
@@ -2701,6 +3482,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'scope.timeframe': {
+    corpus: {
+      aliases: ['多周期范围', '多时间框架', 'timeframe scope', '周期作用域'],
+      positiveExamples: [
+        '15 分钟主周期，1 小时和 4 小时做 scope 依赖周期',
+        '执行周期 5m，参考 15m 1h 多时间框架 scope',
+        '主周期 1h，依赖 4h 1d 严格对齐',
+      ],
+      negativeExamples: ['只用 15 分钟一个周期', '随便几个周期都行'],
+      goldenUtterances: getGoldenUtterancesForAtom('scope.timeframe'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -2726,7 +3517,6 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         alignmentPolicy: (v) => String(v),
       },
       summaryTemplate: (params, locale) => {
-        if (locale === 'en') return ATOM_PUBLIC_NAMES['scope.timeframe'].en
         const primary = typeof params.primaryTimeframe === 'string' ? params.primaryTimeframe : ''
         const requiredRaw = params.requiredTimeframes
         const required = Array.isArray(requiredRaw)
@@ -2735,6 +3525,10 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         const alignmentPolicy = typeof params.alignmentPolicy === 'string' && params.alignmentPolicy.length > 0
           ? params.alignmentPolicy
           : 'strict'
+        if (locale === 'en') {
+          if (primary === '' || required === '') return ATOM_PUBLIC_NAMES['scope.timeframe'].en
+          return `Timeframe scope: primary ${primary}, required ${required} (${alignmentPolicy})`
+        }
         if (primary === '' || required === '') return ATOM_PUBLIC_NAMES['scope.timeframe'].zh
         return renderDisplayToken('atom.scope.timeframe.display.with_required', {
           primaryTimeframe: primary,
@@ -2760,6 +3554,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   'scope.dataSource': {
+    corpus: {
+      aliases: ['数据源作用域', '行情源作用域', 'data source scope', 'feed scope'],
+      positiveExamples: [
+        '主行情源 binance.spot.btcusdt 用 OHLCV',
+        '事件源 webhook tradingview.alpha 接收信号',
+        'primary feed binance.spot.ethusdt OHLCV, confirmation feed okx.spot.ethusdt orderbook',
+      ],
+      negativeExamples: ['随便选个数据源', '看市场情况', '只交易 BTC'],
+      goldenUtterances: getGoldenUtterancesForAtom('scope.dataSource'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -2784,12 +3588,15 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         schema: (v) => String(v),
       },
       summaryTemplate: (params, locale) => {
-        if (locale === 'en') return ATOM_PUBLIC_NAMES['scope.dataSource'].en
         const role = typeof params.role === 'string' ? params.role : ''
         const feedId = typeof params.feedId === 'string' ? params.feedId : ''
         const schemaRefRaw = typeof params.schemaRef === 'string' ? params.schemaRef : ''
         const schemaPlain = typeof params.schema === 'string' ? params.schema : ''
         const schema = schemaRefRaw !== '' ? schemaRefRaw : schemaPlain
+        if (locale === 'en') {
+          if (role === '' || feedId === '') return ATOM_PUBLIC_NAMES['scope.dataSource'].en
+          return `Data source: ${role} (${feedId}${schema !== '' ? ` / ${schema}` : ''})`
+        }
         if (role === '' || feedId === '') return ATOM_PUBLIC_NAMES['scope.dataSource'].zh
         return renderDisplayToken('atom.scope.dataSource.display', { role, feedId, schema })
       },
@@ -2813,6 +3620,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
 
   // #1329 follow-up Phase 3e: scope.subStrategy 完整迁入 ATOM_CONTRACT_REGISTRY.display
   'scope.subStrategy': {
+    corpus: {
+      aliases: ['多子策略', '策略切换范围', 'sub-strategy scope', 'sub strategy scope'],
+      positiveExamples: [
+        '趋势行情用趋势子策略，震荡行情用震荡子策略',
+        '上涨时跑策略 A，下跌时跑策略 B',
+        '在 BTCUSDT 上跑两套子策略，根据 ATR 切换',
+      ],
+      negativeExamples: ['只跑一个策略', '不需要切换', '策略不行'],
+      goldenUtterances: getGoldenUtterancesForAtom('scope.subStrategy'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -2836,13 +3653,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         orderHandlingOnDeactivate: (v) => String(v),
       },
       summaryTemplate: (params, locale) => {
-        if (locale === 'en') return ATOM_PUBLIC_NAMES['scope.subStrategy'].en
         const labelRaw = typeof params.subStrategyLabel === 'string' ? params.subStrategyLabel : ''
         const idRaw = typeof params.subStrategyId === 'string' ? params.subStrategyId : ''
         const label = labelRaw !== '' ? labelRaw : idRaw
-        if (label === '') return ATOM_PUBLIC_NAMES['scope.subStrategy'].zh
         const positionHandling = typeof params.positionHandlingOnDeactivate === 'string' ? params.positionHandlingOnDeactivate : ''
         const orderHandling = typeof params.orderHandlingOnDeactivate === 'string' ? params.orderHandlingOnDeactivate : ''
+        if (locale === 'en') {
+          if (label === '') return ATOM_PUBLIC_NAMES['scope.subStrategy'].en
+          if (positionHandling !== '' && orderHandling !== '') {
+            return `Sub-strategy: ${label} (on switch — position: ${positionHandling}, orders: ${orderHandling})`
+          }
+          return `Sub-strategy: ${label}`
+        }
+        if (label === '') return ATOM_PUBLIC_NAMES['scope.subStrategy'].zh
         if (positionHandling !== '' && orderHandling !== '') {
           return renderDisplayToken('atom.scope.subStrategy.display.with_handling', {
             label,
@@ -2872,6 +3695,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
 
   // #1329 follow-up Phase 3e: gate.subStrategy 完整迁入 ATOM_CONTRACT_REGISTRY.display
   'gate.subStrategy': {
+    corpus: {
+      aliases: ['子策略切换', '子策略暂停', 'sub-strategy gate'],
+      positiveExamples: ['RSI > 70 切到震荡子策略，<30 切回趋势子策略', '盘整时暂停趋势子策略'],
+      negativeExamples: ['不需要切换'],
+      goldenUtterances: getGoldenUtterancesForAtom('gate.subStrategy'),
+    },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey, _params, _locale) => {
@@ -2895,8 +3724,18 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         toSubStrategyScopeRef: (v) => String(v),
       },
       summaryTemplate: (params, locale) => {
-        if (locale === 'en') return ATOM_PUBLIC_NAMES['gate.subStrategy'].en
         const effect = typeof params.effectWhenFalse === 'string' ? params.effectWhenFalse : ''
+        if (locale === 'en') {
+          if (effect === 'pause_substrategy') {
+            const label = typeof params.subStrategyScopeRef === 'string' ? params.subStrategyScopeRef : ''
+            return `Pause sub-strategy${label !== '' ? ` ${label}` : ''} when condition is false`
+          }
+          if (effect === 'switch_substrategy') {
+            const toLabel = typeof params.toSubStrategyScopeRef === 'string' ? params.toSubStrategyScopeRef : ''
+            return `Switch to sub-strategy${toLabel !== '' ? ` ${toLabel}` : ''} when condition is true`
+          }
+          return ATOM_PUBLIC_NAMES['gate.subStrategy'].en
+        }
         if (effect === 'pause_substrategy') {
           const label = typeof params.subStrategyScopeRef === 'string' ? params.subStrategyScopeRef : ''
           return renderDisplayToken('atom.gate.subStrategy.pause', { label })
@@ -2927,8 +3766,8 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
 })
 
 // TS exhaustive 编译期守门验证（无运行时开销）
-// 若 ATOM_CONTRACT_REGISTRY 缺少任一 SupportedExecutableUtteranceAtom key → TS error
-type _ExhaustiveCheck = typeof ATOM_CONTRACT_REGISTRY extends Record<SupportedExecutableUtteranceAtom, AtomContract>
+// 若 ATOM_CONTRACT_REGISTRY 缺少任一 SupportedAtomKey → TS error
+type _ExhaustiveCheck = typeof ATOM_CONTRACT_REGISTRY extends Record<SupportedAtomKey, AtomContract>
   ? true
   : never
 const _exhaustiveCheckPass: _ExhaustiveCheck = true

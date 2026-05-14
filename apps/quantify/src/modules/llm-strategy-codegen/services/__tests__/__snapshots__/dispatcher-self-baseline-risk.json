@@ -1,0 +1,1926 @@
+[
+  {
+    "id": "risk-partial-take-profit-zh-locked-three-tier",
+    "source": "corpus",
+    "atomKey": "risk.partial_take_profit",
+    "utterance": "OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，单笔 10%，第一档 +5% 减 30%，第二档 +10% 减 30%，第三档 +15% 减 40%。",
+    "patch": {
+      "contextSlots": {
+        "exchange": "okx",
+        "symbol": {
+          "value": "BTCUSDT",
+          "source": "user_explicit",
+          "evidenceText": "BTCUSDT",
+          "base": "BTC",
+          "quote": "USDT",
+          "quoteSource": "explicit"
+        },
+        "timeframe": "15m",
+        "marketType": "perp"
+      },
+      "triggers": [
+        {
+          "key": "indicator.cross_over",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "value": 20,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 20,
+            "signalPeriod": 20
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-1-indicator-cross-over",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "cross_over",
+                  "shape": {
+                    "key": "indicator.cross_over",
+                    "phase": "entry",
+                    "sideScope": "long",
+                    "indicator": "ma",
+                    "value": 20,
+                    "period": 20,
+                    "fastPeriod": 20,
+                    "slowPeriod": 20,
+                    "signalPeriod": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "value": 20,
+                "period": 20,
+                "fastPeriod": 20,
+                "slowPeriod": 20,
+                "signalPeriod": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "long"
+        },
+        {
+          "key": "indicator.cross_under",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "value": 20,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 20,
+            "signalPeriod": 20
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-2-indicator-cross-under",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "cross_under",
+                  "shape": {
+                    "key": "indicator.cross_under",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "value": 20,
+                    "period": 20,
+                    "fastPeriod": 20,
+                    "slowPeriod": 20,
+                    "signalPeriod": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "value": 20,
+                "period": 20,
+                "fastPeriod": 20,
+                "slowPeriod": 20,
+                "signalPeriod": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.above",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "referenceRole": "mid_term",
+            "reference.period": 20,
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-3-indicator-above",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "above",
+                  "shape": {
+                    "key": "indicator.above",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "referenceRole": "mid_term",
+                    "reference.period": 20,
+                    "timeframeOverride": "true"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "referenceRole": "mid_term",
+                "reference.period": 20,
+                "timeframeOverride": "true"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.below",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "referenceRole": "mid_term",
+            "reference.period": 20,
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-4-indicator-below",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "below",
+                  "shape": {
+                    "key": "indicator.below",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "referenceRole": "mid_term",
+                    "reference.period": 20,
+                    "timeframeOverride": "true"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "referenceRole": "mid_term",
+                "reference.period": 20,
+                "timeframeOverride": "true"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-action-open-long",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "action",
+                  "verb": "emit",
+                  "object": "open_long",
+                  "shape": {
+                    "key": "action.open_long",
+                    "phase": "entry",
+                    "sideScope": "long"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ],
+      "risk": [
+        {
+          "key": "risk.partial_take_profit",
+          "phase": "exit",
+          "params": {
+            "profitPct": 0.05,
+            "ratio": 0.05
+          },
+          "evidence": {
+            "text": "第一档 +5% 减 30%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-risk-partial-take-profit",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "risk",
+                  "verb": "emit",
+                  "object": "partial_take_profit",
+                  "shape": {
+                    "key": "risk.partial_take_profit",
+                    "phase": "exit",
+                    "sideScope": "both",
+                    "profitPct": 0.05,
+                    "ratio": 0.05
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "profitPct": 0.05,
+                "ratio": 0.05
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "risk.partial_take_profit",
+          "phase": "exit",
+          "params": {
+            "profitPct": 0.1,
+            "ratio": 0.1
+          },
+          "evidence": {
+            "text": "第二档 +10% 减 30%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-2-risk-partial-take-profit",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "risk",
+                  "verb": "emit",
+                  "object": "partial_take_profit",
+                  "shape": {
+                    "key": "risk.partial_take_profit",
+                    "phase": "exit",
+                    "sideScope": "both",
+                    "profitPct": 0.1,
+                    "ratio": 0.1
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "profitPct": 0.1,
+                "ratio": 0.1
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "risk.partial_take_profit",
+          "phase": "exit",
+          "params": {
+            "profitPct": 0.15,
+            "ratio": 0.15
+          },
+          "evidence": {
+            "text": "第三档 +15% 减 40%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-3-risk-partial-take-profit",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "risk",
+                  "verb": "emit",
+                  "object": "partial_take_profit",
+                  "shape": {
+                    "key": "risk.partial_take_profit",
+                    "phase": "exit",
+                    "sideScope": "both",
+                    "profitPct": 0.15,
+                    "ratio": 0.15
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "profitPct": 0.15,
+                "ratio": 0.15
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "risk-partial-take-profit-en-locked-three-tier",
+    "source": "corpus",
+    "atomKey": "risk.partial_take_profit",
+    "utterance": "OKX BTCUSDT 15m, scale out 30% at +5%, 30% at +10%, full exit at +15%, MA20 cross above MA50, position 10%.",
+    "patch": {
+      "contextSlots": {
+        "exchange": "okx",
+        "symbol": {
+          "value": "BTCUSDT",
+          "source": "user_explicit",
+          "evidenceText": "BTCUSDT",
+          "base": "BTC",
+          "quote": "USDT",
+          "quoteSource": "explicit"
+        },
+        "timeframe": "15m"
+      },
+      "triggers": [
+        {
+          "key": "oscillator.rsi_gte",
+          "phase": "entry",
+          "params": {
+            "period": 20,
+            "value": 20,
+            "thresholdRole": "upper_threshold"
+          },
+          "evidence": {
+            "text": "MA20 cross above MA50",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-1-oscillator-rsi-gte",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "rsi_gte",
+                  "shape": {
+                    "key": "oscillator.rsi_gte",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "period": 20,
+                    "value": 20,
+                    "thresholdRole": "upper_threshold"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "period": 20,
+                "value": 20,
+                "thresholdRole": "upper_threshold"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.cross_over",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "value": 20,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 20,
+            "signalPeriod": 20
+          },
+          "evidence": {
+            "text": "MA20 cross above MA50",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-2-indicator-cross-over",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "cross_over",
+                  "shape": {
+                    "key": "indicator.cross_over",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "value": 20,
+                    "period": 20,
+                    "fastPeriod": 20,
+                    "slowPeriod": 20,
+                    "signalPeriod": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "value": 20,
+                "period": 20,
+                "fastPeriod": 20,
+                "slowPeriod": 20,
+                "signalPeriod": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.cross_under",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "value": 20,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 20,
+            "signalPeriod": 20
+          },
+          "evidence": {
+            "text": "MA20 cross above MA50",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-3-indicator-cross-under",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "cross_under",
+                  "shape": {
+                    "key": "indicator.cross_under",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "value": 20,
+                    "period": 20,
+                    "fastPeriod": 20,
+                    "slowPeriod": 20,
+                    "signalPeriod": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "value": 20,
+                "period": 20,
+                "fastPeriod": 20,
+                "slowPeriod": 20,
+                "signalPeriod": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.above",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "referenceRole": "mid_term",
+            "reference.period": 20,
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "MA20 cross above MA50",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-4-indicator-above",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "above",
+                  "shape": {
+                    "key": "indicator.above",
+                    "phase": "entry",
+                    "sideScope": "long",
+                    "indicator": "ma",
+                    "referenceRole": "mid_term",
+                    "reference.period": 20,
+                    "timeframeOverride": "true"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "referenceRole": "mid_term",
+                "reference.period": 20,
+                "timeframeOverride": "true"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "long"
+        },
+        {
+          "key": "indicator.below",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "referenceRole": "mid_term",
+            "reference.period": 20,
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "MA20 cross above MA50",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-5-indicator-below",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "below",
+                  "shape": {
+                    "key": "indicator.below",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "referenceRole": "mid_term",
+                    "reference.period": 20,
+                    "timeframeOverride": "true"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "referenceRole": "mid_term",
+                "reference.period": 20,
+                "timeframeOverride": "true"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "both"
+        }
+      ],
+      "risk": [
+        {
+          "key": "risk.partial_take_profit",
+          "phase": "exit",
+          "params": {
+            "profitPct": 0.3,
+            "ratio": 0.3
+          },
+          "evidence": {
+            "text": "scale out 30% at +5%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-risk-partial-take-profit",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "risk",
+                  "verb": "emit",
+                  "object": "partial_take_profit",
+                  "shape": {
+                    "key": "risk.partial_take_profit",
+                    "phase": "exit",
+                    "sideScope": "both",
+                    "profitPct": 0.3,
+                    "ratio": 0.3
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "profitPct": 0.3,
+                "ratio": 0.3
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "risk.partial_take_profit",
+          "phase": "exit",
+          "params": {
+            "profitPct": 0.3,
+            "ratio": 0.3
+          },
+          "evidence": {
+            "text": "30% at +10%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-2-risk-partial-take-profit",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "risk",
+                  "verb": "emit",
+                  "object": "partial_take_profit",
+                  "shape": {
+                    "key": "risk.partial_take_profit",
+                    "phase": "exit",
+                    "sideScope": "both",
+                    "profitPct": 0.3,
+                    "ratio": 0.3
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "profitPct": 0.3,
+                "ratio": 0.3
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "risk.partial_take_profit",
+          "phase": "exit",
+          "params": {
+            "profitPct": 0.15,
+            "ratio": 0.15
+          },
+          "evidence": {
+            "text": "full exit at +15%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-3-risk-partial-take-profit",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "risk",
+                  "verb": "emit",
+                  "object": "partial_take_profit",
+                  "shape": {
+                    "key": "risk.partial_take_profit",
+                    "phase": "exit",
+                    "sideScope": "both",
+                    "profitPct": 0.15,
+                    "ratio": 0.15
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "profitPct": 0.15,
+                "ratio": 0.15
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "gate.regime",
+          "phase": "gate",
+          "params": {
+            "indicator": "ma",
+            "period": 20,
+            "operator": "GT",
+            "sideScope": "both"
+          },
+          "evidence": {
+            "text": "MA20 cross above MA50",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-4-gate-regime",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "orchestration",
+                  "verb": "emit",
+                  "object": "regime",
+                  "shape": {
+                    "key": "gate.regime",
+                    "phase": "gate",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "period": 20,
+                    "operator": "GT"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "period": 20,
+                "operator": "GT",
+                "sideScope": "both"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "risk-partial-take-profit-zh-open-slot-missing-tiers",
+    "source": "corpus",
+    "atomKey": "risk.partial_take_profit",
+    "utterance": "OKX 合约 BTCUSDT 15m，设置分批止盈，MA20 上穿 MA50 开多，单笔 10%。",
+    "patch": {
+      "contextSlots": {
+        "exchange": "okx",
+        "symbol": {
+          "value": "BTCUSDT",
+          "source": "user_explicit",
+          "evidenceText": "BTCUSDT",
+          "base": "BTC",
+          "quote": "USDT",
+          "quoteSource": "explicit"
+        },
+        "timeframe": "15m",
+        "marketType": "perp"
+      },
+      "triggers": [
+        {
+          "key": "indicator.cross_over",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "value": 20,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 20,
+            "signalPeriod": 20
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-1-indicator-cross-over",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "cross_over",
+                  "shape": {
+                    "key": "indicator.cross_over",
+                    "phase": "entry",
+                    "sideScope": "long",
+                    "indicator": "ma",
+                    "value": 20,
+                    "period": 20,
+                    "fastPeriod": 20,
+                    "slowPeriod": 20,
+                    "signalPeriod": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "value": 20,
+                "period": 20,
+                "fastPeriod": 20,
+                "slowPeriod": 20,
+                "signalPeriod": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "long"
+        },
+        {
+          "key": "indicator.cross_under",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "value": 20,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 20,
+            "signalPeriod": 20
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-2-indicator-cross-under",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "cross_under",
+                  "shape": {
+                    "key": "indicator.cross_under",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "value": 20,
+                    "period": 20,
+                    "fastPeriod": 20,
+                    "slowPeriod": 20,
+                    "signalPeriod": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "value": 20,
+                "period": 20,
+                "fastPeriod": 20,
+                "slowPeriod": 20,
+                "signalPeriod": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.above",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "referenceRole": "mid_term",
+            "reference.period": 20,
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-3-indicator-above",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "above",
+                  "shape": {
+                    "key": "indicator.above",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "referenceRole": "mid_term",
+                    "reference.period": 20,
+                    "timeframeOverride": "true"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "referenceRole": "mid_term",
+                "reference.period": 20,
+                "timeframeOverride": "true"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.below",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "referenceRole": "mid_term",
+            "reference.period": 20,
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-4-indicator-below",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "below",
+                  "shape": {
+                    "key": "indicator.below",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "referenceRole": "mid_term",
+                    "reference.period": 20,
+                    "timeframeOverride": "true"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "referenceRole": "mid_term",
+                "reference.period": 20,
+                "timeframeOverride": "true"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-action-open-long",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "action",
+                  "verb": "emit",
+                  "object": "open_long",
+                  "shape": {
+                    "key": "action.open_long",
+                    "phase": "entry",
+                    "sideScope": "long"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ],
+      "risk": [
+        {
+          "key": "risk.partial_take_profit",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "设置分批止盈",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-risk-partial-take-profit",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "risk",
+                  "verb": "emit",
+                  "object": "partial_take_profit",
+                  "shape": {
+                    "key": "risk.partial_take_profit",
+                    "phase": "exit",
+                    "sideScope": "both"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "risk-partial-take-profit-zh-locked-single-tier",
+    "source": "corpus",
+    "atomKey": "risk.partial_take_profit",
+    "utterance": "OKX 合约 BTCUSDT 15m，盈利 5% 平一半，MA20 上穿 MA50 开多，单笔 10%。",
+    "patch": {
+      "contextSlots": {
+        "exchange": "okx",
+        "symbol": {
+          "value": "BTCUSDT",
+          "source": "user_explicit",
+          "evidenceText": "BTCUSDT",
+          "base": "BTC",
+          "quote": "USDT",
+          "quoteSource": "explicit"
+        },
+        "timeframe": "15m",
+        "marketType": "perp"
+      },
+      "triggers": [
+        {
+          "key": "indicator.cross_over",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "value": 20,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 20,
+            "signalPeriod": 20
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-1-indicator-cross-over",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "cross_over",
+                  "shape": {
+                    "key": "indicator.cross_over",
+                    "phase": "entry",
+                    "sideScope": "long",
+                    "indicator": "ma",
+                    "value": 20,
+                    "period": 20,
+                    "fastPeriod": 20,
+                    "slowPeriod": 20,
+                    "signalPeriod": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "value": 20,
+                "period": 20,
+                "fastPeriod": 20,
+                "slowPeriod": 20,
+                "signalPeriod": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "long"
+        },
+        {
+          "key": "indicator.cross_under",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "value": 20,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 20,
+            "signalPeriod": 20
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-2-indicator-cross-under",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "cross_under",
+                  "shape": {
+                    "key": "indicator.cross_under",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "value": 20,
+                    "period": 20,
+                    "fastPeriod": 20,
+                    "slowPeriod": 20,
+                    "signalPeriod": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "value": 20,
+                "period": 20,
+                "fastPeriod": 20,
+                "slowPeriod": 20,
+                "signalPeriod": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.above",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "referenceRole": "mid_term",
+            "reference.period": 20,
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-3-indicator-above",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "above",
+                  "shape": {
+                    "key": "indicator.above",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "referenceRole": "mid_term",
+                    "reference.period": 20,
+                    "timeframeOverride": "true"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "referenceRole": "mid_term",
+                "reference.period": 20,
+                "timeframeOverride": "true"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.below",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "referenceRole": "mid_term",
+            "reference.period": 20,
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-4-indicator-below",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "below",
+                  "shape": {
+                    "key": "indicator.below",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "referenceRole": "mid_term",
+                    "reference.period": 20,
+                    "timeframeOverride": "true"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "referenceRole": "mid_term",
+                "reference.period": 20,
+                "timeframeOverride": "true"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "action.add_position",
+          "phase": "entry",
+          "params": {
+            "sideScope": "long",
+            "addMode": "profit_pct",
+            "addRatio": 0.05,
+            "profitThreshold": 0.05,
+            "drawdownThreshold": 0.05
+          },
+          "evidence": {
+            "text": "盈利 5% 平一半",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-action-add-position",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "action",
+                  "verb": "emit",
+                  "object": "add_position",
+                  "shape": {
+                    "key": "action.add_position",
+                    "phase": "entry",
+                    "sideScope": "long",
+                    "addMode": "profit_pct",
+                    "addRatio": 0.05,
+                    "profitThreshold": 0.05,
+                    "drawdownThreshold": 0.05
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "sideScope": "long",
+                "addMode": "profit_pct",
+                "addRatio": 0.05,
+                "profitThreshold": 0.05,
+                "drawdownThreshold": 0.05
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-action-open-long",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "action",
+                  "verb": "emit",
+                  "object": "open_long",
+                  "shape": {
+                    "key": "action.open_long",
+                    "phase": "entry",
+                    "sideScope": "long"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ],
+      "risk": [
+        {
+          "key": "risk.partial_take_profit",
+          "phase": "exit",
+          "params": {
+            "profitPct": 0.05,
+            "ratio": 0.05
+          },
+          "evidence": {
+            "text": "盈利 5% 平一半",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-risk-partial-take-profit",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "risk",
+                  "verb": "emit",
+                  "object": "partial_take_profit",
+                  "shape": {
+                    "key": "risk.partial_take_profit",
+                    "phase": "exit",
+                    "sideScope": "both",
+                    "profitPct": 0.05,
+                    "ratio": 0.05
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "profitPct": 0.05,
+                "ratio": 0.05
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "risk-partial-take-profit-zh-locked-two-tier-user-real",
+    "source": "corpus",
+    "atomKey": "risk.partial_take_profit",
+    "utterance": "OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，单笔 10%，盈利 5% 平 50%，盈利 10% 平 50%。",
+    "patch": {
+      "contextSlots": {
+        "exchange": "okx",
+        "symbol": {
+          "value": "BTCUSDT",
+          "source": "user_explicit",
+          "evidenceText": "BTCUSDT",
+          "base": "BTC",
+          "quote": "USDT",
+          "quoteSource": "explicit"
+        },
+        "timeframe": "15m",
+        "marketType": "perp"
+      },
+      "triggers": [
+        {
+          "key": "indicator.cross_over",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "value": 20,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 20,
+            "signalPeriod": 20
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-1-indicator-cross-over",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "cross_over",
+                  "shape": {
+                    "key": "indicator.cross_over",
+                    "phase": "entry",
+                    "sideScope": "long",
+                    "indicator": "ma",
+                    "value": 20,
+                    "period": 20,
+                    "fastPeriod": 20,
+                    "slowPeriod": 20,
+                    "signalPeriod": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "value": 20,
+                "period": 20,
+                "fastPeriod": 20,
+                "slowPeriod": 20,
+                "signalPeriod": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "long"
+        },
+        {
+          "key": "indicator.cross_under",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "value": 20,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 20,
+            "signalPeriod": 20
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-2-indicator-cross-under",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "cross_under",
+                  "shape": {
+                    "key": "indicator.cross_under",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "value": 20,
+                    "period": 20,
+                    "fastPeriod": 20,
+                    "slowPeriod": 20,
+                    "signalPeriod": 20
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "value": 20,
+                "period": 20,
+                "fastPeriod": 20,
+                "slowPeriod": 20,
+                "signalPeriod": 20
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.above",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "referenceRole": "mid_term",
+            "reference.period": 20,
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-3-indicator-above",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "above",
+                  "shape": {
+                    "key": "indicator.above",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "referenceRole": "mid_term",
+                    "reference.period": 20,
+                    "timeframeOverride": "true"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "referenceRole": "mid_term",
+                "reference.period": 20,
+                "timeframeOverride": "true"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "both"
+        },
+        {
+          "key": "indicator.below",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "referenceRole": "mid_term",
+            "reference.period": 20,
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-trigger-4-indicator-below",
+              "kind": "trigger",
+              "capabilities": [
+                {
+                  "domain": "trigger",
+                  "verb": "emit",
+                  "object": "below",
+                  "shape": {
+                    "key": "indicator.below",
+                    "phase": "entry",
+                    "sideScope": "both",
+                    "indicator": "ma",
+                    "referenceRole": "mid_term",
+                    "reference.period": 20,
+                    "timeframeOverride": "true"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "indicator": "ma",
+                "referenceRole": "mid_term",
+                "reference.period": 20,
+                "timeframeOverride": "true"
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ],
+          "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-1-action-open-long",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "action",
+                  "verb": "emit",
+                  "object": "open_long",
+                  "shape": {
+                    "key": "action.open_long",
+                    "phase": "entry",
+                    "sideScope": "long"
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {},
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "action.add_position",
+          "phase": "entry",
+          "params": {
+            "sideScope": "long",
+            "addMode": "profit_pct",
+            "addRatio": 0.05,
+            "profitThreshold": 0.05,
+            "drawdownThreshold": 0.05
+          },
+          "evidence": {
+            "text": "盈利 5% 平 50%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-2-action-add-position",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "action",
+                  "verb": "emit",
+                  "object": "add_position",
+                  "shape": {
+                    "key": "action.add_position",
+                    "phase": "entry",
+                    "sideScope": "long",
+                    "addMode": "profit_pct",
+                    "addRatio": 0.05,
+                    "profitThreshold": 0.05,
+                    "drawdownThreshold": 0.05
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "sideScope": "long",
+                "addMode": "profit_pct",
+                "addRatio": 0.05,
+                "profitThreshold": 0.05,
+                "drawdownThreshold": 0.05
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "action.add_position",
+          "phase": "entry",
+          "params": {
+            "sideScope": "long",
+            "addMode": "profit_pct",
+            "addRatio": 0.1,
+            "profitThreshold": 0.1,
+            "drawdownThreshold": 0.1
+          },
+          "evidence": {
+            "text": "盈利 10% 平 50%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-action-3-action-add-position",
+              "kind": "action",
+              "capabilities": [
+                {
+                  "domain": "action",
+                  "verb": "emit",
+                  "object": "add_position",
+                  "shape": {
+                    "key": "action.add_position",
+                    "phase": "entry",
+                    "sideScope": "long",
+                    "addMode": "profit_pct",
+                    "addRatio": 0.1,
+                    "profitThreshold": 0.1,
+                    "drawdownThreshold": 0.1
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "sideScope": "long",
+                "addMode": "profit_pct",
+                "addRatio": 0.1,
+                "profitThreshold": 0.1,
+                "drawdownThreshold": 0.1
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ],
+      "risk": [
+        {
+          "key": "risk.partial_take_profit",
+          "phase": "exit",
+          "params": {
+            "profitPct": 0.05,
+            "ratio": 0.05
+          },
+          "evidence": {
+            "text": "盈利 5% 平 50%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-1-risk-partial-take-profit",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "risk",
+                  "verb": "emit",
+                  "object": "partial_take_profit",
+                  "shape": {
+                    "key": "risk.partial_take_profit",
+                    "phase": "exit",
+                    "sideScope": "both",
+                    "profitPct": 0.05,
+                    "ratio": 0.05
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "profitPct": 0.05,
+                "ratio": 0.05
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        },
+        {
+          "key": "risk.partial_take_profit",
+          "phase": "exit",
+          "params": {
+            "profitPct": 0.1,
+            "ratio": 0.1
+          },
+          "evidence": {
+            "text": "盈利 10% 平 50%",
+            "source": "user_explicit"
+          },
+          "contracts": [
+            {
+              "id": "contract-seed-risk-2-risk-partial-take-profit",
+              "kind": "risk",
+              "capabilities": [
+                {
+                  "domain": "risk",
+                  "verb": "emit",
+                  "object": "partial_take_profit",
+                  "shape": {
+                    "key": "risk.partial_take_profit",
+                    "phase": "exit",
+                    "sideScope": "both",
+                    "profitPct": 0.1,
+                    "ratio": 0.1
+                  }
+                }
+              ],
+              "requires": [],
+              "params": {
+                "profitPct": 0.1,
+                "ratio": 0.1
+              },
+              "runtimeRequirements": [],
+              "stateRequirements": [],
+              "orderRequirements": [],
+              "openSlots": []
+            }
+          ]
+        }
+      ]
+    }
+  }
+]
