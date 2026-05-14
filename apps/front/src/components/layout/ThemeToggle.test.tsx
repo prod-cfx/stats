@@ -62,4 +62,14 @@ describe('ThemeToggle', () => {
     expect(button?.getAttribute('aria-label')).toBe('Toggle light/dark mode')
     expect(button?.getAttribute('title')).toBe('Toggle light/dark mode')
   })
+
+  it('keeps a stable touch target on mobile', async () => {
+    await act(async () => {
+      root.render(<ThemeToggle />)
+    })
+
+    const button = container.querySelector('button')
+    expect(button?.className).toContain('min-h-10')
+    expect(button?.className).toContain('w-[72px]')
+  })
 })

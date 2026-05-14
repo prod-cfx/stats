@@ -59,10 +59,10 @@ export const Modal = ({
       
       {/* Content */}
       <div
-        className={`relative w-full ${width} max-h-[calc(100vh-2rem)] bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-200 z-10 min-h-0`}
+        className={`relative z-10 flex min-h-0 max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] ${width} flex-col overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl animate-in zoom-in-95 fade-in duration-200`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[color:var(--cf-border)]">
+        <div className="flex shrink-0 items-center justify-between border-b border-[color:var(--cf-border)] px-6 py-4">
           <h3 className="text-lg font-bold text-[color:var(--cf-text-strong)]">{title}</h3>
           <button 
             type="button"
@@ -74,7 +74,7 @@ export const Modal = ({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto min-h-0 relative">
+        <div className="relative min-h-0 flex-1 overflow-y-auto">
           {loading && (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-[color:var(--cf-surface)]/80 backdrop-blur-[2px]">
               <div className="flex flex-col items-center gap-3">
@@ -90,7 +90,7 @@ export const Modal = ({
 
         {/* Footer */}
         {footer && (
-          <div className="px-6 py-4 border-t border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/70">
+          <div className="shrink-0 border-t border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/70 px-6 py-4">
             {footer}
           </div>
         )}

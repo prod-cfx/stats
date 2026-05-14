@@ -379,6 +379,17 @@ main {
   width: 100%;
 }
 
+.mobile-safe-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+.contained-x-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 .form-card {
   background: rgba(15, 23, 42, 0.8);
   border-radius: 16px;

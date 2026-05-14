@@ -62,7 +62,7 @@ function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: 
   if (!mounted) return null
 
   return createPortal(
-    <div className="pointer-events-none fixed right-4 top-5 z-[9999] flex w-[calc(100vw-2rem)] max-w-[360px] flex-col gap-2 sm:right-6">
+    <div className="pointer-events-none fixed inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[9999] flex flex-col gap-2 sm:left-auto sm:right-4 sm:w-full sm:max-w-sm">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onRemove={onRemove} />
       ))}

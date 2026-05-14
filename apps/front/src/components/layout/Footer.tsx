@@ -31,8 +31,8 @@ export const Footer = () => {
   }
 
   return (
-    <footer className="bg-[color:var(--cf-bg)] border-t border-[color:var(--cf-border)] py-8 px-4 md:px-8">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+    <footer className="w-full border-t border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-8 md:px-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-col items-center justify-between gap-6 md:flex-row">
         <div className="flex flex-col items-center md:items-start gap-2">
           <Link href={withLng('/')} className="flex flex-col items-center md:items-start no-underline">
             <div className="flex items-center">
@@ -45,11 +45,11 @@ export const Footer = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 md:justify-end md:gap-6">
           <button
             type="button"
             onClick={handleSocialClick}
-            className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors"
+            className="flex min-h-10 min-w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
             aria-label="Telegram"
           >
             <Send className="w-5 h-5" />
@@ -57,7 +57,7 @@ export const Footer = () => {
           <button
             type="button"
             onClick={handleSocialClick}
-            className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors"
+            className="flex min-h-10 min-w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
             aria-label="X"
           >
             <XIcon className="w-5 h-5" />
@@ -65,14 +65,14 @@ export const Footer = () => {
           <button
             type="button"
             onClick={handleSocialClick}
-            className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors"
+            className="flex min-h-10 min-w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
             aria-label="GitHub"
           >
             <Github className="w-5 h-5" />
           </button>
           <Link
             href={withLng('/docs')}
-            className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors text-sm font-medium no-underline flex items-center gap-1.5"
+            className="flex min-h-10 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-[color:var(--cf-muted)] no-underline transition-colors hover:text-[color:var(--cf-text-strong)]"
           >
             <FileText className="w-4 h-4" />
             {t('nav.docs') || 'Doc'}

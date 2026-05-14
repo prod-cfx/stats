@@ -13,6 +13,11 @@ import { useAuth } from '@/hooks/use-auth'
 import { getMockMarketList } from '@/lib/market-data/mock-market-list'
 import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
 import { LanguageSwitcher } from './LanguageSwitcher'
+import {
+  buildDataNavLinks,
+  buildMobileAccountLinks,
+  buildMobileWhaleLinks,
+} from './navbar.nav-data'
 import { ThemeToggle } from './ThemeToggle'
 
 type SearchEntryType = 'coin' | 'indicator' | 'feature' | 'page' | 'address'
@@ -63,34 +68,7 @@ export const Navbar = () => {
 
   const { items: catalogItems } = useMarketDataCatalog()
 
-  const normalizeHref = (href: string) => {
-    // If catalog already includes a locale prefix, keep it.
-    if (href.startsWith('/zh/') || href.startsWith('/en/')) return href
-    // Ensure leading slash
-    const p = href.startsWith('/') ? href : `/${href}`
-    return withLng(p)
-  }
-
-  const dataNavOrder = [
-    'nav-liquidation-map',
-    'nav-long-short-ratio',
-    'nav-aggregated-orderbook',
-    'nav-liquidation-data',
-    'nav-prediction-market',
-    'nav-public-companies',
-  ]
-
-  // 临时隐藏：清算地图、爆仓数据（需要时再恢复展示）
-  const dataNavHiddenIds = ['nav-liquidation-map', 'nav-liquidation-data']
-  const marketDataChild = { name: t('nav.marketData'), href: withLng('/market') }
-  const dataChildren = [
-    marketDataChild,
-    ...catalogItems
-    .filter(x => x.kind === 'nav' && x.href && !dataNavHiddenIds.includes(x.id))
-    .slice()
-    .sort((a, b) => dataNavOrder.indexOf(a.id) - dataNavOrder.indexOf(b.id))
-    .map(x => ({ name: t(x.labelKey), href: normalizeHref(x.href!) })),
-  ]
+  const dataChildren = buildDataNavLinks({ lng: currentLng, t, catalogItems })
 
   const whaleChildren = [
     { name: t('nav.discover'), href: withLng('/whale-tracking/discover') },
@@ -114,6 +92,26 @@ export const Navbar = () => {
     },
     // { name: t('nav.dashboard'), href: withLng('/dashboard') },
   ]
+
+  const mobileNavLinks = [
+    { name: t('nav.aiQuant', { defaultValue: 'AI量化' }), href: withLng('/ai-quant') },
+    {
+      name: t('nav.data'),
+      href: '#',
+      children: dataChildren,
+    },
+    {
+      name: t('nav.whales'),
+      href: '#',
+      children: buildMobileWhaleLinks({ lng: currentLng, t }),
+    },
+  ]
+
+  const mobileAccountLinks = buildMobileAccountLinks({
+    lng: currentLng,
+    t,
+    isLoggedIn: Boolean(session),
+  })
 
   // 获取热门搜索建议（示例）
   // 实际场景：可以基于 extraBases 或 mock market list 动态生成
@@ -237,6 +235,12 @@ export const Navbar = () => {
     }
   }, [searchOpen])
 
+  useEffect(() => {
+    setMobileMenuOpen(false)
+    setBellOpen(false)
+    setAccountMenuOpen(false)
+  }, [pathname])
+
   // 高亮匹配文字
   const highlight = (label: string) => {
     const q = searchQuery.trim()
@@ -263,6 +267,12 @@ export const Navbar = () => {
     )
   }
 
+  const openMobileMenu = () => {
+    setBellOpen(false)
+    setAccountMenuOpen(false)
+    setMobileMenuOpen(true)
+  }
+
   const recentInboxItems = useMemo(() => inbox.items.slice(0, 5), [inbox.items])
 
   useEffect(() => {
@@ -285,7 +295,7 @@ export const Navbar = () => {
           <button
             type="button"
             className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] md:hidden"
-            onClick={() => setMobileMenuOpen(true)}
+            onClick={openMobileMenu}
           >
             <Menu className="h-6 w-6" />
           </button>
@@ -494,7 +504,7 @@ export const Navbar = () => {
           </button>
 
           {bellOpen && (
-            <div className="absolute top-full right-0 z-[80] mt-2 w-[min(92vw,360px)] overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl">
+            <div className="absolute top-full right-0 z-[80] mt-2 flex max-h-[min(32rem,calc(100dvh-5rem))] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl">
               <div className="flex items-center justify-between border-b border-[color:var(--cf-border)] px-4 py-3">
                 <div className="text-sm font-semibold text-[color:var(--cf-text-strong)]">
                   {t('whaleTracking.notifications.tabs.inbox')} ({unreadCount})
@@ -513,7 +523,7 @@ export const Navbar = () => {
                 )}
               </div>
 
-              <div className="max-h-80 overflow-y-auto p-2">
+              <div className="min-h-0 flex-1 overflow-y-auto p-2">
                 {inbox.loading ? (
                   <div className="px-2 py-8 text-center text-sm text-[color:var(--cf-muted)]">
                     {t('common.loading')}
@@ -589,7 +599,7 @@ export const Navbar = () => {
               </button>
 
               {accountMenuOpen && (
-                <div className="absolute top-[110%] right-0 z-50 min-w-[180px] overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-xl">
+                <div className="absolute top-[110%] right-0 z-50 w-56 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-xl">
                   <Link
                     href={withLng('/account?tab=settings')}
                     onClick={() => setAccountMenuOpen(false)}
@@ -647,7 +657,7 @@ export const Navbar = () => {
           </div>
 
           <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
-            {navLinks.map(link => {
+            {mobileNavLinks.map(link => {
               const hasChildren = link.children && link.children.length > 0
               const isExpanded = expandedMobileMenus.includes(link.name)
 
@@ -700,18 +710,18 @@ export const Navbar = () => {
                 {session ? (
                   <div className="space-y-2">
                     <Link
-                      href={withLng('/account?tab=settings')}
+                      href={mobileAccountLinks[0].href}
                       onClick={() => setMobileMenuOpen(false)}
                       className="block w-full rounded-xl border border-[color:var(--cf-border)] py-3 text-center text-base font-semibold"
                     >
-                      {t('account.settings')}
+                      {mobileAccountLinks[0].name}
                     </Link>
                     <Link
-                      href={withLng('/account?tab=ai-quant')}
+                      href={mobileAccountLinks[1].href}
                       onClick={() => setMobileMenuOpen(false)}
                       className="block w-full rounded-xl border border-[color:var(--cf-border)] py-3 text-center text-base font-semibold"
                     >
-                      {t('nav.aiQuant')}
+                      {mobileAccountLinks[1].name}
                     </Link>
                     <button
                       type="button"
@@ -726,11 +736,11 @@ export const Navbar = () => {
                   </div>
                 ) : (
                   <Link
-                    href={withLng('/auth/login')}
+                    href={mobileAccountLinks[0].href}
                     onClick={() => setMobileMenuOpen(false)}
                     className="from-primary to-secondary shadow-primary/20 block w-full rounded-xl bg-gradient-to-r py-3 text-center text-lg font-bold text-white shadow-lg"
                   >
-                    {t('nav.login')}
+                    {mobileAccountLinks[0].name}
                   </Link>
                 )}
               </div>

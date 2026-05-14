@@ -17,7 +17,7 @@ export function ThemeToggle() {
 
   // Avoid hydration mismatches (server can't know localStorage/theme)
   if (!mounted) {
-    return <div className="h-9 w-[72px]" aria-hidden="true" />
+    return <div className="h-10 w-[72px]" aria-hidden="true" />
   }
 
   const Icon = theme === 'dark' ? Moon : Sun
@@ -31,7 +31,7 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggleTheme}
-      className="flex items-center gap-2 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-2 text-[color:var(--cf-text)] transition-colors hover:bg-[color:var(--cf-surface-hover)]"
+      className="inline-flex min-h-10 w-[72px] items-center justify-center gap-2 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-2 text-[color:var(--cf-text)] transition-colors hover:bg-[color:var(--cf-surface-hover)]"
       aria-label={toggleLabel}
       title={toggleLabel}
     >
