@@ -393,7 +393,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
-    classifier: { ...DEFAULT_CLASSIFIER_META },
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
     display: {
       publicName: ATOM_PUBLIC_NAMES['volume.threshold'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -458,7 +458,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
-    classifier: { ...DEFAULT_CLASSIFIER_META },
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
     display: {
       publicName: ATOM_PUBLIC_NAMES['volatility.atr_threshold'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -524,7 +524,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
-    classifier: { ...DEFAULT_CLASSIFIER_META },
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
     display: {
       publicName: ATOM_PUBLIC_NAMES['strategy.time_window'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1234,7 +1234,10 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
-    classifier: { ...DEFAULT_CLASSIFIER_META },
+    classifier: {
+      supportStatus: `unsupported_indicator_static_compare_public_beta_unsupported` as const,
+      unsupportedMeta: { reasonCode: 'indicator_static_compare_public_beta_unsupported', publicReasonZh: '指标静态高于条件当前公测暂未支持生成和回测。' },
+    },
     display: {
       publicName: ATOM_PUBLIC_NAMES['indicator.above'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1282,7 +1285,10 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
-    classifier: { ...DEFAULT_CLASSIFIER_META },
+    classifier: {
+      supportStatus: `unsupported_indicator_static_compare_public_beta_unsupported` as const,
+      unsupportedMeta: { reasonCode: 'indicator_static_compare_public_beta_unsupported', publicReasonZh: '指标静态低于条件当前公测暂未支持生成和回测。' },
+    },
     display: {
       publicName: ATOM_PUBLIC_NAMES['indicator.below'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1638,7 +1644,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
-    classifier: { ...DEFAULT_CLASSIFIER_META },
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
     display: {
       publicName: ATOM_PUBLIC_NAMES['indicator.divergence'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1715,7 +1721,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
-    classifier: { ...DEFAULT_CLASSIFIER_META },
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
     display: {
       publicName: ATOM_PUBLIC_NAMES['price.candle_pattern'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1795,7 +1801,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
-    classifier: { ...DEFAULT_CLASSIFIER_META },
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
     display: {
       publicName: ATOM_PUBLIC_NAMES['price.chart_pattern'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1868,7 +1874,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
-    classifier: { ...DEFAULT_CLASSIFIER_META },
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
     display: {
       publicName: ATOM_PUBLIC_NAMES['liquidity.sweep'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -2012,7 +2018,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: ['position.no_position'],
     isActionable: false,
     sizingEvidence: null,
-    classifier: { ...DEFAULT_CLASSIFIER_META },
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
     display: {
       publicName: ATOM_PUBLIC_NAMES['position.has_position'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -2068,7 +2074,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: ['position.has_position'],
     isActionable: false,
     sizingEvidence: null,
-    classifier: { ...DEFAULT_CLASSIFIER_META },
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
     display: {
       publicName: ATOM_PUBLIC_NAMES['position.no_position'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -2161,7 +2167,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: true,
     sizingEvidence: null,
-    classifier: { ...DEFAULT_CLASSIFIER_META },
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
     surface: {
       intent: {
         // critic m1 fix: 删除 '加码'/'追仓'（extractor/utterance/fixture 全仓 0 命中的凭空同义词）
@@ -2227,7 +2233,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: true,
     sizingEvidence: null,
-    classifier: { ...DEFAULT_CLASSIFIER_META },
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
     surface: {
       intent: {
         keywords: ['反手', '翻仓', '反向开仓', '反转持仓', 'reverse position', 'flip position'] as const,
@@ -2433,7 +2439,10 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: ATOM_MUTEX['risk.partial_take_profit'] ?? [],
     isActionable: false,
     sizingEvidence: null,
-    classifier: { ...DEFAULT_CLASSIFIER_META },
+    classifier: {
+      supportStatus: `unsupported_partial_take_profit_public_beta_unsupported` as const,
+      unsupportedMeta: { reasonCode: 'partial_take_profit_public_beta_unsupported', publicReasonZh: '多档分批止盈当前公测暂未支持生成和回测。' },
+    },
     display: {
       publicName: ATOM_PUBLIC_NAMES['risk.partial_take_profit'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -2577,7 +2586,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: true,
     sizingEvidence: DCA_SIZING_EVIDENCE,
-    classifier: { ...DEFAULT_CLASSIFIER_META },
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
     display: {
       publicName: ATOM_PUBLIC_NAMES['position.dca_schedule'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)

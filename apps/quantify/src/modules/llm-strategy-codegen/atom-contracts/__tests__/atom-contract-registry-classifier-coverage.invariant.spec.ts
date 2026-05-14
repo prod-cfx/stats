@@ -3,6 +3,8 @@
  * with a valid `supportStatus` value matching AtomClassifierSupportStatus.
  *
  * Issue #1334 PR1 — guards that classifier metadata coverage is complete.
+ * Issue #1334 PR2 — supportStatus + unsupportedMeta pairing invariant naturally
+ *                   covers newly migrated unsupported atoms; no hardcoded key list needed.
  */
 
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contract-registry'
