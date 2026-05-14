@@ -11,6 +11,7 @@ import type {
   SemanticUnknownAtomDefinition,
 } from '../types/semantic-atom-support'
 import { Injectable } from '@nestjs/common'
+import { ATOM_CONTRACT_REGISTRY, ATOM_BUCKETS, ATOM_PUBLIC_NAMES } from '../atom-contracts/atom-contract-registry'
 
 type UnknownSemanticAtomDefinition = SemanticUnknownAtomDefinition
 type ExecutableAtomOptions = { executableSinceVersion?: string }
@@ -462,12 +463,132 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   unsupported('action.pause_trading', 'action', '暂停交易', 'pause_trading_public_beta_unsupported', '暂停交易动作当前公测暂未支持生成和回测。'),
 ]
 
+// ── PR3: adaptContractToLegacyShape ──────────────────────────────────────────
+// 将 ATOM_CONTRACT_REGISTRY 条目适配为 legacy SemanticRegisteredAtomDefinition 形态。
+//
+// 策略：以 legacy ATOMS 条目为基础形态，仅用 REGISTRY classifier 覆盖：
+//   - supportStatus（supported_executable / recognized_unsupported）
+//   - executableSinceVersion
+//   - category（由 ATOM_BUCKETS 派生）
+//   - unsupported 元数据（仅 unsupported atom）
+//
+// 对于 REGISTRY 中存在但 legacy 没有的 atom（LEGACY_MISSING_KEYS），
+// 从 surface.paramSlots 构建基本形态。
+//
+// bucket → legacy category 映射：
+//   trigger/action/risk → 直接；positionConstraint → 'position'；orchestration → 'orchestration'
+
+// ── special-case key set for atoms only in REGISTRY (no legacy equivalent) ──
+const LEGACY_MISSING_KEYS = new Set([
+  'action.open_long',
+  'action.close_long',
+  'action.open_short',
+  'action.close_short',
+  'gate.regime',
+  'portfolioRisk.symbol_exposure_cap',
+  'portfolioRisk.substrategy_exposure_cap',
+  'program.dynamic_grid',
+  'program.fixed_grid_gated',
+  'program.adaptive_volatility_grid',
+  'program.event_listener',
+  'scope.symbol',
+  'scope.leg',
+  'scope.timeframe',
+  'scope.dataSource',
+  'scope.subStrategy',
+  'gate.subStrategy',
+  'portfolioRisk.drawdown_block',
+])
+
+// Build a fresh legacy atom from REGISTRY entry for keys not in legacy ATOMS
+const _LEGACY_ATOMS_MAP_PR4 = new Map(ATOMS.map(atom => [atom.key, atom]))
+
+function bucketToCategory(bucket: string): SemanticAtomDefinition['category'] {
+  switch (bucket) {
+    case 'trigger': return 'trigger'
+    case 'action': return 'action'
+    case 'risk': return 'risk'
+    case 'positionConstraint': return 'position'
+    case 'orchestration': return 'context'
+    default: throw new Error(`bucket_to_category_unknown:${bucket}`)
+  }
+}
+
+function adaptContractToLegacyShape(
+  entryKey: string,
+): SemanticRegisteredAtomDefinition {
+  // 仅静态 atom 形态适配；运行期 params 化（如 risk.partial_take_profit）由调用方在 resolve 入口短路处理。
+  const entry = (ATOM_CONTRACT_REGISTRY as Record<string, typeof ATOM_CONTRACT_REGISTRY[keyof typeof ATOM_CONTRACT_REGISTRY]>)[entryKey]
+  const bucket = (ATOM_BUCKETS as Record<string, string>)[entryKey] ?? 'trigger'
+  const category = bucketToCategory(bucket)
+  const { classifier } = entry
+  const isUnsupported = classifier.supportStatus !== 'supported_executable'
+
+  if (isUnsupported) {
+    const unsupportedMeta = (classifier as { unsupportedMeta: { reasonCode: string; publicReasonZh: string } }).unsupportedMeta
+    const publicNames = ATOM_PUBLIC_NAMES as Record<string, { zh: string; en: string }>
+    const displayName = publicNames[entryKey]?.zh ?? entryKey
+
+    // Prefer legacy unsupported shape if available (preserves exact reasonCode/publicReason)
+    const legacyAtom = _LEGACY_ATOMS_MAP_PR4.get(entryKey)
+    if (legacyAtom && legacyAtom.supportStatus === 'recognized_unsupported') {
+      return cloneAtom({
+        ...legacyAtom,
+        category,
+      })
+    }
+
+    return {
+      key: entryKey,
+      category,
+      supportStatus: 'recognized_unsupported',
+      requiredParams: [],
+      defaultableParams: [],
+      executableProjection: [],
+      openSlots: [],
+      unsupported: {
+        displayName,
+        reasonCode: unsupportedMeta.reasonCode,
+        publicReason: unsupportedMeta.publicReasonZh,
+      },
+      replacement: DEFAULT_REPLACEMENT,
+    }
+  }
+
+  // Prefer legacy supported shape — only override classifier-derived fields.
+  // PR3 阶段：所有 ATOM_CONTRACT_REGISTRY 命中此路径的 key 必然存在于 _LEGACY_ATOMS_MAP_PR4 中
+  //   （三入口 get/resolve/list 都已用 LEGACY_MISSING_KEYS 短路掉 orchestration/scope 类）。
+  // PR4 物理删 _LEGACY_ATOMS_MAP_PR4 时需把 LEGACY_MISSING_KEYS 路径补全（surface.paramSlots 派生）。
+  const legacyAtom = _LEGACY_ATOMS_MAP_PR4.get(entryKey)
+  if (!legacyAtom || legacyAtom.supportStatus === 'recognized_unsupported') {
+    throw new Error(`adapt_legacy_shape_missing_for:${entryKey}`)
+  }
+  const executableSinceVersion = classifier.executableSinceVersion
+  const base = cloneAtom(legacyAtom)
+  // 保留 legacy supportStatus（supported_executable / supported_requires_slot），
+  // 不强制 supported_executable——下游 list().filter(supportStatus) 依赖此区分。
+  return {
+    ...base,
+    category,
+    ...(executableSinceVersion !== undefined ? { executableSinceVersion } : {}),
+  } as SemanticSupportedAtomDefinition
+}
+
+
 @Injectable()
 export class SemanticAtomRegistryService {
-  private readonly atoms = new Map(ATOMS.map(atom => [atom.key, atom]))
+  // PR3 阶段：REGISTRY 优先 + legacy ATOMS fallback 兜底 bare key（如 'open_long'）；
+  // adapter 也用 _LEGACY_ATOMS_MAP_PR4 取 contractSubstrate 等 legacy 形态字段。
+  // PR4 物理删 ATOMS 表 + 此 map 时，需先扫描所有 SemanticAtomRegistryService 调用方
+  // 确认无 bare-key 调用残留，并把 adapter 中"prefer legacy supported shape"路径替换为
+  // 完全从 ATOM_CONTRACT_REGISTRY 派生 contractSubstrate / openSlots / 等。
+  private readonly _legacyAtoms = _LEGACY_ATOMS_MAP_PR4
 
   get(key: string): SemanticRegisteredAtomDefinition {
-    const atom = this.atoms.get(key)
+    if (key in ATOM_CONTRACT_REGISTRY && !LEGACY_MISSING_KEYS.has(key)) {
+      return adaptContractToLegacyShape(key)
+    }
+    const atom = this._legacyAtoms.get(key)
     if (!atom) {
       throw new Error(`semantic_atom_not_registered:${key}`)
     }
@@ -478,8 +599,15 @@ export class SemanticAtomRegistryService {
     if (key === 'risk.partial_take_profit') {
       return resolvePartialTakeProfitAtom(params ?? {})
     }
-    const atom = this.atoms.get(key)
-    return atom ? cloneAtom(atom) : {
+    if (key in ATOM_CONTRACT_REGISTRY && !LEGACY_MISSING_KEYS.has(key)) {
+      return adaptContractToLegacyShape(key)
+    }
+    // Fallback: legacy ATOMS (covers bare keys like 'open_long' not yet prefixed in REGISTRY)
+    const legacyAtom = _LEGACY_ATOMS_MAP_PR4.get(key)
+    if (legacyAtom) {
+      return cloneAtom(legacyAtom)
+    }
+    return {
       key,
       category: 'unknown',
       supportStatus: 'unsupported_unknown',
@@ -487,7 +615,25 @@ export class SemanticAtomRegistryService {
   }
 
   list(): SemanticRegisteredAtomDefinition[] {
-    return [...this.atoms.values()].map(atom => cloneAtom(atom))
+    const result: SemanticRegisteredAtomDefinition[] = []
+    const seen = new Set<string>()
+    for (const key of Object.keys(ATOM_CONTRACT_REGISTRY)) {
+      if (LEGACY_MISSING_KEYS.has(key)) continue
+      if (key === 'risk.partial_take_profit') {
+        result.push(resolvePartialTakeProfitAtom({}))
+        seen.add(key)
+        continue
+      }
+      result.push(adaptContractToLegacyShape(key))
+      seen.add(key)
+    }
+    // bare-key fallback：legacy ATOMS 中存在但 REGISTRY 未覆盖的 key（如 'open_long'）保 list() 行为不变。
+    // PR4 物理删 ATOMS 时同步清理此 fallback。
+    for (const [key, atom] of this._legacyAtoms) {
+      if (seen.has(key)) continue
+      result.push(cloneAtom(atom))
+    }
+    return result
   }
 }
 
