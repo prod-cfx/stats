@@ -494,9 +494,9 @@ export const ProfileDataTabs = ({
 
       setRecentTrades(mapped)
       setTradesState('success')
-    } catch (e) {
+    } catch {
       setRecentTrades([])
-      setTradesError(e instanceof Error ? e.message : t('whaleTracking.profile.recentTrades.loadFailed'))
+      setTradesError(t('whaleTracking.profile.recentTrades.loadFailed'))
       setTradesState('error')
     }
   }
