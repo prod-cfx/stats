@@ -1,3 +1,5 @@
+import type { MarketDataCatalogItem } from '@/lib/market-data/catalog-types'
+
 export interface NavbarLink {
   name: string
   href: string
@@ -11,19 +13,44 @@ interface MobileNavInput {
   t: NavbarTranslate
 }
 
+interface DataNavInput extends MobileNavInput {
+  catalogItems: MarketDataCatalogItem[]
+}
+
 interface MobileAccountInput extends MobileNavInput {
   isLoggedIn: boolean
 }
 
 const withLng = (lng: string, path: string) => `/${lng}${path}`
 
-export function buildMobileDataLinks({ lng, t }: MobileNavInput): NavbarLink[] {
+const normalizeCatalogHref = (lng: string, href: string) => {
+  if (href.startsWith('/zh/') || href.startsWith('/en/')) return href
+  const path = href.startsWith('/') ? href : `/${href}`
+  return withLng(lng, path)
+}
+
+const dataNavOrder = [
+  'nav-liquidation-map',
+  'nav-long-short-ratio',
+  'nav-aggregated-orderbook',
+  'nav-liquidation-data',
+  'nav-prediction-market',
+  'nav-public-companies',
+]
+
+const dataNavHiddenIds = new Set(['nav-liquidation-map', 'nav-liquidation-data'])
+
+export function buildDataNavLinks({ lng, t, catalogItems }: DataNavInput): NavbarLink[] {
   return [
     { name: t('nav.marketData'), href: withLng(lng, '/market') },
-    { name: t('nav.long_short_ratio'), href: withLng(lng, '/long-short-ratio') },
-    { name: t('nav.aggregated_orderbook'), href: withLng(lng, '/aggregated-orderbook') },
-    { name: t('nav.prediction_market'), href: withLng(lng, '/prediction-market') },
-    { name: t('nav.public_companies'), href: withLng(lng, '/public-companies') },
+    ...catalogItems
+      .filter(item => item.kind === 'nav' && item.href && !dataNavHiddenIds.has(item.id))
+      .slice()
+      .sort((a, b) => dataNavOrder.indexOf(a.id) - dataNavOrder.indexOf(b.id))
+      .map(item => ({
+        name: t(item.labelKey),
+        href: normalizeCatalogHref(lng, item.href!),
+      })),
   ]
 }
 

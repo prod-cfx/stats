@@ -1,15 +1,54 @@
 import { describe, expect, it } from '@jest/globals'
 import {
+  buildDataNavLinks,
   buildMobileAccountLinks,
-  buildMobileDataLinks,
   buildMobileWhaleLinks,
 } from './Navbar.nav-data'
 
 const t = (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key
 
+const catalogItems = [
+  {
+    id: 'nav-liquidation-map',
+    kind: 'nav' as const,
+    labelKey: 'nav.liquidation_map',
+    href: '/liquidation-map',
+  },
+  {
+    id: 'nav-long-short-ratio',
+    kind: 'nav' as const,
+    labelKey: 'nav.long_short_ratio',
+    href: '/long-short-ratio',
+  },
+  {
+    id: 'nav-aggregated-orderbook',
+    kind: 'nav' as const,
+    labelKey: 'nav.aggregated_orderbook',
+    href: '/aggregated-orderbook',
+  },
+  {
+    id: 'nav-liquidation-data',
+    kind: 'nav' as const,
+    labelKey: 'nav.liquidation_data',
+    href: '/liquidation-data',
+  },
+  {
+    id: 'nav-prediction-market',
+    kind: 'nav' as const,
+    labelKey: 'nav.prediction_market',
+    href: '/prediction-market',
+  },
+  {
+    id: 'nav-public-companies',
+    kind: 'nav' as const,
+    labelKey: 'nav.public_companies',
+    href: '/public-companies',
+  },
+]
+
 describe('Navbar mobile navigation data', () => {
   it('exposes required data destinations with locale prefixes and no hidden liquidation links', () => {
-    const hrefs = buildMobileDataLinks({ lng: 'en', t }).map(link => link.href)
+    const hrefs = buildDataNavLinks({ lng: 'en', t, catalogItems }).map(link => link.href)
 
     expect(hrefs).toEqual([
       '/en/market',

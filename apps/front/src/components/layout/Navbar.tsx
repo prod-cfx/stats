@@ -14,8 +14,8 @@ import { getMockMarketList } from '@/lib/market-data/mock-market-list'
 import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import {
+  buildDataNavLinks,
   buildMobileAccountLinks,
-  buildMobileDataLinks,
   buildMobileWhaleLinks,
 } from './Navbar.nav-data'
 import { ThemeToggle } from './ThemeToggle'
@@ -68,34 +68,7 @@ export const Navbar = () => {
 
   const { items: catalogItems } = useMarketDataCatalog()
 
-  const normalizeHref = (href: string) => {
-    // If catalog already includes a locale prefix, keep it.
-    if (href.startsWith('/zh/') || href.startsWith('/en/')) return href
-    // Ensure leading slash
-    const p = href.startsWith('/') ? href : `/${href}`
-    return withLng(p)
-  }
-
-  const dataNavOrder = [
-    'nav-liquidation-map',
-    'nav-long-short-ratio',
-    'nav-aggregated-orderbook',
-    'nav-liquidation-data',
-    'nav-prediction-market',
-    'nav-public-companies',
-  ]
-
-  // 临时隐藏：清算地图、爆仓数据（需要时再恢复展示）
-  const dataNavHiddenIds = ['nav-liquidation-map', 'nav-liquidation-data']
-  const marketDataChild = { name: t('nav.marketData'), href: withLng('/market') }
-  const dataChildren = [
-    marketDataChild,
-    ...catalogItems
-    .filter(x => x.kind === 'nav' && x.href && !dataNavHiddenIds.includes(x.id))
-    .slice()
-    .sort((a, b) => dataNavOrder.indexOf(a.id) - dataNavOrder.indexOf(b.id))
-    .map(x => ({ name: t(x.labelKey), href: normalizeHref(x.href!) })),
-  ]
+  const dataChildren = buildDataNavLinks({ lng: currentLng, t, catalogItems })
 
   const whaleChildren = [
     { name: t('nav.discover'), href: withLng('/whale-tracking/discover') },
@@ -125,7 +98,7 @@ export const Navbar = () => {
     {
       name: t('nav.data'),
       href: '#',
-      children: buildMobileDataLinks({ lng: currentLng, t }),
+      children: dataChildren,
     },
     {
       name: t('nav.whales'),
