@@ -240,13 +240,13 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
   }, [orderbook, selectedExchanges])
 
   return (
-    <div className={`bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl flex flex-col ${isCompact ? '' : 'shadow-2xl'} min-h-[750px] overflow-hidden h-full`}>
+    <div className={`bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl flex flex-col ${isCompact ? '' : 'shadow-2xl'} min-h-[560px] md:min-h-[750px] overflow-hidden h-full`}>
       <LoadingState isLoading={loading} error={!!error} onRetry={fetchData}>
         {orderbook
           ? (
               <>
-                <div className={`flex items-center justify-between ${isCompact ? 'p-2' : 'p-4'} border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/70 flex-none`}>
-                  <div className={`flex items-center ${isCompact ? 'gap-2' : 'gap-6'}`}>
+                <div className={`flex flex-wrap items-center justify-between gap-3 ${isCompact ? 'p-2' : 'p-3 md:p-4'} border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/70 flex-none`}>
+                  <div className={`flex min-w-0 flex-wrap items-center ${isCompact ? 'gap-2' : 'gap-3 md:gap-6'}`}>
                     <div className="flex bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg p-0.5">
                       <button
                         type="button"
@@ -311,7 +311,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                 </div>
 
                 <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden overflow-y-auto md:overflow-y-hidden">
-                  <div className={`w-full md:${isCompact ? 'w-[58%]' : 'w-1/2'} flex flex-col border-b md:border-b-0 md:border-r border-[color:var(--cf-border)] min-h-[500px] md:min-h-0`}>
+                  <div className={`w-full md:${isCompact ? 'w-[58%]' : 'w-1/2'} flex flex-col border-b md:border-b-0 md:border-r border-[color:var(--cf-border)] min-h-[420px] md:min-h-0`}>
                     <div className={`${isCompact ? 'p-1.5' : 'p-4'} border-b border-[color:var(--cf-border)] flex items-center justify-between bg-[color:var(--cf-surface-2)]/50 flex-none`}>
                       <div className={`font-bold text-[color:var(--cf-text-strong)] tracking-tight ${isCompact ? 'text-[11px]' : 'text-sm md:text-lg'}`}>
                         {t('aggregatedOrderbook.sections.realtimeOrderbook', {

@@ -161,7 +161,7 @@ export const CenterChartPanel = ({
       {isIndicatorModalOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
           <div
-            className={`${isCompact ? 'h-[300px] w-[400px]' : 'h-[400px] w-[600px]'} flex flex-col overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl`}
+            className={`${isCompact ? 'h-[300px] w-[400px]' : 'h-[400px] w-[600px]'} max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] flex flex-col overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl`}
           >
             {/* Modal Header */}
             <div

@@ -16,7 +16,7 @@ export default async function LongShortRatioPage({
   return (
     <div className="flex flex-col min-h-screen bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
       <Navbar />
-      <main className="flex-1 overflow-y-auto no-scrollbar p-8">
+      <main className="flex-1 overflow-y-auto no-scrollbar p-4 md:p-8">
           <Suspense fallback={<div className="h-96 flex items-center justify-center text-[color:var(--cf-muted)]">{t('common.loading')}</div>}>
             <LongShortRatioClient />
           </Suspense>
