@@ -181,9 +181,9 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
   }
 
   return (
-    <div className="flex h-full max-h-[80vh] min-h-[70vh]">
+    <div className="flex min-h-0 min-w-0 flex-col md:max-h-[80vh] md:min-h-[70vh] md:flex-row">
       {/* Left: Configuration */}
-      <div className="w-1/3 overflow-y-auto border-r border-[color:var(--cf-border)] p-6">
+      <div className="min-w-0 border-b border-[color:var(--cf-border)] p-4 md:w-1/3 md:overflow-y-auto md:border-r md:border-b-0 md:p-6">
         <button
           type="button"
           onClick={onBack}
@@ -230,19 +230,19 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
       </div>
 
       {/* Right: Size & Preview */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         {/* Size Selection */}
-        <div className="border-b border-[color:var(--cf-border)] p-6">
+        <div className="border-b border-[color:var(--cf-border)] p-4 md:p-6">
           <label className="mb-3 block text-xs font-medium tracking-wide text-[color:var(--cf-muted)] uppercase">
             {t('widget.config.size')}
           </label>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {(Object.keys(sizePresets) as UnitSize[]).map(size => (
               <button
                 type="button"
                 key={size}
                 onClick={() => setSelectedSize(size)}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                className={`min-h-11 rounded-lg px-4 py-2 text-sm font-medium transition-all md:min-h-0 ${
                   selectedSize === size
                     ? 'from-primary to-secondary shadow-primary/20 bg-gradient-to-r text-white shadow-lg'
                     : 'bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)]'
@@ -258,7 +258,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
         </div>
 
         {/* Preview */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="min-w-0 flex-1 overflow-auto p-4 md:p-6">
           <div className="mb-3">
             <div className="mb-2 text-xs font-medium tracking-wide text-[color:var(--cf-muted)] uppercase">
               {t('widget.config.preview')}
@@ -267,7 +267,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
           <div
             className="relative overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]"
             style={{
-              height: '360px', // Strict fixed height as requested
+              height: 'min(360px, 55dvh)',
               width: '100%',
             }}
           >
@@ -284,11 +284,11 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
         </div>
 
         {/* Save Button */}
-        <div className="border-t border-[color:var(--cf-border)] p-6">
+        <div className="border-t border-[color:var(--cf-border)] p-4 md:p-6">
           <button
             type="button"
             onClick={() => onSave({ ...config, size: selectedSize }, layout)}
-            className="from-primary to-secondary shadow-primary/20 w-full rounded-lg bg-gradient-to-r py-3 font-medium text-white shadow-lg transition-all hover:opacity-90 active:scale-95"
+            className="from-primary to-secondary shadow-primary/20 min-h-11 w-full rounded-lg bg-gradient-to-r py-3 font-medium text-white shadow-lg transition-all hover:opacity-90 active:scale-95"
           >
             {t('widget.config.saveAndAdd')}
           </button>

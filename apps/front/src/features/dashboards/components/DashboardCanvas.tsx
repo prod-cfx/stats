@@ -9,6 +9,11 @@ import { ensureDashboard, getDashboard } from '../store/dashboard-store'
 import { snapToPresetForWidgetType } from '../widgets/unit-size-presets'
 import { WidgetRenderer } from '../widgets/WidgetRenderer'
 import { WIDGET_CATALOG } from '../widgets/widgets-catalog'
+import {
+  mobileWidgetMinHeight,
+  sortLayoutForMobile,
+  useDashboardMobileLayout,
+} from './dashboard-layout-utils'
 import { DashboardHeader } from './DashboardHeader'
 
 const AddWidgetModal = dynamic(
@@ -83,13 +88,15 @@ export function DashboardCanvas(props: { dashboardId: string }) {
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   const { setEl: containerRef, width } = useContainerWidth()
+  const isMobileLayout = useDashboardMobileLayout()
   const saveTimerRef = useRef<any>(null)
 
   useEffect(() => {
+    if (isMobileLayout) return
     import('react-grid-layout').then((mod: any) => {
       setGridLayout(() => mod?.default || mod?.GridLayout)
     })
-  }, [])
+  }, [isMobileLayout])
 
   useEffect(() => {
     const refresh = () => {
@@ -184,7 +191,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
   }
 
   if (!doc) return <div className="p-10 text-center text-white/30">{t('dashboard.notFound')}</div>
-  if (!GridLayout)
+  if (!isMobileLayout && !GridLayout)
     return <div className="p-10 text-center text-white/30">{t('common.loading')}</div>
 
   const rowHeight = 10
@@ -214,44 +221,73 @@ export function DashboardCanvas(props: { dashboardId: string }) {
       </div>
 
       <div ref={containerRef} className="no-scrollbar relative min-h-0 flex-1 overflow-y-auto">
-        <GridLayout
-          key={resetKey}
-          layout={layoutState as any}
-          cols={12}
-          rowHeight={rowHeight}
-          margin={[8, marginY]}
-          width={width || 1200}
-          onLayoutChange={onLayoutChange}
-          isDraggable
-          isResizable
-          resizeHandles={['se']}
-          draggableHandle=".react-draggable-handle"
-          draggableCancel=".react-draggable-cancel"
-        >
-          {layoutState.map((l: any) => {
-            const w = widgetsById.get(l.i)
-            if (!w) return null
-            return (
-              <div
-                key={l.i}
-                className="group relative overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm transition-all duration-300"
-                style={{ height: '100%', overflow: 'hidden' }}
-              >
-                <WidgetRenderer
-                  widget={w}
-                  onRemove={() => {
-                    removeWidgetFromDashboard(props.dashboardId, w.id)
-                    const freshDoc = getDashboard(props.dashboardId)
-                    if (!freshDoc) return
-                    setDoc(freshDoc)
-                    const newMap = new Map((freshDoc.widgets ?? []).map(wd => [wd.id, wd]))
-                    setLayoutState(clampLayout(freshDoc.layout, newMap))
-                  }}
-                />
-              </div>
-            )
-          })}
-        </GridLayout>
+        {isMobileLayout ? (
+          <div data-testid="mobile-dashboard-canvas" className="flex w-full min-w-0 flex-col gap-4 overflow-hidden">
+            {sortLayoutForMobile(layoutState as any).map((l: any) => {
+              const w = widgetsById.get(l.i)
+              if (!w) return null
+              return (
+                <div
+                  key={l.i}
+                  className="group relative w-full min-w-0 overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm"
+                  style={{ minHeight: mobileWidgetMinHeight(l) }}
+                >
+                  <WidgetRenderer
+                    widget={w}
+                    draggable={false}
+                    onRemove={() => {
+                      removeWidgetFromDashboard(props.dashboardId, w.id)
+                      const freshDoc = getDashboard(props.dashboardId)
+                      if (!freshDoc) return
+                      setDoc(freshDoc)
+                      const newMap = new Map((freshDoc.widgets ?? []).map(wd => [wd.id, wd]))
+                      setLayoutState(clampLayout(freshDoc.layout, newMap))
+                    }}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <GridLayout
+            key={resetKey}
+            layout={layoutState as any}
+            cols={12}
+            rowHeight={rowHeight}
+            margin={[8, marginY]}
+            width={width || 1200}
+            onLayoutChange={onLayoutChange}
+            isDraggable
+            isResizable
+            resizeHandles={['se']}
+            draggableHandle=".react-draggable-handle"
+            draggableCancel=".react-draggable-cancel"
+          >
+            {layoutState.map((l: any) => {
+              const w = widgetsById.get(l.i)
+              if (!w) return null
+              return (
+                <div
+                  key={l.i}
+                  className="group relative overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm transition-all duration-300"
+                  style={{ height: '100%', overflow: 'hidden' }}
+                >
+                  <WidgetRenderer
+                    widget={w}
+                    onRemove={() => {
+                      removeWidgetFromDashboard(props.dashboardId, w.id)
+                      const freshDoc = getDashboard(props.dashboardId)
+                      if (!freshDoc) return
+                      setDoc(freshDoc)
+                      const newMap = new Map((freshDoc.widgets ?? []).map(wd => [wd.id, wd]))
+                      setLayoutState(clampLayout(freshDoc.layout, newMap))
+                    }}
+                  />
+                </div>
+              )
+            })}
+          </GridLayout>
+        )}
       </div>
 
       <AddWidgetModal

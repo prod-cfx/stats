@@ -57,7 +57,7 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
   }, [dashboardId, doc, lng, router])
 
   return (
-    <div className="flex flex-col gap-8 pb-20">
+    <div className="flex min-w-0 flex-col gap-6 pb-20 md:gap-8">
       <div className="space-y-6">
         <input
           type="text"
@@ -68,24 +68,24 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
             const next = e.target.value
             updateDashboard(dashboardId, d => ({ ...d, name: next }))
           }}
-          className="text-h1 w-full border-none bg-transparent font-bold text-[color:var(--cf-text-strong)] placeholder:text-[color:var(--cf-muted)] placeholder:opacity-50 focus:outline-none"
+          className="w-full border-none bg-transparent text-2xl font-bold text-[color:var(--cf-text-strong)] placeholder:text-[color:var(--cf-muted)] placeholder:opacity-50 focus:outline-none md:text-h1"
         />
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3 md:gap-4">
           <button
             type="button"
             onClick={() => setIsModalOpen(true)}
-            className="from-primary to-secondary shadow-primary/20 flex items-center gap-2 rounded-lg bg-gradient-to-r px-4 py-2 text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-95"
+            className="from-primary to-secondary shadow-primary/20 flex min-h-11 items-center gap-2 rounded-lg bg-gradient-to-r px-4 py-2 text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-95"
           >
             <Plus className="h-4 w-4" />
             <span>{t('dashboard.editor.addWidgetTitle')}</span>
           </button>
 
-          <div className="h-6 w-px bg-[color:var(--cf-border)]" />
+          <div className="hidden h-6 w-px bg-[color:var(--cf-border)] sm:block" />
 
           <button
             type="button"
-            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
+            className="flex min-h-11 items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
           >
             <LayoutIcon className="h-3.5 w-3.5" />
             <span>{t('dashboard.resetLayout')}</span>
@@ -93,7 +93,7 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
         </div>
       </div>
 
-      <div className="bg-grid-pattern relative min-h-[600px] rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4">
+      <div className="bg-grid-pattern relative min-h-[420px] min-w-0 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3 md:min-h-[600px] md:p-4">
         {doc ? (
           <DashboardCanvas dashboardId={dashboardId} />
         ) : (

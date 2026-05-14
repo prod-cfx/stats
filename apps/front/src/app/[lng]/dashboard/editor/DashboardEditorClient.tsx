@@ -16,12 +16,12 @@ export function DashboardEditorClient() {
   const dashboardId = searchParams?.get('id') || 'draft'
 
   return (
-    <main className="flex min-h-0 flex-1">
+    <main className="flex min-h-0 flex-1 flex-col md:flex-row">
       {/* Sidebar */}
       <DashboardEditorSidebar dashboardId={dashboardId} />
 
       {/* Content Area */}
-      <div className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto p-8">
+      <div className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-4 py-4 md:p-8">
         <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6">
           {/* Back Button */}
           <Link

@@ -33,7 +33,7 @@ export function DashboardViewClient() {
   if (!dashboardId) {
     return (
       <main className="flex min-h-0 flex-1">
-        <div className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto p-8">
+        <div className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-4 py-4 md:p-8">
           <div className="mx-auto w-full max-w-[1440px]">
             <div className="text-[#8b949e]">{t('dashboard.view.missingId')}</div>
           </div>
@@ -44,9 +44,9 @@ export function DashboardViewClient() {
 
   if (!dashboard) {
     return (
-      <main className="flex min-h-0 flex-1">
+      <main className="flex min-h-0 flex-1 flex-col md:flex-row">
         <DashboardEditorSidebar dashboardId={dashboardId} mode="view" />
-        <div className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto p-8">
+        <div className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-4 py-4 md:p-8">
           <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6">
             <Link
               href={`/${lng}/dashboard/`}
@@ -63,10 +63,10 @@ export function DashboardViewClient() {
   }
 
   return (
-    <main className="flex min-h-0 flex-1">
+    <main className="flex min-h-0 flex-1 flex-col md:flex-row">
       <DashboardEditorSidebar dashboardId={dashboardId} mode="view" />
 
-      <div className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto p-8">
+      <div className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-4 py-4 md:p-8">
         <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6">
           <Link
             href={`/${lng}/dashboard/`}
@@ -76,18 +76,18 @@ export function DashboardViewClient() {
             <span>{t('dashboard.view.backToList')}</span>
           </Link>
 
-          <div className="flex items-center gap-4">
+          <div className="flex min-w-0 items-center gap-4">
             {dashboard.thumbnail ? (
               <div className="border-primary/30 h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border">
                 <img src={dashboard.thumbnail} alt="" className="h-full w-full object-cover" />
               </div>
             ) : null}
-            <div>
-              <h1 className="text-3xl font-bold text-white">
+            <div className="min-w-0">
+              <h1 className="break-words text-2xl font-bold text-white md:text-3xl">
                 {dashboard.name || t('dashboard.sidebar.untitled')}
               </h1>
               {dashboard.description ? (
-                <div className="mt-1 text-sm text-[#8b949e]">{dashboard.description}</div>
+                <div className="mt-1 break-words text-sm text-[#8b949e]">{dashboard.description}</div>
               ) : null}
             </div>
           </div>

@@ -98,13 +98,13 @@ export function DashboardClient() {
   const displayDashboards = activeTab === 'my' ? myDashboards : savedDashboards
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-[1440px] flex-col gap-8 md:flex-row">
+    <div className="mx-auto flex min-h-0 w-full max-w-[1440px] flex-col gap-6 px-1 md:flex-row md:gap-8 md:px-0">
       <div className="hidden flex-none md:block">
         <DashboardSidebar activeTab={activeTab} />
       </div>
 
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        <div className="flex flex-col gap-10">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-col gap-6 md:gap-10">
           <div className="no-scrollbar flex items-center gap-2 overflow-x-auto border-b border-[color:var(--cf-border)]">
             {tabs.map(tab => {
               const Icon = tab.icon
@@ -114,7 +114,7 @@ export function DashboardClient() {
                   key={tab.id}
                   type="button"
                   onClick={() => handleTabChange(tab.id as TabType)}
-                  className={`relative -mb-[px] flex items-center gap-2 px-6 py-4 text-sm font-bold transition-all ${
+                  className={`relative -mb-[px] flex min-h-11 items-center gap-2 px-4 py-3 text-sm font-bold transition-all md:px-6 md:py-4 ${
                     isActive
                       ? 'bg-[color:var(--cf-surface-2)] text-[color:var(--cf-text-strong)]'
                       : 'border-transparent text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
@@ -149,7 +149,7 @@ export function DashboardClient() {
                       </button>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
                       {displayDashboards.map(dash => (
                         <button
                           key={dash.id}
@@ -170,7 +170,7 @@ export function DashboardClient() {
                               <MoreHorizontal className="h-4 w-4" />
                             </button>
                             {openMenuId === dash.id && (
-                              <div className="absolute right-0 mt-2 w-44 overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl">
+                              <div className="absolute right-0 mt-2 w-44 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl">
                                 <button
                                   type="button"
                                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)]"
@@ -217,7 +217,7 @@ export function DashboardClient() {
                             <h3 className="group-hover:text-primary mb-1 truncate text-lg font-bold text-[color:var(--cf-text-strong)] drop-shadow-md transition-colors">
                               {resolveDashboardName(dash.name)}
                             </h3>
-                            <div className="flex items-center justify-between text-xs">
+                            <div className="flex min-w-0 items-center justify-between gap-2 text-xs">
                               <span className="text-[color:var(--cf-muted)] drop-shadow-md">
                                 {t('dashboard.editor.componentsCount', {
                                   count: dash.widgets?.length || 0,
@@ -249,7 +249,7 @@ export function DashboardClient() {
                       </button>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
                       {displayDashboards.map(dash => (
                         <button
                           key={dash.id}
@@ -270,7 +270,7 @@ export function DashboardClient() {
                               <MoreHorizontal className="h-4 w-4" />
                             </button>
                             {openMenuId === dash.id && (
-                              <div className="absolute right-0 mt-2 w-44 overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl">
+                              <div className="absolute right-0 mt-2 w-44 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl">
                                 <button
                                   type="button"
                                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)]"
@@ -317,7 +317,7 @@ export function DashboardClient() {
                             <h3 className="group-hover:text-primary mb-1 truncate text-lg font-bold text-[color:var(--cf-text-strong)] drop-shadow-md transition-colors">
                               {resolveDashboardName(dash.name)}
                             </h3>
-                            <div className="flex items-center justify-between text-xs">
+                            <div className="flex min-w-0 items-center justify-between gap-2 text-xs">
                               <span className="text-[color:var(--cf-muted)] drop-shadow-md">
                                 {t('dashboard.editor.componentsCount', {
                                   count: dash.widgets?.length || 0,
@@ -348,10 +348,10 @@ export function DashboardClient() {
             title={tr('common.rename', '重命名', 'Rename')}
             width="max-w-md"
             footer={
-              <div className="flex justify-end gap-3">
+              <div className="flex w-full flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <button
                   type="button"
-                  className="rounded-lg bg-[color:var(--cf-surface-2)] px-4 py-2 text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)]"
+                  className="min-h-11 rounded-lg bg-[color:var(--cf-surface-2)] px-4 py-2 text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)] sm:min-h-0"
                   onClick={() => {
                     setRenameTarget(null)
                     setRenameValue('')
@@ -361,7 +361,7 @@ export function DashboardClient() {
                 </button>
                 <button
                   type="button"
-                  className="bg-primary hover:bg-primary/90 rounded-lg px-4 py-2 text-white transition-colors"
+                  className="bg-primary hover:bg-primary/90 min-h-11 rounded-lg px-4 py-2 text-white transition-colors sm:min-h-0"
                   onClick={() => {
                     if (!renameTarget) return
                     const next = renameValue.trim()

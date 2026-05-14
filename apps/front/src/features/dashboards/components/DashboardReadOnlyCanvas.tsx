@@ -5,6 +5,11 @@ import { useTranslation } from 'react-i18next'
 import { DASHBOARD_UPDATED_EVENT, ensureDashboard, getDashboard } from '../store/dashboard-store'
 import { snapToPresetForWidgetType } from '../widgets/unit-size-presets'
 import { WidgetRenderer } from '../widgets/WidgetRenderer'
+import {
+  mobileWidgetMinHeight,
+  sortLayoutForMobile,
+  useDashboardMobileLayout,
+} from './dashboard-layout-utils'
 
 type GridLayoutComponent = React.ComponentType<any> | null
 
@@ -61,12 +66,14 @@ export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
   )
   const [GridLayout, setGridLayout] = useState<GridLayoutComponent>(null)
   const { setEl: containerRef, width } = useContainerWidth()
+  const isMobileLayout = useDashboardMobileLayout()
 
   useEffect(() => {
+    if (isMobileLayout) return
     import('react-grid-layout').then((mod: any) => {
       setGridLayout(() => mod?.default || mod?.GridLayout)
     })
-  }, [])
+  }, [isMobileLayout])
 
   useEffect(() => {
     const refresh = () => {
@@ -97,6 +104,28 @@ export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
   }, [props.dashboardId])
 
   if (!doc) return <div className="p-10 text-center text-white/30">{t('dashboard.notFound')}</div>
+  if (isMobileLayout) {
+    return (
+      <div
+        data-testid="mobile-readonly-canvas"
+        className="flex h-full w-full min-w-0 flex-col gap-4 overflow-hidden"
+      >
+        {sortLayoutForMobile(layoutState as any).map((l: any) => {
+          const w = widgetsById.get(l.i)
+          if (!w) return null
+          return (
+            <div
+              key={l.i}
+              className="relative w-full min-w-0 overflow-hidden rounded-xl border border-white/10 bg-[#161b22] shadow-sm"
+              style={{ minHeight: mobileWidgetMinHeight(l) }}
+            >
+              <WidgetRenderer widget={w} draggable={false} />
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
   if (!GridLayout)
     return <div className="p-10 text-center text-white/30">{t('common.loading')}</div>
 
@@ -126,7 +155,7 @@ export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
                 className="relative overflow-hidden rounded-xl border border-white/10 bg-[#161b22] shadow-sm transition-all duration-300"
                 style={{ height: '100%', overflow: 'hidden' }}
               >
-                <WidgetRenderer widget={w} />
+                <WidgetRenderer widget={w} draggable={false} />
               </div>
             )
           })}

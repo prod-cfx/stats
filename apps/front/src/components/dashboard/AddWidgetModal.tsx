@@ -99,14 +99,14 @@ export const AddWidgetModal = ({ isOpen, onClose, dashboardId }: AddWidgetModalP
       loading={loading}
       footer={null}
     >
-      <div className="max-h-[80vh] overflow-y-auto">
+      <div className="max-h-[calc(100dvh-8rem)] min-w-0 overflow-y-auto overscroll-contain md:max-h-[80vh]">
         {step === 'groups' && (
-          <div className="space-y-6 p-2">
+          <div className="min-w-0 space-y-5 p-1 md:space-y-6 md:p-2">
             <p className="text-[color:var(--cf-muted)] text-xs font-medium tracking-wide">
               {t('dashboard.editor.addWidgetHint')}
             </p>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3 md:gap-4">
               {WIDGET_CATALOG.map((group) => {
                 const Icon = GROUP_ICONS[group.id] || Database
                 const color = GROUP_COLORS[group.id]
@@ -116,7 +116,7 @@ export const AddWidgetModal = ({ isOpen, onClose, dashboardId }: AddWidgetModalP
                     type="button"
                     key={group.id}
                     onClick={() => handleSelectGroup(group)}
-                    className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-6 hover:bg-[color:var(--cf-surface-hover)] hover:border-primary/50 transition-all group text-left"
+                    className="group min-w-0 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 text-left transition-all hover:border-primary/50 hover:bg-[color:var(--cf-surface-hover)] md:p-6"
                   >
                     <div 
                       className="w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110"
@@ -125,7 +125,7 @@ export const AddWidgetModal = ({ isOpen, onClose, dashboardId }: AddWidgetModalP
                       <Icon className="w-6 h-6" />
                     </div>
                     
-                    <h3 className="text-[color:var(--cf-text-strong)] font-bold text-lg mb-2 group-hover:text-primary transition-colors">
+                    <h3 className="mb-2 break-words text-base font-bold text-[color:var(--cf-text-strong)] transition-colors group-hover:text-primary md:text-lg">
                       {t(group.title)}
                     </h3>
                     
@@ -133,11 +133,11 @@ export const AddWidgetModal = ({ isOpen, onClose, dashboardId }: AddWidgetModalP
                       {t(group.subtitle)}
                     </p>
                     
-                    <div className="flex items-center justify-between">
+                    <div className="flex min-w-0 items-center justify-between gap-3">
                       <span className="text-[color:var(--cf-muted)] text-xs">
                         {t('dashboard.editor.componentsCount', { count: group.items.length })}
                       </span>
-                      <span className="text-primary text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="text-primary text-xs opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
                         {t('dashboard.editor.actions.view')} →
                       </span>
                     </div>
@@ -149,7 +149,7 @@ export const AddWidgetModal = ({ isOpen, onClose, dashboardId }: AddWidgetModalP
         )}
 
         {step === 'preview' && selectedGroup && (
-          <div className="p-2">
+          <div className="min-w-0 p-1 md:p-2">
             <WidgetGroupPreview
               group={selectedGroup}
               onBack={handleBack}
