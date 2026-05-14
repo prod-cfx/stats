@@ -16,7 +16,7 @@ describe('codegenSessionPublicationPipeline', () => {
   const semanticState: SemanticState = {
     version: 1,
     families: ['single-leg'],
-    triggers: [
+    trigger: [
       {
         id: 'entry-bollinger-upper',
         key: 'bollinger.touch_upper',
@@ -48,7 +48,7 @@ describe('codegenSessionPublicationPipeline', () => {
         openSlots: [],
       },
     ],
-    actions: [
+    action: [
       { id: 'action-open-short', key: 'open_short', status: 'locked', source: 'user_explicit' },
       { id: 'action-close-short', key: 'close_short', status: 'locked', source: 'user_explicit' },
     ],
@@ -60,6 +60,9 @@ describe('codegenSessionPublicationPipeline', () => {
       status: 'locked',
       source: 'user_explicit',
     },
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     contextSlots: {
       exchange: {
         slotKey: 'exchange',

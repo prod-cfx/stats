@@ -54,7 +54,7 @@ export class CapabilityEvidenceIndex {
   static build(state: SemanticState): CapabilityEvidenceIndex {
     const entries: CapabilityEvidence[] = []
 
-    for (const action of state.actions) {
+    for (const action of state.action) {
       if (!action.contracts) continue
       for (const contract of action.contracts) {
         for (const capability of contract.capabilities) {
@@ -70,8 +70,8 @@ export class CapabilityEvidenceIndex {
       }
     }
 
-    if (state.position?.constraints) {
-      for (const pc of state.position.constraints) {
+    if (state.positionConstraint) {
+      for (const pc of state.positionConstraint) {
         if (!pc.contracts) continue
         for (const contract of pc.contracts) {
           for (const capability of contract.capabilities) {

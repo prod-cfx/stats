@@ -1539,7 +1539,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
         },
       },
       position: null,
-      triggers: [
+      trigger: [
         ...['5m', '1h', '4h'].map((timeframe, index) => ({
           id: `entry-ema-${index}`,
           key: 'indicator.above',
@@ -1571,7 +1571,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
           },
         },
       ],
-      actions: [
+      action: [
         { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
         { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
       ],
@@ -1583,6 +1583,9 @@ describe('canonicalSpecV2IrCompilerService', () => {
         source: 'user_explicit',
         openSlots: [],
       }],
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       normalizationNotes: [],
       updatedAt: '2026-05-06T00:00:00.000Z',
     }
@@ -2908,7 +2911,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
     const semanticState: SemanticState = {
       version: 1,
       families: ['single-leg', 'state-gated'],
-      triggers: [
+      trigger: [
         {
           id: 'entry-close-gt-open',
           key: 'condition.expression',
@@ -2944,7 +2947,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
           openSlots: [],
         },
       ],
-      actions: [
+      action: [
         { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
       ],
       risk: [],
@@ -2955,6 +2958,9 @@ describe('canonicalSpecV2IrCompilerService', () => {
         status: 'locked',
         source: 'user_explicit',
       },
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       contextSlots: {
         exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请选择交易所', affectsExecution: true },
         symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '请选择交易标的', affectsExecution: true },
@@ -3896,7 +3902,7 @@ describe('canonicalSpecV2IrCompilerService phase-1 gate atoms', () => {
           },
         },
         position: null,
-        triggers: [
+        trigger: [
           {
             id: 'entry-on-start',
             key: 'execution.on_start',
@@ -3908,7 +3914,7 @@ describe('canonicalSpecV2IrCompilerService phase-1 gate atoms', () => {
             params: {},
           },
         ],
-        actions: [
+        action: [
           { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
         ],
         risk: [
@@ -3921,6 +3927,9 @@ describe('canonicalSpecV2IrCompilerService phase-1 gate atoms', () => {
             openSlots: [],
           },
         ],
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         normalizationNotes: [],
         updatedAt: '2026-05-07T00:00:00.000Z',
       }

@@ -27,10 +27,13 @@ function makeEmptyState(): SemanticState {
   return {
     version: 1,
     families: ['single-leg'],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
     position: null,
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
     updatedAt: new Date().toISOString(),
@@ -41,7 +44,7 @@ function makeTriggerState(
   key: string,
   phase: 'entry' | 'exit' = 'entry',
   params: Record<string, unknown> = {},
-): SemanticState['triggers'][number] {
+): SemanticState['trigger'][number] {
   return {
     id: `t-${key}`,
     key,
@@ -72,7 +75,7 @@ function makeRiskState(
 function makeActionState(
   key: string,
   params: Record<string, unknown> = {},
-): SemanticState['actions'][number] {
+): SemanticState['action'][number] {
   return {
     id: `a-${key}`,
     key,
@@ -168,8 +171,8 @@ describe('InternalKeyLeakGuard — projection output 0 命中', () => {
         const params = TRIGGER_PARAMS[key] ?? {}
         const state: SemanticState = {
           ...makeEmptyState(),
-          triggers: [makeTriggerState(key, 'entry', params)],
-          actions: [makeActionState('action.open_long')],
+          trigger: [makeTriggerState(key, 'entry', params)],
+          action: [makeActionState('action.open_long')],
         }
         const texts = extractTexts(state)
         assertNoLeaks(texts, `trigger:${key}`)
@@ -191,8 +194,8 @@ describe('InternalKeyLeakGuard — projection output 0 命中', () => {
           : { valuePct: 5 }
         const state: SemanticState = {
           ...makeEmptyState(),
-          triggers: [makeTriggerState('price.percent_change', 'entry', { valuePct: -3, basis: 'prev_close' })],
-          actions: [makeActionState('action.open_long')],
+          trigger: [makeTriggerState('price.percent_change', 'entry', { valuePct: -3, basis: 'prev_close' })],
+          action: [makeActionState('action.open_long')],
           risk: [makeRiskState(key, params)],
         }
         const texts = extractTexts(state)
@@ -212,8 +215,8 @@ describe('InternalKeyLeakGuard — projection output 0 命中', () => {
       it(`action key=${key} 无 internal key 泄漏`, () => {
         const state: SemanticState = {
           ...makeEmptyState(),
-          triggers: [makeTriggerState('price.percent_change', 'entry', { valuePct: -3, basis: 'prev_close' })],
-          actions: [makeActionState(key)],
+          trigger: [makeTriggerState('price.percent_change', 'entry', { valuePct: -3, basis: 'prev_close' })],
+          action: [makeActionState(key)],
         }
         const texts = extractTexts(state)
         assertNoLeaks(texts, `action:${key}`)
@@ -244,6 +247,7 @@ describe('InternalKeyLeakGuard — projection output 0 命中', () => {
             positionMode: 'oneway',
             status: 'locked' as const,
             source: 'user_explicit' as const,
+            // @ts-ignore Task6: position.constraints moved to top-level positionConstraint
             constraints: [
               {
                 id: `pc-${key}`,
@@ -270,12 +274,12 @@ describe('InternalKeyLeakGuard — projection output 0 命中', () => {
   it('多 trigger 组合状态不泄漏', () => {
     const state: SemanticState = {
       ...makeEmptyState(),
-      triggers: [
+      trigger: [
         makeTriggerState('indicator.above', 'entry', { indicator: 'MA', 'reference.period': 20 }),
         makeTriggerState('price.detect.indicator_boundary', 'entry', { indicator: { name: 'bollinger', period: 20, stdDev: 2 }, boundaryRole: 'upper' }),
         makeTriggerState('execution.on_start', 'exit'),
       ],
-      actions: [makeActionState('action.open_long'), makeActionState('action.close_long')],
+      action: [makeActionState('action.open_long'), makeActionState('action.close_long')],
       risk: [makeRiskState('risk.partial_take_profit', { tiers: [{ trigger: { threshold: 5 }, reduceRatio: 0.5 }] })],
     }
     const texts = extractTexts(state)

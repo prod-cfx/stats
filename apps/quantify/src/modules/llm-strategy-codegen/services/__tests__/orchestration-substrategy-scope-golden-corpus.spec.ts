@@ -33,9 +33,12 @@ function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticSt
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
@@ -131,71 +134,61 @@ describe('orchestration scope.subStrategy — golden corpus (Phase 5 S10 #1111)'
 
     it('B1 valid 2 sub-strategies: ready=true', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [
+        orchestration: [
             subStrategyScopeNode({ id: 'ss-1', subStrategyId: 'trend_sub' }),
             subStrategyScopeNode({ id: 'ss-2', subStrategyId: 'range_sub' }),
           ],
-          contracts: [],
-        },
+        orchestrationContracts: [],
       })
       const result = readiness.normalize(state, CURRENT_VERSION)
       // Both scope nodes preserved as locked
-      const nodes = result.state.orchestration?.nodes ?? []
+      const nodes = result.state.orchestration ?? []
       expect(nodes.every(n => n.status === 'locked')).toBe(true)
     })
 
     it('B2 missing positionHandling → fail-closed', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [
+        orchestration: [
             subStrategyScopeNode({ id: 'ss-1', positionHandlingOnDeactivate: undefined }),
           ],
-          contracts: [],
-        },
+        orchestrationContracts: [],
       })
       const result = readiness.normalize(state, CURRENT_VERSION)
-      const node = result.state.orchestration?.nodes[0]
+      const node = result.state.orchestration[0]
       expect(node?.status).toBe('open')
     })
 
     it('B3 collision id → fail-closed', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [
+        orchestration: [
             subStrategyScopeNode({ id: 'ss-1', subStrategyId: 'trend_sub' }),
             subStrategyScopeNode({ id: 'ss-2', subStrategyId: 'trend_sub' }),
           ],
-          contracts: [],
-        },
+        orchestrationContracts: [],
       })
       const result = readiness.normalize(state, CURRENT_VERSION)
       // 任一 collision 节点 → status='open'
-      const nodes = result.state.orchestration?.nodes ?? []
+      const nodes = result.state.orchestration ?? []
       expect(nodes.some(n => n.status === 'open')).toBe(true)
     })
 
     it('B4 missing strategyVersion → fail-closed (version gate)', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [subStrategyScopeNode({ id: 'ss-1' })],
-          contracts: [],
-        },
+        orchestration: [subStrategyScopeNode({ id: 'ss-1' })],
+        orchestrationContracts: [],
       })
       const result = readiness.normalize(state, undefined)
-      expect(result.state.orchestration?.nodes[0]?.status).toBe('open')
+      expect(result.state.orchestration[0]?.status).toBe('open')
     })
 
     it('B5 binding fail-closed: 2 subStrategies + locked trigger 缺 subStrategyScopeRef → trigger downgraded', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [
+        orchestration: [
             subStrategyScopeNode({ id: 'ss-1', subStrategyId: 'trend_sub' }),
             subStrategyScopeNode({ id: 'ss-2', subStrategyId: 'range_sub' }),
           ],
-          contracts: [],
-        },
-        triggers: [
+        orchestrationContracts: [],
+        trigger: [
           {
             id: 'trigger-1',
             key: 'price.indicator_compare',
@@ -210,7 +203,7 @@ describe('orchestration scope.subStrategy — golden corpus (Phase 5 S10 #1111)'
         ],
       })
       const result = readiness.normalize(state, CURRENT_VERSION)
-      expect(result.state.triggers[0]?.status).toBe('open')
+      expect(result.state.trigger[0]?.status).toBe('open')
       expect(result.ready).toBe(false)
     })
   })
@@ -240,10 +233,8 @@ describe('orchestration scope.subStrategy — golden corpus (Phase 5 S10 #1111)'
 
     it('D1 single sub-strategy: canonical scope 仍输出 (但 runtime 兜底跳过)', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [subStrategyScopeNode({ id: 'ss-1', subStrategyId: 'only_sub' })],
-          contracts: [],
-        },
+        orchestration: [subStrategyScopeNode({ id: 'ss-1', subStrategyId: 'only_sub' })],
+        orchestrationContracts: [],
       })
       const spec = builder.buildFromSemanticState(state)
       const scopes = spec.orchestration?.scopes ?? []
@@ -254,13 +245,11 @@ describe('orchestration scope.subStrategy — golden corpus (Phase 5 S10 #1111)'
 
     it('D2 two sub-strategies: canonical → IR full round-trip', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [
+        orchestration: [
             subStrategyScopeNode({ id: 'ss-1', subStrategyId: 'trend_sub' }),
             subStrategyScopeNode({ id: 'ss-2', subStrategyId: 'range_sub' }),
           ],
-          contracts: [],
-        },
+        orchestrationContracts: [],
       })
       const spec = builder.buildFromSemanticState(state)
       const scopes = spec.orchestration?.scopes ?? []
@@ -279,16 +268,14 @@ describe('orchestration scope.subStrategy — golden corpus (Phase 5 S10 #1111)'
 
     it('D3 invalid handling → builder silent skip (canonical scopes empty)', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [
+        orchestration: [
             subStrategyScopeNode({
               id: 'ss-1',
               subStrategyId: 'incomplete',
               positionHandlingOnDeactivate: undefined,
             }),
           ],
-          contracts: [],
-        },
+        orchestrationContracts: [],
       })
       const spec = builder.buildFromSemanticState(state)
       const scopes = spec.orchestration?.scopes ?? []

@@ -1,8 +1,17 @@
+import { ATOM_CONTRACT_REGISTRY } from '../../atom-contracts/atom-contract-registry'
 import { SemanticAtomRegistryService } from '../../services/semantic-atom-registry.service'
 
 export const BASE_INTERNAL_IDENTIFIERS = [
   'generic_boundary',
 ] as const
+
+// #1364 AC-4: orchestration bucket（scope.*, program.*, gate.*, portfolioRisk.*）
+// 在 display token 中作为领域可见术语出现（例如 "当前仅支持 scope.symbol / scope.leg ..."），
+// 属于公开复印的合法引用，不应被 leak guard 当作"内部泄漏"。
+function isOrchestrationAtomKey(key: string): boolean {
+  const entry = (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string }>)[key]
+  return entry?.bucket === 'orchestration'
+}
 
 export const PUBLIC_RESPONSE_INTERNAL_IDENTIFIERS = [
   'condition.kind',
@@ -22,7 +31,7 @@ export function buildInternalIdentifierKeys(
   additionalInternalKeys: readonly string[] = [],
 ): readonly string[] {
   return [...new Set([
-    ...atomRegistry.list().map(atom => atom.key),
+    ...atomRegistry.list().map(atom => atom.key).filter(key => !isOrchestrationAtomKey(key)),
     ...BASE_INTERNAL_IDENTIFIERS,
     ...additionalInternalKeys,
   ])].sort((left, right) => right.length - left.length)

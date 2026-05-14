@@ -24,10 +24,13 @@ function baseState(): SemanticState {
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
     position: null,
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
     updatedAt: '2026-05-11T00:00:00.000Z',
@@ -110,7 +113,7 @@ export function buildStateWithActionPerOrderBudget(opts: {
 
   return {
     ...baseState(),
-    actions: [action],
+    action: [action],
   }
 }
 
@@ -180,8 +183,8 @@ export function buildStateWithDcaPerOrderSizing(opts: {
       positionMode: 'one_way',
       status: 'locked' as const,
       source: 'user_explicit' as const,
-      constraints: [constraint],
     },
+    positionConstraint: [constraint],
   }
 }
 
@@ -212,7 +215,7 @@ export function buildMultiLegState(opts: {
 
   return {
     ...baseState(),
-    actions,
+    action: actions,
   }
 }
 
@@ -295,5 +298,6 @@ export function buildStateWithActionAndConstraint(opts: {
   return {
     ...actionState,
     position: constraintState.position,
+    positionConstraint: constraintState.positionConstraint,
   }
 }

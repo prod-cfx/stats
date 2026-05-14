@@ -52,7 +52,7 @@ describe('SemanticSeedStateBuilderService', () => {
       }],
     })
 
-    expect(state?.triggers[0]).toEqual(expect.objectContaining({
+    expect(state?.trigger[0]).toEqual(expect.objectContaining({
       id: 'trigger-open-breakout',
       key: 'price.breakout_up',
       phase: 'entry',
@@ -86,7 +86,7 @@ describe('SemanticSeedStateBuilderService', () => {
       fieldPath: 'triggers[0].params.confirmationMode',
     }
 
-    expect(state?.triggers[0]).toEqual(expect.objectContaining({
+    expect(state?.trigger[0]).toEqual(expect.objectContaining({
       status: 'open',
       params: expect.not.objectContaining({ confirmationMode: expect.anything() }),
       openSlots: expect.arrayContaining([expect.objectContaining({
@@ -103,8 +103,8 @@ describe('SemanticSeedStateBuilderService', () => {
       answer: '收盘确认',
     })
 
-    expect(next.triggers[0]?.params.confirmationMode).toBe('close_confirm')
-    expect(next.triggers[0]?.openSlots.find(item =>
+    expect(next.trigger[0]?.params.confirmationMode).toBe('close_confirm')
+    expect(next.trigger[0]?.openSlots.find(item =>
       item.slotKey === slot.slotKey
       && item.fieldPath === slot.fieldPath
       && item.status === 'open',
@@ -125,7 +125,7 @@ describe('SemanticSeedStateBuilderService', () => {
       }],
     })
 
-    expect(state?.triggers[0]).toEqual(expect.objectContaining({
+    expect(state?.trigger[0]).toEqual(expect.objectContaining({
       key: 'grid.range_rebalance',
       status: 'open',
       openSlots: expect.arrayContaining([expect.objectContaining({
@@ -172,7 +172,7 @@ describe('SemanticSeedStateBuilderService', () => {
       }],
     })
 
-    expect(state?.actions[0]).toEqual(expect.objectContaining({
+    expect(state?.action[0]).toEqual(expect.objectContaining({
       key: 'place_limit_grid',
       status: 'locked',
       openSlots: [],
@@ -206,13 +206,13 @@ describe('SemanticSeedStateBuilderService', () => {
     })
 
     const groupIds = new Set(
-      state?.triggers.map(trigger =>
+      state?.trigger.map(trigger =>
         trigger.contracts?.find(contract => typeof contract.params.groupId === 'string')?.params.groupId,
       ),
     )
 
     expect(groupIds).toEqual(new Set(['entry-long-ema-above-stack-15m-20-60-144']))
-    expect(state?.triggers).toEqual(expect.arrayContaining([
+    expect(state?.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({
         contracts: expect.arrayContaining([
           expect.objectContaining({
@@ -265,7 +265,7 @@ describe('SemanticSeedStateBuilderService', () => {
       actions: [{ key: 'open_long' }],
     })
 
-    const groupIds = state?.triggers.map(trigger =>
+    const groupIds = state?.trigger.map(trigger =>
       trigger.contracts?.find(contract => typeof contract.params.groupId === 'string')?.params.groupId,
     )
 
@@ -293,7 +293,7 @@ describe('SemanticSeedStateBuilderService', () => {
       actions: [{ key: 'open_long' }],
     })
 
-    for (const trigger of state?.triggers ?? []) {
+    for (const trigger of state?.trigger ?? []) {
       expect(trigger.contracts).toEqual(expect.arrayContaining([
         expect.objectContaining({
           capabilities: expect.arrayContaining([
@@ -343,7 +343,7 @@ describe('SemanticSeedStateBuilderService', () => {
       }],
     })
 
-    expect(state?.triggers[0]).toEqual(expect.objectContaining({
+    expect(state?.trigger[0]).toEqual(expect.objectContaining({
       key: 'grid.range_rebalance',
       openSlots: expect.arrayContaining([expect.objectContaining({
         slotKey: 'contract.shape.price.level_set.density',
@@ -361,7 +361,7 @@ describe('SemanticSeedStateBuilderService', () => {
         })],
       })],
     }))
-    expect(state?.actions[0]).toEqual(expect.objectContaining({
+    expect(state?.action[0]).toEqual(expect.objectContaining({
       key: 'place_limit_grid',
       openSlots: [],
       contracts: [expect.objectContaining({
@@ -395,6 +395,7 @@ describe('SemanticSeedStateBuilderService', () => {
       },
     })
 
+    // @ts-ignore Task6: position.constraints moved to top-level positionConstraint
     expect(state?.position?.constraints?.[0]?.contracts?.[0]?.capabilities).toEqual(expect.arrayContaining([
       expect.objectContaining({
         domain: 'runtime',
@@ -429,6 +430,7 @@ describe('SemanticSeedStateBuilderService', () => {
       },
     })
 
+    // @ts-ignore Task6: position.constraints moved to top-level positionConstraint
     const capabilities = state?.position?.constraints?.[0]?.contracts?.[0]?.capabilities ?? []
     // 既有 exposure.limit.pyramiding_layers
     expect(capabilities).toEqual(expect.arrayContaining([
@@ -466,6 +468,7 @@ describe('SemanticSeedStateBuilderService', () => {
       },
     })
 
+    // @ts-ignore Task6: position.constraints moved to top-level positionConstraint
     const capabilities = state?.position?.constraints?.[0]?.contracts?.[0]?.capabilities ?? []
     expect(capabilities).toEqual(expect.not.arrayContaining([
       expect.objectContaining({
@@ -489,7 +492,7 @@ describe('SemanticSeedStateBuilderService', () => {
         },
       }],
     })
-    const densitySlot = state?.triggers[0]?.openSlots.find(slot =>
+    const densitySlot = state?.trigger[0]?.openSlots.find(slot =>
       slot.slotKey === 'contract.shape.price.level_set.density',
     )
     expect(densitySlot).toBeDefined()
@@ -510,12 +513,12 @@ describe('SemanticSeedStateBuilderService', () => {
       throw new Error('expected grid density answer to be consumed')
     }
 
-    const shape = resolved.nextState.triggers[0]?.contracts?.[0]?.capabilities[0]?.shape
+    const shape = resolved.nextState.trigger[0]?.contracts?.[0]?.capabilities[0]?.shape
 
     expect(shape).toEqual(expect.objectContaining({
       spacingPct: 0.5,
     }))
-    expect(resolved.nextState.triggers[0]?.openSlots).toEqual(expect.not.arrayContaining([
+    expect(resolved.nextState.trigger[0]?.openSlots).toEqual(expect.not.arrayContaining([
       expect.objectContaining({
         slotKey: 'contract.shape.price.level_set.density',
         status: 'open',
@@ -545,7 +548,7 @@ describe('SemanticSeedStateBuilderService', () => {
       fieldPath: 'triggers[0].params.confirmationMode',
     }
 
-    expect(state?.triggers[0]).toEqual(expect.objectContaining({
+    expect(state?.trigger[0]).toEqual(expect.objectContaining({
       status: 'open',
       params: expect.not.objectContaining({ confirmationMode: expect.anything() }),
       openSlots: expect.arrayContaining([expect.objectContaining({
@@ -562,8 +565,8 @@ describe('SemanticSeedStateBuilderService', () => {
       answer: '盘中触碰就触发',
     })
 
-    expect(next.triggers[0]?.params.confirmationMode).toBe('touch')
-    expect(next.triggers[0]?.openSlots.find(item =>
+    expect(next.trigger[0]?.params.confirmationMode).toBe('touch')
+    expect(next.trigger[0]?.openSlots.find(item =>
       item.slotKey === slot.slotKey
       && item.fieldPath === slot.fieldPath
       && item.status === 'open',
@@ -605,7 +608,7 @@ describe('SemanticSeedStateBuilderService', () => {
       }],
     })
 
-    expect(state?.triggers).toEqual(expect.arrayContaining([
+    expect(state?.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'price.detect.indicator_boundary',
         status: 'locked',
@@ -644,7 +647,7 @@ describe('SemanticSeedStateBuilderService', () => {
       ],
     })
 
-    expect(state?.triggers).toEqual(expect.arrayContaining([
+    expect(state?.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'indicator.cross_over',
         phase: 'entry',
@@ -686,7 +689,7 @@ describe('SemanticSeedStateBuilderService', () => {
       actions: [{ key: 'open_long' }],
     })
 
-    expect(state?.triggers[0].contracts?.[0]).toEqual(expect.objectContaining({
+    expect(state?.trigger[0].contracts?.[0]).toEqual(expect.objectContaining({
       runtimeRequirements: expect.arrayContaining([
         expect.objectContaining({ domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' }),
       ]),
@@ -709,7 +712,7 @@ describe('SemanticSeedStateBuilderService', () => {
       actions: [{ key: 'open_long' }],
     })
 
-    expect(state?.triggers[0].contracts?.[0]).toEqual(expect.objectContaining({
+    expect(state?.trigger[0].contracts?.[0]).toEqual(expect.objectContaining({
       runtimeRequirements: expect.arrayContaining([
         expect.objectContaining({ domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' }),
       ]),
@@ -784,7 +787,7 @@ describe('SemanticSeedStateBuilderService', () => {
       actions: [{ key: 'open_long' }],
     })
 
-    expect(state?.triggers).toEqual(expect.arrayContaining([
+    expect(state?.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'condition.sequence',
         status: 'locked',
@@ -890,7 +893,7 @@ describe('SemanticSeedStateBuilderService', () => {
       },
     })
 
-    expect(state?.triggers[0]).toEqual(expect.objectContaining({
+    expect(state?.trigger[0]).toEqual(expect.objectContaining({
       status: 'locked',
       source: 'user_explicit',
       openSlots: [],
@@ -904,7 +907,7 @@ describe('SemanticSeedStateBuilderService', () => {
         })],
       })],
     }))
-    expect(state?.triggers[1]).toEqual(expect.objectContaining({
+    expect(state?.trigger[1]).toEqual(expect.objectContaining({
       status: 'locked',
       params: expect.objectContaining({ valuePct: 3 }),
       contracts: [expect.objectContaining({
@@ -913,7 +916,7 @@ describe('SemanticSeedStateBuilderService', () => {
         })],
       })],
     }))
-    expect(state?.triggers[2]).toEqual(expect.objectContaining({
+    expect(state?.trigger[2]).toEqual(expect.objectContaining({
       status: 'locked',
       params: expect.objectContaining({ indicator: 'ma', fastPeriod: 20, slowPeriod: 50 }),
       contracts: [expect.objectContaining({
@@ -922,7 +925,7 @@ describe('SemanticSeedStateBuilderService', () => {
         })],
       })],
     }))
-    expect(state?.triggers[3]).toEqual(expect.objectContaining({
+    expect(state?.trigger[3]).toEqual(expect.objectContaining({
       status: 'locked',
       params: expect.objectContaining({ lookbackBars: 20, thresholdPct: 45 }),
       contracts: [expect.objectContaining({
@@ -931,7 +934,7 @@ describe('SemanticSeedStateBuilderService', () => {
         })],
       })],
     }))
-    expect(state?.actions[0]).toEqual(expect.objectContaining({
+    expect(state?.action[0]).toEqual(expect.objectContaining({
       status: 'locked',
       source: 'user_explicit',
       openSlots: [],
@@ -1001,12 +1004,12 @@ describe('SemanticSeedStateBuilderService', () => {
       risk: [{ key: 'risk.unknown_guard', params: { valuePct: 10 } }],
     })
 
-    expect(state?.triggers[0]).toEqual(expect.objectContaining({
+    expect(state?.trigger[0]).toEqual(expect.objectContaining({
       status: 'open',
       source: 'user_explicit',
       openSlots: [expectContractRequiredSlot('triggers[0].contracts')],
     }))
-    expect(state?.actions[0]).toEqual(expect.objectContaining({
+    expect(state?.action[0]).toEqual(expect.objectContaining({
       status: 'open',
       source: 'user_explicit',
       openSlots: [expectContractRequiredSlot('actions[0].contracts')],
@@ -1051,31 +1054,31 @@ describe('SemanticSeedStateBuilderService', () => {
       }],
     })
 
-    expect(state?.triggers[0]).toEqual(expect.objectContaining({
+    expect(state?.trigger[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expectContractRequiredSlot('triggers[0].contracts')],
     }))
-    expect(state?.triggers[1]).toEqual(expect.objectContaining({
+    expect(state?.trigger[1]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expectContractRequiredSlot('triggers[1].contracts')],
     }))
-    expect(state?.triggers[2]).toEqual(expect.objectContaining({
+    expect(state?.trigger[2]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expectContractRequiredSlot('triggers[2].contracts')],
     }))
-    expect(state?.triggers[3]).toEqual(expect.objectContaining({
+    expect(state?.trigger[3]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expectContractRequiredSlot('triggers[3].contracts')],
     }))
-    expect(state?.triggers[4]).toEqual(expect.objectContaining({
+    expect(state?.trigger[4]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expectContractRequiredSlot('triggers[4].contracts')],
     }))
-    expect(state?.triggers[5]).toEqual(expect.objectContaining({
+    expect(state?.trigger[5]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expectContractRequiredSlot('triggers[5].contracts')],
     }))
-    expect(state?.triggers[6]).toEqual(expect.objectContaining({
+    expect(state?.trigger[6]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expectContractRequiredSlot('triggers[6].contracts')],
     }))
@@ -1166,7 +1169,7 @@ describe('SemanticSeedStateBuilderService', () => {
       }],
     })
 
-    expect(state?.triggers[0]).toEqual(expect.objectContaining({
+    expect(state?.trigger[0]).toEqual(expect.objectContaining({
       status: 'superseded',
       openSlots: [],
     }))
@@ -1194,7 +1197,7 @@ describe('SemanticSeedStateBuilderService', () => {
       }],
     })
 
-    expect(state?.actions[0]).toEqual(expect.objectContaining({
+    expect(state?.action[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expectContractRequiredSlot('actions[1].contracts')],
       contracts: [expect.objectContaining({ kind: 'action' })],
@@ -1254,14 +1257,14 @@ describe('SemanticSeedStateBuilderService', () => {
       }],
     })
 
-    expect(state?.actions[0]?.status).toBe('open')
-    expect(state?.actions[0]?.openSlots).toEqual([
+    expect(state?.action[0]?.status).toBe('open')
+    expect(state?.action[0]?.openSlots).toEqual([
       expect.objectContaining({
         slotKey: 'action.order_type',
         fieldPath: 'actions[0].params.orderType',
       }),
     ])
-    expect(state?.actions[0]?.contracts).toEqual([expect.objectContaining({ kind: 'action' })])
+    expect(state?.action[0]?.contracts).toEqual([expect.objectContaining({ kind: 'action' })])
   })
 
   it('does not add contract required slots to context slots', () => {
@@ -1408,19 +1411,19 @@ describe('SemanticSeedStateBuilderService', () => {
       }],
     })
 
-    expect(state?.actions[0]).toEqual(expect.objectContaining({
+    expect(state?.action[0]).toEqual(expect.objectContaining({
       key: 'open_long',
       status: 'open',
       source: 'user_explicit',
     }))
-    expect(state?.actions[0]?.openSlots).toEqual([
+    expect(state?.action[0]?.openSlots).toEqual([
       expect.objectContaining({
         slotKey: 'action.order_type',
         status: 'open',
         questionHint: '请确认开仓订单类型。',
       }),
     ])
-    expect(state?.actions[0]?.contracts).toEqual([expect.objectContaining({ kind: 'action' })])
+    expect(state?.action[0]?.contracts).toEqual([expect.objectContaining({ kind: 'action' })])
   })
 
   it('preserves semantic atom contracts from semantic seed patch', () => {
@@ -1509,13 +1512,13 @@ describe('SemanticSeedStateBuilderService', () => {
       },
     })
 
-    expect(state?.triggers[0]?.contracts).toEqual([
+    expect(state?.trigger[0]?.contracts).toEqual([
       expect.objectContaining({
         id: 'trigger-1',
         capabilities: [expect.objectContaining({ domain: 'price', verb: 'define', object: 'level_set' })],
       }),
     ])
-    expect(state?.actions[0]?.contracts).toEqual([
+    expect(state?.action[0]?.contracts).toEqual([
       expect.objectContaining({
         id: 'action-1',
         requires: [
@@ -1562,7 +1565,7 @@ describe('SemanticSeedStateBuilderService', () => {
       }],
     })
 
-    expect(state?.actions[0]?.contracts).toBeUndefined()
+    expect(state?.action[0]?.contracts).toBeUndefined()
   })
 
   it('normalizes planner basis open slot before resolving risk status', () => {
@@ -1672,21 +1675,21 @@ describe('SemanticSeedStateBuilderService', () => {
       }],
     })
 
-    expect(state?.triggers).toHaveLength(3)
+    expect(state?.trigger).toHaveLength(3)
     expect(state?.risk).toHaveLength(2)
-    for (const node of [...(state?.triggers ?? []), ...(state?.risk ?? [])]) {
+    for (const node of [...(state?.trigger ?? []), ...(state?.risk ?? [])]) {
       expect(node.openSlots).toEqual([])
       expect(node.contracts).toEqual(expect.arrayContaining([expect.objectContaining({
         capabilities: expect.any(Array),
       })]))
     }
-    expect(state?.triggers[0]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
+    expect(state?.trigger[0]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
       object: 'volume_condition',
     }))
-    expect(state?.triggers[1]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
+    expect(state?.trigger[1]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
       object: 'volume_condition',
     }))
-    expect(state?.triggers[2]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
+    expect(state?.trigger[2]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
       object: 'volatility_condition',
     }))
     expect(state?.risk[0]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
@@ -1951,8 +1954,8 @@ describe('projectSingleAnchorToPosition — base_qty asset 投影', () => {
     return {
       version: 1,
       families: ['single-leg'],
-      triggers: [],
-      actions: [{
+      trigger: [],
+      action: [{
         id: 'a-base',
         key: 'action.open_long',
         status: 'locked',
@@ -1979,6 +1982,9 @@ describe('projectSingleAnchorToPosition — base_qty asset 投影', () => {
       }],
       risk: [],
       position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
       normalizationNotes: [],
       updatedAt: '2026-05-11T00:00:00.000Z',
@@ -2184,8 +2190,8 @@ describe('SemanticSeedStateBuilderService — evidence invariant (drop mode)', (
         },
       ],
     }, MSG)
-    expect(state?.triggers).toHaveLength(1)
-    expect(state?.triggers[0]?.key).toBe('indicator.above')
+    expect(state?.trigger).toHaveLength(1)
+    expect(state?.trigger[0]?.key).toBe('indicator.above')
   })
 
   it('keeps trigger with missing evidence (warn-only, backward-compatible)', () => {
@@ -2198,7 +2204,7 @@ describe('SemanticSeedStateBuilderService — evidence invariant (drop mode)', (
         params: { indicator: 'ema', 'reference.period': 20 },
       }],
     }, MSG)
-    expect(state?.triggers).toHaveLength(1)
+    expect(state?.trigger).toHaveLength(1)
   })
 
   it('drops trigger with empty evidence.text (C2)', () => {
@@ -2216,7 +2222,7 @@ describe('SemanticSeedStateBuilderService — evidence invariant (drop mode)', (
         evidence: { text: '开多', source: 'user_explicit' },
       }],
     }, '开多 RSI 超卖')
-    expect(state?.triggers).toHaveLength(0)
+    expect(state?.trigger).toHaveLength(0)
   })
 
   it('returns null when all atoms are dropped (all have explicitly wrong evidence)', () => {
@@ -2257,7 +2263,7 @@ describe('SemanticSeedStateBuilderService — evidence invariant (off mode)', ()
         params: { indicator: 'ema', 'reference.period': 20 },
       }],
     }, MSG)
-    expect(state?.triggers).toHaveLength(1)
+    expect(state?.trigger).toHaveLength(1)
   })
 })
 
@@ -2281,25 +2287,82 @@ describe('SemanticSeedStateBuilderService.toActionState — action.* 前缀归�
 
   it('"action.open_long" 剥前缀 → state.actions[0].key = "open_long"', () => {
     const state = svc.build(buildPatchWithAction('action.open_long'), MSG)
-    expect(state?.actions).toHaveLength(1)
-    expect(state?.actions[0]?.key).toBe('open_long')
+    expect(state?.action).toHaveLength(1)
+    expect(state?.action[0]?.key).toBe('open_long')
   })
 
   it('"action.add_position" 不剥（非 lifecycle）→ 保留全 atom-key', () => {
     const state = svc.build(buildPatchWithAction('action.add_position'), MSG)
-    expect(state?.actions).toHaveLength(1)
-    expect(state?.actions[0]?.key).toBe('action.add_position')
+    expect(state?.action).toHaveLength(1)
+    expect(state?.action[0]?.key).toBe('action.add_position')
   })
 
   it('"open_long" 已 unprefixed → idempotent 透传', () => {
     const state = svc.build(buildPatchWithAction('open_long'), MSG)
-    expect(state?.actions).toHaveLength(1)
-    expect(state?.actions[0]?.key).toBe('open_long')
+    expect(state?.action).toHaveLength(1)
+    expect(state?.action[0]?.key).toBe('open_long')
   })
 
   it('"Action.OPEN_LONG" 大小写漂移 → lowercase 后剥前缀，存 "open_long"', () => {
     const state = svc.build(buildPatchWithAction('Action.OPEN_LONG'), MSG)
-    expect(state?.actions).toHaveLength(1)
-    expect(state?.actions[0]?.key).toBe('open_long')
+    expect(state?.action).toHaveLength(1)
+    expect(state?.action[0]?.key).toBe('open_long')
+  })
+
+  // #1364 AC-3: patch.atoms[] 单数组 + 服务端按 contract.bucket 归桶
+  describe('#1364 AC-3: patch.atoms[] dispatch by contract.bucket', () => {
+    const builder = new SemanticSeedStateBuilderService()
+
+    it('routes trigger atom by contract.bucket=trigger', () => {
+      const state = builder.build({
+        atoms: [{
+          key: 'indicator.above',
+          phase: 'entry',
+          params: { indicator: 'ma', timeframe: '15m', reference: { period: 50 } },
+        }],
+      })
+      expect(state).not.toBeNull()
+      expect(state!.trigger).toHaveLength(1)
+      expect(state!.trigger[0].key).toBe('indicator.above')
+      expect(state!.action).toHaveLength(0)
+    })
+
+    it('routes risk atom by contract.bucket=risk', () => {
+      const state = builder.build({
+        atoms: [{
+          key: 'risk.partial_take_profit',
+          params: { tiers: [{ trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 }] },
+        }],
+      })
+      expect(state).not.toBeNull()
+      expect(state!.risk).toHaveLength(1)
+      expect(state!.risk[0].key).toBe('risk.partial_take_profit')
+      expect(state!.trigger).toHaveLength(0)
+    })
+
+    it('drops unknown atom key with warn', () => {
+      const state = builder.build({
+        atoms: [{ key: 'completely.unknown.atom.key', params: {} }],
+      })
+      // No buckets populated -> build returns null
+      expect(state).toBeNull()
+    })
+
+    it('coexists with legacy 5-bucket fields in same patch', () => {
+      const state = builder.build({
+        atoms: [{
+          key: 'indicator.above',
+          phase: 'entry',
+          params: { indicator: 'ma', timeframe: '15m', reference: { period: 20 } },
+        }],
+        risk: [{
+          key: 'risk.partial_take_profit',
+          params: { tiers: [{ trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 }] },
+        }],
+      })
+      expect(state).not.toBeNull()
+      expect(state!.trigger).toHaveLength(1)
+      expect(state!.risk).toHaveLength(1)
+    })
   })
 })

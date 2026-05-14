@@ -15,7 +15,7 @@ describe('SemanticAtomInvariantService', () => {
     return {
       version: 1,
       families: ['single-leg'],
-      triggers: [
+      trigger: [
         {
           id: 'entry-on-start',
           key: 'execution.on_start',
@@ -38,7 +38,7 @@ describe('SemanticAtomInvariantService', () => {
           openSlots: [],
         },
       ],
-      actions: [
+      action: [
         { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
         { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
       ],
@@ -50,6 +50,9 @@ describe('SemanticAtomInvariantService', () => {
         status: 'locked',
         source: 'user_explicit',
       },
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       contextSlots: {
         exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请确认交易所。', affectsExecution: true },
         symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'ORDIUSDT', status: 'locked', priority: 'context', questionHint: '请确认交易标的。', affectsExecution: true },
@@ -77,7 +80,7 @@ describe('SemanticAtomInvariantService', () => {
 
     return {
       ...state,
-      triggers: [...state.triggers, secondTrigger],
+      trigger: [...state.trigger, secondTrigger],
     }
   }
 
@@ -85,7 +88,7 @@ describe('SemanticAtomInvariantService', () => {
     const state = buildSemanticState()
     return {
       ...state,
-      triggers: state.triggers.map(trigger =>
+      trigger: state.trigger.map(trigger =>
         trigger.key === 'price.percent_change'
           ? {
               ...trigger,
@@ -104,12 +107,12 @@ describe('SemanticAtomInvariantService', () => {
     const state = buildSemanticState()
     return {
       ...state,
-      triggers: state.triggers.map(trigger =>
+      trigger: state.trigger.map(trigger =>
         trigger.key === 'price.percent_change'
           ? { ...trigger, sideScope: 'both' as const }
           : trigger,
       ),
-      actions: [
+      action: [
         { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
         { id: 'open-short', key: 'open_short', status: 'locked', source: 'user_explicit' },
         { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
@@ -126,7 +129,7 @@ describe('SemanticAtomInvariantService', () => {
     return {
       version: 1,
       families: ['single-leg'],
-      triggers: [
+      trigger: [
         {
           id: 'entry-close-gt-open',
           key: 'condition.expression',
@@ -162,7 +165,7 @@ describe('SemanticAtomInvariantService', () => {
           openSlots: [],
         },
       ],
-      actions: [
+      action: [
         { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
         { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
       ],
@@ -174,6 +177,9 @@ describe('SemanticAtomInvariantService', () => {
         status: 'locked',
         source: 'user_explicit',
       },
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       contextSlots: {
         exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请选择交易所', affectsExecution: true },
         symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '请选择交易标的', affectsExecution: true },
@@ -189,7 +195,7 @@ describe('SemanticAtomInvariantService', () => {
     const state = buildCloseOpenExpressionSemanticState()
     return {
       ...state,
-      triggers: state.triggers.map(trigger =>
+      trigger: state.trigger.map(trigger =>
         trigger.id === 'entry-close-gt-open'
           ? {
               ...trigger,
@@ -222,7 +228,7 @@ describe('SemanticAtomInvariantService', () => {
     const state = buildCloseOpenExpressionSemanticState()
     return {
       ...state,
-      triggers: state.triggers.map(trigger =>
+      trigger: state.trigger.map(trigger =>
         trigger.id === 'entry-close-gt-open'
           ? {
               ...trigger,
@@ -324,7 +330,7 @@ describe('SemanticAtomInvariantService', () => {
     return {
       version: 1,
       families: ['single-leg'],
-      triggers: [
+      trigger: [
         {
           id: 'grid-range',
           key: 'condition.expression',
@@ -337,7 +343,7 @@ describe('SemanticAtomInvariantService', () => {
           contracts: [levelSetContract],
         },
       ],
-      actions: [
+      action: [
         {
           id: 'maintain-grid',
           key: 'maintain_grid',
@@ -355,6 +361,9 @@ describe('SemanticAtomInvariantService', () => {
         source: 'user_explicit',
         contracts: [budgetContract],
       },
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       contextSlots: {
         exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请选择交易所', affectsExecution: true },
         symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTC-USDT-SWAP', status: 'locked', priority: 'context', questionHint: '请选择交易标的', affectsExecution: true },
@@ -989,7 +998,7 @@ describe('SemanticAtomInvariantService', () => {
 
   it('passes when percent-spaced fixed grid order programs derive level count without semantic gridCount', () => {
     const state = buildContractOrderProgramSemanticState()
-    const levelSet = state.triggers[0]?.contracts?.[0]?.capabilities[0]
+    const levelSet = state.trigger[0]?.contracts?.[0]?.capabilities[0]
     if (levelSet) {
       levelSet.shape = {
         lower: 79200,
@@ -998,8 +1007,8 @@ describe('SemanticAtomInvariantService', () => {
         spacingMode: 'arithmetic',
       }
     }
-    if (state.actions[0]?.contracts?.[0]) {
-      state.actions[0].contracts[0].requires = []
+    if (state.action[0]?.contracts?.[0]) {
+      state.action[0].contracts[0].requires = []
     }
     if (state.position?.contracts?.[0]?.capabilities[0]) {
       state.position.contracts[0].capabilities = state.position.contracts[0].capabilities.filter(capability =>
@@ -1064,7 +1073,7 @@ describe('SemanticAtomInvariantService', () => {
 
   it('passes when centered-percent contract order program semantics survive canonicalSpec, IR, and AST', () => {
     const state = buildContractOrderProgramSemanticState()
-    const levelSet = state.triggers[0]?.contracts?.[0]?.capabilities[0]
+    const levelSet = state.trigger[0]?.contracts?.[0]?.capabilities[0]
     if (levelSet) {
       levelSet.shape = {
         mode: 'centered_percent_range',
@@ -1106,7 +1115,7 @@ describe('SemanticAtomInvariantService', () => {
 
   it('fails when centered-percent canonical density drifts from semantic grid intervals', () => {
     const state = buildContractOrderProgramSemanticState()
-    const levelSet = state.triggers[0]?.contracts?.[0]?.capabilities[0]
+    const levelSet = state.trigger[0]?.contracts?.[0]?.capabilities[0]
     if (levelSet) {
       levelSet.shape = {
         mode: 'centered_percent_range',
@@ -1159,10 +1168,10 @@ describe('SemanticAtomInvariantService', () => {
   it('does not collapse conflicting level_set contracts that only differ by absolute spacing', () => {
     const state = buildContractOrderProgramSemanticState()
     const canonicalState = buildContractOrderProgramSemanticState()
-    const triggerContract = state.triggers[0]?.contracts?.[0]
+    const triggerContract = state.trigger[0]?.contracts?.[0]
     if (triggerContract) {
-      state.triggers[0] = {
-        ...state.triggers[0]!,
+      state.trigger[0] = {
+        ...state.trigger[0]!,
         contracts: [
           triggerContract,
           {
@@ -1410,7 +1419,7 @@ describe('SemanticAtomInvariantService', () => {
 
   it('detects inferred generic expression drift once the trigger is locked', () => {
     const state = buildCloseOpenExpressionSemanticState()
-    state.triggers = state.triggers.map(trigger => ({
+    state.trigger = state.trigger.map(trigger => ({
       ...trigger,
       source: 'inferred',
     }))

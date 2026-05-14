@@ -350,7 +350,7 @@ export class CodegenConversationService {
     if (initialSupportGate.route === 'unsupported_fallback') {
       const unsupportedFallback = this.unsupportedFallback.buildPendingFallback(
         initialSupportGate.unsupportedAtoms,
-        initialSupportGate.state.triggers,
+        initialSupportGate.state.trigger,
         responseLocale,
       )
       if (unsupportedFallback !== null) {
@@ -390,7 +390,7 @@ export class CodegenConversationService {
         site: 'initial_session',
         userId: sessionUserId,
         unsupportedAtoms: initialSupportGate.unsupportedAtoms.map(a => a.key),
-        supportedTriggers: initialSupportGate.state.triggers?.map(t => t.key) ?? [],
+        supportedTriggers: initialSupportGate.state.trigger?.map(t => t.key) ?? [],
       })
       initialSemanticState = this.clearUnsupportedFallback(initialSemanticState)
     }
@@ -947,7 +947,7 @@ export class CodegenConversationService {
     state: SemanticState,
     snapshot: EditablePublishedStrategySnapshotRecord,
   ): SemanticState {
-    if (state.triggers.length > 0 || state.actions.length > 0 || state.risk.length > 0) {
+    if (state.trigger.length > 0 || state.action.length > 0 || state.risk.length > 0) {
       return state
     }
 
@@ -974,8 +974,8 @@ export class CodegenConversationService {
 
     return {
       ...state,
-      triggers,
-      actions,
+      trigger: triggers,
+      action: actions,
       risk,
       updatedAt: new Date().toISOString(),
     }
@@ -2760,8 +2760,8 @@ export class CodegenConversationService {
   }
 
   private isEmptySemanticState(semanticState: SemanticState): boolean {
-    return semanticState.triggers.length === 0
-      && semanticState.actions.length === 0
+    return semanticState.trigger.length === 0
+      && semanticState.action.length === 0
       && semanticState.risk.length === 0
       && semanticState.position === null
       && Object.values(semanticState.contextSlots).every(slot => slot === null)
@@ -2936,10 +2936,10 @@ export class CodegenConversationService {
 
   private collectStructuredLevelSetOpenSlots(semanticState: SemanticState): SemanticSlotState[] {
     const slots: SemanticSlotState[] = []
-    for (const trigger of semanticState.triggers) {
+    for (const trigger of semanticState.trigger) {
       slots.push(...trigger.openSlots.filter(slot => this.isStructuredLevelSetOpenSlot(slot)))
     }
-    for (const action of semanticState.actions) {
+    for (const action of semanticState.action) {
       slots.push(...(action.openSlots ?? []).filter(slot => this.isStructuredLevelSetOpenSlot(slot)))
     }
     for (const risk of semanticState.risk) {
@@ -3001,7 +3001,7 @@ export class CodegenConversationService {
     const state: SemanticState = {
       version: 1,
       families: [...normalization.normalizedIntent.families],
-      triggers: [
+      trigger: [
         ...normalization.normalizedIntent.triggers.map((trigger, index) => this.toSemanticTriggerState(trigger, index)),
         ...(normalization.normalizedIntent.stateHints ?? []).map<SemanticTriggerState>((hint, index) => ({
           id: `gate-${index + 1}`,
@@ -3017,7 +3017,7 @@ export class CodegenConversationService {
           openSlots: hint.unresolvedSlots.map(slot => this.toSemanticSlotState(slot)),
         })),
       ],
-      actions: normalization.normalizedIntent.actions.map((action, index) => ({
+      action: normalization.normalizedIntent.actions.map((action, index) => ({
         id: `action-${index + 1}`,
         key: action.key,
         ...(action.params ? { params: action.params as Record<string, unknown> } : {}),
@@ -3048,6 +3048,9 @@ export class CodegenConversationService {
         marketType: this.buildContextSlotState('marketType', executionContext.context.marketType, '请确认市场类型（现货或合约/perp）。'),
         timeframe: this.buildContextSlotState('timeframe', executionContext.context.timeframe, '请确认策略主周期（例如 15m 或 1h）。'),
       },
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       normalizationNotes: [...normalization.normalizedIntent.normalizationNotes],
       updatedAt: new Date().toISOString(),
     }
@@ -3072,8 +3075,8 @@ export class CodegenConversationService {
       checklist,
     )
     const stateWithExecutableAtomSlots = this.ensureExecutableAtomSlots(stateWithExplicitDeterministicRisk)
-    const hasExecutableSemantics = stateWithExplicitDeterministicRisk.triggers.length > 0
-      || stateWithExplicitDeterministicRisk.actions.length > 0
+    const hasExecutableSemantics = stateWithExplicitDeterministicRisk.trigger.length > 0
+      || stateWithExplicitDeterministicRisk.action.length > 0
 
     if (!hasExecutableSemantics) {
       return {
@@ -3095,7 +3098,7 @@ export class CodegenConversationService {
   }
 
   private ensureExecutableAtomSlots(state: SemanticState): SemanticState {
-    const hasMissingExecutableAtomSlots = state.triggers.some(trigger => this.isMissingExecutableAtomTrigger(trigger))
+    const hasMissingExecutableAtomSlots = state.trigger.some(trigger => this.isMissingExecutableAtomTrigger(trigger))
     const shouldCreateMissingExecutableAtomSlots =
       hasMissingExecutableAtomSlots || this.hasPartialNonExecutableSemanticEvidence(state)
     if (!shouldCreateMissingExecutableAtomSlots) {
@@ -3105,12 +3108,12 @@ export class CodegenConversationService {
     const hasLockedEntry = this.hasLockedTriggerPhase(state, 'entry')
     const hasLockedExit = this.hasLockedTriggerPhase(state, 'exit')
     const hasCompleteOrderProgram = this.hasCompleteOrderProgramSemantics(state)
-    const triggers = state.triggers.filter(trigger =>
+    const triggers = state.trigger.filter(trigger =>
       !this.isMissingExecutableAtomTrigger(trigger)
       || (trigger.phase === 'entry' && !hasLockedEntry)
       || (trigger.phase === 'exit' && !hasLockedExit && !hasCompleteOrderProgram),
     )
-    let changed = triggers.length !== state.triggers.length
+    let changed = triggers.length !== state.trigger.length
 
     if (!hasLockedEntry && !triggers.some(trigger => this.isMissingExecutableAtomTrigger(trigger) && trigger.phase === 'entry')) {
       triggers.push(this.buildMissingExecutableAtomTrigger('entry'))
@@ -3122,17 +3125,17 @@ export class CodegenConversationService {
       changed = true
     }
 
-    return changed ? { ...state, triggers } : state
+    return changed ? { ...state, trigger: triggers } : state
   }
 
   private hasPartialNonExecutableSemanticEvidence(state: SemanticState): boolean {
     return (
-      state.triggers.length === 0
-      && state.actions.length === 0
+      state.trigger.length === 0
+      && state.action.length === 0
       && (state.risk.length > 0 || state.position !== null || this.hasExecutionContextEvidence(state))
     ) || (
-      state.actions.length > 0
-      && state.triggers.length === 0
+      state.action.length > 0
+      && state.trigger.length === 0
       && !this.hasCompleteOrderProgramSemantics(state)
     )
   }
@@ -3145,7 +3148,7 @@ export class CodegenConversationService {
     state: SemanticState,
     phase: Extract<SemanticTriggerState['phase'], 'entry' | 'exit'>,
   ): boolean {
-    return state.triggers.some(trigger =>
+    return state.trigger.some(trigger =>
       trigger.phase === phase
       && trigger.status === 'locked'
       && trigger.openSlots.every(slot => slot.status !== 'open'),
@@ -3153,7 +3156,7 @@ export class CodegenConversationService {
   }
 
   private hasCompleteOrderProgramSemantics(state: SemanticState): boolean {
-    const hasLockedLevelSetProvider = state.triggers.some(trigger =>
+    const hasLockedLevelSetProvider = state.trigger.some(trigger =>
       trigger.status === 'locked'
       && trigger.openSlots.every(slot => slot.status !== 'open')
       && trigger.contracts?.some(contract =>
@@ -3168,7 +3171,7 @@ export class CodegenConversationService {
       return false
     }
 
-    return state.actions.some(action =>
+    return state.action.some(action =>
       action.status === 'locked'
       && (action.openSlots ?? []).every(slot => slot.status !== 'open')
       && action.contracts?.some(contract =>
@@ -3276,7 +3279,7 @@ export class CodegenConversationService {
 
   private resolvePrimaryExecutionTimeframeFromRules(state: SemanticState): string | null {
     const timeframes = new Set<string>()
-    for (const trigger of state.triggers) {
+    for (const trigger of state.trigger) {
       if (trigger.status !== 'locked') continue
       const timeframe = trigger.params.timeframe
       if (typeof timeframe === 'string' && timeframe.trim().length > 0) {
@@ -3332,7 +3335,7 @@ export class CodegenConversationService {
         mode: 'fixed_ratio',
         value: positionPct / 100,
         sizing: { kind: 'ratio', value: positionPct / 100, unit: 'ratio' },
-        positionMode: state.position?.positionMode ?? this.inferPositionModeFromActions(state.actions, checklist),
+        positionMode: state.position?.positionMode ?? this.inferPositionModeFromActions(state.action, checklist),
         status: 'locked',
         source: 'user_explicit',
         openSlots: [],
@@ -3407,7 +3410,7 @@ export class CodegenConversationService {
         mode: 'fixed_ratio',
         value: 0,
         sizing: null,
-        positionMode: this.inferPositionModeFromActions(state.actions, checklist),
+        positionMode: this.inferPositionModeFromActions(state.action, checklist),
         status: 'open',
         source: 'derived',
         openSlots: [{
@@ -3523,7 +3526,7 @@ export class CodegenConversationService {
   }
 
   private inferPositionModeFromActions(
-    actions: SemanticState['actions'],
+    actions: SemanticState['action'],
     checklist: StrategyLogicSnapshot,
   ): string {
     if (checklist.riskRules?.marketType === 'spot' || checklist.market?.marketType === 'spot') {
@@ -3568,7 +3571,7 @@ export class CodegenConversationService {
   }
 
   private hasLockedExitSemantics(state: SemanticState): boolean {
-    return state.triggers.some(trigger =>
+    return state.trigger.some(trigger =>
       trigger.phase === 'exit'
       && trigger.status === 'locked'
       && trigger.openSlots.every(slot => slot.status !== 'open'),
@@ -3729,7 +3732,7 @@ export class CodegenConversationService {
     semanticState: SemanticState,
   ): boolean {
     if (item.reason === 'missing_entry_rules' || item.field === 'entryRules') {
-      return semanticState.triggers.some(trigger =>
+      return semanticState.trigger.some(trigger =>
         trigger.phase === 'entry'
         && trigger.status === 'locked'
         && trigger.openSlots.every(slot => slot.status !== 'open'),
@@ -3737,7 +3740,7 @@ export class CodegenConversationService {
     }
 
     if (item.reason === 'missing_exit_rules' || item.field === 'exitRules') {
-      return semanticState.triggers.some(trigger =>
+      return semanticState.trigger.some(trigger =>
         trigger.phase === 'exit'
         && trigger.status === 'locked'
         && trigger.openSlots.every(slot => slot.status !== 'open'),
@@ -3772,7 +3775,7 @@ export class CodegenConversationService {
       return false
     }
 
-    return semanticState.triggers.some(trigger =>
+    return semanticState.trigger.some(trigger =>
       trigger.phase === 'gate'
       && trigger.status === 'locked'
       && trigger.openSlots.every(slot => slot.status !== 'open'),
@@ -3848,7 +3851,7 @@ export class CodegenConversationService {
   private findNextOpenSemanticSlot(state: SemanticState): SemanticSlotState | null {
     const triggerPhaseOrder: Array<'entry' | 'exit' | 'risk' | 'gate'> = ['entry', 'exit', 'risk', 'gate']
     const openTriggerSlots = triggerPhaseOrder.flatMap(phase =>
-      state.triggers
+      state.trigger
         .filter(trigger => trigger.phase === phase && trigger.status !== 'superseded')
         .flatMap(trigger => trigger.openSlots)
         .filter(isBlockingSemanticOpenSlot),
@@ -3870,7 +3873,7 @@ export class CodegenConversationService {
       return positionSlot
     }
 
-    const actionSlot = state.actions
+    const actionSlot = state.action
       .flatMap(action => action.openSlots ?? [])
       .find(isBlockingSemanticOpenSlot)
     if (actionSlot) {
@@ -3882,7 +3885,7 @@ export class CodegenConversationService {
       return riskSlot
     }
 
-    const orchestrationSlot = state.orchestration?.nodes
+    const orchestrationSlot = state.orchestration
       .flatMap(node => node.openSlots)
       .find(isBlockingSemanticOpenSlot)
     if (orchestrationSlot) {
@@ -3961,7 +3964,7 @@ export class CodegenConversationService {
   private listOpenSemanticSlots(state: SemanticState): SemanticSlotState[] {
     const triggerPhaseOrder: Array<'entry' | 'exit' | 'risk' | 'gate'> = ['entry', 'exit', 'risk', 'gate']
     const openTriggerSlots = triggerPhaseOrder.flatMap(phase =>
-      state.triggers
+      state.trigger
         .filter(trigger => trigger.phase === phase)
         .flatMap(trigger => trigger.openSlots)
         .filter(isBlockingSemanticOpenSlot),
@@ -3969,7 +3972,7 @@ export class CodegenConversationService {
     const openRiskSlots = state.risk
       .flatMap(risk => risk.openSlots)
       .filter(isBlockingSemanticOpenSlot)
-    const openActionSlots = state.actions
+    const openActionSlots = state.action
       .flatMap(action => action.openSlots ?? [])
       .filter(isBlockingSemanticOpenSlot)
     const openPositionSlots = state.position?.openSlots?.filter(isBlockingSemanticOpenSlot) ?? []
@@ -3999,10 +4002,10 @@ export class CodegenConversationService {
       return []
     }
 
-    const hasShortIntent = state.actions.some(action =>
+    const hasShortIntent = state.action.some(action =>
       action.status === 'locked'
       && (action.key === 'open_short' || action.key === 'close_short' || action.key === 'reduce_short'),
-    ) || state.triggers.some(trigger =>
+    ) || state.trigger.some(trigger =>
       trigger.status === 'locked'
       && (trigger.sideScope === 'short' || trigger.sideScope === 'both'),
     )
@@ -4021,8 +4024,8 @@ export class CodegenConversationService {
   }
 
   private hasSemanticMainFlowEvidence(state: SemanticState): boolean {
-    return state.triggers.length > 0
-      || state.actions.length > 0
+    return state.trigger.length > 0
+      || state.action.length > 0
       || state.risk.length > 0
       || state.position !== null
   }
@@ -4133,9 +4136,12 @@ export class CodegenConversationService {
     return {
       version: 1,
       families: [],
-      triggers: [],
-      actions: [],
+      trigger: [],
+      action: [],
       risk: [],
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       position: null,
       contextSlots: {
         exchange: null,
@@ -6811,7 +6817,7 @@ export class CodegenConversationService {
     state: SemanticState,
     fallbackLogicSnapshot: StrategyLogicSnapshot = {},
   ): StrategyLogicSnapshot {
-    const projectedGrid = this.buildLegacyGrid(state.triggers)
+    const projectedGrid = this.buildLegacyGrid(state.trigger)
     const nextLogicSnapshot: StrategyLogicSnapshot = {
       ...fallbackLogicSnapshot,
       riskRules: fallbackLogicSnapshot.riskRules ? { ...fallbackLogicSnapshot.riskRules } : undefined,
@@ -6953,7 +6959,7 @@ export class CodegenConversationService {
   private buildProjectedStateGates(state: SemanticState): NonNullable<StrategyLogicSnapshot['stateGates']> {
     const nextStateGates: NonNullable<StrategyLogicSnapshot['stateGates']> = {}
 
-    for (const trigger of state.triggers) {
+    for (const trigger of state.trigger) {
       if (trigger.phase !== 'gate') continue
 
       if (trigger.key === ATOM_CONTRACT_REGISTRY['market.regime'].key && typeof trigger.params.value === 'string') {
@@ -6974,7 +6980,7 @@ export class CodegenConversationService {
     state: SemanticState,
     phase: 'entry' | 'exit',
   ): string[] {
-    return state.triggers
+    return state.trigger
       .filter(trigger => trigger.phase === phase && trigger.status !== 'superseded')
       .map(trigger => this.buildProjectedRuleText(trigger))
       .filter((rule): rule is string => Boolean(rule))
@@ -7228,7 +7234,7 @@ export class CodegenConversationService {
     if (classification.route === 'unsupported_fallback') {
       const unsupportedFallback = this.unsupportedFallback.buildPendingFallback(
         classification.unsupportedAtoms,
-        classification.state.triggers,
+        classification.state.trigger,
         responseLocale,
       )
       if (unsupportedFallback !== null) {
@@ -7280,7 +7286,7 @@ export class CodegenConversationService {
         userId: args.userId,
         sessionId: args.session.id,
         unsupportedAtoms: classification.unsupportedAtoms.map(a => a.key),
-        supportedTriggers: classification.state.triggers?.map(t => t.key) ?? [],
+        supportedTriggers: classification.state.trigger?.map(t => t.key) ?? [],
       })
       return {
         semanticState: this.clearUnsupportedFallback(classification.state),
@@ -7461,8 +7467,8 @@ export class CodegenConversationService {
       this.extractSemanticPatchFromMessage(normalized),
       normalized,
     )
-    const hasExtractedStrategy = seedState.triggers.length > 0
-      && seedState.actions.length > 0
+    const hasExtractedStrategy = seedState.trigger.length > 0
+      && seedState.action.length > 0
       && (seedState.risk.length > 0 || seedState.position !== null)
     if (hasExtractedStrategy) {
       return true
@@ -7753,8 +7759,8 @@ export class CodegenConversationService {
   private clearRejectedUnsupportedFallbackState(state: SemanticState): SemanticState {
     return {
       ...state,
-      triggers: state.triggers.map(trigger => this.supersedeUnsupportedNode(trigger)),
-      actions: state.actions.map(action => this.supersedeUnsupportedNode(action)),
+      trigger: state.trigger.map(trigger => this.supersedeUnsupportedNode(trigger)),
+      action: state.action.map(action => this.supersedeUnsupportedNode(action)),
       risk: state.risk.map(risk => this.supersedeUnsupportedNode(risk)),
       position: state.position ? this.supersedeUnsupportedNode(state.position) : null,
       unsupportedFallback: null,

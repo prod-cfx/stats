@@ -390,7 +390,7 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     const semanticState: SemanticState = {
       version: 1,
       families: ['single-leg'],
-      triggers: [
+      trigger: [
         {
           id: 'trigger-entry-ma-long',
           key: 'indicator.above',
@@ -410,9 +410,12 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
           ],
         },
       ],
-      actions: [],
+      action: [],
       risk: [],
       position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       contextSlots: {
         exchange: null,
         symbol: null,
@@ -443,7 +446,7 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
       version: 1,
       families: ['single-leg'],
       updatedAt: '2026-04-15T10:00:00.000Z',
-      triggers: expect.arrayContaining([
+      trigger: expect.arrayContaining([
         expect.objectContaining({
           openSlots: expect.arrayContaining([
             expect.objectContaining({
@@ -452,6 +455,9 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
           ]),
         }),
       ]),
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       contextSlots: expect.objectContaining({
         timeframe: null,
       }),
@@ -460,7 +466,7 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
       version: 1,
       families: ['single-leg'],
       updatedAt: '2026-04-15T10:00:00.000Z',
-      triggers: expect.arrayContaining([
+      trigger: expect.arrayContaining([
         expect.objectContaining({
           openSlots: expect.arrayContaining([
             expect.objectContaining({
@@ -469,6 +475,9 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
           ]),
         }),
       ]),
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       contextSlots: expect.objectContaining({
         timeframe: null,
       }),
@@ -533,10 +542,13 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     const baseSemanticState: SemanticState = {
       version: 1,
       families: ['single-leg'],
-      triggers: [],
-      actions: [],
+      trigger: [],
+      action: [],
       risk: [],
       position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       contextSlots: {
         exchange: null,
         symbol: null,
@@ -641,10 +653,13 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     const semanticState: SemanticState = {
       version: 1,
       families: ['single-leg'],
-      triggers: [],
-      actions: [],
+      trigger: [],
+      action: [],
       risk: [],
       position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       contextSlots: {
         exchange: null,
         symbol: null,
@@ -717,6 +732,9 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
         actions: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: {
           exchange: null,
           symbol: null,
@@ -850,10 +868,13 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
       semanticState: {
         version: 1,
         families: [],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: {
           exchange: null,
           symbol: null,

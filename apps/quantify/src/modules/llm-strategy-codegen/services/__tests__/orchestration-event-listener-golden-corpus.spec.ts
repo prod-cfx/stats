@@ -31,9 +31,12 @@ function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticSt
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
@@ -199,10 +202,10 @@ describe('orchestration program.event_listener — golden corpus (Phase 5 S12 #1
           : regimeGateNode()
         const target = eventListenerNode(override)
         const state = createSemanticState({
-          orchestration: { nodes: [gate, dsScope, target], contracts: [] },
+          orchestration: [gate, dsScope, target], orchestrationContracts: [],
         })
         const result = readiness.normalize(state, CURRENT_VERSION)
-        const node = result.state.orchestration?.nodes.find(n => n.id === target.id)
+        const node = result.state.orchestration.find(n => n.id === target.id)
         expect(node).toBeDefined()
         expect(expectPhase0(node!)).toBe(true)
       })

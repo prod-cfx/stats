@@ -125,10 +125,10 @@ export class SemanticContractReadinessService {
     )
     const baseNextState: SemanticState = {
       ...state,
-      triggers: state.triggers.map(trigger =>
+      trigger: state.trigger.map(trigger =>
         mergeOwnerOpenSlots(trigger, slotsByOwnerKey.get(ownerKey('trigger', trigger.id))),
       ),
-      actions: state.actions.map(action =>
+      action: state.action.map(action =>
         mergeOwnerOpenSlots(action, slotsByOwnerKey.get(ownerKey('action', action.id))),
       ),
       risk: state.risk.map(risk =>
@@ -400,7 +400,7 @@ function normalizePhase0Orchestration(
   //   Pass 2: scope.leg 节点首轮（instrumentRef 见 Pass 1 状态）
   //   Pass 3: scope.leg 节点二轮（pairedLegId 见 Pass 2 leg 状态）
   //   Pass 4: gate/program/portfolioRisk 维持 S2 原 single-pass 行为
-  const initialNodes = orchestration.nodes
+  const initialNodes = orchestration
   /* eslint-disable atom-keys/no-atom-key-literal -- scope.leg / scope.symbol node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
   const isLegScopeNode = (n: SemanticOrchestrationNode): boolean =>
     n.kind === 'scope' && (n.key === 'scope.leg' || n.legScopeKind === 'leg')
@@ -438,7 +438,7 @@ function normalizePhase0Orchestration(
   }
 
   return {
-    state: changed ? { ...orchestration, nodes: finalNodes } : orchestration,
+    state: changed ? finalNodes : orchestration,
     hasBlockingSlots,
   }
 }
@@ -1533,7 +1533,7 @@ function applySymbolScopeBindingFailClosed(
     return { state, hasBlockingSlots: false }
   }
   const supportedScopeIds = new Set<string>()
-  for (const node of orchestration.nodes) {
+  for (const node of orchestration) {
     if (
       node.kind === 'scope'
       // eslint-disable-next-line atom-keys/no-atom-key-literal -- scope.symbol node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
@@ -1567,7 +1567,7 @@ function applySymbolScopeBindingFailClosed(
     return !supportedScopeIds.has(trimmed)
   }
 
-  const triggers = state.triggers.map((trigger) => {
+  const trigger = state.trigger.map((trigger) => {
     if (trigger.status !== 'locked' || !isMissingRef(trigger.symbolScopeRef)) return trigger
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('trigger', trigger.id)
@@ -1577,7 +1577,7 @@ function applySymbolScopeBindingFailClosed(
       openSlots: [...(trigger.openSlots ?? []), slot],
     }
   })
-  const actions = state.actions.map((action) => {
+  const action = state.action.map((action) => {
     if (action.status !== 'locked' || !isMissingRef(action.symbolScopeRef)) return action
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('action', action.id)
@@ -1599,7 +1599,7 @@ function applySymbolScopeBindingFailClosed(
   })
   const position = state.position
     ? (() => {
-        const constraints = state.position?.constraints
+        const constraints = state.positionConstraint
         if (!Array.isArray(constraints) || constraints.length === 0) return state.position
         const nextConstraints = constraints.map((constraint) => {
           if (constraint.status !== 'locked' || !isMissingRef(constraint.symbolScopeRef)) return constraint
@@ -1616,7 +1616,7 @@ function applySymbolScopeBindingFailClosed(
     : state.position
 
   return {
-    state: { ...state, triggers, actions, risk, position },
+    state: { ...state, trigger, action, risk, position },
     hasBlockingSlots,
   }
 }
@@ -1636,7 +1636,7 @@ function applyLegScopeBindingFailClosed(
     return { state, hasBlockingSlots: false }
   }
   const supportedLegScopeIds = new Set<string>()
-  for (const node of orchestration.nodes) {
+  for (const node of orchestration) {
     if (
       node.kind === 'scope'
       // eslint-disable-next-line atom-keys/no-atom-key-literal -- scope.leg node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
@@ -1655,10 +1655,10 @@ function applyLegScopeBindingFailClosed(
   const riskStatusBeforeBinding = new Map<string, SemanticNodeStatus>()
   const constraintStatusBeforeBinding = new Map<string, SemanticNodeStatus>()
   const sourceState = preBindingState ?? state
-  for (const t of sourceState.triggers) triggerStatusBeforeBinding.set(t.id, t.status)
-  for (const a of sourceState.actions) actionStatusBeforeBinding.set(a.id, a.status)
+  for (const t of sourceState.trigger) triggerStatusBeforeBinding.set(t.id, t.status)
+  for (const a of sourceState.action) actionStatusBeforeBinding.set(a.id, a.status)
   for (const r of sourceState.risk) riskStatusBeforeBinding.set(r.id, r.status)
-  for (const c of sourceState.position?.constraints ?? []) constraintStatusBeforeBinding.set(c.id, c.status)
+  for (const c of sourceState.positionConstraint ?? []) constraintStatusBeforeBinding.set(c.id, c.status)
 
   let hasBlockingSlots = false
 
@@ -1680,14 +1680,14 @@ function applyLegScopeBindingFailClosed(
     return !supportedLegScopeIds.has(trimmed)
   }
 
-  const triggers = state.triggers.map((trigger) => {
+  const trigger = state.trigger.map((trigger) => {
     const preStatus = triggerStatusBeforeBinding.get(trigger.id) ?? trigger.status
     if (preStatus !== 'locked' || !isMissingLegRef(trigger.legScopeRef)) return trigger
     hasBlockingSlots = true
     const slot = buildLegMissingBindingSlot('trigger', trigger.id)
     return { ...trigger, status: 'open' as SemanticNodeStatus, openSlots: [...(trigger.openSlots ?? []), slot] }
   })
-  const actions = state.actions.map((action) => {
+  const action = state.action.map((action) => {
     const preStatus = actionStatusBeforeBinding.get(action.id) ?? action.status
     if (preStatus !== 'locked' || !isMissingLegRef(action.legScopeRef)) return action
     hasBlockingSlots = true
@@ -1703,7 +1703,7 @@ function applyLegScopeBindingFailClosed(
   })
   const position = state.position
     ? (() => {
-        const constraints = state.position?.constraints
+        const constraints = state.positionConstraint
         if (!Array.isArray(constraints) || constraints.length === 0) return state.position
         const nextConstraints = constraints.map((constraint) => {
           const preStatus = constraintStatusBeforeBinding.get(constraint.id) ?? constraint.status
@@ -1716,7 +1716,7 @@ function applyLegScopeBindingFailClosed(
       })()
     : state.position
 
-  return { state: { ...state, triggers, actions, risk, position }, hasBlockingSlots }
+  return { state: { ...state, trigger, action, risk, position }, hasBlockingSlots }
 }
 
 /**
@@ -1733,7 +1733,7 @@ function applyTimeframeScopeBindingFailClosed(
     return { state, hasBlockingSlots: false }
   }
   const supportedScopeIds = new Set<string>()
-  for (const node of orchestration.nodes) {
+  for (const node of orchestration) {
     if (
       node.kind === 'scope'
       // eslint-disable-next-line atom-keys/no-atom-key-literal -- scope.timeframe node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
@@ -1775,13 +1775,13 @@ function applyTimeframeScopeBindingFailClosed(
     )
   }
 
-  const triggers = state.triggers.map((trigger) => {
+  const trigger = state.trigger.map((trigger) => {
     if (!wasOriginallyLocked(trigger) || !isMissingTfRef(trigger.timeframeScopeRef)) return trigger
     hasBlockingSlots = true
     const slot = buildTfMissingBindingSlot('trigger', trigger.id)
     return { ...trigger, status: 'open' as SemanticNodeStatus, openSlots: [...(trigger.openSlots ?? []), slot] }
   })
-  const actions = state.actions.map((action) => {
+  const action = state.action.map((action) => {
     if (!wasOriginallyLocked(action) || !isMissingTfRef(action.timeframeScopeRef)) return action
     hasBlockingSlots = true
     const slot = buildTfMissingBindingSlot('action', action.id)
@@ -1795,7 +1795,7 @@ function applyTimeframeScopeBindingFailClosed(
   })
   const position = state.position
     ? (() => {
-        const constraints = state.position?.constraints
+        const constraints = state.positionConstraint
         if (!Array.isArray(constraints) || constraints.length === 0) return state.position
         const nextConstraints = constraints.map((constraint) => {
           if (!wasOriginallyLocked(constraint) || !isMissingTfRef(constraint.timeframeScopeRef)) return constraint
@@ -1807,7 +1807,7 @@ function applyTimeframeScopeBindingFailClosed(
       })()
     : state.position
 
-  return { state: { ...state, triggers, actions, risk, position }, hasBlockingSlots }
+  return { state: { ...state, trigger, action, risk, position }, hasBlockingSlots }
 }
 
 /**
@@ -1826,7 +1826,7 @@ function applyDataSourceScopeBindingFailClosed(
     return { state, hasBlockingSlots: false }
   }
   const supportedScopeIds = new Set<string>()
-  for (const node of orchestration.nodes) {
+  for (const node of orchestration) {
     if (
       node.kind === 'scope'
       && node.key === 'scope.dataSource'
@@ -1861,7 +1861,7 @@ function applyDataSourceScopeBindingFailClosed(
     return !supportedScopeIds.has(trimmed)
   }
 
-  const triggers = state.triggers.map((trigger) => {
+  const trigger = state.trigger.map((trigger) => {
     if (trigger.status !== 'locked' || !isInvalidExplicitRef(trigger.dataSourceScopeRef)) return trigger
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('trigger', trigger.id)
@@ -1871,7 +1871,7 @@ function applyDataSourceScopeBindingFailClosed(
       openSlots: [...(trigger.openSlots ?? []), slot],
     }
   })
-  const actions = state.actions.map((action) => {
+  const action = state.action.map((action) => {
     if (action.status !== 'locked' || !isInvalidExplicitRef(action.dataSourceScopeRef)) return action
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('action', action.id)
@@ -1893,7 +1893,7 @@ function applyDataSourceScopeBindingFailClosed(
   })
   const position = state.position
     ? (() => {
-        const constraints = state.position?.constraints
+        const constraints = state.positionConstraint
         if (!Array.isArray(constraints) || constraints.length === 0) return state.position
         const nextConstraints = constraints.map((constraint) => {
           if (constraint.status !== 'locked' || !isInvalidExplicitRef(constraint.dataSourceScopeRef)) return constraint
@@ -1910,7 +1910,7 @@ function applyDataSourceScopeBindingFailClosed(
     : state.position
 
   return {
-    state: { ...state, triggers, actions, risk, position },
+    state: { ...state, trigger, action, risk, position },
     hasBlockingSlots,
   }
 }
@@ -1933,7 +1933,7 @@ function applySubStrategyScopeBindingFailClosed(
     return { state, hasBlockingSlots: false }
   }
   const supportedScopeIds = new Set<string>()
-  for (const node of orchestration.nodes) {
+  for (const node of orchestration) {
     if (
       node.kind === 'scope'
       && node.key === 'scope.subStrategy'
@@ -1966,7 +1966,7 @@ function applySubStrategyScopeBindingFailClosed(
     return !supportedScopeIds.has(trimmed)
   }
 
-  const triggers = state.triggers.map((trigger) => {
+  const trigger = state.trigger.map((trigger) => {
     if (trigger.status !== 'locked' || !isMissingSubStrategyRef(trigger.subStrategyScopeRef)) return trigger
     hasBlockingSlots = true
     const slot = buildSubStrategyMissingBindingSlot('trigger', trigger.id)
@@ -1976,7 +1976,7 @@ function applySubStrategyScopeBindingFailClosed(
       openSlots: [...(trigger.openSlots ?? []), slot],
     }
   })
-  const actions = state.actions.map((action) => {
+  const action = state.action.map((action) => {
     if (action.status !== 'locked' || !isMissingSubStrategyRef(action.subStrategyScopeRef)) return action
     hasBlockingSlots = true
     const slot = buildSubStrategyMissingBindingSlot('action', action.id)
@@ -1998,7 +1998,7 @@ function applySubStrategyScopeBindingFailClosed(
   })
   const position = state.position
     ? (() => {
-        const constraints = state.position?.constraints
+        const constraints = state.positionConstraint
         if (!Array.isArray(constraints) || constraints.length === 0) return state.position
         const nextConstraints = constraints.map((constraint) => {
           if (constraint.status !== 'locked' || !isMissingSubStrategyRef(constraint.subStrategyScopeRef)) return constraint
@@ -2015,7 +2015,7 @@ function applySubStrategyScopeBindingFailClosed(
     : state.position
 
   return {
-    state: { ...state, triggers, actions, risk, position },
+    state: { ...state, trigger, action, risk, position },
     hasBlockingSlots,
   }
 }
@@ -2070,7 +2070,7 @@ function isBoundaryCancelRequirement(object: string): boolean {
 function collectActiveContractOwners(state: SemanticState): SemanticContractOwnerRef[] {
   const owners: SemanticContractOwnerRef[] = []
 
-  for (const trigger of state.triggers) {
+  for (const trigger of state.trigger) {
     if (trigger.status !== 'superseded' && trigger.contracts?.length) {
       owners.push({
         ownerKind: 'trigger',
@@ -2085,7 +2085,7 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
     }
   }
 
-  for (const action of state.actions) {
+  for (const action of state.action) {
     if (action.status !== 'superseded' && action.contracts?.length) {
       owners.push({
         ownerKind: 'action',
@@ -2138,7 +2138,7 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
     })
   }
 
-  for (const constraint of state.position?.constraints ?? []) {
+  for (const constraint of state.positionConstraint ?? []) {
     if (constraint.status !== 'superseded' && constraint.contracts?.length) {
       owners.push({
         ownerKind: 'position',
@@ -2363,7 +2363,7 @@ function buildAddPositionConstraintRelationshipSlots(state: SemanticState): Map<
     return slotsByOwnerKey
   }
 
-  for (const action of state.actions) {
+  for (const action of state.action) {
     if (action.status === 'superseded' || action.key !== ATOM_CONTRACT_REGISTRY['action.add_position'].key) {
       continue
     }
@@ -2386,7 +2386,8 @@ function buildAddPositionConstraintRelationshipSlots(state: SemanticState): Map<
 }
 
 function hasActiveAddPositionConstraint(position: SemanticPositionState | null): boolean {
-  return position?.constraints?.some(constraint =>
+  // DEPRECATED Task 6: position.constraints moved to top-level positionConstraint[]
+  return (position as { constraints?: SemanticPositionConstraintState[] } | null)?.constraints?.some(constraint =>
     constraint.status !== 'superseded'
     // eslint-disable-next-line atom-keys/no-atom-key-literal -- position.max_exposure_pct not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     && (constraint.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key || constraint.key === 'position.max_exposure_pct'),
@@ -2428,11 +2429,11 @@ function hasOpenSlots(slotsByOwnerKey: Map<string, SemanticSlotState[]>): boolea
 }
 
 function hasBlockingOwnerOpenSlots(state: SemanticState): boolean {
-  return state.triggers.some(ownerHasOpenSlot)
-    || state.actions.some(ownerHasOpenSlot)
+  return state.trigger.some(ownerHasOpenSlot)
+    || state.action.some(ownerHasOpenSlot)
     || state.risk.some(ownerHasOpenSlot)
     || ownerHasOpenSlot(state.position)
-    || (state.position?.constraints ?? []).some(ownerHasOpenSlot)
+    || (state.positionConstraint ?? []).some(ownerHasOpenSlot)
 }
 
 function ownerHasOpenSlot(owner: { openSlots?: readonly SemanticSlotState[] } | null): boolean {
@@ -2481,7 +2482,8 @@ function mergePositionOpenSlots(
     return null
   }
 
-  const constraints = position.constraints?.map(constraint =>
+  // DEPRECATED Task 6: position.constraints moved to top-level positionConstraint[]
+  const constraints = (position as { constraints?: SemanticPositionConstraintState[] }).constraints?.map(constraint =>
     mergeOwnerOpenSlots(
       constraint,
       slotsByOwnerKey.get(ownerKey('position', positionConstraintOwnerId(constraint))),
@@ -2489,7 +2491,7 @@ function mergePositionOpenSlots(
   )
   const nextPosition = mergeOwnerOpenSlots(position, slotsByOwnerKey.get(ownerKey('position', positionOwnerId())))
   return constraints
-    ? { ...nextPosition, constraints }
+    ? ({ ...nextPosition, constraints } as SemanticPositionState)
     : nextPosition
 }
 

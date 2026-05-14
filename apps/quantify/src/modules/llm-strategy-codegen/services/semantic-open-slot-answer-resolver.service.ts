@@ -195,8 +195,8 @@ function fulfillSemanticFragment(
 }
 
 function hasOpenSlot(state: SemanticState, slotKey: string): boolean {
-  return state.triggers.some(trigger => trigger.openSlots.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
-    || state.actions.some(action => (action.openSlots ?? []).some(slot => slot.slotKey === slotKey && slot.status === 'open'))
+  return state.trigger.some(trigger => trigger.openSlots.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
+    || state.action.some(action => (action.openSlots ?? []).some(slot => slot.slotKey === slotKey && slot.status === 'open'))
     || state.risk.some(risk => risk.openSlots.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
     || Boolean(state.position?.openSlots?.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
 }
@@ -209,10 +209,10 @@ function mergeFragmentPatch(
 ): SemanticState {
   const missingTriggerKeys = new Set<string>(fulfilledPhases.map(missingTriggerKeyForPhase))
   const fulfilledPhaseSet = new Set<FulfilledTriggerPhase>(fulfilledPhases)
-  const existingTriggerIds = new Set(state.triggers.map(trigger => trigger.id))
-  const existingActionIds = new Set(state.actions.map(action => action.id))
+  const existingTriggerIds = new Set(state.trigger.map(trigger => trigger.id))
+  const existingActionIds = new Set(state.action.map(action => action.id))
   const nextTriggers = [
-    ...state.triggers.filter(trigger => !(missingTriggerKeys.has(trigger.key) && trigger.status === 'open')),
+    ...state.trigger.filter(trigger => !(missingTriggerKeys.has(trigger.key) && trigger.status === 'open')),
     ...(patch.triggers ?? [])
       .filter(trigger => shouldMergeFragmentTrigger(trigger, fulfilledPhaseSet))
       .map((trigger, index): SemanticTriggerState => {
@@ -236,9 +236,9 @@ function mergeFragmentPatch(
         }
       }),
   ]
-  const existingActionKeys = new Set(state.actions.map(action => action.key))
+  const existingActionKeys = new Set(state.action.map(action => action.key))
   const nextActions = [
-    ...state.actions,
+    ...state.action,
     ...(patch.actions ?? [])
       .filter(action => !existingActionKeys.has(action.key))
       .filter(action => actionMatchesFulfilledPhases(action, fulfilledPhaseSet))
@@ -264,8 +264,8 @@ function mergeFragmentPatch(
 
   return {
     ...state,
-    triggers: nextTriggers,
-    actions: nextActions,
+    trigger: nextTriggers,
+    action: nextActions,
     contextSlots: mergeFragmentContextSlots(state.contextSlots, patch.contextSlots, symbolResolver),
   }
 }
@@ -627,13 +627,13 @@ function findOpenLevelSetSlot(state: SemanticState, clarificationState: unknown)
 function collectOpenLevelSetSlots(state: SemanticState): OpenLevelSetSlotRef[] {
   const slots: OpenLevelSetSlotRef[] = []
 
-  for (const trigger of state.triggers) {
+  for (const trigger of state.trigger) {
     for (const slot of findOpenSlots(trigger.openSlots)) {
       slots.push({ ownerKind: 'trigger', ownerId: trigger.id, slot })
     }
   }
 
-  for (const action of state.actions) {
+  for (const action of state.action) {
     for (const slot of findOpenSlots(action.openSlots ?? [])) {
       slots.push({ ownerKind: 'action', ownerId: action.id, slot })
     }
@@ -725,20 +725,20 @@ function applyLevelSetAnswerToOpenSlot(
   shapeNormalizer: SemanticContractShapeNormalizerService,
 ): SemanticState {
   if (openSlot.ownerKind === 'trigger') {
-    const updates = state.triggers.map(owner =>
+    const updates = state.trigger.map(owner =>
       owner.id === openSlot.ownerId ? updateTriggerOwner(owner, openSlot.slot, answer, shapeNormalizer) : { owner, updated: false },
     )
     return hasOwnerUpdate(updates)
-      ? { ...state, triggers: updates.map(update => update.owner) }
+      ? { ...state, trigger: updates.map(update => update.owner) }
       : state
   }
 
   if (openSlot.ownerKind === 'action') {
-    const updates = state.actions.map(owner =>
+    const updates = state.action.map(owner =>
       owner.id === openSlot.ownerId ? updateActionOwner(owner, openSlot.slot, answer, shapeNormalizer) : { owner, updated: false },
     )
     return hasOwnerUpdate(updates)
-      ? { ...state, actions: updates.map(update => update.owner) }
+      ? { ...state, action: updates.map(update => update.owner) }
       : state
   }
 

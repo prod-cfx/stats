@@ -38,10 +38,13 @@ function makeEmptyState(): SemanticState {
   return {
     version: 1,
     families: ['single-leg'],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
     position: null,
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
     updatedAt: new Date().toISOString(),
@@ -52,7 +55,7 @@ function makeTriggerState(
   key: string,
   phase: 'entry' | 'exit' = 'entry',
   params: Record<string, unknown> = {},
-): SemanticState['triggers'][number] {
+): SemanticState['trigger'][number] {
   return {
     id: `t-${key}`,
     key,
@@ -83,7 +86,7 @@ function makeRiskState(
 function makeActionState(
   key: string,
   params: Record<string, unknown> = {},
-): SemanticState['actions'][number] {
+): SemanticState['action'][number] {
   return {
     id: `a-${key}`,
     key,
@@ -170,8 +173,8 @@ describe('user-facing leak guard 集成（#1329 Wave 1D）', () => {
         const params = TRIGGER_PARAMS[key] ?? {}
         const state: SemanticState = {
           ...makeEmptyState(),
-          triggers: [makeTriggerState(key, 'entry', params)],
-          actions: [makeActionState('action.open_long')],
+          trigger: [makeTriggerState(key, 'entry', params)],
+          action: [makeActionState('action.open_long')],
         }
         assertNoLeaks(extractClarificationTexts(state), `clarificationView:trigger:${key}`)
       })
@@ -190,8 +193,8 @@ describe('user-facing leak guard 集成（#1329 Wave 1D）', () => {
           : { valuePct: 5 }
         const state: SemanticState = {
           ...makeEmptyState(),
-          triggers: [makeTriggerState('price.percent_change', 'entry', { valuePct: -3, basis: 'prev_close' })],
-          actions: [makeActionState('action.open_long')],
+          trigger: [makeTriggerState('price.percent_change', 'entry', { valuePct: -3, basis: 'prev_close' })],
+          action: [makeActionState('action.open_long')],
           risk: [makeRiskState(key, params)],
         }
         assertNoLeaks(extractClarificationTexts(state), `clarificationView:risk:${key}`)
@@ -208,8 +211,8 @@ describe('user-facing leak guard 集成（#1329 Wave 1D）', () => {
       it(`clarificationView action=${key} 无 internal key 泄漏`, () => {
         const state: SemanticState = {
           ...makeEmptyState(),
-          triggers: [makeTriggerState('price.percent_change', 'entry', { valuePct: -3, basis: 'prev_close' })],
-          actions: [makeActionState(key)],
+          trigger: [makeTriggerState('price.percent_change', 'entry', { valuePct: -3, basis: 'prev_close' })],
+          action: [makeActionState(key)],
         }
         assertNoLeaks(extractClarificationTexts(state), `clarificationView:action:${key}`)
       })
@@ -239,6 +242,7 @@ describe('user-facing leak guard 集成（#1329 Wave 1D）', () => {
             positionMode: 'oneway',
             status: 'locked' as const,
             source: 'user_explicit' as const,
+            // @ts-ignore Task6: position.constraints moved to top-level positionConstraint
             constraints: [
               {
                 id: `pc-${key}`,

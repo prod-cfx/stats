@@ -5,7 +5,7 @@ import { SemanticContractReadinessService } from '../semantic-contract-readiness
 describe('SemanticContractReadinessService', () => {
   it('accepts supported contracts with explicit empty substrate arrays', () => {
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-1',
         key: 'condition.expression',
         phase: 'entry',
@@ -26,7 +26,7 @@ describe('SemanticContractReadinessService', () => {
           openSlots: [],
         }],
       }],
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'open_long',
         status: 'locked',
@@ -55,7 +55,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('accepts action owners without an openSlots array', () => {
     const state = createSemanticState({
-      actions: [{
+      action: [{
         id: 'action-without-open-slots',
         key: 'open_long',
         status: 'locked',
@@ -77,12 +77,12 @@ describe('SemanticContractReadinessService', () => {
     const result = new SemanticContractReadinessService().normalize(state)
 
     expect(result.ready).toBe(true)
-    expect(result.state.actions[0].openSlots).toBeUndefined()
+    expect(result.state.action[0].openSlots).toBeUndefined()
   })
 
   it('keeps executable indicator above and below MA aliases supported during readiness', () => {
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-price-above-ma',
         key: 'indicator.above',
         phase: 'entry',
@@ -129,7 +129,7 @@ describe('SemanticContractReadinessService', () => {
           openSlots: [],
         }],
       }],
-      actions: [{
+      action: [{
         id: 'action-open-long',
         key: 'open_long',
         status: 'locked',
@@ -153,13 +153,13 @@ describe('SemanticContractReadinessService', () => {
 
     expect(result.ready).toBe(true)
     expect(result.missingRequirements).toEqual([])
-    expect(result.state.triggers[0].openSlots).toEqual([])
-    expect(result.state.triggers[1].openSlots).toEqual([])
+    expect(result.state.trigger[0].openSlots).toEqual([])
+    expect(result.state.trigger[1].openSlots).toEqual([])
   })
 
   it('accepts known runtime state and order requirements', () => {
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-cross-over',
         key: 'indicator.cross_over',
         phase: 'entry',
@@ -189,12 +189,12 @@ describe('SemanticContractReadinessService', () => {
 
     expect(result.ready).toBe(true)
     expect(result.missingRequirements).toEqual([])
-    expect(result.state.triggers[0].openSlots).toEqual([])
+    expect(result.state.trigger[0].openSlots).toEqual([])
   })
 
   it('accepts state.read_write.program_lifecycle (Phase 5 S0a substrate)', () => {
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-program-lifecycle',
         key: 'indicator.cross_over',
         phase: 'entry',
@@ -225,12 +225,12 @@ describe('SemanticContractReadinessService', () => {
 
     expect(result.ready).toBe(true)
     expect(result.missingRequirements).toEqual([])
-    expect(result.state.triggers[0].openSlots).toEqual([])
+    expect(result.state.trigger[0].openSlots).toEqual([])
   })
 
   it('fails closed on unknown runtime state and order requirements', () => {
     const state = createSemanticState({
-      actions: [{
+      action: [{
         id: 'action-grid-ladder',
         key: 'action.grid_ladder',
         status: 'locked',
@@ -255,7 +255,7 @@ describe('SemanticContractReadinessService', () => {
 
     expect(result.ready).toBe(false)
     expect(result.missingRequirements).toEqual([])
-    expect(result.state.actions[0]).toEqual(expect.objectContaining({
+    expect(result.state.action[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [
         expect.objectContaining({
@@ -289,7 +289,7 @@ describe('SemanticContractReadinessService', () => {
       params: {},
     } as never
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-legacy',
         key: 'condition.expression',
         phase: 'entry',
@@ -305,7 +305,7 @@ describe('SemanticContractReadinessService', () => {
     const result = new SemanticContractReadinessService().normalize(state)
 
     expect(result.ready).toBe(false)
-    expect(result.state.triggers[0]).toEqual(expect.objectContaining({
+    expect(result.state.trigger[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expect.objectContaining({
         slotKey: 'contract.substrate.missing',
@@ -430,7 +430,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('writes missing price and capital requirements to the requiring action open slots', () => {
     const state = createSemanticState({
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'action.grid_ladder',
         status: 'open',
@@ -480,7 +480,7 @@ describe('SemanticContractReadinessService', () => {
         errorCode: 'READINESS_PER_ORDER_BUDGET_MISSING',
       },
     ])
-    expect(result.state.actions[0].openSlots).toEqual([
+    expect(result.state.action[0].openSlots).toEqual([
       {
         slotKey: 'contract.requirement.price.define.level_set',
         fieldPath: 'actions[action-1].contracts[action-contract-1].requires.price.define.level_set',
@@ -548,7 +548,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('keeps unknown contracts out of readiness open slots', () => {
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-unknown',
         key: 'custom.volume.delta',
         phase: 'entry',
@@ -577,12 +577,12 @@ describe('SemanticContractReadinessService', () => {
 
     expect(result.ready).toBe(false)
     expect(result.missingRequirements).toEqual([])
-    expect(result.state.triggers[0].openSlots).toEqual([])
+    expect(result.state.trigger[0].openSlots).toEqual([])
   })
 
   it('does not let stale unsupported metadata block currently supported registry atoms', () => {
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-supported',
         key: 'grid.price_levels',
         phase: 'gate',
@@ -612,7 +612,7 @@ describe('SemanticContractReadinessService', () => {
           openSlots: [],
         }],
       }],
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'action.grid_ladder',
         status: 'locked',
@@ -639,7 +639,7 @@ describe('SemanticContractReadinessService', () => {
 
     expect(result.ready).toBe(true)
     expect(result.missingRequirements).toEqual([])
-    expect(result.state.actions[0]).toEqual(expect.objectContaining({
+    expect(result.state.action[0]).toEqual(expect.objectContaining({
       status: 'locked',
       openSlots: [],
     }))
@@ -647,7 +647,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('keeps unregistered contracts without support metadata out of readiness open slots', () => {
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-unregistered',
         key: 'custom.unregistered.contract',
         phase: 'entry',
@@ -675,12 +675,12 @@ describe('SemanticContractReadinessService', () => {
 
     expect(result.ready).toBe(false)
     expect(result.missingRequirements).toEqual([])
-    expect(result.state.triggers[0].openSlots).toEqual([])
+    expect(result.state.trigger[0].openSlots).toEqual([])
   })
 
   it('does not duplicate existing open slots and preserves the original question hint', () => {
     const state = createSemanticState({
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'action.grid_ladder',
         status: 'open',
@@ -713,8 +713,8 @@ describe('SemanticContractReadinessService', () => {
     const result = new SemanticContractReadinessService().normalize(state)
 
     expect(result.ready).toBe(false)
-    expect(result.state.actions[0].openSlots).toHaveLength(1)
-    expect(result.state.actions[0].openSlots?.[0]).toEqual(expect.objectContaining({
+    expect(result.state.action[0].openSlots).toHaveLength(1)
+    expect(result.state.action[0].openSlots?.[0]).toEqual(expect.objectContaining({
       questionHint: '原始问题提示',
       value: null,
     }))
@@ -722,7 +722,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('reopens answered contract requirement slots when the capability is still missing', () => {
     const state = createSemanticState({
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'action.grid_ladder',
         status: 'open',
@@ -759,8 +759,8 @@ describe('SemanticContractReadinessService', () => {
     const result = new SemanticContractReadinessService().normalize(state)
 
     expect(result.ready).toBe(false)
-    expect(result.state.actions[0].openSlots).toHaveLength(1)
-    expect(result.state.actions[0].openSlots?.[0]).toEqual({
+    expect(result.state.action[0].openSlots).toHaveLength(1)
+    expect(result.state.action[0].openSlots?.[0]).toEqual({
       slotKey: 'contract.requirement.capital.allocate.per_order_budget',
       fieldPath: 'actions[action-1].contracts[action-contract-1].requires.capital.allocate.per_order_budget',
       status: 'open',
@@ -772,12 +772,12 @@ describe('SemanticContractReadinessService', () => {
         text: 'Missing semantic contract requirement action-contract-1: capital.allocate.per_order_budget',
       },
     })
-    expect(result.state.actions[0].openSlots?.filter(slot => slot.status === 'open')).toHaveLength(1)
+    expect(result.state.action[0].openSlots?.filter(slot => slot.status === 'open')).toHaveLength(1)
   })
 
   it('clears stale contract requirement slots when the capability becomes satisfied', () => {
     const state = createSemanticState({
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'action.grid_ladder',
         status: 'locked',
@@ -827,7 +827,7 @@ describe('SemanticContractReadinessService', () => {
 
     expect(result.ready).toBe(false)
     expect(result.missingRequirements).toEqual([])
-    expect(result.state.actions[0].openSlots).toEqual([
+    expect(result.state.action[0].openSlots).toEqual([
       {
         slotKey: 'action.order_type',
         fieldPath: 'actions[action-1].params.orderType',
@@ -841,7 +841,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('locks an open owner when satisfied contract requirements leave no open slots', () => {
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-grid-levels',
         key: 'grid.price_levels',
         phase: 'gate',
@@ -866,7 +866,7 @@ describe('SemanticContractReadinessService', () => {
           openSlots: [],
         }],
       }],
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'action.grid_ladder',
         status: 'open',
@@ -899,7 +899,7 @@ describe('SemanticContractReadinessService', () => {
 
     expect(result.ready).toBe(true)
     expect(result.missingRequirements).toEqual([])
-    expect(result.state.actions[0]).toEqual(expect.objectContaining({
+    expect(result.state.action[0]).toEqual(expect.objectContaining({
       status: 'locked',
       openSlots: [],
     }))
@@ -907,7 +907,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('keeps fixed-range level-set requirements missing and opens the provider density slot when density is absent', () => {
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-grid-levels',
         key: 'grid.price_levels',
         phase: 'gate',
@@ -932,7 +932,7 @@ describe('SemanticContractReadinessService', () => {
           openSlots: [],
         }],
       }],
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'action.grid_ladder',
         status: 'locked',
@@ -966,14 +966,14 @@ describe('SemanticContractReadinessService', () => {
         object: 'level_set',
       },
     ])
-    expect(result.state.triggers[0]).toEqual(expect.objectContaining({
+    expect(result.state.trigger[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expect.objectContaining({
         slotKey: 'contract.shape.price.level_set.density',
         fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-levels].capabilities[price.define.level_set].shape',
       })],
     }))
-    expect(result.state.actions[0].openSlots).toEqual([
+    expect(result.state.action[0].openSlots).toEqual([
       expect.objectContaining({
         slotKey: 'contract.requirement.price.define.level_set',
       }),
@@ -982,7 +982,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('keeps provider density slots stable across repeated readiness normalization', () => {
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-grid-levels',
         key: 'grid.price_levels',
         phase: 'gate',
@@ -1007,7 +1007,7 @@ describe('SemanticContractReadinessService', () => {
           openSlots: [],
         }],
       }],
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'action.grid_ladder',
         status: 'locked',
@@ -1043,14 +1043,14 @@ describe('SemanticContractReadinessService', () => {
         object: 'level_set',
       },
     ])
-    expect(second.state.triggers[0]).toEqual(expect.objectContaining({
+    expect(second.state.trigger[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expect.objectContaining({
         slotKey: 'contract.shape.price.level_set.density',
         fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-levels].capabilities[price.define.level_set].shape',
       })],
     }))
-    expect(second.state.actions[0].openSlots).toEqual([
+    expect(second.state.action[0].openSlots).toEqual([
       expect.objectContaining({
         slotKey: 'contract.requirement.price.define.level_set',
       }),
@@ -1059,7 +1059,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('opens the provider spacing conflict slot when grid count and absolute spacing disagree', () => {
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-grid-levels',
         key: 'grid.price_levels',
         phase: 'gate',
@@ -1084,7 +1084,7 @@ describe('SemanticContractReadinessService', () => {
           openSlots: [],
         }],
       }],
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'action.grid_ladder',
         status: 'locked',
@@ -1108,14 +1108,14 @@ describe('SemanticContractReadinessService', () => {
     const result = new SemanticContractReadinessService().normalize(state)
 
     expect(result.ready).toBe(false)
-    expect(result.state.triggers[0]).toEqual(expect.objectContaining({
+    expect(result.state.trigger[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expect.objectContaining({
         slotKey: 'contract.shape.price.level_set.spacing_conflict',
         fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-levels].capabilities[price.define.level_set].shape',
       })],
     }))
-    expect(result.state.actions[0].openSlots).toEqual([
+    expect(result.state.action[0].openSlots).toEqual([
       expect.objectContaining({
         slotKey: 'contract.requirement.price.define.level_set',
       }),
@@ -1124,7 +1124,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('keeps provider spacing conflict slots stable across repeated readiness normalization', () => {
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-grid-levels',
         key: 'grid.price_levels',
         phase: 'gate',
@@ -1149,7 +1149,7 @@ describe('SemanticContractReadinessService', () => {
           openSlots: [],
         }],
       }],
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'action.grid_ladder',
         status: 'locked',
@@ -1185,14 +1185,14 @@ describe('SemanticContractReadinessService', () => {
         object: 'level_set',
       },
     ])
-    expect(second.state.triggers[0]).toEqual(expect.objectContaining({
+    expect(second.state.trigger[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expect.objectContaining({
         slotKey: 'contract.shape.price.level_set.spacing_conflict',
         fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-levels].capabilities[price.define.level_set].shape',
       })],
     }))
-    expect(second.state.actions[0].openSlots).toEqual([
+    expect(second.state.action[0].openSlots).toEqual([
       expect.objectContaining({
         slotKey: 'contract.requirement.price.define.level_set',
       }),
@@ -1201,7 +1201,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('accepts absolute-spacing fixed-range level-set capabilities for grid contracts', () => {
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-grid-levels',
         key: 'grid.price_levels',
         phase: 'gate',
@@ -1226,7 +1226,7 @@ describe('SemanticContractReadinessService', () => {
           openSlots: [],
         }],
       }],
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'action.grid_ladder',
         status: 'open',
@@ -1259,7 +1259,7 @@ describe('SemanticContractReadinessService', () => {
 
     expect(result.ready).toBe(true)
     expect(result.missingRequirements).toEqual([])
-    expect(result.state.actions[0]).toEqual(expect.objectContaining({
+    expect(result.state.action[0]).toEqual(expect.objectContaining({
       status: 'locked',
       openSlots: [],
     }))
@@ -1267,7 +1267,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('keeps known requirements missing when matching capabilities have unusable shapes', () => {
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-grid-levels',
         key: 'grid.price_levels',
         phase: 'gate',
@@ -1292,7 +1292,7 @@ describe('SemanticContractReadinessService', () => {
           openSlots: [],
         }],
       }],
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'action.grid_ladder',
         status: 'locked',
@@ -1326,7 +1326,7 @@ describe('SemanticContractReadinessService', () => {
         object: 'level_set',
       },
     ])
-    expect(result.state.actions[0]).toEqual(expect.objectContaining({
+    expect(result.state.action[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expect.objectContaining({
         slotKey: 'contract.requirement.price.define.level_set',
@@ -1336,7 +1336,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('accepts centered dynamic level-set capabilities for grid contracts', () => {
     const state = createSemanticState({
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'action.grid_ladder',
         status: 'locked',
@@ -1381,7 +1381,7 @@ describe('SemanticContractReadinessService', () => {
 
     expect(result.ready).toBe(true)
     expect(result.missingRequirements).toEqual([])
-    expect(result.state.actions[0]).toEqual(expect.objectContaining({
+    expect(result.state.action[0]).toEqual(expect.objectContaining({
       status: 'locked',
       openSlots: [],
     }))
@@ -1495,7 +1495,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('opens locked owners when stale non-contract slots remain open', () => {
     const state = createSemanticState({
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'action.grid_ladder',
         status: 'locked',
@@ -1514,7 +1514,7 @@ describe('SemanticContractReadinessService', () => {
 
     const result = new SemanticContractReadinessService().normalize(state)
 
-    expect(result.state.actions[0]).toEqual(expect.objectContaining({
+    expect(result.state.action[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expect.objectContaining({
         slotKey: 'action.order_type',
@@ -1525,7 +1525,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('keeps execution-affecting action owner open slots blocking readiness', () => {
     const state = createSemanticState({
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'action.grid_ladder',
         status: 'open',
@@ -1545,7 +1545,7 @@ describe('SemanticContractReadinessService', () => {
     const result = new SemanticContractReadinessService().normalize(state)
 
     expect(result.ready).toBe(false)
-    expect(result.state.actions[0].openSlots).toEqual([
+    expect(result.state.action[0].openSlots).toEqual([
       expect.objectContaining({
         slotKey: 'action.order_type',
         status: 'open',
@@ -1556,7 +1556,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('does not block readiness on display-only action owner open slots', () => {
     const state = createSemanticState({
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'action.grid_ladder',
         status: 'open',
@@ -1576,7 +1576,7 @@ describe('SemanticContractReadinessService', () => {
     const result = new SemanticContractReadinessService().normalize(state)
 
     expect(result.ready).toBe(true)
-    expect(result.state.actions[0].openSlots).toEqual([
+    expect(result.state.action[0].openSlots).toEqual([
       expect.objectContaining({
         slotKey: 'action.display_hint',
         status: 'open',
@@ -1587,7 +1587,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('keeps trigger risk and position owner open slots blocking readiness', () => {
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-dip',
         key: 'price.percent_change',
         phase: 'gate',
@@ -1688,7 +1688,7 @@ describe('SemanticContractReadinessService', () => {
 
     expect(result.ready).toBe(false)
     expect(result.missingRequirements).toEqual([])
-    expect(result.state.triggers[0].openSlots).toEqual([
+    expect(result.state.trigger[0].openSlots).toEqual([
       expect.objectContaining({
         slotKey: 'trigger.percent_change.magnitude',
         fieldPath: 'triggers[price.percent_change].params.valuePct',
@@ -1710,7 +1710,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('does not use open atom capabilities to satisfy contract requirements', () => {
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-open-provider',
         key: 'grid.price_levels',
         phase: 'gate',
@@ -1735,7 +1735,7 @@ describe('SemanticContractReadinessService', () => {
           openSlots: [],
         }],
       }],
-      actions: [{
+      action: [{
         id: 'action-1',
         key: 'action.grid_ladder',
         status: 'locked',
@@ -1769,7 +1769,7 @@ describe('SemanticContractReadinessService', () => {
         object: 'level_set',
       },
     ])
-    expect(result.state.actions[0].openSlots).toEqual([
+    expect(result.state.action[0].openSlots).toEqual([
       expect.objectContaining({
         slotKey: 'contract.requirement.price.define.level_set',
       }),
@@ -1778,7 +1778,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('keeps owner context when active atoms reuse the same contract id', () => {
     const state = createSemanticState({
-      actions: [
+      action: [
         {
           id: 'action-1',
           key: 'action.grid_ladder',
@@ -1841,13 +1841,13 @@ describe('SemanticContractReadinessService', () => {
         object: 'level_set',
       },
     ])
-    expect(result.state.actions[0].openSlots).toEqual([
+    expect(result.state.action[0].openSlots).toEqual([
       expect.objectContaining({
         slotKey: 'contract.requirement.price.define.level_set',
         fieldPath: 'actions[action-1].contracts[shared-contract].requires.price.define.level_set',
       }),
     ])
-    expect(result.state.actions[1].openSlots).toEqual([
+    expect(result.state.action[1].openSlots).toEqual([
       expect.objectContaining({
         slotKey: 'contract.requirement.price.define.level_set',
         fieldPath: 'actions[action-2].contracts[shared-contract].requires.price.define.level_set',
@@ -1857,7 +1857,7 @@ describe('SemanticContractReadinessService', () => {
 
   it('ignores contracts on superseded atoms', () => {
     const state = createSemanticState({
-      actions: [{
+      action: [{
         id: 'action-superseded',
         key: 'action.grid_ladder',
         status: 'superseded',
@@ -1882,40 +1882,38 @@ describe('SemanticContractReadinessService', () => {
 
     expect(result.ready).toBe(true)
     expect(result.missingRequirements).toEqual([])
-    expect(result.state.actions[0].openSlots).toBeUndefined()
+    expect(result.state.action[0].openSlots).toBeUndefined()
   })
 
   it('blocks locked orchestration nodes because Phase 0 has no orchestration runtime', () => {
     const state = createSemanticState({
-      orchestration: {
-        nodes: [{
-          id: 'scope-1',
+      orchestration: [{
+        id: 'scope-1',
+        kind: 'scope',
+        status: 'locked',
+        source: 'user_explicit',
+        params: { symbol: 'BTCUSDT' },
+        openSlots: [],
+        contracts: [{
+          id: 'scope-contract-1',
           kind: 'scope',
-          status: 'locked',
-          source: 'user_explicit',
-          params: { symbol: 'BTCUSDT' },
+          params: {},
+          capabilities: [],
+          requires: [],
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
           openSlots: [],
-          contracts: [{
-            id: 'scope-contract-1',
-            kind: 'scope',
-            params: {},
-            capabilities: [],
-            requires: [],
-            runtimeRequirements: [],
-            stateRequirements: [],
-            orderRequirements: [],
-            openSlots: [],
-          }],
         }],
-        contracts: [],
-      },
+      }],
+      orchestrationContracts: [],
     })
 
     const result = new SemanticContractReadinessService().normalize(state)
-    const openSlots = result.state.orchestration?.nodes[0].openSlots
+    const openSlots = result.state.orchestration[0].openSlots
 
     expect(result.ready).toBe(false)
-    expect(result.state.orchestration?.contracts).toEqual([])
+    expect(result.state.orchestrationContracts).toEqual([])
     expect(openSlots).toContainEqual(
       expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -1927,42 +1925,40 @@ describe('SemanticContractReadinessService', () => {
 
   it('does not block draft orchestration nodes that are still open', () => {
     const state = createSemanticState({
-      orchestration: {
-        nodes: [{
-          id: 'scope-1',
-          kind: 'scope',
+      orchestration: [{
+        id: 'scope-1',
+        kind: 'scope',
+        status: 'open',
+        source: 'user_explicit',
+        params: { symbol: 'BTCUSDT' },
+        openSlots: [{
+          slotKey: 'orchestration.scope.symbol',
+          fieldPath: 'orchestration.scope[scope-1].params.symbol',
           status: 'open',
-          source: 'user_explicit',
-          params: { symbol: 'BTCUSDT' },
-          openSlots: [{
-            slotKey: 'orchestration.scope.symbol',
-            fieldPath: 'orchestration.scope[scope-1].params.symbol',
-            status: 'open',
-            priority: 'core',
-            questionHint: '请选择 orchestration scope symbol。',
-            affectsExecution: true,
-          }],
-          contracts: [{
-            id: 'scope-contract-1',
-            kind: 'scope',
-            params: {},
-            capabilities: [],
-            requires: [],
-            runtimeRequirements: [],
-            stateRequirements: [],
-            orderRequirements: [],
-            openSlots: [],
-          }],
+          priority: 'core',
+          questionHint: '请选择 orchestration scope symbol。',
+          affectsExecution: true,
         }],
-        contracts: [],
-      },
+        contracts: [{
+          id: 'scope-contract-1',
+          kind: 'scope',
+          params: {},
+          capabilities: [],
+          requires: [],
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+      orchestrationContracts: [],
     })
 
     const result = new SemanticContractReadinessService().normalize(state)
-    const openSlots = result.state.orchestration?.nodes[0].openSlots
+    const openSlots = result.state.orchestration[0].openSlots
 
     expect(result.ready).toBe(false)
-    expect(result.state.orchestration?.contracts).toEqual([])
+    expect(result.state.orchestrationContracts).toEqual([])
     expect(openSlots).toEqual([
       expect.objectContaining({
         slotKey: 'orchestration.scope.symbol',
@@ -2001,11 +1997,11 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test A: gate.regime + activeWhen valid + 新策略 → readiness 不注入 phase0 slot', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode()], contracts: [] },
+        orchestration: [regimeGateNode()], orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const node = result.state.orchestration?.nodes[0]
+      const node = result.state.orchestration[0]
 
       expect(node?.status).toBe('locked')
       expect(node?.openSlots ?? []).not.toContainEqual(expect.objectContaining({
@@ -2018,12 +2014,12 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test B: gate.regime + activeWhen valid + 老策略 (deployedAtSemanticVersion=null) → fail-closed 走 phase0', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode()], contracts: [] },
+        orchestration: [regimeGateNode()], orchestrationContracts: [],
       })
 
       const legacy: StrategyVersionInfo = { deployedAtSemanticVersion: null }
       const result = new SemanticContractReadinessService().normalize(state, legacy)
-      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const openSlots = result.state.orchestration[0].openSlots ?? []
 
       expect(openSlots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -2032,14 +2028,12 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test C: gate.regime + activeWhen 缺失 → registry 驱动 active_when open slot，无 phase0 slot', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [regimeGateNode({ activeWhen: undefined })],
-          contracts: [],
-        },
+        orchestration: [regimeGateNode({ activeWhen: undefined })],
+          orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const openSlots = result.state.orchestration[0].openSlots ?? []
 
       expect(openSlots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.gate.regime.active_when',
@@ -2051,14 +2045,12 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test D: kind=gate + key=未知 → fail-closed 走 phase0', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [regimeGateNode({ key: 'unknown_gate_atom' })],
-          contracts: [],
-        },
+        orchestration: [regimeGateNode({ key: 'unknown_gate_atom' })],
+          orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const openSlots = result.state.orchestration[0].openSlots ?? []
 
       expect(openSlots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -2067,14 +2059,12 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test E: gate.regime + target.phase !== entry → fail-closed 走 phase0', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [regimeGateNode({ target: undefined })],
-          contracts: [],
-        },
+        orchestration: [regimeGateNode({ target: undefined })],
+          orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const openSlots = result.state.orchestration[0].openSlots ?? []
 
       expect(openSlots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -2083,16 +2073,14 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test F: gate.regime + activeWhen 不是表达式对象 → fail-closed 走 phase0', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [regimeGateNode({
+        orchestration: [regimeGateNode({
             activeWhen: 'close > 0' as unknown as SemanticOrchestrationNode['activeWhen'],
           })],
-          contracts: [],
-        },
+          orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const openSlots = result.state.orchestration[0].openSlots ?? []
 
       expect(openSlots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -2103,8 +2091,7 @@ describe('SemanticContractReadinessService', () => {
       const kinds: Array<'scope' | 'program' | 'portfolioRisk'> = ['scope', 'program', 'portfolioRisk']
       for (const kind of kinds) {
         const state = createSemanticState({
-          orchestration: {
-            nodes: [{
+          orchestration: [{
               id: `${kind}-node`,
               kind,
               status: 'locked',
@@ -2113,12 +2100,11 @@ describe('SemanticContractReadinessService', () => {
               openSlots: [],
               contracts: [],
             }],
-            contracts: [],
-          },
+            orchestrationContracts: [],
         })
 
         const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-        const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+        const openSlots = result.state.orchestration[0].openSlots ?? []
 
         expect(openSlots).toContainEqual(expect.objectContaining({
           slotKey: 'orchestration.phase0.unsupported',
@@ -2149,11 +2135,11 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test A: portfolioRisk.drawdown_block + 完整字段 + 新策略 → 不注入 phase0 slot', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [drawdownBlockNode()], contracts: [] },
+        orchestration: [drawdownBlockNode()], orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const node = result.state.orchestration?.nodes[0]
+      const node = result.state.orchestration[0]
 
       expect(node?.status).toBe('locked')
       expect(node?.openSlots ?? []).not.toContainEqual(expect.objectContaining({
@@ -2166,14 +2152,12 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test B: portfolioRisk.drawdown_block + thresholdPct 缺失 → registry 驱动 threshold_pct open slot，无 phase0 slot', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [drawdownBlockNode({ thresholdPct: undefined })],
-          contracts: [],
-        },
+        orchestration: [drawdownBlockNode({ thresholdPct: undefined })],
+          orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const openSlots = result.state.orchestration[0].openSlots ?? []
 
       expect(openSlots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.portfolio_drawdown.threshold_pct',
@@ -2185,14 +2169,12 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test C: kind=portfolioRisk + key=未知 → fail-closed 走 phase0', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [drawdownBlockNode({ key: 'portfolioRisk.unknown' })],
-          contracts: [],
-        },
+        orchestration: [drawdownBlockNode({ key: 'portfolioRisk.unknown' })],
+          orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const openSlots = result.state.orchestration[0].openSlots ?? []
 
       expect(openSlots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -2201,14 +2183,12 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test D: scope !== portfolio → fail-closed 走 phase0', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [drawdownBlockNode({ scope: 'symbol' as unknown as SemanticOrchestrationNode['scope'] })],
-          contracts: [],
-        },
+        orchestration: [drawdownBlockNode({ scope: 'symbol' as unknown as SemanticOrchestrationNode['scope'] })],
+          orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const openSlots = result.state.orchestration[0].openSlots ?? []
 
       expect(openSlots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -2217,14 +2197,12 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test E: mode 非 observe|enforce → fail-closed 走 phase0', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [drawdownBlockNode({ mode: 'reduce' as unknown as SemanticOrchestrationNode['mode'] })],
-          contracts: [],
-        },
+        orchestration: [drawdownBlockNode({ mode: 'reduce' as unknown as SemanticOrchestrationNode['mode'] })],
+          orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const openSlots = result.state.orchestration[0].openSlots ?? []
 
       expect(openSlots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -2234,14 +2212,12 @@ describe('SemanticContractReadinessService', () => {
     it('Test F: thresholdPct ≤ 0 或 > 100 → fail-closed 走 phase0', () => {
       for (const bad of [0, -5, 100.01, 500]) {
         const state = createSemanticState({
-          orchestration: {
-            nodes: [drawdownBlockNode({ thresholdPct: bad })],
-            contracts: [],
-          },
+          orchestration: [drawdownBlockNode({ thresholdPct: bad })],
+            orchestrationContracts: [],
         })
 
         const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-        const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+        const openSlots = result.state.orchestration[0].openSlots ?? []
 
         expect(openSlots).toContainEqual(expect.objectContaining({
           slotKey: 'orchestration.phase0.unsupported',
@@ -2251,12 +2227,12 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test G: 老策略 (deployedAtSemanticVersion=null) → 双 fail-closed 走 phase0', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [drawdownBlockNode()], contracts: [] },
+        orchestration: [drawdownBlockNode()], orchestrationContracts: [],
       })
 
       const legacy: StrategyVersionInfo = { deployedAtSemanticVersion: null }
       const result = new SemanticContractReadinessService().normalize(state, legacy)
-      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const openSlots = result.state.orchestration[0].openSlots ?? []
 
       expect(openSlots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -2282,14 +2258,12 @@ describe('SemanticContractReadinessService', () => {
         contracts: [],
       }
       const state = createSemanticState({
-        orchestration: {
-          nodes: [regimeNode, drawdownBlockNode()],
-          contracts: [],
-        },
+        orchestration: [regimeNode, drawdownBlockNode()],
+          orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const nodes = result.state.orchestration?.nodes ?? []
+      const nodes = result.state.orchestration ?? []
 
       expect(nodes).toHaveLength(2)
       for (const n of nodes) {
@@ -2353,11 +2327,11 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test A: 完整 program + valid gate ref + 新策略 → 不注入 phase0 slot', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode(), fixedGridGatedNode()], contracts: [] },
+        orchestration: [regimeGateNode(), fixedGridGatedNode()], orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      const program = result.state.orchestration.find(n => n.kind === 'program')
 
       expect(program?.status).toBe('locked')
       expect(program?.openSlots ?? []).not.toContainEqual(expect.objectContaining({
@@ -2367,17 +2341,15 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test B: programKind 非 fixed_grid_gated → fail-closed 走 phase0', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [
+        orchestration: [
             regimeGateNode(),
             fixedGridGatedNode({ programKind: undefined }),
           ],
-          contracts: [],
-        },
+          orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      const program = result.state.orchestration.find(n => n.kind === 'program')
       const openSlots = program?.openSlots ?? []
 
       expect(openSlots).toContainEqual(expect.objectContaining({
@@ -2387,17 +2359,15 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test C: onDeactivate 非法 → fail-closed 走 phase0', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [
+        orchestration: [
             regimeGateNode(),
             fixedGridGatedNode({ onDeactivate: 'rollover' as unknown as SemanticOrchestrationNode['onDeactivate'] }),
           ],
-          contracts: [],
-        },
+          orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      const program = result.state.orchestration.find(n => n.kind === 'program')
 
       expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -2406,17 +2376,15 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test D: rebuildPolicy 非 static → fail-closed 走 phase0', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [
+        orchestration: [
             regimeGateNode(),
             fixedGridGatedNode({ rebuildPolicy: 'dynamic' as unknown as SemanticOrchestrationNode['rebuildPolicy'] }),
           ],
-          contracts: [],
-        },
+          orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      const program = result.state.orchestration.find(n => n.kind === 'program')
 
       expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -2433,14 +2401,12 @@ describe('SemanticContractReadinessService', () => {
       ]
       for (const grid of badGrids) {
         const state = createSemanticState({
-          orchestration: {
-            nodes: [regimeGateNode(), fixedGridGatedNode({ gridParams: grid })],
-            contracts: [],
-          },
+          orchestration: [regimeGateNode(), fixedGridGatedNode({ gridParams: grid })],
+            orchestrationContracts: [],
         })
 
         const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-        const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+        const program = result.state.orchestration.find(n => n.kind === 'program')
 
         expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
           slotKey: 'orchestration.phase0.unsupported',
@@ -2456,14 +2422,12 @@ describe('SemanticContractReadinessService', () => {
       ]
       for (const sizing of badSizings) {
         const state = createSemanticState({
-          orchestration: {
-            nodes: [regimeGateNode(), fixedGridGatedNode({ sizing })],
-            contracts: [],
-          },
+          orchestration: [regimeGateNode(), fixedGridGatedNode({ sizing })],
+            orchestrationContracts: [],
         })
 
         const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-        const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+        const program = result.state.orchestration.find(n => n.kind === 'program')
 
         expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
           slotKey: 'orchestration.phase0.unsupported',
@@ -2473,17 +2437,15 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test G: activeWhenRef 引用不存在的节点 → fail-closed 走 phase0', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [
+        orchestration: [
             regimeGateNode(),
             fixedGridGatedNode({ activeWhenRef: 'no-such-id' }),
           ],
-          contracts: [],
-        },
+          orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      const program = result.state.orchestration.find(n => n.kind === 'program')
 
       expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -2492,17 +2454,15 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test H: activeWhenRef 引用 status:open 的 gate → fail-closed 走 phase0', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [
+        orchestration: [
             regimeGateNode({ status: 'open' }),
             fixedGridGatedNode(),
           ],
-          contracts: [],
-        },
+          orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      const program = result.state.orchestration.find(n => n.kind === 'program')
 
       expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -2511,17 +2471,15 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test I: activeWhenRef 引用 readiness fail 的 gate (target.phase 缺失) → fail-closed 走 phase0', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [
+        orchestration: [
             regimeGateNode({ target: undefined }),
             fixedGridGatedNode(),
           ],
-          contracts: [],
-        },
+          orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      const program = result.state.orchestration.find(n => n.kind === 'program')
 
       expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -2530,15 +2488,13 @@ describe('SemanticContractReadinessService', () => {
 
     it('Test J: 老策略 (deployedAtSemanticVersion=null) → 双 fail-closed 走 phase0', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [regimeGateNode(), fixedGridGatedNode()],
-          contracts: [],
-        },
+        orchestration: [regimeGateNode(), fixedGridGatedNode()],
+          orchestrationContracts: [],
       })
 
       const legacy: StrategyVersionInfo = { deployedAtSemanticVersion: null }
       const result = new SemanticContractReadinessService().normalize(state, legacy)
-      const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      const program = result.state.orchestration.find(n => n.kind === 'program')
 
       expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -2575,10 +2531,10 @@ describe('SemanticContractReadinessService', () => {
 
     it('S6 case 1 完整 adaptive + valid gate ref + 新策略 → 不注入 phase0 slot', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode(), adaptiveNode()], contracts: [] },
+        orchestration: [regimeGateNode(), adaptiveNode()], orchestrationContracts: [],
       })
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      const program = result.state.orchestration.find(n => n.kind === 'program')
       expect(program?.status).toBe('locked')
       expect(program?.openSlots ?? []).not.toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -2594,10 +2550,10 @@ describe('SemanticContractReadinessService', () => {
       ]
       for (const v of variations) {
         const state = createSemanticState({
-          orchestration: { nodes: [regimeGateNode(), adaptiveNode(v)], contracts: [] },
+          orchestration: [regimeGateNode(), adaptiveNode(v)], orchestrationContracts: [],
         })
         const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-        const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+        const program = result.state.orchestration.find(n => n.kind === 'program')
         expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
           slotKey: 'orchestration.phase0.unsupported',
         }))
@@ -2607,10 +2563,10 @@ describe('SemanticContractReadinessService', () => {
     it('S6 case 6 atrPeriod 越界 (1 / 201 / 非整数) → fail-closed', () => {
       for (const atrPeriod of [1, 201, 14.5]) {
         const state = createSemanticState({
-          orchestration: { nodes: [regimeGateNode(), adaptiveNode({ atrPeriod })], contracts: [] },
+          orchestration: [regimeGateNode(), adaptiveNode({ atrPeriod })], orchestrationContracts: [],
         })
         const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-        const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+        const program = result.state.orchestration.find(n => n.kind === 'program')
         expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
           slotKey: 'orchestration.phase0.unsupported',
         }))
@@ -2620,10 +2576,10 @@ describe('SemanticContractReadinessService', () => {
     it('S6 cases 7-8 atrMultiplier / rangeMultiplier <= 0 → fail-closed', () => {
       for (const overrides of [{ atrMultiplier: 0 }, { rangeMultiplier: -1 }, { atrMultiplier: NaN }]) {
         const state = createSemanticState({
-          orchestration: { nodes: [regimeGateNode(), adaptiveNode(overrides)], contracts: [] },
+          orchestration: [regimeGateNode(), adaptiveNode(overrides)], orchestrationContracts: [],
         })
         const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-        const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+        const program = result.state.orchestration.find(n => n.kind === 'program')
         expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
           slotKey: 'orchestration.phase0.unsupported',
         }))
@@ -2633,10 +2589,10 @@ describe('SemanticContractReadinessService', () => {
     it('S6 case 9 atrDriftPct 越界 (0 / 101) → fail-closed', () => {
       for (const atrDriftPct of [0, 101]) {
         const state = createSemanticState({
-          orchestration: { nodes: [regimeGateNode(), adaptiveNode({ atrDriftPct })], contracts: [] },
+          orchestration: [regimeGateNode(), adaptiveNode({ atrDriftPct })], orchestrationContracts: [],
         })
         const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-        const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+        const program = result.state.orchestration.find(n => n.kind === 'program')
         expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
           slotKey: 'orchestration.phase0.unsupported',
         }))
@@ -2645,10 +2601,10 @@ describe('SemanticContractReadinessService', () => {
 
     it('S6 case 10 rebuildCooldownSec=299（硬下限 300 不达）→ fail-closed', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode(), adaptiveNode({ rebuildCooldownSec: 299 })], contracts: [] },
+        orchestration: [regimeGateNode(), adaptiveNode({ rebuildCooldownSec: 299 })], orchestrationContracts: [],
       })
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      const program = result.state.orchestration.find(n => n.kind === 'program')
       expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
       }))
@@ -2657,10 +2613,10 @@ describe('SemanticContractReadinessService', () => {
     it('S6 cases 11-13 minStepPct / maxStepPct / max < min → fail-closed', () => {
       for (const overrides of [{ minStepPct: 0 }, { maxStepPct: 0 }, { minStepPct: 2, maxStepPct: 1 }]) {
         const state = createSemanticState({
-          orchestration: { nodes: [regimeGateNode(), adaptiveNode(overrides)], contracts: [] },
+          orchestration: [regimeGateNode(), adaptiveNode(overrides)], orchestrationContracts: [],
         })
         const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-        const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+        const program = result.state.orchestration.find(n => n.kind === 'program')
         expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
           slotKey: 'orchestration.phase0.unsupported',
         }))
@@ -2670,10 +2626,10 @@ describe('SemanticContractReadinessService', () => {
     it('S6 case 14 levelCount 越界 (1 / 101 / 非整数) → fail-closed', () => {
       for (const levelCount of [1, 101, 5.5]) {
         const state = createSemanticState({
-          orchestration: { nodes: [regimeGateNode(), adaptiveNode({ levelCount })], contracts: [] },
+          orchestration: [regimeGateNode(), adaptiveNode({ levelCount })], orchestrationContracts: [],
         })
         const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-        const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+        const program = result.state.orchestration.find(n => n.kind === 'program')
         expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
           slotKey: 'orchestration.phase0.unsupported',
         }))
@@ -2686,10 +2642,10 @@ describe('SemanticContractReadinessService', () => {
         { mode: 'fixed_quote' as const, value: 0 },
       ]) {
         const state = createSemanticState({
-          orchestration: { nodes: [regimeGateNode(), adaptiveNode({ sizing })], contracts: [] },
+          orchestration: [regimeGateNode(), adaptiveNode({ sizing })], orchestrationContracts: [],
         })
         const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-        const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+        const program = result.state.orchestration.find(n => n.kind === 'program')
         expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
           slotKey: 'orchestration.phase0.unsupported',
         }))
@@ -2698,10 +2654,10 @@ describe('SemanticContractReadinessService', () => {
 
     it('S6 case 16a activeWhenRef 引用不存在节点 → fail-closed', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode(), adaptiveNode({ activeWhenRef: 'no-such-id' })], contracts: [] },
+        orchestration: [regimeGateNode(), adaptiveNode({ activeWhenRef: 'no-such-id' })], orchestrationContracts: [],
       })
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      const program = result.state.orchestration.find(n => n.kind === 'program')
       expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
       }))
@@ -2709,11 +2665,11 @@ describe('SemanticContractReadinessService', () => {
 
     it('S6 case 16b 老策略 (deployedAtSemanticVersion=null) → fail-closed', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode(), adaptiveNode()], contracts: [] },
+        orchestration: [regimeGateNode(), adaptiveNode()], orchestrationContracts: [],
       })
       const legacy: StrategyVersionInfo = { deployedAtSemanticVersion: null }
       const result = new SemanticContractReadinessService().normalize(state, legacy)
-      const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      const program = result.state.orchestration.find(n => n.kind === 'program')
       expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
       }))
@@ -2721,10 +2677,10 @@ describe('SemanticContractReadinessService', () => {
 
     it('S6 case 17 fixed_grid_gated + adaptive_volatility_grid 共存互不干扰', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode(), fixedGridGatedNode(), adaptiveNode()], contracts: [] },
+        orchestration: [regimeGateNode(), fixedGridGatedNode(), adaptiveNode()], orchestrationContracts: [],
       })
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const programs = (result.state.orchestration?.nodes ?? []).filter(n => n.kind === 'program')
+      const programs = (result.state.orchestration ?? []).filter(n => n.kind === 'program')
       expect(programs).toHaveLength(2)
       for (const p of programs) {
         expect(p.status).toBe('locked')
@@ -2749,14 +2705,12 @@ describe('SemanticContractReadinessService', () => {
         contracts: [],
       }
       const state = createSemanticState({
-        orchestration: {
-          nodes: [regimeGateNode(), drawdownNode, fixedGridGatedNode()],
-          contracts: [],
-        },
+        orchestration: [regimeGateNode(), drawdownNode, fixedGridGatedNode()],
+          orchestrationContracts: [],
       })
 
       const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
-      const nodes = result.state.orchestration?.nodes ?? []
+      const nodes = result.state.orchestration ?? []
 
       expect(nodes).toHaveLength(3)
       for (const n of nodes) {
@@ -2809,7 +2763,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
         marketType: null,
         timeframe: timeframeSlot('1h'),
       },
-      triggers: [{
+      trigger: [{
         id: 'trigger-aligned',
         key: 'indicator.above',
         phase: 'entry',
@@ -2829,7 +2783,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
           openSlots: [],
         }],
       }],
-      actions: [baseAction],
+      action: [baseAction],
     })
 
     const result = new SemanticContractReadinessService().normalize(state)
@@ -2846,7 +2800,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
         marketType: null,
         timeframe: timeframeSlot('1h'),
       },
-      triggers: [{
+      trigger: [{
         id: 'trigger-misaligned',
         key: 'indicator.cross_over',
         phase: 'entry',
@@ -2866,7 +2820,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
           openSlots: [],
         }],
       }],
-      actions: [baseAction],
+      action: [baseAction],
     })
 
     const result = new SemanticContractReadinessService().normalize(state)
@@ -2882,7 +2836,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
       producer: { ownerKind: 'trigger', ownerId: 'trigger-misaligned', timeframe: '4h' },
       consumer: { source: 'context_slot', timeframe: '1h' },
     })
-    expect(result.state.triggers[0].openSlots).toEqual(expect.arrayContaining([
+    expect(result.state.trigger[0].openSlots).toEqual(expect.arrayContaining([
       expect.objectContaining({
         slotKey: 'contract.timeframe_mismatch.trigger.trigger-misaligned',
         affectsExecution: true,
@@ -2899,7 +2853,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
         marketType: null,
         timeframe: timeframeSlot('1h'),
       },
-      triggers: [{
+      trigger: [{
         id: 'trigger-aligned',
         key: 'indicator.cross_over',
         phase: 'entry',
@@ -2957,7 +2911,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
           openSlots: [],
         }],
       }],
-      actions: [baseAction],
+      action: [baseAction],
     })
 
     const result = new SemanticContractReadinessService().normalize(state)
@@ -2969,7 +2923,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
 
   it('does not raise timeframe mismatch when execution context timeframe is missing', () => {
     const state = createSemanticState({
-      triggers: [{
+      trigger: [{
         id: 'trigger-no-context',
         key: 'indicator.cross_over',
         phase: 'entry',
@@ -2989,7 +2943,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
           openSlots: [],
         }],
       }],
-      actions: [baseAction],
+      action: [baseAction],
     })
 
     const result = new SemanticContractReadinessService().normalize(state)
@@ -3005,7 +2959,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
         marketType: null,
         timeframe: timeframeSlot('1h'),
       },
-      triggers: [{
+      trigger: [{
         id: 'trigger-override',
         key: 'indicator.cross_over',
         phase: 'entry',
@@ -3025,7 +2979,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
           openSlots: [],
         }],
       }],
-      actions: [baseAction],
+      action: [baseAction],
     })
 
     const result = new SemanticContractReadinessService().normalize(state)
@@ -3043,7 +2997,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
         marketType: null,
         timeframe: timeframeSlot('15m'),
       },
-      triggers: [{
+      trigger: [{
         id: 'trigger-htf-above',
         key: 'indicator.above',
         phase: 'entry',
@@ -3063,7 +3017,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
           openSlots: [],
         }],
       }],
-      actions: [baseAction],
+      action: [baseAction],
     })
 
     const result = new SemanticContractReadinessService().normalize(state)
@@ -3081,7 +3035,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
         marketType: null,
         timeframe: timeframeSlot('15m'),
       },
-      triggers: [{
+      trigger: [{
         id: 'trigger-htf-below',
         key: 'indicator.below',
         phase: 'exit',
@@ -3101,7 +3055,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
           openSlots: [],
         }],
       }],
-      actions: [baseAction],
+      action: [baseAction],
     })
 
     const result = new SemanticContractReadinessService().normalize(state)
@@ -3113,7 +3067,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
   // PR3.4: CapabilityEvidenceIndex 路径——纯 DCA utterance per_order_budget 通过 EvidenceIndex 判 satisfied
   it('PR3.4: per_order_budget requirement satisfied via CapabilityEvidenceIndex when DCA action provides the capability', () => {
     const state = createSemanticState({
-      actions: [
+      action: [
         {
           id: 'action-grid-ladder',
           key: 'action.grid_ladder',
@@ -3179,7 +3133,7 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
   // PR3.4 Q1 negative path: open-status owner emit capability is NOT counted as satisfied evidence
   it('PR3.4 Q1: per_order_budget requirement NOT satisfied when only an OPEN-status action provides the capability', () => {
     const state = createSemanticState({
-      actions: [
+      action: [
         {
           id: 'action-grid-ladder',
           key: 'action.grid_ladder',
@@ -3355,7 +3309,7 @@ describe('#1186 PR3 — multi-leg per_order_budget per-leg anchored', () => {
     it('case A — multi-leg + 双 leg 各自 anchored → per_order_budget 判 satisfied', () => {
       const state = createSemanticState({
         isMultiLeg: true,
-        actions: [
+        action: [
           buildMultiLegConsumer(),
           buildAnchoredLeg('action-leg-a', 100),
           buildAnchoredLeg('action-leg-b', 200),
@@ -3374,7 +3328,7 @@ describe('#1186 PR3 — multi-leg per_order_budget per-leg anchored', () => {
     it('case B — multi-leg + 单 leg 缺 anchored → per_order_budget mismatch + errorCode READINESS_PER_ORDER_BUDGET_MISSING', () => {
       const state = createSemanticState({
         isMultiLeg: true,
-        actions: [
+        action: [
           buildMultiLegConsumer(),
           buildAnchoredLeg('action-leg-a', 100),
           buildOpenLeg('action-leg-b'),
@@ -3393,7 +3347,7 @@ describe('#1186 PR3 — multi-leg per_order_budget per-leg anchored', () => {
     // case C（回归）：单腿 + 单 anchor → satisfied=true（等价 #1175 行为）
     it('case C — 单腿（isMultiLeg 缺省）+ 单 anchor → 行为零变更（satisfied）', () => {
       const state = createSemanticState({
-        actions: [
+        action: [
           buildMultiLegConsumer(),
           buildAnchoredLeg('action-leg-only', 100),
         ],
@@ -3412,9 +3366,12 @@ function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticSt
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: {
       exchange: null,

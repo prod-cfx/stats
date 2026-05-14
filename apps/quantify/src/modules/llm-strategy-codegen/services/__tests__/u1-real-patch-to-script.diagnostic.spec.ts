@@ -47,15 +47,15 @@ describe('U1 real LLM patch → SemanticSeedStateBuilder.build → codegen (issu
     console.log(state && JSON.stringify(state).length > 4000 ? '\n...(truncated)' : '')
 
     expect(state).not.toBeNull()
-    expect(state!.triggers).toBeDefined()
+    expect(state!.trigger).toBeDefined()
 
-    const entryTriggers = state!.triggers.filter(t => t.phase === 'entry')
-    const exitTriggers = state!.triggers.filter(t => t.phase === 'exit')
+    const entryTriggers = state!.trigger.filter(t => t.phase === 'entry')
+    const exitTriggers = state!.trigger.filter(t => t.phase === 'exit')
     const lockedEntries = entryTriggers.filter(t => t.status === 'locked')
     const lockedExits = exitTriggers.filter(t => t.status === 'locked')
 
-    console.log(`\ntriggers: total=${state!.triggers.length}, entry=${entryTriggers.length} (locked=${lockedEntries.length}), exit=${exitTriggers.length} (locked=${lockedExits.length})`)
-    console.log(`actions: ${JSON.stringify(state!.actions)}`)
+    console.log(`\ntriggers: total=${state!.trigger.length}, entry=${entryTriggers.length} (locked=${lockedEntries.length}), exit=${exitTriggers.length} (locked=${lockedExits.length})`)
+    console.log(`action: ${JSON.stringify(state!.action)}`)
 
     // 关键断言：必须有 locked entry / exit trigger，否则 ensureExecutableAtomSlots 会注入 missing_*_atom
     expect(lockedEntries.length).toBeGreaterThan(0)

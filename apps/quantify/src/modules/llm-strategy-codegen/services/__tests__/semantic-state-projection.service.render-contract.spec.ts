@@ -8,9 +8,12 @@ function baseState(overrides: Partial<SemanticState>): SemanticState {
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
@@ -31,16 +34,16 @@ describe('SemanticStateProjectionService — render contract (#1154)', () => {
       status: 'locked',
       source: 'user_explicit',
       openSlots: [],
-      constraints: [{
-        id: 'pyr-1',
-        key: 'position.pyramiding_limit',
-        params: { maxLayers: 3, layerSizing: { kind: 'ratio', value: 0.2 } },
-        status: 'locked',
-        source: 'user_explicit',
-        openSlots: [],
-      }],
     }
-    const view = service.buildConversationView(baseState({ position }))
+    const positionConstraint = [{
+      id: 'pyr-1',
+      key: 'position.pyramiding_limit',
+      params: { maxLayers: 3, layerSizing: { kind: 'ratio', value: 0.2 } },
+      status: 'locked' as const,
+      source: 'user_explicit' as const,
+      openSlots: [],
+    }] as any
+    const view = service.buildConversationView(baseState({ position, positionConstraint }))
     expect(view.positionSummary).toContain('3')
     expect(view.positionSummary).toMatch(/最多.*3.*次/)
   })
@@ -54,7 +57,7 @@ describe('SemanticStateProjectionService — render contract (#1154)', () => {
       openSlots: [],
       params: { addMode: 'profit_pct', addRatio: 0.2, sizing: { kind: 'ratio', value: 0.2 } },
     }
-    const view = service.buildConversationView(baseState({ actions: [action] }))
+    const view = service.buildConversationView(baseState({ action: [action] }))
     expect(view.summary).toContain('20')
     expect(view.summary).toMatch(/加仓.*盈利后加仓.*每次\s*20\s*%/)
   })
@@ -69,7 +72,7 @@ describe('SemanticStateProjectionService — render contract (#1154)', () => {
       openSlots: [],
       params: { addMode: 'profit_pct', addRatio: 0.2, profitThreshold: 2, sizing: { kind: 'ratio', value: 0.2 } },
     }
-    const view = service.buildConversationView(baseState({ actions: [action] }))
+    const view = service.buildConversationView(baseState({ action: [action] }))
     expect(view.summary).toMatch(/盈利\s*2\s*%\s*后加仓/)
     expect(view.summary).toMatch(/每次\s*20\s*%/)
   })
@@ -83,7 +86,7 @@ describe('SemanticStateProjectionService — render contract (#1154)', () => {
       openSlots: [],
       params: { addMode: 'drawdown_pct', addRatio: 0.3, drawdownThreshold: 5, sizing: { kind: 'ratio', value: 0.3 } },
     }
-    const view = service.buildConversationView(baseState({ actions: [action] }))
+    const view = service.buildConversationView(baseState({ action: [action] }))
     expect(view.summary).toMatch(/回撤\s*5\s*%\s*后加仓/)
     expect(view.summary).toMatch(/每次\s*30\s*%/)
   })

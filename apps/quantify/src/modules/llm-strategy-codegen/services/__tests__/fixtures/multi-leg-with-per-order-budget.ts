@@ -32,10 +32,13 @@ function baseState(): SemanticState {
   return {
     version: 1,
     families: ['multi-leg'],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
     position: null,
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
     updatedAt: '2026-05-11T00:00:00.000Z',
@@ -191,18 +194,16 @@ const SYMBOL_NODE = makeSymbolScopeNode('BTCUSDT')
 export const MULTI_LEG_CASE_A: SemanticState = {
   ...baseState(),
   isMultiLeg: true,
-  actions: [
+  action: [
     makeLockedLeg({ id: 'leg-1', keyIndex: 1, value: 100 }),
     makeLockedLeg({ id: 'leg-2', keyIndex: 2, value: 200 }),
   ],
-  orchestration: {
-    nodes: [
+  orchestration: [
       SYMBOL_NODE,
       makeLegScopeNode({ legId: 'leg-1', direction: 'long', instrumentRef: SYMBOL_NODE.id }),
       makeLegScopeNode({ legId: 'leg-2', direction: 'short', instrumentRef: SYMBOL_NODE.id }),
     ],
-    contracts: [],
-  },
+  orchestrationContracts: [],
 }
 
 /**
@@ -212,70 +213,62 @@ export const MULTI_LEG_CASE_A: SemanticState = {
 export const MULTI_LEG_CASE_B: SemanticState = {
   ...baseState(),
   isMultiLeg: true,
-  actions: [
+  action: [
     makeLockedLeg({ id: 'leg-1', keyIndex: 1, value: 100 }),
     makeOpenLeg({ id: 'leg-2', keyIndex: 2 }),
   ],
-  orchestration: {
-    nodes: [
+  orchestration: [
       SYMBOL_NODE,
       makeLegScopeNode({ legId: 'leg-1', direction: 'long', instrumentRef: SYMBOL_NODE.id }),
       makeLegScopeNode({ legId: 'leg-2', direction: 'short', instrumentRef: SYMBOL_NODE.id }),
     ],
-    contracts: [],
-  },
+  orchestrationContracts: [],
 }
 
 /** axis 异构：leg-A quote 100 USDT + leg-B ratio 0.1（10%）→ fixed_quote / fixed_pct 共存 */
 export const MULTI_LEG_CASE_HETERO_AXIS: SemanticState = {
   ...baseState(),
   isMultiLeg: true,
-  actions: [
+  action: [
     makeLockedLeg({ id: 'leg-1', keyIndex: 1, value: 100, unit: 'quote' }),
     makeLockedLeg({ id: 'leg-2', keyIndex: 2, value: 0.1, unit: 'ratio' }),
   ],
-  orchestration: {
-    nodes: [
+  orchestration: [
       SYMBOL_NODE,
       makeLegScopeNode({ legId: 'leg-1', direction: 'long', instrumentRef: SYMBOL_NODE.id }),
       makeLegScopeNode({ legId: 'leg-2', direction: 'short', instrumentRef: SYMBOL_NODE.id }),
     ],
-    contracts: [],
-  },
+  orchestrationContracts: [],
 }
 
 /** base_qty 哨兵：leg 用 base axis 0.001 BTC → fixed_base mode + asset='BTC'；禁止静默归 fixed_quote */
 export const MULTI_LEG_CASE_BASE_QTY: SemanticState = {
   ...baseState(),
   isMultiLeg: true,
-  actions: [
+  action: [
     makeLockedLeg({ id: 'leg-1', keyIndex: 1, value: 0.001, unit: 'base', asset: 'BTC' }),
     makeLockedLeg({ id: 'leg-2', keyIndex: 2, value: 0.002, unit: 'base', asset: 'BTC' }),
   ],
-  orchestration: {
-    nodes: [
+  orchestration: [
       SYMBOL_NODE,
       makeLegScopeNode({ legId: 'leg-1', direction: 'long', instrumentRef: SYMBOL_NODE.id }),
       makeLegScopeNode({ legId: 'leg-2', direction: 'short', instrumentRef: SYMBOL_NODE.id }),
     ],
-    contracts: [],
-  },
+  orchestrationContracts: [],
 }
 
 /** risk_budget 哨兵：leg 用 risk_budget axis → mapAnchorAxisToLegSizingMode 返 null，skip+warn */
 export const MULTI_LEG_CASE_RISK_BUDGET: SemanticState = {
   ...baseState(),
   isMultiLeg: true,
-  actions: [
+  action: [
     makeLockedLeg({ id: 'leg-1', keyIndex: 1, value: 50, unit: 'risk_budget' }),
     makeLockedLeg({ id: 'leg-2', keyIndex: 2, value: 200, unit: 'quote' }),
   ],
-  orchestration: {
-    nodes: [
+  orchestration: [
       SYMBOL_NODE,
       makeLegScopeNode({ legId: 'leg-1', direction: 'long', instrumentRef: SYMBOL_NODE.id }),
       makeLegScopeNode({ legId: 'leg-2', direction: 'short', instrumentRef: SYMBOL_NODE.id }),
     ],
-    contracts: [],
-  },
+  orchestrationContracts: [],
 }

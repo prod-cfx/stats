@@ -515,7 +515,7 @@ describe('codegenConversationService edit recovery', () => {
 
     const createInput = harness.sessionsRepo.createSession.mock.calls[0][0]
     expect(createInput.semanticState).toEqual(expect.objectContaining({
-      triggers: expect.arrayContaining([
+      trigger: expect.arrayContaining([
         expect.objectContaining({
           id: 'entry-ma',
           key: 'indicator.cross_over',
@@ -529,7 +529,7 @@ describe('codegenConversationService edit recovery', () => {
           params: expect.objectContaining({ indicator: 'sma', fastPeriod: 6, slowPeriod: 48 }),
         }),
       ]),
-      actions: expect.arrayContaining([
+      action: expect.arrayContaining([
         expect.objectContaining({ key: 'open_long' }),
         expect.objectContaining({ key: 'close_long' }),
       ]),

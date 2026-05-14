@@ -33,7 +33,7 @@ describe('codegenPublicationGenerationStage', () => {
   const buildLockedMaSemanticState = (): SemanticState => ({
     version: 1,
     families: ['single-leg'],
-    triggers: [
+    trigger: [
       {
         id: 'entry-ma',
         key: 'indicator.above',
@@ -63,7 +63,7 @@ describe('codegenPublicationGenerationStage', () => {
         openSlots: [],
       },
     ],
-    actions: [
+    action: [
       { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
       { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
     ],
@@ -92,6 +92,9 @@ describe('codegenPublicationGenerationStage', () => {
       status: 'locked',
       source: 'user_explicit',
     },
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     contextSlots: {
       exchange: {
         slotKey: 'exchange',
@@ -137,7 +140,7 @@ describe('codegenPublicationGenerationStage', () => {
   const buildLockedCloseOpenExpressionSemanticState = (): SemanticState => ({
     version: 1,
     families: ['single-leg'],
-    triggers: [
+    trigger: [
       {
         id: 'entry-close-gt-open',
         key: 'condition.expression',
@@ -194,7 +197,7 @@ describe('codegenPublicationGenerationStage', () => {
         openSlots: [],
       },
     ],
-    actions: [
+    action: [
       { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
       { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
     ],
@@ -206,6 +209,9 @@ describe('codegenPublicationGenerationStage', () => {
       status: 'locked',
       source: 'user_explicit',
     },
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     contextSlots: {
       exchange: {
         slotKey: 'exchange',
@@ -251,7 +257,7 @@ describe('codegenPublicationGenerationStage', () => {
   const buildLockedBollingerSemanticState = (): SemanticState => ({
     version: 1,
     families: ['single-leg'],
-    triggers: [
+    trigger: [
       {
         id: 'entry-bollinger-upper',
         key: 'bollinger.touch_upper',
@@ -283,7 +289,7 @@ describe('codegenPublicationGenerationStage', () => {
         openSlots: [],
       },
     ],
-    actions: [
+    action: [
       { id: 'action-open-short', key: 'open_short', status: 'locked', source: 'user_explicit' },
       { id: 'action-close-short', key: 'close_short', status: 'locked', source: 'user_explicit' },
     ],
@@ -295,6 +301,9 @@ describe('codegenPublicationGenerationStage', () => {
       status: 'locked',
       source: 'user_explicit',
     },
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     contextSlots: {
       exchange: {
         slotKey: 'exchange',
@@ -340,7 +349,7 @@ describe('codegenPublicationGenerationStage', () => {
   const buildLockedGridSemanticState = (): SemanticState => ({
     version: 1,
     families: ['grid.range_rebalance'],
-    triggers: [
+    trigger: [
       {
         id: 'grid-entry',
         key: 'grid.range_rebalance',
@@ -359,7 +368,7 @@ describe('codegenPublicationGenerationStage', () => {
         openSlots: [],
       },
     ],
-    actions: [],
+    action: [],
     risk: [],
     position: {
       mode: 'fixed_ratio',
@@ -368,6 +377,9 @@ describe('codegenPublicationGenerationStage', () => {
       status: 'locked',
       source: 'user_explicit',
     },
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     contextSlots: {
       exchange: {
         slotKey: 'exchange',
@@ -413,7 +425,7 @@ describe('codegenPublicationGenerationStage', () => {
   const buildPreviousCloseRiseSemanticState = (): SemanticState => ({
     version: 1,
     families: ['single-leg'],
-    triggers: [
+    trigger: [
       {
         id: 'entry-on-start',
         key: 'execution.on_start',
@@ -435,7 +447,7 @@ describe('codegenPublicationGenerationStage', () => {
         openSlots: [],
       },
     ],
-    actions: [
+    action: [
       { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
       { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
     ],
@@ -464,6 +476,9 @@ describe('codegenPublicationGenerationStage', () => {
       status: 'locked',
       source: 'user_explicit',
     },
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     contextSlots: {
       exchange: {
         slotKey: 'exchange',

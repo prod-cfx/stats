@@ -44,9 +44,12 @@ function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticSt
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: {
       exchange: null,
@@ -188,9 +191,9 @@ describe('orchestration program.dynamic_grid — golden corpus (Phase 5 S5 #984)
   describe('Section B: readiness 15 fail-closed', () => {
     const readiness = new SemanticContractReadinessService()
     function expectPhase0(node: SemanticOrchestrationNode): boolean {
-      const state = createSemanticState({ orchestration: { nodes: [regimeGateNode(), node], contracts: [] } })
+      const state = createSemanticState({ orchestration: [regimeGateNode(), node], orchestrationContracts: [] })
       const result = readiness.normalize(state, CURRENT_VERSION)
-      const next = result.state.orchestration?.nodes.find(n => n.id === node.id)
+      const next = result.state.orchestration.find(n => n.id === node.id)
       return next?.openSlots?.some(slot => slot.slotKey === 'orchestration.phase0.unsupported') ?? false
     }
 
@@ -240,9 +243,9 @@ describe('orchestration program.dynamic_grid — golden corpus (Phase 5 S5 #984)
       expect(expectPhase0(dynamicGridNode({ activeWhenRef: 'non-existent-gate' }))).toBe(true)
     })
     it('B.16 happy path → readiness ok（验证 15 fail-closed 不漏过）', () => {
-      const state = createSemanticState({ orchestration: { nodes: [regimeGateNode(), dynamicGridNode()], contracts: [] } })
+      const state = createSemanticState({ orchestration: [regimeGateNode(), dynamicGridNode()], orchestrationContracts: [] })
       const result = readiness.normalize(state, CURRENT_VERSION)
-      const next = result.state.orchestration?.nodes.find(n => n.id === 'orchestration-program-dynamic-grid-1')
+      const next = result.state.orchestration.find(n => n.id === 'orchestration-program-dynamic-grid-1')
       const blocker = next?.openSlots?.some(slot => slot.slotKey === 'orchestration.phase0.unsupported') ?? false
       expect(blocker).toBe(false)
     })
@@ -254,7 +257,7 @@ describe('orchestration program.dynamic_grid — golden corpus (Phase 5 S5 #984)
   describe('Section C: display blacklist', () => {
     it('C.1 display 文本不含黑名单 6 字面量', () => {
       const projection = new SemanticStateProjectionService()
-      const state = createSemanticState({ orchestration: { nodes: [regimeGateNode(), dynamicGridNode({
+      const state = createSemanticState({ orchestration: [regimeGateNode(), dynamicGridNode({
         params: {
           anchorLookbackBars: 50,
           anchorSide: 'high',
@@ -262,7 +265,7 @@ describe('orchestration program.dynamic_grid — golden corpus (Phase 5 S5 #984)
           step: { mode: 'pct', value: 0.5 },
           onDeactivate: 'cancel',
         },
-      })], contracts: [] } })
+      })], orchestrationContracts: [] })
       const display = projection.buildDisplayLogicGraph(state)
       const json = JSON.stringify(display)
       // 黑名单 6 字面量
@@ -282,7 +285,7 @@ describe('orchestration program.dynamic_grid — golden corpus (Phase 5 S5 #984)
     it('D.1 state → canonical → IR 形态稳定', () => {
       const builder = new CanonicalSpecBuilderService()
       const compiler = new CanonicalSpecV2IrCompilerService()
-      const state = createSemanticState({ orchestration: { nodes: [regimeGateNode(), dynamicGridNode()], contracts: [] } })
+      const state = createSemanticState({ orchestration: [regimeGateNode(), dynamicGridNode()], orchestrationContracts: [] })
       const spec = builder.buildFromSemanticState(state)
       expect(spec?.orchestration?.programs).toHaveLength(1)
       const program = spec!.orchestration!.programs![0]

@@ -69,7 +69,7 @@ export class SemanticSupportClassifierService {
     const unsupportedAtoms: SemanticSupportClassification['unsupportedAtoms'] = []
     const unknownAtoms: string[] = []
 
-    const triggers = state.triggers.map((trigger) => {
+    const triggers = state.trigger.map((trigger) => {
       if (trigger.status === 'superseded') {
         return { ...trigger }
       }
@@ -81,7 +81,7 @@ export class SemanticSupportClassifierService {
 
     const position = this.classifyPosition(state.position, unsupportedAtoms, unknownAtoms, strategyVersion)
 
-    const actions = state.actions.map((action) => {
+    const actions = state.action.map((action) => {
       if (action.status === 'superseded') {
         return { ...action }
       }
@@ -111,13 +111,11 @@ export class SemanticSupportClassifierService {
 
     const nextState: SemanticState = {
       ...state,
-      triggers,
-      actions,
+      trigger: triggers,
+      action: actions,
       risk,
       position,
-      ...(state.orchestration
-        ? { orchestration: { ...state.orchestration, nodes: orchestrationNodes } }
-        : {}),
+      orchestration: [...orchestrationNodes],
     }
 
     if (unknownAtoms.length > 0) {
@@ -174,7 +172,8 @@ export class SemanticSupportClassifierService {
       return { ...position }
     }
 
-    const constraints = position.constraints?.map((constraint) => {
+    // DEPRECATED Task 6: position.constraints moved to top-level positionConstraint[]
+    const constraints = (position as { constraints?: SemanticPositionConstraintState[] }).constraints?.map((constraint) => {
       if (constraint.status === 'superseded') {
         return { ...constraint }
       }
@@ -207,7 +206,7 @@ export class SemanticSupportClassifierService {
     state: SemanticState,
     unknownAtoms: string[],
   ): readonly SemanticOrchestrationNode[] {
-    const nodes = state.orchestration?.nodes ?? []
+    const nodes = state.orchestration ?? []
     if (!this.orchestrationRegistry || nodes.length === 0) {
       return nodes
     }
@@ -408,7 +407,8 @@ function withAddPositionConstraintOpenSlot(
 }
 
 function hasActiveAddPositionConstraint(position: SemanticPositionState | null): boolean {
-  return position?.constraints?.some(constraint =>
+  // DEPRECATED Task 6: position.constraints moved to top-level positionConstraint[]
+  return (position as { constraints?: SemanticPositionConstraintState[] } | null)?.constraints?.some(constraint =>
     constraint.status !== 'superseded'
     // eslint-disable-next-line atom-keys/no-atom-key-literal -- position.max_exposure_pct not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     && (constraint.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key || constraint.key === 'position.max_exposure_pct'),
@@ -513,12 +513,12 @@ function toSupportMetadata(resolved: ResolvedSemanticAtom): SemanticAtomSupportM
 
 function collectOpenSlots(state: SemanticState): SemanticSlotState[] {
   return [
-    ...state.triggers.flatMap(trigger => readNodeOpenSlots(trigger)),
-    ...state.actions.flatMap(action => readNodeOpenSlots(action)),
+    ...state.trigger.flatMap(trigger => readNodeOpenSlots(trigger)),
+    ...state.action.flatMap(action => readNodeOpenSlots(action)),
     ...state.risk.flatMap(risk => readNodeOpenSlots(risk)),
     ...readNodeOpenSlots(state.position),
-    ...(state.position?.constraints ?? []).flatMap(constraint => readNodeOpenSlots(constraint)),
-    ...(state.orchestration?.nodes ?? []).flatMap(node =>
+    ...(state.positionConstraint ?? []).flatMap(constraint => readNodeOpenSlots(constraint)),
+    ...(state.orchestration ?? []).flatMap(node =>
       node.status === 'superseded' ? [] : node.openSlots.filter(isOpenSlot),
     ),
     ...Object.values(state.contextSlots).filter(isOpenSlot),

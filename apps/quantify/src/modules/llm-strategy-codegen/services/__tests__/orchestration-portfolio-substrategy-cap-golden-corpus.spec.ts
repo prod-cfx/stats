@@ -33,9 +33,12 @@ function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticSt
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: {
       exchange: null,
@@ -120,7 +123,7 @@ describe('orchestration portfolioRisk.substrategy_exposure_cap — golden corpus
 
       const state = builder.build(patch)
       expect(state).not.toBeNull()
-      const stateNode = state!.orchestration?.nodes.find(n => n.key === 'portfolioRisk.substrategy_exposure_cap')
+      const stateNode = state!.orchestration.find(n => n.key === 'portfolioRisk.substrategy_exposure_cap')
       expect(stateNode).toBeDefined()
       expect(stateNode?.kind).toBe('portfolioRisk')
       expect(stateNode?.scope).toBe('subStrategy')
@@ -172,104 +175,88 @@ describe('orchestration portfolioRisk.substrategy_exposure_cap — golden corpus
 
     it('B.1 valid node + sibling scope.subStrategy locked + 新策略 → no phase0 unsupported slot', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [subStrategyScopeNode(), subStrategyCapNode()],
-          contracts: [],
-        },
+        orchestration: [subStrategyScopeNode(), subStrategyCapNode()],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.substrategy_exposure_cap')?.openSlots ?? []
       expect(slots).not.toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
 
     it('B.2 scope !== "subStrategy" → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [subStrategyScopeNode(), subStrategyCapNode({ scope: 'portfolio' as SemanticOrchestrationNode['scope'] })],
-          contracts: [],
-        },
+        orchestration: [subStrategyScopeNode(), subStrategyCapNode({ scope: 'portfolio' as SemanticOrchestrationNode['scope'] })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.substrategy_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
 
     it('B.3 invalid mode → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [subStrategyScopeNode(), subStrategyCapNode({ mode: 'unknown' as SemanticOrchestrationNode['mode'] })],
-          contracts: [],
-        },
+        orchestration: [subStrategyScopeNode(), subStrategyCapNode({ mode: 'unknown' as SemanticOrchestrationNode['mode'] })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.substrategy_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
 
     it('B.4 notionalCapPct=0 (≤0) → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [subStrategyScopeNode(), subStrategyCapNode({ notionalCapPct: 0 })],
-          contracts: [],
-        },
+        orchestration: [subStrategyScopeNode(), subStrategyCapNode({ notionalCapPct: 0 })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.substrategy_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
 
     it('B.5 notionalCapPct=150 (>100) → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [subStrategyScopeNode(), subStrategyCapNode({ notionalCapPct: 150 })],
-          contracts: [],
-        },
+        orchestration: [subStrategyScopeNode(), subStrategyCapNode({ notionalCapPct: 150 })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.substrategy_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
 
     it('B.6 invalid effectWhenTriggered (reduce_exposure not valid for subStrategy) → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [subStrategyScopeNode(), subStrategyCapNode({ effectWhenTriggered: 'reduce_exposure' })],
-          contracts: [],
-        },
+        orchestration: [subStrategyScopeNode(), subStrategyCapNode({ effectWhenTriggered: 'reduce_exposure' })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.substrategy_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
 
     it('B.7 boundSubStrategyScopeRef empty → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [subStrategyScopeNode(), subStrategyCapNode({ boundSubStrategyScopeRef: '' })],
-          contracts: [],
-        },
+        orchestration: [subStrategyScopeNode(), subStrategyCapNode({ boundSubStrategyScopeRef: '' })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.substrategy_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
 
     it('B.8 boundSubStrategyScopeRef not matching any sibling scope.subStrategy id → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [subStrategyScopeNode('different-id'), subStrategyCapNode({ boundSubStrategyScopeRef: 'nonexistent-scope-id' })],
-          contracts: [],
-        },
+        orchestration: [subStrategyScopeNode('different-id'), subStrategyCapNode({ boundSubStrategyScopeRef: 'nonexistent-scope-id' })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.substrategy_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
@@ -277,27 +264,23 @@ describe('orchestration portfolioRisk.substrategy_exposure_cap — golden corpus
     it('B.9 sibling scope.subStrategy exists but status=open (not locked) → phase0 unsupported', () => {
       const unlockedScope = { ...subStrategyScopeNode(), status: 'open' as const }
       const state = createSemanticState({
-        orchestration: {
-          nodes: [unlockedScope, subStrategyCapNode()],
-          contracts: [],
-        },
+        orchestration: [unlockedScope, subStrategyCapNode()],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.substrategy_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
 
     it('B.10 老策略 (deployedAtSemanticVersion=null) → phase0 unsupported（version-gate fail-closed）', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [subStrategyScopeNode(), subStrategyCapNode()],
-          contracts: [],
-        },
+        orchestration: [subStrategyScopeNode(), subStrategyCapNode()],
+        orchestrationContracts: [],
       })
       const legacy: StrategyVersionInfo = { deployedAtSemanticVersion: null }
       const result = readiness().normalize(state, legacy)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.substrategy_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
@@ -311,10 +294,8 @@ describe('orchestration portfolioRisk.substrategy_exposure_cap — golden corpus
 
     it('C.1 supported substrategy_exposure_cap renders 中文 label without leaking internal keys', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [subStrategyScopeNode(), subStrategyCapNode()],
-          contracts: [],
-        },
+        orchestration: [subStrategyScopeNode(), subStrategyCapNode()],
+        orchestrationContracts: [],
       })
       const graph = projection.buildDisplayLogicGraph(state)
       const orchestrationBlocks = graph.blocks.filter(b => b.type === 'ORCHESTRATION')
@@ -341,13 +322,11 @@ describe('orchestration portfolioRisk.substrategy_exposure_cap — golden corpus
 
     it('C.3 observe mode renders distinct token from enforce mode (no "enforce" text leak)', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [
+        orchestration: [
             subStrategyScopeNode(),
             subStrategyCapNode({ mode: 'observe', params: { notionalCapPct: 40, mode: 'observe' } }),
           ],
-          contracts: [],
-        },
+        orchestrationContracts: [],
       })
       const graph = projection.buildDisplayLogicGraph(state)
       const flat = graph.blocks.flatMap(b => b.items.map(i => i.text)).join(' ')
@@ -395,10 +374,8 @@ describe('orchestration portfolioRisk.substrategy_exposure_cap — golden corpus
           source: 'user_explicit',
           openSlots: [],
         },
-        orchestration: {
-          nodes: [subStrategyScopeNode(), subStrategyCapNode(nodeOverrides)],
-          contracts: [],
-        },
+        orchestration: [subStrategyScopeNode(), subStrategyCapNode(nodeOverrides)],
+        orchestrationContracts: [],
       })
 
       const spec = builder.buildFromSemanticState(state)
@@ -546,7 +523,7 @@ describe('orchestration portfolioRisk.substrategy_exposure_cap — golden corpus
           source: 'user_explicit',
           openSlots: [],
         },
-        orchestration: { nodes: [drawdownNode], contracts: [] },
+        orchestration: [drawdownNode], orchestrationContracts: [],
       })
 
       const spec = builder.buildFromSemanticState(state)

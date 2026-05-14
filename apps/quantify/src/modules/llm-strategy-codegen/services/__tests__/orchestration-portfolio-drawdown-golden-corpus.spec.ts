@@ -32,9 +32,12 @@ function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticSt
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: {
       exchange: null,
@@ -101,7 +104,7 @@ describe('orchestration portfolioRisk.drawdown_block — golden corpus (Phase 5 
 
       const state = builder.build(patch)
       expect(state).not.toBeNull()
-      const stateNode = state!.orchestration?.nodes[0]
+      const stateNode = state!.orchestration[0]
       expect(stateNode).toBeDefined()
       expect(stateNode?.kind).toBe('portfolioRisk')
       expect(stateNode?.key).toBe('portfolioRisk.drawdown_block')
@@ -120,10 +123,10 @@ describe('orchestration portfolioRisk.drawdown_block — golden corpus (Phase 5 
 
     it('B.1 portfolioRisk.drawdown_block + enforce + thresholdPct=10 + scope=portfolio + 新策略 → 不注入 phase0 slot', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [portfolioDrawdownNode()], contracts: [] },
+        orchestration: [portfolioDrawdownNode()], orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const slots = result.state.orchestration[0].openSlots ?? []
       expect(slots).not.toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
       }))
@@ -131,13 +134,11 @@ describe('orchestration portfolioRisk.drawdown_block — golden corpus (Phase 5 
 
     it('B.2 missing thresholdPct → registry openSlot orchestration.portfolio_drawdown.threshold_pct', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [portfolioDrawdownNode({ thresholdPct: undefined })],
-          contracts: [],
-        },
+        orchestration: [portfolioDrawdownNode({ thresholdPct: undefined })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const slots = result.state.orchestration[0].openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.portfolio_drawdown.threshold_pct',
       }))
@@ -148,13 +149,11 @@ describe('orchestration portfolioRisk.drawdown_block — golden corpus (Phase 5 
 
     it('B.3 unknown key (kind=portfolioRisk + key=portfolioRisk.unknown) → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [portfolioDrawdownNode({ key: 'portfolioRisk.unknown' })],
-          contracts: [],
-        },
+        orchestration: [portfolioDrawdownNode({ key: 'portfolioRisk.unknown' })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const slots = result.state.orchestration[0].openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
       }))
@@ -162,15 +161,13 @@ describe('orchestration portfolioRisk.drawdown_block — golden corpus (Phase 5 
 
     it('B.4 scope !== portfolio → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [portfolioDrawdownNode({
+        orchestration: [portfolioDrawdownNode({
             scope: 'symbol' as unknown as SemanticOrchestrationNode['scope'],
           })],
-          contracts: [],
-        },
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const slots = result.state.orchestration[0].openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
       }))
@@ -178,15 +175,13 @@ describe('orchestration portfolioRisk.drawdown_block — golden corpus (Phase 5 
 
     it('B.5 invalid mode → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [portfolioDrawdownNode({
+        orchestration: [portfolioDrawdownNode({
             mode: 'unknown' as unknown as SemanticOrchestrationNode['mode'],
           })],
-          contracts: [],
-        },
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const slots = result.state.orchestration[0].openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
       }))
@@ -194,13 +189,11 @@ describe('orchestration portfolioRisk.drawdown_block — golden corpus (Phase 5 
 
     it('B.6a thresholdPct=0 (≤0) → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [portfolioDrawdownNode({ thresholdPct: 0 })],
-          contracts: [],
-        },
+        orchestration: [portfolioDrawdownNode({ thresholdPct: 0 })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const slots = result.state.orchestration[0].openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
       }))
@@ -208,13 +201,11 @@ describe('orchestration portfolioRisk.drawdown_block — golden corpus (Phase 5 
 
     it('B.6b thresholdPct=150 (>100) → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [portfolioDrawdownNode({ thresholdPct: 150 })],
-          contracts: [],
-        },
+        orchestration: [portfolioDrawdownNode({ thresholdPct: 150 })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const slots = result.state.orchestration[0].openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
       }))
@@ -222,11 +213,11 @@ describe('orchestration portfolioRisk.drawdown_block — golden corpus (Phase 5 
 
     it('B.7 老策略 (deployedAtSemanticVersion=null) → phase0 unsupported（双 fail-closed）', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [portfolioDrawdownNode()], contracts: [] },
+        orchestration: [portfolioDrawdownNode()], orchestrationContracts: [],
       })
       const legacy: StrategyVersionInfo = { deployedAtSemanticVersion: null }
       const result = readiness().normalize(state, legacy)
-      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const slots = result.state.orchestration[0].openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
       }))
@@ -241,10 +232,8 @@ describe('orchestration portfolioRisk.drawdown_block — golden corpus (Phase 5 
 
     it('C.1 supported portfolioRisk.drawdown_block renders 中文 label without leaking internal keys', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [portfolioDrawdownNode()],
-          contracts: [],
-        },
+        orchestration: [portfolioDrawdownNode()],
+        orchestrationContracts: [],
       })
 
       const graph = projection.buildDisplayLogicGraph(state)
@@ -314,10 +303,8 @@ describe('orchestration portfolioRisk.drawdown_block — golden corpus (Phase 5 
           source: 'user_explicit',
           openSlots: [],
         },
-        orchestration: {
-          nodes: [portfolioDrawdownNode(nodeOverrides)],
-          contracts: [],
-        },
+        orchestration: [portfolioDrawdownNode(nodeOverrides)],
+        orchestrationContracts: [],
       })
 
       const spec = builder.buildFromSemanticState(state)

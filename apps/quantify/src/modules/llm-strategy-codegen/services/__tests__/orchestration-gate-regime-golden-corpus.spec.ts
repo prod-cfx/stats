@@ -32,9 +32,12 @@ function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticSt
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: {
       exchange: null,
@@ -98,7 +101,7 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
 
       const state = builder.build(patch)
       expect(state).not.toBeNull()
-      const stateNode = state!.orchestration?.nodes[0]
+      const stateNode = state!.orchestration[0]
       expect(stateNode).toBeDefined()
       expect(stateNode?.kind).toBe('gate')
       expect(stateNode?.key).toBe('gate.regime')
@@ -115,10 +118,10 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
 
     it('B.1 gate.regime + activeWhen valid + 新策略 → 不注入 phase0 slot', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode()], contracts: [] },
+        orchestration: [regimeGateNode()], orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const slots = result.state.orchestration[0].openSlots ?? []
       expect(slots).not.toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
       }))
@@ -126,10 +129,10 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
 
     it('B.2 gate.regime missing activeWhen → registry-driven active_when open slot', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode({ activeWhen: undefined })], contracts: [] },
+        orchestration: [regimeGateNode({ activeWhen: undefined })], orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const slots = result.state.orchestration[0].openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.gate.regime.active_when',
       }))
@@ -140,13 +143,11 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
 
     it('B.3 kind=gate + key=未知 → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [regimeGateNode({ key: 'unknown_gate_atom' })],
-          contracts: [],
-        },
+        orchestration: [regimeGateNode({ key: 'unknown_gate_atom' })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const slots = result.state.orchestration[0].openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
       }))
@@ -154,13 +155,11 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
 
     it('B.4 gate.regime + target.phase=exit → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [regimeGateNode({ target: { phase: 'exit' as 'entry', sideScope: 'long' } })],
-          contracts: [],
-        },
+        orchestration: [regimeGateNode({ target: { phase: 'exit' as 'entry', sideScope: 'long' } })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const slots = result.state.orchestration[0].openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
       }))
@@ -168,15 +167,13 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
 
     it('B.5 gate.regime + activeWhen 不是表达式对象 → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [regimeGateNode({
+        orchestration: [regimeGateNode({
             activeWhen: 'not-an-expression' as unknown as SemanticOrchestrationNode['activeWhen'],
           })],
-          contracts: [],
-        },
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const slots = result.state.orchestration[0].openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
       }))
@@ -184,11 +181,11 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
 
     it('B.6 gate.regime valid + 老策略 (deployedAtSemanticVersion=null) → 双 fail-closed phase0', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode()], contracts: [] },
+        orchestration: [regimeGateNode()], orchestrationContracts: [],
       })
       const legacy: StrategyVersionInfo = { deployedAtSemanticVersion: null }
       const result = readiness().normalize(state, legacy)
-      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
+      const slots = result.state.orchestration[0].openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
       }))
@@ -203,8 +200,7 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
 
     it('C.1 supported gate.regime renders human label without internal keys', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [{
+        orchestration: [{
             id: 'orchestration-gate-regime-1',
             kind: 'gate',
             key: 'gate.regime',
@@ -214,8 +210,7 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
             openSlots: [],
             contracts: [],
           }],
-          contracts: [],
-        },
+        orchestrationContracts: [],
       })
 
       const graph = projection.buildDisplayLogicGraph(state)
@@ -281,27 +276,8 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
           source: 'user_explicit',
           openSlots: [],
         },
-        orchestration: {
-          nodes: [{
-            id: 'gate-regime-long-1',
-            kind: 'gate',
-            key: 'gate.regime',
-            status: 'locked',
-            source: 'user_explicit',
-            openSlots: [],
-            contracts: [],
-            params: {},
-            target: { phase: 'entry', sideScope: 'long' },
-            activeWhen: {
-              kind: 'predicate',
-              op: 'GT',
-              left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
-              right: { kind: 'indicator', name: 'ema', params: { length: 50 } },
-            },
-            effectWhenFalse: 'block_new_entries',
-          }],
-          contracts: [],
-        },
+        orchestration: [regimeGateNode({ id: 'gate-regime-long-1' })],
+        orchestrationContracts: [],
       })
 
       const spec = builder.buildFromSemanticState(state)

@@ -15,21 +15,21 @@ export class SemanticMissingPlaceholderReconcilerService {
       return state
     }
 
-    const triggers = state.triggers.filter((trigger) => {
+    const triggers = state.trigger.filter((trigger) => {
       if (trigger.status !== 'open') return true
       if (trigger.key === MISSING_ENTRY_TRIGGER_KEY) return !hasRealCompleteEntryTrigger
       if (trigger.key === MISSING_EXIT_TRIGGER_KEY) return !hasRealCompleteExitTrigger
       return true
     })
 
-    return triggers.length === state.triggers.length ? state : { ...state, triggers }
+    return triggers.length === state.trigger.length ? state : { ...state, trigger: triggers }
   }
 
   private hasRealCompleteTrigger(
     state: SemanticState,
     phase: Extract<SemanticTriggerState['phase'], 'entry' | 'exit'>,
   ): boolean {
-    return state.triggers.some(trigger =>
+    return state.trigger.some(trigger =>
       trigger.phase === phase
       && !MISSING_TRIGGER_KEYS.has(trigger.key)
       && trigger.status !== 'superseded'

@@ -203,8 +203,8 @@ describe('semanticAtomRegistryService', () => {
 
     const state = new SemanticSeedStateBuilderService().build(replacement?.patch)
 
-    expect(state?.triggers).toHaveLength(2)
-    expect(state?.triggers).toEqual([
+    expect(state?.trigger).toHaveLength(2)
+    expect(state?.trigger).toEqual([
       expect.objectContaining({
         key: 'indicator.cross_over',
         contracts: expect.any(Array),

@@ -1,3 +1,5 @@
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+import type { AtomContractBucket } from '../atom-contracts/atom-contract-types'
 import { formatAtomCatalogForPrompt, getPhaseEnum, getRegisteredAtomKeys } from './atom-catalog-projection'
 
 /**
@@ -55,39 +57,33 @@ const JSON_SHAPE_BLOCK: readonly string[] = [
   '  "assistantPrompt": string,',
   '  "semanticPatch"?: {',
   '    "contextSlots"?: object,',
-  '    "triggers"?: object[],',
-  '    "actions"?: object[],',
-  '    "risk"?: object[],',
-  '    "position"?: object',
+  '    "atoms"?: [{ "key": string, "phase"?: "entry" | "exit" | "gate", "params": object }],',
+  '    "position"?: { "mode"?: string, "sizing"?: object }',
   '  }',
   '}',
 ]
 
 /**
- * In-context examples — 每桶 1 条，演示 LLM 应该用的 `{key, phase, params}` 形态。
+ * In-context 示例派生自 ATOM_CONTRACT_REGISTRY（issue #1364 AC-2）。
  *
- * 这些 atom key 必须存在于 ATOM_CONTRACT_REGISTRY（由对应 spec 守门，防止 atom 重命名
- * 静默退化）。共 5 个 key：indicator.cross_over / action.open_long /
- * risk.partial_take_profit / portfolioRisk.drawdown_block / position.pyramiding_limit。
+ * 旧版 5 段硬编码（trigger/action/risk/orchestration/positionConstraint 各 1 例）
+ * 由本函数动态选取每桶第 1 个 atom 作为示例，避免 atom 重命名后 in-context 示例
+ * 静默退化；不再单独导出 IN_CONTEXT_EXAMPLE_ATOM_KEYS（反向不变量由 REGISTRY 守门）。
  */
-const IN_CONTEXT_EXAMPLES: readonly string[] = [
-  'In-context 示例（每桶 1 条，演示 key/phase/params 形态）：',
-  '',
-  '示例 1（trigger）— 用户输入：“EMA20 上穿 EMA50 开多”',
-  '  triggers: [{ "key": "indicator.cross_over", "phase": "entry", "params": { "indicator": "ema", "fastPeriod": 20, "slowPeriod": 50 } }]',
-  '',
-  '示例 2（action）— 用户输入：“开多市价”',
-  '  actions: [{ "key": "action.open_long", "phase": "entry", "params": { "orderType": "market" } }]',
-  '',
-  '示例 3（risk）— 用户输入：“达到 3% 利润分批止盈一半”',
-  '  risk: [{ "key": "risk.partial_take_profit", "phase": "exit", "params": { "thresholdPct": 3, "reduceRatio": 0.5 } }]',
-  '',
-  '示例 4（orchestration / portfolioRisk）— 用户输入：“账户回撤超过 10% 暂停开新仓”',
-  '  triggers: [{ "key": "portfolioRisk.drawdown_block", "phase": "gate", "params": { "drawdownPct": 10 } }]',
-  '',
-  '示例 5（positionConstraint）— 用户输入：“同方向加仓不超过 5 次”',
-  '  position: { "constraints": [{ "key": "position.pyramiding_limit", "params": { "maxLayers": 5 } }] }',
-]
+function buildInContextExamples(): readonly string[] {
+  const buckets: readonly AtomContractBucket[] = ['trigger', 'action', 'risk', 'orchestration', 'positionConstraint']
+  const out: string[] = ['In-context 示例（每桶 1 条，演示 atoms[] 元素形态）：', '']
+  for (const b of buckets) {
+    const sample = Object.values(ATOM_CONTRACT_REGISTRY).find(c => c.bucket === b)
+    if (!sample) continue
+    const paramKeys = Object.keys(sample.surface?.paramSlots ?? {}).slice(0, 2)
+    const paramsExample = Object.fromEntries(paramKeys.map(k => [k, null]))
+    out.push(`示例（${b}）— key=${sample.key}`)
+    out.push(`  atoms: [{ "key": "${sample.key}", "phase": "entry", "params": ${JSON.stringify(paramsExample)} }]`)
+    out.push('')
+  }
+  return out
+}
 
 const TERMINAL_RULES: readonly string[] = [
   '规则：',
@@ -104,15 +100,15 @@ function formatAtomCatalogSection(locale: 'zh' | 'en'): string[] {
   const registeredKeys = getRegisteredAtomKeys()
   const phaseEnum = getPhaseEnum()
   return [
-    `semanticPatch 严格 schema（issue #1345）：triggers[] / actions[] / risk[] 元素必填 { key, phase, params }；phase ∈ [${phaseEnum.join(', ')}]（不含 'risk'，risk 子句对应 risk[] 桶）。`,
-    `triggers[].key / actions[].key / risk[].key 必须从下列 ${registeredKeys.length} 个原子枚举中选（禁止自由文本或自创 atom）：`,
+    `semanticPatch 严格 schema（issue #1364 AC-2）：atoms[] 元素必填 { key, phase, params }；phase ∈ [${phaseEnum.join(', ')}]。`,
+    `atoms[].key 必须从下列 ${registeredKeys.length} 个原子枚举中选（禁止自由文本或自创 atom）：`,
     '',
     formatAtomCatalogForPrompt(locale),
     '',
     'semanticPatch 字段规范：',
-    '- triggers[]/actions[]/risk[]：每条必填 `key`（上表 atom key 枚举）+ `phase`（entry/exit/gate）+ `params`（object，字段名严格按上表 paramFields 填，禁止造新字段；缺失值留空即可，服务端会按 paramSlots 派生 openSlots 驱动澄清）',
-    '- contextSlots：`symbol` / `timeframe` / `exchange` / `marketType` 等必须是结构化对象 { value, source } 而非裸字符串（source ∈ user_explicit / inferred）',
-    '- position：`mode` / `sizing` / `constraints` 等字段按 atom 桶语义填，position 桶 atom 通过 positionConstraints 数组挂入',
+    '- atoms[]：每条 { key（上表枚举）, phase（entry/exit/gate，server 端按 contract.phaseResolver 强制覆写）, params（按上表 paramFields 填，禁止造新字段；缺失服务端派生 openSlots 驱动澄清）}',
+    '- contextSlots：symbol/timeframe/exchange/marketType 等必须是 { value, source }（source ∈ user_explicit/inferred）',
+    '- position：仅 { mode?, sizing? } 标量字段；position atom（dca_schedule/pyramiding_limit）走 atoms[]',
   ]
 }
 
@@ -123,7 +119,7 @@ export function buildConversationPlannerSystemPrompt(locale: 'zh' | 'en' = 'zh')
     '',
     ...formatAtomCatalogSection(locale),
     '',
-    ...IN_CONTEXT_EXAMPLES,
+    ...buildInContextExamples(),
     '',
     ...TERMINAL_RULES,
   ]
@@ -133,11 +129,3 @@ export function buildConversationPlannerSystemPrompt(locale: 'zh' | 'en' = 'zh')
   return lines.join('\n')
 }
 
-/** Issue #1345 PR1 review m3 follow-up：用于 spec 反向断言示例中 5 个 atom key ∈ REGISTRY */
-export const IN_CONTEXT_EXAMPLE_ATOM_KEYS = [
-  'indicator.cross_over',
-  'action.open_long',
-  'risk.partial_take_profit',
-  'portfolioRisk.drawdown_block',
-  'position.pyramiding_limit',
-] as const

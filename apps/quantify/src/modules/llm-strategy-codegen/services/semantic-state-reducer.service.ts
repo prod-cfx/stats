@@ -44,12 +44,12 @@ export class SemanticStateReducerService {
   }): SemanticState {
     const nextState: SemanticState = {
       ...input.currentState,
-      triggers: input.currentState.triggers.map(trigger => ({
+      trigger: input.currentState.trigger.map(trigger => ({
         ...trigger,
         params: { ...trigger.params },
         openSlots: trigger.openSlots.map(slot => ({ ...slot })),
       })),
-      actions: input.currentState.actions.map(action => ({
+      action: input.currentState.action.map(action => ({
         ...action,
         ...(action.params ? { params: { ...action.params } } : {}),
         openSlots: action.openSlots?.map(slot => ({ ...slot })),
@@ -63,11 +63,9 @@ export class SemanticStateReducerService {
         ? {
             ...input.currentState.position,
             openSlots: input.currentState.position.openSlots?.map(slot => ({ ...slot })),
-            ...(input.currentState.position.constraints
-              ? { constraints: structuredClone(input.currentState.position.constraints) }
-              : {}),
           }
         : null,
+      positionConstraint: structuredClone(input.currentState.positionConstraint ?? []),
       contextSlots: {
         exchange: input.currentState.contextSlots.exchange ? { ...input.currentState.contextSlots.exchange } : null,
         symbol: input.currentState.contextSlots.symbol ? { ...input.currentState.contextSlots.symbol } : null,
@@ -78,7 +76,7 @@ export class SemanticStateReducerService {
     }
 
     const answerText = input.answer.trim()
-    for (const trigger of nextState.triggers) {
+    for (const trigger of nextState.trigger) {
       const slot = trigger.openSlots.find((item) => {
         if (input.targetSlotId) {
           return buildSemanticSlotId(item) === input.targetSlotId
@@ -127,7 +125,7 @@ export class SemanticStateReducerService {
       break
     }
 
-    for (const action of nextState.actions) {
+    for (const action of nextState.action) {
       const slot = action.openSlots?.find((item) => {
         if (input.targetSlotId) {
           return buildSemanticSlotId(item) === input.targetSlotId
@@ -199,7 +197,7 @@ export class SemanticStateReducerService {
       }
     }
 
-    for (const constraint of nextState.position?.constraints ?? []) {
+    for (const constraint of nextState.positionConstraint ?? []) {
       const slot = constraint.openSlots.find((item) => {
         if (input.targetSlotId) {
           return buildSemanticSlotId(item) === input.targetSlotId
@@ -426,11 +424,10 @@ export class SemanticStateReducerService {
         status: 'locked',
         source: 'user_explicit',
         openSlots: [],
-        constraints: [],
       }
     }
 
-    const constraints = state.position.constraints ?? []
+    const constraints = state.positionConstraint ?? []
     const existing = constraints.find(constraint => constraint.key === parsed.key)
     const evidence: SemanticEvidence = {
       text: answerText,
@@ -456,7 +453,7 @@ export class SemanticStateReducerService {
       })
     }
 
-    state.position.constraints = constraints
+    state.positionConstraint = constraints
   }
 
   private parseAddPositionConstraintAnswer(
@@ -972,7 +969,7 @@ export class SemanticStateReducerService {
     answerText: string,
     messageIndex: number | undefined,
   ): void {
-    for (const trigger of state.triggers) {
+    for (const trigger of state.trigger) {
       for (const slot of trigger.openSlots) {
         if (
           slot.status !== 'open'

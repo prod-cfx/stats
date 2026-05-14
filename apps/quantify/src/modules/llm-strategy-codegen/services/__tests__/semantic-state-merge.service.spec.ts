@@ -8,8 +8,8 @@ describe('SemanticStateMergeService', () => {
       persisted: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [{
+        trigger: [],
+        action: [{
           id: 'action-open-long-old',
           key: 'open_long',
           status: 'open',
@@ -25,6 +25,9 @@ describe('SemanticStateMergeService', () => {
         }],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:00:00.000Z',
@@ -32,17 +35,20 @@ describe('SemanticStateMergeService', () => {
       derived: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [{ id: 'action-open-long-new', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+        trigger: [],
+        action: [{ id: 'action-open-long-new', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:01:00.000Z',
       },
     })
 
-    expect(merged.actions[0]).toEqual(expect.objectContaining({
+    expect(merged.action[0]).toEqual(expect.objectContaining({
       id: 'action-open-long-old',
       key: 'open_long',
       openSlots: [expect.objectContaining({ slotKey: 'action.order_type' })],
@@ -54,7 +60,7 @@ describe('SemanticStateMergeService', () => {
       persisted: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [
+        trigger: [
           {
             id: 'grid-entry',
             key: 'grid.range_rebalance',
@@ -90,7 +96,7 @@ describe('SemanticStateMergeService', () => {
             }],
           },
         ],
-        actions: [
+        action: [
           {
             id: 'open-grid',
             key: 'open_long',
@@ -174,6 +180,9 @@ describe('SemanticStateMergeService', () => {
             openSlots: [],
           }],
         },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-05-05T10:00:00.000Z',
@@ -181,7 +190,7 @@ describe('SemanticStateMergeService', () => {
       derived: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [{
+        trigger: [{
           id: 'derived-grid-entry',
           key: 'grid.range_rebalance',
           phase: 'entry',
@@ -192,7 +201,7 @@ describe('SemanticStateMergeService', () => {
           openSlots: [],
           contracts: [],
         }],
-        actions: [{
+        action: [{
           id: 'derived-open-grid',
           key: 'open_long',
           status: 'locked',
@@ -219,13 +228,16 @@ describe('SemanticStateMergeService', () => {
           openSlots: [],
           contracts: [],
         },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-05-05T10:01:00.000Z',
       },
     })
 
-    expect(merged.triggers[0]?.contracts).toEqual(expect.arrayContaining([
+    expect(merged.trigger[0]?.contracts).toEqual(expect.arrayContaining([
       expect.objectContaining({
         capabilities: expect.arrayContaining([expect.objectContaining({
           domain: 'price',
@@ -234,7 +246,7 @@ describe('SemanticStateMergeService', () => {
         })]),
       }),
     ]))
-    expect(merged.actions[0]?.contracts).toEqual(expect.arrayContaining([
+    expect(merged.action[0]?.contracts).toEqual(expect.arrayContaining([
       expect.objectContaining({
         capabilities: expect.arrayContaining([
           expect.objectContaining({
@@ -276,8 +288,8 @@ describe('SemanticStateMergeService', () => {
       persisted: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [{
           id: 'risk-boundary-stop',
           key: 'risk.boundary_guard',
@@ -300,6 +312,9 @@ describe('SemanticStateMergeService', () => {
           }],
         }],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-05-05T10:00:00.000Z',
@@ -307,8 +322,8 @@ describe('SemanticStateMergeService', () => {
       derived: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [{
           id: 'derived-risk-boundary-stop',
           key: 'risk.boundary_guard',
@@ -339,6 +354,9 @@ describe('SemanticStateMergeService', () => {
           }],
         }],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-05-05T10:01:00.000Z',
@@ -365,7 +383,7 @@ describe('SemanticStateMergeService', () => {
       persisted: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [
+        trigger: [
           {
             id: 'grid-entry',
             key: 'grid.range_rebalance',
@@ -383,9 +401,12 @@ describe('SemanticStateMergeService', () => {
             openSlots: [],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:00:00.000Z',
@@ -393,10 +414,13 @@ describe('SemanticStateMergeService', () => {
       derived: {
         version: 1,
         families: [],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: {
           exchange: null,
           symbol: null,
@@ -416,7 +440,7 @@ describe('SemanticStateMergeService', () => {
       },
     })
 
-    expect(merged.triggers).toEqual(expect.arrayContaining([
+    expect(merged.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'grid.range_rebalance', status: 'locked' }),
     ]))
     expect(merged.contextSlots.timeframe?.value).toBe('15m')
@@ -427,7 +451,7 @@ describe('SemanticStateMergeService', () => {
       persisted: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'entry-ma',
             key: 'indicator.above',
@@ -458,9 +482,12 @@ describe('SemanticStateMergeService', () => {
             ],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:00:00.000Z',
@@ -468,7 +495,7 @@ describe('SemanticStateMergeService', () => {
       derived: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'entry-1',
             key: 'indicator.above',
@@ -501,18 +528,21 @@ describe('SemanticStateMergeService', () => {
             ],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:01:00.000Z',
       },
     })
 
-    expect(merged.triggers[0]?.params['reference.period']).toBe(50)
-    expect(merged.triggers[0]?.status).toBe('open')
-    expect(merged.triggers[0]?.openSlots).toEqual(expect.arrayContaining([
+    expect(merged.trigger[0]?.params['reference.period']).toBe(50)
+    expect(merged.trigger[0]?.status).toBe('open')
+    expect(merged.trigger[0]?.openSlots).toEqual(expect.arrayContaining([
       expect.objectContaining({
         slotKey: 'reference.period.entry',
         status: 'locked',
@@ -530,7 +560,7 @@ describe('SemanticStateMergeService', () => {
       persisted: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'entry-ma',
             key: 'indicator.above',
@@ -546,9 +576,12 @@ describe('SemanticStateMergeService', () => {
             openSlots: [],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: {
           exchange: {
             slotKey: 'exchange',
@@ -593,7 +626,7 @@ describe('SemanticStateMergeService', () => {
       derived: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'derived-entry-ma',
             key: 'indicator.above',
@@ -616,9 +649,12 @@ describe('SemanticStateMergeService', () => {
             ],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: {
           exchange: {
             slotKey: 'exchange',
@@ -659,7 +695,7 @@ describe('SemanticStateMergeService', () => {
       },
     })
 
-    expect(merged.triggers[0]).toEqual(expect.objectContaining({
+    expect(merged.trigger[0]).toEqual(expect.objectContaining({
       id: 'entry-ma',
       status: 'locked',
       source: 'user_explicit',
@@ -693,7 +729,7 @@ describe('SemanticStateMergeService', () => {
       persisted: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [
+        trigger: [
           {
             id: 'grid-entry',
             key: 'grid.range_rebalance',
@@ -732,9 +768,12 @@ describe('SemanticStateMergeService', () => {
             }],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-05-04T10:00:00.000Z',
@@ -742,7 +781,7 @@ describe('SemanticStateMergeService', () => {
       derived: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [
+        trigger: [
           {
             id: 'derived-grid-entry',
             key: 'grid.range_rebalance',
@@ -765,17 +804,20 @@ describe('SemanticStateMergeService', () => {
             }],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-05-04T10:01:00.000Z',
       },
     })
 
-    expect(merged.triggers).toHaveLength(1)
-    expect(merged.triggers[0]).toEqual(expect.objectContaining({
+    expect(merged.trigger).toHaveLength(1)
+    expect(merged.trigger[0]).toEqual(expect.objectContaining({
       id: 'grid-entry',
       status: 'locked',
       openSlots: [],
@@ -787,7 +829,7 @@ describe('SemanticStateMergeService', () => {
       persisted: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [
+        trigger: [
           {
             id: 'grid-entry',
             key: 'grid.range_rebalance',
@@ -805,9 +847,12 @@ describe('SemanticStateMergeService', () => {
             openSlots: [],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:00:00.000Z',
@@ -815,7 +860,7 @@ describe('SemanticStateMergeService', () => {
       derived: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [
+        trigger: [
           {
             id: 'derived-grid-entry',
             key: 'grid.range_rebalance',
@@ -832,17 +877,20 @@ describe('SemanticStateMergeService', () => {
             openSlots: [],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:01:00.000Z',
       },
     })
 
-    expect(merged.triggers).toHaveLength(1)
-    expect(merged.triggers[0]).toEqual(expect.objectContaining({
+    expect(merged.trigger).toHaveLength(1)
+    expect(merged.trigger[0]).toEqual(expect.objectContaining({
       id: 'grid-entry',
       key: 'grid.range_rebalance',
       sideScope: 'both',
@@ -855,7 +903,7 @@ describe('SemanticStateMergeService', () => {
       persisted: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'entry-upper-touch',
             key: 'bollinger.touch_upper',
@@ -872,9 +920,12 @@ describe('SemanticStateMergeService', () => {
             openSlots: [],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:00:00.000Z',
@@ -882,7 +933,7 @@ describe('SemanticStateMergeService', () => {
       derived: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'entry-upper-close',
             key: 'bollinger.touch_upper',
@@ -899,17 +950,20 @@ describe('SemanticStateMergeService', () => {
             openSlots: [],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:01:00.000Z',
       },
     })
 
-    expect(merged.triggers).toHaveLength(1)
-    expect(merged.triggers[0]).toEqual(expect.objectContaining({
+    expect(merged.trigger).toHaveLength(1)
+    expect(merged.trigger[0]).toEqual(expect.objectContaining({
       key: 'bollinger.touch_upper',
       phase: 'entry',
       sideScope: 'short',
@@ -924,7 +978,7 @@ describe('SemanticStateMergeService', () => {
       persisted: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'seed-entry-upper-boundary',
             key: 'price.detect.indicator_boundary',
@@ -954,9 +1008,12 @@ describe('SemanticStateMergeService', () => {
             openSlots: [],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-05-06T10:00:00.000Z',
@@ -964,7 +1021,7 @@ describe('SemanticStateMergeService', () => {
       derived: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'planner-entry-upper-touch',
             key: 'bollinger.touch_upper',
@@ -996,17 +1053,20 @@ describe('SemanticStateMergeService', () => {
             openSlots: [],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-05-06T10:01:00.000Z',
       },
     })
 
-    expect(merged.triggers).toHaveLength(2)
-    expect(merged.triggers).toEqual(expect.arrayContaining([
+    expect(merged.trigger).toHaveLength(2)
+    expect(merged.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'bollinger.touch_upper',
         phase: 'entry',
@@ -1018,7 +1078,7 @@ describe('SemanticStateMergeService', () => {
         params: expect.objectContaining({ confirmationMode: 'close_confirm' }),
       }),
     ]))
-    expect(merged.triggers).not.toEqual(expect.arrayContaining([
+    expect(merged.trigger).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'price.detect.indicator_boundary' }),
     ]))
   })
@@ -1028,8 +1088,8 @@ describe('SemanticStateMergeService', () => {
       persisted: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [
+        trigger: [],
+        action: [
           { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
           { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
         ],
@@ -1050,6 +1110,9 @@ describe('SemanticStateMergeService', () => {
           status: 'locked',
           source: 'user_explicit',
         },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:00:00.000Z',
@@ -1057,8 +1120,8 @@ describe('SemanticStateMergeService', () => {
       derived: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [
+        trigger: [],
+        action: [
           { id: 'derived-open-long', key: 'open_long', status: 'open', source: 'derived' },
         ],
         risk: [
@@ -1087,6 +1150,9 @@ describe('SemanticStateMergeService', () => {
           status: 'open',
           source: 'derived',
         },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:01:00.000Z',
@@ -1098,7 +1164,7 @@ describe('SemanticStateMergeService', () => {
       source: 'user_explicit',
       value: 0.1,
     }))
-    expect(merged.actions).toEqual(expect.arrayContaining([
+    expect(merged.action).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'open-long',
         key: 'open_long',
@@ -1128,8 +1194,8 @@ describe('SemanticStateMergeService', () => {
       persisted: {
         version: 1,
         families: [],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [
           {
             id: 'risk-1',
@@ -1150,6 +1216,9 @@ describe('SemanticStateMergeService', () => {
           },
         ],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-29T00:00:00.000Z',
@@ -1157,8 +1226,8 @@ describe('SemanticStateMergeService', () => {
       derived: {
         version: 1,
         families: [],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [
           {
             id: 'risk-1',
@@ -1170,6 +1239,9 @@ describe('SemanticStateMergeService', () => {
           },
         ],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-29T00:00:00.000Z',
@@ -1192,7 +1264,7 @@ describe('SemanticStateMergeService', () => {
       persisted: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           ...persistedEntryTimeframes.map((timeframe, index) => ({
             id: `entry-ema-${timeframe}`,
             key: 'indicator.above',
@@ -1224,9 +1296,12 @@ describe('SemanticStateMergeService', () => {
             openSlots: [],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-05-06T10:00:00.000Z',
@@ -1234,7 +1309,7 @@ describe('SemanticStateMergeService', () => {
       derived: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'derived-exit-ema-15m',
             key: 'indicator.below',
@@ -1251,16 +1326,19 @@ describe('SemanticStateMergeService', () => {
             openSlots: [],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-05-06T10:01:00.000Z',
       },
     })
 
-    expect(merged.triggers).toEqual(expect.arrayContaining([
+    expect(merged.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'entry-ema-5m',
         params: expect.objectContaining({ timeframe: '5m' }),
@@ -1282,7 +1360,7 @@ describe('SemanticStateMergeService', () => {
         }),
       }),
     ]))
-    expect(merged.triggers.filter(trigger => trigger.key === 'indicator.above')).toHaveLength(3)
+    expect(merged.trigger.filter(trigger => trigger.key === 'indicator.above')).toHaveLength(3)
   })
 
   it('matches each derived trigger at most once so persisted sibling atoms stay distinct', () => {
@@ -1290,7 +1368,7 @@ describe('SemanticStateMergeService', () => {
       persisted: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'entry-sibling-a',
             key: 'indicator.above',
@@ -1334,9 +1412,12 @@ describe('SemanticStateMergeService', () => {
             ],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:00:00.000Z',
@@ -1344,7 +1425,7 @@ describe('SemanticStateMergeService', () => {
       derived: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'derived-entry-open',
             key: 'indicator.above',
@@ -1367,17 +1448,20 @@ describe('SemanticStateMergeService', () => {
             ],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:01:00.000Z',
       },
     })
 
-    expect(merged.triggers).toHaveLength(2)
-    expect(merged.triggers).toEqual(expect.arrayContaining([
+    expect(merged.trigger).toHaveLength(2)
+    expect(merged.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'entry-sibling-a',
       }),

@@ -4,9 +4,9 @@
  * 防止 prompt 退化为 #1345 之前的 "让 LLM 自由造 schema" 形态。
  */
 
-import { ATOM_CONTRACT_REGISTRY, getAllRegisteredAtomKeys, getAtomKeysByBucket } from '../../atom-contracts/atom-contract-registry'
+import { getAllRegisteredAtomKeys, getAtomKeysByBucket } from '../../atom-contracts/atom-contract-registry'
 import { resetAtomCatalogCacheForTest } from '../atom-catalog-projection'
-import { buildConversationPlannerSystemPrompt, IN_CONTEXT_EXAMPLE_ATOM_KEYS } from '../conversation-planner-system.prompt'
+import { buildConversationPlannerSystemPrompt } from '../conversation-planner-system.prompt'
 
 describe('conversationPlannerSystemPrompt — atom catalog injection (issue #1345)', () => {
   beforeEach(() => resetAtomCatalogCacheForTest())
@@ -20,31 +20,26 @@ describe('conversationPlannerSystemPrompt — atom catalog injection (issue #134
       }
     })
 
-    it('显式说明 triggers[].key / actions[].key / risk[].key 必须从枚举选', () => {
-      expect(prompt).toMatch(/triggers\[\]\.key.*?actions\[\]\.key.*?risk\[\]\.key.*?枚举/s)
+    it('显式说明 atoms[].key 必须从枚举选（issue #1364 AC-2 单数组）', () => {
+      expect(prompt).toMatch(/atoms\[\]\.key.*?枚举/s)
       expect(prompt).toContain('禁止自由文本或自创 atom')
     })
 
-    it('显式列出 phase enum 为 entry / exit / gate（不含 risk）', () => {
+    it('显式列出 phase enum 为 entry / exit / gate', () => {
       expect(prompt).toMatch(/phase\s*∈\s*\[entry,\s*exit,\s*gate\]/)
-      expect(prompt).toContain("不含 'risk'")
     })
 
-    it('要求 contextSlots 是结构化 { value, source } 而非裸字符串', () => {
-      expect(prompt).toContain('结构化对象 { value, source }')
+    it('要求 contextSlots 是 { value, source } 形态', () => {
+      expect(prompt).toContain('{ value, source }')
     })
 
-    it('包含 5 桶各 1 条 in-context example（trigger/action/risk/orchestration/positionConstraint）', () => {
-      expect(prompt).toContain('示例 1（trigger）')
-      expect(prompt).toContain('indicator.cross_over')
-      expect(prompt).toContain('示例 2（action）')
-      expect(prompt).toContain('action.open_long')
-      expect(prompt).toContain('示例 3（risk）')
-      expect(prompt).toContain('risk.partial_take_profit')
-      expect(prompt).toContain('示例 4（orchestration / portfolioRisk）')
-      expect(prompt).toContain('portfolioRisk.drawdown_block')
-      expect(prompt).toContain('示例 5（positionConstraint）')
-      expect(prompt).toContain('position.pyramiding_limit')
+    it('包含 5 桶各 1 条 in-context example（动态派生自 REGISTRY，issue #1364 AC-2）', () => {
+      const buckets = ['trigger', 'action', 'risk', 'orchestration', 'positionConstraint'] as const
+      for (const b of buckets) {
+        expect(prompt).toContain(`示例（${b}）`)
+      }
+      // 单数组 atoms[] 形态
+      expect(prompt).toMatch(/atoms:\s*\[\{\s*"key":/)
     })
 
     it('包含动态 atom 总数（绝不写死，断言数值与注册表长度一致）', () => {
@@ -90,10 +85,4 @@ describe('conversationPlannerSystemPrompt — atom catalog injection (issue #134
     }
   })
 
-  it('In-context 示例段使用的 atom key 全部 ∈ ATOM_CONTRACT_REGISTRY（防 atom 重命名静默退化）', () => {
-    // review m3 follow-up：5 条 in-context 示例硬编码 atom key，必须由反向不变量守门
-    for (const key of IN_CONTEXT_EXAMPLE_ATOM_KEYS) {
-      expect(key in ATOM_CONTRACT_REGISTRY).toBe(true)
-    }
-  })
 })

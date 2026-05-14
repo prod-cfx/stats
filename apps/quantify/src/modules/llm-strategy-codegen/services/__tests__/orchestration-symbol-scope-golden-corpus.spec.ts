@@ -33,9 +33,12 @@ function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticSt
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
@@ -108,7 +111,7 @@ describe('orchestration scope.symbol — golden corpus (Phase 5 S2 Task 11)', ()
 
     it('B1 kind ≠ scope → unsupported', () => {
       const node = symbolScopeNode({ kind: 'gate' })
-      const state = createSemanticState({ orchestration: { nodes: [node], contracts: [] } })
+      const state = createSemanticState({ orchestration: [node], orchestrationContracts: [] })
       const result = readinessService.normalize(state, CURRENT_VERSION)
       // gate kind 走兜底 phase0 unsupported（既有路径），symbols 不参与 supported scope set
       expect(result.ready).toBe(false)
@@ -116,28 +119,28 @@ describe('orchestration scope.symbol — golden corpus (Phase 5 S2 Task 11)', ()
 
     it('B2 key ≠ scope.symbol → unsupported_kind slot', () => {
       const node = symbolScopeNode({ key: 'scope.timeframe' })
-      const state = createSemanticState({ orchestration: { nodes: [node], contracts: [] } })
+      const state = createSemanticState({ orchestration: [node], orchestrationContracts: [] })
       const result = readinessService.normalize(state, CURRENT_VERSION)
       expect(result.ready).toBe(false)
     })
 
     it('B3 symbolScopeKind ≠ symbol → unsupported', () => {
       const node = symbolScopeNode({ symbolScopeKind: undefined })
-      const state = createSemanticState({ orchestration: { nodes: [node], contracts: [] } })
+      const state = createSemanticState({ orchestration: [node], orchestrationContracts: [] })
       const result = readinessService.normalize(state, CURRENT_VERSION)
       expect(result.ready).toBe(false)
     })
 
     it('B4 symbols 含非法格式 → fail-closed', () => {
       const node = symbolScopeNode({ symbols: ['btc-usdt'] }) // 小写 + 短横，违反 ^[A-Z]{2,5}USDT$
-      const state = createSemanticState({ orchestration: { nodes: [node], contracts: [] } })
+      const state = createSemanticState({ orchestration: [node], orchestrationContracts: [] })
       const result = readinessService.normalize(state, CURRENT_VERSION)
       expect(result.ready).toBe(false)
     })
 
     it('B5 primarySymbol 不在 symbols → fail-closed', () => {
       const node = symbolScopeNode({ symbols: ['BTCUSDT', 'ETHUSDT'], primarySymbol: 'SOLUSDT' })
-      const state = createSemanticState({ orchestration: { nodes: [node], contracts: [] } })
+      const state = createSemanticState({ orchestration: [node], orchestrationContracts: [] })
       const result = readinessService.normalize(state, CURRENT_VERSION)
       expect(result.ready).toBe(false)
     })
@@ -167,14 +170,14 @@ describe('orchestration scope.symbol — golden corpus (Phase 5 S2 Task 11)', ()
       const scopeBtc = symbolScopeNode({ id: 's-btc', symbols: ['BTCUSDT'], primarySymbol: 'BTCUSDT' })
       const scopeEth = symbolScopeNode({ id: 's-eth', symbols: ['ETHUSDT'], primarySymbol: 'ETHUSDT' })
       const state = createSemanticState({
-        orchestration: { nodes: [scopeBtc, scopeEth], contracts: [] },
-        triggers: [{
+        orchestration: [scopeBtc, scopeEth], orchestrationContracts: [],
+        trigger: [{
           id: 't1', key: 'price.range_position_lte', phase: 'entry',
           params: {}, status: 'locked', source: 'user_explicit', openSlots: [],
         }],
       })
       const result = readinessService.normalize(state, CURRENT_VERSION)
-      const trigger = result.state.triggers[0]
+      const trigger = result.state.trigger[0]
       expect(trigger.status).toBe('open')
       const slot = trigger.openSlots.find(s => s.slotKey === 'orchestration.scope.symbol.missing_binding')
       expect(slot).toBeDefined()
@@ -223,7 +226,7 @@ describe('orchestration scope.symbol — golden corpus (Phase 5 S2 Task 11)', ()
       const scopeBtc = symbolScopeNode({ id: 's-btc', symbols: ['BTCUSDT'], primarySymbol: 'BTCUSDT' })
       const scopeEth = symbolScopeNode({ id: 's-eth', symbols: ['ETHUSDT'], primarySymbol: 'ETHUSDT' })
       const state = createSemanticState({
-        orchestration: { nodes: [scopeBtc, scopeEth], contracts: [] },
+        orchestration: [scopeBtc, scopeEth], orchestrationContracts: [],
         contextSlots: {
           exchange: { slotKey: 'context.exchange', fieldPath: 'context.exchange', value: 'binance', status: 'locked', priority: 'context', questionHint: '', affectsExecution: true },
           symbol: { slotKey: 'context.symbol', fieldPath: 'context.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '', affectsExecution: true },
@@ -261,7 +264,7 @@ describe('orchestration scope.symbol — golden corpus (Phase 5 S2 Task 11)', ()
     it('D3 (N4) 1 scope locked → spec 含单 scope；无 binding 检查', () => {
       const scopeBtc = symbolScopeNode({ id: 's-btc', symbols: ['BTCUSDT'] })
       const state = createSemanticState({
-        orchestration: { nodes: [scopeBtc], contracts: [] },
+        orchestration: [scopeBtc], orchestrationContracts: [],
         contextSlots: {
           exchange: { slotKey: 'context.exchange', fieldPath: 'context.exchange', value: 'binance', status: 'locked', priority: 'context', questionHint: '', affectsExecution: true },
           symbol: { slotKey: 'context.symbol', fieldPath: 'context.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '', affectsExecution: true },

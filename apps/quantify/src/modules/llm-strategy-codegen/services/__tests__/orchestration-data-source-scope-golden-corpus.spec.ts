@@ -36,9 +36,12 @@ function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticSt
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
@@ -156,35 +159,35 @@ describe('orchestration scope.dataSource — golden corpus (Phase 5 S9 Task 11)'
 
     it('B1 dataSourceScopeKind ≠ dataSource → unsupported', () => {
       const node = dataSourceScopeNode({ dataSourceScopeKind: undefined })
-      const state = createSemanticState({ orchestration: { nodes: [node], contracts: [] } })
+      const state = createSemanticState({ orchestration: [node], orchestrationContracts: [] })
       const result = readinessService.normalize(state, CURRENT_VERSION)
       expect(result.ready).toBe(false)
     })
 
     it('B2 dataSourceRole 非法 → fail-closed', () => {
       const node = dataSourceScopeNode({ dataSourceRole: undefined })
-      const state = createSemanticState({ orchestration: { nodes: [node], contracts: [] } })
+      const state = createSemanticState({ orchestration: [node], orchestrationContracts: [] })
       const result = readinessService.normalize(state, CURRENT_VERSION)
       expect(result.ready).toBe(false)
     })
 
     it('B3 dataSourceFeedId 格式不合法 → fail-closed（大写/含空格）', () => {
       const node = dataSourceScopeNode({ dataSourceFeedId: 'BINANCE.spot.btcusdt' })
-      const state = createSemanticState({ orchestration: { nodes: [node], contracts: [] } })
+      const state = createSemanticState({ orchestration: [node], orchestrationContracts: [] })
       const result = readinessService.normalize(state, CURRENT_VERSION)
       expect(result.ready).toBe(false)
     })
 
     it('B4 dataSourceSchemaRef 非白名单 → fail-closed', () => {
       const node = dataSourceScopeNode({ dataSourceSchemaRef: 'unknown_schema' as never })
-      const state = createSemanticState({ orchestration: { nodes: [node], contracts: [] } })
+      const state = createSemanticState({ orchestration: [node], orchestrationContracts: [] })
       const result = readinessService.normalize(state, CURRENT_VERSION)
       expect(result.ready).toBe(false)
     })
 
     it('B5 dataSourceSchemaRef 缺失 → fail-closed（所有 role 必填）', () => {
       const node = dataSourceScopeNode({ dataSourceSchemaRef: undefined })
-      const state = createSemanticState({ orchestration: { nodes: [node], contracts: [] } })
+      const state = createSemanticState({ orchestration: [node], orchestrationContracts: [] })
       const result = readinessService.normalize(state, CURRENT_VERSION)
       expect(result.ready).toBe(false)
     })
@@ -210,15 +213,15 @@ describe('orchestration scope.dataSource — golden corpus (Phase 5 S9 Task 11)'
     it('B8 单 scope locked + trigger dataSourceScopeRef 不在 supported → missing_binding open slot', () => {
       const dsNode = dataSourceScopeNode({ id: 'ds-1' })
       const state = createSemanticState({
-        orchestration: { nodes: [dsNode], contracts: [] },
-        triggers: [{
+        orchestration: [dsNode], orchestrationContracts: [],
+        trigger: [{
           id: 't1', key: 'price.range_position_lte', phase: 'entry',
           params: {}, status: 'locked', source: 'user_explicit', openSlots: [],
           dataSourceScopeRef: 'ds-unknown',
         }],
       })
       const result = readinessService.normalize(state, CURRENT_VERSION)
-      const trigger = result.state.triggers[0]
+      const trigger = result.state.trigger[0]
       expect(trigger.status).toBe('open')
       const slot = trigger.openSlots.find(s => s.slotKey === 'orchestration.scope.dataSource.missing_binding')
       expect(slot).toBeDefined()
@@ -239,8 +242,8 @@ describe('orchestration scope.dataSource — golden corpus (Phase 5 S9 Task 11)'
       }
       const dsNode = dataSourceScopeNode({ id: 'ds-1' })
       const state = createSemanticState({
-        orchestration: { nodes: [symbolNode1, symbolNode2, dsNode], contracts: [] },
-        triggers: [{
+        orchestration: [symbolNode1, symbolNode2, dsNode], orchestrationContracts: [],
+        trigger: [{
           id: 't1', key: 'price.range_position_lte', phase: 'entry',
           params: {}, status: 'locked', source: 'user_explicit', openSlots: [],
           symbolScopeRef: 's-btc',
@@ -248,7 +251,7 @@ describe('orchestration scope.dataSource — golden corpus (Phase 5 S9 Task 11)'
         }],
       })
       const result = readinessService.normalize(state, CURRENT_VERSION)
-      const trigger = result.state.triggers[0]
+      const trigger = result.state.trigger[0]
       // 双 ref 都合法 → trigger 仍 locked
       expect(trigger.status).toBe('locked')
     })
@@ -304,7 +307,7 @@ describe('orchestration scope.dataSource — golden corpus (Phase 5 S9 Task 11)'
       const dsBtc = dataSourceScopeNode({ id: 'ds-binance-btc', dataSourceFeedId: 'binance.spot.btcusdt', dataSourceRole: 'primary', dataSourceSchemaRef: 'ohlcv' })
       const dsEth = dataSourceScopeNode({ id: 'ds-okx-eth', dataSourceFeedId: 'okx.spot.ethusdt', dataSourceRole: 'confirmation', dataSourceSchemaRef: 'orderbook' })
       const state = createSemanticState({
-        orchestration: { nodes: [dsBtc, dsEth], contracts: [] },
+        orchestration: [dsBtc, dsEth], orchestrationContracts: [],
         ...lockedContext(),
       })
       const spec = builder.buildFromSemanticState(state)
@@ -339,7 +342,7 @@ describe('orchestration scope.dataSource — golden corpus (Phase 5 S9 Task 11)'
     it('D3 1 dataSource scope locked → spec 含单 scope；无 binding 强制', () => {
       const dsNode = dataSourceScopeNode({ id: 'ds-1' })
       const state = createSemanticState({
-        orchestration: { nodes: [dsNode], contracts: [] },
+        orchestration: [dsNode], orchestrationContracts: [],
         ...lockedContext(),
       })
       const spec = builder.buildFromSemanticState(state)
@@ -349,7 +352,7 @@ describe('orchestration scope.dataSource — golden corpus (Phase 5 S9 Task 11)'
     it('D5 (critic C1 防回归) silent-skip：rule 声明孤儿 dataSourceScopeRef → IR ruleBlock metadata 不含该字段', () => {
       const dsNode = dataSourceScopeNode({ id: 'ds-real' })
       const state = createSemanticState({
-        orchestration: { nodes: [dsNode], contracts: [] },
+        orchestration: [dsNode], orchestrationContracts: [],
         ...lockedContext(),
       })
       const spec = builder.buildFromSemanticState(state)
@@ -375,7 +378,7 @@ describe('orchestration scope.dataSource — golden corpus (Phase 5 S9 Task 11)'
       }
       const dsNode = dataSourceScopeNode({ id: 'ds-binance' })
       const state = createSemanticState({
-        orchestration: { nodes: [symbolNode, dsNode], contracts: [] },
+        orchestration: [symbolNode, dsNode], orchestrationContracts: [],
         ...lockedContext(),
       })
       const spec = builder.buildFromSemanticState(state)

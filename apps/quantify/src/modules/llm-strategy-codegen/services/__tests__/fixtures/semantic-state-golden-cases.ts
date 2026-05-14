@@ -41,8 +41,8 @@ function baseLockedAtomicState(): SemanticState {
   return {
     version: 1,
     families: ['single-leg'],
-    triggers: [],
-    actions: [
+    trigger: [],
+    action: [
       { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
     ],
     risk: [],
@@ -55,6 +55,9 @@ function baseLockedAtomicState(): SemanticState {
       source: 'user_explicit',
       openSlots: [],
     },
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     contextSlots: {
       exchange: lockedContextSlot('exchange', 'contextSlots.exchange', 'okx'),
       symbol: lockedContextSlot('symbol', 'contextSlots.symbol', 'BTCUSDT'),
@@ -71,7 +74,7 @@ export function buildLockedAtomicState(name: LockedAtomicStateName): SemanticSta
 
   if (name === 'bollinger-volume-entry') {
     state.contextSlots.timeframe = lockedContextSlot('timeframe', 'contextSlots.timeframe', '15m')
-    state.triggers = [
+    state.trigger = [
       lockedTrigger({
         id: 'entry-bollinger-lower-touch',
         key: 'price.detect.indicator_boundary',
@@ -108,12 +111,12 @@ export function buildLockedAtomicState(name: LockedAtomicStateName): SemanticSta
         },
       }),
     ]
-    state.actions.push({ id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] })
+    state.action.push({ id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] })
     return state
   }
 
   if (name === 'breakout-retest') {
-    state.triggers = [
+    state.trigger = [
       lockedTrigger({
         id: 'entry-breakout-retest',
         key: 'condition.sequence',
@@ -137,7 +140,7 @@ export function buildLockedAtomicState(name: LockedAtomicStateName): SemanticSta
     return state
   }
 
-  state.triggers = [
+  state.trigger = [
     lockedTrigger({
       id: 'entry-ma-above',
       key: 'indicator.above',

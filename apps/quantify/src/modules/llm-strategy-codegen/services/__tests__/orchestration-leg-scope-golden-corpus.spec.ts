@@ -36,9 +36,12 @@ function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticSt
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
@@ -150,25 +153,21 @@ describe('orchestration scope.leg — golden corpus (Phase 5 S11 #1112)', () => 
 
     it('B1 valid leg + locked scope.symbol → readiness 通过 leg locked', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [symbolScopeNode(), legScopeNode()],
-          contracts: [],
-        },
+        orchestration: [symbolScopeNode(), legScopeNode()],
+        orchestrationContracts: [],
       })
       const next = readinessAfter(state)
-      const leg = next.orchestration?.nodes.find((n) => n.kind === 'scope' && n.key === 'scope.leg')
+      const leg = next.orchestration.find((n) => n.kind === 'scope' && n.key === 'scope.leg')
       expect(leg?.status).toBe('locked')
     })
 
     it('B2 instrumentRef 引用不存在的 scope.symbol → leg fail-closed (status=open)', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [legScopeNode({ instrumentRef: 'nonexistent' })],
-          contracts: [],
-        },
+        orchestration: [legScopeNode({ instrumentRef: 'nonexistent' })],
+        orchestrationContracts: [],
       })
       const next = readinessAfter(state)
-      const leg = next.orchestration?.nodes.find((n) => n.kind === 'scope' && n.key === 'scope.leg')
+      const leg = next.orchestration.find((n) => n.kind === 'scope' && n.key === 'scope.leg')
       expect(leg?.status).toBe('open')
       // isSupportedLegScope=false 走 phase0.unsupported；slot key 列表通过 registry.validate 单独覆盖
       expect(leg?.openSlots.length).toBeGreaterThan(0)
@@ -214,7 +213,7 @@ describe('orchestration scope.leg — golden corpus (Phase 5 S11 #1112)', () => 
       const legA = legScopeNode({ id: 'leg-A', legId: 'leg.A', direction: 'long', instrumentRef: 'scope-symbol-1' })
       const legB = legScopeNode({ id: 'leg-B', legId: 'leg.B', direction: 'short', instrumentRef: 'scope-symbol-2' })
       const state = createSemanticState({
-        triggers: [{
+        trigger: [{
           id: 'tr-1',
           key: 'price.cross_above',
           phase: 'entry',
@@ -223,25 +222,23 @@ describe('orchestration scope.leg — golden corpus (Phase 5 S11 #1112)', () => 
           source: 'user_explicit',
           openSlots: [],
         }],
-        orchestration: {
-          nodes: [
+        orchestration: [
             symbolScopeNode(),
             symbolScopeNode({ id: 'scope-symbol-2', symbols: ['ETHUSDT'], primarySymbol: 'ETHUSDT' }),
             legA,
             legB,
           ],
-          contracts: [],
-        },
+        orchestrationContracts: [],
       })
       const next = readinessAfter(state)
-      const trigger = next.triggers.find((t) => t.id === 'tr-1')
+      const trigger = next.trigger.find((t) => t.id === 'tr-1')
       expect(trigger?.status).toBe('open')
       expect(trigger?.openSlots.some((s) => s.slotKey === 'orchestration.scope.leg.missing_binding')).toBe(true)
     })
 
     it('B-binding 单 leg 策略 → bypass binding（旧策略零侵入）', () => {
       const state = createSemanticState({
-        triggers: [{
+        trigger: [{
           id: 'tr-1',
           key: 'price.cross_above',
           phase: 'entry',
@@ -250,13 +247,11 @@ describe('orchestration scope.leg — golden corpus (Phase 5 S11 #1112)', () => 
           source: 'user_explicit',
           openSlots: [],
         }],
-        orchestration: {
-          nodes: [symbolScopeNode(), legScopeNode()],
-          contracts: [],
-        },
+        orchestration: [symbolScopeNode(), legScopeNode()],
+        orchestrationContracts: [],
       })
       const next = readinessAfter(state)
-      const trigger = next.triggers.find((t) => t.id === 'tr-1')
+      const trigger = next.trigger.find((t) => t.id === 'tr-1')
       expect(trigger?.status).toBe('locked')
       expect(trigger?.openSlots.length).toBe(0)
     })
@@ -316,15 +311,13 @@ describe('orchestration scope.leg — golden corpus (Phase 5 S11 #1112)', () => 
 
     it('D1 双腿对冲 supported → spec.orchestration.legScopes / IR.orchestrationLegScopes / AST.orchestrationLegScopes 全链路透传', () => {
       const state = withContextSlots(createSemanticState({
-        orchestration: {
-          nodes: [
+        orchestration: [
             symbolScopeNode({ id: 's-btc', symbols: ['BTCUSDT'], primarySymbol: 'BTCUSDT' }),
             symbolScopeNode({ id: 's-eth', symbols: ['ETHUSDT'], primarySymbol: 'ETHUSDT' }),
             legScopeNode({ id: 'l-long', legId: 'leg.long.btc', direction: 'long', instrumentRef: 's-btc' }),
             legScopeNode({ id: 'l-short', legId: 'leg.short.eth', direction: 'short', instrumentRef: 's-eth' }),
           ],
-          contracts: [],
-        },
+        orchestrationContracts: [],
       }))
       const spec = builder.buildFromSemanticState(state)
       expect(spec.orchestration?.legScopes?.length).toBe(2)
@@ -339,10 +332,8 @@ describe('orchestration scope.leg — golden corpus (Phase 5 S11 #1112)', () => 
 
     it('D2 1-leg 兜底：builder 输出 1 leg；IR / AST 同形透传（仍走单 leg substrate runtime continue）', () => {
       const state = withContextSlots(createSemanticState({
-        orchestration: {
-          nodes: [symbolScopeNode(), legScopeNode()],
-          contracts: [],
-        },
+        orchestration: [symbolScopeNode(), legScopeNode()],
+        orchestrationContracts: [],
       }))
       const spec = builder.buildFromSemanticState(state)
       const ir = irCompiler.compile({ canonicalSpec: spec, fallback: irFallback })

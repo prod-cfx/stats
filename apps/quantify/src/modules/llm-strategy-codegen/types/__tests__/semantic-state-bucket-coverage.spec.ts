@@ -23,12 +23,12 @@ import type { SemanticState } from '../semantic-state'
 // 用字符串字面量 `'position.constraints'` 表达此 nested 路径，spec 在 follow-up 真正
 // 引入 mapped type 时会强制重写。
 const BUCKET_TO_FIELD = {
-  trigger: 'triggers',
-  action: 'actions',
+  trigger: 'trigger',
+  action: 'action',
   risk: 'risk',
-  positionConstraint: 'position.constraints',
+  positionConstraint: 'positionConstraint',
   orchestration: 'orchestration',
-} as const satisfies Readonly<Record<AtomContractBucket, string>>
+} as const satisfies Readonly<Record<AtomContractBucket, keyof SemanticState>>
 
 describe('SemanticState ↔ AtomContractBucket 一致性 (issue #1364 PR2)', () => {
   it('每个 AtomContractBucket 字面量都已显式映射到 SemanticState 字段', () => {
@@ -39,15 +39,12 @@ describe('SemanticState ↔ AtomContractBucket 一致性 (issue #1364 PR2)', () 
     expect(bucketsCovered).toHaveLength(5)
   })
 
-  it('top-level field 名称未漂移（向后兼容守门）', () => {
-    expect(BUCKET_TO_FIELD.trigger).toBe('triggers')
-    expect(BUCKET_TO_FIELD.action).toBe('actions')
+  it('top-level field 名称单数化（mapped type 派生后与 bucket 字面量一致）', () => {
+    expect(BUCKET_TO_FIELD.trigger).toBe('trigger')
+    expect(BUCKET_TO_FIELD.action).toBe('action')
     expect(BUCKET_TO_FIELD.risk).toBe('risk')
     expect(BUCKET_TO_FIELD.orchestration).toBe('orchestration')
-  })
-
-  it('positionConstraint 归 nested 路径（待 follow-up 提至顶层）', () => {
-    expect(BUCKET_TO_FIELD.positionConstraint).toBe('position.constraints')
+    expect(BUCKET_TO_FIELD.positionConstraint).toBe('positionConstraint')
   })
 
   it('SemanticState 类型示例：所有 top-level bucket 字段在运行时存在', () => {
@@ -55,9 +52,12 @@ describe('SemanticState ↔ AtomContractBucket 一致性 (issue #1364 PR2)', () 
     const sample: SemanticState = {
       version: 1,
       families: [],
-      triggers: [],
-      actions: [],
+      trigger: [],
+      action: [],
       risk: [],
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       position: null,
       contextSlots: {
         exchange: null,
@@ -68,9 +68,10 @@ describe('SemanticState ↔ AtomContractBucket 一致性 (issue #1364 PR2)', () 
       normalizationNotes: [],
       updatedAt: '2026-05-14T00:00:00.000Z',
     }
-    expect(Array.isArray(sample.triggers)).toBe(true)
-    expect(Array.isArray(sample.actions)).toBe(true)
+    expect(Array.isArray(sample.trigger)).toBe(true)
+    expect(Array.isArray(sample.action)).toBe(true)
     expect(Array.isArray(sample.risk)).toBe(true)
-    expect('orchestration' in sample || sample.orchestration === undefined).toBe(true)
+    expect(Array.isArray(sample.orchestration)).toBe(true)
+    expect(Array.isArray(sample.positionConstraint)).toBe(true)
   })
 })

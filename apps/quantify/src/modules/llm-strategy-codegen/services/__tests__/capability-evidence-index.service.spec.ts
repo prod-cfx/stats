@@ -28,10 +28,13 @@ function baseState(): SemanticState {
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
     position: null,
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
     updatedAt: '2026-01-01T00:00:00.000Z',
@@ -70,7 +73,7 @@ describe('CapabilityEvidenceIndex', () => {
   describe('case 2 — 4 mount points, 1 capability each', () => {
     const state: SemanticState = {
       ...baseState(),
-      actions: [
+      action: [
         {
           id: 'a1',
           key: 'action.buy',
@@ -78,7 +81,7 @@ describe('CapabilityEvidenceIndex', () => {
           source: 'user_explicit',
           contracts: [makeContract('c-action', [makeCap('capital', 'allocate', 'fixed_quote')])],
         },
-      ],
+      ] as any,
       risk: [
         {
           id: 'r1',
@@ -89,26 +92,26 @@ describe('CapabilityEvidenceIndex', () => {
           openSlots: [],
           contracts: [makeContract('c-risk', [makeCap('guard', 'enforce', 'stop_loss')])],
         },
-      ],
+      ] as any,
       position: {
         mode: 'long',
         value: 0,
         positionMode: 'one_way',
         status: 'locked' as const,
         source: 'user_explicit',
-        constraints: [
-          {
-            id: 'pc1',
-            key: 'position.dca_schedule',
-            params: {},
-            status: 'open' as const,
-            source: 'user_explicit',
-            openSlots: [],
-            contracts: [makeContract('c-pc', [makeCap('order_program', 'schedule', 'dca')])],
-          },
-        ],
         contracts: [makeContract('c-position', [makeCap('exposure', 'cap', 'max_exposure')])],
-      },
+      } as any,
+      positionConstraint: [
+        {
+          id: 'pc1',
+          key: 'position.dca_schedule',
+          params: {},
+          status: 'open' as const,
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [makeContract('c-pc', [makeCap('order_program', 'schedule', 'dca')])],
+        },
+      ] as any,
     }
 
     const idx = CapabilityEvidenceIndex.build(state)
@@ -142,7 +145,7 @@ describe('CapabilityEvidenceIndex', () => {
     const cap = makeCap('capital', 'allocate', 'per_order_budget')
     const state: SemanticState = {
       ...baseState(),
-      actions: [
+      action: [
         {
           id: 'a1',
           key: 'action.buy',
@@ -150,25 +153,25 @@ describe('CapabilityEvidenceIndex', () => {
           source: 'user_explicit',
           contracts: [makeContract('c-a', [cap])],
         },
-      ],
+      ] as any,
       position: {
         mode: 'long',
         value: 0,
         positionMode: 'one_way',
         status: 'locked' as const,
         source: 'user_explicit',
-        constraints: [
-          {
-            id: 'pc1',
-            key: 'position.dca_schedule',
-            params: {},
-            status: 'locked' as const,
-            source: 'inferred',
-            openSlots: [],
-            contracts: [makeContract('c-pc', [cap])],
-          },
-        ],
-      },
+      } as any,
+      positionConstraint: [
+        {
+          id: 'pc1',
+          key: 'position.dca_schedule',
+          params: {},
+          status: 'locked' as const,
+          source: 'inferred',
+          openSlots: [],
+          contracts: [makeContract('c-pc', [cap])],
+        },
+      ] as any,
     }
 
     const idx = CapabilityEvidenceIndex.build(state)
@@ -191,7 +194,7 @@ describe('CapabilityEvidenceIndex', () => {
   describe('case 4 — ownerStatus propagation', () => {
     const state: SemanticState = {
       ...baseState(),
-      actions: [
+      action: [
         {
           id: 'a-locked',
           key: 'action.sell',
@@ -199,25 +202,25 @@ describe('CapabilityEvidenceIndex', () => {
           source: 'user_explicit',
           contracts: [makeContract('c1', [makeCap('order', 'place', 'market')])],
         },
-      ],
+      ] as any,
       position: {
         mode: 'long',
         value: 0,
         positionMode: 'one_way',
         status: 'open' as const,
         source: 'user_explicit',
-        constraints: [
-          {
-            id: 'pc1',
-            key: 'position.pyramiding_limit',
-            params: {},
-            status: 'open' as const,
-            source: 'inferred',
-            openSlots: [],
-            contracts: [makeContract('c2', [makeCap('guard', 'limit', 'pyramiding')])],
-          },
-        ],
-      },
+      } as any,
+      positionConstraint: [
+        {
+          id: 'pc1',
+          key: 'position.pyramiding_limit',
+          params: {},
+          status: 'open' as const,
+          source: 'inferred',
+          openSlots: [],
+          contracts: [makeContract('c2', [makeCap('guard', 'limit', 'pyramiding')])],
+        },
+      ] as any,
     }
 
     const idx = CapabilityEvidenceIndex.build(state)
@@ -235,7 +238,7 @@ describe('CapabilityEvidenceIndex', () => {
     it('superseded action → ownerStatus superseded', () => {
       const supersededState: SemanticState = {
         ...baseState(),
-        actions: [
+        action: [
           {
             id: 'a-superseded',
             key: 'action.buy_old',
@@ -265,7 +268,7 @@ describe('CapabilityEvidenceIndex', () => {
     }
     const state: SemanticState = {
       ...baseState(),
-      actions: [
+      action: [
         {
           id: 'a1',
           key: 'action.buy',

@@ -69,6 +69,14 @@ describe('conversation-planner-system-prompt ↔ ATOM_CONTRACT_REGISTRY 一致�
     })
   })
 
+  it('prompt 绝不出现旧 5 桶 patch 字段（issue #1364 AC-2）', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+    expect(prompt).not.toMatch(/"triggers"\s*\??\s*:/)
+    expect(prompt).not.toMatch(/"actions"\s*\??\s*:/)
+    expect(prompt).not.toMatch(/"risk"\s*\??\s*:\s*\[/)
+    expect(prompt).toMatch(/"atoms"\s*\??\s*:\s*\[/)
+  })
+
   describe('REGISTRY contract sanity', () => {
     it('每个 REGISTRY key 的 contract.bucket ∈ AtomContractBucket', () => {
       for (const key of getAllRegisteredAtomKeys()) {

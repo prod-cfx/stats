@@ -1,3 +1,4 @@
+import { ATOM_CONTRACT_REGISTRY } from '../../atom-contracts/atom-contract-registry'
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
 import {
   getLegacyEntry,
@@ -7,11 +8,21 @@ import {
 } from '../legacy-presentation-data'
 import { getDisplayToken, listDisplayTokens, renderDisplayToken } from '../../nl-gateway/display-registry'
 
+// #1364 AC-4: orchestration bucket atoms 由 SemanticOrchestrationRegistryService
+// 单独管理 presentation/clarification 渲染，不走 legacy-presentation-data 通道；
+// 这里在 list() 出口侧过滤掉它们，避免对未注册的 legacy entry 误检。
+function isOrchestrationAtom(key: string): boolean {
+  const entry = (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string }>)[key]
+  return entry?.bucket === 'orchestration'
+}
+
 describe('legacy-presentation-data (transition pure helpers)', () => {
   const atomRegistry = new SemanticAtomRegistryService()
 
   it('has presentation metadata and contract completion fields for every supported atom', () => {
-    const supportedAtoms = atomRegistry.list().filter(atom => atom.supportStatus.startsWith('supported_'))
+    const supportedAtoms = atomRegistry.list()
+      .filter(atom => atom.supportStatus.startsWith('supported_'))
+      .filter(atom => !isOrchestrationAtom(atom.key))
 
     expect(supportedAtoms.length).toBeGreaterThan(0)
 
@@ -56,7 +67,10 @@ describe('legacy-presentation-data (transition pure helpers)', () => {
     expect(listDisplayTokens('enum').length).toBeGreaterThan(0)
     expect(listDisplayTokens('slot').length).toBeGreaterThan(0)
 
-    for (const atomKey of atomRegistry.list().filter(atom => atom.supportStatus.startsWith('supported_')).map(atom => atom.key)) {
+    for (const atomKey of atomRegistry.list()
+      .filter(atom => atom.supportStatus.startsWith('supported_'))
+      .filter(atom => !isOrchestrationAtom(atom.key))
+      .map(atom => atom.key)) {
       expect(getDisplayToken(`atom.${atomKey}.name`)).toEqual(expect.objectContaining({
         kind: 'atom',
         zh: expect.any(String),
@@ -82,7 +96,9 @@ describe('legacy-presentation-data (transition pure helpers)', () => {
       'u',
     )
 
-    for (const supportedAtom of atomRegistry.list().filter(atom => atom.supportStatus.startsWith('supported_'))) {
+    for (const supportedAtom of atomRegistry.list()
+      .filter(atom => atom.supportStatus.startsWith('supported_'))
+      .filter(atom => !isOrchestrationAtom(atom.key))) {
       const entry = getLegacyEntry(supportedAtom.key)
       expect(entry).toBeDefined()
       const metadata = entry!

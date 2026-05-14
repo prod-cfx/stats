@@ -15,7 +15,9 @@ name: LLM E2E Acceptance (#1364)
 #
 # 安全约束：
 #   - 仅 pull_request（非 pull_request_target），fork PR 拿不到 secrets，
-#     spec 内 describe.skip 兜底
+#     此时 secrets-check step 走 fail-soft（warning + skip job）；
+#     注：codegen-to-deploy-pipeline.e2e-spec.ts 自身 fail-loud（缺 key throw），
+#     fork PR 路径靠 workflow level 的 secrets-check 兜底，避免 spec 报错噪声
 #   - jest 默认 verbose 模式不 leak secrets（API key 不出现在 stdout）
 #   - workflow 不 echo / dump env
 
@@ -36,13 +38,20 @@ on:
       - 'apps/quantify/src/modules/strategy-runtime/**'
       - 'apps/quantify/e2e/llm-strategy-codegen/**'
       - 'apps/quantify/e2e/backtesting/**'
+      - 'packages/shared/**'
       - 'packages/api-contracts/**'
       - '.github/workflows/llm-e2e-acceptance.yml'
+  push:
+    branches:
+      - main
+  # AC-9 nightly：18:00 UTC（北京时间 02:00），覆盖未触发 PR/path filter 的 LLM 回归
+  schedule:
+    - cron: '0 18 * * *'
 
 env:
   NODE_VERSION: '22.14.0'
-  DX_VERSION: '0.1.97'
-  RUN_REAL_LLM_E2E: '1'
+  DX_PACKAGE: '@ranger1/dx'
+  DX_VERSION: '0.1.104'
 
 jobs:
   llm-e2e-acceptance:
@@ -86,7 +95,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: 安装 dx CLI
-        run: pnpm add -g @net/dx@${{ env.DX_VERSION }} || npx --yes @net/dx@${{ env.DX_VERSION }} --version
+        run: pnpm add -g ${{ env.DX_PACKAGE }}@${{ env.DX_VERSION }} || npx --yes ${{ env.DX_PACKAGE }}@${{ env.DX_VERSION }} --version
 
       - name: 跑 LLM e2e（llm-strategy-codegen）
         if: steps.secrets-check.outputs.secrets_available == 'true'

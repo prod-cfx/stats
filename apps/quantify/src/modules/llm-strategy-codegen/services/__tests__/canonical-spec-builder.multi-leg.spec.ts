@@ -88,10 +88,13 @@ function emptyBaseState(): SemanticState {
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
     position: null,
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
     updatedAt: '2026-05-11T00:00:00.000Z',
@@ -136,20 +139,18 @@ describe('CanonicalSpecBuilderService — #1186 PR2 multi-leg legScopes 反填',
     const state: SemanticState = {
       ...emptyBaseState(),
       isMultiLeg: true,
-      actions: [
+      action: [
         makeLockedLegAction('leg-1', 50),
         makeLockedLegAction('leg-2', 100),
         makeLockedLegAction('leg-3', 150),
       ],
-      orchestration: {
-        nodes: [
+      orchestration: [
           sym,
           makeLegNode('leg-1', 'long', sym.id),
           makeLegNode('leg-2', 'short', sym.id),
           makeLegNode('leg-3', 'long', sym.id),
         ],
-        contracts: [],
-      },
+      orchestrationContracts: [],
     }
     const spec = builder.buildFromSemanticState(state)
     const legScopes = spec.orchestration?.legScopes ?? []
@@ -165,7 +166,7 @@ describe('CanonicalSpecBuilderService — #1186 PR2 multi-leg legScopes 反填',
     const state: SemanticState = {
       ...emptyBaseState(),
       // isMultiLeg 缺省
-      actions: [makeLockedLegAction('only-action', 100)],
+      action: [makeLockedLegAction('only-action', 100)],
       // 不声明 orchestration.nodes → buildOrchestrationLegScopes 早返
     }
     const spec = builder.buildFromSemanticState(state)

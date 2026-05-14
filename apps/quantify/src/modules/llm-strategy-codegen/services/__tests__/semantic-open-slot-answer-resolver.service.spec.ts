@@ -10,7 +10,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
 
   it('writes grid count answers into the open level set density slot and closes it', () => {
     const state = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: { lower: 79200, upper: 80200, spacingMode: 'arithmetic' },
         openSlots: [createOpenSlot('contract.shape.price.level_set.density')],
       })],
@@ -23,22 +23,22 @@ describe('semanticOpenSlotAnswerResolverService', () => {
 
     expectConsumed(result)
     expect(result.answer).toEqual({ gridCount: 20 })
-    expect(result.nextState.triggers[0]).toEqual(expect.objectContaining({
+    expect(result.nextState.trigger[0]).toEqual(expect.objectContaining({
       status: 'locked',
       openSlots: [],
     }))
-    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual({
+    expect(result.nextState.trigger[0].contracts?.[0].capabilities[0].shape).toEqual({
       lower: 79200,
       upper: 80200,
       spacingMode: 'arithmetic',
       gridCount: 20,
     })
-    expect(state.triggers[0].openSlots).toEqual([createOpenSlot('contract.shape.price.level_set.density')])
+    expect(state.trigger[0].openSlots).toEqual([createOpenSlot('contract.shape.price.level_set.density')])
   })
 
   it('maps missing level set requirement slots to the same density answer shape', () => {
     const state = createSemanticState({
-      actions: [{
+      action: [{
         id: 'action-grid-ladder',
         key: 'open_long',
         status: 'open',
@@ -73,18 +73,18 @@ describe('semanticOpenSlotAnswerResolverService', () => {
 
     expectConsumed(result)
     expect(result.answer).toEqual({ gridCount: 20 })
-    expect(result.nextState.actions[0]).toEqual(expect.objectContaining({
+    expect(result.nextState.action[0]).toEqual(expect.objectContaining({
       status: 'locked',
       openSlots: [],
     }))
-    expect(result.nextState.actions[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+    expect(result.nextState.action[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
       gridCount: 20,
     }))
   })
 
   it('writes absolute spacing answers into the level set shape', () => {
     const state = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: { lower: 79200, upper: 80200, spacingMode: 'arithmetic' },
         openSlots: [createOpenSlot('contract.shape.price.level_set.density')],
       })],
@@ -97,15 +97,15 @@ describe('semanticOpenSlotAnswerResolverService', () => {
 
     expectConsumed(result)
     expect(result.answer).toEqual({ absoluteSpacing: 100 })
-    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+    expect(result.nextState.trigger[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
       absoluteSpacing: 100,
     }))
-    expect(result.nextState.triggers[0].openSlots).toEqual([])
+    expect(result.nextState.trigger[0].openSlots).toEqual([])
   })
 
   it('writes percent spacing answers into the level set shape', () => {
     const state = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: { mode: 'centered_percent_range', centerSource: 'last_price', halfRangePct: 1, spacingMode: 'arithmetic' },
         openSlots: [createOpenSlot('contract.shape.price.level_set.density')],
       })],
@@ -118,15 +118,15 @@ describe('semanticOpenSlotAnswerResolverService', () => {
 
     expectConsumed(result)
     expect(result.answer).toEqual({ spacingPct: 0.5 })
-    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+    expect(result.nextState.trigger[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
       spacingPct: 0.5,
     }))
-    expect(result.nextState.triggers[0].openSlots).toEqual([])
+    expect(result.nextState.trigger[0].openSlots).toEqual([])
   })
 
   it('opens a business-language conflict slot when one answer provides count and spacing', () => {
     const state = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: { lower: 79200, upper: 80200, spacingMode: 'arithmetic' },
         openSlots: [createOpenSlot('contract.shape.price.level_set.density')],
       })],
@@ -139,7 +139,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
 
     expectConsumed(result)
     expect(result.answer).toEqual({ gridCount: 20, absoluteSpacing: 100 })
-    expect(result.nextState.triggers[0]).toEqual(expect.objectContaining({
+    expect(result.nextState.trigger[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [{
         slotKey: 'contract.shape.price.level_set.spacing_conflict',
@@ -154,7 +154,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
         },
       }],
     }))
-    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+    expect(result.nextState.trigger[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
       gridCount: 20,
       absoluteSpacing: 100,
     }))
@@ -170,7 +170,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
       'triggers[trigger-second-levels].contracts[contract-second-levels].capabilities[price.define.level_set].shape',
     )
     const state = createSemanticState({
-      triggers: [
+      trigger: [
         createLevelSetTrigger({
           id: 'trigger-grid-levels',
           contractId: 'contract-grid-levels',
@@ -202,16 +202,16 @@ describe('semanticOpenSlotAnswerResolverService', () => {
     })
 
     expectConsumed(result)
-    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual({
+    expect(result.nextState.trigger[0].contracts?.[0].capabilities[0].shape).toEqual({
       lower: 100,
       upper: 200,
       spacingMode: 'arithmetic',
     })
-    expect(result.nextState.triggers[0].openSlots).toEqual([firstSlot])
-    expect(result.nextState.triggers[1].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+    expect(result.nextState.trigger[0].openSlots).toEqual([firstSlot])
+    expect(result.nextState.trigger[1].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
       gridCount: 20,
     }))
-    expect(result.nextState.triggers[1].openSlots).toEqual([])
+    expect(result.nextState.trigger[1].openSlots).toEqual([])
   })
 
   it('uses the priority-selected pending clarification target for level set answers', () => {
@@ -228,7 +228,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
       affectsExecution: true,
     }
     const state = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         id: 'trigger-grid-levels',
         contractId: 'contract-grid-levels',
         shape: { lower: 79200, upper: 80200, spacingMode: 'arithmetic' },
@@ -263,7 +263,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
     })
 
     expectConsumed(result)
-    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+    expect(result.nextState.trigger[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
       gridCount: 20,
     }))
     expect(result.closedSlots).toEqual([{ slotKey: densitySlot.slotKey, fieldPath: densitySlot.fieldPath }])
@@ -279,7 +279,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
       'triggers[trigger-grid-levels].contracts[contract-sibling-levels].capabilities[price.define.level_set].shape',
     )
     const state = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: { lower: 100, upper: 200, spacingMode: 'arithmetic' },
         openSlots: [targetSlot, siblingSlot],
         contracts: [
@@ -304,15 +304,15 @@ describe('semanticOpenSlotAnswerResolverService', () => {
 
     expectConsumed(result)
     expect(result.answer).toEqual({ gridCount: 20 })
-    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+    expect(result.nextState.trigger[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
       gridCount: 20,
     }))
-    expect(result.nextState.triggers[0].contracts?.[1].capabilities[0].shape).toEqual({
+    expect(result.nextState.trigger[0].contracts?.[1].capabilities[0].shape).toEqual({
       lower: 1000,
       upper: 2000,
       spacingMode: 'arithmetic',
     })
-    expect(result.nextState.triggers[0].openSlots).toEqual([siblingSlot])
+    expect(result.nextState.trigger[0].openSlots).toEqual([siblingSlot])
   })
 
   it('keeps same-key open slots with different fieldPath when closing the consumed slot', () => {
@@ -325,7 +325,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
       'triggers[trigger-grid-levels].contracts[contract-sibling-levels].capabilities[price.define.level_set].shape',
     )
     const state = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         openSlots: [consumedSlot, siblingSlot],
         contracts: [
           createLevelSetContract('contract-grid-levels', { lower: 79200, upper: 80200, spacingMode: 'arithmetic' }),
@@ -347,19 +347,19 @@ describe('semanticOpenSlotAnswerResolverService', () => {
     })
 
     expectConsumed(result)
-    expect(result.nextState.triggers[0].openSlots).toEqual([siblingSlot])
-    expect(result.nextState.triggers[0].status).toBe('open')
+    expect(result.nextState.trigger[0].openSlots).toEqual([siblingSlot])
+    expect(result.nextState.trigger[0].status).toBe('open')
   })
 
   it('parses grid count labels and interval answers', () => {
     const countState = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: { lower: 79200, upper: 80200, spacingMode: 'arithmetic' },
         openSlots: [createOpenSlot('contract.shape.price.level_set.density')],
       })],
     })
     const intervalState = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: { lower: 79200, upper: 80200, spacingMode: 'arithmetic' },
         openSlots: [createOpenSlot('contract.shape.price.level_set.density')],
       })],
@@ -372,7 +372,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
     expect(countResult.answer).toEqual({ gridCount: 20 })
     expectConsumed(intervalResult)
     expect(intervalResult.answer).toEqual({ gridIntervals: 20, gridCount: 21 })
-    expect(intervalResult.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+    expect(intervalResult.nextState.trigger[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
       gridIntervals: 20,
       gridCount: 21,
     }))
@@ -380,7 +380,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
 
   it('does not open conflict when merged grid count and absolute spacing are consistent', () => {
     const state = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: { lower: 79200, upper: 80200, spacingMode: 'arithmetic' },
         openSlots: [createOpenSlot('contract.shape.price.level_set.density')],
       })],
@@ -392,9 +392,9 @@ describe('semanticOpenSlotAnswerResolverService', () => {
     })
 
     expectConsumed(result)
-    expect(result.nextState.triggers[0].status).toBe('locked')
-    expect(result.nextState.triggers[0].openSlots).toEqual([])
-    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+    expect(result.nextState.trigger[0].status).toBe('locked')
+    expect(result.nextState.trigger[0].openSlots).toEqual([])
+    expect(result.nextState.trigger[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
       gridCount: 11,
       absoluteSpacing: 100,
     }))
@@ -402,7 +402,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
 
   it('opens conflict when existing grid count disagrees with a later spacing answer', () => {
     const state = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: { lower: 79200, upper: 80200, gridCount: 11, spacingMode: 'arithmetic' },
         openSlots: [createOpenSlot('contract.shape.price.level_set.density')],
       })],
@@ -415,8 +415,8 @@ describe('semanticOpenSlotAnswerResolverService', () => {
 
     expectConsumed(result)
     expect(result.answer).toEqual({ absoluteSpacing: 50 })
-    expect(result.nextState.triggers[0].status).toBe('open')
-    expect(result.nextState.triggers[0].openSlots).toEqual([
+    expect(result.nextState.trigger[0].status).toBe('open')
+    expect(result.nextState.trigger[0].openSlots).toEqual([
       expect.objectContaining({
         slotKey: 'contract.shape.price.level_set.spacing_conflict',
         questionHint: '网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。',
@@ -427,7 +427,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
   it('resolves spacing conflict by keeping the grid count', () => {
     const conflictSlot = createOpenSlot('contract.shape.price.level_set.spacing_conflict')
     const state = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: {
           lower: 79200,
           upper: 80200,
@@ -453,11 +453,11 @@ describe('semanticOpenSlotAnswerResolverService', () => {
 
     expectConsumed(result)
     expect(result.answer).toEqual({ resolveConflictBy: 'gridCount' })
-    expect(result.nextState.triggers[0].openSlots).toEqual([])
-    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+    expect(result.nextState.trigger[0].openSlots).toEqual([])
+    expect(result.nextState.trigger[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
       gridCount: 20,
     }))
-    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).not.toEqual(expect.objectContaining({
+    expect(result.nextState.trigger[0].contracts?.[0].capabilities[0].shape).not.toEqual(expect.objectContaining({
       absoluteSpacing: 100,
     }))
   })
@@ -465,7 +465,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
   it('resolves spacing conflict by keeping the spacing', () => {
     const conflictSlot = createOpenSlot('contract.shape.price.level_set.spacing_conflict')
     const state = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: {
           lower: 79200,
           upper: 80200,
@@ -492,11 +492,11 @@ describe('semanticOpenSlotAnswerResolverService', () => {
 
     expectConsumed(result)
     expect(result.answer).toEqual({ resolveConflictBy: 'spacing' })
-    expect(result.nextState.triggers[0].openSlots).toEqual([])
-    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+    expect(result.nextState.trigger[0].openSlots).toEqual([])
+    expect(result.nextState.trigger[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
       absoluteSpacing: 100,
     }))
-    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).not.toEqual(expect.objectContaining({
+    expect(result.nextState.trigger[0].contracts?.[0].capabilities[0].shape).not.toEqual(expect.objectContaining({
       gridCount: 20,
     }))
   })
@@ -504,7 +504,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
   it('resolves spacing conflict from a bare spacing choice answer', () => {
     const conflictSlot = createOpenSlot('contract.shape.price.level_set.spacing_conflict')
     const state = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: {
           lower: 79200,
           upper: 80200,
@@ -531,11 +531,11 @@ describe('semanticOpenSlotAnswerResolverService', () => {
 
     expectConsumed(result)
     expect(result.answer).toEqual({ resolveConflictBy: 'spacing' })
-    expect(result.nextState.triggers[0].openSlots).toEqual([])
-    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+    expect(result.nextState.trigger[0].openSlots).toEqual([])
+    expect(result.nextState.trigger[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
       absoluteSpacing: 100,
     }))
-    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).not.toEqual(expect.objectContaining({
+    expect(result.nextState.trigger[0].contracts?.[0].capabilities[0].shape).not.toEqual(expect.objectContaining({
       gridCount: 20,
     }))
   })
@@ -543,7 +543,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
   it('resolves percent spacing conflict by keeping the spacing', () => {
     const conflictSlot = createOpenSlot('contract.shape.price.level_set.spacing_conflict')
     const state = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: {
           lower: 100,
           upper: 110,
@@ -570,18 +570,18 @@ describe('semanticOpenSlotAnswerResolverService', () => {
 
     expectConsumed(result)
     expect(result.answer).toEqual({ resolveConflictBy: 'spacing' })
-    expect(result.nextState.triggers[0].openSlots).toEqual([])
-    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+    expect(result.nextState.trigger[0].openSlots).toEqual([])
+    expect(result.nextState.trigger[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
       spacingPct: 0.5,
     }))
-    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).not.toEqual(expect.objectContaining({
+    expect(result.nextState.trigger[0].contracts?.[0].capabilities[0].shape).not.toEqual(expect.objectContaining({
       gridCount: 20,
     }))
   })
 
   it('does not consume invalid grid count numbers', () => {
     const state = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: { lower: 79200, upper: 80200, spacingMode: 'arithmetic' },
         openSlots: [createOpenSlot('contract.shape.price.level_set.density')],
       })],
@@ -597,13 +597,13 @@ describe('semanticOpenSlotAnswerResolverService', () => {
 
   it('does not consume messages without a matching open slot or parseable density answer', () => {
     const lockedState = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: { lower: 79200, upper: 80200, spacingMode: 'arithmetic' },
         openSlots: [],
       })],
     })
     const openState = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: { lower: 79200, upper: 80200, spacingMode: 'arithmetic' },
         openSlots: [createOpenSlot('contract.shape.price.level_set.density')],
       })],
@@ -629,7 +629,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
       affectsExecution: true,
     } satisfies SemanticSlotState
     const state = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: { lower: 79200, upper: 80200, spacingMode: 'arithmetic' },
         openSlots: [createOpenSlot('contract.shape.price.level_set.density')],
       })],
@@ -674,7 +674,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
     } satisfies SemanticSlotState
     const densitySlot = createOpenSlot('contract.shape.price.level_set.density')
     const state = createSemanticState({
-      triggers: [createLevelSetTrigger({
+      trigger: [createLevelSetTrigger({
         shape: { lower: 79200, upper: 80200, spacingMode: 'arithmetic' },
         openSlots: [densitySlot],
       })],
@@ -953,17 +953,17 @@ describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
     // PR2c-final-1a: dispatcher 对 'ema20' / '15min' 联合提取精度不如 legacy；
     // params 强断言（indicator='ema', reference.period=20, timeframe='15m'）留 PR2c-final-2 /
     // PR3 dispatcher surface 增强后恢复。sideScope 仍可断言（dispatcher 当前已写入）。
-    expect(result.nextState.triggers).toEqual(expect.arrayContaining([
+    expect(result.nextState.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'indicator.above',
         phase: 'entry',
         sideScope: 'long',
       }),
     ]))
-    expect(result.nextState.actions).toEqual(expect.arrayContaining([
+    expect(result.nextState.action).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'action.open_long' }),
     ]))
-    expect(result.nextState.triggers).not.toEqual(expect.arrayContaining([
+    expect(result.nextState.trigger).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
     ]))
     expect(result.closedSlotKeys).toContain('trigger.entry')
@@ -990,13 +990,13 @@ describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
     })
 
     expectConsumed(result)
-    expect(result.nextState.triggers).toEqual(expect.arrayContaining([
+    expect(result.nextState.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'indicator.above',
         phase: 'entry',
       }),
     ]))
-    expect(result.nextState.triggers).not.toEqual(expect.arrayContaining([
+    expect(result.nextState.trigger).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
     ]))
     // PR2c-final-1a: dispatcher 对 '15min' 不提取 contextSlots.timeframe（legacy extractor 有此逻辑）；
@@ -1013,14 +1013,14 @@ describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
     })
 
     expectConsumed(result)
-    expect(result.nextState.triggers).toEqual(expect.arrayContaining([
+    expect(result.nextState.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({ phase: 'entry' }),
       expect.objectContaining({ phase: 'exit' }),
     ]))
-    expect(result.nextState.triggers).not.toEqual(expect.arrayContaining([
+    expect(result.nextState.trigger).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
     ]))
-    expect(result.nextState.triggers).not.toEqual(expect.arrayContaining([
+    expect(result.nextState.trigger).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'semantic.missing_exit_atom', status: 'open' }),
     ]))
     expect(result.closedSlotKeys).toEqual(expect.arrayContaining(['trigger.entry', 'trigger.exit']))
@@ -1033,16 +1033,16 @@ describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
     })
 
     expectConsumed(result)
-    expect(result.nextState.triggers).toEqual(expect.arrayContaining([
+    expect(result.nextState.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({ phase: 'entry' }),
     ]))
-    expect(result.nextState.triggers).not.toEqual(expect.arrayContaining([
+    expect(result.nextState.trigger).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ phase: 'exit' }),
     ]))
-    expect(result.nextState.actions).toEqual(expect.arrayContaining([
+    expect(result.nextState.action).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'action.open_long' }),
     ]))
-    expect(result.nextState.actions).not.toEqual(expect.arrayContaining([
+    expect(result.nextState.action).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'action.close_long' }),
     ]))
     expect(result.closedSlotKeys).toEqual(['trigger.entry'])
@@ -1057,17 +1057,17 @@ describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
     })
 
     expectConsumed(result)
-    expect(result.nextState.triggers).toEqual(expect.arrayContaining([
+    expect(result.nextState.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({ phase: 'entry', key: 'indicator.above' }),
       expect.objectContaining({ phase: 'gate', key: 'condition.expression' }),
     ]))
-    expect(result.nextState.triggers).not.toEqual(expect.arrayContaining([
+    expect(result.nextState.trigger).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ phase: 'exit' }),
     ]))
-    expect(result.nextState.actions).toEqual(expect.arrayContaining([
+    expect(result.nextState.action).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'open_long' }),
     ]))
-    expect(result.nextState.actions).not.toEqual(expect.arrayContaining([
+    expect(result.nextState.action).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'close_long' }),
     ]))
   })
@@ -1085,7 +1085,7 @@ describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
       consumed: false,
       nextState: state,
     })
-    expect(result.nextState.triggers).not.toEqual(expect.arrayContaining([
+    expect(result.nextState.trigger).not.toEqual(expect.arrayContaining([
       expect.objectContaining({
         status: 'locked',
         openSlots: expect.arrayContaining([
@@ -1464,7 +1464,7 @@ function stateWithMissingEntry(): SemanticState {
   return {
     version: 1,
     families: [],
-    triggers: [{
+    trigger: [{
       id: 'semantic-missing-entry-atom',
       key: 'semantic.missing_entry_atom',
       phase: 'entry',
@@ -1480,7 +1480,7 @@ function stateWithMissingEntry(): SemanticState {
         affectsExecution: true,
       }],
     }],
-    actions: [],
+    action: [],
     risk: [],
     position: {
       mode: 'fixed_ratio',
@@ -1491,6 +1491,9 @@ function stateWithMissingEntry(): SemanticState {
       source: 'user_explicit',
       openSlots: [],
     },
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     contextSlots: {
       exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请选择交易所。', affectsExecution: true },
       symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '请选择标的。', affectsExecution: true },
@@ -1507,8 +1510,8 @@ function stateWithMissingEntryAndExit(): SemanticState {
 
   return {
     ...state,
-    triggers: [
-      ...state.triggers,
+    trigger: [
+      ...state.trigger,
       {
         id: 'semantic-missing-exit-atom',
         key: 'semantic.missing_exit_atom',
@@ -1539,10 +1542,13 @@ function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticSt
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
     position: null,
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     contextSlots: {
       exchange: null,
       symbol: null,
@@ -1560,8 +1566,8 @@ function createLevelSetTrigger(input: {
   contractId?: string
   shape?: Record<string, string | number>
   openSlots: SemanticSlotState[]
-  contracts?: SemanticState['triggers'][number]['contracts']
-}): SemanticState['triggers'][number] {
+  contracts?: SemanticState['trigger'][number]['contracts']
+}): SemanticState['trigger'][number] {
   return {
     id: input.id ?? 'trigger-grid-levels',
     key: 'custom.price.levels',
@@ -1577,7 +1583,7 @@ function createLevelSetTrigger(input: {
   }
 }
 
-function createLevelSetContract(id: string, shape: SemanticCapabilityShape): NonNullable<SemanticState['triggers'][number]['contracts']>[number] {
+function createLevelSetContract(id: string, shape: SemanticCapabilityShape): NonNullable<SemanticState['trigger'][number]['contracts']>[number] {
   return {
     id,
     kind: 'trigger',

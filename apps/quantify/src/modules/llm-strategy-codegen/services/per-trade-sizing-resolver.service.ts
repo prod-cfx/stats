@@ -319,7 +319,7 @@ export class PerTradeSizingResolver {
     // (b) action level — capital.allocate.per_order_budget
     for (const ev of index.byKey('capital', 'allocate', 'per_order_budget')) {
       if (ev.mount !== 'action') continue
-      const action = state.actions.find(a => a.id === ev.ownerId)
+      const action = state.action.find(a => a.id === ev.ownerId)
       const anchor = anchorFromActionCapability(ev, action?.openSlots)
       if (anchor.executionAnchored) {
         out.set(scopeKey(anchor.scope), anchor)
@@ -331,15 +331,17 @@ export class PerTradeSizingResolver {
       if (ev.mount !== 'position_constraint') continue
       const sk = scopeKey({ kind: 'position_constraint', ownerKey: ev.ownerKey })
       // Don't override an already-placed entry from same scope (shouldn't happen with distinct mounts, but defensive)
-      const pc = pos?.constraints?.find(c => c.key === ev.ownerKey)
+      // Task 6: read top-level positionConstraint[] (legacy position.constraints removed)
+      const pc = (state.positionConstraint ?? []).find(c => c.key === ev.ownerKey)
       const anchor = anchorFromPositionConstraintCapability(ev, pc)
       if (anchor.executionAnchored) {
         out.set(sk, anchor)
       }
     }
 
-    // (d) degraded path — positionConstraints[*].params.perOrderSizing
-    for (const pc of pos?.constraints ?? []) {
+    // (d) degraded path — positionConstraint[*].params.perOrderSizing
+    // Task 6: read top-level positionConstraint[]
+    for (const pc of state.positionConstraint ?? []) {
       const sk = scopeKey({ kind: 'position_constraint', ownerKey: pc.key })
       if (out.has(sk)) continue // capability main path already placed — skip fallback
       const resolved = readPerOrderSizingFromParams(pc.params)

@@ -56,7 +56,7 @@ describe('specDescBuilderService', () => {
     const semanticState: SemanticState = {
       version: 1,
       families: ['single-leg'],
-      triggers: [
+      trigger: [
         {
           id: 'entry-close-gt-high',
           key: 'condition.expression',
@@ -75,7 +75,7 @@ describe('specDescBuilderService', () => {
           openSlots: [],
         },
       ],
-      actions: [{ id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      action: [{ id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
       risk: [],
       position: {
         sizing: { kind: 'ratio', value: 0.03, unit: 'ratio' },
@@ -86,6 +86,9 @@ describe('specDescBuilderService', () => {
         source: 'user_explicit',
         openSlots: [],
       },
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       contextSlots: {
         exchange: null,
         symbol: null,

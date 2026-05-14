@@ -1,27 +1,31 @@
 /**
- * #1358: gate-only substrategy path — CanonicalSpecBuilderService
+ * #1364 AC-4 — CanonicalSpecBuilderService orchestration 节点直读
  *
- * 当 LLM patch 将 portfolioRisk.* / scope.* atom 以 phase='gate' 放进
- * state.triggers（而非 orchestration.nodes）时，buildFromSemanticState 需要将
- * 这些 trigger 提升为 spec.orchestration.portfolioRisks / .scopes。
+ * 历史背景：本 spec 原名 "gate-trigger-promotion"，用于覆盖 PR #1359/#1360 引入的
+ * 三段 promotion hack（buildOrchestrationPairsFromProgramActions /
+ * buildOrchestration*FromGateTriggers），把 LLM 错放在 state.trigger[] 里的
+ * portfolioRisk.* / scope.* atom 提升到 spec.orchestration。
  *
- * 本 spec 覆盖三个场景：
- *   T1. drawdown_block gate trigger → orchestration.portfolioRisks scope='portfolio'
- *   T2. scope.symbol + symbol_exposure_cap gate triggers → scope + portfolioRisk
- *   T3. scope.subStrategy×2 + substrategy_exposure_cap gate trigger → 2 scopes + 2 portfolioRisks
+ * AC-4 之后：服务端归桶器已按 ATOM_CONTRACT_REGISTRY[key].bucket 单一真相源把
+ * orchestration atom 直接落到 state.orchestration[]，三段 hack 已物理删除。
+ * 本 spec 改为直接验证 builder 从 state.orchestration[] 正确派生
+ * spec.orchestration.portfolioRisks / .scopes。
  */
 
-import type { SemanticState, SemanticTriggerState } from '../../types/semantic-state'
+import type { SemanticOrchestrationNode, SemanticState } from '../../types/semantic-state'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 
-function makeBaseState(triggers: SemanticTriggerState[]): SemanticState {
+function makeBaseState(orchestration: SemanticOrchestrationNode[]): SemanticState {
   return {
     version: 1,
     families: [],
-    triggers,
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration,
+    orchestrationContracts: [],
     position: null,
     contextSlots: {
       exchange: {
@@ -50,20 +54,117 @@ function makeBaseState(triggers: SemanticTriggerState[]): SemanticState {
   }
 }
 
-function makeGateTrigger(
-  id: string,
-  key: string,
-  params: Record<string, unknown>,
-): SemanticTriggerState {
+function makeDrawdownBlockNode(id: string, thresholdPct: number): SemanticOrchestrationNode {
   return {
     id,
-    key,
-    phase: 'gate',
-    params,
+    kind: 'portfolioRisk',
+    key: 'portfolioRisk.drawdown_block',
+    params: { thresholdPct, mode: 'enforce' },
     status: 'locked',
     source: 'user_explicit',
     openSlots: [],
     contracts: [],
+    scope: 'portfolio',
+    mode: 'enforce',
+    thresholdPct,
+  }
+}
+
+function makeSymbolScopeNode(
+  id: string,
+  symbols: readonly string[],
+  primarySymbol?: string,
+): SemanticOrchestrationNode {
+  return {
+    id,
+    kind: 'scope',
+    key: 'scope.symbol',
+    params: { symbols: [...symbols], ...(primarySymbol ? { primarySymbol } : {}) },
+    status: 'locked',
+    source: 'user_explicit',
+    openSlots: [],
+    contracts: [],
+    symbolScopeKind: 'symbol',
+    symbols,
+    ...(primarySymbol ? { primarySymbol } : {}),
+  }
+}
+
+function makeSubStrategyScopeNode(
+  id: string,
+  subStrategyId: string,
+): SemanticOrchestrationNode {
+  return {
+    id,
+    kind: 'scope',
+    key: 'scope.subStrategy',
+    params: {
+      subStrategyId,
+      positionHandlingOnDeactivate: 'close',
+      orderHandlingOnDeactivate: 'cancel',
+    },
+    status: 'locked',
+    source: 'user_explicit',
+    openSlots: [],
+    contracts: [],
+    subStrategyScopeKind: 'subStrategy',
+    subStrategyId,
+    positionHandlingOnDeactivate: 'close',
+    orderHandlingOnDeactivate: 'cancel',
+  }
+}
+
+function makeSymbolExposureCapNode(
+  id: string,
+  notionalCapPct: number,
+  boundSymbolScopeRef: string,
+): SemanticOrchestrationNode {
+  return {
+    id,
+    kind: 'portfolioRisk',
+    key: 'portfolioRisk.symbol_exposure_cap',
+    params: {
+      notionalCapPct,
+      mode: 'enforce',
+      effectWhenTriggered: 'block_new_entries',
+      boundSymbolScopeRef,
+    },
+    status: 'locked',
+    source: 'user_explicit',
+    openSlots: [],
+    contracts: [],
+    scope: 'symbol',
+    mode: 'enforce',
+    notionalCapPct,
+    effectWhenTriggered: 'block_new_entries',
+    boundSymbolScopeRef,
+  }
+}
+
+function makeSubStrategyExposureCapNode(
+  id: string,
+  notionalCapPct: number,
+  boundSubStrategyScopeRef: string,
+): SemanticOrchestrationNode {
+  return {
+    id,
+    kind: 'portfolioRisk',
+    key: 'portfolioRisk.substrategy_exposure_cap',
+    params: {
+      notionalCapPct,
+      mode: 'enforce',
+      effectWhenTriggered: 'block_new_entries',
+      boundSubStrategyScopeRef,
+    },
+    status: 'locked',
+    source: 'user_explicit',
+    openSlots: [],
+    contracts: [],
+    scope: 'subStrategy',
+    mode: 'enforce',
+    notionalCapPct,
+    effectWhenTriggered: 'block_new_entries',
+    boundSubStrategyScopeRef,
   }
 }
 
@@ -77,16 +178,13 @@ const FALLBACK = {
   positionPct: 10,
 }
 
-describe('CanonicalSpecBuilderService — gate trigger promotion (#1358)', () => {
+describe('CanonicalSpecBuilderService — orchestration nodes → spec.orchestration (#1364 AC-4)', () => {
   // ---------------------------------------------------------------
-  // T1: portfolioRisk.drawdown_block gate trigger → portfolio risk
+  // T1: portfolioRisk.drawdown_block node → portfolio risk
   // ---------------------------------------------------------------
-  describe('T1: drawdown_block gate trigger → orchestration.portfolioRisks scope=portfolio', () => {
+  describe('T1: drawdown_block orchestration node → orchestration.portfolioRisks scope=portfolio', () => {
     const state = makeBaseState([
-      makeGateTrigger('trig-drawdown-1', 'portfolioRisk.drawdown_block', {
-        thresholdPct: 15,
-        mode: 'enforce',
-      }),
+      makeDrawdownBlockNode('node-drawdown-1', 15),
     ])
     const spec = builder.buildFromSemanticState(state)
 
@@ -94,7 +192,7 @@ describe('CanonicalSpecBuilderService — gate trigger promotion (#1358)', () =>
       expect(spec.orchestration?.portfolioRisks).toHaveLength(1)
       const risk = spec.orchestration?.portfolioRisks?.[0]
       expect(risk).toMatchObject({
-        id: 'trig-drawdown-1',
+        id: 'node-drawdown-1',
         scope: 'portfolio',
         mode: 'enforce',
         thresholdPct: 15,
@@ -111,19 +209,12 @@ describe('CanonicalSpecBuilderService — gate trigger promotion (#1358)', () =>
   })
 
   // ---------------------------------------------------------------
-  // T2: scope.symbol + symbol_exposure_cap
+  // T2: scope.symbol + symbol_exposure_cap orchestration nodes
   // ---------------------------------------------------------------
-  describe('T2: scope.symbol + symbol_exposure_cap gate triggers → scope + portfolioRisk', () => {
+  describe('T2: scope.symbol + symbol_exposure_cap orchestration nodes → scope + portfolioRisk', () => {
     const state = makeBaseState([
-      makeGateTrigger('trig-sym-scope-1', 'scope.symbol', {
-        symbols: ['BTCUSDT', 'ETHUSDT'],
-        primarySymbol: 'BTCUSDT',
-      }),
-      makeGateTrigger('trig-sym-cap-1', 'portfolioRisk.symbol_exposure_cap', {
-        notionalCapPct: 30,
-        mode: 'enforce',
-        effectWhenTriggered: 'block_new_entries',
-      }),
+      makeSymbolScopeNode('node-sym-scope-1', ['BTCUSDT', 'ETHUSDT'], 'BTCUSDT'),
+      makeSymbolExposureCapNode('node-sym-cap-1', 30, 'node-sym-scope-1'),
     ])
     const spec = builder.buildFromSemanticState(state)
 
@@ -144,35 +235,21 @@ describe('CanonicalSpecBuilderService — gate trigger promotion (#1358)', () =>
       if (capRisk?.scope === 'symbol') {
         expect(capRisk.notionalCapPct).toBe(30)
         expect(capRisk.mode).toBe('enforce')
-        expect(capRisk.symbolScopeRef).toBe('trig-sym-scope-1')
+        expect(capRisk.symbolScopeRef).toBe('node-sym-scope-1')
       }
     })
   })
 
   // ---------------------------------------------------------------
-  // T3: scope.subStrategy×2 + substrategy_exposure_cap
+  // T3: scope.subStrategy×2 + substrategy_exposure_cap×2
   // ---------------------------------------------------------------
-  describe('T3: scope.subStrategy×2 + substrategy_exposure_cap → 2 scopes + 2 portfolioRisks', () => {
+  describe('T3: scope.subStrategy×2 + substrategy_exposure_cap×2 → 2 scopes + 2 portfolioRisks', () => {
     const state = makeBaseState([
-      makeGateTrigger('trig-sub-scope-A', 'scope.subStrategy', {
-        subStrategyId: 'A_RSI_reversal_long_BTC',
-        positionHandlingOnDeactivate: 'close',
-        orderHandlingOnDeactivate: 'cancel',
-      }),
-      makeGateTrigger('trig-sub-scope-B', 'scope.subStrategy', {
-        subStrategyId: 'B_EMA_trend_follow_ETH',
-        positionHandlingOnDeactivate: 'close',
-        orderHandlingOnDeactivate: 'cancel',
-      }),
-      makeGateTrigger('trig-sub-cap-1', 'portfolioRisk.substrategy_exposure_cap', {
-        notionalCapPct: 50,
-        mode: 'enforce',
-        effectWhenTriggered: 'block_new_entries',
-      }),
-      makeGateTrigger('trig-drawdown-2', 'portfolioRisk.drawdown_block', {
-        thresholdPct: 15,
-        mode: 'enforce',
-      }),
+      makeSubStrategyScopeNode('node-sub-scope-A', 'A_RSI_reversal_long_BTC'),
+      makeSubStrategyScopeNode('node-sub-scope-B', 'B_EMA_trend_follow_ETH'),
+      makeSubStrategyExposureCapNode('node-sub-cap-A', 50, 'node-sub-scope-A'),
+      makeSubStrategyExposureCapNode('node-sub-cap-B', 50, 'node-sub-scope-B'),
+      makeDrawdownBlockNode('node-drawdown-2', 15),
     ])
     const spec = builder.buildFromSemanticState(state)
 
@@ -202,11 +279,11 @@ describe('CanonicalSpecBuilderService — gate trigger promotion (#1358)', () =>
       expect(drawdownRisks).toHaveLength(1)
     })
 
-    it('subStrategy portfolioRisk 各 subStrategyScopeRef 绑定到对应 scope trigger id', () => {
+    it('subStrategy portfolioRisk 各 subStrategyScopeRef 绑定到对应 scope node id', () => {
       const risks = spec.orchestration?.portfolioRisks ?? []
       const subRisks = risks.filter(r => r.scope === 'subStrategy')
       const refs = subRisks.map(r => (r as { subStrategyScopeRef?: string }).subStrategyScopeRef).sort()
-      expect(refs).toEqual(['trig-sub-scope-A', 'trig-sub-scope-B'])
+      expect(refs).toEqual(['node-sub-scope-A', 'node-sub-scope-B'])
     })
 
     it('IR orchestrationPortfolioRisks 共 3 条（2 subStrategy + 1 portfolio）', () => {
@@ -224,9 +301,9 @@ describe('CanonicalSpecBuilderService — gate trigger promotion (#1358)', () =>
   })
 
   // ---------------------------------------------------------------
-  // T4: 无 gate trigger → 无额外 portfolioRisk / scope（零侧效应）
+  // T4: 空 orchestration → 无 spec.orchestration
   // ---------------------------------------------------------------
-  describe('T4: no gate triggers → no extra portfolioRisks/scopes emitted', () => {
+  describe('T4: empty orchestration → no orchestration emitted', () => {
     const state = makeBaseState([])
     const spec = builder.buildFromSemanticState(state)
 

@@ -23,7 +23,7 @@ function compileAtomicAst(name: Parameters<typeof buildLockedAtomicState>[0]): S
 
 function compileBreakoutWithRollingHighAst(): StrategyAstV1 {
   const state = buildLockedAtomicState('breakout-retest')
-  state.triggers.push({
+  state.trigger.push({
     id: 'gate-rolling-high-breakout',
     key: 'price.rolling_extrema_breakout',
     phase: 'gate',

@@ -18,7 +18,6 @@ import type {
   SemanticEvidence,
   SemanticNodeStatus,
   SemanticOrchestrationNode,
-  SemanticOrchestrationState,
   SemanticOrderRequirement,
   SemanticPositionConstraintState,
   SemanticPositionSizingContract,
@@ -41,6 +40,9 @@ import type { SizingAnchor, SizingAxis } from './per-trade-sizing-resolver.servi
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { buildTriggerCombinationContract, isTriggerPredicateGroupContract, normalizeRiskSemantic } from './semantic-state-normalization'
 import { validateSemanticRiskContract } from './strategy-semantic-contracts'
+
+// DEPRECATED Task 6: legacy aggregate shape; new SemanticState splits into orchestration + orchestrationContracts
+type SemanticOrchestrationState = { nodes: SemanticOrchestrationNode[], contracts: readonly unknown[] }
 
 // Issue #1223: 出口 evidence invariant 模式
 //   throw  — 违规立即抛出（spec 测试需显式传入）
@@ -155,10 +157,33 @@ export class SemanticSeedStateBuilderService {
     this.evidenceInvariantMode = evidenceInvariantMode ?? 'drop'
   }
 
-  build(semanticPatch: unknown, message?: string): SemanticState | null {
-    if (!this.isRecord(semanticPatch)) {
+  build(semanticPatchInput: unknown, message?: string): SemanticState | null {
+    if (!this.isRecord(semanticPatchInput)) {
       return null
     }
+
+    // #1364 AC-3: 服务端按 ATOM_CONTRACT_REGISTRY[key].bucket 归桶 —
+    // patch.atoms[] 是单数组单数源，LLM 不再决定 bucket。
+    // 兼容存量 5 桶 patch shape（triggers/actions/risk/...）以便内部 caller 渐进迁移。
+    let semanticPatch: SemanticPatchRecord = semanticPatchInput
+    if (Array.isArray(semanticPatch.atoms)) {
+      const dispatched = this.dispatchAtomsByContractBucket(semanticPatch.atoms)
+      semanticPatch = {
+        ...semanticPatch,
+        triggers: [...(Array.isArray(semanticPatch.triggers) ? semanticPatch.triggers : []), ...dispatched.trigger],
+        actions: [...(Array.isArray(semanticPatch.actions) ? semanticPatch.actions : []), ...dispatched.action],
+        risk: [...(Array.isArray(semanticPatch.risk) ? semanticPatch.risk : []), ...dispatched.risk],
+        // positionConstraint / orchestration atoms 暂走 orchestration nodes 路径或丢弃；
+        // 主要 LLM 输出场景目前是 trigger/action/risk，positionConstraint/orchestration
+        // 仍通过专用 patch channel（patch.position / patch.orchestration）注入。
+        orchestration: this.mergeOrchestrationPatch(
+          semanticPatch.orchestration,
+          dispatched.orchestration,
+        ),
+      }
+    }
+    // Note: legacy 5-bucket patch shape (triggers/actions/risk) remains accepted for
+    // backward compatibility with internal callers; new patches should use atoms[].
 
     const triggerItems = Array.isArray(semanticPatch.triggers)
       ? semanticPatch.triggers
@@ -271,14 +296,16 @@ export class SemanticSeedStateBuilderService {
     return this.withRequiredSeedOpenSlots({
       version: 1,
       families: [],
-      triggers: groupedTriggerUpdates,
-      actions: actionUpdates,
+      trigger: groupedTriggerUpdates,
+      action: actionUpdates,
       risk: riskUpdates,
       position: positionUpdate,
+      positionConstraint: [],
+      orchestration: orchestration?.nodes ?? [],
+      orchestrationContracts: [],
       contextSlots,
       normalizationNotes: [],
       updatedAt: new Date().toISOString(),
-      ...(orchestration ? { orchestration } : {}),
     })
   }
 
@@ -379,6 +406,81 @@ export class SemanticSeedStateBuilderService {
 
   private isCombinationContract(contract: SemanticAtomContract): boolean {
     return isTriggerPredicateGroupContract(contract)
+  }
+
+  // #1364 AC-3: 单一真相源 — 按 ATOM_CONTRACT_REGISTRY[key].bucket 服务端归桶。
+  // patch.atoms[] 输入侧 LLM 不再决定 bucket；未知 key warn-drop（fail-closed）。
+  // 同时按 contract.surface.phaseResolver=fixed-* 强制覆写 LLM 提供的 phase。
+  private dispatchAtomsByContractBucket(atoms: unknown[]): {
+    trigger: unknown[]
+    action: unknown[]
+    risk: unknown[]
+    positionConstraint: unknown[]
+    orchestration: unknown[]
+  } {
+    const out = {
+      trigger: [] as unknown[],
+      action: [] as unknown[],
+      risk: [] as unknown[],
+      positionConstraint: [] as unknown[],
+      orchestration: [] as unknown[],
+    }
+    for (const atom of atoms) {
+      if (!this.isRecord(atom)) continue
+      const key = typeof atom.key === 'string' ? atom.key : null
+      if (key === null) {
+        this.logger.warn(`[#1364] atoms[] entry missing key field — dropped`)
+        continue
+      }
+      const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string, surface?: { phaseResolver?: string } } | undefined>)[key]
+      if (!contract || typeof contract.bucket !== 'string') {
+        this.logger.warn(`[#1364] atoms[] unknown key dropped: key=${key}`)
+        continue
+      }
+      // phase enforcement: fixed-entry / fixed-exit / fixed-gate -> server 覆写
+      const resolver = contract.surface?.phaseResolver
+      let normalized: Record<string, unknown> = atom
+      if (typeof resolver === 'string' && resolver.startsWith('fixed-')) {
+        normalized = { ...atom, phase: resolver.slice('fixed-'.length) }
+      }
+      switch (contract.bucket) {
+        case 'trigger': out.trigger.push(normalized); break
+        case 'action': out.action.push(normalized); break
+        case 'risk': out.risk.push(normalized); break
+        case 'positionConstraint': out.positionConstraint.push(normalized); break
+        case 'orchestration': out.orchestration.push(normalized); break
+        default:
+          this.logger.warn(`[#1364] atoms[] unknown bucket dropped: key=${key} bucket=${contract.bucket}`)
+      }
+    }
+    return out
+  }
+
+  // Merge 现有 patch.orchestration 与 atoms[] 派生 orchestration nodes。
+  // 现有 patch.orchestration shape: { nodes: [...], contracts: [...] }
+  // atoms[] 派生项需补 kind（按 key prefix 推断 gate.* / scope.* / program.* / portfolioRisk.*）。
+  private mergeOrchestrationPatch(existing: unknown, atomNodes: unknown[]): unknown {
+    const inferred: Record<string, unknown>[] = []
+    for (const atom of atomNodes) {
+      if (!this.isRecord(atom)) continue
+      const key = typeof atom.key === 'string' ? atom.key : ''
+      let kind: 'gate' | 'scope' | 'program' | 'portfolioRisk' | undefined
+      if (key.startsWith('gate.')) kind = 'gate'
+      else if (key.startsWith('scope.')) kind = 'scope'
+      else if (key.startsWith('program.')) kind = 'program'
+      else if (key.startsWith('portfolioRisk.')) kind = 'portfolioRisk'
+      if (!kind) continue
+      inferred.push({ ...atom, kind })
+    }
+    if (!this.isRecord(existing)) {
+      if (inferred.length === 0) return undefined
+      return { nodes: inferred, contracts: [] }
+    }
+    const existingNodes = Array.isArray(existing.nodes) ? existing.nodes : []
+    return {
+      ...existing,
+      nodes: [...existingNodes, ...inferred],
+    }
   }
 
   private toOrchestrationState(value: unknown): SemanticOrchestrationState | undefined {
@@ -1644,7 +1746,7 @@ export class SemanticSeedStateBuilderService {
   }
 
   private withRequiredSeedOpenSlots(state: SemanticState): SemanticState {
-    const hasExecutableSemantics = state.triggers.length > 0 || state.actions.length > 0
+    const hasExecutableSemantics = state.trigger.length > 0 || state.action.length > 0
     if (!hasExecutableSemantics) {
       return state
     }
@@ -1688,7 +1790,7 @@ export class SemanticSeedStateBuilderService {
           mode: 'fixed_ratio',
           value: 0,
           sizing: null,
-          positionMode: this.inferPositionModeFromActions(state.actions),
+          positionMode: this.inferPositionModeFromActions(state.action),
           status: 'open',
           source: 'derived',
           openSlots: [{
@@ -1727,7 +1829,7 @@ export class SemanticSeedStateBuilderService {
         sizing: legacySizingFromNormalized(axis, value, asset),
         mode: legacyModeFromAxis(axis),
         value,
-        positionMode: state.position?.positionMode ?? this.inferPositionModeFromActions(state.actions),
+        positionMode: state.position?.positionMode ?? this.inferPositionModeFromActions(state.action),
         status: 'locked',
         source: 'derived',
         openSlots: [],

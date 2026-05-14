@@ -34,9 +34,12 @@ function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticSt
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: {
       exchange: null,
@@ -120,7 +123,7 @@ describe('orchestration portfolioRisk.symbol_exposure_cap — golden corpus (Pha
 
       const state = builder.build(patch)
       expect(state).not.toBeNull()
-      const stateNode = state!.orchestration?.nodes.find(n => n.key === 'portfolioRisk.symbol_exposure_cap')
+      const stateNode = state!.orchestration.find(n => n.key === 'portfolioRisk.symbol_exposure_cap')
       expect(stateNode).toBeDefined()
       expect(stateNode?.kind).toBe('portfolioRisk')
       expect(stateNode?.scope).toBe('symbol')
@@ -173,104 +176,88 @@ describe('orchestration portfolioRisk.symbol_exposure_cap — golden corpus (Pha
 
     it('B.1 valid node + sibling scope.symbol locked + 新策略 → no phase0 unsupported slot', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [symbolScopeNode(), symbolCapNode()],
-          contracts: [],
-        },
+        orchestration: [symbolScopeNode(), symbolCapNode()],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.symbol_exposure_cap')?.openSlots ?? []
       expect(slots).not.toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
 
     it('B.2 scope !== "symbol" → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [symbolScopeNode(), symbolCapNode({ scope: 'portfolio' as SemanticOrchestrationNode['scope'] })],
-          contracts: [],
-        },
+        orchestration: [symbolScopeNode(), symbolCapNode({ scope: 'portfolio' as SemanticOrchestrationNode['scope'] })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.symbol_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
 
     it('B.3 invalid mode → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [symbolScopeNode(), symbolCapNode({ mode: 'unknown' as SemanticOrchestrationNode['mode'] })],
-          contracts: [],
-        },
+        orchestration: [symbolScopeNode(), symbolCapNode({ mode: 'unknown' as SemanticOrchestrationNode['mode'] })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.symbol_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
 
     it('B.4 notionalCapPct=0 (≤0) → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [symbolScopeNode(), symbolCapNode({ notionalCapPct: 0 })],
-          contracts: [],
-        },
+        orchestration: [symbolScopeNode(), symbolCapNode({ notionalCapPct: 0 })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.symbol_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
 
     it('B.5 notionalCapPct=150 (>100) → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [symbolScopeNode(), symbolCapNode({ notionalCapPct: 150 })],
-          contracts: [],
-        },
+        orchestration: [symbolScopeNode(), symbolCapNode({ notionalCapPct: 150 })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.symbol_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
 
     it('B.6 invalid effectWhenTriggered (pause_substrategy is not valid for symbol) → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [symbolScopeNode(), symbolCapNode({ effectWhenTriggered: 'pause_substrategy' })],
-          contracts: [],
-        },
+        orchestration: [symbolScopeNode(), symbolCapNode({ effectWhenTriggered: 'pause_substrategy' })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.symbol_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
 
     it('B.7 boundSymbolScopeRef empty → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [symbolScopeNode(), symbolCapNode({ boundSymbolScopeRef: '' })],
-          contracts: [],
-        },
+        orchestration: [symbolScopeNode(), symbolCapNode({ boundSymbolScopeRef: '' })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.symbol_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
 
     it('B.8 boundSymbolScopeRef not matching any sibling scope.symbol id → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [symbolScopeNode('different-id'), symbolCapNode({ boundSymbolScopeRef: 'nonexistent-scope-id' })],
-          contracts: [],
-        },
+        orchestration: [symbolScopeNode('different-id'), symbolCapNode({ boundSymbolScopeRef: 'nonexistent-scope-id' })],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.symbol_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
@@ -278,27 +265,23 @@ describe('orchestration portfolioRisk.symbol_exposure_cap — golden corpus (Pha
     it('B.9 sibling scope.symbol exists but status=open (not locked) → phase0 unsupported', () => {
       const unlockedScope = { ...symbolScopeNode(), status: 'open' as const }
       const state = createSemanticState({
-        orchestration: {
-          nodes: [unlockedScope, symbolCapNode()],
-          contracts: [],
-        },
+        orchestration: [unlockedScope, symbolCapNode()],
+        orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.symbol_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
 
     it('B.10 老策略 (deployedAtSemanticVersion=null) → phase0 unsupported（version-gate fail-closed）', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [symbolScopeNode(), symbolCapNode()],
-          contracts: [],
-        },
+        orchestration: [symbolScopeNode(), symbolCapNode()],
+        orchestrationContracts: [],
       })
       const legacy: StrategyVersionInfo = { deployedAtSemanticVersion: null }
       const result = readiness().normalize(state, legacy)
-      const slots = result.state.orchestration?.nodes
+      const slots = result.state.orchestration
         .find(n => n.key === 'portfolioRisk.symbol_exposure_cap')?.openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({ slotKey: 'orchestration.phase0.unsupported' }))
     })
@@ -312,10 +295,8 @@ describe('orchestration portfolioRisk.symbol_exposure_cap — golden corpus (Pha
 
     it('C.1 supported symbol_exposure_cap renders 中文 label without leaking internal keys', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [symbolScopeNode(), symbolCapNode()],
-          contracts: [],
-        },
+        orchestration: [symbolScopeNode(), symbolCapNode()],
+        orchestrationContracts: [],
       })
       const graph = projection.buildDisplayLogicGraph(state)
       const orchestrationBlocks = graph.blocks.filter(b => b.type === 'ORCHESTRATION')
@@ -342,13 +323,11 @@ describe('orchestration portfolioRisk.symbol_exposure_cap — golden corpus (Pha
 
     it('C.3 observe mode renders distinct token from enforce mode (no "enforce" text leak)', () => {
       const state = createSemanticState({
-        orchestration: {
-          nodes: [
+        orchestration: [
             symbolScopeNode(),
             symbolCapNode({ mode: 'observe', params: { notionalCapPct: 30, mode: 'observe' } }),
           ],
-          contracts: [],
-        },
+        orchestrationContracts: [],
       })
       const graph = projection.buildDisplayLogicGraph(state)
       const flat = graph.blocks.flatMap(b => b.items.map(i => i.text)).join(' ')
@@ -396,10 +375,8 @@ describe('orchestration portfolioRisk.symbol_exposure_cap — golden corpus (Pha
           source: 'user_explicit',
           openSlots: [],
         },
-        orchestration: {
-          nodes: [symbolScopeNode(), symbolCapNode(nodeOverrides)],
-          contracts: [],
-        },
+        orchestration: [symbolScopeNode(), symbolCapNode(nodeOverrides)],
+        orchestrationContracts: [],
       })
 
       const spec = builder.buildFromSemanticState(state)
@@ -551,7 +528,7 @@ describe('orchestration portfolioRisk.symbol_exposure_cap — golden corpus (Pha
           source: 'user_explicit',
           openSlots: [],
         },
-        orchestration: { nodes: [drawdownNode], contracts: [] },
+        orchestration: [drawdownNode], orchestrationContracts: [],
       })
 
       const spec = builder.buildFromSemanticState(state)

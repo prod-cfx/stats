@@ -31,7 +31,7 @@ function buildU1LockedSemanticState(): SemanticState {
   return {
     version: 1,
     families: ['single-leg'],
-    triggers: [
+    trigger: [
       {
         id: 'entry-ema-cross-over',
         key: 'indicator.cross_over',
@@ -53,7 +53,7 @@ function buildU1LockedSemanticState(): SemanticState {
         openSlots: [],
       },
     ],
-    actions: [
+    action: [
       { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
       { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
     ],
@@ -67,6 +67,9 @@ function buildU1LockedSemanticState(): SemanticState {
       source: 'user_explicit',
       openSlots: [],
     },
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     contextSlots: {
       exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请选择交易所', affectsExecution: true },
       symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '请选择交易标的', affectsExecution: true },

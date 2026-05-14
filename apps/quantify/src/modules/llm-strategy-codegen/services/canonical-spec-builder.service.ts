@@ -115,15 +115,13 @@ export class CanonicalSpecBuilderService {
   ) {}
 
   /**
-   * #1364 PR3：扫 SemanticState 检测桶错位（trigger atom 出现在 actions[]，
+   * #1364：扫 SemanticState 检测桶错位（trigger atom 出现在 actions[]，
    * 或 orchestration atom 出现在 triggers[]/actions[] 等），按 contract.bucket
    * 单一真相源校验，不一致时 warn-log。
    *
-   * 不做自动修正：自动 re-route 需要重建 envelope（orchestration 节点有 14 种
-   * discriminated union），不在本 PR 范围。当前下游 `buildOrchestrationPairsFromProgramActions`
-   * 等三段兜底 hack 仍在执行，待 #1364 AC-2/AC-3 完整实施（LLM patch shape 折叠为
-   * `atoms: [{key, phase?, params}]` 单数组 + 服务端按 contract.bucket 强制归桶）后
-   * 删除 hack。
+   * AC-4 后：服务端归桶器已强制把 orchestration atom 路由到 state.orchestration[]，
+   * 兜底 promotion hack（PR #1356/#1359/#1360）已物理删除；此处仅保留
+   * warn-only 监控，捕获任何残留错位（理论上不应再出现）。
    */
   private warnBucketMismatchInState(state: SemanticState): void {
     const checkBucket = (
@@ -139,8 +137,8 @@ export class CanonicalSpecBuilderService {
         )
       }
     }
-    for (const t of state.triggers) checkBucket(t.key, 'trigger', 'state.triggers')
-    for (const a of state.actions) checkBucket(a.key, 'action', 'state.actions')
+    for (const t of state.trigger) checkBucket(t.key, 'trigger', 'state.triggers')
+    for (const a of state.action) checkBucket(a.key, 'action', 'state.actions')
     for (const r of state.risk) checkBucket(r.key, 'risk', 'state.risk')
   }
 
@@ -609,35 +607,15 @@ export class CanonicalSpecBuilderService {
       orderPrograms,
     )
     const baseRequiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
-    const defaultTimeframe = this.readLockedContextSlotString(normalizedState.contextSlots.timeframe)
-    // #1364 PR3 — 桶错位检测（warn-only），并保留下游兜底 hack（#1357/#1358）：
-    //   bucket 决策真相源已收敛到 ATOM_CONTRACT_REGISTRY[key].bucket；当 LLM patch
-    //   把 orchestration atom（如 portfolioRisk.* / scope.* / program.*）放进
-    //   `state.triggers/state.actions` 时，这里 warn-log 暴露错位形态。
-    //   下方 `buildOrchestrationPairsFromProgramActions` / `*FromGateTriggers` 三段
-    //   兜底 hack 仍在执行（删除 = 立刻 regress 现网 5 条用户策略 + corpus），
-    //   待 LLM patch shape 折叠（issue #1364 AC-2/AC-3 完整实施）后才能删除。
+    // #1364 AC-4 — bucket 决策真相源已收敛到 ATOM_CONTRACT_REGISTRY[key].bucket
+    // 服务端归桶后，orchestration atom 一律落在 state.orchestration[]，
+    // 下游兜底 hack（#1357/#1358 / PR #1359/#1360）已物理删除。
+    // 这里保留 warn-log 暴露任何残留错位形态。
     this.warnBucketMismatchInState(normalizedState)
-    // [DEPRECATED, 待 #1364 AC-2/AC-3 完整实施后删除] #1357 兜底
-    const promotedPairs = this.buildOrchestrationPairsFromProgramActions(normalizedState, defaultTimeframe)
-    const orchestrationGates = [
-      ...this.buildOrchestrationGates(normalizedState),
-      ...promotedPairs.map(p => p.gate),
-    ]
-    // [DEPRECATED, 待 #1364 AC-2/AC-3 完整实施后删除] #1358 兜底
-    const orchestrationPortfolioRisks = [
-      ...this.buildOrchestrationPortfolioRisks(normalizedState),
-      ...this.buildOrchestrationPortfolioRisksFromGateTriggers(normalizedState),
-    ].sort((a, b) => a.id.localeCompare(b.id))
-    const orchestrationPrograms = [
-      ...this.buildOrchestrationPrograms(normalizedState),
-      ...promotedPairs.map(p => p.program),
-    ]
-    // [DEPRECATED, 待 #1364 AC-2/AC-3 完整实施后删除] #1358 兜底
-    const orchestrationScopes = [
-      ...this.buildOrchestrationScopes(normalizedState),
-      ...this.buildOrchestrationScopesFromGateTriggers(normalizedState),
-    ].sort((a, b) => a.id.localeCompare(b.id))
+    const orchestrationGates = this.buildOrchestrationGates(normalizedState)
+    const orchestrationPortfolioRisks = this.buildOrchestrationPortfolioRisks(normalizedState)
+    const orchestrationPrograms = this.buildOrchestrationPrograms(normalizedState)
+    const orchestrationScopes = this.buildOrchestrationScopes(normalizedState)
     const orchestrationLegScopes = this.buildOrchestrationLegScopes(normalizedState)
     // Phase 5 S3 (#1109): 把 scope.timeframe 声明的 tf 合并到 dataRequirements
     const requiredTimeframes = this.mergeTimeframeScopeIntoDataRequirements(
@@ -655,9 +633,9 @@ export class CanonicalSpecBuilderService {
       market: this.withRequiredMarketTimeframes(
         market,
         requiredTimeframes,
-        normalizedState.triggers.some(trigger => this.readTriggerParamTimeframe(trigger.params)),
+        normalizedState.trigger.some(trigger => this.readTriggerParamTimeframe(trigger.params)),
       ),
-      indicators: this.resolveIndicatorsFromSemanticTriggers(normalizedState.triggers),
+      indicators: this.resolveIndicatorsFromSemanticTriggers(normalizedState.trigger),
       sizing,
       executionPolicy: {
         signalTiming: 'BAR_CLOSE',
@@ -686,7 +664,7 @@ export class CanonicalSpecBuilderService {
   // #1186 PR2: 多锚（state.isMultiLeg===true）路径用 PerTradeSizingResolver anchor 反填 legSizing；
   // 单腿/旧路径走 LLM 直供 legSizing fallback，零行为变更。
   private buildOrchestrationLegScopes(state: SemanticState): CanonicalOrchestrationLegScope[] {
-    const nodes = state.orchestration?.nodes
+    const nodes = state.orchestration
     if (!nodes || nodes.length === 0) return []
     const isMultiLeg = state.isMultiLeg === true
     const anchorMap = isMultiLeg ? this.sizingResolver.resolve(state) : undefined
@@ -750,7 +728,7 @@ export class CanonicalSpecBuilderService {
     if (anchorMap.has(sizingScopeKey({ kind: 'action', id: legId }))) {
       candidateActionIds.push(legId)
     }
-    for (const action of state.actions) {
+    for (const action of state.action) {
       if (action.id === legId) continue
       if (action.id.endsWith(legId) || action.key.endsWith(legId)) {
         candidateActionIds.push(action.id)
@@ -807,7 +785,7 @@ export class CanonicalSpecBuilderService {
   // Phase 5 S2 (#1104) + S3 (#1109) + S9 (#1110) + S10 (#1111): scope union substrate（symbol + timeframe + dataSource + subStrategy）
   // 输出 status='locked' scope；按 node.id 字典序，保证 byte-equal（含旧 v1 单/多 symbol scope 字节兼容）
   private buildOrchestrationScopes(state: SemanticState): CanonicalOrchestrationScope[] {
-    const nodes = state.orchestration?.nodes
+    const nodes = state.orchestration
     if (!nodes || nodes.length === 0) {
       return []
     }
@@ -925,7 +903,7 @@ export class CanonicalSpecBuilderService {
   }
 
   private buildOrchestrationPortfolioRisks(state: SemanticState): CanonicalOrchestrationPortfolioRisk[] {
-    const nodes = state.orchestration?.nodes
+    const nodes = state.orchestration
     if (!nodes || nodes.length === 0) {
       return []
     }
@@ -995,211 +973,8 @@ export class CanonicalSpecBuilderService {
     return risks.sort((a, b) => a.id.localeCompare(b.id))
   }
 
-  /**
-   * #1358: gate-only substrategy path
-   *
-   * LLM patch が `portfolioRisk.*` を triggers 配列に phase='gate' で入れてくる場合、
-   * `buildOrchestrationPortfolioRisks` は orchestration.nodes しか見ないためスキップされる。
-   * 本メソッドは state.triggers の gate-phase atom から direct に
-   * CanonicalOrchestrationPortfolioRisk を生成してマージする。
-   *
-   * 対象 keys:
-   *   - portfolioRisk.drawdown_block  → scope='portfolio'
-   *   - portfolioRisk.symbol_exposure_cap → scope='symbol' (symbolScopeRef は同 phase の scope.symbol trigger から合成)
-   *   - portfolioRisk.substrategy_exposure_cap → scope='subStrategy' (同 phase の各 scope.subStrategy trigger に展開)
-   */
-  private buildOrchestrationPortfolioRisksFromGateTriggers(
-    state: SemanticState,
-  ): CanonicalOrchestrationPortfolioRisk[] {
-    // portfolioRisk.* / scope.* gate triggers land as status='open' (no synthesizable contracts)
-    // but carry all required fields in params — promote them regardless of status.
-    const gateTriggers = state.triggers.filter(t => t.phase === 'gate')
-    if (gateTriggers.length === 0) return []
-
-    // Already handled via orchestration.nodes path — avoid double-emitting
-    const existingNodeKeys = new Set(
-      (state.orchestration?.nodes ?? [])
-        .filter(n => n.kind === 'portfolioRisk' && n.status === 'locked')
-        .map(n => n.key),
-    )
-
-    const risks: CanonicalOrchestrationPortfolioRisk[] = []
-
-    // Collect symbol scope trigger ids for symbolScopeRef binding
-    const symbolScopeTriggerIds = gateTriggers
-      .filter(t => t.key === ATOM_CONTRACT_REGISTRY['scope.symbol'].key)
-      .map(t => t.id)
-
-    // Collect substrategy scope trigger ids for subStrategyScopeRef expansion
-    const subStrategyScopeTriggerIds = gateTriggers
-      .filter(t => t.key === ATOM_CONTRACT_REGISTRY['scope.subStrategy'].key)
-      .map(t => t.id)
-
-    for (const trigger of gateTriggers) {
-      const p = trigger.params
-
-      // portfolioRisk.drawdown_block → scope='portfolio'
-      if (
-        trigger.key === ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key
-        && !existingNodeKeys.has(trigger.key)
-      ) {
-        const mode = p.mode === 'observe' || p.mode === 'enforce' ? p.mode : 'enforce'
-        const thresholdPct = typeof p.thresholdPct === 'number' && Number.isFinite(p.thresholdPct) && p.thresholdPct > 0 && p.thresholdPct <= 100
-          ? p.thresholdPct
-          : null
-        if (thresholdPct !== null) {
-          risks.push({
-            id: trigger.id,
-            scope: 'portfolio',
-            mode,
-            thresholdPct,
-            effectWhenTriggered: 'block_new_entries',
-          })
-        }
-        continue
-      }
-
-      // portfolioRisk.symbol_exposure_cap → scope='symbol'
-      if (
-        trigger.key === FIELD_KEY.PORTFOLIO_RISK_SYMBOL_EXPOSURE_CAP
-        && !existingNodeKeys.has(trigger.key)
-      ) {
-        const mode = p.mode === 'observe' || p.mode === 'enforce' ? p.mode : 'enforce'
-        const notionalCapPct = typeof p.notionalCapPct === 'number' && Number.isFinite(p.notionalCapPct) && p.notionalCapPct > 0 && p.notionalCapPct <= 100
-          ? p.notionalCapPct
-          : null
-        const effectWhenTriggered = p.effectWhenTriggered === 'reduce_exposure'
-          ? 'reduce_exposure' as const
-          : 'block_new_entries' as const
-        // Bind to first sibling scope.symbol trigger (may be absent → skip)
-        const symbolScopeRef = symbolScopeTriggerIds[0]
-        if (notionalCapPct !== null && symbolScopeRef) {
-          risks.push({
-            id: trigger.id,
-            scope: 'symbol',
-            mode,
-            notionalCapPct,
-            symbolScopeRef,
-            effectWhenTriggered,
-          })
-        }
-        continue
-      }
-
-      // portfolioRisk.substrategy_exposure_cap → scope='subStrategy' (expand per subStrategy scope)
-      if (
-        trigger.key === FIELD_KEY.PORTFOLIO_RISK_SUBSTRATEGY_EXPOSURE_CAP
-        && !existingNodeKeys.has(trigger.key)
-      ) {
-        const mode = p.mode === 'observe' || p.mode === 'enforce' ? p.mode : 'enforce'
-        const notionalCapPct = typeof p.notionalCapPct === 'number' && Number.isFinite(p.notionalCapPct) && p.notionalCapPct > 0 && p.notionalCapPct <= 100
-          ? p.notionalCapPct
-          : null
-        const effectWhenTriggered = p.effectWhenTriggered === 'pause_substrategy'
-          ? 'pause_substrategy' as const
-          : 'block_new_entries' as const
-        if (notionalCapPct !== null) {
-          if (subStrategyScopeTriggerIds.length > 0) {
-            // Expand: one risk entry per substrategy scope
-            for (const [idx, subStrategyScopeRef] of subStrategyScopeTriggerIds.entries()) {
-              risks.push({
-                id: `${trigger.id}-sub-${idx + 1}`,
-                scope: 'subStrategy',
-                mode,
-                notionalCapPct,
-                subStrategyScopeRef,
-                effectWhenTriggered,
-              })
-            }
-          } else {
-            // No sibling subStrategy scope triggers — emit with a placeholder ref so the
-            // runtime evaluator can still see the cap; will be a no-op without matching scope.
-            risks.push({
-              id: trigger.id,
-              scope: 'subStrategy',
-              mode,
-              notionalCapPct,
-              subStrategyScopeRef: trigger.id,
-              effectWhenTriggered,
-            })
-          }
-        }
-        continue
-      }
-    }
-
-    return risks
-  }
-
-  /**
-   * #1358: gate-only substrategy path
-   *
-   * state.triggers の gate-phase scope.symbol / scope.subStrategy atom から
-   * CanonicalOrchestrationScope を生成する。
-   * orchestration.nodes 経由で既に生成済みの scope は重複しない。
-   */
-  private buildOrchestrationScopesFromGateTriggers(
-    state: SemanticState,
-  ): CanonicalOrchestrationScope[] {
-    // scope.* gate triggers land as status='open' (no synthesizable contracts)
-    // but carry all required fields in params — promote them regardless of status.
-    const gateTriggers = state.triggers.filter(t => t.phase === 'gate')
-    if (gateTriggers.length === 0) return []
-
-    // Already handled via orchestration.nodes path — avoid double-emitting
-    const existingNodeIds = new Set(
-      (state.orchestration?.nodes ?? [])
-        .filter(n => n.kind === 'scope' && n.status === 'locked')
-        .map(n => n.id),
-    )
-
-    const scopes: CanonicalOrchestrationScope[] = []
-
-    for (const trigger of gateTriggers) {
-      if (existingNodeIds.has(trigger.id)) continue
-      const p = trigger.params
-
-      // scope.symbol
-      if (trigger.key === ATOM_CONTRACT_REGISTRY['scope.symbol'].key) {
-        const rawSymbols = Array.isArray(p.symbols) ? p.symbols : []
-        const symbols = rawSymbols
-          .filter((s): s is string => typeof s === 'string' && s.trim() !== '')
-          .map(s => s.trim())
-        if (symbols.length === 0) continue
-        const primarySymbol = typeof p.primarySymbol === 'string' ? p.primarySymbol.trim() : undefined
-        scopes.push({
-          id: trigger.id,
-          scopeKind: 'symbol',
-          symbols: [...symbols].sort(),
-          ...(primarySymbol && primarySymbol !== '' ? { primarySymbol } : {}),
-        })
-        continue
-      }
-
-      // scope.subStrategy
-      if (trigger.key === ATOM_CONTRACT_REGISTRY['scope.subStrategy'].key) {
-        const subStrategyId = typeof p.subStrategyId === 'string' ? p.subStrategyId.trim() : ''
-        if (subStrategyId === '') continue
-        const positionHandling = p.positionHandlingOnDeactivate === 'keep' ? 'keep' as const : 'close' as const
-        const orderHandling = p.orderHandlingOnDeactivate === 'keep' ? 'keep' as const : 'cancel' as const
-        const label = typeof p.subStrategyLabel === 'string' ? p.subStrategyLabel.trim() : undefined
-        scopes.push({
-          id: trigger.id,
-          scopeKind: 'subStrategy',
-          subStrategyId,
-          ...(label && label !== '' ? { subStrategyLabel: label } : {}),
-          positionHandlingOnDeactivate: positionHandling,
-          orderHandlingOnDeactivate: orderHandling,
-        })
-        continue
-      }
-    }
-
-    return scopes
-  }
-
   private buildOrchestrationGates(state: SemanticState): CanonicalOrchestrationGate[] {
-    const nodes = state.orchestration?.nodes
+    const nodes = state.orchestration
     if (!nodes || nodes.length === 0) {
       return []
     }
@@ -1257,7 +1032,7 @@ export class CanonicalSpecBuilderService {
   }
 
   private buildOrchestrationPrograms(state: SemanticState): CanonicalOrchestrationProgram[] {
-    const nodes = state.orchestration?.nodes
+    const nodes = state.orchestration
     if (!nodes || nodes.length === 0) {
       return []
     }
@@ -1295,110 +1070,6 @@ export class CanonicalSpecBuilderService {
     }
 
     return programs
-  }
-
-  // #1357: LLM 把 program.adaptive_volatility_grid 放到 actions[] 而非 orchestration.nodes 时，
-  //        从 state.actions 提升为 canonical gate + program 对。
-  //        gate 条件 = 所有 locked entry trigger 的 AND；
-  //        program 参数 = action.params，缺失字段补充安全默认值。
-  private buildOrchestrationPairsFromProgramActions(
-    state: SemanticState,
-    defaultTimeframe: string | null,
-  ): Array<{ gate: CanonicalOrchestrationGate; program: CanonicalOrchestrationProgram }> {
-    const isPositiveFinite = (v: unknown): v is number =>
-      typeof v === 'number' && Number.isFinite(v) && v > 0
-    const isPositiveInt = (v: unknown): v is number =>
-      isPositiveFinite(v) && Number.isInteger(v)
-
-    // program.* actions 没有 contract 体系，toActionState 始终把它们留在 'open' 状态；
-    // 此处不过滤 status，只要 key 命中即提升。
-    const programActions = state.actions.filter(
-      a => a.key === 'program.adaptive_volatility_grid',
-    )
-    if (programActions.length === 0) {
-      return []
-    }
-
-    // Build AND condition from all locked entry triggers
-    const entryTriggers = state.triggers.filter(
-      t => t.status === 'locked' && t.phase === 'entry',
-    )
-    if (entryTriggers.length === 0) {
-      return []
-    }
-
-    const triggerConditions = entryTriggers
-      .map(t => this.buildConditionFromSemanticTriggerContract(t, defaultTimeframe))
-      .filter((c): c is CanonicalConditionNode => c !== null)
-    if (triggerConditions.length === 0) {
-      return []
-    }
-
-    const gateCondition: CanonicalConditionNode =
-      triggerConditions.length === 1
-        ? triggerConditions[0]!
-        : { kind: 'AND', children: triggerConditions }
-
-    const pairs: Array<{ gate: CanonicalOrchestrationGate; program: CanonicalOrchestrationProgram }> = []
-
-    for (let i = 0; i < programActions.length; i++) {
-      const action = programActions[i]!
-      const p = action.params ?? {}
-      const gateId = `promoted-program-gate-${i + 1}`
-      const programId = action.id ?? `promoted-program-${i + 1}`
-
-      const atrPeriod = isPositiveInt(p.atrPeriod) && (p.atrPeriod as number) >= 2 && (p.atrPeriod as number) <= 200
-        ? (p.atrPeriod as number)
-        : 14
-      const atrMultiplier = isPositiveFinite(p.atrMultiplier) ? (p.atrMultiplier as number) : 1.5
-      const rangeMultiplier = isPositiveFinite(p.rangeMultiplier) ? (p.rangeMultiplier as number) : 3
-      const atrDriftPct = isPositiveFinite(p.atrDriftPct) && (p.atrDriftPct as number) <= 100
-        ? (p.atrDriftPct as number)
-        : 25
-      const rebuildCooldownSec = isPositiveInt(p.rebuildCooldownSec) && (p.rebuildCooldownSec as number) >= 300
-        ? (p.rebuildCooldownSec as number)
-        : 600
-      const minStepPct = isPositiveFinite(p.minStepPct) ? (p.minStepPct as number) : 0.1
-      const rawMaxStepPct = isPositiveFinite(p.maxStepPct) ? (p.maxStepPct as number) : 1
-      const maxStepPct = rawMaxStepPct >= minStepPct ? rawMaxStepPct : minStepPct
-      const levelCount = isPositiveInt(p.levelCount) && (p.levelCount as number) >= 2 && (p.levelCount as number) <= 100
-        ? (p.levelCount as number)
-        : 6
-      const onDeactivate: 'cancel' | 'keep' | 'close' =
-        p.onDeactivate === 'cancel' || p.onDeactivate === 'keep' || p.onDeactivate === 'close'
-          ? p.onDeactivate
-          : 'close'
-
-      const gate: CanonicalOrchestrationGate = {
-        id: gateId,
-        target: { phase: 'entry', sideScope: 'long' },
-        activeWhen: gateCondition,
-        effectWhenFalse: 'block_new_entries',
-      }
-
-      const program: CanonicalOrchestrationProgram = {
-        id: programId,
-        programKind: 'adaptive_volatility_grid',
-        activeWhenRef: gateId,
-        onDeactivate,
-        rebuildPolicy: 'atr_window',
-        adaptiveGridParams: {
-          atrPeriod,
-          atrMultiplier,
-          rangeMultiplier,
-          atrDriftPct,
-          rebuildCooldownSec,
-          minStepPct,
-          maxStepPct,
-          levelCount,
-        },
-        sizing: { mode: 'fixed_pct', value: 0.1 },
-      }
-
-      pairs.push({ gate, program })
-    }
-
-    return pairs
   }
 
   private buildFixedGridGatedProgram(node: SemanticOrchestrationNode): CanonicalOrchestrationProgram | null {
@@ -1668,8 +1339,8 @@ export class CanonicalSpecBuilderService {
 
   private collectContracts(state: SemanticState): SemanticAtomContract[] {
     return [
-      ...state.triggers.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
-      ...state.actions.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...state.trigger.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...state.action.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
       ...state.risk.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
       ...(state.position?.status === 'locked' ? state.position.contracts ?? [] : []),
     ]
@@ -2043,7 +1714,7 @@ export class CanonicalSpecBuilderService {
     state: SemanticState,
     sizing: CanonicalStrategySpecV2['sizing'],
   ): CanonicalRuleV2[] {
-    const actionKeys = new Set(state.actions
+    const actionKeys = new Set(state.action
       .filter(action => action.status === 'locked')
       .map(action => action.key))
     const counters: Record<'entry' | 'exit' | 'gate', number> = {
@@ -2053,7 +1724,7 @@ export class CanonicalSpecBuilderService {
     }
     const rules: CanonicalRuleV2[] = []
     const defaultTimeframe = this.readLockedContextSlotString(state.contextSlots.timeframe)
-    const gateConditions = state.triggers
+    const gateConditions = state.trigger
       .filter(trigger => trigger.status === 'locked' && trigger.phase === 'gate')
       .map((trigger): ScopedSemanticGateCondition | null => {
         const condition = trigger.key === 'condition.expression'
@@ -2070,7 +1741,7 @@ export class CanonicalSpecBuilderService {
       })
       .filter((gate): gate is ScopedSemanticGateCondition => gate !== null)
 
-    for (const triggerGroup of this.groupSemanticMultiTimeframeTriggers(state.triggers)) {
+    for (const triggerGroup of this.groupSemanticMultiTimeframeTriggers(state.trigger)) {
       const trigger = triggerGroup[0]
       if (!trigger) {
         continue
@@ -2114,7 +1785,7 @@ export class CanonicalSpecBuilderService {
     }
 
     const executableGroups = this.mergeImplicitMultiTimeframeGroups(
-      this.triggerCombinationContracts.resolveExecutableGroups(state.triggers.filter(trigger =>
+      this.triggerCombinationContracts.resolveExecutableGroups(state.trigger.filter(trigger =>
         trigger.status === 'locked'
         && (trigger.phase === 'entry' || trigger.phase === 'exit')
         && trigger.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key,
@@ -2139,7 +1810,7 @@ export class CanonicalSpecBuilderService {
 
       const lifecycleAction = this.resolveLifecycleActionForTriggerGroup(
         group,
-        state.actions,
+        state.action,
         state.position,
         addPositionHasEvidenceTriggers,
         dcaScheduleHasEvidenceTriggers,
@@ -2187,7 +1858,7 @@ export class CanonicalSpecBuilderService {
       }
     }
 
-    rules.push(...this.buildRiskRulesFromSemanticState(state.risk, state.position, state.actions))
+    rules.push(...this.buildRiskRulesFromSemanticState(state.risk, state.position, state.action))
 
     return rules
   }
@@ -2665,14 +2336,16 @@ export class CanonicalSpecBuilderService {
     position: SemanticPositionState | null,
     key: SemanticPositionConstraintState['key'],
   ): SemanticPositionConstraintState | null {
-    return position?.constraints?.find(constraint => constraint.status === 'locked' && constraint.key === key) ?? null
+    // DEPRECATED Task 6: position.constraints moved to top-level positionConstraint[]
+    return (position as { constraints?: SemanticPositionConstraintState[] } | null)?.constraints?.find(constraint => constraint.status === 'locked' && constraint.key === key) ?? null
   }
 
   private findActivePositionConstraint(
     position: SemanticPositionState | null,
     key: SemanticPositionConstraintState['key'],
   ): SemanticPositionConstraintState | null {
-    return position?.constraints?.find(constraint => constraint.status !== 'superseded' && constraint.key === key) ?? null
+    // DEPRECATED Task 6: position.constraints moved to top-level positionConstraint[]
+    return (position as { constraints?: SemanticPositionConstraintState[] } | null)?.constraints?.find(constraint => constraint.status !== 'superseded' && constraint.key === key) ?? null
   }
 
   private optionalNumberField<K extends string>(key: K, value: unknown): Record<K, number> | {} {

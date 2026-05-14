@@ -6,7 +6,7 @@ describe('SemanticMissingPlaceholderReconcilerService', () => {
 
   it('removes an open missing entry placeholder when a real entry trigger exists', () => {
     const state = createSemanticState({
-      triggers: [
+      trigger: [
         createMissingPlaceholder('entry'),
         createTrigger({ id: 'trigger-entry', key: 'ma.cross_over', phase: 'entry' }),
       ],
@@ -15,15 +15,15 @@ describe('SemanticMissingPlaceholderReconcilerService', () => {
     const nextState = service.reconcile(state)
 
     expect(nextState).not.toBe(state)
-    expect(nextState.triggers).toEqual([
+    expect(nextState.trigger).toEqual([
       createTrigger({ id: 'trigger-entry', key: 'ma.cross_over', phase: 'entry' }),
     ])
   })
 
   it('keeps an open missing entry placeholder when only an entry action exists', () => {
     const state = createSemanticState({
-      triggers: [createMissingPlaceholder('entry')],
-      actions: [{
+      trigger: [createMissingPlaceholder('entry')],
+      action: [{
         id: 'action-open-long',
         key: 'open_long',
         status: 'locked',
@@ -35,12 +35,12 @@ describe('SemanticMissingPlaceholderReconcilerService', () => {
     const nextState = service.reconcile(state)
 
     expect(nextState).toBe(state)
-    expect(nextState.triggers).toEqual([createMissingPlaceholder('entry')])
+    expect(nextState.trigger).toEqual([createMissingPlaceholder('entry')])
   })
 
   it('removes an open missing exit placeholder when a real exit trigger exists', () => {
     const state = createSemanticState({
-      triggers: [
+      trigger: [
         createMissingPlaceholder('exit'),
         createTrigger({ id: 'trigger-exit', key: 'take_profit.price_cross', phase: 'exit' }),
       ],
@@ -49,7 +49,7 @@ describe('SemanticMissingPlaceholderReconcilerService', () => {
     const nextState = service.reconcile(state)
 
     expect(nextState).not.toBe(state)
-    expect(nextState.triggers).toEqual([
+    expect(nextState.trigger).toEqual([
       createTrigger({ id: 'trigger-exit', key: 'take_profit.price_cross', phase: 'exit' }),
     ])
   })
@@ -57,7 +57,7 @@ describe('SemanticMissingPlaceholderReconcilerService', () => {
   it('keeps missing placeholders when the matching real trigger is still open', () => {
     const openSlot = createOpenSlot()
     const state = createSemanticState({
-      triggers: [
+      trigger: [
         createMissingPlaceholder('entry'),
         createTrigger({
           id: 'trigger-entry-open',
@@ -72,7 +72,7 @@ describe('SemanticMissingPlaceholderReconcilerService', () => {
     const nextState = service.reconcile(state)
 
     expect(nextState).toBe(state)
-    expect(nextState.triggers).toEqual([
+    expect(nextState.trigger).toEqual([
       createMissingPlaceholder('entry'),
       createTrigger({
         id: 'trigger-entry-open',
@@ -89,9 +89,12 @@ function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticSt
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: {
       exchange: null,

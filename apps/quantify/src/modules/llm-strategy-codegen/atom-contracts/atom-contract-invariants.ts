@@ -1,11 +1,13 @@
 import type { SupportedAtomKey } from '../nl-gateway/utterance-corpus/utterance-corpus.types'
 import type { FirstWaveTriggerAtom } from '../constants/canonical-strategy-capabilities'
 import type {
+  AtomContractBucket,
   AtomContractDisplay,
   AtomContractEmit,
   AtomContractKey,
   AtomContractSurface,
 } from './atom-contract-types'
+import type { SemanticState } from '../types/semantic-state'
 import { FIRST_WAVE_TRIGGER_ATOMS } from '../constants/canonical-strategy-capabilities'
 import { CONDITION_ATOM_EMITS } from './atom-contract-condition-emits'
 import { RISK_GUARD_ATOM_EMITS } from './atom-contract-risk-guard-emits'
@@ -441,3 +443,15 @@ export type _OrchestrationPortfolioRiskEmitAllReal = AssertTrue<AtomContractInva
 // Issue #1313 PR5d 翻转：6 个 action atom 全部 `capabilityStatus === 'pr3e-action'`
 //   且 `emit.actionShape` 实际挂载（双重收窄）。任一漂移 → AssertTrue 编译挂。
 export type _ActionEmitAllReal = AssertTrue<AtomContractInvariantReport['actionEmitAllReal']>
+
+// =========================================================
+// #1364 AC-8：SemanticState 覆盖 AtomContractBucket 全集（type-level 守门）
+// =========================================================
+// SemanticState 用 `[B in AtomContractBucket]` mapped type 派生 bucket 字段，
+// 此处显式 forward invariant：AtomContractBucket 任一字面量必须是 SemanticState
+// 的 key。故意删 bucket / SemanticState mapped type 漂移 → tsc 编译挂。
+// 反向（SemanticState bucket 字段 ⊆ AtomContractBucket）由 mapped type 定义本身
+// 保证，无需重复声明。
+type _SemanticStateCoverAllBuckets = AtomContractBucket extends keyof SemanticState ? true : never
+const _semanticStateCoversBuckets: _SemanticStateCoverAllBuckets = true
+void _semanticStateCoversBuckets

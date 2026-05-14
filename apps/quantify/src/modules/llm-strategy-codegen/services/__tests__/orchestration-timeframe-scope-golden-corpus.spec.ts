@@ -28,9 +28,12 @@ function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticSt
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
@@ -182,28 +185,28 @@ describe('orchestration scope.timeframe — golden corpus (Phase 5 S3 #1109)', (
 
     it('B1 supported timeframe scope alone (no owners) → ready (binding 强制只对 locked owner 生效)', () => {
       const node = timeframeScopeNode()
-      const state = createSemanticState({ orchestration: { nodes: [node], contracts: [] } })
+      const state = createSemanticState({ orchestration: [node], orchestrationContracts: [] })
       const result = readinessService.normalize(state, CURRENT_VERSION)
       expect(result.ready).toBe(true)
     })
 
     it('B2 invalid primaryTimeframe → unsupported（registry 9 重 fail-closed 命中 primary_timeframe）', () => {
       const node = timeframeScopeNode({ primaryTimeframe: 'invalid-tf' as never })
-      const state = createSemanticState({ orchestration: { nodes: [node], contracts: [] } })
+      const state = createSemanticState({ orchestration: [node], orchestrationContracts: [] })
       const result = readinessService.normalize(state, CURRENT_VERSION)
       expect(result.ready).toBe(false)
     })
 
     it('B3 primaryTimeframe ∈ requiredTimeframes（自引用拒绝）→ fail-closed', () => {
       const node = timeframeScopeNode({ primaryTimeframe: '15m', requiredTimeframes: ['15m', '1h'] })
-      const state = createSemanticState({ orchestration: { nodes: [node], contracts: [] } })
+      const state = createSemanticState({ orchestration: [node], orchestrationContracts: [] })
       const result = readinessService.normalize(state, CURRENT_VERSION)
       expect(result.ready).toBe(false)
     })
 
     it('B4 primary 粒度 ≥ min(required)（颠倒）→ fail-closed primary_granularity', () => {
       const node = timeframeScopeNode({ primaryTimeframe: '1h', requiredTimeframes: ['15m'] })
-      const state = createSemanticState({ orchestration: { nodes: [node], contracts: [] } })
+      const state = createSemanticState({ orchestration: [node], orchestrationContracts: [] })
       const result = readinessService.normalize(state, CURRENT_VERSION)
       expect(result.ready).toBe(false)
     })
@@ -213,7 +216,7 @@ describe('orchestration scope.timeframe — golden corpus (Phase 5 S3 #1109)', (
         primaryTimeframe: '1m',
         requiredTimeframes: ['3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h'],
       })
-      const state = createSemanticState({ orchestration: { nodes: [node], contracts: [] } })
+      const state = createSemanticState({ orchestration: [node], orchestrationContracts: [] })
       const result = readinessService.normalize(state, CURRENT_VERSION)
       expect(result.ready).toBe(false)
     })
@@ -221,14 +224,14 @@ describe('orchestration scope.timeframe — golden corpus (Phase 5 S3 #1109)', (
     it('B6 ≥1 timeframe scope locked + trigger 缺 ref → missing_binding（strict ≥1 强制）', () => {
       const node = timeframeScopeNode()
       const state = createSemanticState({
-        orchestration: { nodes: [node], contracts: [] },
-        triggers: [{
+        orchestration: [node], orchestrationContracts: [],
+        trigger: [{
           id: 't1', key: 'price.range_position_lte', phase: 'entry',
           params: {}, status: 'locked', source: 'user_explicit', openSlots: [],
         }],
       })
       const result = readinessService.normalize(state, CURRENT_VERSION)
-      const trigger = result.state.triggers[0]
+      const trigger = result.state.trigger[0]
       expect(trigger.status).toBe('open')
       const slot = trigger.openSlots.find(s => s.slotKey === 'orchestration.scope.timeframe.missing_binding')
       expect(slot).toBeDefined()
@@ -237,14 +240,14 @@ describe('orchestration scope.timeframe — golden corpus (Phase 5 S3 #1109)', (
     it('B6b open→locked 流转：scope status="open" 时 owner 无 ref → ok=true（不触发 binding）', () => {
       const node = timeframeScopeNode({ status: 'open' })
       const state = createSemanticState({
-        orchestration: { nodes: [node], contracts: [] },
-        triggers: [{
+        orchestration: [node], orchestrationContracts: [],
+        trigger: [{
           id: 't1', key: 'price.range_position_lte', phase: 'entry',
           params: {}, status: 'locked', source: 'user_explicit', openSlots: [],
         }],
       })
       const result = readinessService.normalize(state, CURRENT_VERSION)
-      const trigger = result.state.triggers[0]
+      const trigger = result.state.trigger[0]
       const missingBindingSlot = trigger.openSlots.find(s => s.slotKey === 'orchestration.scope.timeframe.missing_binding')
       expect(missingBindingSlot).toBeUndefined()
     })
@@ -254,14 +257,14 @@ describe('orchestration scope.timeframe — golden corpus (Phase 5 S3 #1109)', (
       const symScope2 = symbolScopeNode({ id: 's-eth', symbols: ['ETHUSDT'] })
       const tfNode = timeframeScopeNode()
       const state = createSemanticState({
-        orchestration: { nodes: [symScope1, symScope2, tfNode], contracts: [] },
-        triggers: [{
+        orchestration: [symScope1, symScope2, tfNode], orchestrationContracts: [],
+        trigger: [{
           id: 't1', key: 'price.range_position_lte', phase: 'entry',
           params: {}, status: 'locked', source: 'user_explicit', openSlots: [],
         }],
       })
       const result = readinessService.normalize(state, CURRENT_VERSION)
-      const trigger = result.state.triggers[0]
+      const trigger = result.state.trigger[0]
       const slots = trigger.openSlots.map(s => s.slotKey)
       expect(slots).toContain('orchestration.scope.symbol.missing_binding')
       expect(slots).toContain('orchestration.scope.timeframe.missing_binding')
@@ -270,7 +273,7 @@ describe('orchestration scope.timeframe — golden corpus (Phase 5 S3 #1109)', (
     it('B8 共存 spec：locked scope.symbol + locked scope.timeframe → 互不污染 missingSlot', () => {
       const symScope = symbolScopeNode({ id: 's-1', symbols: ['BTCUSDT'] })
       const tfNode = timeframeScopeNode({ id: 't-1' })
-      const state = createSemanticState({ orchestration: { nodes: [symScope, tfNode], contracts: [] } })
+      const state = createSemanticState({ orchestration: [symScope, tfNode], orchestrationContracts: [] })
       const result = readinessService.normalize(state, CURRENT_VERSION)
       // 两个 scope 各自合法（一 symbol 不需要 binding；一 timeframe 也不需要 binding 因为 0 个 owner）
       expect(result.ready).toBe(true)
@@ -287,7 +290,7 @@ describe('orchestration scope.timeframe — golden corpus (Phase 5 S3 #1109)', (
         openSlots: [],
         contracts: [],
       }
-      const state = createSemanticState({ orchestration: { nodes: [dsNode], contracts: [] } })
+      const state = createSemanticState({ orchestration: [dsNode], orchestrationContracts: [] })
       const result = readinessService.normalize(state, CURRENT_VERSION)
       expect(result.ready).toBe(false)
     })

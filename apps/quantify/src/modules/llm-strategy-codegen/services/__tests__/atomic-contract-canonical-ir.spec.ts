@@ -55,7 +55,7 @@ describe('atomic contract canonical IR projection', () => {
 
   it('compiles reclaim sequences into executable cross predicates with semantic params preserved', () => {
     const state = buildLockedAtomicState('breakout-retest')
-    state.triggers = [{
+    state.trigger = [{
       id: 'entry-rsi-reclaim',
       key: 'condition.sequence',
       phase: 'entry',
@@ -103,7 +103,7 @@ describe('atomic contract canonical IR projection', () => {
 
   it('projects logical any-of into generic anyOf without relying on atomic key allowlists', () => {
     const state = buildLockedAtomicState('atr-risk')
-    state.triggers = [{
+    state.trigger = [{
       id: 'entry-logical-any-of',
       key: 'logical.any_of',
       phase: 'entry',
@@ -152,7 +152,7 @@ describe('atomic contract canonical IR projection', () => {
 
   it('keeps attached gates in generic allOf when entry atomic predicates are combined with gates', () => {
     const state = buildLockedAtomicState('breakout-retest')
-    state.triggers.push({
+    state.trigger.push({
       id: 'gate-volume-relative-average',
       key: 'volume.relative_average',
       phase: 'gate',

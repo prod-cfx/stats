@@ -1,4 +1,5 @@
 import { TIMEFRAME_MS } from '@ai/shared/script-engine/compiled-runtime'
+import type { AtomContractBucket } from '../atom-contracts/atom-contract-types'
 import type { SemanticAtomSupportMetadata, UnsupportedFallbackState } from './semantic-atom-support'
 
 // Phase 5 S3 (#1109): timeframe vocab 单一 source-of-truth — 派生于 packages/shared TIMEFRAME_MS
@@ -328,7 +329,6 @@ export interface SemanticPositionState {
   evidence?: SemanticEvidence
   openSlots?: SemanticSlotState[]
   contracts?: SemanticAtomContract[]
-  constraints?: SemanticPositionConstraintState[]
   support?: SemanticAtomSupportMetadata
 }
 
@@ -551,23 +551,29 @@ export interface SemanticOrchestrationLegSizing {
   pairedLegId?: string
 }
 
-export interface SemanticOrchestrationState {
-  nodes: readonly SemanticOrchestrationNode[]
-  contracts: readonly SemanticOrchestrationContract[]
+type SemanticAtomStateByBucket<B extends AtomContractBucket> =
+    B extends 'trigger' ? SemanticTriggerState
+  : B extends 'action' ? SemanticActionState
+  : B extends 'risk' ? SemanticRiskState
+  : B extends 'orchestration' ? SemanticOrchestrationNode
+  : B extends 'positionConstraint' ? SemanticPositionConstraintState
+  : never
+
+// mapped type 派生 — 关键：用 `[B in AtomContractBucket]` 而非 Record<B, T>，
+// 后者会丢失 per-key 判别（Record 的 value 类型对 union key 是 distributed=false → 退化为 union）。
+export type SemanticStateBuckets = {
+  [B in AtomContractBucket]: SemanticAtomStateByBucket<B>[]
 }
 
-export interface SemanticState {
+export interface SemanticState extends SemanticStateBuckets {
   version: 1
   families: string[]
-  triggers: SemanticTriggerState[]
-  actions: SemanticActionState[]
-  risk: SemanticRiskState[]
-  position: SemanticPositionState | null
   contextSlots: SemanticContextSlotState
+  position: SemanticPositionState | null
+  orchestrationContracts: readonly SemanticOrchestrationContract[]
   normalizationNotes: string[]
   updatedAt: string
   updatedTurnId?: string
-  orchestration?: SemanticOrchestrationState
   unsupportedFallback?: UnsupportedFallbackState | null
   /**
    * 由 PerTradeSizingResolver 派生投影阶段标记。

@@ -22,14 +22,18 @@ import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
 
 type AtomContractEntry = (typeof ATOM_CONTRACT_REGISTRY)[keyof typeof ATOM_CONTRACT_REGISTRY]
 
-/** REGISTRY bucket → legacy category 映射 */
+/** REGISTRY bucket → legacy category 映射
+ *  #1364 AC-4：production `bucketToCategory` 将 `orchestration` 映射为
+ *  `context`（SemanticAtomDefinition 的 category 联合中只有 'context'，无 'orchestration'）。
+ *  Task 6 后 orchestration atom 可通过 legacy resolve()/list() 暴露，本映射与之对齐。
+ */
 function bucketToLegacyCategory(bucket: string): string {
   switch (bucket) {
     case 'trigger': return 'trigger'
     case 'action': return 'action'
     case 'risk': return 'risk'
     case 'positionConstraint': return 'position'
-    case 'orchestration': return 'orchestration'
+    case 'orchestration': return 'context'
     default: return bucket
   }
 }
@@ -69,27 +73,14 @@ describe('atoms-classifier-migration-equivalence', () => {
   const specialCaseKeys = new Set(['risk.partial_take_profit'])
 
   // Atoms that exist in REGISTRY but NOT in legacy ATOMS (only in REGISTRY since PR1)
-  // These are orchestration/scope atoms added in #1329 follow-up
+  // #1364 AC-4: orchestration / scope / portfolioRisk / gate / program keys 已移出
+  // REGISTRY_ONLY_KEYS，现在通过 registry adapter 正常 resolve；这里只剩下 lifecycle
+  // action dotted keys（legacy ATOMS 使用裸标签 'open_long' 等）。
   const legacyMissingKeys = new Set([
-    // action.* prefixed keys: legacy ATOMS uses bare 'open_long'/'close_long' etc.
     'action.open_long',
     'action.close_long',
     'action.open_short',
     'action.close_short',
-    'gate.regime',
-    'portfolioRisk.symbol_exposure_cap',
-    'portfolioRisk.substrategy_exposure_cap',
-    'program.dynamic_grid',
-    'program.fixed_grid_gated',
-    'program.adaptive_volatility_grid',
-    'program.event_listener',
-    'scope.symbol',
-    'scope.leg',
-    'scope.timeframe',
-    'scope.dataSource',
-    'scope.subStrategy',
-    'gate.subStrategy',
-    'portfolioRisk.drawdown_block',
   ])
 
   describe('full equivalence for atoms present in both sources', () => {
@@ -192,7 +183,7 @@ describe('atoms-classifier-migration-equivalence', () => {
       for (const key of registryKeys) {
         const entry = ATOM_CONTRACT_REGISTRY[key]
         const adapted = adaptFromContractRegistry(entry)
-        expect(['trigger', 'action', 'risk', 'position', 'orchestration']).toContain(adapted.legacyCategory)
+        expect(['trigger', 'action', 'risk', 'position', 'context']).toContain(adapted.legacyCategory)
       }
     })
   })

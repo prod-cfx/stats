@@ -9,8 +9,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [{
+        trigger: [],
+        action: [{
           id: 'action-open-long',
           key: 'open_long',
           status: 'open',
@@ -29,7 +29,9 @@ describe('SemanticStateReducerService', () => {
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'action.order_type',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'action.order_type',
@@ -39,7 +41,7 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 3,
     })
 
-    expect(next.actions[0]).toEqual(expect.objectContaining({
+    expect(next.action[0]).toEqual(expect.objectContaining({
       status: 'locked',
       params: { orderType: '市价单' },
       openSlots: [expect.objectContaining({
@@ -56,8 +58,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [{
           id: 'falling-knife',
           key: 'risk.falling_knife_guard',
@@ -77,7 +79,9 @@ describe('SemanticStateReducerService', () => {
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'risk.falling_knife_guard.definition',
       targetFieldPath: 'risk.params.definition',
       targetSlotId: buildSemanticSlotId({
@@ -131,7 +135,7 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [{
+        trigger: [{
           id: 'entry-volume-relative-average',
           key: 'volume.relative_average',
           phase: 'entry',
@@ -148,13 +152,15 @@ describe('SemanticStateReducerService', () => {
             affectsExecution: true,
           }],
         }],
-        actions: [{ id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+        action: [{ id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
         risk: [],
         position: null,
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-05-09T00:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: slotKey,
       targetFieldPath: fieldPath,
       targetSlotId: buildSemanticSlotId({ slotKey, fieldPath }),
@@ -162,7 +168,7 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 11,
     })
 
-    expect(next.triggers[0]).toEqual(expect.objectContaining({
+    expect(next.trigger[0]).toEqual(expect.objectContaining({
       status: 'locked',
       params: expect.objectContaining(expectedParam),
       openSlots: [expect.objectContaining({
@@ -184,8 +190,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [{
+        trigger: [],
+        action: [{
           id: 'action-add-position',
           key: 'action.add_position',
           status: 'open',
@@ -207,12 +213,13 @@ describe('SemanticStateReducerService', () => {
           status: 'locked',
           source: 'user_explicit',
           openSlots: [],
-          constraints: [],
         },
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-05-08T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'action.add_position.constraint',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'action.add_position.constraint',
@@ -222,11 +229,11 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 9,
     })
 
-    expect(next.actions[0]).toEqual(expect.objectContaining({
+    expect(next.action[0]).toEqual(expect.objectContaining({
       status: 'locked',
       params: expect.objectContaining({ constraint: '最多加仓 3 次' }),
     }))
-    expect(next.position?.constraints).toEqual(expect.arrayContaining([
+    expect(next.positionConstraint).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'position.pyramiding_limit',
         status: 'locked',
@@ -265,8 +272,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [],
         position: {
           mode: 'fixed_ratio',
@@ -276,26 +283,27 @@ describe('SemanticStateReducerService', () => {
           status: 'locked',
           source: 'user_explicit',
           openSlots: [],
-          constraints: [{
-            id: 'dca',
-            key: 'position.dca_schedule',
-            params: { maxCount: 4 },
-            status: 'open',
-            source: 'user_explicit',
-            openSlots: [{
-              slotKey,
-              fieldPath,
-              status: 'open',
-              priority: 'risk',
-              questionHint: '请确认 DCA 参数。',
-              affectsExecution: true,
-            }],
-          }],
         },
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-05-08T10:00:00.000Z',
-      },
+        positionConstraint: [{
+          id: 'dca',
+          key: 'position.dca_schedule',
+          params: { maxCount: 4 },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey,
+            fieldPath,
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认 DCA 参数。',
+            affectsExecution: true,
+          }],
+        }] as any,
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: slotKey,
       targetSlotId: buildSemanticSlotId({
         slotKey,
@@ -310,7 +318,7 @@ describe('SemanticStateReducerService', () => {
       value: 0.1,
       sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
     }))
-    expect(next.position?.constraints?.[0]).toEqual(expect.objectContaining({
+    expect(next.positionConstraint?.[0]).toEqual(expect.objectContaining({
       status: 'locked',
       params: expect.objectContaining({
         maxCount: 4,
@@ -329,8 +337,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [],
         position: {
           mode: 'fixed_ratio',
@@ -340,37 +348,38 @@ describe('SemanticStateReducerService', () => {
           status: 'locked',
           source: 'user_explicit',
           openSlots: [],
-          constraints: [{
-            id: 'dca',
-            key: 'position.dca_schedule',
-            params: {},
-            status: 'open',
-            source: 'user_explicit',
-            openSlots: [{
-              slotKey: 'contract.requirement.guard.define.dca_exit_rule',
-              fieldPath: 'position.constraints[dca].contracts[dca-contract].requires.guard.define.dca_exit_rule',
-              status: 'open',
-              priority: 'risk',
-              questionHint: '请补充 guard define dca_exit_rule 的执行语义。',
-              affectsExecution: true,
-            }],
-            contracts: [{
-              id: 'dca-contract',
-              kind: 'position',
-              capabilities: [],
-              requires: [{ domain: 'guard', verb: 'define', object: 'dca_exit_rule' }],
-              params: {},
-              runtimeRequirements: [],
-              stateRequirements: [],
-              orderRequirements: [],
-              openSlots: [],
-            }],
-          }],
         },
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-05-08T10:00:00.000Z',
-      },
+        positionConstraint: [{
+          id: 'dca',
+          key: 'position.dca_schedule',
+          params: {},
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'contract.requirement.guard.define.dca_exit_rule',
+            fieldPath: 'position.constraints[dca].contracts[dca-contract].requires.guard.define.dca_exit_rule',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请补充 guard define dca_exit_rule 的执行语义。',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'dca-contract',
+            kind: 'position',
+            capabilities: [],
+            requires: [{ domain: 'guard', verb: 'define', object: 'dca_exit_rule' }],
+            params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
+          }],
+        }] as any,
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'contract.requirement.guard.define.dca_exit_rule',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'contract.requirement.guard.define.dca_exit_rule',
@@ -380,7 +389,7 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 9,
     })
 
-    expect(next.position?.constraints?.[0]).toEqual(expect.objectContaining({
+    expect(next.positionConstraint?.[0]).toEqual(expect.objectContaining({
       status: 'locked',
       openSlots: [expect.objectContaining({ status: 'locked' })],
       contracts: [expect.objectContaining({
@@ -398,8 +407,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [],
-        actions: [{
+        trigger: [],
+        action: [{
           id: 'action-grid-ladder',
           key: 'open_long',
           status: 'open',
@@ -432,7 +441,9 @@ describe('SemanticStateReducerService', () => {
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'contract.requirement.capital.allocate.per_order_budget',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'contract.requirement.capital.allocate.per_order_budget',
@@ -442,7 +453,7 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 5,
     })
 
-    expect(next.actions[0]).toEqual(expect.objectContaining({
+    expect(next.action[0]).toEqual(expect.objectContaining({
       status: 'locked',
       openSlots: [expect.objectContaining({
         slotKey: 'contract.requirement.capital.allocate.per_order_budget',
@@ -466,8 +477,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [],
-        actions: [{
+        trigger: [],
+        action: [{
           id: 'action-grid-ladder',
           key: 'open_long',
           status: 'open',
@@ -500,7 +511,9 @@ describe('SemanticStateReducerService', () => {
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'contract.requirement.capital.allocate.per_order_budget',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'contract.requirement.capital.allocate.per_order_budget',
@@ -510,7 +523,7 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 5,
     })
 
-    expect(next.actions[0]).toEqual(expect.objectContaining({
+    expect(next.action[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expect.objectContaining({
         slotKey: 'contract.requirement.capital.allocate.per_order_budget',
@@ -527,8 +540,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [{
           id: 'risk-boundary-stop',
           key: 'risk.boundary_guard',
@@ -561,7 +574,9 @@ describe('SemanticStateReducerService', () => {
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'contract.requirement.guard.enforce.boundary_cancel',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'contract.requirement.guard.enforce.boundary_cancel',
@@ -602,8 +617,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [{
           id: 'risk-boundary-stop',
           key: 'risk.boundary_guard',
@@ -636,7 +651,9 @@ describe('SemanticStateReducerService', () => {
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'contract.requirement.guard.enforce.boundary_cancel',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'contract.requirement.guard.enforce.boundary_cancel',
@@ -667,8 +684,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [],
-        actions: [{
+        trigger: [],
+        action: [{
           id: 'action-grid-ladder',
           key: 'open_long',
           status: 'open',
@@ -701,7 +718,9 @@ describe('SemanticStateReducerService', () => {
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'contract.requirement.capital.allocate.per_order_budget',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'contract.requirement.capital.allocate.per_order_budget',
@@ -711,7 +730,7 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 5,
     })
 
-    expect(next.actions[0]).toEqual(expect.objectContaining({
+    expect(next.action[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expect.objectContaining({
         slotKey: 'contract.requirement.capital.allocate.per_order_budget',
@@ -728,8 +747,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [],
-        actions: [{
+        trigger: [],
+        action: [{
           id: 'action-grid-ladder',
           key: 'open_long',
           status: 'open',
@@ -762,7 +781,9 @@ describe('SemanticStateReducerService', () => {
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'contract.requirement.exposure.set.position_mode',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'contract.requirement.exposure.set.position_mode',
@@ -772,7 +793,7 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 5,
     })
 
-    expect(next.actions[0]).toEqual(expect.objectContaining({
+    expect(next.action[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expect.objectContaining({
         slotKey: 'contract.requirement.exposure.set.position_mode',
@@ -789,7 +810,7 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [{
+        trigger: [{
           id: 'trigger-grid-levels',
           key: 'grid.price_levels',
           phase: 'gate',
@@ -818,13 +839,15 @@ describe('SemanticStateReducerService', () => {
             openSlots: [],
           }],
         }],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'contract.requirement.price.define.level_set',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'contract.requirement.price.define.level_set',
@@ -834,7 +857,7 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 5,
     })
 
-    expect(next.triggers[0]).toEqual(expect.objectContaining({
+    expect(next.trigger[0]).toEqual(expect.objectContaining({
       status: 'locked',
       openSlots: [expect.objectContaining({
         slotKey: 'contract.requirement.price.define.level_set',
@@ -861,7 +884,7 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [{
+        trigger: [{
           id: 'trigger-grid-levels',
           key: 'grid.price_levels',
           phase: 'gate',
@@ -894,13 +917,15 @@ describe('SemanticStateReducerService', () => {
             openSlots: [],
           }],
         }],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'contract.requirement.price.define.level_set',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'contract.requirement.price.define.level_set',
@@ -910,7 +935,7 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 5,
     })
 
-    expect(next.triggers[0]).toEqual(expect.objectContaining({
+    expect(next.trigger[0]).toEqual(expect.objectContaining({
       status: 'locked',
       openSlots: [expect.objectContaining({
         slotKey: 'contract.requirement.price.define.level_set',
@@ -940,8 +965,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [{
+        trigger: [],
+        action: [{
           id: 'action-open-long',
           key: 'open_long',
           status: 'open',
@@ -974,7 +999,9 @@ describe('SemanticStateReducerService', () => {
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-29T00:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'action.order_type',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'action.order_type',
@@ -984,7 +1011,7 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 3,
     })
 
-    expect(next.actions[0]).toEqual(expect.objectContaining({
+    expect(next.action[0]).toEqual(expect.objectContaining({
       status: 'locked',
       params: { orderType: '市价单' },
     }))
@@ -1010,8 +1037,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [],
         position: null,
         contextSlots: {
@@ -1029,7 +1056,9 @@ describe('SemanticStateReducerService', () => {
         },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'marketType',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'marketType',
@@ -1050,8 +1079,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [],
         position: null,
         contextSlots: {
@@ -1069,7 +1098,9 @@ describe('SemanticStateReducerService', () => {
         },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'marketType',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'marketType',
@@ -1089,7 +1120,7 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'entry-ma',
             key: 'indicator.above',
@@ -1117,13 +1148,15 @@ describe('SemanticStateReducerService', () => {
             ],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'reference.period.entry',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'reference.period.entry',
@@ -1133,9 +1166,9 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 4,
     })
 
-    expect(next.triggers[0]?.params['reference.period']).toBe(50)
-    expect(next.triggers[0]?.openSlots.find(slot => slot.slotKey === 'reference.period.entry')?.status).toBe('locked')
-    expect(next.triggers[0]?.openSlots.find(slot => slot.slotKey === 'confirmationMode.entry')?.status).toBe('open')
+    expect(next.trigger[0]?.params['reference.period']).toBe(50)
+    expect(next.trigger[0]?.openSlots.find(slot => slot.slotKey === 'reference.period.entry')?.status).toBe('locked')
+    expect(next.trigger[0]?.openSlots.find(slot => slot.slotKey === 'confirmationMode.entry')?.status).toBe('open')
   })
 
   it('locks the confirmation slot with the semantic confirmation value instead of inheriting reference period', () => {
@@ -1143,7 +1176,7 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'entry-ma',
             key: 'indicator.above',
@@ -1167,13 +1200,15 @@ describe('SemanticStateReducerService', () => {
             ],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'confirmationMode.entry',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'confirmationMode.entry',
@@ -1183,8 +1218,8 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 5,
     })
 
-    expect(next.triggers[0]?.params.confirmationMode).toBe('close_confirm')
-    expect(next.triggers[0]?.openSlots.find(slot => slot.slotKey === 'confirmationMode.entry')).toEqual(expect.objectContaining({
+    expect(next.trigger[0]?.params.confirmationMode).toBe('close_confirm')
+    expect(next.trigger[0]?.openSlots.find(slot => slot.slotKey === 'confirmationMode.entry')).toEqual(expect.objectContaining({
       status: 'locked',
       value: 'close_confirm',
     }))
@@ -1195,7 +1230,7 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'entry-bollinger-lower',
             key: 'price.detect.indicator_boundary',
@@ -1218,13 +1253,15 @@ describe('SemanticStateReducerService', () => {
             ],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'confirmationMode.entry',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'confirmationMode.entry',
@@ -1234,9 +1271,9 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 5,
     })
 
-    expect(next.triggers[0]?.params.confirmationMode).toBe('touch')
-    expect(next.triggers[0]?.status).toBe('locked')
-    expect(next.triggers[0]?.openSlots.find(slot => slot.slotKey === 'confirmationMode.entry')).toEqual(expect.objectContaining({
+    expect(next.trigger[0]?.params.confirmationMode).toBe('touch')
+    expect(next.trigger[0]?.status).toBe('locked')
+    expect(next.trigger[0]?.openSlots.find(slot => slot.slotKey === 'confirmationMode.entry')).toEqual(expect.objectContaining({
       status: 'locked',
       value: 'touch',
       evidence: expect.objectContaining({
@@ -1251,8 +1288,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [],
         position: {
           mode: 'fixed_ratio',
@@ -1274,7 +1311,9 @@ describe('SemanticStateReducerService', () => {
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'position.sizing',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'position.sizing',
@@ -1308,8 +1347,8 @@ describe('SemanticStateReducerService', () => {
         currentState: {
           version: 1,
           families: ['single-leg'],
-          triggers: [],
-          actions: [],
+          trigger: [],
+          action: [],
           risk: [],
           position: {
             mode: 'fixed_ratio',
@@ -1331,7 +1370,9 @@ describe('SemanticStateReducerService', () => {
           contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
           normalizationNotes: [],
           updatedAt: '2026-04-15T10:00:00.000Z',
-        },
+          positionConstraint: [],
+          orchestration: [],
+          orchestrationContracts: []        },
         targetSlotKey: 'position.sizing',
         targetSlotId: buildSemanticSlotId({
           slotKey: 'position.sizing',
@@ -1370,7 +1411,7 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'entry-ma',
             key: 'indicator.above',
@@ -1394,13 +1435,15 @@ describe('SemanticStateReducerService', () => {
             ],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'confirmationMode.entry',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'confirmationMode.entry',
@@ -1410,9 +1453,9 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 6,
     })
 
-    expect(next.triggers[0]?.params.confirmationMode).toBeUndefined()
-    expect(next.triggers[0]?.status).toBe('open')
-    const confirmationSlot = next.triggers[0]?.openSlots.find(slot => slot.slotKey === 'confirmationMode.entry')
+    expect(next.trigger[0]?.params.confirmationMode).toBeUndefined()
+    expect(next.trigger[0]?.status).toBe('open')
+    const confirmationSlot = next.trigger[0]?.openSlots.find(slot => slot.slotKey === 'confirmationMode.entry')
     expect(confirmationSlot).toEqual(expect.objectContaining({
       status: 'open',
     }))
@@ -1425,7 +1468,7 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'entry-ma-fast',
             key: 'indicator.above',
@@ -1463,13 +1506,15 @@ describe('SemanticStateReducerService', () => {
             ],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'confirmationMode.entry',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'confirmationMode.entry',
@@ -1479,16 +1524,16 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 7,
     })
 
-    expect(next.triggers[0]?.params.confirmationMode).toBeUndefined()
-    expect(next.triggers[0]?.status).toBe('open')
-    expect(next.triggers[0]?.openSlots[0]).toEqual(expect.objectContaining({
+    expect(next.trigger[0]?.params.confirmationMode).toBeUndefined()
+    expect(next.trigger[0]?.status).toBe('open')
+    expect(next.trigger[0]?.openSlots[0]).toEqual(expect.objectContaining({
       status: 'open',
     }))
-    expect(next.triggers[0]?.openSlots[0]).not.toHaveProperty('value')
+    expect(next.trigger[0]?.openSlots[0]).not.toHaveProperty('value')
 
-    expect(next.triggers[1]?.params.confirmationMode).toBe('close_confirm')
-    expect(next.triggers[1]?.status).toBe('locked')
-    expect(next.triggers[1]?.openSlots[0]).toEqual(expect.objectContaining({
+    expect(next.trigger[1]?.params.confirmationMode).toBe('close_confirm')
+    expect(next.trigger[1]?.status).toBe('locked')
+    expect(next.trigger[1]?.openSlots[0]).toEqual(expect.objectContaining({
       fieldPath: 'triggers[1].params.confirmationMode',
       status: 'locked',
       value: 'close_confirm',
@@ -1500,7 +1545,7 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'entry-bollinger-lower',
             key: 'price.detect.indicator_boundary',
@@ -1544,13 +1589,15 @@ describe('SemanticStateReducerService', () => {
             ],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'confirmationMode.entry',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'confirmationMode.entry',
@@ -1561,7 +1608,7 @@ describe('SemanticStateReducerService', () => {
       applyEquivalentConfirmationSlots: true,
     })
 
-    expect(next.triggers).toEqual([
+    expect(next.trigger).toEqual([
       expect.objectContaining({
         status: 'locked',
         params: expect.objectContaining({ confirmationMode: 'touch' }),
@@ -1580,7 +1627,7 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [
+        trigger: [
           {
             id: 'entry-ma',
             key: 'indicator.above',
@@ -1604,13 +1651,15 @@ describe('SemanticStateReducerService', () => {
             ],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'confirmationMode.entry',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'confirmationMode.entry',
@@ -1620,8 +1669,8 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 8,
     })
 
-    expect(next.triggers[0]?.params.confirmationMode).toBe('close_confirm')
-    expect(next.triggers[0]?.openSlots[0]).toEqual(expect.objectContaining({
+    expect(next.trigger[0]?.params.confirmationMode).toBe('close_confirm')
+    expect(next.trigger[0]?.openSlots[0]).toEqual(expect.objectContaining({
       status: 'locked',
       value: 'close_confirm',
     }))
@@ -1631,7 +1680,7 @@ describe('SemanticStateReducerService', () => {
     const baseState: SemanticState = {
       version: 1,
       families: ['grid.range_rebalance'],
-      triggers: [
+      trigger: [
         {
           id: 'grid-entry',
           key: 'grid.range_rebalance',
@@ -1670,13 +1719,15 @@ describe('SemanticStateReducerService', () => {
           ],
         },
       ],
-      actions: [],
+      action: [],
       risk: [],
       position: null,
       contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
       normalizationNotes: [],
       updatedAt: '2026-04-16T10:00:00.000Z',
-    }
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: []    }
 
     const withLower = service.applyClarificationAnswer({
       currentState: baseState,
@@ -1709,25 +1760,25 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 11,
     })
 
-    expect(withLower.triggers[0]?.params.rangeLower).toBe(60000)
-    expect(withLower.triggers[0]?.openSlots.find(slot => slot.slotKey === 'grid.range.lower')).toEqual(expect.objectContaining({
+    expect(withLower.trigger[0]?.params.rangeLower).toBe(60000)
+    expect(withLower.trigger[0]?.openSlots.find(slot => slot.slotKey === 'grid.range.lower')).toEqual(expect.objectContaining({
       status: 'locked',
       value: 60000,
     }))
-    expect(withLower.triggers[0]?.openSlots.find(slot => slot.slotKey === 'grid.range.upper')?.status).toBe('open')
+    expect(withLower.trigger[0]?.openSlots.find(slot => slot.slotKey === 'grid.range.upper')?.status).toBe('open')
 
-    expect(withUpper.triggers[0]?.params.rangeUpper).toBe(80000)
-    expect(withUpper.triggers[0]?.openSlots.find(slot => slot.slotKey === 'grid.range.upper')).toEqual(expect.objectContaining({
+    expect(withUpper.trigger[0]?.params.rangeUpper).toBe(80000)
+    expect(withUpper.trigger[0]?.openSlots.find(slot => slot.slotKey === 'grid.range.upper')).toEqual(expect.objectContaining({
       status: 'locked',
       value: 80000,
     }))
 
-    expect(withStep.triggers[0]?.params.stepPct).toBe(0.5)
-    expect(withStep.triggers[0]?.openSlots.find(slot => slot.slotKey === 'grid.stepPct')).toEqual(expect.objectContaining({
+    expect(withStep.trigger[0]?.params.stepPct).toBe(0.5)
+    expect(withStep.trigger[0]?.openSlots.find(slot => slot.slotKey === 'grid.stepPct')).toEqual(expect.objectContaining({
       status: 'locked',
       value: 0.5,
     }))
-    expect(withStep.triggers[0]?.status).toBe('locked')
+    expect(withStep.trigger[0]?.status).toBe('locked')
   })
 
   it('treats legacy grid.lower and grid.upper slots as canonical grid range semantics', () => {
@@ -1735,7 +1786,7 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [
+        trigger: [
           {
             id: 'grid-entry',
             key: 'grid.range_rebalance',
@@ -1757,26 +1808,28 @@ describe('SemanticStateReducerService', () => {
             ],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'grid.lower',
       targetFieldPath: 'triggers[0].params.rangeLower',
       answer: '60000',
       messageIndex: 12,
     })
 
-    expect(next.triggers[0]?.params.rangeLower).toBe(60000)
-    expect(next.triggers[0]?.openSlots[0]).toEqual(expect.objectContaining({
+    expect(next.trigger[0]?.params.rangeLower).toBe(60000)
+    expect(next.trigger[0]?.openSlots[0]).toEqual(expect.objectContaining({
       slotKey: 'grid.lower',
       status: 'locked',
       value: 60000,
     }))
-    expect(next.triggers[0]?.status).toBe('locked')
+    expect(next.trigger[0]?.status).toBe('locked')
   })
 
   it('reduces grid sideMode into trigger params and locks the semantic slot', () => {
@@ -1784,7 +1837,7 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [
+        trigger: [
           {
             id: 'grid-entry',
             key: 'grid.range_rebalance',
@@ -1808,13 +1861,15 @@ describe('SemanticStateReducerService', () => {
             ],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'grid.sideMode',
       targetFieldPath: 'triggers[0].params.sideMode',
       targetSlotId: buildSemanticSlotId({
@@ -1825,12 +1880,12 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 12,
     })
 
-    expect(next.triggers[0]?.params.sideMode).toBe('long_only')
-    expect(next.triggers[0]?.openSlots[0]).toEqual(expect.objectContaining({
+    expect(next.trigger[0]?.params.sideMode).toBe('long_only')
+    expect(next.trigger[0]?.openSlots[0]).toEqual(expect.objectContaining({
       status: 'locked',
       value: 'long_only',
     }))
-    expect(next.triggers[0]?.status).toBe('locked')
+    expect(next.trigger[0]?.status).toBe('locked')
   })
 
   it('accepts natural short-grid sideMode wording in semantic reduction', () => {
@@ -1838,7 +1893,7 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['grid.range_rebalance'],
-        triggers: [
+        trigger: [
           {
             id: 'grid-entry',
             key: 'grid.range_rebalance',
@@ -1862,13 +1917,15 @@ describe('SemanticStateReducerService', () => {
             ],
           },
         ],
-        actions: [],
+        action: [],
         risk: [],
         position: null,
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'grid.sideMode',
       targetFieldPath: 'triggers[0].params.sideMode',
       targetSlotId: buildSemanticSlotId({
@@ -1879,8 +1936,8 @@ describe('SemanticStateReducerService', () => {
       messageIndex: 13,
     })
 
-    expect(next.triggers[0]?.params.sideMode).toBe('short_only')
-    expect(next.triggers[0]?.openSlots[0]).toEqual(expect.objectContaining({
+    expect(next.trigger[0]?.params.sideMode).toBe('short_only')
+    expect(next.trigger[0]?.openSlots[0]).toEqual(expect.objectContaining({
       status: 'locked',
       value: 'short_only',
     }))
@@ -1901,8 +1958,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [],
         position: {
           mode: 'fixed_fraction',
@@ -1924,7 +1981,9 @@ describe('SemanticStateReducerService', () => {
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'position.sizing',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'position.sizing',
@@ -1960,8 +2019,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [],
         position: {
           mode: 'fixed_fraction',
@@ -1983,7 +2042,9 @@ describe('SemanticStateReducerService', () => {
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'position.sizing',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'position.sizing',
@@ -2025,8 +2086,8 @@ describe('SemanticStateReducerService', () => {
         currentState: {
           version: 1,
           families: ['single-leg'],
-          triggers: [],
-          actions: [],
+          trigger: [],
+          action: [],
           risk: [],
           position: {
             mode: 'fixed_ratio',
@@ -2048,7 +2109,9 @@ describe('SemanticStateReducerService', () => {
           contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
           normalizationNotes: [],
           updatedAt: '2026-04-16T10:00:00.000Z',
-        },
+          positionConstraint: [],
+          orchestration: [],
+          orchestrationContracts: []        },
         targetSlotKey: 'position.sizing',
         targetSlotId: buildSemanticSlotId({
           slotKey: 'position.sizing',
@@ -2079,8 +2142,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [
           {
             id: 'protective-exit',
@@ -2104,7 +2167,9 @@ describe('SemanticStateReducerService', () => {
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'risk.protective_exit',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'risk.protective_exit',
@@ -2131,8 +2196,8 @@ describe('SemanticStateReducerService', () => {
     const state: SemanticState = {
       version: 1,
       families: ['single-leg'],
-      triggers: [],
-      actions: [],
+      trigger: [],
+      action: [],
       risk: [
         {
           id: 'risk-protective',
@@ -2156,7 +2221,9 @@ describe('SemanticStateReducerService', () => {
       contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
       normalizationNotes: [],
       updatedAt: '2026-04-29T00:00:00.000Z',
-    }
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: []    }
 
     const next = service.applyClarificationAnswer({
       currentState: state,
@@ -2182,8 +2249,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [
           {
             id: 'protective-exit',
@@ -2207,7 +2274,9 @@ describe('SemanticStateReducerService', () => {
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'risk.protective_exit',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'risk.protective_exit',
@@ -2234,8 +2303,8 @@ describe('SemanticStateReducerService', () => {
     const buildState = (): SemanticState => ({
       version: 1,
       families: ['single-leg'],
-      triggers: [],
-      actions: [],
+      trigger: [],
+      action: [],
       risk: [
         {
           id: 'protective-exit',
@@ -2259,7 +2328,9 @@ describe('SemanticStateReducerService', () => {
       contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
       normalizationNotes: [],
       updatedAt: '2026-04-16T10:00:00.000Z',
-    })
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: []    })
 
     const maxDrawdown = service.applyClarificationAnswer({
       currentState: buildState(),
@@ -2309,8 +2380,8 @@ describe('SemanticStateReducerService', () => {
     const positionState: SemanticState = {
       version: 1,
       families: ['single-leg'],
-      triggers: [],
-      actions: [],
+      trigger: [],
+      action: [],
       risk: [],
       position: {
         mode: 'fixed_fraction',
@@ -2332,7 +2403,9 @@ describe('SemanticStateReducerService', () => {
       contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
       normalizationNotes: [],
       updatedAt: '2026-04-16T10:00:00.000Z',
-    }
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: []    }
     const riskState: SemanticState = {
       ...positionState,
       risk: [
@@ -2409,8 +2482,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [
           {
             id: 'protective-exit',
@@ -2434,7 +2507,9 @@ describe('SemanticStateReducerService', () => {
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'risk.protective_exit',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'risk.protective_exit',
@@ -2458,8 +2533,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [
           {
             id: 'protective-exit',
@@ -2483,7 +2558,9 @@ describe('SemanticStateReducerService', () => {
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'risk.protective_exit',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'risk.protective_exit',
@@ -2507,8 +2584,8 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: ['single-leg'],
-        triggers: [],
-        actions: [],
+        trigger: [],
+        action: [],
         risk: [],
         position: {
           mode: 'fixed_fraction',
@@ -2530,7 +2607,9 @@ describe('SemanticStateReducerService', () => {
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-16T10:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'position.sizing',
       targetSlotId: buildSemanticSlotId({
         slotKey: 'position.sizing',
@@ -2551,7 +2630,7 @@ describe('SemanticStateReducerService', () => {
       currentState: {
         version: 1,
         families: [],
-        triggers: [{
+        trigger: [{
           id: 'trigger-open-breakout',
           key: 'price.breakout_up',
           phase: 'entry',
@@ -2568,19 +2647,21 @@ describe('SemanticStateReducerService', () => {
             affectsExecution: true,
           }],
         }],
-        actions: [{ id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' }],
+        action: [{ id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' }],
         risk: [],
         position: null,
         contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
         normalizationNotes: [],
         updatedAt: '2026-04-29T00:00:00.000Z',
-      },
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: []      },
       targetSlotKey: 'trigger.reference_definition',
       targetFieldPath: 'triggers[0].params.reference',
       answer: '最近 20 根 K 线高点',
     })
 
-    expect(next.triggers[0]).toEqual(expect.objectContaining({
+    expect(next.trigger[0]).toEqual(expect.objectContaining({
       status: 'locked',
       params: expect.objectContaining({
         reference: 'channel_high',

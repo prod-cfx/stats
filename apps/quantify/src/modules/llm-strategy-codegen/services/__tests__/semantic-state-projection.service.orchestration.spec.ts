@@ -5,17 +5,16 @@ function baseState(orchestrationNodes: readonly SemanticOrchestrationNode[]): Se
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
     position: null,
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
     updatedAt: '2026-05-11T00:00:00.000Z',
-    orchestration: {
-      nodes: orchestrationNodes,
-      contracts: [],
-    },
+    orchestration: [...orchestrationNodes],
+    orchestrationContracts: [],
   }
 }
 

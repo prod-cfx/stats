@@ -25,7 +25,7 @@ interface BuildTriggerCombinationContractInput {
  */
 export function buildNormalizedIntentFromSemanticState(state: SemanticState): StrategyNormalizedIntent {
   const normalizedState = normalizeSemanticStateCombinationContracts(state)
-  const normalizedTriggers = normalizedState.triggers
+  const normalizedTriggers = normalizedState.trigger
   const families = new Set(normalizedState.families)
   if (normalizedTriggers.some(trigger => trigger.phase === 'gate')) {
     families.add('state-gated')
@@ -37,7 +37,7 @@ export function buildNormalizedIntentFromSemanticState(state: SemanticState): St
     triggers: normalizedTriggers
       .filter(trigger => trigger.status !== 'superseded')
       .map(trigger => toNormalizedTrigger(trigger)),
-    actions: normalizedState.actions.map(action => ({
+    actions: normalizedState.action.map(action => ({
       key: action.key,
       ...(action.params ? { params: { ...action.params } } : {}),
     })),
@@ -255,8 +255,8 @@ export function normalizeSemanticStateCombinationContracts(state: SemanticState)
   return {
     ...state,
     families: [...state.families],
-    triggers: normalizeTriggerCombinationContracts(state.triggers),
-    actions: state.actions.map(action => ({
+    trigger: normalizeTriggerCombinationContracts(state.trigger),
+    action: state.action.map(action => ({
       ...action,
       ...(action.params ? { params: { ...action.params } } : {}),
       ...(action.openSlots ? { openSlots: [...action.openSlots] } : {}),

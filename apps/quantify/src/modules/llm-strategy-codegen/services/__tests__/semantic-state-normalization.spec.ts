@@ -281,7 +281,7 @@ describe('normalizeConditionSequenceTrigger', () => {
 
   it('keeps existing breakout-retest fixture memoryKey unchanged (corpus stability)', () => {
     const state = buildLockedAtomicState('breakout-retest')
-    const normalized = normalizeTriggerCombinationContracts(state.triggers)
+    const normalized = normalizeTriggerCombinationContracts(state.trigger)
     const sequence = normalized.find(t => t.key === 'condition.sequence')
 
     expect(sequence?.params.memoryKey).toBe('breakout')

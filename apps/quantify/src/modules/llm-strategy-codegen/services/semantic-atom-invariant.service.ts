@@ -182,8 +182,8 @@ export class SemanticAtomInvariantService {
 
   private collectContracts(state: SemanticState): SemanticAtomContract[] {
     return [
-      ...state.triggers.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
-      ...state.actions.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...state.trigger.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...state.action.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
       ...state.risk.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
       ...(state.position?.status === 'locked' ? state.position.contracts ?? [] : []),
     ]
@@ -775,7 +775,7 @@ export class SemanticAtomInvariantService {
     ir: CanonicalStrategyIrV1
     ast: StrategyAstV1
   }): StrategyConsistencyCheck[] {
-    const triggers = input.semanticState.triggers
+    const triggers = input.semanticState.trigger
       .filter(trigger => this.isBlockingGenericExpressionTrigger(trigger))
     const triggersByBucket = new Map<string, SemanticTriggerState[]>()
 
@@ -1256,7 +1256,7 @@ export class SemanticAtomInvariantService {
     // First-stage blocking scope: explicit trigger-level price percent changes.
     // Risk percent rules (stop loss / take profit / trailing stop) remain covered
     // by canonical risk guards and the existing strategy consistency checks.
-    const triggers = input.semanticState.triggers
+    const triggers = input.semanticState.trigger
       .filter(trigger => this.isBlockingPricePercentChangeTrigger(trigger))
     const triggersByBucket = new Map<string, SemanticTriggerState[]>()
 

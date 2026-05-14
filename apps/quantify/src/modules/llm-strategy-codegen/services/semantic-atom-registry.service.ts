@@ -696,7 +696,10 @@ const STANDALONE_ATOM_MAP = new Map<string, SemanticRegisteredAtomDefinition>([
 ])
 
 // ── REGISTRY_ONLY_KEYS：仅在 ATOM_CONTRACT_REGISTRY 存在，不参与 list()/get()/resolve() 的 atom ──
-// (orchestration / scope 类别：由 SemanticOrchestrationRegistryService 单独管理)
+// #1364 AC-4: orchestration / scope / portfolioRisk / gate / program 类 key 已移除。
+// Task 6 后 server 端按 ATOM_CONTRACT_REGISTRY[key].bucket 强制归桶，
+// 错位 atom 不再发生，黑名单失去意义。保留 lifecycle action key 供
+// ImpliedActionSynthesizer 隐含合成使用。
 const REGISTRY_ONLY_KEYS = new Set([
   // Issue #1313 PR5c：action.open_long 等已在 REGISTRY 注册（供 dispatcher 层消费），
   // 但 SemanticState.actions[].key 使用裸标签（'open_long' 等），不含点前缀。
@@ -705,20 +708,6 @@ const REGISTRY_ONLY_KEYS = new Set([
   'action.close_long',
   'action.open_short',
   'action.close_short',
-  'gate.regime',
-  'portfolioRisk.symbol_exposure_cap',
-  'portfolioRisk.substrategy_exposure_cap',
-  'program.dynamic_grid',
-  'program.fixed_grid_gated',
-  'program.adaptive_volatility_grid',
-  'program.event_listener',
-  'scope.symbol',
-  'scope.leg',
-  'scope.timeframe',
-  'scope.dataSource',
-  'scope.subStrategy',
-  'gate.subStrategy',
-  'portfolioRisk.drawdown_block',
 ])
 
 function bucketToCategory(bucket: string): SemanticAtomDefinition['category'] {

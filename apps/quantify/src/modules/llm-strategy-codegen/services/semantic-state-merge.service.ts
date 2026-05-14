@@ -23,8 +23,8 @@ export class SemanticStateMergeService {
     return {
       ...input.derived,
       families: [...new Set([...input.persisted.families, ...input.derived.families])],
-      triggers: this.mergeTriggers(input.persisted.triggers, input.derived.triggers),
-      actions: this.mergeActions(input.persisted.actions, input.derived.actions),
+      trigger: this.mergeTriggers(input.persisted.trigger, input.derived.trigger),
+      action: this.mergeActions(input.persisted.action, input.derived.action),
       risk: this.mergeRisk(input.persisted.risk, input.derived.risk),
       position: this.mergePosition(input.persisted.position, input.derived.position),
       contextSlots: this.mergeContextSlots(input.persisted.contextSlots, input.derived.contextSlots),
@@ -264,15 +264,15 @@ export class SemanticStateMergeService {
       // 只回 position.sizing 不回 position.dca_schedule constraint），就会把 seed 抽出的
       // locked dca_schedule / pyramiding_limit 抹掉。按 key union 合并，每个 key 内部按
       // strength 取强，保证 locked 持久态不被 derived 弱化。
-      constraints: this.mergePositionConstraints(persisted.constraints, derived.constraints),
+      // DEPRECATED Task 6: position.constraints moved to top-level positionConstraint[]
       evidence: stronger.evidence ?? weaker.evidence,
     }
   }
 
   private mergePositionConstraints(
-    persisted: SemanticPositionState['constraints'],
-    derived: SemanticPositionState['constraints'],
-  ): SemanticPositionState['constraints'] {
+    persisted: readonly SemanticPositionConstraintState[] | undefined,
+    derived: readonly SemanticPositionConstraintState[] | undefined,
+  ): readonly SemanticPositionConstraintState[] | undefined {
     if (!persisted && !derived) return undefined
     const byKey = new Map<string, SemanticPositionConstraintState>()
 

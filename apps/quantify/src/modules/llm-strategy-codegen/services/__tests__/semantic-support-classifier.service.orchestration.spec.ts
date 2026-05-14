@@ -7,17 +7,16 @@ function baseState(orchestrationNodes: readonly SemanticOrchestrationNode[]): Se
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
     position: null,
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
     updatedAt: '2026-05-11T00:00:00.000Z',
-    orchestration: {
-      nodes: orchestrationNodes,
-      contracts: [],
-    },
+    orchestration: [...orchestrationNodes],
+    orchestrationContracts: [],
   }
 }
 
@@ -46,8 +45,8 @@ describe('semanticSupportClassifierService — orchestration parity (#1152)', ()
     expect(result.route).toBe('projection_gate')
     expect(result.unknownAtoms).toEqual([])
     expect(result.unsupportedAtoms).toEqual([])
-    expect(result.state.orchestration?.nodes).toHaveLength(1)
-    expect(result.state.orchestration?.nodes[0]?.key).toBe('portfolioRisk.drawdown_block')
+    expect(result.state.orchestration).toHaveLength(1)
+    expect(result.state.orchestration[0]?.key).toBe('portfolioRisk.drawdown_block')
   })
 
   it('B: locked 但 key 未在 orchestration registry 注册 → unknownAtoms 命中、route=unknown_unsupported', () => {
@@ -102,6 +101,6 @@ describe('semanticSupportClassifierService — orchestration parity (#1152)', ()
     const result = fallback.classify(baseState([fake]))
     expect(result.unknownAtoms).toEqual([])
     expect(result.route).toBe('projection_gate')
-    expect(result.state.orchestration?.nodes).toHaveLength(1)
+    expect(result.state.orchestration).toHaveLength(1)
   })
 })

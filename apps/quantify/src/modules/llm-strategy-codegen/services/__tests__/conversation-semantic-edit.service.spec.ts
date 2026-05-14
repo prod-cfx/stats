@@ -109,7 +109,7 @@ describe('ConversationSemanticEditService', () => {
   it('classifies a complete new grid description as a full strategy replacement instead of a merge', () => {
     const semanticState = {
       ...service.createEmptySemanticStateForTest(),
-      triggers: [
+      trigger: [
         {
           id: 'entry-dynamic-grid',
           key: 'price.range_position_lte',
@@ -208,7 +208,7 @@ describe('ConversationSemanticEditService', () => {
     const base = service.createEmptySemanticStateForTest()
     const state = {
       ...base,
-      triggers: [{
+      trigger: [{
         id: 'trigger-1',
         key: 'indicator.above',
         phase: 'entry' as const,
@@ -229,7 +229,7 @@ describe('ConversationSemanticEditService', () => {
       value: 'BTCUSDT',
       status: 'locked',
     }))
-    expect(next.triggers).toEqual(state.triggers)
+    expect(next.trigger).toEqual(state.trigger)
   })
 
   it('updates symbol context slot from inferred semantic edit', () => {
@@ -465,7 +465,7 @@ describe('ConversationSemanticEditService', () => {
   ])('classifies and applies action side replacement wording: %s', (message) => {
     const semanticState = {
       ...service.createEmptySemanticStateForTest(),
-      triggers: [
+      trigger: [
         {
           id: 'entry-bollinger-lower',
           key: 'bollinger.touch_lower',
@@ -487,7 +487,7 @@ describe('ConversationSemanticEditService', () => {
           openSlots: [],
         },
       ],
-      actions: [
+      action: [
         { id: 'action-open-long', key: 'open_long', status: 'locked' as const, source: 'user_explicit' as const },
         { id: 'action-close-long', key: 'close_long', status: 'locked' as const, source: 'user_explicit' as const },
       ],
@@ -571,9 +571,9 @@ describe('ConversationSemanticEditService', () => {
     const next = service.applyPatch(semanticState, decision.patch)
 
     expect(next.contextSlots.exchange?.value).toBe('okx')
-    expect(next.actions.map(action => action.key)).toEqual(['open_short', 'close_short'])
-    expect(next.triggers.map(trigger => trigger.sideScope)).toEqual(['short', 'short'])
-    expect(next.triggers.map(trigger => trigger.params)).toEqual([
+    expect(next.action.map(action => action.key)).toEqual(['open_short', 'close_short'])
+    expect(next.trigger.map(trigger => trigger.sideScope)).toEqual(['short', 'short'])
+    expect(next.trigger.map(trigger => trigger.params)).toEqual([
       { period: 30, stdDev: 0.9 },
       { period: 30, stdDev: 0.9 },
     ])
@@ -593,7 +593,7 @@ describe('ConversationSemanticEditService', () => {
   ])('classifies and applies moving-average period replacement wording: %s', (message) => {
     const semanticState = {
       ...service.createEmptySemanticStateForTest(),
-      triggers: [
+      trigger: [
         {
           id: 'entry-ma-cross',
           key: 'indicator.cross_over',
@@ -635,7 +635,7 @@ describe('ConversationSemanticEditService', () => {
 
     const next = service.applyPatch(semanticState, decision.patch)
 
-    expect(next.triggers).toEqual([
+    expect(next.trigger).toEqual([
       expect.objectContaining({
         id: 'entry-ma-cross',
         params: expect.objectContaining({ fastPeriod: 10, slowPeriod: 48 }),
@@ -691,7 +691,7 @@ describe('ConversationSemanticEditService', () => {
           affectsExecution: true,
         },
       },
-      triggers: [
+      trigger: [
         {
           id: 'entry-rsi-cross',
           key: 'indicator.cross_over',
@@ -713,7 +713,7 @@ describe('ConversationSemanticEditService', () => {
           openSlots: [],
         },
       ],
-      actions: [
+      action: [
         { id: 'action-open-long', key: 'open_long', status: 'locked' as const, source: 'user_explicit' as const },
         { id: 'action-close-long', key: 'close_long', status: 'locked' as const, source: 'user_explicit' as const },
       ],
@@ -769,16 +769,16 @@ describe('ConversationSemanticEditService', () => {
     expect(next.contextSlots.exchange?.value).toBe('okx')
     expect(next.contextSlots.symbol?.value).toBe('ETHUSDT')
     expect(next.contextSlots.timeframe?.value).toBe('15m')
-    expect(next.triggers).toHaveLength(2)
-    expect(next.triggers[0]).toEqual(expect.objectContaining({
+    expect(next.trigger).toHaveLength(2)
+    expect(next.trigger[0]).toEqual(expect.objectContaining({
       id: 'entry-rsi-cross',
       params: { indicator: 'rsi', period: 14, value: 40 },
     }))
-    expect(next.triggers[1]).toEqual(expect.objectContaining({
+    expect(next.trigger[1]).toEqual(expect.objectContaining({
       id: 'exit-rsi-gte',
       params: { indicator: 'rsi', period: 14, value: 64 },
     }))
-    expect(next.actions).toEqual(semanticState.actions)
+    expect(next.action).toEqual(semanticState.action)
     expect(next.risk).toEqual(semanticState.risk)
     expect(next.position).toEqual(expect.objectContaining({
       value: 0.25,
@@ -827,7 +827,7 @@ describe('ConversationSemanticEditService', () => {
           affectsExecution: true,
         },
       },
-      triggers: [
+      trigger: [
         {
           id: 'entry-range-lower',
           key: 'price.range_position_lte',
@@ -849,7 +849,7 @@ describe('ConversationSemanticEditService', () => {
           openSlots: [],
         },
       ],
-      actions: [
+      action: [
         { id: 'action-open-long', key: 'open_long', status: 'locked' as const, source: 'user_explicit' as const },
         { id: 'action-close-long', key: 'close_long', status: 'locked' as const, source: 'user_explicit' as const },
       ],
@@ -899,16 +899,16 @@ describe('ConversationSemanticEditService', () => {
     expect(next.contextSlots.exchange?.value).toBe('okx')
     expect(next.contextSlots.symbol?.value).toBe('BTCUSDT')
     expect(next.contextSlots.timeframe?.value).toBe('15m')
-    expect(next.triggers).toHaveLength(2)
-    expect(next.triggers[0]).toEqual(expect.objectContaining({
+    expect(next.trigger).toHaveLength(2)
+    expect(next.trigger[0]).toEqual(expect.objectContaining({
       id: 'entry-range-lower',
       params: { lookbackBars: 30, thresholdPct: 20 },
     }))
-    expect(next.triggers[1]).toEqual(expect.objectContaining({
+    expect(next.trigger[1]).toEqual(expect.objectContaining({
       id: 'exit-range-upper',
       params: { lookbackBars: 30, thresholdPct: 55 },
     }))
-    expect(next.actions).toEqual(semanticState.actions)
+    expect(next.action).toEqual(semanticState.action)
     expect(next.risk).toEqual(semanticState.risk)
     expect(next.position).toEqual(semanticState.position)
   })
@@ -955,7 +955,7 @@ describe('ConversationSemanticEditService', () => {
           affectsExecution: true,
         },
       },
-      triggers: [
+      trigger: [
         {
           id: 'entry-fixed-grid',
           key: 'grid.fixed_range',
@@ -967,7 +967,7 @@ describe('ConversationSemanticEditService', () => {
           openSlots: [],
         },
       ],
-      actions: [
+      action: [
         { id: 'action-open-long', key: 'open_long', status: 'locked' as const, source: 'user_explicit' as const },
         { id: 'action-open-short', key: 'open_short', status: 'locked' as const, source: 'user_explicit' as const },
       ],
@@ -1025,12 +1025,12 @@ describe('ConversationSemanticEditService', () => {
     expect(next.contextSlots.symbol?.value).toBe('BTCUSDT')
     expect(next.contextSlots.marketType?.value).toBe('perp')
     expect(next.contextSlots.timeframe?.value).toBe('15m')
-    expect(next.triggers).toHaveLength(1)
-    expect(next.triggers[0]).toEqual(expect.objectContaining({
+    expect(next.trigger).toHaveLength(1)
+    expect(next.trigger[0]).toEqual(expect.objectContaining({
       id: 'entry-fixed-grid',
       params: { lowerPrice: 60000, upperPrice: 70000, stepPct: 0.5, direction: 'bidirectional' },
     }))
-    expect(next.actions).toEqual(semanticState.actions)
+    expect(next.action).toEqual(semanticState.action)
     expect(next.risk).toEqual(semanticState.risk)
     expect(next.position).toEqual(semanticState.position)
   })
@@ -1088,7 +1088,7 @@ describe('ConversationSemanticEditService', () => {
     const next = service.applyPatch(semanticState, decision.patch)
 
     expect(service.readPendingEditForTest(next)).toBeNull()
-    expect(next.triggers[0]).toEqual(expect.objectContaining({
+    expect(next.trigger[0]).toEqual(expect.objectContaining({
       key: 'oscillator.rsi_lte',
       phase: 'entry',
       params: {
@@ -1103,7 +1103,7 @@ describe('ConversationSemanticEditService', () => {
   it('replaces the single existing trigger and parses RSI threshold after period', () => {
     const base = {
       ...service.createEmptySemanticStateForTest(),
-      triggers: [{
+      trigger: [{
         id: 'trigger-ma',
         key: 'indicator.ma_cross',
         phase: 'entry' as const,
@@ -1140,8 +1140,8 @@ describe('ConversationSemanticEditService', () => {
 
     const next = service.applyPatch(semanticState, applyDecision.patch)
 
-    expect(next.triggers).toHaveLength(1)
-    expect(next.triggers[0]).toEqual(expect.objectContaining({
+    expect(next.trigger).toHaveLength(1)
+    expect(next.trigger[0]).toEqual(expect.objectContaining({
       id: 'trigger-ma',
       key: 'oscillator.rsi_lte',
       params: {
@@ -1159,7 +1159,7 @@ describe('ConversationSemanticEditService', () => {
     )
     const semanticState = {
       ...service.createEmptySemanticStateForTest(),
-      triggers: [
+      trigger: [
         {
           id: 'trigger-ma',
           key: 'indicator.ma_cross',
@@ -1191,8 +1191,8 @@ describe('ConversationSemanticEditService', () => {
     expect(decision.kind).toBe('ASK_EDIT_CLARIFICATION')
     if (decision.kind !== 'ASK_EDIT_CLARIFICATION') return
     expect(decision.question).toContain('多个触发')
-    expect(service.applyPatch(semanticState, { operations: [{ op: 'replace_trigger', text: '低于 30' }] }).triggers)
-      .toEqual(semanticState.triggers)
+    expect(service.applyPatch(semanticState, { operations: [{ op: 'replace_trigger', text: '低于 30' }] }).trigger)
+      .toEqual(semanticState.trigger)
   })
 
   it('keeps an empty patch as a no-op even when a pending edit exists', () => {

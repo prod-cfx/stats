@@ -174,8 +174,8 @@ describe('PerTradeSizingResolver', () => {
         const state: SemanticState = {
           version: 1,
           families: ['single-leg'],
-          triggers: [],
-          actions: [{
+          trigger: [],
+          action: [{
             id: 'a-base-asset',
             key: 'action.open_long',
             status: 'locked',
@@ -200,6 +200,9 @@ describe('PerTradeSizingResolver', () => {
           }],
           risk: [],
           position: null,
+          positionConstraint: [],
+          orchestration: [],
+          orchestrationContracts: [],
           contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
           normalizationNotes: [],
           updatedAt: '2026-05-11T00:00:00.000Z',
@@ -491,7 +494,7 @@ describe('PerTradeSizingResolver', () => {
         hasOpenSlots: false,
       })
       // Patch the shape to include unit='percent'
-      const action = state.actions[0]
+      const action = state.action[0]
       const cap = action.contracts![0].capabilities[0]
       ;(cap.shape as Record<string, unknown>)['unit'] = 'percent'
 

@@ -39,9 +39,12 @@ function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticSt
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: {
       exchange: null,
@@ -137,7 +140,7 @@ describe('orchestration program.fixed_grid_gated — golden corpus (Phase 5 S4 T
       const state = builder.build(patch)
       expect(state).not.toBeNull()
       expect(state!.orchestration).toBeDefined()
-      const programStateNode = state!.orchestration!.nodes.find(n => n.kind === 'program')
+      const programStateNode = state!.orchestration.find(n => n.kind === 'program')
       expect(programStateNode).toBeDefined()
       expect(programStateNode?.key).toBe('program.fixed_grid_gated')
     })
@@ -161,8 +164,8 @@ describe('orchestration program.fixed_grid_gated — golden corpus (Phase 5 S4 T
       }
       const s1 = builder.build(patch)
       const s2 = builder.build(patch)
-      expect(s1!.orchestration!.nodes).toHaveLength(1)
-      expect(s2!.orchestration!.nodes).toHaveLength(1)
+      expect(s1!.orchestration).toHaveLength(1)
+      expect(s2!.orchestration).toHaveLength(1)
     })
   })
 
@@ -175,20 +178,20 @@ describe('orchestration program.fixed_grid_gated — golden corpus (Phase 5 S4 T
 
     function expectPhase0(node: SemanticOrchestrationNode, version = CURRENT_VERSION): boolean {
       const state = createSemanticState({
-        orchestration: { nodes: [...baseSiblings, node], contracts: [] },
+        orchestration: [...baseSiblings, node], orchestrationContracts: [],
       })
       const result = readiness().normalize(state, version)
-      const programNode = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      const programNode = result.state.orchestration.find(n => n.kind === 'program')
       const slots = programNode?.openSlots ?? []
       return slots.some(s => s.slotKey === 'orchestration.phase0.unsupported')
     }
 
     it('B.1 valid program + valid gate ref + new strategy → no phase0 slot', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [...baseSiblings, fixedGridGatedNode()], contracts: [] },
+        orchestration: [...baseSiblings, fixedGridGatedNode()], orchestrationContracts: [],
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
-      const programNode = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      const programNode = result.state.orchestration.find(n => n.kind === 'program')
       const slots = programNode?.openSlots ?? []
       expect(slots).not.toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -242,7 +245,7 @@ describe('orchestration program.fixed_grid_gated — golden corpus (Phase 5 S4 T
     it('C.1 supported program → display 含 publicName 与数值，不含 internal key', () => {
       const projection = new SemanticStateProjectionService()
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode(), fixedGridGatedNode()], contracts: [] },
+        orchestration: [regimeGateNode(), fixedGridGatedNode()], orchestrationContracts: [],
       })
       const display = projection.buildDisplayLogicGraph(state)
       const json = JSON.stringify(display)
@@ -278,7 +281,7 @@ describe('orchestration program.fixed_grid_gated — golden corpus (Phase 5 S4 T
     it('D.1 state → canonical spec.orchestration.programs.length === 1', () => {
       const builder = new CanonicalSpecBuilderService()
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode(), fixedGridGatedNode()], contracts: [] },
+        orchestration: [regimeGateNode(), fixedGridGatedNode()], orchestrationContracts: [],
       })
       const spec = builder.buildFromSemanticState(state)
       expect(spec?.orchestration?.programs ?? []).toHaveLength(1)
@@ -292,7 +295,7 @@ describe('orchestration program.fixed_grid_gated — golden corpus (Phase 5 S4 T
       const builder = new CanonicalSpecBuilderService()
       const compiler = new CanonicalSpecV2IrCompilerService()
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode(), fixedGridGatedNode()], contracts: [] },
+        orchestration: [regimeGateNode(), fixedGridGatedNode()], orchestrationContracts: [],
       })
       const spec = builder.buildFromSemanticState(state)!
       const { ir } = compiler.compile({ canonicalSpec: spec, fallback: IR_FALLBACK })
@@ -307,14 +310,12 @@ describe('orchestration program.fixed_grid_gated — golden corpus (Phase 5 S4 T
       const builder = new CanonicalSpecBuilderService()
       const compiler = new CanonicalSpecV2IrCompilerService()
       const state = createSemanticState({
-        orchestration: {
-          nodes: [
+        orchestration: [
             // gate id intentionally NOT 'orchestration-gate-regime-1'
             regimeGateNode({ id: 'orchestration-gate-regime-other' }),
             fixedGridGatedNode({ activeWhenRef: 'non-existent-gate' }),
           ],
-          contracts: [],
-        },
+        orchestrationContracts: [],
       })
       const spec = builder.buildFromSemanticState(state)!
       const { ir } = compiler.compile({ canonicalSpec: spec, fallback: IR_FALLBACK })

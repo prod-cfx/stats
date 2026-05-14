@@ -30,16 +30,16 @@ type FrameKind = SemanticNaturalLanguageFrame['kind']
 type AtomLookup = (state: SemanticState) => readonly { readonly key?: string }[]
 
 function orchestrationNodes(state: SemanticState): readonly SemanticOrchestrationNode[] {
-  return state.orchestration?.nodes ?? []
+  return state.orchestration ?? []
 }
 
 export const FRAME_KIND_TO_STATE_LOOKUP: Record<FrameKind, AtomLookup | 'no_state_projection'> = {
   // —— 顶层 state 字段 ——
-  action: state => state.actions ?? [],
+  action: state => state.action ?? [],
   risk: state => state.risk ?? [],
-  indicator_compare: state => state.triggers ?? [],
-  boundary_touch: state => state.triggers ?? [],
-  combination: state => state.triggers ?? [],
+  indicator_compare: state => state.trigger ?? [],
+  boundary_touch: state => state.trigger ?? [],
+  combination: state => state.trigger ?? [],
 
   // —— state.orchestration.nodes filter by kind + key ——
   portfolio_drawdown: state =>

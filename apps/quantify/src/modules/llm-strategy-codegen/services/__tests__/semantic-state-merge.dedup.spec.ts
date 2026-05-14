@@ -9,9 +9,12 @@ function makeState(overrides: Partial<SemanticState>): SemanticState {
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
@@ -51,21 +54,21 @@ describe('SemanticStateMergeService — fallback push 真重复 dedup (#1162 Tas
     const derivedAction = makeAction('a2', { addMode: 'profit_pct', addRatio: 0.2, profitThreshold: 2 })
     // 关键：让 derived 已含 persisted 同 key 的 action（但 id 不同 → identity miss）
     // 触发 fallback push 路径
-    const persisted = makeState({ actions: [persistedAction] })
-    const derived = makeState({ actions: [derivedAction] })
+    const persisted = makeState({ action: [persistedAction] })
+    const derived = makeState({ action: [derivedAction] })
     const merged = merge.merge({ persisted, derived })
     // 真重复（stableParamsHash 完全相等）应被丢弃 → 仅 1 份保留
-    const addPositionActions = merged.actions.filter(a => a.key === 'action.add_position')
+    const addPositionActions = merged.action.filter(a => a.key === 'action.add_position')
     expect(addPositionActions.length).toBeLessThanOrEqual(1)
   })
 
   it('同 key 多档（params 不同）fallback push 时保留 → 出现 N 份（合法多档）', () => {
     // 模拟 add-position.example.ts 三档 0.5/0.3/0.2 场景
     // derived 已含 0.5 档；persisted 含 0.3 档（同 key 但 stableParamsHash 不同）
-    const persisted = makeState({ actions: [makeAction('a-tier-2', { addRatio: 0.3 })] })
-    const derived = makeState({ actions: [makeAction('a-tier-1', { addRatio: 0.5 })] })
+    const persisted = makeState({ action: [makeAction('a-tier-2', { addRatio: 0.3 })] })
+    const derived = makeState({ action: [makeAction('a-tier-1', { addRatio: 0.5 })] })
     const merged = merge.merge({ persisted, derived })
-    const addPositionActions = merged.actions.filter(a => a.key === 'action.add_position')
+    const addPositionActions = merged.action.filter(a => a.key === 'action.add_position')
     const ratios = new Set(addPositionActions.map(a => a.params?.addRatio))
     // 两档不同 ratio 应都保留
     expect(ratios.has(0.5)).toBe(true)
@@ -86,13 +89,13 @@ describe('SemanticStateMergeService — fallback push 真重复 dedup (#1162 Tas
   it('stableParamsHash 递归稳定：嵌套对象 key 顺序不影响判定（critic Major #1）', () => {
     // persisted 嵌套对象 key 顺序与 derived 不同（{a, b} vs {b, a}），应判等价 → 真重复 → 丢弃一份
     const persisted = makeState({
-      actions: [makeAction('a1', { addMode: 'profit_pct', sizing: { kind: 'ratio', value: 0.2, unit: 'ratio' } })],
+      action: [makeAction('a1', { addMode: 'profit_pct', sizing: { kind: 'ratio', value: 0.2, unit: 'ratio' } })],
     })
     const derived = makeState({
-      actions: [makeAction('a2', { sizing: { unit: 'ratio', value: 0.2, kind: 'ratio' }, addMode: 'profit_pct' })],
+      action: [makeAction('a2', { sizing: { unit: 'ratio', value: 0.2, kind: 'ratio' }, addMode: 'profit_pct' })],
     })
     const merged = merge.merge({ persisted, derived })
-    const addPositionActions = merged.actions.filter(a => a.key === 'action.add_position')
+    const addPositionActions = merged.action.filter(a => a.key === 'action.add_position')
     expect(addPositionActions.length).toBeLessThanOrEqual(1)
   })
 })

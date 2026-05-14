@@ -30,9 +30,12 @@ function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticSt
   return {
     version: 1,
     families: [],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
@@ -122,7 +125,7 @@ describe('orchestration program.adaptive_volatility_grid — golden corpus (Phas
         expect(programNodes.length).toBe(1)
         const state = builder.build(patch as never)
         if (!state) throw new Error('builder returned null')
-        expect(state.orchestration?.nodes.some(n => n.kind === 'program' && n.key === 'program.adaptive_volatility_grid')).toBe(true)
+        expect(state.orchestration.some(n => n.kind === 'program' && n.key === 'program.adaptive_volatility_grid')).toBe(true)
       })
     }
   })
@@ -151,10 +154,10 @@ describe('orchestration program.adaptive_volatility_grid — golden corpus (Phas
       it(name, () => {
         const target = adaptiveNode(override)
         const state = createSemanticState({
-          orchestration: { nodes: [regimeGateNode(), target], contracts: [] },
+          orchestration: [regimeGateNode(), target], orchestrationContracts: [],
         })
         const result = readiness.normalize(state, CURRENT_VERSION)
-        const node = result.state.orchestration?.nodes.find(n => n.id === target.id)
+        const node = result.state.orchestration.find(n => n.id === target.id)
         expect(node).toBeDefined()
         expect(expectPhase0(node!)).toBe(true)
       })
@@ -165,7 +168,7 @@ describe('orchestration program.adaptive_volatility_grid — golden corpus (Phas
   describe('Section C: display 黑名单 + 正向 grep（critic round 2 Q8 双向）', () => {
     it('C.1 display 文本不泄漏 3 内部 key（负 grep）+ 保留 ATR / 自适应网格 fragment（正 grep）', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode(), adaptiveNode()], contracts: [] },
+        orchestration: [regimeGateNode(), adaptiveNode()], orchestrationContracts: [],
       })
       const projection = new SemanticStateProjectionService()
       const graph = projection.buildDisplayLogicGraph(state)
@@ -191,7 +194,7 @@ describe('orchestration program.adaptive_volatility_grid — golden corpus (Phas
   describe('Section D: canonical → IR → runtime', () => {
     function buildCanonicalAndIr(node: SemanticOrchestrationNode) {
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode(), node], contracts: [] },
+        orchestration: [regimeGateNode(), node], orchestrationContracts: [],
       })
       const result = readiness.normalize(state, CURRENT_VERSION)
       const canonicalBuilder = new CanonicalSpecBuilderService()

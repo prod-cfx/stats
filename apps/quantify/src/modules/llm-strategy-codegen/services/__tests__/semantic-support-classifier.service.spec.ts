@@ -11,9 +11,12 @@ function baseState(overrides: Partial<SemanticState>): SemanticState {
   return {
     version: 1,
     families: ['legacy-family-must-not-matter'],
-    triggers: [],
-    actions: [],
+    trigger: [],
+    action: [],
     risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
     position: null,
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
     normalizationNotes: [],
@@ -27,7 +30,7 @@ describe('semanticSupportClassifierService', () => {
 
   it('allows a supported atom combination to proceed to projection', () => {
     const result = service.classify(baseState({
-      triggers: [{
+      trigger: [{
         id: 'entry',
         key: 'indicator.cross_over',
         phase: 'entry',
@@ -36,7 +39,7 @@ describe('semanticSupportClassifierService', () => {
         source: 'user_explicit',
         openSlots: [],
       }],
-      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      action: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
       risk: [{
         id: 'sl',
         key: 'risk.stop_loss_pct',
@@ -63,7 +66,7 @@ describe('semanticSupportClassifierService', () => {
 
   it('routes generic volume and ATR atom combinations to projection', () => {
     const result = service.classify(baseState({
-      triggers: [{
+      trigger: [{
         id: 'volume',
         key: 'volume.relative_average',
         phase: 'entry',
@@ -72,7 +75,7 @@ describe('semanticSupportClassifierService', () => {
         source: 'user_explicit',
         openSlots: [],
       }],
-      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      action: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
       risk: [{
         id: 'atr-stop',
         key: 'risk.atr_multiple_stop',
@@ -100,7 +103,7 @@ describe('semanticSupportClassifierService', () => {
 
   it('fails closed for versioned executable atoms when deployedAtSemanticVersion is null', () => {
     const result = service.classify(baseState({
-      triggers: [{
+      trigger: [{
         id: 'volume',
         key: 'volume.threshold',
         phase: 'entry',
@@ -109,7 +112,7 @@ describe('semanticSupportClassifierService', () => {
         source: 'user_explicit',
         openSlots: [],
       }],
-      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      action: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
     }), { deployedAtSemanticVersion: null })
 
     expect(result.route).toBe('unsupported_fallback')
@@ -119,7 +122,7 @@ describe('semanticSupportClassifierService', () => {
         reasonCode: 'runtime_version_unsupported',
       }),
     ])
-    expect(result.state.triggers[0].support).toEqual(expect.objectContaining({
+    expect(result.state.trigger[0].support).toEqual(expect.objectContaining({
       supportStatus: 'recognized_unsupported',
       unsupportedReasonCode: 'runtime_version_unsupported',
     }))
@@ -127,7 +130,7 @@ describe('semanticSupportClassifierService', () => {
 
   it('keeps versioned executable atoms executable when deployedAtSemanticVersion is at since version', () => {
     const result = service.classify(baseState({
-      triggers: [{
+      trigger: [{
         id: 'volume',
         key: 'volume.threshold',
         phase: 'entry',
@@ -136,17 +139,17 @@ describe('semanticSupportClassifierService', () => {
         source: 'user_explicit',
         openSlots: [],
       }],
-      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      action: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
     }), { deployedAtSemanticVersion: '2026.05.W02' })
 
     expect(result.route).toBe('projection_gate')
     expect(result.unsupportedAtoms).toEqual([])
-    expect(result.state.triggers[0].support).toBeUndefined()
+    expect(result.state.trigger[0].support).toBeUndefined()
   })
 
   it('applies runtime version gate to versioned action atoms', () => {
     const legacy = service.classify(baseState({
-      actions: [{
+      action: [{
         id: 'add-position',
         key: 'action.add_position',
         params: { addMode: 'fixed_ratio', addRatio: 0.2 },
@@ -157,7 +160,7 @@ describe('semanticSupportClassifierService', () => {
     }), { deployedAtSemanticVersion: null })
 
     const current = service.classify(baseState({
-      actions: [{
+      action: [{
         id: 'add-position',
         key: 'action.add_position',
         params: { addMode: 'fixed_ratio', addRatio: 0.2 },
@@ -174,7 +177,7 @@ describe('semanticSupportClassifierService', () => {
     }))
     expect(current.route).toBe('open_slots')
     expect(current.unsupportedAtoms).toEqual([])
-    expect(current.state.actions[0].support).toBeUndefined()
+    expect(current.state.action[0].support).toBeUndefined()
   })
 
   it('applies runtime version gate to versioned risk atoms', () => {
@@ -214,6 +217,7 @@ describe('semanticSupportClassifierService', () => {
         status: 'locked',
         source: 'user_explicit',
         openSlots: [],
+        // @ts-ignore Task6: position.constraints moved to top-level positionConstraint
         constraints: [{
           id: 'dca',
           key: 'position.dca_schedule',
@@ -241,12 +245,13 @@ describe('semanticSupportClassifierService', () => {
     }))
     expect(current.route).toBe('projection_gate')
     expect(current.unsupportedAtoms).toEqual([])
+    // @ts-ignore Task6: position.constraints moved to top-level positionConstraint
     expect(current.state.position?.constraints?.[0].support).toBeUndefined()
   })
 
   it('uses registry support status as authoritative over stale unsupported metadata', () => {
     const result = service.classify(baseState({
-      triggers: [{
+      trigger: [{
         id: 'entry',
         key: 'indicator.cross_over',
         phase: 'entry',
@@ -260,7 +265,7 @@ describe('semanticSupportClassifierService', () => {
           unsupportedDisplayName: '旧 unsupported 元数据',
         },
       }],
-      actions: [{
+      action: [{
         id: 'open',
         key: 'open_long',
         status: 'locked',
@@ -273,8 +278,8 @@ describe('semanticSupportClassifierService', () => {
     expect(result.route).toBe('projection_gate')
     expect(result.unsupportedAtoms).toEqual([])
     expect(result.unknownAtoms).toEqual([])
-    expect(result.state.triggers[0].support).toBeUndefined()
-    expect(result.state.actions[0].support).toBeUndefined()
+    expect(result.state.trigger[0].support).toBeUndefined()
+    expect(result.state.action[0].support).toBeUndefined()
   })
 
   it('ignores non-execution open slots when classifying supported strategies', () => {
@@ -288,7 +293,7 @@ describe('semanticSupportClassifierService', () => {
     }
 
     const result = service.classify(baseState({
-      triggers: [{
+      trigger: [{
         id: 'entry',
         key: 'indicator.cross_over',
         phase: 'entry',
@@ -297,7 +302,7 @@ describe('semanticSupportClassifierService', () => {
         source: 'user_explicit',
         openSlots: [nonExecutionSlot],
       }],
-      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      action: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
       risk: [{
         id: 'sl',
         key: 'risk.stop_loss_pct',
@@ -323,7 +328,7 @@ describe('semanticSupportClassifierService', () => {
 
   it('blocks the whole strategy when one atom is recognized unsupported', () => {
     const result = service.classify(baseState({
-      triggers: [{
+      trigger: [{
         id: 'volume',
         key: 'volume.spike',
         phase: 'entry',
@@ -332,7 +337,7 @@ describe('semanticSupportClassifierService', () => {
         source: 'user_explicit',
         openSlots: [],
       }],
-      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      action: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
     }))
 
     expect(result.route).toBe('unsupported_fallback')
@@ -349,7 +354,7 @@ describe('semanticSupportClassifierService', () => {
     // 即便 trigger 未填齐 kind/lookback/memoryKey，也不再落入 unsupported_fallback，
     // 而是由 projection_gate 通过 openSlots 继续追问，与 supported atom 行为对齐。
     const result = service.classify(baseState({
-      triggers: [{
+      trigger: [{
         id: 'previous-extrema',
         key: 'price.previous_extrema',
         phase: 'entry',
@@ -358,7 +363,7 @@ describe('semanticSupportClassifierService', () => {
         source: 'user_explicit',
         openSlots: [],
       }],
-      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      action: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
     }))
 
     expect(result.route).toBe('open_slots')
@@ -368,7 +373,7 @@ describe('semanticSupportClassifierService', () => {
 
   it('keeps executable price-vs-moving-average indicator aliases out of fallback', () => {
     const result = service.classify(baseState({
-      triggers: [
+      trigger: [
         {
           id: 'entry-ma',
           key: 'indicator.above',
@@ -396,7 +401,7 @@ describe('semanticSupportClassifierService', () => {
           openSlots: [],
         },
       ],
-      actions: [
+      action: [
         { id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
         { id: 'close', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
       ],
@@ -421,12 +426,12 @@ describe('semanticSupportClassifierService', () => {
 
     expect(result.route).toBe('projection_gate')
     expect(result.unsupportedAtoms).toEqual([])
-    expect(result.state.triggers.map(trigger => trigger.support)).toEqual([undefined, undefined])
+    expect(result.state.trigger.map(trigger => trigger.support)).toEqual([undefined, undefined])
   })
 
   it('does not treat raw price indicator aliases as executable MA references', () => {
     const result = service.classify(baseState({
-      triggers: [
+      trigger: [
         {
           id: 'gate-price-vs-ma',
           key: 'indicator.above',
@@ -442,7 +447,7 @@ describe('semanticSupportClassifierService', () => {
           openSlots: [],
         },
       ],
-      actions: [],
+      action: [],
     }))
 
     expect(result.route).toBe('unsupported_fallback')
@@ -453,7 +458,7 @@ describe('semanticSupportClassifierService', () => {
 
   it('routes executable moving-average indicator aliases through public classification', () => {
     const result = service.classify(baseState({
-      triggers: [{
+      trigger: [{
         id: 'entry-ma',
         key: 'indicator.above',
         phase: 'entry',
@@ -466,12 +471,12 @@ describe('semanticSupportClassifierService', () => {
         source: 'user_explicit',
         openSlots: [],
       }],
-      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      action: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
     }))
 
     expect(result.route).toBe('projection_gate')
     expect(result.unsupportedAtoms).toEqual([])
-    expect(result.state.triggers[0].support).toBeUndefined()
+    expect(result.state.trigger[0].support).toBeUndefined()
   })
 
   it('preserves substrate metadata when resolving executable moving-average indicator aliases', () => {
@@ -504,7 +509,7 @@ describe('semanticSupportClassifierService', () => {
 
   it('adds registry open slots for supported requires-slot risk atoms with unknown required params', () => {
     const result = service.classify(baseState({
-      triggers: [{
+      trigger: [{
         id: 'entry',
         key: 'indicator.cross_over',
         phase: 'entry',
@@ -513,7 +518,7 @@ describe('semanticSupportClassifierService', () => {
         source: 'user_explicit',
         openSlots: [],
       }],
-      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      action: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
       risk: [{
         id: 'falling-knife',
         key: 'risk.falling_knife_guard',
@@ -570,7 +575,7 @@ describe('semanticSupportClassifierService', () => {
 
   it('routes executable EMA compare triggers with per-trigger timeframe to projection', () => {
     const result = service.classify(baseState({
-      triggers: [{
+      trigger: [{
         id: 'entry-ema',
         key: 'indicator.above',
         phase: 'entry',
@@ -584,7 +589,7 @@ describe('semanticSupportClassifierService', () => {
         source: 'user_explicit',
         openSlots: [],
       }],
-      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      action: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
       risk: [{
         id: 'sl',
         key: 'risk.stop_loss_pct',
@@ -607,7 +612,7 @@ describe('semanticSupportClassifierService', () => {
     expect(result.route).toBe('projection_gate')
     expect(result.unsupportedAtoms).toEqual([])
     expect(result.unknownAtoms).toEqual([])
-    expect(result.state.triggers[0].support).toBeUndefined()
+    expect(result.state.trigger[0].support).toBeUndefined()
   })
 
   it('keeps unsupported fallback precedence over execution open slots', () => {
@@ -621,7 +626,7 @@ describe('semanticSupportClassifierService', () => {
     }
 
     const result = service.classify(baseState({
-      triggers: [{
+      trigger: [{
         id: 'volume',
         key: 'volume.spike',
         phase: 'entry',
@@ -630,7 +635,7 @@ describe('semanticSupportClassifierService', () => {
         source: 'user_explicit',
         openSlots: [executionSlot],
       }],
-      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      action: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
     }))
 
     expect(result.route).toBe('unsupported_fallback')
@@ -639,7 +644,7 @@ describe('semanticSupportClassifierService', () => {
 
   it('blocks unknown atom combinations without treating them as open slots', () => {
     const result = service.classify(baseState({
-      triggers: [{
+      trigger: [{
         id: 'unknown',
         key: 'custom.pattern',
         phase: 'entry',
@@ -657,7 +662,7 @@ describe('semanticSupportClassifierService', () => {
 
   it('keeps unknown atom precedence when mixed with recognized unsupported atoms', () => {
     const result = service.classify(baseState({
-      triggers: [
+      trigger: [
         {
           id: 'volume',
           key: 'volume.spike',
@@ -679,7 +684,7 @@ describe('semanticSupportClassifierService', () => {
           openSlots: [],
         },
       ],
-      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      action: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
     }))
 
     expect(result.route).toBe('unknown_unsupported')
@@ -701,7 +706,7 @@ describe('semanticSupportClassifierService', () => {
     }
 
     const result = service.classify(baseState({
-      triggers: [{
+      trigger: [{
         id: 'entry',
         key: 'indicator.cross_over',
         phase: 'entry',
@@ -710,7 +715,7 @@ describe('semanticSupportClassifierService', () => {
         source: 'user_explicit',
         openSlots: [slot],
       }],
-      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      action: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
     }))
 
     expect(result.route).toBe('open_slots')

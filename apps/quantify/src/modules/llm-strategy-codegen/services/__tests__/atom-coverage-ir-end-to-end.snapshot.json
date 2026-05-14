@@ -141,6 +141,22 @@
       ]
     },
     {
+      "key": "gate.regime",
+      "category": "context",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
+      "key": "gate.subStrategy",
+      "category": "context",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
       "key": "grid.fixed_range",
       "category": "trigger",
       "status": "skipped",
@@ -158,11 +174,11 @@
     },
     {
       "key": "grid.range_rebalance",
-      "category": "trigger",
+      "category": "position",
       "status": "skipped",
       "failureLayer": "none",
       "trace": [],
-      "note": "当前模板无法以 condition.atom 形式独立注入；由专用 spec 覆盖"
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
     },
     {
       "key": "indicator.boundary_cross",
@@ -328,6 +344,30 @@
       "note": "action atom 不映射到单一 CanonicalRuleAction.type（orderProgram / 组合 action）"
     },
     {
+      "key": "portfolioRisk.drawdown_block",
+      "category": "context",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
+      "key": "portfolioRisk.substrategy_exposure_cap",
+      "category": "context",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
+      "key": "portfolioRisk.symbol_exposure_cap",
+      "category": "context",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
       "key": "position.dca_schedule",
       "category": "position",
       "status": "skipped",
@@ -490,6 +530,38 @@
       ]
     },
     {
+      "key": "program.adaptive_volatility_grid",
+      "category": "context",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
+      "key": "program.dynamic_grid",
+      "category": "context",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
+      "key": "program.event_listener",
+      "category": "context",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
+      "key": "program.fixed_grid_gated",
+      "category": "context",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
       "key": "reduce_long",
       "category": "action",
       "status": "covered",
@@ -641,6 +713,46 @@
         "guard.kind:TRAILING_STOP_PCT",
         "guard:guard_probe-risk-rule"
       ]
+    },
+    {
+      "key": "scope.dataSource",
+      "category": "context",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
+      "key": "scope.leg",
+      "category": "context",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
+      "key": "scope.subStrategy",
+      "category": "context",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
+      "key": "scope.symbol",
+      "category": "context",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
+    },
+    {
+      "key": "scope.timeframe",
+      "category": "context",
+      "status": "skipped",
+      "failureLayer": "none",
+      "trace": [],
+      "note": "position atom 通过 spec.sizing/positionConstraints 注入，与 condition.atom 模板正交；由 canonical-spec-builder spec 单独覆盖。"
     },
     {
       "key": "semantic.missing_entry_atom",

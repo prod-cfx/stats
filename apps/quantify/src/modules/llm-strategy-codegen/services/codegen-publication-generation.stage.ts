@@ -370,10 +370,10 @@ export class CodegenPublicationGenerationStage {
 
   private buildLegacyNormalizedIntentSnapshot(semanticState: SemanticState): StrategyNormalizedIntent {
     const families = new Set(semanticState.families)
-    if (semanticState.triggers.some(trigger => trigger.phase === 'gate')) {
+    if (semanticState.trigger.some(trigger => trigger.phase === 'gate')) {
       families.add('state-gated')
     }
-    const gridTrigger = semanticState.triggers.find(trigger =>
+    const gridTrigger = semanticState.trigger.find(trigger =>
       trigger.key === 'grid.range_rebalance'
       && trigger.status !== 'superseded'
       && typeof trigger.params.rangeLower === 'number'
@@ -383,7 +383,7 @@ export class CodegenPublicationGenerationStage {
 
     return {
       families: Array.from(families) as StrategyNormalizedIntent['families'],
-      triggers: semanticState.triggers
+      triggers: semanticState.trigger
         .filter(trigger => trigger.status !== 'superseded')
         .map(trigger => ({
           key: trigger.key as StrategyNormalizedIntent['triggers'][number]['key'],
@@ -402,7 +402,7 @@ export class CodegenPublicationGenerationStage {
           })),
           ...(trigger.evidence?.text ? { evidenceText: trigger.evidence.text } : {}),
         })),
-      actions: semanticState.actions.map(action => ({
+      actions: semanticState.action.map(action => ({
         key: action.key,
         ...(action.params ? { params: { ...action.params } } : {}),
       })),

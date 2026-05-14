@@ -124,7 +124,7 @@ export class StrategyExecutionContextService {
   }
 
   private hasSemanticGridTrigger(state: SemanticState): boolean {
-    return state.triggers.some(trigger => trigger.status !== 'superseded' && trigger.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
+    return state.trigger.some(trigger => trigger.status !== 'superseded' && trigger.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
   }
 
   private readPrimaryValue(values: string[] | undefined): string | null {

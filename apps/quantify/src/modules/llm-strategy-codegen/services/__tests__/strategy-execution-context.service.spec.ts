@@ -212,10 +212,13 @@ describe('StrategyExecutionContextService semantic state', () => {
     const state: SemanticState = {
       version: 1,
       families: [],
-      triggers: [],
-      actions: [],
+      trigger: [],
+      action: [],
       risk: [],
       position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       contextSlots: {
         exchange: slot('exchange', 'contextSlots.exchange', 'okx'),
         symbol: slot('symbol', 'contextSlots.symbol', 'BTCUSDT'),
@@ -242,7 +245,7 @@ describe('StrategyExecutionContextService semantic state', () => {
     const state: SemanticState = {
       version: 1,
       families: [],
-      triggers: [
+      trigger: [
         {
           id: 'grid.trigger',
           key: 'grid.range_rebalance',
@@ -253,9 +256,12 @@ describe('StrategyExecutionContextService semantic state', () => {
           openSlots: [],
         },
       ],
-      actions: [],
+      action: [],
       risk: [],
       position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       contextSlots: {
         exchange: slot('exchange', 'contextSlots.exchange', 'okx'),
         symbol: slot('symbol', 'contextSlots.symbol', 'BTCUSDT'),
@@ -280,10 +286,13 @@ describe('StrategyExecutionContextService semantic state', () => {
     const state: SemanticState = {
       version: 1,
       families: [],
-      triggers: [],
-      actions: [],
+      trigger: [],
+      action: [],
       risk: [],
       position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       contextSlots: {
         exchange: slot('exchange', 'contextSlots.exchange', 'kucoin'),
         symbol: slot('symbol', 'contextSlots.symbol', 'BTCUSDT'),
@@ -323,10 +332,13 @@ describe('StrategyExecutionContextService semantic state', () => {
     const state: SemanticState = {
       version: 1,
       families: [],
-      triggers: [],
-      actions: [],
+      trigger: [],
+      action: [],
       risk: [],
       position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       contextSlots: {
         exchange: slot('exchange', 'contextSlots.exchange', 'okx', 'superseded'),
         symbol: slot('symbol', 'contextSlots.symbol', 'BTCUSDT'),
@@ -357,10 +369,13 @@ describe('StrategyExecutionContextService semantic state', () => {
     const state: SemanticState = {
       version: 1,
       families: [],
-      triggers: [],
-      actions: [],
+      trigger: [],
+      action: [],
       risk: [],
       position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       contextSlots: {
         exchange: slot('exchange', 'contextSlots.exchange', 'okx', 'open'),
         symbol: slot('symbol', 'contextSlots.symbol', 'BTCUSDT', 'open'),
@@ -390,10 +405,13 @@ describe('StrategyExecutionContextService semantic state', () => {
     const state: SemanticState = {
       version: 1,
       families: [],
-      triggers: [],
-      actions: [],
+      trigger: [],
+      action: [],
       risk: [],
       position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
       contextSlots: {
         exchange: slot('exchange', 'contextSlots.exchange', 'okx'),
         symbol: slot('symbol', 'contextSlots.symbol', 'BTC/USDT'),
