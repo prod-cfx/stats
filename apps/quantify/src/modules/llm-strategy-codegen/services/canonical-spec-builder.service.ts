@@ -583,12 +583,19 @@ export class CanonicalSpecBuilderService {
       ...this.buildOrchestrationGates(normalizedState),
       ...promotedPairs.map(p => p.gate),
     ]
-    const orchestrationPortfolioRisks = this.buildOrchestrationPortfolioRisks(normalizedState)
+    // #1358: gate-only substrategy path — merge portfolioRisk/scope from triggers into orchestration
+    const orchestrationPortfolioRisks = [
+      ...this.buildOrchestrationPortfolioRisks(normalizedState),
+      ...this.buildOrchestrationPortfolioRisksFromGateTriggers(normalizedState),
+    ].sort((a, b) => a.id.localeCompare(b.id))
     const orchestrationPrograms = [
       ...this.buildOrchestrationPrograms(normalizedState),
       ...promotedPairs.map(p => p.program),
     ]
-    const orchestrationScopes = this.buildOrchestrationScopes(normalizedState)
+    const orchestrationScopes = [
+      ...this.buildOrchestrationScopes(normalizedState),
+      ...this.buildOrchestrationScopesFromGateTriggers(normalizedState),
+    ].sort((a, b) => a.id.localeCompare(b.id))
     const orchestrationLegScopes = this.buildOrchestrationLegScopes(normalizedState)
     // Phase 5 S3 (#1109): 把 scope.timeframe 声明的 tf 合并到 dataRequirements
     const requiredTimeframes = this.mergeTimeframeScopeIntoDataRequirements(
@@ -944,6 +951,209 @@ export class CanonicalSpecBuilderService {
 
     // Sort by id for byte-equal stability
     return risks.sort((a, b) => a.id.localeCompare(b.id))
+  }
+
+  /**
+   * #1358: gate-only substrategy path
+   *
+   * LLM patch が `portfolioRisk.*` を triggers 配列に phase='gate' で入れてくる場合、
+   * `buildOrchestrationPortfolioRisks` は orchestration.nodes しか見ないためスキップされる。
+   * 本メソッドは state.triggers の gate-phase atom から direct に
+   * CanonicalOrchestrationPortfolioRisk を生成してマージする。
+   *
+   * 対象 keys:
+   *   - portfolioRisk.drawdown_block  → scope='portfolio'
+   *   - portfolioRisk.symbol_exposure_cap → scope='symbol' (symbolScopeRef は同 phase の scope.symbol trigger から合成)
+   *   - portfolioRisk.substrategy_exposure_cap → scope='subStrategy' (同 phase の各 scope.subStrategy trigger に展開)
+   */
+  private buildOrchestrationPortfolioRisksFromGateTriggers(
+    state: SemanticState,
+  ): CanonicalOrchestrationPortfolioRisk[] {
+    // portfolioRisk.* / scope.* gate triggers land as status='open' (no synthesizable contracts)
+    // but carry all required fields in params — promote them regardless of status.
+    const gateTriggers = state.triggers.filter(t => t.phase === 'gate')
+    if (gateTriggers.length === 0) return []
+
+    // Already handled via orchestration.nodes path — avoid double-emitting
+    const existingNodeKeys = new Set(
+      (state.orchestration?.nodes ?? [])
+        .filter(n => n.kind === 'portfolioRisk' && n.status === 'locked')
+        .map(n => n.key),
+    )
+
+    const risks: CanonicalOrchestrationPortfolioRisk[] = []
+
+    // Collect symbol scope trigger ids for symbolScopeRef binding
+    const symbolScopeTriggerIds = gateTriggers
+      .filter(t => t.key === ATOM_CONTRACT_REGISTRY['scope.symbol'].key)
+      .map(t => t.id)
+
+    // Collect substrategy scope trigger ids for subStrategyScopeRef expansion
+    const subStrategyScopeTriggerIds = gateTriggers
+      .filter(t => t.key === ATOM_CONTRACT_REGISTRY['scope.subStrategy'].key)
+      .map(t => t.id)
+
+    for (const trigger of gateTriggers) {
+      const p = trigger.params
+
+      // portfolioRisk.drawdown_block → scope='portfolio'
+      if (
+        trigger.key === ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key
+        && !existingNodeKeys.has(trigger.key)
+      ) {
+        const mode = p.mode === 'observe' || p.mode === 'enforce' ? p.mode : 'enforce'
+        const thresholdPct = typeof p.thresholdPct === 'number' && Number.isFinite(p.thresholdPct) && p.thresholdPct > 0 && p.thresholdPct <= 100
+          ? p.thresholdPct
+          : null
+        if (thresholdPct !== null) {
+          risks.push({
+            id: trigger.id,
+            scope: 'portfolio',
+            mode,
+            thresholdPct,
+            effectWhenTriggered: 'block_new_entries',
+          })
+        }
+        continue
+      }
+
+      // portfolioRisk.symbol_exposure_cap → scope='symbol'
+      if (
+        trigger.key === FIELD_KEY.PORTFOLIO_RISK_SYMBOL_EXPOSURE_CAP
+        && !existingNodeKeys.has(trigger.key)
+      ) {
+        const mode = p.mode === 'observe' || p.mode === 'enforce' ? p.mode : 'enforce'
+        const notionalCapPct = typeof p.notionalCapPct === 'number' && Number.isFinite(p.notionalCapPct) && p.notionalCapPct > 0 && p.notionalCapPct <= 100
+          ? p.notionalCapPct
+          : null
+        const effectWhenTriggered = p.effectWhenTriggered === 'reduce_exposure'
+          ? 'reduce_exposure' as const
+          : 'block_new_entries' as const
+        // Bind to first sibling scope.symbol trigger (may be absent → skip)
+        const symbolScopeRef = symbolScopeTriggerIds[0]
+        if (notionalCapPct !== null && symbolScopeRef) {
+          risks.push({
+            id: trigger.id,
+            scope: 'symbol',
+            mode,
+            notionalCapPct,
+            symbolScopeRef,
+            effectWhenTriggered,
+          })
+        }
+        continue
+      }
+
+      // portfolioRisk.substrategy_exposure_cap → scope='subStrategy' (expand per subStrategy scope)
+      if (
+        trigger.key === FIELD_KEY.PORTFOLIO_RISK_SUBSTRATEGY_EXPOSURE_CAP
+        && !existingNodeKeys.has(trigger.key)
+      ) {
+        const mode = p.mode === 'observe' || p.mode === 'enforce' ? p.mode : 'enforce'
+        const notionalCapPct = typeof p.notionalCapPct === 'number' && Number.isFinite(p.notionalCapPct) && p.notionalCapPct > 0 && p.notionalCapPct <= 100
+          ? p.notionalCapPct
+          : null
+        const effectWhenTriggered = p.effectWhenTriggered === 'pause_substrategy'
+          ? 'pause_substrategy' as const
+          : 'block_new_entries' as const
+        if (notionalCapPct !== null) {
+          if (subStrategyScopeTriggerIds.length > 0) {
+            // Expand: one risk entry per substrategy scope
+            for (const [idx, subStrategyScopeRef] of subStrategyScopeTriggerIds.entries()) {
+              risks.push({
+                id: `${trigger.id}-sub-${idx + 1}`,
+                scope: 'subStrategy',
+                mode,
+                notionalCapPct,
+                subStrategyScopeRef,
+                effectWhenTriggered,
+              })
+            }
+          } else {
+            // No sibling subStrategy scope triggers — emit with a placeholder ref so the
+            // runtime evaluator can still see the cap; will be a no-op without matching scope.
+            risks.push({
+              id: trigger.id,
+              scope: 'subStrategy',
+              mode,
+              notionalCapPct,
+              subStrategyScopeRef: trigger.id,
+              effectWhenTriggered,
+            })
+          }
+        }
+        continue
+      }
+    }
+
+    return risks
+  }
+
+  /**
+   * #1358: gate-only substrategy path
+   *
+   * state.triggers の gate-phase scope.symbol / scope.subStrategy atom から
+   * CanonicalOrchestrationScope を生成する。
+   * orchestration.nodes 経由で既に生成済みの scope は重複しない。
+   */
+  private buildOrchestrationScopesFromGateTriggers(
+    state: SemanticState,
+  ): CanonicalOrchestrationScope[] {
+    // scope.* gate triggers land as status='open' (no synthesizable contracts)
+    // but carry all required fields in params — promote them regardless of status.
+    const gateTriggers = state.triggers.filter(t => t.phase === 'gate')
+    if (gateTriggers.length === 0) return []
+
+    // Already handled via orchestration.nodes path — avoid double-emitting
+    const existingNodeIds = new Set(
+      (state.orchestration?.nodes ?? [])
+        .filter(n => n.kind === 'scope' && n.status === 'locked')
+        .map(n => n.id),
+    )
+
+    const scopes: CanonicalOrchestrationScope[] = []
+
+    for (const trigger of gateTriggers) {
+      if (existingNodeIds.has(trigger.id)) continue
+      const p = trigger.params
+
+      // scope.symbol
+      if (trigger.key === ATOM_CONTRACT_REGISTRY['scope.symbol'].key) {
+        const rawSymbols = Array.isArray(p.symbols) ? p.symbols : []
+        const symbols = rawSymbols
+          .filter((s): s is string => typeof s === 'string' && s.trim() !== '')
+          .map(s => s.trim())
+        if (symbols.length === 0) continue
+        const primarySymbol = typeof p.primarySymbol === 'string' ? p.primarySymbol.trim() : undefined
+        scopes.push({
+          id: trigger.id,
+          scopeKind: 'symbol',
+          symbols: [...symbols].sort(),
+          ...(primarySymbol && primarySymbol !== '' ? { primarySymbol } : {}),
+        })
+        continue
+      }
+
+      // scope.subStrategy
+      if (trigger.key === ATOM_CONTRACT_REGISTRY['scope.subStrategy'].key) {
+        const subStrategyId = typeof p.subStrategyId === 'string' ? p.subStrategyId.trim() : ''
+        if (subStrategyId === '') continue
+        const positionHandling = p.positionHandlingOnDeactivate === 'keep' ? 'keep' as const : 'close' as const
+        const orderHandling = p.orderHandlingOnDeactivate === 'keep' ? 'keep' as const : 'cancel' as const
+        const label = typeof p.subStrategyLabel === 'string' ? p.subStrategyLabel.trim() : undefined
+        scopes.push({
+          id: trigger.id,
+          scopeKind: 'subStrategy',
+          subStrategyId,
+          ...(label && label !== '' ? { subStrategyLabel: label } : {}),
+          positionHandlingOnDeactivate: positionHandling,
+          orderHandlingOnDeactivate: orderHandling,
+        })
+        continue
+      }
+    }
+
+    return scopes
   }
 
   private buildOrchestrationGates(state: SemanticState): CanonicalOrchestrationGate[] {

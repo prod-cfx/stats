@@ -44,8 +44,7 @@ interface Fixture {
   /**
    * #1354 回归门禁：true 表示该策略经 SemanticSeedStateBuilder.build →
    * canonical → IR → AST → emit 之后，脚本必须含非空 EXPR_POOL 与 DECISION_PROGRAMS。
-   * U3/U5 暂时为 false（action 走 program.* orchestration 路径与全 phase=gate
-   * 是另两个独立缺口，挂 follow-up）。
+   * U3 暂时为 false（action 走 program.* orchestration 路径是另一个独立缺口，挂 follow-up）。
    */
   expectExecutableScript: boolean
   /**
@@ -54,6 +53,11 @@ interface Fixture {
    * 设为 true 时替换 DECISION_PROGRAMS 断言为 ORCHESTRATION_PROGRAMS 断言。
    */
   expectOrchestrationPrograms?: boolean
+  /**
+   * #1358: gate-only 子策略路径（U5）的脚本无 EXPR_POOL/DECISION_PROGRAMS（无 entry/exit 规则），
+   * 改为断言这些 const 名非空。缺省时与 expectExecutableScript 使用 EXPR_POOL+DECISION_PROGRAMS。
+   */
+  expectNonEmptyConsts?: string[]
 }
 
 const FIXTURES: readonly Fixture[] = [
@@ -150,7 +154,8 @@ const FIXTURES: readonly Fixture[] = [
   {
     id: 'U5',
     description: '双子策略 + 敞口/回撤限额',
-    expectExecutableScript: false, // follow-up: #1358 — 全 phase='gate' 子策略路径独立处理
+    expectExecutableScript: true, // #1358 — 全 phase='gate' 子策略路径
+    expectNonEmptyConsts: ['ORCHESTRATION_SCOPES'], // gate-only: 无 entry/exit 规则，ORCHESTRATION_SCOPES 非空
     message: '同一账户跑两条子策略：A：BTC 永续做 RSI 反转多头；B：ETH 永续做 EMA 趋势跟随。账户总敞口不超过 50%，单币种敞口不超过 30%，账户回撤 15% 全停。',
     patch: {
       contextSlots: {
@@ -264,21 +269,30 @@ describe('U1-U5 batch real-patch → codegen pipeline diagnostic (issue #1345)',
     // 又把 trigger-based atom 丢成空壳。
     // review m3：除 regex 形态检查外，抽 JSON 数组长度 ≥ 1 防"`[{}]` 空对象退化"
     // #1357 扩展：program.* grid 路径不产出 DECISION_PROGRAMS，改查 ORCHESTRATION_PROGRAMS
+    // #1358: gate-only fixture（U5）使用 expectNonEmptyConsts 覆盖默认检查
     if (fx.expectExecutableScript) {
       expect(script.ok).toBe(true)
       const scriptText = script.data as string
-      const exprPoolLen = extractConstArrayLength(scriptText, 'EXPR_POOL')
-      expect(exprPoolLen).toBeGreaterThan(0)
-      if (fx.expectOrchestrationPrograms) {
-        const orchLen = extractConstArrayLength(scriptText, 'ORCHESTRATION_PROGRAMS')
-        expect(orchLen).toBeGreaterThan(0)
+      if (fx.expectNonEmptyConsts) {
+        // gate-only path（U5）：自定义 const 列表，无需 EXPR_POOL
+        for (const constName of fx.expectNonEmptyConsts) {
+          const len = extractConstArrayLength(scriptText, constName)
+          expect(len).toBeGreaterThan(0)
+        }
       } else {
-        const decisionLen = extractConstArrayLength(scriptText, 'DECISION_PROGRAMS')
-        expect(decisionLen).toBeGreaterThan(0)
+        const exprPoolLen = extractConstArrayLength(scriptText, 'EXPR_POOL')
+        expect(exprPoolLen).toBeGreaterThan(0)
+        if (fx.expectOrchestrationPrograms) {
+          const orchLen = extractConstArrayLength(scriptText, 'ORCHESTRATION_PROGRAMS')
+          expect(orchLen).toBeGreaterThan(0)
+        } else {
+          const decisionLen = extractConstArrayLength(scriptText, 'DECISION_PROGRAMS')
+          expect(decisionLen).toBeGreaterThan(0)
+        }
       }
     } else {
-      // review m7：U3/U5 已知缺口暂走 false 占位；若未来 canonical pipeline 升级把
-      // program.* / phase=gate 路径接通，本断言会"意外通过"——console.log 提示翻 true。
+      // review m7：U3 已知缺口暂走 false 占位；若未来 canonical pipeline 升级把
+      // program.* 路径接通，本断言会"意外通过"——console.log 提示翻 true。
       if (script.ok) {
         const scriptText = script.data as string
         const exprPoolLen = extractConstArrayLength(scriptText, 'EXPR_POOL')
