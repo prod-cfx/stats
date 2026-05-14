@@ -25,9 +25,10 @@ import type {
   NormalizedTriggerAtomKey,
   StrategyNormalizedIntent,
 } from '../types/strategy-normalized-intent'
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+import type { AtomContractKey } from '../atom-contracts/atom-contract-types'
 import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
 import { NORMALIZED_TRIGGER_ATOM_KEYS } from '../types/strategy-normalized-intent'
 import {
@@ -101,6 +102,9 @@ interface ScopedSemanticGateCondition {
 
 @Injectable()
 export class CanonicalSpecBuilderService {
+  // #1364 PR3: bucket 错位 warn-log 用
+  private readonly bucketMismatchLogger = new Logger('CanonicalSpecBuilder.BucketMismatch')
+
   constructor(
     private readonly strategyIrCanonicalAdapter: StrategyIrCanonicalAdapterService = new StrategyIrCanonicalAdapterService(),
     private readonly contracts: SemanticAtomContractService = new SemanticAtomContractService(),
@@ -109,6 +113,36 @@ export class CanonicalSpecBuilderService {
     // #1186 PR2: 多锚 sizing 反填到 legScopes[*].legSizing 时使用
     private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
   ) {}
+
+  /**
+   * #1364 PR3：扫 SemanticState 检测桶错位（trigger atom 出现在 actions[]，
+   * 或 orchestration atom 出现在 triggers[]/actions[] 等），按 contract.bucket
+   * 单一真相源校验，不一致时 warn-log。
+   *
+   * 不做自动修正：自动 re-route 需要重建 envelope（orchestration 节点有 14 种
+   * discriminated union），不在本 PR 范围。当前下游 `buildOrchestrationPairsFromProgramActions`
+   * 等三段兜底 hack 仍在执行，待 #1364 AC-2/AC-3 完整实施（LLM patch shape 折叠为
+   * `atoms: [{key, phase?, params}]` 单数组 + 服务端按 contract.bucket 强制归桶）后
+   * 删除 hack。
+   */
+  private warnBucketMismatchInState(state: SemanticState): void {
+    const checkBucket = (
+      atomKey: string | undefined,
+      observedBucket: 'trigger' | 'action' | 'risk',
+      sourceLabel: string,
+    ): void => {
+      if (typeof atomKey !== 'string' || !(atomKey in ATOM_CONTRACT_REGISTRY)) return
+      const expected = ATOM_CONTRACT_REGISTRY[atomKey as AtomContractKey].bucket
+      if (expected !== observedBucket) {
+        this.bucketMismatchLogger.warn(
+          `event=bucket_mismatch atom=${atomKey} observed=${observedBucket} expected=${expected} source=${sourceLabel} note=#1364 hack 兜底中，待 AC-2/AC-3 完整实施后由服务端归桶单点修正`,
+        )
+      }
+    }
+    for (const t of state.triggers) checkBucket(t.key, 'trigger', 'state.triggers')
+    for (const a of state.actions) checkBucket(a.key, 'action', 'state.actions')
+    for (const r of state.risk) checkBucket(r.key, 'risk', 'state.risk')
+  }
 
   buildFromLegacyChecklistForTestsOnly(legacySnapshot: StrategyLogicSnapshotInput): CanonicalStrategySpecV2 {
     if (this.isSemanticState(legacySnapshot.semanticState)) {
@@ -576,14 +610,21 @@ export class CanonicalSpecBuilderService {
     )
     const baseRequiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
     const defaultTimeframe = this.readLockedContextSlotString(normalizedState.contextSlots.timeframe)
-    // #1357: program.* actions（如 program.adaptive_volatility_grid）从 state.actions 提升到
-    // orchestration 层；pair = 合成 gate（用 entry trigger 条件） + program（用 action params）
+    // #1364 PR3 — 桶错位检测（warn-only），并保留下游兜底 hack（#1357/#1358）：
+    //   bucket 决策真相源已收敛到 ATOM_CONTRACT_REGISTRY[key].bucket；当 LLM patch
+    //   把 orchestration atom（如 portfolioRisk.* / scope.* / program.*）放进
+    //   `state.triggers/state.actions` 时，这里 warn-log 暴露错位形态。
+    //   下方 `buildOrchestrationPairsFromProgramActions` / `*FromGateTriggers` 三段
+    //   兜底 hack 仍在执行（删除 = 立刻 regress 现网 5 条用户策略 + corpus），
+    //   待 LLM patch shape 折叠（issue #1364 AC-2/AC-3 完整实施）后才能删除。
+    this.warnBucketMismatchInState(normalizedState)
+    // [DEPRECATED, 待 #1364 AC-2/AC-3 完整实施后删除] #1357 兜底
     const promotedPairs = this.buildOrchestrationPairsFromProgramActions(normalizedState, defaultTimeframe)
     const orchestrationGates = [
       ...this.buildOrchestrationGates(normalizedState),
       ...promotedPairs.map(p => p.gate),
     ]
-    // #1358: gate-only substrategy path — merge portfolioRisk/scope from triggers into orchestration
+    // [DEPRECATED, 待 #1364 AC-2/AC-3 完整实施后删除] #1358 兜底
     const orchestrationPortfolioRisks = [
       ...this.buildOrchestrationPortfolioRisks(normalizedState),
       ...this.buildOrchestrationPortfolioRisksFromGateTriggers(normalizedState),
@@ -592,6 +633,7 @@ export class CanonicalSpecBuilderService {
       ...this.buildOrchestrationPrograms(normalizedState),
       ...promotedPairs.map(p => p.program),
     ]
+    // [DEPRECATED, 待 #1364 AC-2/AC-3 完整实施后删除] #1358 兜底
     const orchestrationScopes = [
       ...this.buildOrchestrationScopes(normalizedState),
       ...this.buildOrchestrationScopesFromGateTriggers(normalizedState),
