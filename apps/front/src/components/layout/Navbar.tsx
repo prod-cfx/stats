@@ -267,6 +267,12 @@ export const Navbar = () => {
     )
   }
 
+  const openMobileMenu = () => {
+    setBellOpen(false)
+    setAccountMenuOpen(false)
+    setMobileMenuOpen(true)
+  }
+
   const recentInboxItems = useMemo(() => inbox.items.slice(0, 5), [inbox.items])
 
   useEffect(() => {
@@ -289,7 +295,7 @@ export const Navbar = () => {
           <button
             type="button"
             className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] md:hidden"
-            onClick={() => setMobileMenuOpen(true)}
+            onClick={openMobileMenu}
           >
             <Menu className="h-6 w-6" />
           </button>
