@@ -38,9 +38,9 @@ describe('mobile data pages layout contracts', () => {
     expect(longShortClient).toContain('min-w-0')
     expect(aggregatedPage).toContain('p-4 md:p-8')
     expect(aggregatedClient).toContain('px-0 py-0 md:p-8')
-    expect(aggregatedClient).toContain('Swipe horizontally')
+    expect(aggregatedClient).toContain('aria-hidden="true"')
     expect(aggregatedClient).toContain('min-h-[560px] md:min-h-[750px]')
-    expect(aggregatedOI).toContain('Swipe horizontally')
+    expect(aggregatedOI).toContain('aria-hidden="true"')
   })
 
   it('prediction cards and public company tables keep long mobile text inside local containers', () => {
@@ -53,7 +53,7 @@ describe('mobile data pages layout contracts', () => {
     expect(predictionCard).toContain('min-w-0')
     expect(predictionCard).toContain('truncate')
     expect(predictionCard).toContain('flex-wrap')
-    expect(publicCompanies).toContain('Swipe horizontally')
+    expect(publicCompanies).toContain('aria-hidden="true"')
     expect(publicCompanies).toContain('min-w-[840px] md:min-w-[1200px]')
     expect(publicCompanies).toContain('left-[56px] md:left-[88px]')
     expect(publicCompanies).toContain('break-words')

@@ -39,7 +39,7 @@ export function AggregatedOrderBookClient() {
         ))}
         </div>
         <div
-          aria-label="Swipe horizontally"
+          aria-hidden="true"
           className="pointer-events-none absolute top-0 right-0 h-full w-8 bg-gradient-to-l from-[color:var(--cf-bg)] to-transparent md:hidden"
         />
       </div>

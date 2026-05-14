@@ -522,7 +522,7 @@ export const PublicCompaniesTable = () => {
         >
           <div className="animate-in fade-in cf-scrollbar relative overflow-x-auto duration-500">
             <div
-              aria-label="Swipe horizontally"
+              aria-hidden="true"
               className="pointer-events-none sticky left-0 top-0 z-20 h-0 md:hidden"
             >
               <div className="absolute right-0 top-0 h-12 w-8 bg-gradient-to-l from-[color:var(--cf-surface)] to-transparent" />

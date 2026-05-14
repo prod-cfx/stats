@@ -687,7 +687,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
         {!loading && !error && data.length > 0 && (
           <div className="cf-scrollbar relative flex-1 overflow-auto">
             <div
-              aria-label="Swipe horizontally"
+              aria-hidden="true"
               className="pointer-events-none sticky left-0 top-0 z-30 h-0 md:hidden"
             >
               <div className="absolute right-0 top-0 h-12 w-8 bg-gradient-to-l from-[color:var(--cf-surface)] to-transparent" />
