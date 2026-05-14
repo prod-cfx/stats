@@ -619,7 +619,7 @@ export const PublicCompaniesTable = () => {
                 {sortedData.map((row, index) => (
                   <tr
                     key={index}
-                    className="cursor-pointer transition-colors hover:bg-[color:var(--cf-surface-hover)]"
+                    className="group cursor-pointer transition-colors hover:bg-[color:var(--cf-surface-hover)]"
                     onClick={() => setSelectedCompany(row)}
                   >
                     <td className="sticky left-0 z-10 w-14 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 py-3 group-hover:bg-[color:var(--cf-surface-hover)] md:w-[88px] md:px-6 md:py-4">
