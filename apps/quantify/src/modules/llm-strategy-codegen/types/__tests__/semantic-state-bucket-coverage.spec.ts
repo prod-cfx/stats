@@ -59,7 +59,12 @@ describe('SemanticState ↔ AtomContractBucket 一致性 (issue #1364 PR2)', () 
       actions: [],
       risk: [],
       position: null,
-      contextSlots: {},
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
       normalizationNotes: [],
       updatedAt: '2026-05-14T00:00:00.000Z',
     }

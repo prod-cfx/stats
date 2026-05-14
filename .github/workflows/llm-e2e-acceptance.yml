@@ -1,0 +1,104 @@
+name: LLM E2E Acceptance (#1364)
+
+# Issue #1364 PR5：5 条用户实测策略 + 仓库 corpus 端到端 LLM 验收。
+#
+# 触发：
+#   - workflow_dispatch（手动）：默认入口，支持指定 spec 子集
+#   - pull_request 修改 quantify ai-quant 关键路径时：自动触发（fork PR 因
+#     secrets 不可用，spec 内置 describe.skip fallback）
+#
+# Secrets 注入：
+#   - LLM_STRATEGY_CODEGEN_API_KEY
+#   - LLM_STRATEGY_CODEGEN_BASE_URL
+#   - LLM_STRATEGY_CODEGEN_MODEL
+#   - QUANTIFY_DATABASE_URL / QUANTIFY_REDIS_URL（dx test e2e 启动 ephemeral 服务用）
+#
+# 安全约束：
+#   - 仅 pull_request（非 pull_request_target），fork PR 拿不到 secrets，
+#     spec 内 describe.skip 兜底
+#   - jest 默认 verbose 模式不 leak secrets（API key 不出现在 stdout）
+#   - workflow 不 echo / dump env
+
+on:
+  workflow_dispatch:
+    inputs:
+      spec:
+        description: '要跑的 e2e spec 路径（默认全套）'
+        required: false
+        default: 'apps/quantify/e2e/llm-strategy-codegen'
+        type: string
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'apps/quantify/src/modules/llm-strategy-codegen/**'
+      - 'apps/quantify/src/modules/strategy-templates/**'
+      - 'apps/quantify/src/modules/strategy-runtime/**'
+      - 'apps/quantify/e2e/llm-strategy-codegen/**'
+      - 'apps/quantify/e2e/backtesting/**'
+      - 'packages/api-contracts/**'
+      - '.github/workflows/llm-e2e-acceptance.yml'
+
+env:
+  NODE_VERSION: '22.14.0'
+  DX_VERSION: '0.1.97'
+  RUN_REAL_LLM_E2E: '1'
+
+jobs:
+  llm-e2e-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LLM_STRATEGY_CODEGEN_API_KEY: ${{ secrets.LLM_STRATEGY_CODEGEN_API_KEY }}
+      LLM_STRATEGY_CODEGEN_BASE_URL: ${{ secrets.LLM_STRATEGY_CODEGEN_BASE_URL }}
+      LLM_STRATEGY_CODEGEN_MODEL: ${{ secrets.LLM_STRATEGY_CODEGEN_MODEL }}
+      QUANTIFY_DATABASE_URL: ${{ secrets.QUANTIFY_E2E_DATABASE_URL }}
+      QUANTIFY_REDIS_URL: ${{ secrets.QUANTIFY_E2E_REDIS_URL }}
+      DATABASE_URL: ${{ secrets.QUANTIFY_E2E_DATABASE_URL }}
+      REDIS_URL: ${{ secrets.QUANTIFY_E2E_REDIS_URL }}
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 校验 secrets 可用性（fork PR fail-soft）
+        id: secrets-check
+        run: |
+          if [ -z "${LLM_STRATEGY_CODEGEN_API_KEY:-}" ]; then
+            echo "secrets_available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::LLM_STRATEGY_CODEGEN_API_KEY 不可用（fork PR / 未配置 secrets），spec 走 describe.skip 兜底"
+          else
+            echo "secrets_available=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 安装 dx CLI
+        run: pnpm add -g @net/dx@${{ env.DX_VERSION }} || npx --yes @net/dx@${{ env.DX_VERSION }} --version
+
+      - name: 跑 LLM e2e（llm-strategy-codegen）
+        if: steps.secrets-check.outputs.secrets_available == 'true'
+        run: |
+          dx test e2e quantify ${{ inputs.spec || 'apps/quantify/e2e/llm-strategy-codegen' }}
+
+      - name: 跑 backtesting e2e（确保 backtest 路径未被结构性改动破坏）
+        if: steps.secrets-check.outputs.secrets_available == 'true'
+        run: |
+          dx test e2e quantify apps/quantify/e2e/backtesting
+
+      - name: 缺 secrets 时打 skip 标
+        if: steps.secrets-check.outputs.secrets_available != 'true'
+        run: |
+          echo "::warning::跳过 LLM e2e（secrets 不可用）。fork PR 不能跑端到端 LLM 验收；如本地需要复跑：dx test e2e quantify apps/quantify/e2e/llm-strategy-codegen"
