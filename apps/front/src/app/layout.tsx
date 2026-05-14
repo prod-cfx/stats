@@ -18,7 +18,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const htmlLang = await inferHtmlLang()
 
   return (
-    <html lang={htmlLang} className="max-w-full overflow-x-clip" suppressHydrationWarning>
+    <html lang={htmlLang} suppressHydrationWarning>
       <head>
         <script
           // eslint-disable-next-line react-dom/no-dangerously-set-innerhtml
@@ -50,7 +50,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         />
       </head>
       <body
-        className="selection:bg-primary/30 min-h-screen max-w-full overflow-x-clip bg-[color:var(--cf-bg)] text-[color:var(--cf-text)] antialiased"
+        className="selection:bg-primary/30 min-h-screen bg-[color:var(--cf-bg)] text-[color:var(--cf-text)] antialiased"
         suppressHydrationWarning
       >
         {children}

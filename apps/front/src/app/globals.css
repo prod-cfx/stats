@@ -256,18 +256,9 @@
   background-color: rgba(139, 148, 158, 0.65);
 }
 
-html {
-  max-width: 100%;
-  overflow-x: hidden;
-  overflow-x: clip;
-}
-
 body {
   margin: 0;
   padding: 0;
-  max-width: 100%;
-  overflow-x: hidden;
-  overflow-x: clip;
   min-height: 100vh;
   background: var(--cf-bg);
   color: var(--cf-text);
