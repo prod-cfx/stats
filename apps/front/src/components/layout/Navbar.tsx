@@ -17,7 +17,7 @@ import {
   buildDataNavLinks,
   buildMobileAccountLinks,
   buildMobileWhaleLinks,
-} from './Navbar.nav-data'
+} from './navbar.nav-data'
 import { ThemeToggle } from './ThemeToggle'
 
 type SearchEntryType = 'coin' | 'indicator' | 'feature' | 'page' | 'address'

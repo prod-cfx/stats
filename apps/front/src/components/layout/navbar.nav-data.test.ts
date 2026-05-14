@@ -3,7 +3,7 @@ import {
   buildDataNavLinks,
   buildMobileAccountLinks,
   buildMobileWhaleLinks,
-} from './Navbar.nav-data'
+} from './navbar.nav-data'
 
 const t = (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key
 
