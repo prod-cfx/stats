@@ -414,7 +414,8 @@ export const ProfileDataTabs = ({
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<Error | null>(null)
   const lastHistoryFetchAtRef = useRef<number>(0)
-  const historySentinelRef = useRef<HTMLDivElement | null>(null)
+  const mobileHistorySentinelRef = useRef<HTMLDivElement | null>(null)
+  const desktopHistorySentinelRef = useRef<HTMLDivElement | null>(null)
 
   const loadHistoryOrders = useCallback(async () => {
     if (isHistoryLoading) return
@@ -693,9 +694,12 @@ export const ProfileDataTabs = ({
 
   useEffect(() => {
     if (!canLoadMoreHistory) return
-    if (!historySentinelRef.current) return
+    const sentinelEls = [
+      mobileHistorySentinelRef.current,
+      desktopHistorySentinelRef.current,
+    ].filter((el): el is HTMLDivElement => Boolean(el))
+    if (sentinelEls.length === 0) return
 
-    const el = historySentinelRef.current
     const observer = new IntersectionObserver(
       entries => {
         const hit = entries.some(e => e.isIntersecting)
@@ -707,7 +711,7 @@ export const ProfileDataTabs = ({
       { root: null, rootMargin: '200px', threshold: 0 },
     )
 
-    observer.observe(el)
+    sentinelEls.forEach(el => observer.observe(el))
     return () => observer.disconnect()
   }, [allHistoryOrdersFiltered.length, canLoadMoreHistory])
 
@@ -882,7 +886,7 @@ export const ProfileDataTabs = ({
             ))
           )
         ) : null}
-        {canLoadMoreHistory && <div ref={historySentinelRef} className="h-1" />}
+        {canLoadMoreHistory && <div ref={mobileHistorySentinelRef} className="h-1" />}
       </div>
 
       {/* Table Content */}
@@ -1576,7 +1580,7 @@ export const ProfileDataTabs = ({
             ) : null}
           </tbody>
         </table>
-        {canLoadMoreHistory && <div ref={historySentinelRef} className="h-1" />}
+        {canLoadMoreHistory && <div ref={desktopHistorySentinelRef} className="h-1" />}
       </div>
     </div>
   )
