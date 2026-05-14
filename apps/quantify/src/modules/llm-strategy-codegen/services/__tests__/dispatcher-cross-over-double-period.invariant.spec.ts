@@ -58,15 +58,34 @@ describe('issue #1338 — dispatcher cross_over double-period + 多原子并行�
     expect(triggerKeys).not.toContain('position.has_position')
   })
 
-  it('triggers 恰 2 条：cross_over@entry@long + cross_under@exit@long', () => {
+  it('triggers 恰 2 条：cross_over@entry@long + cross_under@exit@long（issue #1338 AC sideScope=long 单边）', () => {
     const patch = dispatcher.dispatch(utterance)
     const triggers = (patch.triggers ?? []) as Array<{ key: string, phase: string, sideScope: string }>
     expect(triggers.length).toBe(2)
 
     const co = triggers.find(t => t.key === 'indicator.cross_over')!
     const cu = triggers.find(t => t.key === 'indicator.cross_under')!
+    // entry：cross_over direction → long（DIRECTION_TO_SIDE 直接派生）
     expect(co).toMatchObject({ phase: 'entry', sideScope: 'long' })
-    expect(cu).toMatchObject({ phase: 'exit', sideScope: 'short' })
+    // exit：'平多' close-verb 覆盖 cross_under → short 派生，回归 long（平的是多仓）。
+    // 这是 Issue #1338 验收标准 3（sideScope = long 单边）的核心断言。
+    expect(cu).toMatchObject({ phase: 'exit', sideScope: 'long' })
+  })
+
+  it('反例：仅 kw 命中（无 direction verb）不应触发 cross_over（守 kw && direction 双闸口）', () => {
+    // 'EMA20 高于 EMA50'：EMA kw 在 cross_over.keywords 中，但 '上穿/金叉' verbs 全部不命中。
+    // 旧逻辑 kw||direction 会误触；新逻辑 kw && direction 必须双命中。
+    const patch = dispatcher.dispatch('EMA20 高于 EMA50 时开多')
+    const triggerKeys = (patch.triggers ?? []).map(t => (t as { key?: string }).key)
+    expect(triggerKeys).not.toContain('indicator.cross_over')
+    expect(triggerKeys).not.toContain('indicator.cross_under')
+  })
+
+  it('反例：仅 verb 命中（无 kw 主语）不应触发 cross_over', () => {
+    // '上穿' 是 cross_over verb，但 'EMA/MA/RSI' 等 kw 全部缺席（用 BTC 替代避免 kw 命中）。
+    const patch = dispatcher.dispatch('上穿 时开多')
+    const triggerKeys = (patch.triggers ?? []).map(t => (t as { key?: string }).key)
+    expect(triggerKeys).not.toContain('indicator.cross_over')
   })
 
   it('cross_over RSI 形态：period=14, value=70（与 fast/slow 位置语义对齐）', () => {
