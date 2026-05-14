@@ -730,7 +730,7 @@ export const ProfileDataTabs = ({
   return (
     <div className="flex min-h-[400px] flex-col overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]">
       {/* Tabs Header */}
-      <div className="flex border-b border-[color:var(--cf-border)] px-6">
+      <div className="flex overflow-x-auto border-b border-[color:var(--cf-border)] px-2 md:px-6">
         {tabs.map(tab => (
           <button
             key={tab.id}
@@ -740,7 +740,7 @@ export const ProfileDataTabs = ({
               setSortField(null)
               setSortOrder(null)
             }}
-            className={`group relative px-6 py-4 text-sm font-bold transition-all ${
+            className={`group relative flex-shrink-0 px-4 py-4 text-sm font-bold transition-all md:px-6 ${
               activeTab === tab.id
                 ? 'text-[color:var(--cf-text-strong)]'
                 : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
@@ -757,8 +757,136 @@ export const ProfileDataTabs = ({
         ))}
       </div>
 
+      <div data-testid="profile-mobile-card-list" className="space-y-3 p-3 md:hidden">
+        {activeTab === 'trades' && tradesState === 'loading' ? (
+          <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-6 text-center text-sm text-[color:var(--cf-muted)]">
+            加载中…
+          </div>
+        ) : activeTab === 'trades' && tradesState === 'error' ? (
+          <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-6 text-center text-sm text-[color:var(--cf-muted)]">
+            {tradesError || '加载最近成交失败'}
+            <button
+              type="button"
+              className="ml-2 underline"
+              onClick={() => {
+                setTradesState('idle')
+                void loadRecentTrades()
+              }}
+            >
+              重试
+            </button>
+          </div>
+        ) : activeTab === 'trades' && tradesState === 'empty' ? (
+          <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-6 text-center text-sm text-[color:var(--cf-muted)]">
+            暂无最近成交
+          </div>
+        ) : activeTab === 'spot' ? (
+          filteredSpotData.map((pos, idx) => (
+            <article key={`${pos.asset}-${idx}-mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <span className="text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">{pos.asset}</span>
+                <span className="text-xs font-bold text-[color:var(--cf-text-strong)]">{pos.share}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.value')}</div><div className="font-semibold text-[color:var(--cf-text-strong)]">{pos.value}</div></div>
+                <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.amount')}</div><div className="text-[color:var(--cf-muted)]">{pos.amount}</div></div>
+                <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.price')}</div><div className="text-[color:var(--cf-text-strong)]">{pos.price}</div></div>
+              </div>
+            </article>
+          ))
+        ) : activeTab === 'perpetual' ? (
+          filteredPerpData.map((pos, idx) => (
+            <article key={`${pos.asset}-${idx}-mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-bold text-[color:var(--cf-text-strong)]">{pos.asset}</div>
+                  <div className="text-[10px] text-[color:var(--cf-muted)] uppercase">{translateMarginType(pos.marginType)} {pos.leverage}</div>
+                </div>
+                {renderSideBadge(pos.side)}
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.positionValue')}</div><div className="font-semibold text-[color:var(--cf-text-strong)]">{pos.valueUSD}</div><div className="text-[color:var(--cf-muted)]">{pos.valueAsset}</div></div>
+                <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.unrealizedPnl')}</div><div className={pos.pnlUSD.includes('+') ? 'font-semibold text-green-500' : 'font-semibold text-red-500'}>{pos.pnlUSD}</div><div className={pos.pnlPercent.includes('+') ? 'text-green-500' : 'text-red-500'}>{pos.pnlPercent}</div></div>
+                <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.entryPrice')}</div><div className="text-[color:var(--cf-text-strong)]">{pos.entryPrice}</div></div>
+                <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.markPrice')}</div><div className="text-[color:var(--cf-text-strong)]">{pos.markPrice}</div></div>
+                <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.liqPrice')}</div><div className="text-[color:var(--cf-text-strong)]">{pos.liqPrice}</div></div>
+                <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.margin')}</div><div className="text-[color:var(--cf-text-strong)]">{pos.margin}</div></div>
+              </div>
+            </article>
+          ))
+        ) : activeTab === 'orders' ? (
+          filteredOpenOrders.map(order => {
+            const orderKey = getOpenOrderKey(order)
+            return (
+              <article key={`${orderKey}-mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+                <button type="button" className="w-full text-left" onClick={() => toggleOrderExpansion(orderKey)}>
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div><div className="text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">{order.asset}</div><div className="text-xs text-[color:var(--cf-muted)]">{formatRelativeTime(order.timestamp)}</div></div>
+                    <div className="flex items-center gap-2">{renderSideBadge(order.side)}<ChevronDownIcon className={`h-4 w-4 text-[color:var(--cf-muted)] ${expandedOrders.has(orderKey) ? 'rotate-180' : ''}`} /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.value')}</div><div className="font-semibold text-[color:var(--cf-text-strong)]">{order.value}</div></div>
+                    <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.amount')}</div><div className="text-[color:var(--cf-muted)]">{order.amount}</div></div>
+                    <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.price')}</div><div className="text-[color:var(--cf-text-strong)]">{order.price}</div></div>
+                    <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.orders.orderCount', { count: order.count })}</div></div>
+                  </div>
+                </button>
+                {expandedOrders.has(orderKey) && (
+                  <div className="mt-3 space-y-2 border-t border-[color:var(--cf-border)] pt-3">
+                    {order.details.map((detail, dIdx) => (
+                      <div key={detail.id || dIdx} className="rounded-lg bg-[color:var(--cf-surface)] p-2 text-xs">
+                        <div className="flex justify-between gap-2"><span className="text-[color:var(--cf-muted)]">{translateOrderType(detail.type)}</span><span className="text-[color:var(--cf-text-strong)]">{detail.value}</span></div>
+                        <div className="mt-1 break-all text-[color:var(--cf-muted)]">{detail.id} · {detail.amount} · {detail.price}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </article>
+            )
+          })
+        ) : activeTab === 'trades' ? (
+          filteredRecentTrades.map((trade, idx) => (
+            <article key={`${trade.asset}-${idx}-mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div><div className="text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">{trade.asset}</div><div className="text-xs text-[color:var(--cf-muted)]">{formatRelativeTime(trade.timestamp)}</div></div>
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase ${getTradeActionBadgeClass(trade.action)}`}>{translateTradeAction(trade.action)}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.amount')}</div><div className="text-[color:var(--cf-muted)]">{trade.amount}</div></div>
+                <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.value')}</div><div className="text-[color:var(--cf-text-strong)]">{trade.value}</div></div>
+                <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.price')}</div><div className="text-[color:var(--cf-text-strong)]">{trade.price}</div></div>
+                <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.closedPnl')}</div><div className="text-[color:var(--cf-muted)]">{trade.pnl}</div></div>
+              </div>
+            </article>
+          ))
+        ) : activeTab === 'delegation' ? (
+          isHistoryLoading && historyOrdersAll === null ? (
+            <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-6 text-center text-sm text-[color:var(--cf-muted)]">{t('common.loading')}</div>
+          ) : filteredHistoryOrders.length === 0 ? (
+            <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-6 text-center text-sm text-[color:var(--cf-muted)]">{t('common.noData')}</div>
+          ) : (
+            filteredHistoryOrders.map((order, idx) => (
+              <article key={`${order.id}-${idx}-mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div><div className="text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">{order.asset}</div><div className="text-xs text-[color:var(--cf-muted)]">{formatRelativeTime(order.timestamp)}</div></div>
+                  {renderSideBadge(order.side)}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.type')}</div><div className="text-[color:var(--cf-text-strong)]">{order.type}</div></div>
+                  <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.amount')}</div><div className="text-[color:var(--cf-muted)]">{order.amount}</div></div>
+                  <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.price')}</div><div className="text-[color:var(--cf-text-strong)]">{order.price}</div></div>
+                  <div><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.executionStatus')}</div><div className="text-[color:var(--cf-muted)]">{translateOrderStatus(order.status)}</div></div>
+                  <div className="col-span-2 break-all"><div className="text-[color:var(--cf-muted)]">{t('whaleTracking.profile.columns.orderId')}</div><div className="text-[color:var(--cf-muted)]">{order.id}</div></div>
+                </div>
+              </article>
+            ))
+          )
+        ) : null}
+        {canLoadMoreHistory && <div ref={historySentinelRef} className="h-1" />}
+      </div>
+
       {/* Table Content */}
-      <div className="overflow-x-auto p-0">
+      <div className="hidden md:block overflow-x-auto p-0">
         <table className="w-full border-collapse">
           <thead>
             <tr className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[10px] font-bold tracking-wider text-[color:var(--cf-muted)] uppercase">

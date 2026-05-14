@@ -9,16 +9,16 @@ export const PositionProfile = () => {
     <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-5 flex flex-col gap-5 h-full">
       {/* Title */}
       <div className="flex flex-col gap-1.5">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[color:var(--cf-muted)] text-sm font-medium">{t('whaleTracking.profile.positionProfile.perpetualTotalValue')}</span>
           <span className="px-2 py-0.5 bg-[color:var(--cf-surface-2)] text-[color:var(--cf-muted)] text-[10px] font-bold rounded uppercase">{t('whaleTracking.profile.positionProfile.currentPositions')}</span>
         </div>
-        <div className="text-[color:var(--cf-text-strong)] text-h2 font-bold tracking-tight">$ 31,034,500</div>
+        <div className="break-words text-[color:var(--cf-text-strong)] text-2xl md:text-h2 font-bold tracking-tight">$ 31,034,500</div>
       </div>
 
       {/* Margin Usage Bar */}
       <div className="flex flex-col gap-2">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[color:var(--cf-muted)] text-sm">{t('whaleTracking.profile.positionProfile.avgMarginUsage')}</span>
           <span className="text-[color:var(--cf-text-strong)] text-sm font-bold">90.78 %</span>
         </div>
@@ -60,7 +60,7 @@ export const PositionProfile = () => {
       {/* Value Distribution */}
       <div className="flex flex-col gap-3">
         <div className="text-[color:var(--cf-muted)] text-sm font-medium border-b border-[color:var(--cf-border)] pb-2">{t('whaleTracking.profile.positionProfile.distribution')}</div>
-        <div className="flex justify-between items-end">
+        <div className="flex flex-wrap justify-between gap-3 sm:items-end">
           <div className="flex flex-col gap-0.5">
             <span className="text-[color:var(--cf-muted)] text-[10px] font-medium uppercase">{t('whaleTracking.profile.positionProfile.longValue')}</span>
             <span className="text-[color:var(--cf-text-strong)] text-base font-bold">$ 0</span>
@@ -75,11 +75,11 @@ export const PositionProfile = () => {
 
       {/* ROI & PnL */}
       <div className="flex flex-col gap-2 pt-3 mt-auto border-t border-[color:var(--cf-border)]">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[color:var(--cf-muted)] text-sm">{t('whaleTracking.profile.positionProfile.roi')}</span>
           <span className="text-red-500 text-base font-bold">-7.63 %</span>
         </div>
-        <div className="flex justify-between items-center">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[color:var(--cf-muted)] text-sm">{t('whaleTracking.profile.positionProfile.unrealizedPnl')}</span>
           <span className="text-red-500 text-base font-bold">$ -54,885.83</span>
         </div>

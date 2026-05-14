@@ -121,7 +121,7 @@ export function AddressMonitorSection({
 
   return (
     <section className="space-y-3 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 md:p-5">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-lg font-bold text-[color:var(--cf-text-strong)]">
           {t('whaleTracking.notifications.sections.address')} ({addressRules.length})
         </h3>
@@ -147,7 +147,109 @@ export function AddressMonitorSection({
       )}
 
       {!!addressRules.length && (
-        <div className="overflow-x-auto rounded-xl border border-[color:var(--cf-border)]">
+        <>
+        <div className="space-y-3 md:hidden">
+          {addressRules.map(rule => {
+            const address = rule.address!
+            const item = metrics[address]
+            const pnl = item?.unrealizedPnl ?? 0
+            const pnlClass = pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
+            return (
+              <article
+                key={`${rule.id}-mobile`}
+                className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3"
+              >
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm font-semibold text-[color:var(--cf-text-strong)]">
+                        {address.slice(0, 10)}...{address.slice(-4)}
+                      </span>
+                      <button
+                        data-testid="address-monitor-mobile-copy"
+                        type="button"
+                        onClick={() => handleCopy(address)}
+                        className="rounded-lg border border-[color:var(--cf-border)] p-2 text-[color:var(--cf-muted)]"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </button>
+                    </div>
+                    {rule.note && <div className="mt-1 break-words text-xs text-[color:var(--cf-muted)]">{rule.note}</div>}
+                  </div>
+                  <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                    <button
+                      data-testid="address-monitor-mobile-stats"
+                      type="button"
+                      onClick={() => setStatsAddress(address)}
+                      className="rounded-lg border border-[color:var(--cf-border)] p-2 text-[color:var(--cf-muted)]"
+                      title={t('whaleTracking.notifications.actions.tradingStats')}
+                    >
+                      <TrendingUp className="h-4 w-4" />
+                    </button>
+                    <button
+                      data-testid="address-monitor-mobile-disable-telegram"
+                      type="button"
+                      onClick={() => {
+                        void onUpdate(rule.id, {
+                          channels: { ...rule.channels, telegram: false },
+                        })
+                      }}
+                      disabled={!rule.channels.telegram}
+                      className="rounded-lg border border-[color:var(--cf-border)] p-2 text-[color:var(--cf-muted)] disabled:cursor-not-allowed disabled:opacity-40"
+                      title={t('whaleTracking.notifications.actions.disableTelegram')}
+                    >
+                      <BellOff className="h-4 w-4" />
+                    </button>
+                    <button
+                      data-testid="address-monitor-mobile-edit"
+                      type="button"
+                      onClick={() => setEditingRule(rule)}
+                      className="rounded-lg border border-[color:var(--cf-border)] p-2 text-[color:var(--cf-muted)]"
+                      title={t('whaleTracking.notifications.actions.edit')}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      data-testid="address-monitor-mobile-delete"
+                      type="button"
+                      onClick={() => {
+                        void onDelete(rule.id)
+                      }}
+                      className="rounded-lg border border-[color:var(--cf-border)] p-2 text-rose-400"
+                      title={t('whaleTracking.notifications.actions.removeMonitor')}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.notifications.addressMetrics.totalValue')}</div>
+                    <div className="font-semibold text-[color:var(--cf-text-strong)]">{item ? formatCompactUsd(item.totalPositionValue) : '-'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.holdings.table.unrealizedPnl')}</div>
+                    <div className={`font-semibold ${item ? pnlClass : 'text-[color:var(--cf-text-strong)]'}`}>{item ? formatCompactUsd(item.unrealizedPnl) : '-'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.notifications.addressMetrics.withdrawable')}</div>
+                    <div className="text-[color:var(--cf-text-strong)]">{item ? formatCompactUsd(item.withdrawable) : '-'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.notifications.addressMetrics.marginUsage')}</div>
+                    <div className="text-[color:var(--cf-text-strong)]">{item ? `${item.marginUsagePercent.toFixed(0)}%` : '-'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.notifications.addressMetrics.positions')}</div>
+                    <div className="text-[color:var(--cf-text-strong)]">{item ? item.positions : '-'}</div>
+                  </div>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto rounded-xl border border-[color:var(--cf-border)]">
           <table className="w-full min-w-[1120px]">
             <thead>
               <tr className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/70 text-xs text-[color:var(--cf-muted)]">
@@ -266,6 +368,7 @@ export function AddressMonitorSection({
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       <WhaleTradingStatsModal
