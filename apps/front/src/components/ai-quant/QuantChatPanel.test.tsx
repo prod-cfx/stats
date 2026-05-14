@@ -117,6 +117,36 @@ describe('QuantChatPanel range settings', () => {
     expect(container.textContent).toContain('aiQuant.customRange')
   })
 
+  it('exposes mobile-safe shell, toolbar, and message wrapping classes', async () => {
+    await act(async () => {
+      root?.render(
+        <QuantChatPanel
+          messages={[
+            { id: 'm1', role: 'assistant', content: 'hello' },
+            { id: 'm2', role: 'user', content: 'please backtest BTCUSDT' },
+          ]}
+          paramSchema={null}
+          paramValues={baseParams}
+          onParamChange={() => {}}
+          onSend={() => {}}
+          onRunBacktest={() => {}}
+          onConfirmBacktestParams={() => {}}
+        />,
+      )
+    })
+
+    const shell = container.querySelector('section')
+    const toolbar = shell?.firstElementChild
+    const assistantBubble = container.querySelector('[data-testid="quant-message-bubble-assistant"]')
+
+    expect(shell?.className).toContain('min-h-[520px]')
+    expect(shell?.className).toContain('max-h-[calc(100dvh-7rem)]')
+    expect(toolbar?.className).toContain('flex-col')
+    expect(toolbar?.className).toContain('sm:flex-row')
+    expect(assistantBubble?.className).toContain('max-w-[min(100%,42rem)]')
+    expect(assistantBubble?.className).toContain('break-words')
+  })
+
   it('shows custom datetime inputs and applies them after confirm', async () => {
     const onParamChange = jest.fn()
     const Harness = () => {

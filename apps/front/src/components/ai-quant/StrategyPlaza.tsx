@@ -137,16 +137,16 @@ export function StrategyPlaza({
           return (
             <article
               key={template.id}
-              className="group flex flex-col justify-between rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 transition-all hover:border-primary/30 hover:shadow-lg hover:-translate-y-0.5"
+              className="group flex min-w-0 flex-col justify-between rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 transition-all hover:border-primary/30 hover:shadow-lg hover:-translate-y-0.5 sm:p-5"
             >
               <div>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-start justify-between">
+                  <div className="flex min-w-0 items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[color:var(--cf-bg)] text-primary transition-colors group-hover:bg-primary/10 group-hover:text-primary">
                       <Activity className="h-5 w-5" />
                     </div>
-                    <div>
-                      <h3 className="font-bold text-[color:var(--cf-text-strong)]">{display.name}</h3>
+                    <div className="min-w-0">
+                      <h3 className="break-words font-bold text-[color:var(--cf-text-strong)]">{display.name}</h3>
                       <div className="mt-1 flex flex-wrap gap-1.5">
                         {display.tags.map(tag => (
                           <span
@@ -166,31 +166,31 @@ export function StrategyPlaza({
                 </p>
 
                 <div className="mt-4 grid gap-2 rounded-xl bg-[color:var(--cf-bg)] px-3 py-3 text-xs text-[color:var(--cf-muted)]">
-                  <div className="flex items-center justify-between gap-3">
+                  <div data-testid="strategy-plaza-meta-row" className="grid gap-1 sm:flex sm:items-center sm:justify-between sm:gap-3">
                     <span>{t('aiQuant.strategyPlazaCard.pairTimeframe', { defaultValue: '交易对 / 周期' })}</span>
-                    <span className="font-mono font-semibold text-[color:var(--cf-text)]">
+                    <span className="break-all font-mono font-semibold text-[color:var(--cf-text)] sm:text-right">
                       {template.symbol}
                       {' / '}
                       {template.timeframe}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between gap-3">
+                  <div data-testid="strategy-plaza-meta-row" className="grid gap-1 sm:flex sm:items-center sm:justify-between sm:gap-3">
                     <span>{t('aiQuant.strategyPlazaCard.environment', { defaultValue: '环境' })}</span>
-                    <span className="font-semibold text-[color:var(--cf-text)]">
+                    <span className="font-semibold text-[color:var(--cf-text)] sm:text-right">
                       {t('aiQuant.strategyPlazaCard.okxDemo', { defaultValue: 'OKX 模拟盘' })}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between gap-3">
+                  <div data-testid="strategy-plaza-meta-row" className="grid gap-1 sm:flex sm:items-center sm:justify-between sm:gap-3">
                     <span>{t('aiQuant.strategyPlazaCard.market', { defaultValue: '市场' })}</span>
-                    <span className="font-semibold text-[color:var(--cf-text)]">
+                    <span className="font-semibold text-[color:var(--cf-text)] sm:text-right">
                       {t(`aiQuant.strategyPlazaCard.marketType.${template.marketType}`, {
                         defaultValue: getMarketTypeLabel(template.marketType, t),
                       })}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between gap-3">
+                  <div data-testid="strategy-plaza-meta-row" className="grid gap-1 sm:flex sm:items-center sm:justify-between sm:gap-3">
                     <span>{t('aiQuant.strategyPlazaCard.positionLeverage', { defaultValue: '仓位 / 杠杆' })}</span>
-                    <span className="font-mono font-semibold text-[color:var(--cf-text)]">
+                    <span className="font-mono font-semibold text-[color:var(--cf-text)] sm:text-right">
                       {formatPositionPct(template.positionPct)}
                       {' / '}
                       {getLeverageLabel(template.leverage, t)}
@@ -226,7 +226,7 @@ export function StrategyPlaza({
                 </div>
               </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-3">
+              <div data-testid="strategy-plaza-actions" className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <button
                   type="button"
                   disabled={hasPendingAction}

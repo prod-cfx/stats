@@ -244,4 +244,39 @@ describe('StopRunningStrategyDialog', () => {
     expect((container.querySelector('[data-testid="liquidate-and-stop-strategy"]') as HTMLButtonElement | null)?.disabled).toBe(true)
     expect((container.querySelector('[data-testid="cancel-stop-strategy"]') as HTMLButtonElement | null)?.disabled).toBe(true)
   })
+
+  it('keeps the stop dialog scrollable with full-width mobile actions', async () => {
+    await act(async () => {
+      root.render(
+        <StopRunningStrategyDialog
+          open
+          strategy={{
+            name: 'Very long strategy name that should wrap inside mobile dialog',
+            exchange: 'okx',
+            symbol: 'BTC-USDT-SWAP',
+            positionOverview: {
+              openPositionsCount: 1,
+              totalUnrealizedPnl: 12.5,
+            },
+            openOrdersCount: 1,
+          }}
+          onStopOnly={() => undefined}
+          onLiquidateAndStop={() => undefined}
+          onCancel={() => undefined}
+        />,
+      )
+    })
+
+    const overlay = container.firstElementChild
+    const panel = overlay?.firstElementChild
+    const actions = container.querySelector('[data-testid="stop-dialog-actions"]')
+    const detailRows = container.querySelectorAll('[data-testid="stop-dialog-detail-row"]')
+
+    expect(overlay?.className).toContain('py-4')
+    expect(panel?.className).toContain('max-h-[calc(100dvh-2rem)]')
+    expect(panel?.className).toContain('overflow-y-auto')
+    expect(actions?.className).toContain('grid')
+    expect(actions?.className).toContain('sm:flex')
+    expect(detailRows[0]?.className).toContain('flex-col')
+  })
 })

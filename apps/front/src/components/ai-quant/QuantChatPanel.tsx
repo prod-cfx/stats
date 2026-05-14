@@ -352,10 +352,10 @@ export function QuantChatPanel({
   }
 
   return (
-    <section className="flex h-[calc(100dvh-200px)] min-w-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm md:h-[calc(100vh-200px)] md:min-h-[600px]">
+    <section className="flex min-h-[520px] max-h-[calc(100dvh-7rem)] min-w-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm md:h-[calc(100vh-200px)] md:max-h-none md:min-h-[600px]">
       {/* Header / Toolbar */}
-      <div className="flex items-center justify-between border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-active)] px-4 py-3">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-3 border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-active)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
           <div className="bg-primary/10 text-primary flex h-8 w-8 items-center justify-center rounded-lg">
             <Bot className="h-5 w-5" />
           </div>
@@ -367,7 +367,7 @@ export function QuantChatPanel({
           <button
             type="button"
             onClick={() => setShowSettings(!showSettings)}
-            className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
               showSettings
                 ? 'border-primary bg-primary/5 text-primary'
                 : 'border-[color:var(--cf-border)] text-[color:var(--cf-text)] hover:bg-[color:var(--cf-bg)]'
@@ -381,7 +381,7 @@ export function QuantChatPanel({
             data-testid="run-backtest"
             onClick={onRunBacktest}
             disabled={!canRunBacktest || hasDraftChanges}
-            className="cf-primary-cta flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-all"
+            className="cf-primary-cta flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium transition-all"
           >
             <Play className="h-4 w-4 fill-current" />
             <span>{t('aiQuant.startBacktest')}</span>
@@ -606,14 +606,15 @@ export function QuantChatPanel({
               )}
 
               <div
-                className={`max-w-[85%] min-w-0 rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                data-testid={`quant-message-bubble-${message.role}`}
+                className={`max-w-[min(100%,42rem)] min-w-0 break-words rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
                   message.role === 'assistant'
                     ? 'rounded-tl-none border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)] [&_code]:rounded [&_code]:bg-[color:var(--cf-bg)] [&_code]:px-1.5 [&_code]:py-0.5'
                     : 'bg-primary rounded-tr-none text-white'
                 }`}
               >
                 {message.role === 'assistant' ? (
-                  <div className="[&_a]:text-primary min-w-0 space-y-3 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-[color:var(--cf-border)] [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:leading-7 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-[color:var(--cf-border)] [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-[color:var(--cf-border)] [&_th]:bg-[color:var(--cf-surface-active)] [&_th]:px-2 [&_th]:py-1 [&_ul]:list-disc [&_ul]:pl-6">
+                  <div className="[&_a]:text-primary min-w-0 space-y-3 overflow-x-auto [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-[color:var(--cf-border)] [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:leading-7 [&_table]:min-w-[32rem] [&_table]:border-collapse [&_td]:border [&_td]:border-[color:var(--cf-border)] [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-[color:var(--cf-border)] [&_th]:bg-[color:var(--cf-surface-active)] [&_th]:px-2 [&_th]:py-1 [&_ul]:list-disc [&_ul]:pl-6">
                     {(() => {
                       let codeBlockIndex = 0
                       return (

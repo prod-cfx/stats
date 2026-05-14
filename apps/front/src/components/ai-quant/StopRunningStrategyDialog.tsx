@@ -76,9 +76,9 @@ export function StopRunningStrategyDialog({
   const exposureValue = isSpotMarket ? formatSpotHolding(strategy, t) : String(openPositionsCount)
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4" onClick={onCancel}>
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4 py-4" onClick={onCancel}>
       <div
-        className="w-full max-w-[560px] rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-[560px] overflow-y-auto rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 sm:p-5"
         onClick={event => event.stopPropagation()}
       >
         <h3 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{title}</h3>
@@ -89,27 +89,27 @@ export function StopRunningStrategyDialog({
         </p>
 
         <div className="mt-4 grid gap-2 rounded-xl border border-[color:var(--cf-border)] bg-black/10 p-3 text-sm text-[color:var(--cf-text)]">
-          <div className="flex justify-between gap-3">
+          <div data-testid="stop-dialog-detail-row" className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
             <span className="text-[color:var(--cf-muted)]">{t('aiQuant.stopDialog.strategy')}</span>
             <span className="text-right text-[color:var(--cf-text-strong)]">{strategy?.name ?? '--'}</span>
           </div>
-          <div className="flex justify-between gap-3">
+          <div data-testid="stop-dialog-detail-row" className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
             <span className="text-[color:var(--cf-muted)]">{t('aiQuant.stopDialog.exchangeSymbol')}</span>
             <span className="text-right text-[color:var(--cf-text-strong)]">
               {[strategy?.exchange, strategy?.symbol].filter(Boolean).join(' · ') || '--'}
             </span>
           </div>
-          <div className="flex justify-between gap-3">
+          <div data-testid="stop-dialog-detail-row" className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
             <span className="text-[color:var(--cf-muted)]">{exposureLabel}</span>
             <span className="text-right text-[color:var(--cf-text-strong)]">{exposureValue}</span>
           </div>
-          <div className="flex justify-between gap-3">
+          <div data-testid="stop-dialog-detail-row" className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
             <span className="text-[color:var(--cf-muted)]">{t('aiQuant.stopDialog.unrealizedPnl')}</span>
             <span className="text-right text-[color:var(--cf-text-strong)]">
               {formatOptionalNumber(strategy?.positionOverview?.totalUnrealizedPnl)}
             </span>
           </div>
-          <div className="flex justify-between gap-3">
+          <div data-testid="stop-dialog-detail-row" className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
             <span className="text-[color:var(--cf-muted)]">{t('aiQuant.stopDialog.openOrders')}</span>
             <span className="text-right text-[color:var(--cf-text-strong)]">
               {hasUnknownOpenOrders ? t('aiQuant.stopDialog.unknown') : openOrdersCount}
@@ -129,7 +129,7 @@ export function StopRunningStrategyDialog({
           </div>
         )}
 
-        <div className="mt-5 flex flex-wrap gap-2">
+        <div data-testid="stop-dialog-actions" className="mt-5 grid gap-2 sm:flex sm:flex-wrap">
           {requiresRiskChoice ? (
             <>
               <button
@@ -137,7 +137,7 @@ export function StopRunningStrategyDialog({
                 data-testid="stop-only-strategy"
                 disabled={pending}
                 onClick={onStopOnly}
-                className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-10 items-center justify-center rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {t(isSpotMarket ? 'aiQuant.stopDialog.stopOnlySpot' : 'aiQuant.stopDialog.stopOnly')}
               </button>
@@ -146,7 +146,7 @@ export function StopRunningStrategyDialog({
                 data-testid="liquidate-and-stop-strategy"
                 disabled={pending}
                 onClick={onLiquidateAndStop}
-                className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
+                className="inline-flex min-h-10 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
               >
                 {t('aiQuant.stopDialog.liquidateAndStop')}
               </button>
@@ -157,7 +157,7 @@ export function StopRunningStrategyDialog({
               data-testid="confirm-stop-strategy"
               disabled={pending}
               onClick={onStopOnly}
-              className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex min-h-10 items-center justify-center rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
               {t('aiQuant.stopDialog.confirmStop')}
             </button>
@@ -167,7 +167,7 @@ export function StopRunningStrategyDialog({
             data-testid="cancel-stop-strategy"
             disabled={pending}
             onClick={onCancel}
-            className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-10 items-center justify-center rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {t('aiQuant.stopDialog.cancel')}
           </button>

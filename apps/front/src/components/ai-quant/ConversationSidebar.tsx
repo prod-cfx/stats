@@ -32,7 +32,7 @@ export function ConversationSidebar({ items, activeId, onSwitch, onCreate, onRen
   const [draftTitle, setDraftTitle] = useState('')
 
   return (
-    <aside className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-3">
+    <aside className="max-h-[42dvh] overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-3 md:max-h-none">
       <button
         type="button"
         onClick={onCreate}
@@ -41,7 +41,7 @@ export function ConversationSidebar({ items, activeId, onSwitch, onCreate, onRen
         {t('aiQuant.createChat')}
       </button>
 
-      <div className="space-y-2">
+      <div data-testid="conversation-sidebar-list" className="max-h-[calc(42dvh-4rem)] space-y-2 overflow-y-auto pr-1 md:max-h-none md:overflow-visible md:pr-0">
         {items.map(item => {
           const active = item.id === activeId
           const canSwitch = editingId !== item.id
