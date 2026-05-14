@@ -10,6 +10,7 @@
 
 import type { SupportedAtomKey } from '../nl-gateway/utterance-corpus/utterance-corpus.types'
 import type {
+  AtomClassifier,
   AtomContract,
   AtomContractBucket,
   AtomContractDisplay,
@@ -121,6 +122,12 @@ const GRID_SIZING_EVIDENCE: SizingEvidence = {
   capability: DCA_PER_ORDER_BUDGET_CAPABILITY,
   paramSource: 'perGridSizing',
 }
+
+// Issue #1334 PR1：所有 atom 默认 classifier 元数据；PR2 迁移 legacy ATOMS 非默认值条目时覆盖。
+// freeze 防御消费方误写常量本体（53 个 atom 仍各自 `{ ...DEFAULT_CLASSIFIER_META, ... }` 浅拷贝注入）。
+export const DEFAULT_CLASSIFIER_META: AtomClassifier = Object.freeze({
+  supportStatus: 'supported_executable',
+}) as AtomClassifier
 
 export const ATOM_BUCKETS = {
   'volume.threshold': 'trigger',
@@ -386,6 +393,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['volume.threshold'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -450,6 +458,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['volatility.atr_threshold'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -515,6 +524,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['strategy.time_window'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -576,6 +586,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['oscillator.rsi_lte'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -629,6 +640,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['oscillator.rsi_gte'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -682,6 +694,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['bollinger.touch_upper'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -738,6 +751,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['bollinger.touch_lower'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -794,6 +808,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['bollinger.touch_middle'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -849,6 +864,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['price.percent_change'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -900,6 +916,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['price.breakout_up'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -948,6 +965,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['price.breakout_down'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -996,6 +1014,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['price.detect.indicator_boundary'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1064,6 +1083,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['indicator.cross_over'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1140,6 +1160,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['indicator.cross_under'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1213,6 +1234,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['indicator.above'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1260,6 +1282,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['indicator.below'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1310,6 +1333,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: true,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['execution.on_start'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1358,6 +1382,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['trend.direction'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1408,6 +1433,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['market.regime'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1459,6 +1485,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['volatility.state'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1509,6 +1536,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['price.range_position_lte'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1555,6 +1583,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['price.range_position_gte'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1609,6 +1638,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['indicator.divergence'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1685,6 +1715,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['price.candle_pattern'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1764,6 +1795,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['price.chart_pattern'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1836,6 +1868,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['liquidity.sweep'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1912,6 +1945,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['external.signal'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -1978,6 +2012,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: ['position.no_position'],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['position.has_position'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -2033,6 +2068,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: ['position.has_position'],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['position.no_position'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -2125,6 +2161,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: true,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     surface: {
       intent: {
         // critic m1 fix: 删除 '加码'/'追仓'（extractor/utterance/fixture 全仓 0 命中的凭空同义词）
@@ -2190,6 +2227,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: true,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     surface: {
       intent: {
         keywords: ['反手', '翻仓', '反向开仓', '反转持仓', 'reverse position', 'flip position'] as const,
@@ -2229,6 +2267,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: true,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['action.open_long'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -2268,6 +2307,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: true,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['action.close_long'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -2306,6 +2346,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: true,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['action.open_short'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -2342,6 +2383,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: true,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['action.close_short'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -2391,6 +2433,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: ATOM_MUTEX['risk.partial_take_profit'] ?? [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['risk.partial_take_profit'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -2446,6 +2489,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['portfolioRisk.drawdown_block'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -2533,6 +2577,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: true,
     sizingEvidence: DCA_SIZING_EVIDENCE,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['position.dca_schedule'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -2598,6 +2643,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: true,
     sizingEvidence: PYRAMIDING_SIZING_EVIDENCE,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['position.pyramiding_limit'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -2650,6 +2696,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: true,
     sizingEvidence: GRID_SIZING_EVIDENCE,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['grid.range_rebalance'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -2714,6 +2761,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['gate.regime'],
       paramRenderers: {
@@ -2799,6 +2847,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['portfolioRisk.symbol_exposure_cap'],
       paramRenderers: {
@@ -2881,6 +2930,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['portfolioRisk.substrategy_exposure_cap'],
       paramRenderers: {
@@ -2972,6 +3022,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['program.dynamic_grid'],
       paramRenderers: {
@@ -3054,6 +3105,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['program.fixed_grid_gated'],
       paramRenderers: {
@@ -3146,6 +3198,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['program.adaptive_volatility_grid'],
       paramRenderers: {
@@ -3257,6 +3310,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['program.event_listener'],
       paramRenderers: {
@@ -3331,6 +3385,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['scope.symbol'],
       paramRenderers: {
@@ -3405,6 +3460,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['scope.leg'],
       paramRenderers: {
@@ -3509,6 +3565,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['scope.timeframe'],
       paramRenderers: {
@@ -3579,6 +3636,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['scope.dataSource'],
       paramRenderers: {
@@ -3644,6 +3702,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['scope.subStrategy'],
       paramRenderers: {
@@ -3716,6 +3775,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
     display: {
       publicName: ATOM_PUBLIC_NAMES['gate.subStrategy'],
       paramRenderers: {

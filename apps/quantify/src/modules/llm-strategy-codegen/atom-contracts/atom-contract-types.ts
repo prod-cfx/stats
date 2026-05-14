@@ -93,6 +93,45 @@ export interface SizingEvidence {
   readonly paramSource: string
 }
 
+// =========================================================
+// AtomClassifier — classifier metadata (Issue #1334 PR1)
+// =========================================================
+
+export interface AtomClassifierUnsupportedMeta {
+  reasonCode: string
+  publicReasonZh: string
+  publicReasonEn?: string
+}
+
+/**
+ * Classifier supportStatus 联合类型 —— 兼供类型层与 invariant spec 共享单一真相源。
+ *   supported_executable                              → 当前可执行
+ *   unsupported_unknown                               → 未知/未注册
+ *   unsupported_${reasonCode}_public_beta_unsupported → 已知但公测阶段不支持
+ */
+export type AtomClassifierSupportStatus =
+  | 'supported_executable'
+  | 'unsupported_unknown'
+  | `unsupported_${string}_public_beta_unsupported`
+
+/**
+ * Classifier 元数据 —— 判别联合，按 supportStatus 强制配对 unsupportedMeta / executableSinceVersion。
+ *
+ *   supported_executable      → executableSinceVersion?（可选版本门控）；禁止 unsupportedMeta
+ *   unsupported_*             → unsupportedMeta 必填；禁止 executableSinceVersion
+ */
+export type AtomClassifier =
+  | {
+      supportStatus: 'supported_executable'
+      executableSinceVersion?: string
+      contractSubstrate?: 'default' | 'custom'
+    }
+  | {
+      supportStatus: Exclude<AtomClassifierSupportStatus, 'supported_executable'>
+      unsupportedMeta: AtomClassifierUnsupportedMeta
+      contractSubstrate?: 'default' | 'custom'
+    }
+
 export interface AtomContract<TParams = Record<string, unknown>> {
   /** atom 自身 key；PR1b 起导出 registry 时由单一真相源补齐 */
   key: AtomContractKey
@@ -192,6 +231,13 @@ export interface AtomContract<TParams = Record<string, unknown>> {
    * PR3a 阶段：在 IR compiler refactor 时真实兑现，反转 `_IrShapeAllStub` invariant。
    */
   emit: AtomContractEmit
+
+  /**
+   * Classifier 元数据（Issue #1334 PR1）——
+   * 取代 SemanticAtomRegistryService.ATOMS 内的 supportStatus / executableSinceVersion 等字段。
+   * PR1 默认值全部填 supported_executable；PR2 迁移 legacy ATOMS 非默认值条目。
+   */
+  classifier: AtomClassifier
 }
 
 export type AtomContractKey = SupportedAtomKey
