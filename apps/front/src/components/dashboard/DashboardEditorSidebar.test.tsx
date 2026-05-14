@@ -24,7 +24,10 @@ jest.mock('@/lib/toast', () => ({
   },
 }))
 
-;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
+Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
+  configurable: true,
+  value: true,
+})
 
 function seedDashboards() {
   window.localStorage.setItem(
