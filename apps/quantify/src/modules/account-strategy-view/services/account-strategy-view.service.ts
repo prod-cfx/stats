@@ -1,3 +1,4 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
 import type { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
 import type {
@@ -10,13 +11,13 @@ import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list-q
 import type { AccountStrategyUpdateExecutionLeverageDto } from '../dto/account-strategy-update-execution-leverage.dto'
 import type { StrategyInstanceStatsDto } from '@/modules/strategy-instances/dto/strategy-instance-stats.dto'
 import type { StrategySignalsRuntimeConfig } from '@/modules/strategy-signals/types/strategy-signals-config.type'
+import type { StrategyFundingSnapshot } from '@/modules/trading/core/strategy-buying-power.resolver'
 import type { ExchangeId, MarketType, UnifiedBalance, UnifiedOrder } from '@/modules/trading/core/types'
-import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { PrismaClient } from '@/prisma/prisma.types'
 import { createHash } from 'node:crypto'
+import { ErrorCode } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { TransactionHost } from '@nestjs-cls/transactional'
-import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { ConfigService } from '@nestjs/config'
@@ -24,24 +25,18 @@ import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { GridRuntimeService } from '@/modules/grid-runtime/services/grid-runtime.service'
-// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
-import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
 // Phase 5 S3 (#1109): scope.timeframe live publication-time gate
 import { ScopeTimeframeLiveUnsupportedException } from '@/modules/llm-strategy-codegen/exceptions/scope-timeframe-live-unsupported.exception'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
-import { PositionsService } from '@/modules/positions/positions.service'
-// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { PositionSyncService } from '@/modules/positions/position-sync.service'
-import {
-  resolveStrategyFundingFromExchangeBalance,
-  resolveStrategyFundingFromStrategyAccount,
-  type StrategyFundingSnapshot,
-} from '@/modules/trading/core/strategy-buying-power.resolver'
-import { normalizeExecutionSymbol } from '@/modules/trading/core/symbol-normalizer'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { PositionsService } from '@/modules/positions/positions.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { StrategyInstanceStatsService } from '@/modules/strategy-instances/services/strategy-instance-stats.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
@@ -49,6 +44,11 @@ import { StrategyInstancesService } from '@/modules/strategy-instances/services/
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { StrategyRuntimeExecutionStateService } from '@/modules/strategy-signals/services/strategy-runtime-execution-state.service'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
+import {
+  resolveStrategyFundingFromExchangeBalance,
+  resolveStrategyFundingFromStrategyAccount,
+} from '@/modules/trading/core/strategy-buying-power.resolver'
+import { normalizeExecutionSymbol } from '@/modules/trading/core/symbol-normalizer'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { TradingService } from '@/modules/trading/trading.service'
 import { Prisma } from '@/prisma/prisma.types'
@@ -164,19 +164,32 @@ export class AccountStrategyViewService {
       })
       const symbol = this.readString(mergedParams, ['symbol'])
 
-      let fallback = null as Awaited<ReturnType<typeof this.buildAccountFallbackMetrics>> | null
-      try {
-        fallback = await this.buildAccountFallbackMetrics(
-          query.userId,
-          (item as { strategyTemplateId?: string | null }).strategyTemplateId ?? null,
-        )
-      } catch {
-        fallback = null
-      }
-
       const statsReturnPct = this.readStatsNumber(stats, 'totalPnlRate')
       const statsWinRatePct = this.readStatsNumber(stats, 'winRate')
       const statsTradeCount = this.readStatsNumber(stats, 'totalTradesCount')
+      const statsMaxDrawdownPct = this.readStatsNumber(stats, 'maxDrawdown')
+
+      let fallback = null as Awaited<ReturnType<typeof this.buildAccountFallbackMetrics>> | null
+      if (this.needsAccountFallbackMetrics({
+        returnPct: statsReturnPct,
+        maxDrawdownPct: statsMaxDrawdownPct,
+        winRatePct: statsWinRatePct,
+        tradeCount: statsTradeCount,
+      })) {
+        try {
+          fallback = await this.buildAccountFallbackMetrics(
+            query.userId,
+            (item as { strategyTemplateId?: string | null }).strategyTemplateId ?? null,
+            {
+              startedAt: (item as { startedAt?: Date | null }).startedAt
+                ?? (item as { createdAt?: Date | null }).createdAt
+                ?? item.updatedAt,
+            },
+          )
+        } catch {
+          fallback = null
+        }
+      }
 
       return {
         id: item.id,
@@ -190,7 +203,10 @@ export class AccountStrategyViewService {
         isSubscribed: item.subscribed,
         metrics: {
           returnPct: this.pickStatsOrFallbackMetric(statsReturnPct, fallback?.returnPct),
-          maxDrawdownPct: this.readStatsNumber(stats, 'maxDrawdown'),
+          maxDrawdownPct: this.pickStatsOrFallbackMetric(
+            statsMaxDrawdownPct,
+            fallback?.maxDrawdownPct,
+          ),
           winRatePct: this.pickStatsOrFallbackMetric(statsWinRatePct, fallback?.winRatePct),
           tradeCount: this.pickStatsOrFallbackMetric(statsTradeCount, fallback?.tradeCount),
         },
@@ -239,6 +255,7 @@ export class AccountStrategyViewService {
         ?? null,
     )
     const marketType = this.resolveMarketType(mergedParams, symbol, exchangeId)
+    const lifecycleStartAt = row.startedAt ?? row.createdAt ?? row.updatedAt
 
     const account = await this.repo.findUserStrategyAccount(userId, row.strategyTemplateId)
       ?? (normalizedSymbol
@@ -268,16 +285,16 @@ export class AccountStrategyViewService {
     }
 
     const closedPositionRows = account
-      ? await this.repo.loadClosedPositionPnlSeries?.(account.id) ?? []
+      ? await this.repo.loadClosedPositionPnlSeries?.(account.id, 500, lifecycleStartAt) ?? []
       : []
     const positionFinancials = account
-      ? await this.repo.loadPositionFinancials?.(account.id) ?? null
+      ? await this.repo.loadPositionFinancials?.(account.id, lifecycleStartAt) ?? null
       : null
     const openPositionsForValuation = account
-      ? await this.repo.loadOpenPositionsForValuation?.(account.id) ?? []
+      ? await this.repo.loadOpenPositionsForValuation?.(account.id, lifecycleStartAt) ?? []
       : []
     const tradeStats = account
-      ? await this.repo.loadTradeStats(account.id)
+      ? await this.repo.loadTradeStats(account.id, lifecycleStartAt)
       : { tradeCount: 0, closedCount: 0, winningCount: 0 }
     const hasLocalActivity = this.hasLocalStrategyActivity({
       account,
@@ -340,7 +357,7 @@ export class AccountStrategyViewService {
       ? exchangeFundingSnapshot?.totalEquity ?? resolvedTotalEquity
       : paramsFundingSnapshot?.totalEquity ?? null
     const overviewAvailableBalance = account
-      ? exchangeFundingSnapshot?.buyingPower ?? this.toFiniteNumber(account.balance)
+      ? exchangeFundingSnapshot?.buyingPower ?? resolvedAvailableBalance
       : paramsFundingSnapshot?.buyingPower ?? null
     const overviewBaseCurrency = account
       ? exchangeFundingSnapshot?.asset ?? this.readAccountBaseCurrency(account)
@@ -369,8 +386,6 @@ export class AccountStrategyViewService {
     const returnPct = investedAmount > 0
       ? Number(((totalPnl / investedAmount) * 100).toFixed(2))
       : 0
-
-    const lifecycleStartAt = row.startedAt ?? row.createdAt ?? row.updatedAt
 
     const derivedEquitySeries = account
       ? this.buildIndustryEquitySeries({
@@ -1826,11 +1841,23 @@ export class AccountStrategyViewService {
     return typeof value === 'number' && Number.isFinite(value) ? value : null
   }
 
-  private pickStatsOrFallbackMetric(statsValue: number | null, fallbackValue: number | null): number | null {
-    if (statsValue == null) return fallbackValue
-    if (fallbackValue == null) return statsValue
-    if (statsValue === 0 && fallbackValue !== 0) return fallbackValue
+  private pickStatsOrFallbackMetric(
+    statsValue: number | null,
+    fallbackValue: number | null | undefined,
+  ): number | null {
+    if (statsValue == null) return fallbackValue ?? null
     return statsValue
+  }
+
+  private needsAccountFallbackMetrics(metrics: {
+    returnPct: number | null
+    maxDrawdownPct: number | null
+    winRatePct: number | null
+    tradeCount: number | null
+  }): boolean {
+    return metrics.returnPct == null
+      || metrics.winRatePct == null
+      || metrics.tradeCount == null
   }
 
   private readFundingSnapshot(params: unknown): StrategyFundingSnapshot | null {
@@ -1861,8 +1888,13 @@ export class AccountStrategyViewService {
     }
   }
 
-  private async buildAccountFallbackMetrics(userId: string, strategyTemplateId: string | null): Promise<{
+  private async buildAccountFallbackMetrics(
+    userId: string,
+    strategyTemplateId: string | null,
+    options: { startedAt: Date },
+  ): Promise<{
     returnPct: number | null
+    maxDrawdownPct: number | null
     winRatePct: number | null
     tradeCount: number | null
   } | null> {
@@ -1871,16 +1903,41 @@ export class AccountStrategyViewService {
     const account = await this.repo.findUserStrategyAccount?.(userId, strategyTemplateId) as StrategyAccountFallback | null
     if (!account) return null
 
-    const tradeStats = await this.repo.loadTradeStats?.(account.id)
+    const [
+      tradeStats,
+      positionFinancials,
+      closedPositionRows,
+      equityRows,
+    ] = await Promise.all([
+      this.repo.loadTradeStats?.(account.id, options.startedAt),
+      this.repo.loadPositionFinancials?.(account.id, options.startedAt) ?? Promise.resolve(null),
+      this.repo.loadClosedPositionPnlSeries?.(account.id, 500, options.startedAt) ?? Promise.resolve([]),
+      this.repo.loadEquitySeries?.(account.id) ?? Promise.resolve([]),
+    ])
     if (!tradeStats) return null
-    const totalPnl = Number(account.totalRealizedPnl) + Number(account.totalUnrealizedPnl)
-    const invested = Number(account.initialBalance)
+    const totalRealizedPnl = this.toFiniteNumber(positionFinancials?.totalRealizedPnl) ?? 0
+    const totalUnrealizedPnl = this.toFiniteNumber(positionFinancials?.totalUnrealizedPnl) ?? 0
+    const totalPnl = totalRealizedPnl + totalUnrealizedPnl
+    const invested = this.toFiniteNumber(account.initialBalance) ?? 0
+    const currentEquity = Number((invested + totalPnl).toFixed(8))
+    const derivedEquitySeries = this.buildIndustryEquitySeries({
+      initialBalance: invested,
+      totalRealizedPnl,
+      totalUnrealizedPnl,
+      closedPositionRows,
+      startedAt: options.startedAt,
+      dailyRows: equityRows,
+      currentEquity,
+    })
 
     return {
       returnPct: invested > 0 ? Number(((totalPnl / invested) * 100).toFixed(2)) : 0,
+      maxDrawdownPct: derivedEquitySeries.length > 0
+        ? this.computeMaxDrawdownPct(derivedEquitySeries)
+        : null,
       winRatePct: tradeStats.closedCount > 0
         ? Number(((tradeStats.winningCount / tradeStats.closedCount) * 100).toFixed(2))
-        : 0,
+        : null,
       tradeCount: tradeStats.tradeCount,
     }
   }
@@ -1955,6 +2012,10 @@ export class AccountStrategyViewService {
       .filter(item => Number.isFinite(item.value))
 
     if (dailyPoints.length > 0) {
+      dailyPoints.unshift({
+        ts: input.startedAt.toISOString(),
+        value: Number(initial.toFixed(8)),
+      })
       dailyPoints.push({
         ts: now.toISOString(),
         value: Number(currentEquity.toFixed(8)),

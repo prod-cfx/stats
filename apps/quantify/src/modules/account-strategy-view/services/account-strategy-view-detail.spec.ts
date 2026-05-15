@@ -1613,6 +1613,11 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
           realizedPnl: 10,
         },
       ]),
+      loadPositionFinancials: jest.fn().mockResolvedValue({
+        openCostBasis: 0,
+        totalRealizedPnl: 10,
+        totalUnrealizedPnl: 0,
+      }),
       loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 1, closedCount: 1, winningCount: 1 }),
       loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 1 }),
       loadTimeline: jest.fn().mockResolvedValue({
@@ -1634,8 +1639,60 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     )
     const detail = await service.getStrategyDetail('user-1', 'inst-dd')
 
+    expect(repo.loadTradeStats).toHaveBeenCalledWith('acc-dd', new Date('2026-03-20T10:00:00.000Z'))
+    expect(repo.loadPositionFinancials).toHaveBeenCalledWith('acc-dd', new Date('2026-03-20T10:00:00.000Z'))
+    expect(repo.loadClosedPositionPnlSeries).toHaveBeenCalledWith('acc-dd', 500, new Date('2026-03-20T10:00:00.000Z'))
     expect(detail.metrics.maxDrawdownPct).toBe(0)
     expect(detail.equitySeries.every(item => item.value > 1000)).toBe(true)
+  })
+
+  it('keeps started baseline when computing drawdown from daily equity rows', async () => {
+    const startedAt = new Date('2026-03-20T10:00:00.000Z')
+    const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-daily-dd',
+        name: 'Daily drawdown guard',
+        status: 'running',
+        createdBy: 'user-1',
+        params: { symbol: 'BTCUSDT' },
+        strategyTemplateId: 'tpl-1',
+        strategyTemplate: { defaultParams: {} },
+        subscriptions: [{ userId: 'user-1', status: 'active', customParams: {} }],
+        startedAt,
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue({
+        id: 'acc-daily-dd',
+        initialBalance: 1000,
+        equity: 900,
+        totalRealizedPnl: -100,
+        totalUnrealizedPnl: 0,
+      }),
+      loadEquitySeries: jest.fn().mockResolvedValue([
+        { date: new Date('2026-03-20T23:59:00.000Z'), equityEnd: 900 },
+      ]),
+      loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: startedAt },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn() } as any,
+    )
+
+    const detail = await service.getStrategyDetail('user-1', 'inst-daily-dd')
+
+    expect(detail.equitySeries[0]).toEqual(expect.objectContaining({ ts: startedAt.toISOString(), value: 1000 }))
+    expect(detail.metrics.maxDrawdownPct).toBe(10)
   })
 
   it('returns null dynamic param fields when strategy template schema is missing', async () => {
@@ -2027,6 +2084,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     )
     const detail = await service.getStrategyDetail('user-1', 'inst-live')
 
+    expect(repo.loadOpenPositionsForValuation).toHaveBeenCalledWith('acc-live', new Date('2026-03-20T10:00:00.000Z'))
     expect(detail.positionOverview).toEqual({
       openPositionsCount: 1,
       closedPositionsCount: 0,

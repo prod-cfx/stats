@@ -13,8 +13,8 @@ export class StrategyInstanceStatsDto {
   @ApiProperty({ description: '累计盈亏 (USDT)', example: 860.0 })
   totalPnl: number
 
-  @ApiProperty({ description: '累计收益率 (%)', example: 17.2 })
-  totalPnlRate: number
+  @ApiProperty({ description: '累计收益率 (%)', example: 17.2, required: false })
+  totalPnlRate?: number
 
   @ApiProperty({ description: '今日盈亏 (USDT)', example: 126.4, required: false })
   todayPnl?: number
@@ -28,11 +28,12 @@ export class StrategyInstanceStatsDto {
   @ApiProperty({ description: '已平仓数量', example: 16 })
   closedPositionsCount: number
 
-  @ApiProperty({ 
-    description: '平仓总数（用于计算胜率，与 closedPositionsCount 相同）', 
-    example: 19 
+  @ApiProperty({
+    description: '平仓总数（用于计算胜率，与 closedPositionsCount 相同）',
+    example: 19,
+    required: false,
   })
-  totalTradesCount: number
+  totalTradesCount?: number
 
   @ApiProperty({ description: '盈利平仓数', example: 15 })
   winningTradesCount: number

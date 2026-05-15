@@ -588,6 +588,8 @@ export class AccountStrategyViewRepository {
           : null,
         metadata: item.strategyTemplate?.metadata as Record<string, unknown> | null,
         customParams: userSub?.customParams as Record<string, unknown> | null,
+        startedAt: item.startedAt,
+        createdAt: item.createdAt,
         updatedAt: item.updatedAt,
         subscribed: isSubscribed,
         viewOnlyAt: item.viewOnlyAt ?? null,
@@ -976,11 +978,12 @@ export class AccountStrategyViewRepository {
 
   async loadEquitySeries(accountId: string, limit = 120) {
     const client = this.txHost.tx
-    return client.strategyPnlDaily.findMany({
+    const rows = await client.strategyPnlDaily.findMany({
       where: { userStrategyAccountId: accountId },
-      orderBy: { date: 'asc' },
+      orderBy: { date: 'desc' },
       take: limit,
     })
+    return rows.reverse()
   }
 
   async loadLatestDailySnapshot(accountId: string) {
@@ -991,17 +994,25 @@ export class AccountStrategyViewRepository {
     })
   }
 
-  async loadTradeStats(accountId: string) {
+  async loadTradeStats(accountId: string, startedAt?: Date) {
     const client = this.txHost.tx
+    const tradeWhere: Prisma.TradeWhereInput = {
+      userStrategyAccountId: accountId,
+      ...(startedAt ? { executedAt: { gte: startedAt } } : {}),
+    }
+    const closedPositionWhere: Prisma.PositionWhereInput = {
+      userStrategyAccountId: accountId,
+      status: 'CLOSED',
+      ...(startedAt ? { closedAt: { gte: startedAt } } : {}),
+    }
     const [tradeCount, closedCount, winningCount] = await Promise.all([
-      client.trade.count({ where: { userStrategyAccountId: accountId } }),
+      client.trade.count({ where: tradeWhere }),
       client.position.count({
-        where: { userStrategyAccountId: accountId, status: 'CLOSED' },
+        where: closedPositionWhere,
       }),
       client.position.count({
         where: {
-          userStrategyAccountId: accountId,
-          status: 'CLOSED',
+          ...closedPositionWhere,
           realizedPnl: { gt: 0 },
         },
       }),
@@ -1031,23 +1042,27 @@ export class AccountStrategyViewRepository {
     }
   }
 
-  async loadPositionFinancials(accountId: string) {
+  async loadPositionFinancials(accountId: string, startedAt?: Date) {
     const client = this.txHost.tx
+    const closedPositionWhere: Prisma.PositionWhereInput = {
+      userStrategyAccountId: accountId,
+      status: 'CLOSED',
+      ...(startedAt ? { closedAt: { gte: startedAt } } : {}),
+    }
+    const openPositionWhere: Prisma.PositionWhereInput = {
+      userStrategyAccountId: accountId,
+      status: 'OPEN',
+      ...(startedAt ? { openedAt: { gte: startedAt } } : {}),
+    }
     const [closedAggregate, openPositions] = await Promise.all([
       client.position.aggregate({
-        where: {
-          userStrategyAccountId: accountId,
-          status: 'CLOSED',
-        },
+        where: closedPositionWhere,
         _sum: {
           realizedPnl: true,
         },
       }),
       client.position.findMany({
-        where: {
-          userStrategyAccountId: accountId,
-          status: 'OPEN',
-        },
+        where: openPositionWhere,
         select: {
           quantity: true,
           avgEntryPrice: true,
@@ -1072,12 +1087,13 @@ export class AccountStrategyViewRepository {
     }
   }
 
-  async loadOpenPositionsForValuation(accountId: string) {
+  async loadOpenPositionsForValuation(accountId: string, startedAt?: Date) {
     const client = this.txHost.tx
     return client.position.findMany({
       where: {
         userStrategyAccountId: accountId,
         status: 'OPEN',
+        ...(startedAt ? { openedAt: { gte: startedAt } } : {}),
       },
       select: {
         symbol: true,
@@ -1108,12 +1124,13 @@ export class AccountStrategyViewRepository {
     })
   }
 
-  async loadClosedPositionPnlSeries(accountId: string, limit = 500) {
+  async loadClosedPositionPnlSeries(accountId: string, limit = 500, startedAt?: Date) {
     const client = this.txHost.tx
     return client.position.findMany({
       where: {
         userStrategyAccountId: accountId,
         status: 'CLOSED',
+        ...(startedAt ? { closedAt: { gte: startedAt } } : {}),
       },
       orderBy: {
         closedAt: 'asc',
