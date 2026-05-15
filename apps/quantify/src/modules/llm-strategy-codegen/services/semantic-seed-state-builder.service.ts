@@ -1609,6 +1609,31 @@ export class SemanticSeedStateBuilderService {
 
     if (key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) {
       const range = this.resolveGridRange(params)
+      // Issue #1391：中心偏移网格（用户表达"以部署时当前价为中心、上下各 N% 共 M 格"）
+      //   走 'centered_percent_range' 模式，centerTiming='deployment' 让 runtime 在
+      //   onStart 用当前价作为中心、halfRangePct=centerOffsetPct 派生 range、
+      //   levels 映射到 gridIntervals/gridCount。canonical-spec-builder 已支持该 mode。
+      if (!range) {
+        const centerOffsetPct = this.readFiniteNumberParam(params, ['centerOffsetPct'])
+        const levels = this.readFiniteNumberParam(params, ['levels'])
+        if (centerOffsetPct !== null && centerOffsetPct > 0 && levels !== null && levels >= 2) {
+          return {
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: this.toCapabilityShape({
+              mode: 'centered_percent_range',
+              centerTiming: 'deployment',
+              centerSource: 'last_price',
+              halfRangePct: centerOffsetPct,
+              gridIntervals: levels,
+              gridCount: levels,
+              spacingMode: 'arithmetic',
+              ...this.resolveGridDensityShape(params),
+            }),
+          }
+        }
+      }
       return {
         domain: 'price',
         verb: 'define',
@@ -2167,13 +2192,32 @@ export class SemanticSeedStateBuilderService {
     index: number,
   ): SemanticAtomContract {
     const range = this.resolveGridRange(params)
-    const levelSetShape = this.toCapabilityShape({
-      mode: 'fixed_range',
-      lower: range?.lower ?? null,
-      upper: range?.upper ?? null,
-      spacingMode: 'arithmetic',
-      ...this.resolveGridDensityShape(params),
-    })
+    // Issue #1391：中心偏移模式（"以部署时当前价为中心、上下各 N% 共 M 格"）
+    //   走 'centered_percent_range'，centerTiming='deployment' 让 runtime 在 onStart
+    //   用当前价做中心、halfRangePct=centerOffsetPct 派生 range；canonical-spec-builder
+    //   的 projectLevelSetCapabilityKey 已支持该 mode。
+    const centerOffsetPct = this.readFiniteNumberParam(params, ['centerOffsetPct'])
+    const levels = this.readFiniteNumberParam(params, ['levels'])
+    const useCenteredMode = !range && centerOffsetPct !== null && centerOffsetPct > 0
+      && levels !== null && levels >= 2
+    const levelSetShape = useCenteredMode
+      ? this.toCapabilityShape({
+          mode: 'centered_percent_range',
+          centerTiming: 'deployment',
+          centerSource: 'last_price',
+          halfRangePct: centerOffsetPct,
+          gridIntervals: levels,
+          gridCount: levels,
+          spacingMode: 'arithmetic',
+          ...this.resolveGridDensityShape(params),
+        })
+      : this.toCapabilityShape({
+          mode: 'fixed_range',
+          lower: range?.lower ?? null,
+          upper: range?.upper ?? null,
+          spacingMode: 'arithmetic',
+          ...this.resolveGridDensityShape(params),
+        })
     const perGridSizing = this.resolveGridPerOrderSizingShape(params)
     const capabilities: SemanticCapability[] = [
       {

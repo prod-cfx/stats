@@ -1,6 +1,14 @@
 import type { CodegenSemanticPatch } from '../../types/codegen-semantic-patch'
 import type { SemanticState } from '../../types/semantic-state'
 import type { StrategyClarificationState } from '../../types/strategy-clarification'
+import type { Bar } from '@/modules/backtesting/types/backtesting.types'
+import { BacktestRunnerService } from '@/modules/backtesting/core/backtest-runner.service'
+import { PortfolioLedgerServiceFactory } from '@/modules/backtesting/portfolio/portfolio-ledger.service'
+import { BacktestReporterService } from '@/modules/backtesting/report/backtest-reporter.service'
+import { RiskEvaluatorService } from '@/modules/backtesting/risk/risk-evaluator.service'
+import { BacktestStrategyAdapterService } from '@/modules/backtesting/services/backtest-strategy-adapter.service'
+import { StateEngineService } from '@/modules/backtesting/state/state-engine.service'
+import { TheoreticalExecutionModel } from '@/modules/backtesting/execution/theoretical-execution.model'
 import { CURRENT_SEMANTIC_VERSION } from '../../nl-gateway/version-gate/version-gate'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
@@ -175,10 +183,10 @@ describe('user reported five strategies: entry -> middle -> publication generati
       publication: true,
     },
     {
-      name: '策略10 现货网格中心偏移（S6 grid center-offset）',
+      name: '策略10 现货网格中心偏移（S6 grid center-offset → centered_percent_range/deployment）',
       message: 'OKX 现货 ETHUSDT、1m 网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT、限价单并相邻网格自动挂反向单、不用趋势信号开仓；当价格突破上下边界时执行"立即停止并撤销所有未成交订单"',
       expectedAnyKeys: ['grid.range_rebalance'],
-      publication: false,
+      publication: true,
     },
   ]
 
@@ -216,12 +224,97 @@ describe('user reported five strategies: entry -> middle -> publication generati
       expect(canonicalSpec.dataRequirements.requiredTimeframes[0] ?? canonicalSpec.market.defaultTimeframe).toBeTruthy()
       const artifacts = await createPublicationStage().generate({ semanticState: state })
 
-      expect(artifacts.canonicalSpec.rules.length).toBeGreaterThanOrEqual(2)
+      // 双路径接受：常规策略走 rules，grid 程序走 orderPrograms（与 canonical spec 设计一致）
+      const ruleCount = artifacts.canonicalSpec.rules.length
+      const programCount = artifacts.canonicalSpec.orderPrograms?.length ?? 0
+      expect(ruleCount >= 2 || programCount >= 1).toBe(true)
       expect(artifacts.compiledScript).toContain('protocolVersion')
       expect(artifacts.compiledScript).toContain('onBar')
       expect(artifacts.validation.passed).toBe(true)
       expect(artifacts.semanticAtomInvariant.status).toBe('PASSED')
       assertNoForbiddenUserText(artifacts.compiledScript)
+    })
+
+    it(`${strategy.name}: 回测装载——BacktestStrategyAdapter 可加载 compiled script`, async () => {
+      const state = buildStateFromUserMessage(strategy.message)
+      const artifacts = await createPublicationStage().generate({ semanticState: state })
+      // BacktestStrategyAdapter 用 CompiledScriptParser 解析脚本并构造 onBar 回调，
+      //   是 backtest runner 实际消费 compiledScript 的入口。能成功 build 即证明
+      //   compiledScript 的 expr pool / guards / risk predicates / decision programs /
+      //   orderPrograms 拓扑都能被运行时正确装载。
+      const adapter = new BacktestStrategyAdapterService()
+      const built = await adapter.build({
+        id: `e2e-${strategy.name}`,
+        protocolVersion: 'v1',
+        scriptCode: artifacts.compiledScript,
+        params: {
+          exchange: 'binance',
+          marketType: 'perp',
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+        },
+      })
+      expect(built).toBeTruthy()
+      expect(typeof built.fn).toBe('function')
+    })
+
+    it(`${strategy.name}: 真实回测——BacktestRunnerService 跑通 mock OHLCV 不抛错`, async () => {
+      const state = buildStateFromUserMessage(strategy.message)
+      const artifacts = await createPublicationStage().generate({ semanticState: state })
+      const adapter = new BacktestStrategyAdapterService()
+      const symbol = state.contextSlots.symbol?.value ?? 'BTCUSDT'
+      const timeframe = state.contextSlots.timeframe?.value ?? artifacts.canonicalSpec.market.defaultTimeframe ?? '15m'
+      const built = await adapter.build({
+        id: `runtime-${strategy.name}`,
+        protocolVersion: 'v1',
+        scriptCode: artifacts.compiledScript,
+        params: {
+          exchange: state.contextSlots.exchange?.value ?? 'binance',
+          marketType: state.contextSlots.marketType?.value ?? 'perp',
+          symbol,
+          timeframe,
+        },
+      })
+      // 50 根 mock OHLCV 走小幅度震荡，覆盖触发 / 不触发两侧
+      const bars: Bar[] = []
+      const intervalMs = 15 * 60 * 1000
+      let price = 100
+      for (let i = 0; i < 50; i += 1) {
+        const closeTime = (i + 1) * intervalMs
+        const drift = Math.sin(i / 5) * 1.5
+        const open = price
+        const close = +(price + drift).toFixed(4)
+        const high = +(Math.max(open, close) + 0.5).toFixed(4)
+        const low = +(Math.min(open, close) - 0.5).toFixed(4)
+        bars.push({ symbol, timeframe, openTime: closeTime - intervalMs, closeTime, open, high, low, close, volume: 100 + i })
+        price = close
+      }
+      const runner = new BacktestRunnerService(
+        new TheoreticalExecutionModel(),
+        new PortfolioLedgerServiceFactory(),
+        new BacktestReporterService(),
+        new StateEngineService(),
+        new RiskEvaluatorService(),
+      )
+      const report = await runner.run({
+        symbols: [symbol],
+        baseTimeframe: timeframe,
+        stateTimeframes: [],
+        initialCash: 10000,
+        leverage: 1,
+        execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+        strategy: {
+          id: built.id,
+          params: built.params,
+          fn: built.fn,
+        },
+        dataRange: { fromTs: bars[0]!.closeTime, toTs: bars.at(-1)!.closeTime },
+        bars,
+      })
+      // 回测引擎跑通 = 报告对象返回；trades 数量 / 终值不强断言（depends on price path）
+      expect(report).toBeTruthy()
+      expect(report.equityCurve).toBeDefined()
+      expect(report.equityCurve.length).toBeGreaterThanOrEqual(1)
     })
   }
 
