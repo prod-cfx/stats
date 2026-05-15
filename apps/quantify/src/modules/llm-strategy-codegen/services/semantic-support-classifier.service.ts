@@ -227,20 +227,7 @@ export class SemanticSupportClassifierService {
   }
 
   private resolveTriggerSupport(trigger: SemanticTriggerState): ResolvedSemanticAtom {
-    if (isExecutableIndicatorReferenceAlias(trigger)) {
-      const resolved = this.registry.get(toExecutableIndicatorReferenceAliasRegistryKey(trigger))
-
-      return {
-        ...resolved,
-        key: trigger.key,
-        requiredParams: ['indicator', 'referenceRole', 'reference.period'],
-        defaultableParams: ['confirmationMode'],
-        executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
-        openSlots: [],
-      }
-    }
-
-    return this.registry.resolve(trigger.key)
+    return this.registry.resolve(trigger.key, trigger.params)
   }
 
   private applyRuntimeVersionGate(
@@ -292,31 +279,6 @@ export class SemanticSupportClassifierService {
       unknownAtoms.push(resolved.key)
     }
   }
-}
-
-function toExecutableIndicatorReferenceAliasRegistryKey(trigger: SemanticTriggerState): 'indicator.threshold_gte' | 'indicator.threshold_lte' {
-  return trigger.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key ? 'indicator.threshold_gte' : 'indicator.threshold_lte'
-}
-
-// MA/SMA/EMA price-vs-reference aliases are projection-supported; non-MA static compares remain recognized unsupported.
-function isExecutableIndicatorReferenceAlias(trigger: SemanticTriggerState): boolean {
-  if (trigger.key !== ATOM_CONTRACT_REGISTRY['indicator.above'].key && trigger.key !== ATOM_CONTRACT_REGISTRY['indicator.below'].key) {
-    return false
-  }
-
-  const params = trigger.params
-  const indicator = typeof params.indicator === 'string' ? params.indicator.trim().toLowerCase() : ''
-  const referenceRole = typeof params.referenceRole === 'string' ? params.referenceRole.trim() : ''
-  const referencePeriod = params['reference.period']
-  const hasReferencePeriod = typeof referencePeriod === 'number' && Number.isFinite(referencePeriod) && referencePeriod > 0
-  const hasReferencePeriodOpenSlot = trigger.openSlots.some(slot =>
-    slot.status === 'open'
-    && slot.affectsExecution
-    && /reference\.period/u.test(`${slot.slotKey}.${slot.fieldPath}`),
-  )
-  return (indicator === 'ma' || indicator === 'sma' || indicator === 'ema')
-    && referenceRole.length > 0
-    && (hasReferencePeriod || hasReferencePeriodOpenSlot)
 }
 
 function withSupportMetadata<

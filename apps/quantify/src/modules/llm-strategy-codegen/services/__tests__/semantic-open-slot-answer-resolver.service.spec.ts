@@ -619,7 +619,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
     })
   })
 
-  it('does not fallback to a level set slot when another clarification item is active', () => {
+  it('consumes an active position sizing clarification without falling back to a level set slot', () => {
     const positionSlot = {
       slotKey: 'position.sizing',
       fieldPath: 'position.sizing',
@@ -657,13 +657,20 @@ describe('semanticOpenSlotAnswerResolverService', () => {
       },
     })
 
-    expect(result).toEqual({
-      consumed: false,
-      nextState: state,
-    })
+    expectConsumed(result)
+    expect(result.answer).toEqual({})
+    expect(result.closedSlots).toEqual([{ slotKey: 'position.sizing', fieldPath: 'position.sizing' }])
+    expect(result.nextState.position).toEqual(expect.objectContaining({
+      mode: 'fixed_ratio',
+      value: 0.1,
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+      status: 'locked',
+      openSlots: [],
+    }))
+    expect(result.nextState.trigger[0].openSlots).toEqual([createOpenSlot('contract.shape.price.level_set.density')])
   })
 
-  it('does not skip the active position clarification to consume a later level set item', () => {
+  it('does not skip the active position sizing clarification to consume a later level set item', () => {
     const positionSlot = {
       slotKey: 'position.sizing',
       fieldPath: 'position.sizing',
@@ -710,10 +717,66 @@ describe('semanticOpenSlotAnswerResolverService', () => {
       },
     })
 
-    expect(result).toEqual({
-      consumed: false,
-      nextState: state,
+    expectConsumed(result)
+    expect(result.closedSlots).toEqual([{ slotKey: 'position.sizing', fieldPath: 'position.sizing' }])
+    expect(result.nextState.position).toEqual(expect.objectContaining({
+      mode: 'fixed_ratio',
+      value: 0.1,
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+      status: 'locked',
+      openSlots: [],
+    }))
+    expect(result.nextState.trigger[0].openSlots).toEqual([densitySlot])
+  })
+
+  it.each([
+    ['100usdt', 'fixed_quote', 100, { kind: 'quote', value: 100, asset: 'USDT' }],
+    ['100刀', 'fixed_quote', 100, { kind: 'quote', value: 100, asset: 'USDT' }],
+    ['1%', 'fixed_ratio', 0.01, { kind: 'ratio', value: 0.01, unit: 'ratio' }],
+    ['百分10', 'fixed_ratio', 0.1, { kind: 'ratio', value: 0.1, unit: 'ratio' }],
+  ] as const)('fills position sizing answer %s', (message, mode, value, sizing) => {
+    const positionSlot = {
+      slotKey: 'position.sizing',
+      fieldPath: 'position.sizing',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
+      affectsExecution: true,
+    } satisfies SemanticSlotState
+    const state = createSemanticState({
+      position: {
+        mode: 'fixed_ratio',
+        value: 0,
+        positionMode: 'long_only',
+        status: 'open',
+        source: 'derived',
+        openSlots: [positionSlot],
+      },
     })
+
+    const result = service.resolve({
+      currentState: state,
+      message,
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotId: buildSemanticSlotId(positionSlot),
+          slotKey: positionSlot.slotKey,
+          fieldPath: positionSlot.fieldPath,
+        }],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.closedSlotKeys).toEqual(['position.sizing'])
+    expect(result.nextState.position).toEqual(expect.objectContaining({
+      mode,
+      value,
+      sizing,
+      status: 'locked',
+      openSlots: [],
+    }))
   })
 })
 

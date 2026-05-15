@@ -166,6 +166,12 @@ export interface AtomContractSurface {
   }
   /** 参数槽位 schema（key 即 slot 名） */
   readonly paramSlots: Readonly<Record<string, ParamSlotSchema>>
+  /**
+   * 命中所需的最小参数集合。
+   * 用于区分同词根但语义更具体的 atom：例如 "ATR 作为止损" 应命中 risk.atr_stop，
+   * 不应因含 "止损" 生成缺 valuePct 的 risk.stop_loss_pct。
+   */
+  readonly matchRequires?: readonly string[]
   /** phase 推断策略 */
   readonly phaseResolver: PhaseResolverSpec
   /** sideScope 推断策略 */

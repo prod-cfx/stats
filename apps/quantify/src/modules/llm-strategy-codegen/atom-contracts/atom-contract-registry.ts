@@ -178,6 +178,9 @@ const ATOM_BUCKETS = {
   'action.close_long': 'action',
   'action.open_short': 'action',
   'action.close_short': 'action',
+  'risk.stop_loss_pct': 'risk',
+  'risk.take_profit_pct': 'risk',
+  'risk.atr_stop': 'risk',
   'risk.partial_take_profit': 'risk',
   'portfolioRisk.drawdown_block': 'orchestration',
   'position.dca_schedule': 'positionConstraint',
@@ -261,6 +264,9 @@ const ATOM_PUBLIC_NAMES = {
   'action.close_long': { zh: '平多', en: 'Close long' },
   'action.open_short': { zh: '开空', en: 'Open short' },
   'action.close_short': { zh: '平空', en: 'Close short' },
+  'risk.stop_loss_pct': { zh: '百分比止损', en: 'Percent stop loss' },
+  'risk.take_profit_pct': { zh: '百分比止盈', en: 'Percent take profit' },
+  'risk.atr_stop': { zh: 'ATR 动态止损', en: 'ATR stop' },
   'risk.partial_take_profit': { zh: '分批止盈', en: 'Partial take profit' },
   'portfolioRisk.drawdown_block': { zh: '组合回撤护栏', en: 'Portfolio drawdown guard' },
   'position.dca_schedule': { zh: 'DCA 补仓计划', en: 'DCA schedule' },
@@ -632,12 +638,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       intent: {
         keywords: ['RSI', 'rsi'] as const,
         verbs: {
-          lte: ['低于', '小于', '下方', '跌破', 'below', 'under', 'less than', 'falls below', 'drops below'] as const,
+          lte: ['≤', '<=', '低于或等于', '小于等于', '不高于', '低于', '小于', '下方', '跌破', 'below', 'under', 'less than or equal', 'less than', 'falls below', 'drops below'] as const,
         },
       },
       paramSlots: {
-        period: { kind: 'number', required: false, range: [1, 200], default: 14, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 200] } },
-        value: { kind: 'number', required: true, range: [0, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [0, 100] } },
+        period: { kind: 'number', required: false, range: [1, 200], default: 14, extractor: { kind: 'number-int', pattern: 'RSI\\s*\\(?\\s*(\\d+)', range: [1, 200] } },
+        value: { kind: 'number', required: true, range: [0, 100], extractor: { kind: 'number-int', pattern: '(?:≤|<=|低于或等于|小于等于|不高于|低于|小于|下方|跌破|below|under|less than or equal|less than|falls below|drops below)\\s*(\\d+)', range: [0, 100] } },
         thresholdRole: { kind: 'enum', required: false, enum: ['lower_threshold'], default: 'lower_threshold' },
       },
       phaseResolver: 'by-clause-verb',
@@ -686,12 +692,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       intent: {
         keywords: ['RSI', 'rsi', '超买'] as const,
         verbs: {
-          gte: ['高于', '大于', '超过', '上方', 'above', 'over', 'greater than'] as const,
+          gte: ['≥', '>=', '高于或等于', '大于等于', '不低于', '高于', '大于', '超过', '上方', 'above', 'over', 'greater than or equal', 'greater than'] as const,
         },
       },
       paramSlots: {
-        period: { kind: 'number', required: false, range: [1, 200], default: 14, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 200] } },
-        value: { kind: 'number', required: true, range: [0, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [0, 100] } },
+        period: { kind: 'number', required: false, range: [1, 200], default: 14, extractor: { kind: 'number-int', pattern: 'RSI\\s*\\(?\\s*(\\d+)', range: [1, 200] } },
+        value: { kind: 'number', required: true, range: [0, 100], extractor: { kind: 'number-int', pattern: '(?:≥|>=|高于或等于|大于等于|不低于|高于|大于|超过|上方|above|over|greater than or equal|greater than)\\s*(\\d+)', range: [0, 100] } },
         thresholdRole: { kind: 'enum', required: false, enum: ['upper_threshold'], default: 'upper_threshold' },
       },
       phaseResolver: 'by-clause-verb',
@@ -904,7 +910,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['价格', '收盘价', '涨跌幅', '百分比', 'price', 'percent change'] as const,
+        keywords: ['价格', '收盘价', '涨跌幅', '百分比', '百分', '%', 'price', 'percent change'] as const,
         verbs: {
           gte: ['上涨', '涨', 'rise', 'up'] as const,
           lte: ['下跌', '跌', 'drop', 'down'] as const,
@@ -1277,7 +1283,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         'reference.period': (v) => String(v),
         timeframeOverride: (v) => String(v),
       },
-      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['indicator.above'][locale],
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['indicator.above'].en
+        const indicator = typeof params.indicator === 'string' ? params.indicator.toUpperCase() : 'MA'
+        const period = typeof params['reference.period'] === 'number' ? params['reference.period'] : null
+        return period !== null ? `价格在 ${indicator}${period} 上方` : ATOM_PUBLIC_NAMES['indicator.above'].zh
+      },
     },
     surface: {
       intent: {
@@ -1287,9 +1298,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         },
       },
       paramSlots: {
-        indicator: { kind: 'enum', required: true, enum: ['ma', 'ema'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema' } } },
+        indicator: { kind: 'enum', required: true, enum: ['ma', 'sma', 'ema'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', 'SMA': 'sma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema' } } },
         referenceRole: { kind: 'enum', required: false, enum: ['short_term', 'mid_term', 'long_term'], extractor: { kind: 'enum-zh-map', derive: 'period-range' } },
-        'reference.period': { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
+        'reference.period': { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '(?:EMA|SMA|MA)\\s*[（(]?\\s*(\\d{1,4})|(\\d{1,4})\\s*(?:日|周期)?均线', range: [1, 500] } },
         timeframeOverride: { kind: 'enum', required: false, enum: ['true'], default: 'true' },
       },
       phaseResolver: 'by-clause-verb',
@@ -1328,7 +1339,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         'reference.period': (v) => String(v),
         timeframeOverride: (v) => String(v),
       },
-      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['indicator.below'][locale],
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['indicator.below'].en
+        const indicator = typeof params.indicator === 'string' ? params.indicator.toUpperCase() : 'MA'
+        const period = typeof params['reference.period'] === 'number' ? params['reference.period'] : null
+        return period !== null ? `价格低于 ${indicator}${period}` : ATOM_PUBLIC_NAMES['indicator.below'].zh
+      },
     },
     surface: {
       intent: {
@@ -1340,9 +1356,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         },
       },
       paramSlots: {
-        indicator: { kind: 'enum', required: true, enum: ['ma', 'ema'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema' } } },
+        indicator: { kind: 'enum', required: true, enum: ['ma', 'sma', 'ema'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', 'SMA': 'sma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema' } } },
         referenceRole: { kind: 'enum', required: false, enum: ['short_term', 'mid_term', 'long_term'], extractor: { kind: 'enum-zh-map', derive: 'period-range' } },
-        'reference.period': { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
+        'reference.period': { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '(?:EMA|SMA|MA)\\s*[（(]?\\s*(\\d{1,4})|(\\d{1,4})\\s*(?:日|周期)?均线', range: [1, 500] } },
         timeframeOverride: { kind: 'enum', required: false, enum: ['true'], default: 'true' },
       },
       phaseResolver: 'by-clause-verb',
@@ -2290,7 +2306,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   // ── 开多 / 平多 action（PR2c-final-1a：解 caller 切换后 open-slot-resolver spec 3 fail）
   'action.open_long': {
     corpus: {
-      aliases: ['开多', '做多', '入场多', '开多仓', 'open long', 'go long'],
+      aliases: ['开多', '做多', '买入', '入场多', '开多仓', 'open long', 'go long', 'buy'],
       positiveExamples: [
         '满足条件时开多 1000U',
         '金叉时开多仓',
@@ -2317,9 +2333,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['开多', '做多', '入场多', 'open long', 'go long'] as const,
+        keywords: ['开多', '做多', '买入', '入场多', 'open long', 'go long', 'buy'] as const,
         verbs: {
-          fixed: ['开多', '做多', 'open long', 'go long'] as const,
+          fixed: ['开多', '做多', '买入', 'open long', 'go long', 'buy'] as const,
         },
       },
       paramSlots: {},
@@ -2330,7 +2346,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
 
   'action.close_long': {
     corpus: {
-      aliases: ['平多', '平仓多', '出场多', '止盈平多', 'close long', 'exit long'],
+      aliases: ['平多', '卖出', '平仓多', '出场多', '止盈平多', 'close long', 'exit long', 'sell'],
       positiveExamples: [
         '止盈时平多',
         '跌破均线时平多仓',
@@ -2357,9 +2373,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['平多', '平仓多', '出场多', 'close long', 'exit long'] as const,
+        keywords: ['平多', '卖出', '平仓多', '出场多', 'close long', 'exit long', 'sell'] as const,
         verbs: {
-          fixed: ['平多', '平仓多', 'close long', 'exit long'] as const,
+          fixed: ['平多', '卖出', '平仓多', 'close long', 'exit long', 'sell'] as const,
         },
       },
       paramSlots: {},
@@ -2445,6 +2461,152 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   // ── 风险（risk）
+  'risk.stop_loss_pct': {
+    corpus: {
+      aliases: ['止损比例', '亏损止损', '百分比止损', 'stop loss pct'],
+      positiveExamples: [
+        '亏损 5% 止损',
+        '按入场均价亏损 5% 止损',
+      ],
+      negativeExamples: ['盈利 10% 止盈', '分批止盈一半'],
+      goldenUtterances: getGoldenUtterancesForAtom('risk.stop_loss_pct'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'risk.stop_loss_pct.valuePct') return '请补充百分比止损的止损比例。'
+      return '请补充百分比止损的缺失信息。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.stop_loss_pct'],
+      paramRenderers: {
+        valuePct: (v) => `${v}%`,
+        basis: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.stop_loss_pct'].en
+        const valuePct = typeof params.valuePct === 'number' ? params.valuePct : 0
+        const basis = params.basis === 'entry_avg_price' ? '入场均价' : '持仓收益率'
+        return `止损：价格相对${basis}下跌${valuePct}% 强制平仓`
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['止损', '亏损', '损失', 'stop loss', 'loss'] as const,
+        verbs: {
+          fixed: ['止损', '亏损', '损失', 'stop loss', 'loss'] as const,
+        },
+      },
+      paramSlots: {
+        valuePct: { kind: 'percent', required: true, range: [0, 100], extractor: { kind: 'percent', pattern: '(?:止损|亏损|损失|stop\\s*loss|loss)\\D{0,12}(\\d+(?:\\.\\d+)?)\\s*%', range: [0, 100] } },
+        basis: { kind: 'enum', required: false, enum: ['entry_avg_price', 'position_pnl'], default: 'entry_avg_price', extractor: { kind: 'enum-zh-map', enumMap: { '入场均价': 'entry_avg_price', '开仓均价': 'entry_avg_price', '持仓收益率': 'position_pnl' } } },
+      },
+      matchRequires: ['valuePct'],
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'risk.take_profit_pct': {
+    corpus: {
+      aliases: ['止盈比例', '盈利止盈', '百分比止盈', 'take profit pct'],
+      positiveExamples: [
+        '盈利 10% 止盈',
+        '止盈 10%',
+      ],
+      negativeExamples: ['亏损 5% 止损', '分批止盈一半'],
+      goldenUtterances: getGoldenUtterancesForAtom('risk.take_profit_pct'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充百分比止盈的缺失信息。',
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.take_profit_pct'],
+      paramRenderers: {
+        valuePct: (v) => `${v}%`,
+        basis: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.take_profit_pct'].en
+        const valuePct = typeof params.valuePct === 'number' ? params.valuePct : 0
+        const basis = params.basis === 'entry_avg_price' ? '入场均价' : '持仓收益率'
+        return `止盈：价格相对${basis}上涨${valuePct}% 平仓`
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['止盈', '盈利', '利润', 'take profit', 'profit'] as const,
+        verbs: {
+          fixed: ['止盈', '盈利', '利润', 'take profit', 'profit'] as const,
+        },
+      },
+      paramSlots: {
+        valuePct: { kind: 'percent', required: true, range: [0, 100], extractor: { kind: 'percent', pattern: '(?:止盈|盈利|利润|take\\s*profit|profit)\\D{0,12}(\\d+(?:\\.\\d+)?)\\s*%', range: [0, 100] } },
+        basis: { kind: 'enum', required: false, enum: ['entry_avg_price', 'position_pnl'], default: 'entry_avg_price', extractor: { kind: 'enum-zh-map', enumMap: { '入场均价': 'entry_avg_price', '开仓均价': 'entry_avg_price', '持仓收益率': 'position_pnl' } } },
+      },
+      matchRequires: ['valuePct'],
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'risk.atr_stop': {
+    corpus: {
+      aliases: ['ATR 止损', '波动止损', 'ATR 动态止损'],
+      positiveExamples: [
+        '用 2 倍 ATR 作为动态止损',
+        '仓位的 2% ATR 作为止损',
+      ],
+      negativeExamples: ['固定 5% 止损', 'ATR 大于 50 才交易'],
+      goldenUtterances: getGoldenUtterancesForAtom('risk.atr_stop'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: UNSUPPORTED_SKIP,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充 ATR 动态止损的缺失信息。',
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: {
+      supportStatus: `unsupported_atr_stop_public_beta_unsupported` as const,
+      unsupportedMeta: { reasonCode: 'atr_stop_public_beta_unsupported', publicReasonZh: 'ATR 动态止损当前公测暂未支持生成和回测。' },
+    },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.atr_stop'],
+      paramRenderers: {
+        multiple: (v) => String(v),
+        pctOfAtr: (v) => `${v}%`,
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.atr_stop'].en
+        if (typeof params.multiple === 'number') return `${params.multiple} 倍 ATR 止损`
+        if (typeof params.pctOfAtr === 'number') return `${params.pctOfAtr}% ATR 止损`
+        return 'ATR 动态止损'
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['ATR 止损', 'ATR', '动态止损', '波动止损', 'atr stop'] as const,
+        verbs: {
+          fixed: ['止损', '作为止损', '动态止损', 'atr stop'] as const,
+        },
+      },
+      paramSlots: {
+        pctOfAtr: { kind: 'percent', required: false, range: [0, 100], extractor: { kind: 'percent', pattern: '(\\d+(?:\\.\\d+)?)\\s*%\\s*ATR', range: [0, 100] } },
+        multiple: { kind: 'number', required: false, range: [0, 100], extractor: { kind: 'number-decimal', pattern: '(\\d+(?:\\.\\d+)?)\\s*(?:倍|x)\\s*ATR', range: [0, 100] } },
+      },
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
+    },
+  },
+
   // 产品决策：risk.partial_take_profit 保持 recognized_unsupported（公测，不改为 supported）
   //   readinessCheck = UNSUPPORTED_SKIP（critic Major #3）：声明"contractReadiness 主动跳过"，
   //   避免与 COMMON_PIPELINE 混淆。summaryContribution 仍 VIA_PRESENTATION_DISPLAY
@@ -2501,7 +2663,8 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       intent: {
         // Issue #1279 PR2b：补 '档' / '减' / '平' 关键词，覆盖中文分档语法
         //   "第一档 +5% 减 30%" / "盈利 5% 平一半" 等真实 utterance（baseline 修复）
-        keywords: ['止盈', '分批止盈', '部分平仓', '档', '减仓', '减', 'take profit', 'partial take profit', 'scale out', 'tier'] as const,
+        // 裸 "止盈 10%" 属 risk.take_profit_pct，不能触发 partial_take_profit。
+        keywords: ['分批止盈', '部分止盈', '部分平仓', '一半', '半仓', '档', '减仓', '减', 'partial take profit', 'scale out', 'tier'] as const,
         verbs: {
           gte: ['盈利', '达到', '第一档', '第二档', '第三档', 'profit', 'at', 'tier'] as const,
         },
@@ -2756,18 +2919,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['网格', '区间网格', '区间', '挂格', 'grid', 'range', 'rebalance'] as const,
+        keywords: ['网格', '区间网格', '区间', '挂格', '每格', '网格间距', '步长', 'grid', 'range', 'rebalance'] as const,
         verbs: {
           fixed: ['网格', '区间', '每格', '挂', 'grid', 'range', 'each grid'] as const,
         },
       },
       paramSlots: {
-        rangeLower: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '\\d+(\\.\\d+)?' } },
-        rangeUpper: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '\\d+(\\.\\d+)?' } },
+        rangeLower: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:价格)?区间\\s*(\\d+(?:\\.\\d+)?)' } },
+        rangeUpper: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:价格)?区间\\s*\\d+(?:\\.\\d+)?\\s*[-~到至]\\s*(\\d+(?:\\.\\d+)?)' } },
         sideMode: { kind: 'enum', required: false, enum: ['long_only', 'short_only', 'both'], default: 'both', extractor: { kind: 'enum-zh-map', enumMap: { '只做多': 'long_only', '仅做多': 'long_only', '只做空': 'short_only', '仅做空': 'short_only', '双向': 'both' } } },
         recycle: { kind: 'enum', required: false, enum: ['true', 'false'], default: 'true', extractor: { kind: 'enum-zh-map', enumMap: { '循环': 'true', 'recycle': 'true', '不循环': 'false' } } },
         breakoutAction: { kind: 'enum', required: false, enum: ['continue', 'stop'], default: 'continue', extractor: { kind: 'enum-zh-map', enumMap: { '继续': 'continue', '停止': 'stop', 'continue': 'continue', 'stop': 'stop' } } },
-        perGridSizing: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '\\d+(\\.\\d+)?' } },
+        stepPct: { kind: 'number', required: false, range: [0, 100], extractor: { kind: 'number-decimal', pattern: '(?:每格间距|网格间距|间距|步长)\\s*(\\d+(?:\\.\\d+)?)\\s*%' } },
+        perGridSizing: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:每格|per grid|each grid)\\s*(?:使用|用)?\\s*(\\d+(?:\\.\\d+)?)\\s*(?:USDT|USDC|USD|U|刀)' } },
       },
       phaseResolver: 'fixed-entry',
       sideResolver: 'both',

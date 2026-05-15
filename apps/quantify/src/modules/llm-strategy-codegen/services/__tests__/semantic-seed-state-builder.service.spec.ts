@@ -125,7 +125,7 @@ describe('SemanticSeedStateBuilderService', () => {
       }],
     })
 
-    expect(state?.trigger[0]).toEqual(expect.objectContaining({
+    expect(state?.position?.constraints?.[0]).toEqual(expect.objectContaining({
       key: 'grid.range_rebalance',
       status: 'open',
       openSlots: expect.arrayContaining([expect.objectContaining({
@@ -133,8 +133,8 @@ describe('SemanticSeedStateBuilderService', () => {
         status: 'open',
         questionHint: expect.stringContaining('网格数量或每格间距'),
       })]),
-      contracts: [expect.objectContaining({
-        capabilities: [expect.objectContaining({
+      contracts: expect.arrayContaining([expect.objectContaining({
+        capabilities: expect.arrayContaining([expect.objectContaining({
           domain: 'price',
           verb: 'define',
           object: 'level_set',
@@ -143,8 +143,8 @@ describe('SemanticSeedStateBuilderService', () => {
             lower: 79200,
             upper: 80200,
           }),
-        })],
-      })],
+        })]),
+      })]),
     }))
     expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
   })
@@ -343,14 +343,14 @@ describe('SemanticSeedStateBuilderService', () => {
       }],
     })
 
-    expect(state?.trigger[0]).toEqual(expect.objectContaining({
+    expect(state?.position?.constraints?.[0]).toEqual(expect.objectContaining({
       key: 'grid.range_rebalance',
       openSlots: expect.arrayContaining([expect.objectContaining({
         slotKey: 'contract.shape.price.level_set.density',
         status: 'open',
       })]),
-      contracts: [expect.objectContaining({
-        capabilities: [expect.objectContaining({
+      contracts: expect.arrayContaining([expect.objectContaining({
+        capabilities: expect.arrayContaining([expect.objectContaining({
           domain: 'price',
           verb: 'define',
           object: 'level_set',
@@ -358,8 +358,8 @@ describe('SemanticSeedStateBuilderService', () => {
             lower: 79200,
             upper: 80200,
           }),
-        })],
-      })],
+        })]),
+      })]),
     }))
     expect(state?.action[0]).toEqual(expect.objectContaining({
       key: 'place_limit_grid',
@@ -492,7 +492,7 @@ describe('SemanticSeedStateBuilderService', () => {
         },
       }],
     })
-    const densitySlot = state?.trigger[0]?.openSlots.find(slot =>
+    const densitySlot = state?.position?.constraints?.[0]?.openSlots.find(slot =>
       slot.slotKey === 'contract.shape.price.level_set.density',
     )
     expect(densitySlot).toBeDefined()
@@ -513,12 +513,12 @@ describe('SemanticSeedStateBuilderService', () => {
       throw new Error('expected grid density answer to be consumed')
     }
 
-    const shape = resolved.nextState.trigger[0]?.contracts?.[0]?.capabilities[0]?.shape
+    const shape = resolved.nextState.position?.constraints?.[0]?.contracts?.[0]?.capabilities[0]?.shape
 
     expect(shape).toEqual(expect.objectContaining({
       spacingPct: 0.5,
     }))
-    expect(resolved.nextState.trigger[0]?.openSlots).toEqual(expect.not.arrayContaining([
+    expect(resolved.nextState.position?.constraints?.[0]?.openSlots).toEqual(expect.not.arrayContaining([
       expect.objectContaining({
         slotKey: 'contract.shape.price.level_set.density',
         status: 'open',
@@ -2338,6 +2338,104 @@ describe('SemanticSeedStateBuilderService.toActionState — action.* 前缀归�
       expect(state!.risk).toHaveLength(1)
       expect(state!.risk[0].key).toBe('risk.partial_take_profit')
       expect(state!.trigger).toHaveLength(0)
+    })
+
+    it('routes positionConstraint atom to the top-level 5-bucket field and opens execution context slots', () => {
+      const state = builder.build({
+        atoms: [{
+          key: 'grid.range_rebalance',
+          params: {
+            rangeLower: 60000,
+            rangeUpper: 80000,
+            sideMode: 'bidirectional',
+            perOrderSizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+          },
+        }],
+      })
+
+      expect(state).not.toBeNull()
+      expect(state!.positionConstraint).toHaveLength(1)
+      expect(state!.positionConstraint[0]).toEqual(expect.objectContaining({
+        key: 'grid.range_rebalance',
+      }))
+      expect(state!.contextSlots.exchange?.status).toBe('open')
+      expect(state!.contextSlots.symbol?.status).toBe('open')
+      expect(state!.contextSlots.marketType?.status).toBe('open')
+      expect(state!.contextSlots.timeframe?.status).toBe('open')
+    })
+
+    it('dedupes positionConstraint atoms when atoms[] and legacy mirrors carry the same semantic item', () => {
+      const gridAtom = {
+        key: 'grid.range_rebalance',
+        params: {
+          rangeLower: 60000,
+          rangeUpper: 80000,
+          sideMode: 'bidirectional',
+          perOrderSizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+        },
+      }
+      const state = builder.build({
+        atoms: [gridAtom],
+        actions: [gridAtom],
+      })
+
+      expect(state).not.toBeNull()
+      expect(state!.positionConstraint).toHaveLength(1)
+    })
+
+    it('dedupes every positionConstraint bucket key when atoms[] and legacy mirrors carry the same semantic item', () => {
+      const dcaAtom = {
+        key: 'position.dca_schedule',
+        params: {
+          maxCount: 4,
+          capitalCap: { kind: 'quote', value: 500, asset: 'USDT' },
+          perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+          triggerMode: 'price_interval',
+          exitRule: { rule: 'stop_below_previous_low' },
+        },
+      }
+      const pyramidingAtom = {
+        key: 'position.pyramiding_limit',
+        params: {
+          maxLayers: 3,
+          layerSizing: { kind: 'ratio', value: 0.2, unit: 'ratio' },
+        },
+      }
+      const state = builder.build({
+        atoms: [dcaAtom, pyramidingAtom],
+        actions: [dcaAtom, pyramidingAtom],
+      })
+
+      expect(state).not.toBeNull()
+      expect(state!.positionConstraint.filter(item => item.key === 'position.dca_schedule')).toHaveLength(1)
+      expect(state!.positionConstraint.filter(item => item.key === 'position.pyramiding_limit')).toHaveLength(1)
+    })
+
+    it('keeps bare numeric grid sizing as ratio rather than quote amount', () => {
+      const state = builder.build({
+        atoms: [{
+          key: 'grid.range_rebalance',
+          params: {
+            rangeLower: 60000,
+            rangeUpper: 80000,
+            sideMode: 'bidirectional',
+            perOrderSizing: 0.1,
+          },
+        }],
+      })
+      const budgetCapability = state?.positionConstraint[0]?.contracts
+        ?.flatMap(contract => contract.capabilities)
+        .find(capability =>
+          capability.domain === 'capital'
+          && capability.verb === 'allocate'
+          && capability.object === 'per_order_budget',
+        )
+
+      expect(budgetCapability?.shape).toEqual(expect.objectContaining({
+        kind: 'ratio',
+        value: 0.1,
+        unit: 'ratio',
+      }))
     })
 
     it('drops unknown atom key with warn', () => {

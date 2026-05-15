@@ -41,8 +41,8 @@ describe('semanticAtomRegistryService', () => {
     })
   })
 
-  it('does not classify aliases or compiler-unsupported atoms as executable projection atoms', () => {
-    for (const key of ['market.trend', 'market.range', 'indicator.above', 'indicator.below']) {
+  it('does not classify aliases as executable projection atoms', () => {
+    for (const key of ['market.trend', 'market.range']) {
       expect(service.get(key)).toMatchObject({
         key,
         category: 'trigger',
@@ -50,6 +50,36 @@ describe('semanticAtomRegistryService', () => {
       })
       expect(service.get(key).executableProjection).toEqual([])
     }
+  })
+
+  it('derives static moving-average compare support from executable emit shape', () => {
+    for (const key of ['indicator.above', 'indicator.below']) {
+      expect(service.resolve(key, { indicator: 'ema', 'reference.period': 20 })).toMatchObject({
+        key,
+        category: 'trigger',
+        supportStatus: 'supported_executable',
+        executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
+      })
+    }
+  })
+
+  it('keeps unsupported indicator references out of executable emit support', () => {
+    expect(service.resolve('indicator.above', { indicator: 'price', 'reference.period': 20 })).toMatchObject({
+      key: 'indicator.above',
+      category: 'trigger',
+      supportStatus: 'recognized_unsupported',
+    })
+  })
+
+  it('does not promote static moving-average compare support without executable params', () => {
+    expect(service.resolve('indicator.above')).toMatchObject({
+      key: 'indicator.above',
+      supportStatus: 'recognized_unsupported',
+    })
+    expect(service.resolve('indicator.below')).toMatchObject({
+      key: 'indicator.below',
+      supportStatus: 'recognized_unsupported',
+    })
   })
 
   it('classifies current executable trigger atoms as supported executable', () => {

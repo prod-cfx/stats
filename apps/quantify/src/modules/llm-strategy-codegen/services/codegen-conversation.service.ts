@@ -17,7 +17,15 @@ import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { SemanticEditDecision } from '../types/semantic-edit'
-import type {SemanticActionState, SemanticPositionState, SemanticRiskState, SemanticSlotState, SemanticState, SemanticTriggerState} from '../types/semantic-state';
+import type {
+  SemanticActionState,
+  SemanticCapability,
+  SemanticPositionState,
+  SemanticRiskState,
+  SemanticSlotState,
+  SemanticState,
+  SemanticTriggerState,
+} from '../types/semantic-state'
 import type { StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyBlockingReason, StrategyInferredAssumption } from '../types/strategy-decision'
@@ -3075,8 +3083,7 @@ export class CodegenConversationService {
       checklist,
     )
     const stateWithExecutableAtomSlots = this.ensureExecutableAtomSlots(stateWithExplicitDeterministicRisk)
-    const hasExecutableSemantics = stateWithExplicitDeterministicRisk.trigger.length > 0
-      || stateWithExplicitDeterministicRisk.action.length > 0
+    const hasExecutableSemantics = this.hasExecutableBehaviorSemantics(stateWithExplicitDeterministicRisk)
 
     if (!hasExecutableSemantics) {
       return {
@@ -3105,8 +3112,8 @@ export class CodegenConversationService {
       return state
     }
 
-    const hasLockedEntry = this.hasLockedTriggerPhase(state, 'entry')
-    const hasLockedExit = this.hasLockedTriggerPhase(state, 'exit')
+    const hasLockedEntry = this.hasExecutableEntrySemantics(state)
+    const hasLockedExit = this.hasExecutableExitSemantics(state)
     const hasCompleteOrderProgram = this.hasCompleteOrderProgramSemantics(state)
     const triggers = state.trigger.filter(trigger =>
       !this.isMissingExecutableAtomTrigger(trigger)
@@ -3132,12 +3139,25 @@ export class CodegenConversationService {
     return (
       state.trigger.length === 0
       && state.action.length === 0
-      && (state.risk.length > 0 || state.position !== null || this.hasExecutionContextEvidence(state))
+      && !this.hasExecutableCapabilityGraph(state)
+      && (state.risk.length > 0 || state.position !== null || state.positionConstraint.length > 0 || this.hasExecutionContextEvidence(state))
     ) || (
       state.action.length > 0
       && state.trigger.length === 0
-      && !this.hasCompleteOrderProgramSemantics(state)
+      && !this.hasExecutableCapabilityGraph(state)
     )
+  }
+
+  private hasExecutableBehaviorSemantics(state: SemanticState): boolean {
+    return state.trigger.length > 0
+      || state.action.length > 0
+      || state.positionConstraint.length > 0
+      || Boolean(state.position?.constraints?.length)
+      || this.hasExecutableCapabilityGraph(state)
+  }
+
+  private hasExecutableCapabilityGraph(state: SemanticState): boolean {
+    return this.hasCompleteOrderProgramSemantics(state) || this.hasLockedScheduleSemantics(state)
   }
 
   private hasExecutionContextEvidence(state: SemanticState): boolean {
@@ -3155,32 +3175,92 @@ export class CodegenConversationService {
     )
   }
 
-  private hasCompleteOrderProgramSemantics(state: SemanticState): boolean {
-    const hasLockedLevelSetProvider = state.trigger.some(trigger =>
-      trigger.status === 'locked'
-      && trigger.openSlots.every(slot => slot.status !== 'open')
-      && trigger.contracts?.some(contract =>
-        contract.capabilities.some(capability =>
-          capability.domain === 'price'
-          && capability.verb === 'define'
-          && capability.object === 'level_set',
-        ),
-      ),
-    )
-    if (!hasLockedLevelSetProvider) {
-      return false
-    }
+  private hasExecutableEntrySemantics(state: SemanticState): boolean {
+    return this.hasLockedTriggerPhase(state, 'entry')
+      || this.hasOrderProgramContractSemantics(state)
+      || this.hasCompleteOrderProgramSemantics(state)
+      || this.hasLockedScheduleSemantics(state)
+  }
 
-    return state.action.some(action =>
-      action.status === 'locked'
-      && (action.openSlots ?? []).every(slot => slot.status !== 'open')
-      && action.contracts?.some(contract =>
+  private hasExecutableExitSemantics(state: SemanticState): boolean {
+    return this.hasLockedTriggerPhase(state, 'exit')
+      || this.hasLockedExitRiskSemantics(state)
+      || this.hasOrderProgramContractSemantics(state)
+      || this.hasExecutableCapabilityGraph(state)
+  }
+
+  private hasOrderProgramContractSemantics(state: SemanticState): boolean {
+    const topLevelConstraintIds = new Set(state.positionConstraint.map(constraint => constraint.id))
+    const constraints = [
+      ...(state.positionConstraint ?? []),
+      ...((state.position?.constraints ?? []).filter(constraint => !topLevelConstraintIds.has(constraint.id))),
+    ]
+    return constraints.some(constraint =>
+      constraint.status !== 'superseded'
+      && (constraint.contracts ?? []).some(contract =>
         contract.capabilities.some(capability =>
           capability.domain === 'order_program'
-          && capability.verb === 'maintain',
+          && (capability.verb === 'maintain' || capability.verb === 'place' || capability.verb === 'rebalance'),
         ),
       ),
     )
+  }
+
+  private hasCompleteOrderProgramSemantics(state: SemanticState): boolean {
+    const capabilities = this.collectLockedCapabilities(state)
+    return capabilities.some(capability =>
+      capability.domain === 'order_program'
+      && (capability.verb === 'maintain' || capability.verb === 'place' || capability.verb === 'rebalance')
+    )
+  }
+
+  private hasLockedScheduleSemantics(state: SemanticState): boolean {
+    return this.collectLockedCapabilities(state).some(capability =>
+      capability.domain === 'runtime'
+      && (capability.verb === 'schedule' || capability.object === 'dca_orders')
+    )
+  }
+
+  private collectLockedCapabilities(state: SemanticState): SemanticCapability[] {
+    const capabilities: SemanticCapability[] = []
+    const pushContracts = (contracts: readonly { capabilities: readonly SemanticCapability[] }[] | undefined): void => {
+      for (const contract of contracts ?? []) capabilities.push(...contract.capabilities)
+    }
+
+    for (const trigger of state.trigger) {
+      if (trigger.status === 'locked' && trigger.openSlots.every(slot => slot.status !== 'open')) {
+        pushContracts(trigger.contracts)
+      }
+    }
+    for (const action of state.action) {
+      if (action.status === 'locked' && (action.openSlots ?? []).every(slot => slot.status !== 'open')) {
+        pushContracts(action.contracts)
+      }
+    }
+    for (const risk of state.risk) {
+      if (risk.status === 'locked' && risk.openSlots.every(slot => slot.status !== 'open')) {
+        pushContracts(risk.contracts)
+      }
+    }
+    const topLevelConstraintIds = new Set(state.positionConstraint.map(constraint => constraint.id))
+    if (state.position?.status === 'locked' && (state.position.openSlots ?? []).every(slot => slot.status !== 'open')) {
+      pushContracts(state.position.contracts)
+      for (const constraint of state.position.constraints ?? []) {
+        if (topLevelConstraintIds.has(constraint.id)) {
+          continue
+        }
+        if (constraint.status === 'locked' && constraint.openSlots.every(slot => slot.status !== 'open')) {
+          pushContracts(constraint.contracts)
+        }
+      }
+    }
+    for (const constraint of state.positionConstraint) {
+      if (constraint.status === 'locked' && constraint.openSlots.every(slot => slot.status !== 'open')) {
+        pushContracts(constraint.contracts)
+      }
+    }
+
+    return capabilities
   }
 
   private isMissingExecutableAtomTrigger(trigger: SemanticTriggerState): boolean {
@@ -3575,7 +3655,31 @@ export class CodegenConversationService {
       trigger.phase === 'exit'
       && trigger.status === 'locked'
       && trigger.openSlots.every(slot => slot.status !== 'open'),
-    )
+    ) || this.hasLockedExitRiskSemantics(state)
+      || this.hasExecutableCapabilityGraph(state)
+  }
+
+  private hasLockedExitRiskSemantics(state: SemanticState): boolean {
+    return state.risk.some((risk) => {
+      if (risk.status !== 'locked' || risk.openSlots.some(slot => slot.status === 'open')) {
+        return false
+      }
+
+      if (risk.key === ATOM_CONTRACT_REGISTRY['risk.partial_take_profit'].key) {
+        return Array.isArray(risk.params.tiers)
+          || (typeof risk.params.profitPct === 'number' && Number.isFinite(risk.params.profitPct) && risk.params.profitPct > 0)
+      }
+
+      const threshold = risk.params.valuePct
+      if (typeof threshold !== 'number' || !Number.isFinite(threshold) || threshold <= 0) {
+        return false
+      }
+
+      return risk.key === FIELD_KEY.RISK_STOP_LOSS_PCT
+        || risk.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT
+        || risk.key === FIELD_KEY.RISK_MAX_DRAWDOWN_PCT
+        || risk.key === FIELD_KEY.RISK_MAX_SINGLE_LOSS_PCT
+    })
   }
 
   private toSemanticTriggerState(
@@ -3732,19 +3836,11 @@ export class CodegenConversationService {
     semanticState: SemanticState,
   ): boolean {
     if (item.reason === 'missing_entry_rules' || item.field === 'entryRules') {
-      return semanticState.trigger.some(trigger =>
-        trigger.phase === 'entry'
-        && trigger.status === 'locked'
-        && trigger.openSlots.every(slot => slot.status !== 'open'),
-      )
+      return this.hasExecutableEntrySemantics(semanticState)
     }
 
     if (item.reason === 'missing_exit_rules' || item.field === 'exitRules') {
-      return semanticState.trigger.some(trigger =>
-        trigger.phase === 'exit'
-        && trigger.status === 'locked'
-        && trigger.openSlots.every(slot => slot.status !== 'open'),
-      )
+      return this.hasExecutableExitSemantics(semanticState)
     }
 
     if (this.isPositionSizingClarificationItem(item)) {
@@ -3873,6 +3969,20 @@ export class CodegenConversationService {
       return positionSlot
     }
 
+    const nestedPositionConstraintSlot = state.position?.constraints
+      ?.flatMap(constraint => constraint.openSlots)
+      .find(isBlockingSemanticOpenSlot)
+    if (nestedPositionConstraintSlot) {
+      return nestedPositionConstraintSlot
+    }
+
+    const positionConstraintSlot = state.positionConstraint
+      .flatMap(constraint => constraint.openSlots)
+      .find(isBlockingSemanticOpenSlot)
+    if (positionConstraintSlot) {
+      return positionConstraintSlot
+    }
+
     const actionSlot = state.action
       .flatMap(action => action.openSlots ?? [])
       .find(isBlockingSemanticOpenSlot)
@@ -3976,10 +4086,26 @@ export class CodegenConversationService {
       .flatMap(action => action.openSlots ?? [])
       .filter(isBlockingSemanticOpenSlot)
     const openPositionSlots = state.position?.openSlots?.filter(isBlockingSemanticOpenSlot) ?? []
+    const topLevelConstraintIds = new Set(state.positionConstraint.map(constraint => constraint.id))
+    const openNestedPositionConstraintSlots = state.position?.constraints
+      ?.filter(constraint => !topLevelConstraintIds.has(constraint.id))
+      .flatMap(constraint => constraint.openSlots)
+      .filter(isBlockingSemanticOpenSlot) ?? []
+    const openPositionConstraintSlots = state.positionConstraint
+      .flatMap(constraint => constraint.openSlots)
+      .filter(isBlockingSemanticOpenSlot)
     const openContextSlots = Object.values(state.contextSlots)
       .filter(isBlockingSemanticOpenSlot)
 
-    return [...openTriggerSlots, ...openPositionSlots, ...openActionSlots, ...openRiskSlots, ...openContextSlots]
+    return [
+      ...openTriggerSlots,
+      ...openPositionSlots,
+      ...openNestedPositionConstraintSlots,
+      ...openPositionConstraintSlots,
+      ...openActionSlots,
+      ...openRiskSlots,
+      ...openContextSlots,
+    ]
   }
 
   private buildClarificationFromSemanticState(

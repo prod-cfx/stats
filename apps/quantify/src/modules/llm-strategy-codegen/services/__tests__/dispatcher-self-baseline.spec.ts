@@ -181,7 +181,7 @@ describe('issue #1279 PR2 — dispatcher self-baseline', () => {
     })
   })
 
-  it('应该精确 224 case（#1329 follow-up Phase 1/2/3e 引入 13 新 orchestration atom，+39 合成）', () => {
+  it('应该精确 233 case（#1329 follow-up Phase 1/2/3e 引入 13 新 orchestration atom，+39 合成；risk 原子 registry 化 +9 合成）', () => {
     // PR2c-final-2：9 个高频 trigger atom（rsi_lte/gte、cross_over/under、bollinger.touch_*×3、
     // breakout_up/down）各补 2 条扩展 utterance（同义词/参数换序/短 token ema20、复合 timeframe），共 +18 条。
     // #1329 follow-up Phase 1/2：ATOM_CONTRACT_REGISTRY 新增 11 个 orchestration atom
@@ -191,8 +191,8 @@ describe('issue #1279 PR2 — dispatcher self-baseline', () => {
     //   走 synthesizeForAtom 兜底，11 × 3 = 33 条合成 utterance。
     // #1329 follow-up Phase 3e：ATOM_CONTRACT_REGISTRY 再追加 2 个 orchestration atom
     //   （scope.subStrategy / gate.subStrategy），同样走合成路径，+2 × 3 = +6 条。
-    // 实际分布：corpus 177 + synthesized 39（13 新 orchestration atom × 3）+ ac-7 6 + ac-12 2 = 224
-    expect(cases.length).toBe(224)
+    // 实际分布：corpus 177 + synthesized 48（13 新 orchestration atom × 3 + 3 risk atom × 3）+ ac-7 6 + ac-12 2 = 233
+    expect(cases.length).toBe(233)
   })
 
   // #1331 C3：per-atom breakdown 断言（13 新 orchestration atom 各 ≥ 1 case），

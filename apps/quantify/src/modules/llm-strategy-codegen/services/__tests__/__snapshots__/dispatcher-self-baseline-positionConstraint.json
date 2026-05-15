@@ -17,103 +17,45 @@
         "timeframe": "1h",
         "marketType": "spot"
       },
-      "actions": [
+      "position": {
+        "mode": "fixed_quote",
+        "value": 100,
+        "positionMode": "long_only",
+        "sizing": {
+          "kind": "quote",
+          "value": 100,
+          "asset": "USDT"
+        },
+        "status": "locked",
+        "source": "user_explicit",
+        "evidence": {
+          "text": "每格 100 USDT",
+          "source": "user_explicit"
+        },
+        "openSlots": []
+      },
+      "atoms": [
         {
           "key": "grid.range_rebalance",
           "phase": "entry",
           "params": {
             "rangeLower": 60000,
-            "rangeUpper": 60000,
+            "rangeUpper": 70000,
             "sideMode": "both",
             "recycle": "true",
             "breakoutAction": "continue",
-            "perGridSizing": 60000
+            "perGridSizing": 100,
+            "perOrderSizing": {
+              "kind": "quote",
+              "value": 100,
+              "asset": "USDT"
+            }
           },
           "evidence": {
             "text": "区间 60000-70000",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-action-1-grid-range-rebalance",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "positionConstraint",
-                  "verb": "emit",
-                  "object": "range_rebalance",
-                  "shape": {
-                    "key": "grid.range_rebalance",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "rangeLower": 60000,
-                    "rangeUpper": 60000,
-                    "sideMode": "both",
-                    "recycle": "true",
-                    "breakoutAction": "continue",
-                    "perGridSizing": 60000
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "rangeLower": 60000,
-                "rangeUpper": 60000,
-                "sideMode": "both",
-                "recycle": "true",
-                "breakoutAction": "continue",
-                "perGridSizing": 60000
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
-        },
-        {
-          "key": "grid.range_rebalance",
-          "phase": "entry",
-          "params": {
-            "sideMode": "both",
-            "recycle": "true",
-            "breakoutAction": "continue"
-          },
-          "evidence": {
-            "text": "双向网格",
-            "source": "user_explicit"
-          },
-          "contracts": [
-            {
-              "id": "contract-seed-action-2-grid-range-rebalance",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "positionConstraint",
-                  "verb": "emit",
-                  "object": "range_rebalance",
-                  "shape": {
-                    "key": "grid.range_rebalance",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "sideMode": "both",
-                    "recycle": "true",
-                    "breakoutAction": "continue"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "sideMode": "both",
-                "recycle": "true",
-                "breakoutAction": "continue"
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          "sideScope": "both"
         }
       ]
     }
@@ -136,165 +78,21 @@
         },
         "timeframe": "15m"
       },
-      "actions": [
+      "atoms": [
         {
           "key": "grid.range_rebalance",
           "phase": "entry",
           "params": {
-            "rangeLower": 60000,
-            "rangeUpper": 60000,
-            "sideMode": "both",
-            "recycle": "true",
-            "breakoutAction": "continue",
-            "perGridSizing": 60000
-          },
-          "evidence": {
-            "text": "grid range 60000-70000",
-            "source": "user_explicit"
-          },
-          "contracts": [
-            {
-              "id": "contract-seed-action-1-grid-range-rebalance",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "positionConstraint",
-                  "verb": "emit",
-                  "object": "range_rebalance",
-                  "shape": {
-                    "key": "grid.range_rebalance",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "rangeLower": 60000,
-                    "rangeUpper": 60000,
-                    "sideMode": "both",
-                    "recycle": "true",
-                    "breakoutAction": "continue",
-                    "perGridSizing": 60000
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "rangeLower": 60000,
-                "rangeUpper": 60000,
-                "sideMode": "both",
-                "recycle": "true",
-                "breakoutAction": "continue",
-                "perGridSizing": 60000
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
-        },
-        {
-          "key": "grid.range_rebalance",
-          "phase": "entry",
-          "params": {
-            "rangeLower": 100,
-            "rangeUpper": 100,
             "sideMode": "both",
             "recycle": "true",
             "breakoutAction": "continue",
             "perGridSizing": 100
           },
           "evidence": {
-            "text": "each grid 100 USDT",
+            "text": "grid range 60000-70000",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-action-2-grid-range-rebalance",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "positionConstraint",
-                  "verb": "emit",
-                  "object": "range_rebalance",
-                  "shape": {
-                    "key": "grid.range_rebalance",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "rangeLower": 100,
-                    "rangeUpper": 100,
-                    "sideMode": "both",
-                    "recycle": "true",
-                    "breakoutAction": "continue",
-                    "perGridSizing": 100
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "rangeLower": 100,
-                "rangeUpper": 100,
-                "sideMode": "both",
-                "recycle": "true",
-                "breakoutAction": "continue",
-                "perGridSizing": 100
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
-        },
-        {
-          "key": "grid.range_rebalance",
-          "phase": "entry",
-          "params": {
-            "rangeLower": 20,
-            "rangeUpper": 20,
-            "sideMode": "both",
-            "recycle": "true",
-            "breakoutAction": "continue",
-            "perGridSizing": 20
-          },
-          "evidence": {
-            "text": "20 grids",
-            "source": "user_explicit"
-          },
-          "contracts": [
-            {
-              "id": "contract-seed-action-3-grid-range-rebalance",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "positionConstraint",
-                  "verb": "emit",
-                  "object": "range_rebalance",
-                  "shape": {
-                    "key": "grid.range_rebalance",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "rangeLower": 20,
-                    "rangeUpper": 20,
-                    "sideMode": "both",
-                    "recycle": "true",
-                    "breakoutAction": "continue",
-                    "perGridSizing": 20
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "rangeLower": 20,
-                "rangeUpper": 20,
-                "sideMode": "both",
-                "recycle": "true",
-                "breakoutAction": "continue",
-                "perGridSizing": 20
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          "sideScope": "both"
         }
       ]
     }
@@ -317,6 +115,23 @@
         "timeframe": "4h",
         "marketType": "spot"
       },
+      "position": {
+        "mode": "fixed_quote",
+        "value": 50,
+        "positionMode": "long_only",
+        "sizing": {
+          "kind": "quote",
+          "value": 50,
+          "asset": "USDT"
+        },
+        "status": "locked",
+        "source": "user_explicit",
+        "evidence": {
+          "text": "每格 50 USDT",
+          "source": "user_explicit"
+        },
+        "openSlots": []
+      },
       "triggers": [
         {
           "key": "price.breakout_up",
@@ -328,89 +143,42 @@
             "text": "突破停止",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-1-price-breakout-up",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "breakout_up",
-                  "shape": {
-                    "key": "price.breakout_up",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "reference": "channel_high"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "reference": "channel_high"
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
           "sideScope": "both"
         }
       ],
       "actions": [
         {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "仅做多",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
           "key": "grid.range_rebalance",
           "phase": "entry",
           "params": {
             "rangeLower": 2000,
-            "rangeUpper": 2000,
+            "rangeUpper": 2500,
             "sideMode": "both",
             "recycle": "true",
             "breakoutAction": "continue",
-            "perGridSizing": 2000
+            "perGridSizing": 50,
+            "perOrderSizing": {
+              "kind": "quote",
+              "value": 50,
+              "asset": "USDT"
+            }
           },
           "evidence": {
             "text": "区间 2000-2500",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-action-1-grid-range-rebalance",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "positionConstraint",
-                  "verb": "emit",
-                  "object": "range_rebalance",
-                  "shape": {
-                    "key": "grid.range_rebalance",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "rangeLower": 2000,
-                    "rangeUpper": 2000,
-                    "sideMode": "both",
-                    "recycle": "true",
-                    "breakoutAction": "continue",
-                    "perGridSizing": 2000
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "rangeLower": 2000,
-                "rangeUpper": 2000,
-                "sideMode": "both",
-                "recycle": "true",
-                "breakoutAction": "continue",
-                "perGridSizing": 2000
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          "sideScope": "both"
         },
         {
           "key": "action.open_long",
@@ -420,30 +188,19 @@
             "text": "仅做多",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-action-2-action-open-long",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "action",
-                  "verb": "emit",
-                  "object": "open_long",
-                  "shape": {
-                    "key": "action.open_long",
-                    "phase": "entry",
-                    "sideScope": "long"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {},
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          "sideScope": "long"
+        },
+        {
+          "key": "price.breakout_up",
+          "phase": "entry",
+          "params": {
+            "reference": "channel_high"
+          },
+          "evidence": {
+            "text": "突破停止",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
         }
       ]
     }
@@ -454,7 +211,37 @@
     "atomKey": "position.dca_schedule",
     "utterance": "每跌 5% 补仓一次，每次 100 USDT，最多 3 次，总投入不超过 500 USDT，跌破前低停止。",
     "patch": {
+      "position": {
+        "mode": "fixed_quote",
+        "value": 100,
+        "positionMode": "long_only",
+        "sizing": {
+          "kind": "quote",
+          "value": 100,
+          "asset": "USDT"
+        },
+        "status": "locked",
+        "source": "user_explicit",
+        "evidence": {
+          "text": "每次 100 USDT",
+          "source": "user_explicit"
+        },
+        "openSlots": []
+      },
       "triggers": [
+        {
+          "key": "price.percent_change",
+          "phase": "entry",
+          "params": {
+            "direction": "down",
+            "valuePct": -5
+          },
+          "evidence": {
+            "text": "每跌 5% 补仓一次",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
         {
           "key": "price.breakout_down",
           "phase": "entry",
@@ -465,42 +252,28 @@
             "text": "跌破前低停止",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-1-price-breakout-down",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "breakout_down",
-                  "shape": {
-                    "key": "price.breakout_down",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "reference": "channel_low"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "reference": "channel_low"
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
           "sideScope": "both"
         }
       ],
-      "actions": [
+      "atoms": [
+        {
+          "key": "price.percent_change",
+          "phase": "entry",
+          "params": {
+            "direction": "down",
+            "valuePct": -5
+          },
+          "evidence": {
+            "text": "每跌 5% 补仓一次",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
         {
           "key": "position.dca_schedule",
           "phase": "entry",
           "params": {
-            "dropPct": -0.05,
+            "dropPct": -5,
             "perOrderBudget": 5,
             "maxOrders": 5
           },
@@ -508,37 +281,19 @@
             "text": "每跌 5% 补仓一次",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-action-1-position-dca-schedule",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "positionConstraint",
-                  "verb": "emit",
-                  "object": "dca_schedule",
-                  "shape": {
-                    "key": "position.dca_schedule",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "dropPct": -0.05,
-                    "perOrderBudget": 5,
-                    "maxOrders": 5
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "dropPct": -0.05,
-                "perOrderBudget": 5,
-                "maxOrders": 5
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          "sideScope": "both"
+        },
+        {
+          "key": "price.breakout_down",
+          "phase": "entry",
+          "params": {
+            "reference": "channel_low"
+          },
+          "evidence": {
+            "text": "跌破前低停止",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
         }
       ]
     }
@@ -562,6 +317,23 @@
         "timeframe": "15m",
         "marketType": "perp"
       },
+      "position": {
+        "mode": "fixed_quote",
+        "value": 100,
+        "positionMode": "long_only",
+        "sizing": {
+          "kind": "quote",
+          "value": 100,
+          "asset": "USDT"
+        },
+        "status": "locked",
+        "source": "user_explicit",
+        "evidence": {
+          "text": "每次 100 USDT",
+          "source": "user_explicit"
+        },
+        "openSlots": []
+      },
       "triggers": [
         {
           "key": "indicator.cross_over",
@@ -577,41 +349,6 @@
             "text": "MA20 上穿 MA50 开多",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-1-indicator-cross-over",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "cross_over",
-                  "shape": {
-                    "key": "indicator.cross_over",
-                    "phase": "entry",
-                    "sideScope": "long",
-                    "indicator": "ma",
-                    "value": 50,
-                    "period": 20,
-                    "fastPeriod": 20,
-                    "slowPeriod": 50
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "indicator": "ma",
-                "value": 50,
-                "period": 20,
-                "fastPeriod": 20,
-                "slowPeriod": 50
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
           "sideScope": "long"
         },
         {
@@ -624,33 +361,6 @@
             "text": "跌破前低停止补仓",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-2-price-breakout-down",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "breakout_down",
-                  "shape": {
-                    "key": "price.breakout_down",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "reference": "channel_low"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "reference": "channel_low"
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
           "sideScope": "both"
         }
       ],
@@ -662,31 +372,47 @@
           "evidence": {
             "text": "MA20 上穿 MA50 开多",
             "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "indicator.cross_over",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "value": 50,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 50
           },
-          "contracts": [
-            {
-              "id": "contract-seed-action-1-action-open-long",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "action",
-                  "verb": "emit",
-                  "object": "open_long",
-                  "shape": {
-                    "key": "action.open_long",
-                    "phase": "entry",
-                    "sideScope": "long"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {},
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "price.breakout_down",
+          "phase": "entry",
+          "params": {
+            "reference": "channel_low"
+          },
+          "evidence": {
+            "text": "跌破前低停止补仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
         }
       ]
     }
@@ -713,50 +439,34 @@
           "phase": "entry",
           "params": {
             "direction": "down",
-            "valuePct": 0.02
+            "valuePct": 2
           },
           "evidence": {
             "text": "DCA every time price drops 2%",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-1-price-percent-change",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "percent_change",
-                  "shape": {
-                    "key": "price.percent_change",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "direction": "down",
-                    "valuePct": 0.02
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "direction": "down",
-                "valuePct": 0.02
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
           "sideScope": "both"
         }
       ],
-      "actions": [
+      "atoms": [
+        {
+          "key": "price.percent_change",
+          "phase": "entry",
+          "params": {
+            "direction": "down",
+            "valuePct": 2
+          },
+          "evidence": {
+            "text": "DCA every time price drops 2%",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
         {
           "key": "position.dca_schedule",
           "phase": "entry",
           "params": {
-            "dropPct": 0.02,
+            "dropPct": 2,
             "perOrderBudget": 2,
             "maxOrders": 2
           },
@@ -764,37 +474,7 @@
             "text": "DCA every time price drops 2%",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-action-1-position-dca-schedule",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "positionConstraint",
-                  "verb": "emit",
-                  "object": "dca_schedule",
-                  "shape": {
-                    "key": "position.dca_schedule",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "dropPct": 0.02,
-                    "perOrderBudget": 2,
-                    "maxOrders": 2
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "dropPct": 0.02,
-                "perOrderBudget": 2,
-                "maxOrders": 2
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          "sideScope": "both"
         }
       ]
     }
@@ -833,41 +513,6 @@
             "text": "MA20 上穿 MA50 开多",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-1-indicator-cross-over",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "cross_over",
-                  "shape": {
-                    "key": "indicator.cross_over",
-                    "phase": "entry",
-                    "sideScope": "long",
-                    "indicator": "ma",
-                    "value": 50,
-                    "period": 20,
-                    "fastPeriod": 20,
-                    "slowPeriod": 50
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "indicator": "ma",
-                "value": 50,
-                "period": 20,
-                "fastPeriod": 20,
-                "slowPeriod": 50
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
           "sideScope": "long"
         }
       ],
@@ -879,31 +524,35 @@
           "evidence": {
             "text": "MA20 上穿 MA50 开多",
             "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "indicator.cross_over",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "value": 50,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 50
           },
-          "contracts": [
-            {
-              "id": "contract-seed-action-1-action-open-long",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "action",
-                  "verb": "emit",
-                  "object": "open_long",
-                  "shape": {
-                    "key": "action.open_long",
-                    "phase": "entry",
-                    "sideScope": "long"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {},
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
         }
       ]
     }
@@ -927,6 +576,23 @@
         "timeframe": "15m",
         "marketType": "perp"
       },
+      "position": {
+        "mode": "fixed_quote",
+        "value": 3000,
+        "positionMode": "long_only",
+        "sizing": {
+          "kind": "quote",
+          "value": 3000,
+          "asset": "USDT"
+        },
+        "status": "locked",
+        "source": "user_explicit",
+        "evidence": {
+          "text": "总投入 3000 USDT",
+          "source": "user_explicit"
+        },
+        "openSlots": []
+      },
       "triggers": [
         {
           "key": "indicator.cross_over",
@@ -942,41 +608,6 @@
             "text": "MA20 上穿 MA50 开多",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-1-indicator-cross-over",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "cross_over",
-                  "shape": {
-                    "key": "indicator.cross_over",
-                    "phase": "entry",
-                    "sideScope": "long",
-                    "indicator": "ma",
-                    "value": 50,
-                    "period": 20,
-                    "fastPeriod": 20,
-                    "slowPeriod": 50
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "indicator": "ma",
-                "value": 50,
-                "period": 20,
-                "fastPeriod": 20,
-                "slowPeriod": 50
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
           "sideScope": "long"
         },
         {
@@ -989,33 +620,6 @@
             "text": "跌破前低停止补仓",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-2-price-breakout-down",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "breakout_down",
-                  "shape": {
-                    "key": "price.breakout_down",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "reference": "channel_low"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "reference": "channel_low"
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
           "sideScope": "both"
         }
       ],
@@ -1027,31 +631,35 @@
           "evidence": {
             "text": "MA20 上穿 MA50 开多",
             "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "indicator.cross_over",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "value": 50,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 50
           },
-          "contracts": [
-            {
-              "id": "contract-seed-action-1-action-open-long",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "action",
-                  "verb": "emit",
-                  "object": "open_long",
-                  "shape": {
-                    "key": "action.open_long",
-                    "phase": "entry",
-                    "sideScope": "long"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {},
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
         },
         {
           "key": "position.dca_schedule",
@@ -1064,35 +672,19 @@
             "text": "每天定投补仓 100 USDT",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-action-2-position-dca-schedule",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "positionConstraint",
-                  "verb": "emit",
-                  "object": "dca_schedule",
-                  "shape": {
-                    "key": "position.dca_schedule",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "perOrderBudget": 100,
-                    "maxOrders": 100
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "perOrderBudget": 100,
-                "maxOrders": 100
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          "sideScope": "both"
+        },
+        {
+          "key": "price.breakout_down",
+          "phase": "entry",
+          "params": {
+            "reference": "channel_low"
+          },
+          "evidence": {
+            "text": "跌破前低停止补仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
         }
       ]
     }
@@ -1116,50 +708,36 @@
         "timeframe": "1h",
         "marketType": "spot"
       },
+      "position": {
+        "mode": "fixed_quote",
+        "value": 100,
+        "positionMode": "long_only",
+        "sizing": {
+          "kind": "quote",
+          "value": 100,
+          "asset": "USDT"
+        },
+        "status": "locked",
+        "source": "user_explicit",
+        "evidence": {
+          "text": "每次 100 USDT",
+          "source": "user_explicit"
+        },
+        "openSlots": []
+      },
       "triggers": [
         {
           "key": "oscillator.rsi_lte",
           "phase": "entry",
           "params": {
             "period": 14,
-            "value": 14,
+            "value": 30,
             "thresholdRole": "lower_threshold"
           },
           "evidence": {
             "text": "RSI14 低于 30 开始 DCA",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-1-oscillator-rsi-lte",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "rsi_lte",
-                  "shape": {
-                    "key": "oscillator.rsi_lte",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "period": 14,
-                    "value": 14,
-                    "thresholdRole": "lower_threshold"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "period": 14,
-                "value": 14,
-                "thresholdRole": "lower_threshold"
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
           "sideScope": "both"
         },
         {
@@ -1167,41 +745,12 @@
           "phase": "entry",
           "params": {
             "direction": "down",
-            "valuePct": -0.05
+            "valuePct": -5
           },
           "evidence": {
             "text": "价格每跌 5% 补仓一次",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-2-price-percent-change",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "percent_change",
-                  "shape": {
-                    "key": "price.percent_change",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "direction": "down",
-                    "valuePct": -0.05
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "direction": "down",
-                "valuePct": -0.05
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
           "sideScope": "both"
         },
         {
@@ -1209,53 +758,60 @@
           "phase": "exit",
           "params": {
             "period": 14,
-            "value": 14,
+            "value": 70,
             "thresholdRole": "upper_threshold"
           },
           "evidence": {
             "text": "RSI14 高于 70 卖出",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-3-oscillator-rsi-gte",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "rsi_gte",
-                  "shape": {
-                    "key": "oscillator.rsi_gte",
-                    "phase": "exit",
-                    "sideScope": "both",
-                    "period": 14,
-                    "value": 14,
-                    "thresholdRole": "upper_threshold"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "period": 14,
-                "value": 14,
-                "thresholdRole": "upper_threshold"
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
-          "sideScope": "both"
+          "sideScope": "long"
         }
       ],
       "actions": [
         {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "RSI14 高于 70 卖出",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "oscillator.rsi_lte",
+          "phase": "entry",
+          "params": {
+            "period": 14,
+            "value": 30,
+            "thresholdRole": "lower_threshold"
+          },
+          "evidence": {
+            "text": "RSI14 低于 30 开始 DCA",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "price.percent_change",
+          "phase": "entry",
+          "params": {
+            "direction": "down",
+            "valuePct": -5
+          },
+          "evidence": {
+            "text": "价格每跌 5% 补仓一次",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
           "key": "position.dca_schedule",
           "phase": "entry",
           "params": {
-            "dropPct": -0.05,
+            "dropPct": -5,
             "perOrderBudget": 5,
             "maxOrders": 5
           },
@@ -1263,37 +819,31 @@
             "text": "价格每跌 5% 补仓一次",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-action-1-position-dca-schedule",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "positionConstraint",
-                  "verb": "emit",
-                  "object": "dca_schedule",
-                  "shape": {
-                    "key": "position.dca_schedule",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "dropPct": -0.05,
-                    "perOrderBudget": 5,
-                    "maxOrders": 5
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "dropPct": -0.05,
-                "perOrderBudget": 5,
-                "maxOrders": 5
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          "sideScope": "both"
+        },
+        {
+          "key": "oscillator.rsi_gte",
+          "phase": "exit",
+          "params": {
+            "period": 14,
+            "value": 70,
+            "thresholdRole": "upper_threshold"
+          },
+          "evidence": {
+            "text": "RSI14 高于 70 卖出",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "RSI14 高于 70 卖出",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
         }
       ]
     }
@@ -1332,41 +882,6 @@
             "text": "MA20 上穿 MA50 开多",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-1-indicator-cross-over",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "cross_over",
-                  "shape": {
-                    "key": "indicator.cross_over",
-                    "phase": "entry",
-                    "sideScope": "long",
-                    "indicator": "ma",
-                    "value": 50,
-                    "period": 20,
-                    "fastPeriod": 20,
-                    "slowPeriod": 50
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "indicator": "ma",
-                "value": 50,
-                "period": 20,
-                "fastPeriod": 20,
-                "slowPeriod": 50
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
           "sideScope": "long"
         }
       ],
@@ -1378,31 +893,35 @@
           "evidence": {
             "text": "MA20 上穿 MA50 开多",
             "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "indicator.cross_over",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "value": 50,
+            "period": 20,
+            "fastPeriod": 20,
+            "slowPeriod": 50
           },
-          "contracts": [
-            {
-              "id": "contract-seed-action-1-action-open-long",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "action",
-                  "verb": "emit",
-                  "object": "open_long",
-                  "shape": {
-                    "key": "action.open_long",
-                    "phase": "entry",
-                    "sideScope": "long"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {},
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "MA20 上穿 MA50 开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
         },
         {
           "key": "position.pyramiding_limit",
@@ -1414,33 +933,7 @@
             "text": "最多加仓 3 层",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-action-2-position-pyramiding-limit",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "positionConstraint",
-                  "verb": "emit",
-                  "object": "pyramiding_limit",
-                  "shape": {
-                    "key": "position.pyramiding_limit",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "maxLayers": 3
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "maxLayers": 3
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          "sideScope": "both"
         }
       ]
     }
@@ -1477,39 +970,21 @@
             "text": "MA20 cross above MA50 open long",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-1-indicator-above",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "above",
-                  "shape": {
-                    "key": "indicator.above",
-                    "phase": "entry",
-                    "sideScope": "long",
-                    "indicator": "ma",
-                    "referenceRole": "mid_term",
-                    "reference.period": 20,
-                    "timeframeOverride": "true"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "indicator": "ma",
-                "referenceRole": "mid_term",
-                "reference.period": 20,
-                "timeframeOverride": "true"
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
+          "sideScope": "long"
+        },
+        {
+          "key": "indicator.above",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "referenceRole": "long_term",
+            "reference.period": 50,
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "MA20 cross above MA50 open long",
+            "source": "user_explicit"
+          },
           "sideScope": "long"
         }
       ],
@@ -1521,31 +996,49 @@
           "evidence": {
             "text": "MA20 cross above MA50 open long",
             "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "indicator.above",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "referenceRole": "mid_term",
+            "reference.period": 20,
+            "timeframeOverride": "true"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-action-1-action-open-long",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "action",
-                  "verb": "emit",
-                  "object": "open_long",
-                  "shape": {
-                    "key": "action.open_long",
-                    "phase": "entry",
-                    "sideScope": "long"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {},
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          "evidence": {
+            "text": "MA20 cross above MA50 open long",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "indicator.above",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "referenceRole": "long_term",
+            "reference.period": 50,
+            "timeframeOverride": "true"
+          },
+          "evidence": {
+            "text": "MA20 cross above MA50 open long",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "MA20 cross above MA50 open long",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
         },
         {
           "key": "position.pyramiding_limit",
@@ -1557,33 +1050,7 @@
             "text": "pyramiding up to 4 layers",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-action-2-position-pyramiding-limit",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "positionConstraint",
-                  "verb": "emit",
-                  "object": "pyramiding_limit",
-                  "shape": {
-                    "key": "position.pyramiding_limit",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "maxLayers": 4
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "maxLayers": 4
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          "sideScope": "both"
         }
       ]
     }
@@ -1617,36 +1084,7 @@
             "text": "BTC 1h 突破前高开多",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-trigger-1-price-breakout-up",
-              "kind": "trigger",
-              "capabilities": [
-                {
-                  "domain": "trigger",
-                  "verb": "emit",
-                  "object": "breakout_up",
-                  "shape": {
-                    "key": "price.breakout_up",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "period": 1,
-                    "reference": "channel_high"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "period": 1,
-                "reference": "channel_high"
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ],
-          "sideScope": "both"
+          "sideScope": "long"
         }
       ],
       "actions": [
@@ -1657,31 +1095,7 @@
           "evidence": {
             "text": "BTC 1h 突破前高开多",
             "source": "user_explicit"
-          },
-          "contracts": [
-            {
-              "id": "contract-seed-action-1-action-open-long",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "action",
-                  "verb": "emit",
-                  "object": "open_long",
-                  "shape": {
-                    "key": "action.open_long",
-                    "phase": "entry",
-                    "sideScope": "long"
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {},
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          }
         },
         {
           "key": "action.add_position",
@@ -1689,48 +1103,82 @@
           "params": {
             "sideScope": "long",
             "addMode": "profit_pct",
-            "addRatio": 0.03,
-            "profitThreshold": 0.03,
-            "drawdownThreshold": 0.03
+            "addRatio": 3,
+            "profitThreshold": 3,
+            "drawdownThreshold": 3
+          },
+          "evidence": {
+            "text": "盈利 3% 后加仓 50%",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "risk": [
+        {
+          "key": "risk.take_profit_pct",
+          "phase": "exit",
+          "params": {
+            "valuePct": 3,
+            "basis": "entry_avg_price"
+          },
+          "evidence": {
+            "text": "盈利 3% 后加仓 50%",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "price.breakout_up",
+          "phase": "entry",
+          "params": {
+            "period": 1,
+            "reference": "channel_high"
+          },
+          "evidence": {
+            "text": "BTC 1h 突破前高开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "BTC 1h 突破前高开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.add_position",
+          "phase": "entry",
+          "params": {
+            "sideScope": "long",
+            "addMode": "profit_pct",
+            "addRatio": 3,
+            "profitThreshold": 3,
+            "drawdownThreshold": 3
           },
           "evidence": {
             "text": "盈利 3% 后加仓 50%",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-action-2-action-add-position",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "action",
-                  "verb": "emit",
-                  "object": "add_position",
-                  "shape": {
-                    "key": "action.add_position",
-                    "phase": "entry",
-                    "sideScope": "long",
-                    "addMode": "profit_pct",
-                    "addRatio": 0.03,
-                    "profitThreshold": 0.03,
-                    "drawdownThreshold": 0.03
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "sideScope": "long",
-                "addMode": "profit_pct",
-                "addRatio": 0.03,
-                "profitThreshold": 0.03,
-                "drawdownThreshold": 0.03
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          "sideScope": "both"
+        },
+        {
+          "key": "risk.take_profit_pct",
+          "phase": "exit",
+          "params": {
+            "valuePct": 3,
+            "basis": "entry_avg_price"
+          },
+          "evidence": {
+            "text": "盈利 3% 后加仓 50%",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
         },
         {
           "key": "position.pyramiding_limit",
@@ -1742,33 +1190,7 @@
             "text": "金字塔最多 3 层",
             "source": "user_explicit"
           },
-          "contracts": [
-            {
-              "id": "contract-seed-action-3-position-pyramiding-limit",
-              "kind": "action",
-              "capabilities": [
-                {
-                  "domain": "positionConstraint",
-                  "verb": "emit",
-                  "object": "pyramiding_limit",
-                  "shape": {
-                    "key": "position.pyramiding_limit",
-                    "phase": "entry",
-                    "sideScope": "both",
-                    "maxLayers": 3
-                  }
-                }
-              ],
-              "requires": [],
-              "params": {
-                "maxLayers": 3
-              },
-              "runtimeRequirements": [],
-              "stateRequirements": [],
-              "orderRequirements": [],
-              "openSlots": []
-            }
-          ]
+          "sideScope": "both"
         }
       ]
     }

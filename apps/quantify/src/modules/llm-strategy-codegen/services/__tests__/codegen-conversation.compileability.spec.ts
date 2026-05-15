@@ -1,3 +1,4 @@
+import type { SemanticState } from '../../types/semantic-state'
 import { CodegenConversationService } from '../codegen-conversation.service'
 
 const noop: any = () => {}
@@ -77,3 +78,119 @@ describe('codegen-conversation — evaluateCanonicalCompileability 入场动作�
     expect(report.reasons).toContain('canonical_projection_missing_exit_program')
   })
 })
+
+describe('codegen-conversation — executable atom readiness uses capability graph', () => {
+  const svc = new CodegenConversationService(
+    stubObj, stubObj, stubObj, stubObj, stubObj, stubObj,
+    stubObj, stubObj, stubObj, stubObj, stubObj, stubObj,
+  )
+  const anySvc = svc as any
+
+  it('does not require trigger-style entry/exit for a complete order program', () => {
+    const state = createSemanticState({
+      trigger: [missingExecutableAtom('entry'), missingExecutableAtom('exit')],
+      action: [{
+        id: 'action-grid-ladder',
+        key: 'action.grid_ladder',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'contract-grid-ladder',
+          kind: 'action',
+          capabilities: [{
+            domain: 'order_program',
+            verb: 'maintain',
+            object: 'limit_ladder',
+            shape: { lower: 60000, upper: 80000, spacingPct: 0.5 },
+          }],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+    })
+
+    const nextState = anySvc.ensureExecutableAtomSlots(state) as SemanticState
+    const triggerKeys = nextState.trigger.map(trigger => trigger.key)
+
+    expect(triggerKeys).not.toContain('semantic.missing_entry_atom')
+    expect(triggerKeys).not.toContain('semantic.missing_exit_atom')
+  })
+
+  it('accepts locked entry trigger plus executable risk as exit semantics', () => {
+    const state = createSemanticState({
+      trigger: [
+        {
+          id: 'trigger-entry-rsi',
+          key: 'oscillator.rsi_lte',
+          phase: 'entry',
+          params: { period: 14, value: 30 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        missingExecutableAtom('exit'),
+      ],
+      risk: [{
+        id: 'risk-stop-loss',
+        key: 'risk.stop_loss_pct',
+        params: { valuePct: 5 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+    })
+
+    const nextState = anySvc.ensureExecutableAtomSlots(state) as SemanticState
+    const triggerKeys = nextState.trigger.map(trigger => trigger.key)
+
+    expect(triggerKeys).not.toContain('semantic.missing_entry_atom')
+    expect(triggerKeys).not.toContain('semantic.missing_exit_atom')
+  })
+})
+
+function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticState {
+  return {
+    version: 1,
+    families: [],
+    trigger: [],
+    action: [],
+    risk: [],
+    position: null,
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
+    contextSlots: {
+      exchange: null,
+      symbol: null,
+      marketType: null,
+      timeframe: null,
+    },
+    normalizationNotes: [],
+    updatedAt: '2026-05-15T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function missingExecutableAtom(phase: 'entry' | 'exit'): SemanticState['trigger'][number] {
+  return {
+    id: `semantic-missing-${phase}-atom`,
+    key: phase === 'entry' ? 'semantic.missing_entry_atom' : 'semantic.missing_exit_atom',
+    phase,
+    params: {},
+    status: 'open',
+    source: 'derived',
+    openSlots: [{
+      slotKey: `trigger.${phase}`,
+      fieldPath: `triggers[${phase}]`,
+      status: 'open',
+      priority: 'core',
+      questionHint: phase === 'entry' ? '请补充入场触发条件。' : '请补充出场触发条件。',
+      affectsExecution: true,
+    }],
+  }
+}

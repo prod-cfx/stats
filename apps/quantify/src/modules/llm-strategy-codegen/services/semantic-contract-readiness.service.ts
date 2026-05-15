@@ -2138,6 +2138,21 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
     })
   }
 
+  for (const constraint of state.position?.constraints ?? []) {
+    if (constraint.status !== 'superseded' && constraint.contracts?.length) {
+      owners.push({
+        ownerKind: 'position',
+        ownerId: positionConstraintOwnerId(constraint),
+        atomKey: constraint.key,
+        params: constraint.params,
+        support: constraint.support,
+        status: constraint.status,
+        openSlots: constraint.openSlots,
+        contracts: constraint.contracts,
+      })
+    }
+  }
+
   for (const constraint of state.positionConstraint ?? []) {
     if (constraint.status !== 'superseded' && constraint.contracts?.length) {
       owners.push({
