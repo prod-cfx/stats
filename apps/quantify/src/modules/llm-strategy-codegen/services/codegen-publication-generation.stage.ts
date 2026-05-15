@@ -443,11 +443,9 @@ export class CodegenPublicationGenerationStage {
     semanticState: SemanticState,
     canonicalSpec: CanonicalStrategySpecV2,
   ): ReturnType<CompiledScriptExecutionEnvelopeService['build']>['positionMode'] | undefined {
-    const semanticMode = semanticState.position?.positionMode
-    if (semanticMode === 'long_only' || semanticMode === 'short_only' || semanticMode === 'long_short') {
-      return semanticMode
-    }
-
+    // Issue #1391：真相源优先级 —— action 暴露（canonical spec rules）> positionConstraint sideMode 声明。
+    // 多轮对话下 state.position.positionMode 第一次锁定后不会随 action 暴露重算，
+    // 因此 canonical spec 推得出真实暴露时必须以 canonical 为准，避免与 IR expected positionMode 漂移。
     const hasLong = canonicalSpec.rules.some(rule => rule.actions.some(action =>
       action.type === 'OPEN_LONG' || action.type === 'REDUCE_LONG',
     ))
@@ -457,6 +455,11 @@ export class CodegenPublicationGenerationStage {
     if (hasLong && hasShort) return 'long_short'
     if (hasShort) return 'short_only'
     if (hasLong) return 'long_only'
+
+    const semanticMode = semanticState.position?.positionMode
+    if (semanticMode === 'long_only' || semanticMode === 'short_only' || semanticMode === 'long_short') {
+      return semanticMode
+    }
     return undefined
   }
 

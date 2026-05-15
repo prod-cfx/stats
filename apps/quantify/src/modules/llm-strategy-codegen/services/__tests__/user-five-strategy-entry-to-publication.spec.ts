@@ -1,6 +1,14 @@
 import type { CodegenSemanticPatch } from '../../types/codegen-semantic-patch'
 import type { SemanticState } from '../../types/semantic-state'
 import type { StrategyClarificationState } from '../../types/strategy-clarification'
+import type { Bar } from '@/modules/backtesting/types/backtesting.types'
+import { BacktestRunnerService } from '@/modules/backtesting/core/backtest-runner.service'
+import { PortfolioLedgerServiceFactory } from '@/modules/backtesting/portfolio/portfolio-ledger.service'
+import { BacktestReporterService } from '@/modules/backtesting/report/backtest-reporter.service'
+import { RiskEvaluatorService } from '@/modules/backtesting/risk/risk-evaluator.service'
+import { BacktestStrategyAdapterService } from '@/modules/backtesting/services/backtest-strategy-adapter.service'
+import { StateEngineService } from '@/modules/backtesting/state/state-engine.service'
+import { TheoreticalExecutionModel } from '@/modules/backtesting/execution/theoretical-execution.model'
 import { CURRENT_SEMANTIC_VERSION } from '../../nl-gateway/version-gate/version-gate'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
@@ -38,6 +46,10 @@ const forbiddenUserVisibleFragments = [
   '请补充该原子的执行合约',
   '指标静态高于条件当前公测暂未支持生成和回测',
   '指标静态低于条件当前公测暂未支持生成和回测',
+  // Issue #1383 后续：dispatcher 抽出的原子被下游正确渲染时，不应再退到这些 atom-key 兜底文案
+  '已识别风控，参数待补充',
+  '指标高于阈值时做多开仓',
+  '指标低于阈值时平多',
 ]
 
 function createConversationService(): ConversationInternals {
@@ -124,6 +136,58 @@ describe('user reported five strategies: entry -> middle -> publication generati
       expectedAnyKeys: ['oscillator.rsi_lte', 'open_long', 'risk.partial_take_profit', 'portfolioRisk.drawdown_block'],
       publication: false,
     },
+    // Issue #1383 后续：用户实际反馈的 6 条策略，全部按"原子语义五桶真相源"通用解
+    //   走通入口（dispatcher）→ 中间（state/projection）→ 不再退到 atom-key 兜底文案
+    //
+    //   publication=true 的策略额外校验生成 canonical-spec + compiled script artifact，
+    //   走完入口→中间→canonical-spec-builder→IR compiler→AST compiler→compiled script
+    //   全链路，确保用户输入能"开出可回测的策略代码"。
+    //
+    //   策略6 / 7 / 10 publication=false 是因为：策略6/7 上下文（exchange/timeframe/sizing）
+    //   完整需澄清，publication 路径 fail-closed；策略10 是 grid 中心偏移，runtime 端
+    //   "用部署时当前价做中心" 的执行层支持是分离 workstream，本 PR 未覆盖。
+    {
+      name: '策略6 EMA 多均线上方 + BOLL 下/上轨双向开（S2 elision）',
+      message: '15min k线里面 价格在ema20 ema60 ema144上方时做多开仓 都位于下方只开空 入场是boll下轨开多 上轨开空 币安的btcusdt永续合约 风控是亏损5%止损',
+      expectedAnyKeys: ['indicator.above', 'bollinger.touch_lower', 'bollinger.touch_upper', 'open_long', 'open_short'],
+      publication: false,
+    },
+    {
+      name: '策略7 BOLL 上下轨入场 + 中轨平仓（S3 自镜像）',
+      message: 'OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%。',
+      expectedAnyKeys: ['bollinger.touch_upper', 'bollinger.touch_lower', 'bollinger.touch_middle', 'open_short', 'open_long'],
+      publication: true,
+    },
+    {
+      name: '策略8 阳线开多/阴线平多（S4 candle pattern）',
+      message: '用 BTCUSDT 1m K 线。每次最新 K 线收盘价高于开盘价时尝试开多。如果已有持仓则不再开仓。收盘价低于开盘价时平多。',
+      expectedAnyKeys: ['price.candle_pattern', 'open_long', 'close_long'],
+      publication: false,
+    },
+    {
+      name: '策略8a 阳线开多/阴线平多 + 完整上下文（S4 publishable）',
+      message: 'binance 永续 BTCUSDT 1m K 线。每次最新 K 线收盘价高于开盘价时尝试开多。如果已有持仓则不再开仓。收盘价低于开盘价时平多。单笔仓位 10%。',
+      expectedAnyKeys: ['price.candle_pattern', 'open_long', 'close_long'],
+      publication: true,
+    },
+    {
+      name: '策略9 EMA7 上穿 EMA21 + 下穿平多（S5 cross-clause inheritance）',
+      message: 'EMA7 上穿 EMA21 时开多；下穿 时平多。',
+      expectedAnyKeys: ['indicator.cross_over', 'indicator.cross_under', 'open_long', 'close_long'],
+      publication: false,
+    },
+    {
+      name: '策略9a EMA7 上穿 EMA21 + 完整上下文（S5 publishable）',
+      message: 'binance 永续 BTCUSDT 15m。EMA7 上穿 EMA21 时开多；下穿 时平多。单笔仓位 10%。',
+      expectedAnyKeys: ['indicator.cross_over', 'indicator.cross_under', 'open_long', 'close_long'],
+      publication: true,
+    },
+    {
+      name: '策略10 现货网格中心偏移（S6 grid center-offset → centered_percent_range/deployment）',
+      message: 'OKX 现货 ETHUSDT、1m 网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT、限价单并相邻网格自动挂反向单、不用趋势信号开仓；当价格突破上下边界时执行"立即停止并撤销所有未成交订单"',
+      expectedAnyKeys: ['grid.range_rebalance'],
+      publication: true,
+    },
   ]
 
   for (const strategy of strategies) {
@@ -160,12 +224,103 @@ describe('user reported five strategies: entry -> middle -> publication generati
       expect(canonicalSpec.dataRequirements.requiredTimeframes[0] ?? canonicalSpec.market.defaultTimeframe).toBeTruthy()
       const artifacts = await createPublicationStage().generate({ semanticState: state })
 
-      expect(artifacts.canonicalSpec.rules.length).toBeGreaterThanOrEqual(2)
+      // 双路径接受：常规策略走 rules，grid 程序走 orderPrograms（与 canonical spec 设计一致）
+      const ruleCount = artifacts.canonicalSpec.rules.length
+      const programCount = (artifacts.canonicalSpec as unknown as { orderPrograms?: unknown[] }).orderPrograms?.length ?? 0
+      expect(ruleCount >= 2 || programCount >= 1).toBe(true)
       expect(artifacts.compiledScript).toContain('protocolVersion')
       expect(artifacts.compiledScript).toContain('onBar')
       expect(artifacts.validation.passed).toBe(true)
       expect(artifacts.semanticAtomInvariant.status).toBe('PASSED')
       assertNoForbiddenUserText(artifacts.compiledScript)
+    })
+
+    it(`${strategy.name}: 回测装载——BacktestStrategyAdapter 可加载 compiled script`, async () => {
+      const state = buildStateFromUserMessage(strategy.message)
+      const artifacts = await createPublicationStage().generate({ semanticState: state })
+      // BacktestStrategyAdapter 用 CompiledScriptParser 解析脚本并构造 onBar 回调，
+      //   是 backtest runner 实际消费 compiledScript 的入口。能成功 build 即证明
+      //   compiledScript 的 expr pool / guards / risk predicates / decision programs /
+      //   orderPrograms 拓扑都能被运行时正确装载。
+      const adapter = new BacktestStrategyAdapterService()
+      const built = await adapter.build({
+        id: `e2e-${strategy.name}`,
+        protocolVersion: 'v1',
+        scriptCode: artifacts.compiledScript,
+        params: {
+          exchange: 'binance',
+          marketType: 'perp',
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+        },
+      })
+      expect(built).toBeTruthy()
+      expect(typeof built.fn).toBe('function')
+    })
+
+    it(`${strategy.name}: 真实回测——BacktestRunnerService 跑通 mock OHLCV 不抛错`, async () => {
+      const state = buildStateFromUserMessage(strategy.message)
+      const artifacts = await createPublicationStage().generate({ semanticState: state })
+      const adapter = new BacktestStrategyAdapterService()
+      const symbolRaw = state.contextSlots.symbol?.value
+      const symbol = typeof symbolRaw === 'string' && symbolRaw.length > 0 ? symbolRaw : 'BTCUSDT'
+      const timeframeRaw = state.contextSlots.timeframe?.value
+      const timeframe = (typeof timeframeRaw === 'string' && timeframeRaw.length > 0
+        ? timeframeRaw
+        : artifacts.canonicalSpec.market.defaultTimeframe ?? '15m') as Bar['timeframe']
+      const exchangeRaw = state.contextSlots.exchange?.value
+      const marketTypeRaw = state.contextSlots.marketType?.value
+      const built = await adapter.build({
+        id: `runtime-${strategy.name}`,
+        protocolVersion: 'v1',
+        scriptCode: artifacts.compiledScript,
+        params: {
+          exchange: typeof exchangeRaw === 'string' ? exchangeRaw : 'binance',
+          marketType: typeof marketTypeRaw === 'string' ? marketTypeRaw : 'perp',
+          symbol,
+          timeframe,
+        },
+      })
+      // 50 根 mock OHLCV 走小幅度震荡，覆盖触发 / 不触发两侧
+      const bars: Bar[] = []
+      const intervalMs = 15 * 60 * 1000
+      let price = 100
+      for (let i = 0; i < 50; i += 1) {
+        const closeTime = (i + 1) * intervalMs
+        const drift = Math.sin(i / 5) * 1.5
+        const open = price
+        const close = +(price + drift).toFixed(4)
+        const high = +(Math.max(open, close) + 0.5).toFixed(4)
+        const low = +(Math.min(open, close) - 0.5).toFixed(4)
+        bars.push({ symbol, timeframe, openTime: closeTime - intervalMs, closeTime, open, high, low, close, volume: 100 + i })
+        price = close
+      }
+      const runner = new BacktestRunnerService(
+        new TheoreticalExecutionModel(),
+        new PortfolioLedgerServiceFactory(),
+        new BacktestReporterService(),
+        new StateEngineService(),
+        new RiskEvaluatorService(),
+      )
+      const report = await runner.run({
+        symbols: [symbol],
+        baseTimeframe: timeframe,
+        stateTimeframes: [],
+        initialCash: 10000,
+        leverage: 1,
+        execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+        strategy: {
+          id: built.id,
+          params: built.params,
+          fn: built.fn,
+        },
+        dataRange: { fromTs: bars[0]!.closeTime, toTs: bars.at(-1)!.closeTime },
+        bars,
+      })
+      // 回测引擎跑通 = 报告对象返回；trades 数量 / 终值不强断言（depends on price path）
+      expect(report).toBeTruthy()
+      expect(report.equityCurve).toBeDefined()
+      expect(report.equityCurve.length).toBeGreaterThanOrEqual(1)
     })
   }
 

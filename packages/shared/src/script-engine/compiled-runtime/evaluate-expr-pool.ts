@@ -1092,11 +1092,13 @@ function evaluateCandlePatternSeries(
   return candlePatternDetector(scopedBars, { pattern, direction, minBars }) ? 1 : 0
 }
 
-function isCandlePattern(value: string | null): value is 'engulfing' | 'hammer' | 'doji' | 'consecutive_body' {
+function isCandlePattern(value: string | null): value is 'engulfing' | 'hammer' | 'doji' | 'consecutive_body' | 'single_bull_bar' | 'single_bear_bar' {
   return value === 'engulfing'
     || value === 'hammer'
     || value === 'doji'
     || value === 'consecutive_body'
+    || value === 'single_bull_bar'
+    || value === 'single_bear_bar'
 }
 
 function isCandlePatternDirection(value: string | null): value is 'bullish' | 'bearish' {

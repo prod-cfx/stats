@@ -339,12 +339,17 @@ export const CONDITION_ATOM_EMITS = {
         && cpPattern !== 'hammer'
         && cpPattern !== 'doji'
         && cpPattern !== 'consecutive_body'
+        && cpPattern !== 'single_bull_bar'
+        && cpPattern !== 'single_bear_bar'
       ) {
         throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:pattern`)
       }
-      const cpDirection = typeof atom.params?.direction === 'string'
+      // single bull/bear bar 自身方向已确定，direction 缺省时由 pattern 推导
+      let cpDirection = typeof atom.params?.direction === 'string'
         ? atom.params.direction.trim().toLowerCase()
         : null
+      if (!cpDirection && cpPattern === 'single_bull_bar') cpDirection = 'bullish'
+      if (!cpDirection && cpPattern === 'single_bear_bar') cpDirection = 'bearish'
       if (cpDirection !== 'bullish' && cpDirection !== 'bearish') {
         throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:direction`)
       }

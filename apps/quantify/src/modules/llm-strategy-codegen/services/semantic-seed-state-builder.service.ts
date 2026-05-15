@@ -84,6 +84,19 @@ const SYNTHESIZABLE_ACTION_KEYS = new Set<string>([
 // SYNTHESIZABLE_POSITION_LIFECYCLE_ACTION_KEYS：bucket === 'action' 的 atom-key 派生
 //   + 显式 union 'action.reduce_position'（legacy 接收的虚拟 atom，registry 暂未声明）。
 //   PR2c cleanup 时若 registry 补齐 action.reduce_position，可去掉 union。
+// Issue #1391 review M6：dedupe identity hash 应排除的派生字段（不参与语义区分）。
+//   memoryKey：partial_take_profit 的 deterministic hash 副产物，纯本地推导
+//   evidenceText/evidence：seed-builder 注入的 trace info，不是 surface paramSlot
+//   _spotSideModeAutoCorrection：M5 注入的 fail-safe 备注，纯文档字段
+//   注意：sourceText（verbatim-clause extractor 抽出的合法 paramSlot，如 candle_pattern）
+//   不在此集合——它是识别要素而非派生字段。
+const STATE_DERIVED_PARAM_KEYS: ReadonlySet<string> = new Set<string>([
+  'memoryKey',
+  'evidenceText',
+  'evidence',
+  '_spotSideModeAutoCorrection',
+])
+
 const SYNTHESIZABLE_POSITION_LIFECYCLE_ACTION_KEYS: ReadonlySet<string> = new Set<string>([
   ...Object.entries(ATOM_CONTRACT_REGISTRY)
     .filter(([, contract]) => (contract as { bucket: string }).bucket === 'action')
@@ -288,21 +301,39 @@ export class SemanticSeedStateBuilderService {
         return !dropViolations.has(`${kind}[${index}:${key}${phase}]`)
       })
     }
-    const positionUpdate = this.toPositionState(positionPatchInput)
+    const positionUpdateRaw = this.toPositionState(positionPatchInput)
     const contextSlots = this.toContextSlots(
       semanticPatch.contextSlots ?? semanticPatch.contextUpdates ?? semanticPatch.context,
     )
+    // Issue #1391：spot 市场下 sideMode='both' / 'short_only' 与现货语义冲突——
+    //   按 marketType 上下文 fail-safe 派生 long_only。registry-driven：任何带 sideMode
+    //   字段的 positionConstraint atom 都受影响，不只 grid。
+    const positionUpdate = this.applySpotSideModeConstraint(positionUpdateRaw, contextSlots)
 
-    const triggerUpdates = filterByEvidenceInvariant(triggerItems, 'trigger')
+    const triggerUpdatesRaw = filterByEvidenceInvariant(triggerItems, 'trigger')
       .map((item, index) => this.toTriggerState(item, index))
       .filter((item): item is SemanticTriggerState => item !== null)
+    // Issue #1391：seed-builder 通用桶去重（registry-driven，作用于所有 atom 不是单策略）
+    //   dispatcher 在跨子句继承 / planner-dispatcher merge / 重复 clause 命中等场景下
+    //   会输出多份同 (key, phase, sideScope, paramsHash) 节点；mergeRisk 等 bucket merge
+    //   只在 persisted-state 路径跑，纯 seed 一次性输入跑不到——这里在 build() 出口
+    //   按统一 identity 折叠，保留最强者（locked > open）。
+    const triggerUpdates = this.coalesceDuplicateBucketEntries(triggerUpdatesRaw, {
+      sideScopeAware: true,
+    })
     const groupedTriggerUpdates = this.withMovingAverageStackCombinationContracts(triggerUpdates)
+    // Action 桶不参与通用 dedupe：action.params 常为空 {}，差异完全靠 contracts.capabilities.shape
+    //   承载（如 per_order_budget=50 vs 80），按 params hash 折叠会错误吞掉合法 multi-leg 配置
+    //   （PR3.9 spec 'isMultiLeg=true with two per_order_budget' 即此场景）。
     const actionUpdates = filterByEvidenceInvariant(actionItems, 'action')
       .map((item, index) => this.toActionState(item, index))
       .filter((item): item is SemanticActionState => item !== null)
-    const riskUpdates = filterByEvidenceInvariant(riskItems, 'risk')
-      .map((item, index) => this.toRiskState(item, index))
-      .filter((item): item is SemanticRiskState => item !== null)
+    const riskUpdates = this.coalesceDuplicateBucketEntries(
+      filterByEvidenceInvariant(riskItems, 'risk')
+        .map((item, index) => this.toRiskState(item, index))
+        .filter((item): item is SemanticRiskState => item !== null),
+      { sideScopeAware: false },
+    )
     const orchestration = this.toOrchestrationState(orchestrationPatchInput)
     const positionConstraints = positionUpdate?.constraints ?? []
 
@@ -541,6 +572,108 @@ export class SemanticSeedStateBuilderService {
       ...base,
       constraints: this.coalescePositionConstraintPatches([...existingConstraints, ...constraints]),
     }
+  }
+
+  // Issue #1391：spot 市场强制 sideMode=long_only fail-safe（review M5 升级）
+  //   任何 positionConstraint atom 声明 sideMode='both'/'short_only' 而 contextSlots.marketType='spot' 时，
+  //   覆写为 'long_only'，并在 atom 上挂 evidence note + 通过 logger.warn 告知此次自动调整，
+  //   避免静默改写违反 Never break userspace。registry-driven：不针对 grid 单 atom。
+  private applySpotSideModeConstraint(
+    position: SemanticState['position'],
+    contextSlots: SemanticState['contextSlots'],
+  ): SemanticState['position'] {
+    if (!position) return position
+    const marketType = contextSlots.marketType?.value
+    if (marketType !== 'spot') return position
+    const constraints = position.constraints
+    if (!Array.isArray(constraints) || constraints.length === 0) return position
+    const adjusted = constraints.map((c) => {
+      const sideMode = (c.params as { sideMode?: unknown } | undefined)?.sideMode
+      if (sideMode !== 'both' && sideMode !== 'short_only') return c
+      // Issue #1391 follow-up：grid.range_rebalance 的 sideMode='both' 语义是
+      //   buy-low / sell-high 循环（sell 平掉网格底仓，不是真做空），
+      //   现货完全支持。spot fail-safe 强制 long_only 会破坏用户"相邻网格自动挂反向单"
+      //   这种合法双向网格表达。grid bidirectional 现货语义安全，跳过约束。
+      if (c.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && sideMode === 'both') {
+        return c
+      }
+      const note = `市场类型为 spot，原始 sideMode=${String(sideMode)} 自动调整为 long_only（现货不支持做空）`
+      this.logger.warn(`[Issue#1391] applySpotSideModeConstraint: ${note} (atom=${c.key})`)
+      return {
+        ...c,
+        params: { ...c.params, sideMode: 'long_only', _spotSideModeAutoCorrection: note },
+      }
+    })
+    return { ...position, constraints: adjusted }
+  }
+
+  // Issue #1391：通用桶去重 helper（按 key+phase+sideScope+stable params hash + openSlots 签名）
+  //   作用面：trigger/action/risk 三桶 build() 收口；orchestration / position.constraints 已有
+  //   各自专用合并路径不重复。规则与 SemanticStateMergeService.dedupeByAtomIdentity 一致
+  //   保留 locked > open，等强保留先到。memoryKey/timestamp 等派生字段从 hash 排除。
+  private coalesceDuplicateBucketEntries<T extends {
+    key: string
+    status: 'open' | 'locked' | 'superseded'
+    params?: Record<string, unknown>
+    openSlots?: ReadonlyArray<{ slotKey?: string, fieldPath?: string, status?: string }>
+    phase?: 'entry' | 'exit' | 'gate' | 'risk' | undefined
+    sideScope?: 'long' | 'short' | 'both' | null
+  }>(
+    entries: T[],
+    options: { sideScopeAware: boolean },
+  ): T[] {
+    if (entries.length <= 1) return entries
+    const out: T[] = []
+    const indexByIdentity = new Map<string, number>()
+    const rank = (s: T['status']): number => s === 'locked' ? 2 : s === 'superseded' ? 1 : 0
+    for (const entry of entries) {
+      const phase = entry.phase ?? '__nophase__'
+      const sideScope = options.sideScopeAware ? (entry.sideScope ?? '__noside__') : ''
+      const paramsHash = this.stableParamsHashIgnoringDerivedFields(entry.params ?? {})
+      const slotSig = (entry.openSlots ?? [])
+        .map(s => `${s.slotKey ?? ''}@${(s as { fieldPath?: string }).fieldPath ?? ''}`)
+        .sort()
+        .join(',')
+      const identity = `${entry.key}|${phase}|${sideScope}|${paramsHash}|${slotSig}`
+      const existingIdx = indexByIdentity.get(identity)
+      if (existingIdx === undefined) {
+        indexByIdentity.set(identity, out.length)
+        out.push(entry)
+        continue
+      }
+      const incumbent = out[existingIdx]!
+      if (rank(entry.status) > rank(incumbent.status)) {
+        out[existingIdx] = entry
+      }
+    }
+    return out
+  }
+
+  // Issue #1391 review M6：硬编码字段黑名单不可持续——sourceText 在 candle_pattern 是合法
+  //   verbatim-clause 识别 paramSlot（atom-contract-registry.ts 中 paramSlots.sourceText），
+  //   不是派生字段。仅保留确实是 server 派生（不影响 identity 的副产物）的字段：memoryKey
+  //   （partial_take_profit 的 deterministic hash）+ evidenceText / evidence （seed builder
+  //   注入的 trace info，不是 surface 抽取的 slot）。
+  private stableParamsHashIgnoringDerivedFields(params: Record<string, unknown>): string {
+    const sortedEntries = Object.entries(params)
+      .filter(([k]) => !STATE_DERIVED_PARAM_KEYS.has(k))
+      .sort(([a], [b]) => a.localeCompare(b))
+    const normalized: Record<string, unknown> = {}
+    for (const [k, v] of sortedEntries) {
+      normalized[k] = this.normalizeForHash(v)
+    }
+    return JSON.stringify(normalized)
+  }
+
+  private normalizeForHash(v: unknown): unknown {
+    if (v === null || typeof v !== 'object') return v
+    if (Array.isArray(v)) return v.map(x => this.normalizeForHash(x))
+    const obj = v as Record<string, unknown>
+    const out: Record<string, unknown> = {}
+    for (const k of Object.keys(obj).sort()) {
+      out[k] = this.normalizeForHash(obj[k])
+    }
+    return out
   }
 
   private coalescePositionConstraintPatches(constraints: unknown[]): unknown[] {
@@ -1210,8 +1343,13 @@ export class SemanticSeedStateBuilderService {
     }
 
     const params = this.readParams(update.params)
-    if (key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && this.resolveGridRange(params) === null) {
-      return null
+    if (key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) {
+      // 接受两种合法 grid 形态：显式 range 或 center-offset+levels（runtime 用部署时价格推导 range）
+      const hasExplicitRange = this.resolveGridRange(params) !== null
+      const hasCenterOffsetMode = this.hasPositiveFiniteNumber(params.centerOffsetPct) && this.hasPositiveInteger(params.levels)
+      if (!hasExplicitRange && !hasCenterOffsetMode) {
+        return null
+      }
     }
 
     let openSlots = this.readOpenSlots(update.openSlots)
@@ -1391,8 +1529,15 @@ export class SemanticSeedStateBuilderService {
       return this.hasPositiveInteger(params.lookbackBars) && this.isPercentThreshold(params.thresholdPct)
     }
 
+    if (key === ATOM_CONTRACT_REGISTRY['price.candle_pattern'].key) {
+      // pattern 必填，其它 slot 可选；single_bull_bar / single_bear_bar / engulfing / hammer / doji / consecutive_body 都允许
+      return Boolean(this.readTrimmedString(params.pattern))
+    }
+
     if (key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) {
-      return this.resolveGridRange(params) !== null
+      // 显式 range 或 center-offset+levels 二选一；都缺则确实没法 synthesize 合约
+      if (this.resolveGridRange(params) !== null) return true
+      return this.hasPositiveFiniteNumber(params.centerOffsetPct) && this.hasPositiveInteger(params.levels)
     }
 
     if (
@@ -1597,6 +1742,31 @@ export class SemanticSeedStateBuilderService {
 
     if (key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) {
       const range = this.resolveGridRange(params)
+      // Issue #1391：中心偏移网格（用户表达"以部署时当前价为中心、上下各 N% 共 M 格"）
+      //   走 'centered_percent_range' 模式，centerTiming='deployment' 让 runtime 在
+      //   onStart 用当前价作为中心、halfRangePct=centerOffsetPct 派生 range、
+      //   levels 映射到 gridIntervals/gridCount。canonical-spec-builder 已支持该 mode。
+      if (!range) {
+        const centerOffsetPct = this.readFiniteNumberParam(params, ['centerOffsetPct'])
+        const levels = this.readFiniteNumberParam(params, ['levels'])
+        if (centerOffsetPct !== null && centerOffsetPct > 0 && levels !== null && levels >= 2) {
+          return {
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: this.toCapabilityShape({
+              mode: 'centered_percent_range',
+              centerTiming: 'deployment',
+              centerSource: 'last_price',
+              halfRangePct: centerOffsetPct,
+              gridIntervals: levels,
+              gridCount: levels,
+              spacingMode: 'arithmetic',
+              ...this.resolveGridDensityShape(params),
+            }),
+          }
+        }
+      }
       return {
         domain: 'price',
         verb: 'define',
@@ -2155,13 +2325,32 @@ export class SemanticSeedStateBuilderService {
     index: number,
   ): SemanticAtomContract {
     const range = this.resolveGridRange(params)
-    const levelSetShape = this.toCapabilityShape({
-      mode: 'fixed_range',
-      lower: range?.lower ?? null,
-      upper: range?.upper ?? null,
-      spacingMode: 'arithmetic',
-      ...this.resolveGridDensityShape(params),
-    })
+    // Issue #1391：中心偏移模式（"以部署时当前价为中心、上下各 N% 共 M 格"）
+    //   走 'centered_percent_range'，centerTiming='deployment' 让 runtime 在 onStart
+    //   用当前价做中心、halfRangePct=centerOffsetPct 派生 range；canonical-spec-builder
+    //   的 projectLevelSetCapabilityKey 已支持该 mode。
+    const centerOffsetPct = this.readFiniteNumberParam(params, ['centerOffsetPct'])
+    const levels = this.readFiniteNumberParam(params, ['levels'])
+    const useCenteredMode = !range && centerOffsetPct !== null && centerOffsetPct > 0
+      && levels !== null && levels >= 2
+    const levelSetShape = useCenteredMode
+      ? this.toCapabilityShape({
+          mode: 'centered_percent_range',
+          centerTiming: 'deployment',
+          centerSource: 'last_price',
+          halfRangePct: centerOffsetPct,
+          gridIntervals: levels,
+          gridCount: levels,
+          spacingMode: 'arithmetic',
+          ...this.resolveGridDensityShape(params),
+        })
+      : this.toCapabilityShape({
+          mode: 'fixed_range',
+          lower: range?.lower ?? null,
+          upper: range?.upper ?? null,
+          spacingMode: 'arithmetic',
+          ...this.resolveGridDensityShape(params),
+        })
     const perGridSizing = this.resolveGridPerOrderSizingShape(params)
     const capabilities: SemanticCapability[] = [
       {
