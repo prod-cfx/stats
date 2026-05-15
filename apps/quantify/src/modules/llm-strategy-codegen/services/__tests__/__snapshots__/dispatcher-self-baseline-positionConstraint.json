@@ -134,20 +134,6 @@
         },
         "openSlots": []
       },
-      "triggers": [
-        {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "突破停止",
-            "source": "user_explicit"
-          },
-          "sideScope": "both"
-        }
-      ],
       "actions": [
         {
           "key": "action.open_long",
@@ -191,18 +177,6 @@
             "source": "user_explicit"
           },
           "sideScope": "long"
-        },
-        {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "突破停止",
-            "source": "user_explicit"
-          },
-          "sideScope": "both"
         }
       ]
     }

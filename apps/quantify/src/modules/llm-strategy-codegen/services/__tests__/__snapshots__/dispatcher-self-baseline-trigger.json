@@ -175,19 +175,6 @@
           "sideScope": "long"
         },
         {
-          "key": "price.breakout_down",
-          "phase": "entry",
-          "params": {
-            "period": 20,
-            "reference": "channel_low"
-          },
-          "evidence": {
-            "text": "布林带20周期2倍标准差跌破下轨做多",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
           "key": "price.detect.indicator_boundary",
           "phase": "entry",
           "params": {
@@ -221,19 +208,6 @@
             "period": 20,
             "stdDev": 2,
             "confirmationMode": "breakout"
-          },
-          "evidence": {
-            "text": "布林带20周期2倍标准差跌破下轨做多",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
-          "key": "price.breakout_down",
-          "phase": "entry",
-          "params": {
-            "period": 20,
-            "reference": "channel_low"
           },
           "evidence": {
             "text": "布林带20周期2倍标准差跌破下轨做多",
@@ -1364,19 +1338,6 @@
           "sideScope": "short"
         },
         {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "period": 20,
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "布林带20周期2倍标准差突破上轨做空",
-            "source": "user_explicit"
-          },
-          "sideScope": "short"
-        },
-        {
           "key": "price.detect.indicator_boundary",
           "phase": "entry",
           "params": {
@@ -1410,19 +1371,6 @@
             "period": 20,
             "stdDev": 2,
             "confirmationMode": "breakout"
-          },
-          "evidence": {
-            "text": "布林带20周期2倍标准差突破上轨做空",
-            "source": "user_explicit"
-          },
-          "sideScope": "short"
-        },
-        {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "period": 20,
-            "reference": "channel_high"
           },
           "evidence": {
             "text": "布林带20周期2倍标准差突破上轨做空",
@@ -2556,19 +2504,6 @@
       },
       "triggers": [
         {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "period": 50,
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "价格突破 MA50 买入",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
           "key": "indicator.above",
           "phase": "entry",
           "params": {
@@ -2596,19 +2531,6 @@
         }
       ],
       "atoms": [
-        {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "period": 50,
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "价格突破 MA50 买入",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
         {
           "key": "indicator.above",
           "phase": "entry",
@@ -2764,19 +2686,6 @@
       },
       "triggers": [
         {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "period": 20,
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "价格突破 MA20 enter long",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
           "key": "indicator.above",
           "phase": "entry",
           "params": {
@@ -2793,19 +2702,6 @@
         }
       ],
       "atoms": [
-        {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "period": 20,
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "价格突破 MA20 enter long",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
         {
           "key": "indicator.above",
           "phase": "entry",
@@ -2849,19 +2745,6 @@
       },
       "triggers": [
         {
-          "key": "price.breakout_down",
-          "phase": "exit",
-          "params": {
-            "period": 50,
-            "reference": "channel_low"
-          },
-          "evidence": {
-            "text": "价格跌破 MA50 平多",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
           "key": "indicator.cross_under",
           "phase": "exit",
           "params": {
@@ -2903,19 +2786,6 @@
         }
       ],
       "atoms": [
-        {
-          "key": "price.breakout_down",
-          "phase": "exit",
-          "params": {
-            "period": 50,
-            "reference": "channel_low"
-          },
-          "evidence": {
-            "text": "价格跌破 MA50 平多",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
         {
           "key": "indicator.cross_under",
           "phase": "exit",
@@ -3072,19 +2942,6 @@
       },
       "triggers": [
         {
-          "key": "price.breakout_down",
-          "phase": "exit",
-          "params": {
-            "period": 100,
-            "reference": "channel_low"
-          },
-          "evidence": {
-            "text": "价格跌破 MA100 close long",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
           "key": "indicator.cross_under",
           "phase": "exit",
           "params": {
@@ -3126,19 +2983,6 @@
         }
       ],
       "atoms": [
-        {
-          "key": "price.breakout_down",
-          "phase": "exit",
-          "params": {
-            "period": 100,
-            "reference": "channel_low"
-          },
-          "evidence": {
-            "text": "价格跌破 MA100 close long",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
         {
           "key": "indicator.cross_under",
           "phase": "exit",
@@ -4780,35 +4624,7 @@
         },
         "timeframe": "15m",
         "marketType": "perp"
-      },
-      "triggers": [
-        {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "假突破后入场",
-            "source": "user_explicit"
-          },
-          "sideScope": "both"
-        }
-      ],
-      "atoms": [
-        {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "假突破后入场",
-            "source": "user_explicit"
-          },
-          "sideScope": "both"
-        }
-      ]
+      }
     }
   },
   {
@@ -6302,19 +6118,6 @@
           "sideScope": "long"
         },
         {
-          "key": "price.breakout_down",
-          "phase": "entry",
-          "params": {
-            "period": 14,
-            "reference": "channel_low"
-          },
-          "evidence": {
-            "text": "RSI14 跌破 30 且价格站上 ema20 时买入",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
           "key": "indicator.cross_under",
           "phase": "entry",
           "params": {
@@ -6381,19 +6184,6 @@
             "period": 14,
             "value": 30,
             "thresholdRole": "lower_threshold"
-          },
-          "evidence": {
-            "text": "RSI14 跌破 30 且价格站上 ema20 时买入",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
-          "key": "price.breakout_down",
-          "phase": "entry",
-          "params": {
-            "period": 14,
-            "reference": "channel_low"
           },
           "evidence": {
             "text": "RSI14 跌破 30 且价格站上 ema20 时买入",
@@ -7397,21 +7187,6 @@
         },
         "openSlots": []
       },
-      "triggers": [
-        {
-          "key": "price.breakout_down",
-          "phase": "entry",
-          "params": {
-            "period": 30,
-            "reference": "channel_low"
-          },
-          "evidence": {
-            "text": "跌破最近 30 根 K 线最低价做空",
-            "source": "user_explicit"
-          },
-          "sideScope": "short"
-        }
-      ],
       "actions": [
         {
           "key": "action.open_short",
@@ -7424,19 +7199,6 @@
         }
       ],
       "atoms": [
-        {
-          "key": "price.breakout_down",
-          "phase": "entry",
-          "params": {
-            "period": 30,
-            "reference": "channel_low"
-          },
-          "evidence": {
-            "text": "跌破最近 30 根 K 线最低价做空",
-            "source": "user_explicit"
-          },
-          "sideScope": "short"
-        },
         {
           "key": "action.open_short",
           "phase": "entry",
@@ -7886,21 +7648,6 @@
         },
         "openSlots": []
       },
-      "triggers": [
-        {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "period": 20,
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "突破最近 20 根 K 线最高价买入",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        }
-      ],
       "actions": [
         {
           "key": "action.open_long",
@@ -7913,19 +7660,6 @@
         }
       ],
       "atoms": [
-        {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "period": 20,
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "突破最近 20 根 K 线最高价买入",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
         {
           "key": "action.open_long",
           "phase": "entry",
@@ -8727,18 +8461,6 @@
       },
       "triggers": [
         {
-          "key": "price.breakout_down",
-          "phase": "entry",
-          "params": {
-            "reference": "channel_low"
-          },
-          "evidence": {
-            "text": "double top breakdown confirmed",
-            "source": "user_explicit"
-          },
-          "sideScope": "both"
-        },
-        {
           "key": "price.chart_pattern",
           "phase": "entry",
           "params": {
@@ -8764,18 +8486,6 @@
         }
       ],
       "atoms": [
-        {
-          "key": "price.breakout_down",
-          "phase": "entry",
-          "params": {
-            "reference": "channel_low"
-          },
-          "evidence": {
-            "text": "double top breakdown confirmed",
-            "source": "user_explicit"
-          },
-          "sideScope": "both"
-        },
         {
           "key": "price.chart_pattern",
           "phase": "entry",
@@ -8883,18 +8593,6 @@
       },
       "triggers": [
         {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "bullish triangle breakout",
-            "source": "user_explicit"
-          },
-          "sideScope": "both"
-        },
-        {
           "key": "price.chart_pattern",
           "phase": "entry",
           "params": {
@@ -8921,18 +8619,6 @@
         }
       ],
       "atoms": [
-        {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "bullish triangle breakout",
-            "source": "user_explicit"
-          },
-          "sideScope": "both"
-        },
         {
           "key": "price.chart_pattern",
           "phase": "entry",
@@ -8998,35 +8684,7 @@
           "quoteSource": "explicit"
         },
         "timeframe": "1h"
-      },
-      "triggers": [
-        {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "enter on breakout",
-            "source": "user_explicit"
-          },
-          "sideScope": "both"
-        }
-      ],
-      "atoms": [
-        {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "enter on breakout",
-            "source": "user_explicit"
-          },
-          "sideScope": "both"
-        }
-      ]
+      }
     }
   },
   {
@@ -9079,18 +8737,6 @@
       },
       "triggers": [
         {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "突破上边界开空",
-            "source": "user_explicit"
-          },
-          "sideScope": "short"
-        },
-        {
           "key": "bollinger.touch_middle",
           "phase": "exit",
           "params": {
@@ -9117,18 +8763,6 @@
         }
       ],
       "atoms": [
-        {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "突破上边界开空",
-            "source": "user_explicit"
-          },
-          "sideScope": "short"
-        },
         {
           "key": "action.open_short",
           "phase": "entry",
@@ -11693,18 +11327,6 @@
           "sideScope": "long"
         },
         {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "reference": "channel_high"
-          },
-          "evidence": {
-            "text": "接 TradingView webhook 信号 BTCUSDT 突破上轨 进场做多",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
           "key": "price.detect.indicator_boundary",
           "phase": "entry",
           "params": {
@@ -11767,18 +11389,6 @@
             "period": 20,
             "stdDev": 2,
             "confirmationMode": "breakout"
-          },
-          "evidence": {
-            "text": "接 TradingView webhook 信号 BTCUSDT 突破上轨 进场做多",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
-          "key": "price.breakout_up",
-          "phase": "entry",
-          "params": {
-            "reference": "channel_high"
           },
           "evidence": {
             "text": "接 TradingView webhook 信号 BTCUSDT 突破上轨 进场做多",

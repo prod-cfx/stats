@@ -3125,9 +3125,14 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     surface: {
       intent: {
         // 中心偏移句式 keyword：'中心' / '上下各'
-        keywords: ['网格', '区间网格', '区间', '挂格', '每格', '网格间距', '步长', '中心', '上下各', 'grid', 'range', 'rebalance'] as const,
+        // Issue #1391 follow-up：补 '上下边界'/'网格边界'/'立即停止'/'撤销' 让 dispatcher 在
+        //   "当价格突破上下边界时执行立即停止并撤销所有未成交订单" 这类网格停止从句也命中 grid，
+        //   令 breakoutAction extractor 抓到 'stop'。
+        keywords: ['网格', '区间网格', '区间', '挂格', '每格', '网格间距', '步长', '中心', '上下各', '上下边界', '网格边界', '立即停止', '撤销', 'grid', 'range', 'rebalance'] as const,
         verbs: {
-          fixed: ['网格', '区间', '每格', '挂', 'grid', 'range', 'each grid'] as const,
+          // Issue #1391 follow-up：'停止'/'撤销'/'cancel'/'stop' 作为 grid 的 stop-action verb，
+          //   触发整段子句也归属 grid 域，breakoutAction extractor 才能抓到 enum-zh-map 中 stop 派生词。
+          fixed: ['网格', '区间', '每格', '挂', '停止', '撤销', 'grid', 'range', 'each grid', 'stop', 'cancel'] as const,
         },
       },
       paramSlots: {

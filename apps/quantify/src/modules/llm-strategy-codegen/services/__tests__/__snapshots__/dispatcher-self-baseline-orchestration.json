@@ -1822,19 +1822,6 @@
           "sideScope": "long"
         },
         {
-          "key": "price.breakout_down",
-          "phase": "entry",
-          "params": {
-            "period": 30,
-            "reference": "channel_low"
-          },
-          "evidence": {
-            "text": "RSI 跌破 30 开多",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
           "key": "indicator.cross_under",
           "phase": "entry",
           "params": {
@@ -1882,19 +1869,6 @@
             "period": 14,
             "value": 30,
             "thresholdRole": "lower_threshold"
-          },
-          "evidence": {
-            "text": "RSI 跌破 30 开多",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
-          "key": "price.breakout_down",
-          "phase": "entry",
-          "params": {
-            "period": 30,
-            "reference": "channel_low"
           },
           "evidence": {
             "text": "RSI 跌破 30 开多",
