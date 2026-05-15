@@ -112,4 +112,31 @@ describe('AccountPageClient', () => {
     expect(avatar?.getAttribute('src')).toBe('https://api.dicebear.com/7.x/identicon/svg?seed=cmp0uen6800016kg5d1k4bk2e')
     expect(avatar?.className).toContain('object-contain')
   })
+
+  it('shows the account identifier without the account center prefix', async () => {
+    await act(async () => {
+      root?.render(<AccountPageClient lng="zh" />)
+    })
+
+    const heading = container.querySelector('h1')
+
+    expect(heading?.textContent).toBe('15***@qq.com')
+    expect(heading?.textContent).not.toContain('Account Center')
+  })
+
+  it('right-aligns account actions on mobile while preserving desktop layout', async () => {
+    await act(async () => {
+      root?.render(<AccountPageClient lng="zh" />)
+    })
+
+    const copyButton = Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Copy')
+    const mainAccountBadge = Array.from(container.querySelectorAll('span')).find(span => span.textContent === 'Main account')
+    const telegramActions = container.querySelector('[data-testid="telegram-login-buttons"]')?.parentElement
+
+    expect(copyButton?.className).toContain('self-end')
+    expect(copyButton?.className).toContain('md:self-auto')
+    expect(mainAccountBadge?.className).toContain('self-end')
+    expect(mainAccountBadge?.className).toContain('md:self-auto')
+    expect(telegramActions?.className).toContain('justify-end')
+  })
 })

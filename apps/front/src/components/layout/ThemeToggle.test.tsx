@@ -51,14 +51,13 @@ describe('ThemeToggle', () => {
     container.remove()
   })
 
-  it('renders localized English theme labels by default', async () => {
+  it('renders as icon-only while keeping accessible labels', async () => {
     await act(async () => {
       root.render(<ThemeToggle />)
     })
 
     const button = container.querySelector('button')
-    expect(button?.textContent).toContain('Dark')
-    expect(button?.textContent).not.toContain('夜间')
+    expect(button?.textContent).toBe('')
     expect(button?.getAttribute('aria-label')).toBe('Toggle light/dark mode')
     expect(button?.getAttribute('title')).toBe('Toggle light/dark mode')
   })
@@ -70,6 +69,6 @@ describe('ThemeToggle', () => {
 
     const button = container.querySelector('button')
     expect(button?.className).toContain('min-h-10')
-    expect(button?.className).toContain('w-[72px]')
+    expect(button?.className).toContain('w-10')
   })
 })

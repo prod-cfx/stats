@@ -1,6 +1,6 @@
 'use client'
 
-import { Bell, ChevronDown, Menu, Search, X } from 'lucide-react'
+import { Bell, ChevronDown, ChevronRight, Menu, Search, X } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -698,9 +698,10 @@ export const Navbar = () => {
                   key={link.name}
                   href={link.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className="border-b border-[color:var(--cf-border)] px-2 py-3 text-lg font-medium text-[color:var(--cf-text-strong)] last:border-0"
+                  className="flex items-center justify-between px-2 py-3 text-lg font-medium text-[color:var(--cf-text-strong)]"
                 >
-                  {link.name}
+                  <span>{link.name}</span>
+                  <ChevronRight className="h-5 w-5 text-[color:var(--cf-muted)]" />
                 </Link>
               )
             })}

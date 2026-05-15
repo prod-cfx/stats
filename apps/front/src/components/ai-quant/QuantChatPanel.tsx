@@ -354,16 +354,16 @@ export function QuantChatPanel({
   return (
     <section className="flex min-h-[520px] max-h-[calc(100dvh-7rem)] min-w-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm md:h-[calc(100vh-200px)] md:max-h-none md:min-h-[600px]">
       {/* Header / Toolbar */}
-      <div className="flex flex-col gap-3 border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-active)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+      <div className="flex items-center gap-3 border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-active)] px-4 py-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <div className="bg-primary/10 text-primary flex h-8 w-8 items-center justify-center rounded-lg">
             <Bot className="h-5 w-5" />
           </div>
-          <h2 className="font-semibold text-[color:var(--cf-text-strong)]">
+          <h2 className="min-w-0 truncate font-semibold text-[color:var(--cf-text-strong)]">
             {t('aiQuant.chatTitle')}
           </h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <button
             type="button"
             onClick={() => setShowSettings(!showSettings)}

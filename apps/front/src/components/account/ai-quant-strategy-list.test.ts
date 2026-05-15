@@ -20,6 +20,7 @@ import {
 
 jest.mock('lucide-react', () => ({
   Activity: () => null,
+  ChevronRight: () => null,
   Clock: () => null,
   MoreHorizontal: () => null,
   Play: () => null,
@@ -141,19 +142,21 @@ afterEach(() => {
 })
 
 describe('AiQuantStrategyList primary summary', () => {
-  it('uses dynamic summary path when schema exists and does not use fixed primary summary', () => {
-    const record = makeListRecord()
+  it('uses a compact metadata row even when dynamic params exist', () => {
+    const record = makeListRecord({
+      marketType: 'perp',
+      deploymentExecutionCurrent: { leverage: 3 },
+    })
     const out = buildPrimarySummary(record, key => key)
 
-    expect(out).toEqual(['杠杆: 3', 'ATR周期: 14'])
-    expect(out).not.toContain(record.exchange.toUpperCase())
-    expect(out).not.toContain(record.symbol)
-    expect(out).not.toContain(record.timeframe)
-    expect(out).not.toContain(`aiQuant.position ${record.positionPct}%`)
+    expect(out).toEqual(['BINANCE', 'BTCUSDT', 'PERP', '15m', '3x'])
+    expect(out.join(' / ')).not.toContain('杠杆:')
+    expect(out.join(' / ')).not.toContain('ATR周期')
   })
 
-  it('uses fixed summary path when schema is missing', () => {
+  it('uses exchange, symbol, timeframe and omits empty optional metadata', () => {
     const record = makeListRecord({
+      marketType: 'unknown',
       paramSchema: null,
       paramValues: null,
     })
@@ -163,7 +166,6 @@ describe('AiQuantStrategyList primary summary', () => {
       'BINANCE',
       'BTCUSDT',
       '15m',
-      'aiQuant.position 10%',
     ])
   })
 
@@ -199,41 +201,34 @@ describe('AiQuantStrategyList primary summary', () => {
     ])
   })
 
-  it('uses localized fallback when schema exists but dynamic summary is empty', () => {
+  it('omits dynamic-param empty fallback from card metadata', () => {
     const record = makeListRecord({
+      marketType: 'spot',
       paramValues: {},
     })
     const out = buildPrimarySummary(record, key => (key === 'aiQuant.paramSummaryEmpty' ? '暂无参数' : key))
 
-    expect(out).toEqual(['暂无参数'])
+    expect(out).toEqual(['BINANCE', 'BTCUSDT', 'SPOT', '15m'])
+    expect(out).not.toContain('暂无参数')
   })
 
-  it('localizes system field labels in dynamic summaries', () => {
+  it('localizes compact market type and appends leverage for derivatives', () => {
     const record = makeListRecord({
-      paramSchema: {
-        type: 'object',
-        properties: {
-          symbol: { type: 'string' },
-          timeframe: { type: 'string' },
-          marketType: { type: 'string' },
-          leverage: { type: 'number' },
-        },
-      },
-      paramValues: {
-        symbol: 'BTCUSDT',
-        timeframe: '15m',
-        marketType: 'spot',
-        leverage: 2,
-      },
+      exchange: 'okx',
+      symbol: 'ETH-USDT-SWAP',
+      marketType: 'perp',
+      deploymentExecutionCurrent: { leverage: 2 },
     })
     const out = buildPrimarySummary(record, mockT)
 
     expect(out).toEqual([
-      '交易对: BTCUSDT',
-      '时间周期: 15m',
-      '市场类型: 现货',
+      'OKX',
+      'ETH-USDT-SWAP',
+      '永续',
+      '15m',
+      '2x',
     ])
-    expect(out.join(' / ')).not.toContain('marketType')
+    expect(out.join(' / ')).not.toContain('市场类型')
   })
 
   it('uses a stop-specific label for running strategies to avoid duplicate detail actions', () => {
@@ -626,7 +621,7 @@ describe('AiQuantStrategyList primary summary', () => {
     expect(rowButtons.find(b => b.textContent?.includes('停止策略'))).toBeUndefined()
 
     const link = Array.from(container.querySelectorAll('a'))
-      .find(a => a.textContent?.includes('查看详情'))
+      .find(a => a.getAttribute('aria-label') === '查看详情')
     expect(link).toBeTruthy()
   })
 
@@ -646,17 +641,15 @@ describe('AiQuantStrategyList primary summary', () => {
     expect(html).toContain('BINANCE')
     expect(html).toContain('BTCUSDT')
     expect(html).toContain('15m')
-    expect(html).toContain('aiQuant.position 10%')
-    expect((html.match(/<span>\/<\/span>/g) || []).length).toBe(3)
+    expect(html).not.toContain('aiQuant.position 10%')
+    expect((html.match(/<span>\/<\/span>/g) || []).length).toBe(2)
 
     const exchangePos = html.indexOf('BINANCE')
     const symbolPos = html.indexOf('BTCUSDT')
     const timeframePos = html.indexOf('15m')
-    const positionPos = html.indexOf('aiQuant.position 10%')
     expect(exchangePos).toBeGreaterThan(-1)
     expect(symbolPos).toBeGreaterThan(exchangePos)
     expect(timeframePos).toBeGreaterThan(symbolPos)
-    expect(positionPos).toBeGreaterThan(timeframePos)
   })
 })
 
@@ -840,13 +833,20 @@ describe('AiQuantStrategyList tabs UI', () => {
     const title = Array.from(container.querySelectorAll('h4')).find(
       node => node.textContent === 'Very long mobile layout strategy name',
     )
+    const detailLinks = Array.from(container.querySelectorAll('a[aria-label="查看详情"]'))
+    const mobileDetailLink = detailLinks.find(link => link.className.includes('absolute'))
+    const desktopDetailLink = detailLinks.find(link => link.className.includes('sm:inline-flex'))
 
     expect(actions?.className).toContain('grid')
     expect(actions?.className).toContain('grid-cols-2')
     expect(actions?.className).toContain('sm:flex')
+    expect(mobileDetailLink?.className).toContain('right-4')
+    expect(mobileDetailLink?.className).toContain('top-4')
+    expect(mobileDetailLink?.className).toContain('sm:hidden')
+    expect(desktopDetailLink?.className).toContain('hidden')
+    expect(desktopDetailLink?.className).toContain('sm:inline-flex')
     expect(title?.className).toContain('break-words')
-    expect(metricGrid?.className).toContain('grid-cols-1')
-    expect(metricGrid?.className).toContain('sm:grid-cols-2')
+    expect(metricGrid?.className).toContain('grid-cols-2')
     expect(metricGrid?.className).toContain('md:grid-cols-4')
   })
 })

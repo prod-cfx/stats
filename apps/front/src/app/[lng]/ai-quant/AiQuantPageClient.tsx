@@ -1,16 +1,18 @@
 'use client'
 
-import type { AccountAiQuantStrategyDetail } from '@/lib/api'
 import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
+import type {AiQuantDeletionDialogKind} from '@/components/ai-quant/AiQuantDeletionDialog';
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
-import { ArrowLeft, ShieldCheck, Sparkles } from 'lucide-react'
+import type { AccountAiQuantStrategyDetail } from '@/lib/api'
+import { ArrowLeft, KeyRound, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AiQuantDeletionDialog  } from '@/components/ai-quant/AiQuantDeletionDialog'
 import { fetchBacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import { getBacktestJobResult } from '@/components/ai-quant/backtest-job-client'
 import { BacktestSummaryCard } from '@/components/ai-quant/BacktestSummaryCard'
@@ -27,16 +29,15 @@ import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
 import { RunningStrategyEditGuardDialog } from '@/components/ai-quant/RunningStrategyEditGuardDialog'
 import { SemanticGraphValidationAlert } from '@/components/ai-quant/SemanticGraphValidationAlert'
-import { AiQuantDeletionDialog, type AiQuantDeletionDialogKind } from '@/components/ai-quant/AiQuantDeletionDialog'
-import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
-import { getSameOriginReturnHref } from '@/components/navigation/return-href'
 import {
   buildAutoAdvanceMessage,
   isStrategyModificationIntent,
   shouldAutoAdvanceOnConfirmation,
 } from '@/components/ai-quant/session-loop'
+import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
 import { applyCapabilitiesToParamSchema } from '@/components/ai-quant/strategy-param-sync'
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
+import { getSameOriginReturnHref } from '@/components/navigation/return-href'
 import { useAuth } from '@/hooks/use-auth'
 import {
   deleteAiQuantConversation,
@@ -1574,27 +1575,31 @@ export function AiQuantPageClient({
         <span>{lng === 'en' ? 'Back' : '返回'}</span>
       </Link>
 
-      <div className="flex items-center justify-between gap-3">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">
             {t('aiQuant.title')}
           </h1>
           <p className="mt-1 text-sm text-[color:var(--cf-muted)]">{t('aiQuant.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-end gap-2 sm:shrink-0">
           <Link
             href={`/${lng}/ai-quant/plaza`}
-            className="cf-ai-action-button cf-ai-action-neutral inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+            data-testid="ai-quant-header-plaza-link"
+            className="cf-ai-action-button cf-ai-action-neutral inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)] sm:px-3.5"
           >
             <Sparkles className="h-4 w-4" />
-            {t('aiQuant.plaza')}
+            <span className="sm:hidden">{t('aiQuant.plazaShort')}</span>
+            <span className="hidden sm:inline">{t('aiQuant.plaza')}</span>
           </Link>
           <Link
             href={`/${lng}/account?tab=settings#exchange-api`}
-            className="cf-ai-action-button cf-ai-action-neutral inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+            data-testid="ai-quant-header-api-link"
+            className="cf-ai-action-button cf-ai-action-neutral inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)] sm:px-3.5"
           >
-            <ShieldCheck className="h-4 w-4" />
-            {t('aiQuant.configApi')}
+            <KeyRound className="h-4 w-4" />
+            <span className="sm:hidden">{t('aiQuant.configApiShort')}</span>
+            <span className="hidden sm:inline">{t('aiQuant.configApi')}</span>
           </Link>
         </div>
       </div>

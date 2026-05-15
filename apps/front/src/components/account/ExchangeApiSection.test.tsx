@@ -214,6 +214,15 @@ describe('ExchangeApiSection', () => {
     expect(dialog.textContent).toContain('OKX API key, secret, and passphrase are required.')
   })
 
+  it('right-aligns exchange card actions on mobile', async () => {
+    await renderSection()
+
+    const actions = container.querySelector('[data-testid="exchange-api-actions-okx"]')
+
+    expect(actions?.className).toContain('justify-end')
+    expect(actions?.className).toContain('md:justify-start')
+  })
+
   it('trims OKX credential fields before saving a new binding', async () => {
     await renderSection()
 

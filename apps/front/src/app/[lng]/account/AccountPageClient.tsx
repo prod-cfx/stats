@@ -134,7 +134,7 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
               </div>
               <div className="min-w-0">
                 <h1 className="truncate text-2xl font-bold text-[color:var(--cf-text-strong)]">
-                  {t('account.title')}{lng === 'zh' ? '，' : ', '}{accountName}
+                  {accountName}
                 </h1>
                 <div className="mt-2 flex items-center gap-2 text-sm text-[color:var(--cf-muted)]">
                   <span className="break-all font-mono">{session.userId}</span>
@@ -158,7 +158,7 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
                 logout()
                 router.replace(`/${lng}/auth/login`)
               }}
-              className="inline-flex w-fit items-center gap-2 rounded-full border border-[color:var(--cf-border)] px-5 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-500"
+              className="inline-flex w-fit self-end items-center gap-2 rounded-full border border-[color:var(--cf-border)] px-5 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-500 md:self-auto"
             >
               <LogOut className="h-4 w-4" />
               {t('account.logout')}
@@ -179,7 +179,7 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
                     navigator.clipboard.writeText(session.userId)
                     success(t('account.userIdCopied'))
                   }}
-                  className="inline-flex w-fit items-center gap-2 rounded-full bg-[color:var(--cf-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+                  className="inline-flex w-fit self-end items-center gap-2 rounded-full bg-[color:var(--cf-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)] md:self-auto"
                 >
                   <Copy className="h-4 w-4" />
                   {t('common.copy')}
@@ -194,11 +194,11 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
                   </p>
                 </div>
                 {loginMethods.has('email') ? (
-                  <span className="inline-flex w-fit rounded-full bg-[color:var(--cf-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]">
+                  <span className="inline-flex w-fit self-end rounded-full bg-[color:var(--cf-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] md:self-auto">
                     {t('account.mainAccount')}
                   </span>
                 ) : (
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
                     <input
                       value={bindEmailValue}
                       onChange={event => setBindEmailValue(event.target.value)}
@@ -238,7 +238,7 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
                     {telegramStatusText}
                   </p>
                 </div>
-                <div className="w-full md:w-auto">
+                <div className="flex w-full justify-end md:w-auto">
                   <TelegramLoginButtons
                     lng={lng}
                     intent="bind"

@@ -2,7 +2,7 @@
 
 import type { AiQuantStrategyRecord, AiQuantStrategyViewState } from './ai-quant-strategy-store'
 import type { AiQuantDeletionDialogKind } from '@/components/ai-quant/AiQuantDeletionDialog'
-import { Activity, Clock, MoreHorizontal, Play, PlayCircle, StopCircle, Trash2 } from 'lucide-react'
+import { Activity, ChevronRight, Clock, MoreHorizontal, Play, PlayCircle, StopCircle, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -179,21 +179,36 @@ function formatParamSummaryValue(key: string, value: string, t?: StrategyListTra
   return translated === translationKey ? value : translated
 }
 
+function formatCompactMarketType(
+  marketType: AiQuantStrategyRecord['marketType'],
+  t: StrategyListTranslation,
+): string | null {
+  if (!marketType || marketType === 'unknown') return null
+  const fallback = marketType.toUpperCase()
+  const translated = t(`aiQuant.strategyPlazaCard.marketType.${marketType}`, { defaultValue: fallback })
+  return translated === `aiQuant.strategyPlazaCard.marketType.${marketType}` ? fallback : translated
+}
+
+function formatCompactLeverage(value: number | null | undefined): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 1) return null
+  const normalized = Number(value.toFixed(2))
+  return `${normalized}x`
+}
+
 export function buildPrimarySummary(
-  item: Pick<AiQuantStrategyRecord, 'exchange' | 'symbol' | 'timeframe' | 'positionPct' | 'paramSchema' | 'paramValues'>,
+  item: Pick<AiQuantStrategyRecord, 'exchange' | 'symbol' | 'timeframe' | 'marketType' | 'deploymentExecutionCurrent' | 'deploymentExecutionBaseline' | 'snapshotBacktestConfigDefaults'>,
   t: StrategyListTranslation,
 ): string[] {
-  if (item.paramSchema) {
-    const dynamicSummary = buildParamSummary(item.paramSchema, item.paramValues, t)
-    return dynamicSummary.length ? dynamicSummary : [t('aiQuant.paramSummaryEmpty')]
-  }
-
+  const leverage = item.deploymentExecutionCurrent?.leverage
+    ?? item.deploymentExecutionBaseline?.leverage
+    ?? item.snapshotBacktestConfigDefaults?.leverage
   return [
     item.exchange.toUpperCase(),
     item.symbol,
+    formatCompactMarketType(item.marketType, t),
     item.timeframe,
-    `${t('aiQuant.position')} ${item.positionPct}%`,
-  ]
+    formatCompactLeverage(leverage),
+  ].filter((entry): entry is string => Boolean(entry))
 }
 
 export function getStrategyRuntimeActionLabel(
@@ -211,7 +226,7 @@ export function AiQuantStrategyPrimarySummary({
   t,
   keyPrefix,
 }: {
-  item: Pick<AiQuantStrategyRecord, 'exchange' | 'symbol' | 'timeframe' | 'positionPct' | 'paramSchema' | 'paramValues'>
+  item: Pick<AiQuantStrategyRecord, 'exchange' | 'symbol' | 'timeframe' | 'marketType' | 'deploymentExecutionCurrent' | 'deploymentExecutionBaseline' | 'snapshotBacktestConfigDefaults'>
   t: StrategyListTranslation
   keyPrefix: string
 }) {
@@ -555,11 +570,20 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
             return (
               <div
                 key={item.id}
-                className="cf-ai-strategy-card group rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 transition-all hover:border-primary/50 hover:shadow-sm"
+                className="cf-ai-strategy-card group relative rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 transition-all hover:border-primary/50 hover:shadow-sm"
               >
+                <Link
+                  href={`/${lng}/account/ai-quant/strategy/${item.id}`}
+                  aria-label={t('aiQuant.viewDetail')}
+                  title={t('aiQuant.viewDetail')}
+                  className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-bg)] hover:text-primary group-hover:text-primary sm:hidden"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                  <span className="sr-only">{t('aiQuant.viewDetail')}</span>
+                </Link>
                 <div className="space-y-4">
                   <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-                    <Link href={`/${lng}/account/ai-quant/strategy/${item.id}`} className="block min-w-0">
+                    <Link href={`/${lng}/account/ai-quant/strategy/${item.id}`} className="block min-w-0 pr-10 sm:pr-0">
                       <div className="min-w-0 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="min-w-0 break-words font-bold text-[color:var(--cf-text-strong)] transition-colors group-hover:text-primary">
@@ -626,9 +650,12 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
 
                       <Link
                         href={`/${lng}/account/ai-quant/strategy/${item.id}`}
-                        className="cf-ai-action-button cf-ai-action-neutral inline-flex min-h-10 min-w-[96px] items-center justify-center rounded-md border border-[color:var(--cf-border)] bg-transparent px-3 text-xs font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-bg)] group-hover:border-primary/30 group-hover:text-primary"
+                        aria-label={t('aiQuant.viewDetail')}
+                        title={t('aiQuant.viewDetail')}
+                        className="cf-ai-action-button cf-ai-action-neutral hidden h-10 w-10 min-w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-bg)] hover:text-primary group-hover:text-primary sm:inline-flex"
                       >
-                        {t('aiQuant.viewDetail')}
+                        <ChevronRight className="h-4 w-4" />
+                        <span className="sr-only">{t('aiQuant.viewDetail')}</span>
                       </Link>
                       </div>
                     </div>
@@ -636,7 +663,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                   <Link
                     href={`/${lng}/account/ai-quant/strategy/${item.id}`}
                     data-testid="ai-quant-strategy-card-metrics"
-                    className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-4"
+                    className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-4"
                   >
                       {[
                         {

@@ -24,7 +24,7 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('next/link', () => ({
   __esModule: true,
-  default: ({ href, children }: { href: string, children: React.ReactNode }) => <a href={href}>{children}</a>,
+  default: ({ href, children, ...props }: { href: string, children: React.ReactNode } & Record<string, unknown>) => <a href={href} {...props}>{children}</a>,
 }))
 
 jest.mock('@/hooks/use-auth', () => ({
@@ -499,6 +499,22 @@ describe('AiQuantPageClient backtest range integration', () => {
     const backLink = Array.from(container.querySelectorAll('a')).find(link => link.textContent?.includes('返回'))
 
     expect(backLink?.getAttribute('href')).toBe('/zh/account?tab=settings')
+  })
+
+  it('renders compact header shortcuts for mobile', async () => {
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const plazaLink = container.querySelector('[data-testid="ai-quant-header-plaza-link"]')
+    const apiLink = container.querySelector('[data-testid="ai-quant-header-api-link"]')
+
+    expect(plazaLink?.getAttribute('href')).toBe('/zh/ai-quant/plaza')
+    expect(apiLink?.getAttribute('href')).toBe('/zh/account?tab=settings#exchange-api')
+    expect(plazaLink?.textContent).toContain('aiQuant.plazaShort')
+    expect(apiLink?.textContent).toContain('aiQuant.configApiShort')
   })
 
   it('blocks backtest when custom range is invalid and shows range error message', async () => {

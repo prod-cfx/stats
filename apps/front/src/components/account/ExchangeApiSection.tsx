@@ -376,7 +376,10 @@ export function ExchangeApiSection() {
                     )}
                   </div>
 
-                  <div className="flex shrink-0 flex-wrap gap-2">
+                  <div
+                    data-testid={`exchange-api-actions-${exchangeId}`}
+                    className="flex shrink-0 flex-wrap justify-end gap-2 md:justify-start"
+                  >
                     {account.isBound ? (
                       <>
                         <button
