@@ -170,9 +170,18 @@ export class SemanticSeedStateBuilderService {
       const dispatched = this.dispatchAtomsByContractBucket(semanticPatch.atoms)
       semanticPatch = {
         ...semanticPatch,
-        triggers: [...(Array.isArray(semanticPatch.triggers) ? semanticPatch.triggers : []), ...dispatched.trigger],
-        actions: [...(Array.isArray(semanticPatch.actions) ? semanticPatch.actions : []), ...dispatched.action],
-        risk: [...(Array.isArray(semanticPatch.risk) ? semanticPatch.risk : []), ...dispatched.risk],
+        triggers: this.mergeUniqueAtomPatchItems(
+          Array.isArray(semanticPatch.triggers) ? semanticPatch.triggers : [],
+          dispatched.trigger,
+        ),
+        actions: this.mergeUniqueAtomPatchItems(
+          Array.isArray(semanticPatch.actions) ? semanticPatch.actions : [],
+          dispatched.action,
+        ),
+        risk: this.mergeUniqueAtomPatchItems(
+          Array.isArray(semanticPatch.risk) ? semanticPatch.risk : [],
+          dispatched.risk,
+        ),
         position: this.mergePositionConstraintPatch(
           semanticPatch.position ?? semanticPatch.positionUpdate,
           dispatched.positionConstraint,
@@ -578,6 +587,45 @@ export class SemanticSeedStateBuilderService {
       openSlots: [...existingOpenSlots, ...incomingOpenSlots],
       contracts: incoming.contracts ?? existing.contracts,
     }
+  }
+
+  private mergeUniqueAtomPatchItems(existing: unknown[], incoming: unknown[]): unknown[] {
+    if (existing.length === 0) {
+      return incoming
+    }
+    if (incoming.length === 0) {
+      return existing
+    }
+
+    const seen = new Set(existing.map(item => this.atomPatchItemDedupeKey(item)))
+    const out = [...existing]
+    for (const item of incoming) {
+      const key = this.atomPatchItemDedupeKey(item)
+      if (seen.has(key)) {
+        continue
+      }
+      seen.add(key)
+      out.push(item)
+    }
+
+    return out
+  }
+
+  private atomPatchItemDedupeKey(item: unknown): string {
+    if (!this.isRecord(item)) {
+      return `raw:${JSON.stringify(item)}`
+    }
+
+    const params = this.readParams(item.params)
+    const sortedParams = Object.fromEntries(
+      Object.entries(params).sort(([left], [right]) => left.localeCompare(right)),
+    )
+    return JSON.stringify({
+      key: item.key,
+      phase: item.phase,
+      sideScope: item.sideScope,
+      params: sortedParams,
+    })
   }
 
   // Merge 现有 patch.orchestration 与 atoms[] 派生 orchestration nodes。
