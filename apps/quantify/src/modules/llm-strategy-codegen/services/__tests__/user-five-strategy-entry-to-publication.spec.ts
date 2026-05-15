@@ -130,6 +130,14 @@ describe('user reported five strategies: entry -> middle -> publication generati
     },
     // Issue #1383 后续：用户实际反馈的 6 条策略，全部按"原子语义五桶真相源"通用解
     //   走通入口（dispatcher）→ 中间（state/projection）→ 不再退到 atom-key 兜底文案
+    //
+    //   publication=true 的策略额外校验生成 canonical-spec + compiled script artifact，
+    //   走完入口→中间→canonical-spec-builder→IR compiler→AST compiler→compiled script
+    //   全链路，确保用户输入能"开出可回测的策略代码"。
+    //
+    //   策略6 / 7 / 10 publication=false 是因为：策略6/7 上下文（exchange/timeframe/sizing）
+    //   完整需澄清，publication 路径 fail-closed；策略10 是 grid 中心偏移，runtime 端
+    //   "用部署时当前价做中心" 的执行层支持是分离 workstream，本 PR 未覆盖。
     {
       name: '策略6 EMA 多均线上方 + BOLL 下/上轨双向开（S2 elision）',
       message: '15min k线里面 价格在ema20 ema60 ema144上方时做多开仓 都位于下方只开空 入场是boll下轨开多 上轨开空 币安的btcusdt永续合约 风控是亏损5%止损',
@@ -140,7 +148,7 @@ describe('user reported five strategies: entry -> middle -> publication generati
       name: '策略7 BOLL 上下轨入场 + 中轨平仓（S3 自镜像）',
       message: 'OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%。',
       expectedAnyKeys: ['bollinger.touch_upper', 'bollinger.touch_lower', 'bollinger.touch_middle', 'open_short', 'open_long'],
-      publication: false,
+      publication: true,
     },
     {
       name: '策略8 阳线开多/阴线平多（S4 candle pattern）',
@@ -149,10 +157,22 @@ describe('user reported five strategies: entry -> middle -> publication generati
       publication: false,
     },
     {
+      name: '策略8a 阳线开多/阴线平多 + 完整上下文（S4 publishable）',
+      message: 'binance 永续 BTCUSDT 1m K 线。每次最新 K 线收盘价高于开盘价时尝试开多。如果已有持仓则不再开仓。收盘价低于开盘价时平多。单笔仓位 10%。',
+      expectedAnyKeys: ['price.candle_pattern', 'open_long', 'close_long'],
+      publication: true,
+    },
+    {
       name: '策略9 EMA7 上穿 EMA21 + 下穿平多（S5 cross-clause inheritance）',
       message: 'EMA7 上穿 EMA21 时开多；下穿 时平多。',
       expectedAnyKeys: ['indicator.cross_over', 'indicator.cross_under', 'open_long', 'close_long'],
       publication: false,
+    },
+    {
+      name: '策略9a EMA7 上穿 EMA21 + 完整上下文（S5 publishable）',
+      message: 'binance 永续 BTCUSDT 15m。EMA7 上穿 EMA21 时开多；下穿 时平多。单笔仓位 10%。',
+      expectedAnyKeys: ['indicator.cross_over', 'indicator.cross_under', 'open_long', 'close_long'],
+      publication: true,
     },
     {
       name: '策略10 现货网格中心偏移（S6 grid center-offset）',

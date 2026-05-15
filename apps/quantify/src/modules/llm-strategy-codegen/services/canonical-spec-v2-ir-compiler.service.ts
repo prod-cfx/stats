@@ -1844,7 +1844,7 @@ export class CanonicalSpecV2IrCompilerService {
       }
 
       case 'price.candle_pattern': {
-        // P4-2: 白名单 4 patterns：engulfing / hammer / doji / consecutive_body
+        // P4-2: 白名单 patterns（Issue #1391 后续加 single_bull_bar / single_bear_bar）
         // IR 通过 CANDLE_PATTERN 系列 + EQ predicate 封装 candle pattern 信号。
         // fail-closed：pattern / direction 非白名单值直接抛错，避免静默降级。
         // compiled-runtime 通过 candlePatternDetector 消费 CANDLE_PATTERN series，
@@ -1857,6 +1857,8 @@ export class CanonicalSpecV2IrCompilerService {
           && cpPattern !== 'hammer'
           && cpPattern !== 'doji'
           && cpPattern !== 'consecutive_body'
+          && cpPattern !== 'single_bull_bar'
+          && cpPattern !== 'single_bear_bar'
         ) {
           throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:pattern`)
         }

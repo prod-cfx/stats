@@ -1,6 +1,13 @@
 import type { Bar } from './technical-indicators'
 
-export type CandlePattern = 'engulfing' | 'hammer' | 'doji' | 'consecutive_body'
+export type CandlePattern =
+  | 'engulfing'
+  | 'hammer'
+  | 'doji'
+  | 'consecutive_body'
+  // Issue #1391：单根阳/阴线 — 用户表达 "收盘价高于开盘价 / 阳线"，等价 close > open
+  | 'single_bull_bar'
+  | 'single_bear_bar'
 export type CandlePatternDirection = 'bullish' | 'bearish'
 
 export interface CandlePatternDetectorInput {
@@ -30,7 +37,20 @@ export function candlePatternDetector(
       return detectsDoji(bars, input.direction)
     case 'consecutive_body':
       return detectsConsecutiveBody(bars, input.direction, input.minBars)
+    case 'single_bull_bar':
+      return detectsSingleBar(bars, 'bullish')
+    case 'single_bear_bar':
+      return detectsSingleBar(bars, 'bearish')
   }
+}
+
+function detectsSingleBar(
+  bars: readonly Pick<Bar, 'open' | 'high' | 'low' | 'close'>[],
+  direction: CandlePatternDirection,
+): boolean {
+  const current = bars[bars.length - 1]
+  if (!current || !isValidBar(current)) return false
+  return direction === 'bullish' ? isBullish(current) : isBearish(current)
 }
 
 function detectsEngulfing(

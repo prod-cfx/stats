@@ -42,6 +42,15 @@ const patternFixtures: Record<CandlePattern, Record<CandlePatternDirection, Test
       bar(10.6, 11, 9.8, 10),
     ],
   },
+  // Issue #1391：单根阳/阴线 — close > open / close < open
+  single_bull_bar: {
+    bullish: [bar(10, 10.8, 9.9, 10.5)],
+    bearish: [bar(10, 10.8, 9.9, 10.5)],
+  },
+  single_bear_bar: {
+    bullish: [bar(10.5, 10.8, 9.9, 10)],
+    bearish: [bar(10.5, 10.8, 9.9, 10)],
+  },
 }
 
 describe('candlePatternDetector', () => {

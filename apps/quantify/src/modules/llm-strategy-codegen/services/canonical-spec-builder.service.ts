@@ -5025,14 +5025,25 @@ export class CanonicalSpecBuilderService {
         }
       }
       case ATOM_CONTRACT_REGISTRY['price.candle_pattern'].key: {
-        // P4-2: 白名单 4 patterns；缺失 pattern 或 direction → fail-closed (null)
+        // P4-2: 白名单 patterns（Issue #1391 后续加 single_bull_bar / single_bear_bar）；
+        //   缺失 pattern 或 direction → fail-closed (null)
         const cpPattern = typeof trigger.params.pattern === 'string'
           ? trigger.params.pattern.trim().toLowerCase()
           : null
-        if (cpPattern !== 'engulfing' && cpPattern !== 'hammer' && cpPattern !== 'doji' && cpPattern !== 'consecutive_body') return null
-        const cpDirection = typeof trigger.params.direction === 'string'
+        if (
+          cpPattern !== 'engulfing'
+          && cpPattern !== 'hammer'
+          && cpPattern !== 'doji'
+          && cpPattern !== 'consecutive_body'
+          && cpPattern !== 'single_bull_bar'
+          && cpPattern !== 'single_bear_bar'
+        ) return null
+        // single_bull_bar / single_bear_bar 自身已确定方向，direction 缺省时由 pattern 推导
+        let cpDirection = typeof trigger.params.direction === 'string'
           ? trigger.params.direction.trim().toLowerCase()
           : null
+        if (!cpDirection && cpPattern === 'single_bull_bar') cpDirection = 'bullish'
+        if (!cpDirection && cpPattern === 'single_bear_bar') cpDirection = 'bearish'
         if (cpDirection !== 'bullish' && cpDirection !== 'bearish') return null
         const cpMinBars = typeof trigger.params.minBars === 'number' && Number.isInteger(trigger.params.minBars) && trigger.params.minBars > 0
           ? trigger.params.minBars
