@@ -229,6 +229,27 @@ describe('codegen entry link regression: user message → seed → projection �
     assertNoForbiddenUserText([projection, clarificationState, prompt])
   })
 
+  it('每格 quote 资金进入 per_order_budget，不被当成权益比例', () => {
+    const { state } = buildSeedStateFromUserMessage('BTCUSDT okx 永续 1h 网格 价格区间 60000-80000 每格 100U 双向循环', { lockPosition: false })
+    const budgetCapability = state.position?.constraints?.[0]?.contracts
+      ?.flatMap(contract => contract.capabilities)
+      .find(capability =>
+        capability.domain === 'capital'
+        && capability.verb === 'allocate'
+        && capability.object === 'per_order_budget',
+      )
+
+    expect(budgetCapability?.shape).toEqual(expect.objectContaining({
+      kind: 'quote',
+      value: 100,
+      asset: 'USDT',
+    }))
+    expect(budgetCapability?.shape).not.toEqual(expect.objectContaining({
+      kind: 'ratio',
+      unit: 'ratio',
+    }))
+  })
+
   it('裸 100usdt sizing 回答可锁定 position.sizing', () => {
     const { state } = buildSeedStateFromUserMessage('100usdt', { lockPosition: false })
     const conversation = createConversationService()

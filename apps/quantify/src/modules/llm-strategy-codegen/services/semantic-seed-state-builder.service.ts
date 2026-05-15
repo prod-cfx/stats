@@ -2147,7 +2147,7 @@ export class SemanticSeedStateBuilderService {
       spacingMode: 'arithmetic',
       ...this.resolveGridDensityShape(params),
     })
-    const perGridSizing = this.readFiniteNumberParam(params, ['perGridSizing', 'perOrderSizing', 'sizing', 'orderSize'])
+    const perGridSizing = this.resolveGridPerOrderSizingShape(params)
     const capabilities: SemanticCapability[] = [
       {
         domain: 'price',
@@ -2173,9 +2173,7 @@ export class SemanticSeedStateBuilderService {
       capabilities.push({
         ...DCA_PER_ORDER_BUDGET_CAPABILITY,
         shape: this.toCapabilityShape({
-          kind: 'ratio',
-          value: perGridSizing,
-          unit: 'ratio',
+          ...perGridSizing,
           triggerSource: key,
         }),
       })
@@ -2192,6 +2190,30 @@ export class SemanticSeedStateBuilderService {
       orderRequirements: [],
       openSlots: [],
     })
+  }
+
+  private resolveGridPerOrderSizingShape(params: Record<string, unknown>): Record<string, unknown> | null {
+    const structuredSizing = this.readUnknownShape(params.perOrderSizing)
+      ?? this.readUnknownShape(params.perGridSizing)
+      ?? this.readUnknownShape(params.sizing)
+      ?? this.readUnknownShape(params.orderSize)
+
+    if (structuredSizing !== null
+      && typeof structuredSizing.value === 'number'
+      && Number.isFinite(structuredSizing.value)
+      && structuredSizing.value > 0) {
+      return {
+        kind: typeof structuredSizing.kind === 'string' ? structuredSizing.kind : 'quote',
+        value: structuredSizing.value,
+        ...(typeof structuredSizing.asset === 'string' ? { asset: structuredSizing.asset } : {}),
+        ...(typeof structuredSizing.unit === 'string' ? { unit: structuredSizing.unit } : {}),
+      }
+    }
+
+    const numericSizing = this.readFiniteNumberParam(params, ['perGridSizing', 'perOrderSizing', 'sizing', 'orderSize'])
+    return numericSizing !== null
+      ? { kind: 'ratio', value: numericSizing, unit: 'ratio' }
+      : null
   }
 
   private synthesizeDcaScheduleContract(
