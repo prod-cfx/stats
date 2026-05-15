@@ -226,7 +226,7 @@ describe('user reported five strategies: entry -> middle -> publication generati
 
       // 双路径接受：常规策略走 rules，grid 程序走 orderPrograms（与 canonical spec 设计一致）
       const ruleCount = artifacts.canonicalSpec.rules.length
-      const programCount = artifacts.canonicalSpec.orderPrograms?.length ?? 0
+      const programCount = (artifacts.canonicalSpec as unknown as { orderPrograms?: unknown[] }).orderPrograms?.length ?? 0
       expect(ruleCount >= 2 || programCount >= 1).toBe(true)
       expect(artifacts.compiledScript).toContain('protocolVersion')
       expect(artifacts.compiledScript).toContain('onBar')
@@ -262,15 +262,21 @@ describe('user reported five strategies: entry -> middle -> publication generati
       const state = buildStateFromUserMessage(strategy.message)
       const artifacts = await createPublicationStage().generate({ semanticState: state })
       const adapter = new BacktestStrategyAdapterService()
-      const symbol = state.contextSlots.symbol?.value ?? 'BTCUSDT'
-      const timeframe = state.contextSlots.timeframe?.value ?? artifacts.canonicalSpec.market.defaultTimeframe ?? '15m'
+      const symbolRaw = state.contextSlots.symbol?.value
+      const symbol = typeof symbolRaw === 'string' && symbolRaw.length > 0 ? symbolRaw : 'BTCUSDT'
+      const timeframeRaw = state.contextSlots.timeframe?.value
+      const timeframe = (typeof timeframeRaw === 'string' && timeframeRaw.length > 0
+        ? timeframeRaw
+        : artifacts.canonicalSpec.market.defaultTimeframe ?? '15m') as Bar['timeframe']
+      const exchangeRaw = state.contextSlots.exchange?.value
+      const marketTypeRaw = state.contextSlots.marketType?.value
       const built = await adapter.build({
         id: `runtime-${strategy.name}`,
         protocolVersion: 'v1',
         scriptCode: artifacts.compiledScript,
         params: {
-          exchange: state.contextSlots.exchange?.value ?? 'binance',
-          marketType: state.contextSlots.marketType?.value ?? 'perp',
+          exchange: typeof exchangeRaw === 'string' ? exchangeRaw : 'binance',
+          marketType: typeof marketTypeRaw === 'string' ? marketTypeRaw : 'perp',
           symbol,
           timeframe,
         },
