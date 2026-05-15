@@ -58,4 +58,37 @@ describe('issue #1279 PR2b — dispatcher semantic equivalence', () => {
       },
     )
   })
+
+  describe('user-reported semantic surface regressions', () => {
+    it('parses Chinese percent price-change clauses without asking for entry/exit again', () => {
+      const patch = dispatcher.dispatch('在okx交易所 我想买btc 3分钟之内跌百分1买入，15分钟之内涨百分2卖出，单笔用百分10资金，止损5% 止盈10%')
+      const percentChangeTriggers = patch.triggers?.filter(trigger => trigger.key === 'price.percent_change') ?? []
+
+      expect(percentChangeTriggers).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          params: expect.objectContaining({ direction: 'down', valuePct: -0.01 }),
+        }),
+        expect.objectContaining({
+          phase: 'exit',
+          params: expect.objectContaining({ direction: 'up', valuePct: 0.02 }),
+        }),
+      ]))
+    })
+
+    it('parses RSI parenthesized period and symbolic lte comparator as one complete entry atom', () => {
+      const patch = dispatcher.dispatch('ETH 永续，15 分钟。RSI(14) ≤ 30 时开多，仓位的 2% ATR 作为止损。')
+      const rsiTriggers = patch.triggers?.filter(trigger => trigger.key === 'oscillator.rsi_lte') ?? []
+
+      expect(rsiTriggers).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          params: expect.objectContaining({
+            period: 14,
+            value: 30,
+          }),
+        }),
+      ]))
+    })
+  })
 })

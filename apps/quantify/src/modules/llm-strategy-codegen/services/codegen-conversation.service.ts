@@ -17,7 +17,15 @@ import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { SemanticEditDecision } from '../types/semantic-edit'
-import type {SemanticActionState, SemanticPositionState, SemanticRiskState, SemanticSlotState, SemanticState, SemanticTriggerState} from '../types/semantic-state';
+import type {
+  SemanticActionState,
+  SemanticCapability,
+  SemanticPositionState,
+  SemanticRiskState,
+  SemanticSlotState,
+  SemanticState,
+  SemanticTriggerState,
+} from '../types/semantic-state'
 import type { StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyBlockingReason, StrategyInferredAssumption } from '../types/strategy-decision'
@@ -3105,8 +3113,8 @@ export class CodegenConversationService {
       return state
     }
 
-    const hasLockedEntry = this.hasLockedTriggerPhase(state, 'entry')
-    const hasLockedExit = this.hasLockedTriggerPhase(state, 'exit')
+    const hasLockedEntry = this.hasExecutableEntrySemantics(state)
+    const hasLockedExit = this.hasExecutableExitSemantics(state)
     const hasCompleteOrderProgram = this.hasCompleteOrderProgramSemantics(state)
     const triggers = state.trigger.filter(trigger =>
       !this.isMissingExecutableAtomTrigger(trigger)
@@ -3155,32 +3163,64 @@ export class CodegenConversationService {
     )
   }
 
+  private hasExecutableEntrySemantics(state: SemanticState): boolean {
+    return this.hasLockedTriggerPhase(state, 'entry')
+      || this.hasCompleteOrderProgramSemantics(state)
+      || this.hasLockedScheduleSemantics(state)
+  }
+
+  private hasExecutableExitSemantics(state: SemanticState): boolean {
+    return this.hasLockedTriggerPhase(state, 'exit')
+      || this.hasLockedExitRiskSemantics(state)
+      || this.hasCompleteOrderProgramSemantics(state)
+  }
+
   private hasCompleteOrderProgramSemantics(state: SemanticState): boolean {
-    const hasLockedLevelSetProvider = state.trigger.some(trigger =>
-      trigger.status === 'locked'
-      && trigger.openSlots.every(slot => slot.status !== 'open')
-      && trigger.contracts?.some(contract =>
-        contract.capabilities.some(capability =>
-          capability.domain === 'price'
-          && capability.verb === 'define'
-          && capability.object === 'level_set',
-        ),
-      ),
+    const capabilities = this.collectLockedCapabilities(state)
+    return capabilities.some(capability =>
+      capability.domain === 'order_program'
+      && (capability.verb === 'maintain' || capability.verb === 'place' || capability.verb === 'rebalance')
     )
-    if (!hasLockedLevelSetProvider) {
-      return false
+  }
+
+  private hasLockedScheduleSemantics(state: SemanticState): boolean {
+    return this.collectLockedCapabilities(state).some(capability =>
+      capability.domain === 'runtime'
+      && (capability.verb === 'schedule' || capability.object === 'dca_orders')
+    )
+  }
+
+  private collectLockedCapabilities(state: SemanticState): SemanticCapability[] {
+    const capabilities: SemanticCapability[] = []
+    const pushContracts = (contracts: readonly { capabilities: readonly SemanticCapability[] }[] | undefined): void => {
+      for (const contract of contracts ?? []) capabilities.push(...contract.capabilities)
     }
 
-    return state.action.some(action =>
-      action.status === 'locked'
-      && (action.openSlots ?? []).every(slot => slot.status !== 'open')
-      && action.contracts?.some(contract =>
-        contract.capabilities.some(capability =>
-          capability.domain === 'order_program'
-          && capability.verb === 'maintain',
-        ),
-      ),
-    )
+    for (const trigger of state.trigger) {
+      if (trigger.status === 'locked' && trigger.openSlots.every(slot => slot.status !== 'open')) {
+        pushContracts(trigger.contracts)
+      }
+    }
+    for (const action of state.action) {
+      if (action.status === 'locked' && (action.openSlots ?? []).every(slot => slot.status !== 'open')) {
+        pushContracts(action.contracts)
+      }
+    }
+    for (const risk of state.risk) {
+      if (risk.status === 'locked' && risk.openSlots.every(slot => slot.status !== 'open')) {
+        pushContracts(risk.contracts)
+      }
+    }
+    if (state.position?.status === 'locked' && (state.position.openSlots ?? []).every(slot => slot.status !== 'open')) {
+      pushContracts(state.position.contracts)
+    }
+    for (const constraint of state.positionConstraint) {
+      if (constraint.status === 'locked' && constraint.openSlots.every(slot => slot.status !== 'open')) {
+        pushContracts(constraint.contracts)
+      }
+    }
+
+    return capabilities
   }
 
   private isMissingExecutableAtomTrigger(trigger: SemanticTriggerState): boolean {
@@ -3575,7 +3615,30 @@ export class CodegenConversationService {
       trigger.phase === 'exit'
       && trigger.status === 'locked'
       && trigger.openSlots.every(slot => slot.status !== 'open'),
-    )
+    ) || this.hasLockedExitRiskSemantics(state)
+  }
+
+  private hasLockedExitRiskSemantics(state: SemanticState): boolean {
+    return state.risk.some((risk) => {
+      if (risk.status !== 'locked' || risk.openSlots.some(slot => slot.status === 'open')) {
+        return false
+      }
+
+      if (risk.key === ATOM_CONTRACT_REGISTRY['risk.partial_take_profit'].key) {
+        return Array.isArray(risk.params.tiers)
+          || (typeof risk.params.profitPct === 'number' && Number.isFinite(risk.params.profitPct) && risk.params.profitPct > 0)
+      }
+
+      const threshold = risk.params.valuePct
+      if (typeof threshold !== 'number' || !Number.isFinite(threshold) || threshold <= 0) {
+        return false
+      }
+
+      return risk.key === FIELD_KEY.RISK_STOP_LOSS_PCT
+        || risk.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT
+        || risk.key === FIELD_KEY.RISK_MAX_DRAWDOWN_PCT
+        || risk.key === FIELD_KEY.RISK_MAX_SINGLE_LOSS_PCT
+    })
   }
 
   private toSemanticTriggerState(

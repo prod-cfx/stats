@@ -632,12 +632,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       intent: {
         keywords: ['RSI', 'rsi'] as const,
         verbs: {
-          lte: ['低于', '小于', '下方', '跌破', 'below', 'under', 'less than', 'falls below', 'drops below'] as const,
+          lte: ['≤', '<=', '低于或等于', '小于等于', '不高于', '低于', '小于', '下方', '跌破', 'below', 'under', 'less than or equal', 'less than', 'falls below', 'drops below'] as const,
         },
       },
       paramSlots: {
-        period: { kind: 'number', required: false, range: [1, 200], default: 14, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 200] } },
-        value: { kind: 'number', required: true, range: [0, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [0, 100] } },
+        period: { kind: 'number', required: false, range: [1, 200], default: 14, extractor: { kind: 'number-int', pattern: 'RSI\\s*\\(?\\s*(\\d+)', range: [1, 200] } },
+        value: { kind: 'number', required: true, range: [0, 100], extractor: { kind: 'number-int', pattern: '(?:≤|<=|低于或等于|小于等于|不高于|低于|小于|下方|跌破|below|under|less than or equal|less than|falls below|drops below)\\s*(\\d+)', range: [0, 100] } },
         thresholdRole: { kind: 'enum', required: false, enum: ['lower_threshold'], default: 'lower_threshold' },
       },
       phaseResolver: 'by-clause-verb',
@@ -686,12 +686,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       intent: {
         keywords: ['RSI', 'rsi', '超买'] as const,
         verbs: {
-          gte: ['高于', '大于', '超过', '上方', 'above', 'over', 'greater than'] as const,
+          gte: ['≥', '>=', '高于或等于', '大于等于', '不低于', '高于', '大于', '超过', '上方', 'above', 'over', 'greater than or equal', 'greater than'] as const,
         },
       },
       paramSlots: {
-        period: { kind: 'number', required: false, range: [1, 200], default: 14, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 200] } },
-        value: { kind: 'number', required: true, range: [0, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [0, 100] } },
+        period: { kind: 'number', required: false, range: [1, 200], default: 14, extractor: { kind: 'number-int', pattern: 'RSI\\s*\\(?\\s*(\\d+)', range: [1, 200] } },
+        value: { kind: 'number', required: true, range: [0, 100], extractor: { kind: 'number-int', pattern: '(?:≥|>=|高于或等于|大于等于|不低于|高于|大于|超过|上方|above|over|greater than or equal|greater than)\\s*(\\d+)', range: [0, 100] } },
         thresholdRole: { kind: 'enum', required: false, enum: ['upper_threshold'], default: 'upper_threshold' },
       },
       phaseResolver: 'by-clause-verb',
@@ -904,7 +904,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['价格', '收盘价', '涨跌幅', '百分比', 'price', 'percent change'] as const,
+        keywords: ['价格', '收盘价', '涨跌幅', '百分比', '百分', '%', 'price', 'percent change'] as const,
         verbs: {
           gte: ['上涨', '涨', 'rise', 'up'] as const,
           lte: ['下跌', '跌', 'drop', 'down'] as const,

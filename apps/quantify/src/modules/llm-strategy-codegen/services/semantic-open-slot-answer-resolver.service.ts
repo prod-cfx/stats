@@ -104,6 +104,11 @@ export class SemanticOpenSlotAnswerResolverService {
       }
     }
 
+    const positionSizingAnswer = resolvePositionSizingAnswer(input.currentState, input.message, input.clarificationState)
+    if (positionSizingAnswer) {
+      return positionSizingAnswer
+    }
+
     const symbolAnswer = this.resolveSymbolAnswer(input.currentState, input.message, input.clarificationState)
     if (symbolAnswer) {
       return symbolAnswer
@@ -144,6 +149,91 @@ export class SemanticOpenSlotAnswerResolverService {
       closedSlots: [{ slotKey: 'symbol', fieldPath: 'contextSlots.symbol' }],
     }
   }
+}
+
+function resolvePositionSizingAnswer(
+  state: SemanticState,
+  message: string,
+  clarificationState: unknown,
+): SemanticOpenSlotAnswerResolverResult | null {
+  const position = state.position
+  const slot = position?.openSlots?.find(item => item.slotKey === 'position.sizing' && item.status === 'open')
+  if (!position || !slot || !canConsumePositionSizingAnswer(slot, clarificationState)) {
+    return null
+  }
+
+  const sizing = parsePositionSizingAnswer(message)
+  if (!sizing) {
+    return null
+  }
+
+  const nextOpenSlots = (position.openSlots ?? []).filter(item =>
+    !(item.slotKey === slot.slotKey && item.fieldPath === slot.fieldPath),
+  )
+  return {
+    consumed: true,
+    nextState: {
+      ...state,
+      position: {
+        ...position,
+        mode: sizing.mode,
+        value: sizing.value,
+        sizing: sizing.sizing,
+        status: nextOpenSlots.some(item => item.status === 'open') ? 'open' : 'locked',
+        source: 'user_explicit',
+        openSlots: nextOpenSlots,
+      },
+    },
+    answer: {},
+    closedSlotKeys: [slot.slotKey],
+    closedSlots: [{ slotKey: slot.slotKey, fieldPath: slot.fieldPath }],
+  }
+}
+
+function canConsumePositionSizingAnswer(slot: SemanticSlotState, clarificationState: unknown): boolean {
+  const activeItem = pickPendingClarificationTarget(readPendingClarificationItems(clarificationState))
+  if (!activeItem) {
+    return true
+  }
+
+  if (typeof activeItem.slotId === 'string' && buildSemanticSlotId(slot) === activeItem.slotId) {
+    return true
+  }
+
+  return activeItem.slotKey === slot.slotKey && activeItem.fieldPath === slot.fieldPath
+}
+
+function parsePositionSizingAnswer(message: string): {
+  mode: string
+  value: number
+  sizing: NonNullable<SemanticPositionState['sizing']>
+} | null {
+  const text = message.trim().replace(/％/gu, '%')
+  if (!text) {
+    return null
+  }
+
+  const quoteMatch = text.match(/(?<![-.\d])(\d+(?:\.\d+)?)(?![\d.])\s*(USDT|USDC|USD|U|刀)(?=$|[\s,，。；;.!！?？])/iu)
+  if (quoteMatch?.[1]) {
+    const value = Number(quoteMatch[1])
+    if (Number.isFinite(value) && value > 0) {
+      const rawAsset = (quoteMatch[2] ?? 'USDT').toUpperCase()
+      const asset = rawAsset === 'USDC' || rawAsset === 'USD' ? rawAsset : 'USDT'
+      return { mode: 'fixed_quote', value, sizing: { kind: 'quote', value, asset } }
+    }
+  }
+
+  const percentMatch = text.match(/(?<![-.\d])(\d+(?:\.\d+)?)(?![\d.])\s*%/u)
+    ?? text.match(/(?:百分之?|percent)\s*(\d+(?:\.\d+)?)/iu)
+  if (percentMatch?.[1]) {
+    const pct = Number(percentMatch[1])
+    if (Number.isFinite(pct) && pct > 0 && pct <= 100) {
+      const value = pct / 100
+      return { mode: 'fixed_ratio', value, sizing: { kind: 'ratio', value, unit: 'ratio' } }
+    }
+  }
+
+  return null
 }
 
 function canConsumeSymbolAnswer(symbolSlot: SemanticSlotState, clarificationState: unknown): boolean {

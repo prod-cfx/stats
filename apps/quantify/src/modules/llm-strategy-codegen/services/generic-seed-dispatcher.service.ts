@@ -129,11 +129,11 @@ function matchNumberAtIndex(clause: string, pattern: string | undefined, fallbac
   if (index === 0) {
     const re = pattern ? new RegExp(pattern) : fallback
     const m = clause.match(re)
-    return m?.[0]
+    return m?.[1] ?? m?.[0]
   }
   const globalRe = pattern ? new RegExp(pattern, 'g') : new RegExp(fallback.source, 'g')
   const all = [...clause.matchAll(globalRe)]
-  return all[index]?.[0]
+  return all[index]?.[1] ?? all[index]?.[0]
 }
 
 const PARSER_NUMBER_INT: ParserFn = (clause, spec) => {
@@ -156,9 +156,9 @@ const PARSER_NUMBER_DECIMAL: ParserFn = (clause, spec) => {
 
 const PARSER_PERCENT: ParserFn = (clause, spec) => {
   const re = spec.pattern ? new RegExp(spec.pattern) : /-?\d+(?:\.\d+)?\s*%/
-  const m = clause.match(re)
+  const m = clause.match(re) ?? clause.match(/(?:百分之?|percent)\s*(-?\d+(?:\.\d+)?)/iu)
   if (!m) return undefined
-  const raw = m[0]
+  const raw = m[1] ?? m[0]
   const sign = raw.startsWith('-') || /下跌|跌|回撤/.test(clause) ? -1 : 1
   const n = Number.parseFloat(raw.replace(/[^\d.]/g, ''))
   if (Number.isNaN(n)) return undefined
