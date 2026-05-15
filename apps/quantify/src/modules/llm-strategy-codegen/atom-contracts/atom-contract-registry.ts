@@ -848,11 +848,14 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       inheritParams: ['period', 'stdDev'],
       paramSlots: {
         band: { kind: 'enum', required: false, enum: ['upper'], default: 'upper' },
-        // Issue #1391：BOLL period / stdDev 必须只在 "BOLL(N,M)" / "布林带(N,M)" /
-        //   "布林线(N,M)" 等明确句法上下文里抽取，否则"15min"/"BOLL(20,2)" 中其它数字会被
-        //   误抢，造成 period=15 或 period=2 等错误状态。
-        period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*(\\d+)', range: [1, 500] } },
-        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)', range: [0.1, 10] } },
+        // Issue #1391：BOLL period / stdDev 必须只在 BOLL / 布林带 / 布林线 词根紧跟的
+        //   句法上下文里抽取，否则"15min"/"BOLL(20,2)" 中其它数字会被误抢。
+        //   pattern 兼容三种合法写法（按宽容度递增）：
+        //     1) "BOLL(20,2)" / "布林带(20,2)"——括号 + 逗号
+        //     2) "BOLL 20 周期、2 倍标准差"——空格 + 数字（period）/ "标准差" 关键字（stdDev）
+        //     3) "布林上轨" / "boll 上轨"——无数字，回落 default
+        period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*(?:[（(]\\s*(\\d+)|(\\d+)\\s*(?:周期|天|根)?)', range: [1, 500] } },
+        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)|(\\d+(?:\\.\\d+)?)\\s*(?:倍\\s*)?标准差', range: [0.1, 10] } },
         confirmationMode: { kind: 'enum', required: false, enum: ['touch', 'breakout', 'close'], extractor: { kind: 'enum-zh-map', enumMap: { '触及': 'touch', '碰到': 'touch', '触碰': 'touch', '突破': 'breakout', '上破': 'breakout', '跌破': 'breakout', '收盘确认': 'close', '收盘': 'close' } } },
       },
       phaseResolver: 'by-clause-verb',
@@ -911,11 +914,14 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       inheritParams: ['period', 'stdDev'],
       paramSlots: {
         band: { kind: 'enum', required: false, enum: ['lower'], default: 'lower' },
-        // Issue #1391：BOLL period / stdDev 必须只在 "BOLL(N,M)" / "布林带(N,M)" /
-        //   "布林线(N,M)" 等明确句法上下文里抽取，否则"15min"/"BOLL(20,2)" 中其它数字会被
-        //   误抢，造成 period=15 或 period=2 等错误状态。
-        period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*(\\d+)', range: [1, 500] } },
-        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)', range: [0.1, 10] } },
+        // Issue #1391：BOLL period / stdDev 必须只在 BOLL / 布林带 / 布林线 词根紧跟的
+        //   句法上下文里抽取，否则"15min"/"BOLL(20,2)" 中其它数字会被误抢。
+        //   pattern 兼容三种合法写法（按宽容度递增）：
+        //     1) "BOLL(20,2)" / "布林带(20,2)"——括号 + 逗号
+        //     2) "BOLL 20 周期、2 倍标准差"——空格 + 数字（period）/ "标准差" 关键字（stdDev）
+        //     3) "布林上轨" / "boll 上轨"——无数字，回落 default
+        period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*(?:[（(]\\s*(\\d+)|(\\d+)\\s*(?:周期|天|根)?)', range: [1, 500] } },
+        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)|(\\d+(?:\\.\\d+)?)\\s*(?:倍\\s*)?标准差', range: [0.1, 10] } },
         confirmationMode: { kind: 'enum', required: false, enum: ['touch', 'breakout', 'close'], extractor: { kind: 'enum-zh-map', enumMap: { '触及': 'touch', '碰到': 'touch', '触碰': 'touch', '突破': 'breakout', '上破': 'breakout', '跌破': 'breakout', '收盘确认': 'close', '收盘': 'close' } } },
       },
       phaseResolver: 'by-clause-verb',
@@ -977,11 +983,14 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       inheritParams: ['period', 'stdDev'],
       paramSlots: {
         band: { kind: 'enum', required: false, enum: ['middle'], default: 'middle' },
-        // Issue #1391：BOLL period / stdDev 必须只在 "BOLL(N,M)" / "布林带(N,M)" /
-        //   "布林线(N,M)" 等明确句法上下文里抽取，否则"15min"/"BOLL(20,2)" 中其它数字会被
-        //   误抢，造成 period=15 或 period=2 等错误状态。
-        period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*(\\d+)', range: [1, 500] } },
-        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)', range: [0.1, 10] } },
+        // Issue #1391：BOLL period / stdDev 必须只在 BOLL / 布林带 / 布林线 词根紧跟的
+        //   句法上下文里抽取，否则"15min"/"BOLL(20,2)" 中其它数字会被误抢。
+        //   pattern 兼容三种合法写法（按宽容度递增）：
+        //     1) "BOLL(20,2)" / "布林带(20,2)"——括号 + 逗号
+        //     2) "BOLL 20 周期、2 倍标准差"——空格 + 数字（period）/ "标准差" 关键字（stdDev）
+        //     3) "布林上轨" / "boll 上轨"——无数字，回落 default
+        period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*(?:[（(]\\s*(\\d+)|(\\d+)\\s*(?:周期|天|根)?)', range: [1, 500] } },
+        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)|(\\d+(?:\\.\\d+)?)\\s*(?:倍\\s*)?标准差', range: [0.1, 10] } },
         confirmationMode: { kind: 'enum', required: false, enum: ['touch', 'breakout', 'close'], extractor: { kind: 'enum-zh-map', enumMap: { '触及': 'touch', '碰到': 'touch', '触碰': 'touch', '突破': 'breakout', '上破': 'breakout', '跌破': 'breakout', '收盘确认': 'close', '收盘': 'close' } } },
       },
       // 中轨触及/回归常作为趋势策略的"获利平仓"信号——保留 fixed-exit。
