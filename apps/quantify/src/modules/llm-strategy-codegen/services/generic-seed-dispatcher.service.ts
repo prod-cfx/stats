@@ -825,7 +825,6 @@ export class GenericSeedDispatcher {
         // external.signal 声明 'webhook'；其余 atom 省略，默认 'user_explicit'。
         const evidenceSource: NonNullable<AtomContractSurface['evidenceProvenance']> = contract.surface?.evidenceProvenance ?? 'user_explicit'
         const evidence = { text: m.clauseText, source: evidenceSource }
-        const shape = { key: m.atomKey, phase, sideScope, ...params }
         // phase は resolver が解決した後に全 slot に記録する（M1: actionMatchesFulfilledPhases が
         // action.phase を参照できるよう action にも phase を付与）。
         // sideScope は triggers のみ意味を持つため引き続き trigger 限定。
