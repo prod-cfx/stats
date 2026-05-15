@@ -996,6 +996,17 @@ export class GenericSeedDispatcher {
           return ev?.text === clause
         })
         if (alreadyMatched) continue
+        // Issue #1391 review M4：self-mirror（sourceKey === atomKey）场景下，若本 clause
+        //   已被 sibling（同 atom 不同 sideScope）覆盖，跳过 self-mirror 派生，避免
+        //   "触及中轨" 一句先 emit sideScope=both，再被 self-mirror 派生 sideScope=long/short
+        //   产生三份冗余。判定基于 evidence.text 等于本 clause 的 sibling 是否已存在。
+        if (sourceKey === atomKey) {
+          const selfMirrorAlreadyCovered = sourceSiblings.some((n) => {
+            const ev = (n.evidence as { text?: string } | undefined)
+            return ev?.text === clause
+          })
+          if (selfMirrorAlreadyCovered) continue
+        }
 
         // 子句必须命中本 atom 的 verb；keyword 此处不要求（这才是"跨子句继承"的意义）
         const direction = matchVerbDirection(clause, surface.intent.verbs)
