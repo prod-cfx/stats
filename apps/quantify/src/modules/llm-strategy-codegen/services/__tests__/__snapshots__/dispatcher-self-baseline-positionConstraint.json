@@ -290,7 +290,7 @@
           "phase": "entry",
           "params": {
             "direction": "down",
-            "valuePct": -0.05
+            "valuePct": -5
           },
           "evidence": {
             "text": "每跌 5% 补仓一次",
@@ -317,7 +317,7 @@
           "phase": "entry",
           "params": {
             "direction": "down",
-            "valuePct": -0.05
+            "valuePct": -5
           },
           "evidence": {
             "text": "每跌 5% 补仓一次",
@@ -329,7 +329,7 @@
           "key": "position.dca_schedule",
           "phase": "entry",
           "params": {
-            "dropPct": -0.05,
+            "dropPct": -5,
             "perOrderBudget": 5,
             "maxOrders": 5
           },
@@ -495,7 +495,7 @@
           "phase": "entry",
           "params": {
             "direction": "down",
-            "valuePct": 0.02
+            "valuePct": 2
           },
           "evidence": {
             "text": "DCA every time price drops 2%",
@@ -510,7 +510,7 @@
           "phase": "entry",
           "params": {
             "direction": "down",
-            "valuePct": 0.02
+            "valuePct": 2
           },
           "evidence": {
             "text": "DCA every time price drops 2%",
@@ -522,7 +522,7 @@
           "key": "position.dca_schedule",
           "phase": "entry",
           "params": {
-            "dropPct": 0.02,
+            "dropPct": 2,
             "perOrderBudget": 2,
             "maxOrders": 2
           },
@@ -801,7 +801,7 @@
           "phase": "entry",
           "params": {
             "direction": "down",
-            "valuePct": -0.05
+            "valuePct": -5
           },
           "evidence": {
             "text": "价格每跌 5% 补仓一次",
@@ -824,6 +824,17 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "RSI14 高于 70 卖出",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "oscillator.rsi_lte",
@@ -844,7 +855,7 @@
           "phase": "entry",
           "params": {
             "direction": "down",
-            "valuePct": -0.05
+            "valuePct": -5
           },
           "evidence": {
             "text": "价格每跌 5% 补仓一次",
@@ -856,7 +867,7 @@
           "key": "position.dca_schedule",
           "phase": "entry",
           "params": {
-            "dropPct": -0.05,
+            "dropPct": -5,
             "perOrderBudget": 5,
             "maxOrders": 5
           },
@@ -874,6 +885,16 @@
             "value": 70,
             "thresholdRole": "upper_threshold"
           },
+          "evidence": {
+            "text": "RSI14 高于 70 卖出",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
           "evidence": {
             "text": "RSI14 高于 70 卖出",
             "source": "user_explicit"
@@ -1138,9 +1159,9 @@
           "params": {
             "sideScope": "long",
             "addMode": "profit_pct",
-            "addRatio": 0.03,
-            "profitThreshold": 0.03,
-            "drawdownThreshold": 0.03
+            "addRatio": 3,
+            "profitThreshold": 3,
+            "drawdownThreshold": 3
           },
           "evidence": {
             "text": "盈利 3% 后加仓 50%",
@@ -1178,9 +1199,9 @@
           "params": {
             "sideScope": "long",
             "addMode": "profit_pct",
-            "addRatio": 0.03,
-            "profitThreshold": 0.03,
-            "drawdownThreshold": 0.03
+            "addRatio": 3,
+            "profitThreshold": 3,
+            "drawdownThreshold": 3
           },
           "evidence": {
             "text": "盈利 3% 后加仓 50%",

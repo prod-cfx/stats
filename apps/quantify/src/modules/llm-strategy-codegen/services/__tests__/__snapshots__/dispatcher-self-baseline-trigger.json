@@ -82,6 +82,17 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "布林带20周期2倍标准差触及下轨买入",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "bollinger.touch_upper",
@@ -135,6 +146,16 @@
             "boundaryRole": "lower",
             "confirmationMode": "touch"
           },
+          "evidence": {
+            "text": "布林带20周期2倍标准差触及下轨买入",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
           "evidence": {
             "text": "布林带20周期2倍标准差触及下轨买入",
             "source": "user_explicit"
@@ -825,6 +846,17 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "布林带20周期2倍标准差触及中轨卖出",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "bollinger.touch_upper",
@@ -878,6 +910,16 @@
             "boundaryRole": "middle",
             "confirmationMode": "touch"
           },
+          "evidence": {
+            "text": "布林带20周期2倍标准差触及中轨卖出",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
           "evidence": {
             "text": "布林带20周期2倍标准差触及中轨卖出",
             "source": "user_explicit"
@@ -1287,6 +1329,17 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "布林带20周期2倍标准差触及上轨卖出",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "bollinger.touch_upper",
@@ -1340,6 +1393,16 @@
             "boundaryRole": "upper",
             "confirmationMode": "touch"
           },
+          "evidence": {
+            "text": "布林带20周期2倍标准差触及上轨卖出",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
           "evidence": {
             "text": "布林带20周期2倍标准差触及上轨卖出",
             "source": "user_explicit"
@@ -2015,6 +2078,17 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "立即开始时市价买入",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "execution.on_start",
@@ -2024,6 +2098,16 @@
             "orderType": "market",
             "occurrence": "once"
           },
+          "evidence": {
+            "text": "立即开始时市价买入",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
           "evidence": {
             "text": "立即开始时市价买入",
             "source": "user_explicit"
@@ -2119,6 +2203,17 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "启动时市价卖出",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "execution.on_start",
@@ -2128,6 +2223,16 @@
             "orderType": "market",
             "occurrence": "once"
           },
+          "evidence": {
+            "text": "启动时市价卖出",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
           "evidence": {
             "text": "启动时市价卖出",
             "source": "user_explicit"
@@ -2251,6 +2356,15 @@
       "actions": [
         {
           "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "on webhook signalId whale_buy with secret configured",
+            "source": "user_explicit"
+          }
+        },
+        {
+          "key": "action.open_long",
           "phase": "exit",
           "params": {},
           "evidence": {
@@ -2260,6 +2374,16 @@
         }
       ],
       "atoms": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "on webhook signalId whale_buy with secret configured",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
         {
           "key": "action.open_long",
           "phase": "exit",
@@ -2386,6 +2510,15 @@
       },
       "actions": [
         {
+          "key": "action.close_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "when webhook signalId=whale_sell arrives",
+            "source": "user_explicit"
+          }
+        },
+        {
           "key": "action.open_short",
           "phase": "entry",
           "params": {},
@@ -2396,6 +2529,16 @@
         }
       ],
       "atoms": [
+        {
+          "key": "action.close_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "when webhook signalId=whale_sell arrives",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
         {
           "key": "action.open_short",
           "phase": "entry",
@@ -2535,6 +2678,17 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "价格突破 MA50 买入",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "price.breakout_up",
@@ -2558,6 +2712,16 @@
             "reference.period": 50,
             "timeframeOverride": "true"
           },
+          "evidence": {
+            "text": "价格突破 MA50 买入",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
           "evidence": {
             "text": "价格突破 MA50 买入",
             "source": "user_explicit"
@@ -3296,6 +3460,17 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "RSI14 从 38 下方向上穿回 38 时买入",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "oscillator.rsi_lte",
@@ -3321,6 +3496,16 @@
             "slowPeriod": 38,
             "signalPeriod": 38
           },
+          "evidence": {
+            "text": "RSI14 从 38 下方向上穿回 38 时买入",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
           "evidence": {
             "text": "RSI14 从 38 下方向上穿回 38 时买入",
             "source": "user_explicit"
@@ -3745,6 +3930,17 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "RSI14 下穿 50 时卖出",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "indicator.cross_under",
@@ -3756,6 +3952,16 @@
             "fastPeriod": 14,
             "slowPeriod": 50
           },
+          "evidence": {
+            "text": "RSI14 下穿 50 时卖出",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
           "evidence": {
             "text": "RSI14 下穿 50 时卖出",
             "source": "user_explicit"
@@ -5087,7 +5293,7 @@
           "phase": "entry",
           "params": {
             "direction": "down",
-            "valuePct": -0.05
+            "valuePct": -5
           },
           "evidence": {
             "text": "价格每跌 5% 补仓一次",
@@ -5110,6 +5316,17 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "RSI14 高于 70 卖出",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "oscillator.rsi_lte",
@@ -5130,7 +5347,7 @@
           "phase": "entry",
           "params": {
             "direction": "down",
-            "valuePct": -0.05
+            "valuePct": -5
           },
           "evidence": {
             "text": "价格每跌 5% 补仓一次",
@@ -5142,7 +5359,7 @@
           "key": "position.dca_schedule",
           "phase": "entry",
           "params": {
-            "dropPct": -0.05,
+            "dropPct": -5,
             "perOrderBudget": 5,
             "maxOrders": 5
           },
@@ -5160,6 +5377,16 @@
             "value": 70,
             "thresholdRole": "upper_threshold"
           },
+          "evidence": {
+            "text": "RSI14 高于 70 卖出",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
           "evidence": {
             "text": "RSI14 高于 70 卖出",
             "source": "user_explicit"
@@ -5235,6 +5462,26 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "RSI14 低于 25 买入",
+            "source": "user_explicit"
+          }
+        },
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "RSI14 高于 70 卖出",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "oscillator.rsi_lte",
@@ -5251,6 +5498,16 @@
           "sideScope": "long"
         },
         {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "RSI14 低于 25 买入",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
           "key": "oscillator.rsi_gte",
           "phase": "exit",
           "params": {
@@ -5258,6 +5515,16 @@
             "value": 70,
             "thresholdRole": "upper_threshold"
           },
+          "evidence": {
+            "text": "RSI14 高于 70 卖出",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
           "evidence": {
             "text": "RSI14 高于 70 卖出",
             "source": "user_explicit"
@@ -5332,6 +5599,17 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "RSI 高于 65 卖出",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "oscillator.rsi_lte",
@@ -5355,6 +5633,16 @@
             "value": 65,
             "thresholdRole": "upper_threshold"
           },
+          "evidence": {
+            "text": "RSI 高于 65 卖出",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
           "evidence": {
             "text": "RSI 高于 65 卖出",
             "source": "user_explicit"
@@ -5467,6 +5755,17 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "RSI14 高于 70 卖出",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "oscillator.rsi_gte",
@@ -5476,6 +5775,16 @@
             "value": 70,
             "thresholdRole": "upper_threshold"
           },
+          "evidence": {
+            "text": "RSI14 高于 70 卖出",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
           "evidence": {
             "text": "RSI14 高于 70 卖出",
             "source": "user_explicit"
@@ -5872,6 +6181,17 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "RSI14 低于 30 买入",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "oscillator.rsi_lte",
@@ -5881,6 +6201,16 @@
             "value": 30,
             "thresholdRole": "lower_threshold"
           },
+          "evidence": {
+            "text": "RSI14 低于 30 买入",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
           "evidence": {
             "text": "RSI14 低于 30 买入",
             "source": "user_explicit"
@@ -6090,7 +6420,8 @@
           "key": "price.percent_change",
           "phase": "entry",
           "params": {
-            "direction": "down"
+            "direction": "down",
+            "window": "20h"
           },
           "evidence": {
             "text": "RSI14 跌破 30 且价格站上 ema20 时买入",
@@ -6159,6 +6490,17 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "RSI14 跌破 30 且价格站上 ema20 时买入",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "oscillator.rsi_lte",
@@ -6178,7 +6520,8 @@
           "key": "price.percent_change",
           "phase": "entry",
           "params": {
-            "direction": "down"
+            "direction": "down",
+            "window": "20h"
           },
           "evidence": {
             "text": "RSI14 跌破 30 且价格站上 ema20 时买入",
@@ -6240,6 +6583,16 @@
             "reference.period": 20,
             "timeframeOverride": "true"
           },
+          "evidence": {
+            "text": "RSI14 跌破 30 且价格站上 ema20 时买入",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
           "evidence": {
             "text": "RSI14 跌破 30 且价格站上 ema20 时买入",
             "source": "user_explicit"
@@ -7387,7 +7740,8 @@
           "key": "price.percent_change",
           "phase": "entry",
           "params": {
-            "direction": "down"
+            "direction": "down",
+            "window": "60h"
           },
           "evidence": {
             "text": "价格下破最近 20 根 K 线前低且跌破 ema60 时开空",
@@ -7456,7 +7810,8 @@
           "key": "price.percent_change",
           "phase": "entry",
           "params": {
-            "direction": "down"
+            "direction": "down",
+            "window": "60h"
           },
           "evidence": {
             "text": "价格下破最近 20 根 K 线前低且跌破 ema60 时开空",
@@ -7651,7 +8006,7 @@
           "params": {
             "period": 24,
             "reference": "channel_high",
-            "bufferPct": 0.0025
+            "bufferPct": 0.25
           },
           "evidence": {
             "text": "价格突破最近 24 根 K 线高点且突破缓冲 0.25% 时做多",
@@ -7691,7 +8046,7 @@
           "params": {
             "period": 24,
             "reference": "channel_high",
-            "bufferPct": 0.0025
+            "bufferPct": 0.25
           },
           "evidence": {
             "text": "价格突破最近 24 根 K 线高点且突破缓冲 0.25% 时做多",
@@ -7763,6 +8118,17 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "突破最近 20 根 K 线最高价买入",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "price.breakout_up",
@@ -7771,6 +8137,16 @@
             "period": 20,
             "reference": "channel_high"
           },
+          "evidence": {
+            "text": "突破最近 20 根 K 线最高价买入",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
           "evidence": {
             "text": "突破最近 20 根 K 线最高价买入",
             "source": "user_explicit"
@@ -9045,8 +9421,8 @@
           "phase": "entry",
           "params": {
             "direction": "down",
-            "valuePct": -0.01,
-            "window": "undefined"
+            "valuePct": -1,
+            "window": "3m"
           },
           "evidence": {
             "text": "BTCUSDT 3m 当前K线收盘价相对上一根K线收盘价下跌 1% 时买入",
@@ -9055,15 +9431,36 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "BTCUSDT 3m 当前K线收盘价相对上一根K线收盘价下跌 1% 时买入",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "price.percent_change",
           "phase": "entry",
           "params": {
             "direction": "down",
-            "valuePct": -0.01,
-            "window": "undefined"
+            "valuePct": -1,
+            "window": "3m"
           },
+          "evidence": {
+            "text": "BTCUSDT 3m 当前K线收盘价相对上一根K线收盘价下跌 1% 时买入",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
           "evidence": {
             "text": "BTCUSDT 3m 当前K线收盘价相对上一根K线收盘价下跌 1% 时买入",
             "source": "user_explicit"
@@ -9105,9 +9502,9 @@
           "phase": "exit",
           "params": {
             "direction": "up",
-            "valuePct": 0.02,
+            "valuePct": 2,
             "basis": "entry_avg_price",
-            "window": "undefined"
+            "window": "15m"
           },
           "evidence": {
             "text": "15m 相对开仓均价上涨 2% 时卖出",
@@ -9116,16 +9513,37 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "15m 相对开仓均价上涨 2% 时卖出",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "price.percent_change",
           "phase": "exit",
           "params": {
             "direction": "up",
-            "valuePct": 0.02,
+            "valuePct": 2,
             "basis": "entry_avg_price",
-            "window": "undefined"
+            "window": "15m"
           },
+          "evidence": {
+            "text": "15m 相对开仓均价上涨 2% 时卖出",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
           "evidence": {
             "text": "15m 相对开仓均价上涨 2% 时卖出",
             "source": "user_explicit"
@@ -9175,7 +9593,7 @@
           "phase": "entry",
           "params": {
             "direction": "down",
-            "valuePct": -0.03
+            "valuePct": -3
           },
           "evidence": {
             "text": "price 下跌 3% 做多",
@@ -9201,7 +9619,7 @@
           "phase": "entry",
           "params": {
             "direction": "down",
-            "valuePct": -0.03
+            "valuePct": -3
           },
           "evidence": {
             "text": "price 下跌 3% 做多",
@@ -9251,7 +9669,7 @@
           "phase": "exit",
           "params": {
             "lookbackBars": 36,
-            "thresholdPct": 0.55
+            "thresholdPct": 55
           },
           "evidence": {
             "text": "价格回到最近 36 根 K 线区间上 55% 时卖出",
@@ -9260,14 +9678,35 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "价格回到最近 36 根 K 线区间上 55% 时卖出",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "price.range_position_gte",
           "phase": "exit",
           "params": {
             "lookbackBars": 36,
-            "thresholdPct": 0.55
+            "thresholdPct": 55
           },
+          "evidence": {
+            "text": "价格回到最近 36 根 K 线区间上 55% 时卖出",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
           "evidence": {
             "text": "价格回到最近 36 根 K 线区间上 55% 时卖出",
             "source": "user_explicit"
@@ -9320,7 +9759,7 @@
           "phase": "entry",
           "params": {
             "lookbackBars": 20,
-            "thresholdPct": 0.8
+            "thresholdPct": 80
           },
           "evidence": {
             "text": "价格在最近 20 根 K 线区间高位 80% 做空",
@@ -9346,7 +9785,7 @@
           "phase": "entry",
           "params": {
             "lookbackBars": 20,
-            "thresholdPct": 0.8
+            "thresholdPct": 80
           },
           "evidence": {
             "text": "价格在最近 20 根 K 线区间高位 80% 做空",
@@ -9421,7 +9860,7 @@
           "phase": "entry",
           "params": {
             "lookbackBars": 50,
-            "thresholdPct": 0.75
+            "thresholdPct": 75
           },
           "evidence": {
             "text": "价格在最近 50 根 K 线区间上 75% open short",
@@ -9447,7 +9886,7 @@
           "phase": "entry",
           "params": {
             "lookbackBars": 50,
-            "thresholdPct": 0.75
+            "thresholdPct": 75
           },
           "evidence": {
             "text": "价格在最近 50 根 K 线区间上 75% open short",
@@ -9511,7 +9950,7 @@
           "phase": "entry",
           "params": {
             "lookbackBars": 36,
-            "thresholdPct": 0.2
+            "thresholdPct": 20
           },
           "evidence": {
             "text": "价格位于最近 36 根 K 线区间下 20% 时买入",
@@ -9520,14 +9959,35 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "价格位于最近 36 根 K 线区间下 20% 时买入",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "price.range_position_lte",
           "phase": "entry",
           "params": {
             "lookbackBars": 36,
-            "thresholdPct": 0.2
+            "thresholdPct": 20
           },
+          "evidence": {
+            "text": "价格位于最近 36 根 K 线区间下 20% 时买入",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
           "evidence": {
             "text": "价格位于最近 36 根 K 线区间下 20% 时买入",
             "source": "user_explicit"
@@ -9580,7 +10040,7 @@
           "phase": "entry",
           "params": {
             "lookbackBars": 20,
-            "thresholdPct": 0.15
+            "thresholdPct": 15
           },
           "evidence": {
             "text": "价格在最近 20 根 K 线区间低位 15% 做多",
@@ -9606,7 +10066,7 @@
           "phase": "entry",
           "params": {
             "lookbackBars": 20,
-            "thresholdPct": 0.15
+            "thresholdPct": 15
           },
           "evidence": {
             "text": "价格在最近 20 根 K 线区间低位 15% 做多",
@@ -9681,7 +10141,7 @@
           "phase": "entry",
           "params": {
             "lookbackBars": 50,
-            "thresholdPct": 0.25
+            "thresholdPct": 25
           },
           "evidence": {
             "text": "价格在最近 50 根 K 线区间下 25% enter long",
@@ -9696,7 +10156,7 @@
           "phase": "entry",
           "params": {
             "lookbackBars": 50,
-            "thresholdPct": 0.25
+            "thresholdPct": 25
           },
           "evidence": {
             "text": "价格在最近 50 根 K 线区间下 25% enter long",
@@ -11572,6 +12032,17 @@
           "sideScope": "long"
         }
       ],
+      "actions": [
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "收到 webhook：ETHUSDT side=sell 卖出",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "external.signal",
@@ -11584,6 +12055,16 @@
           "evidence": {
             "text": "收到 webhook：ETHUSDT side=sell 卖出",
             "source": "webhook"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "action.close_long",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "收到 webhook：ETHUSDT side=sell 卖出",
+            "source": "user_explicit"
           },
           "sideScope": "long"
         }

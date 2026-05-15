@@ -389,7 +389,7 @@
           "key": "portfolioRisk.drawdown_block",
           "phase": "gate",
           "params": {
-            "thresholdPct": -0.1
+            "thresholdPct": -10
           },
           "evidence": {
             "text": "账户回撤超过 10% 停止开新仓",
@@ -496,7 +496,7 @@
           "key": "portfolioRisk.drawdown_block",
           "phase": "gate",
           "params": {
-            "thresholdPct": -0.08
+            "thresholdPct": -8
           },
           "evidence": {
             "text": "账户回撤超过 8% 仅记录",
@@ -557,7 +557,7 @@
           "key": "portfolioRisk.drawdown_block",
           "phase": "gate",
           "params": {
-            "thresholdPct": -0.15
+            "thresholdPct": -15
           },
           "evidence": {
             "text": "账户回撤超过 15% 停止开新仓",
@@ -638,7 +638,7 @@
           "key": "portfolioRisk.drawdown_block",
           "phase": "gate",
           "params": {
-            "thresholdPct": -0.12
+            "thresholdPct": -12
           },
           "evidence": {
             "text": "账户回撤超过 12% 停止开新仓",
@@ -693,7 +693,7 @@
           "key": "portfolioRisk.substrategy_exposure_cap",
           "phase": "gate",
           "params": {
-            "notionalCapPct": 0.4,
+            "notionalCapPct": 40,
             "mode": "enforce",
             "effectWhenTriggered": "block_new_entries"
           },
@@ -745,7 +745,7 @@
           "key": "portfolioRisk.symbol_exposure_cap",
           "phase": "gate",
           "params": {
-            "notionalCapPct": 0.3,
+            "notionalCapPct": 30,
             "mode": "enforce",
             "effectWhenTriggered": "block_new_entries"
           },
@@ -769,7 +769,7 @@
           "key": "portfolioRisk.symbol_exposure_cap",
           "phase": "gate",
           "params": {
-            "notionalCapPct": 0.2,
+            "notionalCapPct": 20,
             "mode": "observe",
             "effectWhenTriggered": "block_new_entries"
           },
@@ -882,8 +882,8 @@
           "key": "risk.partial_take_profit",
           "phase": "exit",
           "params": {
-            "profitPct": 0.001,
-            "ratio": 0.001
+            "profitPct": 0.1,
+            "ratio": 0.1
           },
           "evidence": {
             "text": "ATR(20) 自适应网格 5 档每档钳制 0.1%-1.5%",
@@ -896,8 +896,8 @@
           "key": "risk.partial_take_profit",
           "phase": "exit",
           "params": {
-            "profitPct": 0.001,
-            "ratio": 0.001
+            "profitPct": 0.1,
+            "ratio": 0.1
           },
           "evidence": {
             "text": "ATR(20) 自适应网格 5 档每档钳制 0.1%-1.5%",
@@ -1345,10 +1345,10 @@
       "contextSlots": {
         "exchange": "binance",
         "symbol": {
-          "value": "BINANCEUSDT",
+          "value": "BTCUSDTUSDT",
           "source": "inferred",
-          "evidenceText": "binance",
-          "base": "BINANCE",
+          "evidenceText": "btcusdt",
+          "base": "BTCUSDT",
           "quote": "USDT",
           "quoteSource": "default_usdt"
         },
@@ -1582,10 +1582,10 @@
     "patch": {
       "contextSlots": {
         "symbol": {
-          "value": "TRENDUSDT",
+          "value": "SUBUSDT",
           "source": "inferred",
-          "evidenceText": "trend",
-          "base": "TREND",
+          "evidenceText": "sub",
+          "base": "SUB",
           "quote": "USDT",
           "quoteSource": "default_usdt"
         }
@@ -2183,9 +2183,9 @@
           "params": {
             "sideScope": "long",
             "addMode": "profit_pct",
-            "addRatio": 0.03,
-            "profitThreshold": 0.03,
-            "drawdownThreshold": 0.03
+            "addRatio": 3,
+            "profitThreshold": 3,
+            "drawdownThreshold": 3
           },
           "evidence": {
             "text": "盈利 3% 后加仓 50%",
@@ -2223,9 +2223,9 @@
           "params": {
             "sideScope": "long",
             "addMode": "profit_pct",
-            "addRatio": 0.03,
-            "profitThreshold": 0.03,
-            "drawdownThreshold": 0.03
+            "addRatio": 3,
+            "profitThreshold": 3,
+            "drawdownThreshold": 3
           },
           "evidence": {
             "text": "盈利 3% 后加仓 50%",

@@ -92,6 +92,8 @@ const INDICATOR_KEYWORDS = new Set([
   'ALL', 'ANY', 'ARE', 'CAN', 'DID', 'HAS', 'HAD', 'LET', 'MAY', 'NEW',
   'NOT', 'NOW', 'OLD', 'OUR', 'OWN', 'RUN', 'SAY', 'SEE', 'TOP', 'TRY',
   'TWO', 'USE', 'WAY', 'WHO', 'YOU', 'AGO', 'API', 'APP', 'BOT',
+  // 交易所 / 市场类型 token，避免 "在 okx 买 btc" 推断为 OKXUSDT。
+  'OKX', 'BINANCE', 'HYPERLIQUID', 'SPOT', 'PERP', 'SWAP', 'CONTRACT',
 ])
 
 /** 短句 token 形态：3-10 位大写字母 */
@@ -163,15 +165,32 @@ const PARSER_PERCENT: ParserFn = (clause, spec) => {
   const sign = raw.startsWith('-') || /下跌|跌|回撤/.test(clause) ? -1 : 1
   const n = Number.parseFloat(raw.replace(/[^\d.]/g, ''))
   if (Number.isNaN(n)) return undefined
-  return sign * (n / 100)
+  const value = spec.range?.[1] !== undefined && spec.range[1] <= 1
+    ? n / 100
+    : n
+  return sign * value
 }
 
 const PARSER_DURATION: ParserFn = (clause, spec) => {
   const re = spec.pattern ? new RegExp(spec.pattern) : /(\d+)\s*([mhdw])/i
   const m = clause.match(re)
+    ?? clause.match(/(\d+)\s*(分钟|分|min|m|小时|时|h|天|日|d|周|w)/iu)
   if (!m) return undefined
-  const unit = m[2] ?? ''
-  return `${m[1]}${unit.toLowerCase()}`
+  const raw = m[0]
+  const value = m[1] ?? raw.match(/\d+/u)?.[0]
+  if (!value) return undefined
+  const unitRaw = m[2] ?? raw.match(/[a-z]+|分钟|分|小时|时|天|日|周/iu)?.[0] ?? ''
+  const unit = unitRaw.toLowerCase()
+  const normalizedUnit = unit === '分钟' || unit === '分' || unit === 'min'
+    ? 'm'
+    : unit === '小时' || unit === '时'
+      ? 'h'
+      : unit === '天' || unit === '日'
+        ? 'd'
+        : unit === '周'
+          ? 'w'
+          : unit
+  return `${value}${normalizedUnit}`
 }
 
 const PARSER_ENUM_ZH_MAP: ParserFn = (clause, spec) => {
@@ -626,7 +645,7 @@ interface ContextSlots {
  * 产出 source='inferred' + quoteSource='default_usdt'（quote 默认 USDT）。
  */
 function tryInferShortSymbol(text: string): InferredSymbolSlot | undefined {
-  const tokens = text.split(/[\s,，。.；;:：!！?？()（）、/\\]+/)
+  const tokens = text.match(/(?<![A-Za-z0-9])[A-Za-z]{2,10}(?![A-Za-z0-9])/gu) ?? []
   for (const token of tokens) {
     const upper = token.toUpperCase()
     if (looksLikeBaseToken(upper)) {

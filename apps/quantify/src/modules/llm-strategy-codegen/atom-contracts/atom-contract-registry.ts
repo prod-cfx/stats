@@ -2290,7 +2290,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   // ── 开多 / 平多 action（PR2c-final-1a：解 caller 切换后 open-slot-resolver spec 3 fail）
   'action.open_long': {
     corpus: {
-      aliases: ['开多', '做多', '入场多', '开多仓', 'open long', 'go long'],
+      aliases: ['开多', '做多', '买入', '入场多', '开多仓', 'open long', 'go long', 'buy'],
       positiveExamples: [
         '满足条件时开多 1000U',
         '金叉时开多仓',
@@ -2317,9 +2317,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['开多', '做多', '入场多', 'open long', 'go long'] as const,
+        keywords: ['开多', '做多', '买入', '入场多', 'open long', 'go long', 'buy'] as const,
         verbs: {
-          fixed: ['开多', '做多', 'open long', 'go long'] as const,
+          fixed: ['开多', '做多', '买入', 'open long', 'go long', 'buy'] as const,
         },
       },
       paramSlots: {},
@@ -2330,7 +2330,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
 
   'action.close_long': {
     corpus: {
-      aliases: ['平多', '平仓多', '出场多', '止盈平多', 'close long', 'exit long'],
+      aliases: ['平多', '卖出', '平仓多', '出场多', '止盈平多', 'close long', 'exit long', 'sell'],
       positiveExamples: [
         '止盈时平多',
         '跌破均线时平多仓',
@@ -2357,9 +2357,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['平多', '平仓多', '出场多', 'close long', 'exit long'] as const,
+        keywords: ['平多', '卖出', '平仓多', '出场多', 'close long', 'exit long', 'sell'] as const,
         verbs: {
-          fixed: ['平多', '平仓多', 'close long', 'exit long'] as const,
+          fixed: ['平多', '卖出', '平仓多', 'close long', 'exit long', 'sell'] as const,
         },
       },
       paramSlots: {},

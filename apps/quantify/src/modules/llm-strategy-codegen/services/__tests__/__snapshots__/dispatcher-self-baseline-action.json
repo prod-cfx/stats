@@ -69,9 +69,9 @@
           "params": {
             "sideScope": "long",
             "addMode": "signal_confirm",
-            "addRatio": 0.2,
-            "profitThreshold": 0.2,
-            "drawdownThreshold": 0.2
+            "addRatio": 20,
+            "profitThreshold": 20,
+            "drawdownThreshold": 20
           },
           "evidence": {
             "text": "回踩 MA20 不破后加仓 20%",
@@ -112,9 +112,9 @@
           "params": {
             "sideScope": "long",
             "addMode": "signal_confirm",
-            "addRatio": 0.2,
-            "profitThreshold": 0.2,
-            "drawdownThreshold": 0.2
+            "addRatio": 20,
+            "profitThreshold": 20,
+            "drawdownThreshold": 20
           },
           "evidence": {
             "text": "回踩 MA20 不破后加仓 20%",
@@ -207,9 +207,9 @@
           "params": {
             "sideScope": "long",
             "addMode": "profit_pct",
-            "addRatio": 0.3,
-            "profitThreshold": 0.3,
-            "drawdownThreshold": 0.3
+            "addRatio": 30,
+            "profitThreshold": 30,
+            "drawdownThreshold": 30
           },
           "evidence": {
             "text": "盈利后加仓 30%",
@@ -250,9 +250,9 @@
           "params": {
             "sideScope": "long",
             "addMode": "profit_pct",
-            "addRatio": 0.3,
-            "profitThreshold": 0.3,
-            "drawdownThreshold": 0.3
+            "addRatio": 30,
+            "profitThreshold": 30,
+            "drawdownThreshold": 30
           },
           "evidence": {
             "text": "盈利后加仓 30%",
@@ -545,9 +545,9 @@
           "params": {
             "sideScope": "long",
             "addMode": "drawdown_pct",
-            "addRatio": -0.05,
-            "profitThreshold": -0.05,
-            "drawdownThreshold": -0.05
+            "addRatio": -5,
+            "profitThreshold": -5,
+            "drawdownThreshold": -5
           },
           "evidence": {
             "text": "回撤 5% 补仓 30%",
@@ -588,9 +588,9 @@
           "params": {
             "sideScope": "long",
             "addMode": "drawdown_pct",
-            "addRatio": -0.05,
-            "profitThreshold": -0.05,
-            "drawdownThreshold": -0.05
+            "addRatio": -5,
+            "profitThreshold": -5,
+            "drawdownThreshold": -5
           },
           "evidence": {
             "text": "回撤 5% 补仓 30%",
@@ -776,9 +776,9 @@
           "params": {
             "sideScope": "long",
             "addMode": "profit_pct",
-            "addRatio": 0.02,
-            "profitThreshold": 0.02,
-            "drawdownThreshold": 0.02
+            "addRatio": 2,
+            "profitThreshold": 2,
+            "drawdownThreshold": 2
           },
           "evidence": {
             "text": "盈利 2% 后加仓",
@@ -819,9 +819,9 @@
           "params": {
             "sideScope": "long",
             "addMode": "profit_pct",
-            "addRatio": 0.02,
-            "profitThreshold": 0.02,
-            "drawdownThreshold": 0.02
+            "addRatio": 2,
+            "profitThreshold": 2,
+            "drawdownThreshold": 2
           },
           "evidence": {
             "text": "盈利 2% 后加仓",

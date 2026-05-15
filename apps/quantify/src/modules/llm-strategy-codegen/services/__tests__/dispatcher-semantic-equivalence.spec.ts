@@ -70,11 +70,11 @@ describe('issue #1279 PR2b — dispatcher semantic equivalence', () => {
       expect(percentChangeTriggers).toEqual(expect.arrayContaining([
         expect.objectContaining({
           phase: 'entry',
-          params: expect.objectContaining({ direction: 'down', valuePct: -0.01 }),
+          params: expect.objectContaining({ direction: 'down', valuePct: -1 }),
         }),
         expect.objectContaining({
           phase: 'exit',
-          params: expect.objectContaining({ direction: 'up', valuePct: 0.02 }),
+          params: expect.objectContaining({ direction: 'up', valuePct: 2 }),
         }),
       ]))
     })
@@ -87,16 +87,16 @@ describe('issue #1279 PR2b — dispatcher semantic equivalence', () => {
         expect.objectContaining({
           phase: 'entry',
           sideScope: 'long',
-          params: expect.objectContaining({ direction: 'down', valuePct: -0.01 }),
+          params: expect.objectContaining({ direction: 'down', valuePct: -1 }),
         }),
         expect.objectContaining({
           phase: 'exit',
           sideScope: 'long',
-          params: expect.objectContaining({ direction: 'up', valuePct: 0.02 }),
+          params: expect.objectContaining({ direction: 'up', valuePct: 2 }),
         }),
       ]))
-      expect(percentChangeTriggers.map(trigger => trigger.params.valuePct)).not.toContain(-0.05)
-      expect(percentChangeTriggers.map(trigger => trigger.params.valuePct)).not.toContain(0.05)
+      expect(percentChangeTriggers.map(trigger => trigger.params.valuePct)).not.toContain(-5)
+      expect(percentChangeTriggers.map(trigger => trigger.params.valuePct)).not.toContain(5)
     })
 
     it('parses RSI parenthesized period and symbolic lte comparator as one complete entry atom', () => {
