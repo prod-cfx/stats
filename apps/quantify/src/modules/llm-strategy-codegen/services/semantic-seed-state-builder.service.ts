@@ -561,10 +561,10 @@ export class SemanticSeedStateBuilderService {
     }
   }
 
-  // Issue #1391：spot 市场强制 sideMode=long_only fail-safe
-  //   任何 positionConstraint atom（grid/dca/pyramiding 等）声明 sideMode='both'/'short_only'
-  //   而 contextSlots.marketType='spot' 时，自动改为 'long_only'。registry-driven：
-  //   不针对 grid 单 atom，所有有 sideMode 字段的 constraint 都生效。
+  // Issue #1391：spot 市场强制 sideMode=long_only fail-safe（review M5 升级）
+  //   任何 positionConstraint atom 声明 sideMode='both'/'short_only' 而 contextSlots.marketType='spot' 时，
+  //   覆写为 'long_only'，并在 atom 上挂 evidence note + 通过 logger.warn 告知此次自动调整，
+  //   避免静默改写违反 Never break userspace。registry-driven：不针对 grid 单 atom。
   private applySpotSideModeConstraint(
     position: SemanticState['position'],
     contextSlots: SemanticState['contextSlots'],
@@ -577,9 +577,11 @@ export class SemanticSeedStateBuilderService {
     const adjusted = constraints.map((c) => {
       const sideMode = (c.params as { sideMode?: unknown } | undefined)?.sideMode
       if (sideMode !== 'both' && sideMode !== 'short_only') return c
+      const note = `市场类型为 spot，原始 sideMode=${String(sideMode)} 自动调整为 long_only（现货不支持做空）`
+      this.logger.warn(`[Issue#1391] applySpotSideModeConstraint: ${note} (atom=${c.key})`)
       return {
         ...c,
-        params: { ...c.params, sideMode: 'long_only' },
+        params: { ...c.params, sideMode: 'long_only', _spotSideModeAutoCorrection: note },
       }
     })
     return { ...position, constraints: adjusted }
