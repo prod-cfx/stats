@@ -1133,6 +1133,22 @@
         },
         "timeframe": "1h"
       },
+      "triggers": [
+        {
+          "key": "bollinger.touch_middle",
+          "phase": "exit",
+          "params": {
+            "band": "middle",
+            "period": 20,
+            "stdDev": 2
+          },
+          "evidence": {
+            "text": "bollinger 20 2 retest middle band close long",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        }
+      ],
       "actions": [
         {
           "key": "action.close_long",
@@ -1145,6 +1161,20 @@
         }
       ],
       "atoms": [
+        {
+          "key": "bollinger.touch_middle",
+          "phase": "exit",
+          "params": {
+            "band": "middle",
+            "period": 20,
+            "stdDev": 2
+          },
+          "evidence": {
+            "text": "bollinger 20 2 retest middle band close long",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
         {
           "key": "action.close_long",
           "phase": "exit",

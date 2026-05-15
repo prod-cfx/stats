@@ -1980,7 +1980,8 @@
           "params": {
             "band": "middle",
             "period": 20,
-            "stdDev": 2
+            "stdDev": 2,
+            "confirmationMode": "touch"
           },
           "evidence": {
             "text": "回到中轨止盈",
@@ -2038,36 +2039,6 @@
             "period": 20,
             "stdDev": 2,
             "band": "lower",
-            "confirmationMode": "touch"
-          },
-          "evidence": {
-            "text": "触及上轨开空",
-            "source": "user_explicit"
-          },
-          "sideScope": "short"
-        },
-        {
-          "key": "bollinger.touch_middle",
-          "phase": "exit",
-          "params": {
-            "period": 20,
-            "stdDev": 2,
-            "band": "middle",
-            "confirmationMode": "touch"
-          },
-          "evidence": {
-            "text": "价格触及布林下轨开多",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
-          "key": "bollinger.touch_middle",
-          "phase": "exit",
-          "params": {
-            "period": 20,
-            "stdDev": 2,
-            "band": "middle",
             "confirmationMode": "touch"
           },
           "evidence": {
@@ -2129,7 +2100,8 @@
           "params": {
             "band": "middle",
             "period": 20,
-            "stdDev": 2
+            "stdDev": 2,
+            "confirmationMode": "touch"
           },
           "evidence": {
             "text": "回到中轨止盈",
@@ -2197,36 +2169,6 @@
             "period": 20,
             "stdDev": 2,
             "band": "lower",
-            "confirmationMode": "touch"
-          },
-          "evidence": {
-            "text": "触及上轨开空",
-            "source": "user_explicit"
-          },
-          "sideScope": "short"
-        },
-        {
-          "key": "bollinger.touch_middle",
-          "phase": "exit",
-          "params": {
-            "period": 20,
-            "stdDev": 2,
-            "band": "middle",
-            "confirmationMode": "touch"
-          },
-          "evidence": {
-            "text": "价格触及布林下轨开多",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
-          "key": "bollinger.touch_middle",
-          "phase": "exit",
-          "params": {
-            "period": 20,
-            "stdDev": 2,
-            "band": "middle",
             "confirmationMode": "touch"
           },
           "evidence": {
@@ -2285,7 +2227,7 @@
             "text": "下穿平仓",
             "source": "user_explicit"
           },
-          "sideScope": "short"
+          "sideScope": "long"
         }
       ],
       "actions": [
@@ -2340,7 +2282,7 @@
             "text": "下穿平仓",
             "source": "user_explicit"
           },
-          "sideScope": "short"
+          "sideScope": "long"
         }
       ]
     }
