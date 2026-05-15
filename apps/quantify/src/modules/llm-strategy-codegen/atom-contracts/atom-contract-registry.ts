@@ -848,8 +848,11 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       inheritParams: ['period', 'stdDev'],
       paramSlots: {
         band: { kind: 'enum', required: false, enum: ['upper'], default: 'upper' },
-        period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
-        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '\\d+(\\.\\d+)?', range: [0.1, 10] } },
+        // Issue #1391：BOLL period / stdDev 必须只在 "BOLL(N,M)" / "布林带(N,M)" /
+        //   "布林线(N,M)" 等明确句法上下文里抽取，否则"15min"/"BOLL(20,2)" 中其它数字会被
+        //   误抢，造成 period=15 或 period=2 等错误状态。
+        period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*(\\d+)', range: [1, 500] } },
+        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)', range: [0.1, 10] } },
         confirmationMode: { kind: 'enum', required: false, enum: ['touch', 'breakout', 'close'], extractor: { kind: 'enum-zh-map', enumMap: { '触及': 'touch', '碰到': 'touch', '触碰': 'touch', '突破': 'breakout', '上破': 'breakout', '跌破': 'breakout', '收盘确认': 'close', '收盘': 'close' } } },
       },
       phaseResolver: 'by-clause-verb',
@@ -908,8 +911,11 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       inheritParams: ['period', 'stdDev'],
       paramSlots: {
         band: { kind: 'enum', required: false, enum: ['lower'], default: 'lower' },
-        period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
-        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '\\d+(\\.\\d+)?', range: [0.1, 10] } },
+        // Issue #1391：BOLL period / stdDev 必须只在 "BOLL(N,M)" / "布林带(N,M)" /
+        //   "布林线(N,M)" 等明确句法上下文里抽取，否则"15min"/"BOLL(20,2)" 中其它数字会被
+        //   误抢，造成 period=15 或 period=2 等错误状态。
+        period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*(\\d+)', range: [1, 500] } },
+        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)', range: [0.1, 10] } },
         confirmationMode: { kind: 'enum', required: false, enum: ['touch', 'breakout', 'close'], extractor: { kind: 'enum-zh-map', enumMap: { '触及': 'touch', '碰到': 'touch', '触碰': 'touch', '突破': 'breakout', '上破': 'breakout', '跌破': 'breakout', '收盘确认': 'close', '收盘': 'close' } } },
       },
       phaseResolver: 'by-clause-verb',
@@ -971,8 +977,11 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       inheritParams: ['period', 'stdDev'],
       paramSlots: {
         band: { kind: 'enum', required: false, enum: ['middle'], default: 'middle' },
-        period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
-        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '\\d+(\\.\\d+)?', range: [0.1, 10] } },
+        // Issue #1391：BOLL period / stdDev 必须只在 "BOLL(N,M)" / "布林带(N,M)" /
+        //   "布林线(N,M)" 等明确句法上下文里抽取，否则"15min"/"BOLL(20,2)" 中其它数字会被
+        //   误抢，造成 period=15 或 period=2 等错误状态。
+        period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*(\\d+)', range: [1, 500] } },
+        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)', range: [0.1, 10] } },
         confirmationMode: { kind: 'enum', required: false, enum: ['touch', 'breakout', 'close'], extractor: { kind: 'enum-zh-map', enumMap: { '触及': 'touch', '碰到': 'touch', '触碰': 'touch', '突破': 'breakout', '上破': 'breakout', '跌破': 'breakout', '收盘确认': 'close', '收盘': 'close' } } },
       },
       // 中轨触及/回归常作为趋势策略的"获利平仓"信号——保留 fixed-exit。
@@ -1418,8 +1427,11 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       // 必须抽出指标名称（MA/EMA/SMA/均线）才视为静态 indicator 比较，否则放手让
       // price.candle_pattern / grid 等更具体的 atom 接住"收盘高于开盘"/"突破上下边界"。
       matchRequires: ['indicator'],
-      crossClauseInheritFrom: 'indicator.below',
-      inheritParams: ['indicator', 'referenceRole', 'reference.period', 'timeframeOverride'],
+      // 注：Issue #1391 实测，indicator.above ↔ below 跨子句继承在用户表达"都位于下方只开空"
+      //   等 meta-condition 子句上会 over-fire 出 phantom EMA short entry。这两个 atom 的
+      //   场景下用户通常会显式重复指标名（"价格在 EMA20 上方做多；EMA20 下方做空"），
+      //   不需要继承。移除 dual 声明，避免误伤。crossClauseInheritFrom 机制仍保留给真正
+      //   省略指标名的对偶场景（cross_over/under、touch_lower/upper、touch_middle 自镜像）。
       paramSlots: {
         indicator: { kind: 'enum', required: true, enum: ['ma', 'sma', 'ema'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', 'SMA': 'sma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema' } } },
         referenceRole: { kind: 'enum', required: false, enum: ['short_term', 'mid_term', 'long_term'], extractor: { kind: 'enum-zh-map', derive: 'period-range' } },
@@ -1479,9 +1491,8 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         },
       },
       // 与 indicator.above 对称：必须抽出指标名才视为静态比较，否则让 candle_pattern 等接住
+      // Issue #1391：移除跨子句继承（见 indicator.above 侧注释）。
       matchRequires: ['indicator'],
-      crossClauseInheritFrom: 'indicator.above',
-      inheritParams: ['indicator', 'referenceRole', 'reference.period', 'timeframeOverride'],
       paramSlots: {
         indicator: { kind: 'enum', required: true, enum: ['ma', 'sma', 'ema'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', 'SMA': 'sma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema' } } },
         referenceRole: { kind: 'enum', required: false, enum: ['short_term', 'mid_term', 'long_term'], extractor: { kind: 'enum-zh-map', derive: 'period-range' } },

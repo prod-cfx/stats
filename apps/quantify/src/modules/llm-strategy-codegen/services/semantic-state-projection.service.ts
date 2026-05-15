@@ -1094,7 +1094,7 @@ export class SemanticStateProjectionService {
       groupedAtomicSummaries,
     )
 
-    return orderedTriggers
+    const rendered = orderedTriggers
       .map((trigger) => {
         const folded = contractGroupFoldedSummaries.get(trigger.id)
         if (folded !== undefined) {
@@ -1209,7 +1209,28 @@ export class SemanticStateProjectionService {
         return trigger.key
       })
       .filter(item => item.length > 0)
-      .join('；')
+    // Issue #1391：summary 渲染层 dedupe ——
+    //   state 桶按 (key, phase, sideScope, paramsHash) 去重后，仍可能有不同 atom 实例
+    //   渲染出完全相同的文本（如 indicator.above 的 referenceRole=mid_term/short_term
+    //   渲染均为"价格在 MA20 上方"；price.breakout_up 的 period=20/undefined 渲染均为
+    //   "价格突破近期高点"）。用户视角是重复，按渲染文本最终折叠一遍。
+    return this.dedupeRenderedItems(rendered).join('；')
+  }
+
+  /**
+   * 通用渲染层 dedupe：保留首次出现位置，丢弃后续完全相同的文本条目。
+   * 适用于 trigger/risk/action 等任何按行 join 的 summary 集合。
+   */
+  private dedupeRenderedItems(items: readonly string[]): string[] {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const item of items) {
+      if (!item) continue
+      if (seen.has(item)) continue
+      seen.add(item)
+      out.push(item)
+    }
+    return out
   }
 
   /**
@@ -2048,7 +2069,7 @@ export class SemanticStateProjectionService {
   }
 
   private buildRiskSummary(riskItems: SemanticState['risk']): string {
-    return riskItems
+    const renderedRisk = riskItems
       .filter(risk => risk.status === 'locked')
       .sort((left, right) => this.compareRiskAtoms(left, right))
       .map((risk) => {
@@ -2124,7 +2145,8 @@ export class SemanticStateProjectionService {
         return this.buildRiskFallbackSummary(risk)
       })
       .filter(item => item.length > 0)
-      .join('；')
+    // Issue #1391：risk summary 渲染层 dedupe，与 trigger summary 同一原则
+    return this.dedupeRenderedItems(renderedRisk).join('；')
   }
 
   private buildRiskFallbackSummary(_risk: SemanticState['risk'][number]): string {

@@ -288,21 +288,39 @@ export class SemanticSeedStateBuilderService {
         return !dropViolations.has(`${kind}[${index}:${key}${phase}]`)
       })
     }
-    const positionUpdate = this.toPositionState(positionPatchInput)
+    const positionUpdateRaw = this.toPositionState(positionPatchInput)
     const contextSlots = this.toContextSlots(
       semanticPatch.contextSlots ?? semanticPatch.contextUpdates ?? semanticPatch.context,
     )
+    // Issue #1391：spot 市场下 sideMode='both' / 'short_only' 与现货语义冲突——
+    //   按 marketType 上下文 fail-safe 派生 long_only。registry-driven：任何带 sideMode
+    //   字段的 positionConstraint atom 都受影响，不只 grid。
+    const positionUpdate = this.applySpotSideModeConstraint(positionUpdateRaw, contextSlots)
 
-    const triggerUpdates = filterByEvidenceInvariant(triggerItems, 'trigger')
+    const triggerUpdatesRaw = filterByEvidenceInvariant(triggerItems, 'trigger')
       .map((item, index) => this.toTriggerState(item, index))
       .filter((item): item is SemanticTriggerState => item !== null)
+    // Issue #1391：seed-builder 通用桶去重（registry-driven，作用于所有 atom 不是单策略）
+    //   dispatcher 在跨子句继承 / planner-dispatcher merge / 重复 clause 命中等场景下
+    //   会输出多份同 (key, phase, sideScope, paramsHash) 节点；mergeRisk 等 bucket merge
+    //   只在 persisted-state 路径跑，纯 seed 一次性输入跑不到——这里在 build() 出口
+    //   按统一 identity 折叠，保留最强者（locked > open）。
+    const triggerUpdates = this.coalesceDuplicateBucketEntries(triggerUpdatesRaw, {
+      sideScopeAware: true,
+    })
     const groupedTriggerUpdates = this.withMovingAverageStackCombinationContracts(triggerUpdates)
+    // Action 桶不参与通用 dedupe：action.params 常为空 {}，差异完全靠 contracts.capabilities.shape
+    //   承载（如 per_order_budget=50 vs 80），按 params hash 折叠会错误吞掉合法 multi-leg 配置
+    //   （PR3.9 spec 'isMultiLeg=true with two per_order_budget' 即此场景）。
     const actionUpdates = filterByEvidenceInvariant(actionItems, 'action')
       .map((item, index) => this.toActionState(item, index))
       .filter((item): item is SemanticActionState => item !== null)
-    const riskUpdates = filterByEvidenceInvariant(riskItems, 'risk')
-      .map((item, index) => this.toRiskState(item, index))
-      .filter((item): item is SemanticRiskState => item !== null)
+    const riskUpdates = this.coalesceDuplicateBucketEntries(
+      filterByEvidenceInvariant(riskItems, 'risk')
+        .map((item, index) => this.toRiskState(item, index))
+        .filter((item): item is SemanticRiskState => item !== null),
+      { sideScopeAware: false },
+    )
     const orchestration = this.toOrchestrationState(orchestrationPatchInput)
     const positionConstraints = positionUpdate?.constraints ?? []
 
@@ -541,6 +559,94 @@ export class SemanticSeedStateBuilderService {
       ...base,
       constraints: this.coalescePositionConstraintPatches([...existingConstraints, ...constraints]),
     }
+  }
+
+  // Issue #1391：spot 市场强制 sideMode=long_only fail-safe
+  //   任何 positionConstraint atom（grid/dca/pyramiding 等）声明 sideMode='both'/'short_only'
+  //   而 contextSlots.marketType='spot' 时，自动改为 'long_only'。registry-driven：
+  //   不针对 grid 单 atom，所有有 sideMode 字段的 constraint 都生效。
+  private applySpotSideModeConstraint(
+    position: SemanticState['position'],
+    contextSlots: SemanticState['contextSlots'],
+  ): SemanticState['position'] {
+    if (!position) return position
+    const marketType = contextSlots.marketType?.value
+    if (marketType !== 'spot') return position
+    const constraints = position.constraints
+    if (!Array.isArray(constraints) || constraints.length === 0) return position
+    const adjusted = constraints.map((c) => {
+      const sideMode = (c.params as { sideMode?: unknown } | undefined)?.sideMode
+      if (sideMode !== 'both' && sideMode !== 'short_only') return c
+      return {
+        ...c,
+        params: { ...c.params, sideMode: 'long_only' },
+      }
+    })
+    return { ...position, constraints: adjusted }
+  }
+
+  // Issue #1391：通用桶去重 helper（按 key+phase+sideScope+stable params hash + openSlots 签名）
+  //   作用面：trigger/action/risk 三桶 build() 收口；orchestration / position.constraints 已有
+  //   各自专用合并路径不重复。规则与 SemanticStateMergeService.dedupeByAtomIdentity 一致
+  //   保留 locked > open，等强保留先到。memoryKey/timestamp 等派生字段从 hash 排除。
+  private coalesceDuplicateBucketEntries<T extends {
+    key: string
+    status: 'open' | 'locked' | 'superseded'
+    params?: Record<string, unknown>
+    openSlots?: ReadonlyArray<{ slotKey?: string, fieldPath?: string, status?: string }>
+    phase?: 'entry' | 'exit' | 'gate' | 'risk' | undefined
+    sideScope?: 'long' | 'short' | 'both' | null
+  }>(
+    entries: T[],
+    options: { sideScopeAware: boolean },
+  ): T[] {
+    if (entries.length <= 1) return entries
+    const out: T[] = []
+    const indexByIdentity = new Map<string, number>()
+    const rank = (s: T['status']): number => s === 'locked' ? 2 : s === 'superseded' ? 1 : 0
+    for (const entry of entries) {
+      const phase = entry.phase ?? '__nophase__'
+      const sideScope = options.sideScopeAware ? (entry.sideScope ?? '__noside__') : ''
+      const paramsHash = this.stableParamsHashIgnoringDerivedFields(entry.params ?? {})
+      const slotSig = (entry.openSlots ?? [])
+        .map(s => `${s.slotKey ?? ''}@${(s as { fieldPath?: string }).fieldPath ?? ''}`)
+        .sort()
+        .join(',')
+      const identity = `${entry.key}|${phase}|${sideScope}|${paramsHash}|${slotSig}`
+      const existingIdx = indexByIdentity.get(identity)
+      if (existingIdx === undefined) {
+        indexByIdentity.set(identity, out.length)
+        out.push(entry)
+        continue
+      }
+      const incumbent = out[existingIdx]!
+      if (rank(entry.status) > rank(incumbent.status)) {
+        out[existingIdx] = entry
+      }
+    }
+    return out
+  }
+
+  private stableParamsHashIgnoringDerivedFields(params: Record<string, unknown>): string {
+    const sortedEntries = Object.entries(params)
+      .filter(([k]) => k !== 'memoryKey' && k !== 'evidenceText' && k !== 'sourceText')
+      .sort(([a], [b]) => a.localeCompare(b))
+    const normalized: Record<string, unknown> = {}
+    for (const [k, v] of sortedEntries) {
+      normalized[k] = this.normalizeForHash(v)
+    }
+    return JSON.stringify(normalized)
+  }
+
+  private normalizeForHash(v: unknown): unknown {
+    if (v === null || typeof v !== 'object') return v
+    if (Array.isArray(v)) return v.map(x => this.normalizeForHash(x))
+    const obj = v as Record<string, unknown>
+    const out: Record<string, unknown> = {}
+    for (const k of Object.keys(obj).sort()) {
+      out[k] = this.normalizeForHash(obj[k])
+    }
+    return out
   }
 
   private coalescePositionConstraintPatches(constraints: unknown[]): unknown[] {
