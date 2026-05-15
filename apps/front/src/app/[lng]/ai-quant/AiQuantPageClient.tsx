@@ -1567,13 +1567,33 @@ export function AiQuantPageClient({
 
   return (
     <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-6 px-4 py-8 md:px-8">
-      <Link
-        href={returnHref}
-        className="inline-flex w-fit items-center gap-2 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        <span>{lng === 'en' ? 'Back' : '返回'}</span>
-      </Link>
+      <section className="flex items-center justify-between gap-3">
+        <Link
+          href={returnHref}
+          className="inline-flex w-fit items-center gap-2 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span>{lng === 'en' ? 'Back' : '返回'}</span>
+        </Link>
+        <div className="flex items-center justify-end gap-2 sm:hidden">
+          <Link
+            href={`/${lng}/ai-quant/plaza`}
+            data-testid="ai-quant-header-plaza-link"
+            className="cf-ai-action-button cf-ai-action-neutral inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+          >
+            <Sparkles className="h-4 w-4" />
+            <span>{t('aiQuant.plazaShort')}</span>
+          </Link>
+          <Link
+            href={`/${lng}/account?tab=settings#exchange-api`}
+            data-testid="ai-quant-header-api-link"
+            className="cf-ai-action-button cf-ai-action-neutral inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+          >
+            <KeyRound className="h-4 w-4" />
+            <span>{t('aiQuant.configApiShort')}</span>
+          </Link>
+        </div>
+      </section>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
@@ -1582,10 +1602,9 @@ export function AiQuantPageClient({
           </h1>
           <p className="mt-1 text-sm text-[color:var(--cf-muted)]">{t('aiQuant.subtitle')}</p>
         </div>
-        <div className="flex items-center justify-end gap-2 sm:shrink-0">
+        <div className="hidden items-center justify-end gap-2 sm:flex sm:shrink-0">
           <Link
             href={`/${lng}/ai-quant/plaza`}
-            data-testid="ai-quant-header-plaza-link"
             className="cf-ai-action-button cf-ai-action-neutral inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)] sm:px-3.5"
           >
             <Sparkles className="h-4 w-4" />
@@ -1594,7 +1613,6 @@ export function AiQuantPageClient({
           </Link>
           <Link
             href={`/${lng}/account?tab=settings#exchange-api`}
-            data-testid="ai-quant-header-api-link"
             className="cf-ai-action-button cf-ai-action-neutral inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)] sm:px-3.5"
           >
             <KeyRound className="h-4 w-4" />

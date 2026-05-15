@@ -90,6 +90,8 @@
     "configApiShort": "API",
     "newChat": "New Chat",
     "createChat": "+ New Chat",
+    "conversationSelector": "Select conversation",
+    "mobileCurrentSessionSummary": "Current session · {{count}} past sessions collapsed",
     "chatTitle": "AI Assistant",
     "paramsConfig": "Parameters",
     "backtestSettingsTitle": "Backtest Settings",

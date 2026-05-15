@@ -90,6 +90,8 @@
     "configApiShort": "API",
     "newChat": "新对话",
     "createChat": "+ 新建会话",
+    "conversationSelector": "选择会话",
+    "mobileCurrentSessionSummary": "当前会话 · {{count}} 个历史会话收起",
     "chatTitle": "AI 助手",
     "paramsConfig": "参数配置",
     "backtestSettingsTitle": "回测参数",
