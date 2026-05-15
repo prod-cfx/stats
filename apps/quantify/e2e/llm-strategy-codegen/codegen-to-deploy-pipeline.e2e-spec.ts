@@ -92,6 +92,29 @@ const USER_STRATEGIES: readonly UserStrategyFixture[] = [
     initialMessage:
       '双子策略：BTC 用 RSI(14) ≤ 30 开多、≥ 70 平多；ETH 用 EMA20 上穿 EMA50 开多、下穿平多。总账户敞口 ≤ 50%，单币种敞口 ≤ 30%，账户回撤 ≥ 15% 时暂停全部新开仓。',
   },
+  // Issue #1391：用户实际反馈 6 条策略加入 codegen → deploy 验证。
+  //   验证 conversation → state → CONFIRM_GATE / DRAFTING 状态可达（LLM 真实链路 + dispatcher
+  //   atom-contract 通用解全开），表明部署前置状态机走通。
+  {
+    id: 'U6',
+    description: 'S2 EMA stack + BOLL 上下轨双向开（BOLL period 不被 timeframe 误抢）',
+    initialMessage: '15min k线里面 价格在ema20 ema60 ema144上方时做多开仓 都位于下方只开空 入场是boll下轨开多 上轨开空 币安的btcusdt永续合约 风控是亏损5%止损',
+  },
+  {
+    id: 'U7',
+    description: 'S3 BOLL 上下轨入场 + 中轨平仓（confirmationMode 区分）',
+    initialMessage: 'OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%。',
+  },
+  {
+    id: 'U8',
+    description: 'S4 阳线开多/阴线平多（candle_pattern single bull/bear bar 端到端）',
+    initialMessage: 'binance 永续 BTCUSDT 1m K 线。每次最新 K 线收盘价高于开盘价时尝试开多。如果已有持仓则不再开仓。收盘价低于开盘价时平多。单笔仓位 10%。',
+  },
+  {
+    id: 'U9',
+    description: 'S6 现货网格中心偏移（spot sideMode fail-safe + grid centerOffsetPct 入桶）',
+    initialMessage: 'OKX 现货 ETHUSDT、1m 网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT、限价单并相邻网格自动挂反向单、不用趋势信号开仓；当价格突破上下边界时执行"立即停止并撤销所有未成交订单"',
+  },
 ] as const
 
 /**
