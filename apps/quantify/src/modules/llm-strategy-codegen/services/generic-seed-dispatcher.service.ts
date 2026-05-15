@@ -1001,8 +1001,19 @@ export class GenericSeedDispatcher {
         const direction = matchVerbDirection(clause, surface.intent.verbs)
         if (!direction) continue
 
-        // 取最近一条 sibling（同消息后子句承前一致更自然）
-        const sibling = sourceSiblings[sourceSiblings.length - 1]
+        // Issue #1391 review M2：取最近 sibling 是脆弱启发式——多 entry sibling 场景
+        //   ("EMA7 上穿 EMA21 时开多；上穿 EMA50 时加仓；下穿 时平多") 会无条件取 slow=50
+        //   但语义通常对偶第一条 slow=21。改成 "与本 clause 距离最近的对偶 phase sibling"：
+        //   先派生本 clause 的 phase，再在 sibling 中选 phase 配对的最近一条（exit→entry，
+        //   entry→exit，self→任意），剩余仍 fallback 到最后一条。
+        const tentativePhase = resolvePhaseFromClause(clause, surface.phaseResolver, { atomKey, params: {} }) ?? 'entry'
+        const counterpartPhase: 'entry' | 'exit' | 'gate' = tentativePhase === 'exit' ? 'entry' : tentativePhase === 'entry' ? 'exit' : 'entry'
+        const sibling = sourceSiblings.slice().reverse().find((n) => {
+          const np = (n as { phase?: 'entry' | 'exit' | 'gate' | null }).phase
+          // self-mirror（sourceKey === atomKey）允许任何 phase；否则优先取对偶 phase 的 sibling
+          if (sourceKey === atomKey) return true
+          return np === counterpartPhase
+        }) ?? sourceSiblings[sourceSiblings.length - 1]
         if (!sibling) continue
 
         // 继承声明的 params + 本子句仍可抽到的 params 叠加（本子句优先覆盖继承值）
@@ -1024,12 +1035,24 @@ export class GenericSeedDispatcher {
         }
 
         const phase = resolvePhaseFromClause(clause, surface.phaseResolver, { atomKey, params }) ?? 'entry'
+        // Issue #1391 review M2：phase=exit 且未显式平多/平空时，sideScope 应镜像 sibling.sideScope
+        //   （"平掉它的反向仓位"），而不是按 verb direction(cross_under→short) 重新派生，
+        //   避免 "EMA7 上穿开多；下穿 时平多" 的"下穿平多"被错误派生为 sideScope=short。
         let sideScope: 'long' | 'short' | 'both' = (resolveSide(surface.sideResolver, clause, direction) ?? 'both') as 'long' | 'short' | 'both'
         const explicitActionSide = detectExplicitActionSide(clause)
         if (explicitActionSide) sideScope = explicitActionSide
         if (phase === 'exit') {
           const closeSide = detectCloseSide(clause)
-          if (closeSide) sideScope = closeSide
+          if (closeSide) {
+            sideScope = closeSide
+          }
+          else {
+            // 既无显式 close-verb 也无 explicit action side：取 sibling.sideScope 作为镜像兜底
+            const siblingSide = (sibling as { sideScope?: 'long' | 'short' | 'both' | null }).sideScope
+            if (siblingSide === 'long' || siblingSide === 'short' || siblingSide === 'both') {
+              sideScope = siblingSide
+            }
+          }
         }
 
         const sortedParams = Object.fromEntries(
