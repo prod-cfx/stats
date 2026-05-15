@@ -903,6 +903,20 @@ export class GenericSeedDispatcher {
       }
     }
 
+    // Issue #1383 后续：跨子句对偶继承通用 pass（registry-driven, atom-contract = 唯一真相源）
+    //
+    // 适用场景：用户在出场/入场子句省略 keyword，例如
+    //   "EMA7 上穿 EMA21 时开多；下穿 时平多" 出场子句只有动词没有指标 keyword。
+    // dispatcher 不再硬编码对偶规则；任意 atom 在 contract.surface.crossClauseInheritFrom
+    // 声明继承源 + inheritParams 即可参与本机制。
+    this.applyCrossClauseInheritance(
+      clauses,
+      atomItems,
+      slotItems,
+      atomDedupeKeys,
+      slotDedupeKeys,
+    )
+
     // review C3：替代 `as never` 类型逃生，使用 patch schema 自身派生的精确 cast；
     // 未来 PR3+ 改 CodegenSemanticPatch 字段类型时编译器能抓到 mismatch。
     const mergedSlotItems: Record<'triggers' | 'actions' | 'risk', PatchAtomNode[]> = {
@@ -926,6 +940,132 @@ export class GenericSeedDispatcher {
     }
 
     return patch
+  }
+
+  /**
+   * Issue #1383 后续：跨子句对偶继承（registry-driven generic pass）
+   *
+   * 红线守门（与本服务一致）：本方法不允许 atom-key 字面量；不允许 bucket 字面量比较——
+   * 全部从 ATOM_CONTRACT_REGISTRY 读 contract.surface.crossClauseInheritFrom 表驱动。
+   *
+   * 工作过程：
+   *   1. 用已匹配 atomItems 建 sibling 索引（key → 实例数组）
+   *   2. 遍历声明了 crossClauseInheritFrom 的 atom × 所有 clause
+   *   3. 若该 clause 没正常匹配本 atom（缺 keyword 但有对偶 verb），且 sibling 索引里
+   *      能找到 crossClauseInheritFrom 指向的 atom 实例 → 按 inheritParams 列表继承
+   *      sibling 参数，模拟一次完整匹配 emit 进 atomItems / slotItems
+   *
+   * 自镜像：crossClauseInheritFrom === 'self' 表示本 atom 自身作为 sibling 源（适合
+   * 同 atom 不同 phase 共享参数的场景，例如 bollinger.touch_middle 入场/出场）。
+   */
+  private applyCrossClauseInheritance(
+    clauses: readonly string[],
+    atomItems: PatchAtomNode[],
+    slotItems: Record<'triggers' | 'actions' | 'risk', PatchAtomNode[]>,
+    atomDedupeKeys: Set<string>,
+    slotDedupeKeys: Record<'triggers' | 'actions' | 'risk', Set<string>>,
+  ): void {
+    // 建 sibling 索引（key → 实例数组），取已 push 的 atomItems 副本
+    const siblingsByKey = new Map<string, PatchAtomNode[]>()
+    for (const node of atomItems) {
+      const list = siblingsByKey.get(node.key) ?? []
+      list.push(node)
+      siblingsByKey.set(node.key, list)
+    }
+
+    for (const [atomKey, contractUntyped] of Object.entries(ATOM_CONTRACT_REGISTRY)) {
+      const contract = contractUntyped as AtomContract
+      const surface = contract.surface
+      if (!surface) continue
+      const inheritFromDecl = surface.crossClauseInheritFrom
+      if (!inheritFromDecl) continue
+      const inheritParams = surface.inheritParams ?? []
+
+      // 解析继承源 key：'self' 表示同 atom 自镜像
+      const sourceKey = inheritFromDecl === 'self' ? atomKey : inheritFromDecl
+      const sourceSiblings = siblingsByKey.get(sourceKey)
+      if (!sourceSiblings || sourceSiblings.length === 0) continue
+
+      const slot = BUCKET_TO_PATCH_SLOT[contract.bucket]
+
+      for (const clause of clauses) {
+        // 若本子句已经正常匹配本 atom，跳过（避免重复 emit）
+        const alreadyMatched = atomItems.some((node) => {
+          if (node.key !== atomKey) return false
+          const ev = node.evidence as { text?: string } | undefined
+          return ev?.text === clause
+        })
+        if (alreadyMatched) continue
+
+        // 子句必须命中本 atom 的 verb；keyword 此处不要求（这才是"跨子句继承"的意义）
+        const direction = matchVerbDirection(clause, surface.intent.verbs)
+        if (!direction) continue
+
+        // 取最近一条 sibling（同消息后子句承前一致更自然）
+        const sibling = sourceSiblings[sourceSiblings.length - 1]
+        if (!sibling) continue
+
+        // 继承声明的 params + 本子句仍可抽到的 params 叠加（本子句优先覆盖继承值）
+        const inheritedParams: Record<string, unknown> = {}
+        for (const slotKey of inheritParams) {
+          const v = (sibling.params as Record<string, unknown>)[slotKey]
+          if (v !== undefined) {
+            inheritedParams[slotKey] = v
+          }
+        }
+        const ownParams = extractParamsWithSizingRoles(surface.paramSlots, clause, atomKey)
+        const params: Record<string, unknown> = { ...inheritedParams, ...ownParams }
+
+        // matchRequires 校验（继承后必须满足）
+        if (
+          surface.matchRequires?.some(slotKey => params[slotKey] === undefined || params[slotKey] === null)
+        ) {
+          continue
+        }
+
+        const phase = resolvePhaseFromClause(clause, surface.phaseResolver, { atomKey, params }) ?? 'entry'
+        let sideScope: 'long' | 'short' | 'both' = (resolveSide(surface.sideResolver, clause, direction) ?? 'both') as 'long' | 'short' | 'both'
+        const explicitActionSide = detectExplicitActionSide(clause)
+        if (explicitActionSide) sideScope = explicitActionSide
+        if (phase === 'exit') {
+          const closeSide = detectCloseSide(clause)
+          if (closeSide) sideScope = closeSide
+        }
+
+        const sortedParams = Object.fromEntries(
+          Object.entries(params).sort(([a], [b]) => a.localeCompare(b)),
+        )
+        const dedupeKey = `${atomKey}|${phase}|${sideScope}|${JSON.stringify(sortedParams)}`
+        if (atomDedupeKeys.has(dedupeKey)) continue
+        atomDedupeKeys.add(dedupeKey)
+        if (slot) {
+          if (slotDedupeKeys[slot].has(dedupeKey)) continue
+          slotDedupeKeys[slot].add(dedupeKey)
+        }
+
+        const evidenceSource: NonNullable<AtomContractSurface['evidenceProvenance']> = surface.evidenceProvenance ?? 'user_explicit'
+        const evidence = { text: clause, source: evidenceSource }
+        const node: PatchAtomNode = {
+          key: atomKey,
+          phase,
+          params,
+          evidence,
+        }
+        if (slot === 'triggers') {
+          node.sideScope = sideScope
+        }
+        atomItems.push({ ...node, sideScope })
+        if (slot) {
+          slotItems[slot].push(node)
+        }
+
+        // sibling 索引也要回写新增节点，允许链式继承（例如 cross_over → cross_under
+        // 后续子句若再依赖 cross_under 继承也能拿到）
+        const list = siblingsByKey.get(atomKey) ?? []
+        list.push(node)
+        siblingsByKey.set(atomKey, list)
+      }
+    }
   }
 
   matchClauseAgainstRegistry(clause: string): readonly AtomMatch[] {

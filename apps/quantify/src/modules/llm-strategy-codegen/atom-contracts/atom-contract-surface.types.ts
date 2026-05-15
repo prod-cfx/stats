@@ -188,4 +188,33 @@ export interface AtomContractSurface {
    * 目前仅 external.signal 声明 'webhook'；其余 atom 省略（等价于 'user_explicit'）。
    */
   readonly evidenceProvenance?: 'webhook' | 'user_explicit'
+
+  /**
+   * 跨子句对偶继承（Issue #1383 后续：原子语义五桶真相源扩展）
+   *
+   * 适用场景：
+   *   用户在出场子句里省略 keyword，例如 "EMA7 上穿 EMA21 时开多；下穿 时平多"——
+   *   "下穿 时平多" 这条子句只有 verb（下穿）没有 indicator keyword，按 dispatcher 的
+   *   kw+verb 双校验铁律永远不可能命中 `indicator.cross_under`。
+   *
+   * 解决方案（仍保持 atom contract = 唯一真相源）：
+   *   atom 在自己 contract 上声明 `crossClauseInheritFrom: <对偶 atom key>` +
+   *   `inheritParams: ['indicator', 'fastPeriod', 'slowPeriod', ...]`。dispatcher 跑一道
+   *   registry-driven generic pass：对每个 clause，若只命中本 atom 的 verb 但缺
+   *   keyword，回查同 message 已匹配的 sibling atom（key === crossClauseInheritFrom），
+   *   按 inheritParams 列表克隆参数后 emit 本 atom，phase 由 by-clause-verb 决出。
+   *
+   * 新增对偶关系扩展只需在各自 atom 加一行 crossClauseInheritFrom，dispatcher 零修改、
+   * 仍守 no-atom-key-literal / no-business-rule-in-dispatcher 红线。
+   *
+   * 'self' 表示自镜像（例如 bollinger.touch_middle 在入场和出场子句都可能省略 keyword）。
+   */
+  readonly crossClauseInheritFrom?: string
+
+  /**
+   * 与 crossClauseInheritFrom 搭配：声明哪些 paramSlot 在跨子句继承时从 sibling 取值。
+   * 仅 inheritParams 列出的 slot 会被继承；其它 slot 走本子句正常 extractor 抽取（不抽到就空）。
+   * 缺省视为空数组——即仅起到"无 keyword 时仍允许 verb 触发"的效果，不继承任何参数。
+   */
+  readonly inheritParams?: readonly string[]
 }

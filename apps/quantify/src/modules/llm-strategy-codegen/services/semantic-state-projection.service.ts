@@ -120,7 +120,18 @@ export class SemanticStateProjectionService {
     // 否则纯 orchestration-only utterance（如纯账户回撤）会被视作"空状态"通过 projection_gate
     const lockedOrchestrationNodes = (state.orchestration ?? [])
       .filter(node => node.status === 'locked')
-    const orchestrationSummary = this.buildOrchestrationSummary(lockedOrchestrationNodes)
+    // Issue #1391 后续：phase0.unsupported 是"部署期"门槛而非"识别期"——
+    //   atom 已被 dispatcher 完整抽出（key + params），只是 runtime 暂不支持部署。
+    //   summary 渲染层面仍应展示给用户"已识别"，避免类似 portfolioRisk.drawdown_block
+    //   被静默吞掉、用户以为系统没识别。`hasDeterministicSemantics` 判定仍走严格 locked 集。
+    const recognizedOrchestrationNodes = (state.orchestration ?? [])
+      .filter(node =>
+        node.status === 'locked'
+        || (node.status === 'open'
+          && node.openSlots.length > 0
+          && node.openSlots.every(slot => slot.slotKey === 'orchestration.phase0.unsupported')),
+      )
+    const orchestrationSummary = this.buildOrchestrationSummary(recognizedOrchestrationNodes)
     const hasDeterministicSemantics = this.hasDeterministicSemantics({
       triggers: deterministicTriggers,
       actions: deterministicActions,
@@ -2046,6 +2057,16 @@ export class SemanticStateProjectionService {
           return contractSummary
         }
 
+        // Issue #1383 后续：5 桶真相源 — 任何在 ATOM_CONTRACT_REGISTRY 注册且声明
+        //   display.summaryTemplate 的 atom，统一由 contract 渲染；projection 不再写
+        //   per-atom-key 硬编码分支。legacy field-key（risk.stop_loss_pct / take_profit_pct /
+        //   max_drawdown_pct / max_single_loss_pct / atr_multiple_* / condition_expression /
+        //   remembered_level_stop）暂未挂 registry，仍走下方专项分支兜底。
+        const registrySummary = this.tryAtomContractSummary(risk.key, risk.params)
+        if (registrySummary !== null) {
+          return registrySummary
+        }
+
         /* eslint-disable atom-keys/no-atom-key-literal -- risk.condition_expression / risk.atr_multiple_stop / risk.atr_multiple_take_profit / risk.remembered_level_stop not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
         if (risk.key === 'risk.condition_expression') {
           const condition = this.formatSemanticExpression(risk.params.condition)
@@ -2071,30 +2092,9 @@ export class SemanticStateProjectionService {
         }
         /* eslint-enable atom-keys/no-atom-key-literal */
 
-        if (risk.key === ATOM_CONTRACT_REGISTRY['risk.partial_take_profit'].key) {
-          const tiers = risk.params.tiers
-          if (Array.isArray(tiers) && tiers.length > 0) {
-            const tierTexts = tiers
-              .map((tier: unknown) => {
-                if (!tier || typeof tier !== 'object') return null
-                const t = tier as Record<string, unknown>
-                const trigger = t.trigger as Record<string, unknown> | undefined
-                const threshold = trigger && typeof trigger.threshold === 'number' && Number.isFinite(trigger.threshold)
-                  ? trigger.threshold
-                  : null
-                const reduceRatio = typeof t.reduceRatio === 'number' && Number.isFinite(t.reduceRatio)
-                  ? t.reduceRatio
-                  : null
-                if (threshold === null || reduceRatio === null) return null
-                return `盈利${this.formatPercent(threshold)}%平${this.formatPercent(reduceRatio * 100)}%`
-              })
-              .filter((text): text is string => text !== null)
-            if (tierTexts.length > 0) {
-              return `分批止盈：${tierTexts.join('、')}`
-            }
-          }
-          return this.buildRiskFallbackSummary(risk)
-        }
+        // risk.partial_take_profit 已迁回 atom contract 的 display.summaryTemplate
+        //   （上方 tryAtomContractSummary 路径承接两种参数形状：tiers[] 数组 + dispatcher
+        //   抽出的 {profitPct, ratio}）
 
         const valuePct = risk.params.valuePct
         if (typeof valuePct !== 'number' || !Number.isFinite(valuePct) || valuePct <= 0) {
@@ -2129,6 +2129,34 @@ export class SemanticStateProjectionService {
 
   private buildRiskFallbackSummary(_risk: SemanticState['risk'][number]): string {
     return '已识别风控，参数待补充'
+  }
+
+  /**
+   * Issue #1383 后续：通用 atom contract summary 入口。
+   *
+   * 任何 atom 在 ATOM_CONTRACT_REGISTRY 注册且声明了 display.summaryTemplate 都走此处；
+   * projection / clarification / 其它视图统一通过 contract 渲染，避免在视图层维护 per-atom-key 分支。
+   *
+   * 返回 null 表示 atom 未注册或没有有效 summary，调用方按各自兜底处理。
+   */
+  private tryAtomContractSummary(
+    atomKey: string,
+    params: Record<string, unknown>,
+    locale: 'zh' | 'en' = 'zh',
+  ): string | null {
+    const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { display?: { summaryTemplate?: (p: Record<string, unknown>, l: 'zh' | 'en') => string } } | undefined>)[atomKey]
+    const summaryTemplate = contract?.display?.summaryTemplate
+    if (typeof summaryTemplate !== 'function') {
+      return null
+    }
+    try {
+      const rendered = summaryTemplate(params, locale)
+      if (typeof rendered !== 'string') return null
+      const trimmed = rendered.trim()
+      return trimmed.length > 0 ? trimmed : null
+    } catch {
+      return null
+    }
   }
 
   private buildActionSummary(actions: SemanticState['action'], state: SemanticState): string {

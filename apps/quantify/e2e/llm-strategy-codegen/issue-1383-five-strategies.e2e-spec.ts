@@ -232,12 +232,16 @@ const USER_STRATEGIES: readonly UserStrategyFixture[] = [
       //   Round 2 调整：LLM 在 DRAFTING 阶段会把多条风控压缩成"已识别风控，参数待补充"，
       //   不逐条枚举。规则放宽为：reply 含 "回撤"/"drawdown" 任一，**或** 含 "风控"/"风险"
       //   群体性识别提示——前提是 unsupportedFallback 不把 drawdown 标 unsupported。
+      //   Issue #1391 后续（projection registry-driven）：risk atom 现在通过 atom contract
+      //   summaryTemplate 渲染为具体文案（"2% ATR 止损"/"分批止盈 ..."），不再退到通用
+      //   "已识别风控" 兜底字符串。把 ATR/分批/止损/止盈 一并纳入风控识别信号集合，与原
+      //   测试意图（验证风控类原子被识别）保持等价。
       const blob = (turn1.assistantReply ?? '') + specToString(turn1.specDesc)
       if (/drawdown_block_public_beta_unsupported|max_drawdown_pct_public_beta_unsupported/u.test(fb)) {
         throw new Error(`[S5] 账户回撤 routed to unsupported_fallback（应已 supported）`)
       }
-      if (!/回撤|drawdown|风控|风险/iu.test(blob)) {
-        throw new Error(`[S5] specDesc + reply 既无回撤关键字、也无风控/风险提示：${blob.slice(0, 500)}`)
+      if (!/回撤|drawdown|风控|风险|ATR|分批|止损|止盈/iu.test(blob)) {
+        throw new Error(`[S5] specDesc + reply 既无回撤关键字、也无风控/风险/具体 risk atom 渲染（ATR/止损/止盈/分批）：${blob.slice(0, 500)}`)
       }
       // RSI 入场识别：reply 应含 RSI 关键字（必有，LLM 一般会回显入场）
       if (!/rsi/iu.test(blob)) {

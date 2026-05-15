@@ -1210,8 +1210,13 @@ export class SemanticSeedStateBuilderService {
     }
 
     const params = this.readParams(update.params)
-    if (key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && this.resolveGridRange(params) === null) {
-      return null
+    if (key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) {
+      // 接受两种合法 grid 形态：显式 range 或 center-offset+levels（runtime 用部署时价格推导 range）
+      const hasExplicitRange = this.resolveGridRange(params) !== null
+      const hasCenterOffsetMode = this.hasPositiveFiniteNumber(params.centerOffsetPct) && this.hasPositiveInteger(params.levels)
+      if (!hasExplicitRange && !hasCenterOffsetMode) {
+        return null
+      }
     }
 
     let openSlots = this.readOpenSlots(update.openSlots)
@@ -1391,8 +1396,15 @@ export class SemanticSeedStateBuilderService {
       return this.hasPositiveInteger(params.lookbackBars) && this.isPercentThreshold(params.thresholdPct)
     }
 
+    if (key === ATOM_CONTRACT_REGISTRY['price.candle_pattern'].key) {
+      // pattern 必填，其它 slot 可选；single_bull_bar / single_bear_bar / engulfing / hammer / doji / consecutive_body 都允许
+      return Boolean(this.readTrimmedString(params.pattern))
+    }
+
     if (key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) {
-      return this.resolveGridRange(params) !== null
+      // 显式 range 或 center-offset+levels 二选一；都缺则确实没法 synthesize 合约
+      if (this.resolveGridRange(params) !== null) return true
+      return this.hasPositiveFiniteNumber(params.centerOffsetPct) && this.hasPositiveInteger(params.levels)
     }
 
     if (

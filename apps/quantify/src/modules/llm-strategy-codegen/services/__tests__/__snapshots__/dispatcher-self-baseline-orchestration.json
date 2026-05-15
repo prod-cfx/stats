@@ -1975,6 +1975,20 @@
           "sideScope": "long"
         },
         {
+          "key": "bollinger.touch_middle",
+          "phase": "exit",
+          "params": {
+            "band": "middle",
+            "period": 20,
+            "stdDev": 2
+          },
+          "evidence": {
+            "text": "回到中轨止盈",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
           "key": "bollinger.touch_upper",
           "phase": "entry",
           "params": {
@@ -1994,6 +2008,66 @@
           "phase": "entry",
           "params": {
             "boundaryRole": "upper",
+            "confirmationMode": "touch"
+          },
+          "evidence": {
+            "text": "触及上轨开空",
+            "source": "user_explicit"
+          },
+          "sideScope": "short"
+        },
+        {
+          "key": "bollinger.touch_upper",
+          "phase": "entry",
+          "params": {
+            "period": 20,
+            "stdDev": 2,
+            "band": "upper",
+            "confirmationMode": "touch"
+          },
+          "evidence": {
+            "text": "价格触及布林下轨开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "bollinger.touch_lower",
+          "phase": "entry",
+          "params": {
+            "period": 20,
+            "stdDev": 2,
+            "band": "lower",
+            "confirmationMode": "touch"
+          },
+          "evidence": {
+            "text": "触及上轨开空",
+            "source": "user_explicit"
+          },
+          "sideScope": "short"
+        },
+        {
+          "key": "bollinger.touch_middle",
+          "phase": "exit",
+          "params": {
+            "period": 20,
+            "stdDev": 2,
+            "band": "middle",
+            "confirmationMode": "touch"
+          },
+          "evidence": {
+            "text": "价格触及布林下轨开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "bollinger.touch_middle",
+          "phase": "exit",
+          "params": {
+            "period": 20,
+            "stdDev": 2,
+            "band": "middle",
             "confirmationMode": "touch"
           },
           "evidence": {
@@ -2050,6 +2124,20 @@
           "sideScope": "long"
         },
         {
+          "key": "bollinger.touch_middle",
+          "phase": "exit",
+          "params": {
+            "band": "middle",
+            "period": 20,
+            "stdDev": 2
+          },
+          "evidence": {
+            "text": "回到中轨止盈",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
           "key": "bollinger.touch_upper",
           "phase": "entry",
           "params": {
@@ -2081,6 +2169,66 @@
           "key": "action.open_short",
           "phase": "entry",
           "params": {},
+          "evidence": {
+            "text": "触及上轨开空",
+            "source": "user_explicit"
+          },
+          "sideScope": "short"
+        },
+        {
+          "key": "bollinger.touch_upper",
+          "phase": "entry",
+          "params": {
+            "period": 20,
+            "stdDev": 2,
+            "band": "upper",
+            "confirmationMode": "touch"
+          },
+          "evidence": {
+            "text": "价格触及布林下轨开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "bollinger.touch_lower",
+          "phase": "entry",
+          "params": {
+            "period": 20,
+            "stdDev": 2,
+            "band": "lower",
+            "confirmationMode": "touch"
+          },
+          "evidence": {
+            "text": "触及上轨开空",
+            "source": "user_explicit"
+          },
+          "sideScope": "short"
+        },
+        {
+          "key": "bollinger.touch_middle",
+          "phase": "exit",
+          "params": {
+            "period": 20,
+            "stdDev": 2,
+            "band": "middle",
+            "confirmationMode": "touch"
+          },
+          "evidence": {
+            "text": "价格触及布林下轨开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "bollinger.touch_middle",
+          "phase": "exit",
+          "params": {
+            "period": 20,
+            "stdDev": 2,
+            "band": "middle",
+            "confirmationMode": "touch"
+          },
           "evidence": {
             "text": "触及上轨开空",
             "source": "user_explicit"
@@ -2122,6 +2270,22 @@
             "source": "user_explicit"
           },
           "sideScope": "long"
+        },
+        {
+          "key": "indicator.cross_under",
+          "phase": "exit",
+          "params": {
+            "indicator": "ema",
+            "fastPeriod": 20,
+            "slowPeriod": 60,
+            "period": 20,
+            "value": 60
+          },
+          "evidence": {
+            "text": "下穿平仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "short"
         }
       ],
       "actions": [
@@ -2161,6 +2325,22 @@
             "source": "user_explicit"
           },
           "sideScope": "long"
+        },
+        {
+          "key": "indicator.cross_under",
+          "phase": "exit",
+          "params": {
+            "indicator": "ema",
+            "fastPeriod": 20,
+            "slowPeriod": 60,
+            "period": 20,
+            "value": 60
+          },
+          "evidence": {
+            "text": "下穿平仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "short"
         }
       ]
     }

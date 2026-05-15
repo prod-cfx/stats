@@ -38,6 +38,10 @@ const forbiddenUserVisibleFragments = [
   '请补充该原子的执行合约',
   '指标静态高于条件当前公测暂未支持生成和回测',
   '指标静态低于条件当前公测暂未支持生成和回测',
+  // Issue #1383 后续：dispatcher 抽出的原子被下游正确渲染时，不应再退到这些 atom-key 兜底文案
+  '已识别风控，参数待补充',
+  '指标高于阈值时做多开仓',
+  '指标低于阈值时平多',
 ]
 
 function createConversationService(): ConversationInternals {
@@ -122,6 +126,38 @@ describe('user reported five strategies: entry -> middle -> publication generati
       name: '策略5 RSI + ATR stop + partial TP + drawdown block',
       message: 'ETH 永续，15 分钟。RSI(14) ≤ 30 时开多，仓位的 2% ATR 作为止损，达到 3% 利润分批止盈一半；任何时刻账户回撤超过 10% 暂停开新仓。',
       expectedAnyKeys: ['oscillator.rsi_lte', 'open_long', 'risk.partial_take_profit', 'portfolioRisk.drawdown_block'],
+      publication: false,
+    },
+    // Issue #1383 后续：用户实际反馈的 6 条策略，全部按"原子语义五桶真相源"通用解
+    //   走通入口（dispatcher）→ 中间（state/projection）→ 不再退到 atom-key 兜底文案
+    {
+      name: '策略6 EMA 多均线上方 + BOLL 下/上轨双向开（S2 elision）',
+      message: '15min k线里面 价格在ema20 ema60 ema144上方时做多开仓 都位于下方只开空 入场是boll下轨开多 上轨开空 币安的btcusdt永续合约 风控是亏损5%止损',
+      expectedAnyKeys: ['indicator.above', 'bollinger.touch_lower', 'bollinger.touch_upper', 'open_long', 'open_short'],
+      publication: false,
+    },
+    {
+      name: '策略7 BOLL 上下轨入场 + 中轨平仓（S3 自镜像）',
+      message: 'OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%。',
+      expectedAnyKeys: ['bollinger.touch_upper', 'bollinger.touch_lower', 'bollinger.touch_middle', 'open_short', 'open_long'],
+      publication: false,
+    },
+    {
+      name: '策略8 阳线开多/阴线平多（S4 candle pattern）',
+      message: '用 BTCUSDT 1m K 线。每次最新 K 线收盘价高于开盘价时尝试开多。如果已有持仓则不再开仓。收盘价低于开盘价时平多。',
+      expectedAnyKeys: ['price.candle_pattern', 'open_long', 'close_long'],
+      publication: false,
+    },
+    {
+      name: '策略9 EMA7 上穿 EMA21 + 下穿平多（S5 cross-clause inheritance）',
+      message: 'EMA7 上穿 EMA21 时开多；下穿 时平多。',
+      expectedAnyKeys: ['indicator.cross_over', 'indicator.cross_under', 'open_long', 'close_long'],
+      publication: false,
+    },
+    {
+      name: '策略10 现货网格中心偏移（S6 grid center-offset）',
+      message: 'OKX 现货 ETHUSDT、1m 网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT、限价单并相邻网格自动挂反向单、不用趋势信号开仓；当价格突破上下边界时执行"立即停止并撤销所有未成交订单"',
+      expectedAnyKeys: ['grid.range_rebalance'],
       publication: false,
     },
   ]

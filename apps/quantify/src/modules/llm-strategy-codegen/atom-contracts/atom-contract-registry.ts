@@ -834,12 +834,18 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['布林带', '布林线', 'bollinger', '上轨'] as const,
+        // 'boll' 短形式 alias 接住用户简写（如 "boll 上轨开空"）
+        keywords: ['布林带', '布林线', 'bollinger', 'boll', '上轨'] as const,
         verbs: {
-          touch_upper: ['触及', '碰到', '到达', 'touch', 'reaches'] as const,
+          // touch verb 兼收 "做空/开空"——"上轨开空"等价"触及上轨开空"
+          //   action verb 自带方向；sideResolver:inherit + explicitActionSide 会派生正确 side
+          touch_upper: ['触及', '碰到', '到达', 'touch', 'reaches', '做空', '开空'] as const,
           breakout_up: ['突破', '上破', 'breakout'] as const,
         },
       },
+      // 跨子句对偶：与 touch_lower 互为镜像，inherit period/stdDev
+      crossClauseInheritFrom: 'bollinger.touch_lower',
+      inheritParams: ['period', 'stdDev'],
       paramSlots: {
         band: { kind: 'enum', required: false, enum: ['upper'], default: 'upper' },
         period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
@@ -891,12 +897,15 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['布林带', '布林线', 'bollinger', '下轨'] as const,
+        keywords: ['布林带', '布林线', 'bollinger', 'boll', '下轨'] as const,
         verbs: {
-          touch_lower: ['触及', '碰到', '到达', 'touch', 'reaches'] as const,
+          // touch verb 兼收 "做多/开多"——"下轨开多"等价"触及下轨开多"
+          touch_lower: ['触及', '碰到', '到达', 'touch', 'reaches', '做多', '开多'] as const,
           breakout_down: ['跌破', '下破', 'breakdown'] as const,
         },
       },
+      crossClauseInheritFrom: 'bollinger.touch_upper',
+      inheritParams: ['period', 'stdDev'],
       paramSlots: {
         band: { kind: 'enum', required: false, enum: ['lower'], default: 'lower' },
         period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
@@ -948,17 +957,27 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['布林带', '布林线', 'bollinger', '中轨', '中线'] as const,
+        // 收紧 keyword 到"中轨/中线"独占：避免跟 touch_upper/lower 共享 '布林带' 词根
+        //   被其他子句（"跌破下轨"含布林带 kw）误命中
+        keywords: ['中轨', '中线'] as const,
         verbs: {
-          touch_middle: ['触及', '回踩', '碰到', 'touch', 'retest'] as const,
+          // 多/空单平仓回到中轨表达："价格回到布林带中轨时平仓" / "跌破中轨平仓"
+          touch_middle: ['触及', '回踩', '碰到', '回到', '回归', 'touch', 'retest'] as const,
+          breakout_down: ['跌破', '下破'] as const,
         },
       },
+      // 中轨入场/出场两个场景对偶 → 自镜像：同 atom 不同 phase 共享 period/stdDev
+      crossClauseInheritFrom: 'self',
+      inheritParams: ['period', 'stdDev'],
       paramSlots: {
         band: { kind: 'enum', required: false, enum: ['middle'], default: 'middle' },
         period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
         stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '\\d+(\\.\\d+)?', range: [0.1, 10] } },
         confirmationMode: { kind: 'enum', required: false, enum: ['touch', 'breakout', 'close'], extractor: { kind: 'enum-zh-map', enumMap: { '触及': 'touch', '碰到': 'touch', '触碰': 'touch', '突破': 'breakout', '上破': 'breakout', '跌破': 'breakout', '收盘确认': 'close', '收盘': 'close' } } },
       },
+      // 中轨触及/回归常作为趋势策略的"获利平仓"信号——保留 fixed-exit。
+      //   入场子句若需用中轨做入场，dispatcher 仍能命中 trigger（只是 phase 固定 exit），
+      //   下游可通过 dual phase 行为或显式 atom 扩展（如未来引入 touch_middle_entry）支持。
       phaseResolver: 'fixed-exit',
       sideResolver: 'inherit',
     },
@@ -1005,6 +1024,8 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
           lte: ['下跌', '跌', 'drop', 'down'] as const,
         },
       },
+      // 必须抽到百分比数值才视为 percent_change；否则放手让 indicator.below / bollinger.touch_middle 等承接
+      matchRequires: ['valuePct'],
       paramSlots: {
         direction: { kind: 'enum', required: true, enum: ['up', 'down'], extractor: { kind: 'enum-zh-map', enumMap: { '上涨': 'up', '涨': 'up', 'rise': 'up', 'up': 'up', '下跌': 'down', '跌': 'down', 'drop': 'down', 'down': 'down' } } },
         valuePct: { kind: 'percent', required: true, range: [-100, 100], extractor: { kind: 'percent', pattern: '-?\\d+(\\.\\d+)?%', range: [-100, 100] } },
@@ -1246,6 +1267,10 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
           cross_over: ['上穿', '金叉', '穿回', '向上穿回', 'cross over', 'crosses above'] as const,
         },
       },
+      // 跨子句对偶：与 cross_under 互为镜像；用户在前句写过 indicator 后，后句省略 keyword
+      //   仍可命中（如 "下穿 时平多" 自动继承 cross_over 的 indicator/period 参数）
+      crossClauseInheritFrom: 'indicator.cross_under',
+      inheritParams: ['indicator', 'fastPeriod', 'slowPeriod', 'period', 'signalPeriod', 'value'],
       paramSlots: {
         indicator: { kind: 'enum', required: true, enum: ['ma', 'ema', 'rsi', 'macd'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema', 'RSI': 'rsi', 'MACD': 'macd', 'DIF': 'macd', 'DEA': 'macd' } } },
         semantic: { kind: 'enum', required: false, enum: ['cross_up'] },
@@ -1326,6 +1351,10 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
           cross_under: ['下穿', '死叉', '跌破', '向下穿过', 'cross under', 'crosses below'] as const,
         },
       },
+      // 跨子句对偶：与 cross_over 互为镜像；"EMA7 上穿 EMA21 时开多；下穿 时平多"
+      //   中第二条子句无 keyword，从 cross_over 继承 indicator/fast/slow period 后命中
+      crossClauseInheritFrom: 'indicator.cross_over',
+      inheritParams: ['indicator', 'fastPeriod', 'slowPeriod', 'period', 'signalPeriod', 'value'],
       paramSlots: {
         indicator: { kind: 'enum', required: true, enum: ['ma', 'ema', 'rsi', 'macd'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema', 'RSI': 'rsi', 'MACD': 'macd', 'DIF': 'macd', 'DEA': 'macd' } } },
         semantic: { kind: 'enum', required: false, enum: ['cross_down'] },
@@ -1386,6 +1415,11 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
           gte: ['站上', '突破', '高于', '上方', 'above', 'over'] as const,
         },
       },
+      // 必须抽出指标名称（MA/EMA/SMA/均线）才视为静态 indicator 比较，否则放手让
+      // price.candle_pattern / grid 等更具体的 atom 接住"收盘高于开盘"/"突破上下边界"。
+      matchRequires: ['indicator'],
+      crossClauseInheritFrom: 'indicator.below',
+      inheritParams: ['indicator', 'referenceRole', 'reference.period', 'timeframeOverride'],
       paramSlots: {
         indicator: { kind: 'enum', required: true, enum: ['ma', 'sma', 'ema'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', 'SMA': 'sma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema' } } },
         referenceRole: { kind: 'enum', required: false, enum: ['short_term', 'mid_term', 'long_term'], extractor: { kind: 'enum-zh-map', derive: 'period-range' } },
@@ -1444,6 +1478,10 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
           lte: ['跌破', '低于', '下方', 'below', 'under'] as const,
         },
       },
+      // 与 indicator.above 对称：必须抽出指标名才视为静态比较，否则让 candle_pattern 等接住
+      matchRequires: ['indicator'],
+      crossClauseInheritFrom: 'indicator.above',
+      inheritParams: ['indicator', 'referenceRole', 'reference.period', 'timeframeOverride'],
       paramSlots: {
         indicator: { kind: 'enum', required: true, enum: ['ma', 'sma', 'ema'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', 'SMA': 'sma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema' } } },
         referenceRole: { kind: 'enum', required: false, enum: ['short_term', 'mid_term', 'long_term'], extractor: { kind: 'enum-zh-map', derive: 'period-range' } },
@@ -1827,6 +1865,8 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         '锤子线',
         '十字星',
         '连续实体',
+        '阳线',
+        '阴线',
         'engulfing',
         'hammer',
         'doji',
@@ -1839,6 +1879,8 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         '锤子线确认后做多',
         '十字星出现后开空',
         '连续 3 根阳线后加多',
+        '收盘价高于开盘价时开多',
+        '收盘价低于开盘价时平多',
       ],
       negativeExamples: [
         '像吞没',
@@ -1873,6 +1915,13 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         const pattern = typeof params.pattern === 'string' ? params.pattern : 'engulfing'
         const direction = typeof params.direction === 'string' ? params.direction : ''
         const minBars = typeof params.minBars === 'number' ? params.minBars : undefined
+        // 单根 bull/bear bar 渲染（"收盘价高于开盘价"即阳线，反之阴线）
+        if (pattern === 'single_bull_bar') {
+          return minBars !== undefined ? `连续 ≥${minBars} 根阳线` : '阳线（收盘价高于开盘价）'
+        }
+        if (pattern === 'single_bear_bar') {
+          return minBars !== undefined ? `连续 ≥${minBars} 根阴线` : '阴线（收盘价低于开盘价）'
+        }
         const directionLabel = direction ? (SHARED_ENUM_DISPLAY.directionBias[direction as keyof typeof SHARED_ENUM_DISPLAY.directionBias]?.zh ?? direction) : ''
         const patternLabel = ATOM_PRIVATE_DISPLAY.candlePattern[pattern as keyof typeof ATOM_PRIVATE_DISPLAY.candlePattern]?.zh ?? pattern
         const minBarsLabel = minBars !== undefined ? `（≥${minBars} 根）` : ''
@@ -1883,17 +1932,25 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       intent: {
         // Issue #1279 PR2b：补 '连续' / 'consecutive' / 'body' 关键词，覆盖
         //   "bullish consecutive body 连续 3 根" 这类真实 utterance（baseline 修复）
-        keywords: ['吞没', '锤子', '十字星', '连续', 'candle pattern', 'engulfing', 'hammer', 'doji', 'consecutive', 'body'] as const,
+        // Issue #1383 后续：补 '阳线/阴线/收盘价/开盘价/K线' 覆盖单根 bull/bear bar 表达
+        keywords: ['吞没', '锤子', '十字星', '连续', 'candle pattern', 'engulfing', 'hammer', 'doji', 'consecutive', 'body', '阳线', '阴线', '收盘价', '开盘价', 'K线', 'k线'] as const,
         verbs: {
           fixed: ['出现', '形态', '根', 'pattern', 'confirmed'] as const,
+          // 关系 verb：以"收盘价 高于/低于 开盘价"形式触发单根 bull/bear bar
+          gte: ['高于', 'above'] as const,
+          lte: ['低于', 'below'] as const,
         },
       },
       paramSlots: {
-        pattern: { kind: 'enum', required: true, enum: ['engulfing', 'hammer', 'doji', 'consecutive_body'], extractor: { kind: 'enum-zh-map', enumMap: { '吞没': 'engulfing', 'engulfing': 'engulfing', '锤子': 'hammer', 'hammer': 'hammer', '十字星': 'doji', 'doji': 'doji', '连续阳线': 'consecutive_body', '连续阴线': 'consecutive_body', 'consecutive body': 'consecutive_body', '连续': 'consecutive_body' } } },
+        // 在原有 enum 上扩 single_bull_bar / single_bear_bar；enum-zh-map 增加
+        //   "收盘价高于开盘价 → single_bull_bar"、"收盘价低于开盘价 → single_bear_bar"
+        //   "阳线" → single_bull_bar、"阴线" → single_bear_bar 等映射键
+        pattern: { kind: 'enum', required: true, enum: ['engulfing', 'hammer', 'doji', 'consecutive_body', 'single_bull_bar', 'single_bear_bar'], extractor: { kind: 'enum-zh-map', enumMap: { '吞没': 'engulfing', 'engulfing': 'engulfing', '锤子': 'hammer', 'hammer': 'hammer', '十字星': 'doji', 'doji': 'doji', '连续阳线': 'consecutive_body', '连续阴线': 'consecutive_body', 'consecutive body': 'consecutive_body', '连续': 'consecutive_body', '阳线': 'single_bull_bar', '收盘价高于开盘价': 'single_bull_bar', '收盘高于开盘': 'single_bull_bar', '收盘价高于开盘': 'single_bull_bar', '阴线': 'single_bear_bar', '收盘价低于开盘价': 'single_bear_bar', '收盘低于开盘': 'single_bear_bar', '收盘价低于开盘': 'single_bear_bar' } } },
         direction: { kind: 'enum', required: false, enum: ['bullish', 'bearish'], extractor: { kind: 'enum-zh-map', enumMap: { '看涨': 'bullish', 'bullish': 'bullish', '看跌': 'bearish', 'bearish': 'bearish' } } },
         minBars: { kind: 'number', required: false, range: [1, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 100] } },
         sourceText: { kind: 'enum', required: false, extractor: { kind: 'verbatim-clause' } },
       },
+      matchRequires: ['pattern'],
       phaseResolver: 'by-clause-verb',
       sideResolver: 'inherit',
     },
@@ -2747,13 +2804,26 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       summaryTemplate: (params, locale) => {
         if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.partial_take_profit'].en
         const tiers = params.tiers
-        if (!Array.isArray(tiers) || tiers.length === 0) return '分批止盈'
-        const parts = (tiers as Array<{ trigger?: { threshold?: number }; reduceRatio?: number }>).map((tier, i) => {
-          const pct = typeof tier.trigger?.threshold === 'number' ? `+${tier.trigger.threshold}%` : '?%'
-          const ratio = typeof tier.reduceRatio === 'number' ? `减 ${Math.round(tier.reduceRatio * 100)}%` : ''
-          return `第${i + 1}档 ${pct} ${ratio}`.trim()
-        })
-        return `分批止盈：${parts.join('，')}`
+        if (Array.isArray(tiers) && tiers.length > 0) {
+          const parts = (tiers as Array<{ trigger?: { threshold?: number }; reduceRatio?: number }>).map((tier, i) => {
+            const pct = typeof tier.trigger?.threshold === 'number' ? `+${tier.trigger.threshold}%` : '?%'
+            const ratio = typeof tier.reduceRatio === 'number' ? `减 ${Math.round(tier.reduceRatio * 100)}%` : ''
+            return `第${i + 1}档 ${pct} ${ratio}`.trim()
+          })
+          return `分批止盈：${parts.join('，')}`
+        }
+        // dispatcher 抽出的简化形状：{ profitPct, ratio }（"盈利 3% 分批止盈一半" 这类自然表达）
+        const profitPct = typeof params.profitPct === 'number' && Number.isFinite(params.profitPct) ? params.profitPct : null
+        const ratio = typeof params.ratio === 'number' && Number.isFinite(params.ratio) ? params.ratio : null
+        if (profitPct !== null && ratio !== null) {
+          // ratio 既可能是 0-1 比例（如 0.5）也可能是百分比裸数字（如 3 表示 30%），归一化到百分比口径
+          const reducePct = ratio > 0 && ratio <= 1 ? ratio * 100 : ratio
+          return `分批止盈：盈利 ${profitPct}% 平 ${reducePct}%`
+        }
+        if (profitPct !== null) {
+          return `分批止盈：盈利 ${profitPct}% 触发`
+        }
+        return '分批止盈'
       },
     },
     surface: {
@@ -3016,7 +3086,8 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['网格', '区间网格', '区间', '挂格', '每格', '网格间距', '步长', 'grid', 'range', 'rebalance'] as const,
+        // 中心偏移句式 keyword：'中心' / '上下各'
+        keywords: ['网格', '区间网格', '区间', '挂格', '每格', '网格间距', '步长', '中心', '上下各', 'grid', 'range', 'rebalance'] as const,
         verbs: {
           fixed: ['网格', '区间', '每格', '挂', 'grid', 'range', 'each grid'] as const,
         },
@@ -3028,6 +3099,10 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         //   静默丢失 rangeLower/rangeUpper。
         rangeLower: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:(?:价格)?区间|(?:grid\\s+|price\\s+)?range)\\s*(\\d+(?:\\.\\d+)?)' } },
         rangeUpper: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:(?:价格)?区间|(?:grid\\s+|price\\s+)?range)\\s*\\d+(?:\\.\\d+)?\\s*[-~到至]\\s*(\\d+(?:\\.\\d+)?)' } },
+        // 中心偏移句式："以当前价/部署时当前价为中心，上下各 0.4% 共 10 格"
+        //   centerOffsetPct = 0.4，levels = 10；rangeLower/Upper 由 runtime 用 center * (1 ± pct/100) 推导。
+        centerOffsetPct: { kind: 'number', required: false, range: [0, 100], extractor: { kind: 'number-decimal', pattern: '上下各\\s*(\\d+(?:\\.\\d+)?)\\s*%' } },
+        levels: { kind: 'number', required: false, range: [2, 1000], extractor: { kind: 'number-int', pattern: '共\\s*(\\d+)\\s*格' } },
         sideMode: { kind: 'enum', required: false, enum: ['long_only', 'short_only', 'both'], default: 'both', extractor: { kind: 'enum-zh-map', enumMap: { '只做多': 'long_only', '仅做多': 'long_only', '只做空': 'short_only', '仅做空': 'short_only', '双向': 'both' } } },
         recycle: { kind: 'enum', required: false, enum: ['true', 'false'], default: 'true', extractor: { kind: 'enum-zh-map', enumMap: { '循环': 'true', 'recycle': 'true', '不循环': 'false' } } },
         breakoutAction: { kind: 'enum', required: false, enum: ['continue', 'stop'], default: 'continue', extractor: { kind: 'enum-zh-map', enumMap: { '继续': 'continue', '停止': 'stop', 'continue': 'continue', 'stop': 'stop' } } },

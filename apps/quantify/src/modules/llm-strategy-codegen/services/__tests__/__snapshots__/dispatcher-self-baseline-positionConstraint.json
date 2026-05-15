@@ -364,6 +364,22 @@
             "source": "user_explicit"
           },
           "sideScope": "both"
+        },
+        {
+          "key": "indicator.cross_under",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "fastPeriod": 20,
+            "slowPeriod": 50,
+            "period": 20,
+            "value": 50
+          },
+          "evidence": {
+            "text": "跌破前低停止补仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "short"
         }
       ],
       "actions": [
@@ -415,6 +431,22 @@
             "source": "user_explicit"
           },
           "sideScope": "both"
+        },
+        {
+          "key": "indicator.cross_under",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "fastPeriod": 20,
+            "slowPeriod": 50,
+            "period": 20,
+            "value": 50
+          },
+          "evidence": {
+            "text": "跌破前低停止补仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "short"
         }
       ]
     }
@@ -623,6 +655,22 @@
             "source": "user_explicit"
           },
           "sideScope": "both"
+        },
+        {
+          "key": "indicator.cross_under",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "fastPeriod": 20,
+            "slowPeriod": 50,
+            "period": 20,
+            "value": 50
+          },
+          "evidence": {
+            "text": "跌破前低停止补仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "short"
         }
       ],
       "actions": [
@@ -687,6 +735,22 @@
             "source": "user_explicit"
           },
           "sideScope": "both"
+        },
+        {
+          "key": "indicator.cross_under",
+          "phase": "entry",
+          "params": {
+            "indicator": "ma",
+            "fastPeriod": 20,
+            "slowPeriod": 50,
+            "period": 20,
+            "value": 50
+          },
+          "evidence": {
+            "text": "跌破前低停止补仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "short"
         }
       ]
     }
