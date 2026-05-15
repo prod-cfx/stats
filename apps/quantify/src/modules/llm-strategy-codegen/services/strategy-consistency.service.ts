@@ -1355,7 +1355,7 @@ export class StrategyConsistencyService {
     }
 
     const sideScope = this.resolveRiskPredicateSideScope(positionMode)
-    if (kind === 'atrMultipleStop' || kind === 'rememberedLevelStop') {
+    if (kind === 'atrMultipleStop' || kind === 'atrTrailingStop' || kind === 'rememberedLevelStop') {
       return [{ action: 'FORCE_EXIT', sideScope }]
     }
     if (kind !== 'atrMultipleTakeProfit') {
@@ -1376,6 +1376,7 @@ export class StrategyConsistencyService {
   private inferRuleKeyFromRiskPredicate(kind: string | undefined): StrategySemanticRuleKey | null {
     if (kind === 'atrMultipleStop') return 'risk.atr_multiple_stop'
     if (kind === 'atrMultipleTakeProfit') return 'risk.atr_multiple_take_profit'
+    if (kind === 'atrTrailingStop') return 'risk.atr_stop'
     if (kind === 'rememberedLevelStop') return 'risk.remembered_level_stop'
     return null
   }

@@ -98,6 +98,8 @@ export const DISPLAY_TOKENS = [
   { token: 'atom.risk.take_profit_pct.name', kind: 'atom', zh: '百分比止盈' },
   { token: 'atom.risk.atr_multiple_stop.name', kind: 'atom', zh: 'ATR 倍数止损' },
   { token: 'atom.risk.atr_multiple_take_profit.name', kind: 'atom', zh: 'ATR 倍数止盈' },
+  // Issue #1383 Lane A/C：risk.atr_stop 升级为 supported_executable
+  { token: 'atom.risk.atr_stop.name', kind: 'atom', zh: 'ATR 动态止损' },
   { token: 'atom.risk.remembered_level_stop.name', kind: 'atom', zh: '记忆价位止损' },
   { token: 'atom.risk.falling_knife_guard.name', kind: 'atom', zh: '不接急跌保护' },
   { token: 'atom.risk.trailing_stop_pct.name', kind: 'atom', zh: '百分比移动止损' },

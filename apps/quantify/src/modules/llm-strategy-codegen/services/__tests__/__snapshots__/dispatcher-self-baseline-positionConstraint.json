@@ -83,6 +83,8 @@
           "key": "grid.range_rebalance",
           "phase": "entry",
           "params": {
+            "rangeLower": 60000,
+            "rangeUpper": 70000,
             "sideMode": "both",
             "recycle": "true",
             "breakoutAction": "continue",

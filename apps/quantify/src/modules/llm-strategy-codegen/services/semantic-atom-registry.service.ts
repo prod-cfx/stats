@@ -617,11 +617,15 @@ const STANDALONE_ATOM_MAP = new Map<string, SemanticRegisteredAtomDefinition>([
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots: [], contractSubstrate: timeStopBarsSubstrate(),
   }],
+  // Issue #1383 Lane A：promoted to supported_executable（仅解锁 registry 标志位；
+  //   canonical_spec_v2 / compiled_runtime IR compile path 由 Lane C 兑现）。
+  //   executableSinceVersion 锚定 2026.05.W02 与 atom-contract-registry classifier 对齐。
   ['risk.atr_stop', {
-    key: 'risk.atr_stop', category: 'risk', supportStatus: 'recognized_unsupported',
-    requiredParams: [], defaultableParams: [], executableProjection: [], openSlots: [],
-    unsupported: { displayName: 'ATR 动态止损', reasonCode: 'atr_stop_public_beta_unsupported', publicReason: 'ATR 动态止损当前公测暂未支持生成和回测。' },
-    replacement: DEFAULT_REPLACEMENT,
+    key: 'risk.atr_stop', category: 'risk', supportStatus: 'supported_executable',
+    requiredParams: [], defaultableParams: ['period', 'multiple', 'pctOfAtr'],
+    executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
+    openSlots: [], contractSubstrate: baseExecutableSubstrate(),
+    executableSinceVersion: '2026.05.W02',
   }],
   // ── position atoms not yet in ATOM_CONTRACT_REGISTRY ──
   ['position.fixed_pct', {

@@ -509,26 +509,30 @@ describe('SemanticContractReadinessService', () => {
   })
 
   it('keeps recognized unsupported contracts out of readiness open slots', () => {
+    // Issue #1383 Lane A：risk.atr_stop 已升级为 supported_executable，
+    //   readiness service 走 isSupportedAtom 短路；改用仍为 recognized_unsupported
+    //   的 volume.spike 验证未支持原子的 contract requirements 不进入 open slots。
     const state = createSemanticState({
-      risk: [{
-        id: 'risk-atr-stop',
-        key: 'risk.atr_stop',
-        params: { atrPeriod: 14, multiplier: 2 },
+      trigger: [{
+        id: 'trigger-volume-spike',
+        key: 'volume.spike',
+        phase: 'entry',
+        params: { multiplier: 2 },
         status: 'locked',
         source: 'user_explicit',
         openSlots: [],
         support: {
           supportStatus: 'recognized_unsupported',
-          unsupportedReasonCode: 'atr_stop_public_beta_unsupported',
-          unsupportedDisplayName: 'ATR 动态止损',
+          unsupportedReasonCode: 'volume_condition_public_beta_unsupported',
+          unsupportedDisplayName: '成交量放大',
         },
         contracts: [{
-          id: 'risk-contract-atr-stop',
-          kind: 'risk',
+          id: 'trigger-contract-volume-spike',
+          kind: 'trigger',
           capabilities: [],
           requires: [
             { domain: 'market', verb: 'read', object: 'latest_bar' },
-            { domain: 'guard', verb: 'enforce', object: 'atr_stop' },
+            { domain: 'guard', verb: 'enforce', object: 'volume_spike' },
           ],
           params: {},
           runtimeRequirements: [],
@@ -543,7 +547,7 @@ describe('SemanticContractReadinessService', () => {
 
     expect(result.ready).toBe(false)
     expect(result.missingRequirements).toEqual([])
-    expect(result.state.risk[0].openSlots).toEqual([])
+    expect(result.state.trigger[0].openSlots).toEqual([])
   })
 
   it('keeps unknown contracts out of readiness open slots', () => {

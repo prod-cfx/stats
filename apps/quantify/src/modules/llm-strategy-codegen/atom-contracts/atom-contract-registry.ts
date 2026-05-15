@@ -87,6 +87,8 @@ type CompletedPr1bRegistry<T extends Record<AtomContractKey, AtomContractSeed>> 
     readonly display: AtomContractDisplay
     readonly corpus: AtomContract['corpus']
     readonly emit: T[K] extends { readonly emit: infer E extends AtomContractEmit } ? E : NotApplicableEmit
+    // Issue #1383 Lane A：fulfillsStrategyPhase 由 ATOM_FULFILLS_STRATEGY_PHASE 单一真相源注入
+    readonly fulfillsStrategyPhase: ReadonlyArray<'entry' | 'exit' | 'risk' | 'sizing' | 'context'>
   }
 }
 
@@ -201,6 +203,91 @@ const ATOM_BUCKETS = {
   'scope.subStrategy': 'orchestration',
   'gate.subStrategy': 'orchestration',
 } as const satisfies Record<AtomContractKey, AtomContractBucket>
+
+// =========================================================
+// ATOM_FULFILLS_STRATEGY_PHASE — Issue #1383 Lane A
+// =========================================================
+//
+// "atom 自声明该 atom 满足 strategy 哪几个阶段" 的单一真相源。
+// 历史上 codegen-conversation.service.ts 内 hasExecutableEntry/ExitSemantics
+// 通过硬编码 capability.domain === 'order_program' / verb === 'maintain' 等串判定，
+// 新增策略类型需要修改 conversation service 才能扩展。本表把判定挪到 atom 自声明，
+// SemanticExecutableSemanticsService 仅做注册表驱动的 generic 判定。
+const ATOM_FULFILLS_STRATEGY_PHASE = {
+  // ── triggers（默认 by-clause-verb 双向 → 两个 phase 都能满足；phase 最终取 atom.phase 字段）──
+  'volume.threshold': ['entry', 'exit'],
+  'volatility.atr_threshold': ['entry', 'exit'],
+  'strategy.time_window': ['entry', 'exit'],
+  'oscillator.rsi_lte': ['entry', 'exit'],
+  'oscillator.rsi_gte': ['entry', 'exit'],
+  'indicator.divergence': ['entry', 'exit'],
+  'price.candle_pattern': ['entry', 'exit'],
+  'price.chart_pattern': ['entry', 'exit'],
+  'liquidity.sweep': ['entry', 'exit'],
+  'external.signal': ['entry', 'exit'],
+  'position.has_position': ['entry', 'exit'],
+  'position.no_position': ['entry', 'exit'],
+  'bollinger.touch_upper': ['entry', 'exit'],
+  'bollinger.touch_lower': ['entry', 'exit'],
+  'bollinger.touch_middle': ['entry', 'exit'],
+  'price.percent_change': ['entry', 'exit'],
+  'price.breakout_up': ['entry', 'exit'],
+  'price.breakout_down': ['entry', 'exit'],
+  'price.detect.indicator_boundary': ['entry', 'exit'],
+  'indicator.cross_over': ['entry', 'exit'],
+  'indicator.cross_under': ['entry', 'exit'],
+  'indicator.above': ['entry', 'exit'],
+  'indicator.below': ['entry', 'exit'],
+  // Issue #1383 Round 1 M5：调度类原子自身已满足 entry+exit 语义（程序自洽，
+  //   无需额外出场触发），与 legacy hasLockedScheduleSemantics 行为对齐。
+  'execution.on_start': ['entry', 'exit'],
+  'trend.direction': ['entry', 'exit'],
+  'market.regime': ['entry', 'exit'],
+  'volatility.state': ['entry', 'exit'],
+  'price.range_position_lte': ['entry', 'exit'],
+  'price.range_position_gte': ['entry', 'exit'],
+  // ── actions ──
+  'action.add_position': ['entry'],
+  'action.reverse_position': ['entry', 'exit'],
+  'action.open_long': ['entry'],
+  'action.close_long': ['exit'],
+  'action.open_short': ['entry'],
+  'action.close_short': ['exit'],
+  // ── risk ──
+  'risk.stop_loss_pct': ['risk', 'exit'],
+  'risk.take_profit_pct': ['risk', 'exit'],
+  'risk.atr_stop': ['risk', 'exit'],
+  'risk.partial_take_profit': ['risk'],
+  // ── portfolio / drawdown 护栏：不直接满足 entry/exit/risk 任一阶段（只是阻断） ──
+  'portfolioRisk.drawdown_block': [],
+  // ── positionConstraint ──
+  // Issue #1383 Round 1 M5：DCA 调度自身已满足 entry+exit 语义（自洽程序，
+  //   不需要额外出场触发即可生成可运行策略）。
+  'position.dca_schedule': ['entry', 'exit', 'sizing'],
+  'position.pyramiding_limit': ['entry', 'sizing'],
+  'grid.range_rebalance': ['entry', 'exit', 'sizing'],
+  // ── orchestration ──
+  'gate.regime': [],
+  'portfolioRisk.symbol_exposure_cap': [],
+  'portfolioRisk.substrategy_exposure_cap': [],
+  'program.dynamic_grid': ['entry', 'exit'],
+  'program.fixed_grid_gated': ['entry', 'exit'],
+  'program.adaptive_volatility_grid': ['entry', 'exit'],
+  // Issue #1383 Round 1 M5：事件监听类程序自洽，含 exit。
+  'program.event_listener': ['entry', 'exit'],
+  'scope.symbol': ['context'],
+  'scope.leg': ['context'],
+  'scope.timeframe': ['context'],
+  'scope.dataSource': ['context'],
+  'scope.subStrategy': ['context'],
+  'gate.subStrategy': [],
+} as const satisfies Record<AtomContractKey, ReadonlyArray<'entry' | 'exit' | 'risk' | 'sizing' | 'context'>>
+
+export function getAtomFulfillsStrategyPhase(
+  key: AtomContractKey,
+): ReadonlyArray<'entry' | 'exit' | 'risk' | 'sizing' | 'context'> {
+  return ATOM_FULFILLS_STRATEGY_PHASE[key]
+}
 
 // Public bucket helpers — 单一对外 API，模块外消费方禁止再读 ATOM_BUCKETS（已 private）
 export function getAllRegisteredAtomKeys(): readonly AtomContractKey[] {
@@ -387,6 +474,8 @@ function completePr1bRegistry<const T extends Record<AtomContractKey, AtomContra
       display: registry[key].display ?? createPr1bDisplay(ATOM_PUBLIC_NAMES[key]),
       corpus: registry[key].corpus,
       emit: registry[key].emit ?? mergedEmit,
+      // Issue #1383 Lane A：从 ATOM_FULFILLS_STRATEGY_PHASE 单一真相源注入。
+      fulfillsStrategyPhase: ATOM_FULFILLS_STRATEGY_PHASE[key],
     } as AtomContract
   }
   return completed as CompletedPr1bRegistry<T>
@@ -2569,15 +2658,20 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       goldenUtterances: getGoldenUtterancesForAtom('risk.atr_stop'),
     },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
-    readinessCheck: UNSUPPORTED_SKIP,
-    clarificationQuestion: (_slotKey, _params, _locale) => '请补充 ATR 动态止损的缺失信息。',
+    // Issue #1383 Lane A：ATR 动态止损 promoted 为 supported_executable（registry 标志位翻转）。
+    //   IR compile path 由 Lane C 兑现；此处仅解锁 registry support flag，使
+    //   readinessCheck 走通用流水线、不再走 UNSUPPORTED_SKIP 短路。
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'risk.atr_stop.period') return '请指定 ATR 计算周期，例如 14（常用默认值）。'
+      if (slotKey === 'risk.atr_stop.multiple') return '请给出 ATR 倍数，例如 2（即 2 倍 ATR 作为止损距离）。'
+      if (slotKey === 'risk.atr_stop.pctOfAtr') return '或者给出占 ATR 的百分比，例如 50% ATR。'
+      return '请补充 ATR 动态止损的缺失信息（period / multiple / pctOfAtr）。'
+    },
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
-    classifier: {
-      supportStatus: `unsupported_atr_stop_public_beta_unsupported` as const,
-      unsupportedMeta: { reasonCode: 'atr_stop_public_beta_unsupported', publicReasonZh: 'ATR 动态止损当前公测暂未支持生成和回测。' },
-    },
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
     display: {
       publicName: ATOM_PUBLIC_NAMES['risk.atr_stop'],
       paramRenderers: {
@@ -2599,6 +2693,8 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         },
       },
       paramSlots: {
+        // Issue #1383 Lane A：ATR period 默认 14（行业标准），supported_executable 起步默认值。
+        period: { kind: 'number', required: false, range: [1, 500], default: 14, extractor: { kind: 'number-decimal', pattern: 'ATR\\s*(\\d+)', range: [1, 500] } },
         pctOfAtr: { kind: 'percent', required: false, range: [0, 100], extractor: { kind: 'percent', pattern: '(\\d+(?:\\.\\d+)?)\\s*%\\s*ATR', range: [0, 100] } },
         multiple: { kind: 'number', required: false, range: [0, 100], extractor: { kind: 'number-decimal', pattern: '(\\d+(?:\\.\\d+)?)\\s*(?:倍|x)\\s*ATR', range: [0, 100] } },
       },
@@ -2607,7 +2703,10 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
   },
 
-  // 产品决策：risk.partial_take_profit 保持 recognized_unsupported（公测，不改为 supported）
+  // Issue #1383 Lane A：risk.partial_take_profit promoted 为 supported_executable
+  //   （registry classifier 翻牌；semantic-atom-registry resolvePartialTakeProfitAtom
+  //   现已条件性 supported_executable，本 atom 自身 readiness 仍走 UNSUPPORTED_SKIP
+  //   仅在 tiers 未填阶段，slot 补全后会被 resolvePartialTakeProfitAtom 升级）
   //   readinessCheck = UNSUPPORTED_SKIP（critic Major #3）：声明"contractReadiness 主动跳过"，
   //   避免与 COMMON_PIPELINE 混淆。summaryContribution 仍 VIA_PRESENTATION_DISPLAY
   //   是为了 partial_take_profit fallback 到 unsupported 路径时仍能渲染 publicName 给用户看
@@ -2636,10 +2735,8 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: ATOM_MUTEX['risk.partial_take_profit'] ?? [],
     isActionable: false,
     sizingEvidence: null,
-    classifier: {
-      supportStatus: `unsupported_partial_take_profit_public_beta_unsupported` as const,
-      unsupportedMeta: { reasonCode: 'partial_take_profit_public_beta_unsupported', publicReasonZh: '多档分批止盈当前公测暂未支持生成和回测。' },
-    },
+    // Issue #1383 Lane A：promoted to supported_executable（registry 标志位翻转）。
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
     display: {
       publicName: ATOM_PUBLIC_NAMES['risk.partial_take_profit'],
       // per-slot renderers; consumed by future UI debug surface (not by current summary path)
@@ -2925,8 +3022,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         },
       },
       paramSlots: {
-        rangeLower: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:价格)?区间\\s*(\\d+(?:\\.\\d+)?)' } },
-        rangeUpper: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:价格)?区间\\s*\\d+(?:\\.\\d+)?\\s*[-~到至]\\s*(\\d+(?:\\.\\d+)?)' } },
+        // Issue #1383 follow-up：兼容中英文 range 前缀。Chinese "(价格)?区间 X-Y"
+        //   与 English "(grid|price)? range X-Y" 共用 number-decimal 抽取，pattern 头部
+        //   alternation 覆盖两套词法，避免英文 utterance（"grid range 30000-40000"）
+        //   静默丢失 rangeLower/rangeUpper。
+        rangeLower: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:(?:价格)?区间|(?:grid\\s+|price\\s+)?range)\\s*(\\d+(?:\\.\\d+)?)' } },
+        rangeUpper: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:(?:价格)?区间|(?:grid\\s+|price\\s+)?range)\\s*\\d+(?:\\.\\d+)?\\s*[-~到至]\\s*(\\d+(?:\\.\\d+)?)' } },
         sideMode: { kind: 'enum', required: false, enum: ['long_only', 'short_only', 'both'], default: 'both', extractor: { kind: 'enum-zh-map', enumMap: { '只做多': 'long_only', '仅做多': 'long_only', '只做空': 'short_only', '仅做空': 'short_only', '双向': 'both' } } },
         recycle: { kind: 'enum', required: false, enum: ['true', 'false'], default: 'true', extractor: { kind: 'enum-zh-map', enumMap: { '循环': 'true', 'recycle': 'true', '不循环': 'false' } } },
         breakoutAction: { kind: 'enum', required: false, enum: ['continue', 'stop'], default: 'continue', extractor: { kind: 'enum-zh-map', enumMap: { '继续': 'continue', '停止': 'stop', 'continue': 'continue', 'stop': 'stop' } } },

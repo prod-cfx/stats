@@ -28,6 +28,7 @@ import type {
 import { Injectable, Logger } from '@nestjs/common'
 import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+import { extractAtrStopParams } from './atr-stop-params'
 import type { AtomContractKey } from '../atom-contracts/atom-contract-types'
 import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
 import { NORMALIZED_TRIGGER_ATOM_KEYS } from '../types/strategy-normalized-intent'
@@ -59,6 +60,7 @@ const FIELD_KEY = {
   PRICE_ROLLING_EXTREMA_BREAKOUT: 'price.rolling_extrema_breakout',
   RISK_ATR_MULTIPLE_STOP: 'risk.atr_multiple_stop',
   RISK_ATR_MULTIPLE_TAKE_PROFIT: 'risk.atr_multiple_take_profit',
+  RISK_ATR_STOP: 'risk.atr_stop',
   RISK_CONDITION_EXPRESSION: 'risk.condition_expression',
   RISK_MAX_DRAWDOWN_PCT: 'risk.max_drawdown_pct',
   RISK_MAX_SINGLE_LOSS_PCT: 'risk.max_single_loss_pct',
@@ -1742,6 +1744,25 @@ export class CanonicalSpecBuilderService {
       })
       .filter((gate): gate is ScopedSemanticGateCondition => gate !== null)
 
+    // Issue #1383 真根因（通用 bug）：grid.range_rebalance 在 ATOM_CONTRACT_REGISTRY 是
+    //   positionConstraint 桶（atom-contract-registry.ts:190），不是 trigger 桶。
+    //   原实现仅在 state.trigger 里找 grid（下方 line "trigger.key === grid.range_rebalance"），
+    //   永远找不到，导致 dispatcher / builder 完美识别的 grid 参数（rangeLower/Upper/stepPct/sideMode）
+    //   在 spec-builder 被丢弃，rebalance 规则数永远 0。
+    //   通用解：先扫 state.positionConstraint 桶把 grid atom 转 rebalance 规则；
+    //   buildGridRulesFromSemanticTrigger 只读 key/params/sideScope，positionConstraint state
+    //   全部具备，可直接复用。
+    for (const constraint of state.positionConstraint ?? []) {
+      if (constraint.status !== 'locked') continue
+      if (constraint.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) continue
+      rules.push(...this.buildGridRulesFromSemanticTrigger({
+        trigger: constraint as unknown as SemanticTriggerState,
+        sizing,
+        defaultTimeframe,
+        gateConditions,
+      }))
+    }
+
     for (const triggerGroup of this.groupSemanticMultiTimeframeTriggers(state.trigger)) {
       const trigger = triggerGroup[0]
       if (!trigger) {
@@ -2745,6 +2766,29 @@ export class CanonicalSpecBuilderService {
         if (riskRule) {
           rules.push(riskRule)
         }
+        continue
+      }
+      if (risk.key === FIELD_KEY.RISK_ATR_STOP) {
+        // Issue #1383 Round 1 M3：参数提取抽 extractAtrStopParams，与
+        //   canonical-spec-v2-ir-compiler.service.ts 复用相同规则避免双源漂移。
+        const atrParams = extractAtrStopParams(risk.params)
+        if (atrParams === null) continue
+        rules.push({
+          id: `semantic-${risk.id || 'risk-atr-stop'}`,
+          phase: 'risk',
+          sideScope,
+          priority: priority--,
+          condition: {
+            kind: 'atom',
+            key: 'risk.atr_stop',
+            semanticScope: 'position',
+            params: atrParams,
+          },
+          actions: [{ type: 'FORCE_EXIT' }],
+          metadata: {
+            semanticKey: risk.key,
+          },
+        })
         continue
       }
       if (risk.key === ATOM_CONTRACT_REGISTRY['risk.partial_take_profit'].key) {
@@ -4446,6 +4490,39 @@ export class CanonicalSpecBuilderService {
           },
         },
       })
+    }
+
+    if (riskAtom.key === FIELD_KEY.RISK_ATR_STOP) {
+      const multiplierRaw = typeof riskAtom.params.multiplier === 'number'
+        ? riskAtom.params.multiplier
+        : typeof riskAtom.params.multiple === 'number'
+          ? riskAtom.params.multiple
+          : null
+      if (multiplierRaw === null || !Number.isFinite(multiplierRaw) || multiplierRaw <= 0) {
+        return null
+      }
+      const periodRaw = typeof riskAtom.params.period === 'number' ? riskAtom.params.period : 14
+      const period = Number.isInteger(periodRaw) && periodRaw > 0 ? periodRaw : 14
+      return {
+        id: 'risk-atr-stop',
+        phase: 'risk',
+        sideScope: 'both',
+        priority,
+        condition: {
+          kind: 'atom',
+          key: 'risk.atr_stop',
+          semanticScope: 'position',
+          params: { period, multiplier: multiplierRaw },
+        },
+        actions: [{ type: 'FORCE_EXIT' }],
+        metadata: {
+          normalized: {
+            source: 'normalized-intent',
+            triggerKeys: [riskAtom.key],
+            actionKeys: ['FORCE_EXIT'],
+          },
+        },
+      }
     }
 
     if (riskAtom.key === FIELD_KEY.RISK_MAX_DRAWDOWN_PCT) {

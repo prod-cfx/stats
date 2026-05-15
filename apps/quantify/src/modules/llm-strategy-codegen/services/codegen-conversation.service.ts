@@ -19,7 +19,6 @@ import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { SemanticEditDecision } from '../types/semantic-edit'
 import type {
   SemanticActionState,
-  SemanticCapability,
   SemanticPositionState,
   SemanticRiskState,
   SemanticSlotState,
@@ -98,6 +97,7 @@ import {
 } from './inferred-confirmation-classifier.service'
 import { canonicalizeStrategySymbolInput, isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
+import { PlannerDispatcherMergeService } from './planner-dispatcher-merge.service'
 import { PositionSizingContractService } from './position-sizing-contract.service'
 import { buildStrategyRuleDrafts, resolveStrategyDefaultTimeframe } from './rule-draft-projection'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
@@ -108,6 +108,7 @@ import { resolveSemanticClarificationMetadata } from './semantic-clarification-m
  
 import { SemanticClarificationQuestionRendererService } from './semantic-clarification-question-renderer.service'
 import { SemanticContractReadinessService } from './semantic-contract-readiness.service'
+import { SemanticExecutableSemanticsService } from './semantic-executable-semantics.service'
 import { SemanticMissingPlaceholderReconcilerService } from './semantic-missing-placeholder-reconciler.service'
 import { SemanticOpenSlotAnswerResolverService } from './semantic-open-slot-answer-resolver.service'
 import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
@@ -296,13 +297,20 @@ export class CodegenConversationService {
     private readonly semanticStateProjection: SemanticStateProjectionService = new SemanticStateProjectionService(),
     private readonly semanticStateMerge: SemanticStateMergeService = new SemanticStateMergeService(),
     private readonly genericSeedDispatcher: GenericSeedDispatcher = new GenericSeedDispatcher(),
+    private readonly plannerDispatcherMerge: PlannerDispatcherMergeService = new PlannerDispatcherMergeService(),
     private readonly semanticSeedStateBuilder: SemanticSeedStateBuilderService = new SemanticSeedStateBuilderService(),
     private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
     private readonly semanticSupportClassifier: SemanticSupportClassifierService = new SemanticSupportClassifierService(new SemanticAtomRegistryService(), new SemanticOrchestrationRegistryService()),
     private readonly unsupportedFallback: UnsupportedFallbackService = new UnsupportedFallbackService(),
     private readonly semanticContractReadiness: SemanticContractReadinessService = new SemanticContractReadinessService(),
     private readonly semanticQuestionRenderer: SemanticClarificationQuestionRendererService = new SemanticClarificationQuestionRendererService(),
-    private readonly semanticMissingPlaceholderReconciler: SemanticMissingPlaceholderReconcilerService = new SemanticMissingPlaceholderReconcilerService(),
+    // Issue #1383 Lane A：注入 SemanticExecutableSemanticsService 与 placeholder reconciler；
+    //   两者均 registry-driven，本服务内不再保留硬编码 capability.domain/verb 判定。
+    // Round 1 M1：reconciler 默认值复用同一 executableSemantics 实例（参数 binding
+    //   左→右，executableSemantics 已绑定为局部名，可直接传给后续默认值）。
+    //   避免两个 executableSemantics 实例并存导致后续给 service 加 cache 时撕裂。
+    private readonly executableSemantics: SemanticExecutableSemanticsService = new SemanticExecutableSemanticsService(),
+    private readonly semanticMissingPlaceholderReconciler: SemanticMissingPlaceholderReconcilerService = new SemanticMissingPlaceholderReconcilerService(executableSemantics),
     private readonly semanticOpenSlotAnswerResolver: SemanticOpenSlotAnswerResolverService = new SemanticOpenSlotAnswerResolverService(),
     @Optional() private readonly accountStrategyViewService?: AccountStrategyViewService,
     @Optional() private readonly llmStrategyInstancesService?: LlmStrategyInstancesService,
@@ -1741,9 +1749,9 @@ export class CodegenConversationService {
     }
 
     if (!plan.related) {
-      const recoveredExecutableSemantics = this.hasLockedTriggerPhase(semanticStateBeforeRequiredSlots, 'entry')
-        || this.hasLockedTriggerPhase(semanticStateBeforeRequiredSlots, 'exit')
-        || this.hasCompleteOrderProgramSemantics(semanticStateBeforeRequiredSlots)
+      const recoveredExecutableSemantics = this.executableSemantics.hasLockedTriggerPhase(semanticStateBeforeRequiredSlots, 'entry')
+        || this.executableSemantics.hasLockedTriggerPhase(semanticStateBeforeRequiredSlots, 'exit')
+        || this.executableSemantics.hasCompleteOrderProgramSemantics(semanticStateBeforeRequiredSlots)
       if (startedFromChecklistOnlySession && !inferredConfirmation.consumed && !recoveredExecutableSemantics && !hasSemanticNativeClarificationAnswers) {
         return this.rejectChecklistOnlySession(session, sessionUserId, responseLocale)
       }
@@ -2696,15 +2704,20 @@ export class CodegenConversationService {
       return this.returnPersistedSnapshotResponse(latest, sessionUserId)
     }
 
-    void this.publicationPipeline.run({
-      sessionId: session.id,
-      userId: sessionUserId,
-      semanticState: reducedSemanticState,
-      canonicalSpecOverride: canonicalSpec,
-      message: dto.message,
-      model: dto.model,
-      existingStrategyInstanceId: session.strategyInstanceId ?? null,
-    })
+    // Issue #1383 真根因（fire-and-forget 与 session 生命周期竞争）：
+    //   通过 trackInFlight 把承诺注册到 service，让 awaitInFlight()
+    //   能在测试 afterEach / 优雅停机时等待背景任务完成，避免 P2025 race。
+    void this.publicationPipeline.trackInFlight(
+      this.publicationPipeline.run({
+        sessionId: session.id,
+        userId: sessionUserId,
+        semanticState: reducedSemanticState,
+        canonicalSpecOverride: canonicalSpec,
+        message: dto.message,
+        model: dto.model,
+        existingStrategyInstanceId: session.strategyInstanceId ?? null,
+      }),
+    )
 
     const response = this.finalizeSessionResponse({
       id: session.id,
@@ -2749,13 +2762,17 @@ export class CodegenConversationService {
   private hasPersistedSemanticState(
     payload: Prisma.JsonValue | null | undefined,
   ): payload is Prisma.JsonValue & SemanticState {
+    // Issue #1383 Round 2 真根因：SemanticState 字段是单数 trigger/action（无 s），
+    //   旧实现查 payload.triggers/actions（带 s）导致**任何合法持久化 state 都被判 false**，
+    //   进而 shouldRejectChecklistOnlySession 误触 REJECTED + "当前会话缺少语义状态"。
+    //   原 user 报告的核心回归即由此引起（S1 网格 turn 2 失败）。
     return Boolean(
       payload
       && typeof payload === 'object'
       && !Array.isArray(payload)
       && (payload as { version?: unknown }).version === 1
-      && Array.isArray((payload as { triggers?: unknown }).triggers)
-      && Array.isArray((payload as { actions?: unknown }).actions)
+      && Array.isArray((payload as { trigger?: unknown }).trigger)
+      && Array.isArray((payload as { action?: unknown }).action)
       && Array.isArray((payload as { risk?: unknown }).risk),
     )
   }
@@ -2768,9 +2785,14 @@ export class CodegenConversationService {
   }
 
   private isEmptySemanticState(semanticState: SemanticState): boolean {
+    // Issue #1383 Round 2 真根因：旧实现不查 positionConstraint / orchestration，
+    //   导致仅含 grid.range_rebalance / DCA schedule / program.* 的合法 state 被判 empty。
+    //   叠加 hasPersistedSemanticState bug 触发 REJECTED 链路。
     return semanticState.trigger.length === 0
       && semanticState.action.length === 0
       && semanticState.risk.length === 0
+      && semanticState.positionConstraint.length === 0
+      && (semanticState.orchestration?.length ?? 0) === 0
       && semanticState.position === null
       && Object.values(semanticState.contextSlots).every(slot => slot === null)
   }
@@ -3112,9 +3134,9 @@ export class CodegenConversationService {
       return state
     }
 
-    const hasLockedEntry = this.hasExecutableEntrySemantics(state)
-    const hasLockedExit = this.hasExecutableExitSemantics(state)
-    const hasCompleteOrderProgram = this.hasCompleteOrderProgramSemantics(state)
+    const hasLockedEntry = this.executableSemantics.hasExecutableEntrySemantics(state)
+    const hasLockedExit = this.executableSemantics.hasExecutableExitSemantics(state)
+    const hasCompleteOrderProgram = this.executableSemantics.hasCompleteOrderProgramSemantics(state)
     const triggers = state.trigger.filter(trigger =>
       !this.isMissingExecutableAtomTrigger(trigger)
       || (trigger.phase === 'entry' && !hasLockedEntry)
@@ -3157,111 +3179,23 @@ export class CodegenConversationService {
   }
 
   private hasExecutableCapabilityGraph(state: SemanticState): boolean {
-    return this.hasCompleteOrderProgramSemantics(state) || this.hasLockedScheduleSemantics(state)
+    return this.executableSemantics.hasCompleteOrderProgramSemantics(state)
+      || this.executableSemantics.hasLockedScheduleSemantics(state)
   }
 
   private hasExecutionContextEvidence(state: SemanticState): boolean {
     return Object.values(state.contextSlots).some(slot => slot !== null)
   }
 
-  private hasLockedTriggerPhase(
-    state: SemanticState,
-    phase: Extract<SemanticTriggerState['phase'], 'entry' | 'exit'>,
-  ): boolean {
-    return state.trigger.some(trigger =>
-      trigger.phase === phase
-      && trigger.status === 'locked'
-      && trigger.openSlots.every(slot => slot.status !== 'open'),
-    )
-  }
-
-  private hasExecutableEntrySemantics(state: SemanticState): boolean {
-    return this.hasLockedTriggerPhase(state, 'entry')
-      || this.hasOrderProgramContractSemantics(state)
-      || this.hasCompleteOrderProgramSemantics(state)
-      || this.hasLockedScheduleSemantics(state)
-  }
-
-  private hasExecutableExitSemantics(state: SemanticState): boolean {
-    return this.hasLockedTriggerPhase(state, 'exit')
-      || this.hasLockedExitRiskSemantics(state)
-      || this.hasOrderProgramContractSemantics(state)
-      || this.hasExecutableCapabilityGraph(state)
-  }
-
-  private hasOrderProgramContractSemantics(state: SemanticState): boolean {
-    const topLevelConstraintIds = new Set(state.positionConstraint.map(constraint => constraint.id))
-    const constraints = [
-      ...(state.positionConstraint ?? []),
-      ...((state.position?.constraints ?? []).filter(constraint => !topLevelConstraintIds.has(constraint.id))),
-    ]
-    return constraints.some(constraint =>
-      constraint.status !== 'superseded'
-      && (constraint.contracts ?? []).some(contract =>
-        contract.capabilities.some(capability =>
-          capability.domain === 'order_program'
-          && (capability.verb === 'maintain' || capability.verb === 'place' || capability.verb === 'rebalance'),
-        ),
-      ),
-    )
-  }
-
-  private hasCompleteOrderProgramSemantics(state: SemanticState): boolean {
-    const capabilities = this.collectLockedCapabilities(state)
-    return capabilities.some(capability =>
-      capability.domain === 'order_program'
-      && (capability.verb === 'maintain' || capability.verb === 'place' || capability.verb === 'rebalance')
-    )
-  }
-
-  private hasLockedScheduleSemantics(state: SemanticState): boolean {
-    return this.collectLockedCapabilities(state).some(capability =>
-      capability.domain === 'runtime'
-      && (capability.verb === 'schedule' || capability.object === 'dca_orders')
-    )
-  }
-
-  private collectLockedCapabilities(state: SemanticState): SemanticCapability[] {
-    const capabilities: SemanticCapability[] = []
-    const pushContracts = (contracts: readonly { capabilities: readonly SemanticCapability[] }[] | undefined): void => {
-      for (const contract of contracts ?? []) capabilities.push(...contract.capabilities)
-    }
-
-    for (const trigger of state.trigger) {
-      if (trigger.status === 'locked' && trigger.openSlots.every(slot => slot.status !== 'open')) {
-        pushContracts(trigger.contracts)
-      }
-    }
-    for (const action of state.action) {
-      if (action.status === 'locked' && (action.openSlots ?? []).every(slot => slot.status !== 'open')) {
-        pushContracts(action.contracts)
-      }
-    }
-    for (const risk of state.risk) {
-      if (risk.status === 'locked' && risk.openSlots.every(slot => slot.status !== 'open')) {
-        pushContracts(risk.contracts)
-      }
-    }
-    const topLevelConstraintIds = new Set(state.positionConstraint.map(constraint => constraint.id))
-    if (state.position?.status === 'locked' && (state.position.openSlots ?? []).every(slot => slot.status !== 'open')) {
-      pushContracts(state.position.contracts)
-      for (const constraint of state.position.constraints ?? []) {
-        if (topLevelConstraintIds.has(constraint.id)) {
-          continue
-        }
-        if (constraint.status === 'locked' && constraint.openSlots.every(slot => slot.status !== 'open')) {
-          pushContracts(constraint.contracts)
-        }
-      }
-    }
-    for (const constraint of state.positionConstraint) {
-      if (constraint.status === 'locked' && constraint.openSlots.every(slot => slot.status !== 'open')) {
-        pushContracts(constraint.contracts)
-      }
-    }
-
-    return capabilities
-  }
+  // Issue #1383 Lane A：以下 7 个方法已迁移到 SemanticExecutableSemanticsService，
+  //   通过 this.executableSemantics.* 调用；本服务内不再保留硬编码 capability.domain/verb 判定。
+  //   - hasLockedTriggerPhase
+  //   - hasExecutableEntrySemantics
+  //   - hasExecutableExitSemantics
+  //   - hasOrderProgramContractSemantics
+  //   - hasCompleteOrderProgramSemantics
+  //   - hasLockedScheduleSemantics
+  //   - collectLockedCapabilities
 
   private isMissingExecutableAtomTrigger(trigger: SemanticTriggerState): boolean {
     return trigger.key === 'semantic.missing_entry_atom'
@@ -3836,11 +3770,11 @@ export class CodegenConversationService {
     semanticState: SemanticState,
   ): boolean {
     if (item.reason === 'missing_entry_rules' || item.field === 'entryRules') {
-      return this.hasExecutableEntrySemantics(semanticState)
+      return this.executableSemantics.hasExecutableEntrySemantics(semanticState)
     }
 
     if (item.reason === 'missing_exit_rules' || item.field === 'exitRules') {
-      return this.hasExecutableExitSemantics(semanticState)
+      return this.executableSemantics.hasExecutableExitSemantics(semanticState)
     }
 
     if (this.isPositionSizingClarificationItem(item)) {
@@ -9243,7 +9177,15 @@ export class CodegenConversationService {
           : (logicReady
               ? this.localizedText(locale, 'I have organized the strategy logic. Please confirm the logic graph.', '我已整理出策略逻辑，请确认逻辑图。')
               : this.localizedText(locale, 'I will keep refining the strategy logic. Please provide one key condition.', '我先继续完善策略逻辑，请补充一个关键条件。'))
-        const semanticPatch = this.normalizeSemanticPatch(parsed.semanticPatch ?? parsed.semanticUpdates)
+        const plannerPatch = this.normalizeSemanticPatch(parsed.semanticPatch ?? parsed.semanticUpdates)
+        // Issue #1383：planner JSON 成功也要并跑 dispatcher，
+        //   把 positionConstraint / orchestration 桶 atom（grid.range_rebalance、
+        //   position.dca_schedule、program.event_listener 等）补齐为 union。
+        const dispatcherPatch = this.genericSeedDispatcher.dispatch(text)
+        const semanticPatch = this.plannerDispatcherMerge.mergePlannerAndDispatcherPatches(
+          plannerPatch ?? null,
+          dispatcherPatch ?? null,
+        ) ?? undefined
         return {
           related,
           logicReady,

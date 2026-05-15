@@ -30,6 +30,7 @@ import { GenericSeedDispatcher } from './services/generic-seed-dispatcher.servic
 import { MarketInstrumentSymbolResolverService } from './services/market-instrument-symbol-resolver.service'
 import { NaturalLanguageGatewayService } from './services/natural-language-gateway.service'
 import { PerTradeSizingResolver } from './services/per-trade-sizing-resolver.service'
+import { PlannerDispatcherMergeService } from './services/planner-dispatcher-merge.service'
 import { PositionSizingContractService } from './services/position-sizing-contract.service'
 import { RecommendationIndexService } from './services/recommendation-index.service'
 import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
@@ -41,6 +42,7 @@ import { SemanticContractReadinessService } from './services/semantic-contract-r
 import { SemanticContractShapeNormalizerService } from './services/semantic-contract-shape-normalizer.service'
 import { SemanticEventFrameParserService } from './services/semantic-event-frame-parser.service'
 import { SemanticEventFrameProjectorService } from './services/semantic-event-frame-projector.service'
+import { SemanticExecutableSemanticsService } from './services/semantic-executable-semantics.service'
 import { SemanticFrameNormalizerService } from './services/semantic-frame-normalizer.service'
 import { SemanticMissingPlaceholderReconcilerService } from './services/semantic-missing-placeholder-reconciler.service'
 import { SemanticOpenSlotAnswerResolverService } from './services/semantic-open-slot-answer-resolver.service'
@@ -80,6 +82,7 @@ import { UnsupportedFallbackService } from './services/unsupported-fallback.serv
     // M4: GenericSeedDispatcher + SemanticSeedStateBuilderService 为 PR2c-final-1bc 双 provider 过渡态；
     // SemanticSeedExtractorService 已于 PR2c-final-1bc 删除（M3），legacy provider 不再注册。
     GenericSeedDispatcher,
+    PlannerDispatcherMergeService,
     SemanticEventFrameParserService,
     SemanticEventFrameProjectorService,
     SemanticSeedStateBuilderService,
@@ -124,6 +127,7 @@ import { UnsupportedFallbackService } from './services/unsupported-fallback.serv
     SemanticOrchestrationRegistryService,
     SemanticContractReadinessService,
     SemanticContractShapeNormalizerService,
+    SemanticExecutableSemanticsService,
     SemanticMissingPlaceholderReconcilerService,
     MarketInstrumentSymbolResolverService,
     SemanticOpenSlotAnswerResolverService,

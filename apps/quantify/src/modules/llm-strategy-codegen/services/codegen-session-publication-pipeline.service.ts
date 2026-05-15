@@ -2,7 +2,7 @@ import type { CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec-v
 import type { SemanticState } from '../types/semantic-state'
 import type { CodegenPublicationGenerationInput } from './codegen-publication-generation.stage'
 
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CodegenSessionsRepository } from '../repositories/codegen-sessions.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -40,6 +40,48 @@ export class CodegenSessionPublicationPipelineService {
   private readonly stateMachine = new CodegenConversationStateMachine()
   private readonly generationStage: CodegenPublicationGenerationStage
   private readonly persistenceStage: CodegenPublicationPersistenceStage
+  private readonly logger = new Logger(CodegenSessionPublicationPipelineService.name)
+  /**
+   * Issue #1383 真根因（fire-and-forget 与 session 生命周期竞争）：
+   *   conversation service 用 `void publicationPipeline.run(...)` 起背景任务，
+   *   外部调用方（E2E 测试 afterEach、用户取消会话、session 提前删除）会在管线
+   *   完成前清空 session 记录，导致 run() 内 updateSession "No record was found".
+   *   追踪 in-flight 承诺，让外部能 awaitInFlight() 后再清理，并在 run() 内对
+   *   "session 已删" 错误降级为 warn-log 而不是 crash。
+   */
+  private readonly inFlight = new Set<Promise<void>>()
+
+  /** 等待所有 fire-and-forget pipeline 完成；测试 afterEach / 优雅停机使用 */
+  async awaitInFlight(): Promise<void> {
+    if (this.inFlight.size === 0) return
+    await Promise.allSettled(Array.from(this.inFlight))
+  }
+
+  /** 把 run() 注册到 in-flight，完成后自动 unregister；保留 await 语义不变 */
+  trackInFlight(promise: Promise<void>): Promise<void> {
+    this.inFlight.add(promise)
+    promise.finally(() => this.inFlight.delete(promise)).catch(() => undefined)
+    return promise
+  }
+
+  private async safeUpdateSession(
+    sessionId: string,
+    data: Parameters<CodegenSessionsRepository['updateSession']>[1],
+    context: string,
+  ): Promise<void> {
+    try {
+      await this.sessionsRepo.updateSession(sessionId, data)
+    } catch (error) {
+      // Prisma P2025 = "Record to update not found"; 在 fire-and-forget 场景下
+      //   session 可能已被上层删除（测试清理 / 用户取消），降级为 warn-log。
+      const code = (error as { code?: unknown } | null)?.code
+      if (code === 'P2025') {
+        this.logger.warn(`[${context}] sessionId=${sessionId} 已不存在，跳过 update（fire-and-forget 与 session 生命周期竞争）`)
+        return
+      }
+      throw error
+    }
+  }
 
   constructor(
     private readonly sessionsRepo: CodegenSessionsRepository,
@@ -94,20 +136,22 @@ export class CodegenSessionPublicationPipelineService {
         ?? await this.sessionsRepo.findSessionStrategyInstanceId(args.sessionId)
 
       if (!artifacts.validation.passed) {
-        await this.sessionsRepo.updateSession(
+        await this.safeUpdateSession(
           args.sessionId,
           this.stateMachine.buildRejectedUpdate({
             latestDraftCode: artifacts.validation.scriptCode,
             rejectReason: artifacts.validation.reason ?? '编译脚本结构校验失败',
             strategyInstanceId,
           }),
+          'validation-failed',
         )
         return
       }
 
-      await this.sessionsRepo.updateSession(
+      await this.safeUpdateSession(
         args.sessionId,
         this.stateMachine.buildValidatingConsistencyUpdate(artifacts.compiledScript),
+        'validating-consistency',
       )
 
       await this.persistenceStage.persistValidatedVersion({
@@ -119,7 +163,7 @@ export class CodegenSessionPublicationPipelineService {
       })
 
       if (artifacts.semanticConsistency.status !== 'PASSED') {
-        await this.sessionsRepo.updateSession(
+        await this.safeUpdateSession(
           args.sessionId,
           this.stateMachine.buildConsistencyFailedUpdate({
             latestSpecDesc: artifacts.sessionSpecDesc,
@@ -127,6 +171,7 @@ export class CodegenSessionPublicationPipelineService {
             rejectReason: this.stateMachine.buildConsistencyRejectReason(artifacts.semanticConsistency),
             strategyInstanceId,
           }),
+          'consistency-failed',
         )
         return
       }
@@ -150,7 +195,7 @@ export class CodegenSessionPublicationPipelineService {
           strategyInstanceId = bound.strategyInstanceId
         } catch (publishError) {
           const publishReason = publishError instanceof Error ? publishError.message : String(publishError)
-          await this.sessionsRepo.updateSession(
+          await this.safeUpdateSession(
             args.sessionId,
             this.stateMachine.buildRejectedUpdate({
               latestSpecDesc: artifacts.sessionSpecDesc,
@@ -158,6 +203,7 @@ export class CodegenSessionPublicationPipelineService {
               rejectReason: publishReason,
               strategyInstanceId: null,
             }),
+            'instance-bind-failed',
           )
           return
         }
@@ -198,7 +244,7 @@ export class CodegenSessionPublicationPipelineService {
         )
         if (publicationGate) {
           const reason = error instanceof Error ? error.message : String(error)
-          await this.sessionsRepo.updateSession(
+          await this.safeUpdateSession(
             args.sessionId,
             this.stateMachine.buildRejectedUpdate({
               latestSpecDesc: {
@@ -209,6 +255,7 @@ export class CodegenSessionPublicationPipelineService {
               rejectReason: reason,
               strategyInstanceId: strategyInstanceId ?? null,
             }),
+            'publication-gate',
           )
           return
         }
@@ -216,7 +263,7 @@ export class CodegenSessionPublicationPipelineService {
       }
 
       if (this.stateMachine.readPublishedConsistencyStatus(snapshot.consistencyReport) !== 'PASSED') {
-        await this.sessionsRepo.updateSession(
+        await this.safeUpdateSession(
           args.sessionId,
           this.stateMachine.buildConsistencyFailedUpdate({
             latestSpecDesc: {
@@ -227,11 +274,12 @@ export class CodegenSessionPublicationPipelineService {
             rejectReason: this.stateMachine.buildCompiledPublishRejectReason(snapshot.consistencyReport),
             strategyInstanceId: strategyInstanceId ?? null,
           }),
+          'compiled-consistency-failed',
         )
         return
       }
 
-      await this.sessionsRepo.updateSession(
+      await this.safeUpdateSession(
         args.sessionId,
         this.stateMachine.buildPublishedUpdate({
           latestDraftCode: artifacts.compiledScript,
@@ -242,12 +290,14 @@ export class CodegenSessionPublicationPipelineService {
           },
           strategyInstanceId: strategyInstanceId ?? null,
         }),
+        'published',
       )
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
-      await this.sessionsRepo.updateSession(
+      await this.safeUpdateSession(
         args.sessionId,
         this.stateMachine.buildRejectedUpdate({ rejectReason: reason }),
+        'pipeline-error-fallback',
       )
     }
   }

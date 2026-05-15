@@ -238,6 +238,22 @@ export interface AtomContract<TParams = Record<string, unknown>> {
    * PR1 默认值全部填 supported_executable；PR2 迁移 legacy ATOMS 非默认值条目。
    */
   classifier: AtomClassifier
+
+  /**
+   * Issue #1383 Lane A — Atom 自声明该 atom 在 strategy 五阶段（entry / exit / risk /
+   *   sizing / context）中能满足哪些阶段。SemanticExecutableSemanticsService 据此
+   *   判断 hasExecutableEntrySemantics / hasExecutableExitSemantics 等，不再硬编码
+   *   capability.domain === 'order_program' 等串。
+   *
+   * 缺省（undefined）→ atom 不参与任何 strategy phase（只作为辅助语境/护栏）。
+   * 详细 phase 语义见 issue：
+   *   - entry：locked 后可视为已具备入场触发
+   *   - exit：locked 后可视为已具备出场触发（含 forced-exit 类风险 atom）
+   *   - risk：风险管理 atom（stop loss / take profit / drawdown / ATR stop / partial TP）
+   *   - sizing：贡献 per-trade sizing 的 atom
+   *   - context：执行上下文（exchange / symbol / timeframe / market type）
+   */
+  fulfillsStrategyPhase?: ReadonlyArray<'entry' | 'exit' | 'risk' | 'sizing' | 'context'>
 }
 
 export type AtomContractKey = SupportedAtomKey

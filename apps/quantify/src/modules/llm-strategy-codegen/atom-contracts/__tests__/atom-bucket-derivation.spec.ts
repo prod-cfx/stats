@@ -77,7 +77,7 @@ describe('atom-bucket-derivation (issue #1364 PR1)', () => {
   // 这里用 hardcoded 数字作为独立锚——新增/删除 atom 必须同步更新此值，避免双表
   // （ATOM_BUCKETS + ATOM_CONTRACT_REGISTRY）同时漏注册同一 key 时无 spec 捕获。
   it('注册表 size 等于预期锚（新增 atom 必须同步更新此数字）', () => {
-    const EXPECTED_ATOM_COUNT = 53
+    const EXPECTED_ATOM_COUNT = 56
     expect(getAllRegisteredAtomKeys().length).toBe(EXPECTED_ATOM_COUNT)
   })
 })

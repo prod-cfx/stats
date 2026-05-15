@@ -43,6 +43,7 @@ import type {
 } from '../atom-contracts/atom-contract-emit.types'
 import type { AtomContractEmit, AtomContractKey } from '../atom-contracts/atom-contract-types'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+import { extractAtrStopParams } from './atr-stop-params'
 import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
@@ -2436,6 +2437,23 @@ export class CanonicalSpecV2IrCompilerService {
         id: rule.id,
         kind: rule.condition.key === 'risk.atr_multiple_stop' ? 'atrMultipleStop' : 'atrMultipleTakeProfit',
         params: { multiple },
+        actions: this.compileRiskPredicateActions(rule),
+      }
+    }
+
+    if (rule.condition.key === 'risk.atr_stop') {
+      // Issue #1383 Round 1 M3/M4：参数提取走 extractAtrStopParams 单一来源，
+      //   与 canonical-spec-builder 复用同规则，period 严格 typeof number，
+      //   避免双源漂移。
+      const atrParams = extractAtrStopParams(rule.condition.params)
+      if (atrParams === null) {
+        return null
+      }
+      context.runtimeRequirements.helpers.add('atr')
+      return {
+        id: rule.id,
+        kind: 'atrTrailingStop',
+        params: atrParams,
         actions: this.compileRiskPredicateActions(rule),
       }
     }

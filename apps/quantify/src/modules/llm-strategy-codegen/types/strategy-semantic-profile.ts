@@ -26,6 +26,7 @@ export type StrategySemanticRuleKey =
   | 'position_loss_pct'
   | 'risk.atr_multiple_stop'
   | 'risk.atr_multiple_take_profit'
+  | 'risk.atr_stop'
   | 'risk.remembered_level_stop'
   | 'risk.take_profit_pct'
   | 'risk.trailing_stop_pct'

@@ -4,18 +4,21 @@ import { UnsupportedFallbackService } from '../unsupported-fallback.service'
 describe('UnsupportedFallbackService', () => {
   const service = new UnsupportedFallbackService(new SemanticAtomRegistryService())
 
+  // Issue #1383 Lane A：risk.atr_stop 已升级为 supported_executable，不再走
+  //   recognized_unsupported fallback 路径。下列用例改用仍为 unsupported 的
+  //   volume.spike（成交量放大）作为代表性 case。
   it('builds one executable replacement prompt for unsupported atoms', () => {
     const fallback = service.buildPendingFallback([
       {
-        key: 'risk.atr_stop',
-        displayName: 'ATR 动态止损',
-        reasonCode: 'atr_stop_public_beta_unsupported',
-        publicReason: 'ATR 动态止损当前公测暂未支持生成和回测。',
+        key: 'volume.spike',
+        displayName: '成交量放大',
+        reasonCode: 'volume_condition_public_beta_unsupported',
+        publicReason: '成交量条件当前公测暂未支持生成和回测。',
       },
     ])
 
     expect(fallback).not.toBeNull()
-    expect(fallback!.prompt).toContain('我听懂了，你要的是 ATR 动态止损')
+    expect(fallback!.prompt).toContain('我听懂了，你要的是 成交量放大')
     expect(fallback!.prompt).toContain('是否改用这个策略继续')
     expect(fallback!.recommendedStrategy.patch.risk).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'risk.stop_loss_pct' }),
@@ -26,15 +29,15 @@ describe('UnsupportedFallbackService', () => {
   it('builds English replacement prompt for unsupported atoms', () => {
     const fallback = service.buildPendingFallback([
       {
-        key: 'risk.atr_stop',
-        displayName: 'ATR 动态止损',
-        reasonCode: 'atr_stop_public_beta_unsupported',
-        publicReason: 'ATR 动态止损当前公测暂未支持生成和回测。',
+        key: 'volume.spike',
+        displayName: '成交量放大',
+        reasonCode: 'volume_condition_public_beta_unsupported',
+        publicReason: '成交量条件当前公测暂未支持生成和回测。',
       },
     ], [], 'en')
 
     expect(fallback).not.toBeNull()
-    expect(fallback!.prompt).toContain('I understand you want: risk.atr_stop')
+    expect(fallback!.prompt).toContain('I understand you want: volume.spike')
     expect(fallback!.prompt).toContain('Switch to this strategy and continue')
     expect(fallback!.prompt).not.toContain('是否改用')
     expect(fallback!.recommendedStrategy.description).toContain('Go long when MA20 crosses above MA50')
@@ -77,20 +80,21 @@ describe('UnsupportedFallbackService', () => {
   )
 
   it('does not mutate registry replacement when fallback patch is mutated by caller', () => {
+    // Issue #1383 Lane A：使用仍为 unsupported 的 volume.spike 代替已升级的 atr_stop。
     const first = service.buildPendingFallback([
       {
-        key: 'risk.atr_stop',
-        displayName: 'ATR 动态止损',
-        reasonCode: 'atr_stop_public_beta_unsupported',
-        publicReason: 'ATR 动态止损当前公测暂未支持生成和回测。',
+        key: 'volume.spike',
+        displayName: '成交量放大',
+        reasonCode: 'volume_condition_public_beta_unsupported',
+        publicReason: '成交量条件当前公测暂未支持生成和回测。',
       },
     ])
     const second = service.buildPendingFallback([
       {
-        key: 'risk.atr_stop',
-        displayName: 'ATR 动态止损',
-        reasonCode: 'atr_stop_public_beta_unsupported',
-        publicReason: 'ATR 动态止损当前公测暂未支持生成和回测。',
+        key: 'volume.spike',
+        displayName: '成交量放大',
+        reasonCode: 'volume_condition_public_beta_unsupported',
+        publicReason: '成交量条件当前公测暂未支持生成和回测。',
       },
     ])
 

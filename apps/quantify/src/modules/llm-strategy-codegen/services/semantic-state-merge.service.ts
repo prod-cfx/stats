@@ -5,6 +5,7 @@ import type {
   SemanticActionState,
   SemanticAtomContract,
   SemanticContextSlotState,
+  SemanticOrchestrationNode,
   SemanticPositionConstraintState,
   SemanticPositionState,
   SemanticRiskState,
@@ -12,6 +13,21 @@ import type {
   SemanticTriggerState,
 } from '../types/semantic-state'
 import { normalizeRiskSemantics } from './semantic-state-normalization'
+
+// #1383 Lane B：所有 atom bucket entry 必须实现的最小 identity shape，
+// 供 dedupeByAtomIdentity 用 (key, phase, stableParamsHash, openSlots signature) 折叠重复条目。
+interface AtomLikeEntry {
+  key?: string
+  phase?: string
+  params?: Record<string, unknown>
+  status: 'open' | 'locked' | 'superseded'
+  source?: 'user_explicit' | 'inferred' | 'derived'
+  value?: unknown
+  // openSlots 用于 identity slot-key signature — 同 (key, phase, params) 但 openSlots
+  // 不同的「合法 sibling atoms」（典型场景：用户先后分两轮设定两条同 key 的 MA 上穿条件，
+  // 各自带独立 reference.period openSlot）不能被 dedup 折叠。
+  openSlots?: readonly { slotKey: string }[]
+}
 
 @Injectable()
 export class SemanticStateMergeService {
@@ -26,6 +42,13 @@ export class SemanticStateMergeService {
       trigger: this.mergeTriggers(input.persisted.trigger, input.derived.trigger),
       action: this.mergeActions(input.persisted.action, input.derived.action),
       risk: this.mergeRisk(input.persisted.risk, input.derived.risk),
+      // #1383 Lane B：补齐 orchestration / positionConstraint 两个 bucket 的显式合并，
+      // 否则 `...input.derived` 会用 derived 的空数组静默覆盖持久态。
+      orchestration: this.mergeOrchestration(input.persisted.orchestration, input.derived.orchestration),
+      positionConstraint: this.mergePositionConstraintBucket(
+        input.persisted.positionConstraint,
+        input.derived.positionConstraint,
+      ),
       position: this.mergePosition(input.persisted.position, input.derived.position),
       contextSlots: this.mergeContextSlots(input.persisted.contextSlots, input.derived.contextSlots),
       normalizationNotes: [...new Set([...input.persisted.normalizationNotes, ...input.derived.normalizationNotes])],
@@ -96,7 +119,7 @@ export class SemanticStateMergeService {
       }
     }
 
-    return this.coalesceEquivalentTriggers(next)
+    return this.dedupeByAtomIdentity(this.coalesceEquivalentTriggers(next))
   }
 
   private findBestTriggerMatchIndex(
@@ -176,7 +199,7 @@ export class SemanticStateMergeService {
       }
     }
 
-    return next
+    return this.dedupeByAtomIdentity(next)
   }
 
   private mergeRisk(
@@ -229,7 +252,83 @@ export class SemanticStateMergeService {
       }
     }
 
-    return normalizeRiskSemantics(next)
+    return this.dedupeByAtomIdentity(normalizeRiskSemantics(next))
+  }
+
+  // #1383 Lane B：orchestration bucket。identity = atom `key`（缺失则 fallback id）。
+  private mergeOrchestration(
+    persisted: SemanticOrchestrationNode[],
+    derived: SemanticOrchestrationNode[],
+  ): SemanticOrchestrationNode[] {
+    const next = derived.map(node => this.cloneOrchestrationNode(node))
+    const consumed = new Set<number>()
+
+    for (const persistedNode of persisted) {
+      const matchIndex = next.findIndex((candidate, index) =>
+        !consumed.has(index) && this.isSameOrchestrationIdentity(persistedNode, candidate))
+      if (matchIndex < 0) {
+        next.push(this.cloneOrchestrationNode(persistedNode))
+        continue
+      }
+
+      consumed.add(matchIndex)
+      const derivedNode = next[matchIndex]!
+      const preferPersisted = this.compareNodeStrength(persistedNode, derivedNode) > 0
+      const stronger = preferPersisted ? persistedNode : derivedNode
+      const weaker = preferPersisted ? derivedNode : persistedNode
+
+      next[matchIndex] = {
+        ...weaker,
+        ...stronger,
+        id: persistedNode.id,
+        params: preferPersisted
+          ? { ...derivedNode.params, ...persistedNode.params }
+          : { ...persistedNode.params, ...derivedNode.params },
+        openSlots: this.mergeOpenSlotsForMatchedNodes(
+          persistedNode,
+          derivedNode,
+          [...persistedNode.openSlots],
+          [...derivedNode.openSlots],
+        ),
+        evidence: stronger.evidence ?? weaker.evidence,
+      } as SemanticOrchestrationNode
+    }
+
+    return this.dedupeByAtomIdentity(next)
+  }
+
+  private cloneOrchestrationNode(node: SemanticOrchestrationNode): SemanticOrchestrationNode {
+    return {
+      ...node,
+      params: { ...node.params },
+      openSlots: node.openSlots.map(slot => ({ ...slot })),
+    }
+  }
+
+  private isSameOrchestrationIdentity(
+    left: SemanticOrchestrationNode,
+    right: SemanticOrchestrationNode,
+  ): boolean {
+    if (left.kind !== right.kind) return false
+    // Issue #1383 Round 1 M7：identity 同时比 (key, stableParamsHash)，
+    //   避免两个同名 program（如 program.dynamic_grid 各持不同 lower/upper）
+    //   仅因 key 相同被误折叠 + 后续 params 浅合并丢嵌套。
+    if (left.key !== undefined && right.key !== undefined) {
+      if (left.key !== right.key) return false
+      return this.stableParamsHash(left.params) === this.stableParamsHash(right.params)
+    }
+    return left.id === right.id
+  }
+
+  // #1383 Lane B：positionConstraint bucket 顶层入口。
+  // 复用既有 mergePositionConstraints（基于 byKey + identity = constraint.key），
+  // 再额外跑一遍 dedupeByAtomIdentity 以折叠真重复。
+  private mergePositionConstraintBucket(
+    persisted: SemanticPositionConstraintState[],
+    derived: SemanticPositionConstraintState[],
+  ): SemanticPositionConstraintState[] {
+    const merged = this.mergePositionConstraints(persisted, derived) ?? []
+    return this.dedupeByAtomIdentity([...merged])
   }
 
   private mergePosition(
@@ -938,5 +1037,62 @@ export class SemanticStateMergeService {
   private isTrueDuplicateRisk(left: SemanticRiskState, right: SemanticRiskState): boolean {
     return left.key === right.key
       && this.stableParamsHash(left.params) === this.stableParamsHash(right.params)
+  }
+
+  /**
+   * #1383 Lane B：所有 bucket merge 收尾统一过此 helper。
+   * identity = (key, phase, stableParamsHash, openSlots slotKey signature)；
+   * 同 identity 多条折叠为一条，保留 compareNodeStrength 最强的（locked > superseded > open；
+   * user_explicit > inferred > derived）。修复"止损/止盈渲染两次"等回归 — persisted/derived
+   * 各自走过 identity match 后仍残留同 atom 多份的边界场景。
+   *
+   * openSlots slotKey 列入 identity 是为了保留合法 sibling atom：同 (key, phase, params) 但
+   * 持有不同 open slot 的两条 atom（例如两条 indicator.above 各自带 reference.period.entry.a/b）
+   * 不能被折叠为一条。
+   */
+  private dedupeByAtomIdentity<T extends AtomLikeEntry>(entries: T[]): T[] {
+    const keptByIdentity = new Map<string, T>()
+    const result: T[] = []
+    const placeholderByIdentity = new Map<string, number>()
+
+    for (const entry of entries) {
+      const identity = this.computeAtomIdentityKey(entry)
+      const existingIndex = placeholderByIdentity.get(identity)
+      if (existingIndex === undefined) {
+        placeholderByIdentity.set(identity, result.length)
+        keptByIdentity.set(identity, entry)
+        result.push(entry)
+        continue
+      }
+
+      const incumbent = keptByIdentity.get(identity)!
+      // strict greater：等强保留先到（与现有 tie-break 一致：等强偏 derived，
+      // 但 dedupe 是 post-pass，"先到"已是 mergeXxx 决出的赢家）。
+      if (this.compareNodeStrength(entry, incumbent) > 0) {
+        result[existingIndex] = entry
+        keptByIdentity.set(identity, entry)
+      }
+    }
+
+    return result
+  }
+
+  private computeAtomIdentityKey(entry: AtomLikeEntry): string {
+    const key = entry.key ?? '__nokey__'
+    const phase = entry.phase ?? '__nophase__'
+    const paramsHash = this.stableParamsHash(entry.params)
+    // openSlots signature 把"同 atom 不同 open slot"sibling 区分出去；
+    // Issue #1383 Round 1 M6：含 slotKey + fieldPath，避免两条 sibling atom
+    //   (例如 EMA20 / EMA60 各自 reference.period.entry.a / .b) 因 slotKey 同名
+    //   被错合并。排序保证顺序无关。
+    const slotSignatures = (entry.openSlots ?? [])
+      .map((slot) => {
+        const slotKey = slot.slotKey ?? ''
+        const fieldPath = (slot as { fieldPath?: string }).fieldPath ?? ''
+        return `${slotKey}@${fieldPath}`
+      })
+      .sort()
+      .join(',')
+    return `${key}|${phase}|${paramsHash}|${slotSignatures}`
   }
 }

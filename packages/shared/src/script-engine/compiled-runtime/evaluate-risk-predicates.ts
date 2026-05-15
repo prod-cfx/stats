@@ -1,12 +1,13 @@
 import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
 import type { CompiledGuardState } from './evaluate-guards'
 import { atr } from '../helpers/technical-indicators'
+import { evaluateAtrTrailingStop } from './evaluate-atr-stop'
 
 interface RiskPredicateProgramNode {
   id: string
   payload: {
     id?: string
-    kind?: 'atrMultipleStop' | 'atrMultipleTakeProfit' | 'rememberedLevelStop' | 'timeStopBars'
+    kind?: 'atrMultipleStop' | 'atrMultipleTakeProfit' | 'atrTrailingStop' | 'rememberedLevelStop' | 'timeStopBars'
     params?: Readonly<Record<string, number | string | boolean>>
     actions?: ReadonlyArray<{
       kind?: 'FORCE_EXIT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
@@ -84,6 +85,8 @@ function isRiskPredicateBreached(
       return isAtrMultipleBreached(ctx, predicate, 'stop')
     case 'atrMultipleTakeProfit':
       return isAtrMultipleBreached(ctx, predicate, 'takeProfit')
+    case 'atrTrailingStop':
+      return isAtrTrailingStopBreached(ctx, predicate)
     case 'rememberedLevelStop':
       return isRememberedLevelStopBreached(ctx, predicate)
     case 'timeStopBars':
@@ -150,6 +153,45 @@ function isAtrMultipleBreached(
   return mode === 'stop'
     ? currentPrice >= entryPrice + threshold
     : currentPrice <= entryPrice - threshold
+}
+
+function isAtrTrailingStopBreached(
+  ctx: StrategyExecutionContextV1,
+  predicate: RiskPredicateProgramNode,
+): boolean {
+  const qty = readPositionQty(ctx)
+  if (qty === 0) return false
+
+  const entryPrice = readEntryPrice(ctx)
+  const currentPrice = readCurrentPrice(ctx)
+  const multiplier = readPositiveNumber(predicate.payload.params?.multiplier)
+  const periodRaw = predicate.payload.params?.period
+  const period = typeof periodRaw === 'number' && Number.isInteger(periodRaw) && periodRaw > 0
+    ? periodRaw
+    : 14
+
+  if (entryPrice === null || currentPrice === null || multiplier === null) return false
+
+  const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+  if (bars.length < period + 1) return false
+
+  const position = (ctx.position ?? {}) as Record<string, unknown>
+  const barsHeldRaw = position.barsHeld
+  const barsHeld = typeof barsHeldRaw === 'number' && Number.isInteger(barsHeldRaw) && barsHeldRaw >= 0
+    ? barsHeldRaw
+    : bars.length - 1
+
+  const result = evaluateAtrTrailingStop({
+    qty,
+    currentPrice,
+    entryPrice,
+    barsHeld,
+    multiplier,
+    period,
+    bars,
+  })
+
+  return result.breached
 }
 
 function isRememberedLevelStopBreached(

@@ -600,6 +600,14 @@
       ]
     },
     {
+      "key": "risk.atr_stop",
+      "category": "risk",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:risk.atr_stop"
+    },
+    {
       "key": "risk.boundary_guard",
       "category": "risk",
       "status": "skipped",

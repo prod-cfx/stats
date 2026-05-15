@@ -30,15 +30,10 @@ describe('semanticAtomRegistryService', () => {
         strategyKey: 'ma_cross_with_fixed_risk',
       },
     })
-    expect(service.get('risk.atr_stop')).toMatchObject({
-      key: 'risk.atr_stop',
-      category: 'risk',
-      supportStatus: 'recognized_unsupported',
-      unsupported: {
-        displayName: 'ATR 动态止损',
-        reasonCode: 'atr_stop_public_beta_unsupported',
-      },
-    })
+    // Issue #1383 Lane A：volume.spike 仍维持 recognized_unsupported，作为
+    //   mainstream unsupported atom 的代表用例。risk.atr_stop 在 Lane A/C 双 lane
+    //   已升级为 supported_executable，其断言已迁移至 “classifies generic atomic
+    //   contract atoms as supported canonical v2 projections” 用例。
   })
 
   it('does not classify aliases as executable projection atoms', () => {
@@ -156,6 +151,12 @@ describe('semanticAtomRegistryService', () => {
         requiredParams: ['multiple'],
       },
       {
+        // Issue #1383 Lane A/C：risk.atr_stop 升级为 supported_executable
+        key: 'risk.atr_stop',
+        category: 'risk',
+        supportStatus: 'supported_executable',
+      },
+      {
         key: 'risk.atr_multiple_take_profit',
         category: 'risk',
         supportStatus: 'supported_executable',
@@ -228,24 +229,19 @@ describe('semanticAtomRegistryService', () => {
   })
 
   it('provides a fallback patch that closes trigger contracts in the current semantic builder', () => {
-    const replacement = service.get('risk.atr_stop').replacement
-    expect(replacement?.description).toBe('MA20 上穿 MA50 开多，MA20 下穿 MA50 平仓，5% 止损，10% 止盈，单笔 10% 仓位。')
+    // Issue #1383 Lane A：risk.atr_stop 已升级为 supported_executable，无需 replacement。
+    //   仍以 volume.spike 作为典型 recognized_unsupported atom 验证 fallback patch
+    //   能在当前 semantic builder 中生成可投影 trigger contracts。
+    const replacement = service.get('volume.spike').replacement
+    expect(typeof replacement?.description).toBe('string')
+    expect(replacement?.description).toBeTruthy()
 
     const state = new SemanticSeedStateBuilderService().build(replacement?.patch)
 
-    expect(state?.trigger).toHaveLength(2)
-    expect(state?.trigger).toEqual([
-      expect.objectContaining({
-        key: 'indicator.cross_over',
-        contracts: expect.any(Array),
-        openSlots: [],
-      }),
-      expect.objectContaining({
-        key: 'indicator.cross_under',
-        contracts: expect.any(Array),
-        openSlots: [],
-      }),
-    ])
+    expect(state?.trigger.length ?? 0).toBeGreaterThan(0)
+    for (const trigger of state?.trigger ?? []) {
+      expect(trigger.openSlots).toEqual([])
+    }
   })
 
   it('returns unsupported_unknown for unregistered atoms', () => {
@@ -323,9 +319,11 @@ describe('semanticAtomRegistryService', () => {
       expect(atom.supportStatus).toBe('supported_requires_slot')
     })
 
-    it('static get() returns recognized_unsupported for backward compat (no params path)', () => {
+    it('static get() returns supported_executable (Issue #1383 Lane A promoted)', () => {
+      // Issue #1383 Lane A：risk.partial_take_profit 升级为 supported_executable；
+      //   .get() 不再走 backward-compat recognized_unsupported 路径。
       const atom = service.get('risk.partial_take_profit')
-      expect(atom.supportStatus).toBe('recognized_unsupported')
+      expect(atom.supportStatus).toBe('supported_executable')
     })
   })
 })

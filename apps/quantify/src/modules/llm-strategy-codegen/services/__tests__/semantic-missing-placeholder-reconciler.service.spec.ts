@@ -1,14 +1,17 @@
 import type { SemanticSlotState, SemanticState, SemanticTriggerState } from '../../types/semantic-state'
+import { SemanticExecutableSemanticsService } from '../semantic-executable-semantics.service'
 import { SemanticMissingPlaceholderReconcilerService } from '../semantic-missing-placeholder-reconciler.service'
 
 describe('SemanticMissingPlaceholderReconcilerService', () => {
-  const service = new SemanticMissingPlaceholderReconcilerService()
+  // Issue #1383 Lane A：reconciler 现注入 SemanticExecutableSemanticsService 完成
+  //   registry-driven 判定；spec 同步切到注入构造。
+  const service = new SemanticMissingPlaceholderReconcilerService(new SemanticExecutableSemanticsService())
 
   it('removes an open missing entry placeholder when a real entry trigger exists', () => {
     const state = createSemanticState({
       trigger: [
         createMissingPlaceholder('entry'),
-        createTrigger({ id: 'trigger-entry', key: 'ma.cross_over', phase: 'entry' }),
+        createTrigger({ id: 'trigger-entry', key: 'indicator.cross_over', phase: 'entry' }),
       ],
     })
 
@@ -16,7 +19,7 @@ describe('SemanticMissingPlaceholderReconcilerService', () => {
 
     expect(nextState).not.toBe(state)
     expect(nextState.trigger).toEqual([
-      createTrigger({ id: 'trigger-entry', key: 'ma.cross_over', phase: 'entry' }),
+      createTrigger({ id: 'trigger-entry', key: 'indicator.cross_over', phase: 'entry' }),
     ])
   })
 
@@ -42,7 +45,7 @@ describe('SemanticMissingPlaceholderReconcilerService', () => {
     const state = createSemanticState({
       trigger: [
         createMissingPlaceholder('exit'),
-        createTrigger({ id: 'trigger-exit', key: 'take_profit.price_cross', phase: 'exit' }),
+        createTrigger({ id: 'trigger-exit', key: 'indicator.cross_under', phase: 'exit' }),
       ],
     })
 
@@ -50,7 +53,7 @@ describe('SemanticMissingPlaceholderReconcilerService', () => {
 
     expect(nextState).not.toBe(state)
     expect(nextState.trigger).toEqual([
-      createTrigger({ id: 'trigger-exit', key: 'take_profit.price_cross', phase: 'exit' }),
+      createTrigger({ id: 'trigger-exit', key: 'indicator.cross_under', phase: 'exit' }),
     ])
   })
 
@@ -61,7 +64,7 @@ describe('SemanticMissingPlaceholderReconcilerService', () => {
         createMissingPlaceholder('entry'),
         createTrigger({
           id: 'trigger-entry-open',
-          key: 'ma.cross_over',
+          key: 'indicator.cross_over',
           phase: 'entry',
           status: 'open',
           openSlots: [openSlot],
@@ -76,7 +79,7 @@ describe('SemanticMissingPlaceholderReconcilerService', () => {
       createMissingPlaceholder('entry'),
       createTrigger({
         id: 'trigger-entry-open',
-        key: 'ma.cross_over',
+        key: 'indicator.cross_over',
         phase: 'entry',
         status: 'open',
         openSlots: [openSlot],

@@ -469,6 +469,28 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['价格离开区间后重新计算网格'],
     negativeExamples: ['区间不变一直挂单'],
     goldenUtterances: ['突破网格边界后重置交易区间'],
+    // Issue #1383：positionConstraint bucket 的 grid.range_rebalance 由
+    //   buildPositionSummary 调度此 renderer。triggers 列表里的 grid 触发器
+    //   走 semantic-state-projection 的 inline 分支；这里覆盖 constraint 路径，
+    //   把 rangeLower / rangeUpper / stepPct / sideMode 暴露到 specDesc.summary，
+    //   避免用户原文里的 60000-80000 / 0.5% 这种关键参数被静默丢弃。
+    displayRenderer: ({ params }) => {
+      const lower = readNumberParam(params, ['rangeLower', 'rangeMin', 'lower'])
+      const upper = readNumberParam(params, ['rangeUpper', 'rangeMax', 'upper'])
+      const stepPct = readNumberParam(params, ['stepPct', 'gridStepPct', 'spacingPct'])
+      const sideMode = typeof params?.sideMode === 'string' ? params.sideMode : ''
+      const sideText = sideMode === 'long_only'
+        ? '只做多'
+        : sideMode === 'short_only'
+          ? '只做空'
+          : sideMode === 'both' || sideMode === 'bidirectional'
+            ? '双向'
+            : ''
+      const rangeText = lower !== null && upper !== null ? `${lower}-${upper}` : ''
+      const stepText = stepPct !== null ? `每格 ${stepPct}%` : ''
+      const parts = [sideText && `${sideText}网格`, rangeText && `区间 ${rangeText}`, stepText].filter(Boolean)
+      return parts.length > 0 ? `网格区间再平衡：${parts.join('，')}` : '网格区间再平衡'
+    },
   }),
   presentation({
     key: 'open_long',
@@ -670,6 +692,15 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['盈利 10% 止盈'],
     negativeExamples: ['亏损 5% 止损'],
     goldenUtterances: ['入场后盈利 10% 分批止盈'],
+  }),
+  // Issue #1383 Lane A/C：risk.atr_stop 升级为 supported_executable，补齐 legacy entry
+  presentation({
+    key: 'risk.atr_stop',
+    publicName: 'ATR 动态止损',
+    aliases: ['ATR 止损', '波动止损'],
+    positiveExamples: ['2 倍 ATR 作为止损'],
+    negativeExamples: ['固定百分比止损'],
+    goldenUtterances: ['账户回撤超过 2% ATR 后退出'],
   }),
   presentation({
     key: 'risk.atr_multiple_stop',
@@ -1271,6 +1302,18 @@ function stringParam(params: Record<string, unknown>, key: string, fallback: str
 function numberParam(params: Record<string, unknown>, key: string, fallback: number): number {
   const value = params[key]
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function readNumberParam(
+  params: Record<string, unknown> | undefined,
+  keys: readonly string[],
+): number | null {
+  if (!params) return null
+  for (const key of keys) {
+    const value = params[key]
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+  }
+  return null
 }
 
 function formatPercentLikeValue(value: number): number {

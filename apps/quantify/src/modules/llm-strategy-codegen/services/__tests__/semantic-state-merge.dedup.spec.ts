@@ -1,8 +1,17 @@
 // #1162 critic Major #2 修订：直接守 mergeActions/mergeRisk 的 fallback push 真重复 dedup
 //   INVARIANT-H 在 corpus spec 用同 utterance reduce 3 次会走 strict identity match 路径，
 //   不抓 fallback push 分支；本 spec 用合成 state 直接覆盖 fallback push 的真重复 dedup 逻辑。
+// #1383 Lane B：额外覆盖 5 个 atom bucket 的 dedupeByAtomIdentity 收尾 pass — persisted+derived
+//   各持一份完全相同 atom（key/params）时，merge 结果应只剩 1 条（修复"止损/止盈渲染两次"）。
 
-import type { SemanticActionState, SemanticRiskState, SemanticState } from '../../types/semantic-state'
+import type {
+  SemanticActionState,
+  SemanticOrchestrationNode,
+  SemanticPositionConstraintState,
+  SemanticRiskState,
+  SemanticState,
+  SemanticTriggerState,
+} from '../../types/semantic-state'
 import { SemanticStateMergeService } from '../semantic-state-merge.service'
 
 function makeState(overrides: Partial<SemanticState>): SemanticState {
@@ -84,6 +93,97 @@ describe('SemanticStateMergeService — fallback push 真重复 dedup (#1162 Tas
     const merged = merge.merge({ persisted, derived })
     const stopLossRisks = merged.risk.filter(r => r.key === 'risk.stop_loss_pct')
     expect(stopLossRisks.length).toBeLessThanOrEqual(1)
+  })
+
+  describe('#1383 Lane B — dedupeByAtomIdentity 5-bucket 覆盖', () => {
+    function makeRiskWith(key: string, id: string, params: Record<string, unknown>): SemanticRiskState {
+      return { id, key, params, status: 'locked', source: 'user_explicit', openSlots: [] }
+    }
+    function makeTrig(id: string): SemanticTriggerState {
+      return {
+        id,
+        key: 'indicator.above',
+        phase: 'entry',
+        params: { indicator: 'ema20', period: 20 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }
+    }
+    function makeAct(id: string): SemanticActionState {
+      return {
+        id,
+        key: 'open_long',
+        params: { orderType: 'market' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }
+    }
+    function makeOrch(id: string): SemanticOrchestrationNode {
+      return {
+        id,
+        kind: 'program',
+        key: 'runtime.schedule',
+        params: { cron: '* * * * *' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [],
+      }
+    }
+    function makePC(id: string): SemanticPositionConstraintState {
+      return {
+        id,
+        key: 'position.dca_schedule',
+        params: { tiers: [{ ratio: 0.5 }] },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }
+    }
+
+    it('risk.stop_loss_pct 同 atom 持久+派生各 1 份 → 合并后仅 1 份', () => {
+      const persisted = makeState({ risk: [makeRiskWith('risk.stop_loss_pct', 'r1', { valuePct: 5 })] })
+      const derived = makeState({ risk: [makeRiskWith('risk.stop_loss_pct', 'r2', { valuePct: 5 })] })
+      const merged = merge.merge({ persisted, derived })
+      expect(merged.risk.filter(r => r.key === 'risk.stop_loss_pct')).toHaveLength(1)
+    })
+
+    it('risk.take_profit_pct 同 atom 持久+派生各 1 份 → 合并后仅 1 份（修复止盈渲染两次）', () => {
+      const persisted = makeState({ risk: [makeRiskWith('risk.take_profit_pct', 'r1', { valuePct: 8 })] })
+      const derived = makeState({ risk: [makeRiskWith('risk.take_profit_pct', 'r2', { valuePct: 8 })] })
+      const merged = merge.merge({ persisted, derived })
+      expect(merged.risk.filter(r => r.key === 'risk.take_profit_pct')).toHaveLength(1)
+    })
+
+    it('trigger 同 atom 持久+派生各 1 份 → 合并后仅 1 份', () => {
+      const persisted = makeState({ trigger: [makeTrig('t1')] })
+      const derived = makeState({ trigger: [makeTrig('t2')] })
+      const merged = merge.merge({ persisted, derived })
+      expect(merged.trigger).toHaveLength(1)
+    })
+
+    it('action 同 atom 持久+派生各 1 份 → 合并后仅 1 份', () => {
+      const persisted = makeState({ action: [makeAct('a1')] })
+      const derived = makeState({ action: [makeAct('a2')] })
+      const merged = merge.merge({ persisted, derived })
+      expect(merged.action.filter(a => a.key === 'open_long')).toHaveLength(1)
+    })
+
+    it('orchestration 同 atom 持久+派生各 1 份 → 合并后仅 1 份', () => {
+      const persisted = makeState({ orchestration: [makeOrch('o1')] })
+      const derived = makeState({ orchestration: [makeOrch('o2')] })
+      const merged = merge.merge({ persisted, derived })
+      expect(merged.orchestration.filter(o => o.key === 'runtime.schedule')).toHaveLength(1)
+    })
+
+    it('positionConstraint 同 atom 持久+派生各 1 份 → 合并后仅 1 份', () => {
+      const persisted = makeState({ positionConstraint: [makePC('pc1')] })
+      const derived = makeState({ positionConstraint: [makePC('pc2')] })
+      const merged = merge.merge({ persisted, derived })
+      expect(merged.positionConstraint.filter(pc => pc.key === 'position.dca_schedule')).toHaveLength(1)
+    })
   })
 
   it('stableParamsHash 递归稳定：嵌套对象 key 顺序不影响判定（critic Major #1）', () => {

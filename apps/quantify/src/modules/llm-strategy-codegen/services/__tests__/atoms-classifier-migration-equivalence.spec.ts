@@ -174,10 +174,11 @@ describe('atoms-classifier-migration-equivalence', () => {
       expect((entry.classifier as { unsupportedMeta?: { reasonCode?: string } }).unsupportedMeta?.reasonCode).toBe('indicator_static_compare_public_beta_unsupported')
     })
 
-    it('risk.partial_take_profit has partial_take_profit_public_beta_unsupported', () => {
+    it('risk.partial_take_profit promoted to supported_executable (Issue #1383 Lane A)', () => {
+      // Issue #1383 Lane A：risk.partial_take_profit 升级为 supported_executable，
+      //   不再走 recognized_unsupported reasonCode 路径。
       const entry = ATOM_CONTRACT_REGISTRY['risk.partial_take_profit']
-      expect(entry.classifier.supportStatus).toBe('unsupported_partial_take_profit_public_beta_unsupported')
-      expect((entry.classifier as { unsupportedMeta?: { reasonCode?: string } }).unsupportedMeta?.reasonCode).toBe('partial_take_profit_public_beta_unsupported')
+      expect(entry.classifier.supportStatus).toBe('supported_executable')
     })
   })
 

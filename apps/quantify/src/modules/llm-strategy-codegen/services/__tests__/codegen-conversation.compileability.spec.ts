@@ -87,17 +87,21 @@ describe('codegen-conversation — executable atom readiness uses capability gra
   const anySvc = svc as any
 
   it('does not require trigger-style entry/exit for a complete order program', () => {
+    // Issue #1383 Lane A：执行语义判定由 atom 自声明的 fulfillsStrategyPhase 决定。
+    //   grid.range_rebalance 在 atom-contract-registry 中声明 ['entry','exit','sizing']，
+    //   locked 后即视为完整 order program，不再要求 trigger 阶段补位。
     const state = createSemanticState({
       trigger: [missingExecutableAtom('entry'), missingExecutableAtom('exit')],
-      action: [{
-        id: 'action-grid-ladder',
-        key: 'action.grid_ladder',
+      positionConstraint: [{
+        id: 'constraint-grid-range-rebalance',
+        key: 'grid.range_rebalance',
+        params: { lower: 60000, upper: 80000, spacingPct: 0.5 },
         status: 'locked',
         source: 'user_explicit',
         openSlots: [],
         contracts: [{
-          id: 'contract-grid-ladder',
-          kind: 'action',
+          id: 'contract-grid-range-rebalance',
+          kind: 'position',
           capabilities: [{
             domain: 'order_program',
             verb: 'maintain',
