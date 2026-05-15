@@ -2383,6 +2383,33 @@ describe('SemanticSeedStateBuilderService.toActionState — action.* 前缀归�
       expect(state!.positionConstraint).toHaveLength(1)
     })
 
+    it('keeps bare numeric grid sizing as ratio rather than quote amount', () => {
+      const state = builder.build({
+        atoms: [{
+          key: 'grid.range_rebalance',
+          params: {
+            rangeLower: 60000,
+            rangeUpper: 80000,
+            sideMode: 'bidirectional',
+            perOrderSizing: 0.1,
+          },
+        }],
+      })
+      const budgetCapability = state?.positionConstraint[0]?.contracts
+        ?.flatMap(contract => contract.capabilities)
+        .find(capability =>
+          capability.domain === 'capital'
+          && capability.verb === 'allocate'
+          && capability.object === 'per_order_budget',
+        )
+
+      expect(budgetCapability?.shape).toEqual(expect.objectContaining({
+        kind: 'ratio',
+        value: 0.1,
+        unit: 'ratio',
+      }))
+    })
+
     it('drops unknown atom key with warn', () => {
       const state = builder.build({
         atoms: [{ key: 'completely.unknown.atom.key', params: {} }],

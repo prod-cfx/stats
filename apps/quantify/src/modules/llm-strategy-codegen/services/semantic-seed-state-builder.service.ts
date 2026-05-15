@@ -2197,10 +2197,12 @@ export class SemanticSeedStateBuilderService {
   }
 
   private resolveGridPerOrderSizingShape(params: Record<string, unknown>): Record<string, unknown> | null {
-    const structuredSizing = this.readUnknownShape(params.perOrderSizing)
-      ?? this.readUnknownShape(params.perGridSizing)
-      ?? this.readUnknownShape(params.sizing)
-      ?? this.readUnknownShape(params.orderSize)
+    const structuredSizing = this.readGridStructuredSizing(params, [
+      'perOrderSizing',
+      'perGridSizing',
+      'sizing',
+      'orderSize',
+    ])
 
     if (structuredSizing !== null
       && typeof structuredSizing.value === 'number'
@@ -2218,6 +2220,24 @@ export class SemanticSeedStateBuilderService {
     return numericSizing !== null
       ? { kind: 'ratio', value: numericSizing, unit: 'ratio' }
       : null
+  }
+
+  private readGridStructuredSizing(
+    params: Record<string, unknown>,
+    keys: readonly string[],
+  ): Record<string, unknown> | null {
+    for (const key of keys) {
+      const value = params[key]
+      if (!this.isRecord(value)) {
+        continue
+      }
+      const shape = this.readUnknownShape(value)
+      if (shape !== null) {
+        return shape
+      }
+    }
+
+    return null
   }
 
   private synthesizeDcaScheduleContract(

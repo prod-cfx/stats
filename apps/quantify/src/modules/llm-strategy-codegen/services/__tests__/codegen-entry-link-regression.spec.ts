@@ -111,7 +111,7 @@ describe('codegen entry link regression: user message → seed → projection �
     {
       name: '网格',
       message: 'BTCUSDT okx 永续 1h 网格区间 60000-70000 每格 100U 双向循环',
-      expectedPatch: { actions: ['grid.range_rebalance'] },
+      expectedPatch: { atoms: ['grid.range_rebalance'] },
     },
     {
       name: '无标点百分跌涨',
@@ -145,12 +145,16 @@ describe('codegen entry link regression: user message → seed → projection �
       const patch = conversation.extractSemanticPatchFromMessage(item.message) as CodegenSemanticPatch
       const triggerKeys = patch.triggers?.map(trigger => `${trigger.key}:${trigger.phase}`) ?? []
       const actionKeys = patch.actions?.map(action => action.key) ?? []
+      const atomKeys = patch.atoms?.map(atom => atom.key) ?? []
 
       for (const expected of item.expectedPatch.triggers ?? []) {
         expect(triggerKeys).toContain(expected)
       }
       for (const expected of item.expectedPatch.actions ?? []) {
         expect(actionKeys).toContain(expected)
+      }
+      for (const expected of item.expectedPatch.atoms ?? []) {
+        expect(atomKeys).toContain(expected)
       }
     })
   }
