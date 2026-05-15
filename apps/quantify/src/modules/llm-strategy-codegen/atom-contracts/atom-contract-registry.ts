@@ -1287,9 +1287,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         },
       },
       paramSlots: {
-        indicator: { kind: 'enum', required: true, enum: ['ma', 'ema'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema' } } },
+        indicator: { kind: 'enum', required: true, enum: ['ma', 'sma', 'ema'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', 'SMA': 'sma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema' } } },
         referenceRole: { kind: 'enum', required: false, enum: ['short_term', 'mid_term', 'long_term'], extractor: { kind: 'enum-zh-map', derive: 'period-range' } },
-        'reference.period': { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
+        'reference.period': { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '(?:EMA|SMA|MA)\\s*[（(]?\\s*(\\d{1,4})|(\\d{1,4})\\s*(?:日|周期)?均线', range: [1, 500] } },
         timeframeOverride: { kind: 'enum', required: false, enum: ['true'], default: 'true' },
       },
       phaseResolver: 'by-clause-verb',
@@ -1340,9 +1340,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         },
       },
       paramSlots: {
-        indicator: { kind: 'enum', required: true, enum: ['ma', 'ema'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema' } } },
+        indicator: { kind: 'enum', required: true, enum: ['ma', 'sma', 'ema'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', 'SMA': 'sma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema' } } },
         referenceRole: { kind: 'enum', required: false, enum: ['short_term', 'mid_term', 'long_term'], extractor: { kind: 'enum-zh-map', derive: 'period-range' } },
-        'reference.period': { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
+        'reference.period': { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '(?:EMA|SMA|MA)\\s*[（(]?\\s*(\\d{1,4})|(\\d{1,4})\\s*(?:日|周期)?均线', range: [1, 500] } },
         timeframeOverride: { kind: 'enum', required: false, enum: ['true'], default: 'true' },
       },
       phaseResolver: 'by-clause-verb',
@@ -2756,18 +2756,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['网格', '区间网格', '区间', '挂格', 'grid', 'range', 'rebalance'] as const,
+        keywords: ['网格', '区间网格', '区间', '挂格', '每格', '网格间距', '步长', 'grid', 'range', 'rebalance'] as const,
         verbs: {
           fixed: ['网格', '区间', '每格', '挂', 'grid', 'range', 'each grid'] as const,
         },
       },
       paramSlots: {
-        rangeLower: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '\\d+(\\.\\d+)?' } },
-        rangeUpper: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '\\d+(\\.\\d+)?' } },
+        rangeLower: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:价格)?区间\\s*(\\d+(?:\\.\\d+)?)' } },
+        rangeUpper: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:价格)?区间\\s*\\d+(?:\\.\\d+)?\\s*[-~到至]\\s*(\\d+(?:\\.\\d+)?)' } },
         sideMode: { kind: 'enum', required: false, enum: ['long_only', 'short_only', 'both'], default: 'both', extractor: { kind: 'enum-zh-map', enumMap: { '只做多': 'long_only', '仅做多': 'long_only', '只做空': 'short_only', '仅做空': 'short_only', '双向': 'both' } } },
         recycle: { kind: 'enum', required: false, enum: ['true', 'false'], default: 'true', extractor: { kind: 'enum-zh-map', enumMap: { '循环': 'true', 'recycle': 'true', '不循环': 'false' } } },
         breakoutAction: { kind: 'enum', required: false, enum: ['continue', 'stop'], default: 'continue', extractor: { kind: 'enum-zh-map', enumMap: { '继续': 'continue', '停止': 'stop', 'continue': 'continue', 'stop': 'stop' } } },
-        perGridSizing: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '\\d+(\\.\\d+)?' } },
+        stepPct: { kind: 'number', required: false, range: [0, 100], extractor: { kind: 'number-decimal', pattern: '(?:每格间距|网格间距|间距|步长)\\s*(\\d+(?:\\.\\d+)?)\\s*%' } },
+        perGridSizing: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:每格|per grid|each grid)\\s*(?:使用|用)?\\s*(\\d+(?:\\.\\d+)?)\\s*(?:USDT|USDC|USD|U|刀)' } },
       },
       phaseResolver: 'fixed-entry',
       sideResolver: 'both',

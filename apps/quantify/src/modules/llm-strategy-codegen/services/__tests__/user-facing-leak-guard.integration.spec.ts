@@ -233,8 +233,8 @@ describe('user-facing leak guard 集成（#1329 Wave 1D）', () => {
             : {}
         const state: SemanticState = {
           ...makeEmptyState(),
-          triggers: [makeTriggerState('price.percent_change', 'entry', { valuePct: -3, basis: 'prev_close' })],
-          actions: [makeActionState('action.open_long')],
+          trigger: [makeTriggerState('price.percent_change', 'entry', { valuePct: -3, basis: 'prev_close' })],
+          action: [makeActionState('action.open_long')],
           position: {
             sizing: null,
             mode: 'flat',

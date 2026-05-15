@@ -1,4 +1,5 @@
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+import { UNSUPPORTED_SKIP, type AtomContract, type ParamSlotSchema } from '../atom-contracts/atom-contract-types'
 
 import type {
   SemanticAtomContractSubstrate,
@@ -726,10 +727,56 @@ function bucketToCategory(bucket: string): SemanticAtomDefinition['category'] {
 //
 // 派生策略：
 //   1. STANDALONE_ATOM_MAP 已有特殊 shape → 不走此路径（调用方检查优先级）
-//   2. classifier.supportStatus !== 'supported_executable' → 构造 recognized_unsupported
-//   3. 其他 → 从 surface.paramSlots 派生 requiredParams，按 category 选 contractSubstrate
+//   2. emit 已兑现可执行形态 → supported_executable（emit 是可编译能力单一真相源）
+//   3. classifier.supportStatus !== 'supported_executable' → 构造 recognized_unsupported
+//   4. 其他 → 从 surface.paramSlots 派生 requiredParams，按 category 选 contractSubstrate
+function isExecutableByEmitCapability(entry: AtomContract): boolean {
+  if (entry.readinessCheck === UNSUPPORTED_SKIP) {
+    return false
+  }
+
+  switch (entry.emit.capabilityStatus) {
+    case 'pr3a-condition':
+      return true
+    case 'pr3e-risk-guard':
+      return typeof entry.emit.riskGuardShape === 'function'
+    case 'pr3e-rule-block':
+      return typeof entry.emit.ruleBlockShape === 'function'
+    case 'pr3e-orchestration-portfolio':
+      return typeof entry.emit.orchestrationPortfolioRiskShape === 'function'
+    case 'pr3e-lifecycle':
+      return typeof entry.emit.lifecyclePyramidingShape === 'function'
+    case 'pr3e-action':
+      return typeof entry.emit.actionShape === 'function'
+    default:
+      return false
+  }
+}
+
+function matchesSurfaceParamCapability(
+  entry: AtomContract,
+  params: Record<string, unknown> | undefined,
+): boolean {
+  if (params === undefined) {
+    return true
+  }
+
+  const surface = (entry as { surface?: { paramSlots?: Record<string, ParamSlotSchema> } }).surface
+  const paramSlots = surface?.paramSlots ?? {}
+
+  return Object.entries(params).every(([key, value]) => {
+    const slot = paramSlots[key]
+    if (slot?.kind !== 'enum' || slot.enum === undefined || typeof value !== 'string') {
+      return true
+    }
+
+    return slot.enum.includes(value.trim().toLowerCase())
+  })
+}
+
 function adaptContractToRegistryShape(
   entryKey: string,
+  params?: Record<string, unknown>,
 ): SemanticRegisteredAtomDefinition {
   const entry = (ATOM_CONTRACT_REGISTRY as Record<string, typeof ATOM_CONTRACT_REGISTRY[keyof typeof ATOM_CONTRACT_REGISTRY]>)[entryKey]
   // #1364 PR1：bucket 从 contract.bucket 单点读（已删除独立 ATOM_BUCKETS 表导出）。
@@ -738,7 +785,9 @@ function adaptContractToRegistryShape(
   const bucket = entry.bucket
   const category = bucketToCategory(bucket)
   const { classifier } = entry
-  const isUnsupported = classifier.supportStatus !== 'supported_executable'
+  const isExecutableByEmit = isExecutableByEmitCapability(entry)
+    && matchesSurfaceParamCapability(entry, params)
+  const isUnsupported = classifier.supportStatus !== 'supported_executable' && !isExecutableByEmit
 
   if (isUnsupported) {
     const unsupportedMeta = (classifier as { unsupportedMeta: { reasonCode: string; publicReasonZh: string } }).unsupportedMeta
@@ -801,7 +850,7 @@ function adaptContractToRegistryShape(
 // STANDALONE 保持了已稳定的 requiredParams 契约。
 //
 // executableSinceVersion 从 REGISTRY classifier 覆盖（保持版本门控最新）。
-function resolveKey(key: string): SemanticRegisteredAtomDefinition | null {
+function resolveKey(key: string, params?: Record<string, unknown>): SemanticRegisteredAtomDefinition | null {
   // STANDALONE 优先
   if (STANDALONE_ATOM_MAP.has(key)) {
     const standalone = cloneAtom(STANDALONE_ATOM_MAP.get(key)!)
@@ -817,7 +866,7 @@ function resolveKey(key: string): SemanticRegisteredAtomDefinition | null {
   }
   // 查 REGISTRY（非 orchestration 类）
   if (key in ATOM_CONTRACT_REGISTRY && !REGISTRY_ONLY_KEYS.has(key)) {
-    return adaptContractToRegistryShape(key)
+    return adaptContractToRegistryShape(key, params)
   }
   return null
 }
@@ -837,7 +886,7 @@ export class SemanticAtomRegistryService {
     if (key === 'risk.partial_take_profit') {
       return resolvePartialTakeProfitAtom(params ?? {})
     }
-    const atom = resolveKey(key)
+    const atom = resolveKey(key, params)
     if (!atom) {
       return {
         key,

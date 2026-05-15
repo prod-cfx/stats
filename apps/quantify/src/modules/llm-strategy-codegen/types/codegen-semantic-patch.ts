@@ -45,6 +45,13 @@ export interface CodegenSemanticNodeEnvelope {
 
 export interface CodegenSemanticPatch {
   contextSlots?: Record<string, string | number | boolean | null | CodegenContextSlotPatchValue>
+  atoms?: Array<CodegenSemanticNodeEnvelope & {
+    key: string
+    phase?: 'entry' | 'exit' | 'risk' | 'gate'
+    sideScope?: 'long' | 'short' | 'both'
+    params?: Record<string, unknown>
+    contracts?: SemanticAtomContract[]
+  }>
   triggers?: Array<CodegenSemanticNodeEnvelope & {
     key: string
     phase: 'entry' | 'exit' | 'risk' | 'gate'

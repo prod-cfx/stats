@@ -429,6 +429,66 @@ describe('semanticSupportClassifierService', () => {
     expect(result.state.trigger.map(trigger => trigger.support)).toEqual([undefined, undefined])
   })
 
+  it('keeps multi moving-average static compares supported when each compare has executable reference params', () => {
+    const result = service.classify(baseState({
+      trigger: [
+        {
+          id: 'entry-ema20',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: { indicator: 'ema', 'reference.period': 20 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'entry-ema60',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: { indicator: 'ema', 'reference.period': 60 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'entry-ema144',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: { indicator: 'ema', 'reference.period': 144 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-ema20',
+          key: 'indicator.below',
+          phase: 'exit',
+          params: { indicator: 'ema', 'reference.period': 20 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      action: [
+        { id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'close', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    }))
+
+    expect(result.route).toBe('projection_gate')
+    expect(result.unsupportedAtoms).toEqual([])
+    expect(result.state.trigger.map(trigger => trigger.support)).toEqual([undefined, undefined, undefined, undefined])
+  })
+
   it('does not treat raw price indicator aliases as executable MA references', () => {
     const result = service.classify(baseState({
       trigger: [

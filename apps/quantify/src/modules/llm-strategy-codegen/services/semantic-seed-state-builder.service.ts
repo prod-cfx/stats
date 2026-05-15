@@ -173,9 +173,10 @@ export class SemanticSeedStateBuilderService {
         triggers: [...(Array.isArray(semanticPatch.triggers) ? semanticPatch.triggers : []), ...dispatched.trigger],
         actions: [...(Array.isArray(semanticPatch.actions) ? semanticPatch.actions : []), ...dispatched.action],
         risk: [...(Array.isArray(semanticPatch.risk) ? semanticPatch.risk : []), ...dispatched.risk],
-        // positionConstraint / orchestration atoms 暂走 orchestration nodes 路径或丢弃；
-        // 主要 LLM 输出场景目前是 trigger/action/risk，positionConstraint/orchestration
-        // 仍通过专用 patch channel（patch.position / patch.orchestration）注入。
+        position: this.mergePositionConstraintPatch(
+          semanticPatch.position ?? semanticPatch.positionUpdate,
+          dispatched.positionConstraint,
+        ),
         orchestration: this.mergeOrchestrationPatch(
           semanticPatch.orchestration,
           dispatched.orchestration,
@@ -185,15 +186,28 @@ export class SemanticSeedStateBuilderService {
     // Note: legacy 5-bucket patch shape (triggers/actions/risk) remains accepted for
     // backward compatibility with internal callers; new patches should use atoms[].
 
-    const triggerItems = Array.isArray(semanticPatch.triggers)
+    const legacyDispatched = this.dispatchLegacyBucketArraysByContractBucket(semanticPatch)
+    const positionPatchInput = this.mergePositionConstraintPatch(
+      semanticPatch.position ?? semanticPatch.positionUpdate,
+      legacyDispatched.positionConstraint,
+    )
+    const orchestrationPatchInput = this.mergeOrchestrationPatch(
+      semanticPatch.orchestration,
+      legacyDispatched.orchestration,
+    )
+
+    const rawTriggerItems = Array.isArray(semanticPatch.triggers)
       ? semanticPatch.triggers
       : (Array.isArray(semanticPatch.triggerUpdates) ? semanticPatch.triggerUpdates : [])
-    const actionItems = Array.isArray(semanticPatch.actions)
+    const rawActionItems = Array.isArray(semanticPatch.actions)
       ? semanticPatch.actions
       : (Array.isArray(semanticPatch.actionUpdates) ? semanticPatch.actionUpdates : [])
-    const riskItems = Array.isArray(semanticPatch.risk)
+    const rawRiskItems = Array.isArray(semanticPatch.risk)
       ? semanticPatch.risk
       : (Array.isArray(semanticPatch.riskUpdates) ? semanticPatch.riskUpdates : [])
+    const triggerItems = this.filterLegacyItemsByRegistryBucket(rawTriggerItems, 'trigger')
+    const actionItems = this.filterLegacyItemsByRegistryBucket(rawActionItems, 'action')
+    const riskItems = this.filterLegacyItemsByRegistryBucket(rawRiskItems, 'risk')
 
     // Issue #1223: 出口 evidence invariant — 仅在调用方显式提供 message 时启用
     //   - source === 'system_default' 跳过（系统默认占位 atom 不要求 evidence）
@@ -265,7 +279,7 @@ export class SemanticSeedStateBuilderService {
         return !dropViolations.has(`${kind}[${index}:${key}${phase}]`)
       })
     }
-    const positionUpdate = this.toPositionState(semanticPatch.position ?? semanticPatch.positionUpdate)
+    const positionUpdate = this.toPositionState(positionPatchInput)
     const contextSlots = this.toContextSlots(
       semanticPatch.contextSlots ?? semanticPatch.contextUpdates ?? semanticPatch.context,
     )
@@ -280,7 +294,7 @@ export class SemanticSeedStateBuilderService {
     const riskUpdates = filterByEvidenceInvariant(riskItems, 'risk')
       .map((item, index) => this.toRiskState(item, index))
       .filter((item): item is SemanticRiskState => item !== null)
-    const orchestration = this.toOrchestrationState(semanticPatch.orchestration)
+    const orchestration = this.toOrchestrationState(orchestrationPatchInput)
 
     if (
       triggerUpdates.length === 0
@@ -454,6 +468,116 @@ export class SemanticSeedStateBuilderService {
       }
     }
     return out
+  }
+
+  private dispatchLegacyBucketArraysByContractBucket(semanticPatch: SemanticPatchRecord): {
+    trigger: unknown[]
+    action: unknown[]
+    risk: unknown[]
+    positionConstraint: unknown[]
+    orchestration: unknown[]
+  } {
+    const out = {
+      trigger: [] as unknown[],
+      action: [] as unknown[],
+      risk: [] as unknown[],
+      positionConstraint: [] as unknown[],
+      orchestration: [] as unknown[],
+    }
+    const inputs = [
+      ...(Array.isArray(semanticPatch.triggers) ? semanticPatch.triggers : []),
+      ...(Array.isArray(semanticPatch.triggerUpdates) ? semanticPatch.triggerUpdates : []),
+      ...(Array.isArray(semanticPatch.actions) ? semanticPatch.actions : []),
+      ...(Array.isArray(semanticPatch.actionUpdates) ? semanticPatch.actionUpdates : []),
+      ...(Array.isArray(semanticPatch.risk) ? semanticPatch.risk : []),
+      ...(Array.isArray(semanticPatch.riskUpdates) ? semanticPatch.riskUpdates : []),
+    ]
+    if (inputs.length === 0) return out
+    return this.dispatchAtomsByContractBucket(inputs)
+  }
+
+  private filterLegacyItemsByRegistryBucket(
+    items: unknown[],
+    bucket: 'trigger' | 'action' | 'risk',
+  ): unknown[] {
+    return items.filter((item) => {
+      if (!this.isRecord(item) || typeof item.key !== 'string') {
+        return true
+      }
+      const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string } | undefined>)[item.key]
+      return !contract || contract.bucket === bucket
+    })
+  }
+
+  private mergePositionConstraintPatch(existing: unknown, constraints: unknown[]): unknown {
+    if (constraints.length === 0) {
+      return existing
+    }
+
+    const existingConstraints = this.isRecord(existing) && Array.isArray(existing.constraints)
+      ? existing.constraints
+      : []
+    const base = this.isRecord(existing)
+      ? existing
+      : {
+          mode: 'constraint_only',
+          value: 0,
+          positionMode: 'long_only',
+          status: 'locked',
+          source: 'derived',
+        }
+
+    return {
+      ...base,
+      constraints: this.coalescePositionConstraintPatches([...existingConstraints, ...constraints]),
+    }
+  }
+
+  private coalescePositionConstraintPatches(constraints: unknown[]): unknown[] {
+    const out: unknown[] = []
+    for (const constraint of constraints) {
+      if (!this.isRecord(constraint) || typeof constraint.key !== 'string') {
+        out.push(constraint)
+        continue
+      }
+
+      const existingIndex = out.findIndex(item =>
+        this.isRecord(item)
+        && item.key === constraint.key
+        && constraint.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key,
+      )
+      if (existingIndex < 0) {
+        out.push(constraint)
+        continue
+      }
+
+      const existing = out[existingIndex]
+      out[existingIndex] = this.isRecord(existing)
+        ? this.mergeConstraintPatchRecords(existing, constraint)
+        : constraint
+    }
+
+    return out
+  }
+
+  private mergeConstraintPatchRecords(
+    existing: Record<string, unknown>,
+    incoming: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const existingParams = this.readParams(existing.params)
+    const incomingParams = this.readParams(incoming.params)
+    const existingOpenSlots = this.readOpenSlots(existing.openSlots)
+    const incomingOpenSlots = this.readOpenSlots(incoming.openSlots)
+
+    return {
+      ...existing,
+      ...incoming,
+      id: this.readTrimmedString(existing.id) ?? this.readTrimmedString(incoming.id),
+      params: { ...existingParams, ...incomingParams },
+      evidence: existing.evidence ?? incoming.evidence,
+      openSlots: [...existingOpenSlots, ...incomingOpenSlots],
+      contracts: incoming.contracts ?? existing.contracts,
+    }
   }
 
   // Merge 现有 patch.orchestration 与 atoms[] 派生 orchestration nodes。
@@ -788,14 +912,12 @@ export class SemanticSeedStateBuilderService {
     const evidence = this.readEvidence(update.evidence)
     const supersedes = this.readStringArray(update.supersedes)
     const contracts = this.readContracts(update.contracts)
-      ?? (this.shouldSynthesizeMissingContracts(update)
-        ? this.synthesizeTriggerContracts(key, phase, sideScope, params, index)
-        : null)
+      ?? this.synthesizeTriggerContracts(key, phase, sideScope, params, index)
     openSlots = this.ensureGridLevelSetDensityOpenSlot({
       key,
       openSlots,
       contracts,
-      triggerIndex: index,
+      ownerFieldPath: `triggers[${index}]`,
     })
     const contractCoverage = this.resolveContractCoverage({
       contracts,
@@ -844,9 +966,7 @@ export class SemanticSeedStateBuilderService {
     const openSlots = this.readOpenSlots(update.openSlots)
     const params = this.readParams(update.params)
     const contracts = this.readContracts(update.contracts)
-      ?? (this.shouldSynthesizeMissingContracts(update)
-        ? this.synthesizeActionContracts(key, params, index)
-        : null)
+      ?? this.synthesizeActionContracts(key, params, index)
     const contractCoverage = this.resolveContractCoverage({
       contracts,
       openSlots,
@@ -886,9 +1006,7 @@ export class SemanticSeedStateBuilderService {
       ? this.attachPartialTakeProfitMemoryKey(rawParams)
       : rawParams
     const contracts = this.readContracts(update.contracts)
-      ?? (this.hasOwnProperty(update, 'contracts')
-        ? null
-        : this.synthesizeRiskContracts(key, mergedParams, index))
+      ?? this.synthesizeRiskContracts(key, mergedParams, index)
     const contractCoverage = this.resolveContractCoverage({
       contracts,
       openSlots,
@@ -942,16 +1060,27 @@ export class SemanticSeedStateBuilderService {
     const positionMode = this.normalizePositionSideMode(update.positionMode) ?? update.positionMode
     const normalizedMode = this.normalizePositionSizingMode(update.mode)
     const evidence = this.readEvidence(update.evidence)
+    if (update.mode === 'constraint_only' && constraints.length > 0) {
+      return {
+        mode: 'constraint_only',
+        value: 0,
+        positionMode,
+        status: 'locked',
+        source: this.readSource(update.source),
+        ...(evidence ? { evidence } : {}),
+        openSlots: [],
+        constraints,
+      }
+    }
+
     const contracts = this.readContracts(update.contracts)
-      ?? (this.hasOwnProperty(update, 'contracts')
-        ? null
-        : this.synthesizePositionContracts({
-          sizing,
-          sizingProvided,
-          mode: normalizedMode,
-          value: update.value,
-          positionMode,
-        }))
+      ?? this.synthesizePositionContracts({
+        sizing,
+        sizingProvided,
+        mode: normalizedMode,
+        value: update.value,
+        positionMode,
+      })
     const contractCoverage = this.resolveContractCoverage({
       contracts,
       openSlots,
@@ -1021,11 +1150,21 @@ export class SemanticSeedStateBuilderService {
     }
 
     const params = this.readParams(update.params)
-    const openSlots = this.readOpenSlots(update.openSlots)
+    if (key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && this.resolveGridRange(params) === null) {
+      return null
+    }
+
+    let openSlots = this.readOpenSlots(update.openSlots)
     const evidence = this.readEvidence(update.evidence)
     const supersedes = this.readStringArray(update.supersedes)
     const contracts = this.readContracts(update.contracts)
-      ?? (this.hasOwnProperty(update, 'contracts') ? null : this.synthesizePositionConstraintContracts(key, params, index))
+      ?? this.synthesizePositionConstraintContracts(key, params, index)
+    openSlots = this.ensureGridLevelSetDensityOpenSlot({
+      key,
+      openSlots,
+      contracts,
+      ownerFieldPath: `position.constraints[${index}]`,
+    })
     const contractCoverage = this.resolveContractCoverage({
       contracts,
       openSlots,
@@ -1102,6 +1241,7 @@ export class SemanticSeedStateBuilderService {
   private isPositionConstraintKey(value: string | null): value is SemanticPositionConstraintState['key'] {
     /* eslint-disable atom-keys/no-atom-key-literal -- position.max_exposure_pct / position.dca_schedule not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
     return value === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
+      || value === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key
       || value === 'position.max_exposure_pct'
       || value === 'position.dca_schedule'
     /* eslint-enable atom-keys/no-atom-key-literal */
@@ -1428,13 +1568,13 @@ export class SemanticSeedStateBuilderService {
     key: string
     openSlots: SemanticSlotState[]
     contracts: SemanticAtomContract[] | null
-    triggerIndex: number
+    ownerFieldPath: string
   }): SemanticSlotState[] {
     if (input.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key || !input.contracts?.length) {
       return input.openSlots
     }
 
-    const target = this.resolveLevelSetContractTarget(input.contracts, `triggers[${input.triggerIndex}]`)
+    const target = this.resolveLevelSetContractTarget(input.contracts, input.ownerFieldPath)
     if (!target || this.hasLevelSetDensity(target.capability.shape)) {
       return input.openSlots
     }
@@ -1889,6 +2029,10 @@ export class SemanticSeedStateBuilderService {
     params: Record<string, unknown>,
     index: number,
   ): SemanticAtomContract[] | null {
+    if (key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) {
+      return [this.synthesizeGridRangeRebalanceContract(key, params, index)]
+    }
+
     // eslint-disable-next-line atom-keys/no-atom-key-literal -- position.dca_schedule not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     if (key === 'position.dca_schedule') {
       return [this.synthesizeDcaScheduleContract(key, params, index)]
@@ -1940,6 +2084,66 @@ export class SemanticSeedStateBuilderService {
         { domain: 'guard', verb: 'block', object: 'exposure_increase' },
       ],
     }]
+  }
+
+  private synthesizeGridRangeRebalanceContract(
+    key: SemanticPositionConstraintState['key'],
+    params: Record<string, unknown>,
+    index: number,
+  ): SemanticAtomContract {
+    const range = this.resolveGridRange(params)
+    const levelSetShape = this.toCapabilityShape({
+      mode: 'fixed_range',
+      lower: range?.lower ?? null,
+      upper: range?.upper ?? null,
+      spacingMode: 'arithmetic',
+      ...this.resolveGridDensityShape(params),
+    })
+    const perGridSizing = this.readFiniteNumberParam(params, ['perGridSizing', 'perOrderSizing', 'sizing', 'orderSize'])
+    const capabilities: SemanticCapability[] = [
+      {
+        domain: 'price',
+        verb: 'define',
+        object: 'level_set',
+        shape: levelSetShape,
+      },
+      {
+        domain: 'order_program',
+        verb: 'maintain',
+        object: 'limit_ladder',
+        shape: this.toCapabilityShape({
+          key,
+          levelSet: levelSetShape,
+          sideMode: params.sideMode,
+          recycle: params.recycle,
+          breakoutAction: params.breakoutAction,
+        }),
+      },
+    ]
+
+    if (perGridSizing !== null) {
+      capabilities.push({
+        ...DCA_PER_ORDER_BUDGET_CAPABILITY,
+        shape: this.toCapabilityShape({
+          kind: 'ratio',
+          value: perGridSizing,
+          unit: 'ratio',
+          triggerSource: key,
+        }),
+      })
+    }
+
+    return this.withRegistryContractSubstrate(key, {
+      id: `contract-seed-position-constraint-${index + 1}-${this.slugifyContractId(key)}`,
+      kind: 'position',
+      capabilities,
+      requires: [],
+      params,
+      runtimeRequirements: [],
+      stateRequirements: [],
+      orderRequirements: [],
+      openSlots: [],
+    })
   }
 
   private synthesizeDcaScheduleContract(

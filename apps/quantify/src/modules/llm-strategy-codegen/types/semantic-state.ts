@@ -295,6 +295,7 @@ export type SemanticPositionConstraintKey =
   | 'position.pyramiding_limit'
   | 'position.max_exposure_pct'
   | 'position.dca_schedule'
+  | 'grid.range_rebalance'
 
 export interface SemanticPositionConstraintState {
   id: string
@@ -329,6 +330,7 @@ export interface SemanticPositionState {
   evidence?: SemanticEvidence
   openSlots?: SemanticSlotState[]
   contracts?: SemanticAtomContract[]
+  constraints?: SemanticPositionConstraintState[]
   support?: SemanticAtomSupportMetadata
 }
 

@@ -10,6 +10,7 @@ import type {
   SemanticContextSlotState,
   SemanticEvidence,
   SemanticPositionState,
+  SemanticPositionConstraintState,
   SemanticRiskState,
   SemanticSlotState,
   SemanticState,
@@ -42,7 +43,7 @@ type LevelSetSpacingConflictAnswer = {
 }
 type LevelSetAnswer = LevelSetDensityAnswer | LevelSetSpacingConflictAnswer
 
-type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position'
+type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position' | 'positionConstraint'
 type FulfilledTriggerPhase = 'entry' | 'exit'
 type FragmentTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
 type FragmentAction = NonNullable<CodegenSemanticPatch['actions']>[number]
@@ -741,6 +742,12 @@ function collectOpenLevelSetSlots(state: SemanticState): OpenLevelSetSlotRef[] {
     }
   }
 
+  for (const constraint of state.position?.constraints ?? []) {
+    for (const slot of findOpenSlots(constraint.openSlots)) {
+      slots.push({ ownerKind: 'positionConstraint', ownerId: constraint.id, slot })
+    }
+  }
+
   return slots
 }
 
@@ -845,6 +852,15 @@ function applyLevelSetAnswerToOpenSlot(
     return state
   }
 
+  if (openSlot.ownerKind === 'positionConstraint') {
+    const updates = (state.position.constraints ?? []).map(owner =>
+      owner.id === openSlot.ownerId ? updatePositionConstraintOwner(owner, openSlot.slot, answer, shapeNormalizer) : { owner, updated: false },
+    )
+    return hasOwnerUpdate(updates)
+      ? { ...state, position: { ...state.position, constraints: updates.map(update => update.owner) } }
+      : state
+  }
+
   const positionUpdate = updatePositionOwner(state.position, openSlot.slot, answer, shapeNormalizer)
 
   return positionUpdate.updated ? { ...state, position: positionUpdate.owner } : state
@@ -934,6 +950,30 @@ function updatePositionOwner(
   }
 
   const openSlots = resolveOwnerOpenSlots(owner.openSlots ?? [], consumedSlot, contracts)
+
+  return {
+    owner: {
+      ...owner,
+      status: openSlots.some(slot => slot.status === 'open') ? 'open' : 'locked',
+      openSlots,
+      contracts: contracts.contracts,
+    },
+    updated: true,
+  }
+}
+
+function updatePositionConstraintOwner(
+  owner: SemanticPositionConstraintState,
+  consumedSlot: SemanticSlotState,
+  answer: LevelSetAnswer,
+  shapeNormalizer: SemanticContractShapeNormalizerService,
+): OwnerSlotUpdateResult<SemanticPositionConstraintState> {
+  const contracts = updateLevelSetContracts(owner.contracts, consumedSlot, answer, shapeNormalizer)
+  if (!contracts.updated) {
+    return { owner, updated: false }
+  }
+
+  const openSlots = resolveOwnerOpenSlots(owner.openSlots, consumedSlot, contracts)
 
   return {
     owner: {

@@ -125,7 +125,7 @@ describe('SemanticSeedStateBuilderService', () => {
       }],
     })
 
-    expect(state?.trigger[0]).toEqual(expect.objectContaining({
+    expect(state?.position?.constraints?.[0]).toEqual(expect.objectContaining({
       key: 'grid.range_rebalance',
       status: 'open',
       openSlots: expect.arrayContaining([expect.objectContaining({
@@ -133,8 +133,8 @@ describe('SemanticSeedStateBuilderService', () => {
         status: 'open',
         questionHint: expect.stringContaining('网格数量或每格间距'),
       })]),
-      contracts: [expect.objectContaining({
-        capabilities: [expect.objectContaining({
+      contracts: expect.arrayContaining([expect.objectContaining({
+        capabilities: expect.arrayContaining([expect.objectContaining({
           domain: 'price',
           verb: 'define',
           object: 'level_set',
@@ -143,8 +143,8 @@ describe('SemanticSeedStateBuilderService', () => {
             lower: 79200,
             upper: 80200,
           }),
-        })],
-      })],
+        })]),
+      })]),
     }))
     expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
   })
@@ -343,14 +343,14 @@ describe('SemanticSeedStateBuilderService', () => {
       }],
     })
 
-    expect(state?.trigger[0]).toEqual(expect.objectContaining({
+    expect(state?.position?.constraints?.[0]).toEqual(expect.objectContaining({
       key: 'grid.range_rebalance',
       openSlots: expect.arrayContaining([expect.objectContaining({
         slotKey: 'contract.shape.price.level_set.density',
         status: 'open',
       })]),
-      contracts: [expect.objectContaining({
-        capabilities: [expect.objectContaining({
+      contracts: expect.arrayContaining([expect.objectContaining({
+        capabilities: expect.arrayContaining([expect.objectContaining({
           domain: 'price',
           verb: 'define',
           object: 'level_set',
@@ -358,8 +358,8 @@ describe('SemanticSeedStateBuilderService', () => {
             lower: 79200,
             upper: 80200,
           }),
-        })],
-      })],
+        })]),
+      })]),
     }))
     expect(state?.action[0]).toEqual(expect.objectContaining({
       key: 'place_limit_grid',
@@ -492,7 +492,7 @@ describe('SemanticSeedStateBuilderService', () => {
         },
       }],
     })
-    const densitySlot = state?.trigger[0]?.openSlots.find(slot =>
+    const densitySlot = state?.position?.constraints?.[0]?.openSlots.find(slot =>
       slot.slotKey === 'contract.shape.price.level_set.density',
     )
     expect(densitySlot).toBeDefined()
@@ -513,12 +513,12 @@ describe('SemanticSeedStateBuilderService', () => {
       throw new Error('expected grid density answer to be consumed')
     }
 
-    const shape = resolved.nextState.trigger[0]?.contracts?.[0]?.capabilities[0]?.shape
+    const shape = resolved.nextState.position?.constraints?.[0]?.contracts?.[0]?.capabilities[0]?.shape
 
     expect(shape).toEqual(expect.objectContaining({
       spacingPct: 0.5,
     }))
-    expect(resolved.nextState.trigger[0]?.openSlots).toEqual(expect.not.arrayContaining([
+    expect(resolved.nextState.position?.constraints?.[0]?.openSlots).toEqual(expect.not.arrayContaining([
       expect.objectContaining({
         slotKey: 'contract.shape.price.level_set.density',
         status: 'open',

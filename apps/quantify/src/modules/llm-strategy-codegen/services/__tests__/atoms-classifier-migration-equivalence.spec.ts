@@ -17,6 +17,7 @@
  *     'orchestration' 在两侧相同。
  */
 
+import { UNSUPPORTED_SKIP } from '../../atom-contracts/atom-contract-types'
 import { ATOM_CONTRACT_REGISTRY, DEFAULT_CLASSIFIER_META } from '../../atom-contracts/atom-contract-registry'
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
 
@@ -44,8 +45,39 @@ function bucketToLegacyCategory(bucket: string): string {
  */
 function adaptFromContractRegistry(entry: AtomContractEntry) {
   const { classifier } = entry
-  // 与 legacy `legacyIsUnsupported` 判定一致：recognized_unsupported / unsupported_unknown 均算 unsupported。
-  const isUnsupported = classifier.supportStatus !== 'supported_executable'
+  const emit = entry.emit as {
+    capabilityStatus: string
+    riskGuardShape?: unknown
+    ruleBlockShape?: unknown
+    orchestrationPortfolioRiskShape?: unknown
+    lifecyclePyramidingShape?: unknown
+    actionShape?: unknown
+  }
+  // 与 production registry adapter 一致：静态 classifier 可保留 unsupported 文案元数据；
+  // 已兑现 emit shape 才是可执行支持状态来源，UNSUPPORTED_SKIP 仍强制 unsupported。
+  const isExecutableByEmit = (() => {
+    if (entry.readinessCheck === UNSUPPORTED_SKIP) {
+      return false
+    }
+
+    switch (emit.capabilityStatus) {
+      case 'pr3a-condition':
+        return true
+      case 'pr3e-risk-guard':
+        return typeof emit.riskGuardShape === 'function'
+      case 'pr3e-rule-block':
+        return typeof emit.ruleBlockShape === 'function'
+      case 'pr3e-orchestration-portfolio':
+        return typeof emit.orchestrationPortfolioRiskShape === 'function'
+      case 'pr3e-lifecycle':
+        return typeof emit.lifecyclePyramidingShape === 'function'
+      case 'pr3e-action':
+        return typeof emit.actionShape === 'function'
+      default:
+        return false
+    }
+  })()
+  const isUnsupported = classifier.supportStatus !== 'supported_executable' && !isExecutableByEmit
   return {
     supportStatus: classifier.supportStatus,
     isUnsupported,

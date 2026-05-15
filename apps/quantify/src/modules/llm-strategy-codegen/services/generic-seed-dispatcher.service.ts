@@ -1,4 +1,3 @@
-import type { CapabilityTriple } from '../atom-contracts/atom-contract-emit.types'
 import type {
   AtomContractSurface,
   Direction,
@@ -9,6 +8,7 @@ import type {
 } from '../atom-contracts/atom-contract-surface.types'
 import type { AtomContract, AtomContractBucket } from '../atom-contracts/atom-contract-types'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+import type { SemanticPositionSizingContract } from '../types/semantic-state'
 /**
  * GenericSeedDispatcher — Issue #1279 PR2 唯一真相源 NL→seed 分发器
  *
@@ -31,8 +31,7 @@ import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
  *      - 用 surface.phaseResolver 派生 phase
  *      - 用 surface.sideResolver 派生 sideScope
  *   4. 用 contract.bucket 派生 patch 顶层位置（triggers / actions / risk / ...）
- *   5. 用 contract.emit.capability 装配 contracts[].capabilities[]
- *   6. 返回 CodegenSemanticPatch
+ *   5. 返回 5 桶 atom 语义；执行 contract 由 SemanticSeedStateBuilder 统一合成
  *
  * Refs: #1279
  */
@@ -126,14 +125,16 @@ type ParserFn = (clause: string, spec: ExtractorSpec) => unknown
  * 用此区分位置语义：fastPeriod index=0 → "20"，slowPeriod index=1 → "50"。
  */
 function matchNumberAtIndex(clause: string, pattern: string | undefined, fallback: RegExp, index: number): string | undefined {
+  const pickCapture = (match: RegExpMatchArray | undefined): string | undefined =>
+    match ? (match.slice(1).find(item => item !== undefined) ?? match[0]) : undefined
   if (index === 0) {
-    const re = pattern ? new RegExp(pattern) : fallback
+    const re = pattern ? new RegExp(pattern, 'i') : fallback
     const m = clause.match(re)
-    return m?.[1] ?? m?.[0]
+    return pickCapture(m ?? undefined)
   }
-  const globalRe = pattern ? new RegExp(pattern, 'g') : new RegExp(fallback.source, 'g')
+  const globalRe = pattern ? new RegExp(pattern, 'gi') : new RegExp(fallback.source, 'g')
   const all = [...clause.matchAll(globalRe)]
-  return all[index]?.[1] ?? all[index]?.[0]
+  return pickCapture(all[index])
 }
 
 const PARSER_NUMBER_INT: ParserFn = (clause, spec) => {
@@ -176,11 +177,12 @@ const PARSER_DURATION: ParserFn = (clause, spec) => {
 const PARSER_ENUM_ZH_MAP: ParserFn = (clause, spec) => {
   const map = spec.enumMap
   if (!map) return undefined
+  const lower = clause.toLowerCase()
   // 长 key 优先匹配（review C2 真 bug 修复）：避免 "大于等于" 被先匹中的 "大于" 提前 short-circuit。
   // Object.entries 不保证按 key 长度排序，必须显式 sort。
   const entries = Object.entries(map).sort(([a], [b]) => b.length - a.length)
   for (const [zh, normalized] of entries) {
-    if (clause.includes(zh)) return normalized
+    if (lower.includes(zh.toLowerCase())) return normalized
   }
   return undefined
 }
@@ -231,13 +233,60 @@ const DERIVES: Readonly<Record<string, DeriveFn>> = {
   'period-range': (clause, ctx) => {
     const period = (ctx.params.period as number | undefined)
       ?? (() => {
-        const m = clause.match(/\d+/)
-        return m ? Number.parseInt(m[0], 10) : 0
+        const m = clause.match(/(?:EMA|SMA|MA)\s*[（(]?\s*(\d{1,4})/iu)
+          ?? clause.match(/(\d{1,4})\s*(?:日|周期)?均线/iu)
+          ?? clause.match(/\d+/)
+        return m ? Number.parseInt(m[1] ?? m[0], 10) : 0
       })()
     if (period < 10) return 'short_term'
     if (period < 50) return 'mid_term'
     return 'long_term'
   },
+}
+
+function deriveMovingAverageReferenceRole(period: number): 'short_term' | 'mid_term' | 'long_term' {
+  if (period < 10) return 'short_term'
+  if (period < 50) return 'mid_term'
+  return 'long_term'
+}
+
+function extractMovingAverageReferencePeriods(clause: string): number[] {
+  const compact = clause.replace(/\s+/gu, '')
+  const prefixed = Array.from(compact.matchAll(/(?:EMA|SMA|MA)[（(]?(\d{1,4})[)）]?/giu))
+    .map(match => Number(match[1]))
+    .filter(value => Number.isFinite(value) && value > 0)
+  const zh = Array.from(compact.matchAll(/(\d{1,4})(?:日|周期)?均线/gu))
+    .map(match => Number(match[1]))
+    .filter(value => Number.isFinite(value) && value > 0)
+  return Array.from(new Set([...prefixed, ...zh]))
+}
+
+function expandMovingAverageReferenceMatches(
+  match: Omit<AtomMatch, 'atomKey'>,
+  surface: AtomContractSurface,
+): Array<Omit<AtomMatch, 'atomKey'>> {
+  if (!Object.prototype.hasOwnProperty.call(surface.paramSlots, 'reference.period')) {
+    return [match]
+  }
+
+  const indicator = typeof match.params.indicator === 'string' ? match.params.indicator.toLowerCase() : ''
+  if (indicator !== 'ma' && indicator !== 'sma' && indicator !== 'ema') {
+    return [match]
+  }
+
+  const periods = extractMovingAverageReferencePeriods(match.clauseText)
+  if (periods.length <= 1) {
+    return [match]
+  }
+
+  return periods.map(period => ({
+    ...match,
+    params: {
+      ...match.params,
+      referenceRole: deriveMovingAverageReferenceRole(period),
+      'reference.period': period,
+    },
+  }))
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -278,6 +327,7 @@ const CLOSE_VERB_TO_SIDE: Readonly<Record<string, 'long' | 'short'>> = {
   '平多': 'long',
   '平多仓': 'long',
   '关多': 'long',
+  '卖出': 'long',
   '平空': 'short',
   '平空仓': 'short',
   '关空': 'short',
@@ -285,15 +335,39 @@ const CLOSE_VERB_TO_SIDE: Readonly<Record<string, 'long' | 'short'>> = {
   'close short': 'short',
 }
 
-function detectCloseSide(clause: string): 'long' | 'short' | null {
+const ACTION_VERB_TO_SIDE: Readonly<Record<string, 'long' | 'short'>> = {
+  '开多': 'long',
+  '做多': 'long',
+  '买入': 'long',
+  'long': 'long',
+  'buy': 'long',
+  '开空': 'short',
+  '做空': 'short',
+  'short': 'short',
+  'sell short': 'short',
+  ...CLOSE_VERB_TO_SIDE,
+}
+
+function detectSideFromVerbMap(
+  clause: string,
+  verbMap: Readonly<Record<string, 'long' | 'short'>>,
+): 'long' | 'short' | null {
   const lower = clause.toLowerCase()
   // 长 key 优先，避免 '平多仓' 被 '平多' 提前 short-circuit（虽然结果相同，但保持
   // matchKeyword 风格一致）
-  const entries = Object.entries(CLOSE_VERB_TO_SIDE).sort(([a], [b]) => b.length - a.length)
+  const entries = Object.entries(verbMap).sort(([a], [b]) => b.length - a.length)
   for (const [verb, side] of entries) {
     if (lower.includes(verb.toLowerCase())) return side
   }
   return null
+}
+
+function detectCloseSide(clause: string): 'long' | 'short' | null {
+  return detectSideFromVerbMap(clause, CLOSE_VERB_TO_SIDE)
+}
+
+function detectExplicitActionSide(clause: string): 'long' | 'short' | null {
+  return detectSideFromVerbMap(clause, ACTION_VERB_TO_SIDE)
 }
 
 function resolveSide(
@@ -320,9 +394,145 @@ function resolveSide(
 function splitClauses(text: string): string[] {
   if (!text) return []
   return text
-    .split(/[，,。.；;\n]+/g)
+    .split(/[，,。；;\n]+|(?<!\d)\.(?!\d)/g)
     .map(s => s.trim())
+    .flatMap(splitClauseByEventBoundary)
     .filter(s => s.length > 0)
+}
+
+const EVENT_TERMINATOR_RE = /(?:买入|卖出|开多|开空|做多|做空|平多仓?|平空仓?|平仓|止损\s*-?\d+(?:\.\d+)?\s*%?|止盈\s*-?\d+(?:\.\d+)?\s*%?|资金|仓位)/g
+
+function splitClauseByEventBoundary(clause: string): string[] {
+  const normalized = clause.replace(/\s+/gu, ' ').trim()
+  if (!normalized) return []
+
+  const parts: string[] = []
+  let start = 0
+  for (const match of normalized.matchAll(EVENT_TERMINATOR_RE)) {
+    const end = match.index + match[0].length
+    const part = normalized.slice(start, end).trim()
+    if (part) parts.push(part)
+    start = end
+  }
+
+  const tail = normalized.slice(start).trim()
+  if (tail) parts.push(tail)
+  return parts.length > 0 ? parts : [normalized]
+}
+
+type ExtractedSizingRole = {
+  readonly sizing: SemanticPositionSizingContract
+  readonly evidenceText: string
+}
+
+const SIZING_SLOT_RE = /(?:sizing|size|budget)/iu
+const SIZING_ROLE_PREFIX_RE = /(?:仓位|资金(?!费率)|比例|使用|投入|固定|单笔|每格|每次|每笔|每单|用)\s*(?:使用|用|投入)?\s*[：:]?\s*$/u
+const SIZING_ROLE_SUFFIX_RE = /^\s*(?:仓位|资金(?!费率)|比例)/u
+const RISK_ROLE_NEAR_RE = /(?:止损|止盈|亏损|盈利|ATR|atr)\s*$/u
+
+function hasSizingRoleContext(text: string, index: number, length: number): boolean {
+  const prefix = text.slice(Math.max(0, index - 14), index)
+  const suffix = text.slice(index + length, index + length + 14)
+  if (RISK_ROLE_NEAR_RE.test(prefix) || /^(?:\s*(?:止损|止盈|亏损|盈利|ATR|atr))/u.test(suffix)) return false
+  return SIZING_ROLE_PREFIX_RE.test(prefix) || SIZING_ROLE_SUFFIX_RE.test(suffix)
+}
+
+function normalizeQuoteAsset(input: string): 'USDT' | 'USDC' | 'USD' {
+  const upper = input.toUpperCase()
+  if (upper === 'USDT' || upper === 'U') return 'USDT'
+  if (upper === 'USDC') return 'USDC'
+  return 'USD'
+}
+
+function parseSizingPercentNumber(valueText: string | undefined): number {
+  if (!valueText) return Number.NaN
+  const numeric = Number(valueText)
+  if (Number.isFinite(numeric)) return numeric
+  const digitMap: Record<string, number> = {
+    一: 1,
+    二: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+  }
+  if (valueText === '十') return 10
+  const tenIndex = valueText.indexOf('十')
+  if (tenIndex >= 0) {
+    const leadingText = valueText.slice(0, tenIndex)
+    const trailingText = valueText.slice(tenIndex + 1)
+    const leading = leadingText === '' ? 1 : digitMap[leadingText]
+    const trailing = trailingText === '' ? 0 : digitMap[trailingText]
+    return leading !== undefined && trailing !== undefined ? leading * 10 + trailing : Number.NaN
+  }
+  return digitMap[valueText] ?? Number.NaN
+}
+
+function extractSizingRoleFromText(text: string): ExtractedSizingRole | null {
+  const normalized = text.trim().replace(/\s+/gu, ' ').replace(/％/gu, '%')
+  if (!normalized) return null
+
+  const percentPattern = /(?:百分之?\s*(\d+(?:\.\d+)?|[一二三四五六七八九十]+)|(\d+(?:\.\d+)?)\s*%)/gu
+  for (const match of normalized.matchAll(percentPattern)) {
+    if (match.index === undefined) continue
+    if (!hasSizingRoleContext(normalized, match.index, match[0].length)) continue
+    const percent = parseSizingPercentNumber(match[1] ?? match[2])
+    if (!Number.isFinite(percent) || percent <= 0 || percent > 100) continue
+    return {
+      sizing: { kind: 'ratio', value: percent / 100, unit: 'ratio' },
+      evidenceText: normalized,
+    }
+  }
+
+  const quotePattern = /(?<![\d.])(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|[uU](?![A-Za-z0-9])|刀|美元)/giu
+  for (const match of normalized.matchAll(quotePattern)) {
+    if (match.index === undefined || !match[1] || !match[2]) continue
+    const isBareAnswer = normalized === match[0]
+    if (!isBareAnswer && !hasSizingRoleContext(normalized, match.index, match[0].length)) continue
+    const value = Number(match[1])
+    if (!Number.isFinite(value) || value <= 0) continue
+    return {
+      sizing: { kind: 'quote', value, asset: normalizeQuoteAsset(match[2]) },
+      evidenceText: normalized,
+    }
+  }
+
+  return null
+}
+
+function toPerOrderSizingShape(sizing: SemanticPositionSizingContract): Record<string, unknown> {
+  return { ...sizing }
+}
+
+function semanticPositionModeFromSizing(sizing: SemanticPositionSizingContract): string {
+  if (sizing.kind === 'ratio') return 'fixed_ratio'
+  if (sizing.kind === 'quote') return 'fixed_quote'
+  return 'fixed_qty'
+}
+
+function extractParamsWithSizingRoles(
+  paramSlots: Readonly<Record<string, ParamSlotSchema>>,
+  clause: string,
+  atomKey: string,
+): Record<string, unknown> {
+  const params = extractParams(paramSlots, clause, atomKey)
+  const hasSizingSlot = Object.keys(paramSlots).some(slotKey => SIZING_SLOT_RE.test(slotKey))
+  if (!hasSizingSlot) return params
+
+  const role = extractSizingRoleFromText(clause)
+  if (!role) return params
+
+  params.perOrderSizing = toPerOrderSizingShape(role.sizing)
+  for (const slotKey of Object.keys(paramSlots)) {
+    if (!SIZING_SLOT_RE.test(slotKey)) continue
+    if (role.sizing.kind === 'ratio') {
+      params[slotKey] = role.sizing.value
+    }
+  }
+  return params
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -536,56 +746,6 @@ const BUCKET_TO_PATCH_SLOT: Readonly<Record<AtomContractBucket, 'triggers' | 'ac
   orchestration: 'risk',
 }
 
-// review m1：显式映射表替代 endsWith('s') chop——后者在新增 'positions'/'metrics' 等 slot 时
-// 会拼出错误 contract kind。新加 patch slot 必须同步在此声明。
-const SLOT_TO_KIND: Readonly<Record<'triggers' | 'actions' | 'risk', string>> = {
-  triggers: 'trigger',
-  actions: 'action',
-  risk: 'risk',
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
- * Contract Envelope Assembler
- *
- * id / shape / requires / runtimeRequirements 等字段是 CodegenSemanticPatch
- * 数据结构强制要求的 envelope；capability triple 由 contract.emit.capability
- * 派生（**registry 真相源**），不再用 dispatcher 内置 BUCKET_CAPABILITY 表。
- * ────────────────────────────────────────────────────────────────────────── */
-
-function kebabCase(s: string): string {
-  return s.replace(/\./g, '-').replace(/_/g, '-')
-}
-
-function buildContractEnvelope(
-  bucketSlot: 'triggers' | 'actions' | 'risk',
-  idx: number,
-  atomKey: string,
-  capability: CapabilityTriple,
-  shape: Record<string, unknown>,
-  params: Record<string, unknown>,
-): Record<string, unknown> {
-  // bucket slot → contract kind 字符串（review m1：显式映射表）
-  const kind = SLOT_TO_KIND[bucketSlot]
-  return {
-    id: `contract-seed-${kind}-${idx}-${kebabCase(atomKey)}`,
-    kind,
-    capabilities: [
-      {
-        domain: capability.domain,
-        verb: capability.verb,
-        object: capability.object,
-        shape,
-      },
-    ],
-    requires: [],
-    params,
-    runtimeRequirements: [],
-    stateRequirements: [],
-    orderRequirements: [],
-    openSlots: [],
-  }
-}
-
 /* ──────────────────────────────────────────────────────────────────────────
  * Dispatcher 主体（pure registry-driven）
  * ────────────────────────────────────────────────────────────────────────── */
@@ -610,16 +770,26 @@ export class GenericSeedDispatcher {
     if (ctx) patch.contextSlots = ctx as CodegenSemanticPatch['contextSlots']
 
     const clauses = splitClauses(text)
+    const sizingRole = clauses.map(clause => extractSizingRoleFromText(clause)).find((role): role is ExtractedSizingRole => role !== null)
+      ?? extractSizingRoleFromText(text)
+    if (sizingRole) {
+      patch.position = {
+        mode: semanticPositionModeFromSizing(sizingRole.sizing),
+        value: sizingRole.sizing.value,
+        positionMode: 'long_only',
+        sizing: sizingRole.sizing,
+        status: 'locked',
+        source: 'user_explicit',
+        evidence: { text: sizingRole.evidenceText, source: 'user_explicit' },
+        openSlots: [],
+      }
+    }
     const slotItems: Record<'triggers' | 'actions' | 'risk', unknown[]> = {
       triggers: [],
       actions: [],
       risk: [],
     }
-    const slotIdx: Record<'triggers' | 'actions' | 'risk', number> = {
-      triggers: 0,
-      actions: 0,
-      risk: 0,
-    }
+    const atomItems: unknown[] = []
     // Issue #1338 Phase 4：跨 clause 命中去重——同一 atom 在多个 clause 命中且
     // (phase, sideScope, params) 完全相同时，只保留首条。例如 'EMA20 上穿 EMA50
     // 时市价开多；EMA20 下穿 EMA50 时市价平多' 中 position.no_position 因 verb '时'
@@ -643,7 +813,7 @@ export class GenericSeedDispatcher {
         const sideScope = m.sideScope ?? 'both'
 
         // Issue #1338 Phase 4：dedupe key 用 (atomKey, phase, sideScope, sorted params JSON)，
-        // 跨 clause 等价命中只保留首条。在 slotIdx +=1 之前判定避免空洞计数。
+        // 跨 clause 等价命中只保留首条。
         const sortedParams = Object.fromEntries(
           Object.entries(params).sort(([a], [b]) => a.localeCompare(b)),
         )
@@ -651,21 +821,11 @@ export class GenericSeedDispatcher {
         if (slotDedupeKeys[slot].has(dedupeKey)) continue
         slotDedupeKeys[slot].add(dedupeKey)
 
-        slotIdx[slot] += 1
         // evidence.source 由 atom surface.evidenceProvenance 声明（数据驱动，无 atom-key 字面量比较）。
         // external.signal 声明 'webhook'；其余 atom 省略，默认 'user_explicit'。
         const evidenceSource: NonNullable<AtomContractSurface['evidenceProvenance']> = contract.surface?.evidenceProvenance ?? 'user_explicit'
         const evidence = { text: m.clauseText, source: evidenceSource }
         const shape = { key: m.atomKey, phase, sideScope, ...params }
-        const envelope = buildContractEnvelope(
-          slot,
-          slotIdx[slot],
-          m.atomKey,
-          contract.emit.capability,
-          shape,
-          params,
-        )
-
         // phase は resolver が解決した後に全 slot に記録する（M1: actionMatchesFulfilledPhases が
         // action.phase を参照できるよう action にも phase を付与）。
         // sideScope は triggers のみ意味を持つため引き続き trigger 限定。
@@ -674,11 +834,11 @@ export class GenericSeedDispatcher {
           phase,
           params,
           evidence,
-          contracts: [envelope],
         }
         if (slot === 'triggers') {
           node.sideScope = sideScope
         }
+        atomItems.push({ ...node, sideScope })
         slotItems[slot].push(node)
       }
     }
@@ -694,6 +854,9 @@ export class GenericSeedDispatcher {
     if (slotItems.risk.length > 0) {
       patch.risk = slotItems.risk as CodegenSemanticPatch['risk']
     }
+    if (atomItems.length > 0) {
+      patch.atoms = atomItems as CodegenSemanticPatch['atoms']
+    }
 
     return patch
   }
@@ -704,7 +867,11 @@ export class GenericSeedDispatcher {
       const surface = contract.surface
       if (!surface) continue
       const m = this.matchSurface(surface, clause, atomKey)
-      if (m) out.push({ atomKey, ...m })
+      if (m) {
+        for (const expanded of expandMovingAverageReferenceMatches(m, surface)) {
+          out.push({ atomKey, ...expanded })
+        }
+      }
     }
     return out
   }
@@ -725,9 +892,11 @@ export class GenericSeedDispatcher {
     // 自然消除并行原子规则爆炸；同时 sideScope 由真实命中的 direction 派生，不再回落 'both'。
     if (!kw || !direction) return null
 
-    const params = extractParams(surface.paramSlots, clause, atomKey)
+    const params = extractParamsWithSizingRoles(surface.paramSlots, clause, atomKey)
     const phase = resolvePhaseFromClause(clause, surface.phaseResolver, { atomKey, params })
     let sideScope = resolveSide(surface.sideResolver, clause, direction)
+    const explicitActionSide = detectExplicitActionSide(clause)
+    if (explicitActionSide) sideScope = explicitActionSide
     // Issue #1338 M1：exit phase 下若 clause 含 close-verb（平多/平空），用 close-verb
     //   推导的目标仓位方向覆盖 direction-derived side——'EMA20 下穿 平多' 应 long
     //   单边（平的是多仓），而非 cross_under → short。

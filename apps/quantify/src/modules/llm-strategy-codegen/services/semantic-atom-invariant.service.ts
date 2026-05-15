@@ -186,6 +186,7 @@ export class SemanticAtomInvariantService {
       ...state.action.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
       ...state.risk.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
       ...(state.position?.status === 'locked' ? state.position.contracts ?? [] : []),
+      ...(state.position?.constraints ?? []).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
     ]
   }
 
