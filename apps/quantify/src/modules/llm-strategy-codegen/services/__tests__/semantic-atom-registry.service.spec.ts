@@ -71,6 +71,17 @@ describe('semanticAtomRegistryService', () => {
     })
   })
 
+  it('does not promote static moving-average compare support without executable params', () => {
+    expect(service.resolve('indicator.above')).toMatchObject({
+      key: 'indicator.above',
+      supportStatus: 'recognized_unsupported',
+    })
+    expect(service.resolve('indicator.below')).toMatchObject({
+      key: 'indicator.below',
+      supportStatus: 'recognized_unsupported',
+    })
+  })
+
   it('classifies current executable trigger atoms as supported executable', () => {
     const executableKeys = [
       'price.percent_change',

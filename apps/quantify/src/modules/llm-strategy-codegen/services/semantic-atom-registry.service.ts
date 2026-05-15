@@ -785,7 +785,10 @@ function adaptContractToRegistryShape(
   const bucket = entry.bucket
   const category = bucketToCategory(bucket)
   const { classifier } = entry
-  const isExecutableByEmit = isExecutableByEmitCapability(entry)
+  const isEmitPromotionAllowed = classifier.supportStatus === 'supported_executable'
+    || params !== undefined
+  const isExecutableByEmit = isEmitPromotionAllowed
+    && isExecutableByEmitCapability(entry)
     && matchesSurfaceParamCapability(entry, params)
   const isUnsupported = classifier.supportStatus !== 'supported_executable' && !isExecutableByEmit
 

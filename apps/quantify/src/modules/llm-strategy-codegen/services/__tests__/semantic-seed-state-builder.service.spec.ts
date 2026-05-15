@@ -2383,6 +2383,34 @@ describe('SemanticSeedStateBuilderService.toActionState — action.* 前缀归�
       expect(state!.positionConstraint).toHaveLength(1)
     })
 
+    it('dedupes every positionConstraint bucket key when atoms[] and legacy mirrors carry the same semantic item', () => {
+      const dcaAtom = {
+        key: 'position.dca_schedule',
+        params: {
+          maxCount: 4,
+          capitalCap: { kind: 'quote', value: 500, asset: 'USDT' },
+          perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+          triggerMode: 'price_interval',
+          exitRule: { rule: 'stop_below_previous_low' },
+        },
+      }
+      const pyramidingAtom = {
+        key: 'position.pyramiding_limit',
+        params: {
+          maxLayers: 3,
+          layerSizing: { kind: 'ratio', value: 0.2, unit: 'ratio' },
+        },
+      }
+      const state = builder.build({
+        atoms: [dcaAtom, pyramidingAtom],
+        actions: [dcaAtom, pyramidingAtom],
+      })
+
+      expect(state).not.toBeNull()
+      expect(state!.positionConstraint.filter(item => item.key === 'position.dca_schedule')).toHaveLength(1)
+      expect(state!.positionConstraint.filter(item => item.key === 'position.pyramiding_limit')).toHaveLength(1)
+    })
+
     it('keeps bare numeric grid sizing as ratio rather than quote amount', () => {
       const state = builder.build({
         atoms: [{

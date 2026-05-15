@@ -551,10 +551,10 @@ export class SemanticSeedStateBuilderService {
         continue
       }
 
+      const constraintKey = this.positionConstraintPatchDedupeKey(constraint)
       const existingIndex = out.findIndex(item =>
         this.isRecord(item)
-        && item.key === constraint.key
-        && constraint.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key,
+        && this.positionConstraintPatchDedupeKey(item) === constraintKey,
       )
       if (existingIndex < 0) {
         out.push(constraint)
@@ -568,6 +568,17 @@ export class SemanticSeedStateBuilderService {
     }
 
     return out
+  }
+
+  private positionConstraintPatchDedupeKey(constraint: Record<string, unknown>): string {
+    const params = this.readParams(constraint.params)
+    const sortedParams = Object.fromEntries(
+      Object.entries(params).sort(([left], [right]) => left.localeCompare(right)),
+    )
+    return JSON.stringify({
+      key: constraint.key,
+      params: sortedParams,
+    })
   }
 
   private mergeConstraintPatchRecords(

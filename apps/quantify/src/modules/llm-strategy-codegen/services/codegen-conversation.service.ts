@@ -3177,6 +3177,7 @@ export class CodegenConversationService {
 
   private hasExecutableEntrySemantics(state: SemanticState): boolean {
     return this.hasLockedTriggerPhase(state, 'entry')
+      || this.hasOrderProgramContractSemantics(state)
       || this.hasCompleteOrderProgramSemantics(state)
       || this.hasLockedScheduleSemantics(state)
   }
@@ -3184,7 +3185,25 @@ export class CodegenConversationService {
   private hasExecutableExitSemantics(state: SemanticState): boolean {
     return this.hasLockedTriggerPhase(state, 'exit')
       || this.hasLockedExitRiskSemantics(state)
+      || this.hasOrderProgramContractSemantics(state)
       || this.hasExecutableCapabilityGraph(state)
+  }
+
+  private hasOrderProgramContractSemantics(state: SemanticState): boolean {
+    const topLevelConstraintIds = new Set(state.positionConstraint.map(constraint => constraint.id))
+    const constraints = [
+      ...(state.positionConstraint ?? []),
+      ...((state.position?.constraints ?? []).filter(constraint => !topLevelConstraintIds.has(constraint.id))),
+    ]
+    return constraints.some(constraint =>
+      constraint.status !== 'superseded'
+      && (constraint.contracts ?? []).some(contract =>
+        contract.capabilities.some(capability =>
+          capability.domain === 'order_program'
+          && (capability.verb === 'maintain' || capability.verb === 'place' || capability.verb === 'rebalance'),
+        ),
+      ),
+    )
   }
 
   private hasCompleteOrderProgramSemantics(state: SemanticState): boolean {
@@ -3223,9 +3242,13 @@ export class CodegenConversationService {
         pushContracts(risk.contracts)
       }
     }
+    const topLevelConstraintIds = new Set(state.positionConstraint.map(constraint => constraint.id))
     if (state.position?.status === 'locked' && (state.position.openSlots ?? []).every(slot => slot.status !== 'open')) {
       pushContracts(state.position.contracts)
       for (const constraint of state.position.constraints ?? []) {
+        if (topLevelConstraintIds.has(constraint.id)) {
+          continue
+        }
         if (constraint.status === 'locked' && constraint.openSlots.every(slot => slot.status !== 'open')) {
           pushContracts(constraint.contracts)
         }
@@ -4063,8 +4086,10 @@ export class CodegenConversationService {
       .flatMap(action => action.openSlots ?? [])
       .filter(isBlockingSemanticOpenSlot)
     const openPositionSlots = state.position?.openSlots?.filter(isBlockingSemanticOpenSlot) ?? []
+    const topLevelConstraintIds = new Set(state.positionConstraint.map(constraint => constraint.id))
     const openNestedPositionConstraintSlots = state.position?.constraints
-      ?.flatMap(constraint => constraint.openSlots)
+      ?.filter(constraint => !topLevelConstraintIds.has(constraint.id))
+      .flatMap(constraint => constraint.openSlots)
       .filter(isBlockingSemanticOpenSlot) ?? []
     const openPositionConstraintSlots = state.positionConstraint
       .flatMap(constraint => constraint.openSlots)

@@ -53,9 +53,12 @@ function adaptFromContractRegistry(entry: AtomContractEntry) {
     lifecyclePyramidingShape?: unknown
     actionShape?: unknown
   }
-  // 与 production registry adapter 一致：静态 classifier 可保留 unsupported 文案元数据；
-  // 已兑现 emit shape 才是可执行支持状态来源，UNSUPPORTED_SKIP 仍强制 unsupported。
+  // 与 production registry adapter 的无 params resolve()/list() 路径一致：
+  // unsupported atom 不能只因 emit shape 存在而全局升级，必须由带 params 的 resolve() 特例提升。
   const isExecutableByEmit = (() => {
+    if (classifier.supportStatus !== 'supported_executable') {
+      return false
+    }
     if (entry.readinessCheck === UNSUPPORTED_SKIP) {
       return false
     }
