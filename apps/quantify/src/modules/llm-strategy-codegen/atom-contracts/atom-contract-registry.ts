@@ -178,6 +178,9 @@ const ATOM_BUCKETS = {
   'action.close_long': 'action',
   'action.open_short': 'action',
   'action.close_short': 'action',
+  'risk.stop_loss_pct': 'risk',
+  'risk.take_profit_pct': 'risk',
+  'risk.atr_stop': 'risk',
   'risk.partial_take_profit': 'risk',
   'portfolioRisk.drawdown_block': 'orchestration',
   'position.dca_schedule': 'positionConstraint',
@@ -261,6 +264,9 @@ const ATOM_PUBLIC_NAMES = {
   'action.close_long': { zh: '平多', en: 'Close long' },
   'action.open_short': { zh: '开空', en: 'Open short' },
   'action.close_short': { zh: '平空', en: 'Close short' },
+  'risk.stop_loss_pct': { zh: '百分比止损', en: 'Percent stop loss' },
+  'risk.take_profit_pct': { zh: '百分比止盈', en: 'Percent take profit' },
+  'risk.atr_stop': { zh: 'ATR 动态止损', en: 'ATR stop' },
   'risk.partial_take_profit': { zh: '分批止盈', en: 'Partial take profit' },
   'portfolioRisk.drawdown_block': { zh: '组合回撤护栏', en: 'Portfolio drawdown guard' },
   'position.dca_schedule': { zh: 'DCA 补仓计划', en: 'DCA schedule' },
@@ -1277,7 +1283,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         'reference.period': (v) => String(v),
         timeframeOverride: (v) => String(v),
       },
-      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['indicator.above'][locale],
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['indicator.above'].en
+        const indicator = typeof params.indicator === 'string' ? params.indicator.toUpperCase() : 'MA'
+        const period = typeof params['reference.period'] === 'number' ? params['reference.period'] : null
+        return period !== null ? `价格在 ${indicator}${period} 上方` : ATOM_PUBLIC_NAMES['indicator.above'].zh
+      },
     },
     surface: {
       intent: {
@@ -1328,7 +1339,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         'reference.period': (v) => String(v),
         timeframeOverride: (v) => String(v),
       },
-      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['indicator.below'][locale],
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['indicator.below'].en
+        const indicator = typeof params.indicator === 'string' ? params.indicator.toUpperCase() : 'MA'
+        const period = typeof params['reference.period'] === 'number' ? params['reference.period'] : null
+        return period !== null ? `价格低于 ${indicator}${period}` : ATOM_PUBLIC_NAMES['indicator.below'].zh
+      },
     },
     surface: {
       intent: {
@@ -2445,6 +2461,152 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   // ── 风险（risk）
+  'risk.stop_loss_pct': {
+    corpus: {
+      aliases: ['止损比例', '亏损止损', '百分比止损', 'stop loss pct'],
+      positiveExamples: [
+        '亏损 5% 止损',
+        '按入场均价亏损 5% 止损',
+      ],
+      negativeExamples: ['盈利 10% 止盈', '分批止盈一半'],
+      goldenUtterances: getGoldenUtterancesForAtom('risk.stop_loss_pct'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'risk.stop_loss_pct.valuePct') return '请补充百分比止损的止损比例。'
+      return '请补充百分比止损的缺失信息。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.stop_loss_pct'],
+      paramRenderers: {
+        valuePct: (v) => `${v}%`,
+        basis: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.stop_loss_pct'].en
+        const valuePct = typeof params.valuePct === 'number' ? params.valuePct : 0
+        const basis = params.basis === 'entry_avg_price' ? '入场均价' : '持仓收益率'
+        return `止损：价格相对${basis}下跌${valuePct}% 强制平仓`
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['止损', '亏损', '损失', 'stop loss', 'loss'] as const,
+        verbs: {
+          fixed: ['止损', '亏损', '损失', 'stop loss', 'loss'] as const,
+        },
+      },
+      paramSlots: {
+        valuePct: { kind: 'percent', required: true, range: [0, 100], extractor: { kind: 'percent', pattern: '(?:止损|亏损|损失|stop\\s*loss|loss)\\D{0,12}(\\d+(?:\\.\\d+)?)\\s*%', range: [0, 100] } },
+        basis: { kind: 'enum', required: false, enum: ['entry_avg_price', 'position_pnl'], default: 'entry_avg_price', extractor: { kind: 'enum-zh-map', enumMap: { '入场均价': 'entry_avg_price', '开仓均价': 'entry_avg_price', '持仓收益率': 'position_pnl' } } },
+      },
+      matchRequires: ['valuePct'],
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'risk.take_profit_pct': {
+    corpus: {
+      aliases: ['止盈比例', '盈利止盈', '百分比止盈', 'take profit pct'],
+      positiveExamples: [
+        '盈利 10% 止盈',
+        '止盈 10%',
+      ],
+      negativeExamples: ['亏损 5% 止损', '分批止盈一半'],
+      goldenUtterances: getGoldenUtterancesForAtom('risk.take_profit_pct'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充百分比止盈的缺失信息。',
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.take_profit_pct'],
+      paramRenderers: {
+        valuePct: (v) => `${v}%`,
+        basis: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.take_profit_pct'].en
+        const valuePct = typeof params.valuePct === 'number' ? params.valuePct : 0
+        const basis = params.basis === 'entry_avg_price' ? '入场均价' : '持仓收益率'
+        return `止盈：价格相对${basis}上涨${valuePct}% 平仓`
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['止盈', '盈利', '利润', 'take profit', 'profit'] as const,
+        verbs: {
+          fixed: ['止盈', '盈利', '利润', 'take profit', 'profit'] as const,
+        },
+      },
+      paramSlots: {
+        valuePct: { kind: 'percent', required: true, range: [0, 100], extractor: { kind: 'percent', pattern: '(?:止盈|盈利|利润|take\\s*profit|profit)\\D{0,12}(\\d+(?:\\.\\d+)?)\\s*%', range: [0, 100] } },
+        basis: { kind: 'enum', required: false, enum: ['entry_avg_price', 'position_pnl'], default: 'entry_avg_price', extractor: { kind: 'enum-zh-map', enumMap: { '入场均价': 'entry_avg_price', '开仓均价': 'entry_avg_price', '持仓收益率': 'position_pnl' } } },
+      },
+      matchRequires: ['valuePct'],
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'risk.atr_stop': {
+    corpus: {
+      aliases: ['ATR 止损', '波动止损', 'ATR 动态止损'],
+      positiveExamples: [
+        '用 2 倍 ATR 作为动态止损',
+        '仓位的 2% ATR 作为止损',
+      ],
+      negativeExamples: ['固定 5% 止损', 'ATR 大于 50 才交易'],
+      goldenUtterances: getGoldenUtterancesForAtom('risk.atr_stop'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: UNSUPPORTED_SKIP,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充 ATR 动态止损的缺失信息。',
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: {
+      supportStatus: `unsupported_atr_stop_public_beta_unsupported` as const,
+      unsupportedMeta: { reasonCode: 'atr_stop_public_beta_unsupported', publicReasonZh: 'ATR 动态止损当前公测暂未支持生成和回测。' },
+    },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.atr_stop'],
+      paramRenderers: {
+        multiple: (v) => String(v),
+        pctOfAtr: (v) => `${v}%`,
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.atr_stop'].en
+        if (typeof params.multiple === 'number') return `${params.multiple} 倍 ATR 止损`
+        if (typeof params.pctOfAtr === 'number') return `${params.pctOfAtr}% ATR 止损`
+        return 'ATR 动态止损'
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['ATR 止损', 'ATR', '动态止损', '波动止损', 'atr stop'] as const,
+        verbs: {
+          fixed: ['止损', '作为止损', '动态止损', 'atr stop'] as const,
+        },
+      },
+      paramSlots: {
+        pctOfAtr: { kind: 'percent', required: false, range: [0, 100], extractor: { kind: 'percent', pattern: '(\\d+(?:\\.\\d+)?)\\s*%\\s*ATR', range: [0, 100] } },
+        multiple: { kind: 'number', required: false, range: [0, 100], extractor: { kind: 'number-decimal', pattern: '(\\d+(?:\\.\\d+)?)\\s*(?:倍|x)\\s*ATR', range: [0, 100] } },
+      },
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
+    },
+  },
+
   // 产品决策：risk.partial_take_profit 保持 recognized_unsupported（公测，不改为 supported）
   //   readinessCheck = UNSUPPORTED_SKIP（critic Major #3）：声明"contractReadiness 主动跳过"，
   //   避免与 COMMON_PIPELINE 混淆。summaryContribution 仍 VIA_PRESENTATION_DISPLAY
@@ -2501,7 +2663,8 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       intent: {
         // Issue #1279 PR2b：补 '档' / '减' / '平' 关键词，覆盖中文分档语法
         //   "第一档 +5% 减 30%" / "盈利 5% 平一半" 等真实 utterance（baseline 修复）
-        keywords: ['止盈', '分批止盈', '部分平仓', '档', '减仓', '减', 'take profit', 'partial take profit', 'scale out', 'tier'] as const,
+        // 裸 "止盈 10%" 属 risk.take_profit_pct，不能触发 partial_take_profit。
+        keywords: ['分批止盈', '部分止盈', '部分平仓', '一半', '半仓', '档', '减仓', '减', 'partial take profit', 'scale out', 'tier'] as const,
         verbs: {
           gte: ['盈利', '达到', '第一档', '第二档', '第三档', 'profit', 'at', 'tier'] as const,
         },

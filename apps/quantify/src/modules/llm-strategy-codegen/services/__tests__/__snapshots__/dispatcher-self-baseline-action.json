@@ -217,6 +217,20 @@
           }
         }
       ],
+      "risk": [
+        {
+          "key": "risk.take_profit_pct",
+          "phase": "exit",
+          "params": {
+            "valuePct": 30,
+            "basis": "entry_avg_price"
+          },
+          "evidence": {
+            "text": "盈利后加仓 30%",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "indicator.cross_over",
@@ -253,6 +267,19 @@
             "addRatio": 30,
             "profitThreshold": 30,
             "drawdownThreshold": 30
+          },
+          "evidence": {
+            "text": "盈利后加仓 30%",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "risk.take_profit_pct",
+          "phase": "exit",
+          "params": {
+            "valuePct": 30,
+            "basis": "entry_avg_price"
           },
           "evidence": {
             "text": "盈利后加仓 30%",
@@ -336,6 +363,20 @@
           }
         }
       ],
+      "risk": [
+        {
+          "key": "risk.take_profit_pct",
+          "phase": "exit",
+          "params": {
+            "valuePct": 5,
+            "basis": "entry_avg_price"
+          },
+          "evidence": {
+            "text": "scale in 30% when profit 5%",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "indicator.above",
@@ -376,6 +417,19 @@
             "source": "user_explicit"
           },
           "sideScope": "long"
+        },
+        {
+          "key": "risk.take_profit_pct",
+          "phase": "exit",
+          "params": {
+            "valuePct": 5,
+            "basis": "entry_avg_price"
+          },
+          "evidence": {
+            "text": "scale in 30% when profit 5%",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
         }
       ]
     }
@@ -786,6 +840,20 @@
           }
         }
       ],
+      "risk": [
+        {
+          "key": "risk.take_profit_pct",
+          "phase": "exit",
+          "params": {
+            "valuePct": 2,
+            "basis": "entry_avg_price"
+          },
+          "evidence": {
+            "text": "盈利 2% 后加仓",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "indicator.cross_over",
@@ -822,6 +890,19 @@
             "addRatio": 2,
             "profitThreshold": 2,
             "drawdownThreshold": 2
+          },
+          "evidence": {
+            "text": "盈利 2% 后加仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "risk.take_profit_pct",
+          "phase": "exit",
+          "params": {
+            "valuePct": 2,
+            "basis": "entry_avg_price"
           },
           "evidence": {
             "text": "盈利 2% 后加仓",

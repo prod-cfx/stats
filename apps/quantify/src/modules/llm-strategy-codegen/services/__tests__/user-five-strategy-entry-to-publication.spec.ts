@@ -168,4 +168,59 @@ describe('user reported five strategies: entry -> middle -> publication generati
       assertNoForbiddenUserText(artifacts.compiledScript)
     })
   }
+
+  it('策略1: 网格每格间距已给出时不再追问密度', () => {
+    const state = buildStateFromUserMessage('在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈')
+    const grid = state.trigger.find(item => item.key === 'grid.range_rebalance')
+      ?? state.positionConstraint.find(item => item.key === 'grid.range_rebalance')
+      ?? state.position?.constraints?.find(item => item.key === 'grid.range_rebalance')
+    const conversation = createConversationService()
+    const clarificationState = conversation.buildClarificationFromSemanticState(state)
+    const prompt = new StrategyClarificationQuestionService().build(clarificationState)
+
+    expect(grid?.params.stepPct).toBe(0.5)
+    expect(grid?.openSlots.map(slot => slot.slotKey)).not.toContain('contract.shape.price.level_set.density')
+    expect(prompt).not.toContain('网格数量或每格间距')
+  })
+
+  it('策略2: 普通止盈不误归类为分批止盈', () => {
+    const state = buildStateFromUserMessage('在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%')
+    const riskKeys = state.risk.map(item => item.key)
+    const conversation = createConversationService()
+    const clarificationState = conversation.buildClarificationFromSemanticState(state)
+    const prompt = new StrategyClarificationQuestionService().build(clarificationState)
+
+    expect(riskKeys).toContain('risk.take_profit_pct')
+    expect(riskKeys).not.toContain('risk.partial_take_profit')
+    expect(prompt).not.toContain('分批止盈')
+  })
+
+  it('策略3: EMA 多均线 summary 保留具体指标周期', () => {
+    const state = buildStateFromUserMessage('入场：15m k线里面 价格在ema20 ema60 ema144上方时做多开仓；出场：15m k线里面 价格低于ema20时平多；止损：5%；仓位：10usdt')
+    const projection = new SemanticStateProjectionService().buildConversationView(state)
+
+    expect(projection.summary).toContain('EMA20')
+    expect(projection.summary).toContain('EMA60')
+    expect(projection.summary).toContain('EMA144')
+    expect(projection.summary).not.toContain('指标高于阈值，且指标高于阈值')
+  })
+
+  it('策略4: RSI/ATR/分批止盈/回撤护栏不回退入场追问', () => {
+    const state = buildStateFromUserMessage('ETH 永续，15 分钟。RSI(14) ≤ 30 时开多，仓位的 2% ATR 作为止损，达到 3% 利润分批止盈一半；任何时刻账户回撤超过 10% 暂停开新仓。')
+    const allKeys = [
+      ...state.trigger.map(item => item.key),
+      ...state.action.map(item => item.key),
+      ...state.risk.map(item => item.key),
+      ...state.orchestration.map(item => item.key),
+    ]
+    const conversation = createConversationService()
+    const clarificationState = conversation.buildClarificationFromSemanticState(state)
+    const prompt = new StrategyClarificationQuestionService().build(clarificationState)
+
+    expect(allKeys).toContain('oscillator.rsi_lte')
+    expect(allKeys).toContain('risk.partial_take_profit')
+    expect(allKeys).toContain('portfolioRisk.drawdown_block')
+    expect(allKeys).not.toContain('semantic.missing_entry_atom')
+    expect(prompt).not.toContain('请补充入场触发条件')
+  })
 })

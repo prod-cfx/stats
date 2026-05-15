@@ -762,6 +762,45 @@ const BUCKET_TO_PATCH_SLOT: Readonly<Record<AtomContractBucket, 'triggers' | 'ac
   orchestration: null,
 }
 
+type PatchAtomNode = Record<string, unknown> & {
+  key: string
+  phase: 'entry' | 'exit' | 'gate' | null
+  sideScope?: 'long' | 'short' | 'both' | null
+  params: Record<string, unknown>
+  evidence?: unknown
+}
+
+function canMergePatchAtomParams(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
+  for (const [key, value] of Object.entries(right)) {
+    if (!(key in left)) {
+      continue
+    }
+    if (JSON.stringify(left[key]) !== JSON.stringify(value)) {
+      return false
+    }
+  }
+  return true
+}
+
+function mergeCompatiblePatchAtomNodes<T extends PatchAtomNode>(nodes: T[]): T[] {
+  const out: T[] = []
+  for (const node of nodes) {
+    const existing = out.find(item =>
+      item.key === node.key
+      && item.phase === node.phase
+      && (item.sideScope ?? null) === (node.sideScope ?? null)
+      && canMergePatchAtomParams(item.params, node.params),
+    )
+    if (!existing) {
+      out.push(node)
+      continue
+    }
+    existing.params = { ...existing.params, ...node.params }
+    existing.evidence = existing.evidence ?? node.evidence
+  }
+  return out
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
  * Dispatcher 主体（pure registry-driven）
  * ────────────────────────────────────────────────────────────────────────── */
@@ -800,12 +839,12 @@ export class GenericSeedDispatcher {
         openSlots: [],
       }
     }
-    const slotItems: Record<'triggers' | 'actions' | 'risk', unknown[]> = {
+    const slotItems: Record<'triggers' | 'actions' | 'risk', PatchAtomNode[]> = {
       triggers: [],
       actions: [],
       risk: [],
     }
-    const atomItems: unknown[] = []
+    const atomItems: PatchAtomNode[] = []
     // Issue #1338 Phase 4：跨 clause 命中去重——同一 atom 在多个 clause 命中且
     // (phase, sideScope, params) 完全相同时，只保留首条。例如 'EMA20 上穿 EMA50
     // 时市价开多；EMA20 下穿 EMA50 时市价平多' 中 position.no_position 因 verb '时'
@@ -848,7 +887,7 @@ export class GenericSeedDispatcher {
         // phase は resolver が解決した後に全 slot に記録する（M1: actionMatchesFulfilledPhases が
         // action.phase を参照できるよう action にも phase を付与）。
         // sideScope は triggers のみ意味を持つため引き続き trigger 限定。
-        const node: Record<string, unknown> = {
+        const node: PatchAtomNode = {
           key: m.atomKey,
           phase,
           params,
@@ -866,17 +905,24 @@ export class GenericSeedDispatcher {
 
     // review C3：替代 `as never` 类型逃生，使用 patch schema 自身派生的精确 cast；
     // 未来 PR3+ 改 CodegenSemanticPatch 字段类型时编译器能抓到 mismatch。
-    if (slotItems.triggers.length > 0) {
-      patch.triggers = slotItems.triggers as CodegenSemanticPatch['triggers']
+    const mergedSlotItems: Record<'triggers' | 'actions' | 'risk', PatchAtomNode[]> = {
+      triggers: mergeCompatiblePatchAtomNodes(slotItems.triggers),
+      actions: mergeCompatiblePatchAtomNodes(slotItems.actions),
+      risk: mergeCompatiblePatchAtomNodes(slotItems.risk),
     }
-    if (slotItems.actions.length > 0) {
-      patch.actions = slotItems.actions as CodegenSemanticPatch['actions']
+    const mergedAtomItems = mergeCompatiblePatchAtomNodes(atomItems)
+
+    if (mergedSlotItems.triggers.length > 0) {
+      patch.triggers = mergedSlotItems.triggers as CodegenSemanticPatch['triggers']
     }
-    if (slotItems.risk.length > 0) {
-      patch.risk = slotItems.risk as CodegenSemanticPatch['risk']
+    if (mergedSlotItems.actions.length > 0) {
+      patch.actions = mergedSlotItems.actions as CodegenSemanticPatch['actions']
     }
-    if (atomItems.length > 0) {
-      patch.atoms = atomItems as CodegenSemanticPatch['atoms']
+    if (mergedSlotItems.risk.length > 0) {
+      patch.risk = mergedSlotItems.risk as CodegenSemanticPatch['risk']
+    }
+    if (mergedAtomItems.length > 0) {
+      patch.atoms = mergedAtomItems as CodegenSemanticPatch['atoms']
     }
 
     return patch
@@ -914,6 +960,9 @@ export class GenericSeedDispatcher {
     if (!kw || !direction) return null
 
     const params = extractParamsWithSizingRoles(surface.paramSlots, clause, atomKey)
+    if (surface.matchRequires?.some(slotKey => params[slotKey] === undefined || params[slotKey] === null)) {
+      return null
+    }
     const phase = resolvePhaseFromClause(clause, surface.phaseResolver, { atomKey, params })
     let sideScope = resolveSide(surface.sideResolver, clause, direction)
     const explicitActionSide = detectExplicitActionSide(clause)

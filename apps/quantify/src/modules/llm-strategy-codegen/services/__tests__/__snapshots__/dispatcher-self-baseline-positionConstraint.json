@@ -43,20 +43,6 @@
             "rangeUpper": 70000,
             "sideMode": "both",
             "recycle": "true",
-            "breakoutAction": "continue"
-          },
-          "evidence": {
-            "text": "区间 60000-70000",
-            "source": "user_explicit"
-          },
-          "sideScope": "both"
-        },
-        {
-          "key": "grid.range_rebalance",
-          "phase": "entry",
-          "params": {
-            "sideMode": "both",
-            "recycle": "true",
             "breakoutAction": "continue",
             "perGridSizing": 100,
             "perOrderSizing": {
@@ -66,21 +52,7 @@
             }
           },
           "evidence": {
-            "text": "每格 100 USDT",
-            "source": "user_explicit"
-          },
-          "sideScope": "both"
-        },
-        {
-          "key": "grid.range_rebalance",
-          "phase": "entry",
-          "params": {
-            "sideMode": "both",
-            "recycle": "true",
-            "breakoutAction": "continue"
-          },
-          "evidence": {
-            "text": "双向网格",
+            "text": "区间 60000-70000",
             "source": "user_explicit"
           },
           "sideScope": "both"
@@ -113,25 +85,11 @@
           "params": {
             "sideMode": "both",
             "recycle": "true",
-            "breakoutAction": "continue"
-          },
-          "evidence": {
-            "text": "grid range 60000-70000",
-            "source": "user_explicit"
-          },
-          "sideScope": "both"
-        },
-        {
-          "key": "grid.range_rebalance",
-          "phase": "entry",
-          "params": {
-            "sideMode": "both",
-            "recycle": "true",
             "breakoutAction": "continue",
             "perGridSizing": 100
           },
           "evidence": {
-            "text": "each grid 100 USDT",
+            "text": "grid range 60000-70000",
             "source": "user_explicit"
           },
           "sideScope": "both"
@@ -208,20 +166,6 @@
             "rangeUpper": 2500,
             "sideMode": "both",
             "recycle": "true",
-            "breakoutAction": "continue"
-          },
-          "evidence": {
-            "text": "区间 2000-2500",
-            "source": "user_explicit"
-          },
-          "sideScope": "both"
-        },
-        {
-          "key": "grid.range_rebalance",
-          "phase": "entry",
-          "params": {
-            "sideMode": "both",
-            "recycle": "true",
             "breakoutAction": "continue",
             "perGridSizing": 50,
             "perOrderSizing": {
@@ -231,7 +175,7 @@
             }
           },
           "evidence": {
-            "text": "每格 50 USDT",
+            "text": "区间 2000-2500",
             "source": "user_explicit"
           },
           "sideScope": "both"
@@ -1169,6 +1113,20 @@
           }
         }
       ],
+      "risk": [
+        {
+          "key": "risk.take_profit_pct",
+          "phase": "exit",
+          "params": {
+            "valuePct": 3,
+            "basis": "entry_avg_price"
+          },
+          "evidence": {
+            "text": "盈利 3% 后加仓 50%",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "price.breakout_up",
@@ -1202,6 +1160,19 @@
             "addRatio": 3,
             "profitThreshold": 3,
             "drawdownThreshold": 3
+          },
+          "evidence": {
+            "text": "盈利 3% 后加仓 50%",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "risk.take_profit_pct",
+          "phase": "exit",
+          "params": {
+            "valuePct": 3,
+            "basis": "entry_avg_price"
           },
           "evidence": {
             "text": "盈利 3% 后加仓 50%",

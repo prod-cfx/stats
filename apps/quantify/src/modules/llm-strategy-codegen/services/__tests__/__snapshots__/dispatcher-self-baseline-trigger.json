@@ -2306,6 +2306,20 @@
           }
         }
       ],
+      "risk": [
+        {
+          "key": "risk.stop_loss_pct",
+          "phase": "exit",
+          "params": {
+            "valuePct": 5,
+            "basis": "entry_avg_price"
+          },
+          "evidence": {
+            "text": "止损 5%",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "external.signal",
@@ -2331,6 +2345,19 @@
             "source": "user_explicit"
           },
           "sideScope": "long"
+        },
+        {
+          "key": "risk.stop_loss_pct",
+          "phase": "exit",
+          "params": {
+            "valuePct": 5,
+            "basis": "entry_avg_price"
+          },
+          "evidence": {
+            "text": "止损 5%",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
         }
       ]
     }
@@ -2373,6 +2400,20 @@
           }
         }
       ],
+      "risk": [
+        {
+          "key": "risk.stop_loss_pct",
+          "phase": "exit",
+          "params": {
+            "valuePct": 5,
+            "basis": "entry_avg_price"
+          },
+          "evidence": {
+            "text": "open long 100 USDT and stop loss 5%",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "action.open_long",
@@ -2388,6 +2429,19 @@
           "key": "action.open_long",
           "phase": "exit",
           "params": {},
+          "evidence": {
+            "text": "open long 100 USDT and stop loss 5%",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "risk.stop_loss_pct",
+          "phase": "exit",
+          "params": {
+            "valuePct": 5,
+            "basis": "entry_avg_price"
+          },
           "evidence": {
             "text": "open long 100 USDT and stop loss 5%",
             "source": "user_explicit"
@@ -5686,6 +5740,20 @@
           "sideScope": "long"
         }
       ],
+      "risk": [
+        {
+          "key": "risk.stop_loss_pct",
+          "phase": "exit",
+          "params": {
+            "valuePct": 3,
+            "basis": "entry_avg_price"
+          },
+          "evidence": {
+            "text": "stop loss 3%",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "oscillator.rsi_lte",
@@ -5700,6 +5768,19 @@
             "source": "user_explicit"
           },
           "sideScope": "long"
+        },
+        {
+          "key": "risk.stop_loss_pct",
+          "phase": "exit",
+          "params": {
+            "valuePct": 3,
+            "basis": "entry_avg_price"
+          },
+          "evidence": {
+            "text": "stop loss 3%",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
         }
       ]
     }
