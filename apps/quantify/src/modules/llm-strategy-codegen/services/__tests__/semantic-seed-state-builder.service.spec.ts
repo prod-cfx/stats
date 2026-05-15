@@ -2340,6 +2340,49 @@ describe('SemanticSeedStateBuilderService.toActionState — action.* 前缀归�
       expect(state!.trigger).toHaveLength(0)
     })
 
+    it('routes positionConstraint atom to the top-level 5-bucket field and opens execution context slots', () => {
+      const state = builder.build({
+        atoms: [{
+          key: 'grid.range_rebalance',
+          params: {
+            rangeLower: 60000,
+            rangeUpper: 80000,
+            sideMode: 'bidirectional',
+            perOrderSizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+          },
+        }],
+      })
+
+      expect(state).not.toBeNull()
+      expect(state!.positionConstraint).toHaveLength(1)
+      expect(state!.positionConstraint[0]).toEqual(expect.objectContaining({
+        key: 'grid.range_rebalance',
+      }))
+      expect(state!.contextSlots.exchange?.status).toBe('open')
+      expect(state!.contextSlots.symbol?.status).toBe('open')
+      expect(state!.contextSlots.marketType?.status).toBe('open')
+      expect(state!.contextSlots.timeframe?.status).toBe('open')
+    })
+
+    it('dedupes positionConstraint atoms when atoms[] and legacy mirrors carry the same semantic item', () => {
+      const gridAtom = {
+        key: 'grid.range_rebalance',
+        params: {
+          rangeLower: 60000,
+          rangeUpper: 80000,
+          sideMode: 'bidirectional',
+          perOrderSizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+        },
+      }
+      const state = builder.build({
+        atoms: [gridAtom],
+        actions: [gridAtom],
+      })
+
+      expect(state).not.toBeNull()
+      expect(state!.positionConstraint).toHaveLength(1)
+    })
+
     it('drops unknown atom key with warn', () => {
       const state = builder.build({
         atoms: [{ key: 'completely.unknown.atom.key', params: {} }],

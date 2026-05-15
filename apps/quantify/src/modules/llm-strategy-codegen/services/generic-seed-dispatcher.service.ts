@@ -735,15 +735,12 @@ function extractParams(
 
 // #1298：key 改 AtomContractBucket 联合类型——新增 bucket 必须在此表显式声明，
 // 否则 TS exhaustive check 编译报错；不再依赖运行时 `if (!slot) continue` silent skip。
-const BUCKET_TO_PATCH_SLOT: Readonly<Record<AtomContractBucket, 'triggers' | 'actions' | 'risk'>> = {
+const BUCKET_TO_PATCH_SLOT: Readonly<Record<AtomContractBucket, 'triggers' | 'actions' | 'risk' | null>> = {
   trigger: 'triggers',
   action: 'actions',
   risk: 'risk',
-  // positionConstraint → actions：DCA / pyramiding / grid 本质是"如何执行仓位"，
-  //   isActionable=true，映射 actions 而非独立 position 段（PR2c5）。
-  positionConstraint: 'actions',
-  // orchestration → risk：portfolioRisk 类守门节点归入 risk 段（PR2c5）。
-  orchestration: 'risk',
+  positionConstraint: null,
+  orchestration: null,
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -799,6 +796,7 @@ export class GenericSeedDispatcher {
       actions: new Set(),
       risk: new Set(),
     }
+    const atomDedupeKeys = new Set<string>()
 
     for (const clause of clauses) {
       const matches = this.matchClauseAgainstRegistry(clause)
@@ -806,7 +804,6 @@ export class GenericSeedDispatcher {
         const contract = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract>)[m.atomKey]
         if (!contract) continue
         const slot = BUCKET_TO_PATCH_SLOT[contract.bucket]
-        if (!slot) continue // bucket 不在 BUCKET_TO_PATCH_SLOT —— 未知 bucket 跳过，不 throw
 
         const params = { ...m.params }
         const phase = m.phase ?? 'entry'
@@ -818,8 +815,12 @@ export class GenericSeedDispatcher {
           Object.entries(params).sort(([a], [b]) => a.localeCompare(b)),
         )
         const dedupeKey = `${m.atomKey}|${phase}|${sideScope}|${JSON.stringify(sortedParams)}`
-        if (slotDedupeKeys[slot].has(dedupeKey)) continue
-        slotDedupeKeys[slot].add(dedupeKey)
+        if (atomDedupeKeys.has(dedupeKey)) continue
+        atomDedupeKeys.add(dedupeKey)
+        if (slot) {
+          if (slotDedupeKeys[slot].has(dedupeKey)) continue
+          slotDedupeKeys[slot].add(dedupeKey)
+        }
 
         // evidence.source 由 atom surface.evidenceProvenance 声明（数据驱动，无 atom-key 字面量比较）。
         // external.signal 声明 'webhook'；其余 atom 省略，默认 'user_explicit'。
@@ -838,7 +839,9 @@ export class GenericSeedDispatcher {
           node.sideScope = sideScope
         }
         atomItems.push({ ...node, sideScope })
-        slotItems[slot].push(node)
+        if (slot) {
+          slotItems[slot].push(node)
+        }
       }
     }
 

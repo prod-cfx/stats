@@ -304,6 +304,7 @@ export class SemanticSeedStateBuilderService {
       .map((item, index) => this.toRiskState(item, index))
       .filter((item): item is SemanticRiskState => item !== null)
     const orchestration = this.toOrchestrationState(orchestrationPatchInput)
+    const positionConstraints = positionUpdate?.constraints ?? []
 
     if (
       triggerUpdates.length === 0
@@ -323,7 +324,7 @@ export class SemanticSeedStateBuilderService {
       action: actionUpdates,
       risk: riskUpdates,
       position: positionUpdate,
-      positionConstraint: [],
+      positionConstraint: positionConstraints,
       orchestration: orchestration?.nodes ?? [],
       orchestrationContracts: [],
       contextSlots,
@@ -1934,7 +1935,10 @@ export class SemanticSeedStateBuilderService {
   }
 
   private withRequiredSeedOpenSlots(state: SemanticState): SemanticState {
-    const hasExecutableSemantics = state.trigger.length > 0 || state.action.length > 0
+    const hasExecutableSemantics = state.trigger.length > 0
+      || state.action.length > 0
+      || (state.positionConstraint?.length ?? 0) > 0
+      || (state.orchestration?.length ?? 0) > 0
     if (!hasExecutableSemantics) {
       return state
     }
