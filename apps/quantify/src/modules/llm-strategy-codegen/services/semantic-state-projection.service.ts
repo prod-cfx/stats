@@ -2176,7 +2176,12 @@ export class SemanticStateProjectionService {
       if (typeof rendered !== 'string') return null
       const trimmed = rendered.trim()
       return trimmed.length > 0 ? trimmed : null
-    } catch {
+    }
+    catch (error) {
+      // Issue #1391 review m5：summaryTemplate 抛错不再静默吞——打 warn 保留排查线索。
+      //   生产环境 atom contract 改坏后 specDesc 静默退兜底文案，没日志极难定位。
+      const reason = error instanceof Error ? error.message : String(error)
+      console.warn(`[atom-contract-summary] template threw for atomKey=${atomKey}: ${reason}`)
       return null
     }
   }

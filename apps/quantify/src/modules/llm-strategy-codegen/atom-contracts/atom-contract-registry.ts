@@ -829,7 +829,11 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         if (locale === 'en') return ATOM_PUBLIC_NAMES['bollinger.touch_upper'].en
         const period = typeof params.period === 'number' ? params.period : 20
         const stdDev = typeof params.stdDev === 'number' ? params.stdDev : 2
-        return `BOLL（${period}, ${stdDev}）上轨触及`
+        // Issue #1391 review M7：summaryTemplate 显式渲染 confirmationMode 区分字段，
+        //   避免 touch（触及）vs breakout（突破）vs close（收盘确认）渲染相同被误折叠。
+        const mode = typeof params.confirmationMode === 'string' ? params.confirmationMode : ''
+        const modeSuffix = mode === 'breakout' ? '突破' : mode === 'close' ? '收盘确认' : '触及'
+        return `BOLL（${period}, ${stdDev}）上轨${modeSuffix}`
       },
     },
     surface: {
@@ -898,7 +902,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         if (locale === 'en') return ATOM_PUBLIC_NAMES['bollinger.touch_lower'].en
         const period = typeof params.period === 'number' ? params.period : 20
         const stdDev = typeof params.stdDev === 'number' ? params.stdDev : 2
-        return `BOLL（${period}, ${stdDev}）下轨触及`
+        const mode = typeof params.confirmationMode === 'string' ? params.confirmationMode : ''
+        const modeSuffix = mode === 'breakout' ? '突破' : mode === 'close' ? '收盘确认' : '触及'
+        return `BOLL（${period}, ${stdDev}）下轨${modeSuffix}`
       },
     },
     surface: {
@@ -964,14 +970,18 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         if (locale === 'en') return ATOM_PUBLIC_NAMES['bollinger.touch_middle'].en
         const period = typeof params.period === 'number' ? params.period : 20
         const stdDev = typeof params.stdDev === 'number' ? params.stdDev : 2
-        return `BOLL（${period}, ${stdDev}）中轨触及`
+        const mode = typeof params.confirmationMode === 'string' ? params.confirmationMode : ''
+        const modeSuffix = mode === 'breakout' ? '突破' : mode === 'close' ? '收盘确认' : '触及'
+        return `BOLL（${period}, ${stdDev}）中轨${modeSuffix}`
       },
     },
     surface: {
       intent: {
         // 收紧 keyword 到"中轨/中线"独占：避免跟 touch_upper/lower 共享 '布林带' 词根
-        //   被其他子句（"跌破下轨"含布林带 kw）误命中
-        keywords: ['中轨', '中线'] as const,
+        //   被其他子句（"跌破下轨"含布林带 kw）误命中。
+        // Issue #1391 review m6：补英文 keyword 'middle' / 'bollinger middle'
+        //   覆盖英文表达；不引入 'bollinger' 单 token（仍会触发上面词根误命中问题）。
+        keywords: ['中轨', '中线', 'middle', 'bollinger middle'] as const,
         verbs: {
           // 多/空单平仓回到中轨表达："价格回到布林带中轨时平仓" / "跌破中轨平仓"
           touch_middle: ['触及', '回踩', '碰到', '回到', '回归', 'touch', 'retest'] as const,
@@ -1936,11 +1946,13 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         const direction = typeof params.direction === 'string' ? params.direction : ''
         const minBars = typeof params.minBars === 'number' ? params.minBars : undefined
         // 单根 bull/bear bar 渲染（"收盘价高于开盘价"即阳线，反之阴线）
+        // Issue #1391 review m3：single_bull/bear_bar 是"单根"形态语义，minBars 在此语义下
+        //   会撒谎（用户应改用 consecutive_body+direction）。固定忽略 minBars。
         if (pattern === 'single_bull_bar') {
-          return minBars !== undefined ? `连续 ≥${minBars} 根阳线` : '阳线（收盘价高于开盘价）'
+          return '阳线（收盘价高于开盘价）'
         }
         if (pattern === 'single_bear_bar') {
-          return minBars !== undefined ? `连续 ≥${minBars} 根阴线` : '阴线（收盘价低于开盘价）'
+          return '阴线（收盘价低于开盘价）'
         }
         const directionLabel = direction ? (SHARED_ENUM_DISPLAY.directionBias[direction as keyof typeof SHARED_ENUM_DISPLAY.directionBias]?.zh ?? direction) : ''
         const patternLabel = ATOM_PRIVATE_DISPLAY.candlePattern[pattern as keyof typeof ATOM_PRIVATE_DISPLAY.candlePattern]?.zh ?? pattern
@@ -3121,7 +3133,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         rangeUpper: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:(?:价格)?区间|(?:grid\\s+|price\\s+)?range)\\s*\\d+(?:\\.\\d+)?\\s*[-~到至]\\s*(\\d+(?:\\.\\d+)?)' } },
         // 中心偏移句式："以当前价/部署时当前价为中心，上下各 0.4% 共 10 格"
         //   centerOffsetPct = 0.4，levels = 10；rangeLower/Upper 由 runtime 用 center * (1 ± pct/100) 推导。
-        centerOffsetPct: { kind: 'number', required: false, range: [0, 100], extractor: { kind: 'number-decimal', pattern: '上下各\\s*(\\d+(?:\\.\\d+)?)\\s*%' } },
+        // Issue #1391 review m4：centerOffsetPct ≤ 0 在 price 域无意义；上限 50%
+        //   覆盖任何合理网格设计（±50% 区间已足够极端），上界更稳。
+        centerOffsetPct: { kind: 'number', required: false, range: [0.01, 50], extractor: { kind: 'number-decimal', pattern: '上下各\\s*(\\d+(?:\\.\\d+)?)\\s*%' } },
         levels: { kind: 'number', required: false, range: [2, 1000], extractor: { kind: 'number-int', pattern: '共\\s*(\\d+)\\s*格' } },
         sideMode: { kind: 'enum', required: false, enum: ['long_only', 'short_only', 'both'], default: 'both', extractor: { kind: 'enum-zh-map', enumMap: { '只做多': 'long_only', '仅做多': 'long_only', '只做空': 'short_only', '仅做空': 'short_only', '双向': 'both' } } },
         recycle: { kind: 'enum', required: false, enum: ['true', 'false'], default: 'true', extractor: { kind: 'enum-zh-map', enumMap: { '循环': 'true', 'recycle': 'true', '不循环': 'false' } } },

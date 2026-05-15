@@ -84,6 +84,19 @@ const SYNTHESIZABLE_ACTION_KEYS = new Set<string>([
 // SYNTHESIZABLE_POSITION_LIFECYCLE_ACTION_KEYS：bucket === 'action' 的 atom-key 派生
 //   + 显式 union 'action.reduce_position'（legacy 接收的虚拟 atom，registry 暂未声明）。
 //   PR2c cleanup 时若 registry 补齐 action.reduce_position，可去掉 union。
+// Issue #1391 review M6：dedupe identity hash 应排除的派生字段（不参与语义区分）。
+//   memoryKey：partial_take_profit 的 deterministic hash 副产物，纯本地推导
+//   evidenceText/evidence：seed-builder 注入的 trace info，不是 surface paramSlot
+//   _spotSideModeAutoCorrection：M5 注入的 fail-safe 备注，纯文档字段
+//   注意：sourceText（verbatim-clause extractor 抽出的合法 paramSlot，如 candle_pattern）
+//   不在此集合——它是识别要素而非派生字段。
+const STATE_DERIVED_PARAM_KEYS: ReadonlySet<string> = new Set<string>([
+  'memoryKey',
+  'evidenceText',
+  'evidence',
+  '_spotSideModeAutoCorrection',
+])
+
 const SYNTHESIZABLE_POSITION_LIFECYCLE_ACTION_KEYS: ReadonlySet<string> = new Set<string>([
   ...Object.entries(ATOM_CONTRACT_REGISTRY)
     .filter(([, contract]) => (contract as { bucket: string }).bucket === 'action')
@@ -629,9 +642,14 @@ export class SemanticSeedStateBuilderService {
     return out
   }
 
+  // Issue #1391 review M6：硬编码字段黑名单不可持续——sourceText 在 candle_pattern 是合法
+  //   verbatim-clause 识别 paramSlot（atom-contract-registry.ts 中 paramSlots.sourceText），
+  //   不是派生字段。仅保留确实是 server 派生（不影响 identity 的副产物）的字段：memoryKey
+  //   （partial_take_profit 的 deterministic hash）+ evidenceText / evidence （seed builder
+  //   注入的 trace info，不是 surface 抽取的 slot）。
   private stableParamsHashIgnoringDerivedFields(params: Record<string, unknown>): string {
     const sortedEntries = Object.entries(params)
-      .filter(([k]) => k !== 'memoryKey' && k !== 'evidenceText' && k !== 'sourceText')
+      .filter(([k]) => !STATE_DERIVED_PARAM_KEYS.has(k))
       .sort(([a], [b]) => a.localeCompare(b))
     const normalized: Record<string, unknown> = {}
     for (const [k, v] of sortedEntries) {
