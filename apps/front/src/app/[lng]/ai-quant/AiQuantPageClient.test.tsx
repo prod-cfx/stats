@@ -562,9 +562,109 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
 
     const summary = container.querySelector('[data-testid="backtest-summary"]')
-    expect(summary).toBeTruthy()
-    expect(summary?.textContent).toContain('2026-03-17T12:00:00.000Z')
-    expect(summary?.textContent).toContain('2026-03-24T12:00:00.000Z')
+    expect(summary).toBeNull()
+    expect(container.textContent).toContain('aiQuant.backtestResult')
+
+    await act(async () => {
+      Array.from(container.querySelectorAll('button'))
+        .find(button => button.textContent?.includes('aiQuant.backtestResult'))
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    const visibleSummary = container.querySelector('[data-testid="backtest-summary"]')
+    expect(visibleSummary).toBeTruthy()
+    expect(visibleSummary?.textContent).toContain('2026-03-17T12:00:00.000Z')
+    expect(visibleSummary?.textContent).toContain('2026-03-24T12:00:00.000Z')
+  })
+
+  it('shows an empty backtest result tab when no backtest has run yet', async () => {
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      Array.from(container.querySelectorAll('button'))
+        .find(button => button.textContent?.includes('aiQuant.backtestResult'))
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
+    expect(container.textContent).toContain('aiQuant.messages.backtestResultEmpty')
+  })
+
+  it('keeps backtest summary inside the result tab instead of rendering below the right panel', async () => {
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="set-valid-preset"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const rightPanel = container.querySelector('[data-testid="ai-quant-right-panel"]')
+    expect(rightPanel).toBeTruthy()
+    expect(rightPanel?.querySelector('[data-testid="backtest-summary"]')).toBeNull()
+
+    await act(async () => {
+      Array.from(container.querySelectorAll('button'))
+        .find(button => button.textContent?.includes('aiQuant.backtestResult'))
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(rightPanel?.querySelector('[data-testid="backtest-summary"]')).toBeTruthy()
+    expect(rightPanel?.nextElementSibling).toBeNull()
+  })
+
+  it('passes symbol/startAt/endAt query params when opening backtest full screen from result tab', async () => {
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="set-valid-preset"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      Array.from(container.querySelectorAll('button'))
+        .find(button => button.textContent?.includes('aiQuant.backtestResult'))
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="open-fullscreen"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mockPush).toHaveBeenCalledTimes(1)
+    const pushedUrl = mockPush.mock.calls[0][0] as string
+    const [path, queryString] = pushedUrl.split('?')
+    expect(path).toContain('/zh/ai-quant/backtest/')
+
+    const query = new URLSearchParams(queryString)
+    expect(query.get('symbol')).toBe('BTCUSDT')
+    expect(query.get('startAt')).toBe('2026-03-17T12:00:00.000Z')
+    expect(query.get('endAt')).toBe('2026-03-24T12:00:00.000Z')
   })
 
   it('keeps confirmed logic graph and published snapshot when changing backtest execution params', async () => {
@@ -654,40 +754,6 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(localStorage.getItem('ai_quant_return_intent_v1')).toBeNull()
   })
 
-  it('passes symbol/startAt/endAt query params when opening backtest full screen', async () => {
-    await act(async () => {
-      root?.render(<AiQuantPageClient />)
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-
-    await act(async () => {
-      container.querySelector('[data-testid="set-valid-preset"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
-
-    await act(async () => {
-      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
-    await act(async () => {
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-
-    await act(async () => {
-      container.querySelector('[data-testid="open-fullscreen"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
-
-    expect(mockPush).toHaveBeenCalledTimes(1)
-    const pushedUrl = mockPush.mock.calls[0][0] as string
-    const [path, queryString] = pushedUrl.split('?')
-    expect(path).toContain('/zh/ai-quant/backtest/')
-
-    const query = new URLSearchParams(queryString)
-    expect(query.get('symbol')).toBe('BTCUSDT')
-    expect(query.get('startAt')).toBe('2026-03-17T12:00:00.000Z')
-    expect(query.get('endAt')).toBe('2026-03-24T12:00:00.000Z')
-  })
-
   it('runs backtest directly without rendering legacy confirm dialog', async () => {
     await act(async () => {
       root?.render(<AiQuantPageClient />)
@@ -707,6 +773,13 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
 
     expect(container.querySelector('[data-testid="backtest-confirm"]')).toBeNull()
+
+    await act(async () => {
+      Array.from(container.querySelectorAll('button'))
+        .find(button => button.textContent?.includes('aiQuant.backtestResult'))
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
     expect(container.querySelector('[data-testid="backtest-summary"]')).toBeTruthy()
   })
 

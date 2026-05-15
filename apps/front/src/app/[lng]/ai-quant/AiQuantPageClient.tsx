@@ -248,6 +248,7 @@ export function AiQuantPageClient({
     useState<ConversationDeleteDialogState>(null)
   const [backtestCapabilityRetryNonce, setBacktestCapabilityRetryNonce] = useState(0)
   const [codegenBusyConversationIds, setCodegenBusyConversationIds] = useState<string[]>([])
+  const [rightPanelTab, setRightPanelTab] = useState<'logic' | 'backtest'>('logic')
   const isMountedRef = useRef(true)
   const activeConversationIdRef = useRef('')
   const previousActiveConversationIdRef = useRef<string>('')
@@ -770,6 +771,10 @@ export function AiQuantPageClient({
   const displayLogicGraph = hasRenderableDisplayLogicGraph(activeConversation?.displayLogicGraph)
     ? activeConversation.displayLogicGraph
     : null
+
+  useEffect(() => {
+    setRightPanelTab('logic')
+  }, [activeConversationId])
 
   const callingMessage = (elapsedSec: number) =>
     t('aiQuant.messages.calling', {
@@ -1704,91 +1709,132 @@ export function AiQuantPageClient({
           {activeConversation.validationReport && !activeConversation.validationReport.ok && (
             <SemanticGraphValidationAlert validationReport={activeConversation.validationReport} />
           )}
-          {activeConversation.logicGraph && displayLogicGraph ? (
-            <DisplayLogicGraphPreview
-              graph={displayLogicGraph}
-              confirmDisabled={
-                codegenBusy ||
-                activeConversation.logicGraph.status === 'confirmed' ||
-                !semanticViewConfirmable
-              }
-              confirmed={activeConversation.logicGraph.status === 'confirmed'}
-              publishedSnapshotId={activePublishedSnapshotId}
-              onConfirm={() => {
-                confirmCurrentLogicGraph({
-                  conversationId: activeConversation.id,
-                  params: activeConversation.params,
-                  sessionId: activeConversation.llmCodegenSessionId,
-                  message: t('aiQuant.messages.confirmGenerate', {
-                    defaultValue: 'Confirm code generation',
-                  }),
-                })
-              }}
-              onRevise={requestLogicGraphRevision}
-            />
-          ) : activeConversation.logicGraph ? (
-            <LogicGraphPreview
-              graph={activeConversation.logicGraph}
-              confirmDisabled={
-                codegenBusy ||
-                activeConversation.logicGraph.status === 'confirmed' ||
-                !semanticViewConfirmable
-              }
-              publishedSnapshotId={activePublishedSnapshotId}
-              onConfirm={() => {
-                confirmCurrentLogicGraph({
-                  conversationId: activeConversation.id,
-                  params: activeConversation.params,
-                  sessionId: activeConversation.llmCodegenSessionId,
-                  message: t('aiQuant.messages.confirmGenerate', {
-                    defaultValue: 'Confirm code generation',
-                  }),
-                })
-              }}
-              onRevise={requestLogicGraphRevision}
-            />
-          ) : null}
 
-          {activeConversation.backtestResult && (
-            <BacktestSummaryCard
-              result={activeConversation.backtestResult}
-              marketType={activeBacktestMarketType}
-              canDeploy={canDeploy}
-              deploymentState={deploymentState}
-              deployLabel={deployLabel}
-              drawdownLimited
-              onViewRunningStrategy={deploymentState === 'running' ? viewRunningStrategy : undefined}
-              onOpenFullScreen={() => {
-                const currentBacktest = activeConversation.backtestResult
-                if (!currentBacktest) {
-                  return
-                }
-                const search = new URLSearchParams()
-                search.set('symbol', currentBacktest.symbol ?? activeConversation.params.symbol)
-                if (currentBacktest.startAt) {
-                  search.set('startAt', currentBacktest.startAt)
-                }
-                if (currentBacktest.endAt) {
-                  search.set('endAt', currentBacktest.endAt)
-                }
-                router.push(`/${lng}/ai-quant/backtest/${currentBacktest.id}?${search.toString()}`)
-              }}
-              onDeploy={() => {
-                if (deploymentState === 'running' || deploymentState === 'unknown') {
-                  return
-                }
-                setDeployRequestId(createDeployRequestId())
-                const preferredLeverage = resolvePreferredDeployLeverage(activeConversation)
-                setSelectedDeployLeverage(
-                  activePublishedDeployTruth?.marketType === 'perp'
-                    && preferredLeverage !== null
-                    ? preferredLeverage
-                    : null,
-                )
-                setDeployOpen(true)
-              }}
-            />
-          )}
+          <div data-testid="ai-quant-right-panel" className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {[
+                { key: 'logic' as const, label: t('aiQuant.messages.graphTitle') },
+                { key: 'backtest' as const, label: t('aiQuant.backtestResult') },
+              ].map(tab => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setRightPanelTab(tab.key)}
+                  className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                    rightPanelTab === tab.key
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {rightPanelTab === 'logic'
+              ? activeConversation.logicGraph && displayLogicGraph
+                ? (
+                    <DisplayLogicGraphPreview
+                      graph={displayLogicGraph}
+                      confirmDisabled={
+                        codegenBusy ||
+                        activeConversation.logicGraph.status === 'confirmed' ||
+                        !semanticViewConfirmable
+                      }
+                      confirmed={activeConversation.logicGraph.status === 'confirmed'}
+                      publishedSnapshotId={activePublishedSnapshotId}
+                      onConfirm={() => {
+                        confirmCurrentLogicGraph({
+                          conversationId: activeConversation.id,
+                          params: activeConversation.params,
+                          sessionId: activeConversation.llmCodegenSessionId,
+                          message: t('aiQuant.messages.confirmGenerate', {
+                            defaultValue: 'Confirm code generation',
+                          }),
+                        })
+                      }}
+                      onRevise={requestLogicGraphRevision}
+                    />
+                  )
+                : activeConversation.logicGraph
+                  ? (
+                      <LogicGraphPreview
+                        graph={activeConversation.logicGraph}
+                        confirmDisabled={
+                          codegenBusy ||
+                          activeConversation.logicGraph.status === 'confirmed' ||
+                          !semanticViewConfirmable
+                        }
+                        publishedSnapshotId={activePublishedSnapshotId}
+                        onConfirm={() => {
+                          confirmCurrentLogicGraph({
+                            conversationId: activeConversation.id,
+                            params: activeConversation.params,
+                            sessionId: activeConversation.llmCodegenSessionId,
+                            message: t('aiQuant.messages.confirmGenerate', {
+                              defaultValue: 'Confirm code generation',
+                            }),
+                          })
+                        }}
+                        onRevise={requestLogicGraphRevision}
+                      />
+                    )
+                  : (
+                      <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 text-sm text-[color:var(--cf-muted)]">
+                        {t('aiQuant.messages.logicGraphEmpty', {
+                          defaultValue: '描述策略想法后，逻辑图会显示在这里。',
+                        })}
+                      </section>
+                    )
+              : activeConversation.backtestResult
+                ? (
+                    <BacktestSummaryCard
+                      result={activeConversation.backtestResult}
+                      marketType={activeBacktestMarketType}
+                      canDeploy={canDeploy}
+                      deploymentState={deploymentState}
+                      deployLabel={deployLabel}
+                      drawdownLimited
+                      onViewRunningStrategy={deploymentState === 'running' ? viewRunningStrategy : undefined}
+                      onOpenFullScreen={() => {
+                        const currentBacktest = activeConversation.backtestResult
+                        if (!currentBacktest) {
+                          return
+                        }
+                        const search = new URLSearchParams()
+                        search.set('symbol', currentBacktest.symbol ?? activeConversation.params.symbol)
+                        if (currentBacktest.startAt) {
+                          search.set('startAt', currentBacktest.startAt)
+                        }
+                        if (currentBacktest.endAt) {
+                          search.set('endAt', currentBacktest.endAt)
+                        }
+                        router.push(`/${lng}/ai-quant/backtest/${currentBacktest.id}?${search.toString()}`)
+                      }}
+                      onDeploy={() => {
+                        if (deploymentState === 'running' || deploymentState === 'unknown') {
+                          return
+                        }
+                        setDeployRequestId(createDeployRequestId())
+                        const preferredLeverage = resolvePreferredDeployLeverage(activeConversation)
+                        setSelectedDeployLeverage(
+                          activePublishedDeployTruth?.marketType === 'perp'
+                            && preferredLeverage !== null
+                            ? preferredLeverage
+                            : null,
+                        )
+                        setDeployOpen(true)
+                      }}
+                    />
+                  )
+                : (
+                    <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 text-sm text-[color:var(--cf-muted)]">
+                      {t('aiQuant.messages.backtestResultEmpty', {
+                        defaultValue: '暂无回测结果。确认逻辑图并开始回测后，结果会显示在这里。',
+                      })}
+                    </section>
+                  )}
+          </div>
         </div>
       </div>
 
