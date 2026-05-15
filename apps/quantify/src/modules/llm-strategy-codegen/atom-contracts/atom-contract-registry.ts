@@ -1099,7 +1099,11 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['突破', '前高', '高点', 'channel high', 'breakout'] as const,
+        // Issue #1391 follow-up：移除通用 '突破'/'breakout' keyword（仍保留在 verbs）。
+        //   原因：'突破' 在 S6 类网格策略中常出现于"突破上下边界则停止"这种停止/护栏从句，
+        //   不是入场触发；而 dispatcher kw+verb 双重命中下，单个 '突破' 同时覆盖两半 AND 导致
+        //   误匹 entry。改为必须出现 '前高/高点/channel high' 等明确 reference token 才匹。
+        keywords: ['前高', '高点', 'channel high'] as const,
         verbs: {
           breakout_up: ['突破', '升破', '上破', 'breakout'] as const,
         },
@@ -1148,7 +1152,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['跌破', '前低', '低点', 'channel low', 'breakdown'] as const,
+        // Issue #1391 follow-up：移除通用 '跌破'/'breakdown' keyword（仍保留在 verbs）。
+        //   与 breakout_up 对偶——'跌破' 单词在网格/护栏从句普遍出现，需明确 reference token 才匹。
+        keywords: ['前低', '低点', 'channel low'] as const,
         verbs: {
           breakout_down: ['跌破', '跌回', '下破', '跌穿', 'breakdown'] as const,
         },
@@ -3137,9 +3143,14 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         //   覆盖任何合理网格设计（±50% 区间已足够极端），上界更稳。
         centerOffsetPct: { kind: 'number', required: false, range: [0.01, 50], extractor: { kind: 'number-decimal', pattern: '上下各\\s*(\\d+(?:\\.\\d+)?)\\s*%' } },
         levels: { kind: 'number', required: false, range: [2, 1000], extractor: { kind: 'number-int', pattern: '共\\s*(\\d+)\\s*格' } },
-        sideMode: { kind: 'enum', required: false, enum: ['long_only', 'short_only', 'both'], default: 'both', extractor: { kind: 'enum-zh-map', enumMap: { '只做多': 'long_only', '仅做多': 'long_only', '只做空': 'short_only', '仅做空': 'short_only', '双向': 'both' } } },
+        // Issue #1391 follow-up：'反向单'/'对冲'/'相邻网格'/'相邻反向' 是用户表达"双向网格"的口语形态，
+        //   需映射到 sideMode='both'，避免漏识被默认值掩盖（虽然 default 是 both，但显式 evidence
+        //   提升下游 readiness/consistency 信号）。
+        sideMode: { kind: 'enum', required: false, enum: ['long_only', 'short_only', 'both'], default: 'both', extractor: { kind: 'enum-zh-map', enumMap: { '只做多': 'long_only', '仅做多': 'long_only', '只做空': 'short_only', '仅做空': 'short_only', '双向': 'both', '反向单': 'both', '相邻网格': 'both', '相邻反向': 'both', '对冲': 'both' } } },
         recycle: { kind: 'enum', required: false, enum: ['true', 'false'], default: 'true', extractor: { kind: 'enum-zh-map', enumMap: { '循环': 'true', 'recycle': 'true', '不循环': 'false' } } },
-        breakoutAction: { kind: 'enum', required: false, enum: ['continue', 'stop'], default: 'continue', extractor: { kind: 'enum-zh-map', enumMap: { '继续': 'continue', '停止': 'stop', 'continue': 'continue', 'stop': 'stop' } } },
+        // Issue #1391 follow-up：'立即停止'/'撤销订单'/'撤销所有未成交' 是用户对网格越界的停止动作表达，
+        //   映射到 breakoutAction='stop'，与"继续/continue"形成完整双向枚举。
+        breakoutAction: { kind: 'enum', required: false, enum: ['continue', 'stop'], default: 'continue', extractor: { kind: 'enum-zh-map', enumMap: { '继续': 'continue', '停止': 'stop', 'continue': 'continue', 'stop': 'stop', '立即停止': 'stop', '撤销订单': 'stop', '撤销所有未成交': 'stop', '撤销未成交': 'stop' } } },
         stepPct: { kind: 'number', required: false, range: [0, 100], extractor: { kind: 'number-decimal', pattern: '(?:每格间距|网格间距|间距|步长)\\s*(\\d+(?:\\.\\d+)?)\\s*%' } },
         perGridSizing: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:每格|per grid|each grid)\\s*(?:使用|用)?\\s*(\\d+(?:\\.\\d+)?)\\s*(?:USDT|USDC|USD|U|刀)' } },
       },

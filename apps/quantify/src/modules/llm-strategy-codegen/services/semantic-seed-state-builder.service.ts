@@ -590,6 +590,13 @@ export class SemanticSeedStateBuilderService {
     const adjusted = constraints.map((c) => {
       const sideMode = (c.params as { sideMode?: unknown } | undefined)?.sideMode
       if (sideMode !== 'both' && sideMode !== 'short_only') return c
+      // Issue #1391 follow-up：grid.range_rebalance 的 sideMode='both' 语义是
+      //   buy-low / sell-high 循环（sell 平掉网格底仓，不是真做空），
+      //   现货完全支持。spot fail-safe 强制 long_only 会破坏用户"相邻网格自动挂反向单"
+      //   这种合法双向网格表达。grid bidirectional 现货语义安全，跳过约束。
+      if (c.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && sideMode === 'both') {
+        return c
+      }
       const note = `市场类型为 spot，原始 sideMode=${String(sideMode)} 自动调整为 long_only（现货不支持做空）`
       this.logger.warn(`[Issue#1391] applySpotSideModeConstraint: ${note} (atom=${c.key})`)
       return {
