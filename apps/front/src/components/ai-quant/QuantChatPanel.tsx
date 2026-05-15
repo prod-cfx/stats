@@ -43,6 +43,89 @@ function normalizeCodeText(children: unknown): string {
   return String(children ?? '').replace(/\n$/, '')
 }
 
+const COLLAPSED_CODE_LINE_LIMIT = 12
+
+interface QuantCodeBlockProps {
+  blockId: string
+  className?: string
+  code: string
+  copied: boolean
+  language: string
+  onCopy: () => void
+  t: (key: string, options?: { defaultValue?: string }) => string
+  rest: Record<string, unknown>
+}
+
+function QuantCodeBlock({
+  blockId,
+  className,
+  code,
+  copied,
+  language,
+  onCopy,
+  t,
+  rest,
+}: QuantCodeBlockProps) {
+  const [expanded, setExpanded] = useState(false)
+  const lineCount = code.split(/\r?\n/).length
+  const canCollapse = lineCount > COLLAPSED_CODE_LINE_LIMIT
+  const collapsed = canCollapse && !expanded
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]">
+      <div className="flex items-center justify-between border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-active)] px-3 py-2 text-xs">
+        <span className="font-mono tracking-wide text-[color:var(--cf-muted)] uppercase">
+          {language}
+        </span>
+        <button
+          type="button"
+          onClick={onCopy}
+          aria-label={
+            copied
+              ? t('common.copied', { defaultValue: 'Copied' })
+              : t('common.copy', { defaultValue: 'Copy' })
+          }
+          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[color:var(--cf-text)] transition-colors hover:bg-[color:var(--cf-surface)]"
+        >
+          {copied ? (
+            <>
+              <Check className="h-3.5 w-3.5" />
+              <span>
+                {t('common.copied', { defaultValue: 'Copied' })}
+              </span>
+            </>
+          ) : (
+            <>
+              <Copy className="h-3.5 w-3.5" />
+              <span>{t('common.copy', { defaultValue: 'Copy' })}</span>
+            </>
+          )}
+        </button>
+      </div>
+      <div className="relative">
+        <pre className={`overflow-x-auto p-3 text-xs leading-6 ${collapsed ? 'max-h-48 overflow-y-hidden' : ''}`}>
+          <code className={className} {...rest}>
+            {code}
+          </code>
+        </pre>
+        {collapsed && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[color:var(--cf-bg)] to-transparent" />
+        )}
+      </div>
+      {collapsed && (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="w-full border-t border-[color:var(--cf-border)] bg-[color:var(--cf-surface-active)] px-3 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)]"
+          aria-controls={blockId}
+        >
+          {t('aiQuant.viewAllCode', { defaultValue: '查看全部' })}
+        </button>
+      )}
+    </div>
+  )
+}
+
 const BACKTEST_RANGE_PRESETS = ['7D', '30D', '90D', '1Y', 'CUSTOM'] as const
 const BACKTEST_PRICE_SOURCE_OPTIONS = ['open', 'close', 'mid'] as const
 
@@ -646,42 +729,16 @@ export function QuantChatPanel({
                               codeBlockIndex += 1
 
                               return (
-                                <div className="overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]">
-                                  <div className="flex items-center justify-between border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-active)] px-3 py-2 text-xs">
-                                    <span className="font-mono tracking-wide text-[color:var(--cf-muted)] uppercase">
-                                      {language}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => copyCode(normalizedText, blockId)}
-                                      aria-label={
-                                        copiedCodeId === blockId
-                                          ? t('common.copied', { defaultValue: 'Copied' })
-                                          : t('common.copy', { defaultValue: 'Copy' })
-                                      }
-                                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[color:var(--cf-text)] transition-colors hover:bg-[color:var(--cf-surface)]"
-                                    >
-                                      {copiedCodeId === blockId ? (
-                                        <>
-                                          <Check className="h-3.5 w-3.5" />
-                                          <span>
-                                            {t('common.copied', { defaultValue: 'Copied' })}
-                                          </span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Copy className="h-3.5 w-3.5" />
-                                          <span>{t('common.copy', { defaultValue: 'Copy' })}</span>
-                                        </>
-                                      )}
-                                    </button>
-                                  </div>
-                                  <pre className="overflow-x-auto p-3 text-xs leading-6">
-                                    <code className={className} {...rest}>
-                                      {normalizedText}
-                                    </code>
-                                  </pre>
-                                </div>
+                                <QuantCodeBlock
+                                  blockId={blockId}
+                                  className={className}
+                                  code={normalizedText}
+                                  copied={copiedCodeId === blockId}
+                                  language={language}
+                                  onCopy={() => copyCode(normalizedText, blockId)}
+                                  t={t}
+                                  rest={rest}
+                                />
                               )
                             },
                           }}

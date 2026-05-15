@@ -33,6 +33,7 @@ export interface BacktestResultPresentationModel {
     good: string
     warning: string
     danger: string
+    lowSample: string
   }
 }
 
@@ -152,6 +153,9 @@ export function buildBacktestResultPresentation(args: {
         danger: isEn
           ? 'Spot strategy risk is elevated or overall return is negative, not recommended to deploy.'
           : '现货策略风险较高或整体处于亏损状态，不建议部署。',
+        lowSample: isEn
+          ? 'Too few samples. Extend the backtest or adjust conditions before judging.'
+          : '样本过少，建议延长回测或调整条件后再判断。',
       }
     : {
         good: isEn
@@ -163,6 +167,9 @@ export function buildBacktestResultPresentation(args: {
         danger: isEn
           ? 'High risk or in loss, not recommended to deploy.'
           : '策略风险较高或处于亏损状态，不建议部署。',
+        lowSample: isEn
+          ? 'Too few samples. Extend the backtest or adjust conditions before judging.'
+          : '样本过少，建议延长回测或调整条件后再判断。',
       }
 
   return {

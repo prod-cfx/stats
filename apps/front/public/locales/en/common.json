@@ -724,6 +724,7 @@
       "noAccounts": "No available API accounts for this exchange, please configure in User Center.",
       "goConfig": "Go Config"
     },
+    "viewAllCode": "View all",
     "messages": {
       "welcome": "Tell me your trading idea, I will help you generate a strategy and backtest it. Max drawdown must be <= 20% to deploy.",
       "graphGenerated": "I have converted your natural language into a logic graph. Please confirm the logic graph before backtesting.",
@@ -893,6 +894,8 @@
     "loginFailed": "Login failed",
     "telegramWeb": "Telegram Web (Not Configured)",
     "telegramDesktop": "Telegram Desktop App",
+    "telegramWebCompact": "Web (Not Configured)",
+    "telegramDesktopCompact": "Desktop App",
     "telegramWebAppDesc": "Please authorize in Telegram bot and return",
     "botDomainInvalid": "If Bot domain invalid appears, use /setdomain in BotFather to configure current domain",
     "configFailed": "Failed to get Telegram config, please try again later",

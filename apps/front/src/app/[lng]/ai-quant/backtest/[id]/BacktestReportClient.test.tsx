@@ -366,7 +366,7 @@ describe('BacktestReportClient', () => {
     expect(container.textContent).toContain('已完成交易')
     expect(container.textContent).toContain('当前持仓')
     expect(container.textContent).toContain('持仓浮盈浮亏')
-    expect(container.textContent).toContain('表现一般，建议结合当前持仓与持仓浮盈浮亏后再决定是否部署。')
+    expect(container.textContent).toContain('样本过少，建议延长回测或调整条件后再判断。')
     expect(container.textContent).toContain('当前持仓')
     expect(container.textContent).toContain('BTCUSDT 现货')
     expect(container.textContent).not.toContain('未平仓持仓')
@@ -439,7 +439,7 @@ describe('BacktestReportClient', () => {
     expect(container.textContent).not.toContain('本次报告数据覆盖完整，样本量偏少，需要结合更长周期验证。现货报告关注')
     expect(container.textContent).toContain('$0.098038')
     expect(container.textContent).toContain('$0.100010')
-    expect(container.textContent).toContain('上线前继续验证')
+    expect(container.textContent).not.toContain('上线前继续验证')
     expect(container.textContent).not.toContain('一键部署')
   })
 
@@ -498,7 +498,7 @@ describe('BacktestReportClient', () => {
     expect(container.textContent).toContain('Derivative report focuses on leverage, margin, funding, liquidation risk, and long/short split.')
     expect(container.textContent).toContain('Funding and liquidation data were not provided by this backtest model.')
     expect(container.textContent).toContain('1 long / 1 short closed trades')
-    expect(container.textContent).toContain('Review Before Deploy')
+    expect(container.textContent).not.toContain('Review Before Deploy')
   })
 
   it('stores strategy edit intent when returning from a backtest report with strategy context', async () => {

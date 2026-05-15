@@ -80,11 +80,9 @@ function mapDetailedReport(result: BacktestJobResult): LiveBacktestReportInput |
 function StrategyConclusionCard({
   status,
   summary,
-  lng,
 }: {
-  status: 'good' | 'warning' | 'danger'
+  status: 'good' | 'warning' | 'danger' | 'lowSample'
   summary: string
-  lng: string
 }) {
   const statusConfig = {
     good: {
@@ -93,7 +91,6 @@ function StrategyConclusionCard({
       bgGlow: 'bg-[color:var(--cf-primary)]/10',
       border: 'border-[color:var(--cf-border)]',
       shadow: 'shadow-[0_0_10px_var(--cf-primary)]',
-      btnClass: 'from-primary to-secondary bg-gradient-to-r text-white',
     },
     warning: {
       color: '#F5A623',
@@ -101,7 +98,13 @@ function StrategyConclusionCard({
       bgGlow: 'bg-[#F5A623]/10',
       border: 'border-[color:var(--cf-border)]',
       shadow: 'shadow-[0_0_10px_#F5A623]',
-      btnClass: 'bg-gradient-to-r from-[#F5A623] to-[#D48806] text-white',
+    },
+    lowSample: {
+      color: '#F5A623',
+      icon: '🟡',
+      bgGlow: 'bg-[#F5A623]/10',
+      border: 'border-[color:var(--cf-border)]',
+      shadow: 'shadow-[0_0_10px_#F5A623]',
     },
     danger: {
       color: '#FF4D4F',
@@ -109,7 +112,6 @@ function StrategyConclusionCard({
       bgGlow: 'bg-[#FF4D4F]/10',
       border: 'border-[color:var(--cf-border)]',
       shadow: 'shadow-[0_0_10px_#FF4D4F]',
-      btnClass: 'bg-gradient-to-r from-[#FF4D4F] to-[#CF1322] text-white',
     },
   }
   const config = statusConfig[status]
@@ -129,14 +131,6 @@ function StrategyConclusionCard({
         ></div>
         <h2 className="text-base font-medium text-[color:var(--cf-text)]">{summary}</h2>
       </div>
-
-      <button
-        type="button"
-        disabled
-        className={`relative z-10 cursor-not-allowed rounded-xl px-8 py-3 text-sm font-bold text-white opacity-80 ${config.btnClass}`}
-      >
-        {lng === 'en' ? 'Review Before Deploy' : '上线前继续验证'}
-      </button>
     </div>
   )
 }
@@ -572,9 +566,11 @@ export function BacktestReportClient({
   }, [reportContext?.conversationId, reportContext?.publishedSnapshotId, reportContext?.sessionId, reportContext?.strategyInstanceId])
 
   // Determine strategy status based on metrics
-  let status: 'good' | 'warning' | 'danger' = 'warning'
+  let status: 'good' | 'warning' | 'danger' | 'lowSample' = 'warning'
 
-  if (metrics && metrics.maxDrawdownPct <= 15 && metrics.totalReturnPct > 20) {
+  if (metrics && metrics.tradeCount < 3) {
+    status = 'lowSample'
+  } else if (metrics && metrics.maxDrawdownPct <= 15 && metrics.totalReturnPct > 20) {
     status = 'good'
   } else if (metrics && (metrics.maxDrawdownPct > 30 || metrics.totalReturnPct < 0)) {
     status = 'danger'
@@ -627,7 +623,7 @@ export function BacktestReportClient({
       )}
 
       {/* 1. 策略结论区 */}
-      <StrategyConclusionCard status={status} summary={summary} lng={lng} />
+      <StrategyConclusionCard status={status} summary={summary} />
 
       {/* 2. 核心指标卡 */}
       <div data-testid="backtest-metric-grid" className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">

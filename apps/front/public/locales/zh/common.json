@@ -724,6 +724,7 @@
       "noAccounts": "当前交易所没有可用 API 账户，请先在个人中心配置。",
       "goConfig": "去配置"
     },
+    "viewAllCode": "查看全部",
     "messages": {
       "welcome": "告诉我你的交易想法，我会帮你生成策略并回测。回测最大回撤需要 <= 20% 才能一键部署。",
       "graphGenerated": "我已把你的自然语言转换为逻辑图。请先确认逻辑图，再开始回测。",
@@ -745,7 +746,7 @@
       "codeGeneratedBacktest": "策略代码已生成，现在可以开始回测。",
       "staleConversationRecovered": "检测到本地会话已过期，已为你重建一个干净的对话，请重新确认并生成策略。",
       "graphRevise": "好的，请在对话框继续描述你要修改的条件。",
-      "aiDisclaimer": "AI 生成的内容可能不准确，请务必在实盘前进行充分回测。",
+      "aiDisclaimer": "AI 内容仅供参考，请务必在实盘前进行充分回测。",
       "backtestDrawdownLimit": "最大回撤 <= 20% 才能一键部署",
       "backtestDrawdownLimitBypassed": "当前为模拟部署模式：忽略回撤门槛",
       "backtestDrawdownFail": "回撤不达标，当前禁止部署。请返回对话继续优化参数。",
@@ -893,6 +894,8 @@
     "loginFailed": "登录失败",
     "telegramWeb": "Telegram 网页版（未配置）",
     "telegramDesktop": "Telegram 桌面应用",
+    "telegramWebCompact": "网页版（未配置）",
+    "telegramDesktopCompact": "桌面应用",
     "telegramWebAppDesc": "请在 Telegram 内使用机器人完成授权后返回",
     "botDomainInvalid": "若网页版出现 Bot domain invalid，请在 BotFather 使用 /setdomain 配置当前站点域名",
     "configFailed": "获取 Telegram 配置失败，请稍后重试",

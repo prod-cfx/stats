@@ -90,6 +90,8 @@ export function TelegramLoginButtons({
   const loginBetaCode = intent === 'login' ? betaCode?.trim() : undefined
   const webButtonClassName = variant === 'compact' ? compactUnavailableButtonClassName : buttonClassName
   const desktopButtonClassName = variant === 'compact' ? compactAvailableButtonClassName : buttonClassName
+  const webButtonText = variant === 'compact' ? t('auth.telegramWebCompact') : t('auth.telegramWeb')
+  const desktopButtonText = variant === 'compact' ? t('auth.telegramDesktopCompact') : t('auth.telegramDesktop')
 
   return (
     <div className={variant === 'compact' ? 'space-y-2' : 'space-y-3'}>
@@ -118,7 +120,7 @@ export function TelegramLoginButtons({
           }}
           className={webButtonClassName}
         >
-          {t('auth.telegramWeb')}
+          {webButtonText}
         </button>
 
         {showDesktopEntry && botName && (
@@ -157,7 +159,7 @@ export function TelegramLoginButtons({
             ) : (
               <Send className="h-4 w-4 text-violet-500 dark:text-violet-400" />
             )}
-            {t('auth.telegramDesktop')}
+            {desktopButtonText}
           </button>
         )}
       </div>

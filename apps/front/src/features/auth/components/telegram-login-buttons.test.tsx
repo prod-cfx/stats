@@ -12,6 +12,7 @@ jest.mock('react-i18next', () => ({
 }))
 
 jest.mock('lucide-react', () => ({
+  Check: () => null,
   Send: () => null,
 }))
 
@@ -95,5 +96,22 @@ describe('TelegramLoginButtons desktop flow', () => {
     })
     expect(window.sessionStorage.getItem('auth:telegram:desktop:intent-1:betaCode')).toBe('beta-42')
     expect(timeoutSpy).not.toHaveBeenCalled()
+  })
+
+  it('uses shorter labels in compact mode', async () => {
+    await act(async () => {
+      root?.render(<TelegramLoginButtons lng="zh" intent="bind" variant="compact" />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const buttonTexts = Array.from(container.querySelectorAll('button')).map(button => button.textContent)
+
+    expect(buttonTexts).toContain('auth.telegramWebCompact')
+    expect(buttonTexts).toContain('auth.telegramDesktopCompact')
+    expect(buttonTexts).not.toContain('auth.telegramWeb')
+    expect(buttonTexts).not.toContain('auth.telegramDesktop')
   })
 })

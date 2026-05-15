@@ -54,6 +54,23 @@ describe('backtest-result-presentation', () => {
     expect(model.conclusionSummary.warning).toBe('表现一般，建议优化参数后再部署。')
   })
 
+  it('uses a sample-size warning instead of deployment advice for low-trade backtests', () => {
+    const model = buildBacktestResultPresentation({
+      lng: 'zh',
+      symbol: 'BTCUSDT:PERP',
+      marketType: 'perp',
+      metrics: {
+        maxDrawdownPct: 0.18,
+        totalReturnPct: 0.12,
+        winRatePct: 100,
+        tradeCount: 1,
+      },
+    })
+
+    expect(model.conclusionSummary.lowSample).toBe('样本过少，建议延长回测或调整条件后再判断。')
+    expect(model.conclusionSummary.lowSample).not.toContain('部署')
+  })
+
   it('formats spot symbols and open positions for display', () => {
     expect(formatBacktestDisplaySymbol('BTCUSDT:SPOT', 'spot')).toBe('BTCUSDT 现货')
     expect(formatBacktestDisplaySymbol('BTCUSDT:PERP', 'perp')).toBe('BTCUSDT 合约')

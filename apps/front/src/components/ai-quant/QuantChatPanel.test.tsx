@@ -11,7 +11,32 @@ jest.mock('react-i18next', () => ({
 
 jest.mock('react-markdown', () => ({
   __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => children,
+  default: ({
+    children,
+    components,
+  }: {
+    children: string
+    components?: {
+      code?: (props: {
+        inline?: boolean
+        className?: string
+        children: string
+      }) => React.ReactNode
+    }
+  }) => {
+    const codeFence = /```(\w+)?\n([\s\S]*?)```/.exec(children)
+    if (!codeFence || !components?.code) return children
+
+    return (
+      <>
+        {children.slice(0, codeFence.index)}
+        {components.code({
+          className: codeFence[1] ? `language-${codeFence[1]}` : undefined,
+          children: `${codeFence[2]}\n`,
+        })}
+      </>
+    )
+  },
 }))
 
 jest.mock('remark-gfm', () => ({
@@ -26,6 +51,7 @@ jest.mock('lucide-react', () => {
     Bot: Icon,
     Check: Icon,
     ChevronsUpDown: Icon,
+    Copy: Icon,
     Play: Icon,
     Search: Icon,
     Settings2: Icon,
@@ -149,6 +175,44 @@ describe('QuantChatPanel range settings', () => {
     expect(toolbar?.lastElementChild?.className).toContain('shrink-0')
     expect(assistantBubble?.className).toContain('max-w-[min(100%,42rem)]')
     expect(assistantBubble?.className).toContain('break-words')
+  })
+
+  it('collapses generated strategy code until the user views all', async () => {
+    const codeLines = Array.from({ length: 20 }, (_, index) => `const line${index + 1} = ${index + 1}`).join('\n')
+
+    await act(async () => {
+      root?.render(
+        <QuantChatPanel
+          messages={[{
+            id: 'm-code',
+            role: 'assistant',
+            content: `策略代码已生成，现在可以开始回测。\n\nGenerated strategy code:\n\`\`\`javascript\n${codeLines}\n\`\`\``,
+          }]}
+          paramSchema={null}
+          paramValues={baseParams}
+          onParamChange={() => {}}
+          onSend={() => {}}
+          onRunBacktest={() => {}}
+          onConfirmBacktestParams={() => {}}
+        />,
+      )
+    })
+
+    const pre = container.querySelector('pre')
+    expect(pre?.className).toContain('max-h-48')
+    expect(container.textContent).toContain('aiQuant.viewAllCode')
+
+    const viewAllButton = Array.from(container.querySelectorAll('button')).find(button =>
+      button.textContent?.includes('aiQuant.viewAllCode'),
+    )
+    expect(viewAllButton).toBeTruthy()
+
+    await act(async () => {
+      viewAllButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(pre?.className).not.toContain('max-h-48')
+    expect(container.textContent).not.toContain('aiQuant.viewAllCode')
   })
 
   it('shows custom datetime inputs and applies them after confirm', async () => {
