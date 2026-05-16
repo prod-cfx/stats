@@ -123,7 +123,11 @@ const SYNTHESIZABLE_GRID_ACTION_KEYS = new Set<string>([
 // SYNTHESIZABLE_POSITION_MODES：position sizing mode 字符串枚举，与 atom-key 体系
 //   完全无关；属于 SemanticPositionSizingContract 的 mode 字段值域。保持字面量。
 const SYNTHESIZABLE_POSITION_MODES = new Set<string>(['fixed_ratio', 'fixed_quote', 'fixed_qty'])
-const LEVEL_SET_DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
+// #1409: grid.range_rebalance.levels 抽参由 atom-driven 通道处理；保留 slotKey 作 owner.openSlots 项展示
+//   resolver 调度看 atomKey + paramSlotKey，不再读这条字面量
+const GRID_RANGE_REBALANCE_ATOM_KEY = 'grid.range_rebalance'
+const GRID_LEVELS_PARAM_SLOT_KEY = 'levels'
+const GRID_LEVELS_SLOT_KEY = `${GRID_RANGE_REBALANCE_ATOM_KEY}.${GRID_LEVELS_PARAM_SLOT_KEY}`
 const MARKET_INSTRUMENT_QUOTES: readonly MarketInstrumentQuote[] = ['FDUSD', 'USDT', 'USDC', 'BUSD', 'TUSD', 'USD']
 
 // PR3.7 helpers: map NormalizedSizing axis back to SemanticPositionSizingContract + legacy mode string
@@ -1879,15 +1883,17 @@ export class SemanticSeedStateBuilderService {
       return input.openSlots
     }
 
-    if (input.openSlots.some(slot => slot.slotKey === LEVEL_SET_DENSITY_SLOT_KEY && slot.fieldPath === target.fieldPath)) {
+    if (input.openSlots.some(slot => slot.slotKey === GRID_LEVELS_SLOT_KEY && slot.fieldPath === target.fieldPath)) {
       return input.openSlots
     }
 
     return [
       ...this.removeContractRequiredSlots(input.openSlots, target.contractFieldPath),
       {
-        slotKey: LEVEL_SET_DENSITY_SLOT_KEY,
+        slotKey: GRID_LEVELS_SLOT_KEY,
         fieldPath: target.fieldPath,
+        atomKey: GRID_RANGE_REBALANCE_ATOM_KEY,
+        paramSlotKey: GRID_LEVELS_PARAM_SLOT_KEY,
         status: 'open',
         priority: 'core',
         questionHint: '请确认网格数量或每格间距，例如 20 格 / 每格 100 USDT / 每格 0.5%。',

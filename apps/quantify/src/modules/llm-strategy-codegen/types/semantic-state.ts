@@ -109,6 +109,12 @@ export interface SemanticSlotState {
   evidence?: SemanticEvidence
   supersedes?: string[]
   contracts?: SemanticAtomContract[]
+  // #1409: atom-driven 单 slot 抽参元数据
+  //   - atomKey：dispatcher 注册的 atom 标识（如 'grid.range_rebalance'）
+  //   - paramSlotKey：atom 内 param 名（如 'levels'/'stepPct'）
+  // 仅在 seed-builder 能确定时回填；纯流程性 open slot（trigger.entry/exit、position.sizing、contextSlots.symbol）保持空
+  readonly atomKey?: string
+  readonly paramSlotKey?: string
 }
 
 export interface SemanticCapabilityShape {
