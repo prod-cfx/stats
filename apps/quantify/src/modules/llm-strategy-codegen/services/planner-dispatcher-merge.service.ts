@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+import { collectAtomLeaves, type AtomExpr, type AtomExprAtom, type SemanticRule } from '../types/atom-expr'
 
 /**
  * Issue #1383：planner 输出常常只包含 trigger/action/risk 桶；positionConstraint /
@@ -18,6 +19,8 @@ import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
  */
 @Injectable()
 export class PlannerDispatcherMergeService {
+  private readonly logger = new Logger(PlannerDispatcherMergeService.name)
+
   mergePlannerAndDispatcherPatches(
     plannerPatch: CodegenSemanticPatch | null | undefined,
     dispatcherPatch: CodegenSemanticPatch | null | undefined,
@@ -98,7 +101,257 @@ export class PlannerDispatcherMergeService {
       (merged as { __zodQuarantine?: unknown }).__zodQuarantine = plannerQuarantine
     }
 
+    // Issue #1428 R-D（先于 R-B 跑）：对 merged.rules 中每个 atom leaf，若 dispatcher
+    //   桶含同 (key, sideScope) entry 且其 params 严格 superset 当前 leaf params，
+    //   用 dispatcher params 覆盖 leaf params。原则与现行 `position: dispatcher 优先`
+    //   一致——dispatcher regex 抽到的用户原话精细 params（如 BOLL(5,1) / valuePct=-1）
+    //   比 LLM 默认值填充更准确。
+    //
+    //   守门：仅在 strict superset 场景覆盖；若 dispatcher params 缺关键 slot
+    //   或与 planner 完全无交集，保留 planner 版本（fail-open，零回归）。
+    //
+    //   审查问题 Major #2：两条 pass 各自外层 try/catch，异常时 log + 保留 merged
+    //     原状返回，绝不破坏现行 merge 的 fail-open 承诺。
+    try {
+      this.overrideRulesLeafParamsFromDispatcher(merged, dispatcher)
+    }
+    catch (err) {
+      this.logger.warn(`overrideRulesLeafParamsFromDispatcher 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
+    }
+
+    // Issue #1428 R-B：rules 非空时把 dispatcher 桶里 rules 不含的 atom 提升为
+    //   single-leaf SemanticRule 追加到 merged.rules，让 cross-clause inheritance
+    //   (#1383) 派生的 sibling/mirror 在 rules-tree 上也可见。
+    try {
+      this.liftDispatcherAtomsIntoRules(merged, dispatcher)
+    }
+    catch (err) {
+      this.logger.warn(`liftDispatcherAtomsIntoRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
+    }
+
     return merged
+  }
+
+  /**
+   * Issue #1428 R-D：rules leaf params dispatcher-first override（strict superset 覆盖）。
+   *
+   * 触发条件（必须全部满足）：
+   *   1. merged.rules 非空
+   *   2. dispatcher 桶（atoms / triggers / actions / risk）含同 (key, sideScope) entry
+   *   3. dispatcher entry params 是 leaf params 的 strict superset（每个 leaf params key
+   *      都在 dispatcher 中且值相等，且 dispatcher 还含 leaf 没有的 key）
+   *      —— 或 leaf params 为空而 dispatcher params 非空
+   *
+   * 不触发：
+   *   - 两者 params 完全相同 → 没必要覆盖
+   *   - 两者 params 有交集但值冲突 → 保留 planner（避免误覆盖 planner 有意校正的值）
+   *   - dispatcher 无同 key entry → 保留 planner
+   *
+   * 行为：用 dispatcher params 整体替换 leaf.params；不动 condition 树结构。
+   */
+  private overrideRulesLeafParamsFromDispatcher(
+    merged: CodegenSemanticPatch,
+    dispatcher: CodegenSemanticPatch,
+  ): void {
+    const rules = merged.rules
+    if (!rules || rules.length === 0) return
+
+    // 收集 dispatcher 所有桶里的 atom，按 (key, sideScope) 索引；同签名取第一个非空 params
+    const dispatcherByKey = new Map<string, Record<string, unknown>>()
+    const indexBucket = (
+      source: ReadonlyArray<{ key: string, sideScope?: 'long' | 'short' | 'both', params?: Record<string, unknown> }> | undefined,
+    ): void => {
+      if (!source) return
+      for (const entry of source) {
+        const params = entry.params
+        if (!params || Object.keys(params).length === 0) continue
+        const sig = `${entry.key}|${entry.sideScope ?? 'both'}`
+        if (!dispatcherByKey.has(sig)) dispatcherByKey.set(sig, params)
+      }
+    }
+    indexBucket(dispatcher.atoms)
+    indexBucket(dispatcher.triggers)
+    indexBucket(dispatcher.actions)
+    indexBucket(dispatcher.risk)
+    if (dispatcherByKey.size === 0) return
+
+    const overrideLeaf = (leaf: AtomExprAtom, ruleSideScope: 'long' | 'short' | 'both'): AtomExprAtom => {
+      const leafSide = leaf.sideScope ?? ruleSideScope
+      const sig = `${leaf.key}|${leafSide}`
+      // sideScope 回退保守：仅 planner leaf 标 long/short 时允许从 dispatcher 'both'
+      //   抓（'both' 是更宽泛的 side，覆盖 long/short 安全）。不反向（planner 'both'
+      //   不抓 dispatcher 'long'/'short'），避免把宽泛 leaf 误绑到具体 side params。
+      //   反向 long↔short 也不互换（避免做空策略被覆盖为做多 params）。
+      const dispatcherParams = dispatcherByKey.get(sig)
+        ?? dispatcherByKey.get(`${leaf.key}|both`)
+      if (!dispatcherParams) return leaf
+      if (!this.isStrictSuperset(dispatcherParams, leaf.params)) return leaf
+      return { ...leaf, params: { ...dispatcherParams } }
+    }
+
+    const overrideExpr = (expr: AtomExpr, ruleSideScope: 'long' | 'short' | 'both'): AtomExpr => {
+      if (expr.kind === 'atom') return overrideLeaf(expr, ruleSideScope)
+      if (expr.kind === 'and') return { ...expr, children: expr.children.map(c => overrideExpr(c, ruleSideScope)) }
+      if (expr.kind === 'or') return { ...expr, children: expr.children.map(c => overrideExpr(c, ruleSideScope)) }
+      if (expr.kind === 'not') return { ...expr, child: overrideExpr(expr.child, ruleSideScope) }
+      if (expr.kind === 'sequence') return { ...expr, steps: expr.steps.map(s => overrideExpr(s, ruleSideScope)) }
+      return expr
+    }
+
+    let mutated = false
+    const nextRules: SemanticRule[] = rules.map((rule) => {
+      const newCondition = overrideExpr(rule.condition, rule.sideScope)
+      const newEffects = rule.effects.map(eff => overrideExpr(eff, rule.sideScope))
+      if (newCondition !== rule.condition || newEffects.some((e, i) => e !== rule.effects[i])) {
+        mutated = true
+        return { ...rule, condition: newCondition, effects: newEffects }
+      }
+      return rule
+    })
+    if (mutated) {
+      merged.rules = nextRules
+    }
+  }
+
+  /**
+   * 判定 `superset` 是否是 `subset` 的 strict superset：
+   *   - subset 为空且 superset 非空 → true（dispatcher 比 planner 多任何 slot）
+   *   - subset 所有 key 都在 superset 且值相等 + superset 还含 subset 没有的 key → true
+   *   - 否则 → false（含值冲突 / superset 无新 slot）
+   *
+   * 注：值比较用 JSON.stringify 处理嵌套对象；数组 / 对象顺序敏感，与
+   *   `stableParamsHash` 不同（这里允许 LLM 与 dispatcher 写出键序差异的"相等" params
+   *   —— 比较前先 stableValue 排序）。
+   */
+  private isStrictSuperset(
+    superset: Record<string, unknown>,
+    subset: Record<string, unknown> | undefined,
+  ): boolean {
+    const subKeys = subset ? Object.keys(subset) : []
+    const superKeys = Object.keys(superset)
+    if (subKeys.length === 0) return superKeys.length > 0
+    // 快速路径：superset 必须严格更多 key（正确性由下方 key 包含 + 值相等检查兜底；
+    //   下面循环里任一 subKey 不在 superset 或值不相等都会返回 false → 值冲突场景
+    //   也走 false 分支，回退到调用方"保留 planner 版本"的语义，与 #1428 R-D 设计一致）
+    if (superKeys.length <= subKeys.length) return false
+    for (const k of subKeys) {
+      if (!(k in superset)) return false
+      const a = JSON.stringify(this.stableValue(superset[k]))
+      const b = JSON.stringify(this.stableValue((subset as Record<string, unknown>)[k]))
+      if (a !== b) return false
+    }
+    return true
+  }
+
+  /**
+   * Issue #1428 R-B：rules-first 路径下，把 dispatcher trigger/action/risk 桶里
+   * 在 merged.rules 找不到等价 leaf 的 atom 提升为 single-leaf SemanticRule。
+   *
+   * 适用场景：planner LLM 只产了部分 rules，但 dispatcher 通过 regex + cross-clause
+   * inheritance（#1383）抽到了更多 sibling/mirror。lift 后下游 projection / readiness /
+   * IR compiler 走 rules-tree 时仍能看到这些 sibling，不丢策略语义。
+   *
+   * 守门：
+   *   - merged.rules 为空（dispatcher-only 路径或 planner 未产 rules）→ 直接 return；
+   *     下游照旧走扁平桶路径，零行为差
+   *   - dispatcher.risk 桶 phase='risk' → 归位为 'exit'（rule.phase 不允许 risk）
+   */
+  private liftDispatcherAtomsIntoRules(
+    merged: CodegenSemanticPatch,
+    dispatcher: CodegenSemanticPatch,
+  ): void {
+    const rules = merged.rules
+    if (!rules || rules.length === 0) return
+
+    // 索引 merged.rules 中所有 leaf 的 (key|phase|sideScope|paramsHash) 签名，避免重复 lift
+    const existingSignatures = new Set<string>()
+    for (const rule of rules) {
+      for (const leaf of collectAtomLeaves(rule.condition)) {
+        existingSignatures.add(this.leafSignature(leaf.key, rule.phase, leaf.sideScope ?? rule.sideScope, leaf.params))
+      }
+      for (const eff of rule.effects) {
+        for (const leaf of collectAtomLeaves(eff)) {
+          existingSignatures.add(this.leafSignature(leaf.key, rule.phase, leaf.sideScope ?? rule.sideScope, leaf.params))
+        }
+      }
+    }
+
+    const lifted: SemanticRule[] = []
+    let liftIndex = 0
+    const liftPhase = (phase: 'entry' | 'exit' | 'risk' | 'gate' | undefined): SemanticRule['phase'] => {
+      if (phase === 'entry' || phase === 'exit' || phase === 'gate') return phase
+      // TODO(#1428 R-A follow-up)：'risk' 硬降级为 'exit' 是 rule.phase 枚举不允许
+      //   'risk' 时的合理映射；若 #1395 后续扩展 phase 枚举支持 'risk'，需重审。
+      if (phase === 'risk') return 'exit'
+      return 'entry'
+    }
+    const collectBucket = (
+      source: ReadonlyArray<{ key: string, phase?: 'entry' | 'exit' | 'risk' | 'gate', sideScope?: 'long' | 'short' | 'both', params?: Record<string, unknown> }> | undefined,
+      defaultPhase: 'entry' | 'exit',
+    ): void => {
+      if (!source) return
+      for (const entry of source) {
+        const phase = liftPhase(entry.phase ?? defaultPhase)
+        const sideScope = (entry.sideScope ?? 'both') as 'long' | 'short' | 'both'
+        const params = entry.params ?? {}
+        const signature = this.leafSignature(entry.key, phase, sideScope, params)
+        if (existingSignatures.has(signature)) continue
+        existingSignatures.add(signature)
+        liftIndex += 1
+        lifted.push({
+          // 审查问题 #1：atom key 含 `.`（如 `price.percent_change`），下游 projection
+          //   构造 `${rule.id}-cond-N` / `rule-${rule.id}-grp` 时点号会与既有 id 命名风格
+          //   （kebab + `-` 分段）冲突；替换为 `_` 与 projection 现有命名对齐。
+          id: `dispatcher-lift-${liftIndex}-${entry.key.replace(/\./g, '_')}`,
+          phase,
+          sideScope,
+          condition: {
+            kind: 'atom',
+            key: entry.key,
+            params: { ...params },
+            sideScope,
+          },
+          effects: [],
+        })
+      }
+    }
+
+    // 审查问题 #5：dispatcher 既写 patch.triggers/actions/risk 也写 patch.atoms（
+    //   `generic-seed-dispatcher.service.ts:987` + cross-clause inheritance lift 也
+    //   往 atomItems push）。lift 必须同时收 dispatcher.atoms 桶，否则 cross-clause
+    //   inheritance 派生的镜像 atom 在 atoms-only 路径下不可见。
+    //
+    // R2 审查 Minor：collectBucket 顺序固定为 atoms → triggers → actions → risk。若
+    //   dispatcher 把同一 atom key 同时写入 atoms（空 params）与 triggers（regex 抽到
+    //   具体 params），两条 leafSignature 的 paramsHash 不同 → 允许 lift 两条不同
+    //   params 的 rule。这是**预期行为**：下游 readiness 会按 readiness 链各自校验，
+    //   不会把空 params 的孤儿 leaf 当 locked；若需收口为单条，等 #1433 metadata 反推
+    //   阶段统一处理。
+    collectBucket(dispatcher.atoms, 'entry')
+    collectBucket(dispatcher.triggers, 'entry')
+    collectBucket(dispatcher.actions, 'entry')
+    collectBucket(dispatcher.risk, 'exit')
+
+    if (lifted.length > 0) {
+      merged.rules = [...rules, ...lifted]
+    }
+  }
+
+  /**
+   * 审查问题 Major #3：dedup 签名包含 phase 是**有意分轨**——同一 atom key 在不同
+   * phase（如 entry 触发 vs exit 风控）语义是两个独立 rule，必须分别 lift。例：
+   *   - planner: entry rule 含 `price.percent_change` 作为开仓触发
+   *   - dispatcher.risk: 同 key `price.percent_change` 作为止损触发（phase=risk → exit）
+   * 两者在下游 readiness/projection 各算一次是正确的（一个 trigger，一个 risk effect）。
+   * 若日后 phase 枚举扩展需要软去重，再在此处加 (key, sideScope, paramsHash) fallback。
+   */
+  private leafSignature(
+    key: string,
+    phase: string,
+    sideScope: 'long' | 'short' | 'both' | undefined,
+    params: Record<string, unknown> | undefined,
+  ): string {
+    return `${key}|${phase}|${sideScope ?? 'both'}|${this.stableParamsHash(params)}`
   }
 
   private isNonEmpty(patch: CodegenSemanticPatch | null | undefined): boolean {

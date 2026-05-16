@@ -350,8 +350,19 @@ function buildPlannerCorrectionRulesSection(): readonly string[] {
 function buildAtomParamsHintsSection(): readonly string[] {
   const { paramDefaults } = buildRegistryDerivedHintSections()
   return [
-    '📐 ATOM_PARAMS_HINTS — 常见指标 atom 的标准 params（无用户特殊说明时优先使用这些默认值，',
-    '禁止编造；自 ATOM_CONTRACT_REGISTRY.surface.phraseHints.paramDefaultsHint 派生）：',
+    '📐 ATOM_PARAMS_HINTS — 常见指标 atom 的标准 params。',
+    '',
+    '⛔ Issue #1428 硬约束（必读）：',
+    '  - 若用户原话中显式给出 params（括号数字 "(X,Y)"、"X 周期"、"X 倍"、"X%"、"X 分钟" 等），',
+    '    必须以用户原话为准，禁止使用下面列出的 paramDefaultsHint 默认值覆盖用户输入。',
+    '  - 例：用户说"布林带 5,1" → params.period=5, params.stdDev=1（绝不写 20/2）。',
+    '  - 例：用户说"止盈 1.5%" → 走 risk.fixed_take_profit + pct=1.5，绝不识别成 risk.atr_take_profit + multiple=1.5。',
+    '    （% 与倍数互斥：含 "%" 走 fixed_take_profit；含 "倍 ATR" / "x ATR" / "X*ATR" 走 atr_take_profit；其它情况询问澄清。）',
+    '  - 例：用户说"3 分钟跌 1%" → price.percent_change + valuePct=-1 + window="3m"，禁止丢 valuePct/window。',
+    '  - 仅当用户完全没有给出对应 param 时，才允许使用 paramDefaultsHint。',
+    '',
+    '（以下默认值列表自 ATOM_CONTRACT_REGISTRY.surface.phraseHints.paramDefaultsHint 派生；',
+    '使用前请先确认用户原话未显式覆盖）：',
     '',
     ...paramDefaults,
     '- 多周期同向类 condition：用相同 atom 叶子 + 不同 params.timeframe 用 and 组合，不要合并到单个 atom。',

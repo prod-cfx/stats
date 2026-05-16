@@ -77,6 +77,21 @@ describe('issue #1395 — planner prompt rules shape', () => {
     }
   })
 
+  // Issue #1428 R-E：ATOM_PARAMS_HINTS 段必须含「用户原话 > 默认值」硬约束 + 至少 3 个具体反例
+  it('R-E: ATOM_PARAMS_HINTS 段含「用户原话 > paramDefaultsHint」硬约束 + BOLL/percent_change/ATR 反例', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+    // 硬约束 header
+    expect(prompt).toContain('Issue #1428 硬约束')
+    expect(prompt).toContain('必须以用户原话为准')
+    expect(prompt).toContain('禁止使用下面列出的 paramDefaultsHint 默认值覆盖用户输入')
+    // 三个具体反例
+    expect(prompt).toContain('布林带 5,1')
+    expect(prompt).toContain('止盈 1.5%')
+    expect(prompt).toContain('3 分钟跌 1%')
+    // 仅当用户完全没给 param 才允许走默认值
+    expect(prompt).toContain('仅当用户完全没有给出对应 param 时')
+  })
+
   it('保留跨原子组合 TRIGGER hint (sequence「跌破 X 后重新上穿 X」+ multi-tf + breakout retest)', () => {
     const prompt = buildConversationPlannerSystemPrompt('zh')
     // 「跌破 X 后重新上穿 X」短语由 condition.sequence atom 自身的 phraseHints.triggers 暴露
