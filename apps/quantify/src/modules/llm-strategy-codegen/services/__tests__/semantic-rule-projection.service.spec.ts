@@ -44,8 +44,10 @@ describe('SemanticRuleProjectionService (Issue #1395)', () => {
     }]
     const out = svc.projectToFlat(rules)
     expect(out.trigger).toHaveLength(2)
+    // Issue #1413: combinationContract 现在挂在每个 group member 上（不再仅 anchor），
+    // 与 seed-builder 约定 + rulesFromFlatBuckets 反向投影对齐。
     expect(out.trigger[0]!.contracts?.length ?? 0).toBeGreaterThan(0)
-    expect(out.trigger[1]!.contracts?.length ?? 0).toBe(0)
+    expect(out.trigger[1]!.contracts?.length ?? 0).toBeGreaterThan(0)
     // action 投影需依赖 ATOM_CONTRACT_REGISTRY['action.open_long'].bucket === 'action'
     // 若 registry 中尚未注册该 key，projection 应安全 skip，本断言用 conditional
     if (out.action.length > 0) {
