@@ -190,7 +190,9 @@ describe('issue #1279 PR2 — dispatcher self-baseline', () => {
     //   守门 minBars 不再误抽 timeframe 数字 → 243
     // #1414：risk.protective_exit / risk.max_drawdown_pct / risk.max_single_loss_pct
     //   3 个 legacy atom 注册到 registry（为 lint 兜底，corpus 全空 + 占位 intent），
-    //   dispatcher synthesizeForAtom 各兜底 3 case → risk 桶 +9 → 252。
+    //   corpus 路径 0 贡献（aliases/positiveExamples/negativeExamples/goldenUtterances
+    //   全空，纳入 STUB_CORPUS_WHITELIST），synthesized 路径独家贡献 3 × 3 = 9 case
+    //   到 risk 桶 → 252。后续注册新 atom 必须同步更新此锚 + risk 桶 baseline。
     expect(cases.length).toBe(252)
   })
 

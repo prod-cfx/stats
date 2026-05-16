@@ -4763,6 +4763,11 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     classifier: { supportStatus: 'supported_executable' },
     display: {
       publicName: ATOM_PUBLIC_NAMES['risk.max_drawdown_pct'],
+      // valuePct 实际由 canonical-spec-builder / semantic-state-reducer 直接写入
+      //   rule.params（来源：STANDALONE_ATOM_MAP.requiredParams + protective_exit
+      //   reducer 路径，非 dispatcher NL 抽取），因此 paramSlots 空但 paramRenderers
+      //   仍读 valuePct。未来若需把 NL 抽取接入，应在 paramSlots 内显式登记 valuePct
+      //   并核对 dispatcher 行为兼容性。
       paramRenderers: { valuePct: (v) => `${v}%` },
       summaryTemplate: (params, locale) => {
         if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.max_drawdown_pct'].en
@@ -4792,6 +4797,8 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     classifier: { supportStatus: 'supported_executable' },
     display: {
       publicName: ATOM_PUBLIC_NAMES['risk.max_single_loss_pct'],
+      // valuePct 来源同 risk.max_drawdown_pct（详见上方注释）：canonical-spec-builder
+      //   / reducer 直写 rule.params，dispatcher 不抽。
       paramRenderers: { valuePct: (v) => `${v}%` },
       summaryTemplate: (params, locale) => {
         if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.max_single_loss_pct'].en
