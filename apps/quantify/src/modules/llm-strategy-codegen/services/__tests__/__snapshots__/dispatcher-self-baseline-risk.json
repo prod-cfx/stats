@@ -1012,5 +1012,437 @@
         }
       ]
     }
+  },
+  {
+    "id": "synthesized-risk.protective_exit-1",
+    "source": "synthesized",
+    "atomKey": "risk.protective_exit",
+    "utterance": "__stub_risk_protective_exit__ __stub_risk_protective_exit__ 30 开多",
+    "patch": {
+      "contextSlots": {
+        "symbol": {
+          "value": "STUBUSDT",
+          "source": "inferred",
+          "evidenceText": "stub",
+          "base": "STUB",
+          "quote": "USDT",
+          "quoteSource": "default_usdt"
+        }
+      },
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_protective_exit__ __stub_risk_protective_exit__ 30 开多",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "risk": [
+        {
+          "key": "risk.protective_exit",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_protective_exit__ __stub_risk_protective_exit__ 30 开多",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "action.open_long",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_protective_exit__ __stub_risk_protective_exit__ 30 开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "risk.protective_exit",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_protective_exit__ __stub_risk_protective_exit__ 30 开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        }
+      ]
+    }
+  },
+  {
+    "id": "synthesized-risk.protective_exit-2",
+    "source": "synthesized",
+    "atomKey": "risk.protective_exit",
+    "utterance": "检测到 __stub_risk_protective_exit__ __stub_risk_protective_exit__ 50 进场",
+    "patch": {
+      "contextSlots": {
+        "symbol": {
+          "value": "STUBUSDT",
+          "source": "inferred",
+          "evidenceText": "stub",
+          "base": "STUB",
+          "quote": "USDT",
+          "quoteSource": "default_usdt"
+        }
+      },
+      "risk": [
+        {
+          "key": "risk.protective_exit",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "检测到 __stub_risk_protective_exit__ __stub_risk_protective_exit__ 50 进场",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "risk.protective_exit",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "检测到 __stub_risk_protective_exit__ __stub_risk_protective_exit__ 50 进场",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        }
+      ]
+    }
+  },
+  {
+    "id": "synthesized-risk.protective_exit-3",
+    "source": "synthesized",
+    "atomKey": "risk.protective_exit",
+    "utterance": "__stub_risk_protective_exit__ __stub_risk_protective_exit__ 阈值时执行平仓",
+    "patch": {
+      "contextSlots": {
+        "symbol": {
+          "value": "STUBUSDT",
+          "source": "inferred",
+          "evidenceText": "stub",
+          "base": "STUB",
+          "quote": "USDT",
+          "quoteSource": "default_usdt"
+        }
+      },
+      "risk": [
+        {
+          "key": "risk.protective_exit",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_protective_exit__ __stub_risk_protective_exit__ 阈值时执行平仓",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "risk.protective_exit",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_protective_exit__ __stub_risk_protective_exit__ 阈值时执行平仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        }
+      ]
+    }
+  },
+  {
+    "id": "synthesized-risk.max_drawdown_pct-1",
+    "source": "synthesized",
+    "atomKey": "risk.max_drawdown_pct",
+    "utterance": "__stub_risk_max_drawdown_pct__ __stub_risk_max_drawdown_pct__ 30 开多",
+    "patch": {
+      "contextSlots": {
+        "symbol": {
+          "value": "STUBUSDT",
+          "source": "inferred",
+          "evidenceText": "stub",
+          "base": "STUB",
+          "quote": "USDT",
+          "quoteSource": "default_usdt"
+        }
+      },
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_max_drawdown_pct__ __stub_risk_max_drawdown_pct__ 30 开多",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "risk": [
+        {
+          "key": "risk.max_drawdown_pct",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_max_drawdown_pct__ __stub_risk_max_drawdown_pct__ 30 开多",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_max_drawdown_pct__ __stub_risk_max_drawdown_pct__ 30 开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "risk.max_drawdown_pct",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_max_drawdown_pct__ __stub_risk_max_drawdown_pct__ 30 开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        }
+      ]
+    }
+  },
+  {
+    "id": "synthesized-risk.max_drawdown_pct-2",
+    "source": "synthesized",
+    "atomKey": "risk.max_drawdown_pct",
+    "utterance": "检测到 __stub_risk_max_drawdown_pct__ __stub_risk_max_drawdown_pct__ 50 进场",
+    "patch": {
+      "contextSlots": {
+        "symbol": {
+          "value": "STUBUSDT",
+          "source": "inferred",
+          "evidenceText": "stub",
+          "base": "STUB",
+          "quote": "USDT",
+          "quoteSource": "default_usdt"
+        }
+      },
+      "risk": [
+        {
+          "key": "risk.max_drawdown_pct",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "检测到 __stub_risk_max_drawdown_pct__ __stub_risk_max_drawdown_pct__ 50 进场",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "risk.max_drawdown_pct",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "检测到 __stub_risk_max_drawdown_pct__ __stub_risk_max_drawdown_pct__ 50 进场",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        }
+      ]
+    }
+  },
+  {
+    "id": "synthesized-risk.max_drawdown_pct-3",
+    "source": "synthesized",
+    "atomKey": "risk.max_drawdown_pct",
+    "utterance": "__stub_risk_max_drawdown_pct__ __stub_risk_max_drawdown_pct__ 阈值时执行平仓",
+    "patch": {
+      "contextSlots": {
+        "symbol": {
+          "value": "STUBUSDT",
+          "source": "inferred",
+          "evidenceText": "stub",
+          "base": "STUB",
+          "quote": "USDT",
+          "quoteSource": "default_usdt"
+        }
+      },
+      "risk": [
+        {
+          "key": "risk.max_drawdown_pct",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_max_drawdown_pct__ __stub_risk_max_drawdown_pct__ 阈值时执行平仓",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "risk.max_drawdown_pct",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_max_drawdown_pct__ __stub_risk_max_drawdown_pct__ 阈值时执行平仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        }
+      ]
+    }
+  },
+  {
+    "id": "synthesized-risk.max_single_loss_pct-1",
+    "source": "synthesized",
+    "atomKey": "risk.max_single_loss_pct",
+    "utterance": "__stub_risk_max_single_loss_pct__ __stub_risk_max_single_loss_pct__ 30 开多",
+    "patch": {
+      "contextSlots": {
+        "symbol": {
+          "value": "STUBUSDT",
+          "source": "inferred",
+          "evidenceText": "stub",
+          "base": "STUB",
+          "quote": "USDT",
+          "quoteSource": "default_usdt"
+        }
+      },
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_max_single_loss_pct__ __stub_risk_max_single_loss_pct__ 30 开多",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "risk": [
+        {
+          "key": "risk.max_single_loss_pct",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_max_single_loss_pct__ __stub_risk_max_single_loss_pct__ 30 开多",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_max_single_loss_pct__ __stub_risk_max_single_loss_pct__ 30 开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        },
+        {
+          "key": "risk.max_single_loss_pct",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_max_single_loss_pct__ __stub_risk_max_single_loss_pct__ 30 开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        }
+      ]
+    }
+  },
+  {
+    "id": "synthesized-risk.max_single_loss_pct-2",
+    "source": "synthesized",
+    "atomKey": "risk.max_single_loss_pct",
+    "utterance": "检测到 __stub_risk_max_single_loss_pct__ __stub_risk_max_single_loss_pct__ 50 进场",
+    "patch": {
+      "contextSlots": {
+        "symbol": {
+          "value": "STUBUSDT",
+          "source": "inferred",
+          "evidenceText": "stub",
+          "base": "STUB",
+          "quote": "USDT",
+          "quoteSource": "default_usdt"
+        }
+      },
+      "risk": [
+        {
+          "key": "risk.max_single_loss_pct",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "检测到 __stub_risk_max_single_loss_pct__ __stub_risk_max_single_loss_pct__ 50 进场",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "risk.max_single_loss_pct",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "检测到 __stub_risk_max_single_loss_pct__ __stub_risk_max_single_loss_pct__ 50 进场",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        }
+      ]
+    }
+  },
+  {
+    "id": "synthesized-risk.max_single_loss_pct-3",
+    "source": "synthesized",
+    "atomKey": "risk.max_single_loss_pct",
+    "utterance": "__stub_risk_max_single_loss_pct__ __stub_risk_max_single_loss_pct__ 阈值时执行平仓",
+    "patch": {
+      "contextSlots": {
+        "symbol": {
+          "value": "STUBUSDT",
+          "source": "inferred",
+          "evidenceText": "stub",
+          "base": "STUB",
+          "quote": "USDT",
+          "quoteSource": "default_usdt"
+        }
+      },
+      "risk": [
+        {
+          "key": "risk.max_single_loss_pct",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_max_single_loss_pct__ __stub_risk_max_single_loss_pct__ 阈值时执行平仓",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "risk.max_single_loss_pct",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "__stub_risk_max_single_loss_pct__ __stub_risk_max_single_loss_pct__ 阈值时执行平仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        }
+      ]
+    }
   }
 ]

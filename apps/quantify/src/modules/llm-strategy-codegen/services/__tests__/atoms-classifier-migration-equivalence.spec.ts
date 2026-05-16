@@ -85,7 +85,7 @@ function adaptFromContractRegistry(entry: AtomContractEntry) {
     supportStatus: classifier.supportStatus,
     isUnsupported,
     executableSinceVersion: classifier.supportStatus === 'supported_executable'
-      ? classifier.executableSinceVersion
+      ? (classifier as { executableSinceVersion?: string }).executableSinceVersion
       : undefined,
     reasonCode: classifier.supportStatus === 'supported_executable'
       ? undefined
