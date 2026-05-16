@@ -77,10 +77,6 @@ export type SupportedAtomKey =
   | 'condition.sequence'
   | 'price.previous_extrema_retest'
   | 'risk.atr_take_profit'
-  // ── Issue #1414：legacy risk atom 补注册到 ATOM_CONTRACT_REGISTRY（IR 路径已存在硬编码消费） ──
-  | 'risk.protective_exit'
-  | 'risk.max_drawdown_pct'
-  | 'risk.max_single_loss_pct'
 
 /** @deprecated #1329 已更名 SupportedAtomKey，本 alias 保留兼容 in-flight branch；下个 PR 删 */
 export type SupportedExecutableUtteranceAtom = SupportedAtomKey

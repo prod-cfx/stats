@@ -428,7 +428,9 @@ export function normalizeRiskSemantics(risks: SemanticRiskState[]): SemanticRisk
 
 export function normalizeRiskSemantic(risk: SemanticRiskState, index = 0): SemanticRiskState {
   const params = { ...risk.params }
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   const isStopLoss = risk.key === 'risk.stop_loss_pct'
+  // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
   const isTakeProfit = risk.key === 'risk.take_profit_pct'
 
   if (!isStopLoss && !isTakeProfit) {

@@ -313,19 +313,24 @@ export class CodegenPublicationGenerationStage {
       if (risk.status !== 'locked') {
         continue
       }
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (risk.key === 'risk.stop_loss_pct' && typeof risk.params.valuePct === 'number') {
         locked.stopLossPct = risk.params.valuePct
       }
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (risk.key === 'risk.take_profit_pct' && typeof risk.params.valuePct === 'number') {
         locked.takeProfitPct = risk.params.valuePct
       }
       if (
+        // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
         (risk.key === 'risk.stop_loss_pct' || risk.key === 'risk.take_profit_pct')
         && typeof risk.params.basis === 'string'
       ) {
+        // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
         if (risk.key === 'risk.stop_loss_pct') {
           locked.stopLossBasis = risk.params.basis
         }
+        // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
         if (risk.key === 'risk.take_profit_pct') {
           locked.takeProfitBasis = risk.params.basis
         }

@@ -33,12 +33,6 @@ export const STUB_CORPUS_WHITELIST: ReadonlySet<AtomContractKey> = new Set<AtomC
   // 函数自带语料表达，corpus 4 字段允许空（仍可派生于 utterance-corpus / dispatcher
   // 间接覆盖）。见 #1329b follow-up。
   'portfolioRisk.drawdown_block',
-  // Issue #1414：legacy risk atom 仅为 lint 兜底注册（满足 atom-keys/no-atom-key-literal
-  //   rule），实际语义构造走 canonical-spec-builder / semantic-state-reducer 等遗留路径，
-  //   不通过 dispatcher NL 抽取——故 corpus 全空 + intent 占位，避免改写既有 NL 行为。
-  'risk.protective_exit',
-  'risk.max_drawdown_pct',
-  'risk.max_single_loss_pct',
 ])
 
 /**

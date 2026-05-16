@@ -2233,6 +2233,7 @@ export class SemanticStateProjectionService {
           return this.buildRiskFallbackSummary(risk)
         }
 
+        /* eslint-disable atom-keys/no-atom-key-literal -- risk.stop_loss_pct / risk.take_profit_pct / risk.max_drawdown_pct / risk.max_single_loss_pct not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329) */
         if (risk.key === 'risk.stop_loss_pct') {
           const basis = this.describeRiskBasis(risk.params.basis)
           return `止损：价格相对${basis}下跌${this.formatPercent(valuePct)}% 强制平仓`
@@ -2250,6 +2251,7 @@ export class SemanticStateProjectionService {
         if (risk.key === 'risk.max_single_loss_pct') {
           return `单笔止损：下跌${this.formatPercent(valuePct)}%`
         }
+        /* eslint-enable atom-keys/no-atom-key-literal */
 
         return this.buildRiskFallbackSummary(risk)
       })
@@ -2766,11 +2768,13 @@ export class SemanticStateProjectionService {
         continue
       }
 
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.stop_loss_pct not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (risk.key === 'risk.stop_loss_pct' && !inferred.inferredKeys.includes('risk.stopLossBasis')) {
         inferred.inferredKeys.push('risk.stopLossBasis')
         inferred.stopLossBasis = basis
       }
 
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.take_profit_pct not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (risk.key === 'risk.take_profit_pct' && !inferred.inferredKeys.includes('risk.takeProfitBasis')) {
         inferred.inferredKeys.push('risk.takeProfitBasis')
         inferred.takeProfitBasis = basis

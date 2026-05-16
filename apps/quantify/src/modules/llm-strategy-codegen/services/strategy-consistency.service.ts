@@ -1792,7 +1792,7 @@ export class StrategyConsistencyService {
   ): StrategySemanticRuleProfile['phase'] {
     if (
       rule.phase === 'risk'
-      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.atr_multiple_take_profit not yet in ATOM_CONTRACT_REGISTRY
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.take_profit_pct / risk.atr_multiple_take_profit not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       && (key === 'risk.take_profit_pct' || key === 'risk.atr_multiple_take_profit')
       && (action === 'CLOSE_LONG' || action === 'CLOSE_SHORT')
     ) {

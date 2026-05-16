@@ -251,6 +251,7 @@ export class SemanticStateReducerService {
         break
       }
 
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.protective_exit not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (risk.key !== 'risk.protective_exit' && slot?.status === 'open') {
         const paramKey = this.resolveRiskParamKey(slot)
         if (paramKey) {
@@ -267,7 +268,9 @@ export class SemanticStateReducerService {
         }
       }
 
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.protective_exit not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (risk.key !== 'risk.protective_exit') continue
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.protective_exit slot key routing (follow-up #1329)
       if (slot?.slotKey !== 'risk.protective_exit' || slot.status !== 'open') continue
 
       const percentValue = this.parsePercentAnswer(answerText)
@@ -286,7 +289,7 @@ export class SemanticStateReducerService {
         break
       }
 
-      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.condition_expression not yet in ATOM_CONTRACT_REGISTRY
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.max_drawdown_pct / risk.max_single_loss_pct / risk.condition_expression not yet in REGISTRY (follow-up #1329)
       risk.key = riskKey === 'risk.max_drawdown_pct' || riskKey === 'risk.max_single_loss_pct'
         ? 'risk.condition_expression'
         : riskKey
@@ -1266,7 +1269,7 @@ export class SemanticStateReducerService {
     return Number.isFinite(value) && value > 0 && value <= 100
   }
 
-  /* eslint-disable atom-keys/no-atom-key-literal -- risk.trailing_stop_pct not yet in ATOM_CONTRACT_REGISTRY */
+  /* eslint-disable atom-keys/no-atom-key-literal -- risk.max_drawdown_pct / risk.max_single_loss_pct / risk.stop_loss_pct not yet in REGISTRY (follow-up #1329) */
   private buildProtectiveRiskParams(
     riskKey: 'risk.stop_loss_pct' | 'risk.max_drawdown_pct' | 'risk.max_single_loss_pct' | 'risk.trailing_stop_pct',
     valuePct: number,

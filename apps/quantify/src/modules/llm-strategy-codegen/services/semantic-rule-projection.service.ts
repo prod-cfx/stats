@@ -91,14 +91,7 @@ export class SemanticRuleProjectionService {
       triggers.push(this.atomToTrigger(leaf, rule, i))
     })
 
-    // AND/OR → combinationContract 挂到 **每个** group member（Issue #1413）。
-    //   旧实现只挂第一个 member（"anchor + 隐式 tail" 约定），与 seed-builder
-    //   `withMovingAverageStackCombinationContracts` 的"每个 member 挂同 groupId 合约"
-    //   约定不一致；下游 SemanticTriggerCombinationContractService.resolveExecutableGroups
-    //   按 `existing.members.push(trigger)` 累积成员，依赖每个 member 都带显式合约，
-    //   anchor-only 路径会让非 anchor 退化为 implicit singleton。每个 member 都挂合约
-    //   是与 IR / readiness 既有读取语义对齐的写法，也让 `rulesFromFlatBuckets` 反向
-    //   投影能直接按 contract.groupId 归组，无需启发式扫描。
+    // AND/OR → combinationContract 挂到第一个 member
     const join = this.toJoinKind(expr)
     if (join && leaves.length >= 2) {
       const groupId = `rule-${rule.id}-grp`
@@ -108,12 +101,11 @@ export class SemanticRuleProjectionService {
         phase: this.phaseToTriggerPhase(rule.phase),
         sideScope: rule.sideScope,
       })
-      for (let i = 0; i < leaves.length; i++) {
-        const member = triggers[startIndex + i]
-        if (!member) continue
-        triggers[startIndex + i] = {
-          ...member,
-          contracts: [...(member.contracts ?? []), contract],
+      const first = triggers[startIndex]
+      if (first) {
+        triggers[startIndex] = {
+          ...first,
+          contracts: [...(first.contracts ?? []), contract],
         }
       }
     }
