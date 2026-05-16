@@ -3,6 +3,7 @@ import type { SemanticCapabilityShape, SemanticSlotState, SemanticState } from '
 import type { SemanticOpenSlotAnswerResolverResult } from '../semantic-open-slot-answer-resolver.service'
 import { buildSemanticSlotId } from '../../types/semantic-state'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
+import { SemanticContractShapeNormalizerService } from '../semantic-contract-shape-normalizer.service'
 import { SemanticOpenSlotAnswerResolverService } from '../semantic-open-slot-answer-resolver.service'
 import { buildGridClarificationSlot } from './fixtures/build-grid-slot'
 
@@ -207,21 +208,36 @@ describe('semanticOpenSlotAnswerResolverService', () => {
     expect(result.closedSlotKeys).toEqual(['symbol'])
   })
 
-  it('#1409 invariant: 所有 grid clarification slot 必须含 atomKey + paramSlotKey', () => {
-    // 防回归：seed-builder 注册 grid slot 漏挂 metadata 时此 invariant 抓住
-    const paramSlotKeys: ReadonlyArray<Parameters<typeof buildGridClarificationSlot>[0]> = [
-      'levels',
-      'stepPct',
-      'rangeLower',
-      'rangeUpper',
-      'sideMode',
-      'breakoutAction',
-    ]
-    for (const key of paramSlotKeys) {
-      const slot = buildGridClarificationSlot(key)
-      expect(slot.atomKey).toBe('grid.range_rebalance')
-      expect(slot.paramSlotKey).toBe(key)
-    }
+  it('#1409 invariant: SemanticContractShapeNormalizerService 产线注册的 grid clarification slot 必含 atomKey + paramSlotKey', () => {
+    // 防回归：跑产线 normalizer 派生 openSlots，断言每个 grid slot 都带 atom-driven metadata。
+    // M4 修复：之前只测 fixture 自身的 implementation-testing；现在直接验证产线 service 产出的 slot。
+    const normalizer = new SemanticContractShapeNormalizerService()
+
+    // 路径 1：density 未声明 → 注册 grid.range_rebalance.levels open slot
+    const densityOpen = normalizer.normalizeLevelSetShape(
+      { mode: 'fixed_range', lower: 79200, upper: 80200 },
+      { requireDensity: true, fieldPath: 'shape' },
+    )
+    expect(densityOpen.status).toBe('open')
+    expect(densityOpen.openSlots).toHaveLength(1)
+    expect(densityOpen.openSlots[0]).toMatchObject({
+      atomKey: 'grid.range_rebalance',
+      paramSlotKey: 'levels',
+      slotKey: 'grid.range_rebalance.levels',
+    })
+
+    // 路径 2：gridCount + 与 range 不一致的 absoluteSpacing → 注册 grid.range_rebalance.stepPct conflict slot
+    const conflict = normalizer.normalizeLevelSetShape(
+      { mode: 'fixed_range', lower: 79200, upper: 80200, gridCount: 20, absoluteSpacing: 999 },
+      { requireDensity: true, fieldPath: 'shape' },
+    )
+    expect(conflict.status).toBe('conflict')
+    expect(conflict.openSlots).toHaveLength(1)
+    expect(conflict.openSlots[0]).toMatchObject({
+      atomKey: 'grid.range_rebalance',
+      paramSlotKey: 'stepPct',
+      slotKey: 'grid.range_rebalance.stepPct',
+    })
   })
 
   it('does not consume invalid grid count numbers', () => {
