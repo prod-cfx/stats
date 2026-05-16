@@ -4,6 +4,7 @@ import type { DynamicParamSchema, DynamicParamValues } from './dynamic-params'
 import type { LlmClarificationGate, LlmPublicationGate } from '@/lib/api'
 import { ArrowDown, ArrowUp, BarChart3, Bot, Check, Copy, KeyRound, Play, Settings2, Sparkles, User } from 'lucide-react'
 import Link from 'next/link'
+import type { CSSProperties } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
@@ -371,10 +372,12 @@ export function QuantChatPanel({
   const [submittedBacktestSettings, setSubmittedBacktestSettings] = useState(false)
   const [touchedBacktestFields, setTouchedBacktestFields] = useState<Record<string, boolean>>({})
   const [showScrollToLatest, setShowScrollToLatest] = useState(false)
+  const [mobileComposerHeight, setMobileComposerHeight] = useState(168)
   const [backtestDraftValues, setBacktestDraftValues] = useState<DynamicParamValues>(() =>
     buildBacktestDraftValues(paramValues),
   )
   const chatScrollRef = useRef<HTMLDivElement>(null)
+  const mobileComposerRef = useRef<HTMLDivElement>(null)
   const visibleBacktestSettingFields = useMemo(
     () => BACKTEST_SETTING_FIELDS.filter(field => field.key !== 'backtestLeverage' || backtestMarketType === 'perp'),
     [backtestMarketType],
@@ -408,6 +411,25 @@ export function QuantChatPanel({
     if (!el) return
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [messages])
+
+  useEffect(() => {
+    if (!mobileMode) return
+    const el = mobileComposerRef.current
+    if (!el) return
+
+    const syncComposerHeight = () => {
+      setMobileComposerHeight(Math.ceil(el.getBoundingClientRect().height))
+    }
+
+    syncComposerHeight()
+
+    const ResizeObserverCtor = globalThis.ResizeObserver
+    if (!ResizeObserverCtor) return
+
+    const observer = new ResizeObserverCtor(syncComposerHeight)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [mobileMode])
 
   const updateScrollToLatestVisibility = () => {
     const el = chatScrollRef.current
@@ -478,15 +500,19 @@ export function QuantChatPanel({
       [blockId]: !prev[blockId],
     }))
   }
+  const mobileComposerStyle = mobileMode
+    ? ({ '--quant-mobile-composer-height': `${mobileComposerHeight}px` } as CSSProperties)
+    : undefined
 
   return (
     <section
       className={
         mobileMode
-          ? 'relative flex h-[calc(100dvh-64px)] min-h-0 min-w-0 flex-col overflow-hidden bg-[#f5f8fb] md:h-[calc(100vh-200px)] md:min-h-[600px] md:rounded-2xl md:border md:border-[color:var(--cf-border)] md:bg-[color:var(--cf-surface)] md:shadow-sm'
+          ? 'relative flex h-[calc(100dvh-64px)] min-h-0 min-w-0 flex-col overflow-hidden bg-[color:var(--cf-bg)] md:h-[calc(100vh-200px)] md:min-h-[600px] md:rounded-2xl md:border md:border-[color:var(--cf-border)] md:bg-[color:var(--cf-surface)] md:shadow-sm'
           : 'relative flex min-h-[520px] max-h-[calc(100dvh-7rem)] min-w-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm md:h-[calc(100vh-200px)] md:max-h-none md:min-h-[600px]'
       }
       data-mobile-mode={mobileMode ? 'true' : undefined}
+      style={mobileComposerStyle}
     >
       {/* Header / Toolbar */}
       <div className={`${mobileMode ? 'hidden md:flex' : 'flex'} items-center gap-3 border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-active)] px-4 py-3`}>
@@ -725,7 +751,7 @@ export function QuantChatPanel({
       {/* Chat Area */}
       <div
         ref={chatScrollRef}
-        className={mobileMode ? 'min-w-0 flex-1 overflow-y-auto bg-[#f5f8fb] px-4 py-3' : 'min-w-0 flex-1 overflow-y-auto bg-[color:var(--cf-bg)] p-4'}
+        className={mobileMode ? 'min-w-0 flex-1 overflow-y-auto bg-[color:var(--cf-bg)] px-4 pt-3 pb-[calc(var(--quant-mobile-composer-height)_+_1rem)] md:pb-3' : 'min-w-0 flex-1 overflow-y-auto bg-[color:var(--cf-bg)] p-4'}
         onScroll={updateScrollToLatestVisibility}
       >
         <div className={mobileMode ? 'space-y-5 pb-2' : 'space-y-6'}>
@@ -736,7 +762,7 @@ export function QuantChatPanel({
               className={`flex min-w-0 gap-3 ${message.role === 'assistant' ? 'justify-start' : 'justify-end'}`}
             >
               {message.role === 'assistant' && (
-                <div className={`${mobileMode ? 'bg-[#eef2ff] text-primary' : 'bg-primary/10 text-primary'} flex h-8 w-8 shrink-0 items-center justify-center rounded-full`}>
+                <div className={`${mobileMode ? 'bg-primary/10 text-primary' : 'bg-primary/10 text-primary'} flex h-8 w-8 shrink-0 items-center justify-center rounded-full`}>
                   <Bot className="h-5 w-5" />
                 </div>
               )}
@@ -745,7 +771,7 @@ export function QuantChatPanel({
                 data-testid={`quant-message-bubble-${message.role}`}
                 className={`max-w-[min(100%,42rem)] min-w-0 break-words rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
                   message.role === 'assistant'
-                    ? `${mobileMode ? 'border-[#d9e2ea] bg-white text-[#374151]' : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]'} rounded-tl-none border [&_code]:rounded [&_code]:bg-[color:var(--cf-bg)] [&_code]:px-1.5 [&_code]:py-0.5`
+                    ? `${mobileMode ? 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]' : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]'} rounded-tl-none border [&_code]:rounded [&_code]:bg-[color:var(--cf-bg)] [&_code]:px-1.5 [&_code]:py-0.5`
                     : 'bg-primary rounded-tr-none text-white'
                 }`}
               >
@@ -810,7 +836,7 @@ export function QuantChatPanel({
               </div>
 
               {message.role === 'user' && (
-                <div className={`${mobileMode ? 'bg-white text-[#111827]' : 'bg-[color:var(--cf-surface-active)] text-[color:var(--cf-text-strong)]'} flex h-8 w-8 shrink-0 items-center justify-center rounded-full`}>
+                <div className={`${mobileMode ? 'bg-[color:var(--cf-surface-active)] text-[color:var(--cf-text-strong)]' : 'bg-[color:var(--cf-surface-active)] text-[color:var(--cf-text-strong)]'} flex h-8 w-8 shrink-0 items-center justify-center rounded-full`}>
                   <User className="h-5 w-5" />
                 </div>
               )}
@@ -824,26 +850,26 @@ export function QuantChatPanel({
           type="button"
           onClick={scrollToLatest}
           aria-label={t('aiQuant.scrollToLatest', { defaultValue: '回到最新对话' })}
-          className="absolute left-1/2 bottom-[148px] z-20 inline-flex h-10 w-10 -translate-x-1/2 items-center justify-center rounded-full border border-[#d8dee8] bg-white/95 text-[#111827] shadow-[0_8px_22px_rgba(15,23,42,0.18)] backdrop-blur"
+          className="fixed left-1/2 bottom-[calc(var(--quant-mobile-composer-height)_+_0.75rem)] z-40 inline-flex h-10 w-10 -translate-x-1/2 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]/95 text-[color:var(--cf-text-strong)] shadow-[0_8px_22px_rgba(15,23,42,0.18)] backdrop-blur md:absolute"
         >
           <ArrowDown className="h-5 w-5" />
         </button>
       )}
 
       {/* Input Area */}
-      <div className={mobileMode ? 'border-t border-[#d7dee7] bg-white px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]' : 'border-t border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4'}>
+      <div ref={mobileMode ? mobileComposerRef : undefined} className={mobileMode ? 'fixed inset-x-0 bottom-0 z-30 border-t border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-10px_28px_rgba(15,23,42,0.16)] md:static md:shadow-none' : 'border-t border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4'}>
         {mobileMode && (
           <div
             data-testid="quant-mobile-skill-toolbar"
-            className="mb-2 flex items-center gap-2 overflow-x-auto rounded-2xl bg-white px-1 py-1 md:hidden"
+            className="mb-2 flex items-center gap-2 overflow-x-auto rounded-2xl bg-[color:var(--cf-surface)] px-1 py-1 md:hidden"
           >
             <button
               type="button"
               onClick={() => setShowSettings(!showSettings)}
               className={`inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-[11px] font-semibold shadow-sm ${
                 showSettings
-                  ? 'border-[#3f6fff] bg-[#eef4ff] text-[#1f4fff]'
-                  : 'border-[#d8dee8] bg-white text-[#1f2937]'
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text-strong)]'
               }`}
             >
               <Settings2 className="h-3.5 w-3.5" />
@@ -854,7 +880,7 @@ export function QuantChatPanel({
               data-testid="run-backtest-mobile"
               onClick={onRunBacktest}
               disabled={!canRunBacktest || hasDraftChanges}
-              className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#3f6fff] bg-[#3f6fff] px-2.5 text-[11px] font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:border-[#d7dee7] disabled:bg-[#d7dee7] disabled:text-[#6b7280]"
+              className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-primary bg-primary px-2.5 text-[11px] font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:border-[color:var(--cf-border)] disabled:bg-[color:var(--cf-surface-2)] disabled:text-[color:var(--cf-muted)]"
             >
               <Play className="h-3.5 w-3.5 fill-current" />
               {isZh ? '开始回测' : 'Start Backtest'}
@@ -864,8 +890,8 @@ export function QuantChatPanel({
               onClick={() => onMobilePanelTabChange?.('logic')}
               className={`inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-[12px] font-semibold shadow-sm ${
                 mobilePanelTab === 'logic'
-                  ? 'border-[#b8c4d6] bg-[#f8fbff] text-[#111827]'
-                  : 'border-[#d8dee8] bg-white text-[#374151]'
+                  ? 'border-primary/40 bg-[color:var(--cf-surface-active)] text-[color:var(--cf-text-strong)]'
+                  : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]'
               }`}
             >
               <Check className="h-3.5 w-3.5" />
@@ -876,8 +902,8 @@ export function QuantChatPanel({
               onClick={() => onMobilePanelTabChange?.('backtest')}
               className={`inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-[12px] font-semibold shadow-sm ${
                 mobilePanelTab === 'backtest'
-                  ? 'border-[#b8c4d6] bg-[#f8fbff] text-[#111827]'
-                  : 'border-[#d8dee8] bg-white text-[#374151]'
+                  ? 'border-primary/40 bg-[color:var(--cf-surface-active)] text-[color:var(--cf-text-strong)]'
+                  : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]'
               }`}
             >
               <BarChart3 className="h-3.5 w-3.5" />
@@ -887,7 +913,7 @@ export function QuantChatPanel({
               <Link
                 href={mobilePlazaHref}
                 data-testid="quant-mobile-plaza-link"
-                className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#d8dee8] bg-white px-2.5 text-[11px] font-semibold text-[#1f2937] shadow-sm"
+                className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2.5 text-[11px] font-semibold text-[color:var(--cf-text-strong)] shadow-sm"
               >
                 <Sparkles className="h-3.5 w-3.5" />
                 {isZh ? '策略广场' : 'Strategy Plaza'}
@@ -897,7 +923,7 @@ export function QuantChatPanel({
               <Link
                 href={mobileApiConfigHref}
                 data-testid="quant-mobile-api-link"
-                className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#d8dee8] bg-white px-2.5 text-[11px] font-semibold text-[#1f2937] shadow-sm"
+                className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2.5 text-[11px] font-semibold text-[color:var(--cf-text-strong)] shadow-sm"
               >
                 <KeyRound className="h-3.5 w-3.5" />
                 {isZh ? '交易API' : 'Trading API'}
@@ -905,9 +931,9 @@ export function QuantChatPanel({
             )}
           </div>
         )}
-        <div className={`focus-within:border-primary focus-within:ring-primary relative border shadow-sm focus-within:ring-1 ${mobileMode ? 'rounded-xl border-[#d9e2ea] bg-white' : 'rounded-xl border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]'}`}>
+        <div className={`focus-within:border-primary focus-within:ring-primary relative border shadow-sm focus-within:ring-1 ${mobileMode ? 'rounded-xl border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]' : 'rounded-xl border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]'}`}>
           <textarea
-            className={`max-h-[120px] min-h-[50px] w-full resize-none bg-transparent px-4 py-3 pr-12 text-sm outline-none ${mobileMode ? 'text-[#374151] placeholder:text-[#7b8794]' : 'text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)]'}`}
+            className={`max-h-[120px] min-h-[50px] w-full resize-none bg-transparent px-4 py-3 pr-12 outline-none ${mobileMode ? 'text-base text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)] md:text-sm' : 'text-sm text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)]'}`}
             placeholder={isZh
               ? '描述你的交易策略，例如：3分钟跌1%买入，15分钟涨2%卖出...'
               : t('aiQuant.inputPlaceholder')}
@@ -929,7 +955,7 @@ export function QuantChatPanel({
             <ArrowUp className="h-5 w-5" />
           </button>
         </div>
-        <p className={`mt-2 text-center text-xs ${mobileMode ? 'text-[#6b7280]' : 'text-[color:var(--cf-muted)]'}`}>
+        <p className={`mt-2 text-center text-xs ${mobileMode ? 'text-[color:var(--cf-muted)]' : 'text-[color:var(--cf-muted)]'}`}>
           {isZh
             ? 'AI 内容仅供参考，请务必在实盘前进行充分回测。'
             : t('aiQuant.messages.aiDisclaimer')}

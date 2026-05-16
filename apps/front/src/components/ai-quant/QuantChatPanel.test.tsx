@@ -200,6 +200,8 @@ describe('QuantChatPanel range settings', () => {
     })
 
     expect(container.querySelector('[data-testid="quant-mobile-skill-toolbar"]')?.className).toContain('md:hidden')
+    expect(container.querySelector('textarea')?.className).toContain('text-base')
+    expect(container.querySelector('textarea')?.className).toContain('md:text-sm')
     expect(container.querySelector('[data-testid="quant-mobile-plaza-link"]')?.getAttribute('href')).toBe('/zh/ai-quant/plaza')
     expect(container.querySelector('[data-testid="quant-mobile-api-link"]')?.getAttribute('href')).toBe('/zh/account?tab=settings#exchange-api')
     const skillItems = Array.from(

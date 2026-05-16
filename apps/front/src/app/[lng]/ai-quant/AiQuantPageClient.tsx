@@ -1582,23 +1582,23 @@ export function AiQuantPageClient({
   }
 
   return (
-    <main className="mx-auto flex w-full flex-1 flex-col bg-[#f5f8fb] md:max-w-[1120px] md:gap-6 md:bg-transparent md:px-8 md:py-8">
-      <section className="sticky top-0 z-30 flex h-16 items-center justify-center border-b border-[#d9e2ea] bg-white px-12 md:hidden">
+    <main className="mx-auto flex w-full flex-1 flex-col bg-[color:var(--cf-bg)] md:max-w-[1120px] md:gap-6 md:bg-transparent md:px-8 md:py-8">
+      <section className="sticky top-0 z-30 flex h-16 items-center justify-center border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-12 md:hidden">
         <Link
           href={returnHref}
           aria-label={lng === 'en' ? 'Back' : '返回'}
-          className="absolute left-4 inline-flex h-9 w-9 items-center justify-center text-[#111827]"
+          className="absolute left-4 inline-flex h-9 w-9 items-center justify-center text-[color:var(--cf-text-strong)]"
         >
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div className="min-w-0 text-center leading-none">
           <div className="flex items-center justify-center gap-1.5">
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-[#eef2ff] text-primary">
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Bot className="h-3.5 w-3.5" />
             </span>
-            <span className="text-[13px] font-semibold text-[#111827]">{t('aiQuant.chatTitle')}</span>
+            <span className="text-[13px] font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.chatTitle')}</span>
           </div>
-          <div className="mt-1 truncate text-[11px] font-medium leading-none text-[#8a94a6]">
+          <div className="mt-1 truncate text-[11px] font-medium leading-none text-[color:var(--cf-muted)]">
             {activeConversation.title}
           </div>
         </div>
@@ -1607,7 +1607,7 @@ export function AiQuantPageClient({
           data-testid="mobile-create-conversation-header"
           onClick={() => setMobileConversationSheetOpen(true)}
           aria-label={t('aiQuant.conversationSelector', { defaultValue: '选择会话' })}
-          className="absolute right-4 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#c8dde1] bg-[#eef9fa] text-[#3f6fff] shadow-sm"
+          className="absolute right-4 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-primary shadow-sm"
         >
           <MessageSquarePlus className="h-5 w-5" />
         </button>
@@ -2004,6 +2004,7 @@ export function AiQuantPageClient({
                         canDeploy={canDeploy}
                         deploymentState={deploymentState}
                         deployLabel={deployLabel}
+                        fullScreenButtonClassName="mr-5"
                         drawdownLimited
                         onViewRunningStrategy={deploymentState === 'running' ? viewRunningStrategy : undefined}
                         onOpenFullScreen={() => {

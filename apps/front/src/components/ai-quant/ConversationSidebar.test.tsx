@@ -68,7 +68,7 @@ describe('ConversationSidebar', () => {
     expect(activeItem).not.toBeNull()
     expect(activeItem?.querySelector('[data-testid="current-icon"]')).not.toBeNull()
     expect(activeItem?.textContent).not.toContain('当前')
-    expect(activeItem?.className).toContain('bg-[#f3e8ff]')
+    expect(activeItem?.className).toContain('bg-violet-500/10')
   })
 
   it('keeps the conversation list compact and scrollable on narrow screens', async () => {
@@ -172,7 +172,7 @@ describe('ConversationSidebar', () => {
     expect(reopenedSheet).not.toBeNull()
 
     await act(async () => {
-      reopenedSheet!.querySelector('[data-testid="conversation-item-other"]')?.dispatchEvent(
+      reopenedSheet!.querySelector('[data-testid="conversation-switch-other"]')?.dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       )
     })

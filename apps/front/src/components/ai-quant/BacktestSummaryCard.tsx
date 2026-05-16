@@ -9,6 +9,7 @@ interface BacktestSummaryCardProps {
   canDeploy: boolean
   deploymentState?: 'not_deployed' | 'running' | 'stopped' | 'unknown'
   deployLabel?: string
+  fullScreenButtonClassName?: string
   drawdownLimited?: boolean
   onOpenFullScreen: () => void
   onDeploy: () => void
@@ -36,6 +37,7 @@ export function BacktestSummaryCard({
   canDeploy,
   deploymentState = 'not_deployed',
   deployLabel,
+  fullScreenButtonClassName = '',
   drawdownLimited = true,
   onOpenFullScreen,
   onDeploy,
@@ -191,7 +193,7 @@ export function BacktestSummaryCard({
         <button
           type="button"
           onClick={onOpenFullScreen}
-          className="rounded-lg border border-[color:var(--cf-border)] px-3 py-1 text-xs font-semibold text-[color:var(--cf-text-strong)]"
+          className={`rounded-lg border border-[color:var(--cf-border)] px-3 py-1 text-xs font-semibold text-[color:var(--cf-text-strong)] ${fullScreenButtonClassName}`}
         >
           {t('aiQuant.fullScreen')}
         </button>

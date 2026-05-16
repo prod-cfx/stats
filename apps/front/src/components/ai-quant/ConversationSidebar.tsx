@@ -71,7 +71,6 @@ function ConversationListItem({
   onSwitch,
   mobileDrawer = false,
 }: ConversationListItemProps) {
-  const canSwitch = !editing
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
@@ -88,25 +87,12 @@ function ConversationListItem({
       className={`w-full rounded-xl border px-3 py-2 text-left transition ${
         mobileDrawer
           ? active
-            ? 'border-[#8b5cf6] bg-[#f2e8ff] shadow-sm shadow-violet-500/10'
-            : 'border-[#e3e8f0] bg-[#f8fafc] hover:bg-white'
+            ? 'border-violet-400 bg-violet-500/10 shadow-sm shadow-violet-500/10'
+            : 'border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] hover:bg-[color:var(--cf-surface-hover)]'
           : active
-            ? 'border-violet-400 bg-[#f3e8ff] shadow-sm shadow-violet-500/10 dark:border-violet-500/50 dark:bg-violet-500/15'
+            ? 'border-violet-400 bg-violet-500/10 shadow-sm shadow-violet-500/10 dark:border-violet-500/50 dark:bg-violet-500/15'
             : 'border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] hover:bg-[color:var(--cf-surface-hover)]'
       }`}
-      role="button"
-      tabIndex={canSwitch ? 0 : -1}
-      onClick={() => {
-        if (!canSwitch) return
-        onSwitch(item.id)
-      }}
-      onKeyDown={(event) => {
-        if (!canSwitch) return
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onSwitch(item.id)
-        }
-      }}
     >
       {editing ? (
         <input
@@ -128,32 +114,37 @@ function ConversationListItem({
           className="h-8 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)]"
         />
       ) : (
-        <div className="flex w-full min-w-0 items-start justify-between gap-2">
-          <div className={`min-w-0 truncate text-left text-sm font-semibold ${mobileDrawer ? 'text-[#111827]' : 'text-[color:var(--cf-text-strong)]'}`}>
-            {item.title}
-          </div>
-          {active && (
-            <span
-              className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-violet-600 dark:text-violet-300"
-              aria-label={t('aiQuant.current')}
-              title={t('aiQuant.current')}
-            >
-              <CheckCircle2 className="h-4 w-4" />
+        <button
+          type="button"
+          data-testid={`conversation-switch-${item.id}`}
+          onClick={() => onSwitch(item.id)}
+          className="block w-full min-w-0 rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-primary/40"
+        >
+          <span className="flex w-full min-w-0 items-start justify-between gap-2">
+            <span className={`min-w-0 truncate text-left text-sm font-semibold ${mobileDrawer ? 'text-[color:var(--cf-text-strong)]' : 'text-[color:var(--cf-text-strong)]'}`}>
+              {item.title}
             </span>
-          )}
-        </div>
+            {active && (
+              <span
+                className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-violet-600 dark:text-violet-300"
+                aria-label={t('aiQuant.current')}
+                title={t('aiQuant.current')}
+              >
+                <CheckCircle2 className="h-4 w-4" />
+              </span>
+            )}
+          </span>
+          <span className={`mt-1 block text-xs ${mobileDrawer ? 'text-[color:var(--cf-muted)]' : 'text-[color:var(--cf-muted)]'}`}>{t('aiQuant.updatedAt')} {formatTime(item.updatedAt)}</span>
+        </button>
       )}
-      <div className={`mt-1 text-xs ${mobileDrawer ? 'text-[#697586]' : 'text-[color:var(--cf-muted)]'}`}>{t('aiQuant.updatedAt')} {formatTime(item.updatedAt)}</div>
       <div className="mt-2 flex items-center gap-2">
         <button
           type="button"
           data-testid={`rename-conversation-${item.id}`}
-          onClick={(event) => {
-            event.stopPropagation()
+          onClick={() => {
             onBeginRename(item)
           }}
-          onKeyDown={event => event.stopPropagation()}
-          className={`inline-flex h-7 w-7 items-center justify-center rounded-md border ${mobileDrawer ? 'border-[#d8dee8] bg-white text-[#64748b] hover:text-[#111827]' : 'border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
+          className={`inline-flex h-7 w-7 items-center justify-center rounded-md border ${mobileDrawer ? 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]' : 'border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
           aria-label={t('common.rename', { defaultValue: 'Rename' })}
         >
           <Pencil className="h-3.5 w-3.5" />
@@ -161,12 +152,10 @@ function ConversationListItem({
         <button
           type="button"
           data-testid={`delete-conversation-${item.id}`}
-          onClick={(event) => {
-            event.stopPropagation()
+          onClick={() => {
             onDelete(item.id)
           }}
-          onKeyDown={event => event.stopPropagation()}
-          className={`inline-flex h-7 w-7 items-center justify-center rounded-md border ${mobileDrawer ? 'border-[#d8dee8] bg-white text-[#64748b] hover:text-red-500' : 'border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-red-400'}`}
+          className={`inline-flex h-7 w-7 items-center justify-center rounded-md border ${mobileDrawer ? 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] hover:text-red-400' : 'border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-red-400'}`}
           aria-label={t('common.delete', { defaultValue: 'Delete' })}
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -287,10 +276,10 @@ export function ConversationSidebar({
             >
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h2 id={mobileSheetTitleId} className="text-lg font-bold text-[#111827]">
+                  <h2 id={mobileSheetTitleId} className="text-lg font-bold text-[color:var(--cf-text-strong)]">
                     {t('aiQuant.conversationSelector', { defaultValue: '选择会话' })}
                   </h2>
-                  <div className="mt-0.5 text-xs text-[#697586]">
+                  <div className="mt-0.5 text-xs text-[color:var(--cf-muted)]">
                     {getMobileSummary(t, items)}
                   </div>
                 </div>
@@ -298,7 +287,7 @@ export function ConversationSidebar({
                   type="button"
                   ref={mobileCloseButtonRef}
                   onClick={() => setMobileSheetOpen(false)}
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#d8dee8] bg-white text-[#64748b] shadow-sm hover:text-[#111827]"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] shadow-sm hover:text-[color:var(--cf-text-strong)]"
                   aria-label={t('common.close', { defaultValue: 'Close' })}
                 >
                   <X className="h-4 w-4" />
