@@ -254,17 +254,11 @@ function applyExtractedValueToOwner(
     }
   }
   if (slotRef.ownerKind === 'position') {
-    if (!state.position) return state
-    const openSlots = removeSlot(state.position.openSlots ?? [])
-    return {
-      ...state,
-      position: {
-        ...state.position,
-        openSlots,
-        status: nextStatusFor(openSlots),
-        source: 'user_explicit',
-      },
-    }
+    // M1: position 顶层 SemanticPositionState 没有通用 `params` 字段
+    //   （sizing/mode/value 由 resolvePositionSizingAnswer 独立路径处理）。
+    //   若未来在 state.position.openSlots 注册 atom-driven slot，需要先扩
+    //   SemanticPositionState 字段；当前直接拒绝通用通道，避免静默吞值。
+    return state
   }
   if (slotRef.ownerKind === 'positionConstraint') {
     if (!state.position) return state
