@@ -42,7 +42,7 @@ import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { buildTriggerCombinationContract, isTriggerPredicateGroupContract, normalizeRiskSemantic } from './semantic-state-normalization'
 import { validateSemanticRiskContract } from './strategy-semantic-contracts'
 import type { AtomExprAtom, SemanticRule } from '../types/atom-expr'
-import { collectAtomLeaves } from '../types/atom-expr'
+import { collectAtomLeaves, rulesFromFlatBuckets } from '../types/atom-expr'
 import { readFlatActions, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 // DEPRECATED Task 6: legacy aggregate shape; new SemanticState splits into orchestration + orchestrationContracts
@@ -386,6 +386,25 @@ export class SemanticSeedStateBuilderService {
     //   state.diagnostics.zodQuarantine（数据透传层，下游 reader 不消费；供 follow-up 观测）。
     const zodQuarantine = this.extractZodQuarantine(semanticPatch)
 
+    // Issue #1413：rules-first writer——LLM patch 显式 rules[] 优先透传；空时按
+    // 当前 build 出的 flat 五桶反向投影派生 rules，确保 state.rules 是 SemanticState
+    // 唯一权威 source-of-truth（reader 漏斗化后切 rules-only 的前置）。
+    //   - explicitRules 非空：保留原 LLM rules 树（携带 NOT / SEQUENCE 等组合）
+    //   - explicitRules 为空：调用 rulesFromFlatBuckets，从已 build 的 flat 桶
+    //     重建 SemanticRule[]。AND/OR 通过 trigger.contracts 的 predicate_group
+    //     contract 还原；effects 按 phase + id 命名约定挂回 rule。
+    //   - 真空 patch 路径（上面 if 已 return null）不会走到这里，所以这里 rules
+    //     必非空，满足 Issue #1413 验收"100% 非空 patch 路径 state.rules 非空"。
+    const derivedRules: SemanticRule[] = explicitRules.length > 0
+      ? explicitRules
+      : rulesFromFlatBuckets({
+          trigger: groupedTriggerUpdates,
+          action: actionUpdates,
+          risk: riskUpdates,
+          positionConstraint: positionConstraints,
+          orchestration: orchestration?.nodes ?? [],
+        })
+
     return this.withRequiredSeedOpenSlots({
       version: 1,
       families: [],
@@ -399,8 +418,8 @@ export class SemanticSeedStateBuilderService {
       contextSlots,
       normalizationNotes: [],
       updatedAt: new Date().toISOString(),
-      // Issue #1395: 透传 rules[] 到 state，供 IR compiler (compileAtomExpr) 接表达式树
-      ...(explicitRules.length > 0 ? { rules: explicitRules } : {}),
+      // Issue #1413: rules-first writer 改造——任何非空 patch 路径都写非空 rules[]
+      ...(derivedRules.length > 0 ? { rules: derivedRules } : {}),
       ...(zodQuarantine ? { diagnostics: { zodQuarantine } } : {}),
     })
   }
