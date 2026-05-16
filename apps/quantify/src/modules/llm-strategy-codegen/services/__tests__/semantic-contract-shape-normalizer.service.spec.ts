@@ -105,7 +105,7 @@ describe('SemanticContractShapeNormalizerService', () => {
         status: 'open',
         priority: 'core',
         affectsExecution: true,
-        questionHint: '网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。',
+        questionHint: '网格数量和每格间距与当前价格区间不一致，请给出每格间距数值（例如 0.5% 或 每格 100 USDT）。',
       }),
     ])
   })
@@ -127,7 +127,7 @@ describe('SemanticContractShapeNormalizerService', () => {
         status: 'open',
         priority: 'core',
         affectsExecution: true,
-        questionHint: '网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。',
+        questionHint: '网格数量和每格间距与当前价格区间不一致，请给出每格间距数值（例如 0.5% 或 每格 100 USDT）。',
       }),
     ])
   })

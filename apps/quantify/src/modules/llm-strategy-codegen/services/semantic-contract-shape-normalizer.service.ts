@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common'
 import type { SemanticCapabilityShape, SemanticSlotState } from '../types/semantic-state'
+// m6: 文案常量集中由 renderer 导出，避免 normalizer + renderer 两处复制
+import {
+  GRID_LEVELS_QUESTION_HINT,
+  GRID_STEP_PCT_CONFLICT_QUESTION_HINT,
+} from './semantic-clarification-question-renderer.service'
 
 export type NormalizedContractShapeStatus = 'valid' | 'open' | 'conflict' | 'invalid'
 
@@ -21,8 +26,8 @@ const GRID_LEVELS_PARAM_SLOT_KEY = 'levels'
 const GRID_STEP_PCT_PARAM_SLOT_KEY = 'stepPct'
 const GRID_LEVELS_SLOT_KEY = `${GRID_ATOM_KEY}.${GRID_LEVELS_PARAM_SLOT_KEY}`
 const GRID_STEP_PCT_SLOT_KEY = `${GRID_ATOM_KEY}.${GRID_STEP_PCT_PARAM_SLOT_KEY}`
-const SPACING_CONFLICT_QUESTION_HINT = '网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。'
-const DENSITY_QUESTION_HINT = '请确认网格数量或每格间距，例如 20 格 / 每格 100 USDT / 每格 0.5%。'
+const SPACING_CONFLICT_QUESTION_HINT = GRID_STEP_PCT_CONFLICT_QUESTION_HINT
+const DENSITY_QUESTION_HINT = GRID_LEVELS_QUESTION_HINT
 const ABSOLUTE_SPACING_CONFLICT_TOLERANCE = 1e-8
 const PERCENT_SPACING_CONFLICT_TOLERANCE = 1e-3
 
