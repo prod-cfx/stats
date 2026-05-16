@@ -215,14 +215,24 @@ const DEFAULT_CODEGEN_STRICT_ENABLED = true
 const DEFAULT_CODEGEN_STRICT_FALLBACK = true
 const STRATEGY_PLAZA_RUN_SESSION_ID_PREFIX = 'strategy-plaza:official:'
 const DEFAULT_CODEGEN_STRICT_UNSUPPORTED_TTL_MS = 10 * 60 * 1000
-const STRUCTURED_LEVEL_SET_RESOLVABLE_SLOT_KEYS = new Set([
+// #1409: grid clarification slot 识别——按 atomKey 判定（替代旧 slotKey 字面量 white-list）
+//   旧 slotKey（contract.shape.price.level_set.*）保留兼容老 state 字符串
+//
+// @deprecated 兼容窗口——线上残留旧 state 反序列化时仍可能命中这 3 个旧 slotKey；
+//   一旦持久化 state 全部迁移到 atom-driven slot 形态（`grid.range_rebalance.*`），
+//   即可移除本 Set 及相关 fallback 分支。建议在 2 个 release 后由 follow-up issue 清理。
+const STRUCTURED_GRID_ATOM_KEY = 'grid.range_rebalance'
+const LEGACY_LEVEL_SET_SLOT_KEYS = new Set([
   'contract.shape.price.level_set.density',
   'contract.requirement.price.define.level_set',
   'contract.shape.price.level_set.spacing_conflict',
 ])
-const STRUCTURED_LEVEL_SET_KNOWN_SLOT_KEYS = new Set([
-  ...STRUCTURED_LEVEL_SET_RESOLVABLE_SLOT_KEYS,
-])
+function isStructuredGridSlotKey(slot: { slotKey: string; atomKey?: string }): boolean {
+  return slot.atomKey === STRUCTURED_GRID_ATOM_KEY || LEGACY_LEVEL_SET_SLOT_KEYS.has(slot.slotKey)
+}
+function isLegacyOrGridSlotKeyString(slotKey: string): boolean {
+  return slotKey.startsWith(`${STRUCTURED_GRID_ATOM_KEY}.`) || LEGACY_LEVEL_SET_SLOT_KEYS.has(slotKey)
+}
 const EDIT_RECOVERY_ASSISTANT_MESSAGE = '已基于上一版策略恢复修改上下文。'
 const MISSING_SEMANTIC_STATE_ASSISTANT_PROMPT = '当前会话缺少语义状态，请重新输入完整策略。'
 
@@ -2896,7 +2906,7 @@ export class CodegenConversationService {
 
     for (const item of clarificationState?.items ?? []) {
       const targetSlot = this.findStructuredLevelSetOpenSlot(nextState, item)
-      if (!targetSlot || !STRUCTURED_LEVEL_SET_RESOLVABLE_SLOT_KEYS.has(targetSlot.slotKey)) {
+      if (!targetSlot || !isStructuredGridSlotKey(targetSlot)) {
         continue
       }
 
@@ -2935,7 +2945,7 @@ export class CodegenConversationService {
     item: StrategyClarificationItem,
   ): SemanticSlotState | null {
     const itemSlotKey = this.readStructuredLevelSetSlotKey(item)
-    if (itemSlotKey && !STRUCTURED_LEVEL_SET_KNOWN_SLOT_KEYS.has(itemSlotKey)) {
+    if (itemSlotKey && !isLegacyOrGridSlotKeyString(itemSlotKey)) {
       return null
     }
 
@@ -2980,7 +2990,7 @@ export class CodegenConversationService {
   }
 
   private isStructuredLevelSetOpenSlot(slot: SemanticSlotState): boolean {
-    return slot.status === 'open' && STRUCTURED_LEVEL_SET_KNOWN_SLOT_KEYS.has(slot.slotKey)
+    return slot.status === 'open' && isStructuredGridSlotKey(slot)
   }
 
   private readStructuredLevelSetSlotKey(item: StrategyClarificationItem): string | null {

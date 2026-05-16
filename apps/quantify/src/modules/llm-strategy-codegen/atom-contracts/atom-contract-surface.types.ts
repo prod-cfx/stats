@@ -291,6 +291,24 @@ export interface AtomContractSurface {
   }
 
   /**
+   * Issue #1409 — golden clarification answers
+   *
+   * 让 atom 自描述「open slot 澄清答复时，给定一段自然语言用户回答，slot extractor
+   * 应抽出哪些 paramSlot 值」。registry-level invariant spec 会遍历此表，对每条
+   * answer 调 `GenericSeedDispatcher.extractSingleSlot(atomKey, slotKey, answer)`
+   * 断言抽值 == expectParams。
+   *
+   * 设计意图：把过去散落在 resolver / parseLevelSetDensityAnswer / ad-hoc regex
+   * 的「短答抽参」逻辑沉淀回 atom 自身——新增 atom = 加一条 golden，invariant spec
+   * 自动护栏，resolver 通用通道走 extractSingleSlot 派生无 atom-key 字面量。
+   */
+  readonly goldenClarificationAnswers?: ReadonlyArray<{
+    readonly answer: string
+    readonly expectParams: Readonly<Record<string, unknown>>
+    readonly description?: string
+  }>
+
+  /**
    * Issue #1395 mute-spider — 多 slot 联动的合法预置组合白名单。
    *
    * 场景：MACD 标准参数三元组 (fast/slow/signal) 之间互相约束，单 slot range 校验

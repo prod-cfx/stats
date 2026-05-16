@@ -129,7 +129,9 @@ describe('SemanticSeedStateBuilderService', () => {
       key: 'grid.range_rebalance',
       status: 'open',
       openSlots: expect.arrayContaining([expect.objectContaining({
-        slotKey: 'contract.shape.price.level_set.density',
+        slotKey: 'grid.range_rebalance.levels',
+        atomKey: 'grid.range_rebalance',
+        paramSlotKey: 'levels',
         status: 'open',
         questionHint: expect.stringContaining('网格数量或每格间距'),
       })]),
@@ -346,7 +348,9 @@ describe('SemanticSeedStateBuilderService', () => {
     expect(state?.position?.constraints?.[0]).toEqual(expect.objectContaining({
       key: 'grid.range_rebalance',
       openSlots: expect.arrayContaining([expect.objectContaining({
-        slotKey: 'contract.shape.price.level_set.density',
+        slotKey: 'grid.range_rebalance.levels',
+        atomKey: 'grid.range_rebalance',
+        paramSlotKey: 'levels',
         status: 'open',
       })]),
       contracts: expect.arrayContaining([expect.objectContaining({
@@ -493,13 +497,14 @@ describe('SemanticSeedStateBuilderService', () => {
       }],
     })
     const densitySlot = state?.position?.constraints?.[0]?.openSlots.find(slot =>
-      slot.slotKey === 'contract.shape.price.level_set.density',
+      slot.slotKey === 'grid.range_rebalance.levels',
     )
     expect(densitySlot).toBeDefined()
 
+    // #1409: 通用通道按 atomKey+paramSlotKey 调度；levels paramSlot 接受"N 格"格式
     const resolved = openSlotAnswerResolver.resolve({
       currentState: state!,
-      message: '步长0.5%',
+      message: '20格',
       clarificationState: {
         items: [{
           status: 'pending',
@@ -513,14 +518,16 @@ describe('SemanticSeedStateBuilderService', () => {
       throw new Error('expected grid density answer to be consumed')
     }
 
-    const shape = resolved.nextState.position?.constraints?.[0]?.contracts?.[0]?.capabilities[0]?.shape
+    const params = resolved.nextState.position?.constraints?.[0]?.params
 
-    expect(shape).toEqual(expect.objectContaining({
-      spacingPct: 0.5,
+    expect(params).toEqual(expect.objectContaining({
+      levels: 20,
     }))
     expect(resolved.nextState.position?.constraints?.[0]?.openSlots).toEqual(expect.not.arrayContaining([
       expect.objectContaining({
-        slotKey: 'contract.shape.price.level_set.density',
+        slotKey: 'grid.range_rebalance.levels',
+        atomKey: 'grid.range_rebalance',
+        paramSlotKey: 'levels',
         status: 'open',
       }),
     ]))

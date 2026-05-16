@@ -1165,6 +1165,94 @@ export class GenericSeedDispatcher {
     return out
   }
 
+  /**
+   * extractSingleSlot —— 单 slot 抽参（Issue #1409）
+   *
+   * 用途：resolver 通用 open slot 答复通道。给定 (atomKey, slotKey, answer)，
+   * 仅跑该 slot 的 extractor + schema 校验，返回 schema-validated 值或 ok:false。
+   *
+   * 红线：
+   *   - 不读 atom-key 字面量（registry 查找）
+   *   - 不读 bucket 字面量
+   *   - 不写业务规则；纯函数式 schema-driven
+   *
+   * Schema 校验（顺序）：
+   *   1. atom / slotKey 不存在 → reason='unknown_slot'
+   *   2. extractor 未声明 → reason='no_extractor'
+   *   3. extractor 抽不到 + default 不存在 → reason='no_match'
+   *   4. kind=number-int 必须 Number.isInteger
+   *   5. schema.range 越界 → reason='out_of_range'
+   *   6. schema.multipleOf 不整除 → reason='not_multiple_of'
+   *   7. schema.enum 不在集合 → reason='not_in_enum'
+   */
+  extractSingleSlot(
+    atomKey: string,
+    slotKey: string,
+    answer: string,
+  ): { ok: true; value: unknown } | { ok: false; reason: string } {
+    const contract = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract>)[atomKey]
+    const surface = contract?.surface
+    const schema = surface?.paramSlots[slotKey]
+    if (!surface || !schema) {
+      return { ok: false, reason: 'unknown_slot' }
+    }
+
+    const ext = schema.extractor
+    if (!ext) {
+      return { ok: false, reason: 'no_extractor' }
+    }
+
+    const parser = GENERIC_PARSERS[ext.kind]
+    if (!parser) {
+      return { ok: false, reason: `unknown_parser_kind:${ext.kind}` }
+    }
+
+    // C2: 单 slot 答复抽参不走 schema.default / ext.default fallback——
+    //   default 是「未声明」时的稳态值，不是「答非所问也算答了」的语义。
+    //   parser/derive 真正命中才进 schema validation；都没命中视作 no_match。
+    let value: unknown = parser(answer, ext)
+    if ((value === undefined || value === null) && ext.derive) {
+      const derive = DERIVES[ext.derive]
+      if (!derive) {
+        return { ok: false, reason: `unknown_derive:${ext.derive}` }
+      }
+      value = derive(answer, { atomKey, params: {} })
+    }
+    if (value === undefined || value === null) {
+      return { ok: false, reason: 'no_match' }
+    }
+
+    // schema validation（kind-specific + range / multipleOf / enum）
+    if (schema.kind === 'number' && typeof value !== 'number') {
+      const coerced = Number(value)
+      if (!Number.isFinite(coerced)) {
+        return { ok: false, reason: 'not_a_number' }
+      }
+      value = coerced
+    }
+    if (ext.kind === 'number-int' && typeof value === 'number' && !Number.isInteger(value)) {
+      return { ok: false, reason: 'not_integer' }
+    }
+    if (schema.range && typeof value === 'number') {
+      if (value < schema.range[0] || value > schema.range[1]) {
+        return { ok: false, reason: 'out_of_range' }
+      }
+    }
+    if (schema.multipleOf !== undefined && typeof value === 'number') {
+      // m2: IEEE-754 浮点容差，避免 0.3 % 0.1 ≈ 0.0999... 误判 not_multiple_of
+      const remainder = Math.abs(value % schema.multipleOf)
+      const tolerance = Math.max(Math.abs(value), schema.multipleOf) * 1e-9
+      if (remainder > tolerance && Math.abs(remainder - schema.multipleOf) > tolerance) {
+        return { ok: false, reason: 'not_multiple_of' }
+      }
+    }
+    if (schema.enum && !schema.enum.includes(String(value))) {
+      return { ok: false, reason: 'not_in_enum' }
+    }
+
+    return { ok: true, value }
+  }
+
   matchSurface(
     surface: AtomContractSurface,
     clause: string,

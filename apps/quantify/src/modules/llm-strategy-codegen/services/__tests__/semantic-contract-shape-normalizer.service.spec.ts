@@ -33,9 +33,12 @@ describe('SemanticContractShapeNormalizerService', () => {
     )
 
     expect(result.status).toBe('open')
+    // #1409: density 缺失改注册 grid.range_rebalance.levels（atom-driven 形态）
     expect(result.openSlots).toEqual([{
-      slotKey: 'contract.shape.price.level_set.density',
+      slotKey: 'grid.range_rebalance.levels',
       fieldPath,
+      atomKey: 'grid.range_rebalance',
+      paramSlotKey: 'levels',
       status: 'open',
       priority: 'core',
       affectsExecution: true,
@@ -96,11 +99,13 @@ describe('SemanticContractShapeNormalizerService', () => {
     expect(result.status).toBe('conflict')
     expect(result.openSlots).toEqual([
       expect.objectContaining({
-        slotKey: 'contract.shape.price.level_set.spacing_conflict',
+        slotKey: 'grid.range_rebalance.stepPct',
+        atomKey: 'grid.range_rebalance',
+        paramSlotKey: 'stepPct',
         status: 'open',
         priority: 'core',
         affectsExecution: true,
-        questionHint: '网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。',
+        questionHint: '网格数量和每格间距与当前价格区间不一致，请给出每格间距数值（例如 0.5% 或 每格 100 USDT）。',
       }),
     ])
   })
@@ -116,11 +121,13 @@ describe('SemanticContractShapeNormalizerService', () => {
     expect(result.status).toBe('conflict')
     expect(result.openSlots).toEqual([
       expect.objectContaining({
-        slotKey: 'contract.shape.price.level_set.spacing_conflict',
+        slotKey: 'grid.range_rebalance.stepPct',
+        atomKey: 'grid.range_rebalance',
+        paramSlotKey: 'stepPct',
         status: 'open',
         priority: 'core',
         affectsExecution: true,
-        questionHint: '网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。',
+        questionHint: '网格数量和每格间距与当前价格区间不一致，请给出每格间距数值（例如 0.5% 或 每格 100 USDT）。',
       }),
     ])
   })
