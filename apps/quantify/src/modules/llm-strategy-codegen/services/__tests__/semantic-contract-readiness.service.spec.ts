@@ -973,7 +973,9 @@ describe('SemanticContractReadinessService', () => {
     expect(result.state.trigger[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expect.objectContaining({
-        slotKey: 'contract.shape.price.level_set.density',
+        slotKey: 'grid.range_rebalance.levels',
+        atomKey: 'grid.range_rebalance',
+        paramSlotKey: 'levels',
         fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-levels].capabilities[price.define.level_set].shape',
       })],
     }))
@@ -1050,7 +1052,9 @@ describe('SemanticContractReadinessService', () => {
     expect(second.state.trigger[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expect.objectContaining({
-        slotKey: 'contract.shape.price.level_set.density',
+        slotKey: 'grid.range_rebalance.levels',
+        atomKey: 'grid.range_rebalance',
+        paramSlotKey: 'levels',
         fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-levels].capabilities[price.define.level_set].shape',
       })],
     }))
@@ -1115,7 +1119,9 @@ describe('SemanticContractReadinessService', () => {
     expect(result.state.trigger[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expect.objectContaining({
-        slotKey: 'contract.shape.price.level_set.spacing_conflict',
+        slotKey: 'grid.range_rebalance.stepPct',
+        atomKey: 'grid.range_rebalance',
+        paramSlotKey: 'stepPct',
         fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-levels].capabilities[price.define.level_set].shape',
       })],
     }))
@@ -1192,7 +1198,9 @@ describe('SemanticContractReadinessService', () => {
     expect(second.state.trigger[0]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expect.objectContaining({
-        slotKey: 'contract.shape.price.level_set.spacing_conflict',
+        slotKey: 'grid.range_rebalance.stepPct',
+        atomKey: 'grid.range_rebalance',
+        paramSlotKey: 'stepPct',
         fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-levels].capabilities[price.define.level_set].shape',
       })],
     }))
