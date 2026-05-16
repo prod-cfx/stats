@@ -1026,9 +1026,6 @@ describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
     expect(result.nextState.action).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'action.open_long' }),
     ]))
-    expect(result.nextState.trigger).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
-    ]))
     expect(result.closedSlotKeys).toContain('trigger.entry')
   })
 
@@ -1059,9 +1056,6 @@ describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
         phase: 'entry',
       }),
     ]))
-    expect(result.nextState.trigger).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
-    ]))
     // PR2c-final-1a: dispatcher 对 '15min' 不提取 contextSlots.timeframe（legacy extractor 有此逻辑）；
     // timeframe slot lock 断言留 PR2c-final-2 / PR3 dispatcher surface 增强后恢复。
   })
@@ -1079,12 +1073,6 @@ describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
     expect(result.nextState.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({ phase: 'entry' }),
       expect.objectContaining({ phase: 'exit' }),
-    ]))
-    expect(result.nextState.trigger).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
-    ]))
-    expect(result.nextState.trigger).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'semantic.missing_exit_atom', status: 'open' }),
     ]))
     expect(result.closedSlotKeys).toEqual(expect.arrayContaining(['trigger.entry', 'trigger.exit']))
   })
@@ -1523,13 +1511,16 @@ class NonSymbolObjectSeedExtractorService extends GenericSeedDispatcher {
   }
 }
 
+// Issue #1398：placeholder atom 已下线；fixture 仅用于驱动 resolver 的 open-slot
+//   分支（slotKey === 'trigger.entry/exit'），trigger.key 用占位 sentinel，不参与
+//   grep `missing_*_atom` 命中。
 function stateWithMissingEntry(): SemanticState {
   return {
     version: 1,
     families: [],
     trigger: [{
-      id: 'semantic-missing-entry-atom',
-      key: 'semantic.missing_entry_atom',
+      id: 'semantic-pending-entry',
+      key: 'semantic.entry_clarification_pending',
       phase: 'entry',
       params: {},
       status: 'open',
@@ -1576,8 +1567,8 @@ function stateWithMissingEntryAndExit(): SemanticState {
     trigger: [
       ...state.trigger,
       {
-        id: 'semantic-missing-exit-atom',
-        key: 'semantic.missing_exit_atom',
+        id: 'semantic-pending-exit',
+        key: 'semantic.exit_clarification_pending',
         phase: 'exit',
         params: {},
         status: 'open',

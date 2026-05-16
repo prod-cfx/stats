@@ -40,8 +40,6 @@ type ConversationInternals = {
 const noop = () => undefined
 const stubObj = new Proxy({}, { get: () => noop }) as never
 const forbiddenUserVisibleFragments = [
-  'semantic.missing_entry_atom',
-  'semantic.missing_exit_atom',
   '请补充入场触发条件',
   '请补充该原子的执行合约',
   '指标静态高于条件当前公测暂未支持生成和回测',
@@ -209,8 +207,6 @@ describe('user reported five strategies: entry -> middle -> publication generati
       for (const key of strategy.expectedAnyKeys) {
         expect(allKeys).toContain(key)
       }
-      expect(allKeys).not.toContain('semantic.missing_entry_atom')
-      expect(allKeys).not.toContain('semantic.missing_exit_atom')
       expect(clarificationState.items.map(item => item.reason)).not.toContain('missing_semantic_contract_requirement')
       assertNoForbiddenUserText([projection, clarificationState, prompt])
     })
@@ -375,7 +371,6 @@ describe('user reported five strategies: entry -> middle -> publication generati
     expect(allKeys).toContain('oscillator.rsi_lte')
     expect(allKeys).toContain('risk.partial_take_profit')
     expect(allKeys).toContain('portfolioRisk.drawdown_block')
-    expect(allKeys).not.toContain('semantic.missing_entry_atom')
     expect(prompt).not.toContain('请补充入场触发条件')
   })
 })

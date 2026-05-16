@@ -49,8 +49,8 @@ describe('strategyClarificationRulesService', () => {
     })
   })
 
-  it('keeps missing risk atom priority above execution context gaps', () => {
-    expect((service as any).readReasonPriority('missing_risk_atom')).toBeGreaterThan(
+  it('keeps semantic risk priority above execution context gaps', () => {
+    expect((service as any).readReasonPriority('missing_semantic_risk')).toBeGreaterThan(
       (service as any).readReasonPriority('missing_exchange'),
     )
   })

@@ -263,10 +263,6 @@ const SPECIAL_TRIGGER_MUTATORS: Record<string, SpecMutation> = {
     })
     return spec
   },
-  // semantic.missing_entry_atom / semantic.missing_exit_atom: 占位 atom，由 builder
-  // 在 spec 缺槽时插入；非由用户/LLM 直接喂入 — 走 skipped。
-  'semantic.missing_entry_atom': () => null,
-  'semantic.missing_exit_atom': () => null,
   // condition.expression: 不是 atom-shaped condition，它本身就是 expression kind。
   'condition.expression': () => null,
   // 'volume.threshold' phase-1 gate：需 metric 参数

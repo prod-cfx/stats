@@ -56,22 +56,6 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     }),
   }),
   presentation({
-    key: 'semantic.missing_entry_atom',
-    publicName: '缺少入场条件',
-    aliases: ['待确认入场', '入场语义缺口'],
-    positiveExamples: ['还需要说明什么时候开仓'],
-    negativeExamples: ['已经明确 MA20 上穿 MA60 开多'],
-    goldenUtterances: ['入场条件还没说清楚，需要继续确认'],
-  }),
-  presentation({
-    key: 'semantic.missing_exit_atom',
-    publicName: '缺少出场条件',
-    aliases: ['待确认出场', '出场语义缺口'],
-    positiveExamples: ['还需要说明什么时候平仓'],
-    negativeExamples: ['已经明确跌破 EMA20 平仓'],
-    goldenUtterances: ['出场条件还没说清楚，需要继续确认'],
-  }),
-  presentation({
     key: 'price.percent_change',
     publicName: '价格百分比变化',
     aliases: ['涨跌幅条件', '价格变化比例'],

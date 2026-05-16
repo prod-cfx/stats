@@ -148,7 +148,7 @@ describe('strategyClarificationQuestionService', () => {
         },
         {
           key: 'semantic.risk.falling_knife_guard.definition',
-          reason: 'missing_risk_atom',
+          reason: 'missing_semantic_risk',
           field: 'risk',
           blocking: true,
           question: '请确认“不接飞刀”的判定方式，例如反弹站上 MA20 / 下一根 K 线收阳 / 跌幅停止扩大。',
@@ -171,7 +171,7 @@ describe('strategyClarificationQuestionService', () => {
       items: [
         {
           key: 'risk.falling_knife_guard.definition',
-          reason: 'missing_risk_atom',
+          reason: 'missing_semantic_risk',
           field: 'risk',
           blocking: true,
           question: '请确认“不接飞刀”的判定方式，例如反弹站上 MA20 / 下一根 K 线收阳 / 跌幅停止扩大。',
@@ -186,7 +186,9 @@ describe('strategyClarificationQuestionService', () => {
     expect(prompt).not.toContain('关键条件')
   })
 
-  it('prioritizes non-semantic missing risk atom blockers before execution context gaps', () => {
+  it('prioritizes execution context gaps before semantic risk slots', () => {
+    // Issue #1398：missing_risk_atom 已合并到 missing_semantic_risk（priority 8）；
+    //   execution context（missing_exchange=4）现高于风控语义。
     const prompt = questionService.build({
       status: 'NEEDS_CLARIFICATION',
       summary: '大跌后不接飞刀再买入。',
@@ -201,7 +203,7 @@ describe('strategyClarificationQuestionService', () => {
         },
         {
           key: 'risk.falling_knife_guard.definition',
-          reason: 'missing_risk_atom',
+          reason: 'missing_semantic_risk',
           field: 'risk',
           blocking: true,
           question: '请确认“不接飞刀”的判定方式，例如反弹站上 MA20 / 下一根 K 线收阳 / 跌幅停止扩大。',
@@ -210,9 +212,9 @@ describe('strategyClarificationQuestionService', () => {
       ],
     })
 
-    expect(prompt).toContain('待确认的风控语义槽位')
-    expect(prompt).toContain('不接飞刀')
-    expect(prompt).not.toContain('请确认交易所')
+    expect(prompt).toContain('请确认交易所')
+    expect(prompt).not.toContain('待确认的风控语义槽位')
+    expect(prompt).not.toContain('不接飞刀”的判定方式')
   })
 
   it('asks only the highest-priority unresolved clarification question', () => {

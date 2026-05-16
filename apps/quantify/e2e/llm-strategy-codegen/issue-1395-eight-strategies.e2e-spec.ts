@@ -196,8 +196,6 @@ describeReal('Issue #1395 — 8 strategies LLM e2e (atom expression tree)', () =
       'OKX 现货 ETHUSDT、1m 网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT、限价单并相邻网格自动挂反向单、不用趋势信号开仓；当价格突破上下边界时执行「立即停止并撤销所有未成交订单」',
     )
     expectAnyMatch(blob, ['网格', 'grid'], 'S1 grid 识别')
-    expect(blob).not.toContain('semantic.missing_entry_atom')
-    expect(blob).not.toContain('semantic.missing_exit_atom')
   }, PER_STRATEGY_TIMEOUT_MS)
 
   // ───────────────────────────────────────────────────────────────────────────

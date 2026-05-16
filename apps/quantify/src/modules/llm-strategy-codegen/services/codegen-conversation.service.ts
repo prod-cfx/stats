@@ -110,7 +110,6 @@ import { resolveSemanticClarificationMetadata } from './semantic-clarification-m
 import { SemanticClarificationQuestionRendererService } from './semantic-clarification-question-renderer.service'
 import { SemanticContractReadinessService } from './semantic-contract-readiness.service'
 import { SemanticExecutableSemanticsService } from './semantic-executable-semantics.service'
-import { SemanticMissingPlaceholderReconcilerService } from './semantic-missing-placeholder-reconciler.service'
 import { SemanticOpenSlotAnswerResolverService } from './semantic-open-slot-answer-resolver.service'
 import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
  
@@ -305,13 +304,9 @@ export class CodegenConversationService {
     private readonly unsupportedFallback: UnsupportedFallbackService = new UnsupportedFallbackService(),
     private readonly semanticContractReadiness: SemanticContractReadinessService = new SemanticContractReadinessService(),
     private readonly semanticQuestionRenderer: SemanticClarificationQuestionRendererService = new SemanticClarificationQuestionRendererService(),
-    // Issue #1383 Lane A：注入 SemanticExecutableSemanticsService 与 placeholder reconciler；
-    //   两者均 registry-driven，本服务内不再保留硬编码 capability.domain/verb 判定。
-    // Round 1 M1：reconciler 默认值复用同一 executableSemantics 实例（参数 binding
-    //   左→右，executableSemantics 已绑定为局部名，可直接传给后续默认值）。
-    //   避免两个 executableSemantics 实例并存导致后续给 service 加 cache 时撕裂。
+    // Issue #1383 Lane A：注入 SemanticExecutableSemanticsService，registry-driven，
+    //   本服务内不再保留硬编码 capability.domain/verb 判定。
     private readonly executableSemantics: SemanticExecutableSemanticsService = new SemanticExecutableSemanticsService(),
-    private readonly semanticMissingPlaceholderReconciler: SemanticMissingPlaceholderReconcilerService = new SemanticMissingPlaceholderReconcilerService(executableSemantics),
     private readonly semanticOpenSlotAnswerResolver: SemanticOpenSlotAnswerResolverService = new SemanticOpenSlotAnswerResolverService(),
     @Optional() private readonly accountStrategyViewService?: AccountStrategyViewService,
     @Optional() private readonly llmStrategyInstancesService?: LlmStrategyInstancesService,
@@ -3105,17 +3100,16 @@ export class CodegenConversationService {
       stateWithExplicitDeterministicPosition,
       checklist,
     )
-    const stateWithExecutableAtomSlots = this.ensureExecutableAtomSlots(stateWithExplicitDeterministicRisk)
     const hasExecutableSemantics = this.hasExecutableBehaviorSemantics(stateWithExplicitDeterministicRisk)
 
     if (!hasExecutableSemantics) {
       return {
-        ...stateWithExecutableAtomSlots,
-        position: this.hasExplicitPositionSizing(checklist) ? stateWithExecutableAtomSlots.position : null,
+        ...stateWithExplicitDeterministicRisk,
+        position: this.hasExplicitPositionSizing(checklist) ? stateWithExplicitDeterministicRisk.position : null,
       }
     }
 
-    const stateWithExecutionContextSlots = this.ensureExecutionContextSlots(stateWithExecutableAtomSlots)
+    const stateWithExecutionContextSlots = this.ensureExecutionContextSlots(stateWithExplicitDeterministicRisk)
     const stateWithPositionSizing = this.ensurePositionSizingSlot(stateWithExecutionContextSlots, checklist, options)
 
     if (!this.hasLockedExecutionContext(stateWithPositionSizing)) {
@@ -3125,98 +3119,6 @@ export class CodegenConversationService {
     }
 
     return this.ensureProtectiveRiskSlot(stateWithPositionSizing)
-  }
-
-  private ensureExecutableAtomSlots(state: SemanticState): SemanticState {
-    const hasMissingExecutableAtomSlots = state.trigger.some(trigger => this.isMissingExecutableAtomTrigger(trigger))
-    const shouldCreateMissingExecutableAtomSlots =
-      hasMissingExecutableAtomSlots || this.hasPartialNonExecutableSemanticEvidence(state)
-    if (!shouldCreateMissingExecutableAtomSlots) {
-      return state
-    }
-
-    const hasLockedEntry = this.executableSemantics.hasExecutableEntrySemantics(state)
-    const hasLockedExit = this.executableSemantics.hasExecutableExitSemantics(state)
-    const hasCompleteOrderProgram = this.executableSemantics.hasCompleteOrderProgramSemantics(state)
-
-    // Issue #1395 (mute-spider) Stage I.B：rules-tree 视角的入/出场承接判定。
-    //   - rules[] 含 phase ∈ {entry, gate} + effects 携带 action.open_long/short 或
-    //     condition 子树含 grid.range_rebalance → 视为入场闭环，不再注入 missing_entry_atom；
-    //   - rules[] 含 phase = exit + effects 携带 action.close_*，或任意 rule
-    //     含 grid.range_rebalance → 视为出场闭环，不再注入 missing_exit_atom。
-    const rulesHasEntry = this.rulesCoverEntry(state.rules)
-    const rulesHasExit = this.rulesCoverExit(state.rules)
-
-    const triggers = state.trigger.filter(trigger =>
-      !this.isMissingExecutableAtomTrigger(trigger)
-      || (trigger.phase === 'entry' && !hasLockedEntry && !rulesHasEntry)
-      || (trigger.phase === 'exit' && !hasLockedExit && !hasCompleteOrderProgram && !rulesHasExit),
-    )
-    let changed = triggers.length !== state.trigger.length
-
-    if (!hasLockedEntry && !rulesHasEntry && !triggers.some(trigger => this.isMissingExecutableAtomTrigger(trigger) && trigger.phase === 'entry')) {
-      triggers.push(this.buildMissingExecutableAtomTrigger('entry'))
-      changed = true
-    }
-
-    if (!hasLockedExit && !hasCompleteOrderProgram && !rulesHasExit && !triggers.some(trigger => this.isMissingExecutableAtomTrigger(trigger) && trigger.phase === 'exit')) {
-      triggers.push(this.buildMissingExecutableAtomTrigger('exit'))
-      changed = true
-    }
-
-    return changed ? { ...state, trigger: triggers } : state
-  }
-
-  private rulesCoverEntry(rules: readonly SemanticRule[] | undefined): boolean {
-    if (!rules || rules.length === 0) return false
-    for (const rule of rules) {
-      // grid.range_rebalance 自洽闭环：condition 或 effects 任一含即视为入场承接
-      const allLeaves = [...this.safeCollectLeaves(rule.condition), ...rule.effects.flatMap(e => this.safeCollectLeaves(e))]
-      // eslint-disable-next-line atom-keys/no-atom-key-literal -- Issue #1395 grid 自洽闭环直接匹配 atom key，registry bucket 不足以区分。
-      if (allLeaves.some(l => l.key === 'grid.range_rebalance')) return true
-      if (rule.phase === 'entry' || rule.phase === 'gate') {
-        const effectKeys = rule.effects.flatMap(e => this.safeCollectLeaves(e)).map(l => l.key)
-        if (effectKeys.includes('action.open_long') || effectKeys.includes('action.open_short')) return true
-      }
-    }
-    return false
-  }
-
-  private rulesCoverExit(rules: readonly SemanticRule[] | undefined): boolean {
-    if (!rules || rules.length === 0) return false
-    for (const rule of rules) {
-      const allLeaves = [...this.safeCollectLeaves(rule.condition), ...rule.effects.flatMap(e => this.safeCollectLeaves(e))]
-      // eslint-disable-next-line atom-keys/no-atom-key-literal -- Issue #1395 grid 自洽闭环直接匹配 atom key，registry bucket 不足以区分。
-      if (allLeaves.some(l => l.key === 'grid.range_rebalance')) return true
-      if (rule.phase === 'exit') {
-        const effectKeys = rule.effects.flatMap(e => this.safeCollectLeaves(e)).map(l => l.key)
-        if (effectKeys.includes('action.close_long') || effectKeys.includes('action.close_short')) return true
-      }
-    }
-    return false
-  }
-
-  private safeCollectLeaves(expr: unknown): Array<{ key: string }> {
-    if (!expr || typeof expr !== 'object') return []
-    try {
-      return collectAtomLeaves(expr as Parameters<typeof collectAtomLeaves>[0])
-    }
-    catch {
-      return []
-    }
-  }
-
-  private hasPartialNonExecutableSemanticEvidence(state: SemanticState): boolean {
-    return (
-      state.trigger.length === 0
-      && state.action.length === 0
-      && !this.hasExecutableCapabilityGraph(state)
-      && (state.risk.length > 0 || state.position !== null || state.positionConstraint.length > 0 || this.hasExecutionContextEvidence(state))
-    ) || (
-      state.action.length > 0
-      && state.trigger.length === 0
-      && !this.hasExecutableCapabilityGraph(state)
-    )
   }
 
   private hasExecutableBehaviorSemantics(state: SemanticState): boolean {
@@ -3232,10 +3134,6 @@ export class CodegenConversationService {
       || this.executableSemantics.hasLockedScheduleSemantics(state)
   }
 
-  private hasExecutionContextEvidence(state: SemanticState): boolean {
-    return Object.values(state.contextSlots).some(slot => slot !== null)
-  }
-
   // Issue #1383 Lane A：以下 7 个方法已迁移到 SemanticExecutableSemanticsService，
   //   通过 this.executableSemantics.* 调用；本服务内不再保留硬编码 capability.domain/verb 判定。
   //   - hasLockedTriggerPhase
@@ -3245,33 +3143,6 @@ export class CodegenConversationService {
   //   - hasCompleteOrderProgramSemantics
   //   - hasLockedScheduleSemantics
   //   - collectLockedCapabilities
-
-  private isMissingExecutableAtomTrigger(trigger: SemanticTriggerState): boolean {
-    return trigger.key === 'semantic.missing_entry_atom'
-      || trigger.key === 'semantic.missing_exit_atom'
-  }
-
-  private buildMissingExecutableAtomTrigger(
-    phase: Extract<SemanticTriggerState['phase'], 'entry' | 'exit'>,
-  ): SemanticTriggerState {
-    const isEntry = phase === 'entry'
-    return {
-      id: `semantic-missing-${phase}-atom`,
-      key: isEntry ? 'semantic.missing_entry_atom' : 'semantic.missing_exit_atom',
-      phase,
-      params: {},
-      status: 'open',
-      source: 'derived',
-      openSlots: [{
-        slotKey: isEntry ? 'trigger.entry' : 'trigger.exit',
-        fieldPath: isEntry ? 'triggers[entry]' : 'triggers[exit]',
-        status: 'open',
-        priority: 'core',
-        questionHint: isEntry ? '请补充入场触发条件。' : '请补充出场触发条件。',
-        affectsExecution: true,
-      }],
-    }
-  }
 
   private withDeterministicContextSlots(state: SemanticState, compatibilitySnapshot: StrategyLogicSnapshot): SemanticState {
     const executionContext = this.executionContext.resolve(compatibilitySnapshot)
@@ -4094,7 +3965,7 @@ export class CodegenConversationService {
   private buildClarificationFromSemanticState(
     semanticState: SemanticState,
   ): StrategyClarificationStateWithSummary {
-    const normalizedSemanticState = this.ensureExecutableAtomSlots(semanticState)
+    const normalizedSemanticState = semanticState
     const semanticSafetyItems = this.buildSemanticSafetyClarificationItems(normalizedSemanticState)
     const semanticBaseState: StrategyClarificationStateWithSummary = {
       status: semanticSafetyItems.length > 0 ? 'NEEDS_CLARIFICATION' : 'CLEAR',
@@ -4229,8 +4100,10 @@ export class CodegenConversationService {
     })
   }
 
+  // Issue #1398：placeholder atom 已删除；保留方法签名以避免大面积调用点改写，
+  //   readiness 现统一由 evaluateRulesReadiness + clarificationItems 表达。
   private reconcileSemanticMissingPlaceholders(state: SemanticState): SemanticState {
-    return this.semanticMissingPlaceholderReconciler.reconcile(state)
+    return state
   }
 
   private hasValidLockedPositionSizing(
@@ -5961,7 +5834,6 @@ export class CodegenConversationService {
       reason === 'missing_semantic_trigger'
       || reason === 'missing_semantic_action'
       || reason === 'missing_semantic_risk'
-      || reason === 'missing_risk_atom'
       || reason === 'missing_semantic_position_sizing'
       || reason === 'missing_semantic_position_mode'
       || reason === 'missing_semantic_contract_requirement'
@@ -7988,7 +7860,6 @@ export class CodegenConversationService {
       reason === 'missing_semantic_position_sizing'
       || reason === 'missing_semantic_position_mode'
       || reason === 'missing_semantic_risk'
-      || reason === 'missing_risk_atom'
     ) return 70
     return 10
   }
@@ -9385,8 +9256,8 @@ export class CodegenConversationService {
   /**
    * Issue #1395 (mute-spider)：planner rules[] 逐条独立 graceful parse。
    *
-   * 旧实现一旦任一 rule zod 失败就把整个 rules 字段删光 → 用户侧表现为
-   * missing_entry_atom。新策略：
+   * 旧实现一旦任一 rule zod 失败就把整个 rules 字段删光 → 用户侧表现为入场
+   * 语义缺失追问。新策略：
    *   - rules[] 中每条独立 safeParse + AtomExpr 子树剪枝
    *   - valid 进 result.rules；invalid 进 quarantine `{index, errorPath, rawJsonSnippet}`
    *   - 即便 0 条通过，result.rules = []，quarantine 含所有 index；不删字段

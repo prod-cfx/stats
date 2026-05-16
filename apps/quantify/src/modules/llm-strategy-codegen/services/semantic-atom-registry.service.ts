@@ -325,16 +325,6 @@ const STANDALONE_ATOM_MAP = new Map<string, SemanticRegisteredAtomDefinition>([
     requiredParams: [], defaultableParams: [], executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots: [], contractSubstrate: baseExecutableSubstrate(),
   }],
-  ['semantic.missing_entry_atom', {
-    key: 'semantic.missing_entry_atom', category: 'trigger', supportStatus: 'supported_executable',
-    requiredParams: [], defaultableParams: [], executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
-    openSlots: [], contractSubstrate: baseExecutableSubstrate(),
-  }],
-  ['semantic.missing_exit_atom', {
-    key: 'semantic.missing_exit_atom', category: 'trigger', supportStatus: 'supported_executable',
-    requiredParams: [], defaultableParams: [], executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
-    openSlots: [], contractSubstrate: baseExecutableSubstrate(),
-  }],
   ['price.rolling_extrema_breakout', {
     key: 'price.rolling_extrema_breakout', category: 'trigger', supportStatus: 'supported_executable',
     requiredParams: ['extrema', 'event'], defaultableParams: [],

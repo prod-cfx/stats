@@ -144,7 +144,7 @@ const PATCH_DCA = JSON.stringify({
   semanticPatch: {
     families: ['single-leg'],
     triggers: [
-      // execution.on_start 作为入场锚点，避免 pipeline 插入 semantic.missing_entry_atom 占位 sentinel
+      // execution.on_start 作为入场锚点，保证 pipeline 视为已闭环不再追问入场
       { key: 'execution.on_start', phase: 'entry', params: {} },
     ],
     actions: [

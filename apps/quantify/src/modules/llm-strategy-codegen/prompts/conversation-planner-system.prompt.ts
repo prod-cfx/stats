@@ -117,7 +117,7 @@ const NEW_IN_CONTEXT_EXAMPLES: readonly string[] = [
   '        "effects": [{ "kind": "atom", "key": "action.close_long", "params": {} }]',
   '      }',
   '    ]',
-  '  错误（不要这样）：semantic.missing_entry_atom；语义已经清晰，必须输出 rules[]，禁止 fallback。',
+  '  错误（不要这样）：输出 placeholder 占位 atom 或空 rules[]；语义已经清晰，必须输出 rules[]，禁止 fallback。',
   '',
   '【单叶子】用户："RSI > 65 卖出"',
   '  rules: [{',

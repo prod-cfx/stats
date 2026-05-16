@@ -40,11 +40,11 @@ describe('resolveSemanticClarificationMetadata', () => {
     })
   })
 
-  it('maps falling knife guard definition to risk atom metadata', () => {
+  it('maps falling knife guard definition to semantic risk metadata', () => {
     const metadata = resolveSemanticClarificationMetadata('risk.falling_knife_guard.definition')
 
     expect(metadata).toEqual({
-      reason: 'missing_risk_atom',
+      reason: 'missing_semantic_risk',
       field: 'risk',
     })
     expect(STRATEGY_CLARIFICATION_REASONS).toContain(metadata.reason)

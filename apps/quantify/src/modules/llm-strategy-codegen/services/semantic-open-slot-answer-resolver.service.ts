@@ -28,8 +28,6 @@ const REQUIREMENT_LEVEL_SET_SLOT_KEY = 'contract.requirement.price.define.level_
 const SPACING_CONFLICT_SLOT_KEY = 'contract.shape.price.level_set.spacing_conflict'
 const ENTRY_TRIGGER_SLOT_KEY = 'trigger.entry'
 const EXIT_TRIGGER_SLOT_KEY = 'trigger.exit'
-const MISSING_ENTRY_TRIGGER_KEY = 'semantic.missing_entry_atom'
-const MISSING_EXIT_TRIGGER_KEY = 'semantic.missing_exit_atom'
 const MARKET_INSTRUMENT_QUOTES: readonly MarketInstrumentQuote[] = ['FDUSD', 'USDT', 'USDC', 'BUSD', 'TUSD', 'USD']
 
 type LevelSetDensityAnswer = Partial<{
@@ -298,12 +296,11 @@ function mergeFragmentPatch(
   fulfilledPhases: readonly FulfilledTriggerPhase[],
   symbolResolver: MarketInstrumentSymbolResolverService,
 ): SemanticState {
-  const missingTriggerKeys = new Set<string>(fulfilledPhases.map(missingTriggerKeyForPhase))
   const fulfilledPhaseSet = new Set<FulfilledTriggerPhase>(fulfilledPhases)
   const existingTriggerIds = new Set(state.trigger.map(trigger => trigger.id))
   const existingActionIds = new Set(state.action.map(action => action.id))
   const nextTriggers = [
-    ...state.trigger.filter(trigger => !(missingTriggerKeys.has(trigger.key) && trigger.status === 'open')),
+    ...state.trigger,
     ...(patch.triggers ?? [])
       .filter(trigger => shouldMergeFragmentTrigger(trigger, fulfilledPhaseSet))
       .map((trigger, index): SemanticTriggerState => {
@@ -399,10 +396,6 @@ function triggerPhaseSlotKey(phase: FulfilledTriggerPhase): typeof ENTRY_TRIGGER
 
 function triggerPhaseFieldPath(phase: FulfilledTriggerPhase): 'triggers[entry]' | 'triggers[exit]' {
   return phase === 'entry' ? 'triggers[entry]' : 'triggers[exit]'
-}
-
-function missingTriggerKeyForPhase(phase: FulfilledTriggerPhase): typeof MISSING_ENTRY_TRIGGER_KEY | typeof MISSING_EXIT_TRIGGER_KEY {
-  return phase === 'entry' ? MISSING_ENTRY_TRIGGER_KEY : MISSING_EXIT_TRIGGER_KEY
 }
 
 function isCompleteFragmentNode(node: FragmentTrigger | FragmentAction): boolean {

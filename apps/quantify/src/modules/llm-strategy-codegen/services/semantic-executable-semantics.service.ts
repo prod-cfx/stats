@@ -65,7 +65,7 @@ export class SemanticExecutableSemanticsService {
     // Issue #1395 (b)：positionConstraint 中的"持续入场源"atom 本身即视为入场语义。
     //   grid.range_rebalance / position.dca_schedule / position.pyramiding_limit
     //   是不依赖独立 entry trigger 的连续/调度类入场源；registry 是否已声明 phases
-    //   不影响事实——直接在这里兜底，避免 reconciler 误报 missing_entry_atom。
+    //   不影响事实——直接在这里兜底，避免 readiness 误判入场语义缺失。
     if (this.hasContinuousEntryFromPositionConstraint(state)) return true
     // Issue #1395 (c)：state.rules 内任一 phase==='entry' 且 condition 含非空 atom 叶子。
     if (this.hasRulesEntrySemantics(state)) return true
@@ -204,8 +204,8 @@ export class SemanticExecutableSemanticsService {
    * Issue #1383 Round 1 C3：对百分比类 forced-exit 风险 atom（stop_loss_pct /
    * take_profit_pct / max_drawdown_pct / max_single_loss_pct）追加 valuePct > 0
    * 校验，与 legacy hasLegacyForcedExitRiskSemantics 行为对齐——valuePct 缺失
-   * 或非正时不视为已锁定 exit 语义，避免上游 readiness 漏门导致 placeholder
-   * reconciler 错误回收 missing_exit_atom。
+   * 或非正时不视为已锁定 exit 语义，避免上游 readiness 漏门导致出场语义被
+   * 误判为已闭环。
    */
   hasLockedAtomFulfilling(state: SemanticState, phase: StrategyPhase): boolean {
     return this.collectLockedAtoms(state).some((atom) => {

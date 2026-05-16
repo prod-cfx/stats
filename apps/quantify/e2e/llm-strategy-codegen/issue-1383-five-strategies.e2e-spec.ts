@@ -192,16 +192,11 @@ const USER_STRATEGIES: readonly UserStrategyFixture[] = [
       assertReached(turn1, 'S4 turn1')
       if (!turn2) throw new Error(`[S4] expected turn2 result for follow-up "okx"`)
       assertReached(turn2, 'S4 turn2')
-      const turn2Blob = (turn2.assistantReply ?? '') + specToString(turn2.specDesc)
-      // Lane A 关键回归 1：答槽位后 missing_*_atom 占位符不应泄漏
-      if (/semantic\.missing_(entry|exit)_atom/u.test(turn2Blob)) {
-        throw new Error(`[S4] missing_*_atom placeholder leaked into user-facing output`)
-      }
-      // Issue #1383 Round 1 C6 关键回归 2：turn 2 不应回退到"请补充入场触发条件"
-      //   ——原 issue 描述：用户答 'okx' 后 bot 回 'semantic.missing_entry_atom；
-      //   semantic.missing_exit_atom 请补充入场触发条件'，等于把前一轮已识别的
-      //   EMA 入场全部弄丢。
+      // Issue #1383 Round 1 C6 关键回归：turn 2 不应回退到"请补充入场触发条件"
+      //   ——原 issue 描述：用户答 'okx' 后 bot 回追问"请补充入场触发条件"，等于把
+      //   前一轮已识别的 EMA 入场全部弄丢。
       const turn2Reply = turn2.assistantReply ?? ''
+      const turn2Blob = turn2Reply + specToString(turn2.specDesc)
       if (/请补充入场触发条件|请补充出场触发条件/u.test(turn2Reply)) {
         throw new Error(`[S4] turn2 仍在追问入场/出场触发（前一轮 EMA 入场被丢失）：${turn2Reply.slice(0, 300)}`)
       }

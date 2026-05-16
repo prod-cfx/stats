@@ -41,7 +41,6 @@ const REASON_PRIORITY: Record<StrategyClarificationItem['reason'], number> = {
   missing_semantic_position_sizing: 8,
   missing_semantic_position_mode: 8,
   missing_semantic_risk: 8,
-  missing_risk_atom: 3,
   missing_entry_rules: 20,
   missing_exit_rules: 20,
   missing_stop_loss_rule: 20,
@@ -159,7 +158,7 @@ export class StrategyClarificationQuestionService {
       if (item.reason === 'missing_side_scope' || item.reason === 'direction_ambiguous') return 'missing direction constraint.'
       if (item.reason === 'missing_action_uniqueness') return 'action uniqueness constraint.'
       if (item.reason === 'ambiguous_risk_effect') return 'risk action definition.'
-      if (item.reason === 'missing_risk_atom') return 'risk semantic slot to confirm.'
+      if (item.reason === 'missing_semantic_risk') return 'risk semantic slot to confirm.'
       if (item.reason === 'ambiguous_condition_basis') return 'condition comparison basis.'
       if (item.reason === 'grid_params_missing') return 'grid parameters.'
       if (item.reason === 'ambiguous_state_gate') return 'state gate allowlist.'
@@ -209,7 +208,7 @@ export class StrategyClarificationQuestionService {
     if (item.reason === 'ambiguous_risk_effect') {
       return '风控动作定义。'
     }
-    if (item.reason === 'missing_risk_atom') {
+    if (item.reason === 'missing_semantic_risk') {
       return '待确认的风控语义槽位。'
     }
     if (item.reason === 'ambiguous_condition_basis') {

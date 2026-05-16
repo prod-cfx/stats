@@ -44,7 +44,6 @@ import { SemanticEventFrameParserService } from './services/semantic-event-frame
 import { SemanticEventFrameProjectorService } from './services/semantic-event-frame-projector.service'
 import { SemanticExecutableSemanticsService } from './services/semantic-executable-semantics.service'
 import { SemanticFrameNormalizerService } from './services/semantic-frame-normalizer.service'
-import { SemanticMissingPlaceholderReconcilerService } from './services/semantic-missing-placeholder-reconciler.service'
 import { SemanticOpenSlotAnswerResolverService } from './services/semantic-open-slot-answer-resolver.service'
 import { SemanticOrchestrationRegistryService } from './services/semantic-orchestration-registry.service'
 import { SemanticRuleProjectionService } from './services/semantic-rule-projection.service'
@@ -130,7 +129,6 @@ import { UnsupportedFallbackService } from './services/unsupported-fallback.serv
     SemanticContractReadinessService,
     SemanticContractShapeNormalizerService,
     SemanticExecutableSemanticsService,
-    SemanticMissingPlaceholderReconcilerService,
     MarketInstrumentSymbolResolverService,
     SemanticOpenSlotAnswerResolverService,
     SemanticSupportClassifierService,

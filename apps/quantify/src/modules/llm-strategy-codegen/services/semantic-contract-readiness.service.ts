@@ -411,7 +411,7 @@ export class SemanticContractReadinessService {
    *
    * 旧路径只看 flat trigger/action/risk 桶，导致：
    * - grid 策略的 `grid.range_rebalance` 自洽闭环被误判缺 entry/exit；
-   * - sequence/AND/OR 根节点产出 effects 但扁平桶被 fail-closed 砍光时误报 missing_entry_atom；
+   * - sequence/AND/OR 根节点产出 effects 但扁平桶被 fail-closed 砍光时误报缺 entry；
    * - 多轮编辑后 rules[] 真实结构与扁平投影背离。
    *
    * 本方法**只**对 SemanticRule[] 做判定，不依赖 flat 桶；调用方在 rules 为空时回退到旧路径。

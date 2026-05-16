@@ -8,8 +8,6 @@ export const DISPLAY_TOKENS = [
   { token: 'atom.execution.on_start.name', kind: 'atom', zh: '启动后执行' },
   { token: 'atom.condition.expression.name', kind: 'atom', zh: '表达式条件' },
   { token: 'atom.condition.expression.display', kind: 'atom', zh: '{label}' },
-  { token: 'atom.semantic.missing_entry_atom.name', kind: 'atom', zh: '缺少入场条件' },
-  { token: 'atom.semantic.missing_exit_atom.name', kind: 'atom', zh: '缺少出场条件' },
   { token: 'atom.price.percent_change.name', kind: 'atom', zh: '价格百分比变化' },
   { token: 'atom.price.breakout_up.name', kind: 'atom', zh: '向上突破' },
   { token: 'atom.price.breakout_down.name', kind: 'atom', zh: '向下跌破' },

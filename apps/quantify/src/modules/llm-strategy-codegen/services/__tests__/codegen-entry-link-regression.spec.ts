@@ -25,8 +25,6 @@ type ConversationInternals = {
 const noop = () => undefined
 const stubObj = new Proxy({}, { get: () => noop }) as never
 const FORBIDDEN_USER_VISIBLE_FRAGMENTS = [
-  'semantic.missing_entry_atom',
-  'semantic.missing_exit_atom',
   '请补充入场触发条件',
   '请补充该原子的执行合约',
 ]
@@ -169,8 +167,6 @@ describe('codegen entry link regression: user message → seed → projection �
       const clarificationState = conversation.buildClarificationFromSemanticState(state)
       const prompt = new StrategyClarificationQuestionService().build(clarificationState)
 
-      expect(state.trigger.some(trigger => trigger.key === 'semantic.missing_entry_atom')).toBe(false)
-      expect(state.trigger.some(trigger => trigger.key === 'semantic.missing_exit_atom')).toBe(false)
       expect(projection.summary).not.toBe('已识别部分条件，但仍未完整。')
       expect(clarificationState.status).toBe('NEEDS_CLARIFICATION')
       expect(clarificationState.items.map(item => item.reason)).toContain('missing_semantic_position_sizing')
@@ -226,8 +222,6 @@ describe('codegen entry link regression: user message → seed → projection �
         object: 'limit_ladder',
       }),
     ]))
-    expect(state.trigger.some(trigger => trigger.key === 'semantic.missing_entry_atom')).toBe(false)
-    expect(state.trigger.some(trigger => trigger.key === 'semantic.missing_exit_atom')).toBe(false)
     expect(clarificationState.items.map(item => item.reason)).not.toContain('missing_entry_rules')
     expect(clarificationState.items.map(item => item.reason)).not.toContain('missing_exit_rules')
     assertNoForbiddenUserText([projection, clarificationState, prompt])
