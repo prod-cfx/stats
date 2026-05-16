@@ -31,6 +31,7 @@ import { SemanticOrchestrationRegistryService } from './semantic-orchestration-r
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
 import { validateSemanticExpressionContract } from './strategy-semantic-contracts'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position'
 type SemanticSubstrateRequirement =
@@ -127,13 +128,13 @@ export class SemanticContractReadinessService {
     )
     const baseNextState: SemanticState = {
       ...state,
-      trigger: state.trigger.map(trigger =>
+      trigger: readFlatTriggers(state).map(trigger =>
         mergeOwnerOpenSlots(trigger, slotsByOwnerKey.get(ownerKey('trigger', trigger.id))),
       ),
-      action: state.action.map(action =>
+      action: readFlatActions(state).map(action =>
         mergeOwnerOpenSlots(action, slotsByOwnerKey.get(ownerKey('action', action.id))),
       ),
-      risk: state.risk.map(risk =>
+      risk: readFlatRisks(state).map(risk =>
         mergeOwnerOpenSlots(risk, slotsByOwnerKey.get(ownerKey('risk', risk.id))),
       ),
       position: mergePositionOpenSlots(state.position, slotsByOwnerKey),
@@ -1701,7 +1702,7 @@ function applySymbolScopeBindingFailClosed(
     return !supportedScopeIds.has(trimmed)
   }
 
-  const trigger = state.trigger.map((trigger) => {
+  const trigger = readFlatTriggers(state).map((trigger) => {
     if (trigger.status !== 'locked' || !isMissingRef(trigger.symbolScopeRef)) return trigger
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('trigger', trigger.id)
@@ -1711,7 +1712,7 @@ function applySymbolScopeBindingFailClosed(
       openSlots: [...(trigger.openSlots ?? []), slot],
     }
   })
-  const action = state.action.map((action) => {
+  const action = readFlatActions(state).map((action) => {
     if (action.status !== 'locked' || !isMissingRef(action.symbolScopeRef)) return action
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('action', action.id)
@@ -1721,7 +1722,7 @@ function applySymbolScopeBindingFailClosed(
       openSlots: [...(action.openSlots ?? []), slot],
     }
   })
-  const risk = state.risk.map((risk) => {
+  const risk = readFlatRisks(state).map((risk) => {
     if (risk.status !== 'locked' || !isMissingRef(risk.symbolScopeRef)) return risk
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('risk', risk.id)
@@ -1789,9 +1790,9 @@ function applyLegScopeBindingFailClosed(
   const riskStatusBeforeBinding = new Map<string, SemanticNodeStatus>()
   const constraintStatusBeforeBinding = new Map<string, SemanticNodeStatus>()
   const sourceState = preBindingState ?? state
-  for (const t of sourceState.trigger) triggerStatusBeforeBinding.set(t.id, t.status)
-  for (const a of sourceState.action) actionStatusBeforeBinding.set(a.id, a.status)
-  for (const r of sourceState.risk) riskStatusBeforeBinding.set(r.id, r.status)
+  for (const t of readFlatTriggers(sourceState)) triggerStatusBeforeBinding.set(t.id, t.status)
+  for (const a of readFlatActions(sourceState)) actionStatusBeforeBinding.set(a.id, a.status)
+  for (const r of readFlatRisks(sourceState)) riskStatusBeforeBinding.set(r.id, r.status)
   for (const c of sourceState.positionConstraint ?? []) constraintStatusBeforeBinding.set(c.id, c.status)
 
   let hasBlockingSlots = false
@@ -1814,21 +1815,21 @@ function applyLegScopeBindingFailClosed(
     return !supportedLegScopeIds.has(trimmed)
   }
 
-  const trigger = state.trigger.map((trigger) => {
+  const trigger = readFlatTriggers(state).map((trigger) => {
     const preStatus = triggerStatusBeforeBinding.get(trigger.id) ?? trigger.status
     if (preStatus !== 'locked' || !isMissingLegRef(trigger.legScopeRef)) return trigger
     hasBlockingSlots = true
     const slot = buildLegMissingBindingSlot('trigger', trigger.id)
     return { ...trigger, status: 'open' as SemanticNodeStatus, openSlots: [...(trigger.openSlots ?? []), slot] }
   })
-  const action = state.action.map((action) => {
+  const action = readFlatActions(state).map((action) => {
     const preStatus = actionStatusBeforeBinding.get(action.id) ?? action.status
     if (preStatus !== 'locked' || !isMissingLegRef(action.legScopeRef)) return action
     hasBlockingSlots = true
     const slot = buildLegMissingBindingSlot('action', action.id)
     return { ...action, status: 'open' as SemanticNodeStatus, openSlots: [...(action.openSlots ?? []), slot] }
   })
-  const risk = state.risk.map((riskItem) => {
+  const risk = readFlatRisks(state).map((riskItem) => {
     const preStatus = riskStatusBeforeBinding.get(riskItem.id) ?? riskItem.status
     if (preStatus !== 'locked' || !isMissingLegRef(riskItem.legScopeRef)) return riskItem
     hasBlockingSlots = true
@@ -1909,19 +1910,19 @@ function applyTimeframeScopeBindingFailClosed(
     )
   }
 
-  const trigger = state.trigger.map((trigger) => {
+  const trigger = readFlatTriggers(state).map((trigger) => {
     if (!wasOriginallyLocked(trigger) || !isMissingTfRef(trigger.timeframeScopeRef)) return trigger
     hasBlockingSlots = true
     const slot = buildTfMissingBindingSlot('trigger', trigger.id)
     return { ...trigger, status: 'open' as SemanticNodeStatus, openSlots: [...(trigger.openSlots ?? []), slot] }
   })
-  const action = state.action.map((action) => {
+  const action = readFlatActions(state).map((action) => {
     if (!wasOriginallyLocked(action) || !isMissingTfRef(action.timeframeScopeRef)) return action
     hasBlockingSlots = true
     const slot = buildTfMissingBindingSlot('action', action.id)
     return { ...action, status: 'open' as SemanticNodeStatus, openSlots: [...(action.openSlots ?? []), slot] }
   })
-  const risk = state.risk.map((riskItem) => {
+  const risk = readFlatRisks(state).map((riskItem) => {
     if (!wasOriginallyLocked(riskItem) || !isMissingTfRef(riskItem.timeframeScopeRef)) return riskItem
     hasBlockingSlots = true
     const slot = buildTfMissingBindingSlot('risk', riskItem.id)
@@ -1995,7 +1996,7 @@ function applyDataSourceScopeBindingFailClosed(
     return !supportedScopeIds.has(trimmed)
   }
 
-  const trigger = state.trigger.map((trigger) => {
+  const trigger = readFlatTriggers(state).map((trigger) => {
     if (trigger.status !== 'locked' || !isInvalidExplicitRef(trigger.dataSourceScopeRef)) return trigger
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('trigger', trigger.id)
@@ -2005,7 +2006,7 @@ function applyDataSourceScopeBindingFailClosed(
       openSlots: [...(trigger.openSlots ?? []), slot],
     }
   })
-  const action = state.action.map((action) => {
+  const action = readFlatActions(state).map((action) => {
     if (action.status !== 'locked' || !isInvalidExplicitRef(action.dataSourceScopeRef)) return action
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('action', action.id)
@@ -2015,7 +2016,7 @@ function applyDataSourceScopeBindingFailClosed(
       openSlots: [...(action.openSlots ?? []), slot],
     }
   })
-  const risk = state.risk.map((risk) => {
+  const risk = readFlatRisks(state).map((risk) => {
     if (risk.status !== 'locked' || !isInvalidExplicitRef(risk.dataSourceScopeRef)) return risk
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('risk', risk.id)
@@ -2100,7 +2101,7 @@ function applySubStrategyScopeBindingFailClosed(
     return !supportedScopeIds.has(trimmed)
   }
 
-  const trigger = state.trigger.map((trigger) => {
+  const trigger = readFlatTriggers(state).map((trigger) => {
     if (trigger.status !== 'locked' || !isMissingSubStrategyRef(trigger.subStrategyScopeRef)) return trigger
     hasBlockingSlots = true
     const slot = buildSubStrategyMissingBindingSlot('trigger', trigger.id)
@@ -2110,7 +2111,7 @@ function applySubStrategyScopeBindingFailClosed(
       openSlots: [...(trigger.openSlots ?? []), slot],
     }
   })
-  const action = state.action.map((action) => {
+  const action = readFlatActions(state).map((action) => {
     if (action.status !== 'locked' || !isMissingSubStrategyRef(action.subStrategyScopeRef)) return action
     hasBlockingSlots = true
     const slot = buildSubStrategyMissingBindingSlot('action', action.id)
@@ -2120,7 +2121,7 @@ function applySubStrategyScopeBindingFailClosed(
       openSlots: [...(action.openSlots ?? []), slot],
     }
   })
-  const risk = state.risk.map((risk) => {
+  const risk = readFlatRisks(state).map((risk) => {
     if (risk.status !== 'locked' || !isMissingSubStrategyRef(risk.subStrategyScopeRef)) return risk
     hasBlockingSlots = true
     const slot = buildSubStrategyMissingBindingSlot('risk', risk.id)
@@ -2204,7 +2205,7 @@ function isBoundaryCancelRequirement(object: string): boolean {
 function collectActiveContractOwners(state: SemanticState): SemanticContractOwnerRef[] {
   const owners: SemanticContractOwnerRef[] = []
 
-  for (const trigger of state.trigger) {
+  for (const trigger of readFlatTriggers(state)) {
     if (trigger.status !== 'superseded' && trigger.contracts?.length) {
       owners.push({
         ownerKind: 'trigger',
@@ -2219,7 +2220,7 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
     }
   }
 
-  for (const action of state.action) {
+  for (const action of readFlatActions(state)) {
     if (action.status !== 'superseded' && action.contracts?.length) {
       owners.push({
         ownerKind: 'action',
@@ -2234,7 +2235,7 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
     }
   }
 
-  for (const risk of state.risk) {
+  for (const risk of readFlatRisks(state)) {
     if (risk.status !== 'superseded' && risk.contracts?.length) {
       owners.push({
         ownerKind: 'risk',
@@ -2512,7 +2513,7 @@ function buildAddPositionConstraintRelationshipSlots(state: SemanticState): Map<
     return slotsByOwnerKey
   }
 
-  for (const action of state.action) {
+  for (const action of readFlatActions(state)) {
     if (action.status === 'superseded' || action.key !== ATOM_CONTRACT_REGISTRY['action.add_position'].key) {
       continue
     }
@@ -2578,9 +2579,9 @@ function hasOpenSlots(slotsByOwnerKey: Map<string, SemanticSlotState[]>): boolea
 }
 
 function hasBlockingOwnerOpenSlots(state: SemanticState): boolean {
-  return state.trigger.some(ownerHasOpenSlot)
-    || state.action.some(ownerHasOpenSlot)
-    || state.risk.some(ownerHasOpenSlot)
+  return readFlatTriggers(state).some(ownerHasOpenSlot)
+    || readFlatActions(state).some(ownerHasOpenSlot)
+    || readFlatRisks(state).some(ownerHasOpenSlot)
     || ownerHasOpenSlot(state.position)
     || (state.positionConstraint ?? []).some(ownerHasOpenSlot)
 }

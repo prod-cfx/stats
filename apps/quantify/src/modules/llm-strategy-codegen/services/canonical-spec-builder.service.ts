@@ -49,6 +49,7 @@ import { PerTradeSizingResolver, scopeKey as sizingScopeKey } from './per-trade-
 import type { SizingAnchor, SizingAxis } from './per-trade-sizing-resolver.service'
 import type { CanonicalOrchestrationLegSizing, CanonicalOrchestrationLegSizingMode } from '../types/canonical-strategy-spec'
 import { normalizeLegacyPositionSizing, validateSemanticExpressionContract, validateSemanticPositionContract, validateSemanticRiskContract } from './strategy-semantic-contracts'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 // PR3b: 非 atom 字段路径的类型化引用（Issue #1279 AC-4）
 // 这些 key 不在 ATOM_CONTRACT_REGISTRY,但恰好匹配 lint 规则的 prefix regex,
@@ -139,9 +140,9 @@ export class CanonicalSpecBuilderService {
         )
       }
     }
-    for (const t of state.trigger) checkBucket(t.key, 'trigger', 'state.triggers')
-    for (const a of state.action) checkBucket(a.key, 'action', 'state.actions')
-    for (const r of state.risk) checkBucket(r.key, 'risk', 'state.risk')
+    for (const t of readFlatTriggers(state)) checkBucket(t.key, 'trigger', 'state.triggers')
+    for (const a of readFlatActions(state)) checkBucket(a.key, 'action', 'state.actions')
+    for (const r of readFlatRisks(state)) checkBucket(r.key, 'risk', 'state.risk')
   }
 
   buildFromLegacyChecklistForTestsOnly(legacySnapshot: StrategyLogicSnapshotInput): CanonicalStrategySpecV2 {
@@ -635,9 +636,9 @@ export class CanonicalSpecBuilderService {
       market: this.withRequiredMarketTimeframes(
         market,
         requiredTimeframes,
-        normalizedState.trigger.some(trigger => this.readTriggerParamTimeframe(trigger.params)),
+        readFlatTriggers(normalizedState).some(trigger => this.readTriggerParamTimeframe(trigger.params)),
       ),
-      indicators: this.resolveIndicatorsFromSemanticTriggers(normalizedState.trigger),
+      indicators: this.resolveIndicatorsFromSemanticTriggers(readFlatTriggers(normalizedState)),
       sizing,
       executionPolicy: {
         signalTiming: 'BAR_CLOSE',
@@ -730,7 +731,7 @@ export class CanonicalSpecBuilderService {
     if (anchorMap.has(sizingScopeKey({ kind: 'action', id: legId }))) {
       candidateActionIds.push(legId)
     }
-    for (const action of state.action) {
+    for (const action of readFlatActions(state)) {
       if (action.id === legId) continue
       if (action.id.endsWith(legId) || action.key.endsWith(legId)) {
         candidateActionIds.push(action.id)
@@ -1279,7 +1280,7 @@ export class CanonicalSpecBuilderService {
       return []
     }
 
-    const hasBoundaryCancel = state.risk.some(risk =>
+    const hasBoundaryCancel = readFlatRisks(state).some(risk =>
       risk.status === 'locked'
       && risk.contracts?.some(contract =>
         contract.capabilities.some(capability =>
@@ -1341,9 +1342,9 @@ export class CanonicalSpecBuilderService {
 
   private collectContracts(state: SemanticState): SemanticAtomContract[] {
     return [
-      ...state.trigger.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
-      ...state.action.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
-      ...state.risk.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...readFlatTriggers(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...readFlatActions(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...readFlatRisks(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
       ...(state.position?.status === 'locked' ? state.position.contracts ?? [] : []),
       ...(state.position?.constraints ?? []).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
     ]
@@ -1717,7 +1718,7 @@ export class CanonicalSpecBuilderService {
     state: SemanticState,
     sizing: CanonicalStrategySpecV2['sizing'],
   ): CanonicalRuleV2[] {
-    const actionKeys = new Set(state.action
+    const actionKeys = new Set(readFlatActions(state)
       .filter(action => action.status === 'locked')
       .map(action => action.key))
     const counters: Record<'entry' | 'exit' | 'gate', number> = {
@@ -1727,7 +1728,7 @@ export class CanonicalSpecBuilderService {
     }
     const rules: CanonicalRuleV2[] = []
     const defaultTimeframe = this.readLockedContextSlotString(state.contextSlots.timeframe)
-    const gateConditions = state.trigger
+    const gateConditions = readFlatTriggers(state)
       .filter(trigger => trigger.status === 'locked' && trigger.phase === 'gate')
       .map((trigger): ScopedSemanticGateCondition | null => {
         const condition = trigger.key === 'condition.expression'
@@ -1763,7 +1764,7 @@ export class CanonicalSpecBuilderService {
       }))
     }
 
-    for (const triggerGroup of this.groupSemanticMultiTimeframeTriggers(state.trigger)) {
+    for (const triggerGroup of this.groupSemanticMultiTimeframeTriggers(readFlatTriggers(state))) {
       const trigger = triggerGroup[0]
       if (!trigger) {
         continue
@@ -1807,7 +1808,7 @@ export class CanonicalSpecBuilderService {
     }
 
     const executableGroups = this.mergeImplicitMultiTimeframeGroups(
-      this.triggerCombinationContracts.resolveExecutableGroups(state.trigger.filter(trigger =>
+      this.triggerCombinationContracts.resolveExecutableGroups(readFlatTriggers(state).filter(trigger =>
         trigger.status === 'locked'
         && (trigger.phase === 'entry' || trigger.phase === 'exit')
         && trigger.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key,
@@ -1832,7 +1833,7 @@ export class CanonicalSpecBuilderService {
 
       const lifecycleAction = this.resolveLifecycleActionForTriggerGroup(
         group,
-        state.action,
+        readFlatActions(state),
         state.position,
         addPositionHasEvidenceTriggers,
         dcaScheduleHasEvidenceTriggers,
@@ -1880,7 +1881,7 @@ export class CanonicalSpecBuilderService {
       }
     }
 
-    rules.push(...this.buildRiskRulesFromSemanticState(state.risk, state.position, state.action))
+    rules.push(...this.buildRiskRulesFromSemanticState(readFlatRisks(state), state.position, readFlatActions(state)))
 
     return rules
   }

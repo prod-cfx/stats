@@ -25,6 +25,7 @@ import { toSemanticSupportOpenSlot } from '../types/semantic-atom-support'
 import { isAtomExecutableForStrategy } from '../nl-gateway/version-gate/version-gate'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { SemanticOrchestrationRegistryService } from './semantic-orchestration-registry.service'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 export type SemanticSupportRoute =
   | 'projection_gate'
@@ -69,7 +70,7 @@ export class SemanticSupportClassifierService {
     const unsupportedAtoms: SemanticSupportClassification['unsupportedAtoms'] = []
     const unknownAtoms: string[] = []
 
-    const triggers = state.trigger.map((trigger) => {
+    const triggers = readFlatTriggers(state).map((trigger) => {
       if (trigger.status === 'superseded') {
         return { ...trigger }
       }
@@ -81,7 +82,7 @@ export class SemanticSupportClassifierService {
 
     const position = this.classifyPosition(state.position, unsupportedAtoms, unknownAtoms, strategyVersion)
 
-    const actions = state.action.map((action) => {
+    const actions = readFlatActions(state).map((action) => {
       if (action.status === 'superseded') {
         return { ...action }
       }
@@ -94,7 +95,7 @@ export class SemanticSupportClassifierService {
       )
     })
 
-    const risk = state.risk.map((riskState) => {
+    const risk = readFlatRisks(state).map((riskState) => {
       if (riskState.status === 'superseded') {
         return { ...riskState }
       }
@@ -475,9 +476,9 @@ function toSupportMetadata(resolved: ResolvedSemanticAtom): SemanticAtomSupportM
 
 function collectOpenSlots(state: SemanticState): SemanticSlotState[] {
   return [
-    ...state.trigger.flatMap(trigger => readNodeOpenSlots(trigger)),
-    ...state.action.flatMap(action => readNodeOpenSlots(action)),
-    ...state.risk.flatMap(risk => readNodeOpenSlots(risk)),
+    ...readFlatTriggers(state).flatMap(trigger => readNodeOpenSlots(trigger)),
+    ...readFlatActions(state).flatMap(action => readNodeOpenSlots(action)),
+    ...readFlatRisks(state).flatMap(risk => readNodeOpenSlots(risk)),
     ...readNodeOpenSlots(state.position),
     ...(state.positionConstraint ?? []).flatMap(constraint => readNodeOpenSlots(constraint)),
     ...(state.orchestration ?? []).flatMap(node =>

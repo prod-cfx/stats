@@ -17,6 +17,7 @@ import type {
   SemanticState,
 } from '../../types/semantic-state'
 import type { SupportedAtomKey } from './utterance-corpus.types'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../../types/semantic-state-flat-readers'
 
 // =========================================================
 // 不变量 A — NLG → state parity（全 frame kind）
@@ -35,11 +36,11 @@ function orchestrationNodes(state: SemanticState): readonly SemanticOrchestratio
 
 export const FRAME_KIND_TO_STATE_LOOKUP: Record<FrameKind, AtomLookup | 'no_state_projection'> = {
   // —— 顶层 state 字段 ——
-  action: state => state.action ?? [],
-  risk: state => state.risk ?? [],
-  indicator_compare: state => state.trigger ?? [],
-  boundary_touch: state => state.trigger ?? [],
-  combination: state => state.trigger ?? [],
+  action: state => readFlatActions(state) ?? [],
+  risk: state => readFlatRisks(state) ?? [],
+  indicator_compare: state => readFlatTriggers(state) ?? [],
+  boundary_touch: state => readFlatTriggers(state) ?? [],
+  combination: state => readFlatTriggers(state) ?? [],
 
   // —— state.orchestration.nodes filter by kind + key ——
   portfolio_drawdown: state =>

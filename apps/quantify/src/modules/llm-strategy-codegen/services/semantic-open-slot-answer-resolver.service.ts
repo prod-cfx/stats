@@ -22,6 +22,7 @@ import { renderSemanticClarificationQuestion } from './semantic-clarification-qu
 import { SemanticContractShapeNormalizerService } from './semantic-contract-shape-normalizer.service'
 import { GenericSeedDispatcher } from './generic-seed-dispatcher.service'
 import { pickPendingClarificationTarget } from './strategy-clarification-question.service'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 const DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
 const REQUIREMENT_LEVEL_SET_SLOT_KEY = 'contract.requirement.price.define.level_set'
@@ -284,9 +285,9 @@ function fulfillSemanticFragment(
 }
 
 function hasOpenSlot(state: SemanticState, slotKey: string): boolean {
-  return state.trigger.some(trigger => trigger.openSlots.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
-    || state.action.some(action => (action.openSlots ?? []).some(slot => slot.slotKey === slotKey && slot.status === 'open'))
-    || state.risk.some(risk => risk.openSlots.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
+  return readFlatTriggers(state).some(trigger => trigger.openSlots.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
+    || readFlatActions(state).some(action => (action.openSlots ?? []).some(slot => slot.slotKey === slotKey && slot.status === 'open'))
+    || readFlatRisks(state).some(risk => risk.openSlots.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
     || Boolean(state.position?.openSlots?.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
 }
 
@@ -297,10 +298,10 @@ function mergeFragmentPatch(
   symbolResolver: MarketInstrumentSymbolResolverService,
 ): SemanticState {
   const fulfilledPhaseSet = new Set<FulfilledTriggerPhase>(fulfilledPhases)
-  const existingTriggerIds = new Set(state.trigger.map(trigger => trigger.id))
-  const existingActionIds = new Set(state.action.map(action => action.id))
+  const existingTriggerIds = new Set(readFlatTriggers(state).map(trigger => trigger.id))
+  const existingActionIds = new Set(readFlatActions(state).map(action => action.id))
   const nextTriggers = [
-    ...state.trigger,
+    ...readFlatTriggers(state),
     ...(patch.triggers ?? [])
       .filter(trigger => shouldMergeFragmentTrigger(trigger, fulfilledPhaseSet))
       .map((trigger, index): SemanticTriggerState => {
@@ -324,9 +325,9 @@ function mergeFragmentPatch(
         }
       }),
   ]
-  const existingActionKeys = new Set(state.action.map(action => action.key))
+  const existingActionKeys = new Set(readFlatActions(state).map(action => action.key))
   const nextActions = [
-    ...state.action,
+    ...readFlatActions(state),
     ...(patch.actions ?? [])
       .filter(action => !existingActionKeys.has(action.key))
       .filter(action => actionMatchesFulfilledPhases(action, fulfilledPhaseSet))
@@ -711,19 +712,19 @@ function findOpenLevelSetSlot(state: SemanticState, clarificationState: unknown)
 function collectOpenLevelSetSlots(state: SemanticState): OpenLevelSetSlotRef[] {
   const slots: OpenLevelSetSlotRef[] = []
 
-  for (const trigger of state.trigger) {
+  for (const trigger of readFlatTriggers(state)) {
     for (const slot of findOpenSlots(trigger.openSlots)) {
       slots.push({ ownerKind: 'trigger', ownerId: trigger.id, slot })
     }
   }
 
-  for (const action of state.action) {
+  for (const action of readFlatActions(state)) {
     for (const slot of findOpenSlots(action.openSlots ?? [])) {
       slots.push({ ownerKind: 'action', ownerId: action.id, slot })
     }
   }
 
-  for (const risk of state.risk) {
+  for (const risk of readFlatRisks(state)) {
     for (const slot of findOpenSlots(risk.openSlots)) {
       slots.push({ ownerKind: 'risk', ownerId: risk.id, slot })
     }
@@ -815,7 +816,7 @@ function applyLevelSetAnswerToOpenSlot(
   shapeNormalizer: SemanticContractShapeNormalizerService,
 ): SemanticState {
   if (openSlot.ownerKind === 'trigger') {
-    const updates = state.trigger.map(owner =>
+    const updates = readFlatTriggers(state).map(owner =>
       owner.id === openSlot.ownerId ? updateTriggerOwner(owner, openSlot.slot, answer, shapeNormalizer) : { owner, updated: false },
     )
     return hasOwnerUpdate(updates)
@@ -824,7 +825,7 @@ function applyLevelSetAnswerToOpenSlot(
   }
 
   if (openSlot.ownerKind === 'action') {
-    const updates = state.action.map(owner =>
+    const updates = readFlatActions(state).map(owner =>
       owner.id === openSlot.ownerId ? updateActionOwner(owner, openSlot.slot, answer, shapeNormalizer) : { owner, updated: false },
     )
     return hasOwnerUpdate(updates)
@@ -833,7 +834,7 @@ function applyLevelSetAnswerToOpenSlot(
   }
 
   if (openSlot.ownerKind === 'risk') {
-    const updates = state.risk.map(owner =>
+    const updates = readFlatRisks(state).map(owner =>
       owner.id === openSlot.ownerId ? updateRiskOwner(owner, openSlot.slot, answer, shapeNormalizer) : { owner, updated: false },
     )
     return hasOwnerUpdate(updates)

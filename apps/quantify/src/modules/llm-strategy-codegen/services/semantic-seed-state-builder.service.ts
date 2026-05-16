@@ -43,6 +43,7 @@ import { buildTriggerCombinationContract, isTriggerPredicateGroupContract, norma
 import { validateSemanticRiskContract } from './strategy-semantic-contracts'
 import type { AtomExprAtom, SemanticRule } from '../types/atom-expr'
 import { collectAtomLeaves } from '../types/atom-expr'
+import { readFlatActions, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 // DEPRECATED Task 6: legacy aggregate shape; new SemanticState splits into orchestration + orchestrationContracts
 type SemanticOrchestrationState = { nodes: SemanticOrchestrationNode[], contracts: readonly unknown[] }
@@ -2186,8 +2187,8 @@ export class SemanticSeedStateBuilderService {
   }
 
   private withRequiredSeedOpenSlots(state: SemanticState): SemanticState {
-    const hasExecutableSemantics = state.trigger.length > 0
-      || state.action.length > 0
+    const hasExecutableSemantics = readFlatTriggers(state).length > 0
+      || readFlatActions(state).length > 0
       || (state.positionConstraint?.length ?? 0) > 0
       || (state.orchestration?.length ?? 0) > 0
     if (!hasExecutableSemantics) {
@@ -2233,7 +2234,7 @@ export class SemanticSeedStateBuilderService {
           mode: 'fixed_ratio',
           value: 0,
           sizing: null,
-          positionMode: this.inferPositionModeFromActions(state.action),
+          positionMode: this.inferPositionModeFromActions(readFlatActions(state)),
           status: 'open',
           source: 'derived',
           openSlots: [{
@@ -2272,7 +2273,7 @@ export class SemanticSeedStateBuilderService {
         sizing: legacySizingFromNormalized(axis, value, asset),
         mode: legacyModeFromAxis(axis),
         value,
-        positionMode: state.position?.positionMode ?? this.inferPositionModeFromActions(state.action),
+        positionMode: state.position?.positionMode ?? this.inferPositionModeFromActions(readFlatActions(state)),
         status: 'locked',
         source: 'derived',
         openSlots: [],

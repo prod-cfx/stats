@@ -12,6 +12,7 @@ import { isProcessingCodegenSessionStatus } from '../types/codegen-session-statu
 import { readPendingSemanticEdit, withPendingSemanticEdit } from '../types/semantic-edit'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
 import { resolveEditableRangeParamPairs, resolveEditableScalarParamPaths } from './strategy-semantic-contracts'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 export interface ConversationSemanticEditDecisionInput {
   status: LlmCodegenSessionStatus
@@ -103,7 +104,7 @@ export class ConversationSemanticEditService {
     }
 
     if (pendingEdit && this.isPendingRsiTriggerReplacement(pendingEdit)) {
-      if (!pendingEdit.targetRef && input.semanticState.trigger.length > 1) {
+      if (!pendingEdit.targetRef && readFlatTriggers(input.semanticState).length > 1) {
         return {
           kind: 'ASK_EDIT_CLARIFICATION',
           question: '你正在把触发语义改成 RSI。当前有多个触发，请先说明要替换哪一个触发条件。',
@@ -276,12 +277,12 @@ export class ConversationSemanticEditService {
   private applyTriggerReplacement(state: SemanticState, text: string): SemanticState {
     const pendingEdit = readPendingSemanticEdit(state)
     if (!pendingEdit || !this.isPendingRsiTriggerReplacement(pendingEdit)) return state
-    if (!pendingEdit.targetRef && state.trigger.length > 1) return state
+    if (!pendingEdit.targetRef && readFlatTriggers(state).length > 1) return state
 
     const threshold = this.extractRsiThreshold(text)
     if (!threshold) return state
 
-    const targetRef = pendingEdit.targetRef ?? (state.trigger.length === 1 ? state.trigger[0]?.id : undefined)
+    const targetRef = pendingEdit.targetRef ?? (readFlatTriggers(state).length === 1 ? readFlatTriggers(state)[0]?.id : undefined)
     const trigger: SemanticTriggerState = {
       ...pendingEdit.candidate,
       id: targetRef ?? pendingEdit.candidate.id,
@@ -301,8 +302,8 @@ export class ConversationSemanticEditService {
       openSlots: [],
     }
     const triggers = targetRef
-      ? state.trigger.map((item) => item.id === targetRef ? trigger : item)
-      : [trigger, ...state.trigger.filter((item) => item.id !== trigger.id)]
+      ? readFlatTriggers(state).map((item) => item.id === targetRef ? trigger : item)
+      : [trigger, ...readFlatTriggers(state).filter((item) => item.id !== trigger.id)]
 
     return withPendingSemanticEdit({
       ...state,
@@ -403,7 +404,7 @@ export class ConversationSemanticEditService {
   ): SemanticState {
     const targetIndicator = operation.indicator?.trim().toLowerCase()
     let changed = false
-    const triggers = state.trigger.map((trigger) => {
+    const triggers = readFlatTriggers(state).map((trigger) => {
       const triggerIndicator = typeof trigger.params.indicator === 'string'
         ? trigger.params.indicator.trim().toLowerCase()
         : ''
@@ -452,7 +453,7 @@ export class ConversationSemanticEditService {
     operation: { from: number, to: number, direction?: 'up' | 'down', text?: string },
   ): SemanticState {
     let changed = false
-    const triggers = state.trigger.map((trigger) => {
+    const triggers = readFlatTriggers(state).map((trigger) => {
       if (!this.doesTriggerMatchNumberReplacementDirection(trigger, operation.direction)) {
         return trigger
       }
@@ -485,7 +486,7 @@ export class ConversationSemanticEditService {
     operation: { from: number, to: number, unit?: 'bars' | 'percent' | 'plain', text?: string },
   ): SemanticState {
     let changed = false
-    const triggers = state.trigger.map((trigger) => {
+    const triggers = readFlatTriggers(state).map((trigger) => {
       const nextParams = this.replaceNumericParamValue(trigger.key, trigger.params, operation.from, operation.to, operation.unit)
       if (nextParams === trigger.params) return trigger
 
@@ -500,7 +501,7 @@ export class ConversationSemanticEditService {
       }
     })
 
-    const risk = state.risk.map((riskItem) => {
+    const risk = readFlatRisks(state).map((riskItem) => {
       const nextParams = this.replaceNumericParamValue(riskItem.key, riskItem.params, operation.from, operation.to, operation.unit)
       if (nextParams === riskItem.params) return riskItem
 
@@ -534,7 +535,7 @@ export class ConversationSemanticEditService {
     operation: { from: { lower: number, upper: number }, to: { lower: number, upper: number }, text?: string },
   ): SemanticState {
     let changed = false
-    const triggers = state.trigger.map((trigger) => {
+    const triggers = readFlatTriggers(state).map((trigger) => {
       const nextParams = this.replaceRangeParamValue(trigger.key, trigger.params, operation.from, operation.to)
       if (nextParams === trigger.params) return trigger
 
@@ -549,7 +550,7 @@ export class ConversationSemanticEditService {
       }
     })
 
-    const risk = state.risk.map((riskItem) => {
+    const risk = readFlatRisks(state).map((riskItem) => {
       const nextParams = this.replaceRangeParamValue(riskItem.key, riskItem.params, operation.from, operation.to)
       if (nextParams === riskItem.params) return riskItem
 
@@ -730,7 +731,7 @@ export class ConversationSemanticEditService {
     if (!replacement) return state
 
     let changed = false
-    const actions = state.action.map((action) => {
+    const actions = readFlatActions(state).map((action) => {
       if (action.key !== replacement.from) return action
       changed = true
       return this.replaceActionState(action, replacement.to, text)
@@ -754,7 +755,7 @@ export class ConversationSemanticEditService {
     }
 
     const triggers = fromSide && toSide && fromSide !== toSide
-      ? state.trigger.map((trigger) => {
+      ? readFlatTriggers(state).map((trigger) => {
           if (trigger.sideScope !== fromSide) return trigger
           changed = true
           return {
@@ -766,7 +767,7 @@ export class ConversationSemanticEditService {
             },
           }
         })
-      : state.trigger
+      : readFlatTriggers(state)
 
     const position = fromSide && toSide && fromSide !== toSide && state.position
       ? {
@@ -1142,9 +1143,9 @@ export class ConversationSemanticEditService {
   }
 
   private hasActiveStrategySemantics(state: SemanticState): boolean {
-    return state.trigger.length > 0
-      || state.action.length > 0
-      || state.risk.length > 0
+    return readFlatTriggers(state).length > 0
+      || readFlatActions(state).length > 0
+      || readFlatRisks(state).length > 0
       || state.position !== null
       || Object.values(state.contextSlots).some((slot) => Boolean(slot?.value))
   }
@@ -1187,7 +1188,7 @@ export class ConversationSemanticEditService {
   }
 
   private inferSingleTriggerTargetRef(state: SemanticState): string | undefined {
-    return state.trigger.length === 1 ? state.trigger[0]?.id : undefined
+    return readFlatTriggers(state).length === 1 ? readFlatTriggers(state)[0]?.id : undefined
   }
 
   private createPendingTriggerReplacement(
