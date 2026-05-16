@@ -33,9 +33,12 @@ describe('SemanticContractShapeNormalizerService', () => {
     )
 
     expect(result.status).toBe('open')
+    // #1409: density 缺失改注册 grid.range_rebalance.levels（atom-driven 形态）
     expect(result.openSlots).toEqual([{
-      slotKey: 'contract.shape.price.level_set.density',
+      slotKey: 'grid.range_rebalance.levels',
       fieldPath,
+      atomKey: 'grid.range_rebalance',
+      paramSlotKey: 'levels',
       status: 'open',
       priority: 'core',
       affectsExecution: true,
@@ -96,7 +99,9 @@ describe('SemanticContractShapeNormalizerService', () => {
     expect(result.status).toBe('conflict')
     expect(result.openSlots).toEqual([
       expect.objectContaining({
-        slotKey: 'contract.shape.price.level_set.spacing_conflict',
+        slotKey: 'grid.range_rebalance.stepPct',
+        atomKey: 'grid.range_rebalance',
+        paramSlotKey: 'stepPct',
         status: 'open',
         priority: 'core',
         affectsExecution: true,
@@ -116,7 +121,9 @@ describe('SemanticContractShapeNormalizerService', () => {
     expect(result.status).toBe('conflict')
     expect(result.openSlots).toEqual([
       expect.objectContaining({
-        slotKey: 'contract.shape.price.level_set.spacing_conflict',
+        slotKey: 'grid.range_rebalance.stepPct',
+        atomKey: 'grid.range_rebalance',
+        paramSlotKey: 'stepPct',
         status: 'open',
         priority: 'core',
         affectsExecution: true,
