@@ -223,7 +223,6 @@ describe('rulesFromFlatBuckets (Issue #1413)', () => {
     // rulesFromFlatBuckets → SemanticRuleProjectionService.projectToFlat 来回后
     // 会变成 trigger.phase='gate'。该测试显式锁定该已知有损行为；若未来扩
     // SemanticRulePhase 支持 'risk'，本断言会失败，提示同步修订映射策略与文档。
-    const { SemanticRuleProjectionService } = require('../../services/semantic-rule-projection.service')
     const projector = new SemanticRuleProjectionService()
     const input = {
       trigger: [{

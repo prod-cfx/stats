@@ -397,9 +397,12 @@ export class SemanticSeedStateBuilderService {
     // 不变量精确口径（C1 澄清，对应 Issue #1413 验收第 2 条）：
     //   "**非空执行性 patch** 路径（trigger/action/risk/positionConstraint 任一非空，
     //    即任何会贡献 flat 桶元素的输入）→ state.rules 非空"
-    //   反之，context-only / position-without-constraints / 真空 patch 三类输入
-    //   flat 桶全空，rulesFromFlatBuckets 自然返回 []，本方法不写出 rules key；
-    //   真空 patch 上面的 short-circuit 已 return null，不会走到这里。
+    //   反之，context-only / position-without-constraints / orchestration-only /
+    //   真空 patch 四类输入 flat 桶（trigger/action/risk/positionConstraint）全空，
+    //   rulesFromFlatBuckets 自然返回 []，本方法不写出 rules key；真空 patch 上面
+    //   的 short-circuit 已 return null，不会走到这里。orchestration-only 是因为
+    //   rulesFromFlatBuckets 当前不消费 orchestration（与 projectToFlat MVP 占位
+    //   对称，留待 #1397 后续段补齐）。
     //   该口径由 semantic-seed-state-builder.rules-coverage.spec.ts 守门。
     const derivedRules: SemanticRule[] = explicitRules.length > 0
       ? explicitRules

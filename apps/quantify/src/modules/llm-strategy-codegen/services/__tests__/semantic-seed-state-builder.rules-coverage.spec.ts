@@ -144,6 +144,12 @@ describe('SemanticSeedStateBuilderService — rules-first 路径覆盖 (Issue #1
     }
   })
 
+  // 注：orchestration-only patch 路径（理论上 rules 允许为 0，rulesFromFlatBuckets
+  // 不消费 orchestration）守门 spec 暂缺——构造一个能通过 toOrchestrationState
+  // normalization 的最小 orchestration node 需要深入 orchestration 内部 shape，
+  // 超出本 PR scope。C1 注释中已显式列入"反之"四类输入清单，留待 #1397 后续段
+  // 补齐 orchestration 反向投影时一并补 spec。
+
   it('真空 patch → build() 返回 null（短路守卫）', () => {
     // 反 m3：闭合"真空 patch → null / 非空 patch → rules 非空"核心契约。
     const state = seedBuilder.build({} as Patch, 'irrelevant')
