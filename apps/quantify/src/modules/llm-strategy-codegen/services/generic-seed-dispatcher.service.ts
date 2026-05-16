@@ -1207,6 +1207,9 @@ export class GenericSeedDispatcher {
       return { ok: false, reason: `unknown_parser_kind:${ext.kind}` }
     }
 
+    // C2: 单 slot 答复抽参不走 schema.default / ext.default fallback——
+    //   default 是「未声明」时的稳态值，不是「答非所问也算答了」的语义。
+    //   parser/derive 真正命中才进 schema validation；都没命中视作 no_match。
     let value: unknown = parser(answer, ext)
     if ((value === undefined || value === null) && ext.derive) {
       const derive = DERIVES[ext.derive]
@@ -1214,12 +1217,6 @@ export class GenericSeedDispatcher {
         return { ok: false, reason: `unknown_derive:${ext.derive}` }
       }
       value = derive(answer, { atomKey, params: {} })
-    }
-    if ((value === undefined || value === null) && ext.default !== undefined) {
-      value = ext.default
-    }
-    if ((value === undefined || value === null) && schema.default !== undefined) {
-      value = schema.default
     }
     if (value === undefined || value === null) {
       return { ok: false, reason: 'no_match' }
@@ -1242,7 +1239,10 @@ export class GenericSeedDispatcher {
       }
     }
     if (schema.multipleOf !== undefined && typeof value === 'number') {
-      if (value % schema.multipleOf !== 0) {
+      // m2: IEEE-754 浮点容差，避免 0.3 % 0.1 ≈ 0.0999... 误判 not_multiple_of
+      const remainder = Math.abs(value % schema.multipleOf)
+      const tolerance = Math.max(Math.abs(value), schema.multipleOf) * 1e-9
+      if (remainder > tolerance && Math.abs(remainder - schema.multipleOf) > tolerance) {
         return { ok: false, reason: 'not_multiple_of' }
       }
     }
