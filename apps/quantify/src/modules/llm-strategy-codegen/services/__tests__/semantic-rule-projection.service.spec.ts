@@ -212,6 +212,135 @@ describe('SemanticRuleProjectionService (Issue #1395)', () => {
     expect(out.orchestration).toEqual([])
   })
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // Issue #1433 R-A：metadata 从 contract.paramSlots 反推
+  //   消除 projection 各 case 的 status:'locked' / openSlots:[] 硬编码，
+  //   让 clarification 链路在 rules-first 路径下重新通电。
+  // ───────────────────────────────────────────────────────────────────────────
+  it('R-A: 缺 required slot 时 trigger.status=open + openSlots 含对应 slot', () => {
+    // price.percent_change 的 paramSlots.valuePct.required=true（atom-contract-registry.ts:1214）
+    // 用户输入只给 direction 没给 valuePct → status 应为 open
+    const rules: SemanticRule[] = [{
+      id: 'r-pc',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down' } },
+      effects: [],
+    }]
+    const out = svc.projectToFlat(rules)
+    expect(out.trigger).toHaveLength(1)
+    expect(out.trigger[0].status).toBe('open')
+    expect(out.trigger[0].openSlots.length).toBeGreaterThanOrEqual(1)
+    const valuePctSlot = out.trigger[0].openSlots.find(s => s.paramSlotKey === 'valuePct')
+    expect(valuePctSlot).toBeDefined()
+    expect(valuePctSlot?.slotKey).toBe('price.percent_change.valuePct')
+    expect(valuePctSlot?.fieldPath).toBe('r-pc-cond-0.params.valuePct')
+    expect(valuePctSlot?.atomKey).toBe('price.percent_change')
+    expect(valuePctSlot?.status).toBe('open')
+    expect(valuePctSlot?.priority).toBe('core')
+    expect(valuePctSlot?.affectsExecution).toBe(true)
+  })
+
+  it('R-A: required slot 齐全时 status=locked + openSlots=[]', () => {
+    // price.percent_change 给齐 direction + valuePct（valuePct 是唯一 required）
+    const rules: SemanticRule[] = [{
+      id: 'r-pc-full',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down', valuePct: -1 } },
+      effects: [],
+    }]
+    const out = svc.projectToFlat(rules)
+    expect(out.trigger[0].status).toBe('locked')
+    expect(out.trigger[0].openSlots).toEqual([])
+  })
+
+  it('R-A: atom 未在 registry 时 fail-open（status=locked + openSlots=[]）', () => {
+    // 真实场景：atom 在 registry（trigger 路径 atomToTrigger 不查 bucket），但
+    //   surface.paramSlots 可能缺。deriveOwnerMetadata 返回 locked + [] 保持
+    //   既有行为，避免误升 open。
+    const rules: SemanticRule[] = [{
+      id: 'r-unreg',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'completely.unregistered.atom', params: {} },
+      effects: [],
+    }]
+    const out = svc.projectToFlat(rules)
+    expect(out.trigger[0].status).toBe('locked')
+    expect(out.trigger[0].openSlots).toEqual([])
+  })
+
+  it('R-A 审查 Major #2: missing 判定不误伤 valuePct=0（合法"价格不变"）', () => {
+    // price.percent_change.valuePct required=true，但 0 是合法值（"价格不变"）
+    //   旧版用 v === '' 判 missing 会误把 0 当 missing（因为 '' == 0 但 ===  不是），
+    //   新版用 typeof string + trim 守门，0 不会被误判。
+    const rules: SemanticRule[] = [{
+      id: 'r-pc-zero',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down', valuePct: 0 } },
+      effects: [],
+    }]
+    const out = svc.projectToFlat(rules)
+    // valuePct=0 应被视为已填 → status=locked
+    expect(out.trigger[0].status).toBe('locked')
+    expect(out.trigger[0].openSlots).toEqual([])
+  })
+
+  it('R-A 审查 Major #3: contract.clarificationQuestion 文案优先于通用模板', () => {
+    // price.percent_change atom 在 registry 有 clarificationQuestion 函数
+    //   （atom-contract-registry.ts:1186 → '请补充价格百分比变化条件的缺失信息。'）
+    //   反推 openSlot 时应使用 contract 文案而不是通用模板 "请补充 X 的 Y 参数。"
+    const rules: SemanticRule[] = [{
+      id: 'r-pc-q',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down' } },
+      effects: [],
+    }]
+    const out = svc.projectToFlat(rules)
+    const slot = out.trigger[0].openSlots.find(s => s.paramSlotKey === 'valuePct')
+    expect(slot).toBeDefined()
+    // 通用模板 fallback "请补充 ${atomKey} 的 ${slotKey} 参数。" 不应是最终文案
+    // contract 提供的文案应该被优先使用
+    expect(slot?.questionHint).toContain('价格百分比变化')
+  })
+
+  it('R-A: partial fill（多 required slot 只缺一个）只产对应那条 openSlot', () => {
+    // 用 ATR 类原子假设其有多 required slot；这里用 price.percent_change 单 required（valuePct）
+    //   构造 partial-fill 等价场景：valuePct 给了但 direction 没给，验证遍历逻辑只产
+    //   真缺的那条；direction.required=true → 缺 → 产 1 条 openSlot
+    const rules: SemanticRule[] = [{
+      id: 'r-partial',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'price.percent_change', params: { valuePct: -1 } },
+      effects: [],
+    }]
+    const out = svc.projectToFlat(rules)
+    expect(out.trigger[0].status).toBe('open')
+    expect(out.trigger[0].openSlots).toHaveLength(1)
+    expect(out.trigger[0].openSlots[0].paramSlotKey).toBe('direction')
+  })
+
+  it('R-A: effect risk 桶 atom（risk.atr_take_profit）缺 required multiple 时产 openSlots', () => {
+    // risk.atr_take_profit.multiple required:true（atom-contract-registry.ts:4696）
+    const rules: SemanticRule[] = [{
+      id: 'r-risk',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'oscillator.rsi_lte', params: { threshold: 30 } },
+      effects: [{ kind: 'atom', key: 'risk.atr_take_profit', params: {} }],
+    }]
+    const out = svc.projectToFlat(rules)
+    expect(out.risk).toHaveLength(1)
+    expect(out.risk[0].status).toBe('open')
+    const multipleSlot = out.risk[0].openSlots.find(s => s.paramSlotKey === 'multiple')
+    expect(multipleSlot).toBeDefined()
+    expect(multipleSlot?.atomKey).toBe('risk.atr_take_profit')
+  })
+
   // 审查 Minor #3 真覆盖：直接验 inferOrchestrationKind null 分支（私有方法）。
   //   未来若有新 orchestration bucket atom 使用未声明的 prefix，dispatchEffectLeaf
   //   应在 inferOrchestrationKind 返回 null 时 fail-open（不 push 到 orchestration）。
