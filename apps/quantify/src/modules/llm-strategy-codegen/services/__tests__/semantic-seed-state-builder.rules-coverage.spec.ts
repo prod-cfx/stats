@@ -144,6 +144,12 @@ describe('SemanticSeedStateBuilderService — rules-first 路径覆盖 (Issue #1
     }
   })
 
+  it('真空 patch → build() 返回 null（短路守卫）', () => {
+    // 反 m3：闭合"真空 patch → null / 非空 patch → rules 非空"核心契约。
+    const state = seedBuilder.build({} as Patch, 'irrelevant')
+    expect(state).toBeNull()
+  })
+
   it('explicit rules 路径：state.rules 与 patch.rules 等长且 id 一致', () => {
     const patch = {
       rules: [

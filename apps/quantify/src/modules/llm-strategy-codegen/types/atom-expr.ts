@@ -885,9 +885,11 @@ export function canonicalizeSemanticRule(rule: SemanticRule): SemanticRule {
 
 export function canonicalizeSemanticRules(rules: ReadonlyArray<SemanticRule>): SemanticRule[] {
   const canon = rules.map(canonicalizeSemanticRule)
+  // 用 stableJson（key-sorted）作排序键，避免 JSON.stringify 受对象构造时 key
+  // 插入顺序影响——同 key 集合等价 atom 的排序键必须严格相等。
   return [...canon].sort((a, b) => {
-    const ka = `${a.phase}|${a.sideScope}|${JSON.stringify(a.condition)}|${JSON.stringify(a.effects)}`
-    const kb = `${b.phase}|${b.sideScope}|${JSON.stringify(b.condition)}|${JSON.stringify(b.effects)}`
+    const ka = `${a.phase}|${a.sideScope}|${stableJson(a.condition)}|${stableJson(a.effects)}`
+    const kb = `${b.phase}|${b.sideScope}|${stableJson(b.condition)}|${stableJson(b.effects)}`
     return ka.localeCompare(kb)
   })
 }

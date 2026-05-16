@@ -161,6 +161,38 @@ describe('rulesFromFlatBuckets (Issue #1413)', () => {
     expect(exitRule!.effects[0]).toMatchObject({ kind: 'atom', key: 'risk.atr_stop' })
   })
 
+  it('effect 无 id 匹配时按 phase fallback：action → entry rule', () => {
+    const rules = rulesFromFlatBuckets({
+      trigger: [
+        { id: 'entry-trigger', key: 'price.breakout_up', phase: 'entry', params: {}, sideScope: 'long' },
+        { id: 'exit-trigger', key: 'price.breakdown', phase: 'exit', params: {}, sideScope: 'long' },
+      ],
+      action: [{ id: 'orphan-action', key: 'action.open_long', params: {} }],
+      risk: [],
+      positionConstraint: [],
+      orchestration: [],
+    })
+    const entryRule = rules.find(r => r.phase === 'entry')
+    expect(entryRule!.effects).toHaveLength(1)
+    expect(entryRule!.effects[0]).toMatchObject({ kind: 'atom', key: 'action.open_long' })
+  })
+
+  it('effect 无 id 匹配时按 phase fallback：positionConstraint → entry rule', () => {
+    const rules = rulesFromFlatBuckets({
+      trigger: [
+        { id: 'entry-trigger', key: 'price.breakout_up', phase: 'entry', params: {}, sideScope: 'long' },
+        { id: 'exit-trigger', key: 'price.breakdown', phase: 'exit', params: {}, sideScope: 'long' },
+      ],
+      action: [],
+      risk: [],
+      positionConstraint: [{ id: 'orphan-pc', key: 'position.pyramiding_limit', params: { limit: 3 } }],
+      orchestration: [],
+    })
+    const entryRule = rules.find(r => r.phase === 'entry')
+    expect(entryRule!.effects).toHaveLength(1)
+    expect(entryRule!.effects[0]).toMatchObject({ kind: 'atom', key: 'position.pyramiding_limit' })
+  })
+
   it('effect 无 rule 可挂时丢弃孤儿 effect（不伪造 ghost rule）', () => {
     // 反 M1：旧实现把 action atom 当作 condition 塞进新 rule，违反 condition 的
     // trigger/predicate 语义契约。当前正确行为：丢弃孤儿 effect，返回空 rules。
