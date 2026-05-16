@@ -652,6 +652,14 @@ function parseRuleRefFromEffectId(effId: string): { ruleId: string, index: numbe
 function triggerPhaseToRulePhase(p: 'entry' | 'exit' | 'risk' | 'gate'): SemanticRulePhase {
   // trigger 'risk' phase 在 rule 层没有直接对应；统一映射到 'gate'（与 IR 层
   // compileAtomExpr 对 risk 触发器的解读一致：作为 gate 性质的守门规则）。
+  //
+  // **已知有损**（Issue #1413 review M2）：rule.phase 域目前只有 entry/exit/gate；
+  // round-trip flat(phase='risk') → rule(phase='gate') → projectToFlat
+  // → trigger(phase='gate')，risk 标记会被吞掉。当前 rules-first 派生路径在
+  // seed-builder 场景下不会主动产生 risk-phase trigger（risk 桶是独立通道，不走
+  // trigger.phase='risk'），所以实际数据流上无 regression。若未来 IR readiness gate
+  // 等下游对 trigger.phase==='risk' 有分流需求，应正式扩 SemanticRulePhase 域或
+  // 在 condition atom 上挂元数据保留原 phase。
   if (p === 'risk') return 'gate'
   return p
 }

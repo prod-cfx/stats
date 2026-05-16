@@ -174,7 +174,8 @@ describe('rulesFromFlatBuckets (Issue #1413)', () => {
     expect(rules).toEqual([])
   })
 
-  it('trigger `risk` phase → rule phase `gate`', () => {
+  it('trigger `risk` phase → rule phase `gate`（已知有损映射）', () => {
+    // SemanticRulePhase 域无 'risk'；rules-first 派生时映射为 'gate'。
     const rules = rulesFromFlatBuckets({
       trigger: [{ id: 'risk-gate-cond-0', key: 'risk.gate', phase: 'risk', params: {}, sideScope: 'both' }],
       action: [],
@@ -183,6 +184,32 @@ describe('rulesFromFlatBuckets (Issue #1413)', () => {
       orchestration: [],
     })
     expect(rules[0]!.phase).toBe('gate')
+  })
+
+  it('round-trip 显式 negative：risk-phase trigger 经 reverse → forward 后丢失 `risk` 标记', () => {
+    // 反 M2：当前 rule.phase 域无 'risk'，所以 trigger.phase='risk' 经
+    // rulesFromFlatBuckets → SemanticRuleProjectionService.projectToFlat 来回后
+    // 会变成 trigger.phase='gate'。该测试显式锁定该已知有损行为；若未来扩
+    // SemanticRulePhase 支持 'risk'，本断言会失败，提示同步修订映射策略与文档。
+    const { SemanticRuleProjectionService } = require('../../services/semantic-rule-projection.service')
+    const projector = new SemanticRuleProjectionService()
+    const input = {
+      trigger: [{
+        id: 'orig-risk-cond-0',
+        key: 'risk.atr_stop',
+        phase: 'risk' as const,
+        params: { multiple: 2 },
+        sideScope: 'both' as const,
+      }],
+      action: [],
+      risk: [],
+      positionConstraint: [],
+      orchestration: [],
+    }
+    const rules = rulesFromFlatBuckets(input)
+    expect(rules[0]!.phase).toBe('gate')
+    const flatBack = projector.projectToFlat(rules)
+    expect(flatBack.trigger[0]!.phase).toBe('gate') // 期望：信息丢失（不是 'risk'）
   })
 
   it('positionConstraint 桶按 id 挂回 rule', () => {
