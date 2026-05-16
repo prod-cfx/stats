@@ -68,43 +68,60 @@ export type AtomExpr =
 export type AtomExprKind = AtomExpr['kind']
 
 // ─────────────────────────────────────────────────────────────────────────────
-// zod schema（递归 union；z.lazy 解 forward-ref）
+// zod schema —— discriminated union（Issue #1399）
 //
-// 类型断言为 z.ZodType<AtomExpr> 时，TS 在 discriminatedUnion + lazy 组合下推断会
-// 给出 readonly vs mutable 数组差异。这里用 z.ZodType<AtomExpr, z.ZodTypeDef,
-// AtomExpr> 的形式锁定 input/output 同型，并显式 cast，避免类型噪音。
+// 5 个 kind 各自命名导出，便于 IDE narrow、复用与单测精确定位。递归引用通过
+// `z.lazy(() => atomExprSchema)` 解 forward-ref；顶层用 `z.discriminatedUnion`
+// 按 `kind` 字段路由。这样 zod 报错路径直接精确到具体分支节点（例如
+// `condition.children[1].key`），不再因为 union refine 把整对象包成一团。
 // ─────────────────────────────────────────────────────────────────────────────
 
-const atomExprAtomSchema = z.object({
+/** 叶子 atom 节点 schema */
+export const atomSchema = z.object({
   kind: z.literal('atom'),
   key: z.string().min(1),
   params: z.record(z.unknown()),
   sideScope: z.enum(['long', 'short', 'both']).optional(),
 })
 
+/** AND 组合：≥2 个子节点 */
+export const andSchema = z.object({
+  kind: z.literal('and'),
+  children: z.array(z.lazy(() => atomExprSchema)).min(ATOM_EXPR_MIN_CHILDREN),
+})
+
+/** OR 组合：≥2 个子节点 */
+export const orSchema = z.object({
+  kind: z.literal('or'),
+  children: z.array(z.lazy(() => atomExprSchema)).min(ATOM_EXPR_MIN_CHILDREN),
+})
+
+/** NOT 一元：单子节点取反 */
+export const notSchema = z.object({
+  kind: z.literal('not'),
+  child: z.lazy(() => atomExprSchema),
+})
+
+/** SEQUENCE 顺序敏感：≥2 个 step，可选 withinBars/nextBarOnly */
+export const sequenceSchema = z.object({
+  kind: z.literal('sequence'),
+  steps: z.array(z.lazy(() => atomExprSchema)).min(ATOM_EXPR_MIN_CHILDREN),
+  withinBars: z.number().int().positive().optional(),
+  nextBarOnly: z.boolean().optional(),
+})
+
 export const atomExprSchema: z.ZodType<AtomExpr> = z.lazy(() =>
   z.discriminatedUnion('kind', [
-    atomExprAtomSchema,
-    z.object({
-      kind: z.literal('and'),
-      children: z.array(atomExprSchema).min(ATOM_EXPR_MIN_CHILDREN),
-    }),
-    z.object({
-      kind: z.literal('or'),
-      children: z.array(atomExprSchema).min(ATOM_EXPR_MIN_CHILDREN),
-    }),
-    z.object({
-      kind: z.literal('not'),
-      child: atomExprSchema,
-    }),
-    z.object({
-      kind: z.literal('sequence'),
-      steps: z.array(atomExprSchema).min(ATOM_EXPR_MIN_CHILDREN),
-      withinBars: z.number().int().positive().optional(),
-      nextBarOnly: z.boolean().optional(),
-    }),
+    atomSchema,
+    andSchema,
+    orSchema,
+    notSchema,
+    sequenceSchema,
   ]),
 ) as unknown as z.ZodType<AtomExpr>
+
+/** @deprecated 历史命名；新代码请用 {@link atomSchema}。保留为别名以避免破坏外部引用。 */
+export const atomExprAtomSchema = atomSchema
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SemanticRule —— state 主体
@@ -205,62 +222,218 @@ export function isAtomParamsStrictlyValid(key: string, params: Record<string, un
   return true
 }
 
-export function pruneAtomExprToValid(node: unknown): AtomExpr | null {
-  if (!node || typeof node !== 'object') return null
-  const kind = (node as { kind?: unknown }).kind
-  if (kind === 'atom') {
-    const parsed = atomExprAtomSchema.safeParse(node)
-    if (!parsed.success) return null
-    const atom = parsed.data as AtomExprAtom
-    // Issue #1395 mute-spider S5：在 zod 结构校验通过后追加 params 值域严校
-    if (!isAtomParamsStrictlyValid(atom.key, atom.params)) return null
-    return atom as AtomExpr
+// ─────────────────────────────────────────────────────────────────────────────
+// Issue #1399 — 剪枝时携带精确 path 的诊断
+//
+// 旧实现把剪枝过程的失败信息丢弃（只返回 null），调用方只能在 quarantine 里写
+// "condition: pruned to empty" 这种笼统串。换用 discriminated union 后，叶子
+// zod safeParse 自带 `issues[].path`，组合节点剪枝时把 basePath 透传下去即可
+// 拼出 `condition.children[1].key` / `condition.steps[2].kind` 级别的路径。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 自定义聚合 reason（叠加在 zod 内置 ZodIssueCode 之上）
+ *
+ * - `pruned_to_empty`：and / or 的 children 全部失效 / not 唯一子节点失效
+ * - `sequence_step_invalid`：顺序敏感的 sequence 任一 step 失效（整树失败）
+ * - `params_strict`：atom params 通过 zod 但 paramSlots 严校越界
+ * - `not_object`：节点不是 object（数组 / 原语）
+ * - `invalid_kind`：kind 字段不在 5 桶（atom/and/or/not/sequence）内
+ */
+export type AtomExprPruneReason
+  = | z.ZodIssueCode
+    | 'pruned_to_empty'
+    | 'sequence_step_invalid'
+    | 'params_strict'
+    | 'not_object'
+    | 'invalid_kind'
+
+export interface AtomExprPruneError {
+  /** dot/bracket 路径，例如 `condition.steps[0].key` */
+  readonly path: string
+  /** zod issue.code 或本地枚举的聚合 reason */
+  readonly reason: AtomExprPruneReason
+  /** zod issue.message 或简短描述 */
+  readonly message: string
+}
+
+/**
+ * `errors` 数组顺序约定（公开契约）：
+ *   - 自底向上累积：叶子层 zod 错误最先 push，组合层聚合错误（`pruned_to_empty` /
+ *     `sequence_step_invalid`）最后追加
+ *   - 因此 `errors[0]` 永远是「最具体的叶子失败路径」，适合做诊断 errorPath
+ *   - 末尾若存在 `pruned_to_empty / sequence_step_invalid` 则代表整体失败的语义根因
+ *   - 当 `result !== null` 时 `errors` 仍可能非空（and/or 退化时被丢弃 child 的 path
+ *     仍保留，供观测层做"warnings"分流）
+ */
+export interface AtomExprPruneResult {
+  readonly result: AtomExpr | null
+  readonly errors: ReadonlyArray<AtomExprPruneError>
+}
+
+/**
+ * 拼路径：
+ *   - 字符串段：空 base 不前置点号（避免出现 `.foo`），否则拼 `base.seg`
+ *   - 数字段：始终拼 `base[N]`；当 base 为空时输出 `[N]`（合法但只用于 array root）
+ *
+ * 注：AtomExpr 树根永远是 object（discriminated union），不会触发 `[N]` 形式的
+ * root 路径；这里保留无前缀写法作为工具函数的边界行为。Atom key 受 ATOM_REGISTRY
+ * 控制（无 `.` / `[` 字符），不做 path 段转义。
+ */
+function joinPath(base: string, segment: string | number): string {
+  if (typeof segment === 'number') return `${base}[${segment}]`
+  if (!base) return segment
+  return `${base}.${segment}`
+}
+
+function zodPathToString(base: string, path: ReadonlyArray<string | number>): string {
+  let acc = base
+  for (const seg of path) acc = joinPath(acc, seg)
+  return acc
+}
+
+/**
+ * Issue #1399：带 path 的递归剪枝。
+ *
+ * - atom：用 {@link atomSchema} safeParse；失败时把每个 issue.path 拼到 basePath 后回传
+ * - and/or：≥2 valid 保留；=1 退化；=0 上报 `pruned_to_empty`
+ * - not：唯一子节点剪空则上报
+ * - sequence：任一 step 剪空则整树失败（顺序不可残缺）
+ */
+export function pruneAtomExprWithErrors(node: unknown, basePath = ''): AtomExprPruneResult {
+  if (!node || typeof node !== 'object' || Array.isArray(node)) {
+    return {
+      result: null,
+      errors: [{ path: basePath || '<root>', reason: 'not_object', message: 'expected object' }],
+    }
   }
+  const kind = (node as { kind?: unknown }).kind
+
+  if (kind === 'atom') {
+    const parsed = atomSchema.safeParse(node)
+    if (!parsed.success) {
+      const errors = parsed.error.issues.map(issue => ({
+        path: zodPathToString(basePath, issue.path as ReadonlyArray<string | number>),
+        reason: issue.code,
+        message: issue.message,
+      }))
+      return { result: null, errors }
+    }
+    const atom = parsed.data as AtomExprAtom
+    // Issue #1395 mute-spider S5：zod 通过后追加 params 值域严校
+    if (!isAtomParamsStrictlyValid(atom.key, atom.params)) {
+      return {
+        result: null,
+        errors: [{
+          path: joinPath(basePath, 'params'),
+          reason: 'params_strict',
+          message: `atom params out of slot range for key=${atom.key}`,
+        }],
+      }
+    }
+    return { result: atom as AtomExpr, errors: [] }
+  }
+
   if (kind === 'and' || kind === 'or') {
     const raw = (node as { children?: unknown }).children
-    if (!Array.isArray(raw)) return null
-    const pruned = raw
-      .map(c => pruneAtomExprToValid(c))
-      .filter((c): c is AtomExpr => c !== null)
+    if (!Array.isArray(raw)) {
+      return {
+        result: null,
+        errors: [{ path: joinPath(basePath, 'children'), reason: 'invalid_type', message: 'expected array' }],
+      }
+    }
+    const errors: AtomExprPruneError[] = []
+    const pruned: AtomExpr[] = []
+    for (let i = 0; i < raw.length; i++) {
+      const childPath = joinPath(joinPath(basePath, 'children'), i)
+      const sub = pruneAtomExprWithErrors(raw[i], childPath)
+      errors.push(...sub.errors)
+      if (sub.result) pruned.push(sub.result)
+    }
     if (pruned.length >= ATOM_EXPR_MIN_CHILDREN) {
-      return { kind, children: pruned } as AtomExpr
+      return { result: { kind, children: pruned } as AtomExpr, errors }
     }
     if (pruned.length === 1) {
       // 退化：保留唯一 valid child，丢掉 and/or 包裹
-      return pruned[0]
+      return { result: pruned[0], errors }
     }
-    return null
+    return {
+      result: null,
+      errors: [...errors, { path: basePath || '<root>', reason: 'pruned_to_empty', message: `${kind} children all invalid` }],
+    }
   }
+
   if (kind === 'not') {
-    const child = pruneAtomExprToValid((node as { child?: unknown }).child)
-    return child ? { kind: 'not', child } : null
+    const sub = pruneAtomExprWithErrors((node as { child?: unknown }).child, joinPath(basePath, 'child'))
+    if (sub.result) {
+      return { result: { kind: 'not', child: sub.result }, errors: sub.errors }
+    }
+    return {
+      result: null,
+      errors: [...sub.errors, { path: basePath || '<root>', reason: 'pruned_to_empty', message: 'not child invalid' }],
+    }
   }
+
   if (kind === 'sequence') {
     const raw = (node as { steps?: unknown }).steps
-    if (!Array.isArray(raw) || raw.length === 0) return null
+    if (!Array.isArray(raw) || raw.length === 0) {
+      return {
+        result: null,
+        errors: [{ path: joinPath(basePath, 'steps'), reason: 'invalid_type', message: 'expected non-empty array' }],
+      }
+    }
+    // 注：剪枝阶段对 sequence steps 不再施加 `min(ATOM_EXPR_MIN_CHILDREN)=2` 校验
+    // （fail-open）；schema 层的 sequenceSchema.min(2) 在 parse 时仍生效，但 graceful
+    // 路径优先保留任何顺序完整的 steps 链——length=1 的 sequence 退化时被允许通过，
+    // 以兼容 LLM 偶发产出"单步 sequence"且语义上仍等同于单 atom 的边界场景。
     const prunedSteps: AtomExpr[] = []
-    for (const step of raw) {
-      const v = pruneAtomExprToValid(step)
-      if (!v) return null // sequence 顺序不可残缺
-      prunedSteps.push(v)
+    const errors: AtomExprPruneError[] = []
+    for (let i = 0; i < raw.length; i++) {
+      const stepPath = joinPath(joinPath(basePath, 'steps'), i)
+      const sub = pruneAtomExprWithErrors(raw[i], stepPath)
+      errors.push(...sub.errors)
+      if (!sub.result) {
+        // sequence 顺序敏感，任一 step 失效即整树失效
+        return {
+          result: null,
+          errors: [...errors, { path: stepPath, reason: 'sequence_step_invalid', message: 'sequence step pruned to null' }],
+        }
+      }
+      prunedSteps.push(sub.result)
     }
-    const original = node as {
-      withinBars?: unknown
-      nextBarOnly?: unknown
-    }
+    const original = node as { withinBars?: unknown, nextBarOnly?: unknown }
     const withinBars
       = typeof original.withinBars === 'number' && Number.isInteger(original.withinBars) && original.withinBars > 0
         ? original.withinBars
         : undefined
     const nextBarOnly = typeof original.nextBarOnly === 'boolean' ? original.nextBarOnly : undefined
     return {
-      kind: 'sequence',
-      steps: prunedSteps,
-      ...(withinBars !== undefined ? { withinBars } : {}),
-      ...(nextBarOnly !== undefined ? { nextBarOnly } : {}),
+      result: {
+        kind: 'sequence',
+        steps: prunedSteps,
+        ...(withinBars !== undefined ? { withinBars } : {}),
+        ...(nextBarOnly !== undefined ? { nextBarOnly } : {}),
+      },
+      errors,
     }
   }
-  return null
+
+  return {
+    result: null,
+    errors: [{
+      path: joinPath(basePath, 'kind'),
+      reason: 'invalid_kind',
+      message: `unknown kind: ${String(kind)}`,
+    }],
+  }
+}
+
+/**
+ * 兼容旧签名的 thin wrapper。新代码应直接使用 {@link pruneAtomExprWithErrors}
+ * 以拿到精确诊断。
+ */
+export function pruneAtomExprToValid(node: unknown): AtomExpr | null {
+  return pruneAtomExprWithErrors(node, '').result
 }
 
 /**
@@ -286,19 +459,29 @@ export function gracefulParseSemanticRule(input: unknown): GracefulParseSemantic
   })
   const headerParsed = headerSchema.safeParse({ id: obj.id, phase: obj.phase, sideScope: obj.sideScope })
   if (!headerParsed.success) {
+    // Issue #1399：直接拼出 `id` / `phase` / `sideScope` 级别的精确路径
     const issues = headerParsed.error.issues.slice(0, 5)
-      .map(i => `path=${i.path.join('.')} code=${i.code}`).join('; ')
-    return { ok: false, errorPath: `header: ${issues}` }
+      .map((i) => {
+        const path = zodPathToString('', i.path as ReadonlyArray<string | number>) || '<root>'
+        return `${path}: ${i.code}`
+      })
+      .join('; ')
+    return { ok: false, errorPath: issues }
   }
-  const condition = pruneAtomExprToValid(obj.condition)
-  if (!condition) {
-    return { ok: false, errorPath: 'condition: pruned to empty' }
+  const conditionPruned = pruneAtomExprWithErrors(obj.condition, 'condition')
+  if (!conditionPruned.result) {
+    // Issue #1399：用首个最深 path 暴露具体节点；附带 reason 与节点路径
+    const first = conditionPruned.errors[0]
+    const errorPath = first
+      ? `${first.path}: ${first.reason}`
+      : 'condition: pruned to empty'
+    return { ok: false, errorPath }
   }
   const rawEffects = Array.isArray(obj.effects) ? obj.effects : []
   const effects: AtomExpr[] = []
-  for (const eff of rawEffects) {
-    const pruned = pruneAtomExprToValid(eff)
-    if (pruned) effects.push(pruned)
+  for (let i = 0; i < rawEffects.length; i++) {
+    const pruned = pruneAtomExprWithErrors(rawEffects[i], `effects[${i}]`)
+    if (pruned.result) effects.push(pruned.result)
   }
   return {
     ok: true,
@@ -306,7 +489,7 @@ export function gracefulParseSemanticRule(input: unknown): GracefulParseSemantic
       id: headerParsed.data.id,
       phase: headerParsed.data.phase,
       sideScope: headerParsed.data.sideScope,
-      condition,
+      condition: conditionPruned.result,
       effects,
     } as import('zod').infer<typeof semanticRuleSchema>,
   }
