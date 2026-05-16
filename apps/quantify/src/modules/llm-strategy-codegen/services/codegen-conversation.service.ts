@@ -216,6 +216,10 @@ const STRATEGY_PLAZA_RUN_SESSION_ID_PREFIX = 'strategy-plaza:official:'
 const DEFAULT_CODEGEN_STRICT_UNSUPPORTED_TTL_MS = 10 * 60 * 1000
 // #1409: grid clarification slot 识别——按 atomKey 判定（替代旧 slotKey 字面量 white-list）
 //   旧 slotKey（contract.shape.price.level_set.*）保留兼容老 state 字符串
+//
+// @deprecated 兼容窗口——线上残留旧 state 反序列化时仍可能命中这 3 个旧 slotKey；
+//   一旦持久化 state 全部迁移到 atom-driven slot 形态（`grid.range_rebalance.*`），
+//   即可移除本 Set 及相关 fallback 分支。建议在 2 个 release 后由 follow-up issue 清理。
 const STRUCTURED_GRID_ATOM_KEY = 'grid.range_rebalance'
 const LEGACY_LEVEL_SET_SLOT_KEYS = new Set([
   'contract.shape.price.level_set.density',
