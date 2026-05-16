@@ -3380,7 +3380,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         // Issue #1391 review m4：centerOffsetPct ≤ 0 在 price 域无意义；上限 50%
         //   覆盖任何合理网格设计（±50% 区间已足够极端），上界更稳。
         centerOffsetPct: { kind: 'number', required: false, range: [0.01, 50], extractor: { kind: 'number-decimal', pattern: '上下各\\s*(\\d+(?:\\.\\d+)?)\\s*%' } },
-        levels: { kind: 'number', required: false, range: [2, 1000], extractor: { kind: 'number-int', pattern: '共\\s*(\\d+)\\s*格' } },
+        // Issue #1409：levels 抽取从硬编 pattern '共\\s*(\\d+)\\s*格' 通用化为
+        //   quantifier.include=['格']。让单 slot extract（resolver 通用通道下
+        //   GenericSeedDispatcher.extractSingleSlot）只用回答里"20格"就能抽到 20，
+        //   不再依赖"共"字面量。number-int 配合 quantifier 排除百分号/分钟等量词，
+        //   语义等价但更通用、与「N 根/N 条」minBars 等同源。
+        levels: { kind: 'number', required: false, range: [2, 1000], extractor: { kind: 'number-int', quantifier: { include: ['格'], exclude: ['%', '％', '分钟', '小时', '秒'] } } },
         // Issue #1391 follow-up：'反向单'/'对冲'/'相邻网格'/'相邻反向' 是用户表达"双向网格"的口语形态，
         //   需映射到 sideMode='both'，避免漏识被默认值掩盖（虽然 default 是 both，但显式 evidence
         //   提升下游 readiness/consistency 信号）。
@@ -3400,6 +3405,13 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
           mustOutput: '单叶子 rule（phase=entry）condition=grid.range_rebalance + sideMode + breakoutAction="stop|pause|continue"；不需要额外的 entry trigger，也不需要 protective_exit；grid 自身即是连续入场源 + 出场覆盖。',
         }],
       },
+      // Issue #1409 — open slot 澄清答复 golden 集
+      goldenClarificationAnswers: [
+        { answer: '20格', expectParams: { levels: 20 }, description: '格数澄清' },
+        { answer: '区间 79200-80200', expectParams: { rangeLower: 79200, rangeUpper: 80200 }, description: '区间澄清' },
+        { answer: '双向', expectParams: { sideMode: 'both' }, description: '方向澄清' },
+        { answer: '停止', expectParams: { breakoutAction: 'stop' }, description: '越界动作澄清' },
+      ],
     },
   },
 
