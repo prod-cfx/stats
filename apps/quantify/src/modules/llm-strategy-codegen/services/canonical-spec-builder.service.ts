@@ -4301,7 +4301,28 @@ export class CanonicalSpecBuilderService {
     const upper = this.readSemanticGridNumber(trigger.params, 'rangeMax')
       ?? this.readSemanticGridNumber(trigger.params, 'rangeUpper')
       ?? this.readSemanticGridRangeNumber(trigger.params, 'upper')
-    const stepPct = this.readSemanticGridNumber(trigger.params, 'stepPct')
+    let stepPct = this.readSemanticGridNumber(trigger.params, 'stepPct')
+
+    // #1412: stepPct 缺席而 levels + range 都在场时，按几何间距反推 stepPct。
+    //   公式：ratio = (upper / lower) ^ (1 / (levels - 1))；stepPct = (ratio - 1) * 100
+    //   与 deriveGridLevelCount 公式同源（log(upper/lower) / log(1+stepPct/100) + 1 = levels）
+    //   产品 UI 实测路径「20 格 + 区间 79200-80200」由此派生 stepPct ≈ 0.0664%。
+    //   m2 守卫：levels 必须为正整数（避免 levels=2.5 之类非整数语义不合法的派生）
+    if (stepPct === null) {
+      const levels = this.readSemanticGridNumber(trigger.params, 'levels')
+      if (
+        levels !== null
+        && Number.isInteger(levels)
+        && levels >= 2
+        && lower !== null
+        && upper !== null
+        && lower > 0
+        && upper > lower
+      ) {
+        const ratio = Math.pow(upper / lower, 1 / (levels - 1))
+        stepPct = (ratio - 1) * 100
+      }
+    }
 
     if (
       lower === null
@@ -4314,7 +4335,12 @@ export class CanonicalSpecBuilderService {
       return null
     }
 
+    // m1 守卫：toFixed(4) 截断可能让极端窄区间 + 高 levels 派生的 stepPct → 0.0000
+    //   透过上面的 stepPct <= 0 守卫（守卫用的是 normalize 前的值）。normalize 后再 short-circuit。
     const normalizedStepPct = Number(stepPct.toFixed(4))
+    if (normalizedStepPct <= 0) {
+      return null
+    }
     return {
       rangeMin: lower,
       rangeMax: upper,
