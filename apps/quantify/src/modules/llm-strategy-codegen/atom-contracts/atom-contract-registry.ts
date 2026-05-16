@@ -208,6 +208,10 @@ const ATOM_BUCKETS = {
   'condition.sequence': 'trigger',
   'price.previous_extrema_retest': 'trigger',
   'risk.atr_take_profit': 'risk',
+  // Issue #1414：legacy risk atom 补注册（IR compiler 已硬编码 rule.condition.key 路径消费）
+  'risk.protective_exit': 'risk',
+  'risk.max_drawdown_pct': 'risk',
+  'risk.max_single_loss_pct': 'risk',
 } as const satisfies Record<AtomContractKey, AtomContractBucket>
 
 // =========================================================
@@ -294,6 +298,11 @@ const ATOM_FULFILLS_STRATEGY_PHASE = {
   'condition.sequence': ['entry', 'exit'],
   'price.previous_extrema_retest': ['entry'],
   'risk.atr_take_profit': ['risk', 'exit'],
+  // Issue #1414：legacy risk atom 补注册
+  //   protective_exit / max_drawdown_pct / max_single_loss_pct 均为 exit-time 判定的 risk 阶段 atom
+  'risk.protective_exit': ['risk', 'exit'],
+  'risk.max_drawdown_pct': ['risk', 'exit'],
+  'risk.max_single_loss_pct': ['risk', 'exit'],
 } as const satisfies Record<AtomContractKey, ReadonlyArray<'entry' | 'exit' | 'risk' | 'sizing' | 'context'>>
 
 export function getAtomFulfillsStrategyPhase(
@@ -385,6 +394,12 @@ const ATOM_ROLES = {
   'condition.sequence': ['predicate'],
   'price.previous_extrema_retest': ['predicate'],
   'risk.atr_take_profit': ['effect'],
+  // Issue #1414：legacy risk atom 补注册
+  //   protective_exit：信号触发 + 平仓副作用 → predicate + effect
+  //   max_drawdown_pct / max_single_loss_pct：阈值触及（predicate）+ 强平副作用（effect）
+  'risk.protective_exit': ['predicate', 'effect'],
+  'risk.max_drawdown_pct': ['predicate', 'effect'],
+  'risk.max_single_loss_pct': ['predicate', 'effect'],
 } as const satisfies Record<AtomContractKey, ReadonlyArray<'predicate' | 'effect'>>
 
 export function getAtomRoles(key: AtomContractKey): ReadonlyArray<'predicate' | 'effect'> {
@@ -479,6 +494,10 @@ const ATOM_PUBLIC_NAMES = {
   'condition.sequence': { zh: '条件序列', en: 'Condition sequence' },
   'price.previous_extrema_retest': { zh: '突破后回踩', en: 'Previous extrema retest' },
   'risk.atr_take_profit': { zh: 'ATR 动态止盈', en: 'ATR take profit' },
+  // Issue #1414：legacy risk atom 补注册
+  'risk.protective_exit': { zh: '保护性退出', en: 'Protective exit' },
+  'risk.max_drawdown_pct': { zh: '最大回撤护栏', en: 'Max drawdown guard' },
+  'risk.max_single_loss_pct': { zh: '单笔最大亏损护栏', en: 'Max single loss guard' },
 } as const satisfies Record<AtomContractKey, { zh: string; en: string }>
 
 export { ATOM_PUBLIC_NAMES }
@@ -4691,6 +4710,98 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
           mustOutput: 'risk.atr_take_profit + multiple=X；禁止与 risk.atr_stop 共用同一 atom，也不要回退到 risk.partial_take_profit。',
         }],
       },
+    },
+  },
+
+  // ── Issue #1414：legacy risk atom 补注册到 ATOM_CONTRACT_REGISTRY ──
+  //   3 个 atom 实际由 canonical-spec-builder / semantic-state-reducer 等遗留路径直接
+  //   构造并写入 rule.condition；下游 IR compiler 已硬编码 rule.condition.key 路径消费
+  //   （canonical-spec-v2-ir-compiler.service.ts L3025/L3049/L3172）。本注册仅为 lint
+  //   兜底（atom-keys/no-atom-key-literal）+ bucket / phase / role 元数据补全，
+  //   故意保持 corpus 全空 + intent 占位 + paramSlots 空 + readinessCheck=UNSUPPORTED_SKIP，
+  //   避免改写既有 dispatcher NL 抽取与 clarification 行为（参见 STUB_CORPUS_WHITELIST）。
+  'risk.protective_exit': {
+    corpus: { aliases: [], positiveExamples: [], negativeExamples: [], goldenUtterances: [] },
+    readinessCheck: COMMON_PIPELINE,
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) =>
+      '请补充保护性退出的具体条件（例如：最大回撤、单笔亏损、反向信号触发等）。',
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.protective_exit'],
+      paramRenderers: {},
+      summaryTemplate: (_params, locale) =>
+        locale === 'en' ? ATOM_PUBLIC_NAMES['risk.protective_exit'].en : '保护性退出',
+    },
+    surface: {
+      intent: {
+        keywords: ['__stub_risk_protective_exit__'] as const,
+        verbs: { fixed: ['__stub_risk_protective_exit__'] as const },
+      },
+      paramSlots: {},
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'risk.max_drawdown_pct': {
+    corpus: { aliases: [], positiveExamples: [], negativeExamples: [], goldenUtterances: [] },
+    readinessCheck: COMMON_PIPELINE,
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充最大回撤百分比（例如 10%）。',
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.max_drawdown_pct'],
+      paramRenderers: { valuePct: (v) => `${v}%` },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.max_drawdown_pct'].en
+        const valuePct = typeof params.valuePct === 'number' ? params.valuePct : 0
+        return `最大回撤护栏：组合回撤达到 ${valuePct}% 后停止开仓`
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['__stub_risk_max_drawdown_pct__'] as const,
+        verbs: { fixed: ['__stub_risk_max_drawdown_pct__'] as const },
+      },
+      paramSlots: {},
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'risk.max_single_loss_pct': {
+    corpus: { aliases: [], positiveExamples: [], negativeExamples: [], goldenUtterances: [] },
+    readinessCheck: COMMON_PIPELINE,
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充单笔最大亏损百分比（例如 2%）。',
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.max_single_loss_pct'],
+      paramRenderers: { valuePct: (v) => `${v}%` },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.max_single_loss_pct'].en
+        const valuePct = typeof params.valuePct === 'number' ? params.valuePct : 0
+        return `单笔最大亏损护栏：单笔亏损达到 ${valuePct}% 强制平仓`
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['__stub_risk_max_single_loss_pct__'] as const,
+        verbs: { fixed: ['__stub_risk_max_single_loss_pct__'] as const },
+      },
+      paramSlots: {},
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
     },
   },
 })
