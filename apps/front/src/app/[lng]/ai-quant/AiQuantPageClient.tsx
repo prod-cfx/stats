@@ -7,7 +7,7 @@ import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
 import type { AccountAiQuantStrategyDetail } from '@/lib/api'
-import { ArrowLeft, KeyRound, Sparkles } from 'lucide-react'
+import { ArrowLeft, Bot, KeyRound, MessageSquarePlus, Sparkles, X } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -249,6 +249,8 @@ export function AiQuantPageClient({
   const [backtestCapabilityRetryNonce, setBacktestCapabilityRetryNonce] = useState(0)
   const [codegenBusyConversationIds, setCodegenBusyConversationIds] = useState<string[]>([])
   const [rightPanelTab, setRightPanelTab] = useState<'logic' | 'backtest'>('logic')
+  const [mobileConversationSheetOpen, setMobileConversationSheetOpen] = useState(false)
+  const [mobilePanelSheetOpen, setMobilePanelSheetOpen] = useState(false)
   const isMountedRef = useRef(true)
   const activeConversationIdRef = useRef('')
   const previousActiveConversationIdRef = useRef<string>('')
@@ -1164,7 +1166,6 @@ export function AiQuantPageClient({
       conversations,
       locale: lng,
       sessionUserId: session?.userId,
-      locale: lng,
       setCodegenBusyConversationIds,
       setConversations,
       t,
@@ -1570,9 +1571,49 @@ export function AiQuantPageClient({
 
   if (!activeConversation) return null
 
+  const createNewConversation = () => {
+    const next = createConversation(t)
+    setConversations(prev => [next, ...prev])
+    setActiveConversationId(next.id)
+  }
+  const openMobilePanelTab = (tab: 'logic' | 'backtest') => {
+    setRightPanelTab(tab)
+    setMobilePanelSheetOpen(true)
+  }
+
   return (
-    <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-6 px-4 py-8 md:px-8">
-      <section className="flex items-center justify-between gap-3">
+    <main className="mx-auto flex w-full flex-1 flex-col bg-[#f5f8fb] md:max-w-[1120px] md:gap-6 md:bg-transparent md:px-8 md:py-8">
+      <section className="sticky top-0 z-30 flex h-16 items-center justify-center border-b border-[#d9e2ea] bg-white px-12 md:hidden">
+        <Link
+          href={returnHref}
+          aria-label={lng === 'en' ? 'Back' : '返回'}
+          className="absolute left-4 inline-flex h-9 w-9 items-center justify-center text-[#111827]"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+        <div className="min-w-0 text-center leading-none">
+          <div className="flex items-center justify-center gap-1.5">
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-[#eef2ff] text-primary">
+              <Bot className="h-3.5 w-3.5" />
+            </span>
+            <span className="text-[13px] font-semibold text-[#111827]">{t('aiQuant.chatTitle')}</span>
+          </div>
+          <div className="mt-1 truncate text-[11px] font-medium leading-none text-[#8a94a6]">
+            {activeConversation.title}
+          </div>
+        </div>
+        <button
+          type="button"
+          data-testid="mobile-create-conversation-header"
+          onClick={() => setMobileConversationSheetOpen(true)}
+          aria-label={t('aiQuant.conversationSelector', { defaultValue: '选择会话' })}
+          className="absolute right-4 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#c8dde1] bg-[#eef9fa] text-[#3f6fff] shadow-sm"
+        >
+          <MessageSquarePlus className="h-5 w-5" />
+        </button>
+      </section>
+
+      <section className="hidden items-center justify-between gap-3 md:flex">
         <Link
           href={returnHref}
           className="inline-flex w-fit items-center gap-2 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
@@ -1600,7 +1641,7 @@ export function AiQuantPageClient({
         </div>
       </section>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="hidden flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:flex">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">
             {t('aiQuant.title')}
@@ -1638,15 +1679,14 @@ export function AiQuantPageClient({
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-[280px_minmax(0,1fr)]">
+      <div className="grid min-h-0 gap-0 md:gap-4 md:grid-cols-[280px_minmax(0,1fr)]">
         <ConversationSidebar
           items={conversations.map(x => ({ id: x.id, title: x.title, updatedAt: x.updatedAt }))}
           activeId={activeConversation.id}
-          onCreate={() => {
-            const next = createConversation(t)
-            setConversations(prev => [next, ...prev])
-            setActiveConversationId(next.id)
-          }}
+          mobileTrigger="external"
+          mobileSheetOpen={mobileConversationSheetOpen}
+          onMobileSheetOpenChange={setMobileConversationSheetOpen}
+          onCreate={createNewConversation}
           onSwitch={setActiveConversationId}
           onRename={(id, title) => {
             setConversations(prev =>
@@ -1658,7 +1698,7 @@ export function AiQuantPageClient({
           }}
         />
 
-        <div className="min-w-0 space-y-4">
+        <div className="min-w-0 space-y-0 md:space-y-4">
           <QuantChatPanel
             key={activeConversation.id}
             messages={activeConversation.messages}
@@ -1704,13 +1744,19 @@ export function AiQuantPageClient({
             onSend={onSend}
             onRunBacktest={onRunBacktest}
             canRunBacktest={canRunBacktest}
+            locale={lng}
+            mobileMode
+            mobileApiConfigHref={apiConfigHref}
+            mobilePlazaHref={`/${lng}/ai-quant/plaza`}
+            mobilePanelTab={rightPanelTab}
+            onMobilePanelTabChange={openMobilePanelTab}
           />
 
           {activeConversation.validationReport && !activeConversation.validationReport.ok && (
             <SemanticGraphValidationAlert validationReport={activeConversation.validationReport} />
           )}
 
-          <div data-testid="ai-quant-right-panel" className="space-y-3">
+          <div data-testid="ai-quant-right-panel" className="hidden space-y-3 md:block">
             <div className="flex flex-wrap items-center gap-2">
               {[
                 { key: 'logic' as const, label: t('aiQuant.messages.graphTitle') },
@@ -1730,6 +1776,12 @@ export function AiQuantPageClient({
                 </button>
               ))}
             </div>
+
+            {rightPanelTab === 'logic' && activeConversation.backtestResult && (
+              <div data-testid="deployment-state" className="sr-only">
+                {deploymentState}
+              </div>
+            )}
 
             {rightPanelTab === 'logic'
               ? activeConversation.logicGraph && displayLogicGraph
@@ -1837,6 +1889,166 @@ export function AiQuantPageClient({
           </div>
         </div>
       </div>
+
+      {mobilePanelSheetOpen && (
+        <div
+          className="cf-ios-sheet-backdrop fixed inset-0 z-[80] flex items-end md:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label={
+            rightPanelTab === 'logic'
+              ? t('aiQuant.strategyConfirmation', { defaultValue: '策略确认' })
+              : t('aiQuant.backtestResult')
+          }
+          onClick={() => setMobilePanelSheetOpen(false)}
+        >
+          <div
+            className="cf-ios-sheet-panel max-h-[82dvh] w-full overflow-hidden p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="mb-2 flex items-start gap-2">
+              <div className="grid flex-1 grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRightPanelTab('logic')}
+                  className={`min-h-9 rounded-xl border px-3 text-xs font-bold ${
+                    rightPanelTab === 'logic'
+                      ? 'border-primary bg-primary text-white'
+                      : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-[color:var(--cf-text-strong)]'
+                  }`}
+                >
+                  {t('aiQuant.strategyConfirmation', { defaultValue: '策略确认' })}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRightPanelTab('backtest')}
+                  className={`min-h-9 rounded-xl border px-3 text-xs font-bold ${
+                    rightPanelTab === 'backtest'
+                      ? 'border-primary bg-primary text-white'
+                      : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-[color:var(--cf-text-strong)]'
+                  }`}
+                >
+                  {t('aiQuant.backtestResult')}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobilePanelSheetOpen(false)}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
+                aria-label={t('common.close', { defaultValue: 'Close' })}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="max-h-[calc(82dvh-4.75rem)] overflow-y-auto">
+              {rightPanelTab === 'logic'
+                ? activeConversation.logicGraph && displayLogicGraph
+                  ? (
+                      <DisplayLogicGraphPreview
+                        graph={displayLogicGraph}
+                        confirmDisabled={
+                          codegenBusy ||
+                          activeConversation.logicGraph.status === 'confirmed' ||
+                          !semanticViewConfirmable
+                        }
+                        confirmed={activeConversation.logicGraph.status === 'confirmed'}
+                        publishedSnapshotId={activePublishedSnapshotId}
+                        onConfirm={() => {
+                          confirmCurrentLogicGraph({
+                            conversationId: activeConversation.id,
+                            params: activeConversation.params,
+                            sessionId: activeConversation.llmCodegenSessionId,
+                            message: t('aiQuant.messages.confirmGenerate', {
+                              defaultValue: 'Confirm code generation',
+                            }),
+                          })
+                        }}
+                        onRevise={requestLogicGraphRevision}
+                      />
+                    )
+                  : activeConversation.logicGraph
+                    ? (
+                        <LogicGraphPreview
+                          graph={activeConversation.logicGraph}
+                          confirmDisabled={
+                            codegenBusy ||
+                            activeConversation.logicGraph.status === 'confirmed' ||
+                            !semanticViewConfirmable
+                          }
+                          publishedSnapshotId={activePublishedSnapshotId}
+                          onConfirm={() => {
+                            confirmCurrentLogicGraph({
+                              conversationId: activeConversation.id,
+                              params: activeConversation.params,
+                              sessionId: activeConversation.llmCodegenSessionId,
+                              message: t('aiQuant.messages.confirmGenerate', {
+                                defaultValue: 'Confirm code generation',
+                              }),
+                            })
+                          }}
+                          onRevise={requestLogicGraphRevision}
+                        />
+                      )
+                    : (
+                        <section className="rounded-2xl bg-[color:var(--cf-surface)] p-5 text-sm text-[color:var(--cf-muted)]">
+                          {t('aiQuant.messages.logicGraphEmpty', {
+                            defaultValue: '描述策略想法后，逻辑图会显示在这里。',
+                          })}
+                        </section>
+                      )
+                : activeConversation.backtestResult
+                  ? (
+                      <BacktestSummaryCard
+                        result={activeConversation.backtestResult}
+                        marketType={activeBacktestMarketType}
+                        canDeploy={canDeploy}
+                        deploymentState={deploymentState}
+                        deployLabel={deployLabel}
+                        drawdownLimited
+                        onViewRunningStrategy={deploymentState === 'running' ? viewRunningStrategy : undefined}
+                        onOpenFullScreen={() => {
+                          const currentBacktest = activeConversation.backtestResult
+                          if (!currentBacktest) {
+                            return
+                          }
+                          const search = new URLSearchParams()
+                          search.set('symbol', currentBacktest.symbol ?? activeConversation.params.symbol)
+                          if (currentBacktest.startAt) {
+                            search.set('startAt', currentBacktest.startAt)
+                          }
+                          if (currentBacktest.endAt) {
+                            search.set('endAt', currentBacktest.endAt)
+                          }
+                          router.push(`/${lng}/ai-quant/backtest/${currentBacktest.id}?${search.toString()}`)
+                        }}
+                        onDeploy={() => {
+                          if (deploymentState === 'running' || deploymentState === 'unknown') {
+                            return
+                          }
+                          setMobilePanelSheetOpen(false)
+                          setDeployRequestId(createDeployRequestId())
+                          const preferredLeverage = resolvePreferredDeployLeverage(activeConversation)
+                          setSelectedDeployLeverage(
+                            activePublishedDeployTruth?.marketType === 'perp'
+                              && preferredLeverage !== null
+                              ? preferredLeverage
+                              : null,
+                          )
+                          setDeployOpen(true)
+                        }}
+                      />
+                    )
+                  : (
+                      <section className="rounded-2xl bg-[color:var(--cf-surface)] p-5 text-sm text-[color:var(--cf-muted)]">
+                        {t('aiQuant.messages.backtestResultEmpty', {
+                          defaultValue: '暂无回测结果。确认逻辑图并开始回测后，结果会显示在这里。',
+                        })}
+                      </section>
+                    )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <RunningStrategyEditGuardDialog
         open={editGuardOpen}

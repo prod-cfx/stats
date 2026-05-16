@@ -326,6 +326,15 @@ describe('AiQuantPageClient deploy guard', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot> | null
 
+  async function showBacktestResultTab() {
+    await act(async () => {
+      Array.from(container.querySelectorAll('button'))
+        .find(button => button.textContent?.includes('aiQuant.backtestResult'))
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+  }
+
   beforeEach(() => {
     ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
     container = document.createElement('div')
@@ -371,6 +380,8 @@ describe('AiQuantPageClient deploy guard', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     await act(async () => {
       container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
@@ -378,6 +389,8 @@ describe('AiQuantPageClient deploy guard', () => {
     await act(async () => {
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container.querySelector('[data-testid="confirm-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -401,6 +414,8 @@ describe('AiQuantPageClient deploy guard', () => {
       await Promise.resolve()
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     const deployButton = container.querySelector('[data-testid="open-deploy"]') as HTMLButtonElement | null
     expect(container.querySelector('[data-testid="deployment-state"]')?.textContent).toBe('running')
@@ -427,6 +442,8 @@ describe('AiQuantPageClient deploy guard', () => {
       await Promise.resolve()
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     const deployButton = container.querySelector('[data-testid="open-deploy"]') as HTMLButtonElement | null
     expect(container.querySelector('[data-testid="deployment-state"]')?.textContent).toBe('unknown')
@@ -464,6 +481,8 @@ describe('AiQuantPageClient deploy guard', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     const deployButton = container.querySelector('[data-testid="open-deploy"]') as HTMLButtonElement | null
     expect(container.querySelector('[data-testid="deployment-state"]')?.textContent).toBe('not_deployed')
     expect(deployButton?.textContent).toBe('aiQuant.deploy')
@@ -492,6 +511,8 @@ describe('AiQuantPageClient deploy guard', () => {
       await Promise.resolve()
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     const deployButton = container.querySelector('[data-testid="open-deploy"]') as HTMLButtonElement | null
     expect(container.querySelector('[data-testid="deployment-state"]')?.textContent).toBe('not_deployed')
@@ -522,6 +543,8 @@ describe('AiQuantPageClient deploy guard', () => {
     await act(async () => {
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -578,6 +601,8 @@ describe('AiQuantPageClient deploy guard', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     await act(async () => {
       container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
@@ -631,6 +656,8 @@ describe('AiQuantPageClient deploy guard', () => {
     await act(async () => {
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -688,6 +715,8 @@ describe('AiQuantPageClient deploy guard', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     await act(async () => {
       container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
@@ -729,6 +758,8 @@ describe('AiQuantPageClient deploy guard', () => {
     await act(async () => {
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -808,6 +839,8 @@ describe('AiQuantPageClient deploy guard', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     await act(async () => {
       container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
@@ -860,6 +893,8 @@ describe('AiQuantPageClient deploy guard', () => {
     await act(async () => {
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -916,6 +951,8 @@ describe('AiQuantPageClient deploy guard', () => {
     await act(async () => {
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -1035,6 +1072,8 @@ describe('AiQuantPageClient deploy guard', () => {
     await act(async () => {
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))

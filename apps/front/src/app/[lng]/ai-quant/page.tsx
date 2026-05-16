@@ -22,13 +22,17 @@ export async function generateMetadata({
 
 export default function AiQuantPage() {
   return (
-    <div className="flex min-h-screen flex-col bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
-      <Navbar />
+    <div className="flex min-h-screen flex-col bg-[#f5f8fb] text-[color:var(--cf-text)] md:bg-[color:var(--cf-bg)]">
+      <div className="hidden md:block">
+        <Navbar />
+      </div>
       <AiQuantPageClient
         deployVersion={AI_QUANT_DEPLOY_VERSION}
         serverOwnedConversations={AI_QUANT_SERVER_OWNED_CONVERSATIONS}
       />
-      <Footer />
+      <div className="hidden md:block">
+        <Footer />
+      </div>
     </div>
   )
 }

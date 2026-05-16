@@ -357,6 +357,15 @@ describe('AiQuantPageClient backtest jobs integration', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot> | null
 
+  async function showBacktestResultTab() {
+    await act(async () => {
+      Array.from(container.querySelectorAll('button'))
+        .find(button => button.textContent?.includes('aiQuant.backtestResult'))
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+  }
+
   beforeEach(() => {
     ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
     container = document.createElement('div')
@@ -415,6 +424,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     await act(async () => {
       container
         .querySelector('[data-testid="run-backtest"]')
@@ -455,6 +466,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container
@@ -502,6 +515,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container
@@ -553,6 +568,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     await act(async () => {
       container
         .querySelector('[data-testid="run-backtest"]')
@@ -591,6 +608,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     await act(async () => {
       container
         .querySelector('[data-testid="run-backtest"]')
@@ -622,6 +641,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     await act(async () => {
       container
         .querySelector('[data-testid="run-backtest"]')
@@ -641,6 +662,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container
@@ -669,6 +692,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     await act(async () => {
       container
         .querySelector('[data-testid="run-backtest"]')
@@ -696,6 +721,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     await act(async () => {
       container
         .querySelector('[data-testid="run-backtest"]')
@@ -722,6 +749,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     await act(async () => {
       container
         .querySelector('[data-testid="run-backtest"]')
@@ -745,6 +774,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container
@@ -795,6 +826,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container
@@ -908,6 +941,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
     let summary: Element | null = null
     for (let attempt = 0; attempt < 3 && !summary; attempt += 1) {
       await act(async () => {
@@ -992,6 +1027,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     await act(async () => {
       root?.render(<AiQuantPageClient serverOwnedConversations />)
     })
+
+    await showBacktestResultTab()
 
     expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('btjob-1')
     expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('deployable')
@@ -1205,6 +1242,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient serverOwnedConversations />)
     })
 
+    await showBacktestResultTab()
+
     const summary = container.querySelector('[data-testid="backtest-summary"]')?.textContent
     expect(summary).toContain('btjob-1')
     expect(summary).toContain('config_changed')
@@ -1319,6 +1358,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('btjob-existing')
 
     await act(async () => {
@@ -1340,6 +1381,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container
@@ -1370,6 +1413,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container
@@ -1464,6 +1509,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     await act(async () => {
       container
         .querySelector('[data-testid="run-backtest"]')
@@ -1507,6 +1554,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     await act(async () => {
       container
         .querySelector('[data-testid="run-backtest"]')
@@ -1547,6 +1596,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container
@@ -1608,6 +1659,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container
@@ -1683,6 +1736,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     await act(async () => {
       container
         .querySelector('[data-testid="run-backtest"]')
@@ -1735,6 +1790,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container
@@ -1852,6 +1909,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     await act(async () => {
       container
         .querySelector('[data-testid="run-backtest"]')
@@ -1889,6 +1948,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container
@@ -1938,6 +1999,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
+    await showBacktestResultTab()
+
     await act(async () => {
       container
         .querySelector('[data-testid="run-backtest"]')
@@ -1954,6 +2017,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       const button = container.querySelector('[data-testid="run-backtest"]')
@@ -1974,6 +2039,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container
@@ -2471,6 +2538,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
     })
+
+    await showBacktestResultTab()
 
     await act(async () => {
       container

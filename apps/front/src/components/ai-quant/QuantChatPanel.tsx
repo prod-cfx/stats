@@ -2,7 +2,8 @@
 
 import type { DynamicParamSchema, DynamicParamValues } from './dynamic-params'
 import type { LlmClarificationGate, LlmPublicationGate } from '@/lib/api'
-import { ArrowUp, Bot, Check, Copy, Play, Settings2, User } from 'lucide-react'
+import { ArrowDown, ArrowUp, BarChart3, Bot, Check, Copy, KeyRound, Play, Settings2, Sparkles, User } from 'lucide-react'
+import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
@@ -31,6 +32,12 @@ interface QuantChatPanelProps {
   onSend: (input: string) => void
   onRunBacktest: () => void
   canRunBacktest?: boolean
+  locale?: 'zh' | 'en'
+  mobileMode?: boolean
+  mobileApiConfigHref?: string
+  mobilePlazaHref?: string
+  mobilePanelTab?: 'logic' | 'backtest'
+  onMobilePanelTabChange?: (tab: 'logic' | 'backtest') => void
 }
 
 function getCodeLanguage(className?: string): string {
@@ -50,8 +57,11 @@ interface QuantCodeBlockProps {
   className?: string
   code: string
   copied: boolean
+  expanded: boolean
   language: string
   onCopy: () => void
+  onToggleExpanded: () => void
+  locale?: 'zh' | 'en'
   t: (key: string, options?: { defaultValue?: string }) => string
   rest: Record<string, unknown>
 }
@@ -61,12 +71,14 @@ function QuantCodeBlock({
   className,
   code,
   copied,
+  expanded,
   language,
   onCopy,
+  onToggleExpanded,
+  locale,
   t,
   rest,
 }: QuantCodeBlockProps) {
-  const [expanded, setExpanded] = useState(false)
   const lineCount = code.split(/\r?\n/).length
   const canCollapse = lineCount > COLLAPSED_CODE_LINE_LIMIT
   const collapsed = canCollapse && !expanded
@@ -112,14 +124,17 @@ function QuantCodeBlock({
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[color:var(--cf-bg)] to-transparent" />
         )}
       </div>
-      {collapsed && (
+      {canCollapse && (
         <button
           type="button"
-          onClick={() => setExpanded(true)}
+          onClick={onToggleExpanded}
           className="w-full border-t border-[color:var(--cf-border)] bg-[color:var(--cf-surface-active)] px-3 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)]"
           aria-controls={blockId}
+          aria-expanded={expanded}
         >
-          {t('aiQuant.viewAllCode', { defaultValue: '查看全部' })}
+          {expanded
+            ? locale === 'en' ? 'Collapse' : '收起'
+            : locale === 'en' ? 'View all' : '查看全部'}
         </button>
       )}
     </div>
@@ -339,13 +354,23 @@ export function QuantChatPanel({
   onSend,
   onRunBacktest,
   canRunBacktest = true,
+  locale,
+  mobileMode = false,
+  mobileApiConfigHref,
+  mobilePlazaHref,
+  mobilePanelTab = 'logic',
+  onMobilePanelTabChange,
 }: QuantChatPanelProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const resolvedLocale = locale ?? ((i18n?.resolvedLanguage ?? i18n?.language ?? 'zh').startsWith('en') ? 'en' : 'zh')
+  const isZh = resolvedLocale === 'zh'
   const [input, setInput] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null)
+  const [expandedCodeBlocks, setExpandedCodeBlocks] = useState<Record<string, boolean>>({})
   const [submittedBacktestSettings, setSubmittedBacktestSettings] = useState(false)
   const [touchedBacktestFields, setTouchedBacktestFields] = useState<Record<string, boolean>>({})
+  const [showScrollToLatest, setShowScrollToLatest] = useState(false)
   const [backtestDraftValues, setBacktestDraftValues] = useState<DynamicParamValues>(() =>
     buildBacktestDraftValues(paramValues),
   )
@@ -383,6 +408,19 @@ export function QuantChatPanel({
     if (!el) return
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [messages])
+
+  const updateScrollToLatestVisibility = () => {
+    const el = chatScrollRef.current
+    if (!el) return
+    setShowScrollToLatest(el.scrollHeight - el.scrollTop - el.clientHeight > 140)
+  }
+
+  const scrollToLatest = () => {
+    const el = chatScrollRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    setShowScrollToLatest(false)
+  }
 
   useEffect(() => {
     setBacktestDraftValues(buildBacktestDraftValues(paramValues))
@@ -434,10 +472,24 @@ export function QuantChatPanel({
     }
   }
 
+  const toggleCodeBlockExpanded = (blockId: string) => {
+    setExpandedCodeBlocks(prev => ({
+      ...prev,
+      [blockId]: !prev[blockId],
+    }))
+  }
+
   return (
-    <section className="flex min-h-[520px] max-h-[calc(100dvh-7rem)] min-w-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm md:h-[calc(100vh-200px)] md:max-h-none md:min-h-[600px]">
+    <section
+      className={
+        mobileMode
+          ? 'relative flex h-[calc(100dvh-64px)] min-h-0 min-w-0 flex-col overflow-hidden bg-[#f5f8fb] md:h-[calc(100vh-200px)] md:min-h-[600px] md:rounded-2xl md:border md:border-[color:var(--cf-border)] md:bg-[color:var(--cf-surface)] md:shadow-sm'
+          : 'relative flex min-h-[520px] max-h-[calc(100dvh-7rem)] min-w-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm md:h-[calc(100vh-200px)] md:max-h-none md:min-h-[600px]'
+      }
+      data-mobile-mode={mobileMode ? 'true' : undefined}
+    >
       {/* Header / Toolbar */}
-      <div className="flex items-center gap-3 border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-active)] px-4 py-3">
+      <div className={`${mobileMode ? 'hidden md:flex' : 'flex'} items-center gap-3 border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-active)] px-4 py-3`}>
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <div className="bg-primary/10 text-primary flex h-8 w-8 items-center justify-center rounded-lg">
             <Bot className="h-5 w-5" />
@@ -673,9 +725,10 @@ export function QuantChatPanel({
       {/* Chat Area */}
       <div
         ref={chatScrollRef}
-        className="min-w-0 flex-1 overflow-y-auto bg-[color:var(--cf-bg)] p-4"
+        className={mobileMode ? 'min-w-0 flex-1 overflow-y-auto bg-[#f5f8fb] px-4 py-3' : 'min-w-0 flex-1 overflow-y-auto bg-[color:var(--cf-bg)] p-4'}
+        onScroll={updateScrollToLatestVisibility}
       >
-        <div className="space-y-6">
+        <div className={mobileMode ? 'space-y-5 pb-2' : 'space-y-6'}>
           {publicationGate && <PublicationGateCard gate={publicationGate} />}
           {messages.map(message => (
             <div
@@ -683,7 +736,7 @@ export function QuantChatPanel({
               className={`flex min-w-0 gap-3 ${message.role === 'assistant' ? 'justify-start' : 'justify-end'}`}
             >
               {message.role === 'assistant' && (
-                <div className="bg-primary/10 text-primary flex h-8 w-8 shrink-0 items-center justify-center rounded-full">
+                <div className={`${mobileMode ? 'bg-[#eef2ff] text-primary' : 'bg-primary/10 text-primary'} flex h-8 w-8 shrink-0 items-center justify-center rounded-full`}>
                   <Bot className="h-5 w-5" />
                 </div>
               )}
@@ -692,7 +745,7 @@ export function QuantChatPanel({
                 data-testid={`quant-message-bubble-${message.role}`}
                 className={`max-w-[min(100%,42rem)] min-w-0 break-words rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
                   message.role === 'assistant'
-                    ? 'rounded-tl-none border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)] [&_code]:rounded [&_code]:bg-[color:var(--cf-bg)] [&_code]:px-1.5 [&_code]:py-0.5'
+                    ? `${mobileMode ? 'border-[#d9e2ea] bg-white text-[#374151]' : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]'} rounded-tl-none border [&_code]:rounded [&_code]:bg-[color:var(--cf-bg)] [&_code]:px-1.5 [&_code]:py-0.5`
                     : 'bg-primary rounded-tr-none text-white'
                 }`}
               >
@@ -734,8 +787,11 @@ export function QuantChatPanel({
                                   className={className}
                                   code={normalizedText}
                                   copied={copiedCodeId === blockId}
+                                  expanded={Boolean(expandedCodeBlocks[blockId])}
                                   language={language}
+                                  locale={resolvedLocale}
                                   onCopy={() => copyCode(normalizedText, blockId)}
+                                  onToggleExpanded={() => toggleCodeBlockExpanded(blockId)}
                                   t={t}
                                   rest={rest}
                                 />
@@ -754,7 +810,7 @@ export function QuantChatPanel({
               </div>
 
               {message.role === 'user' && (
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[color:var(--cf-surface-active)] text-[color:var(--cf-text-strong)]">
+                <div className={`${mobileMode ? 'bg-white text-[#111827]' : 'bg-[color:var(--cf-surface-active)] text-[color:var(--cf-text-strong)]'} flex h-8 w-8 shrink-0 items-center justify-center rounded-full`}>
                   <User className="h-5 w-5" />
                 </div>
               )}
@@ -763,12 +819,98 @@ export function QuantChatPanel({
         </div>
       </div>
 
+      {mobileMode && showScrollToLatest && (
+        <button
+          type="button"
+          onClick={scrollToLatest}
+          aria-label={t('aiQuant.scrollToLatest', { defaultValue: '回到最新对话' })}
+          className="absolute left-1/2 bottom-[148px] z-20 inline-flex h-10 w-10 -translate-x-1/2 items-center justify-center rounded-full border border-[#d8dee8] bg-white/95 text-[#111827] shadow-[0_8px_22px_rgba(15,23,42,0.18)] backdrop-blur"
+        >
+          <ArrowDown className="h-5 w-5" />
+        </button>
+      )}
+
       {/* Input Area */}
-      <div className="border-t border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4">
-        <div className="focus-within:border-primary focus-within:ring-primary relative rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] shadow-sm focus-within:ring-1">
+      <div className={mobileMode ? 'border-t border-[#d7dee7] bg-white px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]' : 'border-t border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4'}>
+        {mobileMode && (
+          <div
+            data-testid="quant-mobile-skill-toolbar"
+            className="mb-2 flex items-center gap-2 overflow-x-auto rounded-2xl bg-white px-1 py-1 md:hidden"
+          >
+            <button
+              type="button"
+              onClick={() => setShowSettings(!showSettings)}
+              className={`inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-[11px] font-semibold shadow-sm ${
+                showSettings
+                  ? 'border-[#3f6fff] bg-[#eef4ff] text-[#1f4fff]'
+                  : 'border-[#d8dee8] bg-white text-[#1f2937]'
+              }`}
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+              {isZh ? '参数配置' : 'Parameters'}
+            </button>
+            <button
+              type="button"
+              data-testid="run-backtest-mobile"
+              onClick={onRunBacktest}
+              disabled={!canRunBacktest || hasDraftChanges}
+              className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#3f6fff] bg-[#3f6fff] px-2.5 text-[11px] font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:border-[#d7dee7] disabled:bg-[#d7dee7] disabled:text-[#6b7280]"
+            >
+              <Play className="h-3.5 w-3.5 fill-current" />
+              {isZh ? '开始回测' : 'Start Backtest'}
+            </button>
+            <button
+              type="button"
+              onClick={() => onMobilePanelTabChange?.('logic')}
+              className={`inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-[12px] font-semibold shadow-sm ${
+                mobilePanelTab === 'logic'
+                  ? 'border-[#b8c4d6] bg-[#f8fbff] text-[#111827]'
+                  : 'border-[#d8dee8] bg-white text-[#374151]'
+              }`}
+            >
+              <Check className="h-3.5 w-3.5" />
+              {isZh ? '策略确认' : 'Strategy'}
+            </button>
+            <button
+              type="button"
+              onClick={() => onMobilePanelTabChange?.('backtest')}
+              className={`inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-[12px] font-semibold shadow-sm ${
+                mobilePanelTab === 'backtest'
+                  ? 'border-[#b8c4d6] bg-[#f8fbff] text-[#111827]'
+                  : 'border-[#d8dee8] bg-white text-[#374151]'
+              }`}
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              {isZh ? '回测结果' : 'Backtest Result'}
+            </button>
+            {mobilePlazaHref && (
+              <Link
+                href={mobilePlazaHref}
+                data-testid="quant-mobile-plaza-link"
+                className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#d8dee8] bg-white px-2.5 text-[11px] font-semibold text-[#1f2937] shadow-sm"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                {isZh ? '策略广场' : 'Strategy Plaza'}
+              </Link>
+            )}
+            {mobileApiConfigHref && (
+              <Link
+                href={mobileApiConfigHref}
+                data-testid="quant-mobile-api-link"
+                className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#d8dee8] bg-white px-2.5 text-[11px] font-semibold text-[#1f2937] shadow-sm"
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                {isZh ? '交易API' : 'Trading API'}
+              </Link>
+            )}
+          </div>
+        )}
+        <div className={`focus-within:border-primary focus-within:ring-primary relative border shadow-sm focus-within:ring-1 ${mobileMode ? 'rounded-xl border-[#d9e2ea] bg-white' : 'rounded-xl border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]'}`}>
           <textarea
-            className="max-h-[120px] min-h-[50px] w-full resize-none bg-transparent px-4 py-3 pr-12 text-sm text-[color:var(--cf-text)] outline-none placeholder:text-[color:var(--cf-muted)]"
-            placeholder={t('aiQuant.inputPlaceholder')}
+            className={`max-h-[120px] min-h-[50px] w-full resize-none bg-transparent px-4 py-3 pr-12 text-sm outline-none ${mobileMode ? 'text-[#374151] placeholder:text-[#7b8794]' : 'text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)]'}`}
+            placeholder={isZh
+              ? '描述你的交易策略，例如：3分钟跌1%买入，15分钟涨2%卖出...'
+              : t('aiQuant.inputPlaceholder')}
             value={input}
             onChange={event => setInput(event.target.value)}
             onKeyDown={event => {
@@ -787,8 +929,10 @@ export function QuantChatPanel({
             <ArrowUp className="h-5 w-5" />
           </button>
         </div>
-        <p className="mt-2 text-center text-xs text-[color:var(--cf-muted)]">
-          {t('aiQuant.messages.aiDisclaimer')}
+        <p className={`mt-2 text-center text-xs ${mobileMode ? 'text-[#6b7280]' : 'text-[color:var(--cf-muted)]'}`}>
+          {isZh
+            ? 'AI 内容仅供参考，请务必在实盘前进行充分回测。'
+            : t('aiQuant.messages.aiDisclaimer')}
         </p>
       </div>
     </section>

@@ -47,14 +47,18 @@ jest.mock('remark-gfm', () => ({
 jest.mock('lucide-react', () => {
   const Icon = () => null
   return {
+    ArrowDown: Icon,
     ArrowUp: Icon,
+    BarChart3: Icon,
     Bot: Icon,
     Check: Icon,
     ChevronsUpDown: Icon,
     Copy: Icon,
+    KeyRound: Icon,
     Play: Icon,
     Search: Icon,
     Settings2: Icon,
+    Sparkles: Icon,
     User: Icon,
   }
 })
@@ -177,6 +181,34 @@ describe('QuantChatPanel range settings', () => {
     expect(assistantBubble?.className).toContain('break-words')
   })
 
+  it('keeps the skill toolbar mobile-only', async () => {
+    await act(async () => {
+      root?.render(
+        <QuantChatPanel
+          messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
+          paramSchema={null}
+          paramValues={baseParams}
+          onParamChange={() => {}}
+          onSend={() => {}}
+          onRunBacktest={() => {}}
+          onConfirmBacktestParams={() => {}}
+          mobileMode
+          mobileApiConfigHref="/zh/account?tab=settings#exchange-api"
+          mobilePlazaHref="/zh/ai-quant/plaza"
+        />,
+      )
+    })
+
+    expect(container.querySelector('[data-testid="quant-mobile-skill-toolbar"]')?.className).toContain('md:hidden')
+    expect(container.querySelector('[data-testid="quant-mobile-plaza-link"]')?.getAttribute('href')).toBe('/zh/ai-quant/plaza')
+    expect(container.querySelector('[data-testid="quant-mobile-api-link"]')?.getAttribute('href')).toBe('/zh/account?tab=settings#exchange-api')
+    const skillItems = Array.from(
+      container.querySelector('[data-testid="quant-mobile-skill-toolbar"]')?.children ?? [],
+    )
+    expect(skillItems.at(-2)?.getAttribute('data-testid')).toBe('quant-mobile-plaza-link')
+    expect(skillItems.at(-1)?.getAttribute('data-testid')).toBe('quant-mobile-api-link')
+  })
+
   it('collapses generated strategy code until the user views all', async () => {
     const codeLines = Array.from({ length: 20 }, (_, index) => `const line${index + 1} = ${index + 1}`).join('\n')
 
@@ -200,10 +232,10 @@ describe('QuantChatPanel range settings', () => {
 
     const pre = container.querySelector('pre')
     expect(pre?.className).toContain('max-h-48')
-    expect(container.textContent).toContain('aiQuant.viewAllCode')
+    expect(container.textContent).toContain('查看全部')
 
     const viewAllButton = Array.from(container.querySelectorAll('button')).find(button =>
-      button.textContent?.includes('aiQuant.viewAllCode'),
+      button.textContent?.includes('查看全部'),
     )
     expect(viewAllButton).toBeTruthy()
 
@@ -212,7 +244,14 @@ describe('QuantChatPanel range settings', () => {
     })
 
     expect(pre?.className).not.toContain('max-h-48')
-    expect(container.textContent).not.toContain('aiQuant.viewAllCode')
+    expect(container.textContent).toContain('收起')
+
+    await act(async () => {
+      viewAllButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(pre?.className).toContain('max-h-48')
+    expect(container.textContent).toContain('查看全部')
   })
 
   it('shows custom datetime inputs and applies them after confirm', async () => {

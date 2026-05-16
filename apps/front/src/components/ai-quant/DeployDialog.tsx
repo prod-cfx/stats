@@ -97,7 +97,7 @@ export function DeployDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4 py-4" onClick={handleDialogClose}>
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 px-4 py-4" onClick={handleDialogClose}>
       <div
         className="max-h-[calc(100dvh-2rem)] w-full max-w-[520px] overflow-y-auto rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 sm:p-5"
         onClick={event => event.stopPropagation()}
