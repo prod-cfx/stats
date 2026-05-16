@@ -54,4 +54,11 @@ describe('issue #1414 — legacy risk atom 注册覆盖', () => {
       expect(ATOM_CONTRACT_REGISTRY[key].classifier.supportStatus).toBe('supported_executable')
     }
   })
+
+  it('classifier 不带 executableSinceVersion（避免 runtime-version-gate 把老策略此 atom 强制降级为 recognized_unsupported）', () => {
+    for (const key of LEGACY_RISK_KEYS) {
+      const cls = ATOM_CONTRACT_REGISTRY[key].classifier as { executableSinceVersion?: string }
+      expect(cls.executableSinceVersion).toBeUndefined()
+    }
+  })
 })

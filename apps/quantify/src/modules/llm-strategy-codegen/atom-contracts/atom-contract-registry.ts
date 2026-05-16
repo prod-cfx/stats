@@ -4718,8 +4718,13 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   //   构造并写入 rule.condition；下游 IR compiler 已硬编码 rule.condition.key 路径消费
   //   （canonical-spec-v2-ir-compiler.service.ts L3025/L3049/L3172）。本注册仅为 lint
   //   兜底（atom-keys/no-atom-key-literal）+ bucket / phase / role 元数据补全，
-  //   故意保持 corpus 全空 + intent 占位 + paramSlots 空 + readinessCheck=UNSUPPORTED_SKIP，
+  //   故意保持 corpus 全空 + intent 占位 + paramSlots 空 + readinessCheck=COMMON_PIPELINE，
   //   避免改写既有 dispatcher NL 抽取与 clarification 行为（参见 STUB_CORPUS_WHITELIST）。
+  //
+  //   classifier 不带 executableSinceVersion——这 3 个 atom 走 STANDALONE_ATOM_MAP 路径
+  //   （早期 supported_executable），无新行为翻牌点；若注入 executableSinceVersion，
+  //   semantic-support-classifier.applyRuntimeVersionGate 会把老策略（deployedAt < 该版本）
+  //   的 atom 强制替换为 recognized_unsupported，破坏行为不变契约。
   'risk.protective_exit': {
     corpus: { aliases: [], positiveExamples: [], negativeExamples: [], goldenUtterances: [] },
     readinessCheck: COMMON_PIPELINE,
@@ -4729,7 +4734,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
-    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
+    classifier: { supportStatus: 'supported_executable' },
     display: {
       publicName: ATOM_PUBLIC_NAMES['risk.protective_exit'],
       paramRenderers: {},
@@ -4755,7 +4760,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
-    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
+    classifier: { supportStatus: 'supported_executable' },
     display: {
       publicName: ATOM_PUBLIC_NAMES['risk.max_drawdown_pct'],
       paramRenderers: { valuePct: (v) => `${v}%` },
@@ -4784,7 +4789,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
-    classifier: { supportStatus: 'supported_executable', executableSinceVersion: '2026.05.W02' },
+    classifier: { supportStatus: 'supported_executable' },
     display: {
       publicName: ATOM_PUBLIC_NAMES['risk.max_single_loss_pct'],
       paramRenderers: { valuePct: (v) => `${v}%` },
