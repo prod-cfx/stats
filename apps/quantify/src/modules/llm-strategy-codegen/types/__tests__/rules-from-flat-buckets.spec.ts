@@ -161,7 +161,9 @@ describe('rulesFromFlatBuckets (Issue #1413)', () => {
     expect(exitRule!.effects[0]).toMatchObject({ kind: 'atom', key: 'risk.atr_stop' })
   })
 
-  it('effect 无 rule 可挂时单建 effect-only rule', () => {
+  it('effect 无 rule 可挂时丢弃孤儿 effect（不伪造 ghost rule）', () => {
+    // 反 M1：旧实现把 action atom 当作 condition 塞进新 rule，违反 condition 的
+    // trigger/predicate 语义契约。当前正确行为：丢弃孤儿 effect，返回空 rules。
     const rules = rulesFromFlatBuckets({
       trigger: [],
       action: [{ id: 'lone-action', key: 'action.open_long', params: {} }],
@@ -169,9 +171,7 @@ describe('rulesFromFlatBuckets (Issue #1413)', () => {
       positionConstraint: [],
       orchestration: [],
     })
-    expect(rules).toHaveLength(1)
-    expect(rules[0]!.condition).toMatchObject({ kind: 'atom', key: 'action.open_long' })
-    expect(rules[0]!.effects).toHaveLength(0)
+    expect(rules).toEqual([])
   })
 
   it('trigger `risk` phase → rule phase `gate`', () => {

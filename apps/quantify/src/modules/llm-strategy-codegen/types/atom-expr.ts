@@ -805,19 +805,17 @@ export function rulesFromFlatBuckets(flat: FlatSemanticBuckets): SemanticRule[] 
     }
     if (target) {
       ruleEffects.get(target.id)!.push(atom)
-    } else {
-      const ruleId = newRuleId('rule-effect')
-      const newRule: SemanticRule = {
-        id: ruleId,
-        phase: fallbackPhaseForBucket(eff.bucket),
-        sideScope: 'both',
-        condition: atom,
-        effects: [],
-      }
-      rules.push(newRule)
-      rulesById.set(ruleId, newRule)
-      ruleEffects.set(ruleId, [])
+      continue
     }
+    // 真孤儿 effect（无 id 命中、无 rule 兜底）：丢弃。
+    //   旧实现把 effect atom 当 condition 塞进新 rule，违反 rule.condition 的
+    //   trigger/predicate 语义契约；下游 compileAtomExpr 把 action/risk atom 当
+    //   谓词执行会异常。100% 非空 patch 路径下 trigger 必非空 → 该分支几乎不可达；
+    //   真到达说明 patch 形态本身异常（只塞了 effect 没塞 trigger），应当向上层
+    //   暴露而非在反向投影里伪造 ghost rule 掩盖。
+    //   设计上 rulesFromFlatBuckets 是纯函数，不能 logger.warn；丢弃即可，
+    //   调用方（seed builder）若需观测可在 wrapper 层比较 candidates.length 与
+    //   实际挂载数。
   }
 
   // 3) 用累积的 effects 重写 rules（保持 readonly contract）
