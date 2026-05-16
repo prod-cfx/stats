@@ -26,6 +26,7 @@ import type {
   SemanticState,
   SemanticTriggerState,
 } from '../types/semantic-state'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 const FIELD_KEY_RISK_STOP_LOSS_PCT = 'risk.stop_loss_pct'
 const FIELD_KEY_RISK_TAKE_PROFIT_PCT = 'risk.take_profit_pct'
@@ -102,7 +103,7 @@ export class SemanticExecutableSemanticsService {
     state: SemanticState,
     phase: Extract<SemanticTriggerState['phase'], 'entry' | 'exit'>,
   ): boolean {
-    return state.trigger.some(trigger =>
+    return readFlatTriggers(state).some(trigger =>
       trigger.phase === phase
       && trigger.status === 'locked'
       && trigger.openSlots.every(slot => slot.status !== 'open'),
@@ -159,17 +160,17 @@ export class SemanticExecutableSemanticsService {
       for (const contract of contracts ?? []) capabilities.push(...contract.capabilities)
     }
 
-    for (const trigger of state.trigger) {
+    for (const trigger of readFlatTriggers(state)) {
       if (trigger.status === 'locked' && trigger.openSlots.every(slot => slot.status !== 'open')) {
         pushContracts(trigger.contracts)
       }
     }
-    for (const action of state.action) {
+    for (const action of readFlatActions(state)) {
       if (action.status === 'locked' && (action.openSlots ?? []).every(slot => slot.status !== 'open')) {
         pushContracts(action.contracts)
       }
     }
-    for (const risk of state.risk) {
+    for (const risk of readFlatRisks(state)) {
       if (risk.status === 'locked' && risk.openSlots.every(slot => slot.status !== 'open')) {
         pushContracts(risk.contracts)
       }
@@ -214,9 +215,9 @@ export class SemanticExecutableSemanticsService {
   anyAtomFulfillsPhase(state: SemanticState, phase: StrategyPhase): boolean {
     const fulfills = (key: string): boolean => this.lookupFulfillsPhase(key).includes(phase)
 
-    if (state.trigger.some(t => fulfills(t.key))) return true
-    if (state.action.some(a => fulfills(a.key))) return true
-    if (state.risk.some(r => fulfills(r.key))) return true
+    if (readFlatTriggers(state).some(t => fulfills(t.key))) return true
+    if (readFlatActions(state).some(a => fulfills(a.key))) return true
+    if (readFlatRisks(state).some(r => fulfills(r.key))) return true
     if (state.positionConstraint.some(c => fulfills(c.key))) return true
     for (const c of state.position?.constraints ?? []) {
       if (fulfills(c.key)) return true
@@ -267,17 +268,17 @@ export class SemanticExecutableSemanticsService {
    */
   collectLockedAtoms(state: SemanticState): LockedAtom[] {
     const atoms: LockedAtom[] = []
-    for (const trigger of state.trigger) {
+    for (const trigger of readFlatTriggers(state)) {
       if (trigger.status === 'locked' && trigger.openSlots.every(slot => slot.status !== 'open')) {
         atoms.push({ key: trigger.key, bucket: 'trigger', phase: trigger.phase, params: trigger.params })
       }
     }
-    for (const action of state.action) {
+    for (const action of readFlatActions(state)) {
       if (action.status === 'locked' && (action.openSlots ?? []).every(slot => slot.status !== 'open')) {
         atoms.push({ key: action.key, bucket: 'action', params: action.params ?? {} })
       }
     }
-    for (const risk of state.risk) {
+    for (const risk of readFlatRisks(state)) {
       if (risk.status === 'locked' && risk.openSlots.every(slot => slot.status !== 'open')) {
         atoms.push({ key: risk.key, bucket: 'risk', params: risk.params })
       }
@@ -396,7 +397,7 @@ export class SemanticExecutableSemanticsService {
   }
 
   private hasLegacyForcedExitRiskSemantics(state: SemanticState): boolean {
-    return state.risk.some((risk) => {
+    return readFlatRisks(state).some((risk) => {
       if (risk.status !== 'locked' || risk.openSlots.some(slot => slot.status === 'open')) {
         return false
       }

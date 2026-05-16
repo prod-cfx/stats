@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common'
 import type { SemanticNodeStatus, SemanticPositionConstraintState, SemanticPositionSizingContract, SemanticState } from '../types/semantic-state'
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
 import type { CapabilityEvidence, CapabilityMountKind } from './capability-evidence-index.service'
+import { readFlatActions } from '../types/semantic-state-flat-readers'
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -319,7 +320,7 @@ export class PerTradeSizingResolver {
     // (b) action level — capital.allocate.per_order_budget
     for (const ev of index.byKey('capital', 'allocate', 'per_order_budget')) {
       if (ev.mount !== 'action') continue
-      const action = state.action.find(a => a.id === ev.ownerId)
+      const action = readFlatActions(state).find(a => a.id === ev.ownerId)
       const anchor = anchorFromActionCapability(ev, action?.openSlots)
       if (anchor.executionAnchored) {
         out.set(scopeKey(anchor.scope), anchor)

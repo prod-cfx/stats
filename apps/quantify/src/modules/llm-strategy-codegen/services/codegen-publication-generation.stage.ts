@@ -19,6 +19,7 @@ import { SemanticAtomInvariantService } from './semantic-atom-invariant.service'
 import { CodegenGraphSnapshotService as DefaultCodegenGraphSnapshotService } from './codegen-graph-snapshot.service'
 import { normalizeRiskSemantics } from './semantic-state-normalization'
 import { StrategySummaryObservationService } from './strategy-summary-observation.service'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 export interface CompiledScriptValidationResult {
   passed: boolean
@@ -308,7 +309,7 @@ export class CodegenPublicationGenerationStage {
       locked.positionPct = position.value <= 1 ? position.value * 100 : position.value
     }
 
-    for (const risk of normalizeRiskSemantics(args.semanticState.risk)) {
+    for (const risk of normalizeRiskSemantics(readFlatRisks(args.semanticState))) {
       if (risk.status !== 'locked') {
         continue
       }
@@ -370,10 +371,10 @@ export class CodegenPublicationGenerationStage {
 
   private buildLegacyNormalizedIntentSnapshot(semanticState: SemanticState): StrategyNormalizedIntent {
     const families = new Set(semanticState.families)
-    if (semanticState.trigger.some(trigger => trigger.phase === 'gate')) {
+    if (readFlatTriggers(semanticState).some(trigger => trigger.phase === 'gate')) {
       families.add('state-gated')
     }
-    const gridTrigger = semanticState.trigger.find(trigger =>
+    const gridTrigger = readFlatTriggers(semanticState).find(trigger =>
       trigger.key === 'grid.range_rebalance'
       && trigger.status !== 'superseded'
       && typeof trigger.params.rangeLower === 'number'
@@ -383,7 +384,7 @@ export class CodegenPublicationGenerationStage {
 
     return {
       families: Array.from(families) as StrategyNormalizedIntent['families'],
-      triggers: semanticState.trigger
+      triggers: readFlatTriggers(semanticState)
         .filter(trigger => trigger.status !== 'superseded')
         .map(trigger => ({
           key: trigger.key as StrategyNormalizedIntent['triggers'][number]['key'],
@@ -402,11 +403,11 @@ export class CodegenPublicationGenerationStage {
           })),
           ...(trigger.evidence?.text ? { evidenceText: trigger.evidence.text } : {}),
         })),
-      actions: semanticState.action.map(action => ({
+      actions: readFlatActions(semanticState).map(action => ({
         key: action.key,
         ...(action.params ? { params: { ...action.params } } : {}),
       })),
-      risk: normalizeRiskSemantics(semanticState.risk).map(risk => ({
+      risk: normalizeRiskSemantics(readFlatRisks(semanticState)).map(risk => ({
         key: risk.key,
         params: { ...risk.params },
       })),

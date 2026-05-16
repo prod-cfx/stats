@@ -6,6 +6,7 @@ import type {
   StrategyNormalizedIntent,
 } from '../types/strategy-normalized-intent'
 import { createHash } from 'node:crypto'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 type TriggerCombinationJoin = 'AND' | 'OR'
 
@@ -25,7 +26,7 @@ interface BuildTriggerCombinationContractInput {
  */
 export function buildNormalizedIntentFromSemanticState(state: SemanticState): StrategyNormalizedIntent {
   const normalizedState = normalizeSemanticStateCombinationContracts(state)
-  const normalizedTriggers = normalizedState.trigger
+  const normalizedTriggers = readFlatTriggers(normalizedState)
   const families = new Set(normalizedState.families)
   if (normalizedTriggers.some(trigger => trigger.phase === 'gate')) {
     families.add('state-gated')
@@ -37,11 +38,11 @@ export function buildNormalizedIntentFromSemanticState(state: SemanticState): St
     triggers: normalizedTriggers
       .filter(trigger => trigger.status !== 'superseded')
       .map(trigger => toNormalizedTrigger(trigger)),
-    actions: normalizedState.action.map(action => ({
+    actions: readFlatActions(normalizedState).map(action => ({
       key: action.key,
       ...(action.params ? { params: { ...action.params } } : {}),
     })),
-    risk: normalizedState.risk.map(risk => ({
+    risk: readFlatRisks(normalizedState).map(risk => ({
       key: risk.key,
       params: { ...risk.params },
     })),
@@ -255,14 +256,14 @@ export function normalizeSemanticStateCombinationContracts(state: SemanticState)
   return {
     ...state,
     families: [...state.families],
-    trigger: normalizeTriggerCombinationContracts(state.trigger),
-    action: state.action.map(action => ({
+    trigger: normalizeTriggerCombinationContracts(readFlatTriggers(state)),
+    action: readFlatActions(state).map(action => ({
       ...action,
       ...(action.params ? { params: { ...action.params } } : {}),
       ...(action.openSlots ? { openSlots: [...action.openSlots] } : {}),
       ...(action.contracts ? { contracts: [...action.contracts] } : {}),
     })),
-    risk: state.risk.map(risk => ({
+    risk: readFlatRisks(state).map(risk => ({
       ...risk,
       params: { ...risk.params },
       openSlots: [...risk.openSlots],

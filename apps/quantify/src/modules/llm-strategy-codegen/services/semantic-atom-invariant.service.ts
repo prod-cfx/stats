@@ -6,6 +6,7 @@ import type { StrategyConsistencyCheck } from '../types/strategy-consistency-rep
 import { Injectable } from '@nestjs/common'
 import { SemanticAtomContractService } from './semantic-atom-contract.service'
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 type PriceChangeDirection = 'up' | 'down'
 type PositionAction = 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
@@ -182,9 +183,9 @@ export class SemanticAtomInvariantService {
 
   private collectContracts(state: SemanticState): SemanticAtomContract[] {
     return [
-      ...state.trigger.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
-      ...state.action.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
-      ...state.risk.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...readFlatTriggers(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...readFlatActions(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...readFlatRisks(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
       ...(state.position?.status === 'locked' ? state.position.contracts ?? [] : []),
       ...(state.position?.constraints ?? []).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
     ]
@@ -776,7 +777,7 @@ export class SemanticAtomInvariantService {
     ir: CanonicalStrategyIrV1
     ast: StrategyAstV1
   }): StrategyConsistencyCheck[] {
-    const triggers = input.semanticState.trigger
+    const triggers = readFlatTriggers(input.semanticState)
       .filter(trigger => this.isBlockingGenericExpressionTrigger(trigger))
     const triggersByBucket = new Map<string, SemanticTriggerState[]>()
 
@@ -1257,7 +1258,7 @@ export class SemanticAtomInvariantService {
     // First-stage blocking scope: explicit trigger-level price percent changes.
     // Risk percent rules (stop loss / take profit / trailing stop) remain covered
     // by canonical risk guards and the existing strategy consistency checks.
-    const triggers = input.semanticState.trigger
+    const triggers = readFlatTriggers(input.semanticState)
       .filter(trigger => this.isBlockingPricePercentChangeTrigger(trigger))
     const triggersByBucket = new Map<string, SemanticTriggerState[]>()
 

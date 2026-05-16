@@ -528,6 +528,7 @@ export function collectAtomLeaves(expr: AtomExpr): AtomExprAtom[] {
   return leaves
 }
 
+
 export function atomExprDepth(expr: AtomExpr): number {
   let max = 0
   walkAtomExpr(expr, (_, depth) => {

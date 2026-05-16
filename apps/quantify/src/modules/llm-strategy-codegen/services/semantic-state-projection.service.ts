@@ -14,6 +14,7 @@ import {
   renderLegacyDisplay,
 } from './legacy-presentation-data'
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 export interface SemanticConversationView {
   summary: string
@@ -109,9 +110,9 @@ export class SemanticStateProjectionService {
   ) {}
 
   buildConversationView(state: SemanticState): SemanticConversationView {
-    const deterministicTriggers = this.filterDeterministicTriggers(state.trigger)
-    const deterministicRisk = this.filterDeterministicRisk(state.risk)
-    const deterministicActions = this.filterDeterministicActions(state.action)
+    const deterministicTriggers = this.filterDeterministicTriggers(readFlatTriggers(state))
+    const deterministicRisk = this.filterDeterministicRisk(readFlatRisks(state))
+    const deterministicActions = this.filterDeterministicActions(readFlatActions(state))
     const deterministicSignals = this.buildRecommendationSignals({
       actions: deterministicActions,
       triggers: deterministicTriggers,
@@ -275,8 +276,8 @@ export class SemanticStateProjectionService {
   }
 
   private buildDisplayRuleBlocksFromFlatTriggers(state: SemanticState): SemanticDisplayLogicGraphBlock[] {
-    const triggers = this.filterDeterministicTriggers(state.trigger)
-    const actions = this.filterDeterministicActions(state.action)
+    const triggers = this.filterDeterministicTriggers(readFlatTriggers(state))
+    const actions = this.filterDeterministicActions(readFlatActions(state))
     const ruleGroups = this.groupDisplayRuleTriggers(
       triggers.filter(trigger => trigger.phase === 'entry' || trigger.phase === 'exit'),
     )
@@ -399,8 +400,8 @@ export class SemanticStateProjectionService {
     summary: string
     nextQuestion: string | null
   } {
-    const triggerSummary = this.buildTriggerSummary(state.trigger, true)
-    const riskSummary = this.buildRiskSummary(state.risk)
+    const triggerSummary = this.buildTriggerSummary(readFlatTriggers(state), true)
+    const riskSummary = this.buildRiskSummary(readFlatRisks(state))
     // #1238：clarification 路径下"我当前理解的策略是"这条提示长期只渲染
     // trigger + risk，遗漏 position 段（含 sizing、dca_schedule / pyramiding_limit
     // 等 constraint 显示），导致用户给出 DCA / 加仓配置时即使 state.position.constraints
@@ -1063,7 +1064,7 @@ export class SemanticStateProjectionService {
     const executionContext = this.buildExecutionContext(state.contextSlots)
     const positionSizing = this.buildDisplayPositionSizingValue(state.position)
     const marketType = this.formatDisplayMarketType(executionContext.marketType)
-    const riskTexts = this.buildRiskSummary(this.filterDeterministicRisk(state.risk))
+    const riskTexts = this.buildRiskSummary(this.filterDeterministicRisk(readFlatRisks(state)))
       .split('；')
       .filter(text => text.length > 0)
     const items: SemanticDisplayExecuteItem[] = []
@@ -2804,7 +2805,7 @@ export class SemanticStateProjectionService {
   private findNextOpenSlot(state: SemanticState): SemanticSlotState | null {
     const triggerPhaseOrder: Array<'entry' | 'exit' | 'risk' | 'gate'> = ['entry', 'exit', 'risk', 'gate']
     const openTriggerSlots = triggerPhaseOrder.flatMap(phase =>
-      state.trigger
+      readFlatTriggers(state)
         .filter(trigger => trigger.phase === phase && trigger.status !== 'superseded')
         .flatMap(trigger => trigger.openSlots)
         .filter(slot => slot.status === 'open'),
@@ -2834,14 +2835,14 @@ export class SemanticStateProjectionService {
       return positionSlot
     }
 
-    const actionSlot = state.action
+    const actionSlot = readFlatActions(state)
       .flatMap(action => action.openSlots ?? [])
       .find(slot => slot.status === 'open')
     if (actionSlot) {
       return actionSlot
     }
 
-    const riskSlot = state.risk
+    const riskSlot = readFlatRisks(state)
       .flatMap(risk => risk.openSlots)
       .find(slot => slot.status === 'open')
     if (riskSlot) {

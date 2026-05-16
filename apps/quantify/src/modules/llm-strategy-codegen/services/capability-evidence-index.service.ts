@@ -1,5 +1,6 @@
 import type { SemanticCapability, SemanticState } from '../types/semantic-state'
 import type { SemanticNodeStatus } from '../types/semantic-state'
+import { readFlatActions, readFlatRisks } from '../types/semantic-state-flat-readers'
 
 export type CapabilityMountKind = 'action' | 'position_constraint' | 'risk' | 'position'
 
@@ -54,7 +55,7 @@ export class CapabilityEvidenceIndex {
   static build(state: SemanticState): CapabilityEvidenceIndex {
     const entries: CapabilityEvidence[] = []
 
-    for (const action of state.action) {
+    for (const action of readFlatActions(state)) {
       if (!action.contracts) continue
       for (const contract of action.contracts) {
         for (const capability of contract.capabilities) {
@@ -88,7 +89,7 @@ export class CapabilityEvidenceIndex {
       }
     }
 
-    for (const risk of state.risk) {
+    for (const risk of readFlatRisks(state)) {
       if (!risk.contracts) continue
       for (const contract of risk.contracts) {
         for (const capability of contract.capabilities) {

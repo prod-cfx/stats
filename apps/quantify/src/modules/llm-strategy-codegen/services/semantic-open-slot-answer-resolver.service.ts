@@ -18,6 +18,7 @@ import { buildSemanticSlotId } from '../types/semantic-state'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
 import { GenericSeedDispatcher } from './generic-seed-dispatcher.service'
 import { pickPendingClarificationTarget } from './strategy-clarification-question.service'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 const ENTRY_TRIGGER_SLOT_KEY = 'trigger.entry'
 const EXIT_TRIGGER_SLOT_KEY = 'trigger.exit'
@@ -171,15 +172,15 @@ function findActiveOpenSlotRef(
     return false
   }
 
-  for (const trigger of state.trigger) {
+  for (const trigger of readFlatTriggers(state)) {
     const slot = trigger.openSlots.find(matchSlot)
     if (slot) return { ownerKind: 'trigger', ownerId: trigger.id, slot }
   }
-  for (const action of state.action) {
+  for (const action of readFlatActions(state)) {
     const slot = (action.openSlots ?? []).find(matchSlot)
     if (slot) return { ownerKind: 'action', ownerId: action.id, slot }
   }
-  for (const risk of state.risk) {
+  for (const risk of readFlatRisks(state)) {
     const slot = risk.openSlots.find(matchSlot)
     if (slot) return { ownerKind: 'risk', ownerId: risk.id, slot }
   }
@@ -417,9 +418,9 @@ function fulfillSemanticFragment(
 }
 
 function hasOpenSlot(state: SemanticState, slotKey: string): boolean {
-  return state.trigger.some(trigger => trigger.openSlots.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
-    || state.action.some(action => (action.openSlots ?? []).some(slot => slot.slotKey === slotKey && slot.status === 'open'))
-    || state.risk.some(risk => risk.openSlots.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
+  return readFlatTriggers(state).some(trigger => trigger.openSlots.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
+    || readFlatActions(state).some(action => (action.openSlots ?? []).some(slot => slot.slotKey === slotKey && slot.status === 'open'))
+    || readFlatRisks(state).some(risk => risk.openSlots.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
     || Boolean(state.position?.openSlots?.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
 }
 
@@ -430,10 +431,10 @@ function mergeFragmentPatch(
   symbolResolver: MarketInstrumentSymbolResolverService,
 ): SemanticState {
   const fulfilledPhaseSet = new Set<FulfilledTriggerPhase>(fulfilledPhases)
-  const existingTriggerIds = new Set(state.trigger.map(trigger => trigger.id))
-  const existingActionIds = new Set(state.action.map(action => action.id))
+  const existingTriggerIds = new Set(readFlatTriggers(state).map(trigger => trigger.id))
+  const existingActionIds = new Set(readFlatActions(state).map(action => action.id))
   const nextTriggers = [
-    ...state.trigger,
+    ...readFlatTriggers(state),
     ...(patch.triggers ?? [])
       .filter(trigger => shouldMergeFragmentTrigger(trigger, fulfilledPhaseSet))
       .map((trigger, index): SemanticTriggerState => {
@@ -457,9 +458,9 @@ function mergeFragmentPatch(
         }
       }),
   ]
-  const existingActionKeys = new Set(state.action.map(action => action.key))
+  const existingActionKeys = new Set(readFlatActions(state).map(action => action.key))
   const nextActions = [
-    ...state.action,
+    ...readFlatActions(state),
     ...(patch.actions ?? [])
       .filter(action => !existingActionKeys.has(action.key))
       .filter(action => actionMatchesFulfilledPhases(action, fulfilledPhaseSet))

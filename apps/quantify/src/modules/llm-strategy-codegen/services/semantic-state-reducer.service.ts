@@ -15,6 +15,7 @@ import type {
 } from '../types/semantic-state'
 import { PositionSizingContractService } from './position-sizing-contract.service'
 import { normalizeRiskSemantics } from './semantic-state-normalization'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 interface SupportedSlotReduction {
   paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct' | 'sideMode' | 'reference' | 'lookbackBars' | 'multiplier'
@@ -44,17 +45,17 @@ export class SemanticStateReducerService {
   }): SemanticState {
     const nextState: SemanticState = {
       ...input.currentState,
-      trigger: input.currentState.trigger.map(trigger => ({
+      trigger: readFlatTriggers(input.currentState).map(trigger => ({
         ...trigger,
         params: { ...trigger.params },
         openSlots: trigger.openSlots.map(slot => ({ ...slot })),
       })),
-      action: input.currentState.action.map(action => ({
+      action: readFlatActions(input.currentState).map(action => ({
         ...action,
         ...(action.params ? { params: { ...action.params } } : {}),
         openSlots: action.openSlots?.map(slot => ({ ...slot })),
       })),
-      risk: input.currentState.risk.map(risk => ({
+      risk: readFlatRisks(input.currentState).map(risk => ({
         ...risk,
         params: { ...risk.params },
         openSlots: risk.openSlots.map(slot => ({ ...slot })),
@@ -76,7 +77,7 @@ export class SemanticStateReducerService {
     }
 
     const answerText = input.answer.trim()
-    for (const trigger of nextState.trigger) {
+    for (const trigger of readFlatTriggers(nextState)) {
       const slot = trigger.openSlots.find((item) => {
         if (input.targetSlotId) {
           return buildSemanticSlotId(item) === input.targetSlotId
@@ -125,7 +126,7 @@ export class SemanticStateReducerService {
       break
     }
 
-    for (const action of nextState.action) {
+    for (const action of readFlatActions(nextState)) {
       const slot = action.openSlots?.find((item) => {
         if (input.targetSlotId) {
           return buildSemanticSlotId(item) === input.targetSlotId
@@ -233,7 +234,7 @@ export class SemanticStateReducerService {
     }
 
     let riskChanged = false
-    for (const risk of nextState.risk) {
+    for (const risk of readFlatRisks(nextState)) {
       const slot = risk.openSlots.find((item) => {
         if (input.targetSlotId) {
           return buildSemanticSlotId(item) === input.targetSlotId
@@ -331,7 +332,7 @@ export class SemanticStateReducerService {
 
     return {
       ...nextState,
-      risk: riskChanged ? normalizeRiskSemantics(nextState.risk) : nextState.risk,
+      risk: riskChanged ? normalizeRiskSemantics(readFlatRisks(nextState)) : readFlatRisks(nextState),
     }
   }
 
@@ -969,7 +970,7 @@ export class SemanticStateReducerService {
     answerText: string,
     messageIndex: number | undefined,
   ): void {
-    for (const trigger of state.trigger) {
+    for (const trigger of readFlatTriggers(state)) {
       for (const slot of trigger.openSlots) {
         if (
           slot.status !== 'open'
