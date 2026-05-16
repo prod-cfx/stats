@@ -576,3 +576,312 @@ function stableJson(value: unknown): string {
   const obj = value as Record<string, unknown>
   return `{${Object.keys(obj).sort().map(k => `${JSON.stringify(k)}:${stableJson(obj[k])}`).join(',')}}`
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Issue #1413 — rulesFromFlatBuckets：扁平桶 → SemanticRule[] 反向投影
+//
+// projectToFlat 的精确逆运算（语义层等价；id 命名按 projection 约定还原）：
+//   - trigger 桶中含 combinationContract(predicate_group) 的节点按 groupId 归组
+//     → 重建 AND/OR rule.condition；单 member 退化为 atom；多 member 拼组合节点
+//   - 不含 combinationContract 的 trigger 节点 → single-leaf rule
+//   - action / risk / positionConstraint 桶按 id `${ruleId}-eff-${i}` 命名约定挂回
+//     原 rule.effects；解析失败者按 phase 匹配 fallback；都不命中则单建 effect-only rule
+//   - orchestration 桶暂不参与反投影（与 projectToFlat 当前不投 orchestration effects 对称）
+//
+// 设计上不依赖 NestJS DI，纯函数；放在 atom-expr.ts 与 collectAtomLeaves / canonicalize
+// 同模块，便于 seed-builder / 测试直接 import。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 与 SemanticState 五桶对齐的输入结构（readonly，避免误修改原 state）。 */
+export interface FlatSemanticBuckets {
+  readonly trigger: ReadonlyArray<{
+    readonly id: string
+    readonly key: string
+    readonly phase: 'entry' | 'exit' | 'risk' | 'gate'
+    readonly params: Record<string, unknown>
+    readonly sideScope?: 'long' | 'short' | 'both'
+    readonly contracts?: ReadonlyArray<{
+      readonly capabilities: ReadonlyArray<{ domain: string, verb: string, object: string }>
+      readonly params: Record<string, unknown>
+    }>
+  }>
+  readonly action: ReadonlyArray<{
+    readonly id: string
+    readonly key: string
+    readonly params?: Record<string, unknown>
+  }>
+  readonly risk: ReadonlyArray<{
+    readonly id: string
+    readonly key: string
+    readonly params: Record<string, unknown>
+  }>
+  readonly positionConstraint: ReadonlyArray<{
+    readonly id: string
+    readonly key: string
+    readonly params: Record<string, unknown>
+  }>
+  readonly orchestration: ReadonlyArray<unknown>
+}
+
+function isPredicateGroupContractShape(contract: {
+  capabilities: ReadonlyArray<{ domain: string, verb: string, object: string }>
+}): boolean {
+  return contract.capabilities.some(c =>
+    c.domain === 'market' && c.verb === 'combine' && c.object === 'predicate_group',
+  )
+}
+
+/** 从 projectToFlat 写入的 `rule-${ruleId}-grp` groupId 反推 rule.id；不匹配返回 null。 */
+function parseRuleIdFromGroupId(groupId: string): string | null {
+  const m = /^rule-(.+)-grp$/.exec(groupId)
+  return m ? m[1]! : null
+}
+
+/** 从 projectToFlat 写入的 `${ruleId}-cond-${i}` trigger.id 反推 rule.id；不匹配返回 null。 */
+function parseRuleIdFromTriggerId(triggerId: string): string | null {
+  const m = /^(.+)-cond-\d+$/.exec(triggerId)
+  return m ? m[1]! : null
+}
+
+/** 从 projectToFlat 写入的 `${ruleId}-eff-${i}` effect.id 反推 rule.id；不匹配返回 null。 */
+function parseRuleRefFromEffectId(effId: string): { ruleId: string, index: number } | null {
+  const m = /^(.+)-eff-(\d+)$/.exec(effId)
+  return m ? { ruleId: m[1]!, index: Number(m[2]) } : null
+}
+
+function triggerPhaseToRulePhase(p: 'entry' | 'exit' | 'risk' | 'gate'): SemanticRulePhase {
+  // trigger 'risk' phase 在 rule 层没有直接对应；统一映射到 'gate'（与 IR 层
+  // compileAtomExpr 对 risk 触发器的解读一致：作为 gate 性质的守门规则）。
+  if (p === 'risk') return 'gate'
+  return p
+}
+
+function flatTriggerToAtomExpr(t: FlatSemanticBuckets['trigger'][number]): AtomExprAtom {
+  return {
+    kind: 'atom',
+    key: t.key,
+    params: { ...t.params },
+    ...(t.sideScope ? { sideScope: t.sideScope } : {}),
+  }
+}
+
+/**
+ * 反向投影：把 SemanticState 扁平五桶还原为 SemanticRule[]。
+ *
+ * 还原约定：
+ *   - 触发器：扫 contracts[] 找 predicate_group combinationContract；按 groupId
+ *     归组（同 groupId 的 member 顺序保留），多 member → AND/OR 组合 condition；
+ *     单 member 退化为单 atom condition；无 contract 触发器 → 单叶 rule。
+ *   - 副作用：action / risk / positionConstraint 优先按 id `${ruleId}-eff-${i}`
+ *     命名约定挂回原 rule；解析失败者按 phase fallback（action → entry rule，
+ *     risk → exit rule，positionConstraint → entry rule）；仍无目标则单建
+ *     effect-only rule（condition = atom 自身，effects 空）。
+ *   - orchestration：projectToFlat 当前不投影 orchestration effects（MVP 占位），
+ *     反向同样跳过，保持对称。
+ *
+ * NOT / SEQUENCE：当前 flat 桶不携带 NOT/SEQUENCE 元数据（projectToFlat 也仅
+ * 处理 AND/OR），反投影不会重建它们；调用方若需要 NOT/SEQUENCE 应直接产出
+ * explicit rules，而非走 flat → rules 路径。
+ */
+export function rulesFromFlatBuckets(flat: FlatSemanticBuckets): SemanticRule[] {
+  // 1) 归组触发器
+  interface GroupAcc {
+    readonly members: Array<FlatSemanticBuckets['trigger'][number]>
+    readonly join: 'AND' | 'OR'
+    readonly phase: 'entry' | 'exit' | 'risk' | 'gate'
+    readonly sideScope?: 'long' | 'short' | 'both'
+    readonly groupId: string
+    readonly insertOrder: number
+  }
+  const groups = new Map<string, GroupAcc>()
+  type Slot
+    = | { kind: 'group', groupId: string }
+      | { kind: 'standalone', trigger: FlatSemanticBuckets['trigger'][number] }
+  const slots: Slot[] = []
+  let order = 0
+
+  for (const t of flat.trigger) {
+    const grp = (t.contracts ?? []).find(isPredicateGroupContractShape)
+    if (grp) {
+      const params = grp.params
+      const rawGroupId = params.groupId
+      const groupId = typeof rawGroupId === 'string' ? rawGroupId : ''
+      if (!groupId) {
+        slots.push({ kind: 'standalone', trigger: t })
+        continue
+      }
+      const rawJoin = typeof params.join === 'string' ? params.join.toUpperCase() : 'AND'
+      const join: 'AND' | 'OR' = rawJoin === 'OR' ? 'OR' : 'AND'
+      const existing = groups.get(groupId)
+      if (existing) {
+        existing.members.push(t)
+      } else {
+        groups.set(groupId, {
+          members: [t],
+          join,
+          phase: t.phase,
+          sideScope: t.sideScope,
+          groupId,
+          insertOrder: order++,
+        })
+        slots.push({ kind: 'group', groupId })
+      }
+    } else {
+      slots.push({ kind: 'standalone', trigger: t })
+    }
+  }
+
+  const rules: SemanticRule[] = []
+  const ruleEffects = new Map<string, AtomExpr[]>() // ruleId → effects 累积
+  let ruleSeq = 0
+
+  const newRuleId = (prefix: string): string => `${prefix}-${++ruleSeq}`
+
+  for (const slot of slots) {
+    if (slot.kind === 'group') {
+      const info = groups.get(slot.groupId)!
+      const ruleId = parseRuleIdFromGroupId(info.groupId) ?? newRuleId('rule-grp')
+      const condition: AtomExpr = info.members.length === 1
+        ? flatTriggerToAtomExpr(info.members[0]!)
+        : {
+            kind: info.join === 'OR' ? 'or' : 'and',
+            children: info.members.map(flatTriggerToAtomExpr),
+          }
+      rules.push({
+        id: ruleId,
+        phase: triggerPhaseToRulePhase(info.phase),
+        sideScope: info.sideScope ?? 'both',
+        condition,
+        effects: [],
+      })
+      ruleEffects.set(ruleId, [])
+    } else {
+      const t = slot.trigger
+      const ruleId = parseRuleIdFromTriggerId(t.id) ?? newRuleId('rule-leaf')
+      rules.push({
+        id: ruleId,
+        phase: triggerPhaseToRulePhase(t.phase),
+        sideScope: t.sideScope ?? 'both',
+        condition: flatTriggerToAtomExpr(t),
+        effects: [],
+      })
+      ruleEffects.set(ruleId, [])
+    }
+  }
+
+  // 2) 收集所有 effects 候选；按 id 反查 rule 优先，否则 phase fallback
+  interface EffectCandidate {
+    readonly id: string
+    readonly key: string
+    readonly params: Record<string, unknown>
+    readonly bucket: 'action' | 'risk' | 'positionConstraint'
+  }
+  const candidates: EffectCandidate[] = []
+  for (const a of flat.action) {
+    candidates.push({ id: a.id, key: a.key, params: { ...(a.params ?? {}) }, bucket: 'action' })
+  }
+  for (const r of flat.risk) {
+    candidates.push({ id: r.id, key: r.key, params: { ...r.params }, bucket: 'risk' })
+  }
+  for (const p of flat.positionConstraint) {
+    candidates.push({ id: p.id, key: p.key, params: { ...p.params }, bucket: 'positionConstraint' })
+  }
+
+  const rulesById = new Map<string, SemanticRule>()
+  for (const r of rules) rulesById.set(r.id, r)
+
+  const fallbackPhaseForBucket = (bucket: EffectCandidate['bucket']): SemanticRulePhase =>
+    bucket === 'risk' ? 'exit' : 'entry'
+
+  for (const eff of candidates) {
+    const atom: AtomExprAtom = { kind: 'atom', key: eff.key, params: { ...eff.params } }
+    const parsed = parseRuleRefFromEffectId(eff.id)
+    let target: SemanticRule | undefined
+    if (parsed && rulesById.has(parsed.ruleId)) {
+      target = rulesById.get(parsed.ruleId)!
+    } else {
+      const phase = fallbackPhaseForBucket(eff.bucket)
+      target = rules.find(r => r.phase === phase) ?? rules[0]
+    }
+    if (target) {
+      ruleEffects.get(target.id)!.push(atom)
+    } else {
+      const ruleId = newRuleId('rule-effect')
+      const newRule: SemanticRule = {
+        id: ruleId,
+        phase: fallbackPhaseForBucket(eff.bucket),
+        sideScope: 'both',
+        condition: atom,
+        effects: [],
+      }
+      rules.push(newRule)
+      rulesById.set(ruleId, newRule)
+      ruleEffects.set(ruleId, [])
+    }
+  }
+
+  // 3) 用累积的 effects 重写 rules（保持 readonly contract）
+  return rules.map(r => ({
+    ...r,
+    effects: ruleEffects.get(r.id) ?? [],
+  }))
+}
+
+/**
+ * 规则规范化：用于 round-trip 比较——抹平 id 命名分歧、子节点排序差异（AND/OR
+ * commutative）、effects 排序，仅保留语义形状。
+ *
+ * - rule.id / atom 内部命名信息全部 strip → 用占位 `_`
+ * - rule[] 按 (phase, sideScope, canonical condition hash) 排序
+ * - effects 按 canonical hash 排序（rule 内 effects 顺序在 projectToFlat 中由
+ *   index 编码到 id，但语义上 effects 是无序集合）
+ */
+/** 递归剥掉 atom.sideScope 中与 parent rule.sideScope 相同的冗余声明（atom 缺省继承父）。 */
+function stripRedundantSideScope(expr: AtomExpr, parentSide: SemanticRuleSideScope): AtomExpr {
+  switch (expr.kind) {
+    case 'atom':
+      if (expr.sideScope && expr.sideScope === parentSide) {
+        const { sideScope: _drop, ...rest } = expr
+        return { ...rest, kind: 'atom' }
+      }
+      return expr
+    case 'and':
+    case 'or':
+      return { kind: expr.kind, children: expr.children.map(c => stripRedundantSideScope(c, parentSide)) } as AtomExpr
+    case 'not':
+      return { kind: 'not', child: stripRedundantSideScope(expr.child, parentSide) }
+    case 'sequence':
+      return {
+        kind: 'sequence',
+        steps: expr.steps.map(s => stripRedundantSideScope(s, parentSide)),
+        ...(expr.withinBars !== undefined ? { withinBars: expr.withinBars } : {}),
+        ...(expr.nextBarOnly !== undefined ? { nextBarOnly: expr.nextBarOnly } : {}),
+      }
+  }
+}
+
+export function canonicalizeSemanticRule(rule: SemanticRule): SemanticRule {
+  const condition = canonicalizeAtomExpr(stripRedundantSideScope(rule.condition, rule.sideScope))
+  const normalizedEffects = rule.effects.map(eff =>
+    canonicalizeAtomExpr(stripRedundantSideScope(eff, rule.sideScope)),
+  )
+  const sortedEffects = [...normalizedEffects].sort((a, b) =>
+    JSON.stringify(a).localeCompare(JSON.stringify(b)),
+  )
+  return {
+    id: '_',
+    phase: rule.phase,
+    sideScope: rule.sideScope,
+    condition,
+    effects: sortedEffects,
+  }
+}
+
+export function canonicalizeSemanticRules(rules: ReadonlyArray<SemanticRule>): SemanticRule[] {
+  const canon = rules.map(canonicalizeSemanticRule)
+  return [...canon].sort((a, b) => {
+    const ka = `${a.phase}|${a.sideScope}|${JSON.stringify(a.condition)}|${JSON.stringify(a.effects)}`
+    const kb = `${b.phase}|${b.sideScope}|${JSON.stringify(b.condition)}|${JSON.stringify(b.effects)}`
+    return ka.localeCompare(kb)
+  })
+}
