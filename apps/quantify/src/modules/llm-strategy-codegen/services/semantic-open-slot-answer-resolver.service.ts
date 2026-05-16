@@ -5,8 +5,6 @@ import type { MarketInstrumentQuote, MarketInstrumentSymbolResolution } from '..
 import type {
   SemanticActionState,
   SemanticAtomContract,
-  SemanticCapability,
-  SemanticCapabilityShape,
   SemanticContextSlotState,
   SemanticEvidence,
   SemanticPositionState,
@@ -18,28 +16,12 @@ import type {
 } from '../types/semantic-state'
 import { buildSemanticSlotId } from '../types/semantic-state'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
-import { renderSemanticClarificationQuestion } from './semantic-clarification-question-renderer.service'
-import { SemanticContractShapeNormalizerService } from './semantic-contract-shape-normalizer.service'
 import { GenericSeedDispatcher } from './generic-seed-dispatcher.service'
 import { pickPendingClarificationTarget } from './strategy-clarification-question.service'
 
-const DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
-const REQUIREMENT_LEVEL_SET_SLOT_KEY = 'contract.requirement.price.define.level_set'
-const SPACING_CONFLICT_SLOT_KEY = 'contract.shape.price.level_set.spacing_conflict'
 const ENTRY_TRIGGER_SLOT_KEY = 'trigger.entry'
 const EXIT_TRIGGER_SLOT_KEY = 'trigger.exit'
 const MARKET_INSTRUMENT_QUOTES: readonly MarketInstrumentQuote[] = ['FDUSD', 'USDT', 'USDC', 'BUSD', 'TUSD', 'USD']
-
-type LevelSetDensityAnswer = Partial<{
-  gridIntervals: number
-  gridCount: number
-  absoluteSpacing: number
-  spacingPct: number
-}>
-type LevelSetSpacingConflictAnswer = {
-  resolveConflictBy: 'gridCount' | 'spacing'
-}
-type LevelSetAnswer = LevelSetDensityAnswer | LevelSetSpacingConflictAnswer
 
 type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position' | 'positionConstraint'
 type FulfilledTriggerPhase = 'entry' | 'exit'
@@ -57,7 +39,7 @@ export type SemanticOpenSlotAnswerResolverResult =
   | {
     consumed: true
     nextState: SemanticState
-    answer: LevelSetAnswer
+    answer: Record<string, unknown>
     closedSlotKeys: string[]
     closedSlots: Array<Pick<SemanticSlotState, 'slotKey' | 'fieldPath'>>
   }
@@ -66,41 +48,24 @@ export type SemanticOpenSlotAnswerResolverResult =
     nextState: SemanticState
   }
 
-interface OpenLevelSetSlotRef {
+interface ActiveOpenSlotRef {
   ownerKind: SemanticContractOwnerKind
   ownerId: string
   slot: SemanticSlotState
 }
 
-interface OwnerSlotUpdateResult<T> {
-  owner: T
-  updated: boolean
-}
-
 @Injectable()
 export class SemanticOpenSlotAnswerResolverService {
   constructor(
-    private readonly shapeNormalizer: SemanticContractShapeNormalizerService = new SemanticContractShapeNormalizerService(),
     private readonly seedExtractor: GenericSeedDispatcher = new GenericSeedDispatcher(),
     private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
   ) {}
 
   resolve(input: SemanticOpenSlotAnswerResolverInput): SemanticOpenSlotAnswerResolverResult {
-    const answer = parseLevelSetAnswer(input.message)
-    if (answer) {
-      const openSlot = findOpenLevelSetSlot(input.currentState, input.clarificationState)
-      if (openSlot) {
-        const nextState = applyLevelSetAnswerToOpenSlot(input.currentState, openSlot, answer, this.shapeNormalizer)
-        if (nextState !== input.currentState) {
-          return {
-            consumed: true,
-            nextState,
-            answer,
-            closedSlotKeys: [openSlot.slot.slotKey],
-            closedSlots: [{ slotKey: openSlot.slot.slotKey, fieldPath: openSlot.slot.fieldPath }],
-          }
-        }
-      }
+    // 通用通道（#1409）：active pending slot 含 atomKey+paramSlotKey 时走 atom-driven 抽参
+    const generic = this.resolveSingleSlotViaAtom(input.currentState, input.message, input.clarificationState)
+    if (generic) {
+      return generic
     }
 
     const positionSizingAnswer = resolvePositionSizingAnswer(input.currentState, input.message, input.clarificationState)
@@ -114,6 +79,47 @@ export class SemanticOpenSlotAnswerResolverService {
     }
 
     return fulfillSemanticFragment(input.currentState, this.seedExtractor.dispatch(input.message), this.symbolResolver)
+  }
+
+  private resolveSingleSlotViaAtom(
+    state: SemanticState,
+    message: string,
+    clarificationState: unknown,
+  ): SemanticOpenSlotAnswerResolverResult | null {
+    const pendingItems = readPendingClarificationItems(clarificationState)
+    const activeTarget = pickPendingClarificationTarget(pendingItems)
+    if (!activeTarget) {
+      return null
+    }
+
+    const slotRef = findActiveOpenSlotRef(state, activeTarget)
+    if (!slotRef) {
+      return null
+    }
+
+    const atomKey = slotRef.slot.atomKey
+    const paramSlotKey = slotRef.slot.paramSlotKey
+    if (!atomKey || !paramSlotKey) {
+      return null
+    }
+
+    const result = this.seedExtractor.extractSingleSlot(atomKey, paramSlotKey, message)
+    if (!result.ok) {
+      return null
+    }
+
+    const nextState = applyExtractedValueToOwner(state, slotRef, paramSlotKey, result.value)
+    if (nextState === state) {
+      return null
+    }
+
+    return {
+      consumed: true,
+      nextState,
+      answer: { [paramSlotKey]: result.value },
+      closedSlotKeys: [slotRef.slot.slotKey],
+      closedSlots: [{ slotKey: slotRef.slot.slotKey, fieldPath: slotRef.slot.fieldPath }],
+    }
   }
 
   private resolveSymbolAnswer(
@@ -148,6 +154,139 @@ export class SemanticOpenSlotAnswerResolverService {
       closedSlots: [{ slotKey: 'symbol', fieldPath: 'contextSlots.symbol' }],
     }
   }
+}
+
+function findActiveOpenSlotRef(
+  state: SemanticState,
+  activeTarget: { slotId?: unknown; slotKey?: unknown; fieldPath?: unknown },
+): ActiveOpenSlotRef | null {
+  const matchSlot = (slot: SemanticSlotState): boolean => {
+    if (slot.status !== 'open') return false
+    if (typeof activeTarget.slotId === 'string' && buildSemanticSlotId(slot) === activeTarget.slotId) {
+      return true
+    }
+    if (typeof activeTarget.slotKey === 'string' && typeof activeTarget.fieldPath === 'string') {
+      return slot.slotKey === activeTarget.slotKey && slot.fieldPath === activeTarget.fieldPath
+    }
+    return false
+  }
+
+  for (const trigger of state.trigger) {
+    const slot = trigger.openSlots.find(matchSlot)
+    if (slot) return { ownerKind: 'trigger', ownerId: trigger.id, slot }
+  }
+  for (const action of state.action) {
+    const slot = (action.openSlots ?? []).find(matchSlot)
+    if (slot) return { ownerKind: 'action', ownerId: action.id, slot }
+  }
+  for (const risk of state.risk) {
+    const slot = risk.openSlots.find(matchSlot)
+    if (slot) return { ownerKind: 'risk', ownerId: risk.id, slot }
+  }
+  if (state.position?.openSlots?.length) {
+    const slot = state.position.openSlots.find(matchSlot)
+    if (slot) return { ownerKind: 'position', ownerId: 'position', slot }
+  }
+  for (const constraint of state.position?.constraints ?? []) {
+    const slot = constraint.openSlots.find(matchSlot)
+    if (slot) return { ownerKind: 'positionConstraint', ownerId: constraint.id, slot }
+  }
+  return null
+}
+
+function applyExtractedValueToOwner(
+  state: SemanticState,
+  slotRef: ActiveOpenSlotRef,
+  paramSlotKey: string,
+  value: unknown,
+): SemanticState {
+  const removeSlot = (slots: readonly SemanticSlotState[]): SemanticSlotState[] =>
+    slots.filter(s => !(s.slotKey === slotRef.slot.slotKey && s.fieldPath === slotRef.slot.fieldPath))
+  const nextStatusFor = (slots: readonly SemanticSlotState[]) =>
+    slots.some(s => s.status === 'open') ? 'open' as const : 'locked' as const
+
+  if (slotRef.ownerKind === 'trigger') {
+    return {
+      ...state,
+      trigger: state.trigger.map((owner) => {
+        if (owner.id !== slotRef.ownerId) return owner
+        const openSlots = removeSlot(owner.openSlots)
+        return {
+          ...owner,
+          params: { ...owner.params, [paramSlotKey]: value },
+          openSlots,
+          status: nextStatusFor(openSlots),
+          source: 'user_explicit',
+        } satisfies SemanticTriggerState
+      }),
+    }
+  }
+  if (slotRef.ownerKind === 'action') {
+    return {
+      ...state,
+      action: state.action.map((owner) => {
+        if (owner.id !== slotRef.ownerId) return owner
+        const openSlots = removeSlot(owner.openSlots ?? [])
+        return {
+          ...owner,
+          params: { ...(owner.params ?? {}), [paramSlotKey]: value },
+          openSlots,
+          status: nextStatusFor(openSlots),
+          source: 'user_explicit',
+        } satisfies SemanticActionState
+      }),
+    }
+  }
+  if (slotRef.ownerKind === 'risk') {
+    return {
+      ...state,
+      risk: state.risk.map((owner) => {
+        if (owner.id !== slotRef.ownerId) return owner
+        const openSlots = removeSlot(owner.openSlots)
+        return {
+          ...owner,
+          params: { ...owner.params, [paramSlotKey]: value },
+          openSlots,
+          status: nextStatusFor(openSlots),
+          source: 'user_explicit',
+        } satisfies SemanticRiskState
+      }),
+    }
+  }
+  if (slotRef.ownerKind === 'position') {
+    if (!state.position) return state
+    const openSlots = removeSlot(state.position.openSlots ?? [])
+    return {
+      ...state,
+      position: {
+        ...state.position,
+        openSlots,
+        status: nextStatusFor(openSlots),
+        source: 'user_explicit',
+      },
+    }
+  }
+  if (slotRef.ownerKind === 'positionConstraint') {
+    if (!state.position) return state
+    return {
+      ...state,
+      position: {
+        ...state.position,
+        constraints: (state.position.constraints ?? []).map((owner) => {
+          if (owner.id !== slotRef.ownerId) return owner
+          const openSlots = removeSlot(owner.openSlots)
+          return {
+            ...owner,
+            params: { ...owner.params, [paramSlotKey]: value },
+            openSlots,
+            status: nextStatusFor(openSlots),
+            source: 'user_explicit',
+          } satisfies SemanticPositionConstraintState
+        }),
+      },
+    }
+  }
+  return state
 }
 
 function resolvePositionSizingAnswer(
@@ -608,177 +747,6 @@ function slugifyFragmentId(value: string): string {
     || 'atom'
 }
 
-function parseLevelSetAnswer(message: string): LevelSetAnswer | null {
-  return parseLevelSetSpacingConflictAnswer(message) ?? parseLevelSetDensityAnswer(message)
-}
-
-function parseLevelSetSpacingConflictAnswer(message: string): LevelSetSpacingConflictAnswer | null {
-  const text = message.trim()
-  if (/保留|按|用|使用|选择|选/u.test(text) && /网格数量|格数|格子数|多少格/u.test(text)) {
-    return { resolveConflictBy: 'gridCount' }
-  }
-  if (/保留|按|用|使用|选择|选/u.test(text) && /每格|间距|步长/u.test(text)) {
-    return { resolveConflictBy: 'spacing' }
-  }
-  if (/^(?:每格间距|每格|间距|步长)$/u.test(text)) {
-    return { resolveConflictBy: 'spacing' }
-  }
-
-  return null
-}
-
-function parseLevelSetDensityAnswer(message: string): LevelSetDensityAnswer | null {
-  const text = message.trim()
-  if (!text) {
-    return null
-  }
-
-  const answer: LevelSetDensityAnswer = {}
-  const gridIntervals = matchPositiveInteger(text, /(?<![-.\d])(\d{1,4})(?![\d.])\s*(?:个\s*)?(?:间隔|段)/u)
-  const gridCount = matchPositiveInteger(text, /(?:网格数量|格数)\s*(?<![-.\d])(\d{1,4})(?![\d.])|(?<![-.\d])(\d{1,4})(?![\d.])\s*(?:个\s*)?(?:网格|格)/u)
-  const absoluteSpacing = matchPositiveNumber(
-    text,
-    /(?:每\s*格|间距|步长)\s*(?<![-.\d])(\d+(?:\.\d+)?)(?![\d.])\s*(?:USDT|USDC|USD|U|刀)?/iu,
-  )
-  const spacingPct = matchPositiveNumber(
-    text,
-    /(?:(?:每\s*格|间距|步长)\s*)?(?<![-.\d])(\d+(?:\.\d+)?)(?![\d.])\s*%\s*(?:间距|步长)?/iu,
-  )
-
-  if (gridIntervals !== null) {
-    answer.gridIntervals = gridIntervals
-    answer.gridCount = gridIntervals + 1
-  }
-  else if (gridCount !== null) {
-    answer.gridCount = gridCount
-  }
-
-  if (spacingPct !== null) {
-    answer.spacingPct = spacingPct
-  }
-  else if (absoluteSpacing !== null) {
-    answer.absoluteSpacing = absoluteSpacing
-  }
-
-  return hasDensityAnswer(answer) ? answer : null
-}
-
-function matchPositiveInteger(text: string, pattern: RegExp): number | null {
-  const match = text.match(pattern)
-  const rawValue = match?.[1] ?? match?.[2] ?? null
-  const value = rawValue ? Number(rawValue) : null
-
-  if (value === null || !Number.isInteger(value) || value <= 1 || value > 1000) {
-    return null
-  }
-
-  return value
-}
-
-function matchPositiveNumber(text: string, pattern: RegExp): number | null {
-  const match = text.match(pattern)
-  const value = match?.[1] ? Number(match[1]) : null
-
-  return value !== null && Number.isFinite(value) && value > 0 ? value : null
-}
-
-function hasDensityAnswer(answer: LevelSetDensityAnswer): boolean {
-  return answer.gridIntervals !== undefined
-    || answer.gridCount !== undefined
-    || answer.absoluteSpacing !== undefined
-    || answer.spacingPct !== undefined
-}
-
-function isSpacingConflictAnswer(answer: LevelSetAnswer): answer is LevelSetSpacingConflictAnswer {
-  return 'resolveConflictBy' in answer
-}
-
-function findOpenLevelSetSlot(state: SemanticState, clarificationState: unknown): OpenLevelSetSlotRef | null {
-  const slots = collectOpenLevelSetSlots(state)
-  const pendingItems = readPendingClarificationItems(clarificationState)
-  const clarificationTarget = findClarificationTargetSlot(slots, pendingItems)
-  if (clarificationTarget) {
-    return clarificationTarget
-  }
-
-  if (pendingItems.length > 0) {
-    return null
-  }
-
-  return slots.length === 1 ? slots[0] : null
-}
-
-function collectOpenLevelSetSlots(state: SemanticState): OpenLevelSetSlotRef[] {
-  const slots: OpenLevelSetSlotRef[] = []
-
-  for (const trigger of state.trigger) {
-    for (const slot of findOpenSlots(trigger.openSlots)) {
-      slots.push({ ownerKind: 'trigger', ownerId: trigger.id, slot })
-    }
-  }
-
-  for (const action of state.action) {
-    for (const slot of findOpenSlots(action.openSlots ?? [])) {
-      slots.push({ ownerKind: 'action', ownerId: action.id, slot })
-    }
-  }
-
-  for (const risk of state.risk) {
-    for (const slot of findOpenSlots(risk.openSlots)) {
-      slots.push({ ownerKind: 'risk', ownerId: risk.id, slot })
-    }
-  }
-
-  if (state.position?.openSlots?.length) {
-    for (const slot of findOpenSlots(state.position.openSlots)) {
-      slots.push({ ownerKind: 'position', ownerId: 'position', slot })
-    }
-  }
-
-  for (const constraint of state.position?.constraints ?? []) {
-    for (const slot of findOpenSlots(constraint.openSlots)) {
-      slots.push({ ownerKind: 'positionConstraint', ownerId: constraint.id, slot })
-    }
-  }
-
-  return slots
-}
-
-function findOpenSlots(slots: readonly SemanticSlotState[]): SemanticSlotState[] {
-  return slots.filter(slot =>
-    slot.status === 'open'
-    && (slot.slotKey === DENSITY_SLOT_KEY
-      || slot.slotKey === REQUIREMENT_LEVEL_SET_SLOT_KEY
-      || slot.slotKey === SPACING_CONFLICT_SLOT_KEY),
-  )
-}
-
-function findClarificationTargetSlot(
-  slots: readonly OpenLevelSetSlotRef[],
-  pendingItems: ReturnType<typeof readPendingClarificationItems>,
-): OpenLevelSetSlotRef | null {
-  const activeItem = pickPendingClarificationTarget(pendingItems)
-  if (!activeItem) {
-    return null
-  }
-
-  const bySlotId = typeof activeItem.slotId === 'string'
-    ? slots.find(ref => buildSemanticSlotId(ref.slot) === activeItem.slotId)
-    : undefined
-  if (bySlotId) {
-    return bySlotId
-  }
-
-  const byIdentity = typeof activeItem.slotKey === 'string' && typeof activeItem.fieldPath === 'string'
-    ? slots.find(ref => ref.slot.slotKey === activeItem.slotKey && ref.slot.fieldPath === activeItem.fieldPath)
-    : undefined
-  if (byIdentity) {
-    return byIdentity
-  }
-
-  return null
-}
-
 function readPendingClarificationItems(clarificationState: unknown): Array<{
   status?: unknown
   key?: unknown
@@ -806,350 +774,4 @@ function readPendingClarificationItems(clarificationState: unknown): Array<{
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
-}
-
-function applyLevelSetAnswerToOpenSlot(
-  state: SemanticState,
-  openSlot: OpenLevelSetSlotRef,
-  answer: LevelSetAnswer,
-  shapeNormalizer: SemanticContractShapeNormalizerService,
-): SemanticState {
-  if (openSlot.ownerKind === 'trigger') {
-    const updates = state.trigger.map(owner =>
-      owner.id === openSlot.ownerId ? updateTriggerOwner(owner, openSlot.slot, answer, shapeNormalizer) : { owner, updated: false },
-    )
-    return hasOwnerUpdate(updates)
-      ? { ...state, trigger: updates.map(update => update.owner) }
-      : state
-  }
-
-  if (openSlot.ownerKind === 'action') {
-    const updates = state.action.map(owner =>
-      owner.id === openSlot.ownerId ? updateActionOwner(owner, openSlot.slot, answer, shapeNormalizer) : { owner, updated: false },
-    )
-    return hasOwnerUpdate(updates)
-      ? { ...state, action: updates.map(update => update.owner) }
-      : state
-  }
-
-  if (openSlot.ownerKind === 'risk') {
-    const updates = state.risk.map(owner =>
-      owner.id === openSlot.ownerId ? updateRiskOwner(owner, openSlot.slot, answer, shapeNormalizer) : { owner, updated: false },
-    )
-    return hasOwnerUpdate(updates)
-      ? { ...state, risk: updates.map(update => update.owner) }
-      : state
-  }
-
-  if (!state.position) {
-    return state
-  }
-
-  if (openSlot.ownerKind === 'positionConstraint') {
-    const updates = (state.position.constraints ?? []).map(owner =>
-      owner.id === openSlot.ownerId ? updatePositionConstraintOwner(owner, openSlot.slot, answer, shapeNormalizer) : { owner, updated: false },
-    )
-    return hasOwnerUpdate(updates)
-      ? { ...state, position: { ...state.position, constraints: updates.map(update => update.owner) } }
-      : state
-  }
-
-  const positionUpdate = updatePositionOwner(state.position, openSlot.slot, answer, shapeNormalizer)
-
-  return positionUpdate.updated ? { ...state, position: positionUpdate.owner } : state
-}
-
-function updateTriggerOwner(
-  owner: SemanticTriggerState,
-  consumedSlot: SemanticSlotState,
-  answer: LevelSetAnswer,
-  shapeNormalizer: SemanticContractShapeNormalizerService,
-): OwnerSlotUpdateResult<SemanticTriggerState> {
-  const contracts = updateLevelSetContracts(owner.contracts, consumedSlot, answer, shapeNormalizer)
-  if (!contracts.updated) {
-    return { owner, updated: false }
-  }
-
-  const openSlots = resolveOwnerOpenSlots(owner.openSlots, consumedSlot, contracts)
-
-  return {
-    owner: {
-      ...owner,
-      status: openSlots.some(slot => slot.status === 'open') ? 'open' : 'locked',
-      openSlots,
-      contracts: contracts.contracts,
-    },
-    updated: true,
-  }
-}
-
-function updateActionOwner(
-  owner: SemanticActionState,
-  consumedSlot: SemanticSlotState,
-  answer: LevelSetAnswer,
-  shapeNormalizer: SemanticContractShapeNormalizerService,
-): OwnerSlotUpdateResult<SemanticActionState> {
-  const contracts = updateLevelSetContracts(owner.contracts, consumedSlot, answer, shapeNormalizer)
-  if (!contracts.updated) {
-    return { owner, updated: false }
-  }
-
-  const openSlots = resolveOwnerOpenSlots(owner.openSlots ?? [], consumedSlot, contracts)
-
-  return {
-    owner: {
-      ...owner,
-      status: openSlots.some(slot => slot.status === 'open') ? 'open' : 'locked',
-      openSlots,
-      contracts: contracts.contracts,
-    },
-    updated: true,
-  }
-}
-
-function updateRiskOwner(
-  owner: SemanticRiskState,
-  consumedSlot: SemanticSlotState,
-  answer: LevelSetAnswer,
-  shapeNormalizer: SemanticContractShapeNormalizerService,
-): OwnerSlotUpdateResult<SemanticRiskState> {
-  const contracts = updateLevelSetContracts(owner.contracts, consumedSlot, answer, shapeNormalizer)
-  if (!contracts.updated) {
-    return { owner, updated: false }
-  }
-
-  const openSlots = resolveOwnerOpenSlots(owner.openSlots, consumedSlot, contracts)
-
-  return {
-    owner: {
-      ...owner,
-      status: openSlots.some(slot => slot.status === 'open') ? 'open' : 'locked',
-      openSlots,
-      contracts: contracts.contracts,
-    },
-    updated: true,
-  }
-}
-
-function updatePositionOwner(
-  owner: SemanticPositionState,
-  consumedSlot: SemanticSlotState,
-  answer: LevelSetAnswer,
-  shapeNormalizer: SemanticContractShapeNormalizerService,
-): OwnerSlotUpdateResult<SemanticPositionState> {
-  const contracts = updateLevelSetContracts(owner.contracts, consumedSlot, answer, shapeNormalizer)
-  if (!contracts.updated) {
-    return { owner, updated: false }
-  }
-
-  const openSlots = resolveOwnerOpenSlots(owner.openSlots ?? [], consumedSlot, contracts)
-
-  return {
-    owner: {
-      ...owner,
-      status: openSlots.some(slot => slot.status === 'open') ? 'open' : 'locked',
-      openSlots,
-      contracts: contracts.contracts,
-    },
-    updated: true,
-  }
-}
-
-function updatePositionConstraintOwner(
-  owner: SemanticPositionConstraintState,
-  consumedSlot: SemanticSlotState,
-  answer: LevelSetAnswer,
-  shapeNormalizer: SemanticContractShapeNormalizerService,
-): OwnerSlotUpdateResult<SemanticPositionConstraintState> {
-  const contracts = updateLevelSetContracts(owner.contracts, consumedSlot, answer, shapeNormalizer)
-  if (!contracts.updated) {
-    return { owner, updated: false }
-  }
-
-  const openSlots = resolveOwnerOpenSlots(owner.openSlots, consumedSlot, contracts)
-
-  return {
-    owner: {
-      ...owner,
-      status: openSlots.some(slot => slot.status === 'open') ? 'open' : 'locked',
-      openSlots,
-      contracts: contracts.contracts,
-    },
-    updated: true,
-  }
-}
-
-function updateLevelSetContracts(
-  contracts: readonly SemanticAtomContract[] | undefined,
-  consumedSlot: SemanticSlotState,
-  answer: LevelSetAnswer,
-  shapeNormalizer: SemanticContractShapeNormalizerService,
-): { contracts?: SemanticAtomContract[]; updated: boolean; fieldPath: string; hasConflict: boolean } {
-  if (!contracts?.length) {
-    return { contracts: contracts ? [...contracts] : undefined, updated: false, fieldPath: consumedSlot.fieldPath, hasConflict: false }
-  }
-
-  const target = parseTargetCapabilityPath(consumedSlot.fieldPath, consumedSlot.slotKey)
-  if (!target) {
-    return { contracts: [...contracts], updated: false, fieldPath: consumedSlot.fieldPath, hasConflict: false }
-  }
-
-  let updated = false
-  let hasConflict = false
-  let updatedFieldPath = consumedSlot.fieldPath
-  const nextContracts = contracts.map((contract) => {
-    if (contract.id !== target.contractId) {
-      return contract
-    }
-
-    const capabilityIndex = contract.capabilities.findIndex(capability =>
-      isLevelSetCapability(capability) && capabilityKey(capability) === target.capabilityKey,
-    )
-    if (capabilityIndex < 0) {
-      return contract
-    }
-
-    const nextShape = applyLevelSetAnswer(contract.capabilities[capabilityIndex].shape, consumedSlot, answer)
-    if (nextShape === contract.capabilities[capabilityIndex].shape) {
-      return contract
-    }
-
-    updated = true
-    updatedFieldPath = target.fieldPath
-    hasConflict = shapeNormalizer.normalizeLevelSetShape(nextShape, {
-      requireDensity: true,
-      fieldPath: updatedFieldPath,
-    }).status === 'conflict'
-
-    return {
-      ...contract,
-      capabilities: contract.capabilities.map((capability, index) =>
-        index === capabilityIndex
-          ? { ...capability, shape: nextShape }
-          : capability,
-      ),
-    }
-  })
-
-  return { contracts: nextContracts, updated, fieldPath: updatedFieldPath, hasConflict }
-}
-
-function isLevelSetCapability(capability: SemanticCapability): boolean {
-  return capability.domain === 'price'
-    && capability.verb === 'define'
-    && capability.object === 'level_set'
-}
-
-function applyLevelSetAnswer(
-  shape: SemanticCapabilityShape,
-  consumedSlot: SemanticSlotState,
-  answer: LevelSetAnswer,
-): SemanticCapabilityShape {
-  if (isSpacingConflictAnswer(answer)) {
-    if (consumedSlot.slotKey !== SPACING_CONFLICT_SLOT_KEY) {
-      return shape
-    }
-
-    return answer.resolveConflictBy === 'gridCount'
-      ? omitShapeKeys(shape, ['absoluteSpacing', 'spacingPct'])
-      : omitShapeKeys(shape, ['gridIntervals', 'gridCount'])
-  }
-
-  return {
-    ...shape,
-    ...(answer.gridIntervals !== undefined ? { gridIntervals: answer.gridIntervals } : {}),
-    ...(answer.gridCount !== undefined ? { gridCount: answer.gridCount } : {}),
-    ...(answer.absoluteSpacing !== undefined ? { absoluteSpacing: answer.absoluteSpacing } : {}),
-    ...(answer.spacingPct !== undefined ? { spacingPct: answer.spacingPct } : {}),
-  }
-}
-
-function omitShapeKeys(shape: SemanticCapabilityShape, keys: readonly string[]): SemanticCapabilityShape {
-  const next = { ...shape }
-  for (const key of keys) {
-    delete next[key]
-  }
-
-  return next
-}
-
-function resolveOwnerOpenSlots(
-  openSlots: readonly SemanticSlotState[],
-  consumedSlot: SemanticSlotState,
-  contracts: { fieldPath: string; hasConflict: boolean },
-): SemanticSlotState[] {
-  const slots = openSlots.filter(slot => !isSameSlot(slot, consumedSlot))
-
-  if (!contracts.hasConflict) {
-    return slots
-  }
-
-  if (slots.some(slot => slot.slotKey === SPACING_CONFLICT_SLOT_KEY && slot.fieldPath === contracts.fieldPath && slot.status === 'open')) {
-    return slots
-  }
-
-  return [
-    ...slots,
-    createSpacingConflictSlot(contracts.fieldPath),
-  ]
-}
-
-function isSameSlot(left: SemanticSlotState, right: SemanticSlotState): boolean {
-  return left.slotKey === right.slotKey && left.fieldPath === right.fieldPath
-}
-
-function createSpacingConflictSlot(fieldPath: string): SemanticSlotState {
-  return {
-    slotKey: SPACING_CONFLICT_SLOT_KEY,
-    fieldPath,
-    status: 'open',
-    priority: 'core',
-    questionHint: renderSemanticClarificationQuestion({
-      slotKey: SPACING_CONFLICT_SLOT_KEY,
-      fallback: '网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。',
-    }),
-    affectsExecution: true,
-    evidence: {
-      source: 'derived',
-      text: 'Open slot answer introduced conflicting level set density fields.',
-    },
-  }
-}
-
-function buildCapabilityFieldPathFromRequirement(fieldPath: string): string {
-  return fieldPath.replace(/\.requires\.price\.define\.level_set$/u, '.capabilities[price.define.level_set].shape')
-}
-
-function parseTargetCapabilityPath(
-  fieldPath: string,
-  slotKey: string,
-): { contractId: string; capabilityKey: string; fieldPath: string } | null {
-  const contractId = fieldPath.match(/\.contracts\[([^\]]+)\]/u)?.[1]
-  if (!contractId) {
-    return null
-  }
-
-  if (slotKey === REQUIREMENT_LEVEL_SET_SLOT_KEY) {
-    return {
-      contractId,
-      capabilityKey: 'price.define.level_set',
-      fieldPath: buildCapabilityFieldPathFromRequirement(fieldPath),
-    }
-  }
-
-  const capabilityKeyMatch = fieldPath.match(/\.capabilities\[([^\]]+)\]\.shape$/u)
-  const capabilityKey = capabilityKeyMatch?.[1]
-  if (capabilityKey !== 'price.define.level_set') {
-    return null
-  }
-
-  return { contractId, capabilityKey, fieldPath }
-}
-
-function capabilityKey(capability: SemanticCapability): string {
-  return `${capability.domain}.${capability.verb}.${capability.object}`
-}
-
-function hasOwnerUpdate<T>(updates: readonly OwnerSlotUpdateResult<T>[]): boolean {
-  return updates.some(update => update.updated)
 }

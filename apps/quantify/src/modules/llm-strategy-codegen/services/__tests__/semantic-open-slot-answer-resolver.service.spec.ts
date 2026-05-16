@@ -781,7 +781,7 @@ describe('semanticOpenSlotAnswerResolverService', () => {
 })
 
 describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
-  const service = new SemanticOpenSlotAnswerResolverService(undefined, new GenericSeedDispatcher())
+  const service = new SemanticOpenSlotAnswerResolverService(new GenericSeedDispatcher())
 
   it('locks an open symbol context slot from an inferred symbol answer', () => {
     const state = stateWithMissingEntry()
@@ -1100,7 +1100,7 @@ describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
   })
 
   it('keeps complete gate triggers attached to a fulfilled entry fragment', () => {
-    const mixedService = new SemanticOpenSlotAnswerResolverService(undefined, new MixedEntryGateExitSeedExtractorService())
+    const mixedService = new SemanticOpenSlotAnswerResolverService(new MixedEntryGateExitSeedExtractorService())
 
     const result = mixedService.resolve({
       currentState: stateWithMissingEntry(),
@@ -1124,7 +1124,7 @@ describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
   })
 
   it('does not fulfill an entry slot from an incomplete entry trigger fragment', () => {
-    const incompleteService = new SemanticOpenSlotAnswerResolverService(undefined, new IncompleteEntrySeedExtractorService())
+    const incompleteService = new SemanticOpenSlotAnswerResolverService(new IncompleteEntrySeedExtractorService())
     const state = stateWithMissingEntry()
 
     const result = incompleteService.resolve({
@@ -1147,7 +1147,7 @@ describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
   })
 
   it('locks structured symbol context fragments using their resolved value', () => {
-    const structuredSymbolService = new SemanticOpenSlotAnswerResolverService(undefined, new StructuredSymbolSeedExtractorService())
+    const structuredSymbolService = new SemanticOpenSlotAnswerResolverService(new StructuredSymbolSeedExtractorService())
     const state = {
       ...stateWithMissingEntry(),
       contextSlots: {
@@ -1204,7 +1204,7 @@ describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
   })
 
   it('preserves structured symbol fragment evidence for supported stablecoin quotes', () => {
-    const structuredSymbolService = new SemanticOpenSlotAnswerResolverService(undefined, new StructuredBusdSymbolSeedExtractorService())
+    const structuredSymbolService = new SemanticOpenSlotAnswerResolverService(new StructuredBusdSymbolSeedExtractorService())
     const state = {
       ...stateWithMissingEntry(),
       contextSlots: {
@@ -1247,7 +1247,7 @@ describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
     ['primitive', () => new PrimitiveSymbolSeedExtractorService()],
     ['plain value object', () => new PlainValueSymbolSeedExtractorService()],
   ] as const)('normalizes %s symbol context fragments through the symbol resolver', (_caseName, createSeedExtractor) => {
-    const fragmentSymbolService = new SemanticOpenSlotAnswerResolverService(undefined, createSeedExtractor())
+    const fragmentSymbolService = new SemanticOpenSlotAnswerResolverService(createSeedExtractor())
     const state = {
       ...stateWithMissingEntry(),
       contextSlots: {
@@ -1289,7 +1289,7 @@ describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
   })
 
   it('keeps open non-symbol context slots when fragment value is structured', () => {
-    const nonSymbolObjectService = new SemanticOpenSlotAnswerResolverService(undefined, new NonSymbolObjectSeedExtractorService())
+    const nonSymbolObjectService = new SemanticOpenSlotAnswerResolverService(new NonSymbolObjectSeedExtractorService())
     const openTimeframeSlot: SemanticSlotState = {
       slotKey: 'timeframe',
       fieldPath: 'contextSlots.timeframe',
