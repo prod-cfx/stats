@@ -50,6 +50,11 @@ export interface ParamSlotSchema {
   readonly required: boolean
   /** 数值合法区间，用于 fail-closed 校验（如 RSI 必须 0-100） */
   readonly range?: readonly [number, number]
+  /**
+   * 数值必须为该数的倍数（如整数 period 用 1）。Issue #1395 mute-spider S5：
+   *   防止 LLM 幻觉出 14.5 / 12.3 这类荒唐 period 值。
+   */
+  readonly multipleOf?: number
   /** enum 类型的合法值集 */
   readonly enum?: readonly string[]
   /** 缺省值（仅 required=false 时生效） */
@@ -217,4 +222,16 @@ export interface AtomContractSurface {
    * 缺省视为空数组——即仅起到"无 keyword 时仍允许 verb 触发"的效果，不继承任何参数。
    */
   readonly inheritParams?: readonly string[]
+
+  /**
+   * Issue #1395 mute-spider — 多 slot 联动的合法预置组合白名单。
+   *
+   * 场景：MACD 标准参数三元组 (fast/slow/signal) 之间互相约束，单 slot range 校验
+   *   无法表达 "12/26/9 合法 但 100/26/9 非法" 这种业务约束。strict-validation pass
+   *   先尝试 paramPresetCombos：若 params 中包含某条 preset 的全部 key 且值全等
+   *   →  直接判合法；否则回落到 per-slot enum/range/multipleOf 校验。
+   *
+   * 仅声明在高风险 atom 上（MACD cross_over / cross_under 等）。
+   */
+  readonly paramPresetCombos?: ReadonlyArray<Readonly<Record<string, string | number | boolean>>>
 }

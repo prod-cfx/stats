@@ -19,6 +19,7 @@ import {
   getAtomFulfillsStrategyPhase,
 } from '../atom-contracts/atom-contract-registry'
 import type { AtomContractKey } from '../atom-contracts/atom-contract-types'
+import { collectAtomLeaves, type SemanticRule } from '../types/atom-expr'
 import type {
   SemanticCapability,
   SemanticPositionConstraintState,
@@ -60,7 +61,15 @@ export class SemanticExecutableSemanticsService {
    * 历史等价：trigger.phase==='entry' locked || order_program contract || schedule。
    */
   hasExecutableEntrySemantics(state: SemanticState): boolean {
-    return this.hasLockedAtomFulfilling(state, 'entry')
+    if (this.hasLockedAtomFulfilling(state, 'entry')) return true
+    // Issue #1395 (b)：positionConstraint 中的"持续入场源"atom 本身即视为入场语义。
+    //   grid.range_rebalance / position.dca_schedule / position.pyramiding_limit
+    //   是不依赖独立 entry trigger 的连续/调度类入场源；registry 是否已声明 phases
+    //   不影响事实——直接在这里兜底，避免 reconciler 误报 missing_entry_atom。
+    if (this.hasContinuousEntryFromPositionConstraint(state)) return true
+    // Issue #1395 (c)：state.rules 内任一 phase==='entry' 且 condition 含非空 atom 叶子。
+    if (this.hasRulesEntrySemantics(state)) return true
+    return false
   }
 
   /**
@@ -76,7 +85,14 @@ export class SemanticExecutableSemanticsService {
   hasExecutableExitSemantics(state: SemanticState): boolean {
     if (this.hasLockedAtomFulfilling(state, 'exit')) return true
     // 兼容：legacy risk atom（不在 ATOM_CONTRACT_REGISTRY 内）通过 params 校验判定 forced-exit。
-    return this.hasLegacyForcedExitRiskSemantics(state)
+    if (this.hasLegacyForcedExitRiskSemantics(state)) return true
+    // Issue #1395 (b)：grid.range_rebalance 配置 breakoutAction ∈ {stop, pause, continue}
+    //   本身即构成出场/风控语义（突破边界时的停止/暂停/继续策略），不需要独立 exit trigger。
+    if (this.hasGridBreakoutExitSemantics(state)) return true
+    // Issue #1395 (c)：state.rules 内存在 phase==='exit' 的 rule，或 effects 中含
+    //   risk.* / action.close_* / breakoutAction 的 rule。
+    if (this.hasRulesExitSemantics(state)) return true
+    return false
   }
 
   /**
@@ -266,6 +282,81 @@ export class SemanticExecutableSemanticsService {
    *
    * 与历史 hasLockedExitRiskSemantics 严格对齐：valuePct > 0 视为已锁定 forced-exit 语义。
    */
+  /**
+   * Issue #1395 (b)：持续入场源 atom 在 positionConstraint 内即视为入场语义。
+   * 不要求 registry 声明 phase；这些 atom key 在领域语义上本就是"连续/调度类入场"。
+   */
+  private hasContinuousEntryFromPositionConstraint(state: SemanticState): boolean {
+    const CONTINUOUS_ENTRY_KEYS: ReadonlySet<string> = new Set([
+      'grid.range_rebalance',
+      'position.dca_schedule',
+      'position.pyramiding_limit',
+    ])
+    const constraints: SemanticPositionConstraintState[] = [
+      ...state.positionConstraint,
+      ...((state.position?.constraints ?? [])),
+    ]
+    return constraints.some((c) => {
+      if (c.status === 'superseded') return false
+      return CONTINUOUS_ENTRY_KEYS.has(c.key)
+    })
+  }
+
+  /**
+   * Issue #1395 (b)：grid.range_rebalance + breakoutAction ∈ {stop,pause,continue}
+   *   构成出场/风控语义。
+   */
+  private hasGridBreakoutExitSemantics(state: SemanticState): boolean {
+    const VALID_BREAKOUT_ACTIONS: ReadonlySet<string> = new Set(['stop', 'pause', 'continue'])
+    const constraints: SemanticPositionConstraintState[] = [
+      ...state.positionConstraint,
+      ...((state.position?.constraints ?? [])),
+    ]
+    return constraints.some((c) => {
+      if (c.status === 'superseded') return false
+      if (c.key !== 'grid.range_rebalance') return false
+      const action = (c.params as { breakoutAction?: unknown }).breakoutAction
+      return typeof action === 'string' && VALID_BREAKOUT_ACTIONS.has(action)
+    })
+  }
+
+  /**
+   * Issue #1395 (c)：state.rules 内任一 phase==='entry' 的 rule，且其 condition
+   * 树至少含一个 atom 叶子 → 视为已具备入场语义。
+   */
+  private hasRulesEntrySemantics(state: SemanticState): boolean {
+    const rules: readonly SemanticRule[] | undefined = state.rules
+    if (!rules || rules.length === 0) return false
+    return rules.some((rule) => {
+      if (rule.phase !== 'entry') return false
+      const leaves = collectAtomLeaves(rule.condition)
+      return leaves.length > 0
+    })
+  }
+
+  /**
+   * Issue #1395 (c)：state.rules 内存在 phase==='exit' 的 rule，
+   * 或 effects 含 risk.* / action.close_* / 任何带 breakoutAction 的 grid 节点。
+   */
+  private hasRulesExitSemantics(state: SemanticState): boolean {
+    const rules: readonly SemanticRule[] | undefined = state.rules
+    if (!rules || rules.length === 0) return false
+    return rules.some((rule) => {
+      if (rule.phase === 'exit') return true
+      for (const effect of rule.effects) {
+        for (const leaf of collectAtomLeaves(effect)) {
+          if (leaf.key.startsWith('risk.')) return true
+          if (leaf.key.startsWith('action.close_')) return true
+          if (leaf.key === 'grid.range_rebalance') {
+            const action = (leaf.params as { breakoutAction?: unknown }).breakoutAction
+            if (typeof action === 'string' && action.length > 0) return true
+          }
+        }
+      }
+      return false
+    })
+  }
+
   private hasLegacyForcedExitRiskSemantics(state: SemanticState): boolean {
     return state.risk.some((risk) => {
       if (risk.status !== 'locked' || risk.openSlots.some(slot => slot.status === 'open')) {

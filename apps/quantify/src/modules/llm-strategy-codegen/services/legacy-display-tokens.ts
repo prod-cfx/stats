@@ -14,6 +14,7 @@ export const DISPLAY_TOKENS = [
   { token: 'atom.price.breakout_up.name', kind: 'atom', zh: '向上突破' },
   { token: 'atom.price.breakout_down.name', kind: 'atom', zh: '向下跌破' },
   { token: 'atom.price.rolling_extrema_breakout.name', kind: 'atom', zh: '滚动高低点突破' },
+  { token: 'atom.price.previous_extrema_retest.name', kind: 'atom', zh: '前高/前低回踩' },
   { token: 'atom.price.range_position_lte.name', kind: 'atom', zh: '区间低位' },
   { token: 'atom.price.range_position_gte.name', kind: 'atom', zh: '区间高位' },
   { token: 'atom.price.detect.indicator_boundary.name', kind: 'atom', zh: '价格触及指标边界' },
@@ -100,6 +101,8 @@ export const DISPLAY_TOKENS = [
   { token: 'atom.risk.atr_multiple_take_profit.name', kind: 'atom', zh: 'ATR 倍数止盈' },
   // Issue #1383 Lane A/C：risk.atr_stop 升级为 supported_executable
   { token: 'atom.risk.atr_stop.name', kind: 'atom', zh: 'ATR 动态止损' },
+  // Issue #1395 Wave 1 B4：risk.atr_take_profit 升级为 supported_executable
+  { token: 'atom.risk.atr_take_profit.name', kind: 'atom', zh: 'ATR 动态止盈' },
   { token: 'atom.risk.remembered_level_stop.name', kind: 'atom', zh: '记忆价位止损' },
   { token: 'atom.risk.falling_knife_guard.name', kind: 'atom', zh: '不接急跌保护' },
   { token: 'atom.risk.trailing_stop_pct.name', kind: 'atom', zh: '百分比移动止损' },

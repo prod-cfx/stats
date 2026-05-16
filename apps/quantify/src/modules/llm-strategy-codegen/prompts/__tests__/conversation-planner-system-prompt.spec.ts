@@ -26,8 +26,9 @@ describe('conversationPlannerSystemPrompt', () => {
     const prompt = buildConversationPlannerSystemPrompt()
 
     expect(prompt).toContain('已有 active semantic state 时，默认按增量修改处理')
-    expect(prompt).toContain('输出原子语义 patch')
-    expect(prompt).toContain('context、trigger、action、risk、position')
+    // #1395：rules[] 表达式树形态取代旧 atoms[] 原子语义 patch
+    expect(prompt).toContain('表达式树 patch（rules[]）')
+    expect(prompt).toContain('trigger / action / risk / 仓位 / context')
     expect(prompt).toContain('不要输出 checklist')
     expect(prompt).toContain('用户明确要求替换整个策略')
     expect(prompt).toContain('否则不得重置已有语义')
@@ -37,7 +38,8 @@ describe('conversationPlannerSystemPrompt', () => {
   it('requires executable planner action atoms to include semantic contracts', () => {
     const prompt = buildConversationPlannerSystemPrompt()
 
-    expect(prompt).toContain('任何可执行 action atom 必须携带 contracts/capabilities')
+    // #1395：action atom 现在挂在 semanticPatch.rules[].effects 内
+    expect(prompt).toContain('semanticPatch.rules[].effects 内的 action atom 必须携带 contracts/capabilities')
     expect(prompt).toContain('不得输出缺少执行合约的裸 action')
     expect(prompt).toContain('place_limit_grid')
     expect(prompt).toContain('order_program/maintain/limit_ladder')

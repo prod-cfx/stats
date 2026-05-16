@@ -494,6 +494,17 @@
       ]
     },
     {
+      "key": "price.previous_extrema_retest",
+      "category": "trigger",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "predicate:GTE",
+        "predicate:sequence",
+        "series:HIGHEST_HIGH"
+      ]
+    },
+    {
       "key": "price.range_position_gte",
       "category": "trigger",
       "status": "covered",
@@ -606,6 +617,14 @@
       "failureLayer": "compile-throw",
       "trace": [],
       "note": "codegen.canonical_spec_v2_condition_unsupported:risk.atr_stop"
+    },
+    {
+      "key": "risk.atr_take_profit",
+      "category": "risk",
+      "status": "uncovered",
+      "failureLayer": "compile-throw",
+      "trace": [],
+      "note": "codegen.canonical_spec_v2_condition_unsupported:risk.atr_take_profit:multiple"
     },
     {
       "key": "risk.boundary_guard",

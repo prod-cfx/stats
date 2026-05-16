@@ -20,8 +20,8 @@ describe('conversationPlannerSystemPrompt — atom catalog injection (issue #134
       }
     })
 
-    it('显式说明 atoms[].key 必须从枚举选（issue #1364 AC-2 单数组）', () => {
-      expect(prompt).toMatch(/atoms\[\]\.key.*?枚举/s)
+    it('显式说明 condition / effects 叶子 atom key 必须从枚举选（issue #1395 表达式树）', () => {
+      expect(prompt).toMatch(/condition \/ effects.*?枚举/s)
       expect(prompt).toContain('禁止自由文本或自创 atom')
     })
 
@@ -33,13 +33,15 @@ describe('conversationPlannerSystemPrompt — atom catalog injection (issue #134
       expect(prompt).toContain('{ value, source }')
     })
 
-    it('包含 5 桶各 1 条 in-context example（动态派生自 REGISTRY，issue #1364 AC-2）', () => {
-      const buckets = ['trigger', 'action', 'risk', 'orchestration', 'positionConstraint'] as const
-      for (const b of buckets) {
-        expect(prompt).toContain(`示例（${b}）`)
-      }
-      // 单数组 atoms[] 形态
-      expect(prompt).toMatch(/atoms:\s*\[\{\s*"key":/)
+    it('包含 5 类组合形态 in-context examples（issue #1395 表达式树）', () => {
+      // 单叶子 / AND / OR / SEQUENCE / 嵌套多周期 AND，覆盖 AtomExpr 全部 5 种 kind 形态
+      expect(prompt).toContain('【单叶子】')
+      expect(prompt).toContain('【AND】')
+      expect(prompt).toContain('【OR 出场】')
+      expect(prompt).toContain('【SEQUENCE】')
+      expect(prompt).toContain('【嵌套 + 多周期 AND】')
+      // 表达式树叶子形态
+      expect(prompt).toMatch(/"kind":\s*"atom"/)
     })
 
     it('包含动态 atom 总数（绝不写死，断言数值与注册表长度一致）', () => {

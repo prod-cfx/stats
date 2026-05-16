@@ -181,18 +181,13 @@ describe('issue #1279 PR2 — dispatcher self-baseline', () => {
     })
   })
 
-  it('应该精确 233 case（#1329 follow-up Phase 1/2/3e 引入 13 新 orchestration atom，+39 合成；risk 原子 registry 化 +9 合成）', () => {
-    // PR2c-final-2：9 个高频 trigger atom（rsi_lte/gte、cross_over/under、bollinger.touch_*×3、
-    // breakout_up/down）各补 2 条扩展 utterance（同义词/参数换序/短 token ema20、复合 timeframe），共 +18 条。
-    // #1329 follow-up Phase 1/2：ATOM_CONTRACT_REGISTRY 新增 11 个 orchestration atom
-    //   （gate.regime / portfolioRisk.{symbol,substrategy}_exposure_cap /
-    //    program.{dynamic_grid,fixed_grid_gated,adaptive_volatility_grid,event_listener} /
-    //    scope.{symbol,leg,timeframe,dataSource}），均无 corpus fixture，
-    //   走 synthesizeForAtom 兜底，11 × 3 = 33 条合成 utterance。
-    // #1329 follow-up Phase 3e：ATOM_CONTRACT_REGISTRY 再追加 2 个 orchestration atom
-    //   （scope.subStrategy / gate.subStrategy），同样走合成路径，+2 × 3 = +6 条。
-    // 实际分布：corpus 177 + synthesized 48（13 新 orchestration atom × 3 + 3 risk atom × 3）+ ac-7 6 + ac-12 2 = 233
-    expect(cases.length).toBe(233)
+  it('应该精确 242 case（#1395 Wave 1 升 condition.sequence / price.previous_extrema_retest / risk.atr_take_profit 至 supported_executable，+9 合成）', () => {
+    // 历史背景见 git history：233 = corpus 177 + synthesized 48 + ac-7 6 + ac-12 2。
+    // #1395 Wave 1 B4：condition.sequence / price.previous_extrema_retest / risk.atr_take_profit
+    //   三个 atom 升 supportStatus 至 supported_executable，dispatcher synthesizeForAtom 兜底
+    //   合成 3 × 3 = 9 条 utterance；orchestration / trigger / risk 各 +3 case。
+    // 实际分布：corpus 177 + synthesized 57（原 48 + 9 新）+ ac-7 6 + ac-12 2 = 242
+    expect(cases.length).toBe(242)
   })
 
   // #1331 C3：per-atom breakdown 断言（13 新 orchestration atom 各 ≥ 1 case），

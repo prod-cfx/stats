@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common'
 
 import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
+import type { AtomExpr, AtomExprAtom, SemanticRule } from '../types/atom-expr'
+import { collectAtomLeaves } from '../types/atom-expr'
 import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gate.types'
 import type {
   SemanticAtomContract,
@@ -154,18 +156,41 @@ export class SemanticContractReadinessService {
     const { state: nextState, hasBlockingSlots: subStrategyBindingHasBlockingSlots } =
       applySubStrategyScopeBindingFailClosed(afterDataSourceBinding)
 
+    // Issue #1395 (mute-spider) Stage I.A：state.rules 非空时优先走 rules-tree 判定，
+    //   绕过扁平桶 8 路 binding/blocking-owner-open-slots fail-closed（这些信号在
+    //   rules-first 形态下与真实结构背离）。仍保留 missingRequirements / orchestration /
+    //   provider-shape 校验，因为它们独立于扁平桶 → rules 派生链。
+    const rulesReady = state.rules && state.rules.length > 0
+      ? this.evaluateRulesReadiness(state.rules)
+      : null
+
+    const flatReady
+      = unsupportedOrUnknownOwnerKeys.size === 0
+      && missingRequirements.length === 0
+      && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey)
+      && !hasBlockingOwnerOpenSlots(nextState)
+      && !orchestrationResult.hasBlockingSlots
+      && !symbolBindingHasBlockingSlots
+      && !legBindingHasBlockingSlots
+      && !timeframeBound.hasBlockingSlots
+      && !dataSourceBindingHasBlockingSlots
+      && !subStrategyBindingHasBlockingSlots
+
+    const ready = rulesReady !== null
+      ? (
+          unsupportedOrUnknownOwnerKeys.size === 0
+          && missingRequirements.length === 0
+          && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey)
+          && !orchestrationResult.hasBlockingSlots
+          && rulesReady.hasEntry
+          && rulesReady.hasExit
+          && rulesReady.hasRisk
+        )
+      : flatReady
+
     return {
       state: nextState,
-      ready: unsupportedOrUnknownOwnerKeys.size === 0
-        && missingRequirements.length === 0
-        && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey)
-        && !hasBlockingOwnerOpenSlots(nextState)
-        && !orchestrationResult.hasBlockingSlots
-        && !symbolBindingHasBlockingSlots
-        && !legBindingHasBlockingSlots
-        && !timeframeBound.hasBlockingSlots
-        && !dataSourceBindingHasBlockingSlots
-        && !subStrategyBindingHasBlockingSlots,
+      ready,
       missingRequirements,
     }
   }
@@ -379,6 +404,115 @@ export class SemanticContractReadinessService {
     }
 
     return this.semanticAtomRegistry.resolve(owner.atomKey)
+  }
+
+  /**
+   * Issue #1395 — Rules-tree 优先的 readiness 判定。
+   *
+   * 旧路径只看 flat trigger/action/risk 桶，导致：
+   * - grid 策略的 `grid.range_rebalance` 自洽闭环被误判缺 entry/exit；
+   * - sequence/AND/OR 根节点产出 effects 但扁平桶被 fail-closed 砍光时误报 missing_entry_atom；
+   * - 多轮编辑后 rules[] 真实结构与扁平投影背离。
+   *
+   * 本方法**只**对 SemanticRule[] 做判定，不依赖 flat 桶；调用方在 rules 为空时回退到旧路径。
+   *
+   * 判定口径：
+   * - hasEntry: 存在 phase ∈ {entry, gate} 且 effects 含 action.open_long/open_short，
+   *   或 condition 子树中含 grid.range_rebalance（grid 自洽视为入场闭环）；
+   * - hasExit: 存在 phase = exit 且 effects 含 action.close_*；
+   *   或 condition/effects 中含 grid.range_rebalance 且 breakoutAction ∈ {stop, pause}（grid 越界停止视作出场语义）；
+   *   或任意 rule 含 grid.range_rebalance（rangeRebalance 即自带循环出场语义）；
+   * - hasRisk: effects 中出现 risk.* atom（含 stop_loss_pct / take_profit_pct / atr_stop / atr_take_profit / partial_take_profit）；
+   *   或任意 rule 含 grid.range_rebalance（grid range_rebalance 自带越界风控约束）；
+   * - hasPosition: effects 中出现 grid.range_rebalance 或 position-domain atom（key 前缀 `position.` / `sizing.`）。
+   */
+  evaluateRulesReadiness(rules: readonly SemanticRule[] | undefined): RulesReadinessSummary {
+    const summary: RulesReadinessSummary = {
+      hasEntry: false,
+      hasExit: false,
+      hasRisk: false,
+      hasPosition: false,
+      missing: [],
+    }
+
+    if (!rules || rules.length === 0) {
+      summary.missing.push('rules_empty')
+      return summary
+    }
+
+    let sawGridRangeRebalance = false
+    let sawGridStopBreakout = false
+
+    for (const rule of rules) {
+      const condLeaves = collectAtomLeavesSafe(rule.condition)
+      const effectLeaves = rule.effects.flatMap(collectAtomLeavesSafe)
+      const allLeaves = [...condLeaves, ...effectLeaves]
+
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- Issue #1395 rules-tree readiness 必须直接匹配 grid.range_rebalance 自洽闭环语义，registry bucket(=positionConstraint) 不足以区分。
+      const gridLeaf = allLeaves.find(leaf => leaf.key === 'grid.range_rebalance')
+      if (gridLeaf) {
+        sawGridRangeRebalance = true
+        const breakoutAction = gridLeaf.params?.breakoutAction
+        if (breakoutAction === 'stop' || breakoutAction === 'pause') {
+          sawGridStopBreakout = true
+        }
+      }
+
+      const effectKeys = new Set(effectLeaves.map(l => l.key))
+
+      if (rule.phase === 'entry' || rule.phase === 'gate') {
+        if (effectKeys.has('action.open_long') || effectKeys.has('action.open_short')) {
+          summary.hasEntry = true
+        }
+      }
+      if (rule.phase === 'exit') {
+        if (effectKeys.has('action.close_long') || effectKeys.has('action.close_short')) {
+          summary.hasExit = true
+        }
+      }
+
+      for (const key of effectKeys) {
+        if (key.startsWith('risk.')) summary.hasRisk = true
+        // eslint-disable-next-line atom-keys/no-atom-key-literal -- Issue #1395 rules-tree readiness 直接匹配 grid.range_rebalance（自洽闭环 position 信号），见上方同类豁免。
+        if (key === 'grid.range_rebalance' || key.startsWith('position.') || key.startsWith('sizing.')) {
+          summary.hasPosition = true
+        }
+      }
+    }
+
+    // grid 自洽闭环：range_rebalance 同时承担 entry + exit 语义
+    if (sawGridRangeRebalance) {
+      summary.hasEntry = true
+      summary.hasExit = true
+      summary.hasRisk = true // 越界 breakoutAction 自带风控
+      summary.hasPosition = true
+    }
+    // 显式 grid stop/pause：再强化 exit 信号（用于未来扩展）
+    if (sawGridStopBreakout) summary.hasExit = true
+
+    if (!summary.hasEntry) summary.missing.push('missing_entry')
+    if (!summary.hasExit) summary.missing.push('missing_exit')
+    if (!summary.hasRisk) summary.missing.push('missing_risk')
+
+    return summary
+  }
+}
+
+export interface RulesReadinessSummary {
+  hasEntry: boolean
+  hasExit: boolean
+  hasRisk: boolean
+  hasPosition: boolean
+  missing: string[]
+}
+
+function collectAtomLeavesSafe(expr: AtomExpr | undefined): AtomExprAtom[] {
+  if (!expr) return []
+  try {
+    return collectAtomLeaves(expr)
+  }
+  catch {
+    return []
   }
 }
 

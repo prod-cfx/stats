@@ -14,6 +14,7 @@ import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gat
 import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant-conversations.repository'
 import type { EditablePublishedStrategySnapshotRecord } from '../repositories/published-strategy-snapshots.repository'
 import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
+import { collectAtomLeaves, gracefulParseSemanticRule, type SemanticRule } from '../types/atom-expr'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { SemanticEditDecision } from '../types/semantic-edit'
@@ -3137,24 +3138,72 @@ export class CodegenConversationService {
     const hasLockedEntry = this.executableSemantics.hasExecutableEntrySemantics(state)
     const hasLockedExit = this.executableSemantics.hasExecutableExitSemantics(state)
     const hasCompleteOrderProgram = this.executableSemantics.hasCompleteOrderProgramSemantics(state)
+
+    // Issue #1395 (mute-spider) Stage I.B：rules-tree 视角的入/出场承接判定。
+    //   - rules[] 含 phase ∈ {entry, gate} + effects 携带 action.open_long/short 或
+    //     condition 子树含 grid.range_rebalance → 视为入场闭环，不再注入 missing_entry_atom；
+    //   - rules[] 含 phase = exit + effects 携带 action.close_*，或任意 rule
+    //     含 grid.range_rebalance → 视为出场闭环，不再注入 missing_exit_atom。
+    const rulesHasEntry = this.rulesCoverEntry(state.rules)
+    const rulesHasExit = this.rulesCoverExit(state.rules)
+
     const triggers = state.trigger.filter(trigger =>
       !this.isMissingExecutableAtomTrigger(trigger)
-      || (trigger.phase === 'entry' && !hasLockedEntry)
-      || (trigger.phase === 'exit' && !hasLockedExit && !hasCompleteOrderProgram),
+      || (trigger.phase === 'entry' && !hasLockedEntry && !rulesHasEntry)
+      || (trigger.phase === 'exit' && !hasLockedExit && !hasCompleteOrderProgram && !rulesHasExit),
     )
     let changed = triggers.length !== state.trigger.length
 
-    if (!hasLockedEntry && !triggers.some(trigger => this.isMissingExecutableAtomTrigger(trigger) && trigger.phase === 'entry')) {
+    if (!hasLockedEntry && !rulesHasEntry && !triggers.some(trigger => this.isMissingExecutableAtomTrigger(trigger) && trigger.phase === 'entry')) {
       triggers.push(this.buildMissingExecutableAtomTrigger('entry'))
       changed = true
     }
 
-    if (!hasLockedExit && !hasCompleteOrderProgram && !triggers.some(trigger => this.isMissingExecutableAtomTrigger(trigger) && trigger.phase === 'exit')) {
+    if (!hasLockedExit && !hasCompleteOrderProgram && !rulesHasExit && !triggers.some(trigger => this.isMissingExecutableAtomTrigger(trigger) && trigger.phase === 'exit')) {
       triggers.push(this.buildMissingExecutableAtomTrigger('exit'))
       changed = true
     }
 
     return changed ? { ...state, trigger: triggers } : state
+  }
+
+  private rulesCoverEntry(rules: readonly SemanticRule[] | undefined): boolean {
+    if (!rules || rules.length === 0) return false
+    for (const rule of rules) {
+      // grid.range_rebalance 自洽闭环：condition 或 effects 任一含即视为入场承接
+      const allLeaves = [...this.safeCollectLeaves(rule.condition), ...rule.effects.flatMap(e => this.safeCollectLeaves(e))]
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- Issue #1395 grid 自洽闭环直接匹配 atom key，registry bucket 不足以区分。
+      if (allLeaves.some(l => l.key === 'grid.range_rebalance')) return true
+      if (rule.phase === 'entry' || rule.phase === 'gate') {
+        const effectKeys = rule.effects.flatMap(e => this.safeCollectLeaves(e)).map(l => l.key)
+        if (effectKeys.includes('action.open_long') || effectKeys.includes('action.open_short')) return true
+      }
+    }
+    return false
+  }
+
+  private rulesCoverExit(rules: readonly SemanticRule[] | undefined): boolean {
+    if (!rules || rules.length === 0) return false
+    for (const rule of rules) {
+      const allLeaves = [...this.safeCollectLeaves(rule.condition), ...rule.effects.flatMap(e => this.safeCollectLeaves(e))]
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- Issue #1395 grid 自洽闭环直接匹配 atom key，registry bucket 不足以区分。
+      if (allLeaves.some(l => l.key === 'grid.range_rebalance')) return true
+      if (rule.phase === 'exit') {
+        const effectKeys = rule.effects.flatMap(e => this.safeCollectLeaves(e)).map(l => l.key)
+        if (effectKeys.includes('action.close_long') || effectKeys.includes('action.close_short')) return true
+      }
+    }
+    return false
+  }
+
+  private safeCollectLeaves(expr: unknown): Array<{ key: string }> {
+    if (!expr || typeof expr !== 'object') return []
+    try {
+      return collectAtomLeaves(expr as Parameters<typeof collectAtomLeaves>[0])
+    }
+    catch {
+      return []
+    }
   }
 
   private hasPartialNonExecutableSemanticEvidence(state: SemanticState): boolean {
@@ -9127,26 +9176,30 @@ export class CodegenConversationService {
       }
     }
 
-    const classifyOnce = async () => {
+    const classifyOnce = async (extraSystemFeedback?: string) => {
+      const baseMessages: ChatMessage[] = [
+        {
+          role: 'system',
+          content: buildConversationPlannerSystemPrompt(locale),
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            message: text,
+            currentSemanticState,
+            history: history.slice(-MAX_PLANNER_HISTORY_LINES),
+          }),
+        },
+      ]
+      if (extraSystemFeedback) {
+        baseMessages.push({ role: 'system', content: extraSystemFeedback })
+      }
       const result = await this.aiService.chat({
         providerCode: options?.providerCode ?? DEFAULT_PROVIDER_CODE,
         model: options?.model,
         temperature: 0,
-        maxTokens: 400,
-        messages: [
-          {
-            role: 'system',
-            content: buildConversationPlannerSystemPrompt(locale),
-          },
-          {
-            role: 'user',
-            content: JSON.stringify({
-              message: text,
-              currentSemanticState,
-              history: history.slice(-MAX_PLANNER_HISTORY_LINES),
-            }),
-          },
-        ],
+        maxTokens: 1500,
+        messages: baseMessages,
       })
 
       const content = result.content?.trim() ?? ''
@@ -9163,12 +9216,25 @@ export class CodegenConversationService {
 
       try {
         const parsedValue = JSON.parse(content) as unknown
-        const parsed = this.readPlannerPayload(parsedValue)
+        let parsed = this.readPlannerPayload(parsedValue)
         const schemaMismatchReasons = this.collectPlannerSchemaMismatchReasons(parsedValue, parsed)
         if (schemaMismatchReasons.length > 0) {
           this.logPlannerFallback('schema_mismatch', {
             fields: schemaMismatchReasons.join(','),
           })
+        }
+        // Issue #1395：planner semanticPatch.rules[] 逐条 zod graceful parse
+        //   - rules[] 中合法 rule 全保留；invalid 个体进 quarantine
+        //   - AtomExpr 子树内单点错误剪枝保留 valid 兄弟（pruneAtomExprToValid）
+        //   - 不再因任一 rule 失败 strip 整个 rules 字段；空数组也合法
+        const rawRules = this.extractRawPlannerRules(parsed)
+        const validation = this.validatePlannerRules(rawRules)
+        this.applyValidatedPlannerRules(parsed, validation)
+        if (validation.quarantine.length > 0) {
+          this.logger.warn(
+            `[#1395] planner rules 部分进 quarantine（${validation.quarantine.length}/${(Array.isArray(rawRules) ? rawRules.length : 0)}）：`
+            + validation.quarantine.map(q => `idx=${q.index} ${q.errorPath}`).join('; '),
+          )
         }
         const related = typeof parsed.related === 'boolean' ? parsed.related : true
         const logicReady = typeof parsed.logicReady === 'boolean' ? parsed.logicReady : false
@@ -9305,6 +9371,97 @@ export class CodegenConversationService {
     }
 
     return reasons
+  }
+
+  private extractRawPlannerRules(parsed: {
+    semanticPatch?: unknown
+    semanticUpdates?: unknown
+  }): unknown {
+    const source = parsed.semanticPatch ?? parsed.semanticUpdates
+    if (!source || typeof source !== 'object' || Array.isArray(source)) return undefined
+    return (source as { rules?: unknown }).rules
+  }
+
+  /**
+   * Issue #1395 (mute-spider)：planner rules[] 逐条独立 graceful parse。
+   *
+   * 旧实现一旦任一 rule zod 失败就把整个 rules 字段删光 → 用户侧表现为
+   * missing_entry_atom。新策略：
+   *   - rules[] 中每条独立 safeParse + AtomExpr 子树剪枝
+   *   - valid 进 result.rules；invalid 进 quarantine `{index, errorPath, rawJsonSnippet}`
+   *   - 即便 0 条通过，result.rules = []，quarantine 含所有 index；不删字段
+   */
+  validatePlannerRules(rawRules: unknown): {
+    rules: SemanticRule[]
+    quarantine: Array<{ index: number, errorPath: string, rawSnippet: string }>
+  } {
+    if (rawRules === undefined) return { rules: [], quarantine: [] }
+    if (!Array.isArray(rawRules)) {
+      return {
+        rules: [],
+        quarantine: [{
+          index: -1,
+          errorPath: 'rules: not an array',
+          rawSnippet: this.snippetOf(rawRules),
+        }],
+      }
+    }
+    const rules: SemanticRule[] = []
+    const quarantine: Array<{ index: number, errorPath: string, rawSnippet: string }> = []
+    for (let i = 0; i < rawRules.length; i++) {
+      const raw = rawRules[i]
+      const parsed = gracefulParseSemanticRule(raw)
+      if (parsed.ok === true) {
+        rules.push(parsed.rule as SemanticRule)
+      }
+      else {
+        quarantine.push({
+          index: i,
+          errorPath: parsed.errorPath,
+          rawSnippet: this.snippetOf(raw),
+        })
+      }
+    }
+    return { rules, quarantine }
+  }
+
+  /**
+   * 把 validatePlannerRules 的结果写回 parsed.semanticPatch（in place）；
+   * quarantine 落到 parsed.semanticPatch.__zodQuarantine 供上层观测。
+   * 不删 rules 字段：即便空数组也保留，与"fail-open"语义一致。
+   */
+  private applyValidatedPlannerRules(
+    parsed: {
+      semanticPatch?: unknown
+      semanticUpdates?: unknown
+    },
+    validation: {
+      rules: SemanticRule[]
+      quarantine: Array<{ index: number, errorPath: string, rawSnippet: string }>
+    },
+  ): void {
+    for (const key of ['semanticPatch', 'semanticUpdates'] as const) {
+      const node = parsed[key]
+      if (!node || typeof node !== 'object' || Array.isArray(node)) continue
+      const mutable = node as { rules?: unknown, __zodQuarantine?: unknown }
+      if (mutable.rules !== undefined) {
+        mutable.rules = validation.rules
+      }
+      if (validation.quarantine.length > 0) {
+        mutable.__zodQuarantine = validation.quarantine
+      }
+    }
+  }
+
+  private snippetOf(value: unknown): string {
+    try {
+      const json = JSON.stringify(value)
+      if (!json) return ''
+      return json.length > 240 ? `${json.slice(0, 240)}…` : json
+    }
+    catch {
+      return String(value).slice(0, 240)
+    }
   }
 
   private summarizePlannerError(error: unknown): string {

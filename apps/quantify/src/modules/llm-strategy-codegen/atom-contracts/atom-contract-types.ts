@@ -139,6 +139,17 @@ export interface AtomContract<TParams = Record<string, unknown>> {
   /** codegen 主数据流的 5 桶归类；dispatcher / FIRST_WAVE 派生只查此字段 */
   bucket: AtomContractBucket
 
+  /**
+   * Issue #1395 — atom 在表达式树（AtomExpr / SemanticRule.effects）中可担任的角色。
+   *   - 'predicate': 可作为 AtomExpr 谓词树的叶子（trigger / gate.* / risk-as-condition）
+   *   - 'effect':    可作为 SemanticRule.effects 的叶子（action / risk-as-effect /
+   *                  positionConstraint / orchestration-effect）
+   * 既能做谓词又能做副作用的 atom（如 risk.atr_stop 既是"被触及"谓词，也是
+   *   "设置止损线"副作用），roles 同时包含两者。
+   * 单一真相源：atom-contract-registry.ts 内 ATOM_ROLES 表 + completePr1bRegistry 注入。
+   */
+  readonly roles: ReadonlyArray<'predicate' | 'effect'>
+
   /** canonical strategy capability wave membership；constants 只能从 registry 派生 */
   canonicalWave?: 'first-wave'
 

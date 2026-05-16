@@ -73,6 +73,10 @@ export type SupportedAtomKey =
   | 'scope.dataSource'
   | 'scope.subStrategy'
   | 'gate.subStrategy'
+  // ── Issue #1395：新 atom（registry 注册，IR emit 尚未兑现，readinessCheck=UNSUPPORTED_SKIP）──
+  | 'condition.sequence'
+  | 'price.previous_extrema_retest'
+  | 'risk.atr_take_profit'
 
 /** @deprecated #1329 已更名 SupportedAtomKey，本 alias 保留兼容 in-flight branch；下个 PR 删 */
 export type SupportedExecutableUtteranceAtom = SupportedAtomKey

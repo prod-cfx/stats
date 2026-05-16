@@ -77,7 +77,9 @@ describe('atom-bucket-derivation (issue #1364 PR1)', () => {
   // 这里用 hardcoded 数字作为独立锚——新增/删除 atom 必须同步更新此值，避免双表
   // （ATOM_BUCKETS + ATOM_CONTRACT_REGISTRY）同时漏注册同一 key 时无 spec 捕获。
   it('注册表 size 等于预期锚（新增 atom 必须同步更新此数字）', () => {
-    const EXPECTED_ATOM_COUNT = 56
+    // Issue #1395 Wave 1: B4 IR emit 兑现 condition.sequence / price.previous_extrema_retest /
+    //   risk.atr_take_profit 三个 atom（升 supportStatus 至 supported_executable），合计 +3。
+    const EXPECTED_ATOM_COUNT = 59
     expect(getAllRegisteredAtomKeys().length).toBe(EXPECTED_ATOM_COUNT)
   })
 })

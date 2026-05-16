@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticOrchestrationNode, SemanticSlotState, SemanticState } from '../types/semantic-state'
+import type { AtomExpr, SemanticRule, SemanticRulePhase, SemanticRuleSideScope } from '../types/atom-expr'
 import { isEntryPredicateTriggerKey, isExitPredicateTriggerKey, isTimeframeGroupableTriggerKey } from '../atom-contracts/trigger-display-contract'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
@@ -143,8 +144,14 @@ export class SemanticStateProjectionService {
     const summaryItems = [triggerSummary, actionSummary, riskSummary, positionSummary, orchestrationSummary]
       .filter(item => item.length > 0)
 
+    // Issue #1395 — 优先消费 state.rules 表达式树渲染 summary，保留 sequence/AND/OR/NOT 语义；
+    //   rules 为空时落回旧扁平桶渲染路径，不破坏既有 reader（向后兼容）。
+    const rulesSummary = state.rules && state.rules.length > 0 ? this.buildRulesSummary(state.rules) : ''
+
     return {
-      summary: summaryItems.length > 0 ? summaryItems.join('；') : '已识别部分条件，但仍未完整。',
+      summary: rulesSummary.length > 0
+        ? rulesSummary
+        : (summaryItems.length > 0 ? summaryItems.join('；') : '已识别部分条件，但仍未完整。'),
       triggerSummary,
       riskSummary,
       positionSummary,
@@ -311,10 +318,15 @@ export class SemanticStateProjectionService {
     const positionSummary = this.buildPositionSummary(state.position, state.positionConstraint)
     const summaryItems = [triggerSummary, riskSummary, positionSummary].filter(item => item.length > 0)
 
+    // Issue #1395 — clarification 视图同样优先消费 rules 树
+    const rulesSummary = state.rules && state.rules.length > 0 ? this.buildRulesSummary(state.rules) : ''
+
     const nextSlot = this.findNextOpenSlot(state)
 
     return {
-      summary: summaryItems.length > 0 ? summaryItems.join('；') : '已识别部分条件，但仍未完整。',
+      summary: rulesSummary.length > 0
+        ? rulesSummary
+        : (summaryItems.length > 0 ? summaryItems.join('；') : '已识别部分条件，但仍未完整。'),
       nextQuestion: nextSlot?.questionHint ?? null,
     }
   }
@@ -2754,6 +2766,91 @@ export class SemanticStateProjectionService {
     },
   ): number {
     return left.id.localeCompare(right.id)
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Issue #1395 — AtomExpr 树渲染（rules-first 路径）
+  //
+  // 目的：state.rules 是表达式树主体；扁平桶（trigger/action/risk/...）是派生快照，
+  //   被 lift 之后 sequence/AND/OR/NOT 语义已丢。summary 必须从 rules 树渲染才能保留
+  //   "先 X 后 Y"/"X 且 Y"/"X 或 Y"/"非 X" 等组合关系。
+  //
+  // 设计：
+  //   - 叶子 atom：复用 ATOM_CONTRACT_REGISTRY[key].display.summaryTemplate（已有中文模板）；
+  //     缺模板时退化到 publicName.zh，不要在视图层维护 per-atom 中文（违反 #1383）。
+  //   - 组合节点：纯递归字符串拼装，零特殊代码。
+  //   - sequence.nextBarOnly → "（下一根）"，withinBars=N → "（N 根内）"。
+  //   - rule.phase + rule.sideScope 决定外层包装：入场/出场/前置 + 做多/做空/双向。
+  //   - 同 phase 多 rule：以 "；" 分隔，与既有 summary 风格一致。
+  // ───────────────────────────────────────────────────────────────────────────
+
+  private renderAtomExpr(expr: AtomExpr): string {
+    switch (expr.kind) {
+      case 'atom': {
+        const summary = this.tryAtomContractSummary(expr.key, expr.params, 'zh')
+        if (summary && summary.length > 0) return summary
+        // 退化：未注册 summaryTemplate 时取 publicName.zh
+        const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { display?: { publicName?: { zh?: string } } } | undefined>)[expr.key]
+        return contract?.display?.publicName?.zh ?? expr.key
+      }
+      case 'and': {
+        const parts = expr.children.map(child => this.renderAtomExpr(child)).filter(s => s.length > 0)
+        return parts.join(' 同时 ')
+      }
+      case 'or': {
+        const parts = expr.children.map(child => this.renderAtomExpr(child)).filter(s => s.length > 0)
+        return parts.join(' 或 ')
+      }
+      case 'not': {
+        return `非 ${this.renderAtomExpr(expr.child)}`
+      }
+      case 'sequence': {
+        const parts = expr.steps.map(step => this.renderAtomExpr(step)).filter(s => s.length > 0)
+        if (parts.length === 0) return ''
+        // 第 0 步 "先 X"；后续步骤 "然后 Y"；保持自然中文顺序
+        const head = `先 ${parts[0]}`
+        const tail = parts.slice(1).map(p => `然后 ${p}`).join('，')
+        const body = tail.length > 0 ? `${head}，${tail}` : head
+        const modifiers: string[] = []
+        if (expr.nextBarOnly === true) modifiers.push('下一根')
+        if (typeof expr.withinBars === 'number' && expr.withinBars > 0) modifiers.push(`${expr.withinBars} 根内`)
+        return modifiers.length > 0 ? `${body}（${modifiers.join('，')}）` : body
+      }
+    }
+  }
+
+  private formatRulePhaseLabel(phase: SemanticRulePhase): string {
+    if (phase === 'entry') return '入场'
+    if (phase === 'exit') return '出场'
+    return '前置'
+  }
+
+  private formatRuleSideLabel(side: SemanticRuleSideScope): string {
+    if (side === 'long') return '做多'
+    if (side === 'short') return '做空'
+    return '双向'
+  }
+
+  private renderRule(rule: SemanticRule): string {
+    const condition = this.renderAtomExpr(rule.condition)
+    if (!condition || condition.length === 0) return ''
+    const phaseLabel = this.formatRulePhaseLabel(rule.phase)
+    const sideLabel = this.formatRuleSideLabel(rule.sideScope)
+    // effects 通常是 action / risk 副作用，渲染后用 "→" 衔接条件，保留可读性
+    const effectParts = (rule.effects ?? [])
+      .map(effect => this.renderAtomExpr(effect))
+      .filter(s => s.length > 0)
+    const effectSuffix = effectParts.length > 0 ? ` → ${effectParts.join('，')}` : ''
+    return `${phaseLabel}（${sideLabel}）：${condition}${effectSuffix}`
+  }
+
+  private buildRulesSummary(rules: readonly SemanticRule[]): string {
+    const lines: string[] = []
+    for (const rule of rules) {
+      const line = this.renderRule(rule)
+      if (line.length > 0) lines.push(line)
+    }
+    return lines.join('；')
   }
 
   private timeframeToMinutes(timeframe: string): number {

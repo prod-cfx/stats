@@ -51,6 +51,20 @@
             "source": "user_explicit"
           },
           "sideScope": "long"
+        },
+        {
+          "key": "price.previous_extrema_retest",
+          "phase": "entry",
+          "params": {
+            "memoryKey": "auto",
+            "tolerancePct": 0.1,
+            "maxBars": 6
+          },
+          "evidence": {
+            "text": "回踩 MA20 不破后加仓 20%",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
         }
       ],
       "actions": [
@@ -115,6 +129,20 @@
             "addRatio": 20,
             "profitThreshold": 20,
             "drawdownThreshold": 20
+          },
+          "evidence": {
+            "text": "回踩 MA20 不破后加仓 20%",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "price.previous_extrema_retest",
+          "phase": "entry",
+          "params": {
+            "memoryKey": "auto",
+            "tolerancePct": 0.1,
+            "maxBars": 6
           },
           "evidence": {
             "text": "回踩 MA20 不破后加仓 20%",

@@ -33,6 +33,7 @@ import type {
 } from '../types/semantic-state'
 import { FIRST_WAVE_TRIGGER_ATOMS } from '../constants/canonical-strategy-capabilities'
 import { ATOM_CONTRACT_REGISTRY, DCA_PER_ORDER_BUDGET_CAPABILITY } from '../atom-contracts/atom-contract-registry'
+import { UNSUPPORTED_SKIP } from '../atom-contracts/atom-contract-types'
 import { toSemanticSupportOpenSlot } from '../types/semantic-atom-support'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
 import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
@@ -40,6 +41,8 @@ import type { SizingAnchor, SizingAxis } from './per-trade-sizing-resolver.servi
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { buildTriggerCombinationContract, isTriggerPredicateGroupContract, normalizeRiskSemantic } from './semantic-state-normalization'
 import { validateSemanticRiskContract } from './strategy-semantic-contracts'
+import type { AtomExprAtom, SemanticRule } from '../types/atom-expr'
+import { collectAtomLeaves } from '../types/atom-expr'
 
 // DEPRECATED Task 6: legacy aggregate shape; new SemanticState splits into orchestration + orchestrationContracts
 type SemanticOrchestrationState = { nodes: SemanticOrchestrationNode[], contracts: readonly unknown[] }
@@ -179,6 +182,36 @@ export class SemanticSeedStateBuilderService {
     // patch.atoms[] 是单数组单数源，LLM 不再决定 bucket。
     // 兼容存量 5 桶 patch shape（triggers/actions/risk/...）以便内部 caller 渐进迁移。
     let semanticPatch: SemanticPatchRecord = semanticPatchInput
+
+    // Issue #1395: rules[] → 单叶子 atoms[] 派生
+    //   设计 spec docs/superpowers/specs/2026-05-15-atom-expression-tree-design.md
+    //   - 每条 rule.condition 的所有叶子 atom lift 为 patch.atoms[] 条目（phase 由 rule.phase 派生）
+    //   - 每条 rule.effects[] 的所有叶子 atom 同样 lift（phase 由 atom 自身 contract.bucket 决定；
+    //     当前简单透传 rule.phase，下游 dispatchAtomsByContractBucket 会按 contract.surface.phaseResolver 覆写）
+    //   - rules[] 保留到 state.rules，供 IR compiler 接表达式树
+    //   - liftedAtoms 与 patch.atoms 并行存在；下游 coalesceDuplicateBucketEntries 按 identity 折叠
+    const explicitRules: SemanticRule[] = Array.isArray(semanticPatch.rules)
+      ? (semanticPatch.rules as SemanticRule[]).filter((r): r is SemanticRule => this.isRecord(r) && typeof (r as Record<string, unknown>).id === 'string')
+      : []
+    if (explicitRules.length > 0) {
+      const liftedAtoms: Array<Record<string, unknown>> = []
+      for (const rule of explicitRules) {
+        const condLeaves = collectAtomLeaves(rule.condition)
+        for (const leaf of condLeaves) {
+          liftedAtoms.push(this.liftAtomLeafToPatchItem(leaf, rule, rule.phase === 'gate' ? 'gate' : (rule.phase === 'exit' ? 'exit' : 'entry')))
+        }
+        for (const eff of rule.effects) {
+          for (const leaf of collectAtomLeaves(eff)) {
+            // phase 透传 rule.phase；dispatchAtomsByContractBucket 内会按 contract.surface.phaseResolver
+            // 'fixed-entry|exit|gate' 强制覆写到合约期望相位，无需此处精细推断。
+            liftedAtoms.push(this.liftAtomLeafToPatchItem(leaf, rule, rule.phase === 'gate' ? 'gate' : (rule.phase === 'exit' ? 'exit' : 'entry')))
+          }
+        }
+      }
+      const existingAtoms = Array.isArray(semanticPatch.atoms) ? semanticPatch.atoms : []
+      semanticPatch = { ...semanticPatch, atoms: [...existingAtoms, ...liftedAtoms] }
+    }
+
     if (Array.isArray(semanticPatch.atoms)) {
       const dispatched = this.dispatchAtomsByContractBucket(semanticPatch.atoms)
       semanticPatch = {
@@ -348,6 +381,10 @@ export class SemanticSeedStateBuilderService {
       return null
     }
 
+    // Issue #1395 (mute-spider) Stage I.C: 把 planner 写入 semanticPatch.__zodQuarantine 透传到
+    //   state.diagnostics.zodQuarantine（数据透传层，下游 reader 不消费；供 follow-up 观测）。
+    const zodQuarantine = this.extractZodQuarantine(semanticPatch)
+
     return this.withRequiredSeedOpenSlots({
       version: 1,
       families: [],
@@ -361,7 +398,36 @@ export class SemanticSeedStateBuilderService {
       contextSlots,
       normalizationNotes: [],
       updatedAt: new Date().toISOString(),
+      // Issue #1395: 透传 rules[] 到 state，供 IR compiler (compileAtomExpr) 接表达式树
+      ...(explicitRules.length > 0 ? { rules: explicitRules } : {}),
+      ...(zodQuarantine ? { diagnostics: { zodQuarantine } } : {}),
     })
+  }
+
+  /**
+   * Issue #1395 — 单个 AtomExpr 叶子 → atoms[] patch 条目
+   *
+   * 派生规则：
+   *   - key/params 直接来源于叶子
+   *   - phase 由调用方传入（rule.phase 已规整为 trigger phase 联合类型）
+   *   - sideScope 优先叶子，缺省取 rule.sideScope
+   *   - id 派生为 `${rule.id}-leaf-${key}` 便于排查；下游 toTriggerState/toActionState
+   *     需要时会被覆盖
+   */
+  private liftAtomLeafToPatchItem(
+    leaf: AtomExprAtom,
+    rule: SemanticRule,
+    phase: 'entry' | 'exit' | 'gate',
+  ): Record<string, unknown> {
+    return {
+      id: `${rule.id}-leaf-${leaf.key}`,
+      key: leaf.key,
+      phase,
+      sideScope: leaf.sideScope ?? rule.sideScope,
+      params: { ...leaf.params },
+      status: 'locked',
+      source: 'user_explicit',
+    }
   }
 
   private withMovingAverageStackCombinationContracts(
@@ -1118,6 +1184,7 @@ export class SemanticSeedStateBuilderService {
       statusValue: update.status,
       fieldPath: `triggers[${index}].contracts`,
       priority: 'core',
+      atomKey: key,
     })
 
     return {
@@ -1166,6 +1233,7 @@ export class SemanticSeedStateBuilderService {
       statusValue: update.status,
       fieldPath: `actions[${index}].contracts`,
       priority: 'behavior',
+      atomKey: key,
     })
 
     return {
@@ -1206,6 +1274,7 @@ export class SemanticSeedStateBuilderService {
       statusValue: update.status,
       fieldPath: `risk[${index}].contracts`,
       priority: 'risk',
+      atomKey: key,
     })
 
     const risk: SemanticRiskState = {
@@ -1369,6 +1438,7 @@ export class SemanticSeedStateBuilderService {
       statusValue: update.status,
       fieldPath: `position.constraints[${index}].contracts`,
       priority: 'behavior',
+      atomKey: key,
     })
 
     return {
@@ -3143,6 +3213,7 @@ export class SemanticSeedStateBuilderService {
     statusValue: unknown
     fieldPath: string
     priority: SemanticPriority
+    atomKey?: string
   }): { status: SemanticNodeStatus, openSlots: SemanticSlotState[] } {
     if (options.statusValue === 'superseded') {
       return {
@@ -3162,10 +3233,27 @@ export class SemanticSeedStateBuilderService {
       }
     }
 
+    // Issue #1395 follow-up：unsupported_atom_emit_pending atoms（atom 已注册但 IR
+    // emit 路径暂未兑现）由 registry 显式声明 readinessCheck = UNSUPPORTED_SKIP，
+    // 下游 IR codegen 会走 unsupported fallback。这类 atom 不应再向用户追问
+    // "contract.required"——用户没法补，补了也没意义。保留 status='open' 让上游
+    // 清洗逻辑识别，但不挂 blocking contract.required slot。
+    if (options.atomKey && this.isContractRequirementBypassedAtom(options.atomKey)) {
+      return {
+        status: 'open',
+        openSlots: this.removeContractRequiredSlots(options.openSlots, options.fieldPath),
+      }
+    }
+
     return {
       status: 'open',
       openSlots: this.appendContractRequiredSlot(options.openSlots, options.fieldPath, options.priority),
     }
+  }
+
+  private isContractRequirementBypassedAtom(atomKey: string): boolean {
+    const entry = (ATOM_CONTRACT_REGISTRY as Record<string, { readinessCheck?: unknown }>)[atomKey]
+    return entry?.readinessCheck === UNSUPPORTED_SKIP
   }
 
   private appendContractRequiredSlot(
@@ -3503,6 +3591,27 @@ export class SemanticSeedStateBuilderService {
 
   private isRecord(value: unknown): value is SemanticPatchRecord {
     return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+  }
+
+  /**
+   * Issue #1395 (mute-spider) Stage I.C: 把 codegen-conversation 写到
+   *   semanticPatch.__zodQuarantine 的 graceful-parse 诊断信息透传到 state.diagnostics.zodQuarantine。
+   *   纯数据透传，下游 reader 默认忽略；用于上游观测被剪枝/拒收的 rule 索引。
+   */
+  private extractZodQuarantine(semanticPatch: SemanticPatchRecord):
+    ReadonlyArray<{ index: number, errorPath: string, rawSnippet: string }> | null {
+    const raw = (semanticPatch as Record<string, unknown>).__zodQuarantine
+    if (!Array.isArray(raw) || raw.length === 0) return null
+    const out: Array<{ index: number, errorPath: string, rawSnippet: string }> = []
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue
+      const obj = item as Record<string, unknown>
+      const index = typeof obj.index === 'number' ? obj.index : -1
+      const errorPath = typeof obj.errorPath === 'string' ? obj.errorPath : ''
+      const rawSnippet = typeof obj.rawSnippet === 'string' ? obj.rawSnippet : ''
+      out.push({ index, errorPath, rawSnippet })
+    }
+    return out.length > 0 ? out : null
   }
 
   private hasOwnProperty(value: SemanticPatchRecord, key: string): boolean {

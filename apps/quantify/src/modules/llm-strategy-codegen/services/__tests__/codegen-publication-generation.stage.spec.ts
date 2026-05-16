@@ -669,7 +669,10 @@ describe('codegenPublicationGenerationStage', () => {
         }),
       }),
     ]))
-    expect(executionEnvelopeBuild).toHaveBeenCalledWith(artifacts.canonicalSpec, 'long_only')
+    // Issue #1395 Wave 1：seed-state-builder.fromRules 路径下 grid 规则一次性派生 long+short
+    //   双向 OPEN/CLOSE rules（grid.range_rebalance 语义本身即双向），executionEnvelope 因此
+    //   按 'long_short' 派生而非旧的 'long_only'。
+    expect(executionEnvelopeBuild).toHaveBeenCalledWith(artifacts.canonicalSpec, 'long_short')
   })
 
   it('rejects publication generation when a previous-close rise atom drifts before script publication', async () => {

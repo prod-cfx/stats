@@ -1,4 +1,10 @@
-import type { SemanticSlotState, SemanticState, SemanticTriggerState } from '../../types/semantic-state'
+import type { SemanticRule } from '../../types/atom-expr'
+import type {
+  SemanticPositionConstraintState,
+  SemanticSlotState,
+  SemanticState,
+  SemanticTriggerState,
+} from '../../types/semantic-state'
 import { SemanticExecutableSemanticsService } from '../semantic-executable-semantics.service'
 import { SemanticMissingPlaceholderReconcilerService } from '../semantic-missing-placeholder-reconciler.service'
 
@@ -55,6 +61,76 @@ describe('SemanticMissingPlaceholderReconcilerService', () => {
     expect(nextState.trigger).toEqual([
       createTrigger({ id: 'trigger-exit', key: 'indicator.cross_under', phase: 'exit' }),
     ])
+  })
+
+  describe('Issue #1395 — grid + breakout false-positive fix', () => {
+    const executable = new SemanticExecutableSemanticsService()
+
+    it('grid.range_rebalance positionConstraint = executable entry (no missing_entry_atom)', () => {
+      const state = createSemanticState({
+        positionConstraint: [createGridConstraint({
+          rangeLower: 79200,
+          rangeUpper: 80200,
+          sideMode: 'both',
+        })],
+      })
+      expect(executable.hasExecutableEntrySemantics(state)).toBe(true)
+    })
+
+    it('grid + breakoutAction=stop = executable exit (no missing_exit_atom)', () => {
+      const state = createSemanticState({
+        positionConstraint: [createGridConstraint({
+          rangeLower: 79200,
+          rangeUpper: 80200,
+          sideMode: 'both',
+          breakoutAction: 'stop',
+        })],
+      })
+      expect(executable.hasExecutableExitSemantics(state)).toBe(true)
+    })
+
+    it('rules[] entry rule = executable entry (#1395)', () => {
+      const rules: SemanticRule[] = [{
+        id: 'r1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'oscillator.rsi_lt', params: { threshold: 30 } },
+        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      }]
+      const state = createSemanticState({ rules })
+      expect(executable.hasExecutableEntrySemantics(state)).toBe(true)
+    })
+
+    it('rules[] exit rule = executable exit (#1395)', () => {
+      const rules: SemanticRule[] = [{
+        id: 'r2',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'oscillator.rsi_gt', params: { threshold: 70 } },
+        effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+      }]
+      const state = createSemanticState({ rules })
+      expect(executable.hasExecutableExitSemantics(state)).toBe(true)
+    })
+
+    it('reconciler drops both missing placeholders for S1 grid + breakoutAction=stop', () => {
+      const state = createSemanticState({
+        trigger: [
+          createMissingPlaceholder('entry'),
+          createMissingPlaceholder('exit'),
+        ],
+        positionConstraint: [createGridConstraint({
+          rangeLower: 79200,
+          rangeUpper: 80200,
+          sideMode: 'both',
+          breakoutAction: 'stop',
+        })],
+      })
+
+      const next = service.reconcile(state)
+
+      expect(next.trigger).toEqual([])
+    })
   })
 
   it('keeps missing placeholders when the matching real trigger is still open', () => {
@@ -148,6 +224,22 @@ function createMissingPlaceholder(
       questionHint: isEntry ? '请补充入场触发条件。' : '请补充出场触发条件。',
       affectsExecution: true,
     }],
+  }
+}
+
+function createGridConstraint(params: {
+  rangeLower: number
+  rangeUpper: number
+  sideMode: 'both' | 'long' | 'short'
+  breakoutAction?: 'stop' | 'pause' | 'continue'
+}): SemanticPositionConstraintState {
+  return {
+    id: 'pc-1',
+    key: 'grid.range_rebalance',
+    params,
+    status: 'locked',
+    source: 'user_explicit',
+    openSlots: [],
   }
 }
 

@@ -578,6 +578,14 @@ export interface SemanticState extends SemanticStateBuckets {
   updatedTurnId?: string
   unsupportedFallback?: UnsupportedFallbackState | null
   /**
+   * Issue #1395 — 表达式树主体；扁平桶（trigger/action/risk/positionConstraint/orchestration）
+   * 由 projectRulesToFlat(rules) 派生，下游既有 reader 零迁移。
+   *
+   * 单 atom case = 单叶子 Rule（rule.condition.kind === 'atom'），零特殊代码。
+   * AND/OR/NOT/SEQUENCE 组合见 ./atom-expr.ts。
+   */
+  rules?: readonly import('./atom-expr').SemanticRule[]
+  /**
    * 由 PerTradeSizingResolver 派生投影阶段标记。
    * true 表示存在多个 executionAnchored anchor，下游 canonical-spec / signal-executor
    * 不可假设单仓 sizing，需走 multi-leg 处理路径（follow-up issue 跟进）。
@@ -585,4 +593,16 @@ export interface SemanticState extends SemanticStateBuckets {
    * @internal 不进入 conversation response / persist / Redux 状态
    */
   readonly isMultiLeg?: boolean
+  /**
+   * Issue #1395 (mute-spider): planner rules[] zod 校验诊断信息。
+   * fail-open 后保留被剪枝/拒收的 rule 索引与原始片段，用于上游观测；
+   * 字段为可选 additive，下游 reader 默认忽略。
+   */
+  readonly diagnostics?: {
+    readonly zodQuarantine?: ReadonlyArray<{
+      readonly index: number
+      readonly errorPath: string
+      readonly rawSnippet: string
+    }>
+  }
 }

@@ -105,6 +105,15 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     displayRenderer: ({ params }) => renderRollingExtremaBreakoutCondition(params),
   }),
   presentation({
+    // Issue #1395 Wave 1 B4：price.previous_extrema_retest 升级为 supported_executable
+    key: 'price.previous_extrema_retest',
+    publicName: '前高/前低回踩',
+    aliases: ['前高回踩', '前低回踩', '突破后回踩'],
+    positiveExamples: ['突破前高后回踩不破前高'],
+    negativeExamples: ['仅突破，没有回踩动作'],
+    goldenUtterances: ['突破前高后回踩 0.3% 以内时确认入场'],
+  }),
+  presentation({
     key: 'price.range_position_lte',
     publicName: '区间低位',
     aliases: ['接近区间底部', '区间下沿'],
@@ -717,6 +726,15 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['达到 3 倍 ATR 止盈'],
     negativeExamples: ['固定价格止盈'],
     goldenUtterances: ['盈利达到 3 倍 ATR 后退出'],
+  }),
+  presentation({
+    // Issue #1395 Wave 1 B4：risk.atr_take_profit 升级为 supported_executable
+    key: 'risk.atr_take_profit',
+    publicName: 'ATR 动态止盈',
+    aliases: ['ATR 止盈', 'ATR 倍数止盈'],
+    positiveExamples: ['盈利达到 2 倍 ATR 止盈'],
+    negativeExamples: ['固定百分比止盈'],
+    goldenUtterances: ['持仓盈利达到 2 倍 ATR 时止盈出场'],
   }),
   presentation({
     key: 'risk.remembered_level_stop',

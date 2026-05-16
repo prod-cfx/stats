@@ -135,11 +135,17 @@ function formatParamField(field: AtomCatalogParamField): string {
 
 function formatEntry(entry: AtomCatalogEntry): string {
   const phaseHint = entry.fixedPhase ? ` phase=${entry.fixedPhase}` : ''
+  // #1395：从 ATOM_CONTRACT_REGISTRY 取 roles（predicate / effect），并行 PR 落地后才有；
+  // 防御性读取：字段缺失或非数组 → 不渲染 roles 段，避免在并行 merge 期 prompt 崩塌。
+  const contract = ATOM_CONTRACT_REGISTRY[entry.key] as { roles?: readonly string[] } | undefined
+  const roles = contract && Array.isArray(contract.roles) && contract.roles.length > 0
+    ? ` roles=[${contract.roles.join(',')}]`
+    : ''
   const params = entry.paramFields.length === 0
     ? 'params: {}'
     : `params: { ${entry.paramFields.map(formatParamField).join(', ')} }`
   const example = entry.example ? `\n      例："${entry.example}"` : ''
-  return `  - ${entry.key}${phaseHint}\n      ${params}${example}`
+  return `  - ${entry.key}${phaseHint}${roles}\n      ${params}${example}`
 }
 
 export function formatAtomCatalogForPrompt(locale: 'zh' | 'en' = 'zh'): string {

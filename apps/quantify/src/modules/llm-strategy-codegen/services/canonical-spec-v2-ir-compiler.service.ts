@@ -1179,6 +1179,74 @@ export class CanonicalSpecV2IrCompilerService {
     )
   }
 
+  /**
+   * Issue #1395 — AtomExpr 递归编译
+   *
+   * 把 SemanticRule.condition (AtomExpr 树) 递归归约为 PredicateDef.id。
+   *   - and  → allOf
+   *   - or   → anyOf
+   *   - not  → NOT
+   *   - sequence → sequence（withinBars / nextBarOnly 编码进 params）
+   *   - atom → MVP fallback：const(1) === const(1) 占位谓词 + 把 atom key 编码进 baseId 便于排查；
+   *     真正的 atom → predicate 映射依赖 atom-emit registry，留待后续 PR 接入。
+   *
+   * 占位行为虽然语义恒真，但保证表达式树骨架（allOf/anyOf/NOT/sequence）已就位，
+   * 后续替换 atom kind 分支即可，无需重写组合逻辑。
+   */
+  private compileAtomExpr(
+    expr: import('../types/atom-expr').AtomExpr,
+    context: CompileContext,
+    seed: string,
+  ): string {
+    switch (expr.kind) {
+      case 'atom': {
+        // MVP 占位：const(1) === const(1) — 恒真谓词
+        // 把 atom key 编进 baseId，方便 IR dump 时定位
+        const one = this.ensureConstSeries(context, 1)
+        const safeKey = expr.key.replace(/\W+/g, '_')
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_atom_${safeKey}`,
+          'EQ',
+          [one, one],
+        )
+      }
+      case 'and':
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_and`,
+          'allOf',
+          expr.children.map((child, i) => this.compileAtomExpr(child, context, `${seed}_a${i}`)),
+        )
+      case 'or':
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_or`,
+          'anyOf',
+          expr.children.map((child, i) => this.compileAtomExpr(child, context, `${seed}_o${i}`)),
+        )
+      case 'not':
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_not`,
+          'NOT',
+          [this.compileAtomExpr(expr.child, context, `${seed}_n`)],
+        )
+      case 'sequence': {
+        const params: Record<string, number | boolean> = {}
+        if (typeof expr.withinBars === 'number') params.withinBars = expr.withinBars
+        if (typeof expr.nextBarOnly === 'boolean') params.nextBarOnly = expr.nextBarOnly
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_seq`,
+          'sequence',
+          expr.steps.map((step, i) => this.compileAtomExpr(step, context, `${seed}_s${i}`)),
+          Object.keys(params).length > 0 ? params : undefined,
+        )
+      }
+    }
+  }
+
   private resolveLogicalPredicateKind(
     condition: CanonicalConditionGroup,
   ): PredicateDef['kind'] {
@@ -1778,12 +1846,113 @@ export class CanonicalSpecV2IrCompilerService {
           )
         }
 
-        const memoryKey = typeof atom.params?.memoryKey === 'string' && atom.params.memoryKey.trim().length > 0
+        // Issue #1395 — 三种新 sequenceKind 真实兑现：consecutive_body /
+        //   breakout_then_retest / pattern_then_volume_spike。各 step 实测可参与
+        //   compiled-runtime evaluateGenericSequence。
+        const direction = atom.params?.direction === 'down' ? 'down' : 'up'
+        const openRef = this.ensurePriceSeries(context, 'open')
+        const seqParamsNew: Record<string, number | string | boolean> = { sequenceKind }
+        if (typeof atom.params?.withinBars === 'number' && atom.params.withinBars > 0) {
+          seqParamsNew.withinBars = atom.params.withinBars
+        }
+        const nextBarOnlyRaw = atom.params?.nextBarOnly
+        if (nextBarOnlyRaw === true || nextBarOnlyRaw === 'true') {
+          seqParamsNew.nextBarOnly = true
+        }
+        if (typeof atom.params?.direction === 'string') {
+          seqParamsNew.direction = atom.params.direction
+        }
+        const memoryKeyNew = typeof atom.params?.memoryKey === 'string' && atom.params.memoryKey.trim().length > 0
           ? atom.params.memoryKey.trim()
           : null
-        if (memoryKey) {
-          context.runtimeRequirements.stateKeys.add(memoryKey)
+        if (memoryKeyNew && memoryKeyNew !== 'auto') {
+          context.runtimeRequirements.stateKeys.add(memoryKeyNew)
         }
+
+        if (sequenceKind === 'consecutive_body') {
+          const count = this.readNumber([atom.params?.count], 3)
+          if (!Number.isInteger(count) || count <= 0) {
+            throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:count`)
+          }
+          const steps: string[] = []
+          for (let i = 0; i < count; i += 1) {
+            steps.push(this.upsertPredicate(
+              context.predicateMap,
+              `${seed}_seq_body_${direction}_${i}`,
+              direction === 'down' ? 'LT' : 'GT',
+              [closeRef, openRef],
+            ))
+          }
+          seqParamsNew.count = count
+          return this.upsertPredicate(
+            context.predicateMap,
+            `${seed}_${atom.key.replace(/\./g, '_')}_${sequenceKind}_${direction}`,
+            'sequence',
+            steps,
+            seqParamsNew,
+          )
+        }
+
+        if (sequenceKind === 'breakout_then_retest') {
+          const lookback = this.readNumber([atom.params?.lookbackBars], 24)
+          if (!Number.isInteger(lookback) || lookback <= 0) {
+            throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:lookbackBars`)
+          }
+          const isUp = direction === 'up'
+          const channelRef = isUp
+            ? this.ensureChannelSeries(context, 'HIGHEST_HIGH', lookback)
+            : this.ensureChannelSeries(context, 'LOWEST_LOW', lookback)
+          context.runtimeRequirements.helpers.add(isUp ? 'rollingHigh' : 'rollingLow')
+          const breakoutStep = this.upsertPredicate(
+            context.predicateMap,
+            `${seed}_seq_breakout_${direction}_${lookback}`,
+            isUp ? 'GT' : 'LT',
+            [closeRef, channelRef],
+          )
+          const retestStep = this.upsertPredicate(
+            context.predicateMap,
+            `${seed}_seq_retest_${direction}_${lookback}`,
+            isUp ? 'GTE' : 'LTE',
+            [closeRef, channelRef],
+          )
+          seqParamsNew.lookbackBars = lookback
+          return this.upsertPredicate(
+            context.predicateMap,
+            `${seed}_${atom.key.replace(/\./g, '_')}_${sequenceKind}_${direction}`,
+            'sequence',
+            [breakoutStep, retestStep],
+            seqParamsNew,
+          )
+        }
+
+        if (sequenceKind === 'pattern_then_volume_spike') {
+          const lookback = this.readNumber([atom.params?.lookbackBars], 20)
+          const volumeRef = this.ensureVolumeSeries(context, context.timeframe)
+          const smaVolRef = this.ensureSmaVolumeSeries(context, lookback, 1, context.timeframe)
+          const patternStep = this.upsertPredicate(
+            context.predicateMap,
+            `${seed}_seq_pattern_${direction}`,
+            direction === 'down' ? 'LT' : 'GT',
+            [closeRef, openRef],
+          )
+          const volumeStep = this.upsertPredicate(
+            context.predicateMap,
+            `${seed}_seq_volume_spike_${lookback}`,
+            'compare',
+            [volumeRef, smaVolRef],
+            { op: 'GTE' },
+          )
+          seqParamsNew.lookbackBars = lookback
+          return this.upsertPredicate(
+            context.predicateMap,
+            `${seed}_${atom.key.replace(/\./g, '_')}_${sequenceKind}_${direction}`,
+            'sequence',
+            [patternStep, volumeStep],
+            seqParamsNew,
+          )
+        }
+
+        // 兜底：未知 sequenceKind / 仅做占位（保持 #1395 之前的向后兼容行为）
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}_${sequenceKind}`,
@@ -1795,7 +1964,7 @@ export class CanonicalSpecV2IrCompilerService {
             ...(typeof atom.params?.lookbackBars === 'number' ? { lookbackBars: atom.params.lookbackBars } : {}),
             ...(typeof atom.params?.count === 'number' ? { count: atom.params.count } : {}),
             ...(typeof atom.params?.direction === 'string' ? { direction: atom.params.direction } : {}),
-            ...(memoryKey ? { memoryKey } : {}),
+            ...(memoryKeyNew ? { memoryKey: memoryKeyNew } : {}),
           },
         )
       }
@@ -2006,6 +2175,84 @@ export class CanonicalSpecV2IrCompilerService {
           `${seed}_liquidity_sweep_${lsDirection}_${lsReference}_${lsReclaimBars}`,
           'EQ',
           [lsSeriesId, constOneRef],
+        )
+      }
+
+      // Issue #1395 — price.previous_extrema_retest atom emit
+      //   "突破后回踩不破" 语义 — 2 步 sequence：
+      //     1) 突破 N 周期 high/low（close 越过 rolling extrema）
+      //     2) 回踩到突破位 ±tolerance% 仍不破（close 仍位于突破位上/下方）
+      //
+      //   params：
+      //     - retestKind: 'not_break'（默认）| 'break_through'
+      //     - lookbackBars / window: rolling 窗口，默认 24
+      //     - extremaType: 'high'（默认）| 'low'
+      //     - tolerancePct / maxBars / memoryKey: 透传到 sequence params + stateKeys
+      case 'price.previous_extrema_retest': {
+        const lookback = this.readNumber([
+          atom.params?.lookbackBars,
+          atom.params?.window,
+          atom.params?.period,
+        ], 24)
+        if (!Number.isInteger(lookback) || lookback <= 0) {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:lookbackBars`)
+        }
+        const extremaType = atom.params?.extremaType === 'low' ? 'low' : 'high'
+        const retestKindRaw = atom.params?.retestKind
+        const retestKind = retestKindRaw === 'break_through' ? 'break_through' : 'not_break'
+        const isHigh = extremaType === 'high'
+        const channelRef = isHigh
+          ? this.ensureChannelSeries(context, 'HIGHEST_HIGH', lookback)
+          : this.ensureChannelSeries(context, 'LOWEST_LOW', lookback)
+        context.runtimeRequirements.helpers.add(isHigh ? 'rollingHigh' : 'rollingLow')
+
+        const breakoutStep = this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_prev_extrema_breakout_${extremaType}_${lookback}`,
+          isHigh ? 'GT' : 'LT',
+          [closeRef, channelRef],
+        )
+
+        // retest step
+        //   not_break: close 仍站稳突破位（GTE for high, LTE for low）
+        //   break_through: close 已跌破/突破回突破位（LT for high, GT for low）
+        let retestKindOp: PredicateDef['kind']
+        if (retestKind === 'not_break') {
+          retestKindOp = isHigh ? 'GTE' : 'LTE'
+        }
+        else {
+          retestKindOp = isHigh ? 'LT' : 'GT'
+        }
+        const retestStep = this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_prev_extrema_retest_${retestKind}_${extremaType}_${lookback}`,
+          retestKindOp,
+          [closeRef, channelRef],
+        )
+
+        const memoryKey = typeof atom.params?.memoryKey === 'string' && atom.params.memoryKey.trim().length > 0
+          ? atom.params.memoryKey.trim()
+          : null
+        if (memoryKey && memoryKey !== 'auto') {
+          context.runtimeRequirements.stateKeys.add(memoryKey)
+        }
+
+        const seqParams: Record<string, number | string> = {}
+        if (typeof atom.params?.maxBars === 'number' && atom.params.maxBars > 0) {
+          seqParams.withinBars = atom.params.maxBars
+        }
+        if (typeof atom.params?.tolerancePct === 'number') {
+          seqParams.tolerancePct = atom.params.tolerancePct
+        }
+        seqParams.extremaType = extremaType
+        seqParams.retestKind = retestKind
+
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}_${retestKind}_${extremaType}_${lookback}`,
+          'sequence',
+          [breakoutStep, retestStep],
+          seqParams,
         )
       }
 
@@ -2439,6 +2686,29 @@ export class CanonicalSpecV2IrCompilerService {
         id: rule.id,
         kind: rule.condition.key === 'risk.atr_multiple_stop' ? 'atrMultipleStop' : 'atrMultipleTakeProfit',
         params: { multiple },
+        actions: this.compileRiskPredicateActions(rule),
+      }
+    }
+
+    // Issue #1395 — risk.atr_take_profit atom emit
+    //   语义"达到 N 倍 ATR 止盈"。复用 atrMultipleTakeProfit RiskPredicateDef 形态。
+    //   params：
+    //     - period: ATR 计算周期（registry 默认 14）
+    //     - multiple / multiplier: ATR 倍数（registry 必填）
+    if (rule.condition.key === 'risk.atr_take_profit') {
+      const multiple = this.readNumber(
+        [rule.condition.params?.multiple, rule.condition.params?.multiplier],
+        0,
+      )
+      if (multiple <= 0) {
+        throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${rule.condition.key}:multiple`)
+      }
+      const period = this.readNumber([rule.condition.params?.period, rule.condition.params?.atrPeriod], 14)
+      context.runtimeRequirements.helpers.add('atr')
+      return {
+        id: rule.id,
+        kind: 'atrMultipleTakeProfit',
+        params: { multiple, period },
         actions: this.compileRiskPredicateActions(rule),
       }
     }

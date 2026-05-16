@@ -69,12 +69,14 @@ describe('conversation-planner-system-prompt ↔ ATOM_CONTRACT_REGISTRY 一致�
     })
   })
 
-  it('prompt 绝不出现旧 5 桶 patch 字段（issue #1364 AC-2）', () => {
+  it('prompt 绝不出现旧 5 桶 patch 字段（issue #1364 AC-2 + #1395 rules 表达式树）', () => {
     const prompt = buildConversationPlannerSystemPrompt('zh')
     expect(prompt).not.toMatch(/"triggers"\s*\??\s*:/)
     expect(prompt).not.toMatch(/"actions"\s*\??\s*:/)
     expect(prompt).not.toMatch(/"risk"\s*\??\s*:\s*\[/)
-    expect(prompt).toMatch(/"atoms"\s*\??\s*:\s*\[/)
+    // #1395：旧 atoms[] 已被 rules[] 替换
+    expect(prompt).not.toMatch(/"atoms"\s*\??\s*:\s*\[/)
+    expect(prompt).toMatch(/"rules"\s*\??\s*:\s*\[/)
   })
 
   describe('REGISTRY contract sanity', () => {

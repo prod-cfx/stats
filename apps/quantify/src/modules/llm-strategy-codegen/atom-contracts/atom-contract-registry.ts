@@ -42,7 +42,7 @@ import { ATOM_PRIVATE_DISPLAY } from './atom-private-display-tokens'
 import { renderDisplayToken, renderEnumDisplayToken } from '../nl-gateway/display-registry'
 import { getGoldenUtterancesForAtom } from '../nl-gateway/utterance-corpus'
 
-type AtomContractSeed = Omit<AtomContract, 'key' | 'bucket' | 'display' | 'emit' | 'corpus'> & {
+type AtomContractSeed = Omit<AtomContract, 'key' | 'bucket' | 'roles' | 'display' | 'emit' | 'corpus'> & {
   readonly display?: AtomContractDisplay
   readonly emit?: AtomContractEmit
   // #1329 PR3c Round 1 M5：corpus 改为 required。所有 seed 必须显式提供 corpus；
@@ -89,6 +89,8 @@ type CompletedPr1bRegistry<T extends Record<AtomContractKey, AtomContractSeed>> 
     readonly emit: T[K] extends { readonly emit: infer E extends AtomContractEmit } ? E : NotApplicableEmit
     // Issue #1383 Lane A：fulfillsStrategyPhase 由 ATOM_FULFILLS_STRATEGY_PHASE 单一真相源注入
     readonly fulfillsStrategyPhase: ReadonlyArray<'entry' | 'exit' | 'risk' | 'sizing' | 'context'>
+    // Issue #1395：roles 由 ATOM_ROLES 单一真相源注入
+    readonly roles: ReadonlyArray<'predicate' | 'effect'>
   }
 }
 
@@ -202,6 +204,10 @@ const ATOM_BUCKETS = {
   'scope.dataSource': 'orchestration',
   'scope.subStrategy': 'orchestration',
   'gate.subStrategy': 'orchestration',
+  // Issue #1395：新 atom
+  'condition.sequence': 'trigger',
+  'price.previous_extrema_retest': 'trigger',
+  'risk.atr_take_profit': 'risk',
 } as const satisfies Record<AtomContractKey, AtomContractBucket>
 
 // =========================================================
@@ -281,12 +287,105 @@ const ATOM_FULFILLS_STRATEGY_PHASE = {
   'scope.dataSource': ['context'],
   'scope.subStrategy': ['context'],
   'gate.subStrategy': [],
+  // Issue #1395：新 atom
+  'condition.sequence': ['entry', 'exit'],
+  'price.previous_extrema_retest': ['entry'],
+  'risk.atr_take_profit': ['risk', 'exit'],
 } as const satisfies Record<AtomContractKey, ReadonlyArray<'entry' | 'exit' | 'risk' | 'sizing' | 'context'>>
 
 export function getAtomFulfillsStrategyPhase(
   key: AtomContractKey,
 ): ReadonlyArray<'entry' | 'exit' | 'risk' | 'sizing' | 'context'> {
   return ATOM_FULFILLS_STRATEGY_PHASE[key]
+}
+
+// =========================================================
+// ATOM_ROLES — Issue #1395
+// =========================================================
+//
+// atom 在 AtomExpr 谓词树 / SemanticRule.effects 中可担任的角色单一真相源。
+//   bucket=trigger                          → ['predicate']
+//   bucket=action                           → ['effect']
+//   bucket=positionConstraint               → ['effect']
+//   bucket=orchestration                    → gate.* 用 ['predicate']；其余 ['effect']
+//   bucket=risk                             → 默认 ['effect']；
+//                                              risk.atr_stop / stop_loss_pct / stop_loss_price /
+//                                              trailing_stop / partial_take_profit 同时含
+//                                              ['predicate', 'effect']（"被触及"是谓词、
+//                                              "设置止损线"是副作用）
+//
+// 反向不变量：__tests__/atom-roles.invariant.spec.ts。
+const ATOM_ROLES = {
+  // ── trigger（predicate）──
+  'volume.threshold': ['predicate'],
+  'volatility.atr_threshold': ['predicate'],
+  'strategy.time_window': ['predicate'],
+  'oscillator.rsi_lte': ['predicate'],
+  'oscillator.rsi_gte': ['predicate'],
+  'indicator.divergence': ['predicate'],
+  'price.candle_pattern': ['predicate'],
+  'price.chart_pattern': ['predicate'],
+  'liquidity.sweep': ['predicate'],
+  'external.signal': ['predicate'],
+  'position.has_position': ['predicate'],
+  'position.no_position': ['predicate'],
+  'bollinger.touch_upper': ['predicate'],
+  'bollinger.touch_lower': ['predicate'],
+  'bollinger.touch_middle': ['predicate'],
+  'price.percent_change': ['predicate'],
+  'price.breakout_up': ['predicate'],
+  'price.breakout_down': ['predicate'],
+  'price.detect.indicator_boundary': ['predicate'],
+  'indicator.cross_over': ['predicate'],
+  'indicator.cross_under': ['predicate'],
+  'indicator.above': ['predicate'],
+  'indicator.below': ['predicate'],
+  'execution.on_start': ['predicate'],
+  'trend.direction': ['predicate'],
+  'market.regime': ['predicate'],
+  'volatility.state': ['predicate'],
+  'price.range_position_lte': ['predicate'],
+  'price.range_position_gte': ['predicate'],
+  // ── action（effect）──
+  'action.add_position': ['effect'],
+  'action.reverse_position': ['effect'],
+  'action.open_long': ['effect'],
+  'action.close_long': ['effect'],
+  'action.open_short': ['effect'],
+  'action.close_short': ['effect'],
+  // ── risk（默认 effect；被触及语义的 5 个 atom 同时含 predicate + effect）──
+  'risk.stop_loss_pct': ['predicate', 'effect'],
+  'risk.take_profit_pct': ['effect'],
+  'risk.atr_stop': ['predicate', 'effect'],
+  'risk.partial_take_profit': ['predicate', 'effect'],
+  // ── orchestration（drawdown_block：副作用护栏）──
+  'portfolioRisk.drawdown_block': ['effect'],
+  // ── positionConstraint（effect）──
+  'position.dca_schedule': ['effect'],
+  'position.pyramiding_limit': ['effect'],
+  'grid.range_rebalance': ['effect'],
+  // ── orchestration / scope ──
+  'gate.regime': ['predicate'],
+  'portfolioRisk.symbol_exposure_cap': ['effect'],
+  'portfolioRisk.substrategy_exposure_cap': ['effect'],
+  'program.dynamic_grid': ['effect'],
+  'program.fixed_grid_gated': ['effect'],
+  'program.adaptive_volatility_grid': ['effect'],
+  'program.event_listener': ['effect'],
+  'scope.symbol': ['effect'],
+  'scope.leg': ['effect'],
+  'scope.timeframe': ['effect'],
+  'scope.dataSource': ['effect'],
+  'scope.subStrategy': ['effect'],
+  'gate.subStrategy': ['predicate'],
+  // Issue #1395：新 atom
+  'condition.sequence': ['predicate'],
+  'price.previous_extrema_retest': ['predicate'],
+  'risk.atr_take_profit': ['effect'],
+} as const satisfies Record<AtomContractKey, ReadonlyArray<'predicate' | 'effect'>>
+
+export function getAtomRoles(key: AtomContractKey): ReadonlyArray<'predicate' | 'effect'> {
+  return ATOM_ROLES[key]
 }
 
 // Public bucket helpers — 单一对外 API，模块外消费方禁止再读 ATOM_BUCKETS（已 private）
@@ -373,6 +472,10 @@ const ATOM_PUBLIC_NAMES = {
   'scope.dataSource': { zh: '数据源', en: 'Data source scope' },
   'scope.subStrategy': { zh: '子策略范围', en: 'Sub-strategy scope' },
   'gate.subStrategy': { zh: '子策略 gate', en: 'Sub-strategy gate' },
+  // Issue #1395：新 atom
+  'condition.sequence': { zh: '条件序列', en: 'Condition sequence' },
+  'price.previous_extrema_retest': { zh: '突破后回踩', en: 'Previous extrema retest' },
+  'risk.atr_take_profit': { zh: 'ATR 动态止盈', en: 'ATR take profit' },
 } as const satisfies Record<AtomContractKey, { zh: string; en: string }>
 
 export { ATOM_PUBLIC_NAMES }
@@ -471,6 +574,8 @@ function completePr1bRegistry<const T extends Record<AtomContractKey, AtomContra
       ...registry[key],
       key,
       bucket,
+      // Issue #1395：从 ATOM_ROLES 单一真相源注入。
+      roles: ATOM_ROLES[key],
       display: registry[key].display ?? createPr1bDisplay(ATOM_PUBLIC_NAMES[key]),
       corpus: registry[key].corpus,
       emit: registry[key].emit ?? mergedEmit,
@@ -525,6 +630,11 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       summaryTemplate: (params, locale) => {
         if (locale === 'en') return ATOM_PUBLIC_NAMES['volume.threshold'].en
+        // Issue #1395：均量倍数模式优先渲染
+        if (params.mode === 'relative_to_sma' && typeof params.multiplier === 'number') {
+          const refWindow = typeof params.refWindow === 'number' ? params.refWindow : 20
+          return `成交量 > ${params.multiplier} × ${refWindow} 根均量`
+        }
         const metric = typeof params.metric === 'string' ? params.metric : 'base_volume'
         const op = typeof params.operator === 'string' ? params.operator : 'GT'
         const value = typeof params.value === 'number' ? params.value : 0
@@ -535,7 +645,8 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['成交量', '量能', '放量', 'volume'] as const,
+        // Issue #1395 W7.4：补 '倍均量' / '倍量' / '×' / 'times' / 'multiplier' 覆盖均量倍数表达
+        keywords: ['成交量', '量能', '放量', 'volume', '倍均量', '倍量', '×', 'times', 'multiplier'] as const,
         verbs: {
           gte: ['大于', '超过', 'gte', 'greater than', 'exceeds'] as const,
         },
@@ -544,6 +655,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         operator: { kind: 'enum', required: false, enum: ['GT', 'GTE', 'LT', 'LTE'], default: 'GT', extractor: { kind: 'enum-zh-map', enumMap: { '大于': 'GT', '超过': 'GT', '大于等于': 'GTE', '小于': 'LT', '低于': 'LT', '小于等于': 'LTE' } } },
         metric: { kind: 'enum', required: false, enum: ['base_volume', 'quote_volume'], default: 'base_volume', extractor: { kind: 'enum-zh-map', enumMap: { '成交量': 'base_volume', '量能': 'base_volume', '成交额': 'quote_volume' } } },
         value: { kind: 'number', required: false, range: [0, 1e12], extractor: { kind: 'number-decimal', pattern: '\\d+(\\.\\d+)?' } },
+        // Issue #1395 W7.4：均量倍数模式（absolute / relative_to_sma）
+        //   mode=relative_to_sma 时 multiplier 必填；refWindow 推荐 20 根 SMA。
+        //   slot default 不在此处注入（避免污染 dispatcher self-baseline），由下游 IR compile
+        //   兜底（mode 缺省视为 absolute、refWindow 缺省视为 20）。
+        mode: { kind: 'enum', required: false, enum: ['absolute', 'relative_to_sma'], extractor: { kind: 'enum-zh-map', enumMap: { '倍均量': 'relative_to_sma', '倍量': 'relative_to_sma', '均量倍数': 'relative_to_sma' } } },
+        // Issue #1395 mute-spider：multiplier 实际业务区间 0.1-100 倍；> 100 几乎一定是幻觉
+        multiplier: { kind: 'number', required: false, range: [0.1, 100], extractor: { kind: 'number-decimal', pattern: '(\\d+(?:\\.\\d+)?)\\s*(?:倍|×|x|times)' } },
+        // refWindow 扩展专用：只在出现 "均量N" / "SMA N" / "N 根均量" 等带均线上下文的表达里抽取，
+        //   避免与 value（裸数字）抢匹配（违反 dispatcher self-baseline 1 案例）。
+        refWindow: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '(?:均量|均线|SMA|sma)\\s*(\\d+)', range: [1, 500] } },
       },
       phaseResolver: 'by-clause-verb',
       sideResolver: 'inherit',
@@ -731,8 +852,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         },
       },
       paramSlots: {
-        period: { kind: 'number', required: false, range: [1, 200], default: 14, extractor: { kind: 'number-int', pattern: 'RSI\\s*\\(?\\s*(\\d+)', range: [1, 200] } },
-        value: { kind: 'number', required: true, range: [0, 100], extractor: { kind: 'number-int', pattern: '(?:≤|<=|低于或等于|小于等于|不高于|低于|小于|下方|跌破|below|under|less than or equal|less than|falls below|drops below)\\s*(\\d+)', range: [0, 100] } },
+        // Issue #1395 mute-spider：period/value 必为整数；value 严格 0-100。
+        period: { kind: 'number', required: false, range: [1, 200], multipleOf: 1, default: 14, extractor: { kind: 'number-int', pattern: 'RSI\\s*\\(?\\s*(\\d+)', range: [1, 200] } },
+        value: { kind: 'number', required: true, range: [0, 100], multipleOf: 1, extractor: { kind: 'number-int', pattern: '(?:≤|<=|低于或等于|小于等于|不高于|低于|小于|下方|跌破|below|under|less than or equal|less than|falls below|drops below)\\s*(\\d+)', range: [0, 100] } },
         thresholdRole: { kind: 'enum', required: false, enum: ['lower_threshold'], default: 'lower_threshold' },
       },
       phaseResolver: 'by-clause-verb',
@@ -785,8 +907,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         },
       },
       paramSlots: {
-        period: { kind: 'number', required: false, range: [1, 200], default: 14, extractor: { kind: 'number-int', pattern: 'RSI\\s*\\(?\\s*(\\d+)', range: [1, 200] } },
-        value: { kind: 'number', required: true, range: [0, 100], extractor: { kind: 'number-int', pattern: '(?:≥|>=|高于或等于|大于等于|不低于|高于|大于|超过|上方|above|over|greater than or equal|greater than)\\s*(\\d+)', range: [0, 100] } },
+        // Issue #1395 mute-spider：period/value 必为整数；value 严格 0-100。
+        period: { kind: 'number', required: false, range: [1, 200], multipleOf: 1, default: 14, extractor: { kind: 'number-int', pattern: 'RSI\\s*\\(?\\s*(\\d+)', range: [1, 200] } },
+        value: { kind: 'number', required: true, range: [0, 100], multipleOf: 1, extractor: { kind: 'number-int', pattern: '(?:≥|>=|高于或等于|大于等于|不低于|高于|大于|超过|上方|above|over|greater than or equal|greater than)\\s*(\\d+)', range: [0, 100] } },
         thresholdRole: { kind: 'enum', required: false, enum: ['upper_threshold'], default: 'upper_threshold' },
       },
       phaseResolver: 'by-clause-verb',
@@ -858,7 +981,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         //     1) "BOLL(20,2)" / "布林带(20,2)"——括号 + 逗号
         //     2) "BOLL 20 周期、2 倍标准差"——空格 + 数字（period）/ "标准差" 关键字（stdDev）
         //     3) "布林上轨" / "boll 上轨"——无数字，回落 default
-        period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*(?:[（(]\\s*(\\d+)|(\\d+)\\s*(?:周期|天|根)?)', range: [1, 500] } },
+        period: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*(?:[（(]\\s*(\\d+)|(\\d+)\\s*(?:周期|天|根)?)', range: [1, 500] } },
         stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)|(\\d+(?:\\.\\d+)?)\\s*(?:倍\\s*)?标准差', range: [0.1, 10] } },
         confirmationMode: { kind: 'enum', required: false, enum: ['touch', 'breakout', 'close'], extractor: { kind: 'enum-zh-map', enumMap: { '触及': 'touch', '碰到': 'touch', '触碰': 'touch', '突破': 'breakout', '上破': 'breakout', '跌破': 'breakout', '收盘确认': 'close', '收盘': 'close' } } },
       },
@@ -926,7 +1049,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         //     1) "BOLL(20,2)" / "布林带(20,2)"——括号 + 逗号
         //     2) "BOLL 20 周期、2 倍标准差"——空格 + 数字（period）/ "标准差" 关键字（stdDev）
         //     3) "布林上轨" / "boll 上轨"——无数字，回落 default
-        period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*(?:[（(]\\s*(\\d+)|(\\d+)\\s*(?:周期|天|根)?)', range: [1, 500] } },
+        period: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*(?:[（(]\\s*(\\d+)|(\\d+)\\s*(?:周期|天|根)?)', range: [1, 500] } },
         stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)|(\\d+(?:\\.\\d+)?)\\s*(?:倍\\s*)?标准差', range: [0.1, 10] } },
         confirmationMode: { kind: 'enum', required: false, enum: ['touch', 'breakout', 'close'], extractor: { kind: 'enum-zh-map', enumMap: { '触及': 'touch', '碰到': 'touch', '触碰': 'touch', '突破': 'breakout', '上破': 'breakout', '跌破': 'breakout', '收盘确认': 'close', '收盘': 'close' } } },
       },
@@ -999,7 +1122,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         //     1) "BOLL(20,2)" / "布林带(20,2)"——括号 + 逗号
         //     2) "BOLL 20 周期、2 倍标准差"——空格 + 数字（period）/ "标准差" 关键字（stdDev）
         //     3) "布林上轨" / "boll 上轨"——无数字，回落 default
-        period: { kind: 'number', required: false, range: [1, 500], default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*(?:[（(]\\s*(\\d+)|(\\d+)\\s*(?:周期|天|根)?)', range: [1, 500] } },
+        period: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*(?:[（(]\\s*(\\d+)|(\\d+)\\s*(?:周期|天|根)?)', range: [1, 500] } },
         stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)|(\\d+(?:\\.\\d+)?)\\s*(?:倍\\s*)?标准差', range: [0.1, 10] } },
         confirmationMode: { kind: 'enum', required: false, enum: ['touch', 'breakout', 'close'], extractor: { kind: 'enum-zh-map', enumMap: { '触及': 'touch', '碰到': 'touch', '触碰': 'touch', '突破': 'breakout', '上破': 'breakout', '跌破': 'breakout', '收盘确认': 'close', '收盘': 'close' } } },
       },
@@ -1311,12 +1434,18 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         // Issue #1338：value/slowPeriod 取第 2 个数字，period/fastPeriod 取第 1 个；
         // signalPeriod 取第 3 个。'EMA20 上穿 EMA50' → fastPeriod=20, slowPeriod=50。
         // 'RSI14 上穿 70' → period=14, value=70。
-        value: { kind: 'number', required: false, range: [0, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [0, 100], index: 1 } },
-        period: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
-        fastPeriod: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
-        slowPeriod: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500], index: 1 } },
-        signalPeriod: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500], index: 2 } },
+        // Issue #1395 mute-spider：multipleOf:1 强制整数；range 已是 [0,100]/[1,500]。
+        value: { kind: 'number', required: false, range: [0, 100], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [0, 100], index: 1 } },
+        period: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
+        fastPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
+        slowPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500], index: 1 } },
+        signalPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500], index: 2 } },
       },
+      // Issue #1395 mute-spider S5：MACD 三元组合法白名单（业界标准 + 快速线变体）
+      paramPresetCombos: [
+        { indicator: 'macd', fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 },
+        { indicator: 'macd', fastPeriod: 5, slowPeriod: 13, signalPeriod: 9 },
+      ] as const,
       phaseResolver: 'by-clause-verb',
       sideResolver: 'from-direction',
     },
@@ -1393,12 +1522,19 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         indicator: { kind: 'enum', required: true, enum: ['ma', 'ema', 'rsi', 'macd'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema', 'RSI': 'rsi', 'MACD': 'macd', 'DIF': 'macd', 'DEA': 'macd' } } },
         semantic: { kind: 'enum', required: false, enum: ['cross_down'] },
         // Issue #1338：与 cross_over 对称——双数字按位置 disambiguate。
-        value: { kind: 'number', required: false, range: [0, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [0, 100], index: 1 } },
-        period: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
-        fastPeriod: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
-        slowPeriod: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500], index: 1 } },
-        signalPeriod: { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500], index: 2 } },
+        // Issue #1395 mute-spider：multipleOf:1 强制整数。
+        value: { kind: 'number', required: false, range: [0, 100], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [0, 100], index: 1 } },
+        period: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
+        fastPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
+        slowPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500], index: 1 } },
+        signalPeriod: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500], index: 2 } },
       },
+      // Issue #1395 mute-spider S5：MACD 三元组合法白名单（业界标准 + 快速线变体）。
+      // 与 cross_over 对称。
+      paramPresetCombos: [
+        { indicator: 'macd', fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 },
+        { indicator: 'macd', fastPeriod: 5, slowPeriod: 13, signalPeriod: 9 },
+      ] as const,
       phaseResolver: 'by-clause-verb',
       sideResolver: 'from-direction',
     },
@@ -4254,6 +4390,181 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         toSubStrategyScopeRef: { kind: 'symbol', required: false },
       },
       phaseResolver: 'fixed-gate',
+      sideResolver: 'inherit',
+    },
+  },
+
+  // =========================================================
+  // Issue #1395：新增 4 个 atom（其中 volume.threshold 直接扩 paramSlots，
+  //   见 L579+；本段仅注册 3 个新 atom）。
+  //
+  //   readinessCheck=UNSUPPORTED_SKIP：IR emit / 真实编译路径尚未兑现，
+  //   atom 仅落地 registry 元数据让 NL gateway / atom-roles invariant 通过；
+  //   下游 codegen 走 unsupported fallback。
+  // =========================================================
+
+  'condition.sequence': {
+    corpus: {
+      aliases: ['条件序列', '连续 N 根', '然后', '先...再', 'consecutive', 'sequence'],
+      positiveExamples: [
+        'BTC 连续跌三根 15 分钟 K 线后，如果下一根开始放量反弹就买一点',
+        '突破前高后回踩不破突破位再买',
+        'RSI 跌破 35 后重新上穿 35 买入',
+      ],
+      negativeExamples: ['单根 K 线突破', '价格在 MA 上方'],
+      goldenUtterances: [],
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: UNSUPPORTED_SKIP,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'condition.sequence.sequenceKind') return '请明确序列类型：consecutive_body（连续阴/阳线）、pattern_then_volume_spike（形态 + 放量）或 breakout_then_retest（突破回踩）。'
+      if (slotKey === 'condition.sequence.count') return '请给出连续根数，例如 3。'
+      if (slotKey === 'condition.sequence.direction') return '请给出方向：up 或 down。'
+      return '请补充条件序列的缺失信息（sequenceKind / count / direction / lookbackBars）。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: {
+      supportStatus: 'supported_executable',
+      executableSinceVersion: '2026.05.W02',
+    },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['condition.sequence'],
+      paramRenderers: {
+        count: (v) => `${v} 根`,
+        direction: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['condition.sequence'].en
+        const count = typeof params.count === 'number' ? `连续 ${params.count} 根` : '条件序列'
+        const dir = params.direction === 'down' ? '阴线' : params.direction === 'up' ? '阳线' : ''
+        const nb = params.nextBarOnly === 'true' ? '（下一根触发）' : ''
+        return `${count}${dir}${nb}`
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['连续', '先', '再', '然后', '下一根', 'sequence', 'consecutive', 'then', 'after', '序列'] as const,
+        verbs: {
+          fixed: ['出现', '满足', '触发'] as const,
+        },
+      },
+      paramSlots: {
+        sequenceKind: { kind: 'enum', required: true, enum: ['consecutive_body', 'pattern_then_volume_spike', 'breakout_then_retest'] },
+        count: { kind: 'number', required: false, range: [1, 100], extractor: { kind: 'number-decimal', pattern: '连续\\s*(\\d+)\\s*根', range: [1, 100] } },
+        direction: { kind: 'enum', required: false, enum: ['up', 'down'] },
+        lookbackBars: { kind: 'number', required: false, range: [1, 500] },
+        withinBars: { kind: 'number', required: false, range: [1, 500] },
+        // nextBarOnly 用 enum 'true' / 'false' 兜底（ParamSlotSchema 不支持 boolean kind）
+        nextBarOnly: { kind: 'enum', required: false, enum: ['true', 'false'] },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'price.previous_extrema_retest': {
+    corpus: {
+      aliases: ['回踩', '回测', '不破', '回踩不破', 'retest', 'pullback'],
+      positiveExamples: [
+        '突破 24 小时高点后回踩不破突破位再买',
+        '突破前高后回测确认再入场',
+      ],
+      negativeExamples: ['直接突破买入', '盘整'],
+      goldenUtterances: [],
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: UNSUPPORTED_SKIP,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'price.previous_extrema_retest.retestKind') return '请明确回踩类型：not_break（不破突破位）或 break_through（跌穿突破位）。'
+      if (slotKey === 'price.previous_extrema_retest.memoryKey') return '请提供突破位记忆键（auto 自动生成）。'
+      return '请补充突破后回踩的缺失信息（retestKind / tolerancePct / maxBars）。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: {
+      supportStatus: 'supported_executable',
+      executableSinceVersion: '2026.05.W02',
+    },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['price.previous_extrema_retest'],
+      paramRenderers: {
+        retestKind: (v) => v === 'not_break' ? '不破' : '跌穿',
+        tolerancePct: (v) => `${v}%`,
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['price.previous_extrema_retest'].en
+        return params.retestKind === 'not_break' ? '回踩不破突破位' : '回踩跌穿突破位'
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['回踩', '回测', '不破', '突破后', 'retest', 'pullback'] as const,
+        verbs: {
+          fixed: ['回踩', '回测', '触及'] as const,
+        },
+      },
+      paramSlots: {
+        // memoryKey 用 symbol kind 兜底（ParamSlotSchema 不支持 string）
+        memoryKey: { kind: 'symbol', required: false, default: 'auto' },
+        retestKind: { kind: 'enum', required: true, enum: ['not_break', 'break_through'] },
+        tolerancePct: { kind: 'percent', required: false, range: [0, 10], default: 0.1 },
+        maxBars: { kind: 'number', required: false, range: [1, 100], default: 6 },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'risk.atr_take_profit': {
+    corpus: {
+      aliases: ['ATR 止盈', '波动止盈', 'ATR 动态止盈'],
+      positiveExamples: [
+        '盈利达到 3 倍 ATR 后止盈',
+        '用 3 倍 ATR 作为动态止盈',
+      ],
+      negativeExamples: ['固定 5% 止盈', 'ATR 大于 50 才平仓'],
+      goldenUtterances: [],
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: UNSUPPORTED_SKIP,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'risk.atr_take_profit.period') return '请指定 ATR 计算周期，例如 14（常用默认值）。'
+      if (slotKey === 'risk.atr_take_profit.multiple') return '请给出 ATR 倍数，例如 3（即 3 倍 ATR 作为止盈距离）。'
+      return '请补充 ATR 动态止盈的缺失信息（period / multiple）。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: {
+      supportStatus: 'supported_executable',
+      executableSinceVersion: '2026.05.W02',
+    },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.atr_take_profit'],
+      paramRenderers: {
+        multiple: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.atr_take_profit'].en
+        if (typeof params.multiple === 'number') return `${params.multiple} 倍 ATR 止盈`
+        return 'ATR 动态止盈'
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['ATR 止盈', 'ATR', '动态止盈', '波动止盈', 'atr take profit', '盈利', '倍 ATR 止盈'] as const,
+        verbs: {
+          fixed: ['止盈', '作为止盈', '动态止盈', 'atr take profit'] as const,
+        },
+      },
+      paramSlots: {
+        period: { kind: 'number', required: false, range: [1, 500], default: 14 },
+        multiple: { kind: 'number', required: true, range: [0, 100], extractor: { kind: 'number-decimal', pattern: '(\\d+(?:\\.\\d+)?)\\s*(?:倍|x)\\s*ATR.*?(?:止盈|take\\s*profit)', range: [0, 100] } },
+      },
+      phaseResolver: 'fixed-exit',
       sideResolver: 'inherit',
     },
   },

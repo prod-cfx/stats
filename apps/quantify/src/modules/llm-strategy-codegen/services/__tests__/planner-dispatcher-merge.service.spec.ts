@@ -124,6 +124,46 @@ describe('PlannerDispatcherMergeService', () => {
     expect(merged?.atoms?.[0].key).toBe('grid.range_rebalance')
   })
 
+  // Issue #1395 Wave 4：rules[] 表达式树是 planner 独有产物，必须被 merge 透传，
+  // 否则下游 readiness / projection / IR compiler 全部退化到 atoms[] 路径。
+  it('Wave 4: propagates planner rules[] through merge (planner-only)', () => {
+    const planner = {
+      rules: [{
+        id: 'entry-seq',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'oscillator.rsi_lte', params: { period: 14, threshold: 35 } },
+        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      }],
+    } as unknown as CodegenSemanticPatch
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, null)
+    expect((merged as { rules?: unknown[] })?.rules).toHaveLength(1)
+  })
+
+  it('Wave 4: rules[] alone counts as non-empty patch (no atoms/triggers)', () => {
+    const planner = {
+      rules: [{ id: 'r1', phase: 'entry', sideScope: 'both', condition: { kind: 'atom', key: 'x.y', params: {} }, effects: [] }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher: CodegenSemanticPatch = { atoms: [{ key: 'grid.range_rebalance' }] }
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
+    expect((merged as { rules?: unknown[] })?.rules).toHaveLength(1)
+    expect(merged?.atoms).toHaveLength(1)
+  })
+
+  it('Wave 4: planner rules wins over dispatcher rules (planner is authoritative for tree)', () => {
+    const planner = {
+      rules: [{ id: 'planner-rule', phase: 'entry', sideScope: 'long', condition: { kind: 'atom', key: 'a.b', params: {} }, effects: [] }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = {
+      rules: [{ id: 'dispatcher-rule', phase: 'exit', sideScope: 'long', condition: { kind: 'atom', key: 'c.d', params: {} }, effects: [] }],
+      atoms: [{ key: 'x' }],
+    } as unknown as CodegenSemanticPatch
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
+    const rules = (merged as { rules?: Array<{ id?: string }> })?.rules
+    expect(rules).toHaveLength(1)
+    expect(rules?.[0].id).toBe('planner-rule')
+  })
+
   it('orchestration nodes dedupe by id when present', () => {
     const planner: CodegenSemanticPatch = {
       orchestration: { nodes: [{ id: 'n1', key: 'program.dynamic_grid', kind: 'program' } as never] },

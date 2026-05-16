@@ -78,6 +78,26 @@ export class PlannerDispatcherMergeService {
       }
     }
 
+    // Issue #1395 Wave 4：rules[] 表达式树是 planner 独有产物，dispatcher 不产 rules。
+    // 之前漏掉透传 → 整棵 rules 树被 merge 步骤吞掉，state.rules 永远为空，
+    // 下游 readiness / projection / IR compiler 全部退化到 atoms[] 5-bucket 路径。
+    const plannerRules = (planner as { rules?: unknown }).rules
+    const dispatcherRules = (dispatcher as { rules?: unknown }).rules
+    const rulesFromPlanner = Array.isArray(plannerRules) ? plannerRules : undefined
+    const rulesFromDispatcher = Array.isArray(dispatcherRules) ? dispatcherRules : undefined
+    if (rulesFromPlanner && rulesFromPlanner.length > 0) {
+      (merged as { rules?: unknown }).rules = rulesFromPlanner
+    }
+    else if (rulesFromDispatcher && rulesFromDispatcher.length > 0) {
+      (merged as { rules?: unknown }).rules = rulesFromDispatcher
+    }
+
+    // 同样透传 __zodQuarantine（planner rules zod 失败明细），供观测层消费。
+    const plannerQuarantine = (planner as { __zodQuarantine?: unknown }).__zodQuarantine
+    if (Array.isArray(plannerQuarantine) && plannerQuarantine.length > 0) {
+      (merged as { __zodQuarantine?: unknown }).__zodQuarantine = plannerQuarantine
+    }
+
     return merged
   }
 
@@ -90,6 +110,10 @@ export class PlannerDispatcherMergeService {
     if (patch.risk && patch.risk.length > 0) return true
     if (patch.position) return true
     if (patch.orchestration?.nodes && patch.orchestration.nodes.length > 0) return true
+    // Issue #1395 Wave 4：rules[] 也算 non-empty 信号；planner 单产 rules（无 atoms）
+    // 也必须被识别为有效 patch，否则会被当成 empty 整体丢弃。
+    const rules = (patch as { rules?: unknown }).rules
+    if (Array.isArray(rules) && rules.length > 0) return true
     return false
   }
 

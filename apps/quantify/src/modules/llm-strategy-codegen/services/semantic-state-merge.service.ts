@@ -36,6 +36,15 @@ export class SemanticStateMergeService {
       return input.derived
     }
 
+    // Issue #1395 Wave 4：rules[] 表达式树合并策略
+    //   - derived 显式给 rules（且非空） → 取 derived（用户最新轮次描述覆盖旧规则树）
+    //   - derived 未给或空 → 保留 persisted.rules（避免 ...derived 把 rules 抹掉）
+    const persistedRules = (input.persisted as { rules?: unknown }).rules
+    const derivedRules = (input.derived as { rules?: unknown }).rules
+    const mergedRules = Array.isArray(derivedRules) && derivedRules.length > 0
+      ? derivedRules
+      : (Array.isArray(persistedRules) ? persistedRules : undefined)
+
     return {
       ...input.derived,
       families: [...new Set([...input.persisted.families, ...input.derived.families])],
@@ -53,6 +62,7 @@ export class SemanticStateMergeService {
       contextSlots: this.mergeContextSlots(input.persisted.contextSlots, input.derived.contextSlots),
       normalizationNotes: [...new Set([...input.persisted.normalizationNotes, ...input.derived.normalizationNotes])],
       updatedAt: new Date().toISOString(),
+      ...(mergedRules !== undefined ? { rules: mergedRules as SemanticState['rules'] } : {}),
     }
   }
 

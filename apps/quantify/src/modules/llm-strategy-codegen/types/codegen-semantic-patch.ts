@@ -45,6 +45,14 @@ export interface CodegenSemanticNodeEnvelope {
 
 export interface CodegenSemanticPatch {
   contextSlots?: Record<string, string | number | boolean | null | CodegenContextSlotPatchValue>
+  /**
+   * Issue #1395 — 表达式树形态的 patch 主体（推荐）。
+   * 每条 rule 含 condition (AtomExpr 谓词树) + effects (副作用绑定)。
+   * 单 atom case = 单叶子 rule.condition；AND/OR/NOT/SEQUENCE 嵌套见 ./atom-expr.ts。
+   *
+   * 旧 atoms[] 字段保留作 degenerate 输入路径：内部 lift 为单叶子 rules[]，零行为差。
+   */
+  rules?: import('./atom-expr').SemanticRule[]
   atoms?: Array<CodegenSemanticNodeEnvelope & {
     key: string
     phase?: 'entry' | 'exit' | 'risk' | 'gate'
