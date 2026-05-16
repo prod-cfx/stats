@@ -18,7 +18,12 @@ import { buildSemanticSlotId } from '../types/semantic-state'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
 import { GenericSeedDispatcher } from './generic-seed-dispatcher.service'
 import { pickPendingClarificationTarget } from './strategy-clarification-question.service'
-import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
+import {
+  readFlatActions,
+  readFlatPositionConstraints,
+  readFlatRisks,
+  readFlatTriggers,
+} from '../types/semantic-state-flat-readers'
 
 const ENTRY_TRIGGER_SLOT_KEY = 'trigger.entry'
 const EXIT_TRIGGER_SLOT_KEY = 'trigger.exit'
@@ -188,6 +193,12 @@ function findActiveOpenSlotRef(
     const slot = state.position.openSlots.find(matchSlot)
     if (slot) return { ownerKind: 'position', ownerId: 'position', slot }
   }
+  // #1395 扁平桶（grid.range_rebalance 等 bucket=positionConstraint 的 atom 由 seed-builder 放这）
+  for (const constraint of readFlatPositionConstraints(state)) {
+    const slot = constraint.openSlots.find(matchSlot)
+    if (slot) return { ownerKind: 'positionConstraint', ownerId: constraint.id, slot }
+  }
+  // 旧嵌套桶残留 fallback（legacy state 反序列化 / 部分 reader 仍查询）
   for (const constraint of state.position?.constraints ?? []) {
     const slot = constraint.openSlots.find(matchSlot)
     if (slot) return { ownerKind: 'positionConstraint', ownerId: constraint.id, slot }
@@ -262,24 +273,40 @@ function applyExtractedValueToOwner(
     return state
   }
   if (slotRef.ownerKind === 'positionConstraint') {
-    if (!state.position) return state
-    return {
-      ...state,
-      position: {
-        ...state.position,
-        constraints: (state.position.constraints ?? []).map((owner) => {
-          if (owner.id !== slotRef.ownerId) return owner
-          const openSlots = removeSlot(owner.openSlots)
-          return {
-            ...owner,
-            params: { ...owner.params, [paramSlotKey]: value },
-            openSlots,
-            status: nextStatusFor(openSlots),
-            source: 'user_explicit',
-          } satisfies SemanticPositionConstraintState
-        }),
-      },
+    // #1395 扁平桶 + 旧嵌套桶都同步写——以 owner.id 匹配的桶为准；另一桶 noop。
+    //
+    // M2 invariant：两桶若同时存在同 slotId 但不同 ownerId 的 open slot 视为 state corruption；
+    //   当前 dispatcher / seed-builder 一次写入只产 1 个 grid constraint，不会触发该场景。
+    //   若未来出现需开 follow-up issue 跟踪（#1422 收口扁平桶 SoT）。
+    //
+    // m1 引用稳定：仅当桶里存在 owner.id 匹配项时才 map 出新数组，否则保持原引用避免下游 memo 失效。
+    const updateConstraint = (owner: SemanticPositionConstraintState): SemanticPositionConstraintState => {
+      if (owner.id !== slotRef.ownerId) return owner
+      const openSlots = removeSlot(owner.openSlots)
+      return {
+        ...owner,
+        params: { ...owner.params, [paramSlotKey]: value },
+        openSlots,
+        status: nextStatusFor(openSlots),
+        source: 'user_explicit',
+      } satisfies SemanticPositionConstraintState
     }
+    const flatConstraints = readFlatPositionConstraints(state)
+    const nestedConstraints = state.position?.constraints ?? []
+    const flatHasOwner = flatConstraints.some(c => c.id === slotRef.ownerId)
+    const nestedHasOwner = nestedConstraints.some(c => c.id === slotRef.ownerId)
+    const nextFlatConstraints = flatHasOwner ? flatConstraints.map(updateConstraint) : flatConstraints
+    const nextNestedConstraints = nestedHasOwner ? nestedConstraints.map(updateConstraint) : nestedConstraints
+    const nextState: SemanticState = nextFlatConstraints === flatConstraints
+      ? state
+      : { ...state, positionConstraint: nextFlatConstraints }
+    if (state.position && nextNestedConstraints !== nestedConstraints) {
+      return {
+        ...nextState,
+        position: { ...state.position, constraints: nextNestedConstraints },
+      }
+    }
+    return nextState
   }
   return state
 }

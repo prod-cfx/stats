@@ -14,6 +14,130 @@ describe('semanticOpenSlotAnswerResolverService', () => {
   // Issue #1409: atom-driven 通用通道（替代 level-set special-case）
   // ─────────────────────────────────────────────────────────────────
 
+  it('#1409 follow-up: writes levels answer (20格) into state.positionConstraint 顶层桶（#1395 扁平桶，grid bucket=positionConstraint 真实落点）', () => {
+    const slot = buildGridClarificationSlot('levels')
+    const gridConstraint = {
+      id: 'pc-grid-1',
+      key: 'grid.range_rebalance',
+      params: { rangeLower: 79200, rangeUpper: 80200, sideMode: 'both' as const },
+      status: 'open' as const,
+      source: 'user_explicit' as const,
+      openSlots: [slot],
+    }
+    const state = createSemanticState({
+      positionConstraint: [gridConstraint as SemanticState['positionConstraint'][number]],
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: '20格',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotId: buildSemanticSlotId(slot),
+          slotKey: slot.slotKey,
+          fieldPath: slot.fieldPath,
+        }],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.positionConstraint).toHaveLength(1)
+    expect(result.nextState.positionConstraint[0].params).toEqual(expect.objectContaining({
+      levels: 20,
+      rangeLower: 79200,
+      rangeUpper: 80200,
+      sideMode: 'both',
+    }))
+    expect(result.nextState.positionConstraint[0].status).toBe('locked')
+    expect(result.nextState.positionConstraint[0].openSlots).toEqual([])
+  })
+
+  it('#1409 follow-up: legacy 嵌套桶 fallback —— state.position.constraints 单独存在时仍能写入', () => {
+    const slot = buildGridClarificationSlot('levels')
+    const gridConstraint = {
+      id: 'pc-grid-legacy',
+      key: 'grid.range_rebalance',
+      params: { rangeLower: 79200, rangeUpper: 80200, sideMode: 'both' as const },
+      status: 'open' as const,
+      source: 'user_explicit' as const,
+      openSlots: [slot],
+    }
+    const state = createSemanticState({
+      position: {
+        mode: 'fixed_ratio',
+        value: 0,
+        positionMode: 'long_only',
+        status: 'open',
+        source: 'user_explicit',
+        openSlots: [],
+        constraints: [gridConstraint as SemanticState['positionConstraint'][number]],
+      } as SemanticState['position'],
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: '20格',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotId: buildSemanticSlotId(slot),
+          slotKey: slot.slotKey,
+          fieldPath: slot.fieldPath,
+        }],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.position?.constraints?.[0].params).toEqual(expect.objectContaining({
+      levels: 20,
+    }))
+  })
+
+  it('#1409 follow-up: 双桶并存时同 owner.id 双写一致（扁平 + 嵌套同步落 levels）', () => {
+    const slot = buildGridClarificationSlot('levels')
+    const baseConstraint = {
+      id: 'pc-grid-dual',
+      key: 'grid.range_rebalance',
+      params: { rangeLower: 79200, rangeUpper: 80200, sideMode: 'both' as const },
+      status: 'open' as const,
+      source: 'user_explicit' as const,
+      openSlots: [slot],
+    } as SemanticState['positionConstraint'][number]
+    const state = createSemanticState({
+      positionConstraint: [baseConstraint],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0,
+        positionMode: 'long_only',
+        status: 'open',
+        source: 'user_explicit',
+        openSlots: [],
+        constraints: [baseConstraint],
+      } as SemanticState['position'],
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: '20格',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotId: buildSemanticSlotId(slot),
+          slotKey: slot.slotKey,
+          fieldPath: slot.fieldPath,
+        }],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.positionConstraint[0].params.levels).toBe(20)
+    expect(result.nextState.position?.constraints?.[0].params.levels).toBe(20)
+  })
+
   it('#1409 atom-driven: writes levels answer (20格) into trigger.params via extractSingleSlot', () => {
     const slot = buildGridClarificationSlot('levels')
     const state = createSemanticState({

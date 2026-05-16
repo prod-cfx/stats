@@ -36,7 +36,13 @@
  * Refs: #1395 (rules 树主体) / #1396 (rules projection 基础设施) / #1397 (本迁移)
  */
 
-import type { SemanticActionState, SemanticRiskState, SemanticState, SemanticTriggerState } from './semantic-state'
+import type {
+  SemanticActionState,
+  SemanticPositionConstraintState,
+  SemanticRiskState,
+  SemanticState,
+  SemanticTriggerState,
+} from './semantic-state'
 
 /** 读取扁平 trigger 桶。当前 passthrough（同引用）；follow-up PR 切到 rules 投影。 */
 export function readFlatTriggers(state: SemanticState): SemanticTriggerState[] {
@@ -51,4 +57,15 @@ export function readFlatActions(state: SemanticState): SemanticActionState[] {
 /** 读取扁平 risk 桶。当前 passthrough（同引用）；follow-up PR 切到 rules 投影。 */
 export function readFlatRisks(state: SemanticState): SemanticRiskState[] {
   return state.risk
+}
+
+/**
+ * 读取扁平 positionConstraint 桶（#1395 引入；grid.range_rebalance 等 bucket=positionConstraint
+ * 的 atom 都放这里）。当前 passthrough；follow-up PR 切到 rules 投影。
+ *
+ * 注意：旧的 `state.position?.constraints` 嵌套桶为 legacy 残留，部分 reader（如
+ * canonical-spec-builder.service.ts:1349）仍在查询；新代码统一通过本 helper 读顶层桶。
+ */
+export function readFlatPositionConstraints(state: SemanticState): SemanticPositionConstraintState[] {
+  return state.positionConstraint ?? []
 }
