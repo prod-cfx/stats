@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common'
 import type { SemanticCapabilityShape, SemanticSlotState } from '../types/semantic-state'
-import { renderSemanticClarificationQuestion } from './semantic-clarification-question-renderer.service'
 
 export type NormalizedContractShapeStatus = 'valid' | 'open' | 'conflict' | 'invalid'
 
@@ -15,8 +14,15 @@ export interface ContractShapeNormalizationResult {
   openSlots: SemanticSlotState[]
 }
 
-const DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
-const SPACING_CONFLICT_SLOT_KEY = 'contract.shape.price.level_set.spacing_conflict'
+// #1409: grid clarification slot 走 atom-driven 通道
+//   density 子句对应 levels paramSlot；spacing_conflict 子句对应 stepPct paramSlot（带冲突文案 hint）
+const GRID_ATOM_KEY = 'grid.range_rebalance'
+const GRID_LEVELS_PARAM_SLOT_KEY = 'levels'
+const GRID_STEP_PCT_PARAM_SLOT_KEY = 'stepPct'
+const GRID_LEVELS_SLOT_KEY = `${GRID_ATOM_KEY}.${GRID_LEVELS_PARAM_SLOT_KEY}`
+const GRID_STEP_PCT_SLOT_KEY = `${GRID_ATOM_KEY}.${GRID_STEP_PCT_PARAM_SLOT_KEY}`
+const SPACING_CONFLICT_QUESTION_HINT = '网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。'
+const DENSITY_QUESTION_HINT = '请确认网格数量或每格间距，例如 20 格 / 每格 100 USDT / 每格 0.5%。'
 const ABSOLUTE_SPACING_CONFLICT_TOLERANCE = 1e-8
 const PERCENT_SPACING_CONFLICT_TOLERANCE = 1e-3
 
@@ -71,7 +77,7 @@ export class SemanticContractShapeNormalizerService {
       return {
         status: 'conflict',
         shape,
-        openSlots: [this.toOpenSlot(SPACING_CONFLICT_SLOT_KEY, options.fieldPath)],
+        openSlots: [this.toGridStepPctConflictSlot(options.fieldPath)],
       }
     }
 
@@ -79,7 +85,7 @@ export class SemanticContractShapeNormalizerService {
       return {
         status: 'open',
         shape,
-        openSlots: [this.toOpenSlot(DENSITY_SLOT_KEY, options.fieldPath)],
+        openSlots: [this.toGridLevelsSlot(options.fieldPath)],
       }
     }
 
@@ -112,24 +118,39 @@ export class SemanticContractShapeNormalizerService {
       return {
         status: 'open',
         shape,
-        openSlots: [this.toOpenSlot(DENSITY_SLOT_KEY, options.fieldPath)],
+        openSlots: [this.toGridLevelsSlot(options.fieldPath)],
       }
     }
 
     return { status: 'valid', shape, openSlots: [] }
   }
 
-  private toOpenSlot(slotKey: string, fieldPath = 'shape'): SemanticSlotState {
+  // #1409: levels paramSlot — density 未声明时追问的网格数量
+  private toGridLevelsSlot(fieldPath = 'shape'): SemanticSlotState {
     return {
-      slotKey,
+      slotKey: GRID_LEVELS_SLOT_KEY,
       fieldPath,
+      atomKey: GRID_ATOM_KEY,
+      paramSlotKey: GRID_LEVELS_PARAM_SLOT_KEY,
       status: 'open',
       priority: 'core',
       affectsExecution: true,
-      questionHint: renderSemanticClarificationQuestion({
-        slotKey,
-        fallback: '请补充价格层级集合的密度或修正冲突配置。',
-      }),
+      questionHint: DENSITY_QUESTION_HINT,
+    }
+  }
+
+  // #1409: stepPct paramSlot — gridCount/spacing 冲突时追问的每格间距
+  //   保留原冲突文案 hint，atom-driven 通道由 paramSlotKey='stepPct' 触发
+  private toGridStepPctConflictSlot(fieldPath = 'shape'): SemanticSlotState {
+    return {
+      slotKey: GRID_STEP_PCT_SLOT_KEY,
+      fieldPath,
+      atomKey: GRID_ATOM_KEY,
+      paramSlotKey: GRID_STEP_PCT_PARAM_SLOT_KEY,
+      status: 'open',
+      priority: 'core',
+      affectsExecution: true,
+      questionHint: SPACING_CONFLICT_QUESTION_HINT,
     }
   }
 }

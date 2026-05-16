@@ -70,7 +70,7 @@ export const STRATEGY_CLARIFICATION_FIELDS = [
   'grid.stepPct',
   'grid.sideMode',
   'trigger.confirmation',
-  'contract.requirement.price.define.level_set',
+  // #1409: contract.requirement.price.define.level_set 已删除（grid clarification 走 atom-driven 形态）
   'contract.requirement.capital.allocate.per_order_budget',
   'contract.requirement.market.read.latest_bar',
   'contract.requirement.guard.enforce.boundary_cancel',

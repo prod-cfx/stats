@@ -26,6 +26,10 @@ interface LocalizedClarificationCopy {
 }
 
 export const SEMANTIC_BUSINESS_QUESTION_BY_SLOT_KEY: Record<string, string> = {
+  // #1409: grid clarification slot 派生 slotKey（atom-driven 形态）
+  'grid.range_rebalance.levels': '请确认网格数量或每格间距，例如 20 格 / 每格 100 USDT / 每格 0.5%。',
+  'grid.range_rebalance.stepPct': '网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。',
+  // 旧字面量保留兼容（spec / fragment fallback / legacy state 仍可能引用）
   'contract.shape.price.level_set.density': '请确认网格数量或每格间距，例如 20 格 / 每格 100 USDT / 每格 0.5%。',
   'contract.shape.price.level_set.spacing_conflict': '网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。',
   'contract.requirement.price.define.level_set': '请补充网格价格区间和网格数量或每格间距。',
@@ -51,14 +55,28 @@ const SEMANTIC_BUSINESS_QUESTION_I18N_BY_SLOT_KEY: Record<string, LocalizedClari
     ['MA6 下穿 MA48', '价格跌破 MA20'],
     ['MA6 crosses below MA48', 'price falls below MA20'],
   ),
+  // #1409: grid clarification slot 派生 slotKey（atom-driven 形态）
+  'grid.range_rebalance.levels': localizedCopy(
+    SEMANTIC_BUSINESS_QUESTION_BY_SLOT_KEY['grid.range_rebalance.levels']!,
+    'Please confirm the grid count or spacing, for example 20 levels, 100 USDT per level, or 0.5% per level.',
+    ['20 格', '每格 100 USDT', '每格 0.5%'],
+    ['20 levels', '100 USDT per level', '0.5% per level'],
+  ),
+  'grid.range_rebalance.stepPct': localizedCopy(
+    SEMANTIC_BUSINESS_QUESTION_BY_SLOT_KEY['grid.range_rebalance.stepPct']!,
+    'The grid count and spacing do not match the current price range. Please confirm whether to keep the grid count or the spacing.',
+    ['保留网格数量', '保留每格间距'],
+    ['keep the grid count', 'keep the spacing'],
+  ),
+  // 旧字面量保留兼容
   'contract.shape.price.level_set.density': localizedCopy(
-    SEMANTIC_BUSINESS_QUESTION_BY_SLOT_KEY['contract.shape.price.level_set.density'],
+    SEMANTIC_BUSINESS_QUESTION_BY_SLOT_KEY['contract.shape.price.level_set.density']!,
     'Please confirm the grid count or spacing, for example 20 levels, 100 USDT per level, or 0.5% per level.',
     ['20 格', '每格 100 USDT', '每格 0.5%'],
     ['20 levels', '100 USDT per level', '0.5% per level'],
   ),
   'contract.shape.price.level_set.spacing_conflict': localizedCopy(
-    SEMANTIC_BUSINESS_QUESTION_BY_SLOT_KEY['contract.shape.price.level_set.spacing_conflict'],
+    SEMANTIC_BUSINESS_QUESTION_BY_SLOT_KEY['contract.shape.price.level_set.spacing_conflict']!,
     'The grid count and spacing do not match the current price range. Please confirm whether to keep the grid count or the spacing.',
     ['保留网格数量', '保留每格间距'],
     ['keep the grid count', 'keep the spacing'],
@@ -122,6 +140,16 @@ const CLARIFICATION_SLOT_LABEL_OVERRIDES: Record<string, Record<ClarificationQue
     zh: '出场触发条件',
     en: 'exit trigger condition',
   },
+  // #1409: grid clarification slot 派生 slotKey（atom-driven 形态）
+  'grid.range_rebalance.levels': {
+    zh: '网格数量或间距',
+    en: 'grid count or spacing',
+  },
+  'grid.range_rebalance.stepPct': {
+    zh: '网格数量与间距冲突',
+    en: 'grid count and spacing conflict',
+  },
+  // 旧字面量保留兼容
   'contract.shape.price.level_set.density': {
     zh: '网格数量或间距',
     en: 'grid count or spacing',
