@@ -184,11 +184,50 @@ export class SemanticRuleProjectionService {
         })
         return
       case 'orchestration':
-        // MVP 占位：orchestration node 结构复杂（kind / contracts / target / programKind ...），
-        // 当前 PR 仅保 trigger 路径不丢失；orchestration effect 投影留待后续 PR。
+        // Issue #1432：补齐 orchestration projection（之前 MVP 占位 return）。
+        //   实施策略与 trigger/action/risk/positionConstraint case 对称：
+        //     - kind 推断自 leaf.key prefix（program. / gate. / scope. / portfolioRisk.）
+        //     - 字段从 leaf.params 透传（与 dispatcher 写入 patch.orchestration.nodes 的
+        //       shape 兼容；具体专属字段 like programKind/sizing/gridParams 仍走 params）
+        //     - metadata 硬编码 status:'locked' / source:'user_explicit' / openSlots:[]
+        //       —— 与 trigger 等其它 case 一致；Issue #1433 (R-A) 统一改 metadata 反推
+        //     - 未知 kind prefix 静默 skip（fail-open，与 unknown atom 兜底一致）
+        //
+        //   注：当前 projectToFlat 无产线调用方（仅 spec + 文档引用），本改动零产线回归
+        //   风险；后续 reader 漏斗化路径将通过本方法消费 rules → flat 视图。
+        {
+          const kind = this.inferOrchestrationKind(leaf.key)
+          if (!kind) return
+          // 审查 Minor #1：params 浅拷贝（与其它 case 对称）。14 变体的专属字段
+          //   如 gridParams / sizing / dynamicGridStep 等含嵌套对象，下游若就地
+          //   mutate 会污染原 leaf。#1433 R-A 阶段如要补 fail-closed 校验需注意
+          //   把嵌套字段也克隆，或在 helper 中走 deep clone。
+          out.orchestration.push({
+            id: baseId,
+            kind,
+            key: leaf.key,
+            params: { ...leaf.params },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            contracts: [],
+          })
+        }
         return
       default:
         return
     }
+  }
+
+  /**
+   * Issue #1432：从 orchestration bucket atom key prefix 推断 `kind`。
+   * 与 `SemanticOrchestrationNode.kind` 联合类型对齐。
+   */
+  private inferOrchestrationKind(key: string): SemanticOrchestrationNode['kind'] | null {
+    if (key.startsWith('program.')) return 'program'
+    if (key.startsWith('gate.')) return 'gate'
+    if (key.startsWith('scope.')) return 'scope'
+    if (key.startsWith('portfolioRisk.')) return 'portfolioRisk'
+    return null
   }
 }
