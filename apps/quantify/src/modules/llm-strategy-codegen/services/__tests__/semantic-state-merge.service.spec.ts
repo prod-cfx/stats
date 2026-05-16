@@ -1,3 +1,4 @@
+import type { SemanticState } from '../../types/semantic-state'
 import { SemanticStateMergeService } from '../semantic-state-merge.service'
 
 describe('SemanticStateMergeService', () => {
@@ -1469,5 +1470,122 @@ describe('SemanticStateMergeService', () => {
         id: 'entry-sibling-b',
       }),
     ]))
+  })
+
+  // Issue #1403 子故障 D：rules[] 在风控轮次只补 risk rule 时，必须保留早轮的 entry/exit rules。
+  //   回归现象：MA100+MACD 策略走完所有 clarification 后，UI summary 只剩「出场（做多）：止损」
+  //   ——因为 LLM 最后一轮只回 risk rule，旧 derived-overrides-all 把 entry/exit 抹光。
+  describe('rules[] identity merge (Issue #1403 子故障 D)', () => {
+    function makeRule(id: string, phase: 'entry' | 'exit' | 'gate', key: string, params: Record<string, unknown> = {}) {
+      return {
+        id,
+        phase,
+        sideScope: 'both' as const,
+        condition: { kind: 'atom' as const, key, params },
+        effects: [],
+      }
+    }
+
+    // 审查 Minor 3 简化：直接用 SemanticState 类型，去掉 `as unknown as Parameters<...>` 双重 cast。
+    function emptyBase(): SemanticState {
+      return {
+        version: 1,
+        families: [],
+        trigger: [],
+        action: [],
+        risk: [],
+        position: null,
+        positionConstraint: [],
+        orchestration: [],
+        orchestrationContracts: [],
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:00:00.000Z',
+      }
+    }
+
+    it('preserves persisted entry/exit rules when derived only carries the risk rule', () => {
+      const persisted: SemanticState = {
+        ...emptyBase(),
+        rules: [
+          makeRule('rule-entry', 'entry', 'price.cross.ma_above'),
+          makeRule('rule-exit', 'exit', 'macd.death_cross'),
+        ],
+      }
+      const derived: SemanticState = {
+        ...emptyBase(),
+        rules: [makeRule('rule-risk', 'exit', 'risk.stop_loss_pct', { pct: 3 })],
+        updatedAt: '2026-04-16T10:05:00.000Z',
+      }
+
+      const merged = service.merge({ persisted, derived })
+      const rules = merged.rules ?? []
+      expect(rules.map(r => r.id)).toEqual(['rule-entry', 'rule-exit', 'rule-risk'])
+    })
+
+    it('lets derived override persisted when rule.id matches', () => {
+      const persisted: SemanticState = {
+        ...emptyBase(),
+        rules: [makeRule('rule-entry', 'entry', 'price.cross.ma_above', { period: 50 })],
+      }
+      const derived: SemanticState = {
+        ...emptyBase(),
+        rules: [makeRule('rule-entry', 'entry', 'price.cross.ma_above', { period: 100 })],
+        updatedAt: '2026-04-16T10:05:00.000Z',
+      }
+
+      const merged = service.merge({ persisted, derived })
+      const rules = merged.rules ?? []
+      expect(rules).toHaveLength(1)
+      const cond0 = rules[0]!.condition
+      expect(cond0.kind).toBe('atom')
+      if (cond0.kind === 'atom') {
+        expect(cond0.params).toEqual({ period: 100 })
+      }
+    })
+
+    // 审查 M2 修复：同 identity 折叠时 effects 字段必须保留 persisted（除非 derived 显式给非空 effects）
+    it('preserves persisted effects when derived rule with same id has empty effects', () => {
+      const persistedRule = {
+        id: 'rule-entry',
+        phase: 'entry' as const,
+        sideScope: 'long' as const,
+        condition: { kind: 'atom' as const, key: 'macd.golden_cross', params: {} },
+        effects: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+      }
+      const derivedRule = {
+        id: 'rule-entry',
+        phase: 'entry' as const,
+        sideScope: 'long' as const,
+        condition: { kind: 'atom' as const, key: 'macd.golden_cross', params: { fastPeriod: 12 } },
+        effects: [], // 多轮场景：LLM 只回 condition 不回 effects
+      }
+      const persisted: SemanticState = { ...emptyBase(), rules: [persistedRule] }
+      const derived: SemanticState = { ...emptyBase(), rules: [derivedRule], updatedAt: '2026-04-16T10:05:00.000Z' }
+
+      const merged = service.merge({ persisted, derived })
+      const rules = merged.rules ?? []
+      expect(rules).toHaveLength(1)
+      // condition 取 derived（新 fastPeriod），effects 保留 persisted（避免 open_long 被抹）
+      const cond = rules[0]!.condition
+      expect(cond.kind).toBe('atom')
+      if (cond.kind === 'atom') {
+        expect(cond.params).toEqual({ fastPeriod: 12 })
+      }
+      expect(rules[0]!.effects).toEqual([
+        expect.objectContaining({ key: 'action.open_long' }),
+      ])
+    })
+
+    it('keeps persisted rules untouched when derived has no rules field', () => {
+      const persisted: SemanticState = {
+        ...emptyBase(),
+        rules: [makeRule('rule-entry', 'entry', 'price.cross.ma_above')],
+      }
+      const derived: SemanticState = { ...emptyBase(), updatedAt: '2026-04-16T10:05:00.000Z' }
+
+      const merged = service.merge({ persisted, derived })
+      expect((merged.rules ?? []).map(r => r.id)).toEqual(['rule-entry'])
+    })
   })
 })

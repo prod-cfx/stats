@@ -6,6 +6,7 @@ import { isEntryPredicateTriggerKey, isExitPredicateTriggerKey, isTimeframeGroup
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
+import { SemanticExecutableSemanticsService } from './semantic-executable-semantics.service'
 import {
   getLegacyEntry,
   hasExplicitLegacyDisplayRenderer,
@@ -100,7 +101,12 @@ const INTERNAL_SEMANTIC_DISPLAY_KEY_PATTERN
 
 @Injectable()
 export class SemanticStateProjectionService {
-  constructor() {}
+  constructor(
+    // Issue #1403 子故障 A：注入 SemanticExecutableSemanticsService 用 registry-driven
+    //   anyAtomFulfillsPhase(state, 'sizing') 替代旧 GRID_DOMAIN_ATOM_KEYS 字面量集合，
+    //   与 codegen-conversation 服务共用同一判定。
+    private readonly executableSemantics: SemanticExecutableSemanticsService = new SemanticExecutableSemanticsService(),
+  ) {}
 
   buildConversationView(state: SemanticState): SemanticConversationView {
     const deterministicTriggers = this.filterDeterministicTriggers(state.trigger)
@@ -148,9 +154,20 @@ export class SemanticStateProjectionService {
     //   rules 为空时落回旧扁平桶渲染路径，不破坏既有 reader（向后兼容）。
     const rulesSummary = state.rules && state.rules.length > 0 ? this.buildRulesSummary(state.rules) : ''
 
+    // Issue #1403 子故障 D 真根因（补丁）—— rules-first summary 不能完全替代桶维度摘要。
+    //   `grid.range_rebalance` 在 positionConstraint 桶、`program.*_grid` 在 orchestration 桶，
+    //   不会出现在 state.rules 表达式树（rules 仅承载条件 + effects，不承载 program 节点
+    //   或 positionConstraint atom）。若 state.rules 非空（如止损 rule 被加入 rules），
+    //   原实现整段抛弃 positionSummary + orchestrationSummary，导致 grid 信号从摘要里消失。
+    //   通用解：rules 非空时仍**附加** positionSummary + orchestrationSummary 这两段桶专属内容，
+    //   保证只能由桶状态承载的 atom（grid program / DCA schedule / pyramiding 等）不丢失。
+    //   triggerSummary / actionSummary / riskSummary 与 rules.condition/effects 高度重叠，
+    //   仍让位给 rulesSummary 避免双重渲染。
+    const bucketOnlySummary = [positionSummary, orchestrationSummary].filter(item => item.length > 0)
+
     return {
       summary: rulesSummary.length > 0
-        ? rulesSummary
+        ? [rulesSummary, ...bucketOnlySummary].join('；')
         : (summaryItems.length > 0 ? summaryItems.join('；') : '已识别部分条件，但仍未完整。'),
       triggerSummary,
       riskSummary,
@@ -168,6 +185,96 @@ export class SemanticStateProjectionService {
   }
 
   buildDisplayLogicGraph(state: SemanticState): SemanticDisplayLogicGraph {
+    // Issue #1403 子故障 B — rules-first display graph 渲染。
+    //   旧路径只读 state.trigger flat-lift（lift 出来的扁平桶可能含 LLM 幻觉参数，
+    //   如 S2 输入「连续跌三根」却被 lift 成 `price.candle_pattern.minBars=15`），
+    //   导致 UI 显示「连续实体形态（≥15 根）时双向开仓」与用户描述背离。
+    //   state.rules 表达式树是 planner 输出的真源（sequence/AND/OR 语义完整），
+    //   优先从 rules 渲染条件文本，flat 路径只在 rules 为空时兜底（向后兼容）。
+    const rulesBlocks = this.buildDisplayRuleBlocksFromRules(state)
+    const ruleBlocks: SemanticDisplayLogicGraphBlock[] = rulesBlocks.length > 0
+      ? rulesBlocks
+      : this.buildDisplayRuleBlocksFromFlatTriggers(state)
+
+    const orchestrationBlock = this.buildDisplayOrchestrationBlock(state)
+
+    return {
+      blocks: [
+        ...(orchestrationBlock ? [orchestrationBlock] : []),
+        ...ruleBlocks,
+        this.buildDisplayExecuteBlock(state),
+      ],
+    }
+  }
+
+  // Issue #1403 子故障 B：用 state.rules 渲染 entry/exit 条件块，绕开 flat trigger lift。
+  //   - 一条 rule → 一个 block，条件文本 = renderAtomExpr(rule.condition)
+  //   - action 后缀（"时做多开仓" / "时平多" 等）按 rule.phase + rule.sideScope 派生
+  //   - rules 为空 / 无 entry|exit rules → 返回 []，调用方走旧 flat 路径兜底
+  private buildDisplayRuleBlocksFromRules(state: SemanticState): SemanticDisplayLogicGraphBlock[] {
+    const rules = state.rules ?? []
+    const eligible = rules.filter(r => r.phase === 'entry' || r.phase === 'exit')
+    if (eligible.length === 0) return []
+
+    const blocks: SemanticDisplayLogicGraphBlock[] = []
+    for (const rule of eligible) {
+      const conditionBody = this.renderAtomExpr(rule.condition)
+      if (!conditionBody || conditionBody.length === 0) {
+        // 审查 Minor 5 修复：rule.condition 渲染为空（如 sequence steps 全是未注册 atom）
+        //   时 warn 到日志便于排查，避免 UI 缺块时无声告警。
+        console.warn(`[semantic-state-projection] skipped rule ${rule.id}: empty condition render`)
+        continue
+      }
+
+      const actionSuffix = this.buildRuleActionSuffix(rule.phase, rule.sideScope)
+      const conditionText = actionSuffix.length > 0 ? `${conditionBody}${actionSuffix}` : conditionBody
+
+      blocks.push({
+        type: blocks.length === 0 ? 'IF' : 'AND_AT_THEN',
+        items: [{
+          kind: 'condition',
+          id: `condition-rule-${rule.id}`,
+          text: conditionText,
+        }],
+      })
+    }
+    return blocks
+  }
+
+  // 审查 Minor 2 共享 side label：buildRuleActionSuffix（display graph）与
+  //   formatRuleSideLabel（rules summary）共用同一份 sideScope 标签源，未来
+  //   加新 side 只需改一处。
+  private static readonly RULE_SIDE_OPEN_VERB: Record<SemanticRuleSideScope, string> = {
+    long: '做多开仓',
+    short: '做空开仓',
+    both: '双向开仓',
+  }
+
+  private static readonly RULE_SIDE_CLOSE_VERB: Record<SemanticRuleSideScope, string> = {
+    long: '平多',
+    short: '平空',
+    both: '双向平仓',
+  }
+
+  private buildRuleActionSuffix(
+    phase: SemanticRulePhase,
+    sideScope: SemanticRuleSideScope,
+  ): string {
+    if (phase === 'entry') {
+      return ` 时${SemanticStateProjectionService.RULE_SIDE_OPEN_VERB[sideScope]}`
+    }
+    if (phase === 'exit') {
+      return ` 时${SemanticStateProjectionService.RULE_SIDE_CLOSE_VERB[sideScope]}`
+    }
+    // 审查 m-R2-3：gate phase 当前不可达——buildDisplayRuleBlocksFromRules 在调用
+    //   前已 filter(phase === 'entry' || 'exit')。若未来放开 gate rule 渲染（如展示
+    //   BLOCK_NEW_ENTRY 规则），必须在此处显式实现 gate 语义后缀（如「时阻止开仓」）
+    //   而非依赖空串 fallback——空串会让 conditionText = body + ''，UI 视觉正常但
+    //   缺动作语义。当前 fallback 设计为故意 dead branch，下游回归保护。
+    return ''
+  }
+
+  private buildDisplayRuleBlocksFromFlatTriggers(state: SemanticState): SemanticDisplayLogicGraphBlock[] {
     const triggers = this.filterDeterministicTriggers(state.trigger)
     const actions = this.filterDeterministicActions(state.action)
     const ruleGroups = this.groupDisplayRuleTriggers(
@@ -186,16 +293,7 @@ export class SemanticStateProjectionService {
         ruleBlocks.push(block)
       }
     }
-
-    const orchestrationBlock = this.buildDisplayOrchestrationBlock(state)
-
-    return {
-      blocks: [
-        ...(orchestrationBlock ? [orchestrationBlock] : []),
-        ...ruleBlocks,
-        this.buildDisplayExecuteBlock(state),
-      ],
-    }
+    return ruleBlocks
   }
 
   private buildDisplayOrchestrationBlock(state: SemanticState): SemanticDisplayLogicGraphBlock | null {
@@ -2723,7 +2821,15 @@ export class SemanticStateProjectionService {
       return firstBlockingTriggerSlot
     }
 
-    const positionSlot = state.position?.openSlots?.find(slot => slot.status === 'open') ?? null
+    // Issue #1403 子故障 A — atom 自声明 'sizing'（grid.range_rebalance / DCA /
+    //   pyramiding / program.*_grid 等"持续 sizing 源"）即旁路单笔仓位追问。
+    //   evaluateRulesReadiness 同步走 hasPosition=true；本路径在 nextQuestion 维度
+    //   跳过 state.position.openSlots，与 codegen-conversation 服务共用 registry
+    //   单一真相源 ATOM_FULFILLS_STRATEGY_PHASE。
+    const hasContinuousSizing = this.executableSemantics.anyAtomFulfillsPhase(state, 'sizing')
+    const positionSlot = hasContinuousSizing
+      ? null
+      : (state.position?.openSlots?.find(slot => slot.status === 'open') ?? null)
     if (positionSlot) {
       return positionSlot
     }
@@ -2791,21 +2897,29 @@ export class SemanticStateProjectionService {
         if (summary && summary.length > 0) return summary
         // 退化：未注册 summaryTemplate 时取 publicName.zh
         const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { display?: { publicName?: { zh?: string } } } | undefined>)[expr.key]
-        return contract?.display?.publicName?.zh ?? expr.key
+        const publicName = contract?.display?.publicName?.zh
+        if (publicName && publicName.length > 0) return publicName
+        // 审查 M3 修复：未注册 / 缺失 zh 名时不把内部 atom key 泄漏到 UI；
+        //   warn 到日志便于排查（与 tryAtomContractSummary 的 warn 风格一致）。
+        console.warn(`[semantic-state-projection] missing display.publicName.zh for atom key: ${expr.key}`)
+        return '已识别条件，参数待补充'
       }
       case 'and': {
-        const parts = expr.children.map(child => this.renderAtomExpr(child)).filter(s => s.length > 0)
+        // 审查 R2-2 修复：≥2 个子节点 fallback 到相同 "已识别条件，参数待补充" 时
+        //   会拼成「已识别条件，参数待补充 同时 已识别条件，参数待补充」乘积量噪声。
+        //   parts 去重保持顺序（首次保留），保证一句兜底文案对用户只显示一次。
+        const parts = this.dedupeKeepOrder(expr.children.map(child => this.renderAtomExpr(child)).filter(s => s.length > 0))
         return parts.join(' 同时 ')
       }
       case 'or': {
-        const parts = expr.children.map(child => this.renderAtomExpr(child)).filter(s => s.length > 0)
+        const parts = this.dedupeKeepOrder(expr.children.map(child => this.renderAtomExpr(child)).filter(s => s.length > 0))
         return parts.join(' 或 ')
       }
       case 'not': {
         return `非 ${this.renderAtomExpr(expr.child)}`
       }
       case 'sequence': {
-        const parts = expr.steps.map(step => this.renderAtomExpr(step)).filter(s => s.length > 0)
+        const parts = this.dedupeKeepOrder(expr.steps.map(step => this.renderAtomExpr(step)).filter(s => s.length > 0))
         if (parts.length === 0) return ''
         // 第 0 步 "先 X"；后续步骤 "然后 Y"；保持自然中文顺序
         const head = `先 ${parts[0]}`
@@ -2844,6 +2958,19 @@ export class SemanticStateProjectionService {
     return `${phaseLabel}（${sideLabel}）：${condition}${effectSuffix}`
   }
 
+  // 审查 R2-2 修复支持：去重保持首次出现顺序。renderAtomExpr 的组合节点用这个
+  //   helper 避免相同兜底文案在 and/or/sequence 内被乘积量重复输出。
+  private dedupeKeepOrder(parts: ReadonlyArray<string>): string[] {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const p of parts) {
+      if (seen.has(p)) continue
+      seen.add(p)
+      out.push(p)
+    }
+    return out
+  }
+
   private buildRulesSummary(rules: readonly SemanticRule[]): string {
     const lines: string[] = []
     for (const rule of rules) {
@@ -2852,6 +2979,7 @@ export class SemanticStateProjectionService {
     }
     return lines.join('；')
   }
+
 
   private timeframeToMinutes(timeframe: string): number {
     const match = /^(\d+)\s*([mhdw])$/iu.exec(timeframe.trim())

@@ -197,6 +197,44 @@ export class SemanticExecutableSemanticsService {
   // =========================================================
 
   /**
+   * 通用 phase 满足检测 —— state 中**任一** atom（任何 bucket 或 rules 表达式树叶子，
+   * 不要求 locked）自声明满足指定 strategy phase。
+   *
+   * 用途：
+   *   - sizing 旁路：grid program / DCA schedule / pyramiding limit 等 atom 在 registry
+   *     `ATOM_FULFILLS_STRATEGY_PHASE` 声明 `'sizing'`，表示"持续 sizing 源已存在"；
+   *     clarification 据此跳过独立 single-trade position-size 追问。
+   *   - 未来扩展新策略（DCA / TWAP / arbitrage 等）只需 atom 自声明对应 phase，
+   *     所有消费者（conversation clarification / projection）零修改自动生效。
+   *
+   * 与 `hasLockedAtomFulfilling` 区别：本方法宽松——允许 unlocked atom + 覆盖 rules 树，
+   * 用于策略层"信号一旦出现即视为旁路触发"的判定；后者严格——要求 locked + 满足
+   * trigger.phase 字面相等，用于执行语义闭环判定。
+   */
+  anyAtomFulfillsPhase(state: SemanticState, phase: StrategyPhase): boolean {
+    const fulfills = (key: string): boolean => this.lookupFulfillsPhase(key).includes(phase)
+
+    if (state.trigger.some(t => fulfills(t.key))) return true
+    if (state.action.some(a => fulfills(a.key))) return true
+    if (state.risk.some(r => fulfills(r.key))) return true
+    if (state.positionConstraint.some(c => fulfills(c.key))) return true
+    for (const c of state.position?.constraints ?? []) {
+      if (fulfills(c.key)) return true
+    }
+    for (const node of state.orchestration ?? []) {
+      if (node.key && fulfills(node.key)) return true
+    }
+    for (const rule of state.rules ?? []) {
+      const leaves = [
+        ...collectAtomLeaves(rule.condition),
+        ...rule.effects.flatMap(effect => collectAtomLeaves(effect)),
+      ]
+      if (leaves.some(leaf => fulfills(leaf.key))) return true
+    }
+    return false
+  }
+
+  /**
    * SemanticState 内是否存在 locked atom 自声明满足指定 strategy phase。
    *
    * 对 trigger bucket 额外约束：atom 实例 phase 必须与请求 phase 字面相等。

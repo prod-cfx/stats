@@ -1538,6 +1538,59 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      // Issue #1403 子故障 C — volume.threshold 在 condition-predicate 路径上的 emit 分支。
+      //   #1396 B4 仅兑现了 condition.sequence / price.previous_extrema_retest /
+      //   risk.atr_take_profit；volume.threshold 之前只在 phase=gate + BLOCK_NEW_ENTRY
+      //   组合下走 compilePhase1GateAtom（L3335），entry-predicate（如 S4 BOLL 下轨 AND
+      //   量×1.5）落在 compileAtom 默认分支，抛 codegen.canonical_spec_v2_condition_unsupported:volume.threshold。
+      //
+      // 与 compilePhase1GateAtom 路径的关键差异（审查 M4 集中说明）：
+      //   - Entry-predicate（本路径）：op 直用 resolveComparisonKind(atom.op)。
+      //     语义是 signal-emit——「volume > threshold 时信号触发」，op 即 predicate op。
+      //   - Gate（L3335，compilePhase1GateAtom）：predicateKind 走 flipGateOperator(userOp)。
+      //     语义是 BLOCK_NEW_ENTRY——「volume > threshold 时阻断入场」，predicate 触发即
+      //     阻断，需要把用户语义的"满足条件就允许入场"反转为"满足条件就阻断"。
+      //   两条路径的 op 处理差异是领域语义要求，不是 bug。
+      //
+      // 参数语义：
+      //   - mode = 'relative_to_sma' + Number.isFinite(multiplier) → volume OP (multiplier × sma_volume(refWindow))
+      //     等价于 volume.relative_average，复用 ensureSmaVolumeSeries 把 multiplier 编进 series id。
+      //   - mode = 'absolute'（或缺省）+ atom.value 是有限正数 → volume OP const(value)。
+      //   - 审查 M4 fail-closed：absolute 模式 atom.value 缺失/NaN/<=0 时显式抛 fail-closed，
+      //     避免静默生成 `volume > 0` 这种恒真 predicate（策略安全风险）。
+      //   - timeframe 缺省取 context.timeframe，与 volume.relative_average 对齐。
+      case 'volume.threshold': {
+        const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
+          ? atom.params.timeframe.trim()
+          : context.timeframe
+        const volumeRef = this.ensureVolumeSeries(context, timeframe)
+        const op = this.resolveComparisonKind(atom.op ?? 'GT')
+        const mode = typeof atom.params?.mode === 'string' ? atom.params.mode : undefined
+        const multiplier = this.readNumber([atom.params?.multiplier], Number.NaN)
+        const refWindow = this.readNumber([atom.params?.refWindow], 20)
+        const isRelative = mode === 'relative_to_sma' && Number.isFinite(multiplier)
+
+        let rightRef: string
+        if (isRelative) {
+          rightRef = this.ensureSmaVolumeSeries(context, refWindow, multiplier, timeframe)
+        }
+        else {
+          // 审查 M4 修复：absolute 模式缺 value 不再退化为 const(0) 恒真，显式 fail-closed。
+          const absoluteValue = this.readNumber([atom.value], Number.NaN)
+          if (!Number.isFinite(absoluteValue) || absoluteValue <= 0) {
+            throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:value`)
+          }
+          rightRef = this.ensureConstSeries(context, absoluteValue)
+        }
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}_${timeframe}`,
+          'compare',
+          [volumeRef, rightRef],
+          { op },
+        )
+      }
+
       case 'price.rolling_extrema_breakout': {
         const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
           ? atom.params.timeframe.trim()

@@ -1,4 +1,12 @@
 import { buildConversationPlannerSystemPrompt } from '../conversation-planner-system.prompt'
+import { ATOM_CONTRACT_REGISTRY } from '../../atom-contracts/atom-contract-registry'
+import type { AtomContractSurface } from '../../atom-contracts/atom-contract-surface.types'
+
+// 类型工具：把 ATOM_CONTRACT_REGISTRY[*].surface union 向上拓宽到 AtomContractSurface
+//   基类，让 TS 识别可选字段 phraseHints。未声明 phraseHints 的 atom 直接拿 undefined。
+function surfaceOf(atom: typeof ATOM_CONTRACT_REGISTRY[keyof typeof ATOM_CONTRACT_REGISTRY]): AtomContractSurface {
+  return atom.surface as AtomContractSurface
+}
 
 describe('issue #1395 — planner prompt rules shape', () => {
   it('emits rules[] in JSON shape block (zh)', () => {
@@ -54,17 +62,29 @@ describe('issue #1395 — planner prompt rules shape', () => {
     expect(prompt).toContain('S8 多周期幻觉')
   })
 
-  it('contains ATOM_PARAMS_HINTS 段（MACD 12/26/9 等标准默认值）', () => {
+  // Issue #1403 通用化 v2：ATOM_PARAMS_HINTS 段必含从 registry 派生的标准参数提示。
+  // 不再硬编码具体策略短语；只断言 prompt 包含 registry 里声明了 paramDefaultsHint 的 atom 的提示词。
+  it('ATOM_PARAMS_HINTS 段从 registry 派生（含至少一条标准参数提示）', () => {
     const prompt = buildConversationPlannerSystemPrompt('zh')
     expect(prompt).toContain('ATOM_PARAMS_HINTS')
-    expect(prompt).toContain('{ fast: 12, slow: 26, signal: 9 }')
-    expect(prompt).toContain('{ period: 14 }')
-    expect(prompt).toContain('{ period: 20, stdDev: 2 }')
+    // 自 registry 派生：MACD / RSI / Bollinger / ATR / MA 等任一 paramDefaultsHint 必须出现
+    const declaredDefaults = Object.values(ATOM_CONTRACT_REGISTRY)
+      .map(atom => surfaceOf(atom).phraseHints?.paramDefaultsHint)
+      .filter((s): s is string => typeof s === 'string' && s.length > 0)
+    expect(declaredDefaults.length).toBeGreaterThan(0)
+    for (const hint of declaredDefaults) {
+      expect(prompt).toContain(hint)
+    }
   })
 
-  it('contains TRIGGER hint for 跌破 X 后重新上穿 X', () => {
+  it('保留跨原子组合 TRIGGER hint (sequence「跌破 X 后重新上穿 X」+ multi-tf + breakout retest)', () => {
     const prompt = buildConversationPlannerSystemPrompt('zh')
+    // 「跌破 X 后重新上穿 X」短语由 condition.sequence atom 自身的 phraseHints.triggers 暴露
     expect(prompt).toContain('跌破 X 后重新上穿 X')
+    // 跨原子组合形态：breakout + retest 仍在 prompt 中（compositional pattern，非单 atom）
+    expect(prompt).toContain('回踩')
+    // 多周期共振 compositional hint
+    expect(prompt).toContain('多周期共振')
   })
 
   it('does not contain legacy atoms[] schema', () => {
@@ -76,5 +96,63 @@ describe('issue #1395 — planner prompt rules shape', () => {
   it('en locale also emits rules shape', () => {
     const prompt = buildConversationPlannerSystemPrompt('en')
     expect(prompt).toContain('"rules"?:')
+  })
+
+  // Issue #1403 通用化 v2 — registry-derived 验证：
+  //   1) ATOM_CONTRACT_REGISTRY 内任一 atom 声明了 phraseHints.triggers，其 keywords[0] 必出现在 prompt；
+  //   2) atom 声明的 paramDefaultsHint 必出现在 prompt；
+  //   3) atom 声明的 antiPatterns.mistake 必出现在 prompt（以 atom key 标注）。
+  // 这把「加 atom = prompt 自动更新」从注释约定提升为编译期 + 单测期硬门禁。
+  describe('Issue #1403 v2 — prompt 派生自 ATOM_CONTRACT_REGISTRY.surface.phraseHints', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+
+    it('每个声明 phraseHints.triggers 的 atom，其首个 keyword 都出现在 prompt 中', () => {
+      const declared: Array<{ key: string, firstKeyword: string }> = []
+      for (const [key, atom] of Object.entries(ATOM_CONTRACT_REGISTRY)) {
+        const triggers = surfaceOf(atom).phraseHints?.triggers
+        if (!triggers || triggers.length === 0) continue
+        const firstKw = triggers[0]?.keywords[0]
+        if (firstKw) declared.push({ key, firstKeyword: firstKw })
+      }
+      expect(declared.length).toBeGreaterThan(0)
+      for (const { key, firstKeyword } of declared) {
+        expect(prompt).toContain(firstKeyword)
+        // mustOutput 必出现
+        const atom = ATOM_CONTRACT_REGISTRY[key as keyof typeof ATOM_CONTRACT_REGISTRY]
+        const triggers = surfaceOf(atom).phraseHints?.triggers
+        for (const t of triggers ?? []) {
+          expect(prompt).toContain(t.mustOutput)
+        }
+      }
+    })
+
+    it('每个声明 antiPatterns 的 atom，其条款都以 atom key 标签出现在 prompt 中', () => {
+      const declared: Array<{ key: string, mistake: string, fix: string }> = []
+      for (const [key, atom] of Object.entries(ATOM_CONTRACT_REGISTRY)) {
+        const aps = surfaceOf(atom).phraseHints?.antiPatterns
+        for (const ap of aps ?? []) {
+          declared.push({ key, mistake: ap.mistake, fix: ap.fix })
+        }
+      }
+      // 至少 1 条 antiPattern（当前 price.candle_pattern / volume.threshold 已声明）
+      expect(declared.length).toBeGreaterThan(0)
+      for (const { key, mistake, fix } of declared) {
+        expect(prompt).toContain(`atom \`${key}\``)
+        expect(prompt).toContain(mistake)
+        expect(prompt).toContain(fix)
+      }
+    })
+
+    it('PLANNER_CORRECTION_META 段仅含通用纠错原则，不含策略级硬编码短语', () => {
+      // 仍保留通用纠错段
+      expect(prompt).toContain('通用纠错（Issue #1403）')
+      expect(prompt).toContain('拒绝 dispatcher noisy lift 退化')
+      expect(prompt).toContain('Issue #1403')
+      // 原硬编码的「连续 N 根」「nextBarOnly」「放量反弹」短语应通过 registry 而非 PLANNER_CORRECTION 段进入 prompt
+      //   —— 仍出现在 prompt 中（因为对应 atom 的 phraseHints 派生），但来源是 registry
+      //   而非 PLANNER_CORRECTION_RULES hand-written 段。本 spec 不再断言 PLANNER_CORRECTION
+      //   内含具体策略短语；只断言「meta 原则」存在 + 「registry 派生段标识」出现。
+      expect(prompt).toContain('自 ATOM_CONTRACT_REGISTRY 派生')
+    })
   })
 })

@@ -266,3 +266,90 @@ describe('Issue #1395 — risk.atr_take_profit IR emit', () => {
     expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(/condition_unsupported:risk\.atr_take_profit:multiple/)
   })
 })
+
+// Issue #1403 子故障 C — volume.threshold entry-predicate IR emit
+//   #1396 B4 仅兑现 condition.sequence / price.previous_extrema_retest /
+//   risk.atr_take_profit；volume.threshold 在 condition-predicate 路径未补，
+//   导致 S4 类「BOLL 下轨 AND 量×1.5」confirm code generation 时抛
+//   codegen.canonical_spec_v2_condition_unsupported:volume.threshold。
+describe('Issue #1403 子故障 C — volume.threshold IR emit', () => {
+  const compiler = new CanonicalSpecV2IrCompilerService()
+
+  it('mode=relative_to_sma + multiplier=1.5 + refWindow=20 → compare predicate against SMA_VOLUME', () => {
+    const spec = buildSpec([
+      baseEntryExitRule({
+        kind: 'atom',
+        key: 'volume.threshold',
+        op: 'GT',
+        params: { mode: 'relative_to_sma', multiplier: 1.5, refWindow: 20 },
+      }),
+    ])
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const pred = result.ir.signalCatalog.predicates.find(p => p.kind === 'compare' && p.id.includes('volume_threshold'))
+    expect(pred).toBeDefined()
+    expect(pred?.params?.op).toBe('GT')
+    // SMA_VOLUME series 应被注册，refWindow=20 + multiplier=1.5 编入 id
+    const smaSeries = result.ir.signalCatalog.series.find(s => s.kind === 'SMA_VOLUME')
+    expect(smaSeries).toBeDefined()
+    expect(smaSeries?.params).toEqual(expect.objectContaining({ period: 20, multiplier: 1.5 }))
+  })
+
+  it('mode=absolute + value=1000 + op=GTE → compare predicate against const(1000)', () => {
+    const spec = buildSpec([
+      baseEntryExitRule({
+        kind: 'atom',
+        key: 'volume.threshold',
+        op: 'GTE',
+        value: 1000,
+        params: { mode: 'absolute' },
+      }),
+    ])
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const pred = result.ir.signalCatalog.predicates.find(p => p.kind === 'compare' && p.id.includes('volume_threshold'))
+    expect(pred).toBeDefined()
+    expect(pred?.params?.op).toBe('GTE')
+    // 不应再触发 unsupported_fallback
+    const series = result.ir.signalCatalog.series
+    expect(series.some(s => s.kind === 'SMA_VOLUME')).toBe(false)
+    expect(series.some(s => s.kind === 'VOLUME')).toBe(true)
+  })
+
+  it('no longer throws codegen.canonical_spec_v2_condition_unsupported:volume.threshold', () => {
+    const spec = buildSpec([
+      baseEntryExitRule({
+        kind: 'atom',
+        key: 'volume.threshold',
+        op: 'GT',
+        params: { mode: 'relative_to_sma', multiplier: 1.5, refWindow: 20 },
+      }),
+    ])
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).not.toThrow()
+  })
+
+  // 审查 M4 修复：absolute 模式 atom.value 缺失/NaN/<=0 时 fail-closed，
+  //   避免静默生成 volume > 0 恒真 predicate（策略安全风险）。
+  it('mode=absolute + value 缺失 → fail-closed (condition_unsupported:value)', () => {
+    const spec = buildSpec([
+      baseEntryExitRule({
+        kind: 'atom',
+        key: 'volume.threshold',
+        op: 'GT',
+        params: { mode: 'absolute' },
+      }),
+    ])
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(/condition_unsupported:volume\.threshold:value/)
+  })
+
+  it('mode=absolute + value=0 → fail-closed (不允许恒真)', () => {
+    const spec = buildSpec([
+      baseEntryExitRule({
+        kind: 'atom',
+        key: 'volume.threshold',
+        op: 'GT',
+        value: 0,
+        params: { mode: 'absolute' },
+      }),
+    ])
+    expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(/condition_unsupported:volume\.threshold:value/)
+  })
+})

@@ -3818,14 +3818,27 @@ export class CodegenConversationService {
       return triggerSlot
     }
 
-    const positionSlot = state.position?.openSlots?.find(isBlockingSemanticOpenSlot)
+    // Issue #1403 子故障 A：当 state 中已存在任一 atom 自声明满足 `'sizing'` phase
+    //   （grid.range_rebalance / position.dca_schedule / position.pyramiding_limit /
+    //   program.*_grid 等"持续 sizing 源"），跳过独立 single-trade position size 追问。
+    //   判定走 registry 单一真相源 ATOM_FULFILLS_STRATEGY_PHASE，新策略只要 atom
+    //   自声明 'sizing' 即自动生效，本函数零修改。
+    //
+    //   两侧（本函数 + projection 层）共用同一判定，避免「projection 旁路了但
+    //   conversation 这条链路漏判」的覆盖不一致。
+    const hasContinuousSizing = this.executableSemantics.anyAtomFulfillsPhase(state, 'sizing')
+    const positionSlot = hasContinuousSizing
+      ? undefined
+      : state.position?.openSlots?.find(isBlockingSemanticOpenSlot)
     if (positionSlot) {
       return positionSlot
     }
 
-    const nestedPositionConstraintSlot = state.position?.constraints
-      ?.flatMap(constraint => constraint.openSlots)
-      .find(isBlockingSemanticOpenSlot)
+    const nestedPositionConstraintSlot = hasContinuousSizing
+      ? undefined
+      : state.position?.constraints
+        ?.flatMap(constraint => constraint.openSlots)
+        .find(isBlockingSemanticOpenSlot)
     if (nestedPositionConstraintSlot) {
       return nestedPositionConstraintSlot
     }
@@ -3939,12 +3952,19 @@ export class CodegenConversationService {
     const openActionSlots = state.action
       .flatMap(action => action.openSlots ?? [])
       .filter(isBlockingSemanticOpenSlot)
-    const openPositionSlots = state.position?.openSlots?.filter(isBlockingSemanticOpenSlot) ?? []
+    // Issue #1403 子故障 A：与 findNextOpenSemanticSlot 同步——atom 自声明 'sizing'
+    //   即旁路 position openSlots 与 nested position constraint openSlots。
+    const hasContinuousSizing = this.executableSemantics.anyAtomFulfillsPhase(state, 'sizing')
+    const openPositionSlots = hasContinuousSizing
+      ? []
+      : (state.position?.openSlots?.filter(isBlockingSemanticOpenSlot) ?? [])
     const topLevelConstraintIds = new Set(state.positionConstraint.map(constraint => constraint.id))
-    const openNestedPositionConstraintSlots = state.position?.constraints
-      ?.filter(constraint => !topLevelConstraintIds.has(constraint.id))
-      .flatMap(constraint => constraint.openSlots)
-      .filter(isBlockingSemanticOpenSlot) ?? []
+    const openNestedPositionConstraintSlots = hasContinuousSizing
+      ? []
+      : (state.position?.constraints
+        ?.filter(constraint => !topLevelConstraintIds.has(constraint.id))
+        .flatMap(constraint => constraint.openSlots)
+        .filter(isBlockingSemanticOpenSlot) ?? [])
     const openPositionConstraintSlots = state.positionConstraint
       .flatMap(constraint => constraint.openSlots)
       .filter(isBlockingSemanticOpenSlot)
@@ -6702,7 +6722,18 @@ export class CodegenConversationService {
       phase: string
       actions: Array<{ type: string }>
     }>
+    // Issue #1403 子故障 D：spec.orderPrograms 非空（grid/event_listener 等自洽 program）
+    //   即认为 entry+exit 都已被 program 路径承载——orderPrograms 自身就内嵌「开仓边界 +
+    //   平仓边界」的双向语义，不再通过 rules[].actions 暴露 OPEN_*/CLOSE_*。
+    //   未在此字段判断时，纯 orchestration grid 策略会被误报「不能稳定投影到可执行入场规则」。
+    orderPrograms?: unknown[]
   }): CanonicalCompileabilityReport {
+    // 早返回：orderPrograms 非空（program.fixed_grid_gated / dynamic_grid / adaptive_volatility_grid /
+    //   event_listener 等）→ 自洽程序覆盖 entry+exit；与下方 hasProjectedGridRules
+    //   line 6145 同源——这里前置进入 compileability 主路径而不是只做兜底检查，
+    //   保持「只要 program 已闭环就视作可编译」的语义。
+    const hasOrderPrograms = Array.isArray(spec.orderPrograms) && spec.orderPrograms.length > 0
+
     const entryRuleCount = spec.rules.filter(rule =>
       rule.phase === 'entry'
       // #1238 follow-up：DCA 策略的 entry rule 由 ADD_LONG / ADD_SHORT 表达
@@ -6729,10 +6760,10 @@ export class CodegenConversationService {
     ).length
 
     const reasons: string[] = []
-    if (entryRuleCount === 0) {
+    if (entryRuleCount === 0 && !hasOrderPrograms) {
       reasons.push('canonical_projection_missing_entry_program')
     }
-    if (exitRuleCount === 0) {
+    if (exitRuleCount === 0 && !hasOrderPrograms) {
       reasons.push('canonical_projection_missing_exit_program')
     }
 

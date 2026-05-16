@@ -276,9 +276,12 @@ const ATOM_FULFILLS_STRATEGY_PHASE = {
   'gate.regime': [],
   'portfolioRisk.symbol_exposure_cap': [],
   'portfolioRisk.substrategy_exposure_cap': [],
-  'program.dynamic_grid': ['entry', 'exit'],
-  'program.fixed_grid_gated': ['entry', 'exit'],
-  'program.adaptive_volatility_grid': ['entry', 'exit'],
+  // grid program 内部自带每格仓位/区间/density 等 sizing 配置，自声明 'sizing' →
+  //   clarification 不必再追问独立 single-trade position size（与 grid.range_rebalance
+  //   等"持续 sizing 源"同质）。后续新策略只要 atom 自声明 'sizing' 即可享受同一旁路。
+  'program.dynamic_grid': ['entry', 'exit', 'sizing'],
+  'program.fixed_grid_gated': ['entry', 'exit', 'sizing'],
+  'program.adaptive_volatility_grid': ['entry', 'exit', 'sizing'],
   // Issue #1383 Round 1 M5：事件监听类程序自洽，含 exit。
   'program.event_listener': ['entry', 'exit'],
   'scope.symbol': ['context'],
@@ -668,6 +671,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       phaseResolver: 'by-clause-verb',
       sideResolver: 'inherit',
+      phraseHints: {
+        triggers: [{
+          keywords: ['放量', 'N 倍均量', 'X 倍成交量', '倍量', 'volume spike'],
+          mustOutput: 'volume.threshold + mode="relative_to_sma" + multiplier=N + refWindow=20（或用户给出的窗口）；不能用 mode=absolute 的 GT 比较。',
+        }],
+        antiPatterns: [{
+          mistake: 'dispatcher 可能只 lift 出 volume.relative_average 或漏抽 multiplier',
+          fix: 'planner 必须按用户原话写 multiplier 与 refWindow 完整参数。',
+        }],
+      },
     },
   },
 
@@ -859,6 +872,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       phaseResolver: 'by-clause-verb',
       sideResolver: 'inherit',
+      phraseHints: {
+        paramDefaultsHint: 'RSI：{ period: 14 } —— 默认周期；用户给出阈值时填 value，未给阈值不要硬塞。',
+      },
     },
   },
 
@@ -914,6 +930,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       phaseResolver: 'by-clause-verb',
       sideResolver: 'inherit',
+      phraseHints: {
+        paramDefaultsHint: 'RSI：{ period: 14 } —— 默认周期；用户给出阈值时填 value，未给阈值不要硬塞。',
+      },
     },
   },
 
@@ -987,6 +1006,13 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       phaseResolver: 'by-clause-verb',
       sideResolver: 'inherit',
+      phraseHints: {
+        triggers: [{
+          keywords: ['布林', 'BOLL', 'Bollinger', '上轨触及'],
+          mustOutput: 'bollinger.touch_upper；assistantPrompt 必须保留「布林」字样，禁止抹平为「价格突破」。',
+        }],
+        paramDefaultsHint: 'Bollinger：{ period: 20, stdDev: 2 } —— 默认参数。',
+      },
     },
   },
 
@@ -1055,6 +1081,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       phaseResolver: 'by-clause-verb',
       sideResolver: 'inherit',
+      phraseHints: {
+        triggers: [{
+          keywords: ['布林', 'BOLL', 'Bollinger', '下轨触及'],
+          mustOutput: 'bollinger.touch_lower；assistantPrompt 必须保留「布林」字样，禁止抹平为「价格突破」。',
+        }],
+      },
     },
   },
 
@@ -1448,6 +1480,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       ] as const,
       phaseResolver: 'by-clause-verb',
       sideResolver: 'from-direction',
+      phraseHints: {
+        paramDefaultsHint: 'MACD：{ fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 } —— 行业标准组合，禁止写 100/26/9 等非标值。',
+      },
     },
   },
 
@@ -1601,6 +1636,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       phaseResolver: 'by-clause-verb',
       sideResolver: 'from-direction',
+      phraseHints: {
+        paramDefaultsHint: 'MA / EMA / SMA：period 常用 [5, 10, 20, 50, 100, 200]；除此之外的周期必须来自用户原话。',
+      },
     },
   },
 
@@ -1907,7 +1945,22 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         },
       },
       paramSlots: {
-        lookbackBars: { kind: 'number', required: false, range: [1, 5000], default: 20, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 5000] } },
+        // Issue #1403 通用化：lookbackBars 与 minBars 同类——必须紧跟「N 根/N 条/N bars」
+        //   量词且不得为 timeframe 数字。复用 declarative quantifier 上下文。
+        lookbackBars: {
+          kind: 'number',
+          required: false,
+          range: [1, 5000],
+          default: 20,
+          extractor: {
+            kind: 'number-int',
+            range: [1, 5000],
+            quantifier: {
+              include: ['根', '条', '个', 'bars', 'bar', 'period', '周期'],
+              exclude: ['分钟', '小时', '秒', '天', '日', 'minute', 'hour'],
+            },
+          },
+        },
         thresholdPct: { kind: 'percent', required: true, range: [0, 100], extractor: { kind: 'percent', pattern: '\\d+(\\.\\d+)?%', range: [0, 100] } },
       },
       phaseResolver: 'by-clause-verb',
@@ -1954,7 +2007,22 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         },
       },
       paramSlots: {
-        lookbackBars: { kind: 'number', required: false, range: [1, 5000], default: 20, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 5000] } },
+        // Issue #1403 通用化：lookbackBars 与 minBars 同类——必须紧跟「N 根/N 条/N bars」
+        //   量词且不得为 timeframe 数字。复用 declarative quantifier 上下文。
+        lookbackBars: {
+          kind: 'number',
+          required: false,
+          range: [1, 5000],
+          default: 20,
+          extractor: {
+            kind: 'number-int',
+            range: [1, 5000],
+            quantifier: {
+              include: ['根', '条', '个', 'bars', 'bar', 'period', '周期'],
+              exclude: ['分钟', '小时', '秒', '天', '日', 'minute', 'hour'],
+            },
+          },
+        },
         thresholdPct: { kind: 'percent', required: true, range: [0, 100], extractor: { kind: 'percent', pattern: '\\d+(\\.\\d+)?%', range: [0, 100] } },
       },
       phaseResolver: 'by-clause-verb',
@@ -2121,12 +2189,34 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         //   "阳线" → single_bull_bar、"阴线" → single_bear_bar 等映射键
         pattern: { kind: 'enum', required: true, enum: ['engulfing', 'hammer', 'doji', 'consecutive_body', 'single_bull_bar', 'single_bear_bar'], extractor: { kind: 'enum-zh-map', enumMap: { '吞没': 'engulfing', 'engulfing': 'engulfing', '锤子': 'hammer', 'hammer': 'hammer', '十字星': 'doji', 'doji': 'doji', '连续阳线': 'consecutive_body', '连续阴线': 'consecutive_body', 'consecutive body': 'consecutive_body', '连续': 'consecutive_body', '阳线': 'single_bull_bar', '收盘价高于开盘价': 'single_bull_bar', '收盘高于开盘': 'single_bull_bar', '收盘价高于开盘': 'single_bull_bar', '阴线': 'single_bear_bar', '收盘价低于开盘价': 'single_bear_bar', '收盘低于开盘': 'single_bear_bar', '收盘价低于开盘': 'single_bear_bar' } } },
         direction: { kind: 'enum', required: false, enum: ['bullish', 'bearish'], extractor: { kind: 'enum-zh-map', enumMap: { '看涨': 'bullish', 'bullish': 'bullish', '看跌': 'bearish', 'bearish': 'bearish' } } },
-        minBars: { kind: 'number', required: false, range: [1, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 100] } },
+        // Issue #1403 通用化：用声明式 quantifier 上下文替代 pattern 硬编码。
+        //   number-int extractor 在 dispatcher 层统一处理「N + 量词」匹配，所有
+        //   含 timeframe / 百分号歧义的 number-* slot 都可以复用该机制。
+        //   汉字数字（三/五/十）目前不抽，宁可让 minBars 留 open slot，也好过抽错数字。
+        minBars: {
+          kind: 'number',
+          required: false,
+          range: [1, 100],
+          extractor: {
+            kind: 'number-int',
+            range: [1, 100],
+            quantifier: {
+              include: ['根', '条', '个', 'bars', 'bar'],
+              exclude: ['分钟', '小时', '秒', '天', '日', 'minute', 'hour'],
+            },
+          },
+        },
         sourceText: { kind: 'enum', required: false, extractor: { kind: 'verbatim-clause' } },
       },
       matchRequires: ['pattern'],
       phaseResolver: 'by-clause-verb',
       sideResolver: 'inherit',
+      phraseHints: {
+        antiPatterns: [{
+          mistake: '用户原话「连续 N 根」/「连阳/连阴」+「N 根 K 线」时，dispatcher 可能落下 price.candle_pattern(pattern="consecutive_body") 的孤立 atom，但缺少 sequence/nextBarOnly 信息',
+          fix: 'planner 必须输出 condition.sequence(sequenceKind="consecutive_body", count=N) 而**不是** price.candle_pattern；count 必须复述用户给出的精确值（如「3 根」→ count=3，不要写 ≥15）。',
+        }],
+      },
     },
   },
 
@@ -2931,6 +3021,13 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       phaseResolver: 'fixed-exit',
       sideResolver: 'inherit',
+      phraseHints: {
+        triggers: [{
+          keywords: ['X 倍 ATR 止损', 'N 倍 ATR 止损'],
+          mustOutput: 'risk.atr_stop + multiple=X。',
+        }],
+        paramDefaultsHint: 'ATR：{ period: 14 }；倍数（multiple）必须来自用户原话。',
+      },
     },
   },
 
@@ -3297,6 +3394,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       phaseResolver: 'fixed-entry',
       sideResolver: 'both',
+      phraseHints: {
+        triggers: [{
+          keywords: ['网格', 'grid 区间', '双向网格', '上下边界', '停止', '撤销'],
+          mustOutput: '单叶子 rule（phase=entry）condition=grid.range_rebalance + sideMode + breakoutAction="stop|pause|continue"；不需要额外的 entry trigger，也不需要 protective_exit；grid 自身即是连续入场源 + 出场覆盖。',
+        }],
+      },
     },
   },
 
@@ -4461,6 +4564,22 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       phaseResolver: 'by-clause-verb',
       sideResolver: 'inherit',
+      phraseHints: {
+        triggers: [
+          {
+            keywords: ['连续 N 根', 'consecutive', 'streak', '连阳', '连阴'],
+            mustOutput: 'condition.sequence + sequenceKind="consecutive_body" + count=N + direction="up"|"down"；不要写成 ≥15 根；count 必须复述用户给出的精确值。',
+          },
+          {
+            keywords: ['下一根', '下一根 K 线', 'next bar'],
+            mustOutput: 'sequence 节点 + nextBarOnly="true"；表示「下一步必须发生在前一步之后的下一根 K 线」。dispatcher 不抽 nextBarOnly，planner 必须主动补。',
+          },
+          {
+            keywords: ['跌破 X 后重新上穿 X', '回到 X 上方', '先跌破 X 再向上穿越 X'],
+            mustOutput: 'condition = sequence([ <X 跌破/低于 atom>, <X 上穿 atom> ])。例：RSI 跌破 35 后重新上穿 35 → sequence([oscillator.rsi_lte(value=35), indicator.cross_over(indicator=rsi, value=35)])。禁止拆成两条独立 entry rule，会丢失「先低再上穿」的时序。',
+          },
+        ],
+      },
     },
   },
 
@@ -4566,6 +4685,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       phaseResolver: 'fixed-exit',
       sideResolver: 'inherit',
+      phraseHints: {
+        triggers: [{
+          keywords: ['X 倍 ATR 止盈', '盈利达到 X 倍 ATR', 'take profit at X*ATR'],
+          mustOutput: 'risk.atr_take_profit + multiple=X；禁止与 risk.atr_stop 共用同一 atom，也不要回退到 risk.partial_take_profit。',
+        }],
+      },
     },
   },
 })

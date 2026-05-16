@@ -85,5 +85,22 @@ export const priceCandlePatternUtterances = [
       openSlotKeys: ['price.candle_pattern.minBars'],
     },
   },
+  // Issue #1403 真用户场景回归守门：「连续跌三根 15 分钟 K 线」中的 15（timeframe）
+  //   不应被错抽为 minBars=15；汉字数字「三」当前不抽，minBars 留 open slot 是
+  //   预期行为（好过抽错数字）。
+  {
+    id: 'price-candle-pattern-zh-issue-1403-no-timeframe-leak',
+    atomKey: 'price.candle_pattern',
+    locale: 'zh',
+    coverage: 'open-slot',
+    utterance: 'BTC 连续跌三根 15 分钟 K 线后，bearish consecutive_body 买入',
+    expected: {
+      owner: 'trigger',
+      key: 'price.candle_pattern',
+      status: 'open',
+      params: { pattern: 'consecutive_body', direction: 'bearish' },
+      openSlotKeys: ['price.candle_pattern.minBars'],
+    },
+  },
 ] satisfies readonly UtteranceCorpusCase[]
 

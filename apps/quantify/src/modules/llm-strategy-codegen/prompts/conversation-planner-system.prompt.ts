@@ -1,3 +1,5 @@
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+import type { AtomContractSurface } from '../atom-contracts/atom-contract-surface.types'
 import { formatAtomCatalogForPrompt, getPhaseEnum, getRegisteredAtomKeys } from './atom-catalog-projection'
 
 /**
@@ -233,73 +235,127 @@ const NEGATIVE_EXAMPLES: readonly string[] = [
 ]
 
 /**
- * Issue #1395 / S3 — atom params 标准提示
+ * Issue #1403 通用化 v2 — 跨原子组合形态（cross-atom structural patterns）。
  *
- * 实测 LLM 在 MACD/RSI/Bollinger 等成熟指标上偶尔输出非标参数（如 MACD 100/26/9）。
- * 列出标准默认值后 LLM 默认采用，减少 openSlots 噪音。
- */
-const ATOM_PARAMS_HINTS: readonly string[] = [
-  '📐 ATOM_PARAMS_HINTS — 常见指标 atom 的标准 params（无用户特殊说明时优先使用这些默认值，禁止编造）：',
-  '',
-  '- MACD：{ fast: 12, slow: 26, signal: 9 } —— 这是行业标准组合，禁止写 100/26/9 等非标值；',
-  '- RSI：{ period: 14 } —— 默认周期；用户给出阈值时填 threshold，未给阈值不要硬塞；',
-  '- MA / EMA / SMA：period 常用 [5, 10, 20, 50, 100, 200]；除此之外的周期必须来自用户原话；',
-  '- Bollinger：{ period: 20, stdDev: 2 } —— 默认参数；',
-  '- ATR：{ period: 14 }；倍数（multiple）必须来自用户原话；',
-  '- KDJ / Stochastic：{ kPeriod: 9, dPeriod: 3, smooth: 3 }；',
-  '- 多周期同向类 condition：用相同 atom 叶子 + 不同 params.timeframe 用 and 组合，不要合并到单个 atom。',
-]
-
-/**
- * Issue #1395 — 关键短语 → atom 映射强提示
+ * 这些 hint 不归属任一 atom（需要多个 atom 协作或描述 sequence/AND 嵌套结构）。
+ * 单 atom 触发短语已沉淀回 ATOM_CONTRACT_REGISTRY[*].surface.phraseHints，由
+ * buildRegistryDerivedHintSections() 自动派生进入 prompt。
  *
- * 实测发现：LLM 看到 ATOM_CONTRACT_REGISTRY 词典 + BNF + in-context 示例后，仍会
- * 漏识别下列高频短语（落到 missing_*_atom 或退化语义）。补这段强制映射后 8 条策略
- * 真调 LLM e2e 才能稳定 8/8。
+ * 加新策略 = 加 atom + 在 atom 自身声明 phraseHints；本段只在出现「跨 atom 组合」
+ * 的结构性 pattern 时才需要扩展。
  */
-const TRIGGER_PHRASE_TO_ATOM_HINTS: readonly string[] = [
-  '关键短语 → atom 映射（用户原话出现下列模式时，必须按对应 atom 形态输出 rules[]，不得退化为通用语义）：',
-  '',
-  '【连续 N 根 / consecutive / streak / 连阳 / 连阴】',
-  '  → condition.sequence + sequenceKind="consecutive_body" + count=N + direction="up"|"down"；不要写成 ≥15 根；count 必须复述用户给出的精确值。',
-  '',
-  '【下一根 / 下一根 K 线 / next bar】',
-  '  → sequence 节点 + nextBarOnly=true；表示「下一步必须发生在前一步之后的下一根 K 线」。',
-  '',
-  '【放量 / N 倍均量 / X 倍成交量 / volume spike】',
-  '  → volume.threshold + mode="relative_to_sma" + multiplier=N + refWindow=20（或用户给出的窗口）；不能用 mode=absolute 的 GT 比较。',
-  '',
-  '【布林 / BOLL / Bollinger 下轨触及 / 上轨触及】',
-  '  → bollinger.touch_lower / bollinger.touch_upper；assistantPrompt 必须保留「布林」字样，禁止抹平为「价格突破」。',
+const COMPOSITIONAL_PATTERN_HINTS: readonly string[] = [
+  '关键短语 → 跨原子组合形态（用户原话出现下列模式时，必须按对应组合形态输出 rules[]）：',
   '',
   '【突破后回踩 / 回踩突破位 / retest / pullback / 不破突破位】',
   '  → sequence([price.breakout_up | price.breakout_down, price.previous_extrema_retest])；',
   '    price.previous_extrema_retest.params.retestKind="not_break"（用户说「不破」）或 "break_through"（用户说「跌破」）。',
   '  → 同 rule 内绑定的止损若引用突破位，effects 应包含 risk.stop_loss_price + ref="previous_extrema"。',
   '',
-  '【X 倍 ATR 止盈 / 盈利达到 X 倍 ATR / take profit at X*ATR】',
-  '  → risk.atr_take_profit + multiple=X；禁止与 risk.atr_stop 共用同一 atom，也不要回退到 risk.partial_take_profit。',
-  '【X 倍 ATR 止损】→ risk.atr_stop + multiple=X。',
-  '',
   '【多周期共振 / 15min 1h 4h 都 X / 都在 X 上方 / multi-timeframe / X@15m AND X@1h】',
   '  → 多个相同 atom 叶子用 { kind: "and" } 包成单条 entry condition，每个叶子的 params.timeframe 设为对应周期；',
   '    不要丢失 timeframe，也不要合并到单一周期 atom；',
   '    禁止：编造「短周期 EMA 下穿长周期 EMA」「EMA 金叉死叉」等用户未提及的语义；用户说「都在 X 上方」就是 above，不是 cross。',
   '',
-  '【跌破 X 后重新上穿 X / 回到 X 上方 / 先跌破 X 再向上穿越 X】',
-  '  → condition = sequence([ <X 跌破/低于 atom>, <X 上穿 atom> ])；',
-  '  → 例：RSI 跌破 35 后重新上穿 35 → sequence([oscillator.rsi_lte(threshold=35), indicator.cross_over(indicator=rsi, threshold=35)])；',
-  '  → 禁止拆成两条独立 entry rule，会丢失「先低再上穿」的时序。',
-  '',
   '【MA50 / MA200 在 / 上方时 + RSI 跌破 X 后重新上穿 X】',
   '  → gate rule（phase=gate）condition=indicator.above(MA200) 或 AND(MA50>MA200)；',
-  '  → entry rule（phase=entry）condition=sequence([oscillator.rsi_lte(threshold=X), indicator.cross_over(rsi, threshold=X)])；',
-  '  → exit rule（phase=exit）condition=oscillator.rsi_gte(threshold=Y)。',
-  '',
-  '【网格 / grid 区间 / 双向网格 / 上下边界 + 停止 / 撤销】',
-  '  → 单叶子 rule（phase=entry）condition=grid.range_rebalance + sideMode + breakoutAction="stop|pause|continue"；',
-  '  → 不需要额外的 entry trigger，也不需要 protective_exit；grid 自身即是连续入场源 + 出场覆盖。',
+  '  → entry rule（phase=entry）condition=sequence([oscillator.rsi_lte(value=X), indicator.cross_over(rsi, value=X)])；',
+  '  → exit rule（phase=exit）condition=oscillator.rsi_gte(value=Y)。',
 ]
+
+/**
+ * Issue #1403 通用化 v2 — Planner 拒绝 dispatcher noisy lift 的 meta-rule。
+ *
+ * 此段只承载「通用纠错原则」；具体每个 atom 的 dispatcher 误形态 + 矫正方向沉淀回
+ * ATOM_CONTRACT_REGISTRY[*].surface.phraseHints.antiPatterns，由
+ * buildRegistryDerivedHintSections() 自动派生附在本段后。
+ *
+ * 加新策略 = 给对应 atom 加 antiPatterns 条款；本段不必扩展。
+ */
+const PLANNER_CORRECTION_META_RULES: readonly string[] = [
+  '【通用纠错（Issue #1403）：拒绝 dispatcher noisy lift 退化】',
+  '',
+  '  Dispatcher 在 LLM 调用前已对用户原话做轻量启发式抽取，会在 state.trigger /',
+  '  state.positionConstraint 桶里落下「孤立」atom（可能缺关键参数）。这些 atom',
+  '  对 planner 仅是参考，**不是约束**。',
+  '',
+  '  通用原则：dispatcher 已抽出的 atom 即使形态不完整，**planner 必须根据用户原话',
+  '  重写为正确的 rules[] 表达式树**，不要 echo dispatcher 输出。assistantPrompt 中',
+  '  的关键短语必须可在 rules[] 内一一对应（同 TERMINAL_RULES.7 验收 hook）。',
+  '',
+  '  下方按 atom 列出该原子相关的 dispatcher 误形态 + 矫正方向（自 ATOM_CONTRACT_REGISTRY 派生）：',
+]
+
+/**
+ * 从 ATOM_CONTRACT_REGISTRY 派生 phraseHints / antiPatterns / paramDefaultsHint，
+ * 三段一次性遍历产出，供下方 build*Section() 消费。
+ *
+ * 各 atom 自描述自己的高频短语、误形态、标准参数；新增策略只要给 atom 加
+ * phraseHints，prompt 自动重新派生，不必回 prompt 文件挂条款。
+ */
+function buildRegistryDerivedHintSections(): {
+  readonly triggers: readonly string[]
+  readonly antiPatterns: readonly string[]
+  readonly paramDefaults: readonly string[]
+} {
+  const triggers: string[] = []
+  const antiPatterns: string[] = []
+  const paramDefaults: string[] = []
+  const keys = Object.keys(ATOM_CONTRACT_REGISTRY).sort() as Array<keyof typeof ATOM_CONTRACT_REGISTRY>
+  for (const key of keys) {
+    // 把 union 类型的 surface 向上拓宽到接口基类，让 TS 识别可选 phraseHints 字段；
+    //   未声明 phraseHints 的 atom 直接拿到 undefined。
+    const surface = ATOM_CONTRACT_REGISTRY[key]?.surface as AtomContractSurface | undefined
+    const hints = surface?.phraseHints
+    if (!hints) continue
+    for (const t of hints.triggers ?? []) {
+      triggers.push(`【${t.keywords.join(' / ')}】`)
+      triggers.push(`  → ${t.mustOutput}`)
+      triggers.push('')
+    }
+    for (const ap of hints.antiPatterns ?? []) {
+      antiPatterns.push(`  - atom \`${key}\`：${ap.mistake}`)
+      antiPatterns.push(`    → ${ap.fix}`)
+      antiPatterns.push('')
+    }
+    if (hints.paramDefaultsHint) {
+      paramDefaults.push(`- ${hints.paramDefaultsHint}`)
+    }
+  }
+  return { triggers, antiPatterns, paramDefaults }
+}
+
+function buildTriggerPhraseHintsSection(): readonly string[] {
+  const { triggers } = buildRegistryDerivedHintSections()
+  return [
+    ...COMPOSITIONAL_PATTERN_HINTS,
+    '',
+    '关键短语 → 单 atom 形态（自 ATOM_CONTRACT_REGISTRY.surface.phraseHints 派生；',
+    '加新策略只需给对应 atom 在 registry 声明 phraseHints.triggers，prompt 自动重新派生）：',
+    '',
+    ...triggers,
+  ]
+}
+
+function buildPlannerCorrectionRulesSection(): readonly string[] {
+  const { antiPatterns } = buildRegistryDerivedHintSections()
+  return [
+    ...PLANNER_CORRECTION_META_RULES,
+    '',
+    ...antiPatterns,
+  ]
+}
+
+function buildAtomParamsHintsSection(): readonly string[] {
+  const { paramDefaults } = buildRegistryDerivedHintSections()
+  return [
+    '📐 ATOM_PARAMS_HINTS — 常见指标 atom 的标准 params（无用户特殊说明时优先使用这些默认值，',
+    '禁止编造；自 ATOM_CONTRACT_REGISTRY.surface.phraseHints.paramDefaultsHint 派生）：',
+    '',
+    ...paramDefaults,
+    '- 多周期同向类 condition：用相同 atom 叶子 + 不同 params.timeframe 用 and 组合，不要合并到单个 atom。',
+  ]
+}
 
 const TERMINAL_RULES: readonly string[] = [
   '规则：',
@@ -334,13 +390,17 @@ function formatAtomCatalogSection(locale: 'zh' | 'en'): string[] {
 export function buildConversationPlannerSystemPrompt(locale: 'zh' | 'en' = 'zh'): string {
   // Issue #1395：易错纠正 + 关键短语映射前置（小模型 attention bias 偏 prompt 头部 / 尾部，
   //   把这两段同时前置 + 复述在尾部 TERMINAL_RULES 之上以双层强化）。
+  // Issue #1403 通用化 v2：单 atom 触发短语 / antiPatterns / paramDefaults 从
+  //   ATOM_CONTRACT_REGISTRY[*].surface.phraseHints 自动派生；加新策略只需扩 atom 元数据。
   const lines: string[] = [
     '⚠️ 高优先级规则（优先读完再处理用户消息）：',
-    ...TRIGGER_PHRASE_TO_ATOM_HINTS,
+    ...buildTriggerPhraseHintsSection(),
+    '',
+    ...buildPlannerCorrectionRulesSection(),
     '',
     ...NEGATIVE_EXAMPLES,
     '',
-    ...ATOM_PARAMS_HINTS,
+    ...buildAtomParamsHintsSection(),
     '',
     ...NEW_IN_CONTEXT_EXAMPLES,
     '',

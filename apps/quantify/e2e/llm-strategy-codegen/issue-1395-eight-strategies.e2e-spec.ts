@@ -161,6 +161,9 @@ describeReal('Issue #1395 — 8 strategies LLM e2e (atom expression tree)', () =
     payload: Record<string, unknown>
     /** Issue #1395: 从 DB 直接读 semanticState JSONB，绕过 server-rendered summary 的 legacy 渲染。 */
     semanticState: Record<string, unknown>
+    /** Issue #1403 结构性 E：UI 实际消费字段（assistantPrompt 字符串）。null 表示 response 未给。 */
+    assistantPrompt: string | null
+    sessionId: string
   }> {
     const server = app.getHttpServer()
     const startRes = await supertestRequest(server)
@@ -184,30 +187,74 @@ describeReal('Issue #1395 — 8 strategies LLM e2e (atom expression tree)', () =
     // 把 semanticState（含 rules[] 树结构）也加入 blob，让关键字断言能命中 rules 内的 atom key + params。
     const baseBlob = buildBlob(payload)
     const stateBlob = JSON.stringify(semanticState)
-    return { blob: `${baseBlob}\n${stateBlob}`, payload, semanticState }
+    const assistantPrompt = typeof payload.assistantPrompt === 'string' ? payload.assistantPrompt : null
+    return { blob: `${baseBlob}\n${stateBlob}`, payload, semanticState, assistantPrompt, sessionId }
+  }
+
+  // Issue #1403 结构性 E：UI 实际渲染字段（assistantPrompt）必须与 state.rules 树结构同步。
+  //   原 Wave 4 e2e 只看 blob substring，覆盖不到「state.rules 正确但 UI 拿到的 assistantPrompt
+  //   是 lift 出来的 flat summary」这条 e2e 绿 / UI 红 漏报路径（子故障 B 的根因）。
+  //
+  // 审查 R2-1 修复：助手不允许空串。早 `if (!assistantPrompt) return` 把空串当 falsy
+  //   直接 early-return，与 `expect(prompt).not.toBeNull()` 组合产生「空 prompt = 全绿」
+  //   静默通道。改成显式 throw：调用方必须先保证 assistantPrompt 是非空串。
+  function expectAssistantPromptCoversRules(
+    assistantPrompt: string | null,
+    patterns: ReadonlyArray<string | RegExp>,
+    label: string,
+  ): void {
+    if (typeof assistantPrompt !== 'string' || assistantPrompt.length === 0) {
+      throw new Error(`[${label}] assistantPrompt 必须是非空字符串，实际：${JSON.stringify(assistantPrompt)}`)
+    }
+    for (const p of patterns) {
+      const hit = typeof p === 'string' ? assistantPrompt.includes(p) : p.test(assistantPrompt)
+      if (hit) return
+    }
+    throw new Error(`[${label}] assistantPrompt 未命中 UI 渲染关键字 ${JSON.stringify(patterns.map(p => String(p)))}：${assistantPrompt.slice(0, 400)}`)
   }
 
   // ───────────────────────────────────────────────────────────────────────────
   // S1 网格 1：grid 双向 + 突破停止 — assistantPrompt 必须含网格识别 + 不报 missing_*_atom
   // ───────────────────────────────────────────────────────────────────────────
-  it('S1 grid 网格双向：assistantPrompt 含网格识别，且不报 missing_entry/exit_atom', async () => {
-    const { blob } = await sendCodegenMessage(
+  it('S1 grid 网格双向：assistantPrompt 含网格识别，且不报 missing_entry/exit_atom + UI 不追问单笔仓位（#1403 子故障 A）', async () => {
+    const { blob, assistantPrompt } = await sendCodegenMessage(
       'u-1395-s1',
       'OKX 现货 ETHUSDT、1m 网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT、限价单并相邻网格自动挂反向单、不用趋势信号开仓；当价格突破上下边界时执行「立即停止并撤销所有未成交订单」',
     )
     expectAnyMatch(blob, ['网格', 'grid'], 'S1 grid 识别')
+    // Issue #1403 子故障 A：grid 域 clarification 不应弹「请确认单笔仓位大小」。
+    //   注：#1398 已删除 semantic.missing_entry_atom / semantic.missing_exit_atom 两条
+    //   negative 断言（placeholder 已从代码中删除）；保留 #1403 的 assistantPrompt 负断言。
+    //
+    // 审查 M1 修复：assistantPrompt 是 UI 实际消费字段，必须存在；否则结构性 E 覆盖力
+    //   被降级回 blob substring 时代——负断言不能被 if 包裹静默跳过。
+    // 审查 R2-1 修复：必须是非空字符串；not.toBeNull() 会被 server 返回空串绕过。
+    expect(typeof assistantPrompt === 'string' && assistantPrompt.length > 0).toBe(true)
+    expect(assistantPrompt!).not.toMatch(/(请确认|确认)[\s\S]{0,12}单笔仓位/u)
   }, PER_STRATEGY_TIMEOUT_MS)
 
   // ───────────────────────────────────────────────────────────────────────────
   // S2 连跌 + 下一根放量反弹
   // ───────────────────────────────────────────────────────────────────────────
-  it('S2 连跌 + 下一根放量反弹：assistantPrompt 含 sequence/连跌 + 放量/反弹识别', async () => {
-    const { blob } = await sendCodegenMessage(
+  it('S2 连跌 + 下一根放量反弹：assistantPrompt 含 sequence/连跌 + 放量/反弹识别（#1403 子故障 B）', async () => {
+    const { blob, assistantPrompt } = await sendCodegenMessage(
       'u-1395-s2',
       'BTC 连续跌三根 15 分钟 K 线后，如果下一根开始放量反弹就买一点',
     )
     expectAnyMatch(blob, ['连续', '连跌', 'sequence', 'consecutive', '三根'], 'S2 连跌序列识别')
     expectAnyMatch(blob, ['放量', '量', 'volume', '反弹', '下一根', 'next_bar'], 'S2 放量反弹/下一根识别')
+    // 审查 M1 修复：assistantPrompt 必须存在；负断言不允许被 if 包裹静默跳过。
+    // 审查 R2-1 修复：必须是非空字符串；not.toBeNull() 会被 server 返回空串绕过。
+    expect(typeof assistantPrompt === 'string' && assistantPrompt.length > 0).toBe(true)
+    // Issue #1403 子故障 B：UI 渲染字段不能出现「≥15 根实体双向开仓」幻觉
+    expect(assistantPrompt!).not.toMatch(/≥\s*15\s*根/u)
+    expect(assistantPrompt!).not.toMatch(/双向开仓/u)
+    // UI 必须显式覆盖 S2 关键语义之一
+    expectAssistantPromptCoversRules(
+      assistantPrompt,
+      ['连续', '连跌', '三根', '下一根', '放量', '反弹', '量'],
+      'S2 assistantPrompt 覆盖 rules 语义',
+    )
   }, PER_STRATEGY_TIMEOUT_MS)
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -283,6 +330,28 @@ describeReal('Issue #1395 — 8 strategies LLM e2e (atom expression tree)', () =
   // ───────────────────────────────────────────────────────────────────────────
   // S8 三 TF 共振 EMA20
   // ───────────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
+  // Issue #1403 子故障 A 专项：grid 区间策略的 clarification 不应追问 atom-based position
+  // ───────────────────────────────────────────────────────────────────────────
+  it('S1b grid 区间专项：15m 79200-80200 双向网格 — clarification 不追问单笔仓位（#1403 A）', async () => {
+    const { blob, assistantPrompt } = await sendCodegenMessage(
+      'u-1403-grid',
+      '15m 周期，BTC USDT 永续合约，价格区间 79200-80200，采用双向网格',
+    )
+    expectAnyMatch(blob, ['网格', 'grid'], 'grid 识别')
+    expectAnyMatch(blob, ['79200', '80200', '区间'], 'grid 区间')
+    // 审查 M1 修复：assistantPrompt 必须存在；负断言不允许被 if 包裹静默跳过。
+    // 审查 R2-1 修复：必须是非空字符串；not.toBeNull() 会被 server 返回空串绕过。
+    expect(typeof assistantPrompt === 'string' && assistantPrompt.length > 0).toBe(true)
+    expect(assistantPrompt!).not.toMatch(/(请确认|确认)[\s\S]{0,12}单笔仓位/u)
+    // 审查 Minor 4 修复：补正向覆盖，确保 UI 显示空白也不会绿。
+    expectAssistantPromptCoversRules(
+      assistantPrompt,
+      ['网格', 'grid', '区间', '79200', '80200'],
+      'S1b assistantPrompt 覆盖 grid 关键字',
+    )
+  }, PER_STRATEGY_TIMEOUT_MS)
+
   it('S8 三 TF 共振 EMA20：blob 含 15m + 1h + 4h + EMA20 识别', async () => {
     const { blob } = await sendCodegenMessage(
       'u-1395-s8',

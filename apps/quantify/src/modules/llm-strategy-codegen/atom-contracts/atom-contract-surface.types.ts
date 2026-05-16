@@ -104,6 +104,30 @@ export interface ExtractorSpec {
   readonly derive?: string
   readonly range?: readonly [number, number]
   readonly index?: number
+  /**
+   * Quantifier 上下文（Issue #1403 通用化）—— 让 number-* 抽取器声明
+   * 「数字必须紧跟哪类量词」与「数字后面绝不允许出现哪类量词」。
+   * 替代过去在 `pattern` 里硬编码 `(\d+)\s*(?:根|条|个)(?!\s*分钟)` 的 ad-hoc 写法。
+   *
+   * 适用场景：
+   *   - 「N 根/N 条/N 个/N bars」（candle_pattern.minBars / condition.sequence.count）
+   *     → include: ['根', '条', '个', 'bars', 'bar']
+   *   - 「N 分钟/N 小时」timeframe 数字必须排除（避免被 minBars/count 误抽）
+   *     → exclude: ['分钟', '小时', '秒', '天', '日', 'minute', 'hour']
+   *   - 「N %」百分比歧义防误抽
+   *     → exclude: ['%', '％', 'percent']
+   *
+   * 当同时声明 include + exclude 时，**先 include 后 exclude**：数字必须紧跟 include 中
+   * 任一量词，且**该 include 量词后**不得紧跟 exclude 中任一量词。include 缺省 = 不限制
+   * 必须量词；exclude 缺省 = 不限制禁止量词。
+   *
+   * 实现细节由 dispatcher 的 PARSER_NUMBER_INT / PARSER_NUMBER_DECIMAL 统一处理，
+   * 不在 atom-contract 里硬编码 regex。
+   */
+  readonly quantifier?: {
+    readonly include?: readonly string[]
+    readonly exclude?: readonly string[]
+  }
 }
 
 /**
@@ -222,6 +246,49 @@ export interface AtomContractSurface {
    * 缺省视为空数组——即仅起到"无 keyword 时仍允许 verb 触发"的效果，不继承任何参数。
    */
   readonly inheritParams?: readonly string[]
+
+  /**
+   * Planner prompt 派生数据（Issue #1403 后续通用化）—— atom 自描述「用户高频触发短语 →
+   * planner 必须产出的形态」与「常见 LLM 误形态 → 矫正方向」。
+   *
+   * 设计目标：
+   *   把 `conversation-planner-system.prompt.ts` 内 hard-coded 的 TRIGGER_PHRASE_TO_ATOM_HINTS
+   *   策略级短语段沉淀回原子自身。新增策略 = 给对应 atom 加一行 phraseHints，prompt 自动
+   *   重新派生，不必再回 prompt 文件手工挂条款。
+   *
+   * 适用约束：
+   *   - 只用于「单 atom 主导」的高频短语（如「布林下轨触及」→ bollinger.touch_lower，
+   *     「X 倍 ATR 止损」→ risk.atr_stop）；
+   *   - 跨 atom 的组合时序（sequence / 多周期共振 / breakout+retest）属于 compositional pattern，
+   *     不归任一 atom，留在 prompt 的 COMPOSITIONAL_PATTERN_HINTS 段（结构性 meta，不随
+   *     策略类型变动）。
+   *
+   * 设计意图与 ATOM_FULFILLS_STRATEGY_PHASE 同源：让「加策略 = 扩 atom 自声明」，
+   *   各消费者（prompt、clarification、phase 判定）从 registry 派生，零修改自动生效。
+   */
+  readonly phraseHints?: {
+    /**
+     * 用户原话出现 keywords 中任一短语时，planner 必须按 mustOutput 描述的 atom 形态产出。
+     * mustOutput 是给 LLM 看的中文/英文短描，需要明确 atom key 与关键 params 形态。
+     */
+    readonly triggers?: ReadonlyArray<{
+      readonly keywords: readonly string[]
+      readonly mustOutput: string
+    }>
+    /**
+     * 常见 LLM 误形态点名禁止，给 planner 写「不要写成 X，正确是 Y」。
+     */
+    readonly antiPatterns?: ReadonlyArray<{
+      readonly mistake: string
+      readonly fix: string
+    }>
+    /**
+     * 标准默认参数（人类可读短句）。已在 paramPresetCombos 用结构化数据声明的 combo
+     * 可以同步给出一句话短描，用于 ATOM_PARAMS_HINTS 段派生。例如 MACD「{ fast: 12,
+     * slow: 26, signal: 9 } —— 行业标准组合，禁止写 100/26/9 等非标值」。
+     */
+    readonly paramDefaultsHint?: string
+  }
 
   /**
    * Issue #1395 mute-spider — 多 slot 联动的合法预置组合白名单。

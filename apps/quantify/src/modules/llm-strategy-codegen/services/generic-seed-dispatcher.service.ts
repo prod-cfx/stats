@@ -139,8 +139,54 @@ function matchNumberAtIndex(clause: string, pattern: string | undefined, fallbac
   return pickCapture(all[index])
 }
 
+/**
+ * Issue #1403 通用化 — 数字抽取的 quantifier 上下文过滤。
+ *
+ * 让 number-int / number-decimal 在 spec.quantifier 声明下统一处理「N + 量词」
+ * 上下文约束，替代过去在 pattern 里硬编码 `(\d+)\s*(?:根|条)(?!\s*分钟)` 的
+ * ad-hoc 写法。
+ *
+ * 行为：
+ *   - include 非空：clause 内**遍历所有**数字匹配；每个数字必须紧跟 include 中
+ *     任一量词（可选空白），首个通过的取返；
+ *   - exclude 非空：已通过 include 检查的数字，剥掉 include 量词后**忽略空白**，
+ *     不得紧跟 exclude 中任一量词；
+ *   - 当 quantifier 在场时**接管** matchNumberAtIndex 路径（自己 matchAll
+ *     遍历），spec.index / spec.pattern 仅对无 quantifier 的旧调用生效。
+ */
+function findNumberWithQuantifier(
+  clause: string,
+  fallback: RegExp,
+  spec: ExtractorSpec,
+): string | undefined {
+  const q = spec.quantifier
+  if (!q || (!q.include?.length && !q.exclude?.length)) return undefined
+  const re = new RegExp(spec.pattern ?? fallback.source, 'g')
+  for (const m of clause.matchAll(re)) {
+    const raw = (m as RegExpMatchArray).slice(1).find(item => item !== undefined) ?? m[0]
+    const at = (m.index ?? -1) + m[0].length
+    if (at <= 0) continue
+    const tail = clause.slice(at).replace(/^\s+/u, '')
+    if (q.include?.length) {
+      const includeUnit = q.include.find(unit => tail.startsWith(unit))
+      if (!includeUnit) continue
+      const afterInclude = tail.slice(includeUnit.length).replace(/^\s+/u, '')
+      const excludeHit = q.exclude?.some(unit => afterInclude.startsWith(unit)) ?? false
+      if (excludeHit) continue
+      return raw
+    }
+    // include 缺省，仅 exclude：直接看 tail
+    const excludeHit = q.exclude?.some(unit => tail.startsWith(unit)) ?? false
+    if (excludeHit) continue
+    return raw
+  }
+  return undefined
+}
+
 const PARSER_NUMBER_INT: ParserFn = (clause, spec) => {
-  const raw = matchNumberAtIndex(clause, spec.pattern, /\d+/, spec.index ?? 0)
+  const raw = spec.quantifier
+    ? findNumberWithQuantifier(clause, /\d+/, spec)
+    : matchNumberAtIndex(clause, spec.pattern, /\d+/, spec.index ?? 0)
   if (raw === undefined) return undefined
   const n = Number.parseInt(raw, 10)
   if (Number.isNaN(n)) return undefined
@@ -149,7 +195,9 @@ const PARSER_NUMBER_INT: ParserFn = (clause, spec) => {
 }
 
 const PARSER_NUMBER_DECIMAL: ParserFn = (clause, spec) => {
-  const raw = matchNumberAtIndex(clause, spec.pattern, /\d+(?:\.\d+)?/, spec.index ?? 0)
+  const raw = spec.quantifier
+    ? findNumberWithQuantifier(clause, /\d+(?:\.\d+)?/, spec)
+    : matchNumberAtIndex(clause, spec.pattern, /\d+(?:\.\d+)?/, spec.index ?? 0)
   if (raw === undefined) return undefined
   const n = Number.parseFloat(raw)
   if (Number.isNaN(n)) return undefined

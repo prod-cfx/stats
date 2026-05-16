@@ -8409,6 +8409,75 @@
     }
   },
   {
+    "id": "price-candle-pattern-zh-issue-1403-no-timeframe-leak",
+    "source": "corpus",
+    "atomKey": "price.candle_pattern",
+    "utterance": "BTC 连续跌三根 15 分钟 K 线后，bearish consecutive_body 买入",
+    "patch": {
+      "contextSlots": {
+        "symbol": {
+          "value": "BTCUSDT",
+          "source": "inferred",
+          "evidenceText": "BTC",
+          "base": "BTC",
+          "quote": "USDT",
+          "quoteSource": "default_usdt"
+        }
+      },
+      "triggers": [
+        {
+          "key": "price.candle_pattern",
+          "phase": "entry",
+          "params": {
+            "pattern": "consecutive_body",
+            "sourceText": "BTC 连续跌三根 15 分钟 K 线后"
+          },
+          "evidence": {
+            "text": "BTC 连续跌三根 15 分钟 K 线后",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        }
+      ],
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "bearish consecutive_body 买入",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "price.candle_pattern",
+          "phase": "entry",
+          "params": {
+            "pattern": "consecutive_body",
+            "sourceText": "BTC 连续跌三根 15 分钟 K 线后"
+          },
+          "evidence": {
+            "text": "BTC 连续跌三根 15 分钟 K 线后",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "bearish consecutive_body 买入",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        }
+      ]
+    }
+  },
+  {
     "id": "price-chart-pattern-zh-locked-head-and-shoulders-bullish",
     "source": "corpus",
     "atomKey": "price.chart_pattern",
@@ -11334,7 +11403,6 @@
           "phase": "entry",
           "params": {
             "pattern": "consecutive_body",
-            "minBars": 30,
             "sourceText": "连续 出现 30 开多"
           },
           "evidence": {
@@ -11371,7 +11439,6 @@
           "phase": "entry",
           "params": {
             "pattern": "consecutive_body",
-            "minBars": 30,
             "sourceText": "连续 出现 30 开多"
           },
           "evidence": {
@@ -11415,7 +11482,6 @@
           "phase": "entry",
           "params": {
             "pattern": "consecutive_body",
-            "minBars": 50,
             "sourceText": "检测到 连续 出现 50 进场"
           },
           "evidence": {
@@ -11441,7 +11507,6 @@
           "phase": "entry",
           "params": {
             "pattern": "consecutive_body",
-            "minBars": 50,
             "sourceText": "检测到 连续 出现 50 进场"
           },
           "evidence": {

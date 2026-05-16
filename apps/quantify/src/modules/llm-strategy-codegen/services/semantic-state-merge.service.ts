@@ -13,6 +13,7 @@ import type {
   SemanticTriggerState,
 } from '../types/semantic-state'
 import { normalizeRiskSemantics } from './semantic-state-normalization'
+import type { SemanticRule } from '../types/atom-expr'
 
 // #1383 Lane B：所有 atom bucket entry 必须实现的最小 identity shape，
 // 供 dedupeByAtomIdentity 用 (key, phase, stableParamsHash, openSlots signature) 折叠重复条目。
@@ -36,14 +37,21 @@ export class SemanticStateMergeService {
       return input.derived
     }
 
-    // Issue #1395 Wave 4：rules[] 表达式树合并策略
-    //   - derived 显式给 rules（且非空） → 取 derived（用户最新轮次描述覆盖旧规则树）
+    // Issue #1395 Wave 4 + Issue #1403 子故障 D：rules[] 表达式树合并策略
     //   - derived 未给或空 → 保留 persisted.rules（避免 ...derived 把 rules 抹掉）
+    //   - derived 显式给 rules → 按 identity（id 优先；否则 phase+sideScope+condition shape）
+    //     与 persisted union 合并，同 identity 取 derived 覆盖
+    //
+    // 历史回归（#1403 子故障 D）：早期实现 derived 非空就整体覆盖 persisted，导致
+    //   多轮 clarification 最后一轮（如 risk 槽位 LLM 只回 risk rule）把 entry/exit
+    //   rules 抹光，UI 仅渲染最后一条 → 用户看到「只剩止损」的伪强终态。
+    //   修复后：用户「确认 risk 阈值」单独一轮的 planner patch 仍能把之前的 entry/exit
+    //   rules 留住，buildRulesSummary 一次性渲染齐全。
     const persistedRules = (input.persisted as { rules?: unknown }).rules
     const derivedRules = (input.derived as { rules?: unknown }).rules
-    const mergedRules = Array.isArray(derivedRules) && derivedRules.length > 0
-      ? derivedRules
-      : (Array.isArray(persistedRules) ? persistedRules : undefined)
+    const persistedRulesArr = Array.isArray(persistedRules) ? persistedRules as SemanticState['rules'] : undefined
+    const derivedRulesArr = Array.isArray(derivedRules) ? derivedRules as SemanticState['rules'] : undefined
+    const mergedRules = this.mergeRulesByIdentity(persistedRulesArr, derivedRulesArr)
 
     return {
       ...input.derived,
@@ -1085,6 +1093,53 @@ export class SemanticStateMergeService {
     }
 
     return result
+  }
+
+  // Issue #1403 子故障 D：rules[] 按 identity 合并而非整体覆盖。
+  //   identity 优先取 rule.id；id 不稳定时退化到 (phase, sideScope, conditionShape)。
+  //   同 identity 走 "derived 覆盖 persisted"（最新轮次 LLM 描述权重更高）；
+  //   持久态独有的 rule（如更早轮次定下的 entry/exit）保留，避免被风控轮次抹平。
+  private mergeRulesByIdentity(
+    persisted: readonly SemanticRule[] | undefined,
+    derived: readonly SemanticRule[] | undefined,
+  ): readonly SemanticRule[] | undefined {
+    if (!persisted && !derived) return undefined
+    const persistedArr = persisted ?? []
+    const derivedArr = derived ?? []
+    if (persistedArr.length === 0) return derivedArr.length > 0 ? derivedArr : undefined
+    if (derivedArr.length === 0) return persistedArr
+
+    const identityOf = (rule: SemanticRule): string => {
+      if (rule.id && rule.id.length > 0) return `id:${rule.id}`
+      const condHash = this.stableParamsHash(rule.condition as unknown as Record<string, unknown>)
+      return `shape:${rule.phase}|${rule.sideScope}|${condHash}`
+    }
+
+    const byIdentity = new Map<string, SemanticRule>()
+    const order: string[] = []
+    for (const rule of persistedArr) {
+      const id = identityOf(rule)
+      if (!byIdentity.has(id)) order.push(id)
+      byIdentity.set(id, rule)
+    }
+    for (const rule of derivedArr) {
+      const id = identityOf(rule)
+      if (!byIdentity.has(id)) order.push(id)
+      // 审查 M2 修复：同 identity 折叠时 effects 若 derived 缺省/空数组 → 保留
+      //   persisted.effects，避免 LLM 多轮场景下用户只回 condition 而 effects 字段
+      //   被静默抹掉（子故障 D 在 effects 维度的同形复发风险）。
+      //
+      // 审查 m-R2-1 显式声明：本路径把 derived.effects === [] 视为「未提供」，
+      //   保留 persisted。该 trade-off 在当前 LLM 协议下「未给」与「显式空」电报
+      //   差异不可观测，因此选择更安全的「保留」语义。未来若需要支持显式清空
+      //   effects，需协议层引入 `effects: null` 哨兵区分；当前协议不支持。
+      const existing = byIdentity.get(id)
+      const mergedEffects = (rule.effects && rule.effects.length > 0)
+        ? rule.effects
+        : (existing?.effects ?? rule.effects)
+      byIdentity.set(id, { ...rule, effects: mergedEffects })
+    }
+    return order.map(id => byIdentity.get(id)!)
   }
 
   private computeAtomIdentityKey(entry: AtomLikeEntry): string {
