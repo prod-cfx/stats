@@ -10,9 +10,11 @@ describe('PlannerDispatcherMergeService', () => {
     expect(svc.mergePlannerAndDispatcherPatches({}, {})).toBeNull()
   })
 
-  it('returns planner unchanged when only planner present', () => {
+  it('returns planner content when only planner present', () => {
     const planner: CodegenSemanticPatch = { triggers: [{ key: 'trigger.candle_break_above', phase: 'entry' }] }
-    expect(svc.mergePlannerAndDispatcherPatches(planner, null)).toBe(planner)
+    // Issue #1443：planner-only 路径现在 clone（不再严格引用相等），且过滤 always-on
+    //   action 噪音 rule；内容等价即可
+    expect(svc.mergePlannerAndDispatcherPatches(planner, null)).toEqual(planner)
   })
 
   it('returns dispatcher unchanged when only dispatcher present', () => {
@@ -264,6 +266,69 @@ describe('PlannerDispatcherMergeService', () => {
     expect(rules?.[1].condition.key).toBe('bollinger.touch_lower')
     expect(rules?.[1].phase).toBe('entry')
     expect(rules?.[1].sideScope).toBe('long')
+  })
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Issue #1443：always-on condition + action effects 噪音 rule 过滤
+  //   planner/dispatcher 误产「condition=execution.on_start + effects=action.close_long」
+  //   这种"启动即平仓"无条件兜底 rule（用户没明确说），让 UI 出现「出场：平多」无条件
+  //   动作的噪音。merge 阶段整条丢弃。risk effects 允许 always-on（"挂止损"合理）。
+  // ───────────────────────────────────────────────────────────────────────────
+  it('Issue #1443: always-on condition + action effects → 整条 rule 丢弃', () => {
+    const planner = {
+      rules: [
+        // 正常 entry rule（保留）
+        {
+          id: 'planner-r-entry',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down', valuePct: -1, window: '3m' } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        // 噪音 always-on + close_long（丢弃）
+        {
+          id: 'noise-r-exit',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'execution.on_start', params: { timing: 'on_start' } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, null)
+    const rules = (merged as { rules?: Array<{ id: string }> })?.rules
+    expect(rules).toHaveLength(1)
+    expect(rules?.[0].id).toBe('planner-r-entry')
+  })
+
+  it('Issue #1443: always-on condition + risk effects → 保留（持续生效合理）', () => {
+    const planner = {
+      rules: [{
+        id: 'planner-r-stop',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: { timing: 'on_start' } },
+        effects: [{ kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } }],
+      }],
+    } as unknown as CodegenSemanticPatch
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, null)
+    const rules = (merged as { rules?: unknown[] })?.rules
+    expect(rules).toHaveLength(1)
+  })
+
+  it('Issue #1443: 非 always-on condition + action effects → 保留（正常业务 rule）', () => {
+    const planner = {
+      rules: [{
+        id: 'planner-r-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down' } },
+        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      }],
+    } as unknown as CodegenSemanticPatch
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, null)
+    const rules = (merged as { rules?: unknown[] })?.rules
+    expect(rules).toHaveLength(1)
   })
 
   it('Issue #1441: dispatcher.actions 桶不被 lift（避免「入场（双向）：开多」孤立 rule）', () => {
@@ -555,7 +620,8 @@ describe('PlannerDispatcherMergeService', () => {
       // atoms 透传不受影响（在 try/catch 之前已设置）
       expect(merged?.atoms).toHaveLength(1)
       // 两个 pass 各报警一次
-      expect(warnSpy).toHaveBeenCalledTimes(2)
+      // Issue #1443：增加 filter pass 后可能 warn 3 次（override + lift + filter）
+      expect(warnSpy.mock.calls.length).toBeGreaterThanOrEqual(2)
       expect(warnSpy.mock.calls.some(call => String(call[0]).includes('overrideRulesLeafParamsFromDispatcher'))).toBe(true)
       expect(warnSpy.mock.calls.some(call => String(call[0]).includes('liftDispatcherAtomsIntoRules'))).toBe(true)
     }

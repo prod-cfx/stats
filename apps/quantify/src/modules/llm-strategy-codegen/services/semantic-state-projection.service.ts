@@ -16,11 +16,55 @@ import {
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
 // Issue #1443：always-on runtime gate atom 集合——这类 atom 在 rule.condition 位置
 //   表达「策略启动后始终激活」语义（runtime gate），是技术性运行时门控，对 user-facing
-//   UI 无价值。renderRule 在 condition 是这些 single-leaf atom 时跳过 condition 渲染，
-//   只输出 effects。新增 always-on atom 只需扩此集合。
+//   UI 无价值。新增 always-on atom 只需扩此集合。
 const ALWAYS_ON_ATOM_KEYS: ReadonlySet<string> = new Set([
   'execution.on_start',
 ])
+
+/**
+ * Issue #1443 D 方案：通用 enum value → 人话标签内置表。
+ *
+ * enrichSummaryFromParamSlots 在渲染 kind=enum 类型 slot 时查此表；表内有则用 user
+ * 可读标签，无则**跳过**（避免显示原始 enum value 如 'down'/'current_price'——技术化文案）。
+ *
+ * 设计原则：
+ *   - 只覆盖**用户真关心**的常见 enum slot（如 direction/basis/side/orderType/mode）
+ *   - 不覆盖技术性 enum（如 timing/occurrence/scope_kind/programKind 等——这些是运行时
+ *     配置标签，用户没明确说，不应该自动渲染）
+ *   - 表按 slotKey 索引；同名 slotKey 在不同 atom 共享含义（如所有 atom 的 direction
+ *     都是 up/down，basis 都是 prev_close/entry_avg_price/current_price）
+ *   - 新增 enum 文案只需扩此表（一处改动，所有 atom 受益）
+ */
+const PROJECTION_PARAM_VALUE_LABELS: Readonly<Record<string, Readonly<Record<string, { zh: string, en: string }>>>> = {
+  direction: {
+    up: { zh: '上涨', en: 'rises' },
+    down: { zh: '下跌', en: 'falls' },
+  },
+  basis: {
+    prev_close: { zh: '相对上一根收盘价', en: 'vs prev close' },
+    entry_avg_price: { zh: '相对入场均价', en: 'vs entry avg' },
+    current_price: { zh: '相对当前价', en: 'vs current price' },
+  },
+  side: {
+    long: { zh: '做多', en: 'long' },
+    short: { zh: '做空', en: 'short' },
+    both: { zh: '双向', en: 'both' },
+  },
+  band: {
+    upper: { zh: '上轨', en: 'upper band' },
+    middle: { zh: '中轨', en: 'middle band' },
+    lower: { zh: '下轨', en: 'lower band' },
+  },
+  orderType: {
+    market: { zh: '市价', en: 'market' },
+    limit: { zh: '限价', en: 'limit' },
+  },
+  confirmationMode: {
+    touch: { zh: '触碰即触发', en: 'on touch' },
+    breakout: { zh: '突破后触发', en: 'on breakout' },
+    close: { zh: '收盘确认后触发', en: 'on close' },
+  },
+} as const
 
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
@@ -2313,18 +2357,22 @@ export class SemanticStateProjectionService {
       return null
     }
 
-    // Issue #1441 通用增强：检测 atom 的 summaryTemplate 是否「未消费 params」（输出
-    //   等于 publicName 表示 fallback 到 atom 类型名称，未拼参数）。此时调 paramRenderers
-    //   把 params 关键字段渲染成文本附加在 summary 后，让 UI 看到具体数值。
+    // Issue #1443 通用增强（D 方案）：检测 atom 的 summaryTemplate 是否「未消费 params」
+    //   （输出等于 publicName → fallback 到 atom 类型名）。命中后从 `paramSlots` 元数据
+    //   派生人话标签拼接在 summary 后，**不依赖** atom 自己的 paramRenderers（contract
+    //   注释自承 paramRenderers 是 debug 字段，非 user-facing）。
     //
-    //   遗留 TODO 修复：atom-contract-registry.ts:1193 注释自承「paramRenderers consumed by
-    //   future UI debug surface (not by current summary path)」——本次让它在 summary
-    //   渲染时被通用消费，所有声明了 paramRenderers 的 atom 自动受益（如 price.percent_change
-    //   的 valuePct/window/direction/basis 自动出现在 UI），避免单 atom 改 summaryTemplate。
-    return this.enrichSummaryWithParamRenderers({
+    //   通用机制：
+    //     - paramSlots[slotKey].kind=percent → `${abs(value)}%`
+    //     - paramSlots[slotKey].kind=number → `${value}`
+    //     - paramSlots[slotKey].kind=duration → `${value}`（"3m" / "15m"）
+    //     - paramSlots[slotKey].kind=enum → 查内置 PROJECTION_PARAM_VALUE_LABELS
+    //       常用标签表；表内有则用人话标签，无则**跳过**（避免显示原始 enum value 如 "down"/
+    //       "current_price"——技术化文案）
+    //     - 值等于 paramSlots[slotKey].default → 跳过（避免渲染技术兜底）
+    return this.enrichSummaryFromParamSlots({
       atomKey,
       baseSummary,
-      paramRenderers: display?.paramRenderers,
       publicName: display?.publicName,
       params,
       locale,
@@ -2332,58 +2380,48 @@ export class SemanticStateProjectionService {
   }
 
   /**
-   * Issue #1441：通用 summary 增强 helper。
+   * Issue #1443 D 方案：基于 `paramSlots` 元数据的通用 summary 增强。
    *
-   * 条件触发（必须全部满足）：
-   *   - atom 声明了 `display.paramRenderers`
-   *   - `summaryTemplate` 输出与 `publicName[locale]` 严格相等（说明它未消费 params，
-   *     只回退到 atom 类型名）—— 这是「summaryTemplate 未消费 params」的通用信号
-   *   - params 中至少有一个 paramRenderers 声明的 key 含非空值
+   * 触发：base summary === publicName[locale]（"summaryTemplate 未消费 params" 通用信号）
    *
-   * 行为：把 paramRenderers 渲染的 (key, value) 文本按声明顺序串联，附加在 baseSummary 后。
-   *   format: `${baseSummary}（${rendered values joined by '，' or 'and'}）`。
+   * 行为：遍历 paramSlots 元数据，按 kind 派生 user 可读文本：
+   *   - 数值类（percent/number/duration）→ 直接渲染数值
+   *   - enum 类 → 查 PROJECTION_PARAM_VALUE_LABELS 内置标签表（covers 用户真关心的
+   *     direction/basis 等少数 enum），表内有则用，无则跳过（不显示原始 enum value）
+   *   - 跳过 undefined/null/'' 和 值 === default 的 slot
    *
-   * 否则原样返回 baseSummary（向后兼容：所有 summaryTemplate 已用 params 的 atom 不受影响）。
+   * 输出 format: `${publicName}（${labels.join('，')}）`（zh）/ `${publicName} (...)` (en)
+   *
+   * 不动任何 atom contract。新 atom 自动通用走此路径；要扩 enum 标签覆盖只需扩
+   *   PROJECTION_PARAM_VALUE_LABELS 表（一处改动，所有 atom 受益）。
    */
-  private enrichSummaryWithParamRenderers(input: {
+  private enrichSummaryFromParamSlots(input: {
     atomKey: string
     baseSummary: string
-    paramRenderers: Record<string, (value: unknown, locale: 'zh' | 'en') => string> | undefined
     publicName: { zh?: string, en?: string } | undefined
     params: Record<string, unknown>
     locale: 'zh' | 'en'
   }): string {
-    const { atomKey, baseSummary, paramRenderers, publicName, params, locale } = input
-    if (!paramRenderers || typeof paramRenderers !== 'object') return baseSummary
+    const { atomKey, baseSummary, publicName, params, locale } = input
 
     // 「summaryTemplate 未消费 params」信号：base summary 与 publicName 一字不差
     const publicNameForLocale = publicName?.[locale]?.trim()
     if (!publicNameForLocale || baseSummary !== publicNameForLocale) return baseSummary
 
-    // Issue #1443：跳过值等于 paramSlot.default 的 slot——default 值是技术兜底，
-    //   用户没显式说，渲染出来纯噪音（如 execution.on_start 的 timing=on_start /
-    //   orderType=market / occurrence=once 都是 default → 渲染出"（on_start，市价，once）"
-    //   对用户毫无价值，反让 UI 复杂）。
-    //   从 ATOM_CONTRACT_REGISTRY[atomKey].surface.paramSlots[slotKey].default 读取。
-    const slotDefaults = this.readSlotDefaultsForAtom(atomKey)
+    type ParamSlot = { kind?: string, default?: unknown, enum?: readonly string[] }
+    type SurfaceShape = { paramSlots?: Record<string, ParamSlot> }
+    const entry = (ATOM_CONTRACT_REGISTRY as Record<string, { surface?: SurfaceShape } | undefined>)[atomKey]
+    const paramSlots = entry?.surface?.paramSlots
+    if (!paramSlots) return baseSummary
 
     const rendered: string[] = []
-    for (const [slotKey, renderer] of Object.entries(paramRenderers)) {
-      const v = params[slotKey]
+    for (const [slotKey, slot] of Object.entries(paramSlots)) {
+      const v = (params as Record<string, unknown>)[slotKey]
       if (v === undefined || v === null || v === '') continue
-      // Issue #1443：值等于该 slot 的 default → 跳过（避免渲染技术兜底）
-      if (slotDefaults && Object.prototype.hasOwnProperty.call(slotDefaults, slotKey) && slotDefaults[slotKey] === v) continue
-      try {
-        const text = renderer(v, locale)
-        if (typeof text === 'string' && text.trim().length > 0) {
-          rendered.push(text.trim())
-        }
-      }
-      catch (error) {
-        // paramRenderer 抛错跳过该 slot，不破坏整体 summary
-        const reason = error instanceof Error ? error.message : String(error)
-        console.warn(`[atom-contract-summary] paramRenderer for slot=${slotKey} threw: ${reason}`)
-      }
+      // 值 === default → 跳过（技术兜底，无价值）
+      if (slot && 'default' in slot && slot.default !== undefined && slot.default === v) continue
+      const label = this.renderParamValueLabel(slotKey, slot.kind, v, locale)
+      if (label && label.length > 0) rendered.push(label)
     }
     if (rendered.length === 0) return baseSummary
     const joiner = locale === 'zh' ? '，' : ', '
@@ -2393,9 +2431,42 @@ export class SemanticStateProjectionService {
   }
 
   /**
-   * Issue #1443：读 atom contract `surface.paramSlots[*].default`，按 slotKey 索引。
-   *   供 enrichSummaryWithParamRenderers 跳过值等于 default 的 slot（避免渲染技术兜底）。
-   *   atom 未注册 / 无 paramSlots / 无 default 字段时返回 null。
+   * Issue #1443：按 paramSlot.kind + 内置标签表派生 user 可读文本。
+   *   - percent：`${abs(value)}%`（方向已在 direction enum 里）
+   *   - number：`${value}`
+   *   - duration：`${value}`（如 "3m"/"15m"）
+   *   - enum：查 PROJECTION_PARAM_VALUE_LABELS[slotKey][value][locale]，无则跳过
+   *   - 其它 kind / 值无法渲染 → 返空（跳过）
+   */
+  private renderParamValueLabel(
+    slotKey: string,
+    kind: string | undefined,
+    value: unknown,
+    locale: 'zh' | 'en',
+  ): string {
+    if (kind === 'percent' && typeof value === 'number' && Number.isFinite(value)) {
+      return `${Math.abs(value)}%`
+    }
+    if (kind === 'number' && typeof value === 'number' && Number.isFinite(value)) {
+      return `${value}`
+    }
+    if (kind === 'duration' && typeof value === 'string' && value.length > 0) {
+      return value
+    }
+    if (kind === 'enum' && typeof value === 'string') {
+      const table = (PROJECTION_PARAM_VALUE_LABELS as Record<string, Record<string, { zh?: string, en?: string } | undefined> | undefined>)[slotKey]
+      const labelMap = table?.[value]
+      const label = labelMap?.[locale]
+      if (typeof label === 'string' && label.trim().length > 0) return label.trim()
+      // enum value 不在表内 → 跳过（避免显示原始 enum 如 'down'/'current_price'）
+      return ''
+    }
+    return ''
+  }
+
+  /**
+   * @deprecated Issue #1443：被 enrichSummaryFromParamSlots 内联消费 default 取代；
+   *   保留以兼容潜在外部引用，下个 PR 删。
    */
   private readSlotDefaultsForAtom(atomKey: string): Record<string, unknown> | null {
     type ParamSlot = { default?: unknown }

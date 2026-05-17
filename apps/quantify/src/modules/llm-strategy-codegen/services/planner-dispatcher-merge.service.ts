@@ -2,6 +2,17 @@ import { Injectable, Logger } from '@nestjs/common'
 
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import { collectAtomLeaves, type AtomExpr, type AtomExprAtom, type SemanticRule } from '../types/atom-expr'
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+
+/**
+ * Issue #1443：always-on runtime gate atom 集合（与 semantic-state-projection.service.ts
+ *   同一份真相源；两处独立维护风险低，atom 数量稳定）。这类 atom 在 rule.condition
+ *   位置表达「策略启动后始终激活」语义；若 effects 是 action（开/平仓动作），通常是
+ *   planner / dispatcher 误产的技术兜底 rule（用户没明确说"启动即开平仓"），是 UI 噪音。
+ */
+const MERGE_ALWAYS_ON_ATOM_KEYS: ReadonlySet<string> = new Set([
+  'execution.on_start',
+])
 
 /**
  * Issue #1383：planner 输出常常只包含 trigger/action/risk 桶；positionConstraint /
@@ -28,7 +39,19 @@ export class PlannerDispatcherMergeService {
     const plannerHas = this.isNonEmpty(plannerPatch)
     const dispatcherHas = this.isNonEmpty(dispatcherPatch)
     if (!plannerHas && !dispatcherHas) return null
-    if (plannerHas && !dispatcherHas) return plannerPatch as CodegenSemanticPatch
+    // Issue #1443：planner-only / dispatcher-only 早返路径也必须走 filter pass
+    //   过滤 always-on + action 噪音 rule（否则用户实测策略 1 这类 planner-only 场景
+    //   下「出场：平多」噪音 rule 仍漏过）。
+    if (plannerHas && !dispatcherHas) {
+      const cloned = { ...(plannerPatch as CodegenSemanticPatch) }
+      try {
+        this.filterAlwaysOnActionNoiseRules(cloned)
+      }
+      catch (err) {
+        this.logger.warn(`filterAlwaysOnActionNoiseRules (planner-only path) 抛出异常，已 fail-open：${err instanceof Error ? err.message : String(err)}`)
+      }
+      return cloned
+    }
     if (!plannerHas && dispatcherHas) return dispatcherPatch as CodegenSemanticPatch
 
     const planner = plannerPatch as CodegenSemanticPatch
@@ -129,7 +152,58 @@ export class PlannerDispatcherMergeService {
       this.logger.warn(`liftDispatcherAtomsIntoRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
     }
 
+    // Issue #1443：过滤掉 "always-on condition + action effects" 噪音 rule。
+    //   这类 rule 通常是 planner/dispatcher 把 trigger 和 action 错绑（trigger 缺失或
+    //   被识别为 execution.on_start always-on），让 UI 出现"出场：平多" / "入场：开多"
+    //   等无条件动作的噪音。用户没明确说"启动即开/平仓"——这种 rule 应丢弃。
+    //   risk effects（stop_loss/take_profit）允许 always-on（"持仓期间一直挂止损"是
+    //   常见且合理语义）。
+    try {
+      this.filterAlwaysOnActionNoiseRules(merged)
+    }
+    catch (err) {
+      this.logger.warn(`filterAlwaysOnActionNoiseRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
+    }
+
     return merged
+  }
+
+  /**
+   * Issue #1443：过滤 "always-on condition + action effects" 噪音 rule。
+   *
+   * 触发条件（全部满足）：
+   *   1. rule.condition.kind === 'atom' 且 key ∈ MERGE_ALWAYS_ON_ATOM_KEYS
+   *   2. rule.effects 中至少含一个 leaf 在 atom contract registry 的 bucket === 'action'
+   *
+   * 行为：整条 rule 从 merged.rules 移除。risk/positionConstraint/orchestration effects
+   *   不视为噪音（持续生效语义合理）。
+   *
+   * 通用机制：基于 ALWAYS_ON 集合 + atom contract bucket 派生，不针对单 atom 写特例。
+   */
+  private filterAlwaysOnActionNoiseRules(merged: CodegenSemanticPatch): void {
+    const rules = merged.rules
+    if (!rules || rules.length === 0) return
+
+    type ContractShape = { bucket?: string }
+    const getBucket = (atomKey: string): string | undefined =>
+      (ATOM_CONTRACT_REGISTRY as Record<string, ContractShape | undefined>)[atomKey]?.bucket
+
+    const isAlwaysOnCondition = (rule: SemanticRule): boolean =>
+      rule.condition.kind === 'atom' && MERGE_ALWAYS_ON_ATOM_KEYS.has(rule.condition.key)
+
+    const hasActionEffect = (rule: SemanticRule): boolean => {
+      for (const eff of rule.effects) {
+        for (const leaf of collectAtomLeaves(eff)) {
+          if (getBucket(leaf.key) === 'action') return true
+        }
+      }
+      return false
+    }
+
+    const kept = rules.filter(rule => !(isAlwaysOnCondition(rule) && hasActionEffect(rule)))
+    if (kept.length !== rules.length) {
+      merged.rules = kept
+    }
   }
 
   /**
