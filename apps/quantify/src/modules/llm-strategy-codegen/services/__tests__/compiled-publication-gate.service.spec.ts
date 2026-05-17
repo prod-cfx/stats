@@ -1657,6 +1657,105 @@ describe('compiledPublicationGateService', () => {
       strategyInstanceId: 'strategy-instance-id-from-codegen',
     }))
   })
+
+  // Issue #1437：网格策略 readCanonicalPositionMode 应识别 orchestration.programs 中
+  //   的 grid programKind 并返回 long_short，否则 publication-gate 三方对账拦截
+  describe('Issue #1437: grid orchestration positionMode 真相源识别', () => {
+    const gate = new CompiledPublicationGateService(
+      { create: jest.fn() } as never,
+      { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
+    )
+    // 通过 bracket 访问私有方法（与 #1432/#1433 同模式）
+    const privateGate = gate as unknown as {
+      readCanonicalPositionMode: (snapshot: Record<string, unknown>) => string | null
+      detectGridOrchestrationPositionMode: (snapshot: Record<string, unknown>) => boolean
+    }
+
+    it('snapshot.orchestration.programs 含 dynamic_grid → readCanonicalPositionMode 返 long_short', () => {
+      const snapshot = {
+        orchestration: { programs: [{ programKind: 'dynamic_grid' }] },
+      }
+      expect(privateGate.readCanonicalPositionMode(snapshot)).toBe('long_short')
+    })
+
+    it('snapshot.orchestration.programs 含 fixed_grid_gated → long_short', () => {
+      const snapshot = {
+        orchestration: { programs: [{ programKind: 'fixed_grid_gated' }] },
+      }
+      expect(privateGate.readCanonicalPositionMode(snapshot)).toBe('long_short')
+    })
+
+    it('snapshot.orchestration.programs 含 adaptive_volatility_grid → long_short', () => {
+      const snapshot = {
+        orchestration: { programs: [{ programKind: 'adaptive_volatility_grid' }] },
+      }
+      expect(privateGate.readCanonicalPositionMode(snapshot)).toBe('long_short')
+    })
+
+    it('snapshot.orchestration.programs 仅含 event_listener → 不视为 long_short 真相源', () => {
+      const snapshot = {
+        orchestration: { programs: [{ programKind: 'event_listener' }] },
+      }
+      // 无 rules + 无 orderPrograms + 无 grid → null/long_only fallback（非 long_short）
+      const result = privateGate.readCanonicalPositionMode(snapshot)
+      expect(result).not.toBe('long_short')
+    })
+
+    it('grid orchestration 优先于 rules.actions 单边推断（即使 rules 只有 OPEN_LONG）', () => {
+      const snapshot = {
+        orchestration: { programs: [{ programKind: 'dynamic_grid' }] },
+        rules: [
+          { actions: [{ type: 'OPEN_LONG' }] },
+        ],
+      }
+      // 网格 + 单边 OPEN_LONG → 仍 long_short（grid 天然双向）
+      expect(privateGate.readCanonicalPositionMode(snapshot)).toBe('long_short')
+    })
+
+    it('grid + orderPrograms 共存：grid 优先返 long_short（审查 Major #1）', () => {
+      // 用户显式叠加 perp_long orderProgram + 双向网格 program。grid 双向语义覆盖
+      // orderPrograms 单边声明（runtime 双向挂单，单边 orderProgram 只是其中一脚）。
+      const snapshot = {
+        orchestration: { programs: [{ programKind: 'dynamic_grid' }] },
+        orderPrograms: [{ kind: 'place_limit_grid', mode: 'perp_long' }],
+      }
+      expect(privateGate.readCanonicalPositionMode(snapshot)).toBe('long_short')
+    })
+
+    it('多个 grid program 同 spec → 仍 long_short（审查 Minor）', () => {
+      const snapshot = {
+        orchestration: {
+          programs: [
+            { programKind: 'dynamic_grid' },
+            { programKind: 'fixed_grid_gated' },
+          ],
+        },
+      }
+      expect(privateGate.readCanonicalPositionMode(snapshot)).toBe('long_short')
+    })
+
+    it('grid + event_listener 混合 → 仍 long_short（grid 命中即足）', () => {
+      const snapshot = {
+        orchestration: {
+          programs: [
+            { programKind: 'event_listener' },
+            { programKind: 'adaptive_volatility_grid' },
+          ],
+        },
+      }
+      expect(privateGate.readCanonicalPositionMode(snapshot)).toBe('long_short')
+    })
+
+    it('detectGridOrchestrationPositionMode 私有方法直测：4 类 grid + 1 类非 grid', () => {
+      expect(privateGate.detectGridOrchestrationPositionMode({ orchestration: { programs: [{ programKind: 'dynamic_grid' }] } })).toBe(true)
+      expect(privateGate.detectGridOrchestrationPositionMode({ orchestration: { programs: [{ programKind: 'fixed_grid_gated' }] } })).toBe(true)
+      expect(privateGate.detectGridOrchestrationPositionMode({ orchestration: { programs: [{ programKind: 'adaptive_volatility_grid' }] } })).toBe(true)
+      expect(privateGate.detectGridOrchestrationPositionMode({ orchestration: { programs: [{ programKind: 'event_listener' }] } })).toBe(false)
+      expect(privateGate.detectGridOrchestrationPositionMode({})).toBe(false)
+      expect(privateGate.detectGridOrchestrationPositionMode({ orchestration: {} })).toBe(false)
+      expect(privateGate.detectGridOrchestrationPositionMode({ orchestration: { programs: [] } })).toBe(false)
+    })
+  })
 })
 
 type IrMarketFixtureOverrides = Partial<CanonicalStrategyIrV1['market']> & {

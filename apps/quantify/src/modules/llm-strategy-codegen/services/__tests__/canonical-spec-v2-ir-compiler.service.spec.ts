@@ -4307,6 +4307,44 @@ describe('canonicalSpecV2IrCompilerService orchestration gates', () => {
     expect(irProgram0.sizing).toEqual({ mode: 'fixed_quote', value: 100 })
   })
 
+  // Issue #1437：grid orchestration program 应让 IR.portfolio.positionMode = 'long_short'
+  //   网格 program 在 runtime 双向挂单，rules.actions 无 OPEN_LONG/SHORT，原 resolvePositionMode
+  //   只看 orderPrograms + rules.actions → 落 long_only，与 publication-gate 三方不一致
+  //   触发 PUBLICATION_GATE_BLOCKED（用户实测策略 3）
+  it('Issue #1437: spec 含 fixed_grid_gated → IR.portfolio.positionMode = long_short', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.orchestration = {
+      gates: [
+        {
+          id: 'gate-grid-active',
+          target: { phase: 'entry' },
+          activeWhen: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'indicator', name: 'ema', params: { period: 50 } },
+          },
+          effectWhenFalse: 'block_new_entries',
+        },
+      ],
+      programs: [
+        {
+          id: 'program-grid-1437',
+          programKind: 'fixed_grid_gated',
+          activeWhenRef: 'gate-grid-active',
+          onDeactivate: 'cancel',
+          rebuildPolicy: 'static',
+          gridParams: { anchorPrice: 60000, levelCount: 20, stepPct: 0.5 },
+          sizing: { mode: 'fixed_quote', value: 100 },
+        },
+      ],
+    }
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    // 关键断言：grid program 让 IR positionMode 升 long_short（原为 long_only）
+    expect(result.ir.portfolio.positionMode).toBe('long_short')
+  })
+
   it('drops orphan program when activeWhenRef points to non-existent gate', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
     const spec = buildBaseSpec()

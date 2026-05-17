@@ -379,6 +379,21 @@ export type SemanticOrchestrationProgramKind =
   | 'adaptive_volatility_grid'
   | 'event_listener'
 
+/**
+ * Issue #1439：网格类 program kind 常量集合（位置/PR 真相源）。
+ *   网格 program 在 runtime 双向挂单（OPEN_LONG + OPEN_SHORT 同时维护），
+ *   天然 long_short。`compiled-publication-gate.service` 与
+ *   `canonical-spec-v2-ir-compiler.service` 在 positionMode 推断时**必须**
+ *   引用此常量，避免两处 hardcoded 漂移（审查问题 Major #2）。
+ *   新增网格 programKind 时只需扩此常量 + SemanticOrchestrationProgramKind union。
+ *   event_listener 不算 grid（无持仓语义，不参与 long_short 推断）。
+ */
+export const GRID_PROGRAM_KINDS: ReadonlySet<SemanticOrchestrationProgramKind> = new Set([
+  'fixed_grid_gated',
+  'dynamic_grid',
+  'adaptive_volatility_grid',
+])
+
 // 全局保留 'close'（fixed_grid_gated / dynamic_grid / adaptive_volatility_grid 仍合法）；
 // event_listener 路径 readiness fail-closed 拒收 'close'（无持仓语义）
 export type SemanticOrchestrationProgramOnDeactivate = 'cancel' | 'keep' | 'close'
