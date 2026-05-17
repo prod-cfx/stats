@@ -2081,7 +2081,7 @@ describe('SemanticSeedStateBuilderService — evidence invariant (throw mode)', 
         evidence: { text: '', source: 'user_explicit' },
         params: { indicator: 'ema', 'reference.period': 20 },
       }],
-    }, MSG)).toThrow(/empty string/)
+    }, MSG)).toThrow(/empty_string/)
   })
 
   it('throws when evidence.text is not a substring of message', () => {
@@ -2093,7 +2093,7 @@ describe('SemanticSeedStateBuilderService — evidence invariant (throw mode)', 
         evidence: { text: '完全不相关文本', source: 'user_explicit' },
         params: { indicator: 'ema', 'reference.period': 20 },
       }],
-    }, MSG)).toThrow(/not a substring/)
+    }, MSG)).toThrow(/not_substring/)
   })
 
   it('throws when action is missing evidence.text (action dimension)', () => {
@@ -2201,17 +2201,19 @@ describe('SemanticSeedStateBuilderService — evidence invariant (drop mode)', (
     expect(state?.trigger[0]?.key).toBe('indicator.above')
   })
 
-  it('keeps trigger with missing evidence (warn-only, backward-compatible)', () => {
+  // Issue #1446: missing evidence.text 在 drop 模式不再 warn-only，与 empty_string / not_substring 一致被剔除
+  it('drops trigger with missing evidence (#1446: warn-only carve-out removed)', () => {
     const state = svc.build({
       triggers: [{
         key: 'indicator.above',
         phase: 'entry',
         source: 'user_explicit',
-        // no evidence — warn only, atom is kept
+        // no evidence — #1446 升级后也会被剔除
         params: { indicator: 'ema', 'reference.period': 20 },
       }],
     }, MSG)
-    expect(state?.trigger).toHaveLength(1)
+    // missing-evidence atom 被 drop → state 退化为 null（无 atom 留存）
+    expect(state).toBeNull()
   })
 
   it('drops trigger with empty evidence.text (C2)', () => {

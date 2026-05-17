@@ -39,7 +39,10 @@ const U1_MESSAGE = 'BTC 永续，1 小时级别。EMA20 上穿 EMA50 时市价�
 
 describe('U1 real LLM patch → SemanticSeedStateBuilder.build → codegen (issue #1345 follow-up)', () => {
   it('build returns non-null SemanticState; pipeline emits script', () => {
-    const builder = new SemanticSeedStateBuilderService()
+    // Issue #1446 fixture 迁移：本 spec 用 PR1 真实 LLM raw mock，atom 不带 evidence.text；
+    //   evidence invariant 升级后默认会 drop —— 与 spec 目的（验证 builder→codegen 输出走样
+    //   还是 pipeline 损坏）无关，注入 'off' 维持原校验语义。
+    const builder = new SemanticSeedStateBuilderService(undefined, undefined, undefined, 'off')
     const state = builder.build(U1_PATCH, U1_MESSAGE)
 
     console.log(`\n═══ U1 SemanticState (after SemanticSeedStateBuilder.build) ═══`)

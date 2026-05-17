@@ -48,12 +48,23 @@ import { readFlatActions, readFlatTriggers } from '../types/semantic-state-flat-
 // DEPRECATED Task 6: legacy aggregate shape; new SemanticState splits into orchestration + orchestrationContracts
 type SemanticOrchestrationState = { nodes: SemanticOrchestrationNode[], contracts: readonly unknown[] }
 
-// Issue #1223: 出口 evidence invariant 模式
-//   throw  — 违规立即抛出（spec 测试需显式传入）
-//   drop   — 违规静默丢弃 + logger.warn（全环境默认；测试 fixture 含无 evidence atom，兼容存量）
-//   off    — 关闭检查（跳过 invariant）
+// Issue #1223 / #1446: 出口 evidence invariant 模式
+//   throw  — 违规立即抛出（spec 测试需显式传入；可作可选严格模式注入）
+//   drop   — 违规丢弃 + logger.warn + metric emit（**所有环境默认**，含 dev/e2e/test）
+//   off    — 关闭检查（跳过 invariant；保留旧 fixture 兜底）
+//
+// Issue #1446 偏离说明（vs Issue 原描述 dev/e2e/test='throw'）：
+//   - Issue 描述的「dev/e2e/test 默认 throw」会在 planner 上游尚未稳定输出 evidence.text
+//     的当下直接挂掉整链路；按 "never break userspace" 原则，默认统一保持 'drop'。
+//   - throw 仅作为可选注入 mode 保留，spec 显式 `new SemanticSeedStateBuilderService(..., 'throw')`
+//     时生效，用于针对性的回归测试。
+//   - 待 planner 输出契约（闸 1，#1444）稳定 + drop metric 命中率归零灰度通过后，
+//     再回头切 dev/e2e 默认到 throw。
 export type EvidenceInvariantMode = 'throw' | 'drop' | 'off'
 export const SEMANTIC_SEED_EVIDENCE_INVARIANT_MODE = 'SEMANTIC_SEED_EVIDENCE_INVARIANT_MODE'
+
+// Issue #1446: 标准化 invariant drop reason —— 同时作为 metric label 值
+export type EvidenceInvariantDropReason = 'missing_text' | 'empty_string' | 'not_substring'
 
 type SemanticPatchRecord = Record<string, unknown>
 type ContextField = 'exchange' | 'symbol' | 'marketType' | 'timeframe'
@@ -171,10 +182,10 @@ export class SemanticSeedStateBuilderService {
     @Optional() @Inject(SEMANTIC_SEED_EVIDENCE_INVARIANT_MODE)
     evidenceInvariantMode?: EvidenceInvariantMode,
   ) {
-    // Default to 'drop' in all environments; callers can inject 'throw' for
-    // strict validation (spec tests) or 'off' to disable the invariant.
-    // We do NOT default to 'throw' in dev/test because existing test fixtures
-    // use mock planner patches without evidence on every atom.
+    // Issue #1446: Default to 'drop' in all environments (incl. dev / e2e / test).
+    //   Rationale: planner 上游尚未稳定输出 evidence.text；默认 throw 会破坏 dev/e2e。
+    //   Callers can inject 'throw' (strict, spec only) or 'off' (legacy fixture bypass).
+    //   See `EvidenceInvariantMode` 顶注的偏离说明。
     this.evidenceInvariantMode = evidenceInvariantMode ?? 'drop'
   }
 
@@ -269,15 +280,23 @@ export class SemanticSeedStateBuilderService {
     const actionItems = this.filterLegacyItemsByRegistryBucket(rawActionItems, 'action')
     const riskItems = this.filterLegacyItemsByRegistryBucket(rawRiskItems, 'risk')
 
-    // Issue #1223: 出口 evidence invariant — 仅在调用方显式提供 message 时启用
+    // Issue #1223 / #1446: 出口 evidence invariant — 仅在调用方显式提供 message 时启用
     //   - source === 'system_default' 跳过（系统默认占位 atom 不要求 evidence）
     //   - throw 模式：atom 缺 evidence、空串或非子串均视为违规，统一抛出
-    //   - drop 模式：仅当 atom 已显式设置 evidence 但内容非法（空串/非子串）时才 drop；
-    //     atom 完全不带 evidence 时仅 warn，不 drop（向后兼容未迁移的 planner patch）
-    //   - off 模式：跳过检查
+    //   - drop 模式（默认）：三类违规（missing_text / empty_string / not_substring）一律
+    //     加入 dropViolations 被剔除；同时 emit metric + warn 日志。
+    //     #1446 前 missing_text 是 warn-only 兼容旧 planner；#1395 后 planner 完全切到
+    //     rules[] + evidence，警告"未迁移"不再合法 → 升级为 drop。
+    //   - off 模式：跳过检查（保留旧 fixture 兜底）
     const evidenceInvariantViolations: string[] = []
     // violations that should cause the atom to be dropped in drop-mode
     const dropViolations = new Set<string>()
+    // Issue #1446: per-reason counter for metric emission
+    const dropReasonCounts: Record<EvidenceInvariantDropReason, number> = {
+      missing_text: 0,
+      empty_string: 0,
+      not_substring: 0,
+    }
     const evidenceMode = this.evidenceInvariantMode
     const checkEvidenceInvariant = (
       items: unknown[],
@@ -295,18 +314,18 @@ export class SemanticSeedStateBuilderService {
         // Include array index to avoid atomId collision when multiple atoms share the same key+phase
         // (e.g. multi-MA strategies with several indicator.above/entry triggers)
         const atomId = `${kind}[${itemIndex}:${key}${phase}]`
-        let reason: string | null = null
+        let reason: EvidenceInvariantDropReason | null = null
         if (!hasEvidenceField || evidenceText === null) {
-          reason = 'missing evidence.text'
-          // missing evidence is warn-only in drop mode (backward-compatible)
+          reason = 'missing_text'
         } else if (evidenceText === '') {
-          reason = 'evidence.text is empty string'
-          dropViolations.add(atomId)
+          reason = 'empty_string'
         } else if (!message.includes(evidenceText)) {
-          reason = 'evidence.text not a substring of message'
-          dropViolations.add(atomId)
+          reason = 'not_substring'
         }
         if (reason !== null) {
+          // #1446: all three reasons now drop in drop-mode (no more warn-only carve-out)
+          dropViolations.add(atomId)
+          dropReasonCounts[reason] += 1
           evidenceInvariantViolations.push(`${atomId}: ${reason}`)
         }
       }
@@ -320,10 +339,26 @@ export class SemanticSeedStateBuilderService {
           `SemanticSeedStateBuilderService evidence invariant violated (#1223): ${evidenceInvariantViolations.join('; ')}`,
         )
       } else {
-        // drop mode: log all violations; only atoms in dropViolations are filtered below
+        // drop mode: log all violations + emit per-reason metric stub
+        // Issue #1446: structured log doubles as metric stub —— quantify 当前 codegen 模块
+        //   没有 prom-client 注入路径；用 logger.warn 输出 `metric=evidence_invariant_drop_total
+        //   reason=<r> value=<n>` 形式，便于 log scraper 抓取为 counter。
+        // 摘要行同样以 `metric=` 前缀打头（`metric=evidence_invariant_drop` 区别于带 `_total`
+        //   的 per-reason 行），统一 scraper 正则；后续 prom-client 接入时一次性替换。
+        // TODO(#1446 follow-up): 接入正式 prom-client Counter（参考 MessageBusMetricsService 模式），
+        //   replace structured logger.warn → counter.inc({ reason }).
         this.logger.warn(
-          `event=evidence_invariant_drop count=${evidenceInvariantViolations.length} violations=${evidenceInvariantViolations.join('; ')}`,
+          `metric=evidence_invariant_drop count=${evidenceInvariantViolations.length} violations=${evidenceInvariantViolations.join('; ')}`,
         )
+        // 迭代 dropReasonCounts 的 key 而非硬编码 reason 列表，保持与
+        //   EvidenceInvariantDropReason 类型 / dropReasonCounts 初始化的单一数据源
+        for (const r of Object.keys(dropReasonCounts) as EvidenceInvariantDropReason[]) {
+          if (dropReasonCounts[r] > 0) {
+            this.logger.warn(
+              `metric=evidence_invariant_drop_total reason=${r} value=${dropReasonCounts[r]}`,
+            )
+          }
+        }
       }
     }
     const filterByEvidenceInvariant = (
