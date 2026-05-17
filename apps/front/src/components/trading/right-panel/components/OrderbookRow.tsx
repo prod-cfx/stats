@@ -12,7 +12,7 @@ interface OrderbookRowProps {
 
 export const OrderbookRow = ({ price, amount, total, type, depthPercent }: OrderbookRowProps) => {
   return (
-    <div className="relative group flex items-center h-6 text-xs cursor-pointer hover:bg-[color:var(--cf-surface-hover)]">
+    <div className="relative group flex h-6 cursor-pointer items-center !text-xs !font-normal !leading-5 hover:bg-[color:var(--cf-surface-hover)]">
       <div 
         className={`absolute right-0 top-0 bottom-0 transition-all duration-300 ${
           type === 'sell' ? 'bg-[#da3633]/15' : 'bg-[#2ea043]/15'
@@ -20,18 +20,17 @@ export const OrderbookRow = ({ price, amount, total, type, depthPercent }: Order
         style={{ width: `${depthPercent}%` }}
       />
       
-      <div className={`w-[40%] pl-2 z-10 ${type === 'sell' ? 'text-[#ef4444]' : 'text-[#22c55e]'}`}>
+      <div className={`z-10 w-[40%] pl-2 ${type === 'sell' ? 'text-[#ef4444]' : 'text-[#22c55e]'}`}>
         {price}
       </div>
-      <div className="w-[30%] text-right pr-2 text-[color:var(--cf-text)] z-10">
+      <div className="z-10 w-[30%] pr-2 text-right text-[color:var(--cf-text)]">
         {amount}
       </div>
-      <div className="w-[30%] text-right pr-2 text-[color:var(--cf-muted)] z-10 font-mono">
+      <div className="z-10 w-[30%] pr-2 text-right font-mono text-[color:var(--cf-muted)]">
         {total}
       </div>
     </div>
   );
 };
-
 
 

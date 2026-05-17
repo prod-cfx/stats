@@ -62,7 +62,7 @@ export function LanguageSwitcher() {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex h-10 min-w-10 items-center justify-center rounded-md border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)] focus:outline-none focus:ring-2 focus:ring-primary/50"
+        className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)] focus:outline-none focus:ring-2 focus:ring-primary/50 md:min-h-8 md:min-w-8"
         aria-label="Switch Language"
       >
         <Globe className="h-4 w-4" />
@@ -76,7 +76,7 @@ export function LanguageSwitcher() {
                 type="button"
                 key={lang.code}
                 onClick={() => handleLanguageChange(lang.code)}
-                className={`flex min-h-10 w-full items-center justify-between px-4 py-2 text-left text-sm ${
+                className={`flex min-h-8 w-full items-center justify-between px-3.5 py-2 text-left !text-xs !font-semibold !leading-5 ${
                   i18n.language === lang.code
                     ? 'bg-gradient-to-r from-primary/10 to-secondary/10 text-primary'
                     : 'text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]'

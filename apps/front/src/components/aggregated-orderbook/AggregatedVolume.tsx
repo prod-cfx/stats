@@ -91,15 +91,15 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
   }, []);
 
   return (
-    <div className={`bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-2xl ${isCompact ? 'p-4 gap-4' : 'p-6 gap-6'} flex flex-col shadow-xl h-full min-h-0 relative`}>
+    <div className={`bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg ${isCompact ? 'p-3 gap-3' : 'p-4 gap-4'} flex flex-col shadow-sm h-full min-h-0 relative`}>
       {/* Card Header ... */}
       <div className="flex items-center justify-between">
-        <SubTitle className={isCompact ? '!text-sm' : ''}>{title}</SubTitle>
+        <SubTitle className={isCompact ? '!text-[13px] !leading-5' : ''}>{title}</SubTitle>
         <div className="relative" ref={dropdownRef}>
           <button 
             type="button"
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className={`flex items-center gap-2 bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg ${isCompact ? 'px-2 py-1 text-xs' : 'px-3 py-1.5 text-sm'} font-medium text-[color:var(--cf-muted)] hover:border-[color:var(--cf-muted)] transition-all hover:text-[color:var(--cf-text)]`}
+            className={`flex items-center gap-2 bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-md ${isCompact ? 'px-2 py-1' : 'px-3 py-1.5'} !text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)] hover:border-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text)]`}
           >
             <span>{symbol}</span>
             <ChevronDown className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'} transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
@@ -111,7 +111,7 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
-                className={`absolute top-full right-0 mt-2 ${isCompact ? 'w-24' : 'w-32'} bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-2xl z-50 overflow-hidden max-h-[300px] overflow-y-auto cf-scrollbar`}
+                className={`absolute top-full right-0 mt-2 ${isCompact ? 'w-24' : 'w-28'} bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-lg z-50 overflow-hidden max-h-[300px] overflow-y-auto cf-scrollbar`}
               >
                 {TOKENS.map((t) => (
                   <button
@@ -121,12 +121,12 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
                       onSymbolChange?.(t);
                       setIsDropdownOpen(false);
                     }}
-                    className={`w-full flex items-center justify-between ${isCompact ? 'px-3 py-2 text-xs' : 'px-4 py-2.5 text-sm'} transition-colors hover:bg-[color:var(--cf-surface-hover)] ${
-                      symbol === t ? 'text-[color:var(--cf-text-strong)] bg-[color:var(--cf-surface-2)] font-bold' : 'text-[color:var(--cf-muted)]'
+                    className={`w-full flex items-center justify-between ${isCompact ? 'px-3 py-2' : 'px-3 py-2'} !text-xs !leading-5 transition-colors hover:bg-[color:var(--cf-surface-hover)] ${
+                      symbol === t ? 'bg-gradient-to-r from-primary to-secondary text-white !font-semibold' : 'text-[color:var(--cf-muted)] !font-normal'
                     }`}
                   >
                     <span>{t}</span>
-                    {symbol === t && <Check className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} text-primary`} />}
+                    {symbol === t && <Check className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} text-white`} />}
                   </button>
                 ))}
               </motion.div>
@@ -145,7 +145,7 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
             onMouseLeave={() => setHoveredItem(null)}
           >
             {/* Name */}
-            <span className={`${isCompact ? 'w-16 text-xs' : 'w-24 text-sm'} font-medium transition-colors whitespace-nowrap overflow-hidden text-ellipsis ${
+            <span className={`${isCompact ? 'w-16' : 'w-24'} !text-xs !font-normal !leading-5 transition-colors whitespace-nowrap overflow-hidden text-ellipsis ${
               hoveredItem?.name === item.name ? 'text-[color:var(--cf-text-strong)] bg-[color:var(--cf-bg)] px-2 py-0.5 rounded border border-[color:var(--cf-border)]' : 'text-[color:var(--cf-muted)] group-hover:text-[color:var(--cf-text)]'
             }`}>
               {displayName(item.name)}
@@ -164,7 +164,7 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
             </div>
 
             {/* Amount */}
-            <span className={`${isCompact ? 'w-16 text-xs' : 'w-24 text-sm'} text-right font-bold text-[color:var(--cf-text)]`}>
+            <span className={`${isCompact ? 'w-16' : 'w-24'} text-right !text-xs !font-semibold !leading-5 text-[color:var(--cf-text)]`}>
               {item.amount}
             </span>
             
@@ -175,17 +175,17 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
                   initial={{ opacity: 0, scale: 0.9, y: -10 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.9, y: -10 }}
-                  className="absolute -top-16 z-[100] bg-[color:var(--cf-surface)]/95 border border-[color:var(--cf-border)] rounded-xl p-3 shadow-2xl backdrop-blur-md min-w-[200px] pointer-events-none -translate-x-1/4"
+                  className="absolute -top-16 z-[100] bg-[color:var(--cf-surface)]/95 border border-[color:var(--cf-border)] rounded-lg p-3 shadow-lg backdrop-blur-md min-w-[200px] pointer-events-none -translate-x-1/4"
                   style={{ left: `calc(${isCompact ? '64px' : '96px'} + ${item.percent / 2}%)` }}
                 >
                   <div className="flex flex-col gap-2">
-                    <div className="text-sm font-bold text-[color:var(--cf-text-strong)] border-b border-[color:var(--cf-border)]/60 pb-1.5">{displayName(item.name)}</div>
+                    <div className="!text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] border-b border-[color:var(--cf-border)]/60 pb-1.5">{displayName(item.name)}</div>
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-2">
                         <div className="w-2.5 h-2.5 rounded-full ring-2 ring-[color:var(--cf-border)]/50" style={{ backgroundColor: item.color }} />
-                        <span className="text-xs text-[color:var(--cf-muted)] font-medium">{t('aggregatedOrderbook.volume.contractTurnover')}</span>
+                        <span className="!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">{t('aggregatedOrderbook.volume.contractTurnover')}</span>
                       </div>
-                      <span className="text-sm font-mono font-bold text-[color:var(--cf-text-strong)] tracking-tight">{item.amount}</span>
+                      <span className="font-mono !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] tracking-normal">{item.amount}</span>
                     </div>
                   </div>
                   {/* Arrow */}
@@ -348,8 +348,8 @@ export const AggregatedVolume = ({ variant = 'default' }: { variant?: 'default' 
   }, [rightSymbol, fetchVolumeData, isCompact]);
 
   return (
-    <div className={`flex flex-col min-h-0 ${isCompact ? 'gap-2 pb-0 h-full' : 'gap-8 pb-12'}`}>
-      <div className={`grid grid-cols-1 min-h-0 ${isCompact ? 'h-full' : 'xl:grid-cols-2'} ${isCompact ? 'gap-0' : 'gap-8'} items-stretch`}>
+    <div className={`flex flex-col min-h-0 ${isCompact ? 'gap-2 pb-0 h-full' : 'gap-5 pb-8'}`}>
+      <div className={`grid grid-cols-1 min-h-0 ${isCompact ? 'h-full' : 'xl:grid-cols-2'} ${isCompact ? 'gap-0' : 'gap-5'} items-stretch`}>
         <VolumeComparisonCard 
           title={t('aggregatedOrderbook.volume.title', { symbol: leftSymbol })} 
           symbol={leftSymbol} 

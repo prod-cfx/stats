@@ -534,12 +534,12 @@ export const TopBar = ({
 
   return (
     <div
-      className={`${isCompact ? 'min-h-[48px] md:h-[48px]' : 'min-h-[72px] md:h-[61px]'} flex w-full items-center border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]`}
+      className={`${isCompact ? 'min-h-[48px] md:h-[48px]' : 'min-h-[68px] md:h-[56px]'} flex w-full items-center border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]`}
     >
       {/* Left Area: Removed Navigation */}
 
       {/* Center & Right Area: Full width now */}
-      <div className="relative flex h-full min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1 md:flex-nowrap md:gap-6 md:px-4 md:py-0">
+      <div className="relative flex h-full min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1 md:flex-nowrap md:gap-4 md:px-3 md:py-0">
         {wsConnectionStatus === 'error' && (
           <div className="order-3 ml-auto md:absolute md:top-0 md:right-0 md:order-none md:mt-2 md:mr-2">
             <div className="flex items-center gap-1 rounded bg-red-500/10 px-2 py-1 text-xs text-red-500">
@@ -565,13 +565,13 @@ export const TopBar = ({
             onClick={() => setIsSymbolMenuOpen(!isSymbolMenuOpen)}
           >
             <div
-              className={`${isCompact ? 'h-5 w-5 text-[9px]' : 'h-6 w-6 text-[10px]'} flex items-center justify-center rounded-full bg-orange-500 font-bold text-black`}
+              className={`${isCompact ? 'h-5 w-5 text-[9px]' : 'h-6 w-6 text-[10px]'} flex items-center justify-center rounded-full bg-gradient-to-br from-primary to-secondary !font-semibold text-white`}
             >
               ₿
             </div>
             <div className="flex min-w-0 items-center gap-1">
               <span
-                className={`max-w-[48vw] truncate font-bold whitespace-nowrap md:max-w-none ${isCompact ? 'text-sm' : 'text-base'}`}
+                className={`max-w-[48vw] truncate !font-semibold whitespace-nowrap md:max-w-none ${isCompact ? '!text-sm !leading-[22px]' : '!text-[15px] !leading-[22px]'}`}
               >
                 {t('trade.symbolWithType', {
                   symbol: selectedDisplaySymbol,
@@ -587,20 +587,20 @@ export const TopBar = ({
           {/* Symbol Selector Dropdown */}
           {isSymbolMenuOpen && (
             <div
-              className={`animate-in fade-in zoom-in-95 absolute top-full left-0 z-50 mt-2 flex w-[calc(100vw-1rem)] max-w-[480px] flex-col overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl duration-100 md:w-[480px]`}
+              className={`animate-in fade-in zoom-in-95 absolute top-full left-0 z-50 mt-2 flex w-[calc(100vw-1rem)] max-w-[480px] flex-col overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm duration-100 md:w-[480px]`}
             >
               {/* Header / Tabs */}
               <div className="flex items-center border-b border-[color:var(--cf-border)]">
                 <button
                   type="button"
-                  className={`flex-1 ${isCompact ? 'py-2 text-xs' : 'py-3 text-sm'} font-medium transition-colors ${marketType === 'futures' ? 'bg-[color:var(--cf-surface-2)] text-[color:var(--cf-text)]' : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text)]'}`}
+                  className={`flex-1 ${isCompact ? 'py-2' : 'py-2.5'} !text-xs !font-semibold !leading-5 transition-colors ${marketType === 'futures' ? 'bg-gradient-to-r from-primary to-secondary text-white' : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text)]'}`}
                   onClick={() => setMarketType('futures')}
                 >
                   {t('trade.market_type_futures')}
                 </button>
                 <button
                   type="button"
-                  className={`flex-1 ${isCompact ? 'py-2 text-xs' : 'py-3 text-sm'} font-medium transition-colors ${marketType === 'spot' ? 'bg-[color:var(--cf-surface-2)] text-[color:var(--cf-text)]' : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text)]'}`}
+                  className={`flex-1 ${isCompact ? 'py-2' : 'py-2.5'} !text-xs !font-semibold !leading-5 transition-colors ${marketType === 'spot' ? 'bg-gradient-to-r from-primary to-secondary text-white' : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text)]'}`}
                   onClick={() => setMarketType('spot')}
                 >
                   {t('trade.market_type_spot')}
@@ -611,21 +611,23 @@ export const TopBar = ({
               <div
                 className={`${isCompact ? 'p-2' : 'p-3'} border-b border-[color:var(--cf-border)]`}
               >
-                <div className="relative">
-                  <SearchIcon className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[color:var(--cf-muted)]" />
-                  <input
-                    type="text"
-                    placeholder={t('chart.modal.search')}
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    className={`w-full rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] ${isCompact ? 'py-1 text-xs' : 'py-1.5 text-sm'} pr-3 pl-9 text-[color:var(--cf-text)] placeholder-[color:var(--cf-muted)] focus:border-[#58a6ff] focus:outline-none`}
-                  />
+                <div className="focus-within:from-primary focus-within:to-secondary rounded-lg bg-[color:var(--cf-border)] p-[1px] transition-colors focus-within:bg-gradient-to-r">
+                  <div className="relative rounded-lg bg-[color:var(--cf-bg)]">
+                    <SearchIcon className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[color:var(--cf-muted)]" />
+                    <input
+                      type="text"
+                      placeholder={t('chart.modal.search')}
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      className={`w-full rounded-lg border-0 bg-transparent ${isCompact ? 'py-1' : 'py-1.5'} pr-3 pl-9 !text-xs !font-normal !leading-5 text-[color:var(--cf-text)] placeholder-[color:var(--cf-muted)] focus:outline-none`}
+                    />
+                  </div>
                 </div>
               </div>
 
               {/* List Header */}
               <div
-                className={`grid grid-cols-4 ${isCompact ? 'px-3 py-1.5' : 'px-4 py-2'} bg-[color:var(--cf-surface-2)] text-xs text-[color:var(--cf-muted)]`}
+                className={`grid grid-cols-4 ${isCompact ? 'px-3 py-1.5' : 'px-4 py-2'} bg-[color:var(--cf-surface-2)] !text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)]`}
               >
                 <div className="col-span-1 text-left">{t('trade.column_symbol')}</div>
                 <div className="col-span-1 text-right">{t('trade.column_price')}</div>
@@ -641,9 +643,9 @@ export const TopBar = ({
                     <button
                       key={`${marketType}-${item.chartSymbol}`}
                       type="button"
-                      className={`grid w-full grid-cols-4 text-left ${isCompact ? 'px-3 py-2' : 'px-4 py-2.5'} cursor-pointer border-b border-[color:var(--cf-border)]/50 text-xs transition-colors last:border-0 ${
+                      className={`grid w-full grid-cols-4 text-left ${isCompact ? 'px-3 py-2' : 'px-4 py-2.5'} cursor-pointer border-b border-[color:var(--cf-border)]/50 !text-xs !font-normal !leading-5 transition-colors last:border-0 ${
                         isSelected
-                          ? 'bg-[color:var(--cf-surface-2)]'
+                          ? 'bg-gradient-to-r from-primary to-secondary text-white'
                           : 'hover:bg-[color:var(--cf-surface-hover)]'
                       }`}
                       onClick={() => {
@@ -653,25 +655,25 @@ export const TopBar = ({
                     >
                       <div className="col-span-1 flex min-w-0 items-center gap-2 text-left">
                         <span
-                          className={`truncate font-bold ${isSelected ? 'text-[color:var(--cf-text-strong)]' : 'text-[color:var(--cf-text)]'}`}
+                          className={`truncate !font-semibold ${isSelected ? 'text-white' : 'text-[color:var(--cf-text)]'}`}
                         >
                           {item.displaySymbol}
                         </span>
                         {marketType === 'futures' && !isCompact && (
-                          <span className="ml-1 rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-1.5 py-0.5 text-[10px] whitespace-nowrap text-[color:var(--cf-muted)]">
+                          <span className={`ml-1 rounded border px-1.5 py-0.5 !text-[10px] !leading-4 whitespace-nowrap ${isSelected ? 'border-white/30 bg-white/10 text-white' : 'border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)]'}`}>
                             {t('trade.perpTag')}
                           </span>
                         )}
                       </div>
-                      <div className="col-span-1 text-right font-mono text-[color:var(--cf-text)]">
+                      <div className={`col-span-1 text-right font-mono ${isSelected ? 'text-white' : 'text-[color:var(--cf-text)]'}`}>
                         {priceFormatter.format(item.price)}
                       </div>
                       <div
-                        className={`col-span-1 text-right font-medium ${item.changePct >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}
+                        className={`col-span-1 text-right !font-semibold ${isSelected ? 'text-white' : item.changePct >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}
                       >
                         {formatPct(item.changePct)}
                       </div>
-                      <div className="col-span-1 text-right text-[color:var(--cf-text)]">
+                      <div className={`col-span-1 text-right ${isSelected ? 'text-white' : 'text-[color:var(--cf-text)]'}`}>
                         {compactFormatter.format(item.volume)}
                       </div>
                     </button>
@@ -687,7 +689,7 @@ export const TopBar = ({
             - 涨跌幅：displayChangePct（ticker 24h 涨跌幅优先；ticker 缺失时回退到 mock 百分比） */}
         <div className="flex min-w-0 flex-col">
           <span
-            className={`${isCompact ? 'text-base' : 'text-lg'} leading-tight font-semibold text-[#ef4444]`}
+            className={`${isCompact ? '!text-base !leading-6' : '!text-base !leading-6'} !font-semibold text-[#ef4444]`}
           >
             {priceFormatter.format(displayLastPrice)}
           </span>
@@ -703,7 +705,7 @@ export const TopBar = ({
 
         {/* Market Stats - Flexible list with reduced gap for small screens */}
         <div
-          className={`no-scrollbar order-4 flex w-full min-w-0 flex-none items-center gap-3 overflow-x-auto md:order-none md:w-auto md:flex-1 md:gap-6 ${isCompact ? 'text-[10px]' : 'text-[11px]'}`}
+          className={`no-scrollbar order-4 flex w-full min-w-0 flex-none items-center gap-3 overflow-x-auto md:order-none md:w-auto md:flex-1 md:gap-4 ${isCompact ? '!text-[10px] !leading-4' : '!text-xs !leading-5'}`}
         >
           <div className="flex min-w-fit flex-col">
             <span className="whitespace-nowrap text-[color:var(--cf-muted)]">

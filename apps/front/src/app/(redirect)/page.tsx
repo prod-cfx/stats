@@ -1,6 +1,6 @@
 import { RootRedirectClient } from './RootRedirectClient'
 
-function getPreferredLng() {
+function getPreferredLng(): 'en' {
   return 'en'
 }
 

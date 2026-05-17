@@ -28,9 +28,9 @@ export default async function PredictionMarketPage({
   return (
     <div className="flex min-h-screen flex-col bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
       <Navbar />
-      <main className="no-scrollbar flex-1 overflow-y-auto p-4 md:p-8">
-        <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6 md:gap-10">
-          <div className="flex flex-col gap-3">
+      <main className="no-scrollbar flex-1 overflow-y-auto p-4 md:px-6 md:py-5">
+        <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-5 md:gap-6">
+          <div className="flex flex-col gap-1.5">
             <PageTitle>{t('predictionMarket.title')}</PageTitle>
             <BodyText>{t('predictionMarket.subtitle')}</BodyText>
           </div>

@@ -127,10 +127,10 @@ export const PredictionMarketGrid = () => {
   }
 
   return (
-    <div className="space-y-4 md:space-y-8">
+    <div className="space-y-4">
       <div className="relative min-h-[400px]">
         <LoadingState isLoading={loading} error={error} onRetry={reload}>
-          <div className="animate-in fade-in grid grid-cols-1 gap-4 pb-12 duration-500 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="animate-in fade-in grid grid-cols-1 gap-3 pb-8 duration-300 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {predictions?.map(prediction => (
               <div
                 key={prediction.id}
@@ -152,22 +152,22 @@ export const PredictionMarketGrid = () => {
         width="max-w-xl"
         loading={modalLoading}
       >
-        <div className="min-w-0 space-y-6">
-          <div className="flex min-w-0 items-start gap-4 border-b border-[color:var(--cf-border)] pb-4">
+        <div className="min-w-0 space-y-4">
+          <div className="flex min-w-0 items-start gap-3 border-b border-[color:var(--cf-border)] pb-4">
             <div
-              className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl ${selectedPrediction?.iconBgColor || 'bg-[#374151]'}`}
+              className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${selectedPrediction?.iconBgColor || 'bg-[#374151]'}`}
             >
               {selectedPrediction?.icon}
             </div>
             <div className="min-w-0">
-              <h3 className="break-words text-lg leading-tight font-bold text-[color:var(--cf-text-strong)] md:text-xl">
+              <h3 className="break-words !text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                 {selectedPrediction?.title}
               </h3>
               <div className="mt-2 flex flex-wrap gap-3">
-                <span className="text-xs text-[color:var(--cf-muted)]">
+                <span className="!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
                   {t('predictionMarket.modal.volume')}: {selectedPrediction?.volume ?? '-'}
                 </span>
-                <span className="text-xs font-bold text-[#f87171]">
+                <span className="!text-xs !font-semibold !leading-5 text-[#f87171]">
                   ●{' '}
                   {t(
                     `predictionMarket.status.${(selectedPrediction?.status || 'LIVE').toLowerCase()}`,
@@ -181,29 +181,29 @@ export const PredictionMarketGrid = () => {
           {/* Outcomes (read-only) */}
           {(selectedPrediction?.options?.length || selectedPrediction?.probability) && (
             <div className="space-y-3">
-              <p className="text-sm font-bold tracking-wider text-[color:var(--cf-muted)] uppercase">
+              <p className="!text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)] uppercase">
                 {t('predictionMarket.modal.outcomes')}
               </p>
               {selectedPrediction?.options?.length ? (
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {selectedPrediction.options.map((opt, idx) => (
                     <div
                       key={`${opt.label}-${idx}`}
-                      className="flex w-full min-w-0 items-center justify-between gap-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4"
+                      className="flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2.5"
                     >
-                      <span className="min-w-0 break-words font-bold text-[color:var(--cf-text-strong)]">
+                      <span className="min-w-0 break-words !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                         {opt.label}
                       </span>
-                      <span className="text-primary flex-none font-bold">{opt.probability}</span>
+                      <span className="text-primary flex-none !text-sm !font-semibold !leading-[22px]">{opt.probability}</span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] py-8 text-center">
-                  <p className="mb-1 text-3xl font-bold text-[color:var(--cf-text-strong)]">
+                <div className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] py-6 text-center">
+                  <p className="mb-1 !text-base !font-semibold !leading-6 text-[color:var(--cf-text-strong)]">
                     {selectedPrediction?.probability}
                   </p>
-                  <p className="text-xs tracking-widest text-[color:var(--cf-muted)] uppercase">
+                  <p className="!text-xs !font-semibold !leading-5 tracking-normal text-[color:var(--cf-muted)] uppercase">
                     {t('predictionMarket.modal.probability')}
                   </p>
                 </div>
@@ -212,11 +212,11 @@ export const PredictionMarketGrid = () => {
           )}
 
           {/* Rules */}
-          <div className="space-y-4 pt-2">
-            <h4 className="text-lg font-bold text-[color:var(--cf-text-strong)]">
+          <div className="space-y-3 pt-1">
+            <h4 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
               {t('predictionMarket.modal.rules')}
             </h4>
-            <div className="min-w-0 px-1 text-sm leading-relaxed break-words text-[color:var(--cf-text)]">
+            <div className="min-w-0 px-1 !text-sm !font-normal !leading-[22px] break-words text-[color:var(--cf-text)]">
               {(selectedPrediction?.rules?.paragraphs || []).map((p, idx) => (
                 <React.Fragment key={idx}>
                   <p>{formatRuleText(p)}</p>
@@ -228,8 +228,8 @@ export const PredictionMarketGrid = () => {
             </div>
 
             {selectedPrediction?.rules?.createdAt && (
-              <div className="border-t border-[color:var(--cf-border)] pt-6 text-xs text-[color:var(--cf-muted)]">
-                <span className="font-bold">
+              <div className="border-t border-[color:var(--cf-border)] pt-4 !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
+                <span className="!font-semibold">
                   {t('predictionMarket.modal.createdAt', {
                     date: formatDateTimeFull(selectedPrediction.rules.createdAt),
                   })}

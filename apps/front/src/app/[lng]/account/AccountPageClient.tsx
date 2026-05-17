@@ -1,6 +1,6 @@
 'use client'
 
-import { Copy, LogOut } from 'lucide-react'
+import { Copy, LogOut, Mail, Send } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -18,8 +18,15 @@ function maskEmail(email: string) {
 }
 
 function shortenUserId(userId: string) {
-  if (userId.length <= 12) return userId
-  return `${userId.slice(0, 6)}...${userId.slice(-4)}`
+  if (userId.length <= 14) return userId
+  return `${userId.slice(0, 5)}...${userId.slice(-6)}`
+}
+
+function getAccountInitials(label: string) {
+  const normalized = label.trim()
+  if (!normalized) return '?'
+  if (normalized.startsWith('@')) return normalized.slice(1, 3).toUpperCase()
+  return normalized.slice(0, 2).toUpperCase()
 }
 
 type AccountTab = 'settings' | 'ai-quant'
@@ -32,7 +39,7 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { t } = useTranslation()
-  const { success } = useToast()
+  const { error, success } = useToast()
   const { session, isLoading, sendEmailCode, bindEmail, logout } = useAuth()
   const [bindEmailValue, setBindEmailValue] = useState('')
   const [bindEmailCode, setBindEmailCode] = useState('')
@@ -57,7 +64,8 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
   }
 
   const accountName = session.email ? maskEmail(session.email) : session.telegram?.username ? `@${session.telegram.username}` : shortenUserId(session.userId)
-  const accountAvatarSrc = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(session.userId)}`
+  const accountInitials = getAccountInitials(accountName)
+  const accountIdLabel = `id:${shortenUserId(session.userId)}`
 
   const onBindEmail = async () => {
     if (!bindEmailValue || bindEmailCode.length !== 6) return
@@ -67,6 +75,8 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
       success(t('account.emailBound'))
       setBindEmailValue('')
       setBindEmailCode('')
+    } catch (err) {
+      error(err instanceof Error && err.message.trim() ? err.message : t('account.bindEmailFailed'))
     } finally {
       setBusy(false)
     }
@@ -78,6 +88,8 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
     try {
       await sendEmailCode(bindEmailValue)
       success(t('account.codeSent'))
+    } catch (err) {
+      error(err instanceof Error && err.message.trim() ? err.message : t('account.sendCodeFailed'))
     } finally {
       setBusy(false)
     }
@@ -95,12 +107,12 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
     : 'text-amber-500'
 
   return (
-    <main className="mx-auto flex w-full max-w-[1224px] flex-1 flex-col gap-8 px-4 py-8 md:px-8">
-      <div className="mx-auto flex w-full max-w-[960px] gap-8 overflow-x-auto border-b border-[color:var(--cf-border)]">
+    <main className="mx-auto flex w-full max-w-[1224px] flex-1 flex-col gap-6 px-4 py-6 md:px-8">
+      <div className="mx-auto flex w-full max-w-[960px] gap-6 overflow-x-auto border-b border-[color:var(--cf-border)]">
         <button
           type="button"
           onClick={() => router.replace(`/${lng}/account?tab=settings`)}
-          className={`shrink-0 border-b-2 px-0 pb-3 text-sm font-semibold transition ${
+          className={`shrink-0 border-b-2 px-0 pb-2.5 text-[13px] font-semibold transition ${
             currentTab === 'settings'
               ? 'border-[color:var(--cf-text-strong)] text-[color:var(--cf-text-strong)]'
               : 'border-transparent text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
@@ -111,7 +123,7 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
         <button
           type="button"
           onClick={() => router.replace(`/${lng}/account?tab=ai-quant`)}
-          className={`shrink-0 border-b-2 px-0 pb-3 text-sm font-semibold transition ${
+          className={`shrink-0 border-b-2 px-0 pb-2.5 text-[13px] font-semibold transition ${
             currentTab === 'ai-quant'
               ? 'border-[color:var(--cf-text-strong)] text-[color:var(--cf-text-strong)]'
               : 'border-transparent text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
@@ -122,24 +134,25 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
       </div>
 
       {currentTab === 'settings' && (
-        <div className="mx-auto flex w-full max-w-[920px] flex-col gap-8">
-          <section className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex min-w-0 items-center gap-6">
-              <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-2">
-                <img
-                  src={accountAvatarSrc}
-                  alt=""
-                  className="h-full w-full object-contain"
-                />
+        <div className="mx-auto flex w-full max-w-[920px] flex-col gap-6">
+          <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex min-w-0 items-center gap-4">
+              <div
+                aria-hidden="true"
+                data-testid="account-local-avatar"
+                className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-base font-semibold text-[color:var(--cf-text-strong)]"
+              >
+                {accountInitials}
               </div>
               <div className="min-w-0">
-                <h1 className="truncate text-2xl font-bold text-[color:var(--cf-text-strong)]">
+                <h1 className="truncate text-lg font-bold text-[color:var(--cf-text-strong)]">
                   {accountName}
                 </h1>
-                <div className="mt-2 flex items-center gap-2 text-sm text-[color:var(--cf-muted)]">
-                  <span className="break-all font-mono">{session.userId}</span>
+                <div className="mt-1.5 flex items-center gap-2 text-xs text-[color:var(--cf-muted)]">
+                  <span className="break-all font-mono">{accountIdLabel}</span>
                   <button
                     type="button"
+                    aria-label={t('common.copy')}
                     onClick={() => {
                       navigator.clipboard.writeText(session.userId)
                       success(t('account.userIdCopied'))
@@ -158,7 +171,7 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
                 logout()
                 router.replace(`/${lng}/auth/login`)
               }}
-              className="inline-flex w-fit self-end items-center gap-2 rounded-full border border-[color:var(--cf-border)] px-5 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-500 md:self-auto"
+              className="inline-flex w-fit self-end items-center gap-2 rounded-full border border-[color:var(--cf-border)] px-4 py-2 text-xs font-semibold text-[color:var(--cf-text-strong)] transition hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-500 md:self-auto"
             >
               <LogOut className="h-4 w-4" />
               {t('account.logout')}
@@ -166,35 +179,22 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('account.accountInfo')}</h2>
+            <h2 className="text-[15px] font-semibold text-[color:var(--cf-text-strong)]">{t('account.accountInfo')}</h2>
             <div className="overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]">
-              <div className="flex flex-col gap-4 border-b border-[color:var(--cf-border)] px-6 py-5 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-[color:var(--cf-text-strong)]">{t('account.userId')}</p>
-                  <p className="mt-1 break-all font-mono text-sm text-[color:var(--cf-muted)]">{session.userId}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(session.userId)
-                    success(t('account.userIdCopied'))
-                  }}
-                  className="inline-flex w-fit self-end items-center gap-2 rounded-full bg-[color:var(--cf-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)] md:self-auto"
-                >
-                  <Copy className="h-4 w-4" />
-                  {t('common.copy')}
-                </button>
-              </div>
-
-              <div className="flex flex-col gap-4 border-b border-[color:var(--cf-border)] px-6 py-5 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-[color:var(--cf-text-strong)]">{t('account.loginMethods')}</p>
-                  <p className="mt-1 text-sm text-[color:var(--cf-muted)]">
-                    {session.email ? maskEmail(session.email) : t('account.notBound')}
-                  </p>
+              <div className="flex min-h-[72px] flex-col gap-3 border-b border-[color:var(--cf-border)] px-5 py-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)]">
+                    <Mail className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-[color:var(--cf-text-strong)]">{t('account.loginMethods')}</p>
+                    <p className="mt-1 text-[13px] text-[color:var(--cf-muted)]">
+                      {session.email ? maskEmail(session.email) : t('account.notBound')}
+                    </p>
+                  </div>
                 </div>
                 {loginMethods.has('email') ? (
-                  <span className="inline-flex w-fit self-end rounded-full bg-[color:var(--cf-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] md:self-auto">
+                  <span className="inline-flex w-fit self-end rounded-full bg-[color:var(--cf-bg)] px-3.5 py-1.5 text-xs font-semibold text-[color:var(--cf-text-strong)] md:self-auto">
                     {t('account.mainAccount')}
                   </span>
                 ) : (
@@ -203,19 +203,19 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
                       value={bindEmailValue}
                       onChange={event => setBindEmailValue(event.target.value)}
                       placeholder={t('account.inputEmail')}
-                      className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-sm text-[color:var(--cf-text)] outline-none transition focus:border-violet-500 sm:w-[180px]"
+                      className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-xs text-[color:var(--cf-text)] outline-none transition focus:border-violet-500 sm:w-[180px]"
                     />
                     <input
                       value={bindEmailCode}
                       onChange={event => setBindEmailCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
                       placeholder={t('account.inputCode')}
-                      className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-sm text-[color:var(--cf-text)] outline-none transition focus:border-violet-500 sm:w-[110px]"
+                      className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-xs text-[color:var(--cf-text)] outline-none transition focus:border-violet-500 sm:w-[110px]"
                     />
                     <button
                       type="button"
                       onClick={onSendBindEmailCode}
                       disabled={busy || !bindEmailValue}
-                      className="rounded-full bg-[color:var(--cf-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)] disabled:opacity-50"
+                      className="rounded-full bg-[color:var(--cf-bg)] px-4 py-2 text-xs font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)] disabled:opacity-50"
                     >
                       {t('account.sendCode')}
                     </button>
@@ -223,7 +223,7 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
                       type="button"
                       onClick={onBindEmail}
                       disabled={busy || !bindEmailValue || bindEmailCode.length !== 6}
-                      className="rounded-full bg-[color:var(--cf-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)] disabled:opacity-50"
+                      className="rounded-full bg-[color:var(--cf-bg)] px-4 py-2 text-xs font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)] disabled:opacity-50"
                     >
                       {t('account.bindEmail')}
                     </button>
@@ -231,12 +231,17 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
                 )}
               </div>
 
-              <div className="flex flex-col gap-4 px-6 py-5 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-[color:var(--cf-text-strong)]">{t('account.telegramLogin')}</p>
-                  <p className={`mt-1 text-sm ${telegramStatusClassName}`}>
-                    {telegramStatusText}
-                  </p>
+              <div className="flex min-h-[72px] flex-col gap-3 px-5 py-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-sky-500">
+                    <Send className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-[color:var(--cf-text-strong)]">{t('account.telegramLogin')}</p>
+                    <p className={`mt-1 text-[13px] ${telegramStatusClassName}`}>
+                      {telegramStatusText}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex w-full justify-end md:w-auto">
                   <TelegramLoginButtons
@@ -252,8 +257,8 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
 
           <section className="space-y-4">
             <div>
-              <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.apiConfigTitle')}</h2>
-              <p className="mt-2 text-sm text-[color:var(--cf-muted)]">{t('aiQuant.apiConfigDesc')}</p>
+              <h2 className="text-[15px] font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.apiConfigTitle')}</h2>
+              <p className="mt-1.5 text-[13px] text-[color:var(--cf-muted)] opacity-80">{t('aiQuant.apiConfigDesc')}</p>
             </div>
             <ExchangeApiSection />
           </section>

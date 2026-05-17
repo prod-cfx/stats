@@ -16,22 +16,22 @@ export function RulesTab({ rules, loading, onToggle, onDelete }: RulesTabProps) 
   const { t } = useTranslation()
 
   if (loading) {
-    return <div className="py-10 text-center text-sm text-[color:var(--cf-muted)]">{t('common.loading')}</div>
+    return <div className="py-8 text-center !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">{t('common.loading')}</div>
   }
 
   if (!rules.length) {
     return (
-      <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-8 text-center text-sm text-[color:var(--cf-muted)]">
+      <div className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-6 text-center !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
         {t('whaleTracking.notifications.emptyRules')}
       </div>
     )
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]">
+    <div className="overflow-x-auto rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm">
       <table className="w-full min-w-[760px] border-collapse">
         <thead>
-          <tr className="border-b border-[color:var(--cf-border)] text-xs uppercase tracking-wider text-[color:var(--cf-muted)]">
+          <tr className="border-b border-[color:var(--cf-border)] !text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)]">
             <th className="px-4 py-3 text-left">{t('whaleTracking.notifications.table.type')}</th>
             <th className="px-4 py-3 text-left">{t('whaleTracking.notifications.table.target')}</th>
             <th className="px-4 py-3 text-left">{t('whaleTracking.notifications.table.threshold')}</th>
@@ -43,23 +43,23 @@ export function RulesTab({ rules, loading, onToggle, onDelete }: RulesTabProps) 
         <tbody className="divide-y divide-[color:var(--cf-border)]">
           {rules.map(rule => (
             <tr key={rule.id}>
-              <td className="px-4 py-4 text-sm text-[color:var(--cf-text-strong)]">
+              <td className="px-4 py-3 !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                 {rule.type === 'ADDRESS'
                   ? t('whaleTracking.notifications.ruleType.address')
                   : t('whaleTracking.notifications.ruleType.symbol')}
               </td>
-              <td className="px-4 py-4 text-sm text-[color:var(--cf-text-strong)]">
+              <td className="px-4 py-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text-strong)]">
                 {rule.type === 'ADDRESS' ? rule.address : rule.symbol}
               </td>
-              <td className="px-4 py-4 text-sm text-[color:var(--cf-text)]">${rule.thresholdUsd.toLocaleString('en-US')}</td>
-              <td className="px-4 py-4 text-sm text-[color:var(--cf-text)]">
+              <td className="px-4 py-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">${rule.thresholdUsd.toLocaleString('en-US')}</td>
+              <td className="px-4 py-3 !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
                 {[rule.channels.web ? t('whaleTracking.notifications.channels.web') : null,
                   rule.channels.email ? t('whaleTracking.notifications.channels.email') : null,
                   rule.channels.telegram ? t('whaleTracking.notifications.channels.telegram') : null]
                   .filter(Boolean)
                   .join(' / ') || '-'}
               </td>
-              <td className="px-4 py-4 text-sm">
+              <td className="px-4 py-3 !text-sm !font-normal !leading-[22px]">
                 <label className="inline-flex cursor-pointer items-center gap-2">
                   <input
                     type="checkbox"
@@ -71,11 +71,11 @@ export function RulesTab({ rules, loading, onToggle, onDelete }: RulesTabProps) 
                   </span>
                 </label>
               </td>
-              <td className="px-4 py-4 text-right">
+              <td className="px-4 py-3 text-right">
                 <button
                   type="button"
                   onClick={() => onDelete(rule.id)}
-                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-red-400 transition-colors hover:bg-red-500/10"
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 !text-xs !font-semibold !leading-5 text-red-400 transition-colors hover:bg-red-500/10"
                 >
                   <Trash2 className="h-4 w-4" />
                   {t('whaleTracking.notifications.actions.delete')}

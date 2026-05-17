@@ -8,7 +8,6 @@ import type { LiquidationMapChartHandle } from '@/components/liquidation-map/Liq
 import type { ChartAdapter } from '@/components/trading/chart-adapter/chart-adapter'
 import dynamic from 'next/dynamic'
 import {
-  forwardRef,
   useCallback,
   useEffect,
   useId,
@@ -1151,6 +1150,15 @@ function setButtonActive(btn: HTMLElement | null, active: boolean) {
   else btn.classList.remove('is-active')
 }
 
+function applyHeaderButtonStyle(btn: HTMLElement | null) {
+  if (!btn) return
+  btn.style.fontSize = '12px'
+  btn.style.fontWeight = '600'
+  btn.style.lineHeight = '20px'
+  btn.style.letterSpacing = '0'
+  btn.style.borderRadius = '6px'
+}
+
 function createBodyDropdown(
   anchor: HTMLElement,
   items: Array<{ label: string; onClick: () => void }>,
@@ -1162,10 +1170,10 @@ function createBodyDropdown(
   menu.style.minWidth = '120px'
   menu.style.padding = '4px'
   menu.style.borderRadius = '8px'
-  menu.style.border = '1px solid #2e2e2e'
-  menu.style.background = '#141414' // 深色背景，接近截图
-  menu.style.color = '#e5e5e5'
-  menu.style.boxShadow = '0 6px 16px rgba(0,0,0,0.5)'
+  menu.style.border = '1px solid rgba(148, 163, 184, 0.2)'
+  menu.style.background = '#151a22'
+  menu.style.color = '#d7dde8'
+  menu.style.boxShadow = '0 8px 20px rgba(0,0,0,0.28)'
   menu.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
 
   const rect = anchor.getBoundingClientRect()
@@ -1175,15 +1183,17 @@ function createBodyDropdown(
   items.forEach(it => {
     const row = doc.createElement('div')
     row.textContent = it.label
-    row.style.padding = '8px 12px'
-    row.style.fontSize = '13px'
-    row.style.lineHeight = '1.4'
+    row.style.padding = '8px 10px'
+    row.style.fontSize = '12px'
+    row.style.fontWeight = '600'
+    row.style.lineHeight = '20px'
+    row.style.letterSpacing = '0'
     row.style.cursor = 'pointer'
-    row.style.borderRadius = '4px'
+    row.style.borderRadius = '6px'
     row.style.transition = 'background 0.1s ease'
 
     row.addEventListener('mouseenter', () => {
-      row.style.background = '#2a2a2a'
+      row.style.background = 'rgba(57, 107, 255, 0.12)'
     })
     row.addEventListener('mouseleave', () => {
       row.style.background = 'transparent'
@@ -1285,9 +1295,27 @@ function tryExecuteActionInsertIndicator(widget: any) {
   }
 }
 
+type TradingViewChartComponentProps = TradingViewChartProps & {
+  ref?: Ref<TradingViewChartRef>
+}
+
 export const TradingViewChart = (
-    { ref, symbol = 'BTCUSDT', interval = '60', theme = 'Light', isAggregated = true, selectedExchange = 'binance', onSelectExchange, onToggleAggregate, onOpenIndicator, onOpenDataIndicator, onIntervalChanged, onRemoveIndicator, activeIndicators = EMPTY_ACTIVE_INDICATORS },
-  ) => {
+  {
+    ref,
+    symbol = 'BTCUSDT',
+    interval = '60',
+    theme = 'Light',
+    isAggregated = true,
+    selectedExchange = 'binance',
+    onSelectExchange,
+    onToggleAggregate,
+    onOpenIndicator,
+    onOpenDataIndicator,
+    onIntervalChanged,
+    onRemoveIndicator,
+    activeIndicators = EMPTY_ACTIVE_INDICATORS,
+  }: TradingViewChartComponentProps,
+) => {
     const { t, i18n } = useTranslation()
     const widgetRef = useRef<TradingViewWidget | null>(null)
     const [isReady, setIsReady] = useState(false)
@@ -1897,7 +1925,7 @@ export const TradingViewChart = (
           // 同时设置 container_id + container：
           // - 当前打包的 charting_library.js 实测读取的是 options.container（字符串 ID）
           // - 若未来版本要求 DOM 元素，则退化为 containerEl 初始化
-          const widgetOptions = {
+          const widgetOptions: TradingViewWidgetConfig = {
             container_id: containerId,
             // Use string ID instead of DOM element - required for custom_indicators_getter to work
             container: containerId,
@@ -1960,10 +1988,11 @@ export const TradingViewChart = (
 
             try {
               // eslint-disable-next-line new-cap -- TradingView Charting Library API is `new TradingView.widget(...)`
-              widget = new TradingView.widget({
+              const fallbackWidgetOptions: TradingViewWidgetConfig = {
                 ...widgetOptions,
                 container: containerEl,
-              }) as TradingViewWidget
+              }
+              widget = new TradingView.widget(fallbackWidgetOptions) as TradingViewWidget
             } catch (fallbackError) {
               console.error('[TradingView] Widget init failed (primary + fallback):', {
                 primary: error,
@@ -2071,13 +2100,16 @@ export const TradingViewChart = (
               aggBtn.classList.add('tv-custom-btn')
               aggBtn.style.display = 'flex'
               aggBtn.style.alignItems = 'center'
-              aggBtn.style.gap = '8px'
-              aggBtn.style.padding = '0 10px'
+              aggBtn.style.gap = '6px'
+              aggBtn.style.padding = '0 8px'
+              applyHeaderButtonStyle(aggBtn)
 
               const aggLabel = document.createElement('span')
               aggLabel.textContent = t('chart.toolbar.aggregate')
               aggLabel.style.fontSize = '12px'
-              aggLabel.style.fontWeight = '700'
+              aggLabel.style.fontWeight = '600'
+              aggLabel.style.lineHeight = '20px'
+              aggLabel.style.letterSpacing = '0'
               aggLabel.style.cursor = 'pointer'
 
               const aggSwitch = document.createElement('span')
@@ -2111,6 +2143,7 @@ export const TradingViewChart = (
               // 精选指标（打开你们原来的弹窗）
               const indicatorBtn = widget.createButton({ align: 'left' })
               indicatorBtn.classList.add('tv-custom-btn')
+              applyHeaderButtonStyle(indicatorBtn)
               const indicatorLabel = t('chart.toolbar.featuredIndicators')
               indicatorBtn.textContent = indicatorLabel
               indicatorBtn.onclick = onIndicatorBtnClick
@@ -3529,3 +3562,5 @@ export const TradingViewChart = (
       </div>
     )
   }
+
+TradingViewChart.displayName = 'TradingViewChart'

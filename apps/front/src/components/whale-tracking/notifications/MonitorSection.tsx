@@ -37,24 +37,24 @@ export function MonitorSection({
   }
 
   return (
-    <section className="space-y-3 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 md:p-5">
+    <section className="space-y-3 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-lg font-bold text-[color:var(--cf-text-strong)]">{title} ({rules.length})</h3>
+        <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{title} ({rules.length})</h3>
         <button
           type="button"
           onClick={onCreate}
-          className="from-primary to-secondary rounded-full bg-gradient-to-r px-4 py-1.5 text-xs font-bold text-white transition-opacity hover:opacity-90"
+          className="from-primary to-secondary rounded-full bg-gradient-to-r px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-white transition-opacity hover:opacity-90"
         >
           {t('whaleTracking.notifications.actions.createMonitor')}
         </button>
       </div>
 
       {loading && (
-        <div className="py-6 text-center text-sm text-[color:var(--cf-muted)]">{t('common.loading')}</div>
+        <div className="py-5 text-center !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">{t('common.loading')}</div>
       )}
 
       {!loading && !rules.length && (
-        <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-6 text-center text-sm text-[color:var(--cf-muted)]">
+        <div className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-5 text-center !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
           {emptyText}
         </div>
       )}
@@ -71,10 +71,10 @@ export function MonitorSection({
           return (
             <div
               key={rule.id}
-              className="grid grid-cols-1 gap-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3 md:grid-cols-[1.4fr_1fr_1.2fr_auto] md:items-center"
+              className="grid grid-cols-1 gap-3 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3 md:grid-cols-[1.4fr_1fr_1.2fr_auto] md:items-center"
             >
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <span className="font-mono text-sm text-[color:var(--cf-text-strong)]">
+                <span className="font-mono !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                   {rule.type === 'ADDRESS' ? `${target.slice(0, 8)}...${target.slice(-4)}` : target}
                 </span>
                 <button
@@ -84,14 +84,14 @@ export function MonitorSection({
                 >
                   <Copy className="h-3.5 w-3.5" />
                 </button>
-                {rule.note && <span className="min-w-0 break-words text-xs text-[color:var(--cf-muted)]">{rule.note}</span>}
+                {rule.note && <span className="min-w-0 break-words !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">{rule.note}</span>}
               </div>
 
-              <div className="text-sm text-[color:var(--cf-text)]">
+              <div className="!text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">
                 {t('whaleTracking.notifications.table.threshold')}: ${rule.thresholdUsd.toLocaleString('en-US')}
               </div>
 
-              <div className="text-sm text-[color:var(--cf-muted)]">{channelText}</div>
+              <div className="!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">{channelText}</div>
 
               <div className="flex flex-wrap items-center justify-start gap-2 md:justify-end">
                 <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs">

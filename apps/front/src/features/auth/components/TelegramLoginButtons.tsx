@@ -83,9 +83,9 @@ export function TelegramLoginButtons({
     onAvailabilityChange?.({ webAvailable, desktopAvailable })
   }, [desktopAvailable, onAvailabilityChange, webAvailable])
 
-  const buttonClassName = 'flex h-11 items-center justify-center gap-2 rounded-full border border-violet-500/30 bg-transparent px-4 text-sm font-semibold text-black transition hover:bg-violet-500/5 disabled:opacity-50 dark:text-white'
-  const compactAvailableButtonClassName = 'inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-violet-500/30 bg-transparent px-3.5 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-violet-500/5 disabled:opacity-50'
-  const compactUnavailableButtonClassName = 'inline-flex h-9 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3.5 text-sm font-semibold text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-surface-hover)] disabled:opacity-50'
+  const buttonClassName = 'flex h-10 items-center justify-center gap-2 rounded-full border border-violet-500/30 bg-transparent px-4 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-violet-500/5 disabled:opacity-50'
+  const compactAvailableButtonClassName = 'inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-violet-500/30 bg-transparent px-3 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-violet-500/5 disabled:opacity-50'
+  const compactUnavailableButtonClassName = 'inline-flex h-8 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-surface-hover)] disabled:opacity-50'
   const showBotDomainHint = Boolean(statusMessage && /bot domain invalid/i.test(statusMessage))
   const loginBetaCode = intent === 'login' ? betaCode?.trim() : undefined
   const webButtonClassName = variant === 'compact' ? compactUnavailableButtonClassName : buttonClassName
@@ -165,19 +165,19 @@ export function TelegramLoginButtons({
       </div>
 
       {showWebAppEntry && (
-        <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-3 text-center text-sm font-semibold text-[color:var(--cf-text-strong)]">
+        <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-3 text-center !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
           {t('auth.telegramWebAppDesc')}
         </div>
       )}
 
       {statusMessage && (
-        <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-3 text-center text-sm text-[color:var(--cf-text)]">
+        <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-3 text-center !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">
           {statusMessage}
         </div>
       )}
 
       {showBotDomainHint && (
-        <p className="text-center text-xs text-[color:var(--cf-muted)]">
+        <p className="text-center !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
           {t('auth.botDomainInvalid')}
         </p>
       )}

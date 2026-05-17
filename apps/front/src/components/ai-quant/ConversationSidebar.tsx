@@ -84,7 +84,7 @@ function ConversationListItem({
     <div
       data-testid={`conversation-item-${item.id}`}
       data-active-conversation={active ? 'true' : undefined}
-      className={`w-full rounded-xl border px-3 py-2 text-left transition ${
+      className={`w-full rounded-2xl border px-3 py-2 text-left transition ${
         mobileDrawer
           ? active
             ? 'border-violet-400 bg-violet-500/10 shadow-sm shadow-violet-500/10'
@@ -111,17 +111,17 @@ function ConversationListItem({
               onCancelRename()
             }
           }}
-          className="h-8 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)]"
+          className="h-8 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]"
         />
       ) : (
         <button
           type="button"
           data-testid={`conversation-switch-${item.id}`}
           onClick={() => onSwitch(item.id)}
-          className="block w-full min-w-0 rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-primary/40"
+          className="block w-full min-w-0 rounded-lg text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
           <span className="flex w-full min-w-0 items-start justify-between gap-2">
-            <span className={`min-w-0 truncate text-left text-sm font-semibold ${mobileDrawer ? 'text-[color:var(--cf-text-strong)]' : 'text-[color:var(--cf-text-strong)]'}`}>
+            <span className={`min-w-0 truncate text-left !text-sm !font-semibold !leading-[22px] ${mobileDrawer ? 'text-[color:var(--cf-text-strong)]' : 'text-[color:var(--cf-text-strong)]'}`}>
               {item.title}
             </span>
             {active && (
@@ -134,7 +134,7 @@ function ConversationListItem({
               </span>
             )}
           </span>
-          <span className={`mt-1 block text-xs ${mobileDrawer ? 'text-[color:var(--cf-muted)]' : 'text-[color:var(--cf-muted)]'}`}>{t('aiQuant.updatedAt')} {formatTime(item.updatedAt)}</span>
+          <span className={`mt-1 block !text-xs !font-normal !leading-5 ${mobileDrawer ? 'text-[color:var(--cf-muted)]' : 'text-[color:var(--cf-muted)]'}`}>{t('aiQuant.updatedAt')} {formatTime(item.updatedAt)}</span>
         </button>
       )}
       <div className="mt-2 flex items-center gap-2">
@@ -144,7 +144,7 @@ function ConversationListItem({
           onClick={() => {
             onBeginRename(item)
           }}
-          className={`inline-flex h-7 w-7 items-center justify-center rounded-md border ${mobileDrawer ? 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]' : 'border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
+          className={`inline-flex h-7 w-7 items-center justify-center rounded-full border ${mobileDrawer ? 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]' : 'border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
           aria-label={t('common.rename', { defaultValue: 'Rename' })}
         >
           <Pencil className="h-3.5 w-3.5" />
@@ -155,7 +155,7 @@ function ConversationListItem({
           onClick={() => {
             onDelete(item.id)
           }}
-          className={`inline-flex h-7 w-7 items-center justify-center rounded-md border ${mobileDrawer ? 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] hover:text-red-400' : 'border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-red-400'}`}
+          className={`inline-flex h-7 w-7 items-center justify-center rounded-full border ${mobileDrawer ? 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] hover:text-red-400' : 'border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-red-400'}`}
           aria-label={t('common.delete', { defaultValue: 'Delete' })}
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -247,13 +247,13 @@ export function ConversationSidebar({
             ref={mobileTriggerRef}
             data-testid="mobile-conversation-trigger"
             onClick={() => setMobileSheetOpen(true)}
-            className="md:hidden flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-2 text-left shadow-sm"
+            className="flex w-full items-center justify-between gap-3 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-2 text-left shadow-sm md:hidden"
           >
             <span className="min-w-0">
-              <span className="block truncate text-sm font-bold text-[color:var(--cf-text-strong)]">
+              <span className="block truncate !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                 {activeItem?.title ?? t('aiQuant.newChat')}
               </span>
-              <span className="mt-0.5 block truncate text-xs text-[color:var(--cf-muted)]">
+              <span className="mt-0.5 block truncate !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
                 {getMobileSummary(t, items)}
               </span>
             </span>
@@ -271,15 +271,15 @@ export function ConversationSidebar({
             onClick={() => setMobileSheetOpen(false)}
           >
             <div
-              className="cf-side-drawer-panel h-full w-[86vw] max-w-[360px] overflow-hidden rounded-r-[28px] p-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1rem)]"
+              className="cf-side-drawer-panel h-full w-[86vw] max-w-[360px] overflow-hidden rounded-r-[28px] px-5 py-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1rem)]"
               onClick={event => event.stopPropagation()}
             >
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h2 id={mobileSheetTitleId} className="text-lg font-bold text-[color:var(--cf-text-strong)]">
+                  <h2 id={mobileSheetTitleId} className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                     {t('aiQuant.conversationSelector', { defaultValue: '选择会话' })}
                   </h2>
-                  <div className="mt-0.5 text-xs text-[color:var(--cf-muted)]">
+                  <div className="mt-0.5 !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
                     {getMobileSummary(t, items)}
                   </div>
                 </div>
@@ -287,7 +287,7 @@ export function ConversationSidebar({
                   type="button"
                   ref={mobileCloseButtonRef}
                   onClick={() => setMobileSheetOpen(false)}
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] shadow-sm hover:text-[color:var(--cf-text-strong)]"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] shadow-sm hover:text-[color:var(--cf-text-strong)]"
                   aria-label={t('common.close', { defaultValue: 'Close' })}
                 >
                   <X className="h-4 w-4" />
@@ -298,7 +298,7 @@ export function ConversationSidebar({
                 type="button"
                 data-testid="mobile-create-conversation"
                 onClick={createConversation}
-                className="mb-3 min-h-11 w-full rounded-xl bg-gradient-to-r from-[#3f6fff] to-[#8b5cf6] px-3 text-sm font-bold text-white shadow-sm transition-all"
+                className="mb-3 w-full rounded-full bg-gradient-to-r from-[#3f6fff] to-[#8b5cf6] px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-white shadow-sm transition-colors"
               >
                 {t('aiQuant.createChat')}
               </button>
@@ -328,11 +328,11 @@ export function ConversationSidebar({
         )}
       </div>
 
-      <aside className="hidden max-h-[42dvh] overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-3 md:block md:max-h-none">
+      <aside className="hidden max-h-[42dvh] overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-2 md:block md:max-h-none">
         <button
           type="button"
           onClick={onCreate}
-          className="cf-primary-cta mb-3 min-h-11 w-full rounded-xl px-3 text-sm font-bold transition-all"
+          className="cf-primary-cta mb-3 w-full rounded-full px-3.5 py-1.5 !text-xs !font-semibold !leading-5 transition-colors"
         >
           {t('aiQuant.createChat')}
         </button>

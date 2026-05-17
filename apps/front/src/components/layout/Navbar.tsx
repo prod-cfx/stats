@@ -1,6 +1,6 @@
 'use client'
 
-import { Bell, ChevronDown, ChevronRight, Menu, Search, X } from 'lucide-react'
+import { Bell, Bot, ChevronDown, ChevronRight, FileText, Github, LogOut, Menu, Search, Send, Settings, X } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -15,7 +15,6 @@ import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import {
   buildDataNavLinks,
-  buildMobileAccountLinks,
   buildMobileWhaleLinks,
 } from './navbar.nav-data'
 import { ThemeToggle } from './ThemeToggle'
@@ -36,7 +35,7 @@ export const Navbar = () => {
   const pathname = usePathname()
   const router = useRouter()
   const { t } = useTranslation()
-  const { info: _info } = useToast()
+  const { info } = useToast()
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchWrapRef = useRef<HTMLDivElement>(null)
   const bellWrapRef = useRef<HTMLDivElement>(null)
@@ -107,11 +106,14 @@ export const Navbar = () => {
     },
   ]
 
-  const mobileAccountLinks = buildMobileAccountLinks({
-    lng: currentLng,
-    t,
-    isLoggedIn: Boolean(session),
-  })
+  const accountDisplayName = session?.email || session?.telegram?.username || session?.userId || ''
+  const accountInitials = accountDisplayName.startsWith('@')
+    ? accountDisplayName.slice(1, 3).toUpperCase()
+    : accountDisplayName.slice(0, 2).toUpperCase()
+  const accountIdLabel = session
+    ? `id:${session.userId.length <= 14 ? session.userId : `${session.userId.slice(0, 5)}...${session.userId.slice(-6)}`}`
+    : ''
+  const year = new Date().getFullYear()
 
   // 获取热门搜索建议（示例）
   // 实际场景：可以基于 extraBases 或 mock market list 动态生成
@@ -273,6 +275,13 @@ export const Navbar = () => {
     setMobileMenuOpen(true)
   }
 
+  const handleMobileFooterSocialClick = () => {
+    info(
+      t('common.comingSoonTitle', { defaultValue: 'Coming Soon' }),
+      t('common.comingSoonDesc', { defaultValue: 'This link will be available soon.' }),
+    )
+  }
+
   const recentInboxItems = useMemo(() => inbox.items.slice(0, 5), [inbox.items])
 
   useEffect(() => {
@@ -288,32 +297,32 @@ export const Navbar = () => {
   }, [])
 
   return (
-    <nav className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 md:h-20 md:px-8">
-      <div className="flex items-center gap-4 md:gap-12">
-        <div className="flex items-center gap-3">
+    <nav className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 md:h-16 md:px-6">
+      <div className="flex items-center gap-4 md:gap-10">
+        <div className="flex items-center gap-2.5">
           {/* Mobile Menu Button */}
           <button
             type="button"
             className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] md:hidden"
             onClick={openMobileMenu}
           >
-            <Menu className="h-6 w-6" />
+            <Menu className="h-5 w-5" />
           </button>
 
           <Link href={withLng('/')} className="flex flex-col no-underline">
             <div className="flex items-center">
-              <CoinfluxMark className="h-7 w-7 md:h-10 md:w-10" />
-              <span className="-ml-1.5 text-xl leading-none font-bold tracking-tight text-[color:var(--cf-text-strong)] md:text-2xl">
+              <CoinfluxMark className="h-7 w-7" />
+              <span className="-ml-1.5 !text-base !font-semibold !leading-6 tracking-tight text-[color:var(--cf-text-strong)]">
                 oinflux
               </span>
             </div>
-            <span className="hidden pl-0.5 text-[10px] tracking-wider text-[color:var(--cf-muted)] md:block md:text-xs">
+            <span className="hidden pl-0.5 !text-[11px] !font-normal !leading-4 tracking-[0.08em] text-[color:var(--cf-muted)] md:block">
               Crypto Data Aggregation
             </span>
           </Link>
         </div>
 
-        <div className="hidden h-full items-center gap-8 md:flex">
+        <div className="hidden h-full items-center gap-6 md:flex">
           {navLinks.map(link => {
             const isActive =
               pathname === link.href ||
@@ -325,30 +334,30 @@ export const Navbar = () => {
                 <div key={link.name} className="group relative flex h-full items-center">
                   <Link
                     href={link.href}
-                    className={`relative flex h-full cursor-pointer items-center gap-1 font-medium no-underline transition-all transition-colors ${
+                    className={`relative flex h-full cursor-pointer items-center gap-1 !text-[13px] !font-semibold !leading-5 no-underline transition-colors ${
                       isActive
                         ? 'text-[color:var(--cf-text-strong)]'
                         : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
-                    } text-body`}
+                    }`}
                   >
                     {link.name}
-                    <ChevronDown className="h-4 w-4 transition-transform group-hover:rotate-180" />
+                    <ChevronDown className="h-3.5 w-3.5 transition-transform group-hover:rotate-180" />
                     {isActive && (
                       <div className="from-primary to-secondary absolute right-0 bottom-0 left-0 h-[2px] bg-gradient-to-r" />
                     )}
                   </Link>
 
                   {/* Dropdown Menu */}
-                  <div className="invisible absolute top-[95%] left-0 z-50 w-48 translate-y-2 transform overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] opacity-0 shadow-xl transition-all duration-200 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100">
-                    <div className="py-1">
+                  <div className="invisible absolute top-[95%] left-0 z-50 w-40 translate-y-1.5 transform overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] opacity-0 shadow-sm transition-all duration-150 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100">
+                    <div className="py-1.5">
                       {link.children.map(child => (
                         <Link
                           key={child.name}
                           href={child.href}
-                          className={`text-caption block px-4 py-2.5 transition-colors ${
+                          className={`mx-1.5 block rounded-md px-3 py-2 !text-xs !font-semibold !leading-5 transition-colors ${
                             pathname === child.href
-                              ? 'from-primary to-secondary bg-gradient-to-r text-white'
-                              : 'hover:bg-primary/10 hover:text-primary text-[color:var(--cf-text)]'
+                              ? 'from-primary to-secondary bg-gradient-to-r !text-white'
+                              : 'text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]'
                           }`}
                         >
                           {child.name}
@@ -364,7 +373,7 @@ export const Navbar = () => {
               <Link
                 key={link.name}
                 href={link.href}
-                className={`relative flex h-full items-center font-medium transition-colors ${
+                className={`relative flex h-full items-center !text-[13px] !font-semibold !leading-5 transition-colors ${
                   isActive
                     ? 'text-[color:var(--cf-text-strong)]'
                     : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
@@ -380,7 +389,7 @@ export const Navbar = () => {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 md:gap-4">
+      <div className="flex items-center gap-1.5 md:gap-2.5">
         {/* Global Search - Phase 1 Hidden */}
         {ENABLE_GLOBAL_SEARCH && (
           <div className="relative" ref={searchWrapRef}>
@@ -483,7 +492,7 @@ export const Navbar = () => {
           </div>
         )}
 
-        <div className="mx-1 hidden h-6 w-[1px] bg-[color:var(--cf-border)] md:block" />
+        <div className="mx-1 hidden h-5 w-[1px] bg-[color:var(--cf-border)] md:block" />
 
         <LanguageSwitcher />
         <ThemeToggle />
@@ -493,9 +502,9 @@ export const Navbar = () => {
             type="button"
             aria-label="whale-notification-bell"
             onClick={() => setBellOpen(prev => !prev)}
-            className="relative rounded-lg p-2 text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface)] hover:text-[color:var(--cf-text-strong)]"
+            className="relative inline-flex min-h-10 w-10 items-center justify-center rounded-full text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface)] hover:text-[color:var(--cf-text-strong)] md:min-h-8 md:w-8"
           >
-            <Bell className="h-5 w-5" />
+            <Bell className="h-4 w-4" />
             {unreadCount > 0 && (
               <span className="pointer-events-none absolute -top-0.5 -right-0.5 min-w-[16px] rounded-full bg-primary px-1 text-center text-[10px] leading-4 font-bold text-white">
                 {unreadCount > 99 ? '99+' : unreadCount}
@@ -504,7 +513,7 @@ export const Navbar = () => {
           </button>
 
           {bellOpen && (
-            <div className="absolute top-full right-0 z-[80] mt-2 flex max-h-[min(32rem,calc(100dvh-5rem))] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl">
+            <div className="fixed top-16 right-4 left-4 z-[80] flex max-h-[min(24rem,calc(100dvh-5rem))] flex-col overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl md:absolute md:top-full md:right-0 md:left-auto md:mt-2 md:max-h-[min(32rem,calc(100dvh-5rem))] md:w-[calc(100vw-2rem)] md:max-w-sm">
               <div className="flex items-center justify-between border-b border-[color:var(--cf-border)] px-4 py-3">
                 <div className="text-sm font-semibold text-[color:var(--cf-text-strong)]">
                   {t('whaleTracking.notifications.tabs.inbox')} ({unreadCount})
@@ -588,30 +597,47 @@ export const Navbar = () => {
 
         {ENABLE_USER_SYSTEM &&
           (session ? (
-            <div ref={accountMenuRef} className="relative hidden items-center md:flex">
+            <div ref={accountMenuRef} className="relative flex items-center">
               <button
                 type="button"
                 onClick={() => setAccountMenuOpen(prev => !prev)}
-                className="inline-flex items-center gap-1 rounded-lg border border-[color:var(--cf-border)] px-3 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold text-[color:var(--cf-text-strong)] transition-opacity hover:opacity-90"
+                aria-label={t('account.settings')}
               >
-                {session.email || session.userId}
-                <ChevronDown className={`h-4 w-4 transition-transform ${accountMenuOpen ? 'rotate-180' : ''}`} />
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-xs font-semibold text-[color:var(--cf-text-strong)]">
+                  {accountInitials}
+                </span>
               </button>
 
               {accountMenuOpen && (
-                <div className="absolute top-[110%] right-0 z-50 w-56 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-xl">
+                <div className="absolute top-[calc(100%+0.65rem)] right-0 z-50 w-[min(15rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm">
+                  <div className="flex items-center gap-2.5 border-b border-[color:var(--cf-border)] px-3.5 py-3">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-xs font-semibold text-[color:var(--cf-text-strong)]">
+                      {accountInitials}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="truncate !text-[13px] !font-semibold !leading-5 text-[color:var(--cf-text-strong)]">
+                        {accountDisplayName}
+                      </div>
+                      <div className="mt-0.5 truncate font-mono !text-xs !font-normal !leading-[18px] text-[color:var(--cf-muted)]">
+                        {accountIdLabel}
+                      </div>
+                    </div>
+                  </div>
                   <Link
                     href={withLng('/account?tab=settings')}
                     onClick={() => setAccountMenuOpen(false)}
-                    className="block px-4 py-2.5 text-sm text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)]"
+                    className="flex items-center gap-2.5 border-b border-[color:var(--cf-border)] px-3.5 py-2.5 !text-[13px] !font-semibold !leading-5 text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
                   >
+                    <Settings className="h-4 w-4 text-[color:var(--cf-muted)]" />
                     {t('account.settings')}
                   </Link>
                   <Link
                     href={withLng('/account?tab=ai-quant')}
                     onClick={() => setAccountMenuOpen(false)}
-                    className="block px-4 py-2.5 text-sm text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)]"
+                    className="flex items-center gap-2.5 border-b border-[color:var(--cf-border)] px-3.5 py-2.5 !text-[13px] !font-semibold !leading-5 text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
                   >
+                    <Bot className="h-4 w-4 text-[color:var(--cf-muted)]" />
                     {t('nav.aiQuant')}
                   </Link>
                   <button
@@ -620,8 +646,9 @@ export const Navbar = () => {
                       logout()
                       setAccountMenuOpen(false)
                     }}
-                    className="block w-full px-4 py-2.5 text-left text-sm text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)]"
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left !text-[13px] !font-semibold !leading-5 text-red-500 transition hover:bg-red-500/10"
                   >
+                    <LogOut className="h-4 w-4" />
                     {t('account.logout', { defaultValue: '登出' })}
                   </button>
                 </div>
@@ -630,7 +657,7 @@ export const Navbar = () => {
           ) : (
             <Link
               href={withLng('/auth/login')}
-              className="from-primary to-secondary shadow-primary/20 hidden rounded-lg bg-gradient-to-r px-4 py-2 text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-95 md:flex"
+              className="from-primary to-secondary shadow-primary/15 flex min-h-9 items-center rounded-full bg-gradient-to-r px-3.5 !text-xs !font-semibold !leading-5 whitespace-nowrap text-white shadow-md transition-opacity hover:opacity-90 md:min-h-8"
             >
               {t('nav.login')}
             </Link>
@@ -641,11 +668,11 @@ export const Navbar = () => {
       {mobileMenuOpen && (
         <div className="animate-in slide-in-from-top-10 fixed inset-0 z-[60] flex flex-col bg-[color:var(--cf-bg)] duration-200 md:hidden">
           <div className="flex h-16 items-center justify-between border-b border-[color:var(--cf-border)] px-4">
-            <div className="flex items-center gap-3">
-              <div className="from-primary to-secondary shadow-primary/20 flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br shadow-lg">
-                <CoinfluxMark className="h-5 w-5 text-white" />
-              </div>
-              <span className="text-lg font-bold text-[color:var(--cf-text-strong)]">Coinflux</span>
+            <div className="flex items-center">
+              <CoinfluxMark className="h-7 w-7" />
+              <span className="-ml-1.5 text-xl leading-none font-bold tracking-tight text-[color:var(--cf-text-strong)]">
+                oinflux
+              </span>
             </div>
             <button
               type="button"
@@ -706,46 +733,67 @@ export const Navbar = () => {
               )
             })}
 
-            {ENABLE_USER_SYSTEM && (
-              <div className="mt-6">
-                {session ? (
-                  <div className="space-y-2">
-                    <Link
-                      href={mobileAccountLinks[0].href}
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="block w-full rounded-xl border border-[color:var(--cf-border)] py-3 text-center text-base font-semibold"
-                    >
-                      {mobileAccountLinks[0].name}
-                    </Link>
-                    <Link
-                      href={mobileAccountLinks[1].href}
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="block w-full rounded-xl border border-[color:var(--cf-border)] py-3 text-center text-base font-semibold"
-                    >
-                      {mobileAccountLinks[1].name}
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        logout()
-                        setMobileMenuOpen(false)
-                      }}
-                      className="w-full rounded-xl border border-[color:var(--cf-border)] py-3 text-base font-semibold"
-                    >
-                      {t('account.logout', { defaultValue: '登出' })}
-                    </button>
-                  </div>
-                ) : (
-                  <Link
-                    href={mobileAccountLinks[0].href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="from-primary to-secondary shadow-primary/20 block w-full rounded-xl bg-gradient-to-r py-3 text-center text-lg font-bold text-white shadow-lg"
+            <div className="mt-auto border-t border-[color:var(--cf-border)]/70 pt-6">
+              <div className="flex flex-col items-center gap-3">
+                <Link
+                  href={withLng('/')}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center no-underline"
+                >
+                  <CoinfluxMark className="h-7 w-7" />
+                  <span className="-ml-1.5 text-xl leading-none font-bold tracking-tight text-[color:var(--cf-text-strong)]">
+                    oinflux
+                  </span>
+                </Link>
+                <p className="text-center text-sm text-[color:var(--cf-muted)]">
+                  {t('footer.tagline', { defaultValue: '专业的加密资产 数据聚合与多维行情分析终端' })}
+                </p>
+                <div className="flex items-center justify-center gap-4">
+                  <button
+                    type="button"
+                    onClick={handleMobileFooterSocialClick}
+                    className="flex h-10 w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
+                    aria-label="Telegram"
                   >
-                    {mobileAccountLinks[0].name}
-                  </Link>
-                )}
+                    <Send className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleMobileFooterSocialClick}
+                    className="flex h-10 w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
+                    aria-label="X"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleMobileFooterSocialClick}
+                    className="flex h-10 w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
+                    aria-label="GitHub"
+                  >
+                    <Github className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleMobileFooterSocialClick()
+                      setMobileMenuOpen(false)
+                    }}
+                    className="flex h-10 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-[color:var(--cf-muted)] no-underline transition-colors hover:text-[color:var(--cf-text-strong)]"
+                  >
+                    <FileText className="h-4 w-4" />
+                    {t('nav.docs', { defaultValue: '文档' })}
+                  </button>
+                </div>
               </div>
-            )}
+              <div className="mt-5 border-t border-[color:var(--cf-border)]/50 pt-5 text-center text-xs leading-6 text-[color:var(--cf-muted)]">
+                <p>
+                  {t('footer.copyrightLine', { year })}
+                  <br />
+                  {t('footer.ownership')}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}

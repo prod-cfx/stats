@@ -9,6 +9,7 @@ import type {
   TradeRecord,
 } from './backtest-report-data'
 import type { BacktestJobResult } from '@/components/ai-quant/backtest-job-client'
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, Sparkles } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import React, { startTransition, useMemo, useState } from 'react'
@@ -87,49 +88,52 @@ function StrategyConclusionCard({
   const statusConfig = {
     good: {
       color: 'var(--cf-primary)',
-      icon: '🟢',
+      Icon: CheckCircle2,
       bgGlow: 'bg-[color:var(--cf-primary)]/10',
       border: 'border-[color:var(--cf-border)]',
       shadow: 'shadow-[0_0_10px_var(--cf-primary)]',
     },
     warning: {
       color: '#F5A623',
-      icon: '🟡',
+      Icon: AlertTriangle,
       bgGlow: 'bg-[#F5A623]/10',
       border: 'border-[color:var(--cf-border)]',
       shadow: 'shadow-[0_0_10px_#F5A623]',
     },
     lowSample: {
       color: '#F5A623',
-      icon: '🟡',
+      Icon: AlertTriangle,
       bgGlow: 'bg-[#F5A623]/10',
       border: 'border-[color:var(--cf-border)]',
       shadow: 'shadow-[0_0_10px_#F5A623]',
     },
     danger: {
       color: '#FF4D4F',
-      icon: '🔴',
+      Icon: CircleAlert,
       bgGlow: 'bg-[#FF4D4F]/10',
       border: 'border-[color:var(--cf-border)]',
       shadow: 'shadow-[0_0_10px_#FF4D4F]',
     },
   }
   const config = statusConfig[status]
+  const Icon = config.Icon
 
   return (
     <div
-      className={`relative overflow-hidden border bg-[color:var(--cf-surface)] ${config.border} flex flex-col items-start justify-between gap-4 rounded-[16px] p-6 md:flex-row md:items-center`}
+      className={`relative overflow-hidden border bg-[color:var(--cf-surface)] ${config.border} flex flex-col items-start justify-between gap-3 rounded-2xl px-5 py-4 md:flex-row md:items-center`}
     >
       <div
         className={`absolute top-0 left-0 h-full w-32 ${config.bgGlow} pointer-events-none blur-3xl`}
       ></div>
 
-      <div className="relative z-10 flex items-center gap-4">
+      <div className="relative z-10 flex items-center gap-3">
         <div
-          className={`h-3 w-3 rounded-full ${config.shadow}`}
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${config.shadow}`}
           style={{ backgroundColor: config.color }}
-        ></div>
-        <h2 className="text-base font-medium text-[color:var(--cf-text)]">{summary}</h2>
+        >
+          <Icon className="h-4 w-4 text-white" />
+        </div>
+        <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{summary}</h2>
       </div>
     </div>
   )
@@ -153,9 +157,9 @@ function MetricCard({
         : 'text-[color:var(--cf-text-strong)]'
 
   return (
-    <div className="rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 backdrop-blur-sm transition-all duration-300 hover:bg-[color:var(--cf-surface-hover)] sm:p-5 lg:p-6">
-      <p className="text-sm font-medium text-[color:var(--cf-muted)]">{title}</p>
-      <p className={`mt-2 break-words text-2xl font-bold tracking-tight md:text-[32px] ${colorClass}`}>
+    <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 backdrop-blur-sm transition-colors duration-200 hover:bg-[color:var(--cf-surface-hover)]">
+      <p className="!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">{title}</p>
+      <p className={`mt-1 break-words !text-sm !font-semibold !leading-[22px] ${colorClass}`}>
         {value}
       </p>
     </div>
@@ -175,27 +179,28 @@ function AiAnalysisPanel({ lng, insights }: { lng: string; insights: string[] })
   const [expanded, setExpanded] = useState(true)
 
   return (
-    <div className="rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 transition-all duration-300">
+    <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 transition-colors duration-200">
       <div
         className="flex cursor-pointer items-center justify-between"
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-center gap-2">
-          <span className="text-xl">✨</span>
-          <h3 className="text-base font-medium text-[color:var(--cf-text-strong)]">
+          <Sparkles className="h-4 w-4 text-[color:var(--cf-primary)]" />
+          <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
             {lng === 'en' ? 'Report Interpretation' : '报告解读'}
           </h3>
         </div>
         <button
           type="button"
-          className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
+          aria-label={expanded ? (lng === 'en' ? 'Collapse' : '收起') : lng === 'en' ? 'Expand' : '展开'}
         >
-          {expanded ? (lng === 'en' ? 'Collapse' : '收起') : lng === 'en' ? 'Expand' : '展开'}
+          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
       </div>
 
       {expanded && (
-        <ul className="mt-4 list-disc space-y-3 pl-5 text-sm text-[color:var(--cf-text)]">
+        <ul className="mt-4 list-disc space-y-3 pl-5 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">
           {insights.map((insight, index) => (
             <li key={`${index}-${insight}`}>
               <p>{lng === 'en' ? insight : insight}</p>
@@ -228,11 +233,11 @@ function DecisionSummarySection({
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <RiskCard title={confidence.title} data={confidence.items} />
       <RiskCard title={strategyFit.title} data={strategyFit.items} />
-      <div className="flex h-full flex-col rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 backdrop-blur-sm">
-        <h3 className="mb-4 text-base font-medium text-[color:var(--cf-text-strong)]">
+      <div className="flex h-full flex-col rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 backdrop-blur-sm">
+        <h3 className="mb-4 !text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
           {confidence.title === '报告可信度' ? '市场风险能力' : 'Market Risk Coverage'}
         </h3>
-        <ul className="space-y-3 text-sm text-[color:var(--cf-text)]">
+        <ul className="space-y-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">
           {marketCapabilityNotes.map(note => (
             <li key={note}>{note}</li>
           ))}
@@ -245,13 +250,13 @@ function DecisionSummarySection({
 // --- 5. Risk Analysis ---
 function RiskCard({ title, data }: { title: string; data: { label: string; value: string }[] }) {
   return (
-    <div className="flex h-full flex-col rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 backdrop-blur-sm">
-      <h3 className="mb-6 text-base font-medium text-[color:var(--cf-text-strong)]">{title}</h3>
-      <div className="flex flex-1 flex-col justify-center space-y-4">
+    <div className="flex h-full flex-col rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 backdrop-blur-sm">
+      <h3 className="mb-4 !text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{title}</h3>
+      <div className="flex flex-1 flex-col justify-center space-y-3">
         {data.map((item, idx) => (
-          <div key={idx} className="flex items-center justify-between text-sm">
+          <div key={idx} className="flex items-center justify-between gap-4 !text-sm !font-normal !leading-[22px]">
             <span className="text-[color:var(--cf-muted)]">{item.label}</span>
-            <span className="font-medium text-[color:var(--cf-text-strong)]">{item.value}</span>
+            <span className="text-right !font-semibold text-[color:var(--cf-text-strong)]">{item.value}</span>
           </div>
         ))}
       </div>
@@ -288,18 +293,18 @@ function TradeDetailsSection({
   const hasTrades = filteredTrades.length > 0
 
   return (
-    <div className="rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 backdrop-blur-sm">
-      <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <h3 className="text-base font-medium text-[color:var(--cf-text-strong)]">
+    <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 backdrop-blur-sm">
+      <div className="mb-4 flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
+        <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
           {presentation.tradeSectionTitle}
         </h3>
-        <div className="flex items-center gap-2 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-1">
+        <div className="grid w-full grid-cols-3 gap-1 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-1 sm:w-[228px]">
           {(['all', 'profit', 'loss'] as const).map(f => (
             <button
               type="button"
               key={f}
               onClick={() => setFilter(f)}
-              className={`rounded-md px-3 py-1 text-xs transition-colors ${
+              className={`rounded-full px-3 py-1 !text-xs !font-semibold !leading-5 transition-colors ${
                 filter === f
                   ? 'border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-hover)] font-medium text-[color:var(--cf-text-strong)] shadow-sm'
                   : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
@@ -323,15 +328,23 @@ function TradeDetailsSection({
 
       {hasTrades ? (
         <div className="overflow-x-auto">
-          <table className="min-w-[720px] text-left text-sm">
+          <table className="w-full min-w-[860px] table-fixed text-left !text-sm !font-normal !leading-[22px]">
+            <colgroup>
+              <col className="w-[22%]" />
+              <col className="w-[22%]" />
+              <col className="w-[10%]" />
+              <col className="w-[16%]" />
+              <col className="w-[16%]" />
+              <col className="w-[14%]" />
+            </colgroup>
             <thead>
               <tr className="border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)]">
-                <th className="pb-3 font-normal">{lng === 'en' ? 'Entry Time' : '开仓时间'}</th>
-                <th className="pb-3 font-normal">{lng === 'en' ? 'Exit Time' : '平仓时间'}</th>
-                <th className="pb-3 font-normal">{presentation.tradeDirectionColumnLabel}</th>
-                <th className="pb-3 font-normal">{lng === 'en' ? 'Entry Price' : '开仓价'}</th>
-                <th className="pb-3 font-normal">{lng === 'en' ? 'Exit Price' : '平仓价'}</th>
-                <th className="pb-3 text-right font-normal">{lng === 'en' ? 'Return' : '收益率'}</th>
+                <th className="pb-3 pr-4 !text-xs !font-semibold !leading-5">{lng === 'en' ? 'Entry Time' : '开仓时间'}</th>
+                <th className="pb-3 pr-4 !text-xs !font-semibold !leading-5">{lng === 'en' ? 'Exit Time' : '平仓时间'}</th>
+                <th className="pb-3 pr-4 !text-xs !font-semibold !leading-5">{presentation.tradeDirectionColumnLabel}</th>
+                <th className="pb-3 pr-4 !text-xs !font-semibold !leading-5">{lng === 'en' ? 'Entry Price' : '开仓价'}</th>
+                <th className="pb-3 pr-4 !text-xs !font-semibold !leading-5">{lng === 'en' ? 'Exit Price' : '平仓价'}</th>
+                <th className="pb-3 text-right !text-xs !font-semibold !leading-5">{lng === 'en' ? 'Return' : '收益率'}</th>
               </tr>
             </thead>
             <tbody>
@@ -340,27 +353,29 @@ function TradeDetailsSection({
                   key={trade.id}
                   className="border-b border-[color:var(--cf-border)] transition-colors last:border-0 hover:bg-[color:var(--cf-surface-hover)]"
                 >
-                  <td className="py-3 text-[color:var(--cf-text)]">
-                    <div>{trade.entryTime}</div>
+                  <td className="py-3 pr-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">
+                    <div className="whitespace-nowrap">{trade.entryTime}</div>
                     {trade.reasonOpen && (
-                      <div className="mt-1 text-xs text-[color:var(--cf-muted)]">{trade.reasonOpen}</div>
+                      <div className="mt-1 truncate !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]" title={trade.reasonOpen}>{trade.reasonOpen}</div>
                     )}
                   </td>
-                  <td className="py-3 text-[color:var(--cf-text)]">
-                    <div>{trade.exitTime}</div>
+                  <td className="py-3 pr-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">
+                    <div className="whitespace-nowrap">{trade.exitTime}</div>
                     {trade.reasonClose && (
-                      <div className="mt-1 text-xs text-[color:var(--cf-muted)]">{trade.reasonClose}</div>
+                      <div className="mt-1 truncate !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]" title={trade.reasonClose}>{trade.reasonClose}</div>
                     )}
                   </td>
-                  <td className="py-3 text-[color:var(--cf-text)]">
-                    {presentation.tradeDirectionLabel(trade.direction)}
+                  <td className="py-3 pr-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">
+                    <span className="inline-flex rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2.5 py-0.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)]">
+                      {presentation.tradeDirectionLabel(trade.direction)}
+                    </span>
                   </td>
-                  <td className="py-3 text-[color:var(--cf-text)]">
+                  <td className="py-3 pr-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">
                     {trade.entryPrice === null ? '--' : `$${trade.entryPriceDisplay}`}
                   </td>
-                  <td className="py-3 text-[color:var(--cf-text)]">${trade.exitPriceDisplay}</td>
+                  <td className="py-3 pr-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">${trade.exitPriceDisplay}</td>
                   <td
-                    className={`py-3 text-right font-medium ${trade.isProfit ? 'text-[color:var(--cf-primary)]' : 'text-[#FF4D4F]'}`}
+                    className={`py-3 text-right !text-sm !font-semibold !leading-[22px] ${trade.isProfit ? 'text-[color:var(--cf-primary)]' : 'text-[#FF4D4F]'}`}
                   >
                     {`${trade.profitPct > 0 ? '+' : ''}${trade.profitPct}%`}
                   </td>
@@ -370,7 +385,7 @@ function TradeDetailsSection({
           </table>
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-6 text-sm text-[color:var(--cf-muted)]">
+        <div className="rounded-2xl border border-dashed border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-5 py-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
           {lng === 'en'
             ? presentation.emptyTradeMessage
             : presentation.emptyTradeMessage}
@@ -381,7 +396,7 @@ function TradeDetailsSection({
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
-          className="mt-4 flex w-full items-center justify-center gap-1 py-2 text-xs text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
+          className="mt-4 flex w-full items-center justify-center gap-1 py-2 !text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
         >
           {expanded
             ? lng === 'en'
@@ -412,24 +427,24 @@ function OpenPositionsSection({
     metrics: null,
   })
   return (
-    <div className="rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 backdrop-blur-sm sm:p-6">
-      <div className="mb-4 flex flex-col items-start justify-between gap-2 sm:mb-6 sm:flex-row sm:items-center sm:gap-4">
-        <h3 className="text-base font-medium text-[color:var(--cf-text-strong)]">
+    <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 backdrop-blur-sm">
+      <div className="mb-4 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center sm:gap-4">
+        <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
           {presentation.openPositionsTitle}
         </h3>
-        <span className="text-xs text-[color:var(--cf-muted)]">
+        <span className="!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
           {presentation.openPositionsBadge(openPositions.length)}
         </span>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-[640px] text-left text-sm">
+        <table className="min-w-[640px] text-left !text-sm !font-normal !leading-[22px]">
           <thead>
             <tr className="border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)]">
-              <th className="pb-3 font-normal">{presentation.openPositionsColumns.symbol}</th>
-              <th className="pb-3 font-normal">{presentation.openPositionsColumns.quantity}</th>
-              <th className="pb-3 font-normal">{presentation.openPositionsColumns.avgEntryPrice}</th>
-              <th className="pb-3 text-right font-normal">{presentation.openPositionsColumns.unrealizedPnl}</th>
+              <th className="pb-3 !text-xs !font-semibold !leading-5">{presentation.openPositionsColumns.symbol}</th>
+              <th className="pb-3 !text-xs !font-semibold !leading-5">{presentation.openPositionsColumns.quantity}</th>
+              <th className="pb-3 !text-xs !font-semibold !leading-5">{presentation.openPositionsColumns.avgEntryPrice}</th>
+              <th className="pb-3 text-right !text-xs !font-semibold !leading-5">{presentation.openPositionsColumns.unrealizedPnl}</th>
             </tr>
           </thead>
           <tbody>
@@ -440,11 +455,11 @@ function OpenPositionsSection({
                 key={`${position.symbol}-${position.avgEntryPrice}-${position.qty}`}
                 className="border-b border-[color:var(--cf-border)] transition-colors last:border-0 hover:bg-[color:var(--cf-surface-hover)]"
               >
-                <td className="py-3 text-[color:var(--cf-text)]">{position.symbol}</td>
-                <td className="py-3 text-[color:var(--cf-text)]">{position.qty}</td>
-                <td className="py-3 text-[color:var(--cf-text)]">${position.avgEntryPrice.toFixed(2)}</td>
+                <td className="py-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">{position.symbol}</td>
+                <td className="py-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">{position.qty}</td>
+                <td className="py-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">${position.avgEntryPrice.toFixed(2)}</td>
                 <td
-                  className={`py-3 text-right font-medium ${position.isProfit ? 'text-[color:var(--cf-primary)]' : 'text-[#FF4D4F]'}`}
+                  className={`py-3 text-right !text-sm !font-semibold !leading-[22px] ${position.isProfit ? 'text-[color:var(--cf-primary)]' : 'text-[#FF4D4F]'}`}
                 >
                   {formatSignedPnl(position.unrealizedPnl)}
                 </td>
@@ -583,28 +598,28 @@ export function BacktestReportClient({
       {/* Header */}
       <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">
+          <h1 className="!text-base !font-semibold !leading-6 text-[color:var(--cf-text-strong)]">
             {lng === 'en' ? 'Backtest Analysis Report' : '回测分析报告'}
           </h1>
-          <p className="mt-1 text-sm text-[color:var(--cf-muted)]">
+          <p className="mt-1 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
             {presentation.displaySymbol} · {rangeDisplay}
           </p>
-          <p className="mt-1 text-xs font-medium text-[color:var(--cf-primary)]">
+          <p className="mt-1 !text-xs !font-semibold !leading-5 text-[color:var(--cf-primary)]">
             {presentation.marketLabel}
           </p>
         </div>
         <Link
           href={`/${lng}/ai-quant`}
           onClick={handleReturnToAiQuant}
-          className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)]"
+          className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)]"
         >
           {lng === 'en' ? 'Back to AI Quant' : '返回 AI量化'}
         </Link>
       </div>
 
       {partialCoverageNotice && (
-        <div className="rounded-[16px] border border-[#F5A623]/30 bg-[#F5A623]/8 p-4 text-sm text-[color:var(--cf-text)]">
-          <p className="font-medium text-[color:var(--cf-text-strong)]">
+        <div className="rounded-2xl border border-[#F5A623]/30 bg-[#F5A623]/8 px-5 py-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">
+          <p className="!font-semibold text-[color:var(--cf-text-strong)]">
             {lng === 'en'
               ? 'This backtest ran on partially covered market data.'
               : '本次回测使用了部分覆盖的市场数据。'}
@@ -700,11 +715,11 @@ export function BacktestReportClient({
           )}
         </>
       ) : detailedReportState === 'loading' && metrics ? (
-        <div className="rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 text-sm text-[color:var(--cf-muted)]">
+        <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
           {lng === 'en' ? 'Loading detailed backtest report data...' : '正在加载详细回测数据...'}
         </div>
       ) : (
-        <div className="rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 text-sm text-[color:var(--cf-muted)]">
+        <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
           {lng === 'en'
             ? 'Backtest result data is unavailable. Please rerun the backtest and open the report again.'
             : '回测结果暂不可用，请重新执行回测后再打开该报告。'}

@@ -1,6 +1,6 @@
 import type { DisplayBlock, DisplayExecuteItem, DisplayLogicGraph } from './display-logic-graph'
-import { localizeDisplayLogicGraph } from './display-logic-graph'
 import { useTranslation } from 'react-i18next'
+import { localizeDisplayLogicGraph } from './display-logic-graph'
 
 interface DisplayLogicGraphPreviewProps {
   graph: DisplayLogicGraph
@@ -51,10 +51,10 @@ export function DisplayLogicGraphPreview({
     : ''
 
   return (
-    <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+    <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+          <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
             {t('aiQuant.messages.graphTitle')}
           </h2>
         </div>
@@ -62,14 +62,14 @@ export function DisplayLogicGraphPreview({
 
       <div className="mt-4 space-y-3">
         {localizedGraph.blocks.map(block => (
-          <div key={`${block.type}-${block.items[0]?.id ?? 'block'}`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--cf-muted)]">
+          <div key={`${block.type}-${block.items[0]?.id ?? 'block'}`} className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2">
+            <p className="!text-xs !font-semibold !leading-5 uppercase tracking-[0.2em] text-[color:var(--cf-muted)]">
               {getBlockHeading(block.type)}
             </p>
 
             {block.type === 'EXECUTE'
               ? (
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-[color:var(--cf-muted)]">
+                  <div className="mt-3 flex flex-wrap gap-2 !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
                     {block.items.filter(isExecuteItem).map(item => (
                       <span key={item.id} className="rounded border border-[color:var(--cf-border)] px-2 py-1">
                         {getExecuteLabel(item)}
@@ -78,14 +78,14 @@ export function DisplayLogicGraphPreview({
                   </div>
                 )
               : (
-                  <div className="mt-3 space-y-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-3">
+                  <div className="mt-3 space-y-3 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-2">
                     <div>
-                      <p className="text-xs font-bold text-amber-400">IF</p>
+                      <p className="!text-xs !font-semibold !leading-5 text-amber-400">IF</p>
                       <div className="mt-2 space-y-2">
                         {block.items
                           .filter(item => item.kind === 'condition')
                           .map(item => (
-                            <div key={item.id} className="text-sm text-[color:var(--cf-text)]">
+                            <div key={item.id} className="!text-sm !leading-[22px] text-[color:var(--cf-text)]">
                               {item.text}
                             </div>
                           ))}
@@ -93,17 +93,17 @@ export function DisplayLogicGraphPreview({
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-sky-400">THEN</p>
+                      <p className="!text-xs !font-semibold !leading-5 text-sky-400">THEN</p>
                       <div className="mt-2 space-y-2">
                         {block.items.some(item => item.kind === 'action')
                           ? block.items
                               .filter(item => item.kind === 'action')
                               .map(item => (
-                                <div key={item.id} className="text-sm text-[color:var(--cf-text)]">
+                                <div key={item.id} className="!text-sm !leading-[22px] text-[color:var(--cf-text)]">
                                   {item.text}
                                 </div>
                               ))
-                          : <div className="text-sm text-[color:var(--cf-muted)]">{emptyThenFallback}</div>}
+                          : <div className="!text-sm !leading-[22px] text-[color:var(--cf-muted)]">{emptyThenFallback}</div>}
                       </div>
                     </div>
                   </div>
@@ -117,7 +117,7 @@ export function DisplayLogicGraphPreview({
           type="button"
           onClick={onConfirm}
           disabled={confirmDisabled}
-          className={`rounded-xl px-4 py-2 text-sm font-bold text-white ${
+          className={`rounded-full px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-white ${
             confirmed
               ? 'bg-emerald-600'
               : 'bg-gradient-to-r from-primary to-secondary'
@@ -128,15 +128,15 @@ export function DisplayLogicGraphPreview({
         <button
           type="button"
           onClick={onRevise}
-          className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+          className="rounded-full border border-[color:var(--cf-border)] px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)]"
         >
           {t('aiQuant.messages.returnRevise')}
         </button>
       </div>
 
       {confirmed && normalizedSnapshotId && (
-        <div className="mt-3 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-xs text-[color:var(--cf-muted)]">
-          <span className="font-semibold text-[color:var(--cf-text-strong)]">
+        <div className="mt-3 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
+          <span className="!font-semibold text-[color:var(--cf-text-strong)]">
             {t('aiQuant.messages.snapshotId')}
           </span>
           <span className="mx-1">:</span>

@@ -670,7 +670,7 @@ export const RightPanel = ({
     marketType === 'spot' && symbol.endsWith('USDT') ? `${symbol.slice(0, -4)}/USDT` : symbol
 
   return (
-    <div className="relative flex w-full min-w-0 flex-col rounded-none border-l-0 md:rounded-xl md:border-l border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]">
+    <div className="relative flex w-full min-w-0 flex-col rounded-none border-l-0 md:rounded-lg md:border-l border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]">
       {loading && (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-[color:var(--cf-surface)]/80 backdrop-blur-sm">
           <Spinner size="md" className="text-primary" />
@@ -681,11 +681,11 @@ export const RightPanel = ({
       <div className="flex-none border-b border-[color:var(--cf-border)]">
         <div className="flex items-center justify-between px-3 py-2">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-bold">{displaySymbol}</span>
+            <span className="!text-[15px] !font-semibold !leading-[22px]">{displaySymbol}</span>
             <CopyIcon className="h-3 w-3 cursor-pointer text-[color:var(--cf-muted)]" />
           </div>
           <div className="flex items-center gap-1 text-xs">
-            <span className="from-primary to-secondary bg-gradient-to-br bg-clip-text text-transparent">
+            <span className="from-primary to-secondary bg-gradient-to-br bg-clip-text !text-xs !font-semibold !leading-5 text-transparent">
               {isAggregated
                 ? t('chart.toolbar.aggregationOn')
                 : t(
@@ -695,7 +695,7 @@ export const RightPanel = ({
           </div>
         </div>
 
-        <div className="flex flex-col gap-1 px-3 pb-2 text-[10px]">
+        <div className="flex flex-col gap-1 px-3 pb-2 !text-xs !font-normal !leading-5">
           <div className="flex items-center justify-between">
             <span className="whitespace-nowrap text-[color:var(--cf-muted)]">
               {isAggregated ? t('rightPanel.accumulatedTurnoverUsd') : t('rightPanel.turnoverUsd')}:
@@ -752,7 +752,7 @@ export const RightPanel = ({
               </button>
 
               {isDecimalMenuOpen && (
-                <div className="absolute top-full right-2 z-50 mt-1 w-[120px] rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] py-1 shadow-lg">
+                <div className="absolute top-full right-2 z-50 mt-1 w-[120px] rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] py-1 shadow-sm">
                   {[2, 1, 0, -1, -2].map(p => (
                     <button
                       key={p}
@@ -761,9 +761,9 @@ export const RightPanel = ({
                         setPricePrecision(p)
                         setIsDecimalMenuOpen(false)
                       }}
-                      className={`w-full px-3 py-2 text-left text-xs transition-colors hover:bg-[color:var(--cf-surface-hover)] ${
+                      className={`w-full px-3 py-2 text-left !text-xs !leading-5 transition-colors hover:bg-[color:var(--cf-surface-hover)] ${
                         pricePrecision === p
-                          ? 'bg-[color:var(--cf-surface-2)] font-bold text-[color:var(--cf-text)]'
+                          ? 'bg-gradient-to-r from-primary to-secondary !font-semibold text-white'
                           : 'text-[color:var(--cf-text)]'
                       }`}
                     >
@@ -805,7 +805,7 @@ export const RightPanel = ({
               - 涨跌幅：displayChangePct（ticker 24h 涨跌幅优先；ticker 缺失时回退到 mock 百分比） */}
           <div className="z-10 my-0.5 flex flex-none items-center justify-between border-y border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] px-2 py-1">
             <div className="flex flex-col">
-              <span className="text-base font-bold text-green-400">
+              <span className="!text-base !font-semibold !leading-6 text-green-400">
                 {priceFormatter.format(displayLastPrice)}
               </span>
               <span className="text-[10px] text-[color:var(--cf-muted)]">
@@ -850,9 +850,12 @@ export const RightPanel = ({
                 key={id}
                 type="button"
                 onClick={() => handleTabChange(id)}
-                className={`relative border-b-2 py-2 text-[11px] font-bold transition-colors ${tradeTab === id ? 'border-primary text-[color:var(--cf-text-strong)]' : 'border-transparent text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
+                className={`relative border-b-2 py-2 !text-xs !font-semibold !leading-5 transition-colors ${tradeTab === id ? 'border-transparent text-[color:var(--cf-text-strong)]' : 'border-transparent text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
               >
                 {id === 'latest' ? t('rightPanel.latestTrades') : t('rightPanel.largeTrades')}
+                {tradeTab === id && (
+                  <span className="absolute right-0 bottom-0 left-0 h-0.5 bg-gradient-to-r from-primary to-secondary" />
+                )}
               </button>
             ))}
           </div>

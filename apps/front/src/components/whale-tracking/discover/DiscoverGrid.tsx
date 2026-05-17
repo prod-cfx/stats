@@ -78,14 +78,14 @@ export const DiscoverGrid = () => {
     if (sortField !== field) {
       return <ArrowUpDown className="w-3 h-3 text-[color:var(--cf-muted)] opacity-30 group-hover:opacity-100 transition-opacity" />;
     }
-    return sortOrder === 'desc' ? <ChevronDown className="w-3 h-3 text-primary" /> : <ChevronUp className="w-3 h-3 text-primary" />;
+    return sortOrder === 'desc' ? <ChevronDown className="h-3 w-3 text-white" /> : <ChevronUp className="h-3 w-3 text-white" />;
   };
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-5 md:space-y-6">
       {/* Recommended Section */}
       <LoadingState isLoading={loading} error={!!error} onRetry={reload}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-5">
           {data?.recommended.map((trader, index) => (
             <TraderCard 
               key={`rec-${index}`} 
@@ -97,9 +97,9 @@ export const DiscoverGrid = () => {
       </LoadingState>
 
       {/* Filters Section */}
-      <div className="flex flex-col gap-3 border-y border-[color:var(--cf-border)] py-6 md:flex-row md:flex-wrap md:items-center md:justify-between">
-        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center md:gap-4">
-          <span className="text-[color:var(--cf-muted)] text-sm font-medium">{t('whaleTracking.discover.sortBy')}:</span>
+      <div className="flex flex-col gap-3 border-y border-[color:var(--cf-border)] py-4 md:flex-row md:flex-wrap md:items-center md:justify-between">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center md:gap-3">
+          <span className="!text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)]">{t('whaleTracking.discover.sortBy')}:</span>
           {([
             { id: 'winRate', label: t('whaleTracking.discover.sortFields.winRate') },
             { id: 'totalValue', label: t('whaleTracking.discover.sortFields.totalValue') },
@@ -111,8 +111,8 @@ export const DiscoverGrid = () => {
               onClick={() => {
                 handleSort(field.id as Exclude<typeof sortField, null>);
               }}
-              className={`flex min-w-0 items-center justify-center gap-1 rounded-lg px-3 py-1.5 text-sm font-bold transition-colors group ${
-                sortField === field.id ? 'text-[color:var(--cf-text-strong)] bg-[color:var(--cf-surface-2)]' : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
+              className={`group flex min-w-0 cursor-pointer items-center justify-center gap-1 rounded-lg px-3 py-1.5 !text-xs !font-semibold !leading-5 transition-colors ${
+                sortField === field.id ? 'bg-gradient-to-r from-primary to-secondary text-white' : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]'
               }`}
             >
               <span className="uppercase">{field.label}</span>
@@ -129,7 +129,7 @@ export const DiscoverGrid = () => {
         onRetry={reload}
         isEmpty={!loading && !error && sortedDetails.length === 0}
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-12">
+        <div className="grid grid-cols-1 gap-4 pb-5 md:grid-cols-2 md:gap-5 lg:grid-cols-3">
           {sortedDetails.map((trader, index) => (
             <TraderCard 
               key={`det-${index}`} 

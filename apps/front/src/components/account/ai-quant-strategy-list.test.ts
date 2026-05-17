@@ -749,7 +749,9 @@ describe('AiQuantStrategyList tabs UI', () => {
       ;(container.querySelector('[data-testid="strategy-filter-tab-history"]') as HTMLButtonElement).click()
     })
 
-    const titles = Array.from(container.querySelectorAll('h4')).map(n => n.textContent)
+    const titles = Array.from(container.querySelectorAll('.cf-ai-strategy-card p'))
+      .map(n => n.textContent)
+      .filter(text => text === 'H1')
     expect(titles).toEqual(['H1'])
   })
 
@@ -801,7 +803,9 @@ describe('AiQuantStrategyList tabs UI', () => {
       ;(container.querySelector('[data-testid="strategy-filter-tab-history"]') as HTMLButtonElement).click()
     })
 
-    const titles = Array.from(container.querySelectorAll('h4')).map(n => n.textContent)
+    const titles = Array.from(container.querySelectorAll('.cf-ai-strategy-card p'))
+      .map(n => n.textContent)
+      .filter(text => text === 'HistoryRunning')
     expect(titles).toEqual(['HistoryRunning'])
 
     const rowButtons = Array.from(container.querySelectorAll('button'))
@@ -830,7 +834,7 @@ describe('AiQuantStrategyList tabs UI', () => {
 
     const actions = container.querySelector('[data-testid="ai-quant-strategy-card-actions"]')
     const metricGrid = container.querySelector('[data-testid="ai-quant-strategy-card-metrics"]')
-    const title = Array.from(container.querySelectorAll('h4')).find(
+    const title = Array.from(container.querySelectorAll('.cf-ai-strategy-card p')).find(
       node => node.textContent === 'Very long mobile layout strategy name',
     )
     const detailLinks = Array.from(container.querySelectorAll('a[aria-label="查看详情"]'))
@@ -840,7 +844,7 @@ describe('AiQuantStrategyList tabs UI', () => {
     expect(actions?.className).toContain('grid')
     expect(actions?.className).toContain('grid-cols-2')
     expect(actions?.className).toContain('sm:flex')
-    expect(mobileDetailLink?.className).toContain('right-4')
+    expect(mobileDetailLink?.className).toContain('right-5')
     expect(mobileDetailLink?.className).toContain('top-4')
     expect(mobileDetailLink?.className).toContain('sm:hidden')
     expect(desktopDetailLink?.className).toContain('hidden')

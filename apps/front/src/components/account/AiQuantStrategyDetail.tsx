@@ -663,15 +663,15 @@ export function AiQuantStrategyDetail({
     return (
       <main className="mx-auto flex w-full max-w-[920px] flex-1 flex-col gap-4 px-4 py-8 md:px-8">
         <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-8 text-center">
-          <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">
+          <h1 className="!text-base !font-semibold !leading-6 text-[color:var(--cf-text-strong)]">
             {t('aiQuant.detail.notFoundTitle')}
           </h1>
-          <p className="mt-2 text-sm text-[color:var(--cf-muted)]">
+          <p className="mt-2 text-sm leading-[22px] text-[color:var(--cf-muted)]">
             {t('aiQuant.detail.notFoundDescription')}
           </p>
           <Link
             href={`/${lng}/account?tab=ai-quant`}
-            className="mt-5 inline-flex rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+            className="mt-5 inline-flex rounded-full border border-[color:var(--cf-border)] px-3.5 py-1.5 text-xs font-semibold leading-5 text-[color:var(--cf-text-strong)]"
           >
             {t('aiQuant.detail.backToList')}
           </Link>
@@ -807,7 +807,7 @@ export function AiQuantStrategyDetail({
       <div>
         <Link
           href={`/${lng}/account?tab=ai-quant`}
-          className="inline-flex h-10 items-center gap-2 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+          className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs font-semibold leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
         >
           <span className="text-base leading-none" aria-hidden="true">
             &larr;
@@ -822,28 +822,28 @@ export function AiQuantStrategyDetail({
               className="pointer-events-none absolute -top-24 right-[-88px] h-64 w-64 rounded-full bg-emerald-500/10"
               aria-hidden="true"
             />
-            <div className="flex flex-col gap-5 border-b border-[color:var(--cf-border)] p-5 lg:p-6">
+            <div className="flex flex-col gap-3 border-b border-[color:var(--cf-border)] px-5 py-4">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${STATUS_CLASS[strategy.status]}`}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 !text-xs font-semibold ${STATUS_CLASS[strategy.status]}`}
                     >
                       <span className="h-2 w-2 rounded-full bg-current" aria-hidden="true" />
                       {semanticHeadline ?? t(`aiQuant.status.${strategy.status}`)}
                     </span>
                   </div>
-                  <h1 className="mt-4 break-words text-3xl font-bold tracking-normal text-[color:var(--cf-text-strong)] md:text-4xl">
+                  <h1 className="mt-3 break-words !text-base !font-semibold !leading-6 tracking-normal text-[color:var(--cf-text-strong)]">
                     {strategy.name}
                   </h1>
-                  <p className="mt-2 text-sm font-medium text-[color:var(--cf-muted)]">
+                  <p className="mt-1 text-sm font-normal leading-[22px] text-[color:var(--cf-muted)]">
                     {strategy.exchange.toUpperCase()} / {strategy.symbol} / {strategy.timeframe}
                   </p>
-                  <p className="mt-3 max-w-3xl text-sm leading-6 text-[color:var(--cf-muted)] md:text-base">
+                  <p className="mt-2 max-w-3xl text-sm leading-[22px] text-[color:var(--cf-muted)]">
                     {semanticExplanation ??
                       `${strategy.exchange.toUpperCase()} / ${strategy.symbol} / ${strategy.timeframe}`}
                   </p>
-                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] leading-5 text-[color:var(--cf-muted)]">
+                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs leading-5 text-[color:var(--cf-muted)]">
                     <span className="inline-flex items-center gap-1">
                       {t('aiQuant.detail.strategyInstance')}
                       <span
@@ -901,48 +901,48 @@ export function AiQuantStrategyDetail({
             data-testid="strategy-detail-metric-grid"
             className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4"
           >
-            <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4">
-              <p className="text-xs text-[color:var(--cf-muted)]">{t('aiQuant.detail.totalPnl')}</p>
+            <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
+              <p className="text-sm font-normal leading-[22px] text-[color:var(--cf-muted)]">{t('aiQuant.detail.totalPnl')}</p>
               <p
-                className={`mt-2 text-2xl font-bold tabular-nums ${pnlToneClass(displayTotalPnl)}`}
+                className={`mt-1 text-sm !font-semibold leading-[22px] tabular-nums ${pnlToneClass(displayTotalPnl)}`}
               >
                 {formatSignedNumber(displayTotalPnl)} USDT
               </p>
-              <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+              <p className="mt-1 !text-xs leading-5 text-[color:var(--cf-muted)]">
                 {t('aiQuant.detail.returnPct')} {formatPercentValue(strategy.metrics.returnPct)}
               </p>
             </article>
-            <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4">
-              <p className="text-xs text-[color:var(--cf-muted)]">
+            <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
+              <p className="text-sm font-normal leading-[22px] text-[color:var(--cf-muted)]">
                 {t('aiQuant.detail.todayPnlLabel')}
               </p>
               <p
-                className={`mt-2 text-2xl font-bold tabular-nums ${pnlToneClass(displayTodayPnl)}`}
+                className={`mt-1 text-sm !font-semibold leading-[22px] tabular-nums ${pnlToneClass(displayTodayPnl)}`}
               >
                 {formatSignedNumber(displayTodayPnl)} USDT
               </p>
-              <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+              <p className="mt-1 !text-xs leading-5 text-[color:var(--cf-muted)]">
                 {t('aiQuant.detail.latestTrades')}{' '}
                 {latestOrderPreview ? formatOrderSemanticAction(latestOrderPreview, t) : '--'}
               </p>
             </article>
-            <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4">
-              <p className="text-xs text-[color:var(--cf-muted)]">
+            <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
+              <p className="text-sm font-normal leading-[22px] text-[color:var(--cf-muted)]">
                 {t('aiQuant.detail.maxDrawdown')}
               </p>
-              <p className="mt-2 text-2xl font-bold text-[color:var(--cf-text-strong)] tabular-nums">
+              <p className="mt-1 text-sm !font-semibold leading-[22px] text-[color:var(--cf-text-strong)] tabular-nums">
                 {formatPercentValue(strategy.metrics.maxDrawdownPct)}
               </p>
-              <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+              <p className="mt-1 !text-xs leading-5 text-[color:var(--cf-muted)]">
                 {t('aiQuant.detail.tradeCount')} {strategy.metrics.tradeCount}
               </p>
             </article>
-            <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4">
-              <p className="text-xs text-[color:var(--cf-muted)]">{t('aiQuant.detail.winRate')}</p>
-              <p className="mt-2 text-2xl font-bold text-[color:var(--cf-text-strong)] tabular-nums">
+            <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
+              <p className="text-sm font-normal leading-[22px] text-[color:var(--cf-muted)]">{t('aiQuant.detail.winRate')}</p>
+              <p className="mt-1 text-sm !font-semibold leading-[22px] text-[color:var(--cf-text-strong)] tabular-nums">
                 {formatPercentValue(strategy.metrics.winRatePct)}
               </p>
-              <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+              <p className="mt-1 !text-xs leading-5 text-[color:var(--cf-muted)]">
                 {isSpotMarket
                   ? t('aiQuant.detail.currentHoldings')
                   : t('aiQuant.detail.currentPositionCount')}{' '}
@@ -965,15 +965,15 @@ export function AiQuantStrategyDetail({
           {!isViewOnly && (strategy.status === 'running' || strategy.status === 'stopped') && (
             <section
               data-testid="strategy-runtime-control-panel"
-              className="flex flex-col gap-4 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 lg:hidden"
+              className="flex flex-col gap-4 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 lg:hidden"
             >
               <div className="flex flex-col gap-4">
                 <div className="flex flex-wrap items-center gap-3">
-                  <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+                  <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                     {t('aiQuant.detail.runtimeControl')}
                   </h2>
                   <span
-                    className={`w-fit rounded-lg border px-2 py-1 text-xs ${STATUS_CLASS[strategy.status]}`}
+                    className={`w-fit rounded-full border px-2 py-0.5 !text-xs leading-4 ${STATUS_CLASS[strategy.status]}`}
                   >
                     {strategy.status === 'running'
                       ? t('aiQuant.detail.runtimeOnline')
@@ -982,7 +982,7 @@ export function AiQuantStrategyDetail({
                 </div>
 
                 <div>
-                  <p className="text-sm leading-6 text-[color:var(--cf-text)]">
+                  <p className="text-sm leading-[22px] text-[color:var(--cf-text)]">
                     {strategy.status === 'running'
                       ? showLiquidateAndStop
                         ? t(
@@ -994,7 +994,7 @@ export function AiQuantStrategyDetail({
                       : t('aiQuant.detail.stoppedDescription')}
                   </p>
                   {showLiquidateAndStop && (
-                    <p className="mt-2 text-xs leading-5 text-[color:var(--cf-muted)]">
+                    <p className="mt-2 !text-xs leading-5 text-[color:var(--cf-muted)]">
                       {isSpotMarket
                         ? t('aiQuant.detail.spotRiskHint', {
                             holding: exposureSummary,
@@ -1024,7 +1024,7 @@ export function AiQuantStrategyDetail({
                           void openStopDialogWithLatestDetail()
                         }}
                         disabled={runtimeActionDisabled}
-                        className="inline-flex h-9 min-w-max items-center justify-center rounded-lg border border-red-500/20 bg-red-500/10 px-4 text-sm font-semibold whitespace-nowrap text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
+                        className="inline-flex items-center justify-center rounded-full border border-red-500/20 bg-red-500/10 px-3.5 py-1.5 text-xs !font-semibold leading-5 whitespace-nowrap text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
                       >
                         {t('aiQuant.actions.stopStrategy')}
                       </button>
@@ -1037,7 +1037,7 @@ export function AiQuantStrategyDetail({
                           void handleRuntimeAction('run')
                         }}
                         disabled={runtimeActionDisabled}
-                        className="inline-flex h-9 min-w-max items-center justify-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 text-sm font-semibold whitespace-nowrap text-emerald-600 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-1.5 text-xs !font-semibold leading-5 whitespace-nowrap text-emerald-600 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400"
                       >
                         <Play className="h-4 w-4 fill-current" aria-hidden="true" />
                         {t('aiQuant.detail.run')}
@@ -1055,7 +1055,7 @@ export function AiQuantStrategyDetail({
                             source: 'account-detail',
                           })
                         }}
-                        className="inline-flex h-9 min-w-max items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-white/[0.02] px-4 text-sm font-semibold whitespace-nowrap text-[color:var(--cf-text-strong)] transition hover:border-white/20 hover:bg-white/[0.05]"
+                        className="inline-flex items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-white/[0.02] px-3.5 py-1.5 text-xs !font-semibold leading-5 whitespace-nowrap text-[color:var(--cf-text-strong)] transition hover:border-white/20 hover:bg-white/[0.05]"
                       >
                         {t('aiQuant.detail.returnToChat')}
                       </Link>
@@ -1065,7 +1065,7 @@ export function AiQuantStrategyDetail({
               </div>
               {runtimeControlFeedback && (
                 <p
-                  className={`mt-4 text-sm ${
+                  className={`mt-4 text-sm leading-[22px] ${
                     runtimeControlFeedback.kind === 'error' ? 'text-rose-300' : 'text-emerald-300'
                   }`}
                 >
@@ -1098,8 +1098,8 @@ export function AiQuantStrategyDetail({
           />
 
           {strategy.compatibilityMetadata?.isLegacySnapshot && (
-            <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-              <p className="font-semibold text-amber-100">
+            <section className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm leading-[22px] text-amber-200">
+              <p className="!font-semibold text-amber-100">
                 {t('aiQuant.detail.republishRequired')}
               </p>
               <p className="mt-1">
@@ -1115,24 +1115,24 @@ export function AiQuantStrategyDetail({
           )}
 
           {strategy.compatibilityMetadata?.invalidBinding && (
-            <section className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-              <p className="font-semibold text-rose-100">
+            <section className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-5 py-4 text-sm leading-[22px] text-rose-200">
+              <p className="!font-semibold text-rose-100">
                 {t('aiQuant.detail.snapshotBindingInvalid')}
               </p>
               <p className="mt-1">{t('aiQuant.detail.snapshotBindingInvalidDescription')}</p>
             </section>
           )}
 
-          <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-            <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+          <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
+            <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
               {formatEquitySeriesTitle(t)}
             </h2>
-            <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+            <p className="mt-1 !text-xs text-[color:var(--cf-muted)]">
               {formatEquitySeriesSource(strategy.marketType, t)}
             </p>
             <div
               data-testid="strategy-detail-equity-chart-panel"
-              className="relative mt-3 overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3"
+              className="relative mt-3 overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2"
             >
               <svg
                 viewBox="0 0 900 220"
@@ -1200,7 +1200,7 @@ export function AiQuantStrategyDetail({
               )}
               {hoverPoint && hoverCoord && (
                 <div
-                  className="pointer-events-none absolute rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-2 text-xs text-[color:var(--cf-text)] shadow-lg"
+                  className="pointer-events-none absolute rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-2 !text-xs text-[color:var(--cf-text)] shadow-lg"
                   style={{
                     top: '20px',
                     right: hoverCoord.x > 700 ? '8px' : undefined,
@@ -1226,7 +1226,7 @@ export function AiQuantStrategyDetail({
             </div>
           </section>
 
-          <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+          <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
             <div className="flex flex-col gap-3">
               <div
                 className="flex gap-2 overflow-x-auto pb-1"
@@ -1240,14 +1240,14 @@ export function AiQuantStrategyDetail({
                     role="tab"
                     aria-selected={activeInfoTab === tab}
                     onClick={() => setActiveInfoTab(tab)}
-                    className={`h-8 min-w-[5.5rem] rounded-lg border px-3 text-xs font-semibold whitespace-nowrap transition ${activeInfoTab === tab ? activeInfoTabClass : idleInfoTabClass}`}
+                    className={`rounded-full border px-3.5 py-1.5 text-xs !font-semibold leading-5 whitespace-nowrap transition ${activeInfoTab === tab ? activeInfoTabClass : idleInfoTabClass}`}
                   >
                     {label}
                   </button>
                 ))}
               </div>
               {activeInfoTab === 'trades' && (
-                <p className="text-xs text-[color:var(--cf-muted)]">
+                <p className="!text-xs text-[color:var(--cf-muted)]">
                   {t('aiQuant.detail.latestTradesSource')}
                 </p>
               )}
@@ -1290,7 +1290,7 @@ export function AiQuantStrategyDetail({
                             <td className="py-2 pr-3 text-[color:var(--cf-text)]">
                               <div>{formatOrderSemanticAction(order, t)}</div>
                               {order.reconcileRequired ? (
-                                <div className="mt-0.5 text-xs text-amber-300">
+                                <div className="mt-0.5 !text-xs text-amber-300">
                                   {t('aiQuant.detail.localReconcilePending')}
                                 </div>
                               ) : null}
@@ -1304,7 +1304,7 @@ export function AiQuantStrategyDetail({
                             <td className="py-2 pr-3 text-[color:var(--cf-text)]">
                               <div>{quantityDisplay.quantityLabel}</div>
                               {quantityDisplay.notionalLabel ? (
-                                <div className="mt-0.5 text-xs text-[color:var(--cf-muted)]">
+                                <div className="mt-0.5 !text-xs text-[color:var(--cf-muted)]">
                                   {quantityDisplay.notionalLabel}
                                 </div>
                               ) : null}
@@ -1319,24 +1319,24 @@ export function AiQuantStrategyDetail({
                   </table>
                 </div>
               ) : (
-                <p className="mt-3 text-sm text-[color:var(--cf-muted)]">
+                <p className="mt-3 text-sm leading-[22px] text-[color:var(--cf-muted)]">
                   {t('aiQuant.detail.noTrades')}
                 </p>
               ))}
             {activeInfoTab === 'rules' &&
               (strategy.ruleSummary?.rules?.length ? (
                 <div className="mt-5">
-                  <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+                  <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                     {t('aiQuant.detail.publishedSnapshotRuleSummary')}
                   </h2>
                   <div className="mt-3 grid gap-3 md:grid-cols-3">
                     {strategy.ruleSummary.rules.map(rule => (
                       <article
                         key={rule.id ?? `${rule.phase}-${rule.conditionKey}`}
-                        className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3"
+                        className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2"
                       >
-                        <p className="text-xs text-[color:var(--cf-muted)]">{rule.phase ?? '--'}</p>
-                        <p className="mt-1 text-sm font-semibold text-[color:var(--cf-text-strong)]">
+                        <p className="!text-xs text-[color:var(--cf-muted)]">{rule.phase ?? '--'}</p>
+                        <p className="mt-1 text-sm !font-semibold text-[color:var(--cf-text-strong)]">
                           {formatRuleSummary(rule, t)}
                         </p>
                       </article>
@@ -1344,11 +1344,11 @@ export function AiQuantStrategyDetail({
                   </div>
                 </div>
               ) : (
-                <div className="mt-5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-                  <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+                <div className="mt-5 rounded-2xl border border-amber-500/30 bg-amber-500/5 px-5 py-4">
+                  <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                     {t('aiQuant.legacyUnsupportedTitle')}
                   </h2>
-                  <p className="mt-3 text-sm text-amber-300">
+                  <p className="mt-3 text-sm leading-[22px] text-amber-300">
                     {t('aiQuant.legacyUnsupportedMessage')}
                   </p>
                 </div>
@@ -1357,8 +1357,8 @@ export function AiQuantStrategyDetail({
             {activeInfoTab === 'config' && (
               <section className="mt-5 grid gap-4 md:grid-cols-2">
                 {strategy.paramSchema ? (
-                  <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-                    <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+                  <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
+                    <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                       {t('aiQuant.paramSnapshotTitle')}
                     </h2>
                     <div className="mt-3 space-y-2 text-sm text-[color:var(--cf-text)]">
@@ -1398,8 +1398,8 @@ export function AiQuantStrategyDetail({
                   </article>
                 ) : null}
 
-                <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-                  <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+                <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
+                  <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                     {t('aiQuant.detail.executionConfig')}
                   </h2>
                   <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
@@ -1446,12 +1446,12 @@ export function AiQuantStrategyDetail({
                     )}
                   </div>
                   {strategy.deploymentConstraintExplanation && (
-                    <p className="mt-3 text-xs text-[color:var(--cf-muted)]">
+                    <p className="mt-3 !text-xs text-[color:var(--cf-muted)]">
                       {strategy.deploymentConstraintExplanation}
                     </p>
                   )}
                   {strategy.consistencySummary?.driftReasons?.length ? (
-                    <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-200">
+                    <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 !text-xs text-amber-700 dark:text-amber-200">
                       {strategy.consistencySummary.driftReasons.join(' / ')}
                     </div>
                   ) : null}
@@ -1461,8 +1461,8 @@ export function AiQuantStrategyDetail({
 
             {activeInfoTab === 'backtest' && (
               <section className="mt-5 grid gap-4 md:grid-cols-2">
-                <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-                  <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+                <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
+                  <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                     {t('aiQuant.detail.backtestBaseline')}
                   </h2>
                   <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
@@ -1500,8 +1500,8 @@ export function AiQuantStrategyDetail({
                     </p>
                   </div>
                 </article>
-                <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-                  <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+                <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
+                  <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                     {t('aiQuant.detail.backtestBaseline')}
                   </h2>
                   <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
@@ -1534,10 +1534,10 @@ export function AiQuantStrategyDetail({
               <article className="mt-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+                    <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                       {t('aiQuant.detail.runtimeTimeline')}
                     </h2>
-                    <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+                    <p className="mt-1 !text-xs text-[color:var(--cf-muted)]">
                       {t('aiQuant.detail.timelineCount', { count: strategy.timeline.length })}
                       {hasMoreTimelineItems && !showFullTimeline
                         ? t('aiQuant.detail.timelinePreviewSuffix', {
@@ -1550,7 +1550,7 @@ export function AiQuantStrategyDetail({
                     <button
                       type="button"
                       onClick={() => setShowFullTimeline(curr => !curr)}
-                      className="inline-flex h-8 min-w-max items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-white/[0.02] px-3 text-xs font-semibold text-[color:var(--cf-text-strong)] transition hover:border-white/20 hover:bg-white/[0.05]"
+                      className="inline-flex items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-white/[0.02] px-3.5 py-1.5 text-xs !font-semibold leading-5 text-[color:var(--cf-text-strong)] transition hover:border-white/20 hover:bg-white/[0.05]"
                     >
                       {showFullTimeline
                         ? t('aiQuant.detail.collapse')
@@ -1562,14 +1562,14 @@ export function AiQuantStrategyDetail({
                   {timelineItems.map(item => (
                     <li
                       key={`${item.at}-${item.event}`}
-                      className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3"
+                      className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2"
                     >
-                      <p className="text-xs text-[color:var(--cf-muted)]">{item.at}</p>
-                      <p className="mt-1 text-sm font-semibold text-[color:var(--cf-text-strong)]">
+                      <p className="!text-xs text-[color:var(--cf-muted)]">{item.at}</p>
+                      <p className="mt-1 text-sm !font-semibold text-[color:var(--cf-text-strong)]">
                         {formatTimelineEvent(item.event, t)}
                       </p>
                       {item.note && (
-                        <p className="mt-1 text-xs text-[color:var(--cf-muted)]">{item.note}</p>
+                        <p className="mt-1 !text-xs text-[color:var(--cf-muted)]">{item.note}</p>
                       )}
                     </li>
                   ))}
@@ -1580,35 +1580,35 @@ export function AiQuantStrategyDetail({
             {activeInfoTab === 'diagnostics' && (
               <section className="mt-5 grid gap-4">
                 {semanticSummary && (
-                  <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-                    <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+                  <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
+                    <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                       {t('aiQuant.detail.currentStatusExplanation')}
                     </h2>
-                    <p className="mt-2 text-sm leading-6 text-[color:var(--cf-text)]">
+                    <p className="mt-2 text-sm leading-[22px] text-[color:var(--cf-text)]">
                       {semanticExplanation}
                     </p>
                     <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
-                      <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
-                        <p className="text-xs text-[color:var(--cf-muted)]">
+                      <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2">
+                        <p className="!text-xs text-[color:var(--cf-muted)]">
                           {t('aiQuant.detail.strategyService')}
                         </p>
-                        <p className="mt-1 font-semibold text-[color:var(--cf-text-strong)]">
+                        <p className="mt-1 !font-semibold text-[color:var(--cf-text-strong)]">
                           {semanticServiceStatus}
                         </p>
                       </article>
-                      <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
-                        <p className="text-xs text-[color:var(--cf-muted)]">
+                      <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2">
+                        <p className="!text-xs text-[color:var(--cf-muted)]">
                           {t('aiQuant.detail.currentPosition')}
                         </p>
-                        <p className="mt-1 font-semibold text-[color:var(--cf-text-strong)]">
+                        <p className="mt-1 !font-semibold text-[color:var(--cf-text-strong)]">
                           {semanticPositionStatus}
                         </p>
                       </article>
-                      <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
-                        <p className="text-xs text-[color:var(--cf-muted)]">
+                      <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2">
+                        <p className="!text-xs text-[color:var(--cf-muted)]">
                           {t('aiQuant.detail.currentCycle')}
                         </p>
-                        <p className="mt-1 font-semibold text-[color:var(--cf-text-strong)]">
+                        <p className="mt-1 !font-semibold text-[color:var(--cf-text-strong)]">
                           {semanticCycleStatus}
                         </p>
                       </article>
@@ -1644,8 +1644,8 @@ export function AiQuantStrategyDetail({
                   </article>
                 )}
 
-                <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-                  <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+                <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
+                  <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                     {t('aiQuant.detail.truthAudit')}
                   </h2>
                   <div className="mt-3 space-y-2 text-sm">
@@ -1718,11 +1718,11 @@ export function AiQuantStrategyDetail({
                 </article>
 
                 {strategy.runtimeExecutionStates && strategy.runtimeExecutionStates.length > 0 && (
-                  <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-                    <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+                  <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
+                    <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                       {t('aiQuant.detail.advancedRuntimeDiagnostics')}
                     </h2>
-                    <p className="mt-2 text-sm text-[color:var(--cf-muted)]">
+                    <p className="mt-2 text-sm leading-[22px] text-[color:var(--cf-muted)]">
                       {t('aiQuant.detail.runtimeDiagnosticsSummary', {
                         consumed: consumedRuntimeStates.length,
                         pending: pendingRuntimeStates.length,
@@ -1736,14 +1736,14 @@ export function AiQuantStrategyDetail({
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div>
-                              <p className="text-sm font-semibold text-[color:var(--cf-text-strong)]">
+                              <p className="text-sm !font-semibold text-[color:var(--cf-text-strong)]">
                                 {state.executionSemanticKey}
                               </p>
-                              <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+                              <p className="mt-1 !text-xs text-[color:var(--cf-muted)]">
                                 {t('aiQuant.detail.snapshot', { id: state.publishedSnapshotId })}
                               </p>
                             </div>
-                            <span className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 py-1 text-xs text-[color:var(--cf-text-strong)]">
+                            <span className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 py-1 !text-xs text-[color:var(--cf-text-strong)]">
                               {formatRuntimeExecutionStatus(state.status, t)}
                             </span>
                           </div>
@@ -1791,23 +1791,23 @@ export function AiQuantStrategyDetail({
 
         <aside className="hidden space-y-4 lg:sticky lg:top-6 lg:block">
           {!isViewOnly && (strategy.status === 'running' || strategy.status === 'stopped') && (
-            <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-              <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+            <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
+              <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                 {t('aiQuant.detail.runtimeControl')}
               </h2>
-              <p className="mt-1 text-sm leading-6 text-[color:var(--cf-muted)]">
+              <p className="mt-1 text-sm leading-[22px] text-[color:var(--cf-muted)]">
                 {strategy.status === 'running'
                   ? t('aiQuant.detail.runningDescription')
                   : t('aiQuant.detail.stoppedDescription')}
               </p>
-              <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-                <p className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+              <div className="mt-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-4">
+                <p className="inline-flex items-center gap-2 text-sm !font-semibold text-emerald-600 dark:text-emerald-400">
                   <span className="h-2 w-2 rounded-full bg-current" aria-hidden="true" />
                   {strategy.status === 'running'
                     ? t('aiQuant.detail.runtimeOnline')
                     : t('aiQuant.detail.runtimeOffline')}
                 </p>
-                <p className="mt-2 text-xs leading-5 text-[color:var(--cf-muted)]">
+                <p className="mt-2 !text-xs leading-5 text-[color:var(--cf-muted)]">
                   {showLiquidateAndStop
                     ? isSpotMarket
                       ? t('aiQuant.detail.spotRiskHint', {
@@ -1835,7 +1835,7 @@ export function AiQuantStrategyDetail({
                       void openStopDialogWithLatestDetail()
                     }}
                     disabled={runtimeActionDisabled}
-                    className="inline-flex h-11 items-center justify-center rounded-xl border border-red-500/30 bg-red-500/10 px-4 text-sm font-semibold text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
+                    className="inline-flex items-center justify-center rounded-full border border-red-500/30 bg-red-500/10 px-3.5 py-1.5 text-xs !font-semibold leading-5 text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
                   >
                     {t('aiQuant.actions.stopStrategy')}
                   </button>
@@ -1847,7 +1847,7 @@ export function AiQuantStrategyDetail({
                       void handleRuntimeAction('run')
                     }}
                     disabled={runtimeActionDisabled}
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 text-sm font-semibold text-emerald-600 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1.5 text-xs !font-semibold leading-5 text-emerald-600 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400"
                   >
                     <Play className="h-4 w-4 fill-current" aria-hidden="true" />
                     {t('aiQuant.detail.run')}
@@ -1864,7 +1864,7 @@ export function AiQuantStrategyDetail({
                         source: 'account-detail',
                       })
                     }}
-                    className="from-primary to-secondary shadow-primary/15 inline-flex h-11 items-center justify-center rounded-xl bg-gradient-to-r px-4 text-sm font-semibold !text-white text-white shadow-lg"
+                    className="from-primary to-secondary shadow-primary/15 inline-flex items-center justify-center rounded-full bg-gradient-to-r px-3.5 py-1.5 text-xs !font-semibold leading-5 !text-white text-white shadow-lg"
                   >
                     {t('aiQuant.detail.returnToChat')}
                   </Link>
@@ -1872,7 +1872,7 @@ export function AiQuantStrategyDetail({
               </div>
               {runtimeControlFeedback && (
                 <p
-                  className={`mt-4 text-sm ${
+                  className={`mt-4 text-sm leading-[22px] ${
                     runtimeControlFeedback.kind === 'error'
                       ? 'text-rose-500 dark:text-rose-400'
                       : 'text-emerald-600 dark:text-emerald-400'
@@ -1884,11 +1884,11 @@ export function AiQuantStrategyDetail({
             </article>
           )}
 
-          <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-            <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+          <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
+            <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
               {t('aiQuant.detail.accountOverview')}
             </h2>
-            <p className="mt-1 text-sm leading-6 text-[color:var(--cf-muted)]">
+            <p className="mt-1 text-sm leading-[22px] text-[color:var(--cf-muted)]">
               {t('aiQuant.detail.accountOverviewSource')}
             </p>
             <div className="mt-4 space-y-3 text-sm">
@@ -1946,13 +1946,13 @@ export function AiQuantStrategyDetail({
             </div>
           </article>
 
-          <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-            <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+          <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
+            <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
               {isSpotMarket
                 ? t('aiQuant.detail.holdingOverview')
                 : t('aiQuant.detail.positionOverview')}
             </h2>
-            <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+            <p className="mt-1 !text-xs text-[color:var(--cf-muted)]">
               {t('aiQuant.detail.positionOverviewSource')}
             </p>
             <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
@@ -2005,7 +2005,7 @@ export function AiQuantStrategyDetail({
                 void openStopDialogWithLatestDetail()
               }}
               disabled={runtimeActionDisabled}
-              className="inline-flex h-11 items-center justify-center rounded-xl border border-red-500/30 bg-red-500/10 px-4 text-sm font-semibold text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
+              className="inline-flex items-center justify-center rounded-full border border-red-500/30 bg-red-500/10 px-3.5 py-1.5 text-xs !font-semibold leading-5 text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
             >
               {t('aiQuant.actions.stopStrategy')}
             </button>
@@ -2017,7 +2017,7 @@ export function AiQuantStrategyDetail({
                 void handleRuntimeAction('run')
               }}
               disabled={runtimeActionDisabled}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 text-sm font-semibold text-emerald-600 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400"
+              className="inline-flex items-center justify-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1.5 text-xs !font-semibold leading-5 text-emerald-600 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400"
             >
               <Play className="h-4 w-4 fill-current" aria-hidden="true" />
               {t('aiQuant.detail.run')}
@@ -2034,7 +2034,7 @@ export function AiQuantStrategyDetail({
                   source: 'account-detail',
                 })
               }}
-              className="from-primary to-secondary shadow-primary/15 inline-flex h-11 items-center justify-center rounded-xl bg-gradient-to-r px-4 text-sm font-semibold !text-white text-white shadow-lg"
+              className="from-primary to-secondary shadow-primary/15 inline-flex items-center justify-center rounded-full bg-gradient-to-r px-3.5 py-1.5 text-xs !font-semibold leading-5 !text-white text-white shadow-lg"
             >
               {t('aiQuant.detail.returnToChat')}
             </Link>

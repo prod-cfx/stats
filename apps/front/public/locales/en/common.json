@@ -73,6 +73,8 @@
     "userIdCopied": "UserId Copied",
     "emailBound": "Email Bound",
     "codeSent": "Verification code sent",
+    "bindEmailFailed": "Failed to bind email",
+    "sendCodeFailed": "Failed to send verification code",
     "logout": "Logout",
     "settings": "Account Settings",
     "telegramAvailable": "Telegram available",
@@ -206,7 +208,7 @@
     },
     "noStrategies": "No Running Strategies",
     "noStrategiesDesc": "You haven't created any AI quant strategies yet. Start chatting to generate your first automated trading strategy.",
-    "createStrategy": "Create New Strategy",
+    "createStrategy": "Create Strategy",
     "viewDetail": "View Details",
     "updatedAt": "Updated at",
     "status": {

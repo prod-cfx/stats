@@ -75,22 +75,22 @@ export function GuestAiQuantLanding({ onRequireLogin }: GuestAiQuantLandingProps
   }
 
   return (
-    <section className="w-full space-y-8">
+    <section className="w-full space-y-5">
       {/* AI Chat Section */}
-      <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 shadow-sm">
+      <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md">
-            <Sparkles className="h-5 w-5" />
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-sm">
+            <Sparkles className="h-4 w-4" />
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">{t('aiQuant.guestLanding.title')}</h1>
-            <p className="text-sm text-[color:var(--cf-muted)]">
+          <div className="min-w-0">
+            <h1 className="!text-base !font-semibold !leading-6 text-[color:var(--cf-text-strong)]">{t('aiQuant.guestLanding.title')}</h1>
+            <p className="!text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
               {t('aiQuant.guestLanding.subtitle')}
             </p>
           </div>
         </div>
 
-        <div className="group mt-6 relative rounded-3xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4 shadow-inner transition-all focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/10 hover:border-primary/30">
+        <div className="group relative mt-4 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-3 shadow-inner transition-colors focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 hover:border-primary/30">
           <textarea
             value={draft}
             onChange={event => setDraft(event.target.value)}
@@ -103,14 +103,14 @@ export function GuestAiQuantLanding({ onRequireLogin }: GuestAiQuantLandingProps
               }
             }}
             placeholder={t('aiQuant.inputPlaceholder')}
-            className="min-h-[100px] w-full resize-none bg-transparent text-base leading-relaxed text-[color:var(--cf-text)] outline-none placeholder:text-[color:var(--cf-muted)]"
+            className="min-h-[88px] w-full resize-none bg-transparent !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] outline-none placeholder:text-[color:var(--cf-muted)]"
           />
           <div className="mt-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setDraft('3分钟跌1%买入，15分钟涨2%卖出，单笔10%资金')}
-                className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-bg)] hover:text-[color:var(--cf-text)]"
+                className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-bg)] hover:text-[color:var(--cf-text)]"
               >
                 {t('aiQuant.guestLanding.tryExample')}
               </button>
@@ -120,26 +120,26 @@ export function GuestAiQuantLanding({ onRequireLogin }: GuestAiQuantLandingProps
               onClick={handleSend}
               disabled={!draft.trim()}
               title={t('aiQuant.send')}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white shadow-md transition-all hover:bg-primary/90 hover:scale-105 hover:shadow-lg disabled:cursor-not-allowed disabled:bg-[color:var(--cf-border)] disabled:text-[color:var(--cf-muted)] disabled:scale-100 disabled:shadow-none"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-[color:var(--cf-border)] disabled:text-[color:var(--cf-muted)] disabled:shadow-none"
               aria-label={t('aiQuant.send')}
             >
-              <ArrowUp className="h-5 w-5" />
+              <ArrowUp className="h-4 w-4" />
             </button>
           </div>
         </div>
       </div>
 
       {/* Strategy Square Section */}
-      <section className="space-y-4">
+      <section className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <div>
-            <h2 className="text-xl font-bold text-[color:var(--cf-text-strong)]">{t('aiQuant.guestLanding.plazaTitle')}</h2>
-            <p className="mt-1 text-sm text-[color:var(--cf-muted)]">{t('aiQuant.guestLanding.plazaSubtitle')}</p>
+            <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{t('aiQuant.guestLanding.plazaTitle')}</h2>
+            <p className="mt-1 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">{t('aiQuant.guestLanding.plazaSubtitle')}</p>
           </div>
           {/* Optional: Add a "View All" link here if needed */}
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {STRATEGY_PRESETS.map(item => {
             const display = PRESET_DISPLAY_DATA[item.id] || {
               tags: ['通用'],
@@ -153,21 +153,21 @@ export function GuestAiQuantLanding({ onRequireLogin }: GuestAiQuantLandingProps
             return (
               <article
                 key={item.id}
-                className="group flex flex-col justify-between rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 transition-all hover:border-primary/30 hover:shadow-lg hover:-translate-y-0.5"
+                className="group flex flex-col justify-between rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 transition-colors hover:border-primary/30 hover:bg-[color:var(--cf-surface-hover)]"
               >
                 <div>
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[color:var(--cf-bg)] text-primary group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                        <Icon className="h-5 w-5" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[color:var(--cf-bg)] text-primary transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+                        <Icon className="h-4 w-4" />
                       </div>
-                      <div>
-                        <h3 className="font-bold text-[color:var(--cf-text-strong)]">{t(`aiQuant.strategies.${item.id}.name`, { defaultValue: item.name })}</h3>
+                      <div className="min-w-0">
+                        <h3 className="truncate !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{t(`aiQuant.strategies.${item.id}.name`, { defaultValue: item.name })}</h3>
                         <div className="mt-1 flex flex-wrap gap-1.5">
                           {display.tags.map(tag => (
                             <span
                               key={tag}
-                              className="inline-flex items-center rounded-md bg-[color:var(--cf-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--cf-muted)] border border-[color:var(--cf-border)]"
+                              className="inline-flex items-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2 py-0.5 !text-[10px] !font-semibold !leading-4 text-[color:var(--cf-muted)]"
                             >
                               {t(`aiQuant.strategies.${item.id}.tags.${tag}`, { defaultValue: tag })}
                             </span>
@@ -177,28 +177,28 @@ export function GuestAiQuantLanding({ onRequireLogin }: GuestAiQuantLandingProps
                     </div>
                   </div>
 
-                  <p className="mt-4 line-clamp-2 text-sm leading-relaxed text-[color:var(--cf-muted)]">
+                  <p className="mt-3 line-clamp-2 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
                     {t(`aiQuant.strategies.${item.id}.desc`, { defaultValue: item.desc })}
                   </p>
 
-                  <div className="mt-4 flex items-center gap-4 rounded-xl bg-[color:var(--cf-bg)] px-3 py-2">
+                  <div className="mt-3 flex items-center gap-4 rounded-2xl bg-[color:var(--cf-bg)] px-3 py-2">
                     <div>
-                      <div className="text-xs text-[color:var(--cf-muted)]">{t('aiQuant.guestLanding.backtestReturn')}</div>
-                      <div className="font-mono text-sm font-bold text-green-500">{display.returnRate}</div>
+                      <div className="!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">{t('aiQuant.guestLanding.backtestReturn')}</div>
+                      <div className="font-mono !text-sm !font-semibold !leading-[22px] text-green-500">{display.returnRate}</div>
                     </div>
                     <div className="h-8 w-px bg-[color:var(--cf-border)]" />
                     <div>
-                      <div className="text-xs text-[color:var(--cf-muted)]">{t('aiQuant.guestLanding.winRate')}</div>
-                      <div className="font-mono text-sm font-bold text-[color:var(--cf-text)]">{display.winRate}</div>
+                      <div className="!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">{t('aiQuant.guestLanding.winRate')}</div>
+                      <div className="font-mono !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text)]">{display.winRate}</div>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="mt-4 grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => onRequireLogin({ type: 'run', strategyId: item.id })}
-                    className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:from-indigo-600 hover:to-purple-700 active:scale-95"
+                    className="flex items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-white shadow-sm transition-colors hover:from-indigo-600 hover:to-purple-700"
                   >
                     <Play className="h-4 w-4 fill-current" />
                     {t('aiQuant.run')}
@@ -206,7 +206,7 @@ export function GuestAiQuantLanding({ onRequireLogin }: GuestAiQuantLandingProps
                   <button
                     type="button"
                     onClick={() => onRequireLogin({ type: 'edit', strategyId: item.id })}
-                    className="flex items-center justify-center gap-2 rounded-xl border border-[color:var(--cf-border)] bg-transparent px-4 py-2.5 text-sm font-semibold text-[color:var(--cf-text-strong)] transition-all hover:bg-[color:var(--cf-bg)] hover:border-[color:var(--cf-text-strong)] active:scale-95"
+                    className="flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-transparent px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] transition-colors hover:border-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-bg)]"
                   >
                     <Edit3 className="h-4 w-4" />
                     {t('aiQuant.edit')}

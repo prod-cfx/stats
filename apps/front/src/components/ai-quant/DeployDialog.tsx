@@ -1,5 +1,5 @@
-import Link from 'next/link'
 import { Loader2 } from 'lucide-react'
+import Link from 'next/link'
 import { useTranslation } from 'react-i18next'
 import { ApiKeyStatusBadge } from './ApiKeyStatusBadge'
 
@@ -99,50 +99,50 @@ export function DeployDialog({
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 px-4 py-4" onClick={handleDialogClose}>
       <div
-        className="max-h-[calc(100dvh-2rem)] w-full max-w-[520px] overflow-y-auto rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 sm:p-5"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-[480px] overflow-y-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl sm:p-5"
         onClick={event => event.stopPropagation()}
       >
-        <h3 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{title}</h3>
-        <p className="mt-1 text-sm text-[color:var(--cf-muted)]">{description}</p>
+        <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{title}</h3>
+        <p className="mt-1 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">{description}</p>
 
-        <div className="mt-4 flex flex-col gap-2 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3 sm:flex-row sm:items-center sm:justify-between">
-          <span className="text-sm text-[color:var(--cf-text)]">{t('aiQuant.deployDialog.apiStatus')}</span>
+        <div className="mt-4 flex flex-col gap-2 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-muted)] p-3 sm:flex-row sm:items-center sm:justify-between">
+          <span className="!text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">{t('aiQuant.deployDialog.apiStatus')}</span>
           <ApiKeyStatusBadge configured={apiConfigured} />
         </div>
 
         {!apiConfigured && (
-          <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-500">
+          <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 !text-sm !leading-[22px] text-amber-500">
             {t('aiQuant.deployDialog.apiKeyMissing')}
           </div>
         )}
 
         {!canDeploy && (
-          <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-500">
+          <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 !text-sm !leading-[22px] text-amber-500">
             {t('aiQuant.deployDialog.drawdownFail')}
           </div>
         )}
 
-        <div className="mt-4 grid gap-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3 md:grid-cols-2">
-          <div className="text-xs text-[color:var(--cf-muted)]">
+        <div className="mt-4 grid gap-3 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-muted)] p-3 md:grid-cols-2">
+          <div className="!text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)]">
             {t('aiQuant.exchange')}
-            <div className="mt-1 flex h-9 items-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm text-[color:var(--cf-text)]">
+            <div className="mt-1 flex h-9 items-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">
               {exchange.toUpperCase()}
             </div>
           </div>
 
-          <div className="text-xs text-[color:var(--cf-muted)]">
+          <div className="!text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)]">
             {t('aiQuant.marketType', { defaultValue: '市场类型' })}
-            <div className="mt-1 flex h-9 items-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm text-[color:var(--cf-text)]">
+            <div className="mt-1 flex h-9 items-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">
               {marketTypeLabel}
             </div>
           </div>
 
-          <label className="text-xs text-[color:var(--cf-muted)]">
+          <label className="!text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)]">
             {t('aiQuant.deployDialog.selectAccount')}
             <select
               value={selectedAccountId}
               onChange={event => onSelectAccount(event.target.value)}
-              className="mt-1 h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)]"
+              className="mt-1 h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]"
             >
               <option value="">{t('aiQuant.deployDialog.selectAccount')}...</option>
               {availableAccounts.map(account => (
@@ -152,13 +152,13 @@ export function DeployDialog({
           </label>
 
           {marketType === 'perp' && (
-            <label className="text-xs text-[color:var(--cf-muted)]">
+            <label className="!text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)]">
               {isEn ? 'Deployment Leverage' : '部署杠杆'}
               <select
                 name="deployment-leverage"
                 value={typeof selectedLeverage === 'number' ? String(selectedLeverage) : ''}
                 onChange={event => onSelectLeverage?.(Number(event.target.value))}
-                className="mt-1 h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)]"
+                className="mt-1 h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]"
               >
                 <option value="">{isEn ? 'Select leverage' : '选择杠杆'}</option>
                 {leverageOptions.map(option => (
@@ -170,25 +170,25 @@ export function DeployDialog({
         </div>
 
         {marketType === 'perp' && leverageOptions.length > 0 && (
-          <div className="mt-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-3 text-sm text-[color:var(--cf-text)]">
-            <p className="font-semibold text-[color:var(--cf-text-strong)]">{isEn ? 'Allowed Leverage Range' : '允许杠杆范围'}</p>
+          <div className="mt-3 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-muted)] px-3 py-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">
+            <p className="!font-semibold text-[color:var(--cf-text-strong)]">{isEn ? 'Allowed Leverage Range' : '允许杠杆范围'}</p>
             <p className="mt-1">{leverageRangeLabel}</p>
             {deploymentBaseline && (
-              <p className="mt-2 text-xs text-[color:var(--cf-muted)]">
+              <p className="mt-2 !text-xs !leading-5 text-[color:var(--cf-muted)]">
                 {isEn ? 'Strategy deployment default' : '策略部署默认'}: {deploymentBaseline.leverage ?? '--'}x / {deploymentBaseline.priceSource ?? '--'} / {deploymentBaseline.orderType ?? '--'} / {deploymentBaseline.timeInForce ?? '--'}
               </p>
             )}
             {leverageExplanation && (
-              <p className="mt-2 text-xs text-[color:var(--cf-muted)]">{leverageExplanation}</p>
+              <p className="mt-2 !text-xs !leading-5 text-[color:var(--cf-muted)]">{leverageExplanation}</p>
             )}
             {driftReasons.length > 0 && (
-              <p className="mt-2 text-xs text-amber-300">{driftReasons.join(' / ')}</p>
+              <p className="mt-2 !text-xs !leading-5 text-amber-300">{driftReasons.join(' / ')}</p>
             )}
           </div>
         )}
 
         {availableAccounts.length === 0 && (
-          <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-500">
+          <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 !text-sm !leading-[22px] text-amber-500">
             {t('aiQuant.deployDialog.noAccounts')}
           </div>
         )}
@@ -197,7 +197,7 @@ export function DeployDialog({
           {!apiConfigured && (
             <Link
               href={`/${lng}/account?tab=settings#exchange-api`}
-              className="inline-flex min-h-10 items-center justify-center rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+            className="inline-flex min-h-9 items-center justify-center rounded-full border border-[color:var(--cf-border)] px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)]"
             >
               {t('aiQuant.deployDialog.goConfig')}
             </Link>
@@ -207,7 +207,7 @@ export function DeployDialog({
             onClick={onConfirmDeploy}
             disabled={!apiConfigured || !canDeploy || !marketTypeReady || !accountReady || !leverageReady || deploySubmitting}
             aria-busy={deploySubmitting}
-            className="from-primary to-secondary inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-gradient-to-r px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="from-primary to-secondary inline-flex min-h-9 items-center justify-center gap-2 rounded-full bg-gradient-to-r px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
             {deploySubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
             {deploySubmitting ? submittingLabel : confirmLabel}
@@ -216,7 +216,7 @@ export function DeployDialog({
             type="button"
             onClick={handleDialogClose}
             disabled={deploySubmitting}
-            className="inline-flex min-h-10 items-center justify-center rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-9 items-center justify-center rounded-full border border-[color:var(--cf-border)] px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {t('common.close')}
           </button>

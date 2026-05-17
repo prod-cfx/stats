@@ -2,7 +2,7 @@
 
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
 import type { ExistingStrategyPlazaRunResult, StrategyPlazaRunResult, StrategyPlazaTemplate } from '@/lib/api'
-import { ArrowLeft } from 'lucide-react'
+import { Check, ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
@@ -174,24 +174,24 @@ export function AiQuantPlazaPageClient() {
   })
 
   return (
-    <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-6 px-4 py-8 md:px-8">
+    <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-5 px-4 py-8 md:px-8">
       <Link
         href={returnHref}
-        className="inline-flex w-fit items-center gap-2 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+        className="inline-flex w-fit items-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs font-semibold leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
       >
-        <ArrowLeft className="h-4 w-4" />
+        <ChevronLeft className="h-4 w-4" />
         <span>{t('aiQuant.plazaPage.back')}</span>
       </Link>
 
       <div>
         <div>
-          <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">{t('aiQuant.plaza')}</h1>
-          <p className="mt-1 text-sm text-[color:var(--cf-muted)]">{t('aiQuant.guestLanding.plazaSubtitle')}</p>
+          <h1 className="!text-base !font-semibold !leading-6 text-[color:var(--cf-text-strong)]">{t('aiQuant.plaza')}</h1>
+          <p className="mt-1 text-sm leading-[22px] text-[color:var(--cf-muted)]">{t('aiQuant.guestLanding.plazaSubtitle')}</p>
         </div>
       </div>
 
       {!isLoading && !session && (
-        <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 text-sm text-[color:var(--cf-muted)]">
+        <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 text-sm leading-[22px] text-[color:var(--cf-muted)]">
           {t('aiQuant.plazaPage.guestHint')}
         </div>
       )}
@@ -214,16 +214,16 @@ export function AiQuantPlazaPageClient() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4"
           role="dialog"
         >
-          <div className="w-full max-w-[444px] rounded-[18px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 shadow-2xl shadow-slate-950/20">
-            <div className="flex gap-4">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-100 text-lg font-bold text-violet-700 dark:bg-violet-500/20 dark:text-violet-200">
-                ✓
+          <div className="w-full max-w-[420px] rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-4 shadow-2xl shadow-slate-950/20 sm:px-5">
+            <div className="flex gap-3">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200">
+                <Check className="h-4 w-4" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-[color:var(--cf-text-strong)]">
+                <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                   {t('aiQuant.strategyPlazaExisting.title', { defaultValue: '已存在相同策略' })}
                 </h2>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--cf-muted)]">
+                <p className="mt-2 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
                   {t('aiQuant.strategyPlazaExisting.description', {
                     defaultValue: '这个策略模板已经创建过，系统只保留一个相同模板策略。',
                   })}
@@ -231,38 +231,38 @@ export function AiQuantPlazaPageClient() {
               </div>
             </div>
 
-            <div className="mt-6 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-muted)] p-4">
+            <div className="mt-4 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-muted)] px-3 py-3">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-bold text-[color:var(--cf-text-strong)]">{existingStrategy.name}</div>
-                  <div className="mt-2 text-xs text-[color:var(--cf-muted)]">
+                  <div className="truncate text-sm !font-semibold leading-[22px] text-[color:var(--cf-text-strong)]">{existingStrategy.name}</div>
+                  <div className="mt-1 text-xs leading-5 text-[color:var(--cf-muted)]">
                     {[
                       existingStrategy.symbol,
                       existingStrategy.timeframe,
                     ].filter(Boolean).join(' / ')}
                   </div>
                 </div>
-                <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+                <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold leading-4 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
                   {existingStrategyStatusLabel}
                 </span>
               </div>
-              <p className="mt-3 text-xs leading-5 text-[color:var(--cf-muted)]">
+              <p className="mt-3 !text-xs !leading-5 text-[color:var(--cf-muted)]">
                 {t('aiQuant.strategyPlazaExisting.hint', {
                   defaultValue: '再次运行会跳转到这个已有策略详情，不会重复创建。',
                 })}
               </p>
             </div>
 
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-5 flex flex-wrap gap-2">
               <button
-                className="inline-flex h-11 min-w-[160px] items-center justify-center rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#B414F4] px-5 text-sm font-bold text-white shadow-sm transition hover:brightness-105"
+                className="inline-flex min-h-9 min-w-[108px] items-center justify-center rounded-full bg-gradient-to-r from-[#7C3AED] to-[#B414F4] px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-white shadow-sm transition hover:brightness-105"
                 type="button"
                 onClick={openExistingStrategyDetail}
               >
                 {t('aiQuant.strategyPlazaExisting.viewDetail', { defaultValue: '查看策略详情' })}
               </button>
               <button
-                className="inline-flex h-11 items-center justify-center rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+                className="inline-flex min-h-9 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
                 type="button"
                 onClick={closeExistingStrategyDialog}
               >

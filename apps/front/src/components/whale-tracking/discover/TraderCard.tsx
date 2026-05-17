@@ -167,23 +167,23 @@ export const TraderCard = ({
   }, [])
 
   const content = variant === 'recommended' ? (
-    <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-2xl p-4 md:p-6 flex flex-col gap-6 gradient-border-hover group cursor-pointer h-full" onClick={() => onShowStats?.(address)}>
+    <div className="gradient-border-hover group flex h-full cursor-pointer flex-col gap-4 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 md:gap-5" onClick={() => onShowStats?.(address)}>
       <div className="flex justify-between items-start gap-3">
         <div className="flex min-w-0 items-center gap-3 overflow-visible md:gap-4">
-          <div className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center font-bold text-lg md:text-xl flex-shrink-0" style={avatarStyle}>
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full !text-sm !font-semibold !leading-[22px] md:h-11 md:w-11" style={avatarStyle}>
             {address.substring(2, 4).toUpperCase() || 'WH'}
           </div>
           <div className="flex flex-col gap-0.5 min-w-0">
             <div className="flex items-center gap-2 min-w-0 relative group/address">
               <Link 
                 href={`/${lng}/whale-tracking/profile/?address=${address}`}
-                className="text-[color:var(--cf-text-strong)] font-bold text-h3 hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all truncate"
+                className="truncate !text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)] underline-offset-4 transition-colors hover:text-primary"
                 onClick={handleAddressClick}
               >
                 {address.length > 12 ? `${address.substring(0, 6)}...${address.substring(address.length - 4)}` : address}
               </Link>
               {/* Hover-to-reveal full address tooltip */}
-              <div className="absolute left-0 top-0 -translate-y-[120%] z-30 px-3 py-2 rounded-lg shadow-2xl text-xs font-mono whitespace-nowrap bg-black/90 text-white dark:bg-white/90 dark:text-black border border-black/10 dark:border-white/10 pointer-events-none opacity-0 invisible group-hover/address:opacity-100 group-hover/address:visible transition-all duration-200">
+              <div className="invisible pointer-events-none absolute top-0 left-0 z-30 -translate-y-[120%] rounded-lg border border-black/10 bg-black/90 px-3 py-2 font-mono !text-xs !font-normal !leading-5 whitespace-nowrap text-white opacity-0 shadow-sm transition-opacity duration-200 group-hover/address:visible group-hover/address:opacity-100 dark:border-white/10 dark:bg-white/90 dark:text-black">
                 {address}
                 <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
               </div>
@@ -196,7 +196,7 @@ export const TraderCard = ({
         </div>
         <button 
           type="button"
-          className="w-9 h-9 flex items-center justify-center bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-xl text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-surface-hover)] active:scale-95 transition-all flex-shrink-0 ml-2"
+          className="ml-2 flex h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
           onClick={(e) => {
             e.stopPropagation();
             onShowStats?.(address);
@@ -209,48 +209,48 @@ export const TraderCard = ({
       <div className="grid grid-cols-2 gap-x-4 md:gap-x-8 gap-y-5">
         <div className="flex flex-col gap-1.5">
           <span className="text-[color:var(--cf-muted)] text-caption font-medium">{t('whaleTracking.discover.labels.totalValue')}</span>
-          <span className="text-[color:var(--cf-text-strong)] font-bold text-h3">{resolvedTotalValue}</span>
+          <span className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{resolvedTotalValue}</span>
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-[color:var(--cf-muted)] text-caption font-medium">{t('whaleTracking.discover.labels.realizedPnl')}</span>
-          <span className={`font-bold text-h3 ${isPnlPositive ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
+          <span className={`!text-[15px] !font-semibold !leading-[22px] ${isPnlPositive ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
             {resolvedPnl}
           </span>
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-[color:var(--cf-muted)] text-caption font-medium">{t('whaleTracking.discover.labels.trades')}</span>
-          <span className="text-[color:var(--cf-text-strong)] font-bold text-h3">{trades}</span>
+          <span className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{trades}</span>
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-[color:var(--cf-muted)] text-caption font-medium">{t('whaleTracking.discover.labels.winRate')}</span>
-          <span className="text-[color:var(--cf-text-strong)] font-bold text-h3">{resolvedWinRate}</span>
+          <span className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{resolvedWinRate}</span>
         </div>
       </div>
     </div>
   ) : (
-    <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-2xl p-4 md:p-6 flex flex-col gap-5 md:gap-6 gradient-border-hover group cursor-pointer h-full" onClick={() => onShowStats?.(address)}>
+    <div className="gradient-border-hover group flex h-full cursor-pointer flex-col gap-4 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 md:gap-5" onClick={() => onShowStats?.(address)}>
       <div className="flex justify-between items-start gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2 relative group/address">
           <Link 
             href={`/${lng}/whale-tracking/profile/?address=${address}`}
-            className="text-[color:var(--cf-text-strong)] font-bold text-xl md:text-h2 hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
+            className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)] underline-offset-4 transition-colors hover:text-primary"
             onClick={handleAddressClick}
           >
             {address.length > 15 ? `${address.substring(0, 6)}...${address.substring(address.length - 4)}` : address}
           </Link>
           {/* Hover-to-reveal full address tooltip */}
-          <div className="absolute left-0 top-0 -translate-y-[120%] z-30 px-3 py-2 rounded-lg shadow-2xl text-xs font-mono whitespace-nowrap bg-black/90 text-white dark:bg-white/90 dark:text-black border border-black/10 dark:border-white/10 pointer-events-none opacity-0 invisible group-hover/address:opacity-100 group-hover/address:visible transition-all duration-200">
+          <div className="invisible pointer-events-none absolute top-0 left-0 z-30 -translate-y-[120%] rounded-lg border border-black/10 bg-black/90 px-3 py-2 font-mono !text-xs !font-normal !leading-5 whitespace-nowrap text-white opacity-0 shadow-sm transition-opacity duration-200 group-hover/address:visible group-hover/address:opacity-100 dark:border-white/10 dark:bg-white/90 dark:text-black">
             {address}
             <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
           </div>
           <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors flex-shrink-0" onClick={copyAddress}>
             {hasCopied ? <Check className="w-4.5 h-4.5 text-green-500" /> : <Copy className="w-4.5 h-4.5" />}
           </button>
-          {handle && <span className="min-w-0 break-all text-[color:var(--cf-muted)] text-sm md:text-body font-medium md:ml-2">{handle}</span>}
+          {handle && <span className="min-w-0 break-all !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)] md:ml-2">{handle}</span>}
         </div>
         <button 
           type="button"
-          className="w-9 h-9 flex flex-shrink-0 items-center justify-center bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-xl text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-surface-hover)] active:scale-95 transition-all"
+          className="flex h-8 w-8 flex-shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
           onClick={(e) => {
             e.stopPropagation();
             onShowStats?.(address);
@@ -262,41 +262,41 @@ export const TraderCard = ({
 
       <div className="flex flex-col gap-2">
         <span className="text-[color:var(--cf-muted)] text-caption font-medium">{t('whaleTracking.discover.labels.totalValue')}</span>
-        <span className="text-[color:var(--cf-text-strong)] text-h2 font-bold tracking-tight">{resolvedTotalValue}</span>
+        <span className="!text-base !font-semibold !leading-6 text-[color:var(--cf-text-strong)]">{resolvedTotalValue}</span>
       </div>
 
       <div className="grid grid-cols-1 gap-3 border-b border-[color:var(--cf-border)] pb-5 sm:grid-cols-3 md:gap-2 md:pb-6">
         <div className="flex flex-col gap-1">
-          <span className="text-[color:var(--cf-muted)] text-caption font-bold uppercase tracking-wider">{resolvedPnlLabel}</span>
-          <span className={`font-bold text-body ${isPnlPositive ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
+          <span className="!text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)]">{resolvedPnlLabel}</span>
+          <span className={`!text-sm !font-semibold !leading-[22px] ${isPnlPositive ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
             {resolvedPnl}
           </span>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-[color:var(--cf-muted)] text-caption font-bold uppercase tracking-wider">{t('whaleTracking.discover.labels.positions')}</span>
-          <span className="text-[color:var(--cf-text-strong)] font-bold text-body">{positions}</span>
+          <span className="!text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)]">{t('whaleTracking.discover.labels.positions')}</span>
+          <span className="!text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{positions}</span>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-[color:var(--cf-muted)] text-caption font-bold uppercase tracking-wider">{resolvedWinRateLabel}</span>
-          <span className="text-[color:var(--cf-text-strong)] font-bold text-body">{resolvedWinRate}</span>
+          <span className="!text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)]">{resolvedWinRateLabel}</span>
+          <span className="!text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{resolvedWinRate}</span>
         </div>
       </div>
 
       {aiTags && (
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-[color:var(--cf-muted)] text-caption font-bold uppercase tracking-tighter">{t('whaleTracking.discover.labels.aiTags')}:</span>
+          <span className="!text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)]">{t('whaleTracking.discover.labels.aiTags')}:</span>
           {aiTags.map((tag, i) => {
             const styles = TAG_STYLES[tag.key] || { colorClass: 'text-[color:var(--cf-text-strong)]', bgClass: 'bg-[color:var(--cf-surface-2)]' };
             return (
               <div key={i} className="relative group/tag">
                 <span 
-                  className={`px-2.5 py-1 rounded-md text-caption font-extrabold uppercase tracking-tight flex items-center gap-1 cursor-help ${styles.colorClass} ${styles.bgClass}`}
+                  className={`flex cursor-help items-center gap-1 rounded-md px-2.5 py-1 !text-xs !font-semibold !leading-5 ${styles.colorClass} ${styles.bgClass}`}
                 >
                   {resolveAiTagLabel(tag.key)}
                   <Info className="w-3 h-3 opacity-50" />
                 </span>
                 {/* Simple CSS Tooltip */}
-                <div className="absolute bottom-full left-0 mb-2 max-w-[220px] px-3 py-2 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-2xl text-[10px] text-[color:var(--cf-text)] whitespace-normal opacity-0 invisible group-hover/tag:opacity-100 group-hover/tag:visible transition-all z-20 pointer-events-none md:left-1/2 md:-translate-x-1/2 md:whitespace-nowrap md:max-w-none">
+                <div className="invisible pointer-events-none absolute bottom-full left-0 z-20 mb-2 max-w-[220px] rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-2 text-[10px] text-[color:var(--cf-text)] whitespace-normal opacity-0 shadow-sm transition-opacity group-hover/tag:visible group-hover/tag:opacity-100 md:left-1/2 md:max-w-none md:-translate-x-1/2 md:whitespace-nowrap">
                   {resolveAiTagDescription(tag.key, tag.descriptionKey)}
                   <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-[color:var(--cf-border)]" />
                 </div>

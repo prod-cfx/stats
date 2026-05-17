@@ -165,27 +165,27 @@ export function BacktestSummaryCard({
     : null
 
   return (
-    <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+    <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.backtestResult')}</h2>
+          <h2 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{t('aiQuant.backtestResult')}</h2>
           {normalizedMarketType && (
-            <p className="mt-1 text-xs font-medium text-[color:var(--cf-primary)]">
+            <p className="mt-1 !text-xs !font-medium !leading-5 text-[color:var(--cf-primary)]">
               {normalizedMarketType === 'spot'
                 ? (isEn ? 'Spot Backtest' : '现货回测')
                 : (isEn ? 'Perp Backtest' : '合约回测')}
             </p>
           )}
-          <p className="mt-1 text-sm text-[color:var(--cf-muted)]">
+          <p className="mt-1 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
             {drawdownLimited
               ? t('aiQuant.messages.backtestDrawdownLimit')
               : t('aiQuant.messages.backtestDrawdownLimitBypassed')}
           </p>
           {backtestContext && (
-            <p className="mt-1 text-xs text-[color:var(--cf-muted)]">{backtestContext}</p>
+            <p className="mt-1 !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">{backtestContext}</p>
           )}
           {isConfigChangedRecovery && (
-            <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-500">
+            <p className="mt-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 !text-xs !font-medium !leading-5 text-amber-500">
               {t('aiQuant.messages.backtestConfigChanged')}
             </p>
           )}
@@ -193,7 +193,7 @@ export function BacktestSummaryCard({
         <button
           type="button"
           onClick={onOpenFullScreen}
-          className={`rounded-lg border border-[color:var(--cf-border)] px-3 py-1 text-xs font-semibold text-[color:var(--cf-text-strong)] ${fullScreenButtonClassName}`}
+          className={`rounded-full border border-[color:var(--cf-border)] px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] ${fullScreenButtonClassName}`}
         >
           {t('aiQuant.fullScreen')}
         </button>
@@ -206,12 +206,12 @@ export function BacktestSummaryCard({
       </div>
 
       {showDeployBlockMessage && (
-        <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-500">
+        <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 !text-sm !font-normal !leading-[22px] text-amber-500">
           {deployBlockMessage}
         </div>
       )}
       {deploymentHint && (
-        <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-500">
+        <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 !text-sm !font-normal !leading-[22px] text-amber-500">
           {deploymentHint}
         </div>
       )}
@@ -222,7 +222,7 @@ export function BacktestSummaryCard({
             type="button"
             data-deployment-view-running="true"
             onClick={onViewRunningStrategy}
-            className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+            className="rounded-full border border-[color:var(--cf-border)] px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)]"
           >
             {t('aiQuant.deployViewRunning', { defaultValue: 'View running strategy' })}
           </button>
@@ -232,7 +232,7 @@ export function BacktestSummaryCard({
           type="button"
           onClick={onDeploy}
           disabled={deployDisabled}
-          className="from-primary to-secondary rounded-xl bg-gradient-to-r px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+          className="from-primary to-secondary rounded-full bg-gradient-to-r px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
           {effectiveDeployLabel}
         </button>
@@ -244,9 +244,9 @@ export function BacktestSummaryCard({
 function Metric({ title, value, type }: { title: string, value: string, type?: 'profit' | 'loss' | 'neutral' }) {
   const colorClass = type === 'profit' ? 'text-[#00C087]' : type === 'loss' ? 'text-[#FF4D4F]' : 'text-[color:var(--cf-text-strong)]'
   return (
-    <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3 transition-colors hover:bg-white/[0.02]">
-      <p className="text-xs text-[color:var(--cf-muted)]">{title}</p>
-      <p className={`mt-1 text-lg font-semibold ${colorClass}`}>{value}</p>
+    <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 transition-colors hover:bg-white/[0.02]">
+      <p className="!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">{title}</p>
+      <p className={`mt-1 !text-sm !font-semibold !leading-[22px] ${colorClass}`}>{value}</p>
     </div>
   )
 }

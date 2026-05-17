@@ -167,25 +167,25 @@ export function EmailOtpForm({ betaCode, betaCodeGateEnabled, onBetaCodeChange, 
   return (
     <form onSubmit={handleLogin} className="space-y-4">
       <div className="space-y-2">
-        <label className="text-sm text-[color:var(--cf-muted)]">{t('auth.email')}</label>
+        <label className="!text-sm !font-semibold !leading-[22px] text-[color:var(--cf-muted)]">{t('auth.email')}</label>
         <input
           type="email"
           value={email}
           onChange={event => handleEmailChange(event.target.value)}
-          className="h-11 w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm outline-none transition focus:border-primary"
+          className="h-10 w-full rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 !text-sm !font-normal !leading-[22px] outline-none transition focus:border-primary"
           placeholder={t('auth.emailPlaceholder')}
           required
         />
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm text-[color:var(--cf-muted)]">{t('auth.code')}</label>
+        <label className="!text-sm !font-semibold !leading-[22px] text-[color:var(--cf-muted)]">{t('auth.code')}</label>
         <div className="flex gap-2">
           <input
             type="text"
             value={code}
             onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-            className="h-11 flex-1 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm outline-none transition focus:border-primary"
+            className="h-10 min-w-0 flex-1 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 !text-sm !font-normal !leading-[22px] outline-none transition focus:border-primary"
             placeholder={t('auth.codePlaceholder')}
             required
           />
@@ -193,7 +193,7 @@ export function EmailOtpForm({ betaCode, betaCodeGateEnabled, onBetaCodeChange, 
             type="button"
             disabled={!canSendCode}
             onClick={handleSendCode}
-            className="h-11 min-w-[110px] rounded-xl border border-[color:var(--cf-border)] px-3 text-sm font-medium text-[color:var(--cf-text-strong)] disabled:opacity-50"
+            className="h-10 min-w-[112px] rounded-full border border-[color:var(--cf-border)] px-3 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)] disabled:opacity-50"
           >
             {sendingCode
               ? t('auth.sendingCode')
@@ -205,7 +205,7 @@ export function EmailOtpForm({ betaCode, betaCodeGateEnabled, onBetaCodeChange, 
           </button>
         </div>
         {hasSentCode && (
-          <p className="text-xs text-[color:var(--cf-muted)]">
+          <p className="!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
             {t('auth.latestCodeHint')}
           </p>
         )}
@@ -213,28 +213,28 @@ export function EmailOtpForm({ betaCode, betaCodeGateEnabled, onBetaCodeChange, 
 
       {betaCodeGateEnabled && (
         <div className="space-y-2">
-          <label htmlFor="beta-code-input" className="text-sm text-[color:var(--cf-muted)]">{t('auth.betaCode')}</label>
+          <label htmlFor="beta-code-input" className="!text-sm !font-semibold !leading-[22px] text-[color:var(--cf-muted)]">{t('auth.betaCode')}</label>
           <input
             id="beta-code-input"
             type="text"
             value={betaCode}
             onChange={event => onBetaCodeChange(event.target.value)}
-            className="h-11 w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm outline-none transition focus:border-primary"
+            className="h-10 w-full rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 !text-sm !font-normal !leading-[22px] outline-none transition focus:border-primary"
             placeholder={t('auth.betaCodePlaceholder')}
           />
-          <p className="text-xs text-[color:var(--cf-muted)]">
+          <p className="!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
             {t('auth.betaCodeHint')}
           </p>
         </div>
       )}
 
       {error && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-3 py-2 !text-sm !font-normal !leading-[22px] text-red-300">
           {error}
         </div>
       )}
       {notice && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 !text-sm !font-normal !leading-[22px] text-amber-300">
           {notice}
         </div>
       )}
@@ -242,7 +242,7 @@ export function EmailOtpForm({ betaCode, betaCodeGateEnabled, onBetaCodeChange, 
       <button
         type="submit"
         disabled={verifying || code.length !== 6}
-        className="h-11 w-full rounded-xl bg-gradient-to-r from-primary to-secondary text-sm font-semibold text-white disabled:opacity-50"
+        className="h-10 w-full rounded-full bg-gradient-to-r from-primary to-secondary !text-xs !font-semibold !leading-5 text-white transition-opacity disabled:opacity-50"
       >
         {verifying ? t('auth.loggingIn') : t('auth.loginWithEmail')}
       </button>

@@ -31,57 +31,58 @@ export const Footer = () => {
   }
 
   return (
-    <footer className="w-full border-t border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-8 md:px-8">
-      <div className="mx-auto flex w-full max-w-7xl flex-col items-center justify-between gap-6 md:flex-row">
-        <div className="flex flex-col items-center md:items-start gap-2">
+    <footer className="w-full border-t border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-6 md:px-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-col items-center justify-between gap-4 md:flex-row">
+        <div className="flex flex-col items-center gap-1.5 md:items-start">
           <Link href={withLng('/')} className="flex flex-col items-center md:items-start no-underline">
             <div className="flex items-center">
-              <CoinfluxMark className="w-7 h-7 md:w-10 md:h-10" />
-              <span className="text-[color:var(--cf-text-strong)] font-bold text-xl md:text-2xl leading-none tracking-tight -ml-1.5">oinflux</span>
+              <CoinfluxMark className="h-7 w-7" />
+              <span className="-ml-1.5 !text-base !font-semibold !leading-6 tracking-tight text-[color:var(--cf-text-strong)]">oinflux</span>
             </div>
           </Link>
-          <p className="text-[color:var(--cf-muted)] text-sm text-center md:text-left">
+          <p className="text-center !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)] md:text-left">
             {t('footer.tagline') || 'Your one-stop shop for crypto data aggregation.'}
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 md:justify-end md:gap-6">
+        <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-2 md:justify-end">
           <button
             type="button"
             onClick={handleSocialClick}
-            className="flex min-h-10 min-w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
             aria-label="Telegram"
           >
-            <Send className="w-5 h-5" />
+            <Send className="h-4 w-4" />
           </button>
           <button
             type="button"
             onClick={handleSocialClick}
-            className="flex min-h-10 min-w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
             aria-label="X"
           >
-            <XIcon className="w-5 h-5" />
+            <XIcon className="h-4 w-4" />
           </button>
           <button
             type="button"
             onClick={handleSocialClick}
-            className="flex min-h-10 min-w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
             aria-label="GitHub"
           >
-            <Github className="w-5 h-5" />
+            <Github className="h-4 w-4" />
           </button>
-          <Link
-            href={withLng('/docs')}
-            className="flex min-h-10 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-[color:var(--cf-muted)] no-underline transition-colors hover:text-[color:var(--cf-text-strong)]"
+          <button
+            type="button"
+            onClick={handleSocialClick}
+            className="flex h-8 items-center gap-1.5 rounded-full px-2.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)] no-underline transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
           >
-            <FileText className="w-4 h-4" />
+            <FileText className="h-4 w-4" />
             {t('nav.docs') || 'Doc'}
-          </Link>
+          </button>
         </div>
       </div>
       
-      <div className="max-w-7xl mx-auto mt-8 pt-8 border-t border-[color:var(--cf-border)]/50 flex flex-col md:flex-row items-center justify-center gap-4 text-[color:var(--cf-muted)] text-xs">
-        <p className="text-center">
+      <div className="mx-auto mt-5 flex max-w-7xl flex-col items-center justify-center gap-2 border-t border-[color:var(--cf-border)]/50 pt-5 !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)] md:flex-row">
+        <p className="text-center !text-xs !font-normal !leading-5">
           {t('footer.copyrightLine', { year })}
           <br />
           {t('footer.ownership')}

@@ -537,14 +537,14 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
   }
 
   const renderError = () => (
-    <div className="flex flex-col items-center justify-center gap-4 py-12">
-      <AlertCircle className={`h-12 w-12 ${needsAuth ? 'text-yellow-500' : 'text-red-500'}`} />
-      <p className="text-center text-[color:var(--cf-muted)]">{error}</p>
+    <div className="flex flex-col items-center justify-center gap-3 py-10">
+      <AlertCircle className={`h-8 w-8 ${needsAuth ? 'text-yellow-500' : 'text-red-500'}`} />
+      <p className="text-center !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">{error}</p>
       {!needsAuth && (
         <button
           type="button"
           onClick={() => loadData(activeSymbol)}
-          className="bg-primary/20 text-primary hover:bg-primary/30 rounded-md px-4 py-2 transition-colors"
+          className="bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 rounded-md px-3 py-1.5 !text-xs !font-semibold !leading-5 transition-opacity"
         >
           {t('common.retry')}
         </button>
@@ -553,19 +553,19 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
   )
 
   return (
-    <div className={`flex h-full flex-col ${isCompact ? 'gap-2' : 'gap-6'}`}>
+    <div className={`flex h-full flex-col ${isCompact ? 'gap-2' : 'gap-4'}`}>
       <div className="flex items-center justify-between">
-        <SectionTitle className={isCompact ? '!text-sm' : ''}>
+        <SectionTitle className={isCompact ? '!text-[13px] !leading-5' : ''}>
           {t('aggregatedOrderbook.openInterest.title', { symbol: activeSymbol })}
         </SectionTitle>
       </div>
 
       <div
-        className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] ${isCompact ? '' : 'shadow-2xl'}`}
+          className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] ${isCompact ? '' : 'shadow-sm'}`}
       >
         {/* Symbol Tabs & Search */}
         <div
-          className={`flex items-center justify-between border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/30 px-4 ${isCompact ? 'flex-row-reverse py-1' : ''}`}
+          className={`flex items-center justify-between border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/30 px-3 ${isCompact ? 'flex-row-reverse py-1' : ''}`}
         >
           {!isCompact ? (
             <div className="cf-scrollbar flex items-center overflow-x-auto">
@@ -574,7 +574,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                   type="button"
                   key={s}
                   onClick={() => setActiveSymbol(s)}
-                  className={`relative px-4 py-3 text-sm font-semibold whitespace-nowrap transition-all ${
+                  className={`relative px-3.5 py-2.5 !text-xs !font-semibold !leading-5 whitespace-nowrap transition-colors ${
                     activeSymbol === s
                       ? 'text-[color:var(--cf-text-strong)]'
                       : 'border-transparent text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
@@ -583,8 +583,8 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                   {s}
                   {activeSymbol === s && (
                     <>
-                      <div className="from-primary to-secondary absolute right-0 bottom-0 left-0 h-0.5 bg-gradient-to-r" />
-                      <div className="from-primary/10 pointer-events-none absolute inset-0 bg-gradient-to-b to-transparent" />
+                      <div className="absolute right-0 bottom-0 left-0 h-0.5 bg-gradient-to-r from-primary to-secondary" />
+                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-primary/10 to-transparent" />
                     </>
                   )}
                 </button>
@@ -599,9 +599,9 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                 <button
                   type="button"
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                  className="flex min-w-[80px] items-center justify-between gap-2 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2 py-1 text-xs text-[color:var(--cf-text-strong)] transition-all hover:border-[color:var(--cf-muted)]"
+                  className="flex min-w-[80px] items-center justify-between gap-2 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2 py-1 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] transition-colors hover:border-[color:var(--cf-muted)]"
                 >
-                  <span className="font-medium">{activeSymbol}</span>
+                  <span>{activeSymbol}</span>
                   <ChevronDown
                     className={`h-3 w-3 text-[color:var(--cf-muted)] transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}
                   />
@@ -618,7 +618,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                       setIsDropdownOpen(true)
                     }}
                     onFocus={() => setIsDropdownOpen(true)}
-                    className="focus:border-primary relative z-10 w-48 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] py-1.5 pr-10 pl-9 text-sm text-[color:var(--cf-text-strong)] transition-all focus:outline-none"
+                    className="focus:border-primary relative z-10 w-44 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] py-1.5 pr-10 pl-9 !text-xs !font-normal !leading-5 text-[color:var(--cf-text-strong)] transition-colors focus:outline-none"
                   />
                   <div className="pointer-events-none absolute top-1/2 right-3 z-10 -translate-y-1/2 text-[color:var(--cf-muted)]">
                     <ChevronDown
@@ -630,7 +630,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
 
               {isDropdownOpen && (
                 <div
-                  className={`absolute top-full ${isCompact ? 'left-0' : 'right-0'} cf-scrollbar z-50 mt-1 overflow-hidden rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-xl ${isCompact ? 'max-h-48 w-32' : 'left-0 max-h-60'}`}
+                  className={`absolute top-full ${isCompact ? 'left-0' : 'right-0'} cf-scrollbar z-50 mt-1 overflow-hidden rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-lg ${isCompact ? 'max-h-48 w-32' : 'left-0 max-h-60'}`}
                 >
                   {isCompact && (
                     <div className="border-b border-[color:var(--cf-border)] p-2">
@@ -639,7 +639,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                         placeholder={t('common.search')}
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
-                        className="focus:border-primary w-full rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2 py-1 text-xs text-[color:var(--cf-text-strong)] focus:outline-none"
+                        className="focus:border-primary w-full rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2 py-1 !text-xs !font-normal !leading-5 text-[color:var(--cf-text-strong)] focus:outline-none"
                         autoFocus
                       />
                     </div>
@@ -653,7 +653,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                           setSearchQuery('')
                           setIsDropdownOpen(false)
                         }}
-                        className={`px-4 ${isCompact ? 'py-1.5 text-xs' : 'py-2 text-sm'} cursor-pointer text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)] ${activeSymbol === s ? 'bg-primary/10 text-primary' : ''}`}
+                        className={`px-3 ${isCompact ? 'py-1.5' : 'py-2'} cursor-pointer !text-xs !leading-5 transition-colors hover:bg-[color:var(--cf-surface-hover)] ${activeSymbol === s ? 'bg-gradient-to-r from-primary to-secondary !font-semibold text-white' : '!font-normal text-[color:var(--cf-text-strong)]'}`}
                       >
                         {s}
                       </div>
@@ -669,7 +669,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
         {loading && (
           <div className="flex items-center justify-center gap-2 py-8">
             <Loader2 className="text-primary h-5 w-5 animate-spin" />
-            <span className="text-[color:var(--cf-muted)]">{t('common.loading')}</span>
+            <span className="!text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">{t('common.loading')}</span>
           </div>
         )}
 
@@ -678,8 +678,8 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
 
         {/* Empty State */}
         {!loading && !error && data.length === 0 && (
-          <div className="flex flex-col items-center justify-center gap-4 py-12">
-            <p className="text-[color:var(--cf-muted)]">{t('common.noData')}</p>
+          <div className="flex flex-col items-center justify-center gap-3 py-10">
+            <p className="!text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">{t('common.noData')}</p>
           </div>
         )}
 
@@ -695,20 +695,20 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
             <table className="w-full min-w-[800px] border-collapse text-left md:min-w-[1000px]">
               <thead className="sticky top-0 z-10 bg-[color:var(--cf-bg)]">
                 <tr
-                  className={`tracking-wider text-[color:var(--cf-muted)] uppercase ${isCompact ? 'text-[10px]' : 'text-[10px] md:text-xs'}`}
+                  className={`tracking-normal text-[color:var(--cf-muted)] uppercase ${isCompact ? '!text-[10px] !leading-4' : '!text-xs !leading-5'}`}
                 >
                   <th
-                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} w-10 border-b border-[color:var(--cf-border)] text-center font-bold md:w-16`}
+                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} w-10 border-b border-[color:var(--cf-border)] text-center !font-semibold md:w-16`}
                   >
                     {t('aggregatedOrderbook.openInterest.table.rank')}
                   </th>
                   <th
-                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} sticky left-0 z-20 border-r border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] font-bold`}
+                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} sticky left-0 z-20 border-r border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] !font-semibold`}
                   >
                     {t('aggregatedOrderbook.openInterest.table.exchange')}
                   </th>
                   <th
-                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} border-b border-[color:var(--cf-border)] text-right font-bold`}
+                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} border-b border-[color:var(--cf-border)] text-right !font-semibold`}
                   >
                     <button
                       type="button"
@@ -724,7 +724,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                     </button>
                   </th>
                   <th
-                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} border-b border-[color:var(--cf-border)] text-right font-bold`}
+                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} border-b border-[color:var(--cf-border)] text-right !font-semibold`}
                   >
                     <button
                       type="button"
@@ -735,7 +735,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                     </button>
                   </th>
                   <th
-                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} border-b border-[color:var(--cf-border)] text-right font-bold`}
+                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} border-b border-[color:var(--cf-border)] text-right !font-semibold`}
                   >
                     <button
                       type="button"
@@ -747,7 +747,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                     </button>
                   </th>
                   <th
-                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} hidden border-b border-[color:var(--cf-border)] text-right font-bold sm:table-cell`}
+                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} hidden border-b border-[color:var(--cf-border)] text-right !font-semibold sm:table-cell`}
                   >
                     <button
                       type="button"
@@ -759,7 +759,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                     </button>
                   </th>
                   <th
-                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} hidden border-b border-[color:var(--cf-border)] text-right font-bold sm:table-cell`}
+                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} hidden border-b border-[color:var(--cf-border)] text-right !font-semibold sm:table-cell`}
                   >
                     <button
                       type="button"
@@ -771,7 +771,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                     </button>
                   </th>
                   <th
-                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} border-b border-[color:var(--cf-border)] text-right font-bold`}
+                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} border-b border-[color:var(--cf-border)] text-right !font-semibold`}
                   >
                     <button
                       type="button"
@@ -783,27 +783,27 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                     </button>
                   </th>
                   <th
-                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} hidden border-b border-[color:var(--cf-border)] text-center font-bold md:table-cell`}
+                    className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} hidden border-b border-[color:var(--cf-border)] text-center !font-semibold md:table-cell`}
                   >
                     {t('aggregatedOrderbook.openInterest.table.oiVolRatio')}
                   </th>
                 </tr>
               </thead>
-              <tbody className={isCompact ? 'text-xs' : 'text-[11px] md:text-sm'}>
+              <tbody className={isCompact ? '!text-xs !leading-5' : '!text-xs !leading-5'}>
                 {sortedData.map(row => (
                   <tr
                     key={row.id}
                     className={`border-b border-[color:var(--cf-border)]/50 transition-colors hover:bg-[color:var(--cf-surface-hover)]/30 ${
-                      row.isTotal ? 'bg-[color:var(--cf-surface-2)]/20 font-bold' : ''
+                      row.isTotal ? 'bg-[color:var(--cf-surface-2)]/20 !font-semibold' : ''
                     }`}
                   >
                     <td
-                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} text-center text-[color:var(--cf-muted)]`}
+                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} text-center text-[color:var(--cf-muted)]`}
                     >
                       {row.rank}
                     </td>
                     <td
-                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} sticky left-0 z-10 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] group-hover:bg-[color:var(--cf-surface-hover)]/30 ${row.isTotal ? 'bg-[color:var(--cf-surface-2)]' : ''}`}
+                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} sticky left-0 z-10 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] group-hover:bg-[color:var(--cf-surface-hover)]/30 ${row.isTotal ? 'bg-[color:var(--cf-surface-2)]' : ''}`}
                     >
                       <div className="flex items-center gap-2">
                         <div
@@ -816,44 +816,44 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                           />
                         </div>
                         <span
-                          className={`${row.isTotal ? 'font-bold text-[color:var(--cf-text-strong)]' : 'text-[color:var(--cf-text)]'} max-w-[60px] truncate md:max-w-none`}
+                          className={`${row.isTotal ? '!font-semibold text-[color:var(--cf-text-strong)]' : '!font-normal text-[color:var(--cf-text)]'} max-w-[60px] truncate md:max-w-none`}
                         >
                           {row.isTotal ? t('common.all') : row.exchange}
                         </span>
                       </div>
                     </td>
                     <td
-                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} text-right text-[color:var(--cf-text-strong)]`}
+                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} text-right text-[color:var(--cf-text-strong)]`}
                     >
                       {formatAssetAmount(row.oiAsset)}
                     </td>
                     <td
-                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} text-right text-[color:var(--cf-text-strong)]`}
+                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} text-right text-[color:var(--cf-text-strong)]`}
                     >
                       {currencyCompact.format(row.oiUsd)}
                     </td>
                     <td
-                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} text-right text-[color:var(--cf-text-strong)]`}
+                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} text-right text-[color:var(--cf-text-strong)]`}
                     >
                       {formatRatio(row.ratioPct)}
                     </td>
                     <td
-                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} hidden text-right font-medium sm:table-cell`}
+                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} hidden text-right !font-normal sm:table-cell`}
                     >
                       {renderValueWithColor(row.change1hPct)}
                     </td>
                     <td
-                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} hidden text-right font-medium sm:table-cell`}
+                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} hidden text-right !font-normal sm:table-cell`}
                     >
                       {renderValueWithColor(row.change4hPct)}
                     </td>
                     <td
-                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} text-right font-medium`}
+                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} text-right !font-normal`}
                     >
                       {renderValueWithColor(row.change24hPct)}
                     </td>
                     <td
-                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-4 md:px-4'} hidden text-center text-[color:var(--cf-muted)] md:table-cell`}
+                      className={`${isCompact ? 'px-2 py-2' : 'px-3 py-3 md:px-4'} hidden text-center text-[color:var(--cf-muted)] md:table-cell`}
                     >
                       {row.oiVolRatio.toFixed(4)}
                     </td>

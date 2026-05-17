@@ -1,10 +1,10 @@
 'use client'
 
+import type { CSSProperties } from 'react'
 import type { DynamicParamSchema, DynamicParamValues } from './dynamic-params'
 import type { LlmClarificationGate, LlmPublicationGate } from '@/lib/api'
 import { ArrowDown, ArrowUp, BarChart3, Bot, Check, Copy, KeyRound, Play, Settings2, Sparkles, User } from 'lucide-react'
 import Link from 'next/link'
-import type { CSSProperties } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
@@ -85,7 +85,7 @@ function QuantCodeBlock({
   const collapsed = canCollapse && !expanded
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]">
+    <div className="overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]">
       <div className="flex items-center justify-between border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-active)] px-3 py-2 text-xs">
         <span className="font-mono tracking-wide text-[color:var(--cf-muted)] uppercase">
           {language}
@@ -129,7 +129,7 @@ function QuantCodeBlock({
         <button
           type="button"
           onClick={onToggleExpanded}
-          className="w-full border-t border-[color:var(--cf-border)] bg-[color:var(--cf-surface-active)] px-3 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)]"
+          className="w-full border-t border-[color:var(--cf-border)] bg-[color:var(--cf-surface-active)] px-3 py-2 !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)]"
           aria-controls={blockId}
           aria-expanded={expanded}
         >
@@ -520,7 +520,7 @@ export function QuantChatPanel({
           <div className="bg-primary/10 text-primary flex h-8 w-8 items-center justify-center rounded-lg">
             <Bot className="h-5 w-5" />
           </div>
-          <h2 className="min-w-0 truncate font-semibold text-[color:var(--cf-text-strong)]">
+          <h2 className="min-w-0 truncate !text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
             {t('aiQuant.chatTitle')}
           </h2>
         </div>
@@ -528,7 +528,7 @@ export function QuantChatPanel({
           <button
             type="button"
             onClick={() => setShowSettings(!showSettings)}
-            className={`flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`flex items-center justify-center gap-1.5 rounded-full border px-3.5 py-1.5 !text-xs !font-semibold !leading-5 transition-colors ${
               showSettings
                 ? 'border-primary bg-primary/5 text-primary'
                 : 'border-[color:var(--cf-border)] text-[color:var(--cf-text)] hover:bg-[color:var(--cf-bg)]'
@@ -542,7 +542,7 @@ export function QuantChatPanel({
             data-testid="run-backtest"
             onClick={onRunBacktest}
             disabled={!canRunBacktest || hasDraftChanges}
-            className="cf-primary-cta flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium transition-all"
+            className="cf-primary-cta flex items-center justify-center gap-1.5 rounded-full px-3.5 py-1.5 !text-xs !font-semibold !leading-5 transition-all"
           >
             <Play className="h-4 w-4 fill-current" />
             <span>{t('aiQuant.startBacktest')}</span>
@@ -557,15 +557,15 @@ export function QuantChatPanel({
             <div className="flex-1 overflow-y-auto pr-1">
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-1 md:col-span-3">
-                  <h3 className="text-sm font-semibold text-[color:var(--cf-text-strong)]">
+                  <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                     {t('aiQuant.backtestSettingsTitle')}
                   </h3>
-                  <p className="text-xs text-[color:var(--cf-muted)]">
+                  <p className="mt-1 !text-sm !leading-[22px] text-[color:var(--cf-muted)]">
                     {t('aiQuant.backtestSettingsDescription')}
                   </p>
                 </div>
                 <div className="space-y-2 md:col-span-3">
-                  <span className="text-xs font-medium text-[color:var(--cf-muted)]">
+                  <span className="block !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-muted)]">
                     {t('aiQuant.backtestRange')}
                   </span>
                   <div className="flex flex-wrap gap-2">
@@ -577,7 +577,7 @@ export function QuantChatPanel({
                           key={preset}
                           type="button"
                           onClick={() => updateBacktestDraftValue('backtestRangePreset', preset)}
-                          className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+                          className={`rounded-full border px-3.5 py-1.5 !text-xs !font-semibold !leading-5 transition-colors ${
                             active
                               ? 'border-primary bg-primary/10 text-primary'
                               : 'border-[color:var(--cf-border)] text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface)]'
@@ -593,12 +593,12 @@ export function QuantChatPanel({
                 {backtestRangePreset === 'CUSTOM' && (
                   <>
                     <label className="space-y-1.5">
-                      <span className="text-xs font-medium text-[color:var(--cf-muted)]">
+                      <span className="block !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-muted)]">
                         {t('aiQuant.backtestStart')}
                       </span>
                       <input
                         type="datetime-local"
-                        className="focus:border-primary h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)] outline-none"
+                        className="focus:border-primary h-9 w-full rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] outline-none"
                         value={toDateTimeLocalValue(backtestDraftValues.backtestStart)}
                         onChange={event => {
                           updateBacktestDraftValue(
@@ -610,12 +610,12 @@ export function QuantChatPanel({
                       />
                     </label>
                     <label className="space-y-1.5">
-                      <span className="text-xs font-medium text-[color:var(--cf-muted)]">
+                      <span className="block !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-muted)]">
                         {t('aiQuant.backtestEnd')}
                       </span>
                       <input
                         type="datetime-local"
-                        className="focus:border-primary h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)] outline-none"
+                        className="focus:border-primary h-9 w-full rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] outline-none"
                         value={toDateTimeLocalValue(backtestDraftValues.backtestEnd)}
                         onChange={event => {
                           updateBacktestDraftValue(
@@ -635,19 +635,20 @@ export function QuantChatPanel({
                   const showError =
                     Boolean(error) &&
                     (submittedBacktestSettings || touchedBacktestFields[field.key])
-                  const fieldClassName = `h-9 w-full rounded-lg border bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)] outline-none focus:border-primary ${
+                  const fieldClassName = `h-9 w-full appearance-none rounded-full border bg-[color:var(--cf-surface)] px-3.5 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] outline-none focus:border-primary ${
                     showError ? 'border-red-500' : 'border-[color:var(--cf-border)]'
                   }`
 
                   return (
                     <label key={field.key} className="space-y-1.5">
-                      <span className="text-xs font-medium text-[color:var(--cf-muted)]">
+                      <span className="block !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-muted)]">
                         {t(field.labelKey)}
                         <span className="ml-0.5 text-[color:var(--cf-muted)]">*</span>
                       </span>
                       {field.type === 'select' && field.options ? (
                         <select
                           className={fieldClassName}
+                          style={{ lineHeight: '22px' }}
                           value={
                             typeof value === 'string' ||
                             typeof value === 'number' ||
@@ -707,16 +708,16 @@ export function QuantChatPanel({
                         />
                       )}
                       {showError && (
-                        <span className="text-xs text-red-500">{t(field.errorKey ?? error!)}</span>
+                        <span className="!text-xs !leading-5 text-red-500">{t(field.errorKey ?? error!)}</span>
                       )}
                     </label>
                   )
                 })}
                 {showRangeError && validation.rangeError && (
-                  <p className="text-sm text-red-500 md:col-span-3">{t(validation.rangeError)}</p>
+                  <p className="!text-sm !font-normal !leading-[22px] text-red-500 md:col-span-3">{t(validation.rangeError)}</p>
                 )}
                 {hasDraftChanges && (
-                  <p className="text-sm text-[color:var(--cf-muted)] md:col-span-3">
+                  <p className="!text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)] md:col-span-3">
                     {t('aiQuant.backtestDraftPending')}
                   </p>
                 )}
@@ -730,7 +731,7 @@ export function QuantChatPanel({
                 <button
                   type="button"
                   onClick={handleCancelBacktestParams}
-                  className="w-full rounded-lg border border-[color:var(--cf-border)] px-3 py-1.5 text-sm font-medium text-[color:var(--cf-text)] transition-colors hover:bg-[color:var(--cf-surface)] sm:w-auto"
+                  className="w-full rounded-full border border-[color:var(--cf-border)] px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text)] transition-colors hover:bg-[color:var(--cf-surface)] sm:w-auto"
                 >
                   {t('aiQuant.backtestClosePanel')}
                 </button>
@@ -738,7 +739,7 @@ export function QuantChatPanel({
                   type="button"
                   onClick={handleConfirmBacktestParams}
                   disabled={!hasDraftChanges}
-                  className="bg-primary w-full rounded-lg px-3 py-1.5 text-sm font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                  className="bg-primary w-full rounded-full px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                 >
                   {t('aiQuant.backtestConfirmSettings')}
                 </button>
@@ -769,14 +770,14 @@ export function QuantChatPanel({
 
               <div
                 data-testid={`quant-message-bubble-${message.role}`}
-                className={`max-w-[min(100%,42rem)] min-w-0 break-words rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                className={`max-w-[min(100%,42rem)] min-w-0 break-words rounded-2xl px-4 py-3 !text-sm !font-normal !leading-[22px] shadow-sm ${
                   message.role === 'assistant'
                     ? `${mobileMode ? 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]' : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]'} rounded-tl-none border [&_code]:rounded [&_code]:bg-[color:var(--cf-bg)] [&_code]:px-1.5 [&_code]:py-0.5`
                     : 'bg-primary rounded-tr-none text-white'
                 }`}
               >
                 {message.role === 'assistant' ? (
-                  <div className="[&_a]:text-primary min-w-0 space-y-3 overflow-x-auto [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-[color:var(--cf-border)] [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:leading-7 [&_table]:min-w-[32rem] [&_table]:border-collapse [&_td]:border [&_td]:border-[color:var(--cf-border)] [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-[color:var(--cf-border)] [&_th]:bg-[color:var(--cf-surface-active)] [&_th]:px-2 [&_th]:py-1 [&_ul]:list-disc [&_ul]:pl-6">
+                  <div className="[&_a]:text-primary min-w-0 space-y-3 overflow-x-auto [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-[color:var(--cf-border)] [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:!leading-[22px] [&_table]:min-w-[32rem] [&_table]:border-collapse [&_td]:border [&_td]:border-[color:var(--cf-border)] [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-[color:var(--cf-border)] [&_th]:bg-[color:var(--cf-surface-active)] [&_th]:px-2 [&_th]:py-1 [&_ul]:list-disc [&_ul]:pl-6">
                     {(() => {
                       let codeBlockIndex = 0
                       return (
@@ -866,7 +867,7 @@ export function QuantChatPanel({
             <button
               type="button"
               onClick={() => setShowSettings(!showSettings)}
-              className={`inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-[11px] font-semibold shadow-sm ${
+              className={`inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 !text-xs !font-semibold !leading-5 shadow-sm ${
                 showSettings
                   ? 'border-primary bg-primary/10 text-primary'
                   : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text-strong)]'
@@ -880,7 +881,7 @@ export function QuantChatPanel({
               data-testid="run-backtest-mobile"
               onClick={onRunBacktest}
               disabled={!canRunBacktest || hasDraftChanges}
-              className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-primary bg-primary px-2.5 text-[11px] font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:border-[color:var(--cf-border)] disabled:bg-[color:var(--cf-surface-2)] disabled:text-[color:var(--cf-muted)]"
+              className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-primary bg-primary px-3 !text-xs !font-semibold !leading-5 text-white shadow-sm disabled:cursor-not-allowed disabled:border-[color:var(--cf-border)] disabled:bg-[color:var(--cf-surface-2)] disabled:text-[color:var(--cf-muted)]"
             >
               <Play className="h-3.5 w-3.5 fill-current" />
               {isZh ? '开始回测' : 'Start Backtest'}
@@ -888,7 +889,7 @@ export function QuantChatPanel({
             <button
               type="button"
               onClick={() => onMobilePanelTabChange?.('logic')}
-              className={`inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-[12px] font-semibold shadow-sm ${
+              className={`inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 !text-xs !font-semibold !leading-5 shadow-sm ${
                 mobilePanelTab === 'logic'
                   ? 'border-primary/40 bg-[color:var(--cf-surface-active)] text-[color:var(--cf-text-strong)]'
                   : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]'
@@ -900,7 +901,7 @@ export function QuantChatPanel({
             <button
               type="button"
               onClick={() => onMobilePanelTabChange?.('backtest')}
-              className={`inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-[12px] font-semibold shadow-sm ${
+              className={`inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 !text-xs !font-semibold !leading-5 shadow-sm ${
                 mobilePanelTab === 'backtest'
                   ? 'border-primary/40 bg-[color:var(--cf-surface-active)] text-[color:var(--cf-text-strong)]'
                   : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]'
@@ -913,7 +914,7 @@ export function QuantChatPanel({
               <Link
                 href={mobilePlazaHref}
                 data-testid="quant-mobile-plaza-link"
-                className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2.5 text-[11px] font-semibold text-[color:var(--cf-text-strong)] shadow-sm"
+                className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] shadow-sm"
               >
                 <Sparkles className="h-3.5 w-3.5" />
                 {isZh ? '策略广场' : 'Strategy Plaza'}
@@ -923,7 +924,7 @@ export function QuantChatPanel({
               <Link
                 href={mobileApiConfigHref}
                 data-testid="quant-mobile-api-link"
-                className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2.5 text-[11px] font-semibold text-[color:var(--cf-text-strong)] shadow-sm"
+                className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] shadow-sm"
               >
                 <KeyRound className="h-3.5 w-3.5" />
                 {isZh ? '交易API' : 'Trading API'}
@@ -931,9 +932,9 @@ export function QuantChatPanel({
             )}
           </div>
         )}
-        <div className={`focus-within:border-primary focus-within:ring-primary relative border shadow-sm focus-within:ring-1 ${mobileMode ? 'rounded-xl border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]' : 'rounded-xl border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]'}`}>
+        <div className={`focus-within:border-primary focus-within:ring-primary relative border shadow-sm focus-within:ring-1 ${mobileMode ? 'rounded-2xl border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]' : 'rounded-2xl border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]'}`}>
           <textarea
-            className={`max-h-[120px] min-h-[50px] w-full resize-none bg-transparent px-4 py-3 pr-12 outline-none ${mobileMode ? 'text-base text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)] md:text-sm' : 'text-sm text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)]'}`}
+            className={`max-h-[120px] min-h-[50px] w-full resize-none bg-transparent px-4 py-3 pr-12 !font-normal !leading-[22px] outline-none ${mobileMode ? '!text-base text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)] md:text-sm md:!text-sm' : '!text-sm text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)]'}`}
             placeholder={isZh
               ? '描述你的交易策略，例如：3分钟跌1%买入，15分钟涨2%卖出...'
               : t('aiQuant.inputPlaceholder')}
@@ -950,12 +951,12 @@ export function QuantChatPanel({
             type="button"
             onClick={submit}
             disabled={!input.trim()}
-            className="bg-primary hover:bg-primary/90 absolute right-2 bottom-2 flex h-8 w-8 items-center justify-center rounded-lg text-white transition-all disabled:cursor-not-allowed disabled:bg-[color:var(--cf-border)] disabled:text-[color:var(--cf-muted)]"
+            className="bg-primary hover:bg-primary/90 absolute right-2 bottom-2 flex h-8 w-8 items-center justify-center rounded-full text-white transition-all disabled:cursor-not-allowed disabled:bg-[color:var(--cf-border)] disabled:text-[color:var(--cf-muted)]"
           >
             <ArrowUp className="h-5 w-5" />
           </button>
         </div>
-        <p className={`mt-2 text-center text-xs ${mobileMode ? 'text-[color:var(--cf-muted)]' : 'text-[color:var(--cf-muted)]'}`}>
+        <p className={`mt-2 text-center !text-xs !font-normal !leading-5 ${mobileMode ? 'text-[color:var(--cf-muted)]' : 'text-[color:var(--cf-muted)]'}`}>
           {isZh
             ? 'AI 内容仅供参考，请务必在实盘前进行充分回测。'
             : t('aiQuant.messages.aiDisclaimer')}

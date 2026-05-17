@@ -309,11 +309,11 @@ export const RealtimeWhalesTable = () => {
   }, [transactions, sortOrder])
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-5">
       <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
-        <div className="flex flex-col gap-1">
-          <PageTitle className="text-xl md:text-2xl">{t('whaleTracking.realtime.title')}</PageTitle>
-          <p className="text-[10px] text-[#8b949e] md:text-xs">
+        <div className="flex flex-col gap-1.5">
+          <PageTitle>{t('whaleTracking.realtime.title')}</PageTitle>
+          <p className="!text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
             {t('whaleTracking.realtime.subtitle')}
           </p>
         </div>
@@ -324,17 +324,17 @@ export const RealtimeWhalesTable = () => {
               if (!ensureMonitorAuth(t)) return
               setIsCreateSymbolRuleOpen(true)
             }}
-            className="border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 flex-1 rounded-full border px-4 py-2 text-xs font-bold transition-colors md:flex-none"
+            className="from-primary to-secondary flex-1 rounded-full border border-transparent bg-gradient-to-r px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-white transition-opacity hover:opacity-90 md:flex-none"
           >
             {t('whaleTracking.notifications.actions.newSymbolRule')}
           </button>
           <button
             type="button"
             onClick={() => setIsPaused(!isPaused)}
-            className={`md:text-label flex flex-1 items-center justify-center gap-2 rounded-full border px-4 py-2 text-xs font-bold transition-all active:scale-95 md:flex-none ${
+            className={`flex flex-1 items-center justify-center gap-2 rounded-full border px-3.5 py-1.5 !text-xs !font-semibold !leading-5 transition-colors md:flex-none ${
               isPaused
                 ? 'border-[#30363d] bg-[#21262d] text-[#8b949e]'
-                : 'bg-primary/10 border-primary text-primary shadow-primary/10 shadow-lg'
+                : 'from-primary to-secondary border-transparent bg-gradient-to-r text-white'
             }`}
           >
             <RefreshCw
@@ -350,21 +350,21 @@ export const RealtimeWhalesTable = () => {
         </div>
       </div>
 
-      <div className="relative min-h-[400px] overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl md:min-h-[600px]">
+      <div className="relative min-h-[400px] overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm md:min-h-[600px]">
         {/* Loading indicator removed per UX request (kept data fetching + logs) */}
 
         <div data-testid="realtime-mobile-card-list" className="space-y-3 p-3 md:hidden">
           {displayedTransactions.map(tx => (
             <article
               key={`${tx.address}-${tx.asset}-${tx.side}-${tx.timestamp}-mobile`}
-              className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3"
+              className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3"
               onClick={() => handleShowStats(tx.address)}
             >
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <button
                     type="button"
-                    className="font-mono text-sm font-semibold text-[color:var(--cf-text-strong)]"
+                    className="font-mono !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]"
                     onClick={e => {
                       e.stopPropagation()
                       handleGoProfile(tx.address)
@@ -374,7 +374,7 @@ export const RealtimeWhalesTable = () => {
                   </button>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     <span
-                      className="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                      className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-4"
                       style={{ color: tx.tagColor, backgroundColor: tx.tagBg }}
                     >
                       {t(`whaleTracking.tags.${tx.tagKey}`)}
@@ -407,10 +407,10 @@ export const RealtimeWhalesTable = () => {
                   </button>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="grid grid-cols-2 gap-2 !text-xs !font-normal !leading-5">
                 <div>
                   <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.realtime.table.asset')}</div>
-                  <div className="mt-0.5 flex items-center gap-2 font-bold text-[color:var(--cf-text-strong)]">
+                  <div className="mt-0.5 flex items-center gap-2 !font-semibold text-[color:var(--cf-text-strong)]">
                     {tx.asset}
                     <span className={`rounded px-1.5 py-0.5 text-[10px] ${tx.side === 'Long' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
                       {tx.side === 'Long' ? t('whaleTracking.side.long') : t('whaleTracking.side.short')}
@@ -419,17 +419,17 @@ export const RealtimeWhalesTable = () => {
                 </div>
                 <div>
                   <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.holdings.table.leverage')}</div>
-                  <div className="mt-0.5 font-bold text-[color:var(--cf-text-strong)]">{tx.leverage}</div>
+                  <div className="mt-0.5 !font-semibold text-[color:var(--cf-text-strong)]">{tx.leverage}</div>
                 </div>
                 <div>
                   <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.realtime.table.positionValue')}</div>
-                  <div className="mt-0.5 font-bold text-[color:var(--cf-text-strong)]">{tx.positionValueUSD}</div>
+                  <div className="mt-0.5 !font-semibold text-[color:var(--cf-text-strong)]">{tx.positionValueUSD}</div>
                   <div className="text-[color:var(--cf-muted)]">{tx.positionValueAsset}</div>
                 </div>
                 <div>
                   <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.realtime.table.entryPrice')}</div>
                   <div className="mt-0.5 font-mono text-[color:var(--cf-text-strong)]">{tx.entryPrice}</div>
-                  <div className="font-bold text-[#4ade80]">{tx.winRate}</div>
+                  <div className="!font-semibold text-[#4ade80]">{tx.winRate}</div>
                 </div>
               </div>
             </article>
@@ -440,25 +440,25 @@ export const RealtimeWhalesTable = () => {
           <table className="w-full min-w-[1160px] border-collapse">
             <thead>
               <tr className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/50 text-[color:var(--cf-muted)]">
-                <th className="sticky left-0 z-10 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/95 px-3 py-4 text-left text-[10px] font-bold tracking-wider uppercase md:px-6 md:text-xs">
+                <th className="sticky left-0 z-10 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/95 px-3 py-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
                   {t('whaleTracking.realtime.table.address')}
                 </th>
-                <th className="px-3 py-4 text-left text-[10px] font-bold tracking-wider uppercase md:px-6 md:text-xs">
+                <th className="px-3 py-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
                   {t('whaleTracking.realtime.table.asset')}
                 </th>
-                <th className="px-3 py-4 text-left text-[10px] font-bold tracking-wider uppercase md:px-6 md:text-xs">
+                <th className="px-3 py-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
                   {t('whaleTracking.realtime.table.direction')}
                 </th>
-                <th className="px-3 py-4 text-left text-[10px] font-bold tracking-wider uppercase md:px-6 md:text-xs">
+                <th className="px-3 py-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
                   {t('whaleTracking.holdings.table.leverage')}
                 </th>
-                <th className="px-3 py-4 text-left text-[10px] font-bold tracking-wider uppercase md:px-6 md:text-xs">
+                <th className="px-3 py-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
                   {t('whaleTracking.realtime.table.positionValue')}
                 </th>
-                <th className="px-3 py-4 text-left text-[10px] font-bold tracking-wider uppercase md:px-6 md:text-xs">
+                <th className="px-3 py-3 text-left !text-xs !font-semibold !leading-5 md:px-4">
                   {t('whaleTracking.realtime.table.entryPrice')}
                 </th>
-                <th className="px-3 py-4 text-left text-[10px] font-bold tracking-wider whitespace-nowrap uppercase md:px-6 md:text-xs">
+                <th className="px-3 py-3 text-left !text-xs !font-semibold !leading-5 whitespace-nowrap md:px-4">
                   <button
                     type="button"
                     className="group flex cursor-pointer items-center select-none"
@@ -468,10 +468,10 @@ export const RealtimeWhalesTable = () => {
                     {renderSortIcon()}
                   </button>
                 </th>
-                <th className="px-3 py-4 text-right text-[10px] font-bold tracking-wider uppercase md:px-6 md:text-xs">
+                <th className="px-3 py-3 text-right !text-xs !font-semibold !leading-5 md:px-4">
                   {t('whaleTracking.realtime.table.time')}
                 </th>
-                <th className="w-12 px-3 py-4 text-center md:w-16 md:px-6">
+                <th className="w-12 px-3 py-3 text-center md:w-16 md:px-4">
                   {t('whaleTracking.realtime.table.actions')}
                 </th>
               </tr>
@@ -483,7 +483,7 @@ export const RealtimeWhalesTable = () => {
                   className="group cursor-pointer transition-colors hover:bg-[color:var(--cf-surface-hover)]/50"
                   onClick={() => handleShowStats(tx.address)}
                 >
-                  <td className="sticky left-0 z-10 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-5 group-hover:bg-[color:var(--cf-surface-hover)]/50 md:px-6">
+                  <td className="sticky left-0 z-10 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-3 group-hover:bg-[color:var(--cf-surface-hover)]/50 md:px-4">
                     <div className="flex flex-col gap-1.5">
                       <div className="group/address relative z-20 flex items-center gap-2">
                         <button
@@ -497,7 +497,7 @@ export const RealtimeWhalesTable = () => {
                           {`${tx.address.slice(0, 4)}...${tx.address.slice(-4)}`}
                         </button>
                         {/* Hover-to-reveal full address tooltip */}
-                        <div className="pointer-events-none invisible absolute top-0 left-0 z-30 -translate-y-[120%] rounded-lg border border-black/10 bg-black/90 px-3 py-2 font-mono text-xs whitespace-nowrap text-white opacity-0 shadow-2xl transition-all duration-200 group-hover/address:visible group-hover/address:opacity-100 dark:border-white/10 dark:bg-white/90 dark:text-black">
+                        <div className="pointer-events-none invisible absolute top-0 left-0 z-30 -translate-y-[120%] rounded-lg border border-black/10 bg-black/90 px-3 py-2 font-mono text-xs whitespace-nowrap text-white opacity-0 shadow-sm transition-opacity duration-200 group-hover/address:visible group-hover/address:opacity-100 dark:border-white/10 dark:bg-white/90 dark:text-black">
                           {tx.address}
                           <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
                         </div>
@@ -517,16 +517,16 @@ export const RealtimeWhalesTable = () => {
                         </button>
                       </div>
                       <span
-                        className="w-fit rounded px-1.5 py-0.5 text-[8px] font-bold uppercase md:text-[10px]"
+                        className="w-fit rounded px-1.5 py-0.5 text-[10px] font-semibold leading-4 uppercase"
                         style={{ color: tx.tagColor, backgroundColor: tx.tagBg }}
                       >
                         {t(`whaleTracking.tags.${tx.tagKey}`)}
                       </span>
                     </div>
                   </td>
-                  <td className="px-3 py-5 md:px-6">
+                  <td className="px-3 py-3 md:px-4">
                     <div className="flex flex-col gap-0.5">
-                      <span className="md:text-body text-[11px] font-bold text-[color:var(--cf-text-strong)]">
+                      <span className="!text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                         {tx.asset}
                       </span>
                       <span className="text-[8px] text-[color:var(--cf-muted)] uppercase md:text-[10px]">
@@ -536,21 +536,21 @@ export const RealtimeWhalesTable = () => {
                       </span>
                     </div>
                   </td>
-                  <td className="px-3 py-5 md:px-6">
+                  <td className="px-3 py-3 md:px-4">
                     <span
-                      className={`inline-flex rounded-md border px-2 py-1 text-[10px] font-bold md:text-xs ${tx.side === 'Long' ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-red-500/30 bg-red-500/10 text-red-400'}`}
+                      className={`inline-flex rounded-md border px-2 py-1 !text-xs !font-semibold !leading-5 ${tx.side === 'Long' ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-red-500/30 bg-red-500/10 text-red-400'}`}
                     >
                       {tx.side === 'Long'
                         ? t('whaleTracking.side.long')
                         : t('whaleTracking.side.short')}
                     </span>
                   </td>
-                  <td className="md:text-body px-3 py-5 text-[11px] font-semibold text-[color:var(--cf-text-strong)] md:px-6">
+                  <td className="px-3 py-3 !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)] md:px-4">
                     {tx.leverage}
                   </td>
-                  <td className="px-3 py-5 md:px-6">
+                  <td className="px-3 py-3 md:px-4">
                     <div className="flex flex-col gap-0.5">
-                      <span className="md:text-body text-[11px] font-bold text-[color:var(--cf-text-strong)]">
+                      <span className="!text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                         {tx.positionValueUSD}
                       </span>
                       <span className="text-[9px] text-[color:var(--cf-muted)] md:text-xs">
@@ -558,19 +558,19 @@ export const RealtimeWhalesTable = () => {
                       </span>
                     </div>
                   </td>
-                  <td className="md:text-body px-3 py-5 font-mono text-[11px] text-[color:var(--cf-text-strong)] md:px-6">
+                  <td className="px-3 py-3 font-mono !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text-strong)] md:px-4">
                     {tx.entryPrice}
                   </td>
-                  <td className="md:text-body px-3 py-5 text-[11px] font-bold text-[#4ade80] md:px-6">
+                  <td className="px-3 py-3 !text-sm !font-semibold !leading-[22px] text-[#4ade80] md:px-4">
                     {tx.winRate}
                   </td>
-                  <td className="md:text-caption px-3 py-5 text-right text-[10px] font-medium text-[color:var(--cf-muted)] md:px-6">
+                  <td className="px-3 py-3 text-right !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)] md:px-4">
                     {formatRelativeTime(tx.timestamp)}
                   </td>
-                  <td className="px-3 py-5 text-center md:px-6">
+                  <td className="px-3 py-3 text-center md:px-4">
                     <button
                       type="button"
-                      className="hover:border-primary/50 hover:bg-primary/5 mx-auto flex h-7 w-7 items-center justify-center rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)] shadow-sm transition-all hover:text-[color:var(--cf-text-strong)] active:scale-95 md:h-9 md:w-9 md:rounded-xl"
+                      className="hover:border-primary/50 hover:bg-primary/5 mx-auto flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)] shadow-sm transition-colors hover:text-[color:var(--cf-text-strong)]"
                       onClick={e => {
                         e.stopPropagation()
                         handleShowStats(tx.address)

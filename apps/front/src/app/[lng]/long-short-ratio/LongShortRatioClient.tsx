@@ -43,15 +43,15 @@ const SummaryCard = ({
   longLabel: string
   shortLabel: string
 }) => (
-  <div className="w-full bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-4 md:p-6 mb-6 shadow-sm">
-    <div className="flex flex-col lg:flex-row items-center gap-4 md:gap-8">
-      <div className="flex items-center gap-4 min-w-[140px] md:min-w-[180px] w-full lg:w-auto">
-        <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-yellow-500/10 flex items-center justify-center border border-yellow-500/20 flex-shrink-0">
-          <span className="text-yellow-500 font-bold text-lg md:text-xl">₿</span>
+  <div className="mb-5 w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-sm">
+    <div className="flex flex-col items-center gap-4 lg:flex-row lg:gap-6">
+      <div className="flex w-full min-w-[140px] items-center gap-3 md:min-w-[180px] lg:w-auto">
+        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-yellow-500/20 bg-yellow-500/10">
+          <span className="text-base font-semibold text-yellow-500">₿</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-[color:var(--cf-text-strong)] font-bold text-lg md:text-xl">{symbol}</span>
-          <span className="text-[color:var(--cf-muted)] text-xs md:text-sm">{totalLabel}</span>
+          <span className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{symbol}</span>
+          <span className="!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">{totalLabel}</span>
         </div>
       </div>
       <div className="flex-1 w-full">
@@ -59,12 +59,12 @@ const SummaryCard = ({
       </div>
       <div className="flex items-center min-w-full lg:min-w-[300px] w-full lg:w-auto justify-between lg:justify-start">
         <div className="flex flex-col w-1/2 lg:w-32">
-          <span className="text-[color:var(--cf-muted)] text-[10px] md:text-xs mb-1">{longLabel}</span>
-          <span className="text-[#4ade80] font-bold text-base md:text-lg">{longAmount}</span>
+          <span className="mb-1 !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">{longLabel}</span>
+          <span className="!text-sm !font-semibold !leading-[22px] text-[#4ade80]">{longAmount}</span>
         </div>
         <div className="flex flex-col w-1/2 lg:w-32 text-right lg:text-left">
-          <span className="text-[color:var(--cf-muted)] text-[10px] md:text-xs mb-1">{shortLabel}</span>
-          <span className="text-[#ef4444] font-bold text-base md:text-lg">{shortAmount}</span>
+          <span className="mb-1 !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">{shortLabel}</span>
+          <span className="!text-sm !font-semibold !leading-[22px] text-[#ef4444]">{shortAmount}</span>
         </div>
       </div>
     </div>
@@ -168,11 +168,11 @@ export function LongShortRatioClient() {
   }, [exchanges])
 
   return (
-    <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-6 md:gap-10 p-4 md:p-8">
+    <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-5 p-4 md:gap-6 md:px-6 md:py-5">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex flex-col gap-2 md:gap-3">
-          <PageTitle className="text-xl md:text-2xl">{t('longShort.title', { symbol })}</PageTitle>
-          <BodyText className="text-xs md:text-sm">{t('longShort.subtitle')}</BodyText>
+        <div className="flex flex-col gap-1.5">
+          <PageTitle>{t('longShort.title', { symbol })}</PageTitle>
+          <BodyText>{t('longShort.subtitle')}</BodyText>
         </div>
 
         <div className="no-scrollbar flex min-w-0 items-center gap-2 overflow-x-auto pb-2 md:gap-3 md:pb-0">
@@ -229,7 +229,7 @@ export function LongShortRatioClient() {
             shortLabel={t('longShort.summary.short')}
           />
           <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl overflow-hidden shadow-lg animate-in fade-in duration-500">
-            <div className="hidden md:flex items-center px-6 py-4 text-caption text-[color:var(--cf-muted)] uppercase tracking-wider font-bold border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/70">
+            <div className="hidden items-center border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/70 px-5 py-3 !text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)] uppercase md:flex">
               <span className="w-[180px] pl-10">{t('longShort.table.exchange')}</span>
               <span className="flex-1 text-center">{t('longShort.table.ratio')}</span>
               <div className="flex w-[300px]">
@@ -256,4 +256,3 @@ export function LongShortRatioClient() {
     </div>
   )
 }
-

@@ -41,11 +41,11 @@ export function NotificationsClient() {
 
   return (
     <div className="space-y-5">
-      <div className="space-y-1">
-        <PageTitle className="text-xl md:text-2xl">
+      <div className="space-y-1.5">
+        <PageTitle>
           {t('whaleTracking.notifications.title')}
         </PageTitle>
-        <p className="text-sm text-[color:var(--cf-muted)]">
+        <p className="!text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
           {t('whaleTracking.notifications.subtitle')}
         </p>
       </div>
@@ -78,8 +78,8 @@ export function NotificationsClient() {
         }}
       />
 
-      <section className="space-y-3 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 md:p-5">
-        <h3 className="text-lg font-bold text-[color:var(--cf-text-strong)]">
+      <section className="space-y-3 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-sm">
+        <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
           {t('whaleTracking.notifications.tabs.inbox')} ({inbox.unreadCount})
         </h3>
         <InboxTab

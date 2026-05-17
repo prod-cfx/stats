@@ -76,20 +76,20 @@ export function StrategyPlaza({
   if (loading) {
     return (
       <section className="space-y-4">
-        <p className="text-sm text-[color:var(--cf-muted)]">{displaySubtitle}</p>
+        <p className="text-sm leading-[22px] text-[color:var(--cf-muted)]">{displaySubtitle}</p>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[0, 1, 2].map(item => (
             <article
               key={item}
-              className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
+              className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4"
             >
-              <div className="h-10 w-10 animate-pulse rounded-xl bg-[color:var(--cf-bg)]" />
+              <div className="h-7 w-7 animate-pulse rounded-lg bg-[color:var(--cf-bg)]" />
               <div className="mt-4 h-4 w-2/3 animate-pulse rounded bg-[color:var(--cf-bg)]" />
               <div className="mt-3 h-3 w-full animate-pulse rounded bg-[color:var(--cf-bg)]" />
               <div className="mt-2 h-3 w-5/6 animate-pulse rounded bg-[color:var(--cf-bg)]" />
               <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="h-10 animate-pulse rounded-xl bg-[color:var(--cf-bg)]" />
-                <div className="h-10 animate-pulse rounded-xl bg-[color:var(--cf-bg)]" />
+                <div className="h-8 animate-pulse rounded-full bg-[color:var(--cf-bg)]" />
+                <div className="h-8 animate-pulse rounded-full bg-[color:var(--cf-bg)]" />
               </div>
             </article>
           ))}
@@ -101,8 +101,8 @@ export function StrategyPlaza({
   if (error) {
     return (
       <section className="space-y-4">
-        <p className="text-sm text-[color:var(--cf-muted)]">{displaySubtitle}</p>
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-5 text-sm text-red-500">
+        <p className="text-sm leading-[22px] text-[color:var(--cf-muted)]">{displaySubtitle}</p>
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm leading-[22px] text-red-500">
           {error}
         </div>
       </section>
@@ -112,8 +112,8 @@ export function StrategyPlaza({
   if (templates.length === 0) {
     return (
       <section className="space-y-4">
-        <p className="text-sm text-[color:var(--cf-muted)]">{displaySubtitle}</p>
-        <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-8 text-center text-sm text-[color:var(--cf-muted)]">
+        <p className="text-sm leading-[22px] text-[color:var(--cf-muted)]">{displaySubtitle}</p>
+        <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-8 text-center text-sm leading-[22px] text-[color:var(--cf-muted)]">
           {t('aiQuant.strategyPlazaCard.empty')}
         </div>
       </section>
@@ -122,9 +122,9 @@ export function StrategyPlaza({
 
   return (
     <section className="space-y-4">
-      <p className="text-sm text-[color:var(--cf-muted)]">{displaySubtitle}</p>
+      <p className="text-sm leading-[22px] text-[color:var(--cf-muted)]">{displaySubtitle}</p>
       {actionError && (
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-500">
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm leading-[22px] text-red-500">
           {actionError}
         </div>
       )}
@@ -137,21 +137,21 @@ export function StrategyPlaza({
           return (
             <article
               key={template.id}
-              className="group flex min-w-0 flex-col justify-between rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 transition-all hover:border-primary/30 hover:shadow-lg hover:-translate-y-0.5 sm:p-5"
+              className="group flex min-w-0 flex-col justify-between rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 transition-colors hover:border-primary/30 hover:shadow-sm"
             >
               <div>
                 <div className="flex min-w-0 items-start justify-between">
                   <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[color:var(--cf-bg)] text-primary transition-colors group-hover:bg-primary/10 group-hover:text-primary">
-                      <Activity className="h-5 w-5" />
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-[color:var(--cf-bg)] text-primary transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+                      <Activity className="h-4 w-4" />
                     </div>
                     <div className="min-w-0">
-                      <h3 className="break-words font-bold text-[color:var(--cf-text-strong)]">{display.name}</h3>
+                      <p className="break-words !text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{display.name}</p>
                       <div className="mt-1 flex flex-wrap gap-1.5">
                         {display.tags.map(tag => (
                           <span
                             key={tag}
-                            className="inline-flex items-center rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--cf-muted)]"
+                            className="inline-flex items-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2 py-0.5 text-xs font-medium leading-4 text-[color:var(--cf-muted)]"
                           >
                             {tag}
                           </span>
@@ -161,11 +161,11 @@ export function StrategyPlaza({
                   </div>
                 </div>
 
-                <p className="mt-4 line-clamp-2 text-sm leading-relaxed text-[color:var(--cf-muted)]">
+                <p className="mt-3 line-clamp-2 text-sm leading-[22px] text-[color:var(--cf-muted)]">
                   {display.description}
                 </p>
 
-                <div className="mt-4 grid gap-2 rounded-xl bg-[color:var(--cf-bg)] px-3 py-3 text-xs text-[color:var(--cf-muted)]">
+                <div className="mt-4 grid gap-2 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-xs leading-5 text-[color:var(--cf-muted)]">
                   <div data-testid="strategy-plaza-meta-row" className="grid gap-1 sm:flex sm:items-center sm:justify-between sm:gap-3">
                     <span>{t('aiQuant.strategyPlazaCard.pairTimeframe', { defaultValue: '交易对 / 周期' })}</span>
                     <span className="break-all font-mono font-semibold text-[color:var(--cf-text)] sm:text-right">
@@ -198,28 +198,28 @@ export function StrategyPlaza({
                   </div>
                 </div>
 
-                <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="rounded-lg border border-[color:var(--cf-border)] px-2 py-2">
-                    <div className="text-[10px] text-[color:var(--cf-muted)]">
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-xl border border-[color:var(--cf-border)] px-2 py-2">
+                    <div className="text-xs leading-5 text-[color:var(--cf-muted)]">
                       {t('aiQuant.winRate', { defaultValue: '胜率' })}
                     </div>
-                    <div className="mt-1 font-mono font-semibold text-[color:var(--cf-text-strong)]">
+                    <div className="font-mono text-sm font-semibold leading-[22px] text-[color:var(--cf-text-strong)]">
                       {formatMetricPct(template.displayMetrics.winRatePct)}
                     </div>
                   </div>
-                  <div className="rounded-lg border border-[color:var(--cf-border)] px-2 py-2">
-                    <div className="text-[10px] text-[color:var(--cf-muted)]">
+                  <div className="rounded-xl border border-[color:var(--cf-border)] px-2 py-2">
+                    <div className="text-xs leading-5 text-[color:var(--cf-muted)]">
                       {t('aiQuant.maxDrawdown', { defaultValue: '最大回撤' })}
                     </div>
-                    <div className="mt-1 font-mono font-semibold text-emerald-500">
+                    <div className="font-mono text-sm font-semibold leading-[22px] text-emerald-500">
                       {formatMetricPct(template.displayMetrics.maxDrawdownPct)}
                     </div>
                   </div>
-                  <div className="rounded-lg border border-[color:var(--cf-border)] px-2 py-2">
-                    <div className="text-[10px] text-[color:var(--cf-muted)]">
+                  <div className="rounded-xl border border-[color:var(--cf-border)] px-2 py-2">
+                    <div className="text-xs leading-5 text-[color:var(--cf-muted)]">
                       {t('aiQuant.totalReturn', { defaultValue: '收益' })}
                     </div>
-                    <div className="mt-1 font-mono font-semibold text-[color:var(--cf-text-strong)]">
+                    <div className="font-mono text-sm font-semibold leading-[22px] text-[color:var(--cf-text-strong)]">
                       {formatMetricPct(template.displayMetrics.returnPct, { sign: true })}
                     </div>
                   </div>
@@ -232,7 +232,7 @@ export function StrategyPlaza({
                   disabled={hasPendingAction}
                   aria-busy={isRunning}
                   onClick={() => onRunStrategy(template.id)}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:from-indigo-600 hover:to-purple-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 px-3.5 py-1.5 text-xs font-semibold leading-5 text-white shadow-sm transition-colors hover:from-indigo-600 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Play className="h-4 w-4 fill-current" />
                   {isRunning ? t('aiQuant.strategyPlazaCard.running', { defaultValue: '运行中' }) : t('aiQuant.run')}
@@ -242,7 +242,7 @@ export function StrategyPlaza({
                   disabled={hasPendingAction}
                   aria-busy={isEditing}
                   onClick={() => onEditStrategy(template.id)}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-[color:var(--cf-border)] bg-transparent px-4 py-2.5 text-sm font-semibold text-[color:var(--cf-text-strong)] transition-all hover:border-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-bg)] active:scale-95 disabled:cursor-wait disabled:opacity-70"
+                  className="flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-transparent px-3.5 py-1.5 text-xs font-semibold leading-5 text-[color:var(--cf-text-strong)] transition-colors hover:border-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-bg)] disabled:cursor-wait disabled:opacity-70"
                 >
                   {isEditing ? (
                     <Loader2 className="h-4 w-4 animate-spin" />

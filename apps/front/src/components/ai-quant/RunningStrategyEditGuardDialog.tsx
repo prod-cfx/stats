@@ -35,14 +35,14 @@ export function RunningStrategyEditGuardDialog({
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 px-4 py-4" onClick={onClose}>
       <div
-        className="max-h-[calc(100dvh-2rem)] w-full max-w-[520px] overflow-y-auto rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 sm:p-5"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-[480px] overflow-y-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl sm:p-5"
         onClick={event => event.stopPropagation()}
       >
-        <h3 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{title}</h3>
-        <p className="mt-2 text-sm leading-6 text-[color:var(--cf-muted)]">{description}</p>
+        <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{title}</h3>
+        <p className="mt-2 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">{description}</p>
 
         {errorMessage && (
-          <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 !text-sm !leading-[22px] text-red-400">
             {errorMessage}
           </div>
         )}
@@ -52,7 +52,7 @@ export function RunningStrategyEditGuardDialog({
             type="button"
             data-testid="view-running-strategy"
             onClick={onViewRunningStrategy}
-            className="inline-flex min-h-10 items-center justify-center rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+            className="inline-flex min-h-9 items-center justify-center rounded-full border border-[color:var(--cf-border)] px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)]"
           >
             {t('aiQuant.runningGuard.viewRunningStrategy')}
           </button>
@@ -61,7 +61,7 @@ export function RunningStrategyEditGuardDialog({
             data-testid="stop-running-strategy"
             disabled={stopPending}
             onClick={onStopStrategy}
-            className="inline-flex min-h-10 items-center justify-center rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-9 items-center justify-center rounded-full bg-red-600 px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
             {t('aiQuant.runningGuard.stopStrategy')}
           </button>
@@ -69,7 +69,7 @@ export function RunningStrategyEditGuardDialog({
             type="button"
             data-testid="cancel-running-strategy-guard"
             onClick={onClose}
-            className="inline-flex min-h-10 items-center justify-center rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+            className="inline-flex min-h-9 items-center justify-center rounded-full border border-[color:var(--cf-border)] px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)]"
           >
             {t('aiQuant.runningGuard.cancel')}
           </button>

@@ -9,7 +9,7 @@ interface TypographyProps {
 
 export const PageTitle = ({ children, className = '' }: TypographyProps) => {
   return (
-    <h1 className={`text-h1 font-bold text-[color:var(--cf-text-strong)] tracking-tight ${className}`}>
+    <h1 className={`!text-base !font-semibold !leading-6 text-[color:var(--cf-text-strong)] ${className}`}>
       {children}
     </h1>
   );
@@ -17,7 +17,7 @@ export const PageTitle = ({ children, className = '' }: TypographyProps) => {
 
 export const SectionTitle = ({ children, className = '' }: TypographyProps) => {
   return (
-    <h2 className={`text-h2 font-bold text-[color:var(--cf-text-strong)] tracking-tight ${className}`}>
+    <h2 className={`!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)] ${className}`}>
       {children}
     </h2>
   );
@@ -25,7 +25,7 @@ export const SectionTitle = ({ children, className = '' }: TypographyProps) => {
 
 export const SubTitle = ({ children, className = '' }: TypographyProps) => {
   return (
-    <h3 className={`text-h3 font-semibold text-[color:var(--cf-text-strong)] tracking-tight ${className}`}>
+    <h3 className={`!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)] ${className}`}>
       {children}
     </h3>
   );
@@ -33,7 +33,7 @@ export const SubTitle = ({ children, className = '' }: TypographyProps) => {
 
 export const BodyText = ({ children, className = '' }: TypographyProps) => {
   return (
-    <p className={`text-body text-[color:var(--cf-muted)] ${className}`}>
+    <p className={`!text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)] ${className}`}>
       {children}
     </p>
   );
@@ -41,9 +41,8 @@ export const BodyText = ({ children, className = '' }: TypographyProps) => {
 
 export const CaptionText = ({ children, className = '' }: TypographyProps) => {
   return (
-    <small className={`text-caption text-[color:var(--cf-muted)] ${className}`}>
+    <small className={`!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)] ${className}`}>
       {children}
     </small>
   );
 };
-

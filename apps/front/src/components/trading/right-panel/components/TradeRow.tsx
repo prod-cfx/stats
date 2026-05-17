@@ -11,19 +11,18 @@ interface TradeRowProps {
 
 export const TradeRow = ({ price, amount, time, type }: TradeRowProps) => {
   return (
-    <div className="flex items-center h-6 text-xs hover:bg-[color:var(--cf-surface-hover)] cursor-pointer">
+    <div className="flex h-6 cursor-pointer items-center !text-xs !font-normal !leading-5 hover:bg-[color:var(--cf-surface-hover)]">
       <div className={`w-[40%] pl-2 ${type === 'buy' ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
         {price}
       </div>
-      <div className="w-[30%] text-right pr-2 text-[color:var(--cf-text)]">
+      <div className="w-[30%] pr-2 text-right text-[color:var(--cf-text)]">
         {amount}
       </div>
-      <div className="w-[30%] text-right pr-2 text-[color:var(--cf-muted)]">
+      <div className="w-[30%] pr-2 text-right text-[color:var(--cf-muted)]">
         {time}
       </div>
     </div>
   );
 };
-
 
 

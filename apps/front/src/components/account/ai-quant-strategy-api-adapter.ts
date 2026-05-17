@@ -1,4 +1,4 @@
-import type { AiQuantStrategyRecord, AiQuantStrategyViewState } from './ai-quant-strategy-store'
+import type { AiQuantMarketType, AiQuantStrategyRecord, AiQuantStrategyViewState } from './ai-quant-strategy-store'
 import type {
   AccountAiQuantBacktestConfigDefaults,
   AccountAiQuantConsistencySummary,
@@ -108,7 +108,7 @@ function normalizeDeploymentExecutionConfig(
   }
 }
 
-function normalizeMarketType(value: unknown): AiQuantStrategyRecord['marketType'] {
+function normalizeMarketType(value: unknown): AiQuantMarketType {
   if (value === 'spot' || value === 'perp' || value === 'futures' || value === 'swap') return value
   return 'unknown'
 }

@@ -53,12 +53,12 @@ export function LoginPageClient({ lng }: LoginPageClientProps) {
 
   return (
     <main className="flex flex-1 items-center justify-center px-4 py-8 md:px-8">
-      <div className="w-full max-w-[520px] space-y-6 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 shadow-xl md:p-8">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">
+      <div className="w-full max-w-[520px] space-y-5 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 shadow-xl md:px-6 md:py-5">
+        <div className="space-y-1">
+          <h1 className="!text-base !font-semibold !leading-6 text-[color:var(--cf-text-strong)]">
             {t('nav.login')}
           </h1>
-          <p className="text-sm text-[color:var(--cf-muted)]">
+          <p className="!text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
             {t('auth.loginDesc')}
           </p>
         </div>
@@ -70,7 +70,7 @@ export function LoginPageClient({ lng }: LoginPageClientProps) {
           onSuccess={() => router.replace(redirect)}
         />
 
-        <div className="relative py-1 text-center text-xs text-[color:var(--cf-muted)]">
+        <div className="relative py-1 text-center !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
           <span className="px-2">{t('auth.or')}</span>
         </div>
 

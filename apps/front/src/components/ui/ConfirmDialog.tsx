@@ -63,18 +63,18 @@ export function ConfirmDialog({
       {/* Dialog */}
       <div className="pointer-events-none fixed inset-0 z-[9999] flex items-center justify-center p-4">
         <div
-          className="animate-in zoom-in-95 fade-in pointer-events-auto max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-md overflow-y-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 shadow-2xl duration-200"
+          className="animate-in zoom-in-95 fade-in pointer-events-auto max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-[380px] overflow-y-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl duration-200 sm:p-5"
           onClick={e => e.stopPropagation()}
         >
           {/* Icon */}
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
-            <AlertTriangle className="h-6 w-6 text-red-500" />
+          <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-red-500/10">
+            <AlertTriangle className="h-[18px] w-[18px] text-red-500" />
           </div>
 
           {/* Content */}
-          <div className="mb-6 space-y-3">
-            <h3 className="text-xl font-bold text-[color:var(--cf-text-strong)]">{title}</h3>
-            <p className="text-sm leading-relaxed whitespace-pre-line text-[color:var(--cf-muted)]">
+          <div className="mb-5 space-y-2">
+            <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{title}</h3>
+            <p className="!text-sm !font-normal !leading-[22px] whitespace-pre-line text-[color:var(--cf-muted)]">
               {description}
             </p>
           </div>
@@ -85,7 +85,7 @@ export function ConfirmDialog({
               type="button"
               disabled={disabled}
               onClick={onCancel}
-              className="min-h-10 w-full rounded-lg bg-[color:var(--cf-surface-2)] px-4 py-2.5 text-sm font-medium text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              className="min-h-9 w-full rounded-full bg-[color:var(--cf-surface-2)] px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               {cancelText}
             </button>
@@ -93,7 +93,7 @@ export function ConfirmDialog({
               type="button"
               disabled={disabled}
               onClick={onConfirm}
-              className={`min-h-10 w-full rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto ${confirmButtonClass}`}
+              className={`min-h-9 w-full rounded-full px-3.5 py-1.5 !text-xs !font-semibold !leading-5 shadow-lg transition disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto ${confirmButtonClass}`}
             >
               {confirmText}
             </button>

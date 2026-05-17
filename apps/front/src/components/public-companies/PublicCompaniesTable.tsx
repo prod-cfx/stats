@@ -485,28 +485,28 @@ export const PublicCompaniesTable = () => {
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <div className="relative w-full md:max-w-md">
-        <div className="group focus-within:from-primary focus-within:to-secondary rounded-xl bg-[color:var(--cf-border)] p-[1px] transition-colors focus-within:bg-gradient-to-r">
-          <div className="relative rounded-xl bg-[color:var(--cf-surface)]">
-            <Search className="group-focus-within:text-primary absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-[color:var(--cf-muted)] transition-colors md:h-5 md:w-5" />
+      <div className="relative w-full md:max-w-sm">
+        <div className="group focus-within:from-primary focus-within:to-secondary rounded-lg bg-[color:var(--cf-border)] p-[1px] transition-colors focus-within:bg-gradient-to-r">
+          <div className="relative rounded-lg bg-[color:var(--cf-surface)]">
+            <Search className="group-focus-within:text-primary absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[color:var(--cf-muted)] transition-colors" />
             <input
               type="text"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               placeholder={t('publicCompanies.searchPlaceholder')}
-              className="w-full rounded-xl border-0 bg-transparent py-2 pr-4 pl-10 text-xs text-[color:var(--cf-text)] transition-all placeholder:text-[color:var(--cf-muted)] focus:ring-0 focus:outline-none md:py-2.5 md:pl-12 md:text-sm"
+              className="w-full rounded-lg border-0 bg-transparent py-2 pr-3 pl-9 !text-xs !font-normal !leading-5 text-[color:var(--cf-text)] transition-colors placeholder:text-[color:var(--cf-muted)] focus:ring-0 focus:outline-none"
             />
           </div>
         </div>
       </div>
 
-      <div className="relative min-h-[400px] overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-lg">
+      <div className="relative min-h-[400px] overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm">
         {isAuthError && (
-          <div className="space-y-1 border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/60 px-4 pt-4 pb-2 text-center md:space-y-2 md:px-6 md:pt-6">
-            <h3 className="text-sm font-semibold text-[color:var(--cf-text-strong)] md:text-base">
+          <div className="space-y-1 border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/60 px-4 py-3 text-center">
+            <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
               {t('publicCompanies.authRequiredTitle', '登录后可查看实时币股榜单')}
             </h3>
-            <p className="mx-auto max-w-2xl text-[10px] text-[color:var(--cf-muted)] md:text-xs">
+            <p className="mx-auto max-w-2xl !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
               {t(
                 'publicCompanies.authRequiredDescription',
                 '当前表格展示的是示例数据，登录后将自动切换为来自交易所的实时币股持仓与估值。',
@@ -529,14 +529,14 @@ export const PublicCompaniesTable = () => {
             </div>
             <table className="w-full min-w-[840px] md:min-w-[1200px] border-collapse">
               <thead>
-                <tr className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/70 text-[10px] font-bold text-[color:var(--cf-muted)] md:text-xs">
-                  <th className="sticky left-0 z-10 w-14 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 py-4 text-left md:w-[88px] md:px-6 md:py-6">
+                <tr className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/70 !text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)]">
+                  <th className="sticky left-0 z-10 w-14 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 py-3 text-left !font-semibold md:w-[88px] md:px-4">
                     {t('publicCompanies.columns.asset')}
                   </th>
-                  <th className="sticky left-[56px] md:left-[88px] z-10 w-48 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-4 text-left md:w-auto md:px-6 md:py-6">
+                  <th className="sticky left-[56px] md:left-[88px] z-10 w-48 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-3 text-left !font-semibold md:w-auto md:px-4">
                     {t('publicCompanies.columns.company')}
                   </th>
-                  <th className="px-2 py-4 font-bold md:px-4 md:py-6">
+                  <th className="px-2 py-3 !font-semibold md:px-4">
                     <button
                       type="button"
                       onClick={() => handleSort('mNav')}
@@ -545,7 +545,7 @@ export const PublicCompaniesTable = () => {
                       mNAV {renderSortIcon('mNav')}
                     </button>
                   </th>
-                  <th className="px-2 py-4 font-bold md:px-4 md:py-6">
+                  <th className="px-2 py-3 !font-semibold md:px-4">
                     <button
                       type="button"
                       onClick={() => handleSort('marketCap')}
@@ -554,7 +554,7 @@ export const PublicCompaniesTable = () => {
                       {t('publicCompanies.columns.marketCap')} {renderSortIcon('marketCap')}
                     </button>
                   </th>
-                  <th className="px-2 py-4 font-bold md:px-4 md:py-6">
+                  <th className="px-2 py-3 !font-semibold md:px-4">
                     <button
                       type="button"
                       onClick={() => handleSort('holdingsValue')}
@@ -563,7 +563,7 @@ export const PublicCompaniesTable = () => {
                       {t('publicCompanies.columns.holdingsValue')} {renderSortIcon('holdingsValue')}
                     </button>
                   </th>
-                  <th className="px-2 py-4 font-bold md:px-4 md:py-6">
+                  <th className="px-2 py-3 !font-semibold md:px-4">
                     <button
                       type="button"
                       onClick={() => handleSort('holdingsAmount')}
@@ -573,7 +573,7 @@ export const PublicCompaniesTable = () => {
                       {renderSortIcon('holdingsAmount')}
                     </button>
                   </th>
-                  <th className="px-2 py-4 font-bold md:px-4 md:py-6">
+                  <th className="px-2 py-3 !font-semibold md:px-4">
                     <button
                       type="button"
                       onClick={() => handleSort('sharePrice')}
@@ -582,7 +582,7 @@ export const PublicCompaniesTable = () => {
                       {t('publicCompanies.columns.sharePrice')} {renderSortIcon('sharePrice')}
                     </button>
                   </th>
-                  <th className="px-2 py-4 font-bold md:px-4 md:py-6">
+                  <th className="px-2 py-3 !font-semibold md:px-4">
                     <button
                       type="button"
                       onClick={() => handleSort('change24h')}
@@ -592,7 +592,7 @@ export const PublicCompaniesTable = () => {
                     </button>
                   </th>
                   {showChange1d && (
-                    <th className="px-2 py-4 font-bold md:px-4 md:py-6">
+                    <th className="px-2 py-3 !font-semibold md:px-4">
                       <button
                         type="button"
                         onClick={() => handleSort('change1d')}
@@ -603,7 +603,7 @@ export const PublicCompaniesTable = () => {
                     </th>
                   )}
                   {showChange7d && (
-                    <th className="px-2 py-4 font-bold md:px-4 md:py-6">
+                    <th className="px-2 py-3 !font-semibold md:px-4">
                       <button
                         type="button"
                         onClick={() => handleSort('change7d')}
@@ -615,14 +615,14 @@ export const PublicCompaniesTable = () => {
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[color:var(--cf-border)] text-[11px] md:text-sm">
+              <tbody className="divide-y divide-[color:var(--cf-border)] !text-xs !font-normal !leading-5">
                 {sortedData.map((row, index) => (
                   <tr
                     key={index}
                     className="group cursor-pointer transition-colors hover:bg-[color:var(--cf-surface-hover)]"
                     onClick={() => setSelectedCompany(row)}
                   >
-                    <td className="sticky left-0 z-10 w-14 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 py-3 group-hover:bg-[color:var(--cf-surface-hover)] md:w-[88px] md:px-6 md:py-4">
+                    <td className="sticky left-0 z-10 w-14 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 py-3 group-hover:bg-[color:var(--cf-surface-hover)] md:w-[88px] md:px-4">
                       <div className="flex items-center justify-start gap-1 md:gap-3">
                         <div className="h-5 w-5 flex-none md:h-6 md:w-6">
                           <img
@@ -636,7 +636,7 @@ export const PublicCompaniesTable = () => {
                         </span>
                       </div>
                     </td>
-                    <td className="sticky left-[56px] md:left-[88px] z-10 w-48 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-3 group-hover:bg-[color:var(--cf-surface-hover)] md:w-auto md:px-6 md:py-4">
+                    <td className="sticky left-[56px] md:left-[88px] z-10 w-48 border-r border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-3 group-hover:bg-[color:var(--cf-surface-hover)] md:w-auto md:px-4">
                       <div className="flex min-w-0 items-center justify-start gap-2 md:gap-3">
                         <div className="h-6 w-6 flex-none overflow-hidden rounded-full bg-white p-0.5 md:h-8 md:w-8 md:p-1">
                           <img
@@ -662,13 +662,13 @@ export const PublicCompaniesTable = () => {
                               <Info className="h-4 w-4" />
                             </button>
                           </div>
-                          <span className="truncate text-[10px] text-[color:var(--cf-muted)] uppercase md:text-xs">
+                          <span className="truncate !text-[10px] !font-normal !leading-4 text-[color:var(--cf-muted)] uppercase md:!text-xs md:!leading-5">
                             {row.ticker} {formatExchange(row.exchange)}
                           </span>
                         </div>
                       </div>
                     </td>
-                    <td className="px-2 py-3 text-center md:px-4 md:py-4">
+                    <td className="px-2 py-3 text-center md:px-4">
                       <span
                         className={
                           row.mNav !== '-' && Number.parseFloat(row.mNav) < 1
@@ -679,28 +679,28 @@ export const PublicCompaniesTable = () => {
                         {row.mNav}
                       </span>
                     </td>
-                    <td className="px-2 py-3 text-center md:px-4 md:py-4">
+                    <td className="px-2 py-3 text-center md:px-4">
                       <CompactValueCell rawValue={row.marketCap} subText="USD" />
                     </td>
-                    <td className="px-2 py-3 text-center md:px-4 md:py-4">
+                    <td className="px-2 py-3 text-center md:px-4">
                       <CompactValueCell rawValue={row.holdingsValue} subText="USD" />
                     </td>
-                    <td className="px-2 py-3 text-center md:px-4 md:py-4">
+                    <td className="px-2 py-3 text-center md:px-4">
                       <CompactValueCell rawValue={row.holdingsAmount} />
                     </td>
-                    <td className="px-2 py-3 text-center font-mono text-[color:var(--cf-text-strong)] md:px-4 md:py-4">
+                    <td className="px-2 py-3 text-center font-mono text-[color:var(--cf-text-strong)] md:px-4">
                       {row.sharePrice}
                     </td>
-                    <td className="px-2 py-3 text-center font-mono md:px-4 md:py-4">
+                    <td className="px-2 py-3 text-center font-mono md:px-4">
                       {renderValueWithColor(row.change24h)}
                     </td>
                     {showChange1d && (
-                      <td className="px-2 py-3 text-center font-mono md:px-4 md:py-4">
+                      <td className="px-2 py-3 text-center font-mono md:px-4">
                         {renderValueWithColor(row.change1d)}
                       </td>
                     )}
                     {showChange7d && (
-                      <td className="px-2 py-3 text-center font-mono md:px-4 md:py-4">
+                      <td className="px-2 py-3 text-center font-mono md:px-4">
                         {renderValueWithColor(row.change7d)}
                       </td>
                     )}
@@ -719,25 +719,25 @@ export const PublicCompaniesTable = () => {
         title={t('publicCompanies.modal.title')}
         width="max-w-xl"
       >
-        <div className="space-y-6">
-          <div className="flex items-start gap-4 border-b border-[color:var(--cf-border)] pb-4">
-            <div className="h-12 w-12 flex-none rounded-xl bg-white p-2">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 border-b border-[color:var(--cf-border)] pb-4">
+            <div className="h-9 w-9 flex-none rounded-lg bg-white p-1.5">
               <img src={selectedCompany?.logo} className="h-full w-full object-contain" alt="" />
             </div>
             <div className="min-w-0">
-              <h3 className="break-words text-lg leading-tight font-bold text-[color:var(--cf-text-strong)] md:text-xl">
+              <h3 className="break-words !text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                 {selectedCompany?.name}
               </h3>
               <div className="mt-2 flex flex-wrap gap-3">
-                <span className="text-xs text-[color:var(--cf-muted)]">
+                <span className="!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
                   {t('publicCompanies.modal.ticker')}:{' '}
-                  <span className="font-bold text-[color:var(--cf-text)]">
+                  <span className="!font-semibold text-[color:var(--cf-text)]">
                     {selectedCompany?.ticker}
                   </span>
                 </span>
-                <span className="text-xs text-[color:var(--cf-muted)]">
+                <span className="!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
                   {t('publicCompanies.modal.exchange')}:{' '}
-                  <span className="font-bold text-[color:var(--cf-text)]">
+                  <span className="!font-semibold text-[color:var(--cf-text)]">
                     {selectedCompany ? formatExchange(selectedCompany.exchange) : ''}
                   </span>
                 </span>
@@ -746,10 +746,10 @@ export const PublicCompaniesTable = () => {
           </div>
 
           <div className="space-y-3">
-            <p className="text-sm font-bold tracking-wider text-[color:var(--cf-muted)] uppercase">
+            <p className="!text-xs !font-semibold !leading-5 tracking-normal text-[color:var(--cf-muted)] uppercase">
               {t('publicCompanies.modal.sectionTitle')}
             </p>
-            <div className="min-w-0 px-1 text-sm leading-relaxed break-words text-[color:var(--cf-text)]">
+            <div className="min-w-0 px-1 !text-sm !font-normal !leading-[22px] break-words text-[color:var(--cf-text)]">
               {selectedCompanyInfoParagraphs.map((p, idx) => (
                 <React.Fragment key={idx}>
                   <p>{p}</p>

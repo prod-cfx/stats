@@ -115,7 +115,7 @@ function StrategyFilterTabs({
   t: StrategyListTranslation
 }) {
   return (
-    <div role="tablist" className="cf-strategy-filter-tabs no-scrollbar flex items-center gap-1 overflow-x-auto rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-1">
+    <div role="tablist" className="cf-strategy-filter-tabs no-scrollbar flex items-center gap-1 overflow-x-auto rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-1">
       {TAB_ORDER.map((key) => {
         const isActive = key === active
         return (
@@ -128,14 +128,14 @@ function StrategyFilterTabs({
             data-active={isActive ? 'true' : 'false'}
             data-count={counts[key]}
             onClick={() => onChange(key)}
-            className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm transition-colors ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold leading-5 transition-colors ${
               isActive
-                ? 'bg-[color:var(--cf-surface)] font-semibold text-[color:var(--cf-text-strong)] shadow-sm'
+                ? 'bg-[color:var(--cf-surface)] text-[color:var(--cf-text-strong)] shadow-sm'
                 : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]'
             }`}
           >
             <span>{t(`aiQuant.filter.${key}`)}</span>
-            <span className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2 py-0.5 text-xs font-medium text-[color:var(--cf-muted)]">
+            <span className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2 py-0.5 text-xs font-medium leading-4 text-[color:var(--cf-muted)]">
               {counts[key]}
             </span>
           </button>
@@ -457,7 +457,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
   if (strategies.length === 0) {
     if (isLoading) {
       return (
-        <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 text-sm text-[color:var(--cf-muted)]">
+        <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 text-sm leading-[22px] text-[color:var(--cf-muted)]">
           {t('common.loading')}
         </section>
       )
@@ -465,12 +465,12 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
 
     if (error) {
       return (
-        <section className="rounded-2xl border border-red-500/30 bg-red-500/5 p-6">
-          <p className="text-sm text-red-400">{error}</p>
+        <section className="rounded-2xl border border-red-500/30 bg-red-500/5 px-5 py-4">
+          <p className="text-sm leading-[22px] text-red-400">{error}</p>
           <button
             type="button"
             onClick={() => void loadStrategies()}
-            className="mt-3 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs font-semibold text-red-300"
+            className="mt-3 rounded-full border border-red-500/30 px-3.5 py-1.5 text-xs font-semibold leading-5 text-red-300"
           >
             {t('common.retry')}
           </button>
@@ -479,17 +479,17 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
     }
 
     return (
-      <section className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] py-12 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[color:var(--cf-surface)]">
-          <Activity className="h-8 w-8 text-[color:var(--cf-muted)]" />
+      <section className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-5 py-8 text-center">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[color:var(--cf-surface)]">
+          <Activity className="h-5 w-5 text-[color:var(--cf-muted)]" />
         </div>
-        <h3 className="mt-4 text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.noStrategies')}</h3>
-        <p className="mt-2 max-w-sm text-sm text-[color:var(--cf-muted)]">
+        <p className="mt-4 text-sm font-normal leading-[22px] text-[color:var(--cf-text-strong)]">{t('aiQuant.noStrategies')}</p>
+        <p className="mt-1 max-w-sm text-sm leading-[22px] text-[color:var(--cf-muted)]">
           {t('aiQuant.noStrategiesDesc')}
         </p>
         <Link
           href={`/${lng}/ai-quant`}
-          className="cf-primary-cta mt-6 rounded-xl px-6 py-2.5 text-sm font-bold !text-white transition-transform hover:scale-105 active:scale-95"
+          className="cf-primary-cta mt-4 rounded-full px-3.5 py-1.5 text-xs font-semibold leading-5 !text-white transition"
         >
           {t('aiQuant.createStrategy')}
         </Link>
@@ -516,18 +516,18 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
         ].map(item => (
           <div
             key={item.label}
-            className="cf-ai-overview-card rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4"
+            className="cf-ai-overview-card rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4"
           >
-            <p className="text-xs font-medium text-[color:var(--cf-muted)]">{item.label}</p>
-            <p className={`mt-2 text-xl font-semibold tabular-nums ${item.tone}`}>{item.value}</p>
+            <p className="text-sm font-normal leading-[22px] text-[color:var(--cf-muted)]">{item.label}</p>
+            <p className={`mt-1 text-sm font-semibold leading-[22px] tabular-nums ${item.tone}`}>{item.value}</p>
           </div>
         ))}
       </div>
 
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h3 className="text-lg font-bold text-[color:var(--cf-text-strong)]">{t('aiQuant.myStrategies')}</h3>
-          <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+          <p className="!text-[15px] !font-semibold leading-[22px] text-[color:var(--cf-text-strong)]">{t('aiQuant.myStrategies')}</p>
+          <p className="mt-1 text-sm leading-[22px] text-[color:var(--cf-muted)]">
             {t('aiQuant.consoleListHint', { defaultValue: '查看策略状态、表现指标和最近执行入口。' })}
           </p>
         </div>
@@ -537,7 +537,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
       {strategies.length >= STRATEGY_LIST_FETCH_LIMIT && (
         <div
           data-testid="strategy-filter-cap-hint"
-          className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-600 dark:text-amber-400"
+          className="rounded-2xl border border-amber-500/30 bg-amber-500/5 px-5 py-4 text-sm leading-[22px] text-amber-600 dark:text-amber-400"
         >
           {t('aiQuant.filter.capHint', {
             defaultValue: `仅显示最近 ${STRATEGY_LIST_FETCH_LIMIT} 条策略，更早的请通过分页查询。`,
@@ -546,7 +546,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
       )}
 
       {error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-400">
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-5 py-4 text-sm leading-[22px] text-red-400">
           {error}
         </div>
       )}
@@ -554,7 +554,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
       {filteredStrategies.length === 0 ? (
         <div
           data-testid="strategy-filter-empty"
-          className="rounded-xl border border-dashed border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-8 text-center text-sm text-[color:var(--cf-muted)]"
+          className="rounded-2xl border border-dashed border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-5 py-8 text-center text-sm leading-[22px] text-[color:var(--cf-muted)]"
         >
           {t('aiQuant.filter.emptyForTab', { defaultValue: '当前分类下暂无策略' })}
         </div>
@@ -570,36 +570,36 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
             return (
               <div
                 key={item.id}
-                className="cf-ai-strategy-card group relative rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 transition-all hover:border-primary/50 hover:shadow-sm"
+                className="cf-ai-strategy-card group relative rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 transition-all hover:border-primary/50 hover:shadow-sm"
               >
                 <Link
                   href={`/${lng}/account/ai-quant/strategy/${item.id}`}
                   aria-label={t('aiQuant.viewDetail')}
                   title={t('aiQuant.viewDetail')}
-                  className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-bg)] hover:text-primary group-hover:text-primary sm:hidden"
+                  className="absolute right-5 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-bg)] hover:text-primary group-hover:text-primary sm:hidden"
                 >
                   <ChevronRight className="h-4 w-4" />
                   <span className="sr-only">{t('aiQuant.viewDetail')}</span>
                 </Link>
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
                     <Link href={`/${lng}/account/ai-quant/strategy/${item.id}`} className="block min-w-0 pr-10 sm:pr-0">
-                      <div className="min-w-0 space-y-2">
+                      <div className="min-w-0 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h4 className="min-w-0 break-words font-bold text-[color:var(--cf-text-strong)] transition-colors group-hover:text-primary">
+                          <p className="min-w-0 break-words text-sm font-normal leading-[22px] text-[color:var(--cf-text-strong)] transition-colors group-hover:text-primary">
                             {item.name}
-                          </h4>
-                          <div className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusConfig.className}`}>
+                          </p>
+                          <div className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium leading-4 ${statusConfig.className}`}>
                             <StatusIcon className="h-3 w-3" />
                             {statusConfig.label}
                           </div>
-                          <div className="flex items-center gap-1 text-xs text-[color:var(--cf-muted)]">
+                          <div className="flex items-center gap-1 text-sm leading-[22px] text-[color:var(--cf-muted)]">
                             <Clock className="h-3 w-3" />
                             <span>{t('aiQuant.updatedAt')}</span>
                             <span>{fmtTime(item.updatedAt, lng)}</span>
                           </div>
                         </div>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-5 text-[color:var(--cf-muted)]">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm leading-[22px] text-[color:var(--cf-muted)]">
                           <AiQuantStrategyPrimarySummary item={item} t={t} keyPrefix={item.id} />
                         </div>
                       </div>
@@ -616,7 +616,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                             type="button"
                             onClick={e => { void openStopDialog(e, item) }}
                             disabled={pendingActionId === item.id}
-                            className="cf-ai-action-button cf-ai-action-danger flex min-h-10 min-w-[104px] items-center justify-center gap-1.5 rounded-md border border-red-500/25 bg-red-500/[0.06] px-3 text-xs font-semibold text-red-500 transition hover:border-red-500/40 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
+                            className="cf-ai-action-button cf-ai-action-danger flex items-center justify-center gap-1.5 rounded-full border border-red-500/25 bg-red-500/[0.06] px-3.5 py-1.5 text-xs font-semibold leading-5 text-red-500 transition hover:border-red-500/40 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
                           >
                             <StopCircle className="h-3 w-3" />
                             {getStrategyRuntimeActionLabel(item.status, t)}
@@ -626,7 +626,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                             type="button"
                             onClick={e => handleStatusChange(e, item.id, 'running')}
                             disabled={pendingActionId === item.id}
-                            className="cf-ai-action-button cf-ai-action-success flex min-h-10 min-w-[72px] items-center justify-center gap-1.5 rounded-md border border-emerald-500/25 bg-emerald-500/[0.06] px-3 text-xs font-semibold text-emerald-500 transition hover:border-emerald-500/40 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-400"
+                            className="cf-ai-action-button cf-ai-action-success flex items-center justify-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/[0.06] px-3.5 py-1.5 text-xs font-semibold leading-5 text-emerald-500 transition hover:border-emerald-500/40 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-400"
                           >
                             <Play className="h-3 w-3 fill-current" />
                             {t('aiQuant.actions.run')}
@@ -639,7 +639,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                         type="button"
                         onClick={e => { void openDeleteDialog(e, item) }}
                         disabled={accountDeleteDialog?.strategy.id === item.id && accountDeleteDialog.pending}
-                        className="cf-ai-action-button cf-ai-action-danger-muted flex min-h-10 min-w-[76px] items-center justify-center gap-1.5 rounded-md border border-red-500/20 bg-transparent px-3 text-xs font-semibold text-red-500 transition hover:border-red-500/35 hover:bg-red-500/[0.06] disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
+                        className="cf-ai-action-button cf-ai-action-danger-muted flex items-center justify-center gap-1.5 rounded-full border border-red-500/20 bg-transparent px-3.5 py-1.5 text-xs font-semibold leading-5 text-red-500 transition hover:border-red-500/35 hover:bg-red-500/[0.06] disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
                       >
                         <Trash2 className="h-3 w-3" />
                         {accountDeleteDialog?.strategy.id === item.id && accountDeleteDialog.pending
@@ -652,7 +652,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                         href={`/${lng}/account/ai-quant/strategy/${item.id}`}
                         aria-label={t('aiQuant.viewDetail')}
                         title={t('aiQuant.viewDetail')}
-                        className="cf-ai-action-button cf-ai-action-neutral hidden h-10 w-10 min-w-10 items-center justify-center rounded-md text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-bg)] hover:text-primary group-hover:text-primary sm:inline-flex"
+                        className="cf-ai-action-button cf-ai-action-neutral hidden h-8 w-8 min-w-8 items-center justify-center rounded-full text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-bg)] hover:text-primary group-hover:text-primary sm:inline-flex"
                       >
                         <ChevronRight className="h-4 w-4" />
                         <span className="sr-only">{t('aiQuant.viewDetail')}</span>
@@ -689,10 +689,10 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                       ].map(metric => (
                         <div
                           key={metric.label}
-                          className="cf-ai-metric-cell min-h-[64px] rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2.5"
+                          className="cf-ai-metric-cell min-h-[58px] rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2"
                         >
-                          <div className="text-[11px] text-[color:var(--cf-muted)]">{metric.label}</div>
-                          <div className={`mt-1 text-sm font-semibold tabular-nums ${metric.tone}`}>{metric.value}</div>
+                          <div className="text-xs leading-5 text-[color:var(--cf-muted)]">{metric.label}</div>
+                          <div className={`text-sm font-semibold leading-[22px] tabular-nums ${metric.tone}`}>{metric.value}</div>
                         </div>
                       ))}
                   </Link>

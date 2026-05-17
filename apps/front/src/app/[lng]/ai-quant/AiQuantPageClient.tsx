@@ -7,7 +7,7 @@ import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
 import type { AccountAiQuantStrategyDetail } from '@/lib/api'
-import { ArrowLeft, Bot, KeyRound, MessageSquarePlus, Sparkles, X } from 'lucide-react'
+import { Bot, ChevronLeft, KeyRound, MessageSquarePlus, Sparkles, X } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -1544,9 +1544,9 @@ export function AiQuantPageClient({
       <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-6 px-4 py-8 md:px-8">
         <Link
           href={returnHref}
-          className="inline-flex w-fit items-center gap-2 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+          className="inline-flex w-fit items-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs font-semibold leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4" />
           <span>{lng === 'en' ? 'Back' : '返回'}</span>
         </Link>
         <GuestAiQuantLanding onRequireLogin={goLoginWithIntent} />
@@ -1587,9 +1587,9 @@ export function AiQuantPageClient({
         <Link
           href={returnHref}
           aria-label={lng === 'en' ? 'Back' : '返回'}
-          className="absolute left-4 inline-flex h-9 w-9 items-center justify-center text-[color:var(--cf-text-strong)]"
+          className="absolute left-4 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
         >
-          <ArrowLeft className="h-5 w-5" />
+          <ChevronLeft className="h-4 w-4" />
         </Link>
         <div className="min-w-0 text-center leading-none">
           <div className="flex items-center justify-center gap-1.5">
@@ -1607,7 +1607,7 @@ export function AiQuantPageClient({
           data-testid="mobile-create-conversation-header"
           onClick={() => setMobileConversationSheetOpen(true)}
           aria-label={t('aiQuant.conversationSelector', { defaultValue: '选择会话' })}
-          className="absolute right-4 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-primary shadow-sm"
+          className="absolute right-4 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-primary shadow-sm"
         >
           <MessageSquarePlus className="h-5 w-5" />
         </button>
@@ -1618,14 +1618,14 @@ export function AiQuantPageClient({
           href={returnHref}
           className="inline-flex w-fit items-center gap-2 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4" />
           <span>{lng === 'en' ? 'Back' : '返回'}</span>
         </Link>
         <div className="flex items-center justify-end gap-2 sm:hidden">
           <Link
             href={`/${lng}/ai-quant/plaza`}
             data-testid="ai-quant-header-plaza-link"
-            className="cf-ai-action-button cf-ai-action-neutral inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+            className="cf-ai-action-button cf-ai-action-neutral inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs font-semibold leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
             <Sparkles className="h-4 w-4" />
             <span>{t('aiQuant.plazaShort')}</span>
@@ -1633,7 +1633,7 @@ export function AiQuantPageClient({
           <Link
             href={`/${lng}/account?tab=settings#exchange-api`}
             data-testid="ai-quant-header-api-link"
-            className="cf-ai-action-button cf-ai-action-neutral inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+            className="cf-ai-action-button cf-ai-action-neutral inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs font-semibold leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
             <KeyRound className="h-4 w-4" />
             <span>{t('aiQuant.configApiShort')}</span>
@@ -1643,15 +1643,15 @@ export function AiQuantPageClient({
 
       <div className="hidden flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:flex">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">
+          <h1 className="!text-base !font-semibold !leading-6 text-[color:var(--cf-text-strong)]">
             {t('aiQuant.title')}
           </h1>
-          <p className="mt-1 text-sm text-[color:var(--cf-muted)]">{t('aiQuant.subtitle')}</p>
+          <p className="mt-1 text-sm leading-[22px] text-[color:var(--cf-muted)]">{t('aiQuant.subtitle')}</p>
         </div>
         <div className="hidden items-center justify-end gap-2 sm:flex sm:shrink-0">
           <Link
             href={`/${lng}/ai-quant/plaza`}
-            className="cf-ai-action-button cf-ai-action-neutral inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)] sm:px-3.5"
+            className="cf-ai-action-button cf-ai-action-neutral inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs font-semibold leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
             <Sparkles className="h-4 w-4" />
             <span className="sm:hidden">{t('aiQuant.plazaShort')}</span>
@@ -1659,7 +1659,7 @@ export function AiQuantPageClient({
           </Link>
           <Link
             href={`/${lng}/account?tab=settings#exchange-api`}
-            className="cf-ai-action-button cf-ai-action-neutral inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)] sm:px-3.5"
+            className="cf-ai-action-button cf-ai-action-neutral inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 py-1.5 text-xs font-semibold leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
             <KeyRound className="h-4 w-4" />
             <span className="sm:hidden">{t('aiQuant.configApiShort')}</span>
@@ -1766,7 +1766,7 @@ export function AiQuantPageClient({
                   key={tab.key}
                   type="button"
                   onClick={() => setRightPanelTab(tab.key)}
-                  className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                  className={`rounded-full border px-3.5 py-1.5 !text-xs !font-semibold !leading-5 transition ${
                     rightPanelTab === tab.key
                       ? 'border-primary bg-primary/10 text-primary'
                       : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]'
@@ -1832,7 +1832,7 @@ export function AiQuantPageClient({
                       />
                     )
                   : (
-                      <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 text-sm text-[color:var(--cf-muted)]">
+                      <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
                         {t('aiQuant.messages.logicGraphEmpty', {
                           defaultValue: '描述策略想法后，逻辑图会显示在这里。',
                         })}
@@ -1880,7 +1880,7 @@ export function AiQuantPageClient({
                     />
                   )
                 : (
-                    <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 text-sm text-[color:var(--cf-muted)]">
+                    <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
                       {t('aiQuant.messages.backtestResultEmpty', {
                         defaultValue: '暂无回测结果。确认逻辑图并开始回测后，结果会显示在这里。',
                       })}
@@ -1911,7 +1911,7 @@ export function AiQuantPageClient({
                 <button
                   type="button"
                   onClick={() => setRightPanelTab('logic')}
-                  className={`min-h-9 rounded-xl border px-3 text-xs font-bold ${
+                  className={`rounded-full border px-3.5 py-1.5 !text-xs !font-semibold !leading-5 ${
                     rightPanelTab === 'logic'
                       ? 'border-primary bg-primary text-white'
                       : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-[color:var(--cf-text-strong)]'
@@ -1922,7 +1922,7 @@ export function AiQuantPageClient({
                 <button
                   type="button"
                   onClick={() => setRightPanelTab('backtest')}
-                  className={`min-h-9 rounded-xl border px-3 text-xs font-bold ${
+                  className={`rounded-full border px-3.5 py-1.5 !text-xs !font-semibold !leading-5 ${
                     rightPanelTab === 'backtest'
                       ? 'border-primary bg-primary text-white'
                       : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-[color:var(--cf-text-strong)]'
@@ -1934,7 +1934,7 @@ export function AiQuantPageClient({
               <button
                 type="button"
                 onClick={() => setMobilePanelSheetOpen(false)}
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
                 aria-label={t('common.close', { defaultValue: 'Close' })}
               >
                 <X className="h-4 w-4" />
@@ -1990,7 +1990,7 @@ export function AiQuantPageClient({
                         />
                       )
                     : (
-                        <section className="rounded-2xl bg-[color:var(--cf-surface)] p-5 text-sm text-[color:var(--cf-muted)]">
+                        <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
                           {t('aiQuant.messages.logicGraphEmpty', {
                             defaultValue: '描述策略想法后，逻辑图会显示在这里。',
                           })}
@@ -2040,7 +2040,7 @@ export function AiQuantPageClient({
                       />
                     )
                   : (
-                      <section className="rounded-2xl bg-[color:var(--cf-surface)] p-5 text-sm text-[color:var(--cf-muted)]">
+                      <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
                         {t('aiQuant.messages.backtestResultEmpty', {
                           defaultValue: '暂无回测结果。确认逻辑图并开始回测后，结果会显示在这里。',
                         })}

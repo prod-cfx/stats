@@ -110,9 +110,9 @@ export function RealtimeWhaleMonitorSection({
   }
 
   return (
-    <section className="space-y-3 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 md:p-5">
+    <section className="space-y-3 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-sm">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <h3 className="text-lg font-bold text-[color:var(--cf-text-strong)]">
+        <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
           {t('whaleTracking.notifications.sections.realtime')} ({symbolRules.length})
         </h3>
 
@@ -120,7 +120,7 @@ export function RealtimeWhaleMonitorSection({
           <select
             value={selectedSymbol}
             onChange={e => setSelectedSymbol(e.target.value)}
-            className="min-w-0 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-sm"
+            className="min-w-0 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text)] focus:border-primary focus:outline-none"
           >
             {symbolOptions.map(symbol => (
               <option key={symbol} value={symbol}>{symbol}</option>
@@ -134,20 +134,20 @@ export function RealtimeWhaleMonitorSection({
               const value = e.target.value
               setThresholdDraftBySymbol(prev => ({ ...prev, [selectedSymbol]: value }))
             }}
-            className="w-full min-w-0 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-sm md:w-[140px]"
+            className="w-full min-w-0 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text)] focus:border-primary focus:outline-none md:w-[140px]"
           />
           <button
             type="button"
             onClick={() => { void handleCreateRule() }}
             disabled={creating}
-            className="from-primary to-secondary rounded-full bg-gradient-to-r px-4 py-2 text-xs font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+            className="from-primary to-secondary rounded-full bg-gradient-to-r px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-white transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             {creating ? t('common.loading') : t('whaleTracking.notifications.actions.createMonitor')}
           </button>
           <button
             type="button"
             onClick={() => setIsPaused(prev => !prev)}
-            className="flex items-center gap-2 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-2 text-xs font-bold text-[color:var(--cf-text-strong)]"
+            className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 !text-xs !font-semibold !leading-5 transition-colors ${isPaused ? 'border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-text-strong)]' : 'from-primary to-secondary border-transparent bg-gradient-to-r text-white'}`}
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isPaused ? '' : 'animate-spin'}`} style={{ animationDuration: '3s' }} />
             <span>{isPaused ? t('whaleTracking.realtime.paused') : t('whaleTracking.realtime.nextUpdate', { count: countdown })}</span>
@@ -155,7 +155,7 @@ export function RealtimeWhaleMonitorSection({
         </div>
       </div>
       {!!symbolRules.length && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-2.5">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-2.5">
           {symbolRules.map(rule => (
             <div
               key={rule.id}
@@ -195,17 +195,17 @@ export function RealtimeWhaleMonitorSection({
       )}
 
       {loading && (
-        <div className="py-6 text-center text-sm text-[color:var(--cf-muted)]">{t('common.loading')}</div>
+        <div className="py-5 text-center !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">{t('common.loading')}</div>
       )}
 
       <div className="space-y-3 md:hidden">
         {filteredRows.map(row => (
-          <article key={`${row.rowKey}-mobile`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+          <article key={`${row.rowKey}-mobile`} className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
             <div className="mb-3 flex items-start justify-between gap-3">
               <button
                 type="button"
                 onClick={() => handleCopy(row.address)}
-                className="min-w-0 break-all font-mono text-sm font-semibold text-[color:var(--cf-text-strong)]"
+                className="min-w-0 break-all font-mono !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]"
               >
                 {row.address.slice(0, 8)}...{row.address.slice(-3)}
               </button>
@@ -217,14 +217,14 @@ export function RealtimeWhaleMonitorSection({
                 {copiedAddress === row.address ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid grid-cols-2 gap-2 !text-xs !font-normal !leading-5">
               <div>
                 <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.realtime.table.asset')}</div>
-                <div className="font-bold text-[color:var(--cf-text-strong)]">{row.symbol}</div>
+                <div className="!font-semibold text-[color:var(--cf-text-strong)]">{row.symbol}</div>
               </div>
               <div>
                 <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.realtime.table.direction')}</div>
-                <span className={`inline-flex rounded-md border px-2 py-1 text-xs font-bold ${
+                <span className={`inline-flex rounded-md border px-2 py-1 !text-xs !font-semibold !leading-5 ${
                   row.side === 'Long'
                     ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
                     : 'border-rose-500/30 bg-rose-500/10 text-rose-400'
@@ -248,16 +248,16 @@ export function RealtimeWhaleMonitorSection({
           </article>
         ))}
         {!filteredRows.length && !loading && (
-          <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-10 text-center text-sm text-[color:var(--cf-muted)]">
+          <div className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-8 text-center !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
             {t('whaleTracking.notifications.emptyRealtime')}
           </div>
         )}
       </div>
 
-      <div className="hidden md:block overflow-x-auto rounded-xl border border-[color:var(--cf-border)]">
+      <div className="hidden md:block overflow-x-auto rounded-lg border border-[color:var(--cf-border)]">
         <table className="w-full min-w-[980px]">
           <thead>
-            <tr className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/70 text-xs text-[color:var(--cf-muted)]">
+            <tr className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/70 !text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)]">
               <th className="px-4 py-3 text-left">{t('whaleTracking.realtime.table.address')}</th>
               <th className="px-4 py-3 text-left">{t('whaleTracking.realtime.table.asset')}</th>
               <th className="px-4 py-3 text-left">{t('whaleTracking.realtime.table.direction')}</th>
@@ -273,15 +273,15 @@ export function RealtimeWhaleMonitorSection({
                   <button
                     type="button"
                     onClick={() => handleCopy(row.address)}
-                    className="inline-flex items-center gap-2 font-mono text-sm text-[color:var(--cf-text-strong)] hover:text-primary"
+                    className="inline-flex items-center gap-2 font-mono !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)] hover:text-primary"
                   >
                     <span>{row.address.slice(0, 8)}...{row.address.slice(-3)}</span>
                     {copiedAddress === row.address ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                   </button>
                 </td>
-                <td className="px-4 py-3 text-sm font-semibold text-[color:var(--cf-text-strong)]">{row.symbol}</td>
+                <td className="px-4 py-3 !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{row.symbol}</td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex rounded-md border px-2 py-1 text-xs font-bold ${
+                  <span className={`inline-flex rounded-md border px-2 py-1 !text-xs !font-semibold !leading-5 ${
                     row.side === 'Long'
                       ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
                       : 'border-rose-500/30 bg-rose-500/10 text-rose-400'
@@ -289,14 +289,14 @@ export function RealtimeWhaleMonitorSection({
                     {row.side === 'Long' ? t('whaleTracking.side.long') : t('whaleTracking.side.short')}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-sm font-semibold text-[color:var(--cf-text-strong)]">{row.positionValueText}</td>
-                <td className="px-4 py-3 text-sm text-[color:var(--cf-text)]">{row.entryPriceText}</td>
-                <td className="px-4 py-3 text-sm text-[color:var(--cf-muted)]">{formatRelativeTime(row.timestamp)}</td>
+                <td className="px-4 py-3 !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{row.positionValueText}</td>
+                <td className="px-4 py-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">{row.entryPriceText}</td>
+                <td className="px-4 py-3 !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">{formatRelativeTime(row.timestamp)}</td>
               </tr>
             ))}
             {!filteredRows.length && !loading && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-[color:var(--cf-muted)]">
+                <td colSpan={6} className="px-4 py-8 text-center !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
                   {t('whaleTracking.notifications.emptyRealtime')}
                 </td>
               </tr>

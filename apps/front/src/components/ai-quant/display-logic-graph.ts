@@ -610,8 +610,14 @@ function formatSizingAmount(sizing: DisplayLogicGraphAction['sizing'] | null | u
   return null
 }
 
+function asDisplayGraphSizing(value: unknown): DisplayLogicGraphAction['sizing'] | null {
+  return value && typeof value === 'object'
+    ? value as DisplayLogicGraphAction['sizing']
+    : null
+}
+
 function extractPositionSizing(specDesc: DisplayLogicGraphSpecDesc | null, fallbackPositionPct: unknown): string | null {
-  const canonicalSizing = formatSizingAmount(specDesc?.canonicalSpec?.sizing)
+  const canonicalSizing = formatSizingAmount(asDisplayGraphSizing(specDesc?.canonicalSpec?.sizing))
   if (canonicalSizing) return canonicalSizing
 
   const actionSizing = extractRules(specDesc)

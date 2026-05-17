@@ -194,6 +194,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
   if (!isMobileLayout && !GridLayout)
     return <div className="p-10 text-center text-white/30">{t('common.loading')}</div>
 
+  const DesktopGridLayout = GridLayout as React.ComponentType<any>
   const rowHeight = 10
   const marginY = 6
 
@@ -249,7 +250,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
             })}
           </div>
         ) : (
-          <GridLayout
+          <DesktopGridLayout
             key={resetKey}
             layout={layoutState as any}
             cols={12}
@@ -286,7 +287,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
                 </div>
               )
             })}
-          </GridLayout>
+          </DesktopGridLayout>
         )}
       </div>
 

@@ -51,6 +51,10 @@ loadSharedEnvironment()
 /** @type {import('next').NextConfig} */
 const isDev = process.env.NODE_ENV !== 'production'
 const isVercel = process.env.VERCEL === '1'
+const allowedDevOrigins = (process.env.NEXT_ALLOWED_DEV_ORIGINS || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean)
 
 const nextConfig = {
   // 设置构建输出目录
@@ -105,6 +109,8 @@ const nextConfig = {
   },
   // Help with hydration errors
   reactStrictMode: false,
+
+  allowedDevOrigins: isDev && allowedDevOrigins.length > 0 ? allowedDevOrigins : undefined,
 
   // 使用服务端渲染模式，通过 next start 运行
   // output: 'export',  // 已禁用静态导出

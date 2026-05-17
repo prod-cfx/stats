@@ -143,19 +143,17 @@ export function AiQuantDeletionDialog({
   const { title, description } = resolveContent(kind, t)
 
   // 视觉风格预设：safe = 绿/紫主按钮（默认 Enter 触发的安全操作），
-  // destructive_primary = 红色破坏性主按钮，destructive_secondary = 红色破坏性副按钮，
-  // neutral_secondary = 中性边框副按钮（取消/关闭）。
-  const SAFE_PRIMARY_CLASS = 'rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60'
-  const DESTRUCTIVE_PRIMARY_CLASS = 'rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60'
-  const DESTRUCTIVE_SECONDARY_CLASS = 'rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400 disabled:cursor-not-allowed disabled:opacity-60'
-  const NEUTRAL_SECONDARY_CLASS = 'rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-60'
+  // destructive_primary = 红色破坏性主按钮，neutral_secondary = 中性边框副按钮（取消/关闭）。
+  const SAFE_PRIMARY_CLASS = 'inline-flex min-h-9 items-center justify-center rounded-full bg-violet-600 px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-white disabled:cursor-not-allowed disabled:opacity-60'
+  const DESTRUCTIVE_PRIMARY_CLASS = 'inline-flex min-h-9 items-center justify-center rounded-full bg-red-600 px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-white disabled:cursor-not-allowed disabled:opacity-60'
+  const NEUTRAL_SECONDARY_CLASS = 'inline-flex min-h-9 items-center justify-center rounded-full border border-[color:var(--cf-border)] px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-60'
 
   let primaryLabel: string | null = null
   let primaryClassName = DESTRUCTIVE_PRIMARY_CLASS
   let primaryHandler: (() => void) | null = null
 
   let secondaryLabel: string | null = t('aiQuant.deleteDialog.cancel')
-  let secondaryClassName = NEUTRAL_SECONDARY_CLASS
+  const secondaryClassName = NEUTRAL_SECONDARY_CLASS
   let secondaryHandler: (() => void) | null = onClose
 
   if (kind === 'running') {
@@ -227,21 +225,21 @@ export function AiQuantDeletionDialog({
         aria-modal="true"
         aria-labelledby="ai-quant-deletion-dialog-title"
         ref={dialogRef}
-        className="max-h-[calc(100dvh-2rem)] w-full max-w-[560px] overflow-y-auto rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 sm:p-5"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-[520px] overflow-y-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl sm:p-5"
         onClick={event => event.stopPropagation()}
       >
         <h3
           id="ai-quant-deletion-dialog-title"
-          className="text-lg font-semibold text-[color:var(--cf-text-strong)]"
+          className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]"
         >
           {title}
         </h3>
-        <p className="mt-2 text-sm leading-6 text-[color:var(--cf-muted)]">
+        <p className="mt-2 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
           {description}
         </p>
 
         {showInfoBlock && (conversation || strategy) && (
-          <div className="mt-4 grid gap-2 rounded-xl border border-[color:var(--cf-border)] bg-black/10 p-3 text-sm text-[color:var(--cf-text)]">
+          <div className="mt-4 grid gap-2 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-muted)] p-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]">
             {conversation && (
               <div data-testid="ai-quant-deletion-info-row" className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-3">
                 <span className="text-[color:var(--cf-muted)]">{t('aiQuant.deleteDialog.conversation')}</span>
@@ -264,10 +262,10 @@ export function AiQuantDeletionDialog({
         {showCheckbox && (
           <>
             <label
-              className={`mt-4 flex items-start gap-2 rounded-xl border p-3 text-sm transition-colors ${
+              className={`mt-4 flex items-start gap-2 rounded-lg border p-3 !text-sm !font-semibold !leading-[22px] transition-colors ${
                 deleteStoppedStrategy
                   ? 'border-red-500/40 bg-red-500/10 text-[color:var(--cf-text-strong)]'
-                  : 'border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]'
+                  : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface-muted)] text-[color:var(--cf-text)]'
               }`}
             >
               <input
@@ -279,7 +277,7 @@ export function AiQuantDeletionDialog({
               />
               <span>
                 {checkboxLabel.main}
-                <span className="block text-xs leading-5 text-[color:var(--cf-muted)]">
+                <span className="block !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
                   {checkboxLabel.hint}
                 </span>
               </span>
@@ -288,7 +286,7 @@ export function AiQuantDeletionDialog({
               <div
                 role="alert"
                 data-testid="ai-quant-deletion-destructive-warning"
-                className="mt-2 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-200"
+                className="mt-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 !text-xs !leading-5 text-red-200"
               >
                 {t('aiQuant.deleteDialog.destructiveWarning')}
               </div>
@@ -297,7 +295,7 @@ export function AiQuantDeletionDialog({
         )}
 
         {errorMessage && (
-          <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 !text-sm !leading-[22px] text-red-400">
             {errorMessage}
           </div>
         )}

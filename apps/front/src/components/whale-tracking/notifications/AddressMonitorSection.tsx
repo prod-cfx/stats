@@ -139,28 +139,28 @@ export function AddressMonitorSection({
   }
 
   return (
-    <section className="space-y-3 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 md:p-5">
+    <section className="space-y-3 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-lg font-bold text-[color:var(--cf-text-strong)]">
+        <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
           {t('whaleTracking.notifications.sections.address')} ({addressRules.length})
         </h3>
         <button
           type="button"
           onClick={onCreate}
-          className="from-primary to-secondary rounded-full bg-gradient-to-r px-4 py-1.5 text-xs font-bold text-white transition-opacity hover:opacity-90"
+          className="from-primary to-secondary rounded-full bg-gradient-to-r px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-white transition-opacity hover:opacity-90"
         >
           {t('whaleTracking.notifications.actions.createMonitor')}
         </button>
       </div>
 
       {loading && (
-        <div className="py-6 text-center text-sm text-[color:var(--cf-muted)]">
+        <div className="py-5 text-center !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
           {t('common.loading')}
         </div>
       )}
 
       {!loading && !addressRules.length && (
-        <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-6 text-center text-sm text-[color:var(--cf-muted)]">
+        <div className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-5 text-center !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
           {t('whaleTracking.notifications.emptyAddress')}
         </div>
       )}
@@ -176,12 +176,12 @@ export function AddressMonitorSection({
             return (
               <article
                 key={`${rule.id}-mobile`}
-                className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3"
+                className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3"
               >
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-semibold text-[color:var(--cf-text-strong)]">
+                      <span className="font-mono !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                         {address.slice(0, 10)}...{address.slice(-4)}
                       </span>
                       <button
@@ -193,7 +193,7 @@ export function AddressMonitorSection({
                         <Copy className="h-4 w-4" />
                       </button>
                     </div>
-                    {rule.note && <div className="mt-1 break-words text-xs text-[color:var(--cf-muted)]">{rule.note}</div>}
+                    {rule.note && <div className="mt-1 break-words !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">{rule.note}</div>}
                   </div>
                   <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
                     <button
@@ -239,7 +239,7 @@ export function AddressMonitorSection({
                     </button>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-2 gap-2 !text-xs !font-normal !leading-5">
                   <div>
                     <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.notifications.addressMetrics.totalValue')}</div>
                     <div className="font-semibold text-[color:var(--cf-text-strong)]">{item ? formatCompactUsd(item.totalPositionValue) : '-'}</div>
@@ -269,7 +269,7 @@ export function AddressMonitorSection({
         <div className="hidden md:block overflow-x-auto rounded-xl border border-[color:var(--cf-border)]">
           <table className="w-full min-w-[1120px]">
             <thead>
-              <tr className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/70 text-xs text-[color:var(--cf-muted)]">
+              <tr className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/70 !text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)]">
                 <th className="px-4 py-3 text-left">{t('whaleTracking.holdings.table.address')}</th>
                 <th className="px-4 py-3 text-left">
                   {t('whaleTracking.notifications.addressMetrics.totalValue')}
@@ -315,7 +315,7 @@ export function AddressMonitorSection({
                           <Copy className="h-3.5 w-3.5" />
                         </button>
                         {rule.note && (
-                          <span className="text-xs text-[color:var(--cf-muted)]">{rule.note}</span>
+                          <span className="!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">{rule.note}</span>
                         )}
                       </div>
                     </td>

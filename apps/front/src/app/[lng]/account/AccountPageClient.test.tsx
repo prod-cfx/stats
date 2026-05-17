@@ -10,6 +10,23 @@ const mockLogout = jest.fn()
 const mockSendEmailCode = jest.fn()
 const mockBindEmail = jest.fn()
 const mockSuccess = jest.fn()
+const mockError = jest.fn()
+const setInputValue = (input: HTMLInputElement, value: string) => {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  setter?.call(input, value)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+  input.dispatchEvent(new Event('change', { bubbles: true }))
+}
+let mockSession = {
+  email: '15demo@qq.com',
+  loginMethods: ['email'],
+  userId: 'cmp0uen6800016kg5d1k4bk2e',
+} as {
+  email?: string
+  loginMethods: string[]
+  userId: string
+  telegram?: { username: string }
+}
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ replace: mockReplace }),
@@ -29,6 +46,12 @@ jest.mock('react-i18next', () => ({
         'account.title': 'Account Center',
         'account.userId': 'UserId',
         'account.userIdCopied': 'Copied',
+        'account.inputEmail': 'Email',
+        'account.inputCode': 'Code',
+        'account.sendCode': 'Send Code',
+        'account.bindEmail': 'Bind Email',
+        'account.bindEmailFailed': 'Failed to bind email',
+        'account.sendCodeFailed': 'Failed to send code',
         'aiQuant.apiConfigDesc': 'Configure exchange credentials.',
         'aiQuant.apiConfigTitle': 'Exchange API Configuration',
         'aiQuant.title': 'AI Quant',
@@ -40,7 +63,7 @@ jest.mock('react-i18next', () => ({
 }))
 
 jest.mock('@/components/ui/toast', () => ({
-  useToast: () => ({ success: mockSuccess }),
+  useToast: () => ({ error: mockError, success: mockSuccess }),
 }))
 
 jest.mock('@/hooks/use-auth', () => ({
@@ -49,11 +72,7 @@ jest.mock('@/hooks/use-auth', () => ({
     isLoading: false,
     logout: mockLogout,
     sendEmailCode: mockSendEmailCode,
-    session: {
-      email: '15demo@qq.com',
-      loginMethods: ['email'],
-      userId: 'cmp0uen6800016kg5d1k4bk2e',
-    },
+    session: mockSession,
   }),
 }))
 
@@ -88,6 +107,11 @@ describe('AccountPageClient', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     jest.clearAllMocks()
+    mockSession = {
+      email: '15demo@qq.com',
+      loginMethods: ['email'],
+      userId: 'cmp0uen6800016kg5d1k4bk2e',
+    }
   })
 
   afterEach(async () => {
@@ -101,16 +125,16 @@ describe('AccountPageClient', () => {
     jest.restoreAllMocks()
   })
 
-  it('renders a deterministic DiceBear identicon avatar from the user id', async () => {
+  it('renders a local avatar without exposing the user id to third-party image services', async () => {
     await act(async () => {
       root?.render(<AccountPageClient lng="zh" />)
     })
 
-    const avatar = container.querySelector('img[src*="api.dicebear.com"]')
+    const avatar = container.querySelector('[data-testid="account-local-avatar"]')
 
-    expect(avatar).toBeInstanceOf(HTMLImageElement)
-    expect(avatar?.getAttribute('src')).toBe('https://api.dicebear.com/7.x/identicon/svg?seed=cmp0uen6800016kg5d1k4bk2e')
-    expect(avatar?.className).toContain('object-contain')
+    expect(container.querySelector('img[src*="api.dicebear.com"]')).toBeNull()
+    expect(avatar?.textContent).toBe('15')
+    expect(avatar?.className).toContain('rounded-full')
   })
 
   it('shows the account identifier without the account center prefix', async () => {
@@ -129,14 +153,45 @@ describe('AccountPageClient', () => {
       root?.render(<AccountPageClient lng="zh" />)
     })
 
-    const copyButton = Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Copy')
+    const copyButton = container.querySelector('button[aria-label="Copy"]')
     const mainAccountBadge = Array.from(container.querySelectorAll('span')).find(span => span.textContent === 'Main account')
     const telegramActions = container.querySelector('[data-testid="telegram-login-buttons"]')?.parentElement
 
-    expect(copyButton?.className).toContain('self-end')
-    expect(copyButton?.className).toContain('md:self-auto')
+    expect(copyButton).not.toBeNull()
     expect(mainAccountBadge?.className).toContain('self-end')
     expect(mainAccountBadge?.className).toContain('md:self-auto')
     expect(telegramActions?.className).toContain('justify-end')
+  })
+
+  it('shows toast errors when email binding requests fail', async () => {
+    mockSession = {
+      loginMethods: [],
+      userId: 'cmp0uen6800016kg5d1k4bk2e',
+    }
+    mockSendEmailCode.mockRejectedValueOnce(new Error('send failed'))
+    mockBindEmail.mockRejectedValueOnce(new Error('bind failed'))
+
+    await act(async () => {
+      root?.render(<AccountPageClient lng="zh" />)
+    })
+
+    const emailInput = container.querySelector('input[placeholder="Email"]') as HTMLInputElement
+    const codeInput = container.querySelector('input[placeholder="Code"]') as HTMLInputElement
+    await act(async () => {
+      setInputValue(emailInput, 'user@example.com')
+    })
+    await act(async () => {
+      ;(Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Send Code') as HTMLButtonElement).click()
+    })
+
+    await act(async () => {
+      setInputValue(codeInput, '123456')
+    })
+    await act(async () => {
+      ;(Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Bind Email') as HTMLButtonElement).click()
+    })
+
+    expect(mockError).toHaveBeenCalledWith('send failed')
+    expect(mockError).toHaveBeenCalledWith('bind failed')
   })
 })

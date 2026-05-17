@@ -340,7 +340,7 @@ export function ExchangeApiSection() {
     <>
       <div id="exchange-api">
         {loading ? (
-          <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 text-sm text-[color:var(--cf-muted)]">
+          <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 text-[13px] text-[color:var(--cf-muted)]">
             {t('aiQuant.loading')}
           </div>
         ) : (
@@ -352,28 +352,37 @@ export function ExchangeApiSection() {
               return (
                 <article
                   key={exchangeId}
-                  className="flex flex-col gap-4 border-b border-[color:var(--cf-border)] px-6 py-5 last:border-b-0 md:flex-row md:items-center md:justify-between"
+                  className="flex min-h-[72px] flex-col gap-3 border-b border-[color:var(--cf-border)] px-5 py-4 last:border-b-0 md:flex-row md:items-center md:justify-between"
                 >
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-[color:var(--cf-text-strong)]">{t(getTitleKey(exchangeId))}</h3>
-                    {account.isBound ? (
-                      <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
-                        <span className="text-emerald-500">{t('aiQuant.configured')}</span>
-                        <span className="text-[color:var(--cf-muted)]">
-                          {t('aiQuant.currentKey')}{account.maskedCredential ?? '-'}
-                        </span>
-                        {account.lastValidatedAt && (
+                  <div className="flex min-w-0 items-start gap-3">
+                    <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-1">
+                      <img
+                        src={`/images/exchanges/${exchangeId}.png`}
+                        alt=""
+                        className="h-full w-full object-contain"
+                      />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-semibold text-[color:var(--cf-text-strong)]">{t(getTitleKey(exchangeId))}</p>
+                      {account.isBound ? (
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm leading-[22px]">
+                          <span className="text-emerald-500">{t('aiQuant.configured')}</span>
                           <span className="text-[color:var(--cf-muted)]">
-                            {t('aiQuant.lastValidatedAt')} {new Date(account.lastValidatedAt).toLocaleString()}
+                            {t('aiQuant.currentKey')}{account.maskedCredential ?? '-'}
                           </span>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-sm text-amber-500">{t('aiQuant.notConfigured')}</p>
-                    )}
-                    {errors[exchangeId] && configExchangeId !== exchangeId && (
-                      <p className="mt-2 text-xs text-red-500">{errors[exchangeId]}</p>
-                    )}
+                          {account.lastValidatedAt && (
+                            <span className="text-[color:var(--cf-muted)]">
+                              {t('aiQuant.lastValidatedAt')} {new Date(account.lastValidatedAt).toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-sm text-amber-500">{t('aiQuant.notConfigured')}</p>
+                      )}
+                      {errors[exchangeId] && configExchangeId !== exchangeId && (
+                        <p className="mt-2 text-xs text-red-500">{errors[exchangeId]}</p>
+                      )}
+                    </div>
                   </div>
 
                   <div
@@ -385,7 +394,7 @@ export function ExchangeApiSection() {
                         <button
                           type="button"
                           onClick={() => openConfigDialog(exchangeId)}
-                          className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+                          className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3.5 py-1.5 text-xs font-semibold leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
                         >
                           {t('aiQuant.editApiConfig')}
                         </button>
@@ -393,7 +402,7 @@ export function ExchangeApiSection() {
                           type="button"
                           onClick={() => setDeleteExchangeId(exchangeId)}
                           disabled={isDeleting}
-                          className="rounded-full border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-500 transition hover:bg-red-500/10 disabled:opacity-60"
+                          className="rounded-full border border-red-500/30 px-3.5 py-1.5 text-xs font-semibold leading-5 text-red-500 transition hover:bg-red-500/10 disabled:opacity-60"
                         >
                           {isDeleting ? t('aiQuant.deleting') : t('aiQuant.unbindApiConfig')}
                         </button>
@@ -402,7 +411,7 @@ export function ExchangeApiSection() {
                       <button
                         type="button"
                         onClick={() => openConfigDialog(exchangeId)}
-                        className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+                        className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3.5 py-1.5 text-xs font-semibold leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
                       >
                         {t('aiQuant.notConfigured')}
                       </button>
@@ -416,15 +425,15 @@ export function ExchangeApiSection() {
       </div>
 
       {configExchangeId && configAccount && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4" onClick={() => closeConfigDialog(configExchangeId)}>
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4 py-4" onClick={() => closeConfigDialog(configExchangeId)}>
           <div
-            className="w-full max-w-[520px] rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 shadow-2xl"
+            className="max-h-[calc(100dvh-2rem)] w-full max-w-[480px] overflow-y-auto rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl sm:p-5"
             role="dialog"
             aria-modal="true"
             onClick={event => event.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t(getTitleKey(configExchangeId))}</h3>
-            <p className="mt-1 text-sm text-[color:var(--cf-muted)]">
+            <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{t(getTitleKey(configExchangeId))}</h3>
+            <p className="mt-1 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
               {configAccount.isBound ? t('aiQuant.editApiConfig') : t('aiQuant.saveApiConfig')}
             </p>
             <div className="mt-4 space-y-3">
@@ -432,9 +441,9 @@ export function ExchangeApiSection() {
                 value={forms[configExchangeId].name}
                 onChange={event => setFormValue(configExchangeId, 'name', event.target.value)}
                 placeholder={t('aiQuant.accountName')}
-                className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-sm"
+                className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)]"
               />
-              <label className="flex items-center gap-2 text-xs text-[color:var(--cf-muted)]">
+              <label className="flex items-center gap-2 !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-muted)]">
                 <input
                   type="checkbox"
                   checked={forms[configExchangeId].isTestnet}
@@ -455,7 +464,7 @@ export function ExchangeApiSection() {
                     value={forms[configExchangeId].apiKey}
                     onChange={event => setFormValue(configExchangeId, 'apiKey', event.target.value)}
                     placeholder={t('aiQuant.apiKey')}
-                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-sm"
+                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)]"
                   />
                   <input
                     value={forms[configExchangeId].apiSecret}
@@ -463,7 +472,7 @@ export function ExchangeApiSection() {
                     autoComplete="off"
                     onChange={event => setFormValue(configExchangeId, 'apiSecret', event.target.value)}
                     placeholder={t('aiQuant.secretKey')}
-                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-sm"
+                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)]"
                   />
                 </>
               )}
@@ -474,7 +483,7 @@ export function ExchangeApiSection() {
                   autoComplete="off"
                   onChange={event => setFormValue(configExchangeId, 'passphrase', event.target.value)}
                   placeholder={t('aiQuant.passphrase')}
-                  className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-sm"
+                  className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)]"
                 />
               )}
               {configExchangeId === 'hyperliquid' && (
@@ -483,7 +492,7 @@ export function ExchangeApiSection() {
                     value={forms[configExchangeId].mainWalletAddress}
                     onChange={event => setFormValue(configExchangeId, 'mainWalletAddress', event.target.value)}
                     placeholder={t('aiQuant.walletAddress')}
-                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-sm"
+                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)]"
                   />
                   <input
                     value={forms[configExchangeId].agentPrivateKey}
@@ -491,7 +500,7 @@ export function ExchangeApiSection() {
                     autoComplete="off"
                     onChange={event => setFormValue(configExchangeId, 'agentPrivateKey', event.target.value)}
                     placeholder={t('aiQuant.agentPrivateKey')}
-                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-sm"
+                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)]"
                   />
                 </>
               )}
@@ -505,7 +514,7 @@ export function ExchangeApiSection() {
                 type="button"
                 onClick={() => closeConfigDialog(configExchangeId)}
                 disabled={submittingExchange === configExchangeId}
-                className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+                className="inline-flex min-h-9 items-center justify-center rounded-full border border-[color:var(--cf-border)] px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)]"
               >
                 {t('common.cancel')}
               </button>
@@ -513,7 +522,7 @@ export function ExchangeApiSection() {
                 type="button"
                 onClick={() => void save(configExchangeId)}
                 disabled={submittingExchange === configExchangeId}
-                className="rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 px-4 py-2 text-sm font-bold text-white transition-all hover:from-violet-600 hover:to-purple-700 disabled:opacity-60"
+                className="inline-flex min-h-9 items-center justify-center rounded-full bg-gradient-to-r from-violet-500 to-purple-600 px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-white transition hover:from-violet-600 hover:to-purple-700 disabled:opacity-60"
               >
                 {submittingExchange === configExchangeId
                   ? t('aiQuant.saving')
@@ -525,15 +534,15 @@ export function ExchangeApiSection() {
       )}
 
       {deleteExchangeId && deleteAccount && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4" onClick={() => setDeleteExchangeId(null)}>
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4 py-4" onClick={() => setDeleteExchangeId(null)}>
           <div
-            className="w-full max-w-[420px] rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 shadow-2xl"
+            className="w-full max-w-[380px] rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl sm:p-5"
             role="dialog"
             aria-modal="true"
             onClick={event => event.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.unbindApiConfig')}</h3>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--cf-muted)]">
+            <h3 className="!text-[15px] !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">{t('aiQuant.unbindApiConfig')}</h3>
+            <p className="mt-2 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
               {t(getTitleKey(deleteExchangeId))} / {deleteAccount.name ?? deleteAccount.maskedCredential ?? '-'}
             </p>
             {errors[deleteExchangeId] && (
@@ -544,7 +553,7 @@ export function ExchangeApiSection() {
                 type="button"
                 onClick={() => setDeleteExchangeId(null)}
                 disabled={deletingExchange === deleteExchangeId}
-                className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+                className="inline-flex min-h-9 items-center justify-center rounded-full border border-[color:var(--cf-border)] px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)]"
               >
                 {t('common.cancel')}
               </button>
@@ -552,7 +561,7 @@ export function ExchangeApiSection() {
                 type="button"
                 onClick={() => void remove(deleteExchangeId)}
                 disabled={deletingExchange === deleteExchangeId}
-                className="rounded-xl border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-500 disabled:opacity-60"
+                className="inline-flex min-h-9 items-center justify-center rounded-full border border-red-500/30 px-3.5 py-1.5 !text-xs !font-semibold !leading-5 text-red-500 disabled:opacity-60"
               >
                 {deletingExchange === deleteExchangeId ? t('aiQuant.deleting') : t('aiQuant.unbindApiConfig')}
               </button>

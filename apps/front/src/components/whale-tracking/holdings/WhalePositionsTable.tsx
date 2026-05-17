@@ -269,14 +269,14 @@ export const WhalePositionsTable = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <PageTitle>{t('whaleTracking.holdings.title')}</PageTitle>
           <BodyText>{t('whaleTracking.holdings.subtitle')}</BodyText>
           <div className="flex items-center gap-4">{/* Removed standalone sort buttons */}</div>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <FilterButton
             value={assetFilter}
             options={[
@@ -308,7 +308,7 @@ export const WhalePositionsTable = () => {
         </div>
       </div>
 
-      <div className="relative min-h-[400px] overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]">
+      <div className="relative min-h-[400px] overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm">
         <LoadingState
           isLoading={loading}
           error={Boolean(error)}
@@ -319,7 +319,7 @@ export const WhalePositionsTable = () => {
             {sortedPositions.map((pos, idx) => (
               <article
                 key={`${idx}-${pos.address}-mobile`}
-                className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3"
+                className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3"
                 onClick={() => handleShowStats(pos.address)}
               >
                 <div className="mb-3 flex items-start justify-between gap-3">
@@ -327,7 +327,7 @@ export const WhalePositionsTable = () => {
                     <div className="flex items-center gap-2">
                       <Link
                         href={`/${lng}/whale-tracking/profile/?address=${pos.address}`}
-                        className="font-mono text-sm font-semibold text-[color:var(--cf-text-strong)]"
+                        className="font-mono !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]"
                         onClick={e => e.stopPropagation()}
                       >
                         {pos.address.substring(0, 6)}...{pos.address.substring(pos.address.length - 4)}
@@ -348,7 +348,7 @@ export const WhalePositionsTable = () => {
                       {pos.tags.map((tag, tIdx) => (
                         <span
                           key={tIdx}
-                          className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+                          className="rounded px-1.5 py-0.5 text-[10px] font-semibold leading-4"
                           style={{ color: tag.color, backgroundColor: tag.bg }}
                         >
                           {t(`whaleTracking.tags.${tag.key}`)}
@@ -368,10 +368,10 @@ export const WhalePositionsTable = () => {
                     <TrendingUp className="h-4 w-4" />
                   </button>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-2 gap-2 !text-xs !font-normal !leading-5">
                   <div>
                     <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.holdings.table.asset')}</div>
-                    <div className="mt-0.5 flex items-center gap-2 font-bold text-[color:var(--cf-text-strong)]">
+                    <div className="mt-0.5 flex items-center gap-2 !font-semibold text-[color:var(--cf-text-strong)]">
                       <span className={`rounded px-1.5 py-0.5 text-[10px] ${pos.side === 'Long' ? 'bg-[#22c55e33] text-[#4ade80]' : 'bg-[#ef444433] text-[#f87171]'}`}>
                         {pos.side === 'Long' ? t('whaleTracking.side.longAbbr') : t('whaleTracking.side.shortAbbr')}
                       </span>
@@ -384,12 +384,12 @@ export const WhalePositionsTable = () => {
                   </div>
                   <div>
                     <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.holdings.table.positionValue')}</div>
-                    <div className="mt-0.5 font-bold text-[color:var(--cf-text-strong)]">{pos.positionValueUSD}</div>
+                    <div className="mt-0.5 !font-semibold text-[color:var(--cf-text-strong)]">{pos.positionValueUSD}</div>
                     <div className="text-[color:var(--cf-muted)]">{pos.positionValueAsset}</div>
                   </div>
                   <div>
                     <div className="text-[color:var(--cf-muted)]">{t('whaleTracking.holdings.table.unrealizedPnl')}</div>
-                    <div className={pos.pnlUSD.includes('+') ? 'font-bold text-[#4ade80]' : 'font-bold text-[#f87171]'}>{pos.pnlUSD}</div>
+                    <div className={pos.pnlUSD.includes('+') ? '!font-semibold text-[#4ade80]' : '!font-semibold text-[#f87171]'}>{pos.pnlUSD}</div>
                     <div className={pos.pnlPercent.includes('+') ? 'text-[#4ade80]' : 'text-[#f87171]'}>{pos.pnlPercent}</div>
                   </div>
                   <div>
@@ -416,14 +416,14 @@ export const WhalePositionsTable = () => {
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>
-                <tr className="border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)]">
-                  <th className="px-6 py-4 text-left">
+                <tr className="border-b border-[color:var(--cf-border)] !text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)]">
+                  <th className="px-4 py-3 text-left">
                     {t('whaleTracking.holdings.table.address')}
                   </th>
-                  <th className="px-6 py-4 text-left">{t('whaleTracking.holdings.table.asset')}</th>
-                  <th className="px-6 py-4 text-left">{t('whaleTracking.holdings.table.leverage')}</th>
+                  <th className="px-4 py-3 text-left">{t('whaleTracking.holdings.table.asset')}</th>
+                  <th className="px-4 py-3 text-left">{t('whaleTracking.holdings.table.leverage')}</th>
                   <th
-                    className="group cursor-pointer px-6 py-4 text-left select-none"
+                    className="group cursor-pointer px-4 py-3 text-left select-none"
                     onClick={() => handleSort('positionValue')}
                   >
                     <div className="flex items-center">
@@ -432,11 +432,11 @@ export const WhalePositionsTable = () => {
                     </div>
                   </th>
                   {/* PnL 列当前仅展示占位符，不提供排序交互以避免“空操作”体验 */}
-                  <th className="px-6 py-4 text-left whitespace-nowrap">
+                  <th className="px-4 py-3 text-left whitespace-nowrap">
                     {t('whaleTracking.holdings.table.unrealizedPnl')}
                   </th>
                   <th
-                    className="group cursor-pointer px-6 py-4 text-left select-none"
+                    className="group cursor-pointer px-4 py-3 text-left select-none"
                     onClick={() => handleSort('margin')}
                   >
                     <div className="flex items-center">
@@ -444,14 +444,14 @@ export const WhalePositionsTable = () => {
                       {renderSortIcon('margin')}
                     </div>
                   </th>
-                  <th className="px-6 py-4 text-left">
+                  <th className="px-4 py-3 text-left">
                     {t('whaleTracking.holdings.table.entryPrice')}
                   </th>
-                  <th className="px-6 py-4 text-left">
+                  <th className="px-4 py-3 text-left">
                     {t('whaleTracking.holdings.table.liqPrice')}
                   </th>
                   <th
-                    className="group cursor-pointer px-6 py-4 text-left whitespace-nowrap select-none"
+                    className="group cursor-pointer px-4 py-3 text-left whitespace-nowrap select-none"
                     onClick={() => handleSort('createdTime')}
                   >
                     <div className="flex items-center">
@@ -459,10 +459,10 @@ export const WhalePositionsTable = () => {
                       {renderSortIcon('createdTime')}
                     </div>
                   </th>
-                  <th className="px-6 py-4 text-left">
+                  <th className="px-4 py-3 text-left">
                     {t('whaleTracking.holdings.table.remark')}
                   </th>
-                  <th className="w-16 px-6 py-4 text-center">
+                  <th className="w-16 px-4 py-3 text-center">
                     {t('whaleTracking.holdings.table.actions')}
                   </th>
                 </tr>
@@ -474,19 +474,19 @@ export const WhalePositionsTable = () => {
                     className="group cursor-pointer transition-colors hover:bg-[color:var(--cf-surface-hover)]"
                     onClick={() => handleShowStats(pos.address)}
                   >
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <div className="flex flex-col gap-1.5">
                         <div className="group/address relative flex items-center gap-2">
                           <Link
                             href={`/${lng}/whale-tracking/profile/?address=${pos.address}`}
-                            className="text-body font-medium text-[color:var(--cf-text-strong)] decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all hover:underline"
+                            className="!text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)] underline-offset-4 transition-colors hover:text-primary"
                             onClick={e => e.stopPropagation()}
                           >
                             {pos.address.substring(0, 6)}...
                             {pos.address.substring(pos.address.length - 4)}
                           </Link>
                           {/* Hover-to-reveal full address tooltip */}
-                          <div className="pointer-events-none invisible absolute top-0 left-0 z-30 -translate-y-[120%] rounded-lg border border-black/10 bg-black/90 px-3 py-2 font-mono text-xs whitespace-nowrap text-white opacity-0 shadow-2xl transition-all duration-200 group-hover/address:visible group-hover/address:opacity-100 dark:border-white/10 dark:bg-white/90 dark:text-black">
+                          <div className="pointer-events-none invisible absolute top-0 left-0 z-30 -translate-y-[120%] rounded-lg border border-black/10 bg-black/90 px-3 py-2 font-mono text-xs whitespace-nowrap text-white opacity-0 shadow-sm transition-opacity duration-200 group-hover/address:visible group-hover/address:opacity-100 dark:border-white/10 dark:bg-white/90 dark:text-black">
                             {pos.address}
                             <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
                           </div>
@@ -509,7 +509,7 @@ export const WhalePositionsTable = () => {
                           {pos.tags.map((tag, tIdx) => (
                             <span
                               key={tIdx}
-                              className="text-caption rounded px-1.5 py-0.5 font-medium"
+                              className="rounded px-1.5 py-0.5 !text-xs !font-semibold !leading-5"
                               style={{ color: tag.color, backgroundColor: tag.bg }}
                             >
                               {t(`whaleTracking.tags.${tag.key}`)}
@@ -518,17 +518,17 @@ export const WhalePositionsTable = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <div
-                          className={`text-caption rounded px-1.5 py-0.5 font-bold ${pos.side === 'Long' ? 'bg-[#22c55e33] text-[#4ade80]' : 'bg-[#ef444433] text-[#f87171]'}`}
+                          className={`rounded px-1.5 py-0.5 !text-xs !font-semibold !leading-5 ${pos.side === 'Long' ? 'bg-[#22c55e33] text-[#4ade80]' : 'bg-[#ef444433] text-[#f87171]'}`}
                         >
                           {pos.side === 'Long'
                             ? t('whaleTracking.side.longAbbr')
                             : t('whaleTracking.side.shortAbbr')}
                         </div>
                         <div className="flex flex-col gap-0.5">
-                          <span className="text-body font-bold text-[color:var(--cf-text-strong)]">
+                          <span className="!text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                             {pos.asset}
                           </span>
                           <span className="text-caption text-[color:var(--cf-muted)]">
@@ -539,10 +539,10 @@ export const WhalePositionsTable = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-[color:var(--cf-text-strong)]">{pos.leverage}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text-strong)]">{pos.leverage}</td>
+                    <td className="px-4 py-3">
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-body font-medium text-[color:var(--cf-text-strong)]">
+                        <span className="!text-sm !font-semibold !leading-[22px] text-[color:var(--cf-text-strong)]">
                           {pos.positionValueUSD}
                         </span>
                         <span className="text-caption text-[color:var(--cf-muted)]">
@@ -550,10 +550,10 @@ export const WhalePositionsTable = () => {
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <div className="flex flex-col gap-0.5">
                         <span
-                          className={`text-body font-medium ${pos.pnlUSD.includes('+') ? 'text-[#4ade80]' : 'text-[#f87171]'}`}
+                          className={`!text-sm !font-semibold !leading-[22px] ${pos.pnlUSD.includes('+') ? 'text-[#4ade80]' : 'text-[#f87171]'}`}
                         >
                           {pos.pnlUSD}
                         </span>
@@ -564,21 +564,21 @@ export const WhalePositionsTable = () => {
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-[color:var(--cf-text-strong)]">{pos.margin}</td>
-                    <td className="px-6 py-4 text-[color:var(--cf-text-strong)]">
+                    <td className="px-4 py-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text-strong)]">{pos.margin}</td>
+                    <td className="px-4 py-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text-strong)]">
                       {pos.entryPrice}
                     </td>
-                    <td className="px-6 py-4 text-[color:var(--cf-text-strong)]">{pos.liqPrice}</td>
-                    <td className="px-6 py-4 text-[color:var(--cf-muted)]">
+                    <td className="px-4 py-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text-strong)]">{pos.liqPrice}</td>
+                    <td className="px-4 py-3 !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
                       {formatRelativeMinutes(pos.createdMinutesAgo)}
                     </td>
-                    <td className="text-caption max-w-[150px] truncate px-6 py-4 text-[color:var(--cf-muted)]">
+                    <td className="max-w-[150px] truncate px-4 py-3 !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
                       {pos.remark}
                     </td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-4 py-3 text-center">
                       <button
                         type="button"
-                        className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)] transition-all hover:text-[color:var(--cf-text-strong)] active:scale-95"
+                        className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
                         onClick={e => {
                           e.stopPropagation()
                           handleShowStats(pos.address)
