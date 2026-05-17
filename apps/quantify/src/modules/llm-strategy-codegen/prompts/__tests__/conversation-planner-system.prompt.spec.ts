@@ -77,6 +77,20 @@ describe('issue #1395 — planner prompt rules shape', () => {
     }
   })
 
+  // Issue #1443：planner prompt 必须有 directional gate + 触发条件 → AND 复合 rule 教育
+  //   通用 LLM 行为引导：所有"上方做多/下方做空 + 触发"类策略避免被拆成 4 条独立 entry rule
+  it('Issue #1443: prompt 含 S4 双向 directional gate + 触发条件 → AND 复合 rule 教育', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+    // S4 example 标题 + 关键约束
+    expect(prompt).toContain('S4 双向 directional gate')
+    expect(prompt).toContain('AND 复合 rule')
+    // 关键反例警示
+    expect(prompt).toContain('拆成 4 条独立 entry rule')
+    // 辨析段补充 directional 类
+    expect(prompt).toContain('方向准入语句')
+    expect(prompt).toContain('位于 X 上方/下方')
+  })
+
   // Issue #1428 R-E：ATOM_PARAMS_HINTS 段必须含「用户原话 > 默认值」硬约束 + 至少 3 个具体反例
   it('R-E: ATOM_PARAMS_HINTS 段含「用户原话 > paramDefaultsHint」硬约束 + BOLL/percent_change/ATR 反例', () => {
     const prompt = buildConversationPlannerSystemPrompt('zh')
