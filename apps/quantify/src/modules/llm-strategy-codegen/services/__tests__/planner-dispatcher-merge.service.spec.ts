@@ -190,7 +190,7 @@ describe('PlannerDispatcherMergeService', () => {
   //   （cross-clause inheritance 回归——planner 直产 rules 时 dispatcher 通过
   //   #1383 派生的 sibling/mirror 必须仍在 rules-tree 上可见）
   // ───────────────────────────────────────────────────────────────────────────
-  it('R-B: rules 非空时 lift dispatcher trigger atom 缺失 leaf 为 single-leaf rule', () => {
+  it('R-B: rules 非空时 lift dispatcher atom 缺失 leaf 为 single-leaf rule（atoms 总集）', () => {
     const planner = {
       rules: [{
         id: 'planner-r1',
@@ -200,8 +200,9 @@ describe('PlannerDispatcherMergeService', () => {
         effects: [{ kind: 'atom', key: 'action.open_short', params: {} }],
       }],
     } as unknown as CodegenSemanticPatch
+    // Issue #1441：R-B 只收 atoms 总集；dispatcher 同时往 atoms 和 triggers 写
     const dispatcher: CodegenSemanticPatch = {
-      triggers: [{
+      atoms: [{
         key: 'bollinger.touch_lower',
         phase: 'entry',
         sideScope: 'long',
@@ -226,7 +227,7 @@ describe('PlannerDispatcherMergeService', () => {
       }],
     } as unknown as CodegenSemanticPatch
     const dispatcher: CodegenSemanticPatch = {
-      triggers: [{ key: 'bollinger.touch_lower', phase: 'entry', sideScope: 'long', params: { period: 20, stdDev: 2 } }],
+      atoms: [{ key: 'bollinger.touch_lower', phase: 'entry', sideScope: 'long', params: { period: 20, stdDev: 2 } }],
     }
     const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
     expect((merged as { rules?: unknown[] })?.rules).toHaveLength(1)
@@ -234,7 +235,7 @@ describe('PlannerDispatcherMergeService', () => {
 
   it('R-B: rules 为空时不 lift（dispatcher-only 路径保持原行为）', () => {
     const dispatcher: CodegenSemanticPatch = {
-      triggers: [{ key: 'bollinger.touch_lower', phase: 'entry', sideScope: 'long', params: {} }],
+      atoms: [{ key: 'bollinger.touch_lower', phase: 'entry', sideScope: 'long', params: {} }],
     }
     const merged = svc.mergePlannerAndDispatcherPatches({}, dispatcher)
     expect((merged as { rules?: unknown[] })?.rules).toBeUndefined()
@@ -265,6 +266,73 @@ describe('PlannerDispatcherMergeService', () => {
     expect(rules?.[1].sideScope).toBe('long')
   })
 
+  it('Issue #1441: dispatcher.actions 桶不被 lift（避免「入场（双向）：开多」孤立 rule）', () => {
+    // 用户实测策略 1 复测：UI 出现「入场（双向）：开多」「出场（双向）：平多」孤立 rule
+    //   根因：R-B lift dispatcher.actions 桶把 action.open_long / action.close_long
+    //   作为 condition.key 提升为 single-leaf rule。action atom 语义上应是某 entry/exit
+    //   rule 的 effects，不应独立成 condition leaf。
+    const planner = {
+      rules: [{
+        id: 'planner-r1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down', valuePct: -1 } },
+        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      }],
+    } as unknown as CodegenSemanticPatch
+    // Issue #1441 通用收紧：dispatcher.actions 子桶**不**参与 lift（R-B 现在只收
+    //   `dispatcher.atoms` 总集；actions/triggers/risk 子桶不再走 lift 路径）。
+    // 注：CodegenSemanticPatch.actions 类型无 sideScope 字段，故 fixture 不带。
+    const dispatcher: CodegenSemanticPatch = {
+      actions: [
+        { key: 'action.open_long', phase: 'entry', params: {} },
+        { key: 'action.close_long', phase: 'exit', params: {} },
+      ],
+    }
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
+    const rules = (merged as { rules?: Array<{ id: string, condition: { key?: string } }> })?.rules
+    // 只剩 planner 原 rule，actions 桶**不**被 lift（无 dispatcher-lift-* rule）
+    expect(rules).toHaveLength(1)
+    expect(rules?.[0].id).toBe('planner-r1')
+    // 确认无任何 dispatcher-lift- 前缀 rule
+    expect(rules?.some(r => r.id.startsWith('dispatcher-lift-'))).toBe(false)
+  })
+
+  // Issue #1441 用户实测策略 1 复测复现：planner + dispatcher 同 atom 不同 phase/params
+  //   场景下，旧 R-B 收 atoms+triggers+risk 三桶可能引入重复孤立 rule。新 R-B 只收
+  //   atoms 总集，重复源头消除。
+  it('Issue #1441: R-B 只收 atoms 总集——子桶重复 atom 不引入额外孤立 rule', () => {
+    const planner = {
+      rules: [{
+        id: 'planner-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down', valuePct: -1, window: '3m' } },
+        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      }],
+    } as unknown as CodegenSemanticPatch
+    // dispatcher 既写 atoms 总集 又写 triggers 子视图（同一 atom 同 phase 同 sideScope 同 params）
+    const dispatcher: CodegenSemanticPatch = {
+      atoms: [
+        { key: 'price.percent_change', phase: 'entry', sideScope: 'long', params: { direction: 'down', valuePct: -1, window: '3m' } },
+        { key: 'price.percent_change', phase: 'exit', sideScope: 'long', params: { direction: 'up', valuePct: 2, window: '15m' } },
+      ],
+      triggers: [
+        { key: 'price.percent_change', phase: 'entry', sideScope: 'long', params: { direction: 'down', valuePct: -1, window: '3m' } },
+        { key: 'price.percent_change', phase: 'exit', sideScope: 'long', params: { direction: 'up', valuePct: 2, window: '15m' } },
+      ],
+    }
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
+    const rules = (merged as { rules?: Array<{ id: string, phase: string, condition: { key?: string, params?: Record<string, unknown> } }> })?.rules
+    // 期望 2 条 rule：planner.entry（params 与 dispatcher.entry 相同，R-D superset 检查跳过）
+    //   + 1 条 lift（dispatcher.exit，planner 没产）。triggers 子桶不再额外 lift。
+    expect(rules).toHaveLength(2)
+    const entryRules = rules?.filter(r => r.phase === 'entry') ?? []
+    const exitRules = rules?.filter(r => r.phase === 'exit') ?? []
+    expect(entryRules).toHaveLength(1)  // 不应有重复 entry（旧实现可能产 2 条）
+    expect(exitRules).toHaveLength(1)   // 不应有重复 exit（旧实现可能产 2 条）
+  })
+
   it('R-B: dispatcher risk 桶 phase=risk 被 lift 时归位为 exit', () => {
     const planner = {
       rules: [{
@@ -275,8 +343,10 @@ describe('PlannerDispatcherMergeService', () => {
         effects: [],
       }],
     } as unknown as CodegenSemanticPatch
+    // Issue #1441：R-B 只收 atoms 总集；dispatcher 同时写 atoms（phase=risk）与 risk 子桶
+    //   phase=risk → liftPhase 归位为 'exit'（rule.phase 不允许 risk）
     const dispatcher: CodegenSemanticPatch = {
-      risk: [{ key: 'risk.stop_loss_pct', params: { pct: 5 } }],
+      atoms: [{ key: 'risk.stop_loss_pct', phase: 'risk', params: { pct: 5 } }],
     }
     const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
     const rules = (merged as { rules?: Array<{ phase: string, condition: { key?: string } }> })?.rules
@@ -324,8 +394,9 @@ describe('PlannerDispatcherMergeService', () => {
         effects: [],
       }],
     } as unknown as CodegenSemanticPatch
+    // Issue #1441：R-B 只收 atoms 总集；R-D indexBucket 仍收所有桶用于 override 索引
     const dispatcher: CodegenSemanticPatch = {
-      triggers: [{
+      atoms: [{
         key: 'bollinger.touch_upper',
         phase: 'entry',
         sideScope: 'long',

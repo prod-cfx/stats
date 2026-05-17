@@ -2277,16 +2277,25 @@ export class SemanticStateProjectionService {
     params: Record<string, unknown>,
     locale: 'zh' | 'en' = 'zh',
   ): string | null {
-    const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { display?: { summaryTemplate?: (p: Record<string, unknown>, l: 'zh' | 'en') => string } } | undefined>)[atomKey]
-    const summaryTemplate = contract?.display?.summaryTemplate
+    type ParamRendererFn = (value: unknown, locale: 'zh' | 'en') => string
+    type DisplayShape = {
+      publicName?: { zh?: string, en?: string }
+      summaryTemplate?: (p: Record<string, unknown>, l: 'zh' | 'en') => string
+      paramRenderers?: Record<string, ParamRendererFn>
+    }
+    const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { display?: DisplayShape } | undefined>)[atomKey]
+    const display = contract?.display
+    const summaryTemplate = display?.summaryTemplate
     if (typeof summaryTemplate !== 'function') {
       return null
     }
+    let baseSummary: string
     try {
       const rendered = summaryTemplate(params, locale)
       if (typeof rendered !== 'string') return null
       const trimmed = rendered.trim()
-      return trimmed.length > 0 ? trimmed : null
+      if (trimmed.length === 0) return null
+      baseSummary = trimmed
     }
     catch (error) {
       // Issue #1391 review m5：summaryTemplate 抛错不再静默吞——打 warn 保留排查线索。
@@ -2295,6 +2304,73 @@ export class SemanticStateProjectionService {
       console.warn(`[atom-contract-summary] template threw for atomKey=${atomKey}: ${reason}`)
       return null
     }
+
+    // Issue #1441 通用增强：检测 atom 的 summaryTemplate 是否「未消费 params」（输出
+    //   等于 publicName 表示 fallback 到 atom 类型名称，未拼参数）。此时调 paramRenderers
+    //   把 params 关键字段渲染成文本附加在 summary 后，让 UI 看到具体数值。
+    //
+    //   遗留 TODO 修复：atom-contract-registry.ts:1193 注释自承「paramRenderers consumed by
+    //   future UI debug surface (not by current summary path)」——本次让它在 summary
+    //   渲染时被通用消费，所有声明了 paramRenderers 的 atom 自动受益（如 price.percent_change
+    //   的 valuePct/window/direction/basis 自动出现在 UI），避免单 atom 改 summaryTemplate。
+    return this.enrichSummaryWithParamRenderers({
+      baseSummary,
+      paramRenderers: display?.paramRenderers,
+      publicName: display?.publicName,
+      params,
+      locale,
+    })
+  }
+
+  /**
+   * Issue #1441：通用 summary 增强 helper。
+   *
+   * 条件触发（必须全部满足）：
+   *   - atom 声明了 `display.paramRenderers`
+   *   - `summaryTemplate` 输出与 `publicName[locale]` 严格相等（说明它未消费 params，
+   *     只回退到 atom 类型名）—— 这是「summaryTemplate 未消费 params」的通用信号
+   *   - params 中至少有一个 paramRenderers 声明的 key 含非空值
+   *
+   * 行为：把 paramRenderers 渲染的 (key, value) 文本按声明顺序串联，附加在 baseSummary 后。
+   *   format: `${baseSummary}（${rendered values joined by '，' or 'and'}）`。
+   *
+   * 否则原样返回 baseSummary（向后兼容：所有 summaryTemplate 已用 params 的 atom 不受影响）。
+   */
+  private enrichSummaryWithParamRenderers(input: {
+    baseSummary: string
+    paramRenderers: Record<string, (value: unknown, locale: 'zh' | 'en') => string> | undefined
+    publicName: { zh?: string, en?: string } | undefined
+    params: Record<string, unknown>
+    locale: 'zh' | 'en'
+  }): string {
+    const { baseSummary, paramRenderers, publicName, params, locale } = input
+    if (!paramRenderers || typeof paramRenderers !== 'object') return baseSummary
+
+    // 「summaryTemplate 未消费 params」信号：base summary 与 publicName 一字不差
+    const publicNameForLocale = publicName?.[locale]?.trim()
+    if (!publicNameForLocale || baseSummary !== publicNameForLocale) return baseSummary
+
+    const rendered: string[] = []
+    for (const [slotKey, renderer] of Object.entries(paramRenderers)) {
+      const v = params[slotKey]
+      if (v === undefined || v === null || v === '') continue
+      try {
+        const text = renderer(v, locale)
+        if (typeof text === 'string' && text.trim().length > 0) {
+          rendered.push(text.trim())
+        }
+      }
+      catch (error) {
+        // paramRenderer 抛错跳过该 slot，不破坏整体 summary
+        const reason = error instanceof Error ? error.message : String(error)
+        console.warn(`[atom-contract-summary] paramRenderer for slot=${slotKey} threw: ${reason}`)
+      }
+    }
+    if (rendered.length === 0) return baseSummary
+    const joiner = locale === 'zh' ? '，' : ', '
+    const open = locale === 'zh' ? '（' : ' ('
+    const close = locale === 'zh' ? '）' : ')'
+    return `${baseSummary}${open}${rendered.join(joiner)}${close}`
   }
 
   private buildActionSummary(actions: SemanticState['action'], state: SemanticState): string {

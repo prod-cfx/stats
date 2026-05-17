@@ -316,21 +316,23 @@ export class PlannerDispatcherMergeService {
       }
     }
 
-    // 审查问题 #5：dispatcher 既写 patch.triggers/actions/risk 也写 patch.atoms（
-    //   `generic-seed-dispatcher.service.ts:987` + cross-clause inheritance lift 也
-    //   往 atomItems push）。lift 必须同时收 dispatcher.atoms 桶，否则 cross-clause
-    //   inheritance 派生的镜像 atom 在 atoms-only 路径下不可见。
+    // Issue #1441 通用收紧：只 collect `dispatcher.atoms` 总集。
     //
-    // R2 审查 Minor：collectBucket 顺序固定为 atoms → triggers → actions → risk。若
-    //   dispatcher 把同一 atom key 同时写入 atoms（空 params）与 triggers（regex 抽到
-    //   具体 params），两条 leafSignature 的 paramsHash 不同 → 允许 lift 两条不同
-    //   params 的 rule。这是**预期行为**：下游 readiness 会按 readiness 链各自校验，
-    //   不会把空 params 的孤儿 leaf 当 locked；若需收口为单条，等 #1433 metadata 反推
-    //   阶段统一处理。
+    // 真相源原则：dispatcher 每抽到一个 atom 同时 push `atomItems`（总集）+
+    //   `slotItems[slot]`（triggers/actions/risk 分类子视图，见
+    //   `generic-seed-dispatcher.service.ts:947-950`）。atoms 是 SoT，其它桶是子视图。
+    //
+    // 原 R-B 收 atoms + triggers + risk 三桶是重复 collect——同一 atom 第一次 lift 后
+    //   第二桶虽因 leafSignature 签名相同被 dedup，但实测用户策略多 atom（不同 phase /
+    //   sideScope / params）场景下，子桶 collect 仍能引入与 atoms 不同签名的派生条目，
+    //   造成 UI 出现「入场×2 / 出场×2 / 入场(双向)：开多」等重复孤立 rule。
+    //
+    // 通用方案：只走 atoms 总集 → 重复源头消除；triggers/risk 子桶 lift 移除。
+    //   action atom（action.open_long / close_long）在 atoms 中也存在，但其 atomBucket
+    //   归属 `action` → 走 dispatchAtomsByContractBucket 时被分流为 effects；本 lift
+    //   pass 应只为 trigger / risk-as-gate / orchestration leaf 服务，故下文 phase
+    //   推断默认 'entry'，action 类 atom 通过下游 effect-binding 链路绑定（不在本 PR 范围）。
     collectBucket(dispatcher.atoms, 'entry')
-    collectBucket(dispatcher.triggers, 'entry')
-    collectBucket(dispatcher.actions, 'entry')
-    collectBucket(dispatcher.risk, 'exit')
 
     if (lifted.length > 0) {
       merged.rules = [...rules, ...lifted]
