@@ -10,9 +10,11 @@ describe('PlannerDispatcherMergeService', () => {
     expect(svc.mergePlannerAndDispatcherPatches({}, {})).toBeNull()
   })
 
-  it('returns planner unchanged when only planner present', () => {
+  it('returns planner content when only planner present', () => {
     const planner: CodegenSemanticPatch = { triggers: [{ key: 'trigger.candle_break_above', phase: 'entry' }] }
-    expect(svc.mergePlannerAndDispatcherPatches(planner, null)).toBe(planner)
+    // Issue #1443：planner-only 路径现在 clone（不再严格引用相等），且过滤 always-on
+    //   action 噪音 rule；内容等价即可
+    expect(svc.mergePlannerAndDispatcherPatches(planner, null)).toEqual(planner)
   })
 
   it('returns dispatcher unchanged when only dispatcher present', () => {
@@ -146,13 +148,13 @@ describe('PlannerDispatcherMergeService', () => {
     } as unknown as CodegenSemanticPatch
     const dispatcher: CodegenSemanticPatch = { atoms: [{ key: 'grid.range_rebalance' }] }
     const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
-    // R-B 升级（审查问题 #5）：dispatcher.atoms 现在也参与 lift，所以 rules 长度=2
-    //   （planner 原 1 条 + dispatcher.atoms[grid.range_rebalance] lift 1 条）
+    // Issue #1443 真因复测：dispatcher.atoms 现在按 bucket 过滤 lift——
+    //   grid.range_rebalance.bucket='positionConstraint' 不在 LIFT_ALLOWED_BUCKETS
+    //   （只允 trigger/risk），不 lift。planner 原 rule 保留。atoms 桶仍透传。
     const rules = (merged as { rules?: Array<{ id?: string }> })?.rules
-    expect(rules).toHaveLength(2)
+    expect(rules).toHaveLength(1)
     expect(rules?.[0].id).toBe('r1')           // planner 原 rule 保留
-    expect(rules?.[1].id).toMatch(/^dispatcher-lift-/u) // dispatcher.atoms lifted
-    expect(merged?.atoms).toHaveLength(1)       // atoms 桶仍透传
+    expect(merged?.atoms).toHaveLength(1)       // atoms 桶仍透传（dispatch 链路用）
   })
 
   it('Wave 4: planner rules wins over dispatcher rules (planner is authoritative for tree)', () => {
@@ -266,6 +268,101 @@ describe('PlannerDispatcherMergeService', () => {
     expect(rules?.[1].sideScope).toBe('long')
   })
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // Issue #1443：always-on condition + action effects 噪音 rule 过滤
+  //   planner/dispatcher 误产「condition=execution.on_start + effects=action.close_long」
+  //   这种"启动即平仓"无条件兜底 rule（用户没明确说），让 UI 出现「出场：平多」无条件
+  //   动作的噪音。merge 阶段整条丢弃。risk effects 允许 always-on（"挂止损"合理）。
+  // ───────────────────────────────────────────────────────────────────────────
+  it('Issue #1443 真因复测：dispatcher.atoms 含 action bucket atom（如 close_long）→ 不 lift（避免 "出场：平多" noise）', () => {
+    // 用户实测复测：planner 完整产 entry rule + risk rules，但 dispatcher 把"卖出"
+    //   抽到 action.close_long 进 patch.atoms 总集。R-B 一刀切 lift 会把 close_long
+    //   作为 single-leaf rule，UI 渲染 "出场：平多"（condition 被错渲染成 action 名）。
+    //   按 contract.bucket 过滤后 action 类不 lift。
+    const planner = {
+      rules: [{
+        id: 'planner-r1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down', valuePct: -1 } },
+        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher: CodegenSemanticPatch = {
+      atoms: [
+        // action bucket atom → 应被过滤不 lift
+        { key: 'action.close_long', phase: 'exit', sideScope: 'long', params: {} },
+        // 真 trigger atom → 允许 lift
+        { key: 'bollinger.touch_lower', phase: 'entry', sideScope: 'long', params: { period: 20, stdDev: 2 } },
+      ],
+    }
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
+    const rules = (merged as { rules?: Array<{ id: string, condition: { key?: string } }> })?.rules ?? []
+    // 应只有 2 条：planner 原 entry + lift bollinger.touch_lower
+    expect(rules).toHaveLength(2)
+    // 确认 action.close_long 没被 lift
+    expect(rules.some(r => r.condition.key === 'action.close_long')).toBe(false)
+    // 确认 bollinger.touch_lower 被 lift
+    expect(rules.some(r => r.condition.key === 'bollinger.touch_lower')).toBe(true)
+  })
+
+  it('Issue #1443: always-on condition + action effects → 整条 rule 丢弃', () => {
+    const planner = {
+      rules: [
+        // 正常 entry rule（保留）
+        {
+          id: 'planner-r-entry',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down', valuePct: -1, window: '3m' } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        // 噪音 always-on + close_long（丢弃）
+        {
+          id: 'noise-r-exit',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'execution.on_start', params: { timing: 'on_start' } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, null)
+    const rules = (merged as { rules?: Array<{ id: string }> })?.rules
+    expect(rules).toHaveLength(1)
+    expect(rules?.[0].id).toBe('planner-r-entry')
+  })
+
+  it('Issue #1443: always-on condition + risk effects → 保留（持续生效合理）', () => {
+    const planner = {
+      rules: [{
+        id: 'planner-r-stop',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: { timing: 'on_start' } },
+        effects: [{ kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } }],
+      }],
+    } as unknown as CodegenSemanticPatch
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, null)
+    const rules = (merged as { rules?: unknown[] })?.rules
+    expect(rules).toHaveLength(1)
+  })
+
+  it('Issue #1443: 非 always-on condition + action effects → 保留（正常业务 rule）', () => {
+    const planner = {
+      rules: [{
+        id: 'planner-r-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down' } },
+        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      }],
+    } as unknown as CodegenSemanticPatch
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, null)
+    const rules = (merged as { rules?: unknown[] })?.rules
+    expect(rules).toHaveLength(1)
+  })
+
   it('Issue #1441: dispatcher.actions 桶不被 lift（避免「入场（双向）：开多」孤立 rule）', () => {
     // 用户实测策略 1 复测：UI 出现「入场（双向）：开多」「出场（双向）：平多」孤立 rule
     //   根因：R-B lift dispatcher.actions 桶把 action.open_long / action.close_long
@@ -324,13 +421,13 @@ describe('PlannerDispatcherMergeService', () => {
     }
     const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
     const rules = (merged as { rules?: Array<{ id: string, phase: string, condition: { key?: string, params?: Record<string, unknown> } }> })?.rules
-    // 期望 2 条 rule：planner.entry（params 与 dispatcher.entry 相同，R-D superset 检查跳过）
-    //   + 1 条 lift（dispatcher.exit，planner 没产）。triggers 子桶不再额外 lift。
-    expect(rules).toHaveLength(2)
-    const entryRules = rules?.filter(r => r.phase === 'entry') ?? []
-    const exitRules = rules?.filter(r => r.phase === 'exit') ?? []
-    expect(entryRules).toHaveLength(1)  // 不应有重复 entry（旧实现可能产 2 条）
-    expect(exitRules).toHaveLength(1)   // 不应有重复 exit（旧实现可能产 2 条）
+    // Issue #1443：lift dedup 改为 key-only。planner.entry 已含 price.percent_change
+    //   key → dispatcher 同 key 任何 phase/sideScope/params 一律不 lift（避免重复 sibling）。
+    //   设计取舍：宁可丢 dispatcher.exit 边角识别，也不引入 sibling 重复噪音；用户期望
+    //   planner 自己产完整 entry + exit rules，dispatcher 仅作 atom-key 兜底。
+    expect(rules).toHaveLength(1)
+    expect(rules?.[0].phase).toBe('entry')
+    expect(rules?.[0].id).toBe('planner-entry')
   })
 
   it('R-B: dispatcher risk 桶 phase=risk 被 lift 时归位为 exit', () => {
@@ -394,7 +491,7 @@ describe('PlannerDispatcherMergeService', () => {
         effects: [],
       }],
     } as unknown as CodegenSemanticPatch
-    // Issue #1441：R-B 只收 atoms 总集；R-D indexBucket 仍收所有桶用于 override 索引
+    // Issue #1441：R-B 只收 atoms 总集；Issue #1443：lift dedup 改 key-only
     const dispatcher: CodegenSemanticPatch = {
       atoms: [{
         key: 'bollinger.touch_upper',
@@ -405,10 +502,11 @@ describe('PlannerDispatcherMergeService', () => {
     }
     const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
     const leaf = (merged as { rules?: Array<{ condition: { params?: Record<string, unknown> } }> })?.rules?.[0].condition
-    // 值冲突 → 保留 planner 版本 + dispatcher 通过 R-B lift 为新 rule
+    // 值冲突 → 保留 planner 版本（R-D strict superset 不命中）
     expect(leaf?.params).toEqual({ period: 20, stdDev: 2 })
-    // R-B 应该 lift dispatcher 的 (5,1) 版本为单独的 rule
-    expect((merged as { rules?: unknown[] })?.rules).toHaveLength(2)
+    // Issue #1443：planner 已含 bollinger.touch_upper key → dispatcher 同 key 不再 lift
+    //   （旧实现会 lift 第二条 (5,1) → 引入重复 sibling；新设计宁可丢边角识别也不重复）
+    expect((merged as { rules?: unknown[] })?.rules).toHaveLength(1)
   })
 
   it('R-D: dispatcher 无同 key entry → planner params 不变', () => {
@@ -554,7 +652,8 @@ describe('PlannerDispatcherMergeService', () => {
       // atoms 透传不受影响（在 try/catch 之前已设置）
       expect(merged?.atoms).toHaveLength(1)
       // 两个 pass 各报警一次
-      expect(warnSpy).toHaveBeenCalledTimes(2)
+      // Issue #1443：增加 filter pass 后可能 warn 3 次（override + lift + filter）
+      expect(warnSpy.mock.calls.length).toBeGreaterThanOrEqual(2)
       expect(warnSpy.mock.calls.some(call => String(call[0]).includes('overrideRulesLeafParamsFromDispatcher'))).toBe(true)
       expect(warnSpy.mock.calls.some(call => String(call[0]).includes('liftDispatcherAtomsIntoRules'))).toBe(true)
     }

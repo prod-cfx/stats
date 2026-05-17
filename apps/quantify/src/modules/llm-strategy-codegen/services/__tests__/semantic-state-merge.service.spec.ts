@@ -1577,6 +1577,189 @@ describe('SemanticStateMergeService', () => {
       ])
     })
 
+    it('Issue #1443: 不同 id 但同 condition+effects shape → 多轮累加去重（content-shape SoT）', () => {
+      // 用户复测：多轮对话 LLM 每次产相同语义 rule 但 id 不同（如第 1 轮 'rule-entry-1' /
+      // 第 2 轮 'planner-r-entry' / 第 3 轮 'dispatcher-lift-N-xxx'），旧实现按 id 去重不
+      // 命中 → state.rules 累加，UI 显示重复 rule。新实现按 content shape 二次折叠。
+      const persisted: SemanticState = {
+        ...emptyBase(),
+        rules: [{
+          id: 'rule-r1-entry',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down', valuePct: -1, window: '3m' } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        }],
+      }
+      const derived: SemanticState = {
+        ...emptyBase(),
+        rules: [{
+          id: 'planner-r-entry-NEW',  // 不同 id
+          phase: 'entry',
+          sideScope: 'long',
+          // condition + effects shape 完全相同
+          condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down', valuePct: -1, window: '3m' } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        }],
+        updatedAt: '2026-05-17T01:00:00.000Z',
+      }
+      const merged = service.merge({ persisted, derived })
+      const rules = merged.rules ?? []
+      // 应只剩 1 条（content shape 折叠，留 derived 后入者）
+      expect(rules).toHaveLength(1)
+      expect(rules[0]!.id).toBe('planner-r-entry-NEW')
+    })
+
+    it('Issue #1443: 同 shape 不同 effects → 视为两条独立 rule（content 决定 identity）', () => {
+      // shape 不同 → 不去重；这是真两条 rule
+      const persisted: SemanticState = {
+        ...emptyBase(),
+        rules: [{
+          id: 'r1',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.percent_change', params: { valuePct: -1 } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        }],
+      }
+      const derived: SemanticState = {
+        ...emptyBase(),
+        rules: [{
+          id: 'r2',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.percent_change', params: { valuePct: -1 } },
+          effects: [{ kind: 'atom', key: 'action.add_position', params: {} }],  // 不同 effects
+        }],
+      }
+      const merged = service.merge({ persisted, derived })
+      expect(merged.rules ?? []).toHaveLength(2)
+    })
+
+    // Issue #1443 多轮风控翻倍真因（用户复测：止损止盈在选「合约」后翻倍）
+    describe('Pass 3: 风控类 rule 归一化折叠（condition 全 bucket=risk）', () => {
+      it('persisted sideScope=long SL + derived sideScope=both SL → 折叠为 1 条（perp 派生覆盖）', () => {
+        const persisted: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'rule-r1-sl',
+            phase: 'exit',
+            sideScope: 'long',
+            condition: { kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: -5 } },
+            effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+          }],
+        }
+        const derived: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'rule-r2-sl',
+            phase: 'exit',
+            sideScope: 'both',
+            condition: { kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: -5 } },
+            effects: [
+              { kind: 'atom', key: 'action.close_long', params: {} },
+              { kind: 'atom', key: 'action.close_short', params: {} },
+            ],
+          }],
+          updatedAt: '2026-05-17T01:00:00.000Z',
+        }
+        const merged = service.merge({ persisted, derived })
+        const rules = merged.rules ?? []
+        expect(rules).toHaveLength(1)
+        expect(rules[0]!.id).toBe('rule-r2-sl')
+        expect(rules[0]!.sideScope).toBe('both')
+      })
+
+      it('persisted SL valuePct=-5 + derived SL valuePct=-10 → 保留 2 条（不同语义不折叠）', () => {
+        const persisted: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'rule-sl-5',
+            phase: 'exit',
+            sideScope: 'long',
+            condition: { kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: -5 } },
+            effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+          }],
+        }
+        const derived: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'rule-sl-10',
+            phase: 'exit',
+            sideScope: 'long',
+            condition: { kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: -10 } },
+            effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+          }],
+        }
+        const merged = service.merge({ persisted, derived })
+        expect((merged.rules ?? []).length).toBe(2)
+      })
+
+      it('persisted TP + derived TP（sideScope 漂移）→ 折叠 1 条', () => {
+        const persisted: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'rule-tp-long',
+            phase: 'exit',
+            sideScope: 'long',
+            condition: { kind: 'atom', key: 'risk.take_profit_pct', params: { valuePct: 10 } },
+            effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+          }],
+        }
+        const derived: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'rule-tp-both',
+            phase: 'exit',
+            sideScope: 'both',
+            condition: { kind: 'atom', key: 'risk.take_profit_pct', params: { valuePct: 10 } },
+            effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+          }],
+        }
+        const merged = service.merge({ persisted, derived })
+        expect((merged.rules ?? []).length).toBe(1)
+      })
+
+      it('混合 condition（AND(price.above, risk.stop_loss_pct)）→ 不走风控归一化，按 Pass 2 shape 处理', () => {
+        // 混合 condition 不视为纯风控 rule，保守保留 Pass 2 行为
+        const persisted: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'r-mix-1',
+            phase: 'exit',
+            sideScope: 'long',
+            condition: {
+              kind: 'and',
+              children: [
+                { kind: 'atom', key: 'price.above_indicator', params: {} },
+                { kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: -5 } },
+              ],
+            },
+            effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+          }],
+        }
+        const derived: SemanticState = {
+          ...emptyBase(),
+          rules: [{
+            id: 'r-mix-2',
+            phase: 'exit',
+            sideScope: 'both',
+            condition: {
+              kind: 'and',
+              children: [
+                { kind: 'atom', key: 'price.above_indicator', params: {} },
+                { kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: -5 } },
+              ],
+            },
+            effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+          }],
+        }
+        const merged = service.merge({ persisted, derived })
+        // sideScope 不同 → Pass 2 shape 不同 → 保留 2 条（这是混合条件的保守行为）
+        expect((merged.rules ?? []).length).toBe(2)
+      })
+    })
+
     it('keeps persisted rules untouched when derived has no rules field', () => {
       const persisted: SemanticState = {
         ...emptyBase(),

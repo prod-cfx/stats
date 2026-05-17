@@ -56,7 +56,9 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
     }]
     const view = service.buildConversationView(baseState({ rules }))
     expect(view.summary).toContain('入场')
-    expect(view.summary).toContain('做多')
+    // Issue #1443：去掉 phaseLabel 后的（做多/做空/双向）sideScope 括号；方向信息靠
+    //   condition / effects 文本体现。此处 effects=[] 所以不验方向词。
+    expect(view.summary).not.toContain('入场（做多）')
     expect(view.summary).toMatch(/先\s/u)
     expect(view.summary).toMatch(/然后\s/u)
     expect(view.summary).toContain('下一根')
@@ -155,7 +157,8 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
     }]
     const view = service.buildConversationView(baseState({ rules }))
     expect(view.summary).toContain('前置')
-    expect(view.summary).toContain('双向')
+    // Issue #1443：去掉（双向）sideScope 括号
+    expect(view.summary).not.toContain('（双向）')
     expect(view.summary).toContain('止损')
     expect(view.summary).toContain('3')
   })
@@ -359,6 +362,71 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
     const view = service.buildConversationView(baseState({ rules }))
     expect(view.summary).toContain('或')
     expect(view.summary).toContain('非')
-    expect(view.summary).toContain('做空')
+    // Issue #1443：去掉（做空）sideScope 括号
+    expect(view.summary).not.toContain('（做空）')
+  })
+})
+
+// ───────────────────────────────────────────────────────────────────────────
+// Issue #1443 通用 UI 简化：
+//   (a) renderRule 去掉 phaseLabel 后的（做多/做空/双向）sideScope 括号
+//   (b) condition 是 always-on atom（如 execution.on_start）时 renderRule 省略
+//       condition，只输出 effects
+//   (c) enrichSummaryWithParamRenderers 跳过值 === paramSlot.default 的 slot
+// ───────────────────────────────────────────────────────────────────────────
+describe('Issue #1443 — renderRule 通用 UI 简化', () => {
+  const service = new SemanticStateProjectionService()
+
+  it('(a) entry rule 不再渲染「入场（做多）」括号', () => {
+    const rules: SemanticRule[] = [{
+      id: 'r1',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down', valuePct: -1 } },
+      effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+    }]
+    const view = service.buildConversationView(baseState({ rules }))
+    expect(view.summary).toContain('入场')
+    expect(view.summary).not.toContain('（做多）')
+    expect(view.summary).not.toContain('（做空）')
+    expect(view.summary).not.toContain('（双向）')
+  })
+
+  it('(b) condition 是 execution.on_start always-on atom → 不渲染 condition', () => {
+    // 用户实测策略 1 复测："出场（做多）：启动后执行（on_start，市价，once） → 止损 5%"
+    //   condition execution.on_start 是 runtime gate，对 user 无意义；应只渲染 effects
+    const rules: SemanticRule[] = [{
+      id: 'r-stop-loss',
+      phase: 'exit',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'execution.on_start', params: { timing: 'on_start', orderType: 'market', occurrence: 'once' } },
+      effects: [{ kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } }],
+    }]
+    const view = service.buildConversationView(baseState({ rules }))
+    // condition body 不应出现「启动后执行」
+    expect(view.summary).not.toContain('启动后执行')
+    // effects 应直接出现：止损 5%
+    expect(view.summary).toMatch(/止损/u)
+    expect(view.summary).toContain('5')
+    // 不应有「→」（because condition 跳过，直接是 effects）
+    // 不强断言「→」位置；只要 condition body 不渲染即可
+  })
+
+  it('(c) enrich 跳过值 === paramSlot.default 的 slot — execution.on_start 默认值不输出', () => {
+    // execution.on_start 三个 param 全等 default（timing=on_start / orderType=market /
+    //   occurrence=once）→ enrich 跳过全部 → summary 只剩 "启动后执行" 不附加（...）
+    const rules: SemanticRule[] = [{
+      id: 'r-on-start',
+      phase: 'entry',
+      sideScope: 'both',
+      condition: { kind: 'atom', key: 'oscillator.rsi_lte', params: { period: 14, threshold: 30 } },
+      effects: [{ kind: 'atom', key: 'execution.on_start', params: { timing: 'on_start', orderType: 'market', occurrence: 'once' } }],
+    }]
+    const view = service.buildConversationView(baseState({ rules }))
+    // 应不出现「on_start」「market」「once」这类技术默认值
+    expect(view.summary).not.toContain('on_start')
+    expect(view.summary).not.toContain('once')
+    // "市价" 是 default 渲染应被跳过
+    expect(view.summary).not.toContain('（市价')
   })
 })

@@ -2,6 +2,17 @@ import { Injectable, Logger } from '@nestjs/common'
 
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import { collectAtomLeaves, type AtomExpr, type AtomExprAtom, type SemanticRule } from '../types/atom-expr'
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+
+/**
+ * Issue #1443：always-on runtime gate atom 集合（与 semantic-state-projection.service.ts
+ *   同一份真相源；两处独立维护风险低，atom 数量稳定）。这类 atom 在 rule.condition
+ *   位置表达「策略启动后始终激活」语义；若 effects 是 action（开/平仓动作），通常是
+ *   planner / dispatcher 误产的技术兜底 rule（用户没明确说"启动即开平仓"），是 UI 噪音。
+ */
+const MERGE_ALWAYS_ON_ATOM_KEYS: ReadonlySet<string> = new Set([
+  'execution.on_start',
+])
 
 /**
  * Issue #1383：planner 输出常常只包含 trigger/action/risk 桶；positionConstraint /
@@ -28,7 +39,19 @@ export class PlannerDispatcherMergeService {
     const plannerHas = this.isNonEmpty(plannerPatch)
     const dispatcherHas = this.isNonEmpty(dispatcherPatch)
     if (!plannerHas && !dispatcherHas) return null
-    if (plannerHas && !dispatcherHas) return plannerPatch as CodegenSemanticPatch
+    // Issue #1443：planner-only / dispatcher-only 早返路径也必须走 filter pass
+    //   过滤 always-on + action 噪音 rule（否则用户实测策略 1 这类 planner-only 场景
+    //   下「出场：平多」噪音 rule 仍漏过）。
+    if (plannerHas && !dispatcherHas) {
+      const cloned = { ...(plannerPatch as CodegenSemanticPatch) }
+      try {
+        this.filterAlwaysOnActionNoiseRules(cloned)
+      }
+      catch (err) {
+        this.logger.warn(`filterAlwaysOnActionNoiseRules (planner-only path) 抛出异常，已 fail-open：${err instanceof Error ? err.message : String(err)}`)
+      }
+      return cloned
+    }
     if (!plannerHas && dispatcherHas) return dispatcherPatch as CodegenSemanticPatch
 
     const planner = plannerPatch as CodegenSemanticPatch
@@ -129,7 +152,58 @@ export class PlannerDispatcherMergeService {
       this.logger.warn(`liftDispatcherAtomsIntoRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
     }
 
+    // Issue #1443：过滤掉 "always-on condition + action effects" 噪音 rule。
+    //   这类 rule 通常是 planner/dispatcher 把 trigger 和 action 错绑（trigger 缺失或
+    //   被识别为 execution.on_start always-on），让 UI 出现"出场：平多" / "入场：开多"
+    //   等无条件动作的噪音。用户没明确说"启动即开/平仓"——这种 rule 应丢弃。
+    //   risk effects（stop_loss/take_profit）允许 always-on（"持仓期间一直挂止损"是
+    //   常见且合理语义）。
+    try {
+      this.filterAlwaysOnActionNoiseRules(merged)
+    }
+    catch (err) {
+      this.logger.warn(`filterAlwaysOnActionNoiseRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
+    }
+
     return merged
+  }
+
+  /**
+   * Issue #1443：过滤 "always-on condition + action effects" 噪音 rule。
+   *
+   * 触发条件（全部满足）：
+   *   1. rule.condition.kind === 'atom' 且 key ∈ MERGE_ALWAYS_ON_ATOM_KEYS
+   *   2. rule.effects 中至少含一个 leaf 在 atom contract registry 的 bucket === 'action'
+   *
+   * 行为：整条 rule 从 merged.rules 移除。risk/positionConstraint/orchestration effects
+   *   不视为噪音（持续生效语义合理）。
+   *
+   * 通用机制：基于 ALWAYS_ON 集合 + atom contract bucket 派生，不针对单 atom 写特例。
+   */
+  private filterAlwaysOnActionNoiseRules(merged: CodegenSemanticPatch): void {
+    const rules = merged.rules
+    if (!rules || rules.length === 0) return
+
+    type ContractShape = { bucket?: string }
+    const getBucket = (atomKey: string): string | undefined =>
+      (ATOM_CONTRACT_REGISTRY as Record<string, ContractShape | undefined>)[atomKey]?.bucket
+
+    const isAlwaysOnCondition = (rule: SemanticRule): boolean =>
+      rule.condition.kind === 'atom' && MERGE_ALWAYS_ON_ATOM_KEYS.has(rule.condition.key)
+
+    const hasActionEffect = (rule: SemanticRule): boolean => {
+      for (const eff of rule.effects) {
+        for (const leaf of collectAtomLeaves(eff)) {
+          if (getBucket(leaf.key) === 'action') return true
+        }
+      }
+      return false
+    }
+
+    const kept = rules.filter(rule => !(isAlwaysOnCondition(rule) && hasActionEffect(rule)))
+    if (kept.length !== rules.length) {
+      merged.rules = kept
+    }
   }
 
   /**
@@ -263,15 +337,28 @@ export class PlannerDispatcherMergeService {
     const rules = merged.rules
     if (!rules || rules.length === 0) return
 
-    // 索引 merged.rules 中所有 leaf 的 (key|phase|sideScope|paramsHash) 签名，避免重复 lift
-    const existingSignatures = new Set<string>()
+    // Issue #1443：lift 的定位是「planner 漏 atom 时的兜底」，不应产生 sibling 重复。
+    //   旧实现用 (key, phase, sideScope, paramsHash) 严格签名 dedup，但 planner LLM 与
+    //   dispatcher 抽到的同一 atom 经常 params 不完全相同（如 planner 多 basis 字段、
+    //   dispatcher 缺）→ paramsHash 不同 → lift 重复条目，UI 出现「入场×2/出场×2」。
+    //
+    //   通用修复：dedup 用 atom key only。planner rules 已含某 key 的 leaf（任何 phase/
+    //   sideScope/params），就认为该 atom 已被"识别"，dispatcher 不再 lift 同 key 兜底。
+    //   只在 planner 完全没产某 atom key 的场景下，dispatcher 才作为兜底 lift（如
+    //   BOLL touch_lower 没产时由 dispatcher cross-clause inheritance 派生 → 仍 lift）。
+    //
+    //   边界：用户策略真有两条同 key 不同 params 的 entry（如「3 分钟内跌 1%」+
+    //   「5 分钟内跌 2%」）时，planner 应产 2 条 rule，本 dedup 不影响；
+    //   若 planner 只产 1 条 + dispatcher 抽到另一条不同 params，dispatcher 的额外那条
+    //   会被 dedup 跳过——这是设计取舍：宁可丢一个边角识别，也不引入重复 sibling 噪音。
+    const existingKeys = new Set<string>()
     for (const rule of rules) {
       for (const leaf of collectAtomLeaves(rule.condition)) {
-        existingSignatures.add(this.leafSignature(leaf.key, rule.phase, leaf.sideScope ?? rule.sideScope, leaf.params))
+        existingKeys.add(leaf.key)
       }
       for (const eff of rule.effects) {
         for (const leaf of collectAtomLeaves(eff)) {
-          existingSignatures.add(this.leafSignature(leaf.key, rule.phase, leaf.sideScope ?? rule.sideScope, leaf.params))
+          existingKeys.add(leaf.key)
         }
       }
     }
@@ -291,12 +378,12 @@ export class PlannerDispatcherMergeService {
     ): void => {
       if (!source) return
       for (const entry of source) {
+        // Issue #1443：dedup 用 key only（见 existingKeys 注释），不再用严格四元签名
+        if (existingKeys.has(entry.key)) continue
+        existingKeys.add(entry.key)
         const phase = liftPhase(entry.phase ?? defaultPhase)
         const sideScope = (entry.sideScope ?? 'both') as 'long' | 'short' | 'both'
         const params = entry.params ?? {}
-        const signature = this.leafSignature(entry.key, phase, sideScope, params)
-        if (existingSignatures.has(signature)) continue
-        existingSignatures.add(signature)
         liftIndex += 1
         lifted.push({
           // 审查问题 #1：atom key 含 `.`（如 `price.percent_change`），下游 projection
@@ -328,11 +415,28 @@ export class PlannerDispatcherMergeService {
     //   造成 UI 出现「入场×2 / 出场×2 / 入场(双向)：开多」等重复孤立 rule。
     //
     // 通用方案：只走 atoms 总集 → 重复源头消除；triggers/risk 子桶 lift 移除。
-    //   action atom（action.open_long / close_long）在 atoms 中也存在，但其 atomBucket
-    //   归属 `action` → 走 dispatchAtomsByContractBucket 时被分流为 effects；本 lift
-    //   pass 应只为 trigger / risk-as-gate / orchestration leaf 服务，故下文 phase
-    //   推断默认 'entry'，action 类 atom 通过下游 effect-binding 链路绑定（不在本 PR 范围）。
-    collectBucket(dispatcher.atoms, 'entry')
+    //
+    // Issue #1443 用户实测复测真因：dispatcher.atoms 是总集（含 trigger / action /
+    //   risk / positionConstraint / orchestration 全部 bucket 的 atom）。一刀切 lift
+    //   atoms 总集会把 action atom（如 action.close_long）也作为 single-leaf rule.
+    //   condition——渲染时 UI 显示「出场：平多」noise（condition 被错渲染成 action 名），
+    //   且 always-on filter（condition!=execution.on_start）不命中 → 保留 noise。
+    //
+    // 通用过滤：lift 时按 atom contract.bucket 过滤——只 lift bucket ∈ {trigger, risk}
+    //   的真 condition 形态 atom。action / positionConstraint / orchestration 类
+    //   atom 语义上不是 condition leaf，跳过 lift（action 走 dispatcher.actions 桶
+    //   下游 effect-binding 链路，本 lift pass 不重复处理）。
+    //   未注册 atom（contract miss）→ fail-open 允许 lift（与既有 unknown atom 兜底
+    //   一致；避免新 atom 未注册时静默丢失）。
+    type ContractShape = { bucket?: string }
+    const LIFT_ALLOWED_BUCKETS: ReadonlySet<string> = new Set(['trigger', 'risk'])
+    const isLiftableByBucket = (atomKey: string): boolean => {
+      const bucket = (ATOM_CONTRACT_REGISTRY as Record<string, ContractShape | undefined>)[atomKey]?.bucket
+      if (bucket === undefined) return true  // 未注册 fail-open
+      return LIFT_ALLOWED_BUCKETS.has(bucket)
+    }
+    const liftableAtoms = (dispatcher.atoms ?? []).filter(a => isLiftableByBucket(a.key))
+    collectBucket(liftableAtoms, 'entry')
 
     if (lifted.length > 0) {
       merged.rules = [...rules, ...lifted]
