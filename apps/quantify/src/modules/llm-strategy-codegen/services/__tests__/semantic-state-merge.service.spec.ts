@@ -1577,6 +1577,65 @@ describe('SemanticStateMergeService', () => {
       ])
     })
 
+    it('Issue #1443: 不同 id 但同 condition+effects shape → 多轮累加去重（content-shape SoT）', () => {
+      // 用户复测：多轮对话 LLM 每次产相同语义 rule 但 id 不同（如第 1 轮 'rule-entry-1' /
+      // 第 2 轮 'planner-r-entry' / 第 3 轮 'dispatcher-lift-N-xxx'），旧实现按 id 去重不
+      // 命中 → state.rules 累加，UI 显示重复 rule。新实现按 content shape 二次折叠。
+      const persisted: SemanticState = {
+        ...emptyBase(),
+        rules: [{
+          id: 'rule-r1-entry',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down', valuePct: -1, window: '3m' } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        }],
+      }
+      const derived: SemanticState = {
+        ...emptyBase(),
+        rules: [{
+          id: 'planner-r-entry-NEW',  // 不同 id
+          phase: 'entry',
+          sideScope: 'long',
+          // condition + effects shape 完全相同
+          condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down', valuePct: -1, window: '3m' } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        }],
+        updatedAt: '2026-05-17T01:00:00.000Z',
+      }
+      const merged = service.merge({ persisted, derived })
+      const rules = merged.rules ?? []
+      // 应只剩 1 条（content shape 折叠，留 derived 后入者）
+      expect(rules).toHaveLength(1)
+      expect(rules[0]!.id).toBe('planner-r-entry-NEW')
+    })
+
+    it('Issue #1443: 同 shape 不同 effects → 视为两条独立 rule（content 决定 identity）', () => {
+      // shape 不同 → 不去重；这是真两条 rule
+      const persisted: SemanticState = {
+        ...emptyBase(),
+        rules: [{
+          id: 'r1',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.percent_change', params: { valuePct: -1 } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        }],
+      }
+      const derived: SemanticState = {
+        ...emptyBase(),
+        rules: [{
+          id: 'r2',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.percent_change', params: { valuePct: -1 } },
+          effects: [{ kind: 'atom', key: 'action.add_position', params: {} }],  // 不同 effects
+        }],
+      }
+      const merged = service.merge({ persisted, derived })
+      expect(merged.rules ?? []).toHaveLength(2)
+    })
+
     it('keeps persisted rules untouched when derived has no rules field', () => {
       const persisted: SemanticState = {
         ...emptyBase(),

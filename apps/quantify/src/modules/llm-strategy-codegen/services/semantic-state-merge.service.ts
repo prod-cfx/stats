@@ -1095,8 +1095,18 @@ export class SemanticStateMergeService {
     return result
   }
 
-  // Issue #1403 子故障 D：rules[] 按 identity 合并而非整体覆盖。
-  //   identity 优先取 rule.id；id 不稳定时退化到 (phase, sideScope, conditionShape)。
+  // Issue #1403 子故障 D + Issue #1443 升级：rules[] 按 content shape 合并而非 rule.id。
+  //
+  //   旧实现优先用 rule.id 作 identity——LLM 每轮新 rule 用不同 id（如
+  //   `rule-entry-1` vs `rule-r1-entry` vs `dispatcher-lift-N-xxx`），即便 condition/
+  //   effects shape 完全相同也不去重，导致**多轮对话 rules 累加**：
+  //     - 用户首轮 "3 分钟跌 1% 买入" → planner 产 entry rule#1
+  //     - 用户答 "合约" → planner 重新产 entry rule#2 含相同语义但新 id
+  //     - state.rules 累加 2 条相同 entry → UI 重复显示
+  //
+  //   通用修复：identity 完全基于 content shape（phase + sideScope + conditionHash +
+  //   effectsHash），忽略 rule.id（id 是构造时序号，不该作去重依据）。
+  //
   //   同 identity 走 "derived 覆盖 persisted"（最新轮次 LLM 描述权重更高）；
   //   持久态独有的 rule（如更早轮次定下的 entry/exit）保留，避免被风控轮次抹平。
   private mergeRulesByIdentity(
@@ -1109,37 +1119,49 @@ export class SemanticStateMergeService {
     if (persistedArr.length === 0) return derivedArr.length > 0 ? derivedArr : undefined
     if (derivedArr.length === 0) return persistedArr
 
-    const identityOf = (rule: SemanticRule): string => {
-      if (rule.id && rule.id.length > 0) return `id:${rule.id}`
+    // Issue #1443：双重 dedup 兼顾旧 id 契约 + 新 shape 累加防护
+    //   Pass 1：按 rule.id 折叠（保旧契约——同 id 表"LLM 修正同一条"，derived 覆盖）
+    //   Pass 2：按 content shape 折叠（解决新问题——不同 id 但同 shape 多轮累加）
+    const shapeOf = (rule: SemanticRule): string => {
       const condHash = this.stableParamsHash(rule.condition as unknown as Record<string, unknown>)
-      return `shape:${rule.phase}|${rule.sideScope}|${condHash}`
+      const effectsHash = this.stableParamsHash(
+        (rule.effects ?? []) as unknown as Record<string, unknown>,
+      )
+      return `shape:${rule.phase}|${rule.sideScope}|${condHash}|effects:${effectsHash}`
     }
 
-    const byIdentity = new Map<string, SemanticRule>()
-    const order: string[] = []
-    for (const rule of persistedArr) {
-      const id = identityOf(rule)
-      if (!byIdentity.has(id)) order.push(id)
-      byIdentity.set(id, rule)
+    // ── Pass 1：按 id 折叠 ──
+    const byId = new Map<string, SemanticRule>()
+    const idOrder: string[] = []
+    const noIdRules: SemanticRule[] = []
+    const ingest = (rule: SemanticRule): void => {
+      if (rule.id && rule.id.length > 0) {
+        if (!byId.has(rule.id)) idOrder.push(rule.id)
+        // 审查 M2：同 id 折叠时 effects 若 derived 缺省/空数组 → 保留 persisted
+        const existing = byId.get(rule.id)
+        const mergedEffects = (rule.effects && rule.effects.length > 0)
+          ? rule.effects
+          : (existing?.effects ?? rule.effects)
+        byId.set(rule.id, { ...rule, effects: mergedEffects })
+      }
+      else {
+        noIdRules.push(rule)
+      }
     }
-    for (const rule of derivedArr) {
-      const id = identityOf(rule)
-      if (!byIdentity.has(id)) order.push(id)
-      // 审查 M2 修复：同 identity 折叠时 effects 若 derived 缺省/空数组 → 保留
-      //   persisted.effects，避免 LLM 多轮场景下用户只回 condition 而 effects 字段
-      //   被静默抹掉（子故障 D 在 effects 维度的同形复发风险）。
-      //
-      // 审查 m-R2-1 显式声明：本路径把 derived.effects === [] 视为「未提供」，
-      //   保留 persisted。该 trade-off 在当前 LLM 协议下「未给」与「显式空」电报
-      //   差异不可观测，因此选择更安全的「保留」语义。未来若需要支持显式清空
-      //   effects，需协议层引入 `effects: null` 哨兵区分；当前协议不支持。
-      const existing = byIdentity.get(id)
-      const mergedEffects = (rule.effects && rule.effects.length > 0)
-        ? rule.effects
-        : (existing?.effects ?? rule.effects)
-      byIdentity.set(id, { ...rule, effects: mergedEffects })
+    persistedArr.forEach(ingest)
+    derivedArr.forEach(ingest)
+    const afterIdPass: SemanticRule[] = [...idOrder.map(k => byId.get(k)!), ...noIdRules]
+
+    // ── Pass 2：按 content shape 折叠（不同 id 同 shape → 留后入者，去重累加） ──
+    const byShape = new Map<string, SemanticRule>()
+    const shapeOrder: string[] = []
+    for (const rule of afterIdPass) {
+      const sig = shapeOf(rule)
+      if (!byShape.has(sig)) shapeOrder.push(sig)
+      // 后入者（derived）覆盖前入者（persisted）
+      byShape.set(sig, rule)
     }
-    return order.map(id => byIdentity.get(id)!)
+    return shapeOrder.map(s => byShape.get(s)!)
   }
 
   private computeAtomIdentityKey(entry: AtomLikeEntry): string {
