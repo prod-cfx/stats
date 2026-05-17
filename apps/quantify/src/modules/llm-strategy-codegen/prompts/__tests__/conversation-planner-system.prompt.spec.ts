@@ -91,6 +91,43 @@ describe('issue #1395 — planner prompt rules shape', () => {
     expect(prompt).toContain('位于 X 上方/下方')
   })
 
+  // Issue #1448（父 #1444 闸 4）：COMPOSITIONAL_PATTERN_HINTS 前置「方向准入语句 + 触发条件」hint
+  //   将 S4 example 内部教育提为前置结构性 pattern，attention 前置；S4 example 保留不变作为正反例补强。
+  it('Issue #1448: COMPOSITIONAL_PATTERN_HINTS 含前置「方向准入语句 + 触发条件」独立 hint', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+    // 独立段标题
+    expect(prompt).toContain('【方向准入语句 + 触发条件】')
+    // 关键短语（attention 前置）
+    expect(prompt).toContain('X 上方做多 / 下方做空')
+    expect(prompt).toContain('在 X 之上 / 之下时做多/做空')
+    expect(prompt).toContain('位于 X 上方 / 下方时')
+    // 核心识别词
+    expect(prompt).toContain('方向准入')
+    expect(prompt).toContain('方向 gate')
+    // AND 折叠语义
+    expect(prompt).toContain('and([方向准入 atom..., 触发 atom])')
+    // 显式禁律
+    expect(prompt).toContain('禁止：把方向准入与触发拆成多条')
+  })
+
+  it('Issue #1448: NEGATIVE_EXAMPLES 段含「方向准入 + 触发」拆成 N 条独立 entry 的禁律', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+    expect(prompt).toContain('把「方向准入语句 + 触发条件」拆成 N 条独立 entry rule')
+    expect(prompt).toContain('X 上方做多 / 下方做空 + 触发条件 Y')
+    expect(prompt).toContain('{gate_long}, {gate_short}, {Y_long}, {Y_short}')
+  })
+
+  it('Issue #1448: S4 example 保留不变（防回归）', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+    // S4 example 标题
+    expect(prompt).toContain('【S4 双向 directional gate + 触发条件 → 2 条 AND 复合 rule（不是 4 条平铺）】')
+    // S4 user 输入原句
+    expect(prompt).toContain('价格在 EMA20/60/144 上方时做多开仓，都位于下方只开空；入场是 BOLL 下轨开多，上轨开空')
+    // S4 正例两条 rule id
+    expect(prompt).toContain('entry-long-ema-gate-boll')
+    expect(prompt).toContain('entry-short-ema-gate-boll')
+  })
+
   // Issue #1428 R-E：ATOM_PARAMS_HINTS 段必须含「用户原话 > 默认值」硬约束 + 至少 3 个具体反例
   it('R-E: ATOM_PARAMS_HINTS 段含「用户原话 > paramDefaultsHint」硬约束 + BOLL/percent_change/ATR 反例', () => {
     const prompt = buildConversationPlannerSystemPrompt('zh')

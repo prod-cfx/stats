@@ -266,6 +266,10 @@ const NEGATIVE_EXAMPLES: readonly string[] = [
   '❌ 错误 5：S8 多周期幻觉。用户："15m / 1h / 4h 价格都在 EMA20 上方 买入"',
   '  禁止：输出「EMA15 下穿 EMA20」「EMA 金叉死叉」等用户未提及的语义；',
   '  正确：condition = and([ema20_above@15m, ema20_above@1h, ema20_above@4h])，单条 entry rule。',
+  '',
+  '❌ 错误 6：把「方向准入语句 + 触发条件」拆成 N 条独立 entry rule。',
+  '  用户："X 上方做多 / 下方做空 + 触发条件 Y" → 必须 2 条 entry rule，每条 condition=and([gate, Y])；',
+  '  禁止：rules=[{gate_long}, {gate_short}, {Y_long}, {Y_short}] 这种 4 条并列形态。',
 ]
 
 /**
@@ -295,6 +299,16 @@ const COMPOSITIONAL_PATTERN_HINTS: readonly string[] = [
   '  → gate rule（phase=gate）condition=indicator.above(MA200) 或 AND(MA50>MA200)；',
   '  → entry rule（phase=entry）condition=sequence([oscillator.rsi_lte(value=X), indicator.cross_over(rsi, value=X)])；',
   '  → exit rule（phase=exit）condition=oscillator.rsi_gte(value=Y)。',
+  '',
+  '【方向准入语句 + 触发条件】',
+  '  关键短语："X 上方做多 / 下方做空"、"在 X 之上 / 之下时做多/做空"、"位于 X 上方 / 下方时"',
+  '  这类语句不是独立 entry，而是「方向 gate」。必须按用户给出的 sideScope（双向语句拆 2 条 long/short；',
+  '  单向语句 1 条）输出 entry rule，每条 condition = and([方向准入 atom..., 触发 atom])，',
+  '  effects = open_long / open_short。',
+  '  禁止：把方向准入与触发拆成多条并列 entry rule（会让 UI 显示「入场×N」并丢失合取语义）。',
+  '  边界：本段处理「方向准入短语 + 单触发原子」二元形态；若用户额外给出 RSI sequence /',
+  '  突破回踩等复杂时序触发（命中上一条 MA50/MA200 + RSI sequence hint），按上一条形态执行，',
+  '  仍可在 entry rule 的 condition.and.children 内嵌入 sequence 子节点，不要拆为独立 phase=gate rule。',
 ]
 
 /**
