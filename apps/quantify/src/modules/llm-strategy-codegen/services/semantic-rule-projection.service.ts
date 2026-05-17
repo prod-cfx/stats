@@ -10,14 +10,18 @@
  *   - NOT/SEQUENCE 在 contract 层暂不区分（IR 层处理）
  *   - effects[] 按 ATOM_CONTRACT_REGISTRY[key].bucket 投影到对应桶
  *
- * MVP 占位：
- *   - orchestration 投影仅记录 atom leaf 但未构造完整 orchestration node（结构复杂，
- *     与 effects 语义重合度低；先确保 trigger 路径不丢失，后续 PR 完善）。
- *   - 投影输出的 state 对象只填必要字段；下游 normalization / projection / readiness
- *     若需要额外字段，由各自服务按现有规则补齐。
+ * Issue #1447 闸 3：
+ *   - 每个 flat atom 必须携带 `_provenance: { ruleId, conditionPath }`，
+ *     conditionPath 形如 `condition.atom` / `condition.and.children[2]` /
+ *     `effects[0].atom` / `effects[1].sequence.steps[0]`；
+ *   - merge / projection 链路末端 invariant：所有 atom 的 ruleId 必须能在输入
+ *     `rules[]` 找到，否则 drop + 计数 `flat_atom_orphan_drop_total{bucket, source}`；
+ *   - dispatcher noisy lift 已在 PlannerDispatcherMergeService.liftDispatcherAtomsIntoRules
+ *     收敛为单叶子 rule，rule.id 形如 `dispatcher-lift-N-<key>`，本服务对其与
+ *     planner 产出的 rule 一视同仁——「准入证」只看 ruleId 是否在当前 rules[] 内。
  */
 
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 
 import {
   ATOM_CONTRACT_REGISTRY,
@@ -27,9 +31,9 @@ import type {
   AtomExprAtom,
   SemanticRule,
 } from '../types/atom-expr'
-import { collectAtomLeaves } from '../types/atom-expr'
 import type {
   SemanticActionState,
+  SemanticFlatAtomProvenance,
   SemanticNodeStatus,
   SemanticOrchestrationNode,
   SemanticPositionConstraintKey,
@@ -43,21 +47,28 @@ import type { ParamSlotSchema } from '../atom-contracts/atom-contract-surface.ty
 
 import { buildTriggerCombinationContract } from './semantic-state-normalization'
 
+type ProjectionOut = {
+  trigger: SemanticTriggerState[]
+  action: SemanticActionState[]
+  risk: SemanticRiskState[]
+  positionConstraint: SemanticPositionConstraintState[]
+  orchestration: SemanticOrchestrationNode[]
+}
+
+/** Issue #1447 闸 3：用于 orphan drop 度量的 bucket label 集合（与 ProjectionOut 同步） */
+type FlatBucket = keyof ProjectionOut
+
 @Injectable()
 export class SemanticRuleProjectionService {
-  projectToFlat(rules: ReadonlyArray<SemanticRule>): {
-    trigger: SemanticTriggerState[]
-    action: SemanticActionState[]
-    risk: SemanticRiskState[]
-    positionConstraint: SemanticPositionConstraintState[]
-    orchestration: SemanticOrchestrationNode[]
-  } {
-    const out = {
-      trigger: [] as SemanticTriggerState[],
-      action: [] as SemanticActionState[],
-      risk: [] as SemanticRiskState[],
-      positionConstraint: [] as SemanticPositionConstraintState[],
-      orchestration: [] as SemanticOrchestrationNode[],
+  private readonly logger = new Logger(SemanticRuleProjectionService.name)
+
+  projectToFlat(rules: ReadonlyArray<SemanticRule>): ProjectionOut {
+    const out: ProjectionOut = {
+      trigger: [],
+      action: [],
+      risk: [],
+      positionConstraint: [],
+      orchestration: [],
     }
 
     for (const rule of rules) {
@@ -65,39 +76,110 @@ export class SemanticRuleProjectionService {
 
       let effectIndex = 0
       for (const eff of rule.effects) {
-        for (const leaf of collectAtomLeaves(eff)) {
+        // effects[N] 顶层是 AtomExpr（可能是 atom 或 sequence/and/or/not），
+        //   遍历叶子时拼接 `effects[N].<expr-path>` 作为 conditionPath。
+        //
+        // 审查 Critical C1（#1447 闸 3 第 1 轮）：effectIndex 在 walk 回调里被闭包捕获，
+        //   若 eff 是复合节点（sequence / and / or 含多叶子），所有叶子共享同一 effectIndex
+        //   会产出相同 baseId `${rule.id}-eff-${effectIndex}` → action/risk 桶 id 重复。
+        //   修复：在回调外维护 leafIndexWithinEffect，每个叶子 id 形如
+        //   `${rule.id}-eff-${effectIndex}-${leafIdx}`（单叶子时 leafIdx=0，与旧行为兼容）。
+        const effBasePath = `effects[${effectIndex}]`
+        let leafIdxWithinEffect = 0
+        this.walkLeavesWithPath(eff, effBasePath, (leaf, leafPath) => {
           const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string } | undefined>)[leaf.key]
           if (!contract || typeof contract.bucket !== 'string') {
             // unknown atom — skip silently（与 dispatchAtomsByContractBucket 兜底一致）
-            continue
+            return
           }
-          const baseId = `${rule.id}-eff-${effectIndex}`
-          this.dispatchEffectLeaf(contract.bucket, leaf, baseId, out)
-          effectIndex += 1
-        }
+          const baseId = leafIdxWithinEffect === 0
+            ? `${rule.id}-eff-${effectIndex}`
+            : `${rule.id}-eff-${effectIndex}-${leafIdxWithinEffect}`
+          leafIdxWithinEffect += 1
+          this.dispatchEffectLeaf(contract.bucket, leaf, baseId, out, {
+            ruleId: rule.id,
+            conditionPath: leafPath,
+          })
+        })
+        effectIndex += 1
       }
     }
+
+    // Issue #1447 闸 3：merge / projection 链路末端 invariant 校验。
+    //   理论上 projectToFlat 自己产生的 atom 永远有 _provenance.ruleId 且 in-set，
+    //   但 invariant 作为 defense-in-depth 兜底任何下游误调用 / 未来重抽路径。
+    this.enforceProvenanceInvariant(out, rules)
 
     return out
   }
 
+  /**
+   * Issue #1447 闸 3：遍历 AtomExpr 叶子，同时累积 JSON-Pointer 式路径。
+   *
+   * 路径段约定（与 atom-expr.ts joinPath 风格一致）：
+   *   - atom 叶：`<base>.atom`
+   *   - and/or：`<base>.and.children[i]` / `<base>.or.children[i]`
+   *   - not   ：`<base>.not.child`
+   *   - sequence：`<base>.sequence.steps[i]`
+   *
+   * 单叶子 rule.condition 形如 `condition.atom`；
+   * AND 第三个 child 形如 `condition.and.children[2].atom`。
+   */
+  private walkLeavesWithPath(
+    expr: AtomExpr,
+    basePath: string,
+    visit: (leaf: AtomExprAtom, path: string) => void,
+  ): void {
+    switch (expr.kind) {
+      case 'atom':
+        visit(expr, `${basePath}.atom`)
+        return
+      case 'and':
+        expr.children.forEach((child, i) => {
+          this.walkLeavesWithPath(child, `${basePath}.and.children[${i}]`, visit)
+        })
+        return
+      case 'or':
+        expr.children.forEach((child, i) => {
+          this.walkLeavesWithPath(child, `${basePath}.or.children[${i}]`, visit)
+        })
+        return
+      case 'not':
+        this.walkLeavesWithPath(expr.child, `${basePath}.not.child`, visit)
+        return
+      case 'sequence':
+        expr.steps.forEach((step, i) => {
+          this.walkLeavesWithPath(step, `${basePath}.sequence.steps[${i}]`, visit)
+        })
+        return
+      default: {
+        // 审查 Critical C2（#1447 闸 3 第 1 轮）：exhaustiveness guard。
+        //   若未来新增 AtomExpr kind 而本 switch 漏改，TS 编译期会在 _exhaustive 赋值处报错；
+        //   运行时 fallback warn 一行而不静默 drop。
+        const _exhaustive: never = expr
+        this.logger.warn(`walkLeavesWithPath: unsupported AtomExpr kind ${(_exhaustive as { kind: string }).kind}`)
+      }
+    }
+  }
+
   private projectCondition(rule: SemanticRule, triggers: SemanticTriggerState[]): void {
     const expr = rule.condition
-    if (expr.kind === 'atom') {
-      triggers.push(this.atomToTrigger(expr, rule, 0))
-      return
-    }
-
-    // 组合：收集所有叶子作为 trigger node
-    const leaves = collectAtomLeaves(expr)
     const startIndex = triggers.length
-    leaves.forEach((leaf, i) => {
-      triggers.push(this.atomToTrigger(leaf, rule, i))
+    let leafCount = 0
+    // 审查 Minor m-1（#1447 闸 3 第 1 轮）：删除冗余 collectedLeaves，leafCount 已等价。
+    this.walkLeavesWithPath(expr, 'condition', (leaf, leafPath) => {
+      triggers.push(this.atomToTrigger(leaf, rule, leafCount, {
+        ruleId: rule.id,
+        conditionPath: leafPath,
+      }))
+      leafCount += 1
     })
+
+    if (leafCount === 0) return
 
     // AND/OR → combinationContract 挂到第一个 member
     const join = this.toJoinKind(expr)
-    if (join && leaves.length >= 2) {
+    if (join && leafCount >= 2) {
       const groupId = `rule-${rule.id}-grp`
       const contract = buildTriggerCombinationContract({
         groupId,
@@ -131,6 +213,7 @@ export class SemanticRuleProjectionService {
     atom: AtomExprAtom,
     rule: SemanticRule,
     index: number,
+    provenance: SemanticFlatAtomProvenance,
   ): SemanticTriggerState {
     // Issue #1433 R-A：metadata 从 contract.paramSlots 反推（不再硬编码）
     const meta = this.deriveOwnerMetadata(atom.key, atom.params, `${rule.id}-cond-${index}`)
@@ -143,6 +226,7 @@ export class SemanticRuleProjectionService {
       status: meta.status,
       source: meta.source,
       openSlots: meta.openSlots,
+      _provenance: provenance,
     }
   }
 
@@ -156,6 +240,7 @@ export class SemanticRuleProjectionService {
       positionConstraint: SemanticPositionConstraintState[]
       orchestration: SemanticOrchestrationNode[]
     },
+    provenance: SemanticFlatAtomProvenance,
   ): void {
     // Issue #1433 R-A：所有 case 共用 metadata 反推（不再硬编码 locked / [] / user_explicit）
     const meta = this.deriveOwnerMetadata(leaf.key, leaf.params, baseId)
@@ -168,6 +253,7 @@ export class SemanticRuleProjectionService {
           status: meta.status,
           source: meta.source,
           openSlots: meta.openSlots,
+          _provenance: provenance,
         })
         return
       case 'risk':
@@ -178,6 +264,7 @@ export class SemanticRuleProjectionService {
           status: meta.status,
           source: meta.source,
           openSlots: meta.openSlots,
+          _provenance: provenance,
         })
         return
       case 'positionConstraint':
@@ -189,6 +276,7 @@ export class SemanticRuleProjectionService {
           status: meta.status,
           source: meta.source,
           openSlots: meta.openSlots,
+          _provenance: provenance,
         })
         return
       case 'orchestration':
@@ -209,6 +297,7 @@ export class SemanticRuleProjectionService {
             source: meta.source,
             openSlots: meta.openSlots,
             contracts: [],
+            _provenance: provenance,
           })
         }
         return
@@ -227,6 +316,59 @@ export class SemanticRuleProjectionService {
     if (key.startsWith('scope.')) return 'scope'
     if (key.startsWith('portfolioRisk.')) return 'portfolioRisk'
     return null
+  }
+
+  /**
+   * Issue #1447 闸 3：merge / projection 链路末端 invariant —— flat 桶任一 atom 必须
+   * 能反查到 `_provenance.ruleId` 对应的 rule；找不到 → drop + 结构化 warn 度量
+   * `flat_atom_orphan_drop_total{bucket, source}`。
+   *
+   * dispatcher noisy lift 漏网场景：dispatcher 在 planner 之前做关键词启发式抽取，
+   * 若某条改造路径未经 PlannerDispatcherMergeService.liftDispatcherAtomsIntoRules
+   * 而直接把孤立 atom 塞进 flat 桶（或下游服务手工 push），该 atom 的
+   * `_provenance.ruleId` 不会出现在 `rules[]` 中 → 在此被 drop。
+   *
+   * 缺 `_provenance` 字段（外部直接 push 进扁平桶）→ 也视为 orphan，与 dispatcher
+   * noisy lift 同源治理；下游若需带外注入，应先包装成 single-leaf rule（与
+   * dispatcher lift 一致）。
+   *
+   * TODO(#1447 follow-up)：把 structured logger.warn metric stub 替换为正式
+   *   Prometheus / OpenTelemetry counter（沿用 #1445 / #1446 同一 metric pipeline 升级窗口）。
+   */
+  private enforceProvenanceInvariant(out: ProjectionOut, rules: ReadonlyArray<SemanticRule>): void {
+    const validRuleIds = new Set<string>()
+    for (const r of rules) validRuleIds.add(r.id)
+
+    const filterBucket = <T extends { _provenance?: SemanticFlatAtomProvenance, key?: string }>(
+      bucket: FlatBucket,
+      arr: T[],
+    ): T[] => {
+      const kept: T[] = []
+      for (const node of arr) {
+        const prov = node._provenance
+        if (!prov || !validRuleIds.has(prov.ruleId)) {
+          // 审查 Minor m-5 / m-6（#1447 闸 3 第 1 轮）：去掉拼接字符串里的 trailing space；
+          //   ruleId / key 来自 LLM 输出可能含 \r \n → 净化为单行避免 log injection。
+          const sanitize = (s: string): string => s.replace(/[\r\n]+/g, ' ').slice(0, 200)
+          const srcLabel = prov?.ruleId ? sanitize(prov.ruleId) : 'missing_provenance'
+          const keyLabel = node.key ? sanitize(node.key) : '<unknown>'
+          // structured warn metric stub（与 #1445 / #1446 同 pipeline）
+          this.logger.warn(
+            `[flat_atom_orphan_drop] bucket=${bucket} source=${srcLabel} key=${keyLabel}`
+            + ` metric=flat_atom_orphan_drop_total{bucket="${bucket}",source="${srcLabel}"}+=1`,
+          )
+          continue
+        }
+        kept.push(node)
+      }
+      return kept
+    }
+
+    out.trigger = filterBucket('trigger', out.trigger)
+    out.action = filterBucket('action', out.action)
+    out.risk = filterBucket('risk', out.risk)
+    out.positionConstraint = filterBucket('positionConstraint', out.positionConstraint)
+    out.orchestration = filterBucket('orchestration', out.orchestration)
   }
 
   /**

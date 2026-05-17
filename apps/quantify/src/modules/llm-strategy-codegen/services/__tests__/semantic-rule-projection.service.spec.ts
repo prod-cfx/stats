@@ -356,4 +356,272 @@ describe('SemanticRuleProjectionService (Issue #1395)', () => {
     expect(privateAccess.inferOrchestrationKind('grid.range_rebalance')).toBeNull()
     expect(privateAccess.inferOrchestrationKind('')).toBeNull()
   })
+
+  // ------------------------------------------------------------------
+  // Issue #1447 闸 3：拓扑反查 + 孤立 atom drop invariant
+  // ------------------------------------------------------------------
+  describe('Issue #1447 闸 3 — 拓扑反查 + 孤立 atom drop', () => {
+    it('所有 flat atom 都附带 _provenance.{ruleId, conditionPath}（合规 rules fixture）', () => {
+      const rules: SemanticRule[] = [
+        {
+          id: 'r-single',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
+          effects: [{ kind: 'atom', key: 'risk.stop_loss_pct', params: { pct: 5 } }],
+        },
+        {
+          id: 'r-and',
+          phase: 'entry',
+          sideScope: 'short',
+          condition: {
+            kind: 'and',
+            children: [
+              { kind: 'atom', key: 'bollinger.touch_upper', params: {} },
+              { kind: 'atom', key: 'oscillator.rsi_gte', params: { period: 14, threshold: 70 } },
+            ],
+          },
+          effects: [],
+        },
+      ]
+      const out = svc.projectToFlat(rules)
+
+      // 所有 trigger 都必须带 _provenance，且 ruleId 在 rules[] 内
+      const ruleIds = new Set(rules.map(r => r.id))
+      const allAtoms = [
+        ...out.trigger.map(n => ({ b: 'trigger' as const, n })),
+        ...out.action.map(n => ({ b: 'action' as const, n })),
+        ...out.risk.map(n => ({ b: 'risk' as const, n })),
+        ...out.positionConstraint.map(n => ({ b: 'positionConstraint' as const, n })),
+        ...out.orchestration.map(n => ({ b: 'orchestration' as const, n })),
+      ]
+      expect(allAtoms.length).toBeGreaterThan(0)
+      for (const { b, n } of allAtoms) {
+        expect(n._provenance).toBeDefined()
+        expect(ruleIds.has(n._provenance!.ruleId)).toBe(true)
+        expect(n._provenance!.conditionPath).toMatch(/^(condition|effects\[\d+\])/)
+      }
+
+      // 路径段格式具体校验：单叶子 -> condition.atom；AND 第二个 child -> condition.and.children[1].atom
+      const single = out.trigger.find(t => t._provenance?.ruleId === 'r-single')
+      expect(single?._provenance?.conditionPath).toBe('condition.atom')
+      const andSecond = out.trigger.find(
+        t => t._provenance?.ruleId === 'r-and' && t.key === 'oscillator.rsi_gte',
+      )
+      expect(andSecond?._provenance?.conditionPath).toBe('condition.and.children[1].atom')
+
+      // effects[0].atom 路径
+      const sl = out.risk.find(r => r._provenance?.ruleId === 'r-single')
+      expect(sl?._provenance?.conditionPath).toBe('effects[0].atom')
+    })
+
+    it('dispatcher noisy lift fixture：孤立 BOLL atom 未注册为单叶子 rule 时，被 invariant drop', () => {
+      // 模拟「下游误把孤立 atom 直接 push 到 flat 桶」场景：
+      //   构造合规 rules[]（无 BOLL touch_lower），随后通过私有重抽路径塞入孤立 atom。
+      //   实际工程链路是 dispatcher 走 liftDispatcherAtomsIntoRules 包装成 single-leaf rule
+      //   后调用本服务；如果哪天有路径绕过该包装直接 push，invariant 必须把它 drop 掉。
+      const rules: SemanticRule[] = [
+        {
+          id: 'r-ema-gate',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'oscillator.rsi_gte', params: { period: 14, threshold: 65 } },
+          effects: [],
+        },
+      ]
+      const out = svc.projectToFlat(rules)
+      const baseTriggerCount = out.trigger.length
+      expect(baseTriggerCount).toBe(1)
+
+      // 模拟带外注入：手工 push 孤立 BOLL atom 到 trigger 桶（ruleId 不在 rules[]）
+      out.trigger.push({
+        id: 'orphan-boll-1',
+        key: 'bollinger.touch_lower',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        _provenance: { ruleId: 'dispatcher-noisy-not-in-rules', conditionPath: 'condition.atom' },
+      })
+
+      // 重跑 invariant（私有 API 直访）
+      const privateAccess = svc as unknown as {
+        enforceProvenanceInvariant: (
+          o: ReturnType<SemanticRuleProjectionService['projectToFlat']>,
+          r: ReadonlyArray<SemanticRule>,
+        ) => void
+      }
+      privateAccess.enforceProvenanceInvariant(out, rules)
+
+      // 孤立 BOLL 被 drop，原 RSI trigger 保留
+      expect(out.trigger).toHaveLength(baseTriggerCount)
+      expect(out.trigger.find(t => t.key === 'bollinger.touch_lower')).toBeUndefined()
+      expect(out.trigger[0]!.key).toBe('oscillator.rsi_gte')
+    })
+
+    it('缺 _provenance 字段 → 视为 orphan drop', () => {
+      const rules: SemanticRule[] = [
+        {
+          id: 'r-real',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'oscillator.rsi_gte', params: { period: 14, threshold: 65 } },
+          effects: [],
+        },
+      ]
+      const out = svc.projectToFlat(rules)
+      // 注入无 _provenance 的孤立节点
+      out.trigger.push({
+        id: 'no-prov-1',
+        key: 'bollinger.touch_upper',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      })
+      const privateAccess = svc as unknown as {
+        enforceProvenanceInvariant: (
+          o: ReturnType<SemanticRuleProjectionService['projectToFlat']>,
+          r: ReadonlyArray<SemanticRule>,
+        ) => void
+      }
+      privateAccess.enforceProvenanceInvariant(out, rules)
+      expect(out.trigger.find(t => t.key === 'bollinger.touch_upper')).toBeUndefined()
+    })
+
+    // 审查 Minor m-3（第 1 轮）：覆盖 NOT condition 路径格式
+    it('NOT condition 叶子 conditionPath 形如 condition.not.child.atom', () => {
+      const rules: SemanticRule[] = [
+        {
+          id: 'r-not',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'not', child: { kind: 'atom', key: 'oscillator.rsi_gte', params: {} } },
+          effects: [],
+        },
+      ]
+      const out = svc.projectToFlat(rules)
+      expect(out.trigger).toHaveLength(1)
+      expect(out.trigger[0]!._provenance?.conditionPath).toBe('condition.not.child.atom')
+      // toJoinKind('not') === null → 不挂 combination contract
+      expect(out.trigger[0]!.contracts?.length ?? 0).toBe(0)
+    })
+
+    // 审查 Minor m-3（第 1 轮）：覆盖 SEQUENCE condition 路径格式
+    it('SEQUENCE condition 叶子 conditionPath 形如 condition.sequence.steps[i].atom', () => {
+      const rules: SemanticRule[] = [
+        {
+          id: 'r-seq',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: {
+            kind: 'sequence',
+            steps: [
+              { kind: 'atom', key: 'oscillator.rsi_gte', params: {} },
+              { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
+            ],
+          },
+          effects: [],
+        },
+      ]
+      const out = svc.projectToFlat(rules)
+      expect(out.trigger).toHaveLength(2)
+      expect(out.trigger[0]!._provenance?.conditionPath).toBe('condition.sequence.steps[0].atom')
+      expect(out.trigger[1]!._provenance?.conditionPath).toBe('condition.sequence.steps[1].atom')
+    })
+
+    // 审查 Critical C1（第 1 轮）：复合 effect（and 含多叶子）每叶子产出唯一 id（不重复）
+    it('复合 effect（AND 含 2 个 risk 叶子）每叶子 baseId 唯一，路径含 effects[N].and.children[i].atom', () => {
+      const rules: SemanticRule[] = [
+        {
+          id: 'r-compound-eff',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'oscillator.rsi_gte', params: {} },
+          effects: [
+            {
+              kind: 'and',
+              children: [
+                { kind: 'atom', key: 'risk.stop_loss_pct', params: { pct: 5 } },
+                { kind: 'atom', key: 'risk.atr_take_profit', params: { multiple: 3 } },
+              ],
+            },
+          ],
+        },
+      ]
+      const out = svc.projectToFlat(rules)
+      expect(out.risk).toHaveLength(2)
+      // C1 修复关键断言：两叶子 id 不重复
+      const ids = out.risk.map(r => r.id)
+      expect(new Set(ids).size).toBe(2)
+      // 路径格式：effects[0].and.children[i].atom
+      const sl = out.risk.find(r => r.key === 'risk.stop_loss_pct')
+      const tp = out.risk.find(r => r.key === 'risk.atr_take_profit')
+      expect(sl?._provenance?.conditionPath).toBe('effects[0].and.children[0].atom')
+      expect(tp?._provenance?.conditionPath).toBe('effects[0].and.children[1].atom')
+    })
+
+    it('会话 cmp9d849x0nyxx5qsf0wdfcp3 重放：mock dispatcher 注入孤立 BOLL，最终 flat 桶无孤立 trigger', () => {
+      // 用户输入语义：5min K 线 EMA20/60/144 + BOLL 触轨 + 5% 止损
+      //   合规 planner 输出：单叶子 rules（这里简化为 RSI 占位 + risk）
+      //   dispatcher noisy lift 应通过 liftDispatcherAtomsIntoRules 包装成单叶子 rule，
+      //   在那个路径下 ruleId='dispatcher-lift-N-bollinger_touch_lower' 会进 rules[] →
+      //   本服务对其与 planner rule 一视同仁；这里测试「未经包装直接 push」的非法路径。
+      const plannerRules: SemanticRule[] = [
+        {
+          id: 'planner-r1',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'oscillator.rsi_gte', params: { period: 14, threshold: 65 } },
+          effects: [{ kind: 'atom', key: 'risk.stop_loss_pct', params: { pct: 5 } }],
+        },
+      ]
+
+      // 「合规路径」：dispatcher 包装成单叶子 rule（rule.id 在 rules[] 内）
+      const compliantRules: SemanticRule[] = [
+        ...plannerRules,
+        {
+          id: 'dispatcher-lift-0-bollinger_touch_lower',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
+          effects: [],
+        },
+      ]
+      const compliantOut = svc.projectToFlat(compliantRules)
+      // 合规：BOLL 出现在 flat 桶，且 provenance 指向 dispatcher-lift rule
+      const compliantBoll = compliantOut.trigger.find(t => t.key === 'bollinger.touch_lower')
+      expect(compliantBoll).toBeDefined()
+      expect(compliantBoll!._provenance?.ruleId).toBe('dispatcher-lift-0-bollinger_touch_lower')
+
+      // 「非法路径」：dispatcher 绕过包装，直接 push 孤立 atom
+      const out = svc.projectToFlat(plannerRules)
+      out.trigger.push({
+        id: 'orphan-boll',
+        key: 'bollinger.touch_lower',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        _provenance: { ruleId: 'orphan-not-in-rules', conditionPath: 'condition.atom' },
+      })
+      const privateAccess = svc as unknown as {
+        enforceProvenanceInvariant: (
+          o: ReturnType<SemanticRuleProjectionService['projectToFlat']>,
+          r: ReadonlyArray<SemanticRule>,
+        ) => void
+      }
+      privateAccess.enforceProvenanceInvariant(out, plannerRules)
+      // 孤立 BOLL 被 drop
+      expect(out.trigger.find(t => t.key === 'bollinger.touch_lower')).toBeUndefined()
+      // 合规 RSI 保留
+      expect(out.trigger.find(t => t.key === 'oscillator.rsi_gte')).toBeDefined()
+    })
+  })
 })

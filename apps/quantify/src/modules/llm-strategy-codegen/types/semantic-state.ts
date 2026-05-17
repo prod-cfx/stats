@@ -33,6 +33,48 @@ export type SemanticCapabilityDomain =
   | 'data'
 export type SemanticOrchestrationContractKind = 'scope' | 'gate' | 'program' | 'portfolioRisk'
 
+/**
+ * Issue #1447 闸 3：flat 桶 atom 拓扑反查标记。
+ *
+ * `projectToFlat` 把 `rules[]` 表达式树投影成扁平五桶后，每个 atom 必须能反查到
+ * 来源 rule（`ruleId`）以及在 rule 表达式树内的 JSON-Pointer 式路径（`conditionPath`）。
+ * merge / projection 链路末端 invariant 校验：找不到所属 rule 的 atom（含 dispatcher
+ * noisy lift 漏网 atom）一律 drop + 计数 `flat_atom_orphan_drop_total{bucket, source}`。
+ *
+ * 字段保持可选是为了向后兼容现存填充链路（dispatcher 桶 / planner 桶直接 push 到
+ * 扁平桶时无来源 rule），但所有经 `projectToFlat` 的 atom 都会被填充该字段。
+ *
+ * 审查 Major M-1（#1447 闸 3 第 1 轮）：类型层 `_provenance?` 可选 vs 运行时
+ *   `enforceProvenanceInvariant` drop 缺 provenance 节点，看似语义矛盾，但这是
+ *   有意的两层契约：
+ *     - 类型层兼容旧 push 路径（避免一次性大改造）
+ *     - 运行时通过 invariant 强制等价于 "缺 provenance == orphan == drop"
+ *   后续 follow-up（与本 PR 不绑）应：
+ *     1. 拆分 ProjectedXxxState 子类型，把 `_provenance` 升级为必填
+ *     2. 把 `enforceProvenanceInvariant` 提升为 public 静态纯函数，让调用方在每次
+ *        变异 flat 桶后能显式再跑一次（解决 invariant 仅 projectToFlat 内部生效问题）
+ */
+export interface SemanticFlatAtomProvenance {
+  /** 来源 rule.id（必须存在于当前 semanticState.rules[]） */
+  ruleId: string
+  /**
+   * rule 内 JSON-Pointer 式 expr path（不限于 condition 子树，也覆盖 effects）。
+   *
+   * 命名沿用 `conditionPath` 是历史原因（首版只覆盖 condition），实际上一半场景指向
+   * effects 树。审查 Major M-2（#1447 闸 3 第 1 轮）：保留字段名以避免破坏未来下游
+   * 消费者；语义以本注释为准——读为 "atom 在 rule 内的 expr path"。
+   *
+   * 示例：
+   *   - 单叶子 condition：`condition.atom`
+   *   - AND 第三 child：`condition.and.children[2].atom`
+   *   - NOT 子 atom：  `condition.not.child.atom`
+   *   - SEQUENCE 步：  `condition.sequence.steps[0].atom`
+   *   - effects 单叶：`effects[0].atom`
+   *   - effects 复合：`effects[1].sequence.steps[0].atom`
+   */
+  conditionPath: string
+}
+
 // Phase 5 S9 (#1110): scope.dataSource role / schema 枚举
 export type SemanticOrchestrationDataSourceRole = 'primary' | 'confirmation' | 'event'
 export type SemanticOrchestrationDataSourceSchema = 'ohlcv' | 'orderbook' | 'liquidation' | 'webhook_event'
@@ -203,6 +245,8 @@ export interface SemanticTriggerState {
   dataSourceScopeRef?: string
   // Phase 5 S10 (#1111): 多 subStrategy 策略中显式声明该 trigger 归属哪个 scope.subStrategy 节点
   subStrategyScopeRef?: string
+  // Issue #1447 闸 3：来源 rule 拓扑反查（projectToFlat 填充）
+  _provenance?: SemanticFlatAtomProvenance
 }
 
 export interface SemanticActionState {
@@ -226,6 +270,8 @@ export interface SemanticActionState {
   dataSourceScopeRef?: string
   // Phase 5 S10 (#1111): 多 subStrategy 策略中显式声明该 action 归属哪个 scope.subStrategy 节点
   subStrategyScopeRef?: string
+  // Issue #1447 闸 3：来源 rule 拓扑反查（projectToFlat 填充）
+  _provenance?: SemanticFlatAtomProvenance
 }
 
 export type SemanticRiskBasis =
@@ -290,6 +336,8 @@ export interface SemanticRiskState {
   dataSourceScopeRef?: string
   // Phase 5 S10 (#1111): 多 subStrategy 策略中显式声明该 risk 归属哪个 scope.subStrategy 节点
   subStrategyScopeRef?: string
+  // Issue #1447 闸 3：来源 rule 拓扑反查（projectToFlat 填充）
+  _provenance?: SemanticFlatAtomProvenance
 }
 
 export type SemanticPositionSizingContract =
@@ -324,6 +372,8 @@ export interface SemanticPositionConstraintState {
   dataSourceScopeRef?: string
   // Phase 5 S10 (#1111): 多 subStrategy 策略中显式声明该 position constraint 归属哪个 scope.subStrategy 节点
   subStrategyScopeRef?: string
+  // Issue #1447 闸 3：来源 rule 拓扑反查（projectToFlat 填充）
+  _provenance?: SemanticFlatAtomProvenance
 }
 
 export interface SemanticPositionState {
@@ -562,6 +612,8 @@ export interface SemanticOrchestrationNode {
   positionHandlingOnDeactivate?: 'close' | 'keep'
   orderHandlingOnDeactivate?: 'cancel' | 'keep'
   support?: SemanticAtomSupportMetadata
+  // Issue #1447 闸 3：来源 rule 拓扑反查（projectToFlat 填充）
+  _provenance?: SemanticFlatAtomProvenance
 }
 
 // Phase 5 S11 (#1112): scope.leg sizing 描述
