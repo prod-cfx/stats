@@ -260,21 +260,27 @@ export class SemanticStateProjectionService {
     }
   }
 
-  // Issue #1403 子故障 B：用 state.rules 渲染 entry/exit 条件块，绕开 flat trigger lift。
-  //   - 一条 rule → 一个 block，条件文本 = renderAtomExpr(rule.condition)
-  //   - action 后缀（"时做多开仓" / "时平多" 等）按 rule.phase + rule.sideScope 派生
+  // Issue #1403 子故障 B + Issue #1443 升级：rules-first display graph。
+  //   - 一条 rule → 一个独立 IF block（旧实现错用 AND_AT_THEN 连接多条独立 rule
+  //     → UI 显示"IF / AND AT THEN / AND AT THEN"误导用户）
+  //   - block.items 同时含 condition + action items（旧实现只 push condition →
+  //     THEN 段空显示"等待策略规则补充"）
+  //   - UI 层 always-on + action effects 噪音 rule 兜底过滤（防 merge 阶段 filter
+  //     未生效或下游路径写入 state.rules 绕过 merge）
   //   - rules 为空 / 无 entry|exit rules → 返回 []，调用方走旧 flat 路径兜底
   private buildDisplayRuleBlocksFromRules(state: SemanticState): SemanticDisplayLogicGraphBlock[] {
     const rules = state.rules ?? []
-    const eligible = rules.filter(r => r.phase === 'entry' || r.phase === 'exit')
+    const eligible = rules
+      .filter(r => r.phase === 'entry' || r.phase === 'exit')
+      // Issue #1443 防御性兜底：过滤 always-on + action effects 噪音 rule
+      //   （与 PlannerDispatcherMergeService.filterAlwaysOnActionNoiseRules 同规则）
+      .filter(r => !this.isAlwaysOnActionNoiseRule(r))
     if (eligible.length === 0) return []
 
     const blocks: SemanticDisplayLogicGraphBlock[] = []
     for (const rule of eligible) {
       const conditionBody = this.renderAtomExpr(rule.condition)
       if (!conditionBody || conditionBody.length === 0) {
-        // 审查 Minor 5 修复：rule.condition 渲染为空（如 sequence steps 全是未注册 atom）
-        //   时 warn 到日志便于排查，避免 UI 缺块时无声告警。
         console.warn(`[semantic-state-projection] skipped rule ${rule.id}: empty condition render`)
         continue
       }
@@ -282,16 +288,68 @@ export class SemanticStateProjectionService {
       const actionSuffix = this.buildRuleActionSuffix(rule.phase, rule.sideScope)
       const conditionText = actionSuffix.length > 0 ? `${conditionBody}${actionSuffix}` : conditionBody
 
+      // Issue #1443：渲染 rule.effects 作为 THEN action items（旧实现遗漏 → THEN 段空）
+      const actionItems: SemanticDisplayActionItem[] = []
+      let effectIndex = 0
+      for (const eff of rule.effects ?? []) {
+        const text = this.renderAtomExpr(eff)
+        if (text && text.length > 0) {
+          actionItems.push({
+            kind: 'action',
+            id: `action-rule-${rule.id}-${effectIndex}`,
+            text,
+          })
+          effectIndex += 1
+        }
+      }
+
       blocks.push({
-        type: blocks.length === 0 ? 'IF' : 'AND_AT_THEN',
-        items: [{
-          kind: 'condition',
-          id: `condition-rule-${rule.id}`,
-          text: conditionText,
-        }],
+        // Issue #1443：每条 rule 独立 IF block；不再用 AND_AT_THEN 连接独立 rule
+        //   （UI 层多条 rule 之间是"任一满足都触发"的 OR 语义，不是 AND）
+        type: 'IF',
+        items: [
+          {
+            kind: 'condition',
+            id: `condition-rule-${rule.id}`,
+            text: conditionText,
+          },
+          ...actionItems,
+        ],
       })
     }
     return blocks
+  }
+
+  /**
+   * Issue #1443：UI 层 always-on + action effects 噪音 rule 兜底过滤。
+   *   与 PlannerDispatcherMergeService.filterAlwaysOnActionNoiseRules 同规则，
+   *   防 merge 阶段 filter 未生效或下游写入绕过。
+   */
+  private isAlwaysOnActionNoiseRule(rule: SemanticRule): boolean {
+    if (rule.condition.kind !== 'atom') return false
+    if (!ALWAYS_ON_ATOM_KEYS.has(rule.condition.key)) return false
+    type ContractShape = { bucket?: string }
+    for (const eff of rule.effects ?? []) {
+      const stack: AtomExpr[] = [eff]
+      while (stack.length > 0) {
+        const node = stack.pop()
+        if (!node) continue
+        if (node.kind === 'atom') {
+          const bucket = (ATOM_CONTRACT_REGISTRY as Record<string, ContractShape | undefined>)[node.key]?.bucket
+          if (bucket === 'action') return true
+        }
+        else if (node.kind === 'and' || node.kind === 'or') {
+          stack.push(...node.children)
+        }
+        else if (node.kind === 'not') {
+          stack.push(node.child)
+        }
+        else if (node.kind === 'sequence') {
+          stack.push(...node.steps)
+        }
+      }
+    }
+    return false
   }
 
   // 审查 Minor 2 共享 side label：buildRuleActionSuffix（display graph）与
