@@ -14,6 +14,14 @@ import {
   renderLegacyDisplay,
 } from './legacy-presentation-data'
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
+// Issue #1443：always-on runtime gate atom 集合——这类 atom 在 rule.condition 位置
+//   表达「策略启动后始终激活」语义（runtime gate），是技术性运行时门控，对 user-facing
+//   UI 无价值。renderRule 在 condition 是这些 single-leaf atom 时跳过 condition 渲染，
+//   只输出 effects。新增 always-on atom 只需扩此集合。
+const ALWAYS_ON_ATOM_KEYS: ReadonlySet<string> = new Set([
+  'execution.on_start',
+])
+
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 export interface SemanticConversationView {
@@ -2314,6 +2322,7 @@ export class SemanticStateProjectionService {
     //   渲染时被通用消费，所有声明了 paramRenderers 的 atom 自动受益（如 price.percent_change
     //   的 valuePct/window/direction/basis 自动出现在 UI），避免单 atom 改 summaryTemplate。
     return this.enrichSummaryWithParamRenderers({
+      atomKey,
       baseSummary,
       paramRenderers: display?.paramRenderers,
       publicName: display?.publicName,
@@ -2337,23 +2346,33 @@ export class SemanticStateProjectionService {
    * 否则原样返回 baseSummary（向后兼容：所有 summaryTemplate 已用 params 的 atom 不受影响）。
    */
   private enrichSummaryWithParamRenderers(input: {
+    atomKey: string
     baseSummary: string
     paramRenderers: Record<string, (value: unknown, locale: 'zh' | 'en') => string> | undefined
     publicName: { zh?: string, en?: string } | undefined
     params: Record<string, unknown>
     locale: 'zh' | 'en'
   }): string {
-    const { baseSummary, paramRenderers, publicName, params, locale } = input
+    const { atomKey, baseSummary, paramRenderers, publicName, params, locale } = input
     if (!paramRenderers || typeof paramRenderers !== 'object') return baseSummary
 
     // 「summaryTemplate 未消费 params」信号：base summary 与 publicName 一字不差
     const publicNameForLocale = publicName?.[locale]?.trim()
     if (!publicNameForLocale || baseSummary !== publicNameForLocale) return baseSummary
 
+    // Issue #1443：跳过值等于 paramSlot.default 的 slot——default 值是技术兜底，
+    //   用户没显式说，渲染出来纯噪音（如 execution.on_start 的 timing=on_start /
+    //   orderType=market / occurrence=once 都是 default → 渲染出"（on_start，市价，once）"
+    //   对用户毫无价值，反让 UI 复杂）。
+    //   从 ATOM_CONTRACT_REGISTRY[atomKey].surface.paramSlots[slotKey].default 读取。
+    const slotDefaults = this.readSlotDefaultsForAtom(atomKey)
+
     const rendered: string[] = []
     for (const [slotKey, renderer] of Object.entries(paramRenderers)) {
       const v = params[slotKey]
       if (v === undefined || v === null || v === '') continue
+      // Issue #1443：值等于该 slot 的 default → 跳过（避免渲染技术兜底）
+      if (slotDefaults && Object.prototype.hasOwnProperty.call(slotDefaults, slotKey) && slotDefaults[slotKey] === v) continue
       try {
         const text = renderer(v, locale)
         if (typeof text === 'string' && text.trim().length > 0) {
@@ -2371,6 +2390,28 @@ export class SemanticStateProjectionService {
     const open = locale === 'zh' ? '（' : ' ('
     const close = locale === 'zh' ? '）' : ')'
     return `${baseSummary}${open}${rendered.join(joiner)}${close}`
+  }
+
+  /**
+   * Issue #1443：读 atom contract `surface.paramSlots[*].default`，按 slotKey 索引。
+   *   供 enrichSummaryWithParamRenderers 跳过值等于 default 的 slot（避免渲染技术兜底）。
+   *   atom 未注册 / 无 paramSlots / 无 default 字段时返回 null。
+   */
+  private readSlotDefaultsForAtom(atomKey: string): Record<string, unknown> | null {
+    type ParamSlot = { default?: unknown }
+    type SurfaceShape = { paramSlots?: Record<string, ParamSlot> }
+    const entry = (ATOM_CONTRACT_REGISTRY as Record<string, { surface?: SurfaceShape } | undefined>)[atomKey]
+    const paramSlots = entry?.surface?.paramSlots
+    if (!paramSlots) return null
+    const out: Record<string, unknown> = {}
+    let hasAny = false
+    for (const [slotKey, slot] of Object.entries(paramSlots)) {
+      if (slot && 'default' in slot && slot.default !== undefined) {
+        out[slotKey] = slot.default
+        hasAny = true
+      }
+    }
+    return hasAny ? out : null
   }
 
   private buildActionSummary(actions: SemanticState['action'], state: SemanticState): string {
@@ -3023,16 +3064,43 @@ export class SemanticStateProjectionService {
   }
 
   private renderRule(rule: SemanticRule): string {
-    const condition = this.renderAtomExpr(rule.condition)
-    if (!condition || condition.length === 0) return ''
     const phaseLabel = this.formatRulePhaseLabel(rule.phase)
-    const sideLabel = this.formatRuleSideLabel(rule.sideScope)
     // effects 通常是 action / risk 副作用，渲染后用 "→" 衔接条件，保留可读性
     const effectParts = (rule.effects ?? [])
       .map(effect => this.renderAtomExpr(effect))
       .filter(s => s.length > 0)
-    const effectSuffix = effectParts.length > 0 ? ` → ${effectParts.join('，')}` : ''
-    return `${phaseLabel}（${sideLabel}）：${condition}${effectSuffix}`
+
+    // Issue #1443 通用 UI 简化：condition 是 always-on runtime gate atom（如
+    //   execution.on_start，语义为「策略启动后始终激活」）时，不作为 user-visible
+    //   condition 渲染——这类 atom 是技术性运行时门控，用户不关心。直接输出
+    //   "${phaseLabel}：${effects}"。
+    //
+    //   触发条件：rule.condition 是 single-leaf atom 且 key 在 ALWAYS_ON_ATOM_KEYS。
+    //   通用机制：通过 atom-key 白名单识别，不针对单策略；新增 always-on atom 只需
+    //   扩此常量集。
+    const isAlwaysOnCondition = rule.condition.kind === 'atom'
+      && ALWAYS_ON_ATOM_KEYS.has(rule.condition.key)
+
+    let bodyText: string
+    if (isAlwaysOnCondition) {
+      // 跳过 always-on condition；只输出 effects（如 "止损 5% 强制平仓"）
+      bodyText = effectParts.length > 0 ? effectParts.join('，') : ''
+    }
+    else {
+      const condition = this.renderAtomExpr(rule.condition)
+      if (!condition || condition.length === 0) return ''
+      const effectSuffix = effectParts.length > 0 ? ` → ${effectParts.join('，')}` : ''
+      bodyText = `${condition}${effectSuffix}`
+    }
+
+    if (bodyText.length === 0) return ''
+
+    // Issue #1443 通用 UI 简化：去掉 phaseLabel 后的「（做多/做空/双向）」sideScope 括号。
+    //   方向信息已在 effects（open_long/close_long/open_short/close_short）或 condition
+    //   atom 文本中体现，括号重复冗余、视觉噪音。
+    //   通用机制：所有 rule 一律不带 sideScope 括号；若未来需保留（如纯 condition 无
+    //   方向暗示的场景），按 condition+effects 内是否含方向词智能判定再加。
+    return `${phaseLabel}：${bodyText}`
   }
 
   // 审查 R2-2 修复支持：去重保持首次出现顺序。renderAtomExpr 的组合节点用这个
