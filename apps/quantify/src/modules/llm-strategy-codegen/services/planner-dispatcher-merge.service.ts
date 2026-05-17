@@ -263,15 +263,28 @@ export class PlannerDispatcherMergeService {
     const rules = merged.rules
     if (!rules || rules.length === 0) return
 
-    // 索引 merged.rules 中所有 leaf 的 (key|phase|sideScope|paramsHash) 签名，避免重复 lift
-    const existingSignatures = new Set<string>()
+    // Issue #1443：lift 的定位是「planner 漏 atom 时的兜底」，不应产生 sibling 重复。
+    //   旧实现用 (key, phase, sideScope, paramsHash) 严格签名 dedup，但 planner LLM 与
+    //   dispatcher 抽到的同一 atom 经常 params 不完全相同（如 planner 多 basis 字段、
+    //   dispatcher 缺）→ paramsHash 不同 → lift 重复条目，UI 出现「入场×2/出场×2」。
+    //
+    //   通用修复：dedup 用 atom key only。planner rules 已含某 key 的 leaf（任何 phase/
+    //   sideScope/params），就认为该 atom 已被"识别"，dispatcher 不再 lift 同 key 兜底。
+    //   只在 planner 完全没产某 atom key 的场景下，dispatcher 才作为兜底 lift（如
+    //   BOLL touch_lower 没产时由 dispatcher cross-clause inheritance 派生 → 仍 lift）。
+    //
+    //   边界：用户策略真有两条同 key 不同 params 的 entry（如「3 分钟内跌 1%」+
+    //   「5 分钟内跌 2%」）时，planner 应产 2 条 rule，本 dedup 不影响；
+    //   若 planner 只产 1 条 + dispatcher 抽到另一条不同 params，dispatcher 的额外那条
+    //   会被 dedup 跳过——这是设计取舍：宁可丢一个边角识别，也不引入重复 sibling 噪音。
+    const existingKeys = new Set<string>()
     for (const rule of rules) {
       for (const leaf of collectAtomLeaves(rule.condition)) {
-        existingSignatures.add(this.leafSignature(leaf.key, rule.phase, leaf.sideScope ?? rule.sideScope, leaf.params))
+        existingKeys.add(leaf.key)
       }
       for (const eff of rule.effects) {
         for (const leaf of collectAtomLeaves(eff)) {
-          existingSignatures.add(this.leafSignature(leaf.key, rule.phase, leaf.sideScope ?? rule.sideScope, leaf.params))
+          existingKeys.add(leaf.key)
         }
       }
     }
@@ -291,12 +304,12 @@ export class PlannerDispatcherMergeService {
     ): void => {
       if (!source) return
       for (const entry of source) {
+        // Issue #1443：dedup 用 key only（见 existingKeys 注释），不再用严格四元签名
+        if (existingKeys.has(entry.key)) continue
+        existingKeys.add(entry.key)
         const phase = liftPhase(entry.phase ?? defaultPhase)
         const sideScope = (entry.sideScope ?? 'both') as 'long' | 'short' | 'both'
         const params = entry.params ?? {}
-        const signature = this.leafSignature(entry.key, phase, sideScope, params)
-        if (existingSignatures.has(signature)) continue
-        existingSignatures.add(signature)
         liftIndex += 1
         lifted.push({
           // 审查问题 #1：atom key 含 `.`（如 `price.percent_change`），下游 projection

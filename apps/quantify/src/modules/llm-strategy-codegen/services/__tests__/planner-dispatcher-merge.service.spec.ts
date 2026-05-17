@@ -324,13 +324,13 @@ describe('PlannerDispatcherMergeService', () => {
     }
     const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
     const rules = (merged as { rules?: Array<{ id: string, phase: string, condition: { key?: string, params?: Record<string, unknown> } }> })?.rules
-    // 期望 2 条 rule：planner.entry（params 与 dispatcher.entry 相同，R-D superset 检查跳过）
-    //   + 1 条 lift（dispatcher.exit，planner 没产）。triggers 子桶不再额外 lift。
-    expect(rules).toHaveLength(2)
-    const entryRules = rules?.filter(r => r.phase === 'entry') ?? []
-    const exitRules = rules?.filter(r => r.phase === 'exit') ?? []
-    expect(entryRules).toHaveLength(1)  // 不应有重复 entry（旧实现可能产 2 条）
-    expect(exitRules).toHaveLength(1)   // 不应有重复 exit（旧实现可能产 2 条）
+    // Issue #1443：lift dedup 改为 key-only。planner.entry 已含 price.percent_change
+    //   key → dispatcher 同 key 任何 phase/sideScope/params 一律不 lift（避免重复 sibling）。
+    //   设计取舍：宁可丢 dispatcher.exit 边角识别，也不引入 sibling 重复噪音；用户期望
+    //   planner 自己产完整 entry + exit rules，dispatcher 仅作 atom-key 兜底。
+    expect(rules).toHaveLength(1)
+    expect(rules?.[0].phase).toBe('entry')
+    expect(rules?.[0].id).toBe('planner-entry')
   })
 
   it('R-B: dispatcher risk 桶 phase=risk 被 lift 时归位为 exit', () => {
@@ -394,7 +394,7 @@ describe('PlannerDispatcherMergeService', () => {
         effects: [],
       }],
     } as unknown as CodegenSemanticPatch
-    // Issue #1441：R-B 只收 atoms 总集；R-D indexBucket 仍收所有桶用于 override 索引
+    // Issue #1441：R-B 只收 atoms 总集；Issue #1443：lift dedup 改 key-only
     const dispatcher: CodegenSemanticPatch = {
       atoms: [{
         key: 'bollinger.touch_upper',
@@ -405,10 +405,11 @@ describe('PlannerDispatcherMergeService', () => {
     }
     const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
     const leaf = (merged as { rules?: Array<{ condition: { params?: Record<string, unknown> } }> })?.rules?.[0].condition
-    // 值冲突 → 保留 planner 版本 + dispatcher 通过 R-B lift 为新 rule
+    // 值冲突 → 保留 planner 版本（R-D strict superset 不命中）
     expect(leaf?.params).toEqual({ period: 20, stdDev: 2 })
-    // R-B 应该 lift dispatcher 的 (5,1) 版本为单独的 rule
-    expect((merged as { rules?: unknown[] })?.rules).toHaveLength(2)
+    // Issue #1443：planner 已含 bollinger.touch_upper key → dispatcher 同 key 不再 lift
+    //   （旧实现会 lift 第二条 (5,1) → 引入重复 sibling；新设计宁可丢边角识别也不重复）
+    expect((merged as { rules?: unknown[] })?.rules).toHaveLength(1)
   })
 
   it('R-D: dispatcher 无同 key entry → planner params 不变', () => {
