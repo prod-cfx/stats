@@ -1,8 +1,61 @@
 import { Injectable, Logger } from '@nestjs/common'
 
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
-import { collectAtomLeaves, type AtomExpr, type AtomExprAtom, type SemanticRule } from '../types/atom-expr'
+import { collectAtomLeaves, semanticRuleSchema, type AtomExpr, type AtomExprAtom, type SemanticRule } from '../types/atom-expr'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+
+/**
+ * Issue #1445：planner 输出 schema 硬校验结果。
+ *
+ * - `ok: true`：semanticPatch 符合 rules-first 表达式树契约
+ * - `ok: false`：列出全部违反项；`reminder` 是要拼回 user message 末尾的提示串，
+ *    供 conversation 层做单轮重试
+ */
+export type PlannerPatchValidation =
+  | { ok: true }
+  | { ok: false, reasons: PlannerSchemaRejectReason[], reminder: string }
+
+/**
+ * Issue #1445：planner schema reject 原因 label，按违反类型聚合，便于 metric 维度收敛。
+ * 与 `planner_schema_reject_total{reason}` 对接（当前为 logger.warn 结构化 stub）。
+ */
+export type PlannerSchemaRejectReason =
+  | 'rules_missing_or_empty'        // 无 rules[] 或为空数组
+  | 'legacy_flat_field'             // 出现旧 atoms/triggers/actions/risks/positionConstraints/orchestration 顶层字段
+  | 'rule_shape_invalid'            // rule 缺 id/phase/sideScope/condition/effects 或 zod 不通过
+  | 'evidence_text_missing'         // rule 或叶子 atom 缺 evidence.text
+  | 'evidence_text_not_substring'   // evidence.text 不是 user message 子串
+  | 'condition_leaf_bucket_invalid' // condition 内叶子来自非法 bucket
+  | 'effects_leaf_bucket_invalid'   // effects 内叶子来自非法 bucket
+
+/**
+ * Issue #1445：metric stage 区分初次校验 / 重试后校验。
+ * 用结构化 logger.warn 作 metric stub（参 #1446 PR #1449 的实现风格）。
+ */
+export type PlannerSchemaRejectStage = 'initial' | 'retry'
+
+const LEGACY_FLAT_FIELDS: ReadonlyArray<string> = [
+  'atoms',
+  'triggers',
+  'actions',
+  'risks',
+  'risk',
+  'positionConstraints',
+  'orchestration',
+] as const
+
+const CONDITION_ALLOWED_BUCKETS: ReadonlySet<string> = new Set([
+  'trigger',
+  'risk',           // risk 作 condition / predicate 谓词
+  'orchestration',  // orchestration-gate
+])
+
+const EFFECTS_ALLOWED_BUCKETS: ReadonlySet<string> = new Set([
+  'action',
+  'risk',              // risk 作 effect / 副作用
+  'positionConstraint',
+  'orchestration',     // orchestration-effect
+])
 
 /**
  * Issue #1443：always-on runtime gate atom 集合（与 semantic-state-projection.service.ts
@@ -31,6 +84,232 @@ const MERGE_ALWAYS_ON_ATOM_KEYS: ReadonlySet<string> = new Set([
 @Injectable()
 export class PlannerDispatcherMergeService {
   private readonly logger = new Logger(PlannerDispatcherMergeService.name)
+
+  /**
+   * Issue #1445：planner LLM raw `semanticPatch` 输出硬校验。
+   *
+   * 校验内容（按 Issue 验收标准）：
+   *   1. `semanticPatch.rules` 必填且为非空数组
+   *   2. 禁旧字段：`atoms / triggers / actions / risks / positionConstraints / orchestration`
+   *      出现在 `semanticPatch` 顶层一律 reject
+   *   3. 每条 rule 必有 `id / phase / sideScope / condition / effects`
+   *      （走 zod `semanticRuleSchema`，包含 AtomExpr 子树结构校验）
+   *   4. 每条 rule + 每个叶子 atom 必有 `evidence.text`，且为 user message 子串
+   *   5. condition 内叶子 atom 来自 trigger / risk / orchestration-gate 桶
+   *      effects 内叶子来自 action / risk / positionConstraint / orchestration 桶
+   *      （按 `ATOM_CONTRACT_REGISTRY[*].bucket` 派生；未注册 atom fail-open）
+   *
+   * 返回 `{ ok: false, reasons, reminder }` 时 reminder 拼回 user message 末尾供 planner 重试。
+   *
+   * @param plannerPatch planner LLM 原始 `semanticPatch` 字段（未经 normalize）；
+   *   接受 unknown 以容忍 LLM 偏离 schema
+   * @param userMessage 触发本次 planner 调用的 user message，evidence.text 必须是其子串
+   */
+  validatePlannerSemanticPatch(
+    plannerPatch: unknown,
+    userMessage: string,
+  ): PlannerPatchValidation {
+    const reasons = new Set<PlannerSchemaRejectReason>()
+    const detailNotes: string[] = []
+
+    if (!plannerPatch || typeof plannerPatch !== 'object' || Array.isArray(plannerPatch)) {
+      reasons.add('rules_missing_or_empty')
+      detailNotes.push('semanticPatch 必须是对象，且包含非空 rules[]')
+      return this.buildRejectResult(reasons, detailNotes)
+    }
+    const patch = plannerPatch as Record<string, unknown>
+
+    // 1) legacy flat field check
+    for (const legacy of LEGACY_FLAT_FIELDS) {
+      if (legacy in patch) {
+        reasons.add('legacy_flat_field')
+        detailNotes.push(`禁止使用旧扁平字段 semanticPatch.${legacy}`)
+      }
+    }
+
+    // 2) rules[] 必填且非空
+    const rules = patch.rules
+    if (!Array.isArray(rules) || rules.length === 0) {
+      reasons.add('rules_missing_or_empty')
+      detailNotes.push('semanticPatch.rules 必须是非空数组（rules-first 表达式树形态）')
+      return this.buildRejectResult(reasons, detailNotes)
+    }
+
+    // 3) 每条 rule shape + evidence + bucket 校验
+    const message = typeof userMessage === 'string' ? userMessage : ''
+    for (let i = 0; i < rules.length; i++) {
+      const rule = rules[i] as Record<string, unknown> | undefined
+      if (!rule || typeof rule !== 'object' || Array.isArray(rule)) {
+        reasons.add('rule_shape_invalid')
+        detailNotes.push(`rules[${i}] 不是对象`)
+        continue
+      }
+
+      const parsed = semanticRuleSchema.safeParse(rule)
+      if (!parsed.success) {
+        reasons.add('rule_shape_invalid')
+        const issuePath = parsed.error.issues[0]?.path?.join('.') ?? '<root>'
+        const code = parsed.error.issues[0]?.code ?? 'invalid'
+        detailNotes.push(`rules[${i}] 结构非法（${issuePath}: ${code}）；rule 必须含 id / phase / sideScope / condition / effects`)
+        continue
+      }
+      const semRule = parsed.data as SemanticRule
+
+      // rule.evidence.text
+      const ruleEvidence = (rule as { evidence?: { text?: unknown } }).evidence
+      const ruleEvidenceText = ruleEvidence?.text
+      if (typeof ruleEvidenceText !== 'string' || ruleEvidenceText.trim().length === 0) {
+        reasons.add('evidence_text_missing')
+        detailNotes.push(`rules[${i}].evidence.text 必填`)
+      }
+      else if (message && !message.includes(ruleEvidenceText.trim())) {
+        reasons.add('evidence_text_not_substring')
+        detailNotes.push(`rules[${i}].evidence.text 必须是 user message 子串`)
+      }
+
+      // condition / effects 叶子 atom 校验：bucket + evidence.text
+      this.collectLeafAtomViolations({
+        ruleIndex: i,
+        ruleRaw: rule,
+        semRule,
+        message,
+        reasons,
+        detailNotes,
+      })
+    }
+
+    if (reasons.size === 0) return { ok: true }
+    return this.buildRejectResult(reasons, detailNotes)
+  }
+
+  /**
+   * Issue #1445：metric stub。当前模块无 prom-client 注入，按 #1446 PR #1449 风格
+   * 用结构化 logger.warn 写入，scraper 可抓取。
+   * 后续接入正式 Counter 时替换为 `Counter.labels({ stage }).inc(value)`。
+   *
+   * TODO(#1445 follow-up): 替换为 prom-client Counter，与 codegen 模块整体 metric 接入合并。
+   */
+  emitPlannerSchemaRejectMetric(stage: PlannerSchemaRejectStage, value = 1): void {
+    this.logger.warn(`metric=planner_schema_reject_total stage=${stage} value=${value}`)
+  }
+
+  private buildRejectResult(
+    reasons: Set<PlannerSchemaRejectReason>,
+    detailNotes: ReadonlyArray<string>,
+  ): PlannerPatchValidation {
+    const reasonList = Array.from(reasons)
+    const reminder = [
+      '上一轮 planner 输出未通过 schema 硬校验，必须按 rules-first 表达式树形态重出：',
+      '- semanticPatch.rules[] 必填且非空',
+      '- 禁止使用旧扁平字段（atoms/triggers/actions/risks/positionConstraints/orchestration）',
+      '- 每条 rule 必须含 id / phase / sideScope / condition (AtomExpr) / effects (AtomExpr[])',
+      '- 每条 rule 与每个叶子 atom 必须有 evidence.text，且为 user message 子串',
+      '- condition 内叶子 atom 来自 trigger / risk(谓词) / orchestration-gate 桶；effects 内叶子来自 action / risk(副作用) / positionConstraint / orchestration-effect 桶',
+      '本次具体违反：',
+      ...detailNotes.slice(0, 12).map(s => `  · ${s}`),
+      '请重出合规 semanticPatch.rules[] 形态。',
+    ].join('\n')
+    return { ok: false, reasons: reasonList, reminder }
+  }
+
+  private collectLeafAtomViolations(args: {
+    ruleIndex: number
+    ruleRaw: Record<string, unknown>
+    semRule: SemanticRule
+    message: string
+    reasons: Set<PlannerSchemaRejectReason>
+    detailNotes: string[]
+  }): void {
+    const { ruleIndex, ruleRaw, semRule, message, reasons, detailNotes } = args
+
+    type ContractShape = { bucket?: string }
+    const getBucket = (key: string): string | undefined =>
+      (ATOM_CONTRACT_REGISTRY as Record<string, ContractShape | undefined>)[key]?.bucket
+
+    // condition leaves
+    const conditionLeaves = collectAtomLeaves(semRule.condition)
+    for (const leaf of conditionLeaves) {
+      const bucket = getBucket(leaf.key)
+      if (bucket !== undefined && !CONDITION_ALLOWED_BUCKETS.has(bucket)) {
+        reasons.add('condition_leaf_bucket_invalid')
+        detailNotes.push(`rules[${ruleIndex}].condition 含非法叶子 atom key=${leaf.key} bucket=${bucket}（应来自 trigger/risk/orchestration-gate 桶）`)
+      }
+    }
+
+    // effects leaves
+    for (let ei = 0; ei < semRule.effects.length; ei++) {
+      const effLeaves = collectAtomLeaves(semRule.effects[ei])
+      for (const leaf of effLeaves) {
+        const bucket = getBucket(leaf.key)
+        if (bucket !== undefined && !EFFECTS_ALLOWED_BUCKETS.has(bucket)) {
+          reasons.add('effects_leaf_bucket_invalid')
+          detailNotes.push(`rules[${ruleIndex}].effects[${ei}] 含非法叶子 atom key=${leaf.key} bucket=${bucket}（应来自 action/risk/positionConstraint/orchestration 桶）`)
+        }
+      }
+    }
+
+    // leaf evidence.text：planner 在 leaf atom 上若声明 evidence，则其 text 必为 user message 子串
+    // 注：leaf evidence 不强制必填（rule.evidence.text 已强制）；仅在出现时校验合规性
+    const rawCondition = (ruleRaw as { condition?: unknown }).condition
+    this.checkLeafEvidenceSubstring(rawCondition, message, `rules[${ruleIndex}].condition`, reasons, detailNotes)
+    const rawEffects = Array.isArray((ruleRaw as { effects?: unknown }).effects)
+      ? ((ruleRaw as { effects?: unknown[] }).effects ?? [])
+      : []
+    for (let ei = 0; ei < rawEffects.length; ei++) {
+      this.checkLeafEvidenceSubstring(rawEffects[ei], message, `rules[${ruleIndex}].effects[${ei}]`, reasons, detailNotes)
+    }
+  }
+
+  /**
+   * 递归检查 raw AtomExpr 树叶子 atom 的 evidence.text 子串约束。
+   * leaf.evidence 可选；提供时其 text 必须是 user message 子串（与 rule.evidence 一致）。
+   */
+  private checkLeafEvidenceSubstring(
+    node: unknown,
+    message: string,
+    pathPrefix: string,
+    reasons: Set<PlannerSchemaRejectReason>,
+    detailNotes: string[],
+  ): void {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return
+    const kind = (node as { kind?: unknown }).kind
+    if (kind === 'atom') {
+      const evidence = (node as { evidence?: { text?: unknown } }).evidence
+      if (evidence !== undefined && evidence !== null) {
+        const text = (evidence as { text?: unknown }).text
+        if (typeof text !== 'string' || text.trim().length === 0) {
+          reasons.add('evidence_text_missing')
+          detailNotes.push(`${pathPrefix} 叶子 atom 含 evidence 但 text 缺失/为空`)
+        }
+        else if (message && !message.includes(text.trim())) {
+          reasons.add('evidence_text_not_substring')
+          detailNotes.push(`${pathPrefix} 叶子 atom evidence.text 不是 user message 子串`)
+        }
+      }
+      return
+    }
+    if (kind === 'and' || kind === 'or') {
+      const children = (node as { children?: unknown[] }).children
+      if (Array.isArray(children)) {
+        for (let i = 0; i < children.length; i++) {
+          this.checkLeafEvidenceSubstring(children[i], message, `${pathPrefix}.children[${i}]`, reasons, detailNotes)
+        }
+      }
+      return
+    }
+    if (kind === 'not') {
+      this.checkLeafEvidenceSubstring((node as { child?: unknown }).child, message, `${pathPrefix}.child`, reasons, detailNotes)
+      return
+    }
+    if (kind === 'sequence') {
+      const steps = (node as { steps?: unknown[] }).steps
+      if (Array.isArray(steps)) {
+        for (let i = 0; i < steps.length; i++) {
+          this.checkLeafEvidenceSubstring(steps[i], message, `${pathPrefix}.steps[${i}]`, reasons, detailNotes)
+        }
+      }
+    }
+  }
 
   mergePlannerAndDispatcherPatches(
     plannerPatch: CodegenSemanticPatch | null | undefined,

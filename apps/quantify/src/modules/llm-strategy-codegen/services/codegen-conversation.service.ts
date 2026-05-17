@@ -9011,7 +9011,12 @@ export class CodegenConversationService {
       }
     }
 
-    const classifyOnce = async (extraSystemFeedback?: string) => {
+    // Issue #1445：schema reject 时通过这个 sentinel 把 reminder 透传给外层重试循环
+    type ClassifyOutcome =
+      | { kind: 'plan', plan: ConversationPlan }
+      | { kind: 'schema_reject', reminder: string, reasons: readonly string[] }
+
+    const classifyOnce = async (extraSystemFeedback?: string): Promise<ClassifyOutcome> => {
       const baseMessages: ChatMessage[] = [
         {
           role: 'system',
@@ -9042,11 +9047,14 @@ export class CodegenConversationService {
         const semanticPatch = this.extractSemanticPatchFromMessage(text)
         this.logPlannerFallback('empty_content')
         return {
-          related: true,
-          logicReady: false,
-          assistantPrompt: this.localizedText(locale, 'I understand the trading idea so far. Please provide the entry and exit trigger conditions, then I will organize the logic graph.', '我先理解到你的交易想法了。请补充入场和出场触发条件，我再整理成逻辑图。'),
-          ...(semanticPatch ? { semanticPatch } : {}),
-        } satisfies ConversationPlan
+          kind: 'plan',
+          plan: {
+            related: true,
+            logicReady: false,
+            assistantPrompt: this.localizedText(locale, 'I understand the trading idea so far. Please provide the entry and exit trigger conditions, then I will organize the logic graph.', '我先理解到你的交易想法了。请补充入场和出场触发条件，我再整理成逻辑图。'),
+            ...(semanticPatch ? { semanticPatch } : {}),
+          } satisfies ConversationPlan,
+        }
       }
 
       try {
@@ -9058,6 +9066,29 @@ export class CodegenConversationService {
             fields: schemaMismatchReasons.join(','),
           })
         }
+
+        // Issue #1445：planner 输出 raw semanticPatch 必须通过 rules-first 表达式树
+        //   schema 硬校验；不合规 → 上抛 schema_reject 由外层做单轮重试或 unsupportedFallback。
+        //   仅当 planner 实际给出了 semanticPatch（非 null/undefined）时校验；planner 完全没产
+        //   semanticPatch 的「沟通澄清」型轮次（如 logicReady=false 仅追问）不视为契约违反。
+        //
+        //   ⚠️ 顺序：硬校验必须在 #1395 quarantine 之前，使用 raw planner 原值。
+        //   否则 quarantine 会把 invalid rule 全剪光 → rules=[] → 误归因为
+        //   `rules_missing_or_empty` 而非真实的 `rule_shape_invalid`，reminder/metric 失真。
+        const rawPlannerSemanticPatch = parsed.semanticPatch ?? parsed.semanticUpdates
+        if (rawPlannerSemanticPatch !== undefined && rawPlannerSemanticPatch !== null) {
+          const schemaCheck = this.plannerDispatcherMerge.validatePlannerSemanticPatch(
+            rawPlannerSemanticPatch,
+            text,
+          )
+          if (schemaCheck.ok === false) {
+            this.logger.warn(
+              `[#1445] planner semanticPatch schema reject：reasons=${schemaCheck.reasons.join(',')}`,
+            )
+            return { kind: 'schema_reject', reminder: schemaCheck.reminder, reasons: schemaCheck.reasons }
+          }
+        }
+
         // Issue #1395：planner semanticPatch.rules[] 逐条 zod graceful parse
         //   - rules[] 中合法 rule 全保留；invalid 个体进 quarantine
         //   - AtomExpr 子树内单点错误剪枝保留 valid 兄弟（pruneAtomExprToValid）
@@ -9078,6 +9109,7 @@ export class CodegenConversationService {
           : (logicReady
               ? this.localizedText(locale, 'I have organized the strategy logic. Please confirm the logic graph.', '我已整理出策略逻辑，请确认逻辑图。')
               : this.localizedText(locale, 'I will keep refining the strategy logic. Please provide one key condition.', '我先继续完善策略逻辑，请补充一个关键条件。'))
+
         const plannerPatch = this.normalizeSemanticPatch(parsed.semanticPatch ?? parsed.semanticUpdates)
         // Issue #1383：planner JSON 成功也要并跑 dispatcher，
         //   把 positionConstraint / orchestration 桶 atom（grid.range_rebalance、
@@ -9088,25 +9120,54 @@ export class CodegenConversationService {
           dispatcherPatch ?? null,
         ) ?? undefined
         return {
-          related,
-          logicReady,
-          assistantPrompt,
-          ...(semanticPatch ? { semanticPatch } : {}),
-        } satisfies ConversationPlan
+          kind: 'plan',
+          plan: {
+            related,
+            logicReady,
+            assistantPrompt,
+            ...(semanticPatch ? { semanticPatch } : {}),
+          } satisfies ConversationPlan,
+        }
       } catch {
         const semanticPatch = this.extractSemanticPatchFromMessage(text)
         this.logPlannerFallback('invalid_json', { contentLength: content.length })
         return {
-          related: true,
-          logicReady: false,
-          assistantPrompt: this.localizedText(locale, 'I will keep refining the strategy logic. Please provide the entry and exit conditions.', '我先继续完善策略逻辑，请补充入场和出场条件。'),
-          ...(semanticPatch ? { semanticPatch } : {}),
-        } satisfies ConversationPlan
+          kind: 'plan',
+          plan: {
+            related: true,
+            logicReady: false,
+            assistantPrompt: this.localizedText(locale, 'I will keep refining the strategy logic. Please provide the entry and exit conditions.', '我先继续完善策略逻辑，请补充入场和出场条件。'),
+            ...(semanticPatch ? { semanticPatch } : {}),
+          } satisfies ConversationPlan,
+        }
       }
     }
 
+    // Issue #1445：把 ClassifyOutcome 解包为 ConversationPlan，
+    //   schema_reject → 单轮重试 planner（reminder 拼回 user message 末尾 / 作为
+    //   system feedback 追加）；重试仍 reject → unsupportedFallback。
+    const resolveOutcome = async (
+      outcome: ClassifyOutcome,
+      stage: 'initial' | 'retry',
+    ): Promise<ConversationPlan> => {
+      if (outcome.kind === 'plan') return outcome.plan
+      // schema reject
+      this.plannerDispatcherMerge.emitPlannerSchemaRejectMetric(stage, 1)
+      if (stage === 'initial') {
+        // 单轮重试：把 reminder 作为 extra system feedback 追加；planner 必须按
+        //   rules-first 形态重出。
+        const retryOutcome = await classifyOnce(outcome.reminder)
+        if (retryOutcome.kind === 'plan') return retryOutcome.plan
+        this.plannerDispatcherMerge.emitPlannerSchemaRejectMetric('retry', 1)
+        return this.buildPlannerSchemaUnsupportedFallback(locale, retryOutcome.reasons)
+      }
+      // 已是 retry 仍 reject → unsupportedFallback
+      return this.buildPlannerSchemaUnsupportedFallback(locale, outcome.reasons)
+    }
+
     try {
-      return await classifyOnce()
+      const outcome = await classifyOnce()
+      return await resolveOutcome(outcome, 'initial')
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error)
       const nonRetryableModelError = /model\s+not\s+exist|model.*not.*found/i.test(messageText)
@@ -9124,7 +9185,11 @@ export class CodegenConversationService {
         error: this.summarizePlannerError(error),
       })
       try {
-        return await classifyOnce()
+        const outcome = await classifyOnce()
+        // Issue #1445：transport-retry 后再走 schema 校验，必须以 'retry' stage 解析；
+        //   否则 retry 阶段又触发 schema-retry，最坏可达 3 次 LLM 调用，超出「单轮重试」预算。
+        //   stage='retry' 时若 schema_reject 直接走 unsupportedFallback，不再叠加 LLM 调用。
+        return await resolveOutcome(outcome, 'retry')
       } catch (retryError) {
         const semanticPatch = this.extractSemanticPatchFromMessage(text)
         this.logPlannerFallback('transport_failure_retry_exhausted', {
@@ -9137,6 +9202,27 @@ export class CodegenConversationService {
           ...(semanticPatch ? { semanticPatch } : {}),
         }
       }
+    }
+  }
+
+  /**
+   * Issue #1445：planner schema reject 经单轮重试仍失败 → 返回 unsupportedFallback plan。
+   * 不带 semanticPatch（拒绝把不合规 raw 喂给下游 merge / projection / builder）；
+   * 提示用户重述。
+   */
+  private buildPlannerSchemaUnsupportedFallback(
+    locale: CodegenConversationLocale,
+    reasons: ReadonlyArray<string>,
+  ): ConversationPlan {
+    this.logPlannerFallback('schema_reject_unsupported', { reasons: reasons.join(',') })
+    return {
+      related: true,
+      logicReady: false,
+      assistantPrompt: this.localizedText(
+        locale,
+        'I could not parse the strategy logic into a supported rules-first form. Please re-describe the entry / exit triggers and risk constraints more explicitly.',
+        '策略表达暂未识别成合规的 rules-first 规则形态，请用更明确的入场 / 出场触发条件与风控约束重新描述。',
+      ),
     }
   }
 
@@ -9305,7 +9391,7 @@ export class CodegenConversationService {
   }
 
   private logPlannerFallback(
-    reason: 'empty_content' | 'schema_mismatch' | 'invalid_json' | 'model_not_found' | 'transport_failure_retrying' | 'transport_failure_retry_exhausted',
+    reason: 'empty_content' | 'schema_mismatch' | 'invalid_json' | 'model_not_found' | 'transport_failure_retrying' | 'transport_failure_retry_exhausted' | 'schema_reject_unsupported',
     context: Record<string, string | number | boolean | undefined> = {},
   ): void {
     const contextSuffix = Object.entries(context)
