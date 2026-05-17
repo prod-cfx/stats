@@ -83,9 +83,9 @@ export function TelegramLoginButtons({
     onAvailabilityChange?.({ webAvailable, desktopAvailable })
   }, [desktopAvailable, onAvailabilityChange, webAvailable])
 
-  const buttonClassName = 'flex h-10 items-center justify-center gap-2 rounded-full border border-violet-500/30 bg-transparent px-4 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-violet-500/5 disabled:opacity-50'
-  const compactAvailableButtonClassName = 'inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-violet-500/30 bg-transparent px-3 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-violet-500/5 disabled:opacity-50'
-  const compactUnavailableButtonClassName = 'inline-flex h-8 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-surface-hover)] disabled:opacity-50'
+  const buttonClassName = 'flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-violet-500/30 bg-transparent px-4 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] transition-colors duration-150 hover:bg-violet-500/5 disabled:cursor-not-allowed disabled:opacity-50'
+  const compactAvailableButtonClassName = 'inline-flex h-8 items-center justify-center gap-2.5 rounded-full border border-violet-500/30 bg-transparent px-3 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text-strong)] transition hover:bg-violet-500/5 disabled:opacity-50'
+  const compactUnavailableButtonClassName = 'inline-flex h-8 items-center justify-center gap-2.5 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-xs !font-semibold !leading-5 text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-surface-hover)] disabled:opacity-50'
   const showBotDomainHint = Boolean(statusMessage && /bot domain invalid/i.test(statusMessage))
   const loginBetaCode = intent === 'login' ? betaCode?.trim() : undefined
   const webButtonClassName = variant === 'compact' ? compactUnavailableButtonClassName : buttonClassName
@@ -94,8 +94,8 @@ export function TelegramLoginButtons({
   const desktopButtonText = variant === 'compact' ? t('auth.telegramDesktopCompact') : t('auth.telegramDesktop')
 
   return (
-    <div className={variant === 'compact' ? 'space-y-2' : 'space-y-3'}>
-      <div className={variant === 'compact' ? 'flex flex-wrap justify-end gap-2' : 'grid grid-cols-1 gap-3 sm:grid-cols-2'}>
+    <div className={variant === 'compact' ? 'space-y-2' : 'space-y-2.5'}>
+      <div className={variant === 'compact' ? 'flex flex-wrap justify-end gap-2' : 'grid grid-cols-1 gap-2.5'}>
         <button
           type="button"
           disabled={webBusy}
@@ -120,6 +120,7 @@ export function TelegramLoginButtons({
           }}
           className={webButtonClassName}
         >
+          <Send className="h-4 w-4 text-violet-500 dark:text-violet-400" />
           {webButtonText}
         </button>
 

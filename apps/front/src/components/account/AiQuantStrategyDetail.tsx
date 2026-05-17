@@ -103,8 +103,8 @@ function formatOptionalPrice(value: number | null | undefined) {
 
 function formatCompactId(value: string | null | undefined) {
   if (!value) return '--'
-  if (value.length <= 24) return value
-  return `${value.slice(0, 12)}...${value.slice(-8)}`
+  if (value.length <= 16) return value
+  return `${value.slice(0, 6)}...${value.slice(-6)}`
 }
 
 function formatPercentValue(value: number | null | undefined) {

@@ -237,9 +237,7 @@ export function AiQuantStrategyPrimarySummary({
       {entries.map((entry, idx) => (
         <div key={`${keyPrefix}-param-${idx}`} className="contents">
           {idx > 0 && <span>/</span>}
-          <span className={idx === 0 ? 'font-medium text-[color:var(--cf-text)]' : undefined}>
-            {entry}
-          </span>
+          <span>{entry}</span>
         </div>
       ))}
     </>
@@ -586,7 +584,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                     <Link href={`/${lng}/account/ai-quant/strategy/${item.id}`} className="block min-w-0 pr-10 sm:pr-0">
                       <div className="min-w-0 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="min-w-0 break-words text-sm font-normal leading-[22px] text-[color:var(--cf-text-strong)] transition-colors group-hover:text-primary">
+                          <p className="min-w-0 break-words !text-[13px] !font-semibold !leading-5 text-[color:var(--cf-text-strong)] transition-colors group-hover:text-primary">
                             {item.name}
                           </p>
                           <div className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium leading-4 ${statusConfig.className}`}>

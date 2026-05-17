@@ -9,6 +9,7 @@ export interface TelegramAuthInfo {
 export interface AuthSession {
   userId: string
   email?: string | null
+  avatarUrl?: string | null
   telegram?: TelegramAuthInfo | null
   loginMethods: AuthLoginMethod[]
   accessToken: string

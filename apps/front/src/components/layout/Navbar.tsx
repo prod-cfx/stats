@@ -1,10 +1,11 @@
 'use client'
 
-import { Bell, Bot, ChevronDown, ChevronRight, FileText, Github, LogOut, Menu, Search, Send, Settings, X } from 'lucide-react'
+import { Bell, Bot, ChevronDown, ChevronRight, FileText, Github, LogIn, LogOut, Menu, Search, Send, Settings, X } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { UserAvatar } from '@/components/account/UserAvatar'
 import { CoinfluxMark } from '@/components/ui/CoinfluxMark'
 import { useToast } from '@/components/ui/toast'
 import { useWhaleNotificationInbox } from '@/features/whale-notification/hooks/useWhaleNotificationInbox'
@@ -107,9 +108,6 @@ export const Navbar = () => {
   ]
 
   const accountDisplayName = session?.email || session?.telegram?.username || session?.userId || ''
-  const accountInitials = accountDisplayName.startsWith('@')
-    ? accountDisplayName.slice(1, 3).toUpperCase()
-    : accountDisplayName.slice(0, 2).toUpperCase()
   const accountIdLabel = session
     ? `id:${session.userId.length <= 14 ? session.userId : `${session.userId.slice(0, 5)}...${session.userId.slice(-6)}`}`
     : ''
@@ -601,20 +599,26 @@ export const Navbar = () => {
               <button
                 type="button"
                 onClick={() => setAccountMenuOpen(prev => !prev)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold text-[color:var(--cf-text-strong)] transition-opacity hover:opacity-90"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full transition-opacity hover:opacity-90"
                 aria-label={t('account.settings')}
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-xs font-semibold text-[color:var(--cf-text-strong)]">
-                  {accountInitials}
-                </span>
+                <UserAvatar
+                  userId={session.userId}
+                  name={accountDisplayName}
+                  src={session.avatarUrl}
+                  size="sm"
+                />
               </button>
 
               {accountMenuOpen && (
                 <div className="absolute top-[calc(100%+0.65rem)] right-0 z-50 w-[min(15rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm">
                   <div className="flex items-center gap-2.5 border-b border-[color:var(--cf-border)] px-3.5 py-3">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-xs font-semibold text-[color:var(--cf-text-strong)]">
-                      {accountInitials}
-                    </span>
+                    <UserAvatar
+                      userId={session.userId}
+                      name={accountDisplayName}
+                      src={session.avatarUrl}
+                      size="sm"
+                    />
                     <div className="min-w-0">
                       <div className="truncate !text-[13px] !font-semibold !leading-5 text-[color:var(--cf-text-strong)]">
                         {accountDisplayName}
@@ -627,7 +631,7 @@ export const Navbar = () => {
                   <Link
                     href={withLng('/account?tab=settings')}
                     onClick={() => setAccountMenuOpen(false)}
-                    className="flex items-center gap-2.5 border-b border-[color:var(--cf-border)] px-3.5 py-2.5 !text-[13px] !font-semibold !leading-5 text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
+                    className="flex items-center gap-2.5 px-3.5 py-2.5 !text-[13px] !font-semibold !leading-5 text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
                   >
                     <Settings className="h-4 w-4 text-[color:var(--cf-muted)]" />
                     {t('account.settings')}
@@ -635,7 +639,7 @@ export const Navbar = () => {
                   <Link
                     href={withLng('/account?tab=ai-quant')}
                     onClick={() => setAccountMenuOpen(false)}
-                    className="flex items-center gap-2.5 border-b border-[color:var(--cf-border)] px-3.5 py-2.5 !text-[13px] !font-semibold !leading-5 text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
+                    className="flex items-center gap-2.5 px-3.5 py-2.5 !text-[13px] !font-semibold !leading-5 text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
                   >
                     <Bot className="h-4 w-4 text-[color:var(--cf-muted)]" />
                     {t('nav.aiQuant')}
@@ -657,8 +661,9 @@ export const Navbar = () => {
           ) : (
             <Link
               href={withLng('/auth/login')}
-              className="from-primary to-secondary shadow-primary/15 flex min-h-9 items-center rounded-full bg-gradient-to-r px-3.5 !text-xs !font-semibold !leading-5 whitespace-nowrap text-white shadow-md transition-opacity hover:opacity-90 md:min-h-8"
+              className="inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg bg-gradient-to-r from-primary to-secondary px-3 !text-xs !font-semibold !leading-5 whitespace-nowrap !text-white shadow-sm transition-opacity duration-150 hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary md:min-h-8"
             >
+              <LogIn className="h-3.5 w-3.5 !text-white" aria-hidden="true" />
               {t('nav.login')}
             </Link>
           ))}

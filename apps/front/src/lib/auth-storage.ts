@@ -28,6 +28,7 @@ export function buildSession(response: AuthResponseDto): AuthSession {
   return {
     userId: response.user.id,
     email: response.user.email,
+    avatarUrl: response.user.avatarUrl ?? null,
     telegram: null,
     loginMethods: ['email'],
     accessToken,

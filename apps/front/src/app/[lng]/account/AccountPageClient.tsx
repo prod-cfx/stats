@@ -1,11 +1,12 @@
 'use client'
 
-import { Copy, LogOut, Mail, Send } from 'lucide-react'
+import { Copy, Eye, EyeOff, LogOut, Mail, Send } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AiQuantSection } from '@/components/account/AiQuantSection'
 import { ExchangeApiSection } from '@/components/account/ExchangeApiSection'
+import { UserAvatar } from '@/components/account/UserAvatar'
 import { useToast } from '@/components/ui/toast'
 import { TelegramLoginButtons } from '@/features/auth/components/TelegramLoginButtons'
 import { useAuth } from '@/hooks/use-auth'
@@ -20,13 +21,6 @@ function maskEmail(email: string) {
 function shortenUserId(userId: string) {
   if (userId.length <= 14) return userId
   return `${userId.slice(0, 5)}...${userId.slice(-6)}`
-}
-
-function getAccountInitials(label: string) {
-  const normalized = label.trim()
-  if (!normalized) return '?'
-  if (normalized.startsWith('@')) return normalized.slice(1, 3).toUpperCase()
-  return normalized.slice(0, 2).toUpperCase()
 }
 
 type AccountTab = 'settings' | 'ai-quant'
@@ -44,6 +38,7 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
   const [bindEmailValue, setBindEmailValue] = useState('')
   const [bindEmailCode, setBindEmailCode] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showAccountEmail, setShowAccountEmail] = useState(false)
   const [telegramAvailability, setTelegramAvailability] = useState({
     webAvailable: false,
     desktopAvailable: false,
@@ -64,7 +59,7 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
   }
 
   const accountName = session.email ? maskEmail(session.email) : session.telegram?.username ? `@${session.telegram.username}` : shortenUserId(session.userId)
-  const accountInitials = getAccountInitials(accountName)
+  const visibleAccountName = session.email && showAccountEmail ? session.email : accountName
   const accountIdLabel = `id:${shortenUserId(session.userId)}`
 
   const onBindEmail = async () => {
@@ -136,18 +131,35 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
       {currentTab === 'settings' && (
         <div className="mx-auto flex w-full max-w-[920px] flex-col gap-6">
           <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="flex min-w-0 items-center gap-4">
-              <div
-                aria-hidden="true"
-                data-testid="account-local-avatar"
-                className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-base font-semibold text-[color:var(--cf-text-strong)]"
-              >
-                {accountInitials}
-              </div>
+            <div className="flex min-w-0 items-center gap-4">
+              <UserAvatar
+                userId={session.userId}
+                name={accountName}
+                src={session.avatarUrl}
+                size="lg"
+                testId="account-local-avatar"
+              />
               <div className="min-w-0">
-                <h1 className="truncate text-lg font-bold text-[color:var(--cf-text-strong)]">
-                  {accountName}
-                </h1>
+                <div className="flex min-w-0 items-center gap-2">
+                  <h1 className="truncate !text-base !font-semibold !leading-6 text-[color:var(--cf-text-strong)]">
+                    {visibleAccountName}
+                  </h1>
+                  {session.email && (
+                    <button
+                      type="button"
+                      aria-label={showAccountEmail
+                        ? t('account.hideEmail', { defaultValue: '隐藏邮箱' })
+                        : t('account.showEmail', { defaultValue: '显示完整邮箱' })}
+                      title={showAccountEmail
+                        ? t('account.hideEmail', { defaultValue: '隐藏邮箱' })
+                        : t('account.showEmail', { defaultValue: '显示完整邮箱' })}
+                      onClick={() => setShowAccountEmail(previous => !previous)}
+                      className="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] transition-colors duration-150 hover:border-primary/40 hover:bg-[color:var(--cf-surface-hover)] hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                    >
+                      {showAccountEmail ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  )}
+                </div>
                 <div className="mt-1.5 flex items-center gap-2 text-xs text-[color:var(--cf-muted)]">
                   <span className="break-all font-mono">{accountIdLabel}</span>
                   <button

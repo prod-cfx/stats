@@ -38,9 +38,11 @@ jest.mock('react-i18next', () => ({
     t: (key: string) => {
       const translations: Record<string, string> = {
         'account.accountInfo': 'Account',
+        'account.hideEmail': 'Hide email',
         'account.logout': 'Logout',
         'account.mainAccount': 'Main account',
         'account.settings': 'Settings',
+        'account.showEmail': 'Show email',
         'account.telegramDesktopAvailable': 'Desktop available',
         'account.telegramLogin': 'Telegram Login',
         'account.title': 'Account Center',
@@ -133,7 +135,7 @@ describe('AccountPageClient', () => {
     const avatar = container.querySelector('[data-testid="account-local-avatar"]')
 
     expect(container.querySelector('img[src*="api.dicebear.com"]')).toBeNull()
-    expect(avatar?.textContent).toBe('15')
+    expect(avatar?.querySelectorAll('span[aria-hidden="true"] > span')).toHaveLength(25)
     expect(avatar?.className).toContain('rounded-full')
   })
 
@@ -146,6 +148,31 @@ describe('AccountPageClient', () => {
 
     expect(heading?.textContent).toBe('15***@qq.com')
     expect(heading?.textContent).not.toContain('Account Center')
+  })
+
+  it('keeps email masked by default and toggles full email with one reveal button', async () => {
+    await act(async () => {
+      root?.render(<AccountPageClient lng="zh" />)
+    })
+
+    const heading = container.querySelector('h1')
+    const showEmailButton = container.querySelector('button[aria-label="Show email"]') as HTMLButtonElement
+
+    expect(heading?.textContent).toBe('15***@qq.com')
+    expect(container.textContent).not.toContain('15demo@qq.com')
+    expect(showEmailButton).not.toBeNull()
+
+    await act(async () => {
+      showEmailButton.click()
+    })
+
+    expect(heading?.textContent).toBe('15demo@qq.com')
+
+    await act(async () => {
+      ;(container.querySelector('button[aria-label="Hide email"]') as HTMLButtonElement).click()
+    })
+
+    expect(heading?.textContent).toBe('15***@qq.com')
   })
 
   it('right-aligns account actions on mobile while preserving desktop layout', async () => {

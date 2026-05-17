@@ -52,8 +52,8 @@ export function LoginPageClient({ lng }: LoginPageClientProps) {
   if (isAuthenticated) return null
 
   return (
-    <main className="flex flex-1 items-center justify-center px-4 py-8 md:px-8">
-      <div className="w-full max-w-[520px] space-y-5 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 shadow-xl md:px-6 md:py-5">
+    <main className="flex flex-1 items-center justify-center px-4 py-6 md:px-8">
+      <div className="w-full max-w-[420px] space-y-4 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 shadow-sm md:px-6 md:py-5">
         <div className="space-y-1">
           <h1 className="!text-base !font-semibold !leading-6 text-[color:var(--cf-text-strong)]">
             {t('nav.login')}
