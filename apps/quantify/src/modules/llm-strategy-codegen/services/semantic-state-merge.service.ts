@@ -13,7 +13,7 @@ import type {
   SemanticTriggerState,
 } from '../types/semantic-state'
 import { normalizeRiskSemantics } from './semantic-state-normalization'
-import type { SemanticRule } from '../types/atom-expr'
+import { collectAtomLeaves, type SemanticRule } from '../types/atom-expr'
 
 // #1383 Lane B：所有 atom bucket entry 必须实现的最小 identity shape，
 // 供 dedupeByAtomIdentity 用 (key, phase, stableParamsHash, openSlots signature) 折叠重复条目。
@@ -1161,7 +1161,55 @@ export class SemanticStateMergeService {
       // 后入者（derived）覆盖前入者（persisted）
       byShape.set(sig, rule)
     }
-    return shapeOrder.map(s => byShape.get(s)!)
+    const afterShapePass = shapeOrder.map(s => byShape.get(s)!)
+
+    // ── Pass 3：风控类 rule 归一化折叠（Issue #1443 多轮 SL/TP 翻倍真因） ──
+    //   用户复测：turn 1（现货）planner 产 risk rule { sideScope:'long', effects:[close_long] }；
+    //   turn 2（选「合约 perp」）planner 重产同语义 risk rule 但 { sideScope:'both',
+    //   effects:[close_long, close_short] } —— Pass 2 的 shape 含 sideScope 与 effects，
+    //   两者签名不同 → 两条都留 → UI「止损×2 / 止盈×2」。
+    //
+    //   通用判定：风控类 rule = condition 所有 leaf 的 contract.bucket === 'risk'
+    //   （`risk.stop_loss_pct` / `risk.take_profit_pct` / `risk.trailing_stop` 等）。
+    //   这类 rule 的"用户意图身份"完全由 condition（阈值 + basis）决定，与 sideScope
+    //   或具体 close action 无关——SL/TP 触发后的平仓动作是市场类型派生的，不该让
+    //   语义上同一条 SL 因为派生侧 close action 多寡而分裂成两条。
+    //
+    //   归一化 sig = `risk:${phase}|${condHash}`，同 sig 留后入者（derived 覆盖 persisted），
+    //   与 Pass 2 derived-prevails 语义一致。
+    //
+    //   守门：
+    //   - condition 含任何非 risk-bucket leaf（如 AND(price.above, risk.stop_loss)）→ 不归一化
+    //     （混合 condition 语义复杂，保守保留 Pass 2 行为）
+    //   - condition leaf bucket 在 registry 缺失 → fail-open 不归一化（避免新 atom 未注册时
+    //     被错合并）
+    const conditionAllRiskBucket = (rule: SemanticRule): boolean => {
+      const leaves = collectAtomLeaves(rule.condition)
+      if (leaves.length === 0) return false
+      for (const leaf of leaves) {
+        const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string } | undefined>)[leaf.key]
+        if (!contract || contract.bucket !== 'risk') return false
+      }
+      return true
+    }
+    const byRiskSig = new Map<string, SemanticRule>()
+    const riskOrder: string[] = []
+    const nonRiskRules: SemanticRule[] = []
+    for (const rule of afterShapePass) {
+      if (!conditionAllRiskBucket(rule)) {
+        nonRiskRules.push(rule)
+        continue
+      }
+      const condHash = this.stableParamsHash(rule.condition as unknown as Record<string, unknown>)
+      const sig = `risk:${rule.phase}|${condHash}`
+      if (!byRiskSig.has(sig)) riskOrder.push(sig)
+      byRiskSig.set(sig, rule)
+    }
+    // 保持原顺序：风控 rule 在出现位置插入归一化后的代表（按 riskOrder 一致取首次出现位置）。
+    // 实际渲染顺序对 UI 影响有限（projection 层会按 phase 重排），这里简化为「先非风控，
+    // 后归一化风控」——既往 Pass 2 输出顺序也不保证严格稳定。
+    if (riskOrder.length === 0) return afterShapePass
+    return [...nonRiskRules, ...riskOrder.map(s => byRiskSig.get(s)!)]
   }
 
   private computeAtomIdentityKey(entry: AtomLikeEntry): string {
