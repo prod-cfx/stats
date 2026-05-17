@@ -415,11 +415,28 @@ export class PlannerDispatcherMergeService {
     //   造成 UI 出现「入场×2 / 出场×2 / 入场(双向)：开多」等重复孤立 rule。
     //
     // 通用方案：只走 atoms 总集 → 重复源头消除；triggers/risk 子桶 lift 移除。
-    //   action atom（action.open_long / close_long）在 atoms 中也存在，但其 atomBucket
-    //   归属 `action` → 走 dispatchAtomsByContractBucket 时被分流为 effects；本 lift
-    //   pass 应只为 trigger / risk-as-gate / orchestration leaf 服务，故下文 phase
-    //   推断默认 'entry'，action 类 atom 通过下游 effect-binding 链路绑定（不在本 PR 范围）。
-    collectBucket(dispatcher.atoms, 'entry')
+    //
+    // Issue #1443 用户实测复测真因：dispatcher.atoms 是总集（含 trigger / action /
+    //   risk / positionConstraint / orchestration 全部 bucket 的 atom）。一刀切 lift
+    //   atoms 总集会把 action atom（如 action.close_long）也作为 single-leaf rule.
+    //   condition——渲染时 UI 显示「出场：平多」noise（condition 被错渲染成 action 名），
+    //   且 always-on filter（condition!=execution.on_start）不命中 → 保留 noise。
+    //
+    // 通用过滤：lift 时按 atom contract.bucket 过滤——只 lift bucket ∈ {trigger, risk}
+    //   的真 condition 形态 atom。action / positionConstraint / orchestration 类
+    //   atom 语义上不是 condition leaf，跳过 lift（action 走 dispatcher.actions 桶
+    //   下游 effect-binding 链路，本 lift pass 不重复处理）。
+    //   未注册 atom（contract miss）→ fail-open 允许 lift（与既有 unknown atom 兜底
+    //   一致；避免新 atom 未注册时静默丢失）。
+    type ContractShape = { bucket?: string }
+    const LIFT_ALLOWED_BUCKETS: ReadonlySet<string> = new Set(['trigger', 'risk'])
+    const isLiftableByBucket = (atomKey: string): boolean => {
+      const bucket = (ATOM_CONTRACT_REGISTRY as Record<string, ContractShape | undefined>)[atomKey]?.bucket
+      if (bucket === undefined) return true  // 未注册 fail-open
+      return LIFT_ALLOWED_BUCKETS.has(bucket)
+    }
+    const liftableAtoms = (dispatcher.atoms ?? []).filter(a => isLiftableByBucket(a.key))
+    collectBucket(liftableAtoms, 'entry')
 
     if (lifted.length > 0) {
       merged.rules = [...rules, ...lifted]

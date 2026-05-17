@@ -148,13 +148,13 @@ describe('PlannerDispatcherMergeService', () => {
     } as unknown as CodegenSemanticPatch
     const dispatcher: CodegenSemanticPatch = { atoms: [{ key: 'grid.range_rebalance' }] }
     const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
-    // R-B 升级（审查问题 #5）：dispatcher.atoms 现在也参与 lift，所以 rules 长度=2
-    //   （planner 原 1 条 + dispatcher.atoms[grid.range_rebalance] lift 1 条）
+    // Issue #1443 真因复测：dispatcher.atoms 现在按 bucket 过滤 lift——
+    //   grid.range_rebalance.bucket='positionConstraint' 不在 LIFT_ALLOWED_BUCKETS
+    //   （只允 trigger/risk），不 lift。planner 原 rule 保留。atoms 桶仍透传。
     const rules = (merged as { rules?: Array<{ id?: string }> })?.rules
-    expect(rules).toHaveLength(2)
+    expect(rules).toHaveLength(1)
     expect(rules?.[0].id).toBe('r1')           // planner 原 rule 保留
-    expect(rules?.[1].id).toMatch(/^dispatcher-lift-/u) // dispatcher.atoms lifted
-    expect(merged?.atoms).toHaveLength(1)       // atoms 桶仍透传
+    expect(merged?.atoms).toHaveLength(1)       // atoms 桶仍透传（dispatch 链路用）
   })
 
   it('Wave 4: planner rules wins over dispatcher rules (planner is authoritative for tree)', () => {
@@ -274,6 +274,38 @@ describe('PlannerDispatcherMergeService', () => {
   //   这种"启动即平仓"无条件兜底 rule（用户没明确说），让 UI 出现「出场：平多」无条件
   //   动作的噪音。merge 阶段整条丢弃。risk effects 允许 always-on（"挂止损"合理）。
   // ───────────────────────────────────────────────────────────────────────────
+  it('Issue #1443 真因复测：dispatcher.atoms 含 action bucket atom（如 close_long）→ 不 lift（避免 "出场：平多" noise）', () => {
+    // 用户实测复测：planner 完整产 entry rule + risk rules，但 dispatcher 把"卖出"
+    //   抽到 action.close_long 进 patch.atoms 总集。R-B 一刀切 lift 会把 close_long
+    //   作为 single-leaf rule，UI 渲染 "出场：平多"（condition 被错渲染成 action 名）。
+    //   按 contract.bucket 过滤后 action 类不 lift。
+    const planner = {
+      rules: [{
+        id: 'planner-r1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down', valuePct: -1 } },
+        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher: CodegenSemanticPatch = {
+      atoms: [
+        // action bucket atom → 应被过滤不 lift
+        { key: 'action.close_long', phase: 'exit', sideScope: 'long', params: {} },
+        // 真 trigger atom → 允许 lift
+        { key: 'bollinger.touch_lower', phase: 'entry', sideScope: 'long', params: { period: 20, stdDev: 2 } },
+      ],
+    }
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
+    const rules = (merged as { rules?: Array<{ id: string, condition: { key?: string } }> })?.rules ?? []
+    // 应只有 2 条：planner 原 entry + lift bollinger.touch_lower
+    expect(rules).toHaveLength(2)
+    // 确认 action.close_long 没被 lift
+    expect(rules.some(r => r.condition.key === 'action.close_long')).toBe(false)
+    // 确认 bollinger.touch_lower 被 lift
+    expect(rules.some(r => r.condition.key === 'bollinger.touch_lower')).toBe(true)
+  })
+
   it('Issue #1443: always-on condition + action effects → 整条 rule 丢弃', () => {
     const planner = {
       rules: [
