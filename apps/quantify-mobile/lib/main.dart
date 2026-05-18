@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'data/auth/session_controller.dart';
+import 'l10n/app_localizations.dart';
 import 'router/app_router.dart';
 import 'theme/theme_data.dart';
 import 'theme/theme_notifier.dart';
@@ -80,6 +81,10 @@ class _QuantifyMobileAppState extends ConsumerState<QuantifyMobileApp> {
       title: 'Quantify',
       theme: buildQzThemeData(theme),
       routerConfig: _router,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      // 当前硬锁中文；后续支持系统语言跟随时移除此行（tracking #1515 follow-up）
+      locale: const Locale('zh'),
     );
   }
 }

@@ -1,0 +1,7 @@
+{
+  "@@locale": "zh",
+  "appTitle": "Quantify",
+  "@appTitle": {
+    "description": "应用标题，用作 PR1 smoke test，PR3 起按页面/作用域扩展"
+  }
+}
