@@ -147,3 +147,76 @@ describe('Issue #1494 — core condition atom emit shape snapshot', () => {
     })).toMatchSnapshot()
   })
 })
+
+// Issue #1498 S1 — condition.sequence 五个 sequenceKind 分支 snapshot 守门
+describe('Issue #1498 S1 — condition.sequence emit shape snapshot', () => {
+  it('sequenceKind=pullback_reclaim (ma period=20)', () => {
+    expect(projectIr({
+      kind: 'atom',
+      key: 'condition.sequence',
+      params: { sequenceKind: 'pullback_reclaim', 'reference.indicator': 'ma', 'reference.period': 20 },
+    })).toMatchSnapshot()
+  })
+
+  it('sequenceKind=rsi_reclaim (period=14 threshold=30)', () => {
+    expect(projectIr({
+      kind: 'atom',
+      key: 'condition.sequence',
+      params: { sequenceKind: 'rsi_reclaim', period: 14, threshold: 30 },
+    })).toMatchSnapshot()
+  })
+
+  it('sequenceKind=consecutive_body (count=3 direction=up)', () => {
+    expect(projectIr({
+      kind: 'atom',
+      key: 'condition.sequence',
+      params: { sequenceKind: 'consecutive_body', count: 3, direction: 'up' },
+    })).toMatchSnapshot()
+  })
+
+  it('sequenceKind=breakout_then_retest (direction=up lookback=24)', () => {
+    expect(projectIr({
+      kind: 'atom',
+      key: 'condition.sequence',
+      params: { sequenceKind: 'breakout_then_retest', direction: 'up', lookbackBars: 24 },
+    })).toMatchSnapshot()
+  })
+
+  it('sequenceKind=pattern_then_volume_spike (direction=up lookback=20)', () => {
+    expect(projectIr({
+      kind: 'atom',
+      key: 'condition.sequence',
+      params: { sequenceKind: 'pattern_then_volume_spike', direction: 'up', lookbackBars: 20 },
+    })).toMatchSnapshot()
+  })
+})
+
+// Issue #1498 S2 — price.previous_extrema_retest 两个组合 snapshot 守门
+describe('Issue #1498 S2 — price.previous_extrema_retest emit shape snapshot', () => {
+  it('direction=up extremaType=high memoryKey 显式', () => {
+    expect(projectIr({
+      kind: 'atom',
+      key: 'price.previous_extrema_retest',
+      params: {
+        extremaType: 'high',
+        retestKind: 'not_break',
+        lookbackBars: 24,
+        memoryKey: 'breakout_high_24',
+      },
+    })).toMatchSnapshot()
+  })
+
+  it('direction=down extremaType=low memoryKey 默认 auto', () => {
+    expect(projectIr({
+      kind: 'atom',
+      key: 'price.previous_extrema_retest',
+      params: {
+        extremaType: 'low',
+        retestKind: 'not_break',
+        lookbackBars: 24,
+        memoryKey: 'auto',
+      },
+    })).toMatchSnapshot()
+  })
+})
+

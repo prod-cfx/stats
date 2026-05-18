@@ -49,6 +49,7 @@ describe('ATOM_CONTRACT_REGISTRY full PR1b registration', () => {
         'pr3e-orchestration-portfolio',
         'pr3e-lifecycle',
         'pr3e-action',
+        'pr3e-risk-predicate',
         'irshape-not-applicable',
         'ready',
       ]).toContain(status)
@@ -58,6 +59,7 @@ describe('ATOM_CONTRACT_REGISTRY full PR1b registration', () => {
         || status === 'pr3e-orchestration-portfolio'
         || status === 'pr3e-lifecycle'
         || status === 'pr3e-action'
+        || status === 'pr3e-risk-predicate'
       if (status === 'pr1b-stub') {
         expect((contract.emit.irShape as { __pr1bStub?: true }).__pr1bStub).toBe(true)
         expect((contract.emit.irShape as { __notApplicable?: true }).__notApplicable).toBeUndefined()

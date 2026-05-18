@@ -8,9 +8,9 @@
  *
  * 策略编号 1..31 对应 #1491 父 Issue 验收表格里的 31 条策略；这里保留与父 Issue 同序。
  *
- * 阶段 A 期望（#1496 round-2 C-NEW-1 修复后）：
- *  - pass: 27 条（registry / synth allowlist 内 atom 全覆盖的策略）。
- *  - unsupported: 4 条 — #16 / #22 / #23 / #25。harness 在首轮 seed 之前预检
+ * 阶段 A 期望（#1496 round-2 C-NEW-1 修复后，#1498 完成 #22/#23 翻 pass 后）：
+ *  - pass: 29 条（registry / synth allowlist 内 atom 全覆盖的策略）。
+ *  - unsupported: 2 条 — #16（#1497 范围）/ #25（#1499 范围）。harness 在首轮 seed 之前预检
  *    mock.semanticPatch.rules 全树叶子 atom，命中 `HARNESS_SYNTHESIZABLE_ATOM_KEYS ∪
  *    ATOM_CONTRACT_REGISTRY` 之外的 key 即视为 `unknown_atom:<key>` unsupported，
  *    与阶段 A 「unsupported 必须 fail-closed」承诺对齐，揭示生产 seed builder
@@ -368,8 +368,7 @@ export const THIRTY_ONE_STRATEGIES: readonly ThirtyOneStrategyFixture[] = [
       { key: 'risk.remembered_level_stop', category: 'risk' },
       { key: 'open_long', category: 'action' },
     ],
-    expectedRoute: { kind: 'unsupported', reason: 'unknown_atom:risk.remembered_level_stop' },
-    affectedSubIssue: 1498,
+    expectedRoute: 'pass',
   },
   {
     id: 23,
@@ -382,8 +381,7 @@ export const THIRTY_ONE_STRATEGIES: readonly ThirtyOneStrategyFixture[] = [
       { key: 'risk.atr_multiple_take_profit', category: 'risk' },
       { key: 'open_long', category: 'action' },
     ],
-    expectedRoute: { kind: 'unsupported', reason: 'unknown_atom:risk.atr_multiple_stop,risk.atr_multiple_take_profit' },
-    affectedSubIssue: 1498,
+    expectedRoute: 'pass',
   },
   {
     id: 24,

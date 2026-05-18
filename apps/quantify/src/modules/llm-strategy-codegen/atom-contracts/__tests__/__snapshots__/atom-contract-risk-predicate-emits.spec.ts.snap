@@ -1,0 +1,94 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Issue #1498 — risk predicate atom emit shape snapshot risk.atr_multiple_stop (multiple=2) 1`] = `
+{
+  "helpers": [
+    "atr",
+  ],
+  "riskPredicates": [
+    {
+      "actions": [
+        {
+          "kind": "FORCE_EXIT",
+        },
+      ],
+      "id": "rule-risk",
+      "kind": "atrMultipleStop",
+      "params": {
+        "multiple": 2,
+      },
+    },
+  ],
+  "stateKeys": [],
+}
+`;
+
+exports[`Issue #1498 — risk predicate atom emit shape snapshot risk.atr_multiple_take_profit (multiple=3) 1`] = `
+{
+  "helpers": [
+    "atr",
+  ],
+  "riskPredicates": [
+    {
+      "actions": [
+        {
+          "kind": "FORCE_EXIT",
+        },
+      ],
+      "id": "rule-risk",
+      "kind": "atrMultipleTakeProfit",
+      "params": {
+        "multiple": 3,
+      },
+    },
+  ],
+  "stateKeys": [],
+}
+`;
+
+exports[`Issue #1498 — risk predicate atom emit shape snapshot risk.atr_take_profit (period=14 multiple=3) 1`] = `
+{
+  "helpers": [
+    "atr",
+  ],
+  "riskPredicates": [
+    {
+      "actions": [
+        {
+          "kind": "FORCE_EXIT",
+        },
+      ],
+      "id": "rule-risk",
+      "kind": "atrMultipleTakeProfit",
+      "params": {
+        "multiple": 3,
+        "period": 14,
+      },
+    },
+  ],
+  "stateKeys": [],
+}
+`;
+
+exports[`Issue #1498 — risk predicate atom emit shape snapshot risk.remembered_level_stop (levelKey=breakout_price) 1`] = `
+{
+  "helpers": [],
+  "riskPredicates": [
+    {
+      "actions": [
+        {
+          "kind": "FORCE_EXIT",
+        },
+      ],
+      "id": "rule-risk",
+      "kind": "rememberedLevelStop",
+      "params": {
+        "levelKey": "breakout_price",
+      },
+    },
+  ],
+  "stateKeys": [
+    "breakout_price",
+  ],
+}
+`;

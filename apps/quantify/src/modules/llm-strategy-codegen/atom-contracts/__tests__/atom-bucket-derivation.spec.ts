@@ -79,7 +79,9 @@ describe('atom-bucket-derivation (issue #1364 PR1)', () => {
   it('注册表 size 等于预期锚（新增 atom 必须同步更新此数字）', () => {
     // Issue #1395 Wave 1: B4 IR emit 兑现 condition.sequence / price.previous_extrema_retest /
     //   risk.atr_take_profit 三个 atom（升 supportStatus 至 supported_executable），合计 +3。
-    const EXPECTED_ATOM_COUNT = 59
+    // Issue #1498 S4 + S5: 新增 risk.atr_multiple_stop / risk.atr_multiple_take_profit /
+    //   risk.remembered_level_stop 三个 atom，合计 +3。
+    const EXPECTED_ATOM_COUNT = 62
     expect(getAllRegisteredAtomKeys().length).toBe(EXPECTED_ATOM_COUNT)
   })
 })

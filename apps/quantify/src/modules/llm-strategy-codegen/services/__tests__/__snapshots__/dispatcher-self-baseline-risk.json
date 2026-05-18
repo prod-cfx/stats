@@ -789,11 +789,34 @@
             "text": "ATR 止损 止损 30",
             "source": "user_explicit"
           }
+        },
+        {
+          "key": "risk.atr_multiple_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 止损 止损 30",
+            "source": "user_explicit"
+          }
         }
       ],
       "atoms": [
         {
           "key": "risk.atr_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 止损 止损 30",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "risk.atr_multiple_stop",
           "phase": "exit",
           "params": {
             "period": 14
@@ -834,11 +857,34 @@
             "text": "检测到 ATR 止损 止损 50",
             "source": "user_explicit"
           }
+        },
+        {
+          "key": "risk.atr_multiple_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "检测到 ATR 止损 止损 50",
+            "source": "user_explicit"
+          }
         }
       ],
       "atoms": [
         {
           "key": "risk.atr_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "检测到 ATR 止损 止损 50",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "risk.atr_multiple_stop",
           "phase": "exit",
           "params": {
             "period": 14
@@ -869,11 +915,34 @@
             "text": "ATR 止损 止损 阈值时执行平仓",
             "source": "user_explicit"
           }
+        },
+        {
+          "key": "risk.atr_multiple_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 止损 止损 阈值时执行平仓",
+            "source": "user_explicit"
+          }
         }
       ],
       "atoms": [
         {
           "key": "risk.atr_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 止损 止损 阈值时执行平仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "risk.atr_multiple_stop",
           "phase": "exit",
           "params": {
             "period": 14
@@ -915,11 +984,34 @@
             "text": "ATR 止盈 止盈 30",
             "source": "user_explicit"
           }
+        },
+        {
+          "key": "risk.atr_multiple_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 止盈 止盈 30",
+            "source": "user_explicit"
+          }
         }
       ],
       "atoms": [
         {
           "key": "risk.atr_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 止盈 止盈 30",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "risk.atr_multiple_take_profit",
           "phase": "exit",
           "params": {
             "period": 14
@@ -960,11 +1052,34 @@
             "text": "检测到 ATR 止盈 止盈 50",
             "source": "user_explicit"
           }
+        },
+        {
+          "key": "risk.atr_multiple_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "检测到 ATR 止盈 止盈 50",
+            "source": "user_explicit"
+          }
         }
       ],
       "atoms": [
         {
           "key": "risk.atr_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "检测到 ATR 止盈 止盈 50",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "risk.atr_multiple_take_profit",
           "phase": "exit",
           "params": {
             "period": 14
@@ -995,6 +1110,17 @@
             "text": "ATR 止盈 止盈 阈值时执行平仓",
             "source": "user_explicit"
           }
+        },
+        {
+          "key": "risk.atr_multiple_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 止盈 止盈 阈值时执行平仓",
+            "source": "user_explicit"
+          }
         }
       ],
       "atoms": [
@@ -1006,6 +1132,522 @@
           },
           "evidence": {
             "text": "ATR 止盈 止盈 阈值时执行平仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "risk.atr_multiple_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 止盈 止盈 阈值时执行平仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        }
+      ]
+    }
+  },
+  {
+    "id": "synthesized-risk.atr_multiple_stop-1",
+    "source": "synthesized",
+    "atomKey": "risk.atr_multiple_stop",
+    "utterance": "ATR 倍数止损 止损 30 开多",
+    "patch": {
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "开多",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "risk": [
+        {
+          "key": "risk.atr_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 倍数止损 止损 30",
+            "source": "user_explicit"
+          }
+        },
+        {
+          "key": "risk.atr_multiple_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 倍数止损 止损 30",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "risk.atr_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 倍数止损 止损 30",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "risk.atr_multiple_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 倍数止损 止损 30",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        }
+      ]
+    }
+  },
+  {
+    "id": "synthesized-risk.atr_multiple_stop-2",
+    "source": "synthesized",
+    "atomKey": "risk.atr_multiple_stop",
+    "utterance": "检测到 ATR 倍数止损 止损 50 进场",
+    "patch": {
+      "risk": [
+        {
+          "key": "risk.atr_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "检测到 ATR 倍数止损 止损 50",
+            "source": "user_explicit"
+          }
+        },
+        {
+          "key": "risk.atr_multiple_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "检测到 ATR 倍数止损 止损 50",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "risk.atr_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "检测到 ATR 倍数止损 止损 50",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "risk.atr_multiple_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "检测到 ATR 倍数止损 止损 50",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        }
+      ]
+    }
+  },
+  {
+    "id": "synthesized-risk.atr_multiple_stop-3",
+    "source": "synthesized",
+    "atomKey": "risk.atr_multiple_stop",
+    "utterance": "ATR 倍数止损 止损 阈值时执行平仓",
+    "patch": {
+      "risk": [
+        {
+          "key": "risk.atr_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 倍数止损 止损 阈值时执行平仓",
+            "source": "user_explicit"
+          }
+        },
+        {
+          "key": "risk.atr_multiple_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 倍数止损 止损 阈值时执行平仓",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "risk.atr_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 倍数止损 止损 阈值时执行平仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "risk.atr_multiple_stop",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 倍数止损 止损 阈值时执行平仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        }
+      ]
+    }
+  },
+  {
+    "id": "synthesized-risk.atr_multiple_take_profit-1",
+    "source": "synthesized",
+    "atomKey": "risk.atr_multiple_take_profit",
+    "utterance": "ATR 倍数止盈 止盈 30 开多",
+    "patch": {
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "开多",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "risk": [
+        {
+          "key": "risk.atr_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 倍数止盈 止盈 30",
+            "source": "user_explicit"
+          }
+        },
+        {
+          "key": "risk.atr_multiple_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 倍数止盈 止盈 30",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "risk.atr_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 倍数止盈 止盈 30",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "risk.atr_multiple_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 倍数止盈 止盈 30",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        }
+      ]
+    }
+  },
+  {
+    "id": "synthesized-risk.atr_multiple_take_profit-2",
+    "source": "synthesized",
+    "atomKey": "risk.atr_multiple_take_profit",
+    "utterance": "检测到 ATR 倍数止盈 止盈 50 进场",
+    "patch": {
+      "risk": [
+        {
+          "key": "risk.atr_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "检测到 ATR 倍数止盈 止盈 50",
+            "source": "user_explicit"
+          }
+        },
+        {
+          "key": "risk.atr_multiple_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "检测到 ATR 倍数止盈 止盈 50",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "risk.atr_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "检测到 ATR 倍数止盈 止盈 50",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "risk.atr_multiple_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "检测到 ATR 倍数止盈 止盈 50",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        }
+      ]
+    }
+  },
+  {
+    "id": "synthesized-risk.atr_multiple_take_profit-3",
+    "source": "synthesized",
+    "atomKey": "risk.atr_multiple_take_profit",
+    "utterance": "ATR 倍数止盈 止盈 阈值时执行平仓",
+    "patch": {
+      "risk": [
+        {
+          "key": "risk.atr_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 倍数止盈 止盈 阈值时执行平仓",
+            "source": "user_explicit"
+          }
+        },
+        {
+          "key": "risk.atr_multiple_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 倍数止盈 止盈 阈值时执行平仓",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "risk.atr_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 倍数止盈 止盈 阈值时执行平仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "risk.atr_multiple_take_profit",
+          "phase": "exit",
+          "params": {
+            "period": 14
+          },
+          "evidence": {
+            "text": "ATR 倍数止盈 止盈 阈值时执行平仓",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        }
+      ]
+    }
+  },
+  {
+    "id": "synthesized-risk.remembered_level_stop-1",
+    "source": "synthesized",
+    "atomKey": "risk.remembered_level_stop",
+    "utterance": "记忆位 止损 30 开多",
+    "patch": {
+      "actions": [
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "开多",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "risk": [
+        {
+          "key": "risk.remembered_level_stop",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "记忆位 止损 30",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "risk.remembered_level_stop",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "记忆位 止损 30",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "action.open_long",
+          "phase": "entry",
+          "params": {},
+          "evidence": {
+            "text": "开多",
+            "source": "user_explicit"
+          },
+          "sideScope": "long"
+        }
+      ]
+    }
+  },
+  {
+    "id": "synthesized-risk.remembered_level_stop-2",
+    "source": "synthesized",
+    "atomKey": "risk.remembered_level_stop",
+    "utterance": "检测到 记忆位 止损 50 进场",
+    "patch": {
+      "risk": [
+        {
+          "key": "risk.remembered_level_stop",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "检测到 记忆位 止损 50",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "risk.remembered_level_stop",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "检测到 记忆位 止损 50",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        }
+      ]
+    }
+  },
+  {
+    "id": "synthesized-risk.remembered_level_stop-3",
+    "source": "synthesized",
+    "atomKey": "risk.remembered_level_stop",
+    "utterance": "记忆位 止损 阈值时执行平仓",
+    "patch": {
+      "risk": [
+        {
+          "key": "risk.remembered_level_stop",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "记忆位 止损 阈值时执行平仓",
+            "source": "user_explicit"
+          }
+        }
+      ],
+      "atoms": [
+        {
+          "key": "risk.remembered_level_stop",
+          "phase": "exit",
+          "params": {},
+          "evidence": {
+            "text": "记忆位 止损 阈值时执行平仓",
             "source": "user_explicit"
           },
           "sideScope": "both"

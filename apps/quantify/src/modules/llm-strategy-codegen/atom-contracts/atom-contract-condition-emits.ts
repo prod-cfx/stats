@@ -569,4 +569,246 @@ export const CONDITION_ATOM_EMITS = {
       )
     },
   },
+
+  // Issue #1498 S1 — condition.sequence
+  //   mirror legacy `case 'condition.sequence'` body @ canonical-spec-v2-ir-compiler.service.ts:1969-2131
+  //   五个 sequenceKind 分支：pullback_reclaim / rsi_reclaim / consecutive_body /
+  //   breakout_then_retest / pattern_then_volume_spike + 未知 sequenceKind 占位兜底。
+  'condition.sequence': {
+    capabilityStatus: 'pr3a-condition',
+    irShape: (atom, { compileContext: c, helpers, seed, closeRef }) => {
+      const sequenceKind = typeof atom.params?.sequenceKind === 'string' ? atom.params.sequenceKind : 'sequence'
+
+      if (sequenceKind === 'pullback_reclaim') {
+        const referenceIndicator = helpers.readStringParam(atom.params?.['reference.indicator']) ?? 'ma'
+        const referencePeriod = helpers.readNumber(
+          [atom.params?.['reference.period'], atom.params?.period],
+          c.movingAverage.slow,
+        )
+        const referenceRef = referenceIndicator.toLowerCase() === 'ema'
+          ? helpers.ensureIndicatorSeries(c, 'EMA', referencePeriod, c.timeframe)
+          : helpers.ensureIndicatorSeries(c, 'SMA', referencePeriod, c.timeframe)
+        return helpers.upsertPredicate(
+          c.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}_${sequenceKind}_${referenceIndicator}_${referencePeriod}`,
+          'cross',
+          [closeRef, referenceRef],
+          {
+            sequenceKind,
+            direction: 'CROSS_OVER',
+            'reference.indicator': referenceIndicator.toLowerCase() === 'ema' ? 'ema' : 'ma',
+            'reference.period': referencePeriod,
+          },
+        )
+      }
+
+      if (sequenceKind === 'rsi_reclaim') {
+        const period = helpers.readNumber([atom.params?.period], c.rsi.period)
+        const threshold = helpers.readNumber([atom.params?.threshold, atom.value], 30)
+        const rsiRef = helpers.ensureRsiSeries(c, period)
+        const thresholdRef = helpers.ensureConstSeries(c, threshold)
+        return helpers.upsertPredicate(
+          c.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}_${sequenceKind}_${period}_${helpers.normalizeNumberToken(threshold)}`,
+          'cross',
+          [rsiRef, thresholdRef],
+          {
+            sequenceKind,
+            direction: 'CROSS_OVER',
+            period,
+            threshold,
+          },
+        )
+      }
+
+      // Issue #1395 — 三种新 sequenceKind 真实兑现：consecutive_body /
+      //   breakout_then_retest / pattern_then_volume_spike
+      const direction = atom.params?.direction === 'down' ? 'down' : 'up'
+      const openRef = helpers.ensurePriceSeries(c, 'open')
+      const seqParamsNew: Record<string, number | string | boolean> = { sequenceKind }
+      if (typeof atom.params?.withinBars === 'number' && atom.params.withinBars > 0) {
+        seqParamsNew.withinBars = atom.params.withinBars
+      }
+      const nextBarOnlyRaw = atom.params?.nextBarOnly
+      if (nextBarOnlyRaw === true || nextBarOnlyRaw === 'true') {
+        seqParamsNew.nextBarOnly = true
+      }
+      if (typeof atom.params?.direction === 'string') {
+        seqParamsNew.direction = atom.params.direction
+      }
+      const memoryKeyNew = typeof atom.params?.memoryKey === 'string' && atom.params.memoryKey.trim().length > 0
+        ? atom.params.memoryKey.trim()
+        : null
+      if (memoryKeyNew && memoryKeyNew !== 'auto') {
+        c.runtimeRequirements.stateKeys.add(memoryKeyNew)
+      }
+
+      if (sequenceKind === 'consecutive_body') {
+        const count = helpers.readNumber([atom.params?.count], 3)
+        if (!Number.isInteger(count) || count <= 0) {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:count`)
+        }
+        const steps: string[] = []
+        for (let i = 0; i < count; i += 1) {
+          steps.push(helpers.upsertPredicate(
+            c.predicateMap,
+            `${seed}_seq_body_${direction}_${i}`,
+            direction === 'down' ? 'LT' : 'GT',
+            [closeRef, openRef],
+          ))
+        }
+        seqParamsNew.count = count
+        return helpers.upsertPredicate(
+          c.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}_${sequenceKind}_${direction}`,
+          'sequence',
+          steps,
+          seqParamsNew,
+        )
+      }
+
+      if (sequenceKind === 'breakout_then_retest') {
+        const lookback = helpers.readNumber([atom.params?.lookbackBars], 24)
+        if (!Number.isInteger(lookback) || lookback <= 0) {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:lookbackBars`)
+        }
+        const isUp = direction === 'up'
+        const channelRef = isUp
+          ? helpers.ensureChannelSeries(c, 'HIGHEST_HIGH', lookback)
+          : helpers.ensureChannelSeries(c, 'LOWEST_LOW', lookback)
+        c.runtimeRequirements.helpers.add(isUp ? 'rollingHigh' : 'rollingLow')
+        const breakoutStep = helpers.upsertPredicate(
+          c.predicateMap,
+          `${seed}_seq_breakout_${direction}_${lookback}`,
+          isUp ? 'GT' : 'LT',
+          [closeRef, channelRef],
+        )
+        const retestStep = helpers.upsertPredicate(
+          c.predicateMap,
+          `${seed}_seq_retest_${direction}_${lookback}`,
+          isUp ? 'GTE' : 'LTE',
+          [closeRef, channelRef],
+        )
+        seqParamsNew.lookbackBars = lookback
+        return helpers.upsertPredicate(
+          c.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}_${sequenceKind}_${direction}`,
+          'sequence',
+          [breakoutStep, retestStep],
+          seqParamsNew,
+        )
+      }
+
+      if (sequenceKind === 'pattern_then_volume_spike') {
+        const lookback = helpers.readNumber([atom.params?.lookbackBars], 20)
+        const volumeRef = helpers.ensureVolumeSeries(c, c.timeframe)
+        const smaVolRef = helpers.ensureSmaVolumeSeries(c, lookback, 1, c.timeframe)
+        const patternStep = helpers.upsertPredicate(
+          c.predicateMap,
+          `${seed}_seq_pattern_${direction}`,
+          direction === 'down' ? 'LT' : 'GT',
+          [closeRef, openRef],
+        )
+        const volumeStep = helpers.upsertPredicate(
+          c.predicateMap,
+          `${seed}_seq_volume_spike_${lookback}`,
+          'compare',
+          [volumeRef, smaVolRef],
+          { op: 'GTE' },
+        )
+        seqParamsNew.lookbackBars = lookback
+        return helpers.upsertPredicate(
+          c.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}_${sequenceKind}_${direction}`,
+          'sequence',
+          [patternStep, volumeStep],
+          seqParamsNew,
+        )
+      }
+
+      // 兜底：未知 sequenceKind / 仅做占位（保持 #1395 之前的向后兼容行为）
+      return helpers.upsertPredicate(
+        c.predicateMap,
+        `${seed}_${atom.key.replace(/\./g, '_')}_${sequenceKind}`,
+        'sequence',
+        [],
+        {
+          sequenceKind,
+          ...(typeof atom.params?.lookbackWindow === 'string' ? { lookbackWindow: atom.params.lookbackWindow } : {}),
+          ...(typeof atom.params?.lookbackBars === 'number' ? { lookbackBars: atom.params.lookbackBars } : {}),
+          ...(typeof atom.params?.count === 'number' ? { count: atom.params.count } : {}),
+          ...(typeof atom.params?.direction === 'string' ? { direction: atom.params.direction } : {}),
+          ...(memoryKeyNew ? { memoryKey: memoryKeyNew } : {}),
+        },
+      )
+    },
+  },
+
+  // Issue #1498 S2 — price.previous_extrema_retest
+  //   mirror legacy `case 'price.previous_extrema_retest'` body @ 2352-2418。
+  //   "突破后回踩" 语义 — 2 步 sequence：突破 N 周期 high/low → 回踩到突破位
+  //   ±tolerance% 仍不破/已跌穿；memoryKey 透传到 runtimeRequirements.stateKeys。
+  'price.previous_extrema_retest': {
+    capabilityStatus: 'pr3a-condition',
+    irShape: (atom, { compileContext: c, helpers, seed, closeRef }) => {
+      const lookback = helpers.readNumber([
+        atom.params?.lookbackBars,
+        atom.params?.window,
+        atom.params?.period,
+      ], 24)
+      if (!Number.isInteger(lookback) || lookback <= 0) {
+        throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:lookbackBars`)
+      }
+      const extremaType = atom.params?.extremaType === 'low' ? 'low' : 'high'
+      const retestKindRaw = atom.params?.retestKind
+      const retestKind = retestKindRaw === 'break_through' ? 'break_through' : 'not_break'
+      const isHigh = extremaType === 'high'
+      const channelRef = isHigh
+        ? helpers.ensureChannelSeries(c, 'HIGHEST_HIGH', lookback)
+        : helpers.ensureChannelSeries(c, 'LOWEST_LOW', lookback)
+      c.runtimeRequirements.helpers.add(isHigh ? 'rollingHigh' : 'rollingLow')
+
+      const breakoutStep = helpers.upsertPredicate(
+        c.predicateMap,
+        `${seed}_prev_extrema_breakout_${extremaType}_${lookback}`,
+        isHigh ? 'GT' : 'LT',
+        [closeRef, channelRef],
+      )
+
+      const retestKindOp = retestKind === 'not_break'
+        ? (isHigh ? 'GTE' : 'LTE')
+        : (isHigh ? 'LT' : 'GT')
+      const retestStep = helpers.upsertPredicate(
+        c.predicateMap,
+        `${seed}_prev_extrema_retest_${retestKind}_${extremaType}_${lookback}`,
+        retestKindOp,
+        [closeRef, channelRef],
+      )
+
+      const memoryKey = typeof atom.params?.memoryKey === 'string' && atom.params.memoryKey.trim().length > 0
+        ? atom.params.memoryKey.trim()
+        : null
+      if (memoryKey && memoryKey !== 'auto') {
+        c.runtimeRequirements.stateKeys.add(memoryKey)
+      }
+
+      const seqParams: Record<string, number | string> = {}
+      if (typeof atom.params?.maxBars === 'number' && atom.params.maxBars > 0) {
+        seqParams.withinBars = atom.params.maxBars
+      }
+      if (typeof atom.params?.tolerancePct === 'number') {
+        seqParams.tolerancePct = atom.params.tolerancePct
+      }
+      seqParams.extremaType = extremaType
+      seqParams.retestKind = retestKind
+
+      return helpers.upsertPredicate(
+        c.predicateMap,
+        `${seed}_${atom.key.replace(/\./g, '_')}_${retestKind}_${extremaType}_${lookback}`,
+        'sequence',
+        [breakoutStep, retestStep],
+        seqParams,
+      )
+    },
+  },
 } satisfies Partial<Record<AtomContractKey, ConditionEmitOverride>>

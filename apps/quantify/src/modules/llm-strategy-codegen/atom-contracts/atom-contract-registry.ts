@@ -31,6 +31,8 @@ import type { OrchestrationEmitOverride } from './atom-contract-orchestration-em
 import { ORCHESTRATION_ATOM_EMITS } from './atom-contract-orchestration-emits'
 import type { ActionEmitOverride } from './atom-contract-action-emits'
 import { ACTION_ATOM_EMITS } from './atom-contract-action-emits'
+import type { RiskPredicateEmitOverride } from './atom-contract-risk-predicate-emits'
+import { RISK_PREDICATE_ATOM_EMITS } from './atom-contract-risk-predicate-emits'
 import {
   COMMON_PIPELINE,
   NO_SUMMARY,
@@ -210,6 +212,10 @@ const ATOM_BUCKETS = {
   'condition.sequence': 'trigger',
   'price.previous_extrema_retest': 'trigger',
   'risk.atr_take_profit': 'risk',
+  // Issue #1498：ATR 倍数 stop/TP + 记忆位 stop
+  'risk.atr_multiple_stop': 'risk',
+  'risk.atr_multiple_take_profit': 'risk',
+  'risk.remembered_level_stop': 'risk',
 } as const satisfies Record<AtomContractKey, AtomContractBucket>
 
 // =========================================================
@@ -296,6 +302,10 @@ const ATOM_FULFILLS_STRATEGY_PHASE = {
   'condition.sequence': ['entry', 'exit'],
   'price.previous_extrema_retest': ['entry'],
   'risk.atr_take_profit': ['risk', 'exit'],
+  // Issue #1498
+  'risk.atr_multiple_stop': ['risk', 'exit'],
+  'risk.atr_multiple_take_profit': ['risk', 'exit'],
+  'risk.remembered_level_stop': ['risk', 'exit'],
 } as const satisfies Record<AtomContractKey, ReadonlyArray<'entry' | 'exit' | 'risk' | 'sizing' | 'context'>>
 
 export function getAtomFulfillsStrategyPhase(
@@ -387,6 +397,10 @@ const ATOM_ROLES = {
   'condition.sequence': ['predicate'],
   'price.previous_extrema_retest': ['predicate'],
   'risk.atr_take_profit': ['effect'],
+  // Issue #1498
+  'risk.atr_multiple_stop': ['effect'],
+  'risk.atr_multiple_take_profit': ['effect'],
+  'risk.remembered_level_stop': ['effect'],
 } as const satisfies Record<AtomContractKey, ReadonlyArray<'predicate' | 'effect'>>
 
 export function getAtomRoles(key: AtomContractKey): ReadonlyArray<'predicate' | 'effect'> {
@@ -484,6 +498,9 @@ const ATOM_TEMPORALITY = {
   'risk.take_profit_pct': 'structural',
   'risk.atr_stop': 'structural',
   'risk.atr_take_profit': 'structural',
+  'risk.atr_multiple_stop': 'structural',
+  'risk.atr_multiple_take_profit': 'structural',
+  'risk.remembered_level_stop': 'structural',
   'risk.partial_take_profit': 'structural',
 
   'position.dca_schedule': 'structural',
@@ -594,6 +611,10 @@ const ATOM_PUBLIC_NAMES = {
   'condition.sequence': { zh: '条件序列', en: 'Condition sequence' },
   'price.previous_extrema_retest': { zh: '突破后回踩', en: 'Previous extrema retest' },
   'risk.atr_take_profit': { zh: 'ATR 动态止盈', en: 'ATR take profit' },
+  // Issue #1498
+  'risk.atr_multiple_stop': { zh: 'ATR 倍数止损', en: 'ATR multiple stop loss' },
+  'risk.atr_multiple_take_profit': { zh: 'ATR 倍数止盈', en: 'ATR multiple take profit' },
+  'risk.remembered_level_stop': { zh: '记忆位止损', en: 'Remembered level stop' },
 } as const satisfies Record<AtomContractKey, { zh: string; en: string }>
 
 export { ATOM_PUBLIC_NAMES }
@@ -679,6 +700,11 @@ function completePr1bRegistry<const T extends Record<AtomContractKey, AtomContra
     //   `capabilityStatus = 'pr3e-action'`。与其余四组 override 互斥（atom 不重叠），
     //   spread 合并顺序不会冲突。
     const actionOverride = (ACTION_ATOM_EMITS as Partial<Record<AtomContractKey, ActionEmitOverride>>)[key]
+    // Issue #1498 S3：risk-level RiskPredicate 类 atom（risk.atr_take_profit /
+    //   risk.atr_multiple_stop / risk.atr_multiple_take_profit / risk.remembered_level_stop）
+    //   通过 RISK_PREDICATE_ATOM_EMITS 注入 `emit.riskPredicateShape` +
+    //   `capabilityStatus = 'pr3e-risk-predicate'`。与其余五组 override 互斥（atom 不重叠）。
+    const riskPredicateOverride = (RISK_PREDICATE_ATOM_EMITS as Partial<Record<AtomContractKey, RiskPredicateEmitOverride>>)[key]
     const mergedEmit: AtomContractEmit = {
       ...baseEmit,
       ...(conditionOverride ?? {}),
@@ -687,6 +713,7 @@ function completePr1bRegistry<const T extends Record<AtomContractKey, AtomContra
       ...(ruleBlockOverride ?? {}),
       ...(orchestrationOverride ?? {}),
       ...(actionOverride ?? {}),
+      ...(riskPredicateOverride ?? {}),
     }
     completed[key] = {
       ...registry[key],
@@ -4829,6 +4856,163 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
           mustOutput: 'risk.atr_take_profit + multiple=X；禁止与 risk.atr_stop 共用同一 atom，也不要回退到 risk.partial_take_profit。',
         }],
       },
+    },
+  },
+
+  // Issue #1498 S4：risk.atr_multiple_stop —— fixed N×ATR 一次性止损（不同于 trailing atr_stop）
+  'risk.atr_multiple_stop': {
+    corpus: {
+      aliases: ['ATR 倍数止损', 'N 倍 ATR 止损'],
+      positiveExamples: [
+        '止损设为 2 倍 ATR',
+        '亏损达到 2 倍 ATR 后止损',
+      ],
+      negativeExamples: ['ATR 大于 50 才平仓', '固定 5% 止损'],
+      goldenUtterances: [],
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: UNSUPPORTED_SKIP,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'risk.atr_multiple_stop.period') return '请指定 ATR 计算周期，例如 14（常用默认值）。'
+      if (slotKey === 'risk.atr_multiple_stop.multiple') return '请给出 ATR 倍数，例如 2（即 2 倍 ATR 作为止损距离）。'
+      return '请补充 ATR 倍数止损的缺失信息（period / multiple）。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: {
+      supportStatus: 'supported_executable',
+      executableSinceVersion: '2026.05.W02',
+    },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.atr_multiple_stop'],
+      paramRenderers: {
+        multiple: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.atr_multiple_stop'].en
+        if (typeof params.multiple === 'number') return `${params.multiple} 倍 ATR 止损`
+        return 'ATR 倍数止损'
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['ATR 倍数止损', 'ATR', '倍 ATR', '倍ATR', 'atr multiple stop'] as const,
+        verbs: {
+          fixed: ['止损', '作为止损', 'atr stop'] as const,
+        },
+      },
+      paramSlots: {
+        // #1497 风格：period [1, 100] + multipleOf:1；multiple [0.1, 20] + multipleOf:0.1
+        period: { kind: 'number', required: false, range: [1, 100], multipleOf: 1, default: 14 },
+        multiple: { kind: 'number', required: true, range: [0.1, 20], multipleOf: 0.1, extractor: { kind: 'number-decimal', pattern: '(\\d+(?:\\.\\d+)?)\\s*(?:倍|x)\\s*ATR.*?(?:止损|stop)', range: [0.1, 20] } },
+      },
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
+    },
+  },
+
+  // Issue #1498 S4：risk.atr_multiple_take_profit —— fixed N×ATR 一次性止盈
+  'risk.atr_multiple_take_profit': {
+    corpus: {
+      aliases: ['ATR 倍数止盈', 'N 倍 ATR 止盈'],
+      positiveExamples: [
+        '止盈设为 3 倍 ATR',
+        '盈利达到 3 倍 ATR 后止盈',
+      ],
+      negativeExamples: ['ATR 大于 50 才平仓', '固定 5% 止盈'],
+      goldenUtterances: [],
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: UNSUPPORTED_SKIP,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'risk.atr_multiple_take_profit.period') return '请指定 ATR 计算周期，例如 14（常用默认值）。'
+      if (slotKey === 'risk.atr_multiple_take_profit.multiple') return '请给出 ATR 倍数，例如 3（即 3 倍 ATR 作为止盈距离）。'
+      return '请补充 ATR 倍数止盈的缺失信息（period / multiple）。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: {
+      supportStatus: 'supported_executable',
+      executableSinceVersion: '2026.05.W02',
+    },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.atr_multiple_take_profit'],
+      paramRenderers: {
+        multiple: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.atr_multiple_take_profit'].en
+        if (typeof params.multiple === 'number') return `${params.multiple} 倍 ATR 止盈`
+        return 'ATR 倍数止盈'
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['ATR 倍数止盈', 'ATR', '倍 ATR', '倍ATR', 'atr multiple take profit'] as const,
+        verbs: {
+          fixed: ['止盈', '作为止盈', 'atr take profit'] as const,
+        },
+      },
+      paramSlots: {
+        period: { kind: 'number', required: false, range: [1, 100], multipleOf: 1, default: 14 },
+        multiple: { kind: 'number', required: true, range: [0.1, 20], multipleOf: 0.1, extractor: { kind: 'number-decimal', pattern: '(\\d+(?:\\.\\d+)?)\\s*(?:倍|x)\\s*ATR.*?(?:止盈|take\\s*profit)', range: [0.1, 20] } },
+      },
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
+    },
+  },
+
+  // Issue #1498 S5：risk.remembered_level_stop —— 跌破之前记忆的关键位（如 breakout_price）止损
+  'risk.remembered_level_stop': {
+    corpus: {
+      aliases: ['记忆位止损', '关键位止损', '跌破突破位止损'],
+      positiveExamples: [
+        '跌回突破位下方止损',
+        '跌破突破点止损',
+      ],
+      negativeExamples: ['固定 5% 止损'],
+      goldenUtterances: [],
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: UNSUPPORTED_SKIP,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'risk.remembered_level_stop.levelKey') return '请指定记忆位的来源 key（如 breakout_price / prev_high / session_low）。'
+      return '请补充记忆位止损的缺失信息（levelKey）。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: {
+      supportStatus: 'supported_executable',
+      executableSinceVersion: '2026.05.W02',
+    },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.remembered_level_stop'],
+      paramRenderers: {
+        levelKey: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.remembered_level_stop'].en
+        if (typeof params.levelKey === 'string') return `跌破 ${params.levelKey} 止损`
+        return '记忆位止损'
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['记忆位', '关键位', '跌破突破位', '突破位下方', 'remembered level'] as const,
+        verbs: {
+          fixed: ['止损', '跌破止损', 'stop'] as const,
+        },
+      },
+      paramSlots: {
+        // levelKey 是状态键名（如 breakout_price），用 symbol 槽（最接近无校验的字符串），
+        //   不附 extractor —— 由 planner 直接填写。
+        levelKey: { kind: 'symbol', required: true },
+      },
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
     },
   },
 })

@@ -1966,6 +1966,9 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      // Issue #1498 S1 — dispatched-via CONDITION_ATOM_EMITS['condition.sequence']
+      //   主路径在 atom-contract-condition-emits.ts；下方 legacy case 保留作 fail-safe 兜底
+      //   （与 #1494 同 pattern；ATOM_CONTRACT_REGISTRY 注册校验由 condition-emit-dispatch.spec 守门）。
       case 'condition.sequence': {
         const sequenceKind = typeof atom.params?.sequenceKind === 'string' ? atom.params.sequenceKind : 'sequence'
         if (sequenceKind === 'pullback_reclaim') {
@@ -2349,6 +2352,8 @@ export class CanonicalSpecV2IrCompilerService {
       //     - lookbackBars / window: rolling 窗口，默认 24
       //     - extremaType: 'high'（默认）| 'low'
       //     - tolerancePct / maxBars / memoryKey: 透传到 sequence params + stateKeys
+      // Issue #1498 S2 — dispatched-via CONDITION_ATOM_EMITS['price.previous_extrema_retest']
+      //   主路径在 atom-contract-condition-emits.ts；下方 legacy case 保留作 fail-safe 兜底。
       case 'price.previous_extrema_retest': {
         const lookback = this.readNumber([
           atom.params?.lookbackBars,
@@ -2874,6 +2879,32 @@ export class CanonicalSpecV2IrCompilerService {
       return null
     }
 
+    // Issue #1498 S3：risk-level RiskPredicate 类 atom 走 REGISTRY 调度。命中
+    //   `capabilityStatus === 'pr3e-risk-predicate'` + `emit.riskPredicateShape`
+    //   的 atom（risk.atr_take_profit / risk.atr_multiple_stop /
+    //   risk.atr_multiple_take_profit / risk.remembered_level_stop）走 REGISTRY shape；
+    //   返回 null 时 fall-through 到下方 legacy switch 兜底（守门 100% 行为等价）。
+    //   IR snapshot byte-equal 由 canonical-spec-v2-ir-compiler.service.spec.ts 与
+    //   atom-contract-risk-predicate-emits.spec.ts 守门。
+    const riskPredicateEntry = ATOM_CONTRACT_REGISTRY[rule.condition.key as AtomContractKey]
+    const riskPredicateEmit = riskPredicateEntry?.emit as AtomContractEmit | undefined
+    if (riskPredicateEmit?.capabilityStatus === 'pr3e-risk-predicate' && riskPredicateEmit.riskPredicateShape) {
+      const predicate = riskPredicateEmit.riskPredicateShape(
+        rule.condition,
+        rule as unknown as Readonly<Record<string, unknown>>,
+        {
+          compileContext: context,
+          helpers: this.irHelpers,
+          seed: rule.id,
+        },
+        (r) => this.compileRiskPredicateActions(r as unknown as CanonicalRuleV2),
+      )
+      if (predicate !== null) {
+        return predicate
+      }
+    }
+
+    // dispatched-via RISK_PREDICATE_ATOM_EMITS['risk.atr_multiple_stop' / 'risk.atr_multiple_take_profit']
     if (rule.condition.key === 'risk.atr_multiple_stop' || rule.condition.key === 'risk.atr_multiple_take_profit') {
       const multiple = this.readNumber([rule.condition.params?.multiple], 0)
       if (multiple <= 0) {
@@ -4567,6 +4598,13 @@ export class CanonicalSpecV2IrCompilerService {
         // Issue #1313 PR5c：action atom 的 `emit.actionShape` 真实兑现需要 sizing 解析 helper
         //   mirror service 私有 `resolveActionQuantity`，用于 OPEN/ADD 路径的 sizing 解析。
         resolveActionQuantity: this.resolveActionQuantity.bind(this),
+        // Issue #1498 S1 + S2：condition.sequence / price.previous_extrema_retest emit
+        //   迁移所需的额外 helper bind 暴露。
+        ensureIndicatorSeries: this.ensureIndicatorSeries.bind(this),
+        ensureVolumeSeries: this.ensureVolumeSeries.bind(this),
+        ensureSmaVolumeSeries: this.ensureSmaVolumeSeries.bind(this),
+        readStringParam: this.readStringParam.bind(this),
+        normalizeNumberToken: this.normalizeNumberToken.bind(this),
       }
     }
     return this.__irHelpers

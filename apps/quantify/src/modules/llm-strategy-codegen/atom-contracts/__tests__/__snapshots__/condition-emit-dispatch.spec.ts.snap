@@ -229,3 +229,282 @@ exports[`Issue #1494 — core condition atom emit shape snapshot oscillator.rsi_
   ],
 }
 `;
+
+exports[`Issue #1498 S1 — condition.sequence emit shape snapshot sequenceKind=breakout_then_retest (direction=up lookback=24) 1`] = `
+{
+  "helpers": [
+    "rollingHigh",
+  ],
+  "predicates": [
+    {
+      "args": [
+        "rule_0_seq_breakout_up_24",
+        "rule_0_seq_retest_up_24",
+      ],
+      "id": "rule_0_condition_sequence_breakout_then_retest_up",
+      "kind": "sequence",
+    },
+    {
+      "args": [
+        "close_1h",
+        "highest_high_24_1h",
+      ],
+      "id": "rule_0_seq_breakout_up_24",
+      "kind": "GT",
+    },
+    {
+      "args": [
+        "close_1h",
+        "highest_high_24_1h",
+      ],
+      "id": "rule_0_seq_retest_up_24",
+      "kind": "GTE",
+    },
+  ],
+  "seriesKinds": [
+    {
+      "id": "close_1h",
+      "kind": "PRICE",
+    },
+    {
+      "id": "highest_high_24_1h",
+      "kind": "HIGHEST_HIGH",
+    },
+    {
+      "id": "open_1h",
+      "kind": "PRICE",
+    },
+  ],
+}
+`;
+
+exports[`Issue #1498 S1 — condition.sequence emit shape snapshot sequenceKind=consecutive_body (count=3 direction=up) 1`] = `
+{
+  "helpers": [],
+  "predicates": [
+    {
+      "args": [
+        "rule_0_seq_body_up_0",
+        "rule_0_seq_body_up_0",
+        "rule_0_seq_body_up_0",
+      ],
+      "id": "rule_0_condition_sequence_consecutive_body_up",
+      "kind": "sequence",
+    },
+    {
+      "args": [
+        "close_1h",
+        "open_1h",
+      ],
+      "id": "rule_0_seq_body_up_0",
+      "kind": "GT",
+    },
+  ],
+  "seriesKinds": [
+    {
+      "id": "close_1h",
+      "kind": "PRICE",
+    },
+    {
+      "id": "open_1h",
+      "kind": "PRICE",
+    },
+  ],
+}
+`;
+
+exports[`Issue #1498 S1 — condition.sequence emit shape snapshot sequenceKind=pattern_then_volume_spike (direction=up lookback=20) 1`] = `
+{
+  "helpers": [
+    "smaVolume",
+  ],
+  "predicates": [
+    {
+      "args": [
+        "rule_0_seq_pattern_up",
+        "rule_0_seq_volume_spike_20",
+      ],
+      "id": "rule_0_condition_sequence_pattern_then_volume_spike_up",
+      "kind": "sequence",
+    },
+    {
+      "args": [
+        "close_1h",
+        "open_1h",
+      ],
+      "id": "rule_0_seq_pattern_up",
+      "kind": "GT",
+    },
+    {
+      "args": [
+        "volume_1h",
+        "sma_volume_20_1_1h",
+      ],
+      "id": "rule_0_seq_volume_spike_20",
+      "kind": "compare",
+    },
+  ],
+  "seriesKinds": [
+    {
+      "id": "close_1h",
+      "kind": "PRICE",
+    },
+    {
+      "id": "open_1h",
+      "kind": "PRICE",
+    },
+    {
+      "id": "sma_volume_20_1_1h",
+      "kind": "SMA_VOLUME",
+    },
+    {
+      "id": "volume_1h",
+      "kind": "VOLUME",
+    },
+  ],
+}
+`;
+
+exports[`Issue #1498 S1 — condition.sequence emit shape snapshot sequenceKind=pullback_reclaim (ma period=20) 1`] = `
+{
+  "helpers": [],
+  "predicates": [
+    {
+      "args": [
+        "close_1h",
+        "sma_20_1h",
+      ],
+      "id": "rule_0_condition_sequence_pullback_reclaim_ma_20",
+      "kind": "cross",
+    },
+  ],
+  "seriesKinds": [
+    {
+      "id": "close_1h",
+      "kind": "PRICE",
+    },
+    {
+      "id": "sma_20_1h",
+      "kind": "SMA",
+    },
+  ],
+}
+`;
+
+exports[`Issue #1498 S1 — condition.sequence emit shape snapshot sequenceKind=rsi_reclaim (period=14 threshold=30) 1`] = `
+{
+  "helpers": [],
+  "predicates": [
+    {
+      "args": [
+        "rsi_14_1h",
+        "const_30",
+      ],
+      "id": "rule_0_condition_sequence_rsi_reclaim_14_30",
+      "kind": "cross",
+    },
+  ],
+  "seriesKinds": [
+    {
+      "id": "close_1h",
+      "kind": "PRICE",
+    },
+    {
+      "id": "const_30",
+      "kind": "CONST",
+    },
+    {
+      "id": "rsi_14_1h",
+      "kind": "RSI",
+    },
+  ],
+}
+`;
+
+exports[`Issue #1498 S2 — price.previous_extrema_retest emit shape snapshot direction=down extremaType=low memoryKey 默认 auto 1`] = `
+{
+  "helpers": [
+    "rollingLow",
+  ],
+  "predicates": [
+    {
+      "args": [
+        "close_1h",
+        "lowest_low_24_1h",
+      ],
+      "id": "rule_0_prev_extrema_breakout_low_24",
+      "kind": "LT",
+    },
+    {
+      "args": [
+        "close_1h",
+        "lowest_low_24_1h",
+      ],
+      "id": "rule_0_prev_extrema_retest_not_break_low_24",
+      "kind": "LTE",
+    },
+    {
+      "args": [
+        "rule_0_prev_extrema_breakout_low_24",
+        "rule_0_prev_extrema_retest_not_break_low_24",
+      ],
+      "id": "rule_0_price_previous_extrema_retest_not_break_low_24",
+      "kind": "sequence",
+    },
+  ],
+  "seriesKinds": [
+    {
+      "id": "close_1h",
+      "kind": "PRICE",
+    },
+    {
+      "id": "lowest_low_24_1h",
+      "kind": "LOWEST_LOW",
+    },
+  ],
+}
+`;
+
+exports[`Issue #1498 S2 — price.previous_extrema_retest emit shape snapshot direction=up extremaType=high memoryKey 显式 1`] = `
+{
+  "helpers": [
+    "rollingHigh",
+  ],
+  "predicates": [
+    {
+      "args": [
+        "close_1h",
+        "highest_high_24_1h",
+      ],
+      "id": "rule_0_prev_extrema_breakout_high_24",
+      "kind": "GT",
+    },
+    {
+      "args": [
+        "close_1h",
+        "highest_high_24_1h",
+      ],
+      "id": "rule_0_prev_extrema_retest_not_break_high_24",
+      "kind": "GTE",
+    },
+    {
+      "args": [
+        "rule_0_prev_extrema_breakout_high_24",
+        "rule_0_prev_extrema_retest_not_break_high_24",
+      ],
+      "id": "rule_0_price_previous_extrema_retest_not_break_high_24",
+      "kind": "sequence",
+    },
+  ],
+  "seriesKinds": [
+    {
+      "id": "close_1h",
+      "kind": "PRICE",
+    },
+    {
+      "id": "highest_high_24_1h",
+      "kind": "HIGHEST_HIGH",
+    },
+  ],
+}
+`;

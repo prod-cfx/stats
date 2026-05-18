@@ -77,6 +77,10 @@ export type SupportedAtomKey =
   | 'condition.sequence'
   | 'price.previous_extrema_retest'
   | 'risk.atr_take_profit'
+  // ── Issue #1498 S4/S5：ATR 倍数 stop/TP + 记忆位 stop ──
+  | 'risk.atr_multiple_stop'
+  | 'risk.atr_multiple_take_profit'
+  | 'risk.remembered_level_stop'
 
 /** @deprecated #1329 已更名 SupportedAtomKey，本 alias 保留兼容 in-flight branch；下个 PR 删 */
 export type SupportedExecutableUtteranceAtom = SupportedAtomKey

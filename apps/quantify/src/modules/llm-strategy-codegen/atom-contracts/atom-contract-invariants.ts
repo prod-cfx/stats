@@ -146,6 +146,11 @@ type ConditionAtomKey =
   | 'indicator.cross_under'
   | 'price.breakout_up'
   | 'price.breakout_down'
+  // Issue #1498 S1 + S2：condition.sequence / price.previous_extrema_retest 迁移至
+  //   CONDITION_ATOM_EMITS（capabilityStatus = 'pr3a-condition'），ir-compiler 主路径
+  //   走 REGISTRY 调度；legacy case 保留作 fail-safe。
+  | 'condition.sequence'
+  | 'price.previous_extrema_retest'
 
 // Issue #1313 PR2 / PR3 / PR4 / PR5c 反转：以下 atom 都已迁出 `'irshape-not-applicable'` 领域，
 //   分别通过专用 emit shape 在 ir-compiler 对应 dispatcher 调度：

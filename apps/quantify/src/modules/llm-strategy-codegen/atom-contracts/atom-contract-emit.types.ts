@@ -23,6 +23,7 @@ import type {
   IrOrchestrationPortfolioRisk,
   LevelSetDef,
   PredicateDef,
+  RiskPredicateDef,
   RuleBlock,
   SeriesDef,
 } from '../types/canonical-strategy-ir'
@@ -159,6 +160,23 @@ export interface IrCompileHelpers {
     defaultSizing: CanonicalStrategySpecV2['sizing'],
     fallbackPositionPct: number,
   ) => ActionDef['quantity']
+  // Issue #1498 S1 + S2：condition.sequence / price.previous_extrema_retest emit
+  //   迁移需要的额外 helper，mirror service 私有方法签名。
+  ensureIndicatorSeries: (
+    ctx: IrCompileContext,
+    kind: Extract<SeriesDef['kind'], 'SMA' | 'EMA' | 'RSI'>,
+    period: number,
+    timeframe?: string,
+  ) => string
+  ensureVolumeSeries: (ctx: IrCompileContext, timeframe?: string) => string
+  ensureSmaVolumeSeries: (
+    ctx: IrCompileContext,
+    period: number,
+    multiplier: number,
+    timeframe?: string,
+  ) => string
+  readStringParam: (value: unknown) => string | undefined
+  normalizeNumberToken: (value: number) => string
 }
 
 /**
@@ -412,6 +430,27 @@ export type ActionShape = (
 ) => readonly ActionDefLikeOutput[]
 
 /**
+ * Issue #1498 S3 —— `RiskPredicateShape` —— mirror
+ * `canonical-spec-v2-ir-compiler.service.ts#tryCompileRiskPredicate` 内的单条
+ * risk atom 分支 body。
+ *
+ *   atom: CanonicalConditionAtom（rule.condition；持 `key / params / value / op`）
+ *   rule: CanonicalRuleV2（占位 RuleLikeInput；需透出 `id / actions` 给
+ *         `compileRiskPredicateActions` 使用）
+ *   context: RuleLevelEmitContext（暴露 `compileContext` —— 主要消费
+ *         `runtimeRequirements.helpers / stateKeys`；helpers 暴露 `readNumber`）
+ *   compileRiskPredicateActions: 透传 service 私有 `compileRiskPredicateActions`，
+ *         避免 emit shape 直接耦合 service。返回 RiskPredicateDef['actions']。
+ *   → RiskPredicateDef | null（不命中返回 null，dispatcher 兜底走 legacy switch）
+ */
+export type RiskPredicateShape = (
+  atom: AtomIrCompileInput,
+  rule: RuleLikeInput,
+  context: RuleLevelEmitContext,
+  compileRiskPredicateActions: (rule: RuleLikeInput) => RiskPredicateDef['actions'],
+) => RiskPredicateDef | null
+
+/**
  * AtomContractEmit —— atom IR emit 层契约
  *
  * `capabilityStatus`:
@@ -452,6 +491,7 @@ export interface AtomContractEmit {
     | 'pr3e-orchestration-portfolio'
     | 'pr3e-lifecycle'
     | 'pr3e-action'
+    | 'pr3e-risk-predicate'
     | 'irshape-not-applicable'
     | 'ready'
   readonly irShape: IrShapeBuilder
@@ -460,6 +500,7 @@ export interface AtomContractEmit {
   readonly orchestrationPortfolioRiskShape?: OrchestrationPortfolioRiskShape | null
   readonly lifecyclePyramidingShape?: LifecyclePyramidingShape | null
   readonly actionShape?: ActionShape | null
+  readonly riskPredicateShape?: RiskPredicateShape | null
   readonly evidenceSource: EvidenceSource
 }
 

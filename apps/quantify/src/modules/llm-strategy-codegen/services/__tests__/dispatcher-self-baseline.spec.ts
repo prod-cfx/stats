@@ -181,14 +181,17 @@ describe('issue #1279 PR2 — dispatcher self-baseline', () => {
     })
   })
 
-  it('应该精确 243 case（#1403 真用户场景守门 +1 corpus case，覆盖 minBars 不误抽 timeframe 数字）', () => {
+  it('应该精确 252 case（#1498 三个 risk atom 注册 +9 synthesized utterance）', () => {
     // 历史背景见 git history：233 = corpus 177 + synthesized 48 + ac-7 6 + ac-12 2。
     // #1395 Wave 1 B4：condition.sequence / price.previous_extrema_retest / risk.atr_take_profit
     //   三个 atom 升 supportStatus 至 supported_executable，dispatcher synthesizeForAtom 兜底
     //   合成 3 × 3 = 9 条 utterance；orchestration / trigger / risk 各 +3 case → 242
     // #1403：price.candle_pattern corpus 新增 1 条「BTC 连续跌三根 15 分钟 K 线...」
     //   守门 minBars 不再误抽 timeframe 数字 → 243
-    expect(cases.length).toBe(243)
+    // #1498 S3-S5：risk.atr_multiple_stop / risk.atr_multiple_take_profit /
+    //   risk.remembered_level_stop 三个 atom 升 supportStatus 至 supported_executable，
+    //   dispatcher synthesizeForAtom 兜底合成 3 × 3 = 9 条 risk-bucket utterance → 252
+    expect(cases.length).toBe(252)
   })
 
   // #1331 C3：per-atom breakdown 断言（13 新 orchestration atom 各 ≥ 1 case），
