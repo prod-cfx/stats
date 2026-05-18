@@ -62,8 +62,6 @@ import { StrategyClarificationRulesService } from './services/strategy-clarifica
 import { StrategyCompileabilityDecisionService } from './services/strategy-compileability-decision.service'
 import { StrategyConsistencyService } from './services/strategy-consistency.service'
 import { StrategyExecutionContextService } from './services/strategy-execution-context.service'
-import { StrategyIntentNormalizerService } from './services/strategy-intent-normalizer.service'
-import { StrategyIntentResolutionService } from './services/strategy-intent-resolution.service'
 import { StrategyIrBuilderService } from './services/strategy-ir-builder.service'
 import { StrategyIrCanonicalAdapterService } from './services/strategy-ir-canonical-adapter.service'
 import { StrategySummaryBuilderService } from './services/strategy-summary-builder.service'
@@ -109,8 +107,6 @@ import { UnsupportedFallbackService } from './services/unsupported-fallback.serv
     StrategyExecutionContextService,
     StrategyIrBuilderService,
     StrategyIrCanonicalAdapterService,
-    StrategyIntentNormalizerService,
-    StrategyIntentResolutionService,
     StrategySummaryObservationService,
     StrategySummaryBuilderService,
     SemanticClarificationQuestionRendererService,

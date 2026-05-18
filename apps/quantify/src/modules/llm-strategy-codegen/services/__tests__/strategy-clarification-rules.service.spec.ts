@@ -1,5 +1,4 @@
 import { buildSemanticSlotId } from '../../types/semantic-state'
-import { StrategyIntentResolutionService } from '../strategy-intent-resolution.service'
 import { StrategyClarificationRulesService } from '../strategy-clarification-rules.service'
 
 describe('strategyClarificationRulesService', () => {
@@ -274,67 +273,6 @@ describe('strategyClarificationRulesService', () => {
         slotId: buildSemanticSlotId(slot),
         blocking: true,
         status: 'pending',
-      }),
-    ])
-  })
-
-  it('keeps resolver-produced atomic forks answerable through semantic slots', () => {
-    const resolution = new StrategyIntentResolutionService().resolve({
-      normalizedIntent: {
-        families: ['single-leg'],
-        triggers: [
-          {
-            key: 'bollinger.touch_upper',
-            phase: 'entry',
-            sideScope: 'short',
-            params: {
-              band: 'upper',
-              period: 20,
-              stdDev: 2,
-            },
-            resolutionHints: {
-              confirmation: 'ambiguous_touch_or_close_confirm',
-            },
-            closureStatus: 'open',
-            unresolvedSlots: [],
-          },
-        ],
-        actions: [{ key: 'open_short' }],
-        risk: [],
-        position: {
-          mode: 'fixed_ratio',
-          value: 10,
-          positionMode: 'short_only',
-        },
-        grid: null,
-        stateHints: [],
-        unresolved: [],
-        normalizationNotes: [],
-      },
-    })
-    const state = service.detectFromAmbiguities({
-      executionContext: {
-        context: {
-          exchange: 'okx',
-          symbol: 'BTCUSDT',
-          marketType: 'perp',
-          timeframe: '15m',
-        },
-        evidence: [],
-        ambiguities: [],
-      },
-      atomicResolution: resolution,
-    })
-
-    expect(state.items).toEqual([
-      expect.objectContaining({
-        key: 'semantic.confirmationMode.entry',
-        slotKey: 'confirmationMode.entry',
-        fieldPath: 'triggers[0].params.confirmationMode',
-        slotId: buildSemanticSlotId({
-          slotKey: 'confirmationMode.entry',
-          fieldPath: 'triggers[0].params.confirmationMode',
-        }),
       }),
     ])
   })

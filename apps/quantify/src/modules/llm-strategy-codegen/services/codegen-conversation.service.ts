@@ -26,7 +26,6 @@ import type {
   SemanticState,
   SemanticTriggerState,
 } from '../types/semantic-state'
-import type { StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyBlockingReason, StrategyInferredAssumption } from '../types/strategy-decision'
 import type { StrategyExecutionContextResolution } from '../types/strategy-execution-context'
@@ -132,8 +131,6 @@ import {
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StrategyClarificationRulesService } from './strategy-clarification-rules.service'
 import { StrategyExecutionContextService } from './strategy-execution-context.service'
-import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.service'
-import { StrategyIntentResolutionService } from './strategy-intent-resolution.service'
 import { validateSemanticPositionContract } from './strategy-semantic-contracts'
 import { UnsupportedFallbackService } from './unsupported-fallback.service'
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
@@ -302,8 +299,6 @@ export class CodegenConversationService {
     private readonly publicationPipeline: CodegenSessionPublicationPipelineService,
     private readonly conversationSemanticEdit: ConversationSemanticEditService = new ConversationSemanticEditService(),
     private readonly executionContext: StrategyExecutionContextService = new StrategyExecutionContextService(),
-    private readonly intentNormalizer: StrategyIntentNormalizerService = new StrategyIntentNormalizerService(),
-    private readonly intentResolution: StrategyIntentResolutionService = new StrategyIntentResolutionService(),
     private readonly semanticStateReducer: SemanticStateReducerService = new SemanticStateReducerService(),
     private readonly semanticStateProjection: SemanticStateProjectionService = new SemanticStateProjectionService(),
     private readonly semanticStateMerge: SemanticStateMergeService = new SemanticStateMergeService(),
@@ -3482,42 +3477,6 @@ export class CodegenConversationService {
     })
   }
 
-  private toSemanticTriggerState(
-    trigger: StrategyNormalizedIntent['triggers'][number],
-    index: number,
-  ): SemanticTriggerState {
-    return {
-      id: `${trigger.phase}-${index + 1}`,
-      key: trigger.key,
-      phase: trigger.phase,
-      params: {
-        ...trigger.params,
-        ...(trigger.resolutionHints?.confirmation
-          ? { confirmationMode: trigger.resolutionHints.confirmation }
-          : {}),
-      },
-      ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
-      status: trigger.closureStatus === 'closed' ? 'locked' : 'open',
-      source: 'user_explicit',
-      ...(trigger.evidenceText ? { evidence: { text: trigger.evidenceText, source: 'user_explicit' as const } } : {}),
-      openSlots: trigger.unresolvedSlots.map(slot => this.toSemanticSlotState(slot)),
-    }
-  }
-
-  private toSemanticSlotState(
-    slot: StrategyNormalizedIntent['triggers'][number]['unresolvedSlots'][number],
-  ): SemanticSlotState {
-    return {
-      slotKey: slot.slotKey,
-      fieldPath: slot.fieldPath,
-      status: 'open',
-      priority: slot.priority,
-      questionHint: slot.questionHint,
-      affectsExecution: slot.affectsExecution,
-      ...(slot.evidenceText ? { evidence: { text: slot.evidenceText, source: 'user_explicit' as const } } : {}),
-    }
-  }
-
   private buildContextSlotState(
     field: 'exchange' | 'symbol' | 'marketType' | 'timeframe',
     value: string | null,
@@ -5838,25 +5797,6 @@ export class CodegenConversationService {
       )
   }
 
-  private attachCompatibilityRuleSummary(
-    clarificationState: StrategyClarificationState | null | undefined,
-    compatibilitySnapshot: StrategyLogicSnapshot,
-    normalizedIntent?: StrategyNormalizedIntent | null,
-  ): StrategyClarificationStateWithSummary | null {
-    if (!clarificationState) return null
-    if (clarificationState.status !== 'NEEDS_CLARIFICATION') {
-      return {
-        ...clarificationState,
-        summary: null,
-      }
-    }
-
-    return {
-      ...clarificationState,
-      summary: this.buildCompatibilityRuleSummary(compatibilitySnapshot, normalizedIntent),
-    }
-  }
-
   private attachSemanticSummaryToClarification(
     clarificationState: StrategyClarificationState | null | undefined,
     semanticState: SemanticState,
@@ -5869,190 +5809,6 @@ export class CodegenConversationService {
         ? this.buildSemanticClarificationSummary(semanticState)
         : null,
     }
-  }
-
-  private resolveCompatibilityClarificationArtifacts(compatibilitySnapshot: StrategyLogicSnapshot): {
-    normalization: NormalizationResult
-    executionContext: ReturnType<StrategyExecutionContextService['resolve']>
-    atomicResolution: ReturnType<StrategyIntentResolutionService['resolve']>
-    clarificationState: StrategyClarificationStateWithSummary
-    clarificationPrompt: string
-    blockingReasons: StrategyBlockingReason[]
-    inferredAssumptions: StrategyInferredAssumption[]
-  } {
-    const normalization = this.intentNormalizer.normalize(compatibilitySnapshot)
-    const executionContext = this.executionContext.resolve(compatibilitySnapshot)
-    const atomicResolution = this.intentResolution.resolve({
-      normalizedIntent: normalization.normalizedIntent,
-    })
-    const rawClarificationState = this.attachCompatibilityRuleSummary(
-      this.clarificationRules.detectFromAmbiguities({
-        executionContext,
-        atomicResolution,
-      }),
-      compatibilitySnapshot,
-      normalization.normalizedIntent,
-    ) as StrategyClarificationStateWithSummary
-    const clarificationState = this.filterLegacyClarificationState(rawClarificationState, normalization)
-    const shouldUseExecutionContextAmbiguities = clarificationState.items.some(item => item.key.startsWith('executionContext.'))
-    const shouldUseAtomicAmbiguities = clarificationState.items.some(item =>
-      item.reason === 'atomic_semantic_fork'
-      || item.key.startsWith('semantic.'),
-    )
-    const effectiveAmbiguities: StrategyAmbiguity[] = [
-      ...(shouldUseExecutionContextAmbiguities
-        ? executionContext.ambiguities.map(ambiguity => ({
-            kind: ambiguity.kind,
-            field: ambiguity.field,
-            message: ambiguity.reason,
-          }))
-        : []),
-      ...(shouldUseAtomicAmbiguities ? atomicResolution.ambiguities : []),
-    ]
-    const clarificationPrompt = this.clarificationQuestion.buildFromAmbiguities({
-      summary: clarificationState.summary,
-      ambiguities: effectiveAmbiguities,
-    }) || this.clarificationQuestion.build(clarificationState)
-    const alignedClarificationState = this.alignClarificationStateWithAskedQuestion(
-      clarificationState,
-      clarificationPrompt,
-    ) as StrategyClarificationStateWithSummary
-    const clarificationEvidence = this.clarificationRules.collectEvidence(compatibilitySnapshot)
-    const blockingReasons: StrategyBlockingReason[] = [
-      ...executionContext.evidence
-        .filter((item): item is { key: string, reason: string, priority: number, question: string } => typeof item.question === 'string')
-        .map(item => ({
-          key: item.key,
-          reason: item.reason,
-          priority: item.priority,
-          question: item.question,
-        })),
-      ...clarificationEvidence.blockingReasons.map(item => ({
-        key: item.key,
-        reason: this.mapClarificationReasonToBlockingReason(item.reason),
-        priority: item.priority,
-        question: item.question,
-      })),
-      ...atomicResolution.ambiguities
-        .filter((item) => item.kind === 'atomic_semantic_fork' && item.field === 'trigger.confirmation')
-        .map(() => ({
-          key: 'trigger.confirmation',
-          reason: 'trigger_semantics_fork',
-          priority: 95,
-          question: '该布林带条件是触碰即触发，还是收盘确认后触发？',
-        })),
-    ]
-    const inferredAssumptions = this.collectInferredAssumptions(compatibilitySnapshot)
-
-    return {
-      normalization,
-      executionContext,
-      atomicResolution,
-      clarificationState: alignedClarificationState,
-      clarificationPrompt,
-      blockingReasons,
-      inferredAssumptions,
-    }
-  }
-
-  private filterLegacyClarificationState(
-    clarificationState: StrategyClarificationStateWithSummary,
-    normalization: NormalizationResult,
-  ): StrategyClarificationStateWithSummary {
-    const hasActiveGrid = normalization.normalizedIntent.triggers.some(trigger => trigger.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
-    const items = clarificationState.items.filter(item => {
-      if (
-        hasActiveGrid
-        && (
-          (item.reason === 'missing_entry_rules' && item.field === 'entryRules')
-          || (item.reason === 'missing_exit_rules' && item.field === 'exitRules')
-        )
-      ) {
-        return false
-      }
-
-      return !this.shouldSuppressLegacyClarificationItem(item, normalization)
-    })
-
-    return {
-      ...clarificationState,
-      status: items.length > 0 ? 'NEEDS_CLARIFICATION' : 'CLEAR',
-      items,
-    }
-  }
-
-  private shouldSuppressLegacyClarificationItem(
-    item: StrategyClarificationItem,
-    normalization: NormalizationResult,
-  ): boolean {
-    if (normalization.blocked) return false
-
-    const triggers = normalization.normalizedIntent.triggers
-    if (triggers.length === 0 || triggers.some(trigger => trigger.closureStatus !== 'closed')) {
-      return false
-    }
-
-    const isGoldenSupportedTriggerSet = triggers.every(trigger =>
-      trigger.key === ATOM_CONTRACT_REGISTRY['price.percent_change'].key
-      || trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key
-      || trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key
-      || trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key,
-    )
-    if (!isGoldenSupportedTriggerSet) return false
-
-    return item.reason === 'missing_stop_loss_rule'
-      || item.reason === 'missing_take_profit_rule'
-  }
-
-  private buildCompatibilityRuleSummary(
-    checklist: StrategyLogicSnapshot,
-    normalizedIntent?: StrategyNormalizedIntent | null,
-  ): string | null {
-    const drafts = buildStrategyRuleDrafts(checklist)
-    const executionContext = this.resolveExecutionContextForSummary(checklist)
-    const positionPct = typeof checklist.riskRules?.positionPct === 'number'
-      ? `${checklist.riskRules.positionPct}% 仓位`
-      : ''
-    const formatRuleSummaryText = (text: string, timeframe?: string | null): string => {
-      const trimmed = text.trim()
-      if (!trimmed) return ''
-      if (/^\d+[mhd]\s+/u.test(trimmed) || !timeframe) {
-        return trimmed
-      }
-      return `${timeframe} ${trimmed}`.trim()
-    }
-    const formatDraft = (draft: StrategyRuleDraft | undefined): string => {
-      if (!draft) return ''
-      const normalizedText = draft.text.replace(/^\d+[mhd]\s+/u, '').trim()
-      return formatRuleSummaryText(normalizedText, draft.timeframe)
-    }
-    const formatDrafts = (items: StrategyRuleDraft[]): string => {
-      const summaries = items
-        .map(item => formatDraft(item))
-        .filter(Boolean)
-      return Array.from(new Set(summaries)).join('；')
-    }
-    const entrySummary = this.buildNormalizedTriggerSummary(normalizedIntent, 'entry', executionContext.timeframe)
-      || formatDrafts(drafts.entry)
-    const exitSummary = this.buildNormalizedTriggerSummary(normalizedIntent, 'exit', executionContext.timeframe)
-      || formatDrafts(drafts.exit)
-
-    const segments = [
-      [
-        executionContext.exchange,
-        executionContext.marketType === 'perp' ? '合约' : executionContext.marketType === 'spot' ? '现货' : '',
-        executionContext.symbol,
-        executionContext.timeframe,
-      ].filter(Boolean).join(' '),
-      this.buildGridSummarySegment(checklist.grid),
-      entrySummary ? `入场：${entrySummary}` : '',
-      exitSummary ? `出场：${exitSummary}` : '',
-      this.buildRiskSummarySegment('止损', checklist.riskRules, 'stopLoss'),
-      this.buildRiskSummarySegment('止盈', checklist.riskRules, 'takeProfit'),
-      positionPct,
-    ].filter(Boolean)
-
-    return segments.length > 0 ? segments.join('；') : null
   }
 
   private buildSemanticClarificationSummary(semanticState: SemanticState): string {
@@ -6193,129 +5949,6 @@ export class CodegenConversationService {
       ? '当前有已识别但执行层暂不支持的语义。'
       : '当前有已识别语义尚未稳定投影到可执行规则。'
     return `我当前理解的策略是：${summary}\n${blocker}请调整为当前支持的触发、风控或执行条件后，我再继续生成脚本。`
-  }
-
-  private buildLogicGateAssistantPrompt(
-    checklist: StrategyLogicSnapshot,
-    normalizedIntent?: StrategyNormalizedIntent | null,
-  ): string {
-    const summary = this.buildCompatibilityRuleSummary(checklist, normalizedIntent)
-    if (summary) {
-      return `我当前理解的策略是：${summary}。请确认逻辑图；请确认是否按此逻辑生成。`
-    }
-
-    return '逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。'
-  }
-
-  private buildGridSummarySegment(grid: StrategyLogicSnapshot['grid']): string {
-    if (!grid) return ''
-
-    const range = typeof grid.lower === 'number' && typeof grid.upper === 'number'
-      ? `${grid.lower}-${grid.upper}`
-      : ''
-    const step = typeof grid.stepPct === 'number' ? `步长 ${grid.stepPct}%` : ''
-    const sideMode = grid.sideMode === 'bidirectional'
-      ? '双向网格'
-      : grid.sideMode === 'long_only'
-        ? '仅做多网格'
-        : grid.sideMode === 'short_only'
-          ? '仅做空网格'
-          : '网格'
-    const parts = [sideMode, range, step].filter(Boolean)
-    return parts.length > 0 ? `网格：${parts.join('，')}` : ''
-  }
-
-  private resolveExecutionContextForSummary(checklist: StrategyLogicSnapshot): {
-    exchange: string
-    marketType: string
-    symbol: string
-    timeframe: string
-  } {
-    const rawExchange = typeof checklist.market?.exchange === 'string'
-      ? checklist.market.exchange.trim().toUpperCase()
-      : (typeof checklist.riskRules?.exchange === 'string' ? checklist.riskRules.exchange.trim().toUpperCase() : '')
-    const rawMarketType = typeof checklist.market?.marketType === 'string'
-      ? checklist.market.marketType.trim().toLowerCase()
-      : (typeof checklist.riskRules?.marketType === 'string'
-          ? checklist.riskRules.marketType.trim().toLowerCase()
-          : '')
-    const rawSymbol = checklist.symbols?.[0]?.trim() ?? ''
-    const rawTimeframe = resolveStrategyDefaultTimeframe(checklist) ?? ''
-
-    const resolvedContext = typeof this.executionContext?.resolve === 'function'
-      ? this.executionContext.resolve({ ...checklist }).context
-      : null
-
-    return {
-      exchange: resolvedContext?.exchange?.toUpperCase() ?? rawExchange,
-      marketType: resolvedContext?.marketType ?? rawMarketType,
-      symbol: resolvedContext?.symbol ?? rawSymbol,
-      timeframe: resolvedContext?.timeframe ?? rawTimeframe,
-    }
-  }
-
-  private buildNormalizedTriggerSummary(
-    normalizedIntent: StrategyNormalizedIntent | null | undefined,
-    phase: 'entry' | 'exit',
-    fallbackTimeframe: string,
-  ): string {
-    const triggers = normalizedIntent?.triggers.filter(item =>
-      item.phase === phase
-      && item.closureStatus === 'closed',
-    ) ?? []
-    if (triggers.length === 0) {
-      return ''
-    }
-
-    const projectedSummaries = triggers
-      .map((trigger, index) => {
-        const projected = this.buildProjectedRuleText({
-          id: `summary-${phase}-${index + 1}`,
-          key: trigger.key,
-          phase: trigger.phase,
-          params: {
-            ...trigger.params,
-            ...(trigger.resolutionHints?.confirmation
-              ? { confirmationMode: trigger.resolutionHints.confirmation }
-              : {}),
-          },
-          ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
-          status: 'locked',
-          source: 'user_explicit',
-          ...(trigger.evidenceText ? { evidence: { text: trigger.evidenceText, source: 'user_explicit' as const } } : {}),
-          openSlots: [],
-        })
-        if (!projected) {
-          return null
-        }
-
-        return /^\d+[mhd]\s+/u.test(projected) || !fallbackTimeframe
-          ? projected
-          : `${fallbackTimeframe} ${projected}`.trim()
-      })
-    if (projectedSummaries.includes(null)) {
-      return ''
-    }
-
-    return Array.from(new Set(projectedSummaries)).join('；')
-  }
-
-  private buildNormalizationAssistantPrompt(
-    checklist: StrategyLogicSnapshot,
-    normalization: NormalizationResult,
-  ): string {
-    const summary = this.buildCompatibilityRuleSummary(checklist, normalization.normalizedIntent)
-    const normalizedFamilies = normalization.normalizedIntent.families.join('、')
-    const normalizedLine = normalizedFamilies
-      ? `当前已归一到的语义族：${normalizedFamilies}。`
-      : '当前还没有稳定归一到首批语义族。'
-    const blockerReason = normalization.blockerReason ?? '当前策略语义仍不稳定。'
-    return [
-      summary ? `我当前理解的策略是：${summary}` : '我当前已经整理了你的策略输入。',
-      normalizedLine,
-      `现在还缺一个会影响脚本生成一致性的条件：${blockerReason}`,
-      '请继续明确策略语义。',
-    ].join('\n')
   }
 
   private normalizeClarificationSummary(summary: unknown): string | null {
@@ -7898,53 +7531,6 @@ export class CodegenConversationService {
     return reason
   }
 
-  private collectInferredAssumptions(
-    checklist: StrategyLogicSnapshot,
-    constraintPack: ConstraintPackSnapshot = createDefaultConstraintPack(),
-  ): StrategyInferredAssumption[] {
-    const combinedText = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')
-    const assumptions: StrategyInferredAssumption[] = []
-    const consumedKeys = new Set([
-      ...(Array.isArray(constraintPack.inferredConfirmation?.confirmedKeys)
-        ? constraintPack.inferredConfirmation.confirmedKeys.filter((item): item is string => typeof item === 'string')
-        : []),
-      ...(Array.isArray(constraintPack.inferredConfirmation?.overriddenKeys)
-        ? constraintPack.inferredConfirmation.overriddenKeys.filter((item): item is string => typeof item === 'string')
-        : []),
-    ])
-    const inferredKeys = Array.isArray(checklist.riskRules?._inferredAssumptions)
-      ? checklist.riskRules._inferredAssumptions.filter(
-          (item): item is string => typeof item === 'string' && !consumedKeys.has(item),
-        )
-      : []
-
-    if (inferredKeys.includes('risk.stopLossBasis') && checklist.riskRules?.stopLossBasis === 'entry_avg_price') {
-      assumptions.push({
-        key: 'risk.stopLossBasis',
-        value: 'entry_avg_price',
-        source: 'system_default',
-      })
-    }
-
-    if (inferredKeys.includes('risk.takeProfitBasis') && checklist.riskRules?.takeProfitBasis === 'entry_avg_price') {
-      assumptions.push({
-        key: 'risk.takeProfitBasis',
-        value: 'entry_avg_price',
-        source: 'system_default',
-      })
-    }
-
-    if (/默认|你来定/u.test(combinedText)) {
-      assumptions.push({
-        key: 'strategy.defaults',
-        value: '沿用系统默认解释',
-        source: 'system_default',
-      })
-    }
-
-    return assumptions
-  }
-
   private collectSemanticInferredAssumptions(
     semanticState: SemanticState,
     constraintPack: ConstraintPackSnapshot = createDefaultConstraintPack(),
@@ -8627,72 +8213,6 @@ export class CodegenConversationService {
 
     const value = Number(raw)
     return Number.isFinite(value) ? value : null
-  }
-
-  private buildRiskSummarySegment(
-    label: '止损' | '止盈',
-    riskRules: Record<string, unknown> | undefined,
-    kind: 'stopLoss' | 'takeProfit',
-  ): string {
-    const pct = kind === 'stopLoss'
-      ? riskRules?.stopLossPct
-      : riskRules?.takeProfitPct
-    if (!this.isValidRiskPct(pct)) return ''
-
-    const basis = this.resolveRiskBasis(
-      kind === 'stopLoss'
-        ? typeof riskRules?.stopLoss === 'string' ? riskRules.stopLoss : `止损 ${pct}%`
-        : typeof riskRules?.takeProfit === 'string' ? riskRules.takeProfit : `止盈 ${pct}%`,
-      kind === 'stopLoss'
-        ? this.isNamedBasis(riskRules?.stopLossBasis) ? riskRules.stopLossBasis : null
-        : this.isNamedBasis(riskRules?.takeProfitBasis) ? riskRules.takeProfitBasis : null,
-    )
-    return this.describeRiskSummary(basis, label, pct)
-  }
-
-  private describeRiskSummary(
-    basis: StrategyRuleBasis['kind'] | null,
-    label: '止损' | '止盈',
-    pct: number,
-  ): string {
-    const action = label === '止损' ? '强制平仓' : '平仓'
-
-    if (basis === 'position_pnl') {
-      return `${label}：${label === '止损' ? '持仓亏损达到 ' : '持仓收益率达到 '}${pct}% ${action}`
-    }
-
-    if (basis === 'peak_equity') {
-      return `${label}：账户净值相对峰值回撤达到 ${pct}% ${action}`
-    }
-
-    if (basis === 'peak_position_pnl') {
-      return `${label}：持仓浮盈相对峰值回撤达到 ${pct}% ${action}`
-    }
-
-    const basisLabel = this.describeRiskBasisLabel(basis)
-    const direction = label === '止损' ? '下跌' : '上涨'
-    return `${label}：价格相对${basisLabel}${direction} ${pct}% ${action}`
-  }
-
-  private describeRiskBasisLabel(basis: StrategyRuleBasis['kind'] | null): string {
-    switch (basis) {
-      case 'prev_close':
-        return '上一根K线收盘价'
-      case 'upper_band':
-        return '布林带上轨'
-      case 'lower_band':
-        return '布林带下轨'
-      case 'middle_band':
-        return '布林带中轨'
-      case 'last_high':
-        return '前高'
-      case 'last_low':
-        return '前低'
-      case 'entry_avg_price':
-      case null:
-      default:
-        return '入场价'
-    }
   }
 
   private readConstraintPack(payload: Prisma.JsonValue | null): ConstraintPackSnapshot {
