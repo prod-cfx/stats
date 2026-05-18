@@ -409,11 +409,15 @@ export const THIRTY_ONE_STRATEGIES: readonly ThirtyOneStrategyFixture[] = [
       { key: 'open_long', category: 'action' },
       { key: 'close_long', category: 'action' },
     ],
-    // #1496-C1：harness 移除 dispatcher fallback 后，mock 显式给出 positionPct 与 open_long/short
-    //   effects，pipeline 不再触发 sizing 不一致；webhook external_signal atom 不在 registry，
-    //   被静默过滤后 pipeline 正常落 publication。webhook binding 真实缺口由 #1499 子任务接手。
-    //   #1496 round-2 C-NEW-1：harness 加 unknown_atom 预检后，external_signal 显式 unsupported。
-    expectedRoute: { kind: 'unsupported', reason: 'unknown_atom:external_signal' },
+    // #1499：mock atom key 之前用下划线 `external_signal`（registry 实际注册名是
+    //   `external.signal`），导致 harness unknown_atom 预检拒绝 → 表面 unsupported。
+    //   修正 key 后 codegen 链路（registry / canonical_spec / IR / AST emit）全部正常，
+    //   #25 真实落 pass。
+    //   ⚠️ 仍未实装的是 **webhook runtime 基建**（webhook ingestion endpoint、HMAC 校验、
+    //   signal queue、IR predicate runtime evaluator），与 codegen 不在同一层；该缺口
+    //   由 follow-up issue 跟踪（fixtures/external-signal.example.ts:9-12 显式承认）。
+    //   即：本 fixture 的 'pass' 仅覆盖 codegen 路由，不代表生产 runtime 可执行。
+    expectedRoute: 'pass',
     affectedSubIssue: 1499,
     isUserInputGap: true,
   },
