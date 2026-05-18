@@ -81,6 +81,8 @@ export type SupportedAtomKey =
   | 'risk.atr_multiple_stop'
   | 'risk.atr_multiple_take_profit'
   | 'risk.remembered_level_stop'
+  // ── Issue #1491 阶段 B：滚动高低点突破 ──
+  | 'price.rolling_extrema_breakout'
 
 /** @deprecated #1329 已更名 SupportedAtomKey，本 alias 保留兼容 in-flight branch；下个 PR 删 */
 export type SupportedExecutableUtteranceAtom = SupportedAtomKey

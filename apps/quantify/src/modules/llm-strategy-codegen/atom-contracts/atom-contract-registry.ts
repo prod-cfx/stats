@@ -216,6 +216,8 @@ const ATOM_BUCKETS = {
   'risk.atr_multiple_stop': 'risk',
   'risk.atr_multiple_take_profit': 'risk',
   'risk.remembered_level_stop': 'risk',
+  // Issue #1491 阶段 B：滚动 N 根 K 高/低点突破/跌破
+  'price.rolling_extrema_breakout': 'trigger',
 } as const satisfies Record<AtomContractKey, AtomContractBucket>
 
 // =========================================================
@@ -306,6 +308,8 @@ const ATOM_FULFILLS_STRATEGY_PHASE = {
   'risk.atr_multiple_stop': ['risk', 'exit'],
   'risk.atr_multiple_take_profit': ['risk', 'exit'],
   'risk.remembered_level_stop': ['risk', 'exit'],
+  // Issue #1491 阶段 B：双向触发（突破 high 做多 / 跌破 low 平仓）
+  'price.rolling_extrema_breakout': ['entry', 'exit'],
 } as const satisfies Record<AtomContractKey, ReadonlyArray<'entry' | 'exit' | 'risk' | 'sizing' | 'context'>>
 
 export function getAtomFulfillsStrategyPhase(
@@ -401,6 +405,8 @@ const ATOM_ROLES = {
   'risk.atr_multiple_stop': ['effect'],
   'risk.atr_multiple_take_profit': ['effect'],
   'risk.remembered_level_stop': ['effect'],
+  // Issue #1491 阶段 B
+  'price.rolling_extrema_breakout': ['predicate'],
 } as const satisfies Record<AtomContractKey, ReadonlyArray<'predicate' | 'effect'>>
 
 export function getAtomRoles(key: AtomContractKey): ReadonlyArray<'predicate' | 'effect'> {
@@ -517,6 +523,8 @@ const ATOM_TEMPORALITY = {
   'scope.timeframe': 'structural',
   'scope.dataSource': 'structural',
   'scope.subStrategy': 'structural',
+  // Issue #1491 阶段 B：突破/跌破是 rising-edge 事件
+  'price.rolling_extrema_breakout': 'event',
 } as const satisfies Record<AtomContractKey, 'state' | 'event' | 'structural'>
 
 export function getAtomTemporality(key: AtomContractKey): 'state' | 'event' | 'structural' {
@@ -615,6 +623,8 @@ const ATOM_PUBLIC_NAMES = {
   'risk.atr_multiple_stop': { zh: 'ATR 倍数止损', en: 'ATR multiple stop loss' },
   'risk.atr_multiple_take_profit': { zh: 'ATR 倍数止盈', en: 'ATR multiple take profit' },
   'risk.remembered_level_stop': { zh: '记忆位止损', en: 'Remembered level stop' },
+  // Issue #1491 阶段 B
+  'price.rolling_extrema_breakout': { zh: '滚动高低点突破', en: 'Rolling extrema breakout' },
 } as const satisfies Record<AtomContractKey, { zh: string; en: string }>
 
 export { ATOM_PUBLIC_NAMES }
@@ -5012,6 +5022,71 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         levelKey: { kind: 'symbol', required: true },
       },
       phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
+    },
+  },
+
+  // Issue #1491 阶段 B：滚动 N 根 K 高/低点突破
+  //   场景：「BTC 4 小时突破过去 20 根 K 高点做多 / 跌破过去 10 根 K 低点平仓」
+  //   IR 实现已存在于 canonical-spec-v2-ir-compiler.service.ts 内 case
+  //   'price.rolling_extrema_breakout'（走 legacy switch，capabilityStatus =
+  //   'irshape-not-applicable'）；本注册补齐 ATOM_CONTRACT_REGISTRY 7 张分表入口
+  //   让 harness `isKnownAtomKey` 不再判定 unknown_atom。
+  'price.rolling_extrema_breakout': {
+    corpus: {
+      aliases: ['滚动高低点突破', '近期高低点突破', '突破近 N 根高点', '跌破近 N 根低点'],
+      positiveExamples: [
+        '突破过去 20 根 K 线最高价做多',
+        '跌破过去 10 根 K 线最低价平仓',
+      ],
+      negativeExamples: ['只是接近近期高点', '回踩前高不破'],
+      goldenUtterances: [],
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'price.rolling_extrema_breakout.extrema') return '请明确突破方向：high（向上突破最高价）或 low（向下跌破最低价）。'
+      if (slotKey === 'price.rolling_extrema_breakout.lookbackBars') return '请给出滚动窗口长度，例如 20（过去 20 根 K 线）。'
+      return '请补充滚动高低点突破的缺失信息（extrema / lookbackBars）。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: {
+      supportStatus: 'supported_executable',
+      executableSinceVersion: '2026.05.W02',
+    },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['price.rolling_extrema_breakout'],
+      paramRenderers: {
+        extrema: (v) => v === 'low' ? '低点' : '高点',
+        lookbackBars: (v) => `${v} 根`,
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['price.rolling_extrema_breakout'].en
+        const extrema = params.extrema === 'low' ? 'low' : 'high'
+        const lookback = typeof params.lookbackBars === 'number' ? `过去 ${params.lookbackBars} 根 K 线` : '过去若干根 K 线'
+        return extrema === 'low' ? `跌破${lookback}最低价` : `突破${lookback}最高价`
+      },
+    },
+    surface: {
+      intent: {
+        // #1491 阶段 B：keywords 必须显式指向"过去 N 根 K 高/低点"语义，
+        //   避免与 price.breakout_up / price.breakout_down / bollinger.touch_* 通用
+        //   "突破"/"跌破" 词面冲突；只在出现"过去 N 根"/"最近 N 根"/"rolling N-bar" 等
+        //   显式滚动窗口 token 时才命中。
+        keywords: ['过去 N 根', '过去若干根', '最近 N 根', '最近若干根', '滚动高低点', '滚动极值', 'rolling high', 'rolling low', 'rolling extrema', 'N-bar high', 'N-bar low'] as const,
+        verbs: {
+          fixed: ['突破', '跌破', '上破', '下破', 'breakout', 'break'] as const,
+        },
+      },
+      paramSlots: {
+        // #1491 阶段 B：lookbackBars 收紧 [1, 500] + multipleOf:1；extrema 二选一。
+        lookbackBars: { kind: 'number', required: true, range: [1, 500], multipleOf: 1, default: 20 },
+        extrema: { kind: 'enum', required: true, enum: ['high', 'low'] },
+        event: { kind: 'enum', required: false, enum: ['breakout_up', 'breakout_down'] },
+      },
+      phaseResolver: 'by-clause-verb',
       sideResolver: 'inherit',
     },
   },

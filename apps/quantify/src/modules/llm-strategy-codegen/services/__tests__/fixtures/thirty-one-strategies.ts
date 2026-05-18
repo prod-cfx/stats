@@ -283,8 +283,7 @@ export const THIRTY_ONE_STRATEGIES: readonly ThirtyOneStrategyFixture[] = [
       { key: 'open_long', category: 'action' },
       { key: 'close_long', category: 'action' },
     ],
-    expectedRoute: { kind: 'unsupported', reason: 'unknown_atom:price.rolling_extrema_breakout' },
-    affectedSubIssue: 1497,
+    expectedRoute: 'pass',
   },
   {
     id: 17,
