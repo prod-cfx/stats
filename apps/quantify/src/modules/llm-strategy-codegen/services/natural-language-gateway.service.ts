@@ -23,30 +23,6 @@ import type {
 } from '../types/semantic-natural-language-frame'
 import { Injectable } from '@nestjs/common'
 import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
-import { SUPPORTED_QUOTE_ASSETS } from '../constants/quote-assets'
-import { assertSymbolWellFormed } from './execution-model-source-invariant'
-
-/**
- * Issue #1459 闸 4 review C3：natural-language-gateway 的 `\b([A-Z]{2,5})USDT\b`
- * 正则在某些 fallback / 别名场景下可能拿到已含 quote 后缀的 base（例如别名表注入
- * 后的二次匹配，或上游 OCR 容错把 'BTCUSDT 永续' 切成 m[1]='BTCUS'+'DT?' 之类），
- * 直接 `${m[1]}USDT` 会拼出 BTCUSDTUSDT 双 quote。
- *
- * 本 helper 在拼接前剥离 m[1] 末尾可能已包含的 quote 后缀，再补 USDT；
- * 最终用 assertSymbolWellFormed 兜底，任何残留双 quote 都会被 fail-closed。
- */
-function safeConcatUsdtSymbol(base: string): string {
-  let normalized = base.toUpperCase()
-  for (const quote of SUPPORTED_QUOTE_ASSETS) {
-    if (normalized.endsWith(quote) && normalized.length > quote.length) {
-      normalized = normalized.slice(0, normalized.length - quote.length)
-      break
-    }
-  }
-  const symbol = `${normalized}USDT`
-  assertSymbolWellFormed(symbol)
-  return symbol
-}
 
 type FrameDraft =
   | ContextFrameDraft
@@ -181,7 +157,7 @@ export class NaturalLanguageGatewayService {
     // 全文扫描所有 symbol 候选：显式 USDT + alias，记录位置
     const symbolHits: Array<{ pos: number; symbol: string }> = []
     for (const m of text.matchAll(/\b([A-Z]{2,5})USDT\b/giu)) {
-      if (m.index !== undefined) symbolHits.push({ pos: m.index, symbol: safeConcatUsdtSymbol(m[1]) })
+      if (m.index !== undefined) symbolHits.push({ pos: m.index, symbol: `${m[1]}USDT`.toUpperCase() })
     }
     for (const m of text.matchAll(/(?<![A-Za-z])(BTC|ETH|SOL|BNB|MATIC|AVAX|DOGE|XRP)(?![A-Za-z])/giu)) {
       if (m.index === undefined) continue
@@ -598,7 +574,7 @@ export class NaturalLanguageGatewayService {
     // 显式 USDT 后缀（要求完整 USDT；BTCUS 不命中）
     const explicit = /\b([A-Z]{2,5})USDT\b/gu
     for (const m of text.matchAll(explicit)) {
-      const symbol = safeConcatUsdtSymbol(m[1])
+      const symbol = `${m[1]}USDT`.toUpperCase()
       symbolSet.add(symbol)
     }
     // 中文别名白名单（避免与显式 USDT 命中冲突）

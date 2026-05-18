@@ -509,14 +509,7 @@ export class CodegenSessionsRepository {
   }
 
   private resolveExecutionSymbol(params: Record<string, unknown>): string {
-    // Issue #1459 闸 4 review C3：禁止 'BTCUSDT' 默认 fallback；该路径已被
-    //   上游 buildSymbol / publishParams 校验过，进入此函数时 params.symbol
-    //   必须非空且形态合规，否则 fail-closed。
-    const raw = typeof params.symbol === 'string' ? params.symbol.trim() : ''
-    if (raw.length === 0) {
-      throw new Error('codegen.execution_symbol_missing: params.symbol required')
-    }
-    const rawSymbol = raw.toUpperCase()
+    const rawSymbol = typeof params.symbol === 'string' ? params.symbol.trim().toUpperCase() : 'BTCUSDT'
     const marketType = typeof params.marketType === 'string' ? params.marketType.trim().toLowerCase() : 'spot'
     return toSymbolCode(rawSymbol, marketType === 'perp' ? 'PERP' : 'SPOT')
   }

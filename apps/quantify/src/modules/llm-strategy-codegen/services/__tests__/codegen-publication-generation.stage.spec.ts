@@ -104,7 +104,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请确认交易所。',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
       symbol: {
         slotKey: 'symbol',
@@ -114,7 +113,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请确认交易标的。',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
       marketType: {
         slotKey: 'marketType',
@@ -124,7 +122,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请确认市场类型。',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
       timeframe: {
         slotKey: 'timeframe',
@@ -134,7 +131,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请确认周期。',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
     },
     normalizationNotes: [],
@@ -225,7 +221,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请选择交易所',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
       symbol: {
         slotKey: 'symbol',
@@ -235,7 +230,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请选择交易标的',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
       marketType: {
         slotKey: 'marketType',
@@ -245,7 +239,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请选择市场类型',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
       timeframe: {
         slotKey: 'timeframe',
@@ -255,7 +248,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请选择周期',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
     },
     normalizationNotes: [],
@@ -321,7 +313,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请确认交易所。',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
       symbol: {
         slotKey: 'symbol',
@@ -331,7 +322,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请确认交易标的。',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
       marketType: {
         slotKey: 'marketType',
@@ -341,7 +331,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请确认市场类型。',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
       timeframe: {
         slotKey: 'timeframe',
@@ -351,7 +340,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请确认周期。',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
     },
     normalizationNotes: [],
@@ -401,7 +389,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请确认交易所。',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
       symbol: {
         slotKey: 'symbol',
@@ -411,7 +398,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请确认交易标的。',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
       marketType: {
         slotKey: 'marketType',
@@ -421,7 +407,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请确认市场类型。',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
       timeframe: {
         slotKey: 'timeframe',
@@ -431,7 +416,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请确认周期。',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
     },
     normalizationNotes: [],
@@ -504,7 +488,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请确认交易所。',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
       symbol: {
         slotKey: 'symbol',
@@ -514,7 +497,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请确认交易标的。',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
       marketType: {
         slotKey: 'marketType',
@@ -524,7 +506,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请确认市场类型。',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
       timeframe: {
         slotKey: 'timeframe',
@@ -534,7 +515,6 @@ describe('codegenPublicationGenerationStage', () => {
         priority: 'context',
         questionHint: '请确认周期。',
         affectsExecution: true,
-        evidence: { text: 'user explicit', source: 'user_explicit' },
       },
     },
     normalizationNotes: [],
@@ -1462,12 +1442,10 @@ describe('codegenPublicationGenerationStage', () => {
     canonicalSpec.market.defaultTimeframe = null
     canonicalSpec.dataRequirements.requiredTimeframes = []
 
-    // Issue #1459 闸 4 review C1（strategy B）：IR builder 入口 invariant 先于
-    //   publishParams 缺失校验运行；contextSlots.symbol/timeframe=null 即 missing。
     await expect(stage.generate({
       semanticState,
       canonicalSpecOverride: canonicalSpec,
-    })).rejects.toThrow(/symbol|primaryTimeframe|未锁定|缺失/)
+    })).rejects.toThrow('codegen.publication_context_missing')
   })
 
   it('does not promote canonical market values into locked params without locked semantic context', async () => {
@@ -1492,9 +1470,6 @@ describe('codegenPublicationGenerationStage', () => {
       undefined,
       passingSemanticAtomInvariant() as any,
     )
-    // Issue #1459 闸 4 review C1（strategy B）：原 fixture 验证 contextSlots 全 null
-    //   时 canonical 不会被提升到 lockedParams；新 invariant 之后此路径直接拒绝
-    //   IR 产出，不再有 lockedParams 行为可观察。改为 expect 抛出 invariant 异常。
     const semanticState = buildLockedMaSemanticState()
     semanticState.contextSlots = {
       exchange: null,
@@ -1505,10 +1480,22 @@ describe('codegenPublicationGenerationStage', () => {
     const canonicalSpec = canonicalSpecBuilder.buildFromSemanticState(buildLockedMaSemanticState())
     canonicalSpec.market.marketType = 'perp'
 
-    await expect(stage.generate({
+    const artifacts = await stage.generate({
       semanticState,
       canonicalSpecOverride: canonicalSpec,
-    })).rejects.toThrow(/symbol|venue|primaryTimeframe|instrumentType|未锁定|缺失/)
+    })
+
+    expect(artifacts.publishParams).toEqual({
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      marketType: 'perp',
+    })
+    expect(artifacts.lockedParams).not.toEqual(expect.objectContaining({
+      symbol: expect.any(String),
+      timeframe: expect.any(String),
+      exchange: expect.any(String),
+      marketType: expect.any(String),
+    }))
   })
 
   it('uses SemanticState canonical expression mainline', async () => {
@@ -1807,11 +1794,8 @@ describe('codegenPublicationGenerationStage', () => {
       expect(consistencyEvaluate).not.toHaveBeenCalled()
     })
 
-    it('Issue #1459 闸 4 review C1：未注入 publicationGate 时仍由 ExecutionModel invariant 拒绝缺失 contextSlots', async () => {
-      // review C1 改动后：IR builder 入口先执行 assertExecutionModelFieldsSourced，
-      //   contextSlots 缺失 → ExecutionModelFieldUnsourcedException（strategy B：
-      //   显式 expect 该路径抛 invariant 异常，不放行无来源 fixture）。
-      const canonicalBuilder = { buildFromSemanticState: jest.fn() }
+    it('未注入 publicationGate 时维持原行为（向后兼容旧调用方）', async () => {
+      const canonicalBuilder = { buildFromSemanticState: jest.fn().mockImplementation(() => { throw new Error('downstream-still-runs') }) }
 
       const stage = new CodegenPublicationGenerationStage(
         canonicalBuilder as any,
@@ -1825,13 +1809,13 @@ describe('codegenPublicationGenerationStage', () => {
         { parse: jest.fn() } as any,
       )
 
+      // publicationGate 未注入 → 直接进入下游 builder（这里 mock 故意抛 downstream-still-runs）
       await expect(
         stage.generate({
           semanticState: { version: 1, families: [] } as any,
           clarificationState: { status: 'NEEDS_CLARIFICATION', items: [{ key: 'k', reason: 'missing_exchange', field: 'exchange', blocking: true, question: 'q', status: 'pending' }] },
         }),
-      ).rejects.toThrow(/execution_model_field_unsourced|symbol|未锁定|来源不合规/)
-      expect(canonicalBuilder.buildFromSemanticState).not.toHaveBeenCalled()
+      ).rejects.toThrow(/downstream-still-runs/)
     })
   })
 })

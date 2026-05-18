@@ -28,7 +28,6 @@ import type {
 import { Injectable, Logger } from '@nestjs/common'
 import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
-import { assertSymbolWellFormed } from './execution-model-source-invariant'
 import { extractAtrStopParams } from './atr-stop-params'
 import type { AtomContractKey } from '../atom-contracts/atom-contract-types'
 import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
@@ -3714,12 +3713,7 @@ export class CanonicalSpecBuilderService {
     const riskRules = 'riskRules' in context && context.riskRules && typeof context.riskRules === 'object' && !Array.isArray(context.riskRules)
       ? context.riskRules as Record<string, unknown>
       : {}
-    // Issue #1459 闸 4 review C3：rawSymbol 入口走 assertSymbolWellFormed 校验，
-    //   形态非法（双 quote / 非法字符）立即 fail-closed。
-    const rawSymbolCandidate = typeof symbols[0] === 'string' ? symbols[0].trim().toUpperCase() : ''
-    const rawSymbol = rawSymbolCandidate.length > 0
-      ? (assertSymbolWellFormed(rawSymbolCandidate), rawSymbolCandidate)
-      : ''
+    const rawSymbol = typeof symbols[0] === 'string' ? symbols[0].trim().toUpperCase() : ''
     const marketExchange = typeof market?.exchange === 'string' ? market.exchange.trim().toLowerCase() : ''
     const marketType = typeof market?.marketType === 'string' ? market.marketType.trim().toLowerCase() : ''
     const riskExchange = typeof riskRules.exchange === 'string' ? riskRules.exchange.trim().toLowerCase() : ''

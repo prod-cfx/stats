@@ -63,8 +63,6 @@ describe('codegenSessionPublicationPipeline', () => {
     positionConstraint: [],
     orchestration: [],
     orchestrationContracts: [],
-    // Issue #1459 闸 4 review C2：contextSlots 全部补 user_explicit evidence，
-    //   生产路径 buildSymbol / assertExecutionModelFieldsSourced 默认强制 enforce。
     contextSlots: {
       exchange: {
         slotKey: 'exchange',
@@ -74,7 +72,6 @@ describe('codegenSessionPublicationPipeline', () => {
         priority: 'context',
         questionHint: '请确认交易所。',
         affectsExecution: true,
-        evidence: { text: 'okx', source: 'user_explicit' },
       },
       symbol: {
         slotKey: 'symbol',
@@ -84,7 +81,6 @@ describe('codegenSessionPublicationPipeline', () => {
         priority: 'context',
         questionHint: '请确认交易标的。',
         affectsExecution: true,
-        evidence: { text: 'BTCUSDT', source: 'user_explicit' },
       },
       marketType: {
         slotKey: 'marketType',
@@ -94,7 +90,6 @@ describe('codegenSessionPublicationPipeline', () => {
         priority: 'context',
         questionHint: '请确认市场类型。',
         affectsExecution: true,
-        evidence: { text: 'perp', source: 'user_explicit' },
       },
       timeframe: {
         slotKey: 'timeframe',
@@ -104,7 +99,6 @@ describe('codegenSessionPublicationPipeline', () => {
         priority: 'context',
         questionHint: '请确认周期。',
         affectsExecution: true,
-        evidence: { text: '5m', source: 'user_explicit' },
       },
     },
     normalizationNotes: [],
@@ -317,75 +311,6 @@ describe('codegenSessionPublicationPipeline', () => {
       status: 'PUBLISHED',
       strategyInstanceId: 'instance-1',
       rejectReason: null,
-    }))
-  })
-
-  // Issue #1459 闸 4 review M2：outer catch 把 ExecutionModelFieldUnsourcedException
-  //   / ExecutionModelSymbolMalformedException 收口为 publicationGate.blocked=true。
-  it('outer catch: ExecutionModelFieldUnsourcedException → publicationGate.reason=execution_model_field_unsourced', async () => {
-    const { pipeline, repo } = createPipeline()
-    const semanticStateWithoutVenueEvidence: SemanticState = {
-      ...semanticState,
-      contextSlots: {
-        ...semanticState.contextSlots,
-        // 缺 evidence.source → assertExecutionModelFieldsSourced 当场 fail-closed
-        exchange: { ...semanticState.contextSlots.exchange!, evidence: undefined },
-      },
-    }
-
-    await pipeline.run({
-      sessionId: 'session-invariant-1',
-      userId: 'user-1',
-      semanticState: semanticStateWithoutVenueEvidence,
-      message: '生成策略',
-    })
-
-    const call = repo.updateSession.mock.calls.find((c: unknown[]) => c[0] === 'session-invariant-1')
-    expect(call).toBeDefined()
-    expect(call?.[1]).toEqual(expect.objectContaining({
-      status: 'REJECTED',
-      latestSpecDesc: expect.objectContaining({
-        publicationGate: expect.objectContaining({
-          blocked: true,
-          reason: 'execution_model_field_unsourced',
-          blockedIrFields: ['market.venue'],
-        }),
-      }),
-    }))
-  })
-
-  it('outer catch: ExecutionModelSymbolMalformedException → publicationGate.reason=execution_model_symbol_malformed, blockedIrFields=[market.symbol]', async () => {
-    const { pipeline, repo } = createPipeline()
-    const semanticStateBadSymbol: SemanticState = {
-      ...semanticState,
-      contextSlots: {
-        ...semanticState.contextSlots,
-        symbol: {
-          ...semanticState.contextSlots.symbol!,
-          value: 'BTCUSDTUSDT', // 双 quote 拼接，会被形态正则 fail-closed
-          evidence: { text: 'BTCUSDTUSDT', source: 'user_explicit' },
-        },
-      },
-    }
-
-    await pipeline.run({
-      sessionId: 'session-invariant-2',
-      userId: 'user-1',
-      semanticState: semanticStateBadSymbol,
-      message: '生成策略',
-    })
-
-    const call = repo.updateSession.mock.calls.find((c: unknown[]) => c[0] === 'session-invariant-2')
-    expect(call).toBeDefined()
-    expect(call?.[1]).toEqual(expect.objectContaining({
-      status: 'REJECTED',
-      latestSpecDesc: expect.objectContaining({
-        publicationGate: expect.objectContaining({
-          blocked: true,
-          reason: 'execution_model_symbol_malformed',
-          blockedIrFields: ['market.symbol'],
-        }),
-      }),
     }))
   })
 
