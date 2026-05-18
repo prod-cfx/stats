@@ -22,6 +22,7 @@ import { CodegenGraphSnapshotService as DefaultCodegenGraphSnapshotService } fro
 import { normalizeRiskSemantics } from './semantic-state-normalization'
 import { StrategySummaryObservationService } from './strategy-summary-observation.service'
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
+import { assertSymbolWellFormed, buildSymbol } from './execution-model-source-invariant'
 
 export interface CompiledScriptValidationResult {
   passed: boolean
@@ -42,8 +43,16 @@ export interface SemanticAtomInvariantReport {
   }
 }
 
-function normalizePublishedSymbol(raw: string): string {
-  return raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
+/**
+ * Issue #1459 闸 4：symbol 拼接收敛——所有 IR build 入口必须经 buildSymbol
+ *   (contextSlots 优先) 或 normalizePublishedSymbolValidated (fallback 路径)。
+ *
+ * 形态正则始终强制，BTCUSDTUSDT 等双 quote 拼接当场 reject。
+ */
+function normalizePublishedSymbolValidated(raw: string): string {
+  const normalized = raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
+  assertSymbolWellFormed(normalized)
+  return normalized
 }
 
 export interface CodegenPublicationArtifacts {
@@ -307,7 +316,11 @@ export class CodegenPublicationGenerationStage {
     const timeframe = this.readSemanticContextValue(args.semanticState.contextSlots.timeframe)
 
     if (symbol) {
-      locked.symbol = normalizePublishedSymbol(symbol)
+      // Issue #1459 闸 4：symbol 拼接收敛入口；优先经 buildSymbol(contextSlots)
+      //   走形态正则；contextSlots 缺失再回退到旧 normalize 路径。
+      locked.symbol = args.semanticState.contextSlots.symbol
+        ? buildSymbol({ contextSlots: args.semanticState.contextSlots })
+        : normalizePublishedSymbolValidated(symbol)
     }
 
     if (timeframe) {
@@ -382,8 +395,14 @@ export class CodegenPublicationGenerationStage {
       throw new Error('codegen.publication_context_missing')
     }
 
+    // Issue #1459 闸 4：symbol 拼接收敛入口；优先经 buildSymbol(contextSlots)
+    //   走形态正则；contextSlots 缺失再回退到 canonicalSpec 路径并 validate。
+    const resolvedSymbol = args.semanticState.contextSlots.symbol
+      ? buildSymbol({ contextSlots: args.semanticState.contextSlots })
+      : normalizePublishedSymbolValidated(symbol)
+
     return {
-      symbol: normalizePublishedSymbol(symbol),
+      symbol: resolvedSymbol,
       timeframe,
       marketType: semanticMarketType === 'spot' || semanticMarketType === 'perp'
         ? semanticMarketType

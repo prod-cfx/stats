@@ -96,6 +96,7 @@ import {
   
   
 } from './inferred-confirmation-classifier.service'
+import { assertSymbolWellFormed } from './execution-model-source-invariant'
 import { canonicalizeStrategySymbolInput, isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
 import { PlannerDispatcherMergeService } from './planner-dispatcher-merge.service'
@@ -251,8 +252,16 @@ const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
 const conversationContextHelper = new CodegenConversationContextHelper()
 const responseMapperHelper = new CodegenConversationResponseMapperHelper()
 
+/**
+ * Issue #1459 闸 4：symbol 拼接收敛——共用形态正则 invariant。
+ *   BTCUSDTUSDT 等双 quote 拼接当场 reject；保持与
+ *   `codegen-publication-generation.stage.ts` 的 normalizePublishedSymbolValidated
+ *   行为一致。
+ */
 function normalizePublishedSymbol(raw: string): string {
-  return raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
+  const normalized = raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
+  assertSymbolWellFormed(normalized)
+  return normalized
 }
 
 /**

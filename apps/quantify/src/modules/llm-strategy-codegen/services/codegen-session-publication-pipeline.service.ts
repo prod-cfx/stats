@@ -14,6 +14,8 @@ import { CanonicalSpecV2IrCompilerService } from './canonical-spec-v2-ir-compile
 import { CanonicalStrategyAstCompilerService } from './canonical-strategy-ast-compiler.service'
 import { CodegenConversationStateMachine } from './codegen-conversation-state-machine'
 import { EntryRuleRequiresEventLeafException } from '../exceptions/entry-rule-requires-event-leaf.exception'
+import { ExecutionModelFieldUnsourcedException } from '../exceptions/execution-model-field-unsourced.exception'
+import { ExecutionModelSymbolMalformedException } from '../exceptions/execution-model-symbol-malformed.exception'
 import { CodegenPublicationGenerationStage } from './codegen-publication-generation.stage'
 import { CodegenPublicationPersistenceStage } from './codegen-publication-persistence.stage'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -310,6 +312,7 @@ export class CodegenSessionPublicationPipelineService {
         (error as { publicationGate?: unknown } | null)?.publicationGate,
       )
         ?? this.buildEntryRuleEventLeafPublicationGate(error)
+        ?? this.buildExecutionModelInvariantPublicationGate(error)
       const reason = error instanceof Error ? error.message : String(error)
       if (publicationGate) {
         // Issue #1456 闸 1：IR build 入口 assertion / publish 入口 assertion
@@ -427,6 +430,41 @@ export class CodegenSessionPublicationPipelineService {
       ],
       blockedIrFields: ['ruleBlocks'],
     }
+  }
+
+  /**
+   * Issue #1459 闸 4：ExecutionModel 字段来源 / symbol 形态 invariant 异常合并到
+   * publicationGate 阻断响应。前端可与 #1456 闸 1 / #1457 闸 2 共用展示路径。
+   */
+  private buildExecutionModelInvariantPublicationGate(error: unknown): Record<string, unknown> | null {
+    if (error instanceof ExecutionModelFieldUnsourcedException) {
+      const args = error.args ?? {}
+      const field = typeof args.field === 'string' ? args.field : 'unknown'
+      const reason = typeof args.reason === 'string' ? args.reason : 'unsourced'
+      const actualSource = typeof args.actualSource === 'string' ? args.actualSource : null
+      return {
+        passed: false,
+        blocked: true,
+        reason: 'execution_model_field_unsourced',
+        code: error.code,
+        pendingItems: [{ field, reason, actualSource, message: error.message }],
+        blockedIrFields: [`market.${field === 'venue' ? 'venue' : field}`],
+      }
+    }
+    if (error instanceof ExecutionModelSymbolMalformedException) {
+      const args = error.args ?? {}
+      const symbol = typeof args.symbol === 'string' ? args.symbol : ''
+      const reason = typeof args.reason === 'string' ? args.reason : 'malformed'
+      return {
+        passed: false,
+        blocked: true,
+        reason: 'execution_model_symbol_malformed',
+        code: error.code,
+        pendingItems: [{ field: 'symbol', symbol, malformedReason: reason, message: error.message }],
+        blockedIrFields: ['market.symbol'],
+      }
+    }
+    return null
   }
 
   private normalizePublicationGate(value: unknown): Record<string, unknown> | null {
