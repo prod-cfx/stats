@@ -13,6 +13,7 @@ export 'qz_card.dart';
 export 'qz_chat_bubble.dart';
 export 'qz_chip.dart';
 export 'qz_empty_state.dart';
+export 'qz_kline_placeholder.dart';
 export 'qz_panel.dart';
 export 'qz_pill.dart';
 export 'qz_search_bar.dart';

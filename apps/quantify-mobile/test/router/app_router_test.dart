@@ -66,7 +66,9 @@ Finder _tab(String name) => find.byKey(ValueKey<String>('tab-$name'));
 /// 构造一份已登录的 InMemoryTokenStorage，用来绕过 `/me*` 守卫。
 InMemoryTokenStorage _loggedInStorage() {
   final AuthSession seed = AuthSession(
-    userId: 'u', token: 't', email: 'a@b.com',
+    userId: 'u',
+    token: 't',
+    email: 'a@b.com',
   );
   return InMemoryTokenStorage(<String, String>{
     kSessionStorageKey: jsonEncode(seed.toMap()),
@@ -74,7 +76,9 @@ InMemoryTokenStorage _loggedInStorage() {
 }
 
 void main() {
-  testWidgets('5 tabs render and switch via bottom bar', (WidgetTester tester) async {
+  testWidgets('5 tabs render and switch via bottom bar', (
+    WidgetTester tester,
+  ) async {
     // /me 受守卫保护 → 需要预登录 session 才能切到 me tab。
     await _pumpApp(tester, storage: _loggedInStorage());
     expect(find.byType(AiHomePage), findsOneWidget);
@@ -96,7 +100,9 @@ void main() {
     expect(find.byType(MeHomePage), findsOneWidget);
   });
 
-  testWidgets('branch state is preserved across tab switch', (WidgetTester tester) async {
+  testWidgets('branch state is preserved across tab switch', (
+    WidgetTester tester,
+  ) async {
     await _pumpApp(tester);
 
     // AiHomePage exposes a debug-only counter in its AppBar (cleared of the
@@ -119,7 +125,9 @@ void main() {
     expect(find.text('count: 3'), findsOneWidget);
   });
 
-  testWidgets('tapping the active tab is safe (initialLocation path)', (WidgetTester tester) async {
+  testWidgets('tapping the active tab is safe (initialLocation path)', (
+    WidgetTester tester,
+  ) async {
     // Guards the `initialLocation: i == currentIndex` branch in
     // MainShellScaffold.onTap. Each tab branch currently holds a single
     // route, so re-tapping is a no-op visually — but the call must not
@@ -139,7 +147,9 @@ void main() {
     expect(find.byType(MarketHomePage), findsOneWidget);
   });
 
-  testWidgets('push /login covers the bottom tab bar', (WidgetTester tester) async {
+  testWidgets('push /login covers the bottom tab bar', (
+    WidgetTester tester,
+  ) async {
     final BuildContext ctx = await _pumpApp(tester);
     GoRouter.of(ctx).push('/login');
     await tester.pumpAndSettle();
@@ -148,7 +158,9 @@ void main() {
     expect(find.byType(QzBottomTabBar), findsNothing);
   });
 
-  testWidgets('/market/long-short resolves to LongShortPage (not :symbol)', (WidgetTester tester) async {
+  testWidgets('/market/long-short resolves to LongShortPage (not :symbol)', (
+    WidgetTester tester,
+  ) async {
     final BuildContext ctx = await _pumpApp(tester);
     GoRouter.of(ctx).push('/market/long-short');
     await tester.pumpAndSettle();
@@ -157,16 +169,20 @@ void main() {
     expect(find.byType(MarketDetailPage), findsNothing);
   });
 
-  testWidgets('/market/BTC-USDT resolves to MarketDetailPage', (WidgetTester tester) async {
+  testWidgets('/market/BTCUSDT resolves to MarketDetailPage', (
+    WidgetTester tester,
+  ) async {
     final BuildContext ctx = await _pumpApp(tester);
-    GoRouter.of(ctx).push('/market/BTC-USDT');
+    GoRouter.of(ctx).push('/market/BTCUSDT');
     await tester.pumpAndSettle();
 
     expect(find.byType(MarketDetailPage), findsOneWidget);
-    expect(find.text('行情详情：BTC-USDT'), findsWidgets);
+    expect(find.text('行情详情：BTCUSDT'), findsWidgets);
   });
 
-  testWidgets('/ai/backtest-config resolves to BacktestConfigSheet', (WidgetTester tester) async {
+  testWidgets('/ai/backtest-config resolves to BacktestConfigSheet', (
+    WidgetTester tester,
+  ) async {
     final BuildContext ctx = await _pumpApp(tester);
     GoRouter.of(ctx).push('/ai/backtest-config');
     await tester.pumpAndSettle();
@@ -174,44 +190,56 @@ void main() {
     expect(find.byType(BacktestConfigSheet), findsOneWidget);
   });
 
-  testWidgets('/me/api resolves to ApiSettingsPage', (WidgetTester tester) async {
-    final BuildContext ctx = await _pumpApp(tester, storage: _loggedInStorage());
+  testWidgets('/me/api resolves to ApiSettingsPage', (
+    WidgetTester tester,
+  ) async {
+    final BuildContext ctx = await _pumpApp(
+      tester,
+      storage: _loggedInStorage(),
+    );
     GoRouter.of(ctx).push('/me/api');
     await tester.pumpAndSettle();
 
     expect(find.byType(ApiSettingsPage), findsOneWidget);
   });
 
-  testWidgets('/me/theme resolves to ThemeSettingsPage', (WidgetTester tester) async {
-    final BuildContext ctx = await _pumpApp(tester, storage: _loggedInStorage());
+  testWidgets('/me/theme resolves to ThemeSettingsPage', (
+    WidgetTester tester,
+  ) async {
+    final BuildContext ctx = await _pumpApp(
+      tester,
+      storage: _loggedInStorage(),
+    );
     GoRouter.of(ctx).push('/me/theme');
     await tester.pumpAndSettle();
 
     expect(find.byType(ThemeSettingsPage), findsOneWidget);
   });
 
-  testWidgets('/_dev/theme-preview is the debug-mode landing', (WidgetTester tester) async {
+  testWidgets('/_dev/theme-preview is the debug-mode landing', (
+    WidgetTester tester,
+  ) async {
     // Tests run in debug; the initial route lands here before any go() call.
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final ProviderContainer c = ProviderContainer(overrides: <Override>[
-      sharedPreferencesProvider.overrideWithValue(prefs),
-      tokenStorageProvider.overrideWithValue(InMemoryTokenStorage()),
-      authRepositoryProvider.overrideWithValue(MockAuthRepository()),
-    ]);
+    final ProviderContainer c = ProviderContainer(
+      overrides: <Override>[
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        tokenStorageProvider.overrideWithValue(InMemoryTokenStorage()),
+        authRepositoryProvider.overrideWithValue(MockAuthRepository()),
+      ],
+    );
     await c.read(sessionControllerProvider.future);
     await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: c,
-        child: const QuantifyMobileApp(),
-      ),
+      UncontrolledProviderScope(container: c, child: const QuantifyMobileApp()),
     );
     await tester.pumpAndSettle();
     expect(find.byType(ThemePreviewPage), findsOneWidget);
   });
 
-  testWidgets('/_dev/components-preview resolves to ComponentsPreviewPage',
-      (WidgetTester tester) async {
+  testWidgets('/_dev/components-preview resolves to ComponentsPreviewPage', (
+    WidgetTester tester,
+  ) async {
     final BuildContext ctx = await _pumpApp(tester);
     ctx.go('/_dev/components-preview');
     // Do not pumpAndSettle: the preview page renders QzSpinner whose
@@ -224,27 +252,28 @@ void main() {
     expect(find.byType(ComponentsPreviewPage), findsOneWidget);
   });
 
-  testWidgets('theme-preview screen exposes a link to components-preview',
-      (WidgetTester tester) async {
+  testWidgets('theme-preview screen exposes a link to components-preview', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final ProviderContainer c = ProviderContainer(overrides: <Override>[
-      sharedPreferencesProvider.overrideWithValue(prefs),
-      tokenStorageProvider.overrideWithValue(InMemoryTokenStorage()),
-      authRepositoryProvider.overrideWithValue(MockAuthRepository()),
-    ]);
+    final ProviderContainer c = ProviderContainer(
+      overrides: <Override>[
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        tokenStorageProvider.overrideWithValue(InMemoryTokenStorage()),
+        authRepositoryProvider.overrideWithValue(MockAuthRepository()),
+      ],
+    );
     await c.read(sessionControllerProvider.future);
     await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: c,
-        child: const QuantifyMobileApp(),
-      ),
+      UncontrolledProviderScope(container: c, child: const QuantifyMobileApp()),
     );
     await tester.pumpAndSettle();
     // The link sits below the sample cards inside a ListView, so scroll
     // before asserting visibility.
-    final Finder linkFinder =
-        find.byKey(const ValueKey<String>('dev-link-components-preview'));
+    final Finder linkFinder = find.byKey(
+      const ValueKey<String>('dev-link-components-preview'),
+    );
     await tester.scrollUntilVisible(linkFinder, 200);
     expect(linkFinder, findsOneWidget);
   });
@@ -257,8 +286,7 @@ void main() {
     expect(find.byType(MeHomePage), findsNothing);
   });
 
-  testWidgets('未登录访问 /me/api 也被守卫拦回 /login',
-      (WidgetTester tester) async {
+  testWidgets('未登录访问 /me/api 也被守卫拦回 /login', (WidgetTester tester) async {
     final BuildContext ctx = await _pumpApp(tester);
     GoRouter.of(ctx).go('/me/api');
     await tester.pumpAndSettle();
@@ -268,10 +296,11 @@ void main() {
 
   testWidgets('已登录直接访问 /me 不被拦', (WidgetTester tester) async {
     final AuthSession seed = AuthSession(
-      userId: 'u', token: 't', email: 'a@b.com',
+      userId: 'u',
+      token: 't',
+      email: 'a@b.com',
     );
-    final InMemoryTokenStorage storage =
-        InMemoryTokenStorage(<String, String>{
+    final InMemoryTokenStorage storage = InMemoryTokenStorage(<String, String>{
       kSessionStorageKey: jsonEncode(seed.toMap()),
     });
     final BuildContext ctx = await _pumpApp(tester, storage: storage);
@@ -283,19 +312,22 @@ void main() {
 
   testWidgets('登出后再访问 /me 弹回 /login', (WidgetTester tester) async {
     final AuthSession seed = AuthSession(
-      userId: 'u', token: 't', email: 'a@b.com',
+      userId: 'u',
+      token: 't',
+      email: 'a@b.com',
     );
-    final InMemoryTokenStorage storage =
-        InMemoryTokenStorage(<String, String>{
+    final InMemoryTokenStorage storage = InMemoryTokenStorage(<String, String>{
       kSessionStorageKey: jsonEncode(seed.toMap()),
     });
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final ProviderContainer container = ProviderContainer(overrides: <Override>[
-      sharedPreferencesProvider.overrideWithValue(prefs),
-      tokenStorageProvider.overrideWithValue(storage),
-      authRepositoryProvider.overrideWithValue(MockAuthRepository()),
-    ]);
+    final ProviderContainer container = ProviderContainer(
+      overrides: <Override>[
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        tokenStorageProvider.overrideWithValue(storage),
+        authRepositoryProvider.overrideWithValue(MockAuthRepository()),
+      ],
+    );
     await container.read(sessionControllerProvider.future);
     await tester.pumpWidget(
       UncontrolledProviderScope(

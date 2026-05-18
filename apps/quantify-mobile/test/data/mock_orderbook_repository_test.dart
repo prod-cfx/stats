@@ -13,5 +13,20 @@ void main() {
       expect(snap.bids.length, snap.asks.length);
       expect(snap.bids.first.price < snap.asks.first.price, isTrue);
     });
+
+    test('watchOrderbook 连续快照价格稳定且数量变化', () async {
+      final MockOrderbookRepository repo = MockOrderbookRepository();
+      final List<OrderbookSnapshot> snaps = await repo
+          .watchOrderbook('BTCUSDT')
+          .take(2)
+          .toList();
+
+      expect(snaps.first.bids.first.price, snaps.last.bids.first.price);
+      expect(snaps.first.asks.first.price, snaps.last.asks.first.price);
+      expect(
+        snaps.first.bids.first.quantity,
+        isNot(snaps.last.bids.first.quantity),
+      );
+    });
   });
 }

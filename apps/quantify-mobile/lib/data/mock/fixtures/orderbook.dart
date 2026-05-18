@@ -7,12 +7,14 @@ OrderbookSnapshot buildMockOrderbook({
   required DateTime timestamp,
   int depth = 10,
   double step = 1.0,
+  double quantityOffset = 0.0,
 }) {
   final List<OrderbookLevel> bids = <OrderbookLevel>[];
   final List<OrderbookLevel> asks = <OrderbookLevel>[];
   for (int i = 1; i <= depth; i++) {
-    bids.add(OrderbookLevel(price: mid - step * i, quantity: 0.5 + i * 0.1));
-    asks.add(OrderbookLevel(price: mid + step * i, quantity: 0.5 + i * 0.1));
+    final double quantity = 0.5 + i * 0.1 + quantityOffset;
+    bids.add(OrderbookLevel(price: mid - step * i, quantity: quantity));
+    asks.add(OrderbookLevel(price: mid + step * i, quantity: quantity));
   }
   return OrderbookSnapshot(
     symbol: symbol,

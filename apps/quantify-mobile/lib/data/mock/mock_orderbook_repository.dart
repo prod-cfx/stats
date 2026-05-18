@@ -25,7 +25,7 @@ class MockOrderbookRepository implements OrderbookRepository {
     );
   }
 
-  /// 每秒推一份新快照（mid 不变，仅时间戳更新）。
+  /// 每秒推一份新快照（mid 不变，仅数量与时间戳更新）。
   @override
   Stream<OrderbookSnapshot> watchOrderbook(String symbol) {
     final double mid = _midOf(symbol);
@@ -34,6 +34,7 @@ class MockOrderbookRepository implements OrderbookRepository {
       (int tick) => buildMockOrderbook(
         symbol: symbol,
         mid: mid,
+        quantityOffset: (tick % 10) * 0.01,
         timestamp:
             DateTime.fromMillisecondsSinceEpoch(1_716_000_000_000 + tick * 1000),
       ),
