@@ -1,5 +1,7 @@
 # quantify-mobile
 
+[![quantify-mobile CI](https://github.com/AlphaNet7ed/stats/actions/workflows/quantify-mobile.yml/badge.svg?branch=main)](https://github.com/AlphaNet7ed/stats/actions/workflows/quantify-mobile.yml)
+
 Quantify 项目的移动端 Flutter 工程，独立于 monorepo 的 Nx/dx 工具链，沿用裸 Flutter CLI。
 
 ## 环境要求
