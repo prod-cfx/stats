@@ -2723,6 +2723,9 @@ export class CodegenConversationService {
         message: dto.message,
         model: dto.model,
         existingStrategyInstanceId: session.strategyInstanceId ?? null,
+        // Issue #1456 闸 1：透传 clarificationState，让 publication-gate / IR
+        //   builder 入口都能 fail-closed 拒绝未澄清产出。
+        clarificationState,
       }),
     )
 

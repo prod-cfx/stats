@@ -1,5 +1,6 @@
 import type { CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec-v2'
 import type { SemanticState } from '../types/semantic-state'
+import type { StrategyClarificationState } from '../types/strategy-clarification'
 import type { CodegenPublicationGenerationInput } from './codegen-publication-generation.stage'
 
 import { Injectable, Logger } from '@nestjs/common'
@@ -109,6 +110,10 @@ export class CodegenSessionPublicationPipelineService {
       compiledScriptExecutionEnvelope,
       compiledScriptParser,
       strategySummaryObservation,
+      undefined,
+      undefined,
+      // Issue #1456 闸 1：IR build 入口 assertion 注入。
+      compiledPublicationGate,
     )
     this.persistenceStage = new CodegenPublicationPersistenceStage(
       sessionsRepo,
@@ -125,11 +130,18 @@ export class CodegenSessionPublicationPipelineService {
     message: string
     model?: string
     existingStrategyInstanceId?: string | null
+    /**
+     * Issue #1456 闸 1：上游调用方（codegen-conversation）必须把
+     *   当前 clarificationState 透传进来，让 IR build 入口能 fail-closed。
+     *   兼容旧测试保留为可选。
+     */
+    clarificationState?: StrategyClarificationState | null
   }): Promise<void> {
     try {
       const generationInput: CodegenPublicationGenerationInput = {
         semanticState: args.semanticState,
         canonicalSpecOverride: args.canonicalSpecOverride,
+        clarificationState: args.clarificationState ?? null,
       }
       const artifacts = await this.generationStage.generate(generationInput)
       let strategyInstanceId = args.existingStrategyInstanceId
@@ -293,7 +305,25 @@ export class CodegenSessionPublicationPipelineService {
         'published',
       )
     } catch (error) {
+      const publicationGate = this.normalizePublicationGate(
+        (error as { publicationGate?: unknown } | null)?.publicationGate,
+      )
       const reason = error instanceof Error ? error.message : String(error)
+      if (publicationGate) {
+        // Issue #1456 闸 1：IR build 入口 assertion / publish 入口 assertion
+        //   抛出的 PublicationGateClarificationBlockedError 在此被识别并落到
+        //   session.specDesc.publicationGate，便于前端区分「未澄清被卡」与
+        //   通用编译错误，并触发回到 clarification 流程。
+        await this.safeUpdateSession(
+          args.sessionId,
+          this.stateMachine.buildRejectedUpdate({
+            latestSpecDesc: { publicationGate },
+            rejectReason: reason,
+          }),
+          'publication-gate-clarification',
+        )
+        return
+      }
       await this.safeUpdateSession(
         args.sessionId,
         this.stateMachine.buildRejectedUpdate({ rejectReason: reason }),
@@ -372,6 +402,21 @@ export class CodegenSessionPublicationPipelineService {
     const record = this.readRecord(value)
     if (!record) {
       return null
+    }
+
+    // Issue #1456 闸 1：CLARIFICATION_PENDING 阻断 payload。
+    if (
+      record.blocked === true
+      && typeof record.reason === 'string'
+      && Array.isArray(record.pendingItems)
+    ) {
+      return {
+        passed: false,
+        blocked: true,
+        reason: record.reason,
+        pendingItems: record.pendingItems,
+        blockedIrFields: Array.isArray(record.blockedIrFields) ? record.blockedIrFields : [],
+      }
     }
 
     if (typeof record.passed === 'boolean' && Array.isArray(record.blockingMismatches)) {

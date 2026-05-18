@@ -7,8 +7,9 @@ import type {
   PublishedRuntimeExecutionSemantic,
   PublishedStrategyAstSnapshot,
 } from '../types/publication-gate'
-import type { StrategyClarificationState } from '../types/strategy-clarification'
+import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
+import { lookupIrFieldsForClarificationReason } from '../types/clarification-slot-ir-mapping'
 import { GRID_PROGRAM_KINDS } from '../types/semantic-state'
 import { createHash } from 'node:crypto'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
@@ -16,7 +17,7 @@ import type { PrismaClient } from '@/prisma/prisma.types'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { TransactionHost } from '@nestjs-cls/transactional'
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import { normalizeRuntimeRequirements } from '@/modules/strategy-runtime/semantic-runtime-state.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
@@ -92,22 +93,127 @@ interface FormalDeploymentExecutionConstraints {
 const ON_START_SOURCE_REF_PATTERN = /(^|[_-])(?:execution[_-])?on_start([_-]|$)/i
 const DEFAULT_PERP_PLATFORM_MAX_LEVERAGE = 5
 
+/**
+ * Issue #1456 / 父 Issue #1455 闸 1：publication-gate 阻断未澄清 IR 编译。
+ *   - 任何 clarificationState.status === 'NEEDS_CLARIFICATION'
+ *     或 items 中存在 blocking 且 status==='pending' 的条目，
+ *     必须 fail-closed 拒绝产出 IR / 脚本。
+ *   - reason 固定为 'CLARIFICATION_PENDING'，便于上游 saga / metric scraper 路由。
+ *   - 同时附 slot → IR 字段 mapping（详见 ../types/clarification-slot-ir-mapping）。
+ */
+export const PUBLICATION_GATE_BLOCK_REASONS = {
+  CLARIFICATION_PENDING: 'CLARIFICATION_PENDING',
+} as const
+
+export type PublicationGateBlockReason =
+  typeof PUBLICATION_GATE_BLOCK_REASONS[keyof typeof PUBLICATION_GATE_BLOCK_REASONS]
+
+export interface PublicationGateClarificationBlock {
+  blocked: true
+  reason: PublicationGateBlockReason
+  pendingItems: StrategyClarificationItem[]
+  /**
+   * 把每个 pending item 反查到的 IR 字段汇总（去重），方便前端直接展示
+   * 「下列 IR 字段被阻断」而不必再 join slot→field mapping。
+   */
+  blockedIrFields: string[]
+}
+
+/**
+ * publication-gate 内部异常类型：携带结构化 blocked payload，让 pipeline
+ * 在 catch 分支可以原样持久化到 session.specDesc.publicationGate。
+ */
+export class PublicationGateClarificationBlockedError extends Error {
+  readonly publicationGate: PublicationGateClarificationBlock
+
+  constructor(payload: PublicationGateClarificationBlock) {
+    super(`publication gate blocked: ${payload.reason}`)
+    this.name = 'PublicationGateClarificationBlockedError'
+    this.publicationGate = payload
+  }
+}
+
 @Injectable()
 export class CompiledPublicationGateService {
+  private readonly logger = new Logger(CompiledPublicationGateService.name)
+
   constructor(
     private readonly publishedSnapshotsRepo: PublishedStrategySnapshotsRepository,
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
     private readonly scriptParser: CompiledScriptParserService = new CompiledScriptParserService(),
   ) {}
 
+  /**
+   * Issue #1456：硬阻断接口，可在 IR builder 入口提前调用。
+   *   - 当前条件 = clarificationState.status === 'NEEDS_CLARIFICATION'
+   *     || 任一 item.blocking === true && item.status === 'pending'
+   *   - 命中即抛 `PublicationGateClarificationBlockedError`；同时 emit
+   *     `metric=publication_gate_block_total reason=CLARIFICATION_PENDING value=1`，
+   *     与现有 `metric=evidence_invariant_drop_total` 同款 logger-stub 形态，
+   *     等待 prom-client 接入时统一替换为 counter.inc。
+   */
+  assertClarificationResolvedForIrBuild(
+    clarificationState?: StrategyClarificationState | null,
+  ): void {
+    const block = this.detectClarificationBlock(clarificationState)
+    if (!block) return
+
+    this.logger.warn(
+      `metric=publication_gate_block_total reason=${block.reason} value=1 pendingItems=${block.pendingItems.length} blockedIrFields=${block.blockedIrFields.join(',') || 'n/a'}`,
+    )
+    throw new PublicationGateClarificationBlockedError(block)
+  }
+
+  private detectClarificationBlock(
+    clarificationState?: StrategyClarificationState | null,
+  ): PublicationGateClarificationBlock | null {
+    if (!clarificationState) return null
+
+    // 类型上 StrategyClarificationItem.blocking === true 是必填字面量，所以仅
+    //   按 status === 'pending' 判定即可；如未来引入 non-blocking 条目，需要
+    //   先调整 StrategyClarificationItem.blocking 类型再放宽这里。
+    const pendingItems = (clarificationState.items ?? []).filter(
+      item => item.status === 'pending',
+    )
+    if (clarificationState.status !== 'NEEDS_CLARIFICATION' && pendingItems.length === 0) {
+      return null
+    }
+    if (pendingItems.length === 0) {
+      // NEEDS_CLARIFICATION 但没有具体 pending blocking item：仍然阻断，
+      //   宁可误拦不可漏放。
+      return {
+        blocked: true,
+        reason: PUBLICATION_GATE_BLOCK_REASONS.CLARIFICATION_PENDING,
+        pendingItems: [],
+        blockedIrFields: [],
+      }
+    }
+
+    const blockedIrFields = Array.from(
+      new Set(
+        pendingItems.flatMap(item => lookupIrFieldsForClarificationReason(item.reason)),
+      ),
+    )
+
+    return {
+      blocked: true,
+      reason: PUBLICATION_GATE_BLOCK_REASONS.CLARIFICATION_PENDING,
+      pendingItems,
+      blockedIrFields,
+    }
+  }
+
   async publish(input: PublishCompiledSnapshotInput): Promise<{
     snapshotId: string
     snapshotHash: string
     consistencyReport: Record<string, unknown>
   }> {
-    if (input.clarificationState?.items.some(item => item.status === 'pending')) {
-      throw new Error('clarification unresolved')
-    }
+    // Issue #1456 闸 1：publication-gate 入口硬阻断未澄清 IR 编译。
+    //   - 此处保留原 inline 检查，承担「最后一道」职责：上游 IR builder 入口
+    //     已通过 assertClarificationResolvedForIrBuild 拒过一遍，这里防御漏调用。
+    //   - 抛 PublicationGateClarificationBlockedError，pipeline catch 分支通过
+    //     `(error as { publicationGate?: unknown }).publicationGate` 拿结构化 payload。
+    this.assertClarificationResolvedForIrBuild(input.clarificationState)
 
     const parsed = this.scriptParser.parse(input.script)
     const manifest = parsed.compiledManifest

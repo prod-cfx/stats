@@ -1,10 +1,12 @@
 import type { CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec-v2'
 import type { SemanticState } from '../types/semantic-state'
 import type { SemanticPredicateStrategyGraph } from '../types/semantic-strategy-graph'
+import type { StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyConsistencyCheck, StrategyConsistencyReport } from '../types/strategy-consistency-report'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
 import type { StrategySummary } from '../types/strategy-summary'
 import type { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
+import type { CompiledPublicationGateService } from './compiled-publication-gate.service'
 import type { CanonicalSpecV2IrCompilerService } from './canonical-spec-v2-ir-compiler.service'
 import type { CanonicalStrategyAstCompilerService } from './canonical-strategy-ast-compiler.service'
 import type { CompiledScriptEmitterService } from './compiled-script-emitter.service'
@@ -72,6 +74,12 @@ export interface CodegenPublicationArtifacts {
 export interface CodegenPublicationGenerationInput {
   semanticState: SemanticState
   canonicalSpecOverride?: CanonicalStrategySpecV2
+  /**
+   * Issue #1456 闸 1：未澄清的 clarificationState 传入时，IR builder 入口
+   *   必须 fail-closed 拒绝产出。可选字段保留对老调用方的兼容；后续 follow-up
+   *   收敛所有调用方后再升级为必填。
+   */
+  clarificationState?: StrategyClarificationState | null
 }
 
 export class CodegenPublicationGenerationStage {
@@ -88,9 +96,23 @@ export class CodegenPublicationGenerationStage {
     private readonly strategySummaryObservation: StrategySummaryObservationService = new StrategySummaryObservationService(),
     private readonly semanticAtomInvariant: SemanticAtomInvariantService = new SemanticAtomInvariantService(),
     private readonly graphSnapshotService: CodegenGraphSnapshotService = new DefaultCodegenGraphSnapshotService(),
+    /**
+     * Issue #1456 闸 1：注入 publication-gate 以便在 IR build 入口立刻 fail-closed。
+     *   可选，旧测试可以不传；上线后由 pipeline 统一注入。
+     */
+    private readonly publicationGate?: CompiledPublicationGateService,
   ) {}
 
   async generate(input: CodegenPublicationGenerationInput): Promise<CodegenPublicationArtifacts> {
+    // Issue #1456 闸 1：IR builder 入口 assertion —— 未过 publication gate
+    //   不允许进入 IR / 脚本编译。任何 clarificationState 未结束的会话都会
+    //   在此抛 PublicationGateClarificationBlockedError，pipeline catch 分支
+    //   把结构化 payload 持久化到 session.specDesc.publicationGate。
+    // 兼容老 spec 注入的 partial mock：只在 method 真实存在时调用。
+    if (typeof this.publicationGate?.assertClarificationResolvedForIrBuild === 'function') {
+      this.publicationGate.assertClarificationResolvedForIrBuild(input.clarificationState)
+    }
+
     const canonicalSpec = input.canonicalSpecOverride
       ?? this.canonicalSpecBuilder.buildFromSemanticState(input.semanticState)
     const semanticPredicateGraph = this.graphSnapshotService.buildFromSemanticArtifacts({ canonicalSpec })

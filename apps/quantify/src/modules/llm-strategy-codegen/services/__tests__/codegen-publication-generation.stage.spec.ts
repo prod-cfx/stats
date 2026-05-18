@@ -1731,4 +1731,91 @@ describe('codegenPublicationGenerationStage', () => {
     expect(artifacts.compiled.ir.source.graphDigest).toMatch(bollingerGoldenCase.expectedDigestPattern)
     expect(artifacts.semanticConsistency.status).toBe('PASSED')
   })
+
+  describe('Issue #1456 闸 1 — IR builder 入口 assertion', () => {
+    it('publicationGate 注入后，未澄清的 clarificationState 进入 generate() 立即 throw，且不会调用任何下游 builder', async () => {
+      const canonicalBuilder = { buildFromSemanticState: jest.fn(), buildFromLegacyChecklistForTestsOnly: jest.fn(), buildFromNormalizedIntent: jest.fn() }
+      const specDescBuilder = { buildFromCanonicalSpec: jest.fn() }
+      const consistencyEvaluate = jest.fn()
+      const irCompilerCompile = jest.fn()
+      const astCompile = jest.fn()
+      const scriptEmit = jest.fn()
+      const envelopeBuild = jest.fn()
+      const parserParse = jest.fn()
+      const publicationGate = {
+        assertClarificationResolvedForIrBuild: jest.fn().mockImplementation(() => {
+          // 模拟真实 gate fail-closed 路径
+          const err: any = new Error('publication gate blocked: CLARIFICATION_PENDING')
+          err.publicationGate = {
+            blocked: true,
+            reason: 'CLARIFICATION_PENDING',
+            pendingItems: [],
+            blockedIrFields: [],
+          }
+          throw err
+        }),
+      }
+
+      const stage = new CodegenPublicationGenerationStage(
+        canonicalBuilder as any,
+        specDescBuilder as any,
+        { buildStrategySummary: jest.fn(), buildSummaryFromProfile: jest.fn() } as any,
+        { evaluate: consistencyEvaluate } as any,
+        { compile: irCompilerCompile } as any,
+        { compile: astCompile } as any,
+        { emit: scriptEmit } as any,
+        { build: envelopeBuild } as any,
+        { parse: parserParse } as any,
+        undefined,
+        passingSemanticAtomInvariant() as any,
+        undefined,
+        publicationGate as any,
+      )
+
+      await expect(
+        stage.generate({
+          semanticState: { version: 1, families: [], trigger: [], action: [], risk: [], normalizationNotes: [], contextSlots: {} } as any,
+          clarificationState: {
+            status: 'NEEDS_CLARIFICATION',
+            items: [{
+              key: 'k', reason: 'missing_exchange', field: 'exchange',
+              blocking: true, question: 'q', status: 'pending',
+            }],
+          },
+        }),
+      ).rejects.toThrow(/CLARIFICATION_PENDING/)
+
+      expect(publicationGate.assertClarificationResolvedForIrBuild).toHaveBeenCalledTimes(1)
+      // 关键：下游 builder 全部未被触达 —— 这是"硬拒绝产出 IR"的可观察证据
+      expect(canonicalBuilder.buildFromSemanticState).not.toHaveBeenCalled()
+      expect(irCompilerCompile).not.toHaveBeenCalled()
+      expect(astCompile).not.toHaveBeenCalled()
+      expect(scriptEmit).not.toHaveBeenCalled()
+      expect(consistencyEvaluate).not.toHaveBeenCalled()
+    })
+
+    it('未注入 publicationGate 时维持原行为（向后兼容旧调用方）', async () => {
+      const canonicalBuilder = { buildFromSemanticState: jest.fn().mockImplementation(() => { throw new Error('downstream-still-runs') }) }
+
+      const stage = new CodegenPublicationGenerationStage(
+        canonicalBuilder as any,
+        { buildFromCanonicalSpec: jest.fn() } as any,
+        {} as any,
+        { evaluate: jest.fn() } as any,
+        { compile: jest.fn() } as any,
+        { compile: jest.fn() } as any,
+        { emit: jest.fn() } as any,
+        { build: jest.fn() } as any,
+        { parse: jest.fn() } as any,
+      )
+
+      // publicationGate 未注入 → 直接进入下游 builder（这里 mock 故意抛 downstream-still-runs）
+      await expect(
+        stage.generate({
+          semanticState: { version: 1, families: [] } as any,
+          clarificationState: { status: 'NEEDS_CLARIFICATION', items: [{ key: 'k', reason: 'missing_exchange', field: 'exchange', blocking: true, question: 'q', status: 'pending' }] },
+        }),
+      ).rejects.toThrow(/downstream-still-runs/)
+    })
+  })
 })

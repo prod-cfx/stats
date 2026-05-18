@@ -2,7 +2,7 @@ import type { CanonicalStrategyIrV1 } from '../../types/canonical-strategy-ir'
 import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
-import { CompiledPublicationGateService } from '../compiled-publication-gate.service'
+import { CompiledPublicationGateService, PublicationGateClarificationBlockedError } from '../compiled-publication-gate.service'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 
 describe('compiledPublicationGateService', () => {
@@ -959,7 +959,7 @@ describe('compiledPublicationGateService', () => {
       strategySummary: { thesis: 'grid' },
       scriptSummary: { indicators: [] },
       lockedParams: { positionPct: 25 },
-    } as any)).rejects.toThrow('clarification unresolved')
+    } as any)).rejects.toThrow(/publication gate blocked: CLARIFICATION_PENDING/)
 
     expect(publishedSnapshotsRepo.create).not.toHaveBeenCalled()
   })
@@ -1754,6 +1754,144 @@ describe('compiledPublicationGateService', () => {
       expect(privateGate.detectGridOrchestrationPositionMode({})).toBe(false)
       expect(privateGate.detectGridOrchestrationPositionMode({ orchestration: {} })).toBe(false)
       expect(privateGate.detectGridOrchestrationPositionMode({ orchestration: { programs: [] } })).toBe(false)
+    })
+  })
+
+  describe('Issue #1456 闸 1 — assertClarificationResolvedForIrBuild', () => {
+    function newGate(): CompiledPublicationGateService {
+      return new CompiledPublicationGateService(
+        { create: jest.fn() } as never,
+        { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
+      )
+    }
+
+    it('放行 null / undefined / 已结束的 clarificationState', () => {
+      const gate = newGate()
+      expect(() => gate.assertClarificationResolvedForIrBuild(null)).not.toThrow()
+      expect(() => gate.assertClarificationResolvedForIrBuild(undefined)).not.toThrow()
+      expect(() => gate.assertClarificationResolvedForIrBuild({ status: 'CLEAR', items: [] })).not.toThrow()
+    })
+
+    it('当 status=NEEDS_CLARIFICATION 且有 pending blocking item 时抛 PublicationGateClarificationBlockedError，携带 reason 与 pendingItems', () => {
+      const gate = newGate()
+      const pending = {
+        key: 'slot-1',
+        reason: 'missing_exchange' as const,
+        field: 'exchange' as const,
+        blocking: true as const,
+        question: 'choose exchange',
+        status: 'pending' as const,
+      }
+      let caught: unknown = null
+      try {
+        gate.assertClarificationResolvedForIrBuild({
+          status: 'NEEDS_CLARIFICATION',
+          items: [pending],
+        })
+      } catch (error) {
+        caught = error
+      }
+
+      expect(caught).toBeInstanceOf(PublicationGateClarificationBlockedError)
+      const blocked = caught as PublicationGateClarificationBlockedError
+      expect(blocked.publicationGate.blocked).toBe(true)
+      expect(blocked.publicationGate.reason).toBe('CLARIFICATION_PENDING')
+      expect(blocked.publicationGate.pendingItems).toHaveLength(1)
+      // slot → IR field mapping 命中：missing_exchange 应反查到 venue + symbol。
+      expect(blocked.publicationGate.blockedIrFields).toEqual(
+        expect.arrayContaining(['EXECUTION_MODEL.venue', 'EXECUTION_MODEL.symbol']),
+      )
+    })
+
+    it('当任意一个 item.status=pending 但 clarificationState.status 缺失时仍然阻断（fail-closed）', () => {
+      const gate = newGate()
+      const pending = {
+        key: 'slot-sizing',
+        reason: 'missing_semantic_position_sizing' as const,
+        field: 'position.sizing' as const,
+        blocking: true as const,
+        question: 'sizing?',
+        status: 'pending' as const,
+      }
+      expect(() =>
+        gate.assertClarificationResolvedForIrBuild({
+          // 故意写错 status 模拟上游未对齐的会话快照
+          status: 'CLEAR' as any,
+          items: [pending],
+        }),
+      ).toThrow(PublicationGateClarificationBlockedError)
+    })
+
+    it('当所有 item 都已 answered 时放行', () => {
+      const gate = newGate()
+      expect(() =>
+        gate.assertClarificationResolvedForIrBuild({
+          status: 'CLEAR',
+          items: [
+            {
+              key: 'slot-x',
+              reason: 'missing_exchange',
+              field: 'exchange',
+              blocking: true,
+              question: 'q',
+              status: 'answered',
+              answer: 'okx',
+            },
+          ],
+        }),
+      ).not.toThrow()
+    })
+
+    it('多个 pending item 汇总后 blockedIrFields 去重并按 mapping 反查', () => {
+      const gate = newGate()
+      try {
+        gate.assertClarificationResolvedForIrBuild({
+          status: 'NEEDS_CLARIFICATION',
+          items: [
+            { key: 'a', reason: 'missing_exchange', field: 'exchange', blocking: true, question: 'q', status: 'pending' },
+            { key: 'b', reason: 'missing_symbol', field: 'symbol', blocking: true, question: 'q', status: 'pending' },
+            { key: 'c', reason: 'missing_semantic_trigger', field: 'triggers', blocking: true, question: 'q', status: 'pending' },
+          ],
+        })
+        throw new Error('expected to throw')
+      } catch (error) {
+        const blocked = error as PublicationGateClarificationBlockedError
+        expect(blocked).toBeInstanceOf(PublicationGateClarificationBlockedError)
+        // venue+symbol+symbol+predicates.kind+programs.when 去重后 ≥ 3 项
+        expect(new Set(blocked.publicationGate.blockedIrFields).size).toBe(
+          blocked.publicationGate.blockedIrFields.length,
+        )
+        expect(blocked.publicationGate.blockedIrFields).toEqual(
+          expect.arrayContaining([
+            'EXECUTION_MODEL.venue',
+            'EXECUTION_MODEL.symbol',
+            'SIGNAL_CATALOG.predicates[*].kind',
+          ]),
+        )
+      }
+    })
+
+    it('emits structured metric stub via logger.warn（reason=CLARIFICATION_PENDING）', () => {
+      const gate = newGate()
+      const warnSpy = jest.spyOn((gate as any).logger, 'warn').mockImplementation(() => undefined)
+      try {
+        gate.assertClarificationResolvedForIrBuild({
+          status: 'NEEDS_CLARIFICATION',
+          items: [{
+            key: 'slot-1',
+            reason: 'missing_exchange',
+            field: 'exchange',
+            blocking: true,
+            question: 'q',
+            status: 'pending',
+          }],
+        })
+      } catch {
+        // expected
+      }
+      const calls = warnSpy.mock.calls.map(args => String(args[0]))
+      expect(calls.some(line => line.includes('metric=publication_gate_block_total'))).toBe(true)
+      expect(calls.some(line => line.includes('reason=CLARIFICATION_PENDING'))).toBe(true)
     })
   })
 })
