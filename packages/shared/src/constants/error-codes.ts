@@ -215,13 +215,6 @@ export enum ErrorCode {
   //   m1 重命名（review round 1）：旧名 STATE_PREDICATE_ENTRY_RULE 更准确地表达了
   //   invariant 内涵——entry rule 必须含至少一个 event leaf；state+event 混合允许。
   ENTRY_RULE_REQUIRES_EVENT_LEAF = 'ENTRY_RULE_REQUIRES_EVENT_LEAF',
-  // Issue #1459 闸 4：ExecutionModel 关键字段（symbol / venue / primaryTimeframe /
-  //   instrumentType）必须能反查 contextSlots.<field> = { value, source: 'user_explicit' }；
-  //   缺失或 source !== 'user_explicit' → publication gate fail-closed reject。
-  EXECUTION_MODEL_FIELD_UNSOURCED = 'EXECUTION_MODEL_FIELD_UNSOURCED',
-  // Issue #1459 闸 4：symbol 形态正则校验（禁止 BTCUSDTUSDT 双 quote 拼接 / 非法
-  //   字符 / 超长 / 空串）；命中即 publication gate fail-closed reject。
-  EXECUTION_MODEL_SYMBOL_MALFORMED = 'EXECUTION_MODEL_SYMBOL_MALFORMED',
 
   // ===== NL Gateway / Atom 翻牌基建 =====
   INTERNAL_KEY_LEAK_DETECTED = 'INTERNAL_KEY_LEAK_DETECTED',

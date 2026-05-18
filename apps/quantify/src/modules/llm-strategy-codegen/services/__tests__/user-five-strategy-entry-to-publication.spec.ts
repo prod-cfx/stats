@@ -96,59 +96,10 @@ function buildStateFromUserMessage(message: string): SemanticState {
   const patch = conversation.extractSemanticPatchFromMessage(message) as CodegenSemanticPatch
   const state = new SemanticSeedStateBuilderService().build(patch, message)
   expect(state).not.toBeNull()
-  const normalized = conversation.normalizeSemanticContractReadiness(
+  return conversation.normalizeSemanticContractReadiness(
     state!,
     { deployedAtSemanticVersion: CURRENT_SEMANTIC_VERSION },
   )
-  return enforceContextSlotsUserExplicit(normalized, message)
-}
-
-/**
- * Issue #1459 闸 4 review C2（strategy A）：fixture 后处理——把语义提取出的
- *   contextSlots 标记为 user_explicit。本 spec 关注的是「用户中文消息 → 提取
- *   semantic state → IR build」全链路；上游 extractor 并未给出 evidence.source，
- *   测试目的是验证 publication generation 能跑通，而非 evidence 标注本身。
- *
- * 由于 review C1 / C2 收紧了 IR builder 入口（contextSlots 必须 user_explicit），
- * 此处补 evidence 是 spec 与生产规则对齐的最小动作，保持 fixture 反映真实用户输入。
- */
-function enforceContextSlotsUserExplicit(state: SemanticState, message: string): SemanticState {
-  const slots = state.contextSlots
-  if (!slots) return state
-  const defaults: Record<'exchange' | 'symbol' | 'marketType' | 'timeframe', string> = {
-    exchange: 'okx',
-    symbol: 'BTCUSDT',
-    marketType: 'perp',
-    timeframe: '15m',
-  }
-  const stamp = (key: 'exchange' | 'symbol' | 'marketType' | 'timeframe', slot: typeof slots.symbol): typeof slots.symbol => {
-    if (slot && slot.status === 'locked' && typeof slot.value === 'string' && slot.value.trim().length > 0) {
-      if (slot.evidence?.source === 'user_explicit') return slot
-      return {
-        ...slot,
-        evidence: { text: slot.evidence?.text ?? message, source: 'user_explicit' },
-      }
-    }
-    // 上游提取器未给出 → 用 spec 默认值补全为 user_explicit（模拟澄清后状态）
-    return {
-      slotKey: key,
-      fieldPath: `contextSlots.${key}`,
-      value: defaults[key],
-      status: 'locked',
-      priority: 'context',
-      questionHint: '',
-      affectsExecution: true,
-      evidence: { text: message, source: 'user_explicit' },
-    }
-  }
-  state.contextSlots = {
-    ...slots,
-    exchange: stamp('exchange', slots.exchange),
-    symbol: stamp('symbol', slots.symbol),
-    marketType: stamp('marketType', slots.marketType),
-    timeframe: stamp('timeframe', slots.timeframe),
-  }
-  return state
 }
 
 describe('user reported five strategies: entry -> middle -> publication generation', () => {
