@@ -44,6 +44,7 @@ import type {
 } from '../atom-contracts/atom-contract-emit.types'
 import type { AtomContractEmit, AtomContractKey } from '../atom-contracts/atom-contract-types'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+import { SUPPORTED_QUOTE_ASSETS } from '../constants/quote-assets'
 import { extractAtrStopParams } from './atr-stop-params'
 import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
@@ -4366,8 +4367,10 @@ export class CanonicalSpecV2IrCompilerService {
   }
 
   private inferQuoteAsset(symbol: string): string {
+    // Issue #1459 闸 4 review M3 / C3：使用共享常量，避免与
+    //   execution-model-source-invariant.ts 的 SUPPORTED_QUOTE_ASSETS 分叉。
     const normalized = symbol.toUpperCase()
-    for (const quote of ['USDT', 'USDC', 'USD', 'BTC', 'ETH'] as const) {
+    for (const quote of SUPPORTED_QUOTE_ASSETS) {
       if (normalized.endsWith(quote) && normalized.length > quote.length) {
         return quote
       }

@@ -95,6 +95,7 @@ import {
   
   
 } from './inferred-confirmation-classifier.service'
+import { assertSymbolWellFormed } from './execution-model-source-invariant'
 import { canonicalizeStrategySymbolInput, isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
 import { PlannerDispatcherMergeService } from './planner-dispatcher-merge.service'
@@ -248,8 +249,16 @@ const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
 const conversationContextHelper = new CodegenConversationContextHelper()
 const responseMapperHelper = new CodegenConversationResponseMapperHelper()
 
-function normalizePublishedSymbol(raw: string): string {
-  return raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
+/**
+ * Issue #1459 闸 4：symbol 拼接收敛——共用形态正则 invariant。
+ *   BTCUSDTUSDT 等双 quote 拼接当场 reject；保持与
+ *   `codegen-publication-generation.stage.ts` 的 normalizePublishedSymbolValidated
+ *   行为一致。
+ */
+function normalizePublishedSymbolValidated(raw: string): string {
+  const normalized = raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
+  assertSymbolWellFormed(normalized)
+  return normalized
 }
 
 /**
@@ -1327,7 +1336,7 @@ export class CodegenConversationService {
   }
 
   private normalizeRecoveredSymbol(value: string | null): string | null {
-    return value ? normalizePublishedSymbol(value) : null
+    return value ? normalizePublishedSymbolValidated(value) : null
   }
 
   private normalizeRecoveredMarketType(value: string | null): 'spot' | 'perp' | null {
@@ -4711,7 +4720,7 @@ export class CodegenConversationService {
     }
 
     if (item.key === FIELD_KEY.MARKET_SYMBOL || item.field === 'symbol') {
-      const symbol = normalizePublishedSymbol(normalizedAnswer)
+      const symbol = normalizePublishedSymbolValidated(normalizedAnswer)
       return this.normalizeLogicSnapshot({
         ...checklist,
         symbols: symbol ? [symbol] : checklist.symbols,

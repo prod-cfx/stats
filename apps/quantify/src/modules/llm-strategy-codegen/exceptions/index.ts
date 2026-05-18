@@ -1,5 +1,7 @@
 export * from './atom-version-gate-validation-failed.exception'
 export * from './entry-rule-requires-event-leaf.exception'
+export * from './execution-model-field-unsourced.exception'
+export * from './execution-model-symbol-malformed.exception'
 export * from './internal-key-leak.exception'
 export * from './scope-timeframe-live-unsupported.exception'
 export * from './semantic-presentation-token-not-found.exception'

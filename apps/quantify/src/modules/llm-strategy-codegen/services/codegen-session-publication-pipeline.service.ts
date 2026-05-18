@@ -14,6 +14,8 @@ import { CanonicalSpecV2IrCompilerService } from './canonical-spec-v2-ir-compile
 import { CanonicalStrategyAstCompilerService } from './canonical-strategy-ast-compiler.service'
 import { CodegenConversationStateMachine } from './codegen-conversation-state-machine'
 import { EntryRuleRequiresEventLeafException } from '../exceptions/entry-rule-requires-event-leaf.exception'
+import { ExecutionModelFieldUnsourcedException } from '../exceptions/execution-model-field-unsourced.exception'
+import { ExecutionModelSymbolMalformedException } from '../exceptions/execution-model-symbol-malformed.exception'
 import { CodegenPublicationGenerationStage } from './codegen-publication-generation.stage'
 import { CodegenPublicationPersistenceStage } from './codegen-publication-persistence.stage'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -306,10 +308,24 @@ export class CodegenSessionPublicationPipelineService {
         'published',
       )
     } catch (error) {
-      const publicationGate = this.normalizePublicationGate(
+      // Issue #1459 闸 4 review M6：当上游已带 publicationGate 时优先采纳，
+      //   但若同步 invariant 也命中，附带 supplanted 元数据保留两层信息，
+      //   而不是静默丢失第二层 invariant 异常。
+      const upstream = this.normalizePublicationGate(
         (error as { publicationGate?: unknown } | null)?.publicationGate,
       )
-        ?? this.buildEntryRuleEventLeafPublicationGate(error)
+      const entryRuleGate = this.buildEntryRuleEventLeafPublicationGate(error)
+      const invariantGate = this.buildExecutionModelInvariantPublicationGate(error)
+      let publicationGate = upstream ?? entryRuleGate ?? invariantGate
+      if (publicationGate && upstream) {
+        const supplanted = entryRuleGate ?? invariantGate
+        if (supplanted) {
+          this.logger.warn(
+            `[publication-gate] upstream gate supplanted invariant gate; preserving as metadata: ${JSON.stringify({ upstreamReason: upstream.reason, invariantReason: supplanted.reason })}`,
+          )
+          publicationGate = { ...publicationGate, supplantedGate: supplanted }
+        }
+      }
       const reason = error instanceof Error ? error.message : String(error)
       if (publicationGate) {
         // Issue #1456 闸 1：IR build 入口 assertion / publish 入口 assertion
@@ -427,6 +443,53 @@ export class CodegenSessionPublicationPipelineService {
       ],
       blockedIrFields: ['ruleBlocks'],
     }
+  }
+
+  /**
+   * Issue #1459 闸 4：ExecutionModel 字段来源 / symbol 形态 invariant 异常合并到
+   * publicationGate 阻断响应。前端可与 #1456 闸 1 / #1457 闸 2 共用展示路径。
+   */
+  private buildExecutionModelInvariantPublicationGate(error: unknown): Record<string, unknown> | null {
+    if (error instanceof ExecutionModelFieldUnsourcedException) {
+      // Issue #1459 闸 4 review M5：用 typed getter（field / reason / actualSource）
+      //   读取结构化字段，不依赖 error.args 的字符串约定。
+      const field = error.field
+      if (!field) {
+        // Issue #1459 闸 4 review m6：空字符串 fallback 改为 fail-closed。
+        throw new Error('codegen.execution_model_field_unsourced.field_missing')
+      }
+      return {
+        passed: false,
+        blocked: true,
+        reason: 'execution_model_field_unsourced',
+        code: error.code,
+        pendingItems: [{
+          field,
+          reason: error.reason,
+          actualSource: error.actualSource,
+          message: error.message,
+        }],
+        // Issue #1459 闸 4 review m1：直接 `market.${field}`，删除死三元。
+        blockedIrFields: [`market.${field}`],
+      }
+    }
+    if (error instanceof ExecutionModelSymbolMalformedException) {
+      return {
+        passed: false,
+        blocked: true,
+        reason: 'execution_model_symbol_malformed',
+        code: error.code,
+        pendingItems: [{
+          field: 'symbol',
+          symbol: error.symbol,
+          malformedReason: error.reason,
+          ...(error.detail ? { detail: error.detail } : {}),
+          message: error.message,
+        }],
+        blockedIrFields: ['market.symbol'],
+      }
+    }
+    return null
   }
 
   private normalizePublicationGate(value: unknown): Record<string, unknown> | null {
