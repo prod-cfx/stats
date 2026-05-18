@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../l10n/app_localizations.dart';
 import '../../../theme/tokens.dart';
 
 /// 「我的」页面顶部紫色 header（原型 `m-screens-4.jsx:944-989`）。
@@ -95,8 +96,8 @@ class QzAccountHeader extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: <Widget>[
-              if (telegramBound) const _HeaderChip(label: 'Telegram 已绑定'),
-              if (binanceConnected) const _HeaderChip(label: 'Binance ✓'),
+              if (telegramBound) _HeaderChip(label: AppLocalizations.of(context).meHeaderTelegramBound),
+              if (binanceConnected) _HeaderChip(label: AppLocalizations.of(context).meHeaderBinanceConnected),
             ],
           ),
         ],

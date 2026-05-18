@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../data/models/strategy_models.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../../theme/tokens.dart';
 import '../../../widgets/qz_chip.dart';
 
@@ -18,26 +19,26 @@ class CategoryChipBar extends StatelessWidget {
   final StrategyCategory selected;
   final ValueChanged<StrategyCategory> onChanged;
 
-  static const List<({StrategyCategory key, String label})> _entries =
-      <({StrategyCategory key, String label})>[
-    (key: StrategyCategory.all, label: '全部'),
-    (key: StrategyCategory.highReturn, label: '高收益'),
-    (key: StrategyCategory.lowDrawdown, label: '低回撤'),
-    (key: StrategyCategory.newListing, label: '新上架'),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final List<({StrategyCategory key, String label})> entries =
+        <({StrategyCategory key, String label})>[
+      (key: StrategyCategory.all, label: l10n.commonAll),
+      (key: StrategyCategory.highReturn, label: l10n.strategyCategoryHighReturn),
+      (key: StrategyCategory.lowDrawdown, label: l10n.strategyCategoryLowDrawdown),
+      (key: StrategyCategory.newListing, label: l10n.strategyCategoryNewListing),
+    ];
     return SizedBox(
       height: 40,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: QzSpacing.lg),
-        itemCount: _entries.length,
+        itemCount: entries.length,
         separatorBuilder: (_, int _) =>
             const SizedBox(width: QzSpacing.sm),
         itemBuilder: (BuildContext context, int i) {
-          final ({StrategyCategory key, String label}) e = _entries[i];
+          final ({StrategyCategory key, String label}) e = entries[i];
           final bool on = e.key == selected;
           return GestureDetector(
             key: Key('strategy-chip-${e.key.name}'),

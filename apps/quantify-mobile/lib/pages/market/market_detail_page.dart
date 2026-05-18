@@ -8,6 +8,7 @@ import '../../data/models/kline_models.dart';
 import '../../data/models/long_short_models.dart';
 import '../../data/models/ticker_models.dart';
 import '../../data/providers.dart';
+import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
@@ -163,14 +164,15 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
       appBar: QzTopBar(title: widget.symbol, onBack: () => context.pop()),
       body: Builder(
         builder: (BuildContext context) {
+          final AppLocalizations l10n = AppLocalizations.of(context);
           if (_loading) return const Center(child: QzSpinner());
           if (_error != null) {
-            return QzEmptyState(title: '${widget.symbol} 加载失败');
+            return QzEmptyState(title: '${widget.symbol} ${l10n.commonLoadError}');
           }
           if (_priceSnapshot == null) {
             return QzEmptyState(
               title: widget.symbol,
-              subtitle: '未找到该交易对',
+              subtitle: l10n.marketDetailSymbolNotFound,
             );
           }
           return SingleChildScrollView(
@@ -209,7 +211,7 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      const _SectionTitle('盘口'),
+                      _SectionTitle(l10n.marketDetailSectionOrderbook),
                       const SizedBox(height: QzSpacing.md),
                       OrderbookView(symbol: widget.symbol),
                     ],
@@ -221,10 +223,10 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      const _SectionTitle('多空比'),
+                      _SectionTitle(l10n.marketLongShortTitle),
                       const SizedBox(height: QzSpacing.md),
                       if (_longShort == null)
-                        const QzEmptyState(title: '多空比加载失败')
+                        QzEmptyState(title: l10n.marketLongShortLoadError)
                       else
                         LongShortBar(
                           longRatio: _longShort!.longRatio,
@@ -250,6 +252,7 @@ class _PriceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     return QzCard(
       child: Row(
@@ -259,7 +262,7 @@ class _PriceCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  '行情详情：$displaySymbol',
+                  '${l10n.marketDetailTickerPrefix}$displaySymbol',
                   style: TextStyle(color: c.textDim, fontSize: 12),
                 ),
                 const SizedBox(height: 6),

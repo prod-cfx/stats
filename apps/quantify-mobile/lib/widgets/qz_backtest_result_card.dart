@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/models/backtest_models.dart';
+import '../l10n/app_localizations.dart';
 import '../theme/colors.dart';
 import '../theme/theme_context.dart';
 import '../theme/tokens.dart';
@@ -22,13 +23,14 @@ class QzBacktestResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     return QzCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            '回测结果',
+            l10n.backtestResultTitle,
             style: TextStyle(
               color: c.text,
               fontSize: 13,
@@ -53,7 +55,7 @@ class QzBacktestResultCard extends StatelessWidget {
             children: <Widget>[
               Expanded(
                 child: _Stat(
-                  label: '总收益',
+                  label: l10n.backtestResultTotalReturn,
                   value:
                       '${result.totalReturnPercent >= 0 ? '+' : ''}${result.totalReturnPercent.toStringAsFixed(2)}%',
                   valueColor: result.totalReturnPercent >= 0
@@ -63,7 +65,7 @@ class QzBacktestResultCard extends StatelessWidget {
               ),
               Expanded(
                 child: _Stat(
-                  label: '最大回撤',
+                  label: l10n.backtestResultMaxDrawdown,
                   value:
                       '${result.maxDrawdownPercent.toStringAsFixed(2)}%',
                   valueColor: c.marketDown,
@@ -76,15 +78,15 @@ class QzBacktestResultCard extends StatelessWidget {
             children: <Widget>[
               Expanded(
                 child: _Stat(
-                  label: '夏普',
+                  label: l10n.backtestResultSharpe,
                   value: result.sharpe.toStringAsFixed(2),
                   valueColor: c.text,
                 ),
               ),
               Expanded(
                 child: _Stat(
-                  label: '成交',
-                  value: '${result.trades} 笔',
+                  label: l10n.backtestResultTrades,
+                  value: '${result.trades}${l10n.backtestResultTradesSuffix}',
                   valueColor: c.text,
                 ),
               ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../data/models/whale_models.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
@@ -36,23 +37,33 @@ class QzWhaleRow extends StatelessWidget {
     return '\$${amountUsd.toStringAsFixed(0)}';
   }
 
-  /// 暴露给测试的纯函数：相对时间 "刚刚 / N 分钟前 / N 小时前 / N 天前"。
+  /// 暴露给测试的纯函数（locale-neutral）：返回 'just now' / 'Nm ago' / 'Nh ago' / 'Nd ago'。
+  /// UI 展示请使用 [_localizedRelativeTime]。
   static String formatRelativeTime(DateTime ts, DateTime now) {
     final Duration d = now.difference(ts);
-    if (d.inSeconds < 60) return '刚刚';
-    if (d.inMinutes < 60) return '${d.inMinutes} 分钟前';
-    if (d.inHours < 24) return '${d.inHours} 小时前';
-    return '${d.inDays} 天前';
+    if (d.inSeconds < 60) return 'just now';
+    if (d.inMinutes < 60) return '${d.inMinutes}m ago';
+    if (d.inHours < 24) return '${d.inHours}h ago';
+    return '${d.inDays}d ago';
+  }
+
+  String _localizedRelativeTime(AppLocalizations l10n, DateTime ts, DateTime now) {
+    final Duration d = now.difference(ts);
+    if (d.inSeconds < 60) return l10n.whaleTimeJustNow;
+    if (d.inMinutes < 60) return '${d.inMinutes}${l10n.whaleTimeMinutesAgoSuffix}';
+    if (d.inHours < 24) return '${d.inHours}${l10n.whaleTimeHoursAgoSuffix}';
+    return '${d.inDays}${l10n.whaleTimeDaysAgoSuffix}';
   }
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final bool isIn = event.direction == 'in';
     final Color dirColor = isIn ? c.statusOk : c.statusDanger;
     final IconData dirIcon = isIn ? Icons.arrow_downward : Icons.arrow_upward;
     final DateTime now = _now ?? DateTime.now();
-    final String relTime = formatRelativeTime(event.timestamp, now);
+    final String relTime = _localizedRelativeTime(l10n, event.timestamp, now);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 700),
       color: highlight ? c.accentSoft : Colors.transparent,
@@ -78,12 +89,15 @@ class QzWhaleRow extends StatelessWidget {
               children: <Widget>[
                 Row(
                   children: <Widget>[
-                    Text(
-                      event.symbol,
-                      style: TextStyle(
-                        color: c.text,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                    Flexible(
+                      child: Text(
+                        event.symbol,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: c.text,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                     const SizedBox(width: QzSpacing.sm),

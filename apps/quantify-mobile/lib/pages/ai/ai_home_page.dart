@@ -9,6 +9,7 @@ import '../../data/models/ai_chat_models.dart';
 import '../../data/models/backtest_models.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/ai_chat_repository.dart';
+import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
@@ -226,11 +227,12 @@ class _Empty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(QzSpacing.xl),
         child: Text(
-          '描述你想要的策略，我会帮你生成并回测。',
+          l10n.aiEmptyHint,
           style: TextStyle(color: scheme.textDim, fontSize: 13),
           textAlign: TextAlign.center,
         ),
@@ -254,6 +256,7 @@ class _InputBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     return Container(
       padding: const EdgeInsets.fromLTRB(
@@ -288,7 +291,7 @@ class _InputBar extends StatelessWidget {
                 maxLines: 4,
                 style: TextStyle(color: c.text, fontSize: 14),
                 decoration: InputDecoration(
-                  hintText: '输入消息…',
+                  hintText: l10n.aiInputHint,
                   hintStyle: TextStyle(color: c.textDim, fontSize: 14),
                   border: InputBorder.none,
                   isDense: true,
@@ -300,14 +303,14 @@ class _InputBar extends StatelessWidget {
           const SizedBox(width: QzSpacing.sm),
           QzButton(
             key: const Key('ai-backtest-button'),
-            label: '回测',
+            label: l10n.aiBacktestButton,
             variant: QzButtonVariant.ghost,
             onPressed: isSending ? null : onBacktest,
           ),
           const SizedBox(width: QzSpacing.sm),
           QzButton(
             key: const Key('ai-send-button'),
-            label: '发送',
+            label: l10n.aiSendButton,
             variant: QzButtonVariant.accent,
             onPressed: isSending ? null : onSend,
             loading: isSending,

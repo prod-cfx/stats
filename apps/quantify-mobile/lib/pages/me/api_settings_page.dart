@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/api_key_models.dart';
 import '../../data/providers.dart';
+import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
@@ -39,6 +40,7 @@ class ApiSettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final AsyncValue<List<ExchangeApiKey>> keys = ref.watch(apiKeysProvider);
 
@@ -48,13 +50,13 @@ class ApiSettingsPage extends ConsumerWidget {
         backgroundColor: c.bgElev,
         foregroundColor: c.text,
         elevation: 0,
-        title: const Text('交易所 API'),
+        title: Text(l10n.meApiSettingsTitle),
       ),
       body: keys.when(
         loading: () => const Center(child: QzSpinner()),
         error: (Object e, StackTrace st) => Center(
           child: Text(
-            '加载失败：$e',
+            '${l10n.meApiLoadErrorPrefix}$e',
             style: TextStyle(color: c.statusDanger),
           ),
         ),
@@ -101,6 +103,7 @@ class _ExchangeRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final ExchangeApiKey? k = existingKey;
     final bool configured = k != null;
@@ -152,7 +155,7 @@ class _ExchangeRow extends StatelessWidget {
                 const SizedBox(height: 3),
                 if (configured) ...<Widget>[
                   Text(
-                    '已连接 · 读取 + 下单',
+                    l10n.meApiConnected,
                     style: TextStyle(color: c.statusOk, fontSize: 11),
                   ),
                   const SizedBox(height: 2),
@@ -169,7 +172,7 @@ class _ExchangeRow extends StatelessWidget {
                   ),
                 ] else
                   Text(
-                    '未配置 · 部署策略前请配置',
+                    l10n.meApiNotConfigured,
                     style: TextStyle(color: c.statusWarn, fontSize: 11),
                   ),
               ],
@@ -192,7 +195,7 @@ class _ExchangeRow extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              child: Text(configured ? '管理' : '连接'),
+              child: Text(configured ? l10n.meApiManage : l10n.meApiConnect),
             ),
           ),
         ],

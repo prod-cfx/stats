@@ -8,6 +8,7 @@ import 'package:quantify_mobile/pages/strategy/strategy_detail_page.dart';
 import 'package:quantify_mobile/pages/strategy/strategy_home_page.dart';
 import 'package:quantify_mobile/pages/strategy/widgets/strategy_card_tile.dart';
 import 'package:quantify_mobile/router/app_router.dart';
+import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
@@ -43,6 +44,9 @@ Future<void> _pump(WidgetTester tester, {QzTheme? theme}) async {
         sharedPreferencesProvider.overrideWithValue(prefs),
       ],
       child: MaterialApp.router(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         theme: buildQzThemeData(
           theme ?? const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
         ),
@@ -69,6 +73,9 @@ void main() {
           sharedPreferencesProvider.overrideWithValue(prefs),
         ],
         child: MaterialApp.router(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: buildQzThemeData(
             const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
           ),
@@ -196,6 +203,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp.router(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: buildQzThemeData(
             const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
           ),

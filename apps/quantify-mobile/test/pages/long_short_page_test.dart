@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/pages/market/long_short_page.dart';
 import 'package:quantify_mobile/pages/market/widgets/long_short_bar.dart';
 import 'package:quantify_mobile/router/app_router.dart';
+import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
@@ -17,6 +18,9 @@ Future<void> _pumpPage(
   await tester.pumpWidget(
     ProviderScope(
       child: MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         theme: buildQzThemeData(theme),
         home: const LongShortPage(),
       ),
@@ -33,6 +37,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp.router(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: buildQzThemeData(QzTheme.fallback),
           routerConfig: router,
         ),

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/mock/fixtures/whale_events.dart';
+import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/data/models/whale_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/whale_feed_repository.dart';
@@ -70,6 +71,9 @@ Future<void> _pump(
         whaleFeedRepositoryProvider.overrideWithValue(repo),
       ],
       child: MaterialApp.router(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         theme: buildQzThemeData(theme),
         routerConfig: r,
       ),
@@ -240,27 +244,27 @@ void main() {
 
   test('QzWhaleRow.formatRelativeTime 边界', () {
     final DateTime now = DateTime(2026, 5, 18, 12, 0, 0);
-    expect(QzWhaleRow.formatRelativeTime(now, now), '刚刚');
+    expect(QzWhaleRow.formatRelativeTime(now, now), 'just now');
     expect(
       QzWhaleRow.formatRelativeTime(
         now.subtract(const Duration(minutes: 5)),
         now,
       ),
-      '5 分钟前',
+      '5m ago',
     );
     expect(
       QzWhaleRow.formatRelativeTime(
         now.subtract(const Duration(hours: 3)),
         now,
       ),
-      '3 小时前',
+      '3h ago',
     );
     expect(
       QzWhaleRow.formatRelativeTime(
         now.subtract(const Duration(days: 2)),
         now,
       ),
-      '2 天前',
+      '2d ago',
     );
   });
 }

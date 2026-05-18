@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
@@ -19,6 +20,9 @@ Future<void> pumpQz(
   await tester.pumpWidget(
     MaterialApp(
       debugShowCheckedModeBanner: false,
+      locale: const Locale('zh'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: buildQzThemeData(QzTheme(bg: bg, accent: accent)),
       home: Scaffold(body: Center(child: child)),
     ),

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../data/models/ticker_models.dart';
 import '../../data/providers.dart';
+import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
@@ -29,7 +30,7 @@ class MarketHomePage extends ConsumerStatefulWidget {
 }
 
 class _MarketHomePageState extends ConsumerState<MarketHomePage> {
-  String _tab = '全部';
+  int _tabIndex = 1; // 0=watchlist, 1=all
   List<Ticker> _tickers = <Ticker>[];
   bool _loading = true;
   Object? _error;
@@ -60,14 +61,16 @@ class _MarketHomePageState extends ConsumerState<MarketHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final List<Ticker> visible = _tab == '自选'
+    final List<String> tabOptions = <String>[l10n.marketHomeTabWatchlist, l10n.commonAll];
+    final List<Ticker> visible = _tabIndex == 0
         ? _tickers
               .where((Ticker t) => _kFavoriteSet.contains(t.symbol))
               .toList()
         : _tickers;
     return Scaffold(
-      appBar: const QzTopBar(title: '行情'),
+      appBar: QzTopBar(title: l10n.marketHomeTitle),
       body: Column(
         children: <Widget>[
           Container(
@@ -80,9 +83,9 @@ class _MarketHomePageState extends ConsumerState<MarketHomePage> {
               QzSpacing.md,
             ),
             child: QzSegmentedTabs(
-              options: const <String>['自选', '全部'],
-              value: _tab,
-              onChanged: (String value) => setState(() => _tab = value),
+              options: tabOptions,
+              value: tabOptions[_tabIndex],
+              onChanged: (String value) => setState(() => _tabIndex = tabOptions.indexOf(value)),
             ),
           ),
           Expanded(
@@ -90,10 +93,10 @@ class _MarketHomePageState extends ConsumerState<MarketHomePage> {
               builder: (BuildContext context) {
                 if (_loading) return const Center(child: QzSpinner());
                 if (_error != null) {
-                  return const QzEmptyState(title: '行情加载失败');
+                  return QzEmptyState(title: l10n.marketHomeLoadError);
                 }
                 if (visible.isEmpty) {
-                  return const QzEmptyState(title: '暂无行情');
+                  return QzEmptyState(title: l10n.marketHomeEmpty);
                 }
                 return ListView.separated(
                   itemCount: visible.length,

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/models/backtest_models.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/backtest_repository.dart';
+import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
@@ -71,19 +72,20 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   Future<void> _submit() async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final DateTime? start = DateTime.tryParse(_start.text.trim());
     final DateTime? end = DateTime.tryParse(_end.text.trim());
     final double? capital = double.tryParse(_capital.text.trim());
     if (start == null || end == null) {
-      setState(() => _error = '请输入正确的起止时间（YYYY-MM-DD）');
+      setState(() => _error = l10n.backtestErrorInvalidDate);
       return;
     }
     if (!end.isAfter(start)) {
-      setState(() => _error = '结束时间必须晚于开始时间');
+      setState(() => _error = l10n.backtestErrorEndBeforeStart);
       return;
     }
     if (capital == null || capital <= 0) {
-      setState(() => _error = '请输入正数初始资金');
+      setState(() => _error = l10n.backtestErrorInvalidCapital);
       return;
     }
 
@@ -112,7 +114,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
       if (!mounted) return;
       setState(() {
         _submitting = false;
-        _error = '回测失败：$e';
+        _error = '${l10n.backtestErrorFailedPrefix}$e';
       });
       return;
     }
@@ -127,6 +129,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     return Scaffold(
       backgroundColor: c.scrim,
@@ -181,7 +184,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
                   ),
                   const SizedBox(height: QzSpacing.md),
                   Text(
-                    '回测参数',
+                    l10n.backtestSheetTitle,
                     style: TextStyle(
                       color: c.text,
                       fontSize: 16,
@@ -189,7 +192,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
                     ),
                   ),
                   const SizedBox(height: QzSpacing.lg),
-                  _FieldLabel(label: '交易对', scheme: c),
+                  _FieldLabel(label: l10n.backtestFieldSymbol, scheme: c),
                   const SizedBox(height: QzSpacing.xs),
                   QzSegmentedTabs(
                     options: _symbols,
@@ -197,7 +200,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
                     onChanged: (String v) => setState(() => _symbol = v),
                   ),
                   const SizedBox(height: QzSpacing.md),
-                  _FieldLabel(label: '周期', scheme: c),
+                  _FieldLabel(label: l10n.backtestFieldPeriod, scheme: c),
                   const SizedBox(height: QzSpacing.xs),
                   QzSegmentedTabs(
                     options: _periods,
@@ -211,7 +214,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
-                            _FieldLabel(label: '开始', scheme: c),
+                            _FieldLabel(label: l10n.commonStart, scheme: c),
                             const SizedBox(height: QzSpacing.xs),
                             _TextInput(
                               key: const Key('backtest-start'),
@@ -226,7 +229,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
-                            _FieldLabel(label: '结束', scheme: c),
+                            _FieldLabel(label: l10n.commonEnd, scheme: c),
                             const SizedBox(height: QzSpacing.xs),
                             _TextInput(
                               key: const Key('backtest-end'),
@@ -240,7 +243,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
                   ),
                   const SizedBox(height: QzSpacing.md),
                   _FieldLabel(
-                    label: '杠杆 ${_leverage.toStringAsFixed(0)}×',
+                    label: '${l10n.backtestFieldLeverage} ${_leverage.toStringAsFixed(0)}×',
                     scheme: c,
                   ),
                   Slider(
@@ -252,7 +255,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
                     onChanged: (double v) =>
                         setState(() => _leverage = v),
                   ),
-                  _FieldLabel(label: '初始资金 (USD)', scheme: c),
+                  _FieldLabel(label: l10n.backtestFieldCapital, scheme: c),
                   const SizedBox(height: QzSpacing.xs),
                   _TextInput(
                     key: const Key('backtest-capital'),
@@ -275,7 +278,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
                     children: <Widget>[
                       Expanded(
                         child: QzButton(
-                          label: '取消',
+                          label: l10n.commonCancel,
                           variant: QzButtonVariant.ghost,
                           onPressed: _submitting ? null : _cancel,
                           expanded: true,
@@ -285,7 +288,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
                       Expanded(
                         child: QzButton(
                           key: const Key('backtest-submit'),
-                          label: '开始回测',
+                          label: l10n.backtestStartButton,
                           variant: QzButtonVariant.accent,
                           onPressed: _submitting ? null : _submit,
                           loading: _submitting,

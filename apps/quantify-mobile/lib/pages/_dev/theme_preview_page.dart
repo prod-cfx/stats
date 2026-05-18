@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_data.dart';
 import '../../theme/tokens.dart';
@@ -87,6 +88,7 @@ class _SampleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = qzColors(bg, accent);
     return Container(
       padding: const EdgeInsets.all(QzSpacing.lg),
@@ -119,7 +121,7 @@ class _SampleCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(QzRadii.input),
                 ),
                 child: Text(
-                  '主按钮',
+                  l10n.devPreviewPrimaryButton,
                   style: TextStyle(color: c.accentOn, fontSize: 13),
                 ),
               ),
@@ -134,7 +136,7 @@ class _SampleCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(QzRadii.input),
                 ),
                 child: Text(
-                  '软气泡',
+                  l10n.devPreviewSoftBubble,
                   style: TextStyle(color: c.accent, fontSize: 13),
                 ),
               ),

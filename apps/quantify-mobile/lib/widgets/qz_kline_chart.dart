@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:k_chart_plus/k_chart_plus.dart';
 
 import '../data/models/kline_models.dart';
+import '../l10n/app_localizations.dart';
 import '../theme/colors.dart';
 import '../theme/theme_context.dart';
 import '../theme/tokens.dart';
@@ -55,6 +56,7 @@ class QzKlineChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final String currentLabel = _labelOf(interval);
     final List<String> labels = <String>[
@@ -83,7 +85,7 @@ class QzKlineChart extends StatelessWidget {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(QzRadii.card),
-                child: _buildBody(c),
+                child: _buildBody(c, l10n),
               ),
             ),
           ),
@@ -92,20 +94,20 @@ class QzKlineChart extends StatelessWidget {
     );
   }
 
-  Widget _buildBody(QzColorScheme c) {
-    if (hasError) return _buildError(c);
+  Widget _buildBody(QzColorScheme c, AppLocalizations l10n) {
+    if (hasError) return _buildError(c, l10n);
     if (candles.isEmpty) return const Center(child: QzSpinner());
     return _buildChart(c);
   }
 
   /// 错误态：文字 + 可选重试按钮，与 `QzEmptyState` 风格不同（chart 区域内嵌）。
-  Widget _buildError(QzColorScheme c) {
+  Widget _buildError(QzColorScheme c, AppLocalizations l10n) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           Text(
-            'K 线加载失败',
+            l10n.klineLoadError,
             style: TextStyle(
               color: c.textDim,
               fontSize: 13,
@@ -116,7 +118,7 @@ class QzKlineChart extends StatelessWidget {
             const SizedBox(height: QzSpacing.sm),
             TextButton(
               onPressed: onRetry,
-              child: Text('重试', style: TextStyle(color: c.accent)),
+              child: Text(l10n.commonRetry, style: TextStyle(color: c.accent)),
             ),
           ],
         ],

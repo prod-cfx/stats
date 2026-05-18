@@ -51,6 +51,8 @@ class StrategyMetricCard extends StatelessWidget {
         children: <Widget>[
           Text(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(color: c.textDim, fontSize: 12),
           ),
           const SizedBox(height: QzSpacing.xxs),

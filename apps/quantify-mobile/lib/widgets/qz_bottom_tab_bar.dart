@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../theme/colors.dart';
 import '../theme/theme_context.dart';
 
@@ -31,6 +32,7 @@ class QzBottomTabBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     return BottomNavigationBar(
       currentIndex: currentIndex,
@@ -42,26 +44,26 @@ class QzBottomTabBar extends StatelessWidget {
       unselectedItemColor: c.textDim,
       selectedFontSize: 11,
       unselectedFontSize: 11,
-      items: const <BottomNavigationBarItem>[
+      items: <BottomNavigationBarItem>[
         BottomNavigationBarItem(
-          icon: Icon(Icons.auto_awesome, key: ValueKey<String>('tab-ai')),
+          icon: const Icon(Icons.auto_awesome, key: ValueKey<String>('tab-ai')),
           label: 'AI',
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.show_chart, key: ValueKey<String>('tab-market')),
-          label: '行情',
+          icon: const Icon(Icons.show_chart, key: ValueKey<String>('tab-market')),
+          label: l10n.tabMarket,
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.water_drop_outlined, key: ValueKey<String>('tab-whale')),
-          label: '巨鲸',
+          icon: const Icon(Icons.water_drop_outlined, key: ValueKey<String>('tab-whale')),
+          label: l10n.tabWhale,
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.dashboard_outlined, key: ValueKey<String>('tab-strategy')),
-          label: '策略',
+          icon: const Icon(Icons.dashboard_outlined, key: ValueKey<String>('tab-strategy')),
+          label: l10n.tabStrategy,
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.person_outline, key: ValueKey<String>('tab-me')),
-          label: '我的',
+          icon: const Icon(Icons.person_outline, key: ValueKey<String>('tab-me')),
+          label: l10n.tabMe,
         ),
       ],
     );

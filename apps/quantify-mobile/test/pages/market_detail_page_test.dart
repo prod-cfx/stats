@@ -18,6 +18,7 @@ import 'package:quantify_mobile/data/repositories/orderbook_repository.dart';
 import 'package:quantify_mobile/data/repositories/ticker_repository.dart';
 import 'package:quantify_mobile/pages/market/market_detail_page.dart';
 import 'package:quantify_mobile/pages/market/widgets/orderbook_view.dart';
+import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
@@ -146,6 +147,9 @@ Future<_FakeKlineRepository> _pump(
         klineRepositoryProvider.overrideWithValue(repo),
       ],
       child: MaterialApp.router(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         theme: buildQzThemeData(theme),
         routerConfig: router,
       ),

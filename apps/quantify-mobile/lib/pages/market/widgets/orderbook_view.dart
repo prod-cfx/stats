@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/models/orderbook_models.dart';
 import '../../../data/providers.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
@@ -79,7 +80,7 @@ class _OrderbookViewState extends ConsumerState<OrderbookView> {
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: QzSpinner());
     if (_error != null || _snapshot == null) {
-      return const QzEmptyState(title: '盘口加载失败');
+      return QzEmptyState(title: AppLocalizations.of(context).orderbookLoadError);
     }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,

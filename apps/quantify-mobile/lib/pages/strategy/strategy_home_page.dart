@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/models/strategy_models.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/strategy_repository.dart';
+import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
@@ -118,9 +119,10 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('策略')),
+      appBar: AppBar(title: Text(l10n.strategyHomeTitle)),
       body: Column(
         children: <Widget>[
           Padding(
@@ -128,7 +130,7 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
                 QzSpacing.lg, QzSpacing.sm, QzSpacing.lg, QzSpacing.sm),
             child: QzSearchBar(
               controller: _queryCtrl,
-              hint: '搜索策略 / 作者 / 标签',
+              hint: l10n.strategyHomeSearchHint,
               onChanged: _onQueryChanged,
             ),
           ),
@@ -146,9 +148,9 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
                       ? ListView(
                           // RefreshIndicator 要求可滚动 child
                           physics: const AlwaysScrollableScrollPhysics(),
-                          children: const <Widget>[
-                            SizedBox(height: 80),
-                            QzEmptyState(title: '暂无匹配策略'),
+                          children: <Widget>[
+                            const SizedBox(height: 80),
+                            QzEmptyState(title: l10n.strategyHomeEmpty),
                           ],
                         )
                       : ListView.builder(

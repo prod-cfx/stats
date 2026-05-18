@@ -6,6 +6,7 @@ import 'package:quantify_mobile/data/storage/strategy_subscription_persistence.d
 import 'package:quantify_mobile/pages/strategy/strategy_detail_page.dart';
 import 'package:quantify_mobile/pages/strategy/widgets/strategy_metric_card.dart';
 import 'package:quantify_mobile/pages/strategy/widgets/strategy_signal_tile.dart';
+import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
@@ -30,6 +31,9 @@ Future<ProviderContainer> _pumpDetail(
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         theme: buildQzThemeData(
           theme ?? const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
         ),

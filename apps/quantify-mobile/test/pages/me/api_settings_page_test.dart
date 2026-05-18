@@ -7,6 +7,7 @@ import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/api_key_repository.dart';
 import 'package:quantify_mobile/data/utils/mask_helpers.dart';
 import 'package:quantify_mobile/pages/me/api_settings_page.dart';
+import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
@@ -68,6 +69,9 @@ Future<ProviderContainer> _pumpApi(
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         theme: buildQzThemeData(theme),
         home: const ApiSettingsPage(),
       ),

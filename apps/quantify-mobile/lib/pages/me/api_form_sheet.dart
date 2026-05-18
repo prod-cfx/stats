@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/providers.dart';
+import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
@@ -54,14 +55,15 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
   }
 
   String? _validateRequired(String? v, {required int minLen, required String name}) {
-    if (v == null || v.isEmpty) return '请输入$name';
-    if (v.length < minLen) return '$name 至少 $minLen 位';
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    if (v == null || v.isEmpty) return '${l10n.meApiFormPleaseEnter}$name';
+    if (v.length < minLen) return '$name${l10n.meApiFormMinLenInfix}$minLen${l10n.meApiFormMinLenSuffix}';
     return null;
   }
 
   String? _validateLabel(String? v) {
     if (v == null || v.isEmpty) return null; // 可选
-    if (v.length > 30) return '备注最多 30 字';
+    if (v.length > 30) return AppLocalizations.of(context).meApiFormNoteTooLong;
     return null;
   }
 
@@ -74,7 +76,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
       final bool ok = await tester();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ok ? '连接成功' : '连接失败')),
+        SnackBar(content: Text(ok ? AppLocalizations.of(context).meApiFormConnectionOk : AppLocalizations.of(context).meApiFormConnectionFailed)),
       );
     } finally {
       if (mounted) setState(() => _testing = false);
@@ -87,7 +89,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
     try {
       await ref.read(apiKeyRepositoryProvider).addKey(
             exchange: widget.exchange,
-            label: _label.text.trim().isEmpty ? '默认' : _label.text.trim(),
+            label: _label.text.trim().isEmpty ? AppLocalizations.of(context).meApiFormDefaultLabel : _label.text.trim(),
             apiKey: _apiKey.text,
             apiSecret: _secret.text,
           );
@@ -96,7 +98,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存失败：$e')),
+        SnackBar(content: Text('${AppLocalizations.of(context).meApiFormSaveFailedPrefix}$e')),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -105,6 +107,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final MediaQueryData mq = MediaQuery.of(context);
 
@@ -159,7 +162,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '仅保留读取 + 下单权限',
+                            l10n.meApiFormPermissionHint,
                             style: TextStyle(
                               color: c.textMid,
                               fontSize: 12,
@@ -217,7 +220,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                         ),
                       ),
                       const SizedBox(height: 14),
-                      _Label(text: '备注'),
+                      _Label(text: l10n.meApiFormLabelNote),
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: _label,
@@ -244,7 +247,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                                   strokeWidth: 2,
                                 ),
                               )
-                            : const Text('测试连接'),
+                            : Text(l10n.meApiFormTestButton),
                       ),
                     ],
                   ),
@@ -258,7 +261,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                     Expanded(
                       flex: 1,
                       child: QzButton(
-                        label: '取消',
+                        label: l10n.commonCancel,
                         variant: QzButtonVariant.ghost,
                         onPressed: () => Navigator.of(context).pop(false),
                         expanded: true,
@@ -268,7 +271,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                     Expanded(
                       flex: 2,
                       child: QzButton(
-                        label: '验证并保存',
+                        label: l10n.meApiFormSaveButton,
                         variant: QzButtonVariant.accent,
                         loading: _saving,
                         onPressed: _saving ? null : _save,
@@ -385,6 +388,7 @@ class _WarningBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -406,13 +410,12 @@ class _WarningBanner extends StatelessWidget {
                   height: 1.55,
                 ),
                 children: <InlineSpan>[
-                  const TextSpan(
-                    text: '必须 ',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                  TextSpan(
+                    text: l10n.meApiFormWarningMust,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   TextSpan(
-                    text: '在 $exchange 后台关闭「提币」权限。'
-                        '服务端会再校验一次，发现允许提币的密钥会立即拒绝。',
+                    text: l10n.meApiFormWarningBody(exchange),
                   ),
                 ],
               ),

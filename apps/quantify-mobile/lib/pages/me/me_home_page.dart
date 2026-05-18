@@ -7,6 +7,7 @@ import '../../data/models/account_models.dart';
 import '../../data/models/api_key_models.dart';
 import '../../data/providers.dart';
 import '../../data/utils/mask_helpers.dart';
+import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
@@ -38,7 +39,7 @@ class MeHomePage extends ConsumerWidget {
         loading: () => const Center(child: QzSpinner()),
         error: (Object e, StackTrace st) => Center(
           child: Text(
-            '加载失败：$e',
+            '${AppLocalizations.of(context).meHomeLoadErrorPrefix}$e',
             style: TextStyle(color: c.statusDanger),
           ),
         ),
@@ -58,6 +59,7 @@ class _Content extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final int configuredCount = apiKeys.maybeWhen(
       data: (List<ExchangeApiKey> l) => l.length,
@@ -100,35 +102,35 @@ class _Content extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              const QzSectionTitle(text: '账户'),
+              QzSectionTitle(text: l10n.meSectionAccount),
               _SettingsGroup(
                 children: <Widget>[
-                  QzSettingsRow(label: '邮箱', value: info.email),
+                  QzSettingsRow(label: l10n.authLoginEmailLabel, value: info.email),
                   QzSettingsRow(label: 'UID', value: info.uid, mono: true),
-                  const QzSettingsRow(
-                    label: 'Telegram',
+                  QzSettingsRow(
+                    label: l10n.meSettingsTelegram,
                     // mobile 端 `AccountInfo` 未携带 telegram handle，本迭代
                     // 显示占位；后续 Issue 引入 `AccountInfo.bindings` 后切换。
-                    value: '未绑定',
+                    value: l10n.meSettingsTelegramUnbound,
                     tone: QzSettingsRowTone.warn,
-                    trailing: QzSettingsCaret(),
+                    trailing: const QzSettingsCaret(),
                   ),
-                  const QzSettingsRow(
-                    label: '安全设置',
-                    value: '查看',
-                    trailing: QzSettingsCaret(),
+                  QzSettingsRow(
+                    label: l10n.meSettingsSecurity,
+                    value: l10n.commonView,
+                    trailing: const QzSettingsCaret(),
                     last: true,
                   ),
                 ],
               ),
-              const QzSectionTitle(text: '交易所 API'),
+              QzSectionTitle(text: l10n.meSectionApi),
               _SettingsGroup(
                 children: <Widget>[
                   QzSettingsRow(
-                    label: '管理交易所凭据',
+                    label: l10n.meSettingsApiManage,
                     value: configuredCount > 0
-                        ? '$configuredCount 个已配置'
-                        : '未配置',
+                        ? '$configuredCount${l10n.meSettingsApiConfiguredSuffix}'
+                        : l10n.meSettingsNotConfigured,
                     tone: configuredCount > 0
                         ? QzSettingsRowTone.ok
                         : QzSettingsRowTone.warn,
@@ -138,24 +140,24 @@ class _Content extends ConsumerWidget {
                   ),
                 ],
               ),
-              const QzSectionTitle(text: '偏好'),
+              QzSectionTitle(text: l10n.meSectionPreferences),
               _SettingsGroup(
                 children: <Widget>[
-                  const QzSettingsRow(
-                    label: '语言',
-                    value: '简体中文',
-                    trailing: QzSettingsCaret(),
+                  QzSettingsRow(
+                    label: l10n.meSettingsLanguage,
+                    value: l10n.meSettingsLanguageValue,
+                    trailing: const QzSettingsCaret(),
                   ),
                   QzSettingsRow(
-                    label: '主题',
-                    value: '跟随系统',
+                    label: l10n.meSettingsTheme,
+                    value: l10n.meSettingsThemeValue,
                     trailing: const QzSettingsCaret(),
                     onTap: () => context.push('/me/theme'),
                   ),
-                  const QzSettingsRow(
-                    label: '推送通知',
-                    value: '查看',
-                    trailing: QzSettingsCaret(),
+                  QzSettingsRow(
+                    label: l10n.meSettingsNotifications,
+                    value: l10n.commonView,
+                    trailing: const QzSettingsCaret(),
                     last: true,
                   ),
                 ],
@@ -198,6 +200,7 @@ class _StatsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -222,19 +225,19 @@ class _StatsCard extends StatelessWidget {
       child: Row(
         children: <Widget>[
           _Stat(
-            label: '总权益',
+            label: l10n.meStatsTotalEquity,
             value: '\$${info.totalEquityUsd.toStringAsFixed(0)}',
             color: c.text,
           ),
           _StatDivider(color: c.borderSoft),
           _Stat(
-            label: '可用余额',
+            label: l10n.meStatsAvailableBalance,
             value: '\$${info.availableBalanceUsd.toStringAsFixed(0)}',
             color: c.text,
           ),
           _StatDivider(color: c.borderSoft),
           _Stat(
-            label: '未实现盈亏',
+            label: l10n.meStatsUnrealizedPnl,
             value:
                 '${info.unrealizedPnlUsd >= 0 ? '+' : ''}\$${info.unrealizedPnlUsd.toStringAsFixed(0)}',
             color: info.unrealizedPnlUsd >= 0 ? c.statusOk : c.statusDanger,
@@ -311,6 +314,7 @@ class _LogoutButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     return Material(
       color: c.bgElev,
@@ -326,7 +330,7 @@ class _LogoutButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(QzRadii.input + 2),
           ),
           child: Text(
-            '退出登录',
+            l10n.meLogout,
             style: TextStyle(
               color: c.statusDanger,
               fontSize: 14,

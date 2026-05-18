@@ -79,12 +79,16 @@ class QzButton extends StatelessWidget {
                 ),
                 const SizedBox(width: QzSpacing.sm),
               ],
-              Text(
-                label,
-                style: TextStyle(
-                  color: fg,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: fg,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],

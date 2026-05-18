@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_data.dart';
 import '../../theme/theme_notifier.dart';
@@ -11,25 +12,26 @@ import '../../theme/tokens.dart';
 class ThemeSettingsPage extends ConsumerWidget {
   const ThemeSettingsPage({super.key});
 
-  static const List<({QzBg key, String label})> _bgOptions =
-      <({QzBg key, String label})>[
-    (key: QzBg.dark, label: '暗色'),
-    (key: QzBg.pink, label: '粉红'),
-    (key: QzBg.light, label: '白色'),
-  ];
-
-  static const List<({QzAccent key, String label})> _accentOptions =
-      <({QzAccent key, String label})>[
-    (key: QzAccent.violet, label: '粉紫'),
-    (key: QzAccent.cyan, label: '青蓝'),
-    (key: QzAccent.amber, label: '琥珀'),
-  ];
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzTheme theme = ref.watch(themeProvider);
     final QzColorScheme c =
         Theme.of(context).extension<QzColorSchemeExt>()!.scheme;
+
+    final List<({QzBg key, String label})> bgOptions =
+        <({QzBg key, String label})>[
+      (key: QzBg.dark, label: l10n.themeBgDark),
+      (key: QzBg.pink, label: l10n.themeBgPink),
+      (key: QzBg.light, label: l10n.themeBgLight),
+    ];
+
+    final List<({QzAccent key, String label})> accentOptions =
+        <({QzAccent key, String label})>[
+      (key: QzAccent.violet, label: l10n.themeAccentViolet),
+      (key: QzAccent.cyan, label: l10n.themeAccentCyan),
+      (key: QzAccent.amber, label: l10n.themeAccentAmber),
+    ];
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -41,7 +43,7 @@ class ThemeSettingsPage extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              '界面主题',
+              l10n.themeSettingsTitle,
               style: TextStyle(
                 color: c.text,
                 fontSize: 16,
@@ -49,7 +51,7 @@ class ThemeSettingsPage extends ConsumerWidget {
               ),
             ),
             Text(
-              '仅本设备生效',
+              l10n.themeSettingsDeviceOnly,
               style: TextStyle(color: c.textDim, fontSize: 11),
             ),
           ],
@@ -65,21 +67,21 @@ class ThemeSettingsPage extends ConsumerWidget {
         children: <Widget>[
           _PreviewCard(theme: theme, scheme: c),
           const SizedBox(height: QzSpacing.xl),
-          _SectionLabel('背景主题', color: c.textMid),
+          _SectionLabel(l10n.themeBgSection, color: c.textMid),
           const SizedBox(height: QzSpacing.sm),
           _BgGrid(
             current: theme.bg,
-            options: _bgOptions,
+            options: bgOptions,
             scheme: c,
             onPick: (QzBg bg) =>
                 ref.read(themeProvider.notifier).setBg(bg),
           ),
           const SizedBox(height: QzSpacing.xxl),
-          _SectionLabel('强调色', color: c.textMid),
+          _SectionLabel(l10n.themeAccentSection, color: c.textMid),
           const SizedBox(height: QzSpacing.sm),
           _AccentGrid(
             current: theme.accent,
-            options: _accentOptions,
+            options: accentOptions,
             scheme: c,
             onPick: (QzAccent a) =>
                 ref.read(themeProvider.notifier).setAccent(a),
@@ -111,6 +113,7 @@ class _PreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return Container(
       decoration: BoxDecoration(
         color: scheme.bgElev,
@@ -148,7 +151,7 @@ class _PreviewCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      '预览 · AI 策略助手',
+                      l10n.themePreviewTitle,
                       style: TextStyle(
                         color: scheme.text,
                         fontSize: 14,
@@ -191,7 +194,7 @@ class _PreviewCard extends StatelessWidget {
                       ),
                     ),
                     child: Text(
-                      '已识别为「趋势跟踪」策略',
+                      l10n.themePreviewIdentified,
                       style: TextStyle(color: scheme.accent, fontSize: 13),
                     ),
                   ),
@@ -214,7 +217,7 @@ class _PreviewCard extends StatelessWidget {
                       ),
                     ),
                     child: Text(
-                      '开始回测',
+                      l10n.themePreviewStartBacktest,
                       style: TextStyle(color: scheme.accentOn, fontSize: 13),
                     ),
                   ),

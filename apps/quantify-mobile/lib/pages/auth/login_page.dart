@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/auth/session_controller.dart';
+import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
@@ -38,14 +39,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   }
 
   String? _validateEmail(String? v) {
-    if (v == null || v.isEmpty) return '请输入邮箱';
-    if (!_emailRe.hasMatch(v)) return '邮箱格式不正确';
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    if (v == null || v.isEmpty) return l10n.authLoginEmailRequired;
+    if (!_emailRe.hasMatch(v)) return l10n.authLoginEmailInvalid;
     return null;
   }
 
   String? _validatePassword(String? v) {
-    if (v == null || v.isEmpty) return '请输入密码';
-    if (v.length < 6) return '密码至少 6 位';
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    if (v == null || v.isEmpty) return l10n.authLoginPasswordRequired;
+    if (v.length < 6) return l10n.authLoginPasswordTooShort;
     return null;
   }
 
@@ -62,7 +65,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('登录失败：$e')),
+        SnackBar(content: Text('${AppLocalizations.of(context).authLoginFailedPrefix}$e')),
       );
     } finally {
       if (mounted) setState(() => _emailLoading = false);
@@ -78,7 +81,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Telegram 登录失败：$e')),
+        SnackBar(content: Text('${AppLocalizations.of(context).authTelegramLoginFailedPrefix}$e')),
       );
     } finally {
       if (mounted) setState(() => _telegramLoading = false);
@@ -87,6 +90,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final bool busy = _emailLoading || _telegramLoading;
 
@@ -95,7 +99,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       appBar: AppBar(
         backgroundColor: c.bg,
         elevation: 0,
-        title: const Text('登录'),
+        title: Text(l10n.authLoginTitle),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -133,7 +137,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 const SizedBox(height: QzSpacing.lg),
                 Center(
                   child: Text(
-                    '欢迎回到 Quantify',
+                    l10n.authLoginWelcome,
                     style: TextStyle(
                       color: c.text,
                       fontSize: 18,
@@ -149,8 +153,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   enabled: !busy,
                   keyboardType: TextInputType.emailAddress,
                   autocorrect: false,
-                  decoration: const InputDecoration(
-                    labelText: '邮箱',
+                  decoration: InputDecoration(
+                    labelText: l10n.authLoginEmailLabel,
                     hintText: 'you@example.com',
                   ),
                   validator: _validateEmail,
@@ -162,9 +166,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   controller: _password,
                   enabled: !busy,
                   obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: '密码',
-                    hintText: '至少 6 位',
+                  decoration: InputDecoration(
+                    labelText: l10n.authLoginPasswordLabel,
+                    hintText: l10n.authLoginPasswordHint,
                   ),
                   validator: _validatePassword,
                 ),
@@ -172,7 +176,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
                 QzButton(
                   key: const ValueKey<String>('login-submit'),
-                  label: '登录',
+                  label: l10n.authLoginButton,
                   variant: QzButtonVariant.accent,
                   expanded: true,
                   loading: _emailLoading,
@@ -188,7 +192,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         horizontal: QzSpacing.sm,
                       ),
                       child: Text(
-                        '或',
+                        l10n.commonOr,
                         style: TextStyle(color: c.textDim, fontSize: 12),
                       ),
                     ),
@@ -199,7 +203,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
                 QzButton(
                   key: const ValueKey<String>('login-telegram'),
-                  label: '使用 Telegram 一键登录',
+                  label: l10n.authLoginTelegramButton,
                   variant: QzButtonVariant.ghost,
                   expanded: true,
                   loading: _telegramLoading,

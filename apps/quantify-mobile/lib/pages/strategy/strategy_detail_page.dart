@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/strategy_models.dart';
 import '../../data/providers.dart';
+import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
@@ -42,6 +43,7 @@ class StrategyDetailPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final AsyncValue<StrategyDetail> detailAsync =
         ref.watch(strategyDetailProvider(id));
@@ -52,11 +54,11 @@ class StrategyDetailPage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: c.bg,
-      appBar: AppBar(title: const Text('策略详情')),
+      appBar: AppBar(title: Text(l10n.strategyDetailTitle)),
       body: detailAsync.when(
         loading: () => const Center(child: QzSpinner()),
         error: (Object err, _) => Center(
-          child: QzEmptyState(title: '加载失败', subtitle: err.toString()),
+          child: QzEmptyState(title: l10n.commonLoadError, subtitle: err.toString()),
         ),
         data: (StrategyDetail d) => SafeArea(
           top: false,
@@ -76,38 +78,38 @@ class StrategyDetailPage extends ConsumerWidget {
                 _MetricGrid(
                   cards: <Widget>[
                     StrategyMetricCard(
-                      label: '7日收益',
+                      label: l10n.strategyDetailReturn7d,
                       value: _fmtPct(d.return7d),
                       emphasis: _emphPos(d.return7d),
                     ),
                     StrategyMetricCard(
-                      label: '30日收益',
+                      label: l10n.strategyDetailReturn30d,
                       value: _fmtPct(d.return30d),
                       emphasis: _emphPos(d.return30d),
                     ),
                     StrategyMetricCard(
-                      label: '全部收益',
+                      label: l10n.strategyDetailReturnAll,
                       value: _fmtPct(d.returnAll),
                       emphasis: _emphPos(d.returnAll),
                     ),
                     StrategyMetricCard(
-                      label: '最大回撤',
+                      label: l10n.strategyDetailMaxDrawdown,
                       value: _fmtPct(d.maxDrawdown, sign: false),
                       emphasis: QzMetricEmphasis.down,
                     ),
                     StrategyMetricCard(
-                      label: '夏普',
+                      label: l10n.strategyDetailSharpe,
                       value: d.sharpe.toStringAsFixed(2),
                     ),
                     StrategyMetricCard(
-                      label: '胜率',
+                      label: l10n.strategyDetailWinRate,
                       value: '${(d.winRate * 100).toStringAsFixed(1)}%',
                     ),
                   ],
                 ),
                 const SizedBox(height: QzSpacing.lg),
                 Text(
-                  '收益曲线',
+                  l10n.strategyDetailEquityCurve,
                   style: TextStyle(
                     color: c.text,
                     fontSize: 14,
@@ -120,7 +122,7 @@ class StrategyDetailPage extends ConsumerWidget {
                     height: 120,
                     child: Center(
                       child: Text(
-                        '曲线占位（接入 K 线后可视化）',
+                        l10n.strategyDetailCurvePlaceholder,
                         style: TextStyle(color: c.textDim, fontSize: 12),
                       ),
                     ),
@@ -128,7 +130,7 @@ class StrategyDetailPage extends ConsumerWidget {
                 ),
                 const SizedBox(height: QzSpacing.lg),
                 Text(
-                  '近期信号',
+                  l10n.strategyDetailRecentSignals,
                   style: TextStyle(
                     color: c.text,
                     fontSize: 14,
@@ -153,7 +155,7 @@ class StrategyDetailPage extends ConsumerWidget {
           ),
           child: QzButton(
             key: const Key('strategy-detail-subscribe-btn'),
-            label: subscribed ? '已订阅 · 点击取消' : '订阅策略',
+            label: subscribed ? l10n.strategyDetailSubscribed : l10n.strategyDetailSubscribe,
             variant:
                 subscribed ? QzButtonVariant.ghost : QzButtonVariant.accent,
             expanded: true,
@@ -204,7 +206,7 @@ class _Header extends StatelessWidget {
               ),
               const SizedBox(height: QzSpacing.xxs),
               Text(
-                '${card.author} · ${card.subscribers} 订阅',
+                '${card.author} · ${card.subscribers}${AppLocalizations.of(context).strategyDetailSubscribersSuffix}',
                 style: TextStyle(color: c.textDim, fontSize: 12),
               ),
               const SizedBox(height: QzSpacing.sm),
@@ -268,6 +270,7 @@ class _SignalsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return async.when(
       loading: () => const Padding(
         padding: EdgeInsets.symmetric(vertical: QzSpacing.lg),
@@ -275,11 +278,11 @@ class _SignalsSection extends StatelessWidget {
       ),
       error: (Object e, _) => Padding(
         padding: const EdgeInsets.symmetric(vertical: QzSpacing.md),
-        child: QzEmptyState(title: '信号加载失败', subtitle: e.toString()),
+        child: QzEmptyState(title: l10n.strategyDetailSignalsLoadError, subtitle: e.toString()),
       ),
       data: (List<StrategySignal> list) {
         if (list.isEmpty) {
-          return const QzEmptyState(title: '暂无信号');
+          return QzEmptyState(title: l10n.strategyDetailSignalsEmpty);
         }
         return Column(
           children: list

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:k_chart_plus/k_chart_plus.dart';
 import 'package:quantify_mobile/data/mock/fixtures/candles.dart';
 import 'package:quantify_mobile/data/models/kline_models.dart';
+import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
@@ -123,6 +124,9 @@ void main() {
         await tester.binding.setSurfaceSize(const Size(420, 700));
         await tester.pumpWidget(
           MaterialApp(
+            locale: const Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             theme: buildQzThemeData(QzTheme(bg: bg, accent: accent)),
             home: Scaffold(
               body: QzKlineChart(

@@ -6,6 +6,7 @@ import '../../data/mock/fixtures/tickers.dart';
 import '../../data/models/kline_models.dart';
 import '../../data/models/long_short_models.dart';
 import '../../data/providers.dart';
+import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
@@ -68,7 +69,7 @@ class _LongShortPageState extends ConsumerState<LongShortPage> {
         .take(8)
         .toList();
     return Scaffold(
-      appBar: const QzTopBar(title: '多空比'),
+      appBar: QzTopBar(title: AppLocalizations.of(context).marketLongShortTitle),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(QzSpacing.lg),
         child: Column(
@@ -100,7 +101,7 @@ class _LongShortPageState extends ConsumerState<LongShortPage> {
                 builder: (BuildContext context) {
                   if (_loading) return const Center(child: QzSpinner());
                   if (_error != null || _ratio == null) {
-                    return const QzEmptyState(title: '多空比加载失败');
+                    return QzEmptyState(title: AppLocalizations.of(context).marketLongShortLoadError);
                   }
                   return LongShortBar(
                     longRatio: _ratio!.longRatio,
@@ -126,6 +127,7 @@ class _HistoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final List<LongShortRatio> history =
         mockLongShortHistory[symbol] ?? const <LongShortRatio>[];
@@ -134,7 +136,7 @@ class _HistoryCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            '历史',
+            l10n.marketLongShortHistory,
             style: TextStyle(
               color: c.textMid,
               fontSize: 14,

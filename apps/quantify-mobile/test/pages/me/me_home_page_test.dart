@@ -10,6 +10,7 @@ import 'package:quantify_mobile/data/models/auth_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/storage/secure_token_storage.dart';
 import 'package:quantify_mobile/pages/me/me_home_page.dart';
+import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
@@ -87,6 +88,9 @@ Future<ProviderContainer> _pumpMe(
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp.router(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         theme: buildQzThemeData(theme),
         routerConfig: router,
       ),

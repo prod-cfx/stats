@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/whale_models.dart';
 import '../../data/providers.dart';
+import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
@@ -48,22 +49,11 @@ class _WhaleFeedPageState extends ConsumerState<WhaleFeedPage> {
   bool _loading = true;
   Object? _error;
 
-  String _symbolFilter = '全部';
-  double _minAmount = 0;
+  static const String _kAllSymbol = ''; // internal sentinel for "all"
+  static const List<String> _symbolFilterKeys = <String>['', 'BTC', 'ETH', 'SOL'];
 
-  static const List<String> _symbolChips = <String>[
-    '全部',
-    'BTC',
-    'ETH',
-    'SOL',
-  ];
-  static const List<({String label, double value})> _amountChoices =
-      <({String label, double value})>[
-    (label: '全部金额', value: 0),
-    (label: '≥ \$1M', value: 1_000_000),
-    (label: '≥ \$5M', value: 5_000_000),
-    (label: '≥ \$10M', value: 10_000_000),
-  ];
+  String _symbolFilter = _kAllSymbol;
+  double _minAmount = 0;
 
   @override
   void initState() {
@@ -118,18 +108,19 @@ class _WhaleFeedPageState extends ConsumerState<WhaleFeedPage> {
 
   bool _passesFilter(WhaleEvent e) {
     if (e.amountUsd < _minAmount) return false;
-    if (_symbolFilter == '全部') return true;
+    if (_symbolFilter.isEmpty) return true; // _kAllSymbol sentinel
     return e.symbol.startsWith(_symbolFilter);
   }
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final List<_FeedItem> visible =
         _items.where((_FeedItem it) => _passesFilter(it.event)).toList();
     return Scaffold(
       backgroundColor: c.bg,
-      appBar: const QzTopBar(title: '巨鲸动向'),
+      appBar: QzTopBar(title: l10n.whaleFeedTitle),
       body: Column(
         children: <Widget>[
           _buildFilterBar(c),
@@ -142,6 +133,14 @@ class _WhaleFeedPageState extends ConsumerState<WhaleFeedPage> {
   }
 
   Widget _buildFilterBar(QzColorScheme c) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final List<({String label, double value})> amountChoices =
+        <({String label, double value})>[
+      (label: l10n.whaleFilterAll, value: 0),
+      (label: '≥ \$1M', value: 1_000_000),
+      (label: '≥ \$5M', value: 5_000_000),
+      (label: '≥ \$10M', value: 10_000_000),
+    ];
     return Container(
       width: double.infinity,
       color: c.bgElev,
@@ -158,12 +157,12 @@ class _WhaleFeedPageState extends ConsumerState<WhaleFeedPage> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: <Widget>[
-                for (final String s in _symbolChips) ...<Widget>[
+                for (final String s in _symbolFilterKeys) ...<Widget>[
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => setState(() => _symbolFilter = s),
                     child: QzChip(
-                      label: s,
+                      label: s.isEmpty ? l10n.commonAll : s,
                       tone: _symbolFilter == s
                           ? QzChipTone.accent
                           : QzChipTone.neutral,
@@ -177,7 +176,7 @@ class _WhaleFeedPageState extends ConsumerState<WhaleFeedPage> {
           const SizedBox(height: QzSpacing.sm),
           Row(
             children: <Widget>[
-              Text('阈值:', style: TextStyle(color: c.textMid, fontSize: 12)),
+              Text(l10n.whaleThresholdLabel, style: TextStyle(color: c.textMid, fontSize: 12)),
               const SizedBox(width: QzSpacing.sm),
               DropdownButton<double>(
                 value: _minAmount,
@@ -186,7 +185,7 @@ class _WhaleFeedPageState extends ConsumerState<WhaleFeedPage> {
                 underline: const SizedBox.shrink(),
                 items: <DropdownMenuItem<double>>[
                   for (final ({String label, double value}) choice
-                      in _amountChoices)
+                      in amountChoices)
                     DropdownMenuItem<double>(
                       value: choice.value,
                       child: Text(choice.label),
@@ -205,12 +204,13 @@ class _WhaleFeedPageState extends ConsumerState<WhaleFeedPage> {
   }
 
   Widget _buildBody(List<_FeedItem> visible) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     if (_loading) return const Center(child: QzSpinner());
     if (_error != null) {
-      return QzEmptyState(title: '加载失败', subtitle: _error.toString());
+      return QzEmptyState(title: l10n.commonLoadError, subtitle: _error.toString());
     }
     if (visible.isEmpty) {
-      return const QzEmptyState(title: '暂无符合条件的巨鲸事件');
+      return QzEmptyState(title: l10n.whaleFeedEmpty);
     }
     final DateTime now = DateTime.now();
     return ListView.builder(

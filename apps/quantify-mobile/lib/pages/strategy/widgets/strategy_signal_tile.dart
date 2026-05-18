@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../data/models/strategy_models.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
@@ -29,6 +30,7 @@ class StrategySignalTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final bool buy = signal.side == StrategySignalSide.buy;
     final Color sideColor = buy ? c.marketUp : c.marketDown;
@@ -61,7 +63,7 @@ class StrategySignalTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(QzRadii.pill),
             ),
             child: Text(
-              buy ? '买入' : '卖出',
+              buy ? l10n.strategySignalBuy : l10n.strategySignalSell,
               style: TextStyle(
                 color: sideColor,
                 fontSize: 12,
