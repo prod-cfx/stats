@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { AntdProvider } from '@/components/providers/AntdProvider'
 import { AuthProvider } from '@/components/providers/AuthProvider'
 
@@ -8,6 +8,11 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'Admin 控制台',
   description: '轻量级管理后台脚手架',
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
