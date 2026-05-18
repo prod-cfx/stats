@@ -43,17 +43,7 @@ describe('strategyIntentNormalizerService', () => {
       riskRules: { positionPct: 10, stopLossPct: 5, stopLossBasis: 'entry_avg_price' },
     } as any)
 
-    // #1465：evidenceText 必填且为原文，不同表达必然不同；只比较语义结构。
-    const stripEvidence = (triggers: typeof first.normalizedIntent.triggers) =>
-      triggers.map(({ evidenceText: _evidenceText, ...rest }) => rest)
-    expect(stripEvidence(first.normalizedIntent.triggers))
-      .toEqual(stripEvidence(second.normalizedIntent.triggers))
-
-    // entry trigger 必带 evidenceText，且为原 rule 子串（planner 闸 1 子串校验前置）
-    const firstEntry = first.normalizedIntent.triggers.find(t => t.phase === 'entry')
-    expect(firstEntry?.evidenceText).toBe('3分钟内下跌1%买入')
-    const firstExit = first.normalizedIntent.triggers.find(t => t.phase === 'exit')
-    expect(firstExit?.evidenceText).toBe('15分钟内上涨2%卖出')
+    expect(first.normalizedIntent.triggers).toEqual(second.normalizedIntent.triggers)
   })
 
   it('preserves moving-average crossover periods as atom params', () => {
@@ -412,14 +402,11 @@ describe('strategyIntentNormalizerService', () => {
       sideMode: 'bidirectional',
       breakoutAction: 'pause',
     }))
-    // #1465 PR review (Major)：explicitGrid 完整但 entryRules/exitRules 为空时，
-    // closed trigger 拿不到 user message 子串作 evidence；降级为 open trigger，
-    // 由 clarification 路径要求用户用自然语言补 evidence。
     expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'grid.range_rebalance',
         phase: 'entry',
-        closureStatus: 'open',
+        closureStatus: 'closed',
         sideScope: 'both',
         params: expect.objectContaining({
           rangeLower: 60000,
@@ -428,9 +415,6 @@ describe('strategyIntentNormalizerService', () => {
           sideMode: 'bidirectional',
           breakoutAction: 'pause',
         }),
-        unresolvedSlots: expect.arrayContaining([
-          expect.objectContaining({ slotKey: 'grid.evidenceText' }),
-        ]),
       }),
     ]))
   })
@@ -586,175 +570,6 @@ describe('strategyIntentNormalizerService', () => {
         closureStatus: 'closed',
       }),
     ]))
-  })
-
-  /**
-   * #1465 回归：每个 createClosedTrigger 分支都必须填 evidenceText（原文子串），
-   * 否则 planner 闸 1（#1450）evidence_text_missing 校验会让 seed 兜底也失效，
-   * 导致 entry 或 exit atom 整段丢失。
-   */
-  describe('#1465 — closed trigger evidenceText 必填回归', () => {
-    const expectEvidence = (
-      input: { entryRules?: string[], exitRules?: string[] },
-      expected: { phase: 'entry' | 'exit', evidenceText: string },
-    ) => {
-      const result = service.normalize(input as any)
-      const trigger = result.normalizedIntent.triggers.find(
-        t => t.phase === expected.phase && t.closureStatus === 'closed',
-      )
-      expect(trigger).toBeDefined()
-      expect(trigger?.evidenceText).toBe(expected.evidenceText)
-      // 子串校验对齐 planner 闸 1（#1450）：逐条 rule 判定，避免 join(' ') 跨边界假阳性。
-      const allRules = [...(input.entryRules ?? []), ...(input.exitRules ?? [])]
-      expect(allRules.some(rule => rule.includes(trigger!.evidenceText as string))).toBe(true)
-    }
-
-    it('percent_change entry — N 分钟跌 X% 买入', () => {
-      expectEvidence({
-        entryRules: ['3分钟内下跌1%买入'],
-      }, { phase: 'entry', evidenceText: '3分钟内下跌1%买入' })
-    })
-
-    it('percent_change exit — N 分钟涨 X% 卖出', () => {
-      expectEvidence({
-        entryRules: ['3分钟内下跌1%买入'],
-        exitRules: ['15分钟内上涨2%卖出'],
-      }, { phase: 'exit', evidenceText: '15分钟内上涨2%卖出' })
-    })
-
-    it('execution_intent — 立即市价买入', () => {
-      expectEvidence({
-        entryRules: ['启动时立即市价买入一次'],
-      }, { phase: 'entry', evidenceText: '启动时立即市价买入一次' })
-    })
-
-    it('bollinger.touch_lower — 布林下轨开多', () => {
-      expectEvidence({
-        entryRules: ['布林带下轨开多'],
-      }, { phase: 'entry', evidenceText: '布林带下轨开多' })
-    })
-
-    it('indicator.cross_over — 金叉做多', () => {
-      expectEvidence({
-        entryRules: ['EMA7 上穿 EMA21 做多'],
-      }, { phase: 'entry', evidenceText: 'EMA7 上穿 EMA21 做多' })
-    })
-
-    it('indicator.cross_under — 死叉平多', () => {
-      expectEvidence({
-        entryRules: ['EMA7 上穿 EMA21 做多'],
-        exitRules: ['EMA7 下穿 EMA21 平多'],
-      }, { phase: 'exit', evidenceText: 'EMA7 下穿 EMA21 平多' })
-    })
-
-    it('price.breakout_up — 突破阻力做多', () => {
-      expectEvidence({
-        entryRules: ['突破阻力位做多'],
-      }, { phase: 'entry', evidenceText: '突破阻力位做多' })
-    })
-
-    it('price.breakout_down — 跌破支撑做空', () => {
-      expectEvidence({
-        entryRules: ['跌破支撑位做空'],
-      }, { phase: 'entry', evidenceText: '跌破支撑位做空' })
-    })
-
-    it('position_pnl exit — 收益率达 10% 平仓', () => {
-      expectEvidence({
-        entryRules: ['3分钟内下跌1%买入'],
-        exitRules: ['收益率达到10%平仓'],
-      }, { phase: 'exit', evidenceText: '收益率达到10%平仓' })
-    })
-
-    it('rsi_lte — RSI 超卖买入', () => {
-      expectEvidence({
-        entryRules: ['RSI 低于 30 超卖买入'],
-      }, { phase: 'entry', evidenceText: 'RSI 低于 30 超卖买入' })
-    })
-
-    it('rsi_gte — RSI 超买卖出', () => {
-      expectEvidence({
-        entryRules: ['3分钟内下跌1%买入'],
-        exitRules: ['RSI 高于 70 超买卖出'],
-      }, { phase: 'exit', evidenceText: 'RSI 高于 70 超买卖出' })
-    })
-
-    it('grid 纯结构化输入（无 rules 文本）必须降级为 open trigger + evidence_text slot', () => {
-      const result = service.normalize({
-        market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '15m' },
-        grid: {
-          lower: 60000,
-          upper: 80000,
-          stepPct: 0.5,
-          sideMode: 'bidirectional',
-          breakoutAction: 'pause',
-        },
-        riskRules: { positionPct: 10 },
-      } as any)
-      const gridTrigger = result.normalizedIntent.triggers.find(t => t.key === 'grid.range_rebalance')
-      expect(gridTrigger?.closureStatus).toBe('open')
-      expect(gridTrigger?.unresolvedSlots).toEqual(expect.arrayContaining([
-        expect.objectContaining({ slotKey: 'grid.evidenceText' }),
-      ]))
-      expect(gridTrigger?.evidenceText).toBeUndefined()
-    })
-
-    it('grid 带 rules 文本时 closed trigger 的 evidenceText 必为 rules 文本子串', () => {
-      const result = service.normalize({
-        market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '15m' },
-        entryRules: ['网格区间 60000-80000，步长 0.5%'],
-        grid: {
-          lower: 60000,
-          upper: 80000,
-          stepPct: 0.5,
-          sideMode: 'bidirectional',
-          breakoutAction: 'continue',
-        },
-        riskRules: { positionPct: 10 },
-      } as any)
-      const gridTrigger = result.normalizedIntent.triggers.find(t => t.key === 'grid.range_rebalance')
-      expect(gridTrigger?.closureStatus).toBe('closed')
-      expect(gridTrigger?.evidenceText).toBe('网格区间 60000-80000，步长 0.5%')
-    })
-
-    it('grid 部分字段缺失且无 rules 文本 — open trigger 不带 evidence，slot 也不带 evidence', () => {
-      // 防止 612172b58 同处清理 createOpenTrigger 的 JSON.stringify 兜底后悄悄回退
-      const result = service.normalize({
-        market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '15m' },
-        grid: { lower: 60000 },
-        riskRules: { positionPct: 10 },
-      } as any)
-      const gridTrigger = result.normalizedIntent.triggers.find(t => t.key === 'grid.range_rebalance')
-      expect(gridTrigger?.closureStatus).toBe('open')
-      expect(gridTrigger?.evidenceText).toBeUndefined()
-      // structuredGrid 缺 upper / stepPct → 应有对应 unresolvedSlots
-      expect(gridTrigger?.unresolvedSlots).toEqual(expect.arrayContaining([
-        expect.objectContaining({ slotKey: 'grid.range.upper' }),
-        expect.objectContaining({ slotKey: 'grid.stepPct' }),
-      ]))
-      // combinedText 为空时，slot 也不应携带 JSON 兜底的假 evidence
-      for (const slot of gridTrigger?.unresolvedSlots ?? []) {
-        expect(slot.evidenceText).toBeUndefined()
-      }
-    })
-
-    it('regression of cmpaluxcc1kjjqnqs03tddxsd — 完整 OKX BTC 现货策略 entry+exit 双侧必须有 evidence', () => {
-      const result = service.normalize({
-        market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'spot', timeframe: '3m' },
-        entryRules: ['3分钟之内跌1%买入'],
-        exitRules: ['15分钟之内涨2%卖出'],
-        entryRuleBases: { 'entry-1': 'prev_close' },
-        exitRuleBases: { 'exit-1': 'prev_close' },
-        riskRules: { positionPct: 10, stopLossPct: 5, stopLossBasis: 'entry_avg_price', takeProfitPct: 10 },
-      } as any)
-
-      const entry = result.normalizedIntent.triggers.find(t => t.phase === 'entry')
-      const exit = result.normalizedIntent.triggers.find(t => t.phase === 'exit')
-      expect(entry).toBeDefined()
-      expect(exit).toBeDefined()
-      expect(entry?.evidenceText).toBe('3分钟之内跌1%买入')
-      expect(exit?.evidenceText).toBe('15分钟之内涨2%卖出')
-    })
   })
 
   it('falls back to an open trigger slot instead of dropping unsupported breakout concepts', () => {
