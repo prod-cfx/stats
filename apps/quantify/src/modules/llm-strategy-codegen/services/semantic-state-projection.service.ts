@@ -588,7 +588,8 @@ export class SemanticStateProjectionService {
   }
 
   private groupDisplayRuleTriggers(triggers: SemanticState['trigger']): SemanticState['trigger'][] {
-    const groups: SemanticState['trigger'][] = []
+    type TriggerItem = SemanticState['trigger'][number]
+    const groups: TriggerItem[][] = []
     const consumedTriggerIds = new Set<string>()
 
     for (const trigger of triggers) {
@@ -599,7 +600,7 @@ export class SemanticStateProjectionService {
       const groupedTriggers = this.findGroupedDisplayTriggers(triggers, trigger)
       if (groupedTriggers.length > 1) {
         groupedTriggers.forEach(groupedTrigger => consumedTriggerIds.add(groupedTrigger.id))
-        groups.push(groupedTriggers)
+        groups.push([...groupedTriggers])
         continue
       }
 
@@ -741,7 +742,7 @@ export class SemanticStateProjectionService {
   private buildDisplayConditionText(
     trigger: SemanticState['trigger'][number],
     gateText: string | null,
-    groupedTriggers?: Array<SemanticState['trigger'][number]>,
+    groupedTriggers?: ReadonlyArray<SemanticState['trigger'][number]>,
   ): string {
     const conditionText = groupedTriggers && groupedTriggers.length > 1
       ? this.formatGroupedDisplayTriggerCondition(trigger, groupedTriggers)
@@ -1028,7 +1029,7 @@ export class SemanticStateProjectionService {
 
   private formatGroupedDisplayTriggerCondition(
     trigger: SemanticState['trigger'][number],
-    groupedTriggers: Array<SemanticState['trigger'][number]>,
+    groupedTriggers: ReadonlyArray<SemanticState['trigger'][number]>,
   ): string {
     // 同类 indicator.above/below 合并渲染（如"15m/30m MA20 上方"）
     const grouped = this.formatGroupedIndicatorCompareCondition(groupedTriggers)
@@ -1626,7 +1627,7 @@ export class SemanticStateProjectionService {
   }
 
   private formatGroupedIndicatorCompareCondition(
-    group: Array<SemanticState['trigger'][number]>,
+    group: ReadonlyArray<SemanticState['trigger'][number]>,
   ): string | null {
     if (group.length <= 1) {
       return null
@@ -1871,7 +1872,7 @@ export class SemanticStateProjectionService {
       : 'MA'
   }
 
-  private uniqueSortedIndicatorPeriods(triggers: Array<SemanticState['trigger'][number]>): number[] {
+  private uniqueSortedIndicatorPeriods(triggers: ReadonlyArray<SemanticState['trigger'][number]>): number[] {
     const periods = new Set<number>()
     for (const trigger of triggers) {
       if (typeof trigger.params['reference.period'] === 'number') {
@@ -1895,7 +1896,7 @@ export class SemanticStateProjectionService {
     })
   }
 
-  private uniqueSortedTimeframes(triggers: Array<SemanticState['trigger'][number]>): string[] {
+  private uniqueSortedTimeframes(triggers: ReadonlyArray<SemanticState['trigger'][number]>): string[] {
     const timeframes = new Set<string>()
     for (const trigger of triggers) {
       if (typeof trigger.params.timeframe === 'string' && trigger.params.timeframe.trim().length > 0) {
@@ -2955,8 +2956,8 @@ export class SemanticStateProjectionService {
   private filterDeterministicAtoms<T extends {
     id: string
     status: 'open' | 'locked' | 'superseded'
-    supersedes?: string[]
-  }>(atoms: T[]): T[] {
+    supersedes?: readonly string[] | string[]
+  }>(atoms: readonly T[]): T[] {
     const supersededIds = new Set(
       atoms
         .flatMap(atom => atom.supersedes ?? [])
@@ -3110,12 +3111,12 @@ export class SemanticStateProjectionService {
     left: {
       id: string
       status: 'open' | 'locked' | 'superseded'
-      supersedes?: string[]
+      supersedes?: readonly string[] | string[]
     },
     right: {
       id: string
       status: 'open' | 'locked' | 'superseded'
-      supersedes?: string[]
+      supersedes?: readonly string[] | string[]
     },
   ): number {
     return left.id.localeCompare(right.id)

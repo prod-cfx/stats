@@ -638,7 +638,7 @@ export class CanonicalSpecBuilderService {
         requiredTimeframes,
         readFlatTriggers(normalizedState).some(trigger => this.readTriggerParamTimeframe(trigger.params)),
       ),
-      indicators: this.resolveIndicatorsFromSemanticTriggers(readFlatTriggers(normalizedState)),
+      indicators: this.resolveIndicatorsFromSemanticTriggers([...readFlatTriggers(normalizedState)]),
       sizing,
       executionPolicy: {
         signalTiming: 'BAR_CLOSE',
@@ -1764,7 +1764,7 @@ export class CanonicalSpecBuilderService {
       }))
     }
 
-    for (const triggerGroup of this.groupSemanticMultiTimeframeTriggers(readFlatTriggers(state))) {
+    for (const triggerGroup of this.groupSemanticMultiTimeframeTriggers([...readFlatTriggers(state)])) {
       const trigger = triggerGroup[0]
       if (!trigger) {
         continue
@@ -1833,7 +1833,7 @@ export class CanonicalSpecBuilderService {
 
       const lifecycleAction = this.resolveLifecycleActionForTriggerGroup(
         group,
-        readFlatActions(state),
+        [...readFlatActions(state)],
         state.position,
         addPositionHasEvidenceTriggers,
         dcaScheduleHasEvidenceTriggers,
@@ -1881,7 +1881,7 @@ export class CanonicalSpecBuilderService {
       }
     }
 
-    rules.push(...this.buildRiskRulesFromSemanticState(readFlatRisks(state), state.position, readFlatActions(state)))
+    rules.push(...this.buildRiskRulesFromSemanticState([...readFlatRisks(state)], state.position, [...readFlatActions(state)]))
 
     return rules
   }

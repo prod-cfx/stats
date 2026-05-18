@@ -75,8 +75,8 @@ export class SemanticStateMergeService {
   }
 
   private mergeTriggers(
-    persisted: SemanticTriggerState[],
-    derived: SemanticTriggerState[],
+    persisted: ReadonlyArray<SemanticTriggerState>,
+    derived: ReadonlyArray<SemanticTriggerState>,
   ): SemanticTriggerState[] {
     if (derived.length === 0) {
       return persisted.map(trigger => ({
@@ -168,8 +168,8 @@ export class SemanticStateMergeService {
   }
 
   private mergeActions(
-    persisted: SemanticActionState[],
-    derived: SemanticActionState[],
+    persisted: ReadonlyArray<SemanticActionState>,
+    derived: ReadonlyArray<SemanticActionState>,
   ): SemanticActionState[] {
     const next = derived.map(action => ({
       ...action,
@@ -221,8 +221,8 @@ export class SemanticStateMergeService {
   }
 
   private mergeRisk(
-    persisted: SemanticRiskState[],
-    derived: SemanticRiskState[],
+    persisted: ReadonlyArray<SemanticRiskState>,
+    derived: ReadonlyArray<SemanticRiskState>,
   ): SemanticRiskState[] {
     const next = derived.map(risk => ({
       ...risk,
@@ -275,8 +275,8 @@ export class SemanticStateMergeService {
 
   // #1383 Lane B：orchestration bucket。identity = atom `key`（缺失则 fallback id）。
   private mergeOrchestration(
-    persisted: SemanticOrchestrationNode[],
-    derived: SemanticOrchestrationNode[],
+    persisted: ReadonlyArray<SemanticOrchestrationNode>,
+    derived: ReadonlyArray<SemanticOrchestrationNode>,
   ): SemanticOrchestrationNode[] {
     const next = derived.map(node => this.cloneOrchestrationNode(node))
     const consumed = new Set<number>()
@@ -342,8 +342,8 @@ export class SemanticStateMergeService {
   // 复用既有 mergePositionConstraints（基于 byKey + identity = constraint.key），
   // 再额外跑一遍 dedupeByAtomIdentity 以折叠真重复。
   private mergePositionConstraintBucket(
-    persisted: SemanticPositionConstraintState[],
-    derived: SemanticPositionConstraintState[],
+    persisted: ReadonlyArray<SemanticPositionConstraintState>,
+    derived: ReadonlyArray<SemanticPositionConstraintState>,
   ): SemanticPositionConstraintState[] {
     const merged = this.mergePositionConstraints(persisted, derived) ?? []
     return this.dedupeByAtomIdentity([...merged])

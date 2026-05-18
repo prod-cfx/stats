@@ -1,21 +1,47 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import { buildSemanticSlotId } from '../types/semantic-state'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import type {
+  SemanticActionState,
   SemanticAtomContract,
   SemanticCapability,
   SemanticCapabilityDomain,
   SemanticCapabilityShape,
   SemanticEvidence,
   SemanticExpression,
+  SemanticOrchestrationNode,
   SemanticPositionConstraintState,
   SemanticPositionSizingContract,
+  SemanticRiskState,
   SemanticSlotState,
   SemanticState,
+  SemanticTriggerState,
 } from '../types/semantic-state'
+import { updateRuleAtomParams, type SemanticRule } from '../types/atom-expr'
 import { PositionSizingContractService } from './position-sizing-contract.service'
+import { SemanticRuleProjectionService } from './semantic-rule-projection.service'
 import { normalizeRiskSemantics } from './semantic-state-normalization'
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
+
+/**
+ * Issue #1493 块 B：reducer 内部用 mutable 工作态承载 in-place 中间结果。
+ *
+ * 与 `SemanticState`（block A 把五桶标 readonly）等价但解开 readonly 约束。
+ * 函数末尾返回时通过 readonly 协变赋回 `SemanticState`，类型层无需 cast。
+ *
+ * 实际数组元素由 reducer 入口构造（readFlat* + .map 浅克隆），不会污染原 state。
+ */
+type ReducerWorkingState = Omit<
+  SemanticState,
+  'trigger' | 'action' | 'risk' | 'positionConstraint' | 'orchestration' | 'rules'
+> & {
+  trigger: SemanticTriggerState[]
+  action: SemanticActionState[]
+  risk: SemanticRiskState[]
+  positionConstraint: SemanticPositionConstraintState[]
+  orchestration: SemanticOrchestrationNode[]
+  rules?: readonly SemanticRule[]
+}
 
 interface SupportedSlotReduction {
   paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct' | 'sideMode' | 'reference' | 'lookbackBars' | 'multiplier'
@@ -28,11 +54,117 @@ interface SupportedContextReduction {
   slotValue: string
 }
 
+/**
+ * Issue #1493 C1：reducer 在 flat slot 上写入的用户证据元数据，需要在 reproject 之后
+ * 再次叠加回新的 flat 五桶（projectToFlat 通过 deriveOwnerMetadata 派生默认 evidence
+ * 会丢掉用户的 user_explicit 证据链）。
+ *
+ * - `ruleId` + `conditionPath` 定位重投影后的 owner（_provenance 匹配）
+ * - `slotKey` 定位 owner.openSlots 中的目标 slot；undefined 则覆盖 owner 自身 evidence
+ *   （如 protective_exit 的 risk owner 整体）
+ */
+interface SlotEvidenceOverride {
+  ruleId: string
+  conditionPath: string
+  slotKey?: string
+  evidence: SemanticEvidence
+  value?: string | number | boolean | null
+  // 标记是否同步更新 owner 自身的 evidence/source（如 risk owner）
+  applyToOwner?: boolean
+}
+
 @Injectable()
 export class SemanticStateReducerService {
+  /**
+   * Issue #1493 块 B：mutation 完成后调用 reproject 把 rules → flat 同步回写。
+   * 当 state.rules 为空时本服务 fail-open 直接返回原 state（reproject 实现已守门），
+   * 因此对纯 flat 旧 fixture 路径行为不变。
+   */
+  private readonly logger = new Logger(SemanticStateReducerService.name)
+
   constructor(
     private readonly positionSizingContracts: PositionSizingContractService = new PositionSizingContractService(),
+    private readonly projection: SemanticRuleProjectionService = new SemanticRuleProjectionService(),
   ) {}
+
+  /**
+   * Issue #1493 C1：reproject 后把 reducer 在 flat slot 上写入的 user_explicit 证据
+   * 重新覆盖回派生出的 owner.openSlots / owner.evidence。
+   *
+   * 仅在 ruleId + conditionPath 命中某个 owner 时生效；未命中则静默跳过（fixture/路径
+   * 飘移场景，不影响 invariant）。
+   */
+  private applyEvidenceOverrides(
+    state: SemanticState,
+    overrides: readonly SlotEvidenceOverride[],
+  ): SemanticState {
+    if (overrides.length === 0) return state
+
+    const matchOwner = <T extends { _provenance?: { ruleId: string, conditionPath: string }, openSlots?: SemanticSlotState[] | undefined, evidence?: SemanticEvidence, source?: SemanticState['position'] extends infer P ? P extends { source?: infer S } ? S : never : never }>(
+      arr: ReadonlyArray<T>,
+      override: SlotEvidenceOverride,
+    ): { hit: boolean, next: T[] } => {
+      let hit = false
+      const next = arr.map((node) => {
+        const prov = node._provenance
+        if (!prov || prov.ruleId !== override.ruleId || prov.conditionPath !== override.conditionPath) {
+          return node
+        }
+        hit = true
+        const nextSlots = (node.openSlots ?? []).map((slot) => {
+          if (override.slotKey && slot.slotKey !== override.slotKey) return slot
+          return {
+            ...slot,
+            ...(override.value !== undefined ? { value: override.value } : {}),
+            evidence: override.evidence,
+          }
+        })
+        return {
+          ...node,
+          openSlots: nextSlots,
+          ...(override.applyToOwner ? { evidence: override.evidence, source: override.evidence.source } : {}),
+        }
+      })
+      return { hit, next }
+    }
+
+    let nextTrigger = state.trigger
+    let nextAction = state.action
+    let nextRisk = state.risk
+    let nextPositionConstraint = state.positionConstraint
+
+    for (const override of overrides) {
+      const triggerMatch = matchOwner(nextTrigger, override)
+      if (triggerMatch.hit) {
+        nextTrigger = triggerMatch.next as typeof nextTrigger
+        continue
+      }
+      const actionMatch = matchOwner(nextAction, override)
+      if (actionMatch.hit) {
+        nextAction = actionMatch.next as typeof nextAction
+        continue
+      }
+      const riskMatch = matchOwner(nextRisk, override)
+      if (riskMatch.hit) {
+        nextRisk = riskMatch.next as typeof nextRisk
+        continue
+      }
+      const constraintMatch = matchOwner(nextPositionConstraint ?? [], override)
+      if (constraintMatch.hit) {
+        nextPositionConstraint = constraintMatch.next as typeof nextPositionConstraint
+        continue
+      }
+      // 未命中：reproject 后 owner 可能因 invariant drop，安全跳过
+    }
+
+    return {
+      ...state,
+      trigger: nextTrigger,
+      action: nextAction,
+      risk: nextRisk,
+      positionConstraint: nextPositionConstraint,
+    }
+  }
 
   applyClarificationAnswer(input: {
     currentState: SemanticState
@@ -43,7 +175,63 @@ export class SemanticStateReducerService {
     messageIndex?: number
     applyEquivalentConfirmationSlots?: boolean
   }): SemanticState {
-    const nextState: SemanticState = {
+    // Issue #1493 块 B：rules 是 single source of truth；mutation 期间同时维护
+    //   flat（兼容旧 fixture 与下游 49 reader）与 rules（权威）。
+    //   函数末尾若 rules 非空走 reprojectFromRules 重新派生 flat；空则 fail-open
+    //   保留 flat 修改（reproject 实现已守门 rules.length===0 直接 return state）。
+    let nextRules: readonly SemanticRule[] | undefined = input.currentState.rules
+    // Issue #1493 C1：跟踪 reducer 在 flat slot 上写入的 user_explicit 证据，
+    //   reproject 之后通过 applyEvidenceOverrides 重新覆盖回派生出的 owner.openSlots。
+    const evidenceOverrides: SlotEvidenceOverride[] = []
+    const recordSlotEvidence = (
+      owner: { _provenance?: { ruleId: string, conditionPath: string } },
+      slot: SemanticSlotState,
+      applyToOwner?: boolean,
+    ): void => {
+      const prov = owner._provenance
+      if (!prov || !slot.evidence) return
+      evidenceOverrides.push({
+        ruleId: prov.ruleId,
+        conditionPath: prov.conditionPath,
+        slotKey: slot.slotKey,
+        evidence: slot.evidence,
+        value: slot.value,
+        applyToOwner,
+      })
+    }
+    /**
+     * #1447 闸 3 起，flat 五桶 owner（trigger/action/risk/positionConstraint）携带
+     * `_provenance: { ruleId, conditionPath }` 反查 rules 树中的 atom 叶子。reducer 写入
+     * 时同步重建 rules 子树，保证 `flat ≡ projectToFlat(rules)` invariant。
+     *
+     * 对没有 `_provenance` 的旧 fixture / 没有 `state.rules` 的纯 flat 路径，fail-open
+     * 跳过 rules 更新（reproject 末端也会守门 rules 为空时直接返回）。
+     */
+    const updateRuleFromOwner = (
+      owner: { _provenance?: { ruleId: string, conditionPath: string } },
+      mutator: (params: Record<string, unknown>) => Record<string, unknown>,
+      keyOverride?: string,
+    ): void => {
+      const prov = owner._provenance
+      if (!prov || !nextRules || nextRules.length === 0) return
+      try {
+        nextRules = updateRuleAtomParams(nextRules, prov.ruleId, prov.conditionPath, atom => ({
+          ...atom,
+          ...(keyOverride ? { key: keyOverride } : {}),
+          params: mutator({ ...atom.params }),
+        }))
+      } catch (err) {
+        // Issue #1493 M1：路径不命中或越界时 fail-open，rules 保持旧值；flat 已被同步修改。
+        //   原本静默 swallow 让 reducer / rules 漂移无法被线上观测，
+        //   改为结构化 warn 暴露 ruleId / path / op 标识便于排查。
+        this.logger.warn(
+          `[#1493] mutateRulesAtom path miss: ruleId=${prov.ruleId} path=${prov.conditionPath} op=reducer.updateRuleFromOwner`,
+          err,
+        )
+      }
+    }
+
+    const nextState: ReducerWorkingState = {
       ...input.currentState,
       trigger: readFlatTriggers(input.currentState).map(trigger => ({
         ...trigger,
@@ -60,13 +248,14 @@ export class SemanticStateReducerService {
         params: { ...risk.params },
         openSlots: risk.openSlots.map(slot => ({ ...slot })),
       })),
+      orchestration: [...input.currentState.orchestration],
       position: input.currentState.position
         ? {
             ...input.currentState.position,
             openSlots: input.currentState.position.openSlots?.map(slot => ({ ...slot })),
           }
         : null,
-      positionConstraint: structuredClone(input.currentState.positionConstraint ?? []),
+      positionConstraint: structuredClone(input.currentState.positionConstraint ?? []) as SemanticPositionConstraintState[],
       contextSlots: {
         exchange: input.currentState.contextSlots.exchange ? { ...input.currentState.contextSlots.exchange } : null,
         symbol: input.currentState.contextSlots.symbol ? { ...input.currentState.contextSlots.symbol } : null,
@@ -111,6 +300,9 @@ export class SemanticStateReducerService {
         Object.assign(trigger.params, reduction.extraParams)
       }
 
+      // #1493 块 B：rules-first 同步——把 reducer 写入的 params 透传到 rules 树
+      updateRuleFromOwner(trigger, () => ({ ...trigger.params }))
+
       slot.value = reduction.slotValue
       slot.status = 'locked'
       slot.evidence = {
@@ -118,10 +310,18 @@ export class SemanticStateReducerService {
         messageIndex: input.messageIndex,
         source: 'user_explicit',
       }
+      recordSlotEvidence(trigger, slot)
 
       trigger.status = trigger.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
       if (input.applyEquivalentConfirmationSlots && reduction.paramKey === 'confirmationMode') {
-        this.applyEquivalentConfirmationSlotReduction(nextState, slot, reduction, answerText, input.messageIndex)
+        this.applyEquivalentConfirmationSlotReduction(
+          nextState,
+          slot,
+          reduction,
+          answerText,
+          input.messageIndex,
+          (owner, brotherSlot) => recordSlotEvidence(owner, brotherSlot),
+        )
       }
       break
     }
@@ -149,6 +349,7 @@ export class SemanticStateReducerService {
         ...(action.params ?? {}),
         [paramKey]: answerText,
       }
+      updateRuleFromOwner(action, () => ({ ...(action.params ?? {}) }))
       slot.value = answerText
       slot.status = 'locked'
       slot.evidence = {
@@ -156,9 +357,31 @@ export class SemanticStateReducerService {
         messageIndex: input.messageIndex,
         source: 'user_explicit',
       }
+      recordSlotEvidence(action, slot)
       action.status = (action.openSlots ?? []).every(item => item.status !== 'open') ? 'locked' : 'open'
       if (action.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key && paramKey === 'constraint') {
-        this.applyAddPositionConstraintAnswer(nextState, answerText, input.messageIndex)
+        const result = this.applyAddPositionConstraintAnswer(nextState, answerText, input.messageIndex)
+        if (result?.newRule && nextRules) {
+          // #1493 块 B：append single-leaf gate rule，保持 flat ≡ projectToFlat(rules)
+          nextRules = [...nextRules, result.newRule]
+        }
+        if (result?.updatedExisting && nextRules) {
+          // #1493 C3：既有 positionConstraint 二次更新同步 rules（通过 _provenance
+          //   反查 atom 叶子，更新 params 与 flat 同步）。
+          const { provenance, params } = result.updatedExisting
+          try {
+            nextRules = updateRuleAtomParams(nextRules, provenance.ruleId, provenance.conditionPath, atom => ({
+              ...atom,
+              params: { ...atom.params, ...params },
+            }))
+          }
+          catch (err) {
+            this.logger.warn(
+              `[#1493] mutateRulesAtom path miss: ruleId=${provenance.ruleId} path=${provenance.conditionPath} op=positionConstraint.existing`,
+              err,
+            )
+          }
+        }
       }
       break
     }
@@ -222,6 +445,7 @@ export class SemanticStateReducerService {
       }
 
       constraint.params[paramKey] = this.parsePositionConstraintParamAnswer(paramKey, answerText, input.messageIndex)
+      updateRuleFromOwner(constraint, () => ({ ...constraint.params }))
       slot.value = answerText
       slot.status = 'locked'
       slot.evidence = {
@@ -229,6 +453,7 @@ export class SemanticStateReducerService {
         messageIndex: input.messageIndex,
         source: 'user_explicit',
       }
+      recordSlotEvidence(constraint, slot)
       constraint.status = constraint.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
       break
     }
@@ -256,6 +481,7 @@ export class SemanticStateReducerService {
         const paramKey = this.resolveRiskParamKey(slot)
         if (paramKey) {
           risk.params[paramKey] = answerText
+          updateRuleFromOwner(risk, () => ({ ...risk.params }))
           slot.value = answerText
           slot.status = 'locked'
           slot.evidence = {
@@ -263,6 +489,7 @@ export class SemanticStateReducerService {
             messageIndex: input.messageIndex,
             source: 'user_explicit',
           }
+          recordSlotEvidence(risk, slot)
           risk.status = risk.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
           break
         }
@@ -290,16 +517,20 @@ export class SemanticStateReducerService {
       }
 
       // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk.max_drawdown_pct / risk.max_single_loss_pct / risk.condition_expression not yet in REGISTRY (follow-up #1329)
-      risk.key = riskKey === 'risk.max_drawdown_pct' || riskKey === 'risk.max_single_loss_pct'
+      const swappedKey = riskKey === 'risk.max_drawdown_pct' || riskKey === 'risk.max_single_loss_pct'
         ? 'risk.condition_expression'
         : riskKey
+      risk.key = swappedKey
       risk.params = this.buildProtectiveRiskParams(riskKey, percentValue)
+      // #1493 块 B：protective_exit 「换 key」——同步重写 rules 树中的 atom.key + params
+      updateRuleFromOwner(risk, () => ({ ...risk.params }), swappedKey)
       risk.status = 'locked'
       risk.source = 'user_explicit'
       risk.evidence = evidence
       slot.value = percentValue
       slot.status = 'locked'
       slot.evidence = evidence
+      recordSlotEvidence(risk, slot, true)
       risk.openSlots = []
       riskChanged = true
       break
@@ -330,10 +561,23 @@ export class SemanticStateReducerService {
       break
     }
 
-    return {
+    const flatResult: SemanticState = {
       ...nextState,
-      risk: riskChanged ? normalizeRiskSemantics(readFlatRisks(nextState)) : readFlatRisks(nextState),
+      risk: riskChanged ? normalizeRiskSemantics([...readFlatRisks(nextState)]) : [...readFlatRisks(nextState)],
+      ...(nextRules !== undefined ? { rules: nextRules } : {}),
     }
+
+    // #1493 块 B：rules 非空时统一走 reprojectFromRules 重新派生 flat 五桶。
+    //   - rules 为空：fail-open 直接返回 flatResult（reproject 实现守门 length===0
+    //     时不改 flat），保持旧 fixture 路径行为完全等价。
+    //   - rules 非空：rules-first invariant 生效，flat ≡ projectToFlat(rules)。
+    //
+    // #1493 C1：reproject 后通过 applyEvidenceOverrides 把 reducer 在 flat slot 上
+    //   写入的 user_explicit 证据链（slot.evidence / value 以及 owner 自身 evidence）
+    //   覆盖回派生出的 owner.openSlots；rules 空时 reprojectFromRules 透传，
+    //   applyEvidenceOverrides 仍可对原 flat 应用，行为等价。
+    const reprojected = this.projection.reprojectFromRules(flatResult)
+    return this.applyEvidenceOverrides(reprojected, evidenceOverrides)
   }
 
   private resolveActionParamKey(slot: SemanticSlotState): string {
@@ -407,14 +651,27 @@ export class SemanticStateReducerService {
     return answerText
   }
 
+  /**
+   * Issue #1493 块 B：返回 append 到 rules 的新 SemanticRule（首次添加场景）；
+   * 既有约束就地更新参数时返回 null。
+   *
+   * 历史行为（in-place mutation `state.positionConstraint.push`）保留以兼容旧 fixture；
+   * `ReducerWorkingState.positionConstraint` 显式声明为 mutable 数组，类型层不再误报 readonly。
+   */
   private applyAddPositionConstraintAnswer(
-    state: SemanticState,
+    state: ReducerWorkingState,
     answerText: string,
     messageIndex?: number,
-  ): void {
+  ): {
+    newRule?: SemanticRule
+    updatedExisting?: {
+      provenance: { ruleId: string, conditionPath: string }
+      params: Record<string, unknown>
+    }
+  } | null {
     const parsed = this.parseAddPositionConstraintAnswer(answerText)
     if (!parsed) {
-      return
+      return null
     }
 
     if (!state.position) {
@@ -440,21 +697,49 @@ export class SemanticStateReducerService {
       existing.params = { ...existing.params, ...parsed.params }
       existing.status = existing.openSlots.every(slot => slot.status !== 'open') ? 'locked' : existing.status
       existing.evidence = evidence
-    } else {
-      constraints.push({
-        id: parsed.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
-          ? 'clarified-position-pyramiding-limit'
-          : 'clarified-position-max-exposure',
-        key: parsed.key,
-        params: parsed.params,
-        status: 'locked',
-        source: 'user_explicit',
-        evidence,
-        openSlots: [],
-      })
+      state.positionConstraint = constraints
+      // #1493 C3：既有 constraint 通过 _provenance 关联回 rules；返回 provenance 让 caller
+      //   调 updateRuleAtomParams 同步 rules 树参数，保持 flat ≡ projectToFlat(rules)。
+      if (existing._provenance) {
+        return {
+          updatedExisting: {
+            provenance: existing._provenance,
+            params: parsed.params,
+          },
+        }
+      }
+      return null
     }
 
+    const newConstraintId = parsed.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
+      ? 'clarified-position-pyramiding-limit'
+      : 'clarified-position-max-exposure'
+    // single-leaf gate rule：构造对应 SemanticRule，flat 与 rules 共享同一 _provenance
+    const ruleId = `clarified-rule-${newConstraintId}`
+    const newRule: SemanticRule = {
+      id: ruleId,
+      phase: 'gate',
+      sideScope: 'both',
+      condition: {
+        kind: 'atom',
+        key: parsed.key,
+        params: { ...parsed.params },
+      },
+      effects: [],
+    }
+    constraints.push({
+      id: newConstraintId,
+      key: parsed.key,
+      params: parsed.params,
+      status: 'locked',
+      source: 'user_explicit',
+      evidence,
+      openSlots: [],
+      _provenance: { ruleId, conditionPath: 'condition.atom' },
+    })
+
     state.positionConstraint = constraints
+    return { newRule }
   }
 
   private parseAddPositionConstraintAnswer(
@@ -969,6 +1254,13 @@ export class SemanticStateReducerService {
     reduction: SupportedSlotReduction,
     answerText: string,
     messageIndex: number | undefined,
+    // #1493 R2 M-new-1：caller 注入 evidence 收集回调，让 confirmationMode 同义兄弟
+    //   slot 的 user_explicit evidence 也进入 evidenceOverrides，在 reproject 后保留。
+    //   未传时为 no-op，保持旧调用方兼容。
+    evidenceCollector?: (
+      owner: { _provenance?: { ruleId: string, conditionPath: string } },
+      slot: SemanticSlotState,
+    ) => void,
   ): void {
     for (const trigger of readFlatTriggers(state)) {
       for (const slot of trigger.openSlots) {
@@ -988,6 +1280,7 @@ export class SemanticStateReducerService {
           messageIndex,
           source: 'user_explicit',
         }
+        evidenceCollector?.(trigger, slot)
       }
       trigger.status = trigger.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
     }

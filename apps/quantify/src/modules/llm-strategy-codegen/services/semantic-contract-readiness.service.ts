@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 
 import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
 import type { AtomExpr, AtomExprAtom, SemanticRule } from '../types/atom-expr'
@@ -32,6 +32,7 @@ import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry
 import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
 import { validateSemanticExpressionContract } from './strategy-semantic-contracts'
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
+import { SemanticRuleProjectionService } from './semantic-rule-projection.service'
 
 type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position'
 type SemanticSubstrateRequirement =
@@ -84,6 +85,8 @@ interface NormalizedProviderContracts {
 
 @Injectable()
 export class SemanticContractReadinessService {
+  private readonly logger = new Logger(SemanticContractReadinessService.name)
+
   constructor(
     private readonly semanticAtomContractService: SemanticAtomContractService = new SemanticAtomContractService(),
     private readonly shapeNormalizer: SemanticContractShapeNormalizerService = new SemanticContractShapeNormalizerService(),
@@ -91,12 +94,38 @@ export class SemanticContractReadinessService {
     private readonly orchestrationRegistry: SemanticOrchestrationRegistryService = new SemanticOrchestrationRegistryService(),
     // #1186 PR3 (decision 选项 A): multi-leg per_order_budget 判定共用 PR2 落地的 getExecutableLegScopes()
     private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
+    // #1493 块 D：normalize() 入口跑一次 reproject，把 `flat = pure function of rules` 落成硬不变量。
+    private readonly ruleProjection: SemanticRuleProjectionService = new SemanticRuleProjectionService(),
   ) {}
 
   normalize(
     state: SemanticState,
     strategyVersion?: StrategyVersionInfo,
   ): SemanticContractReadinessNormalizationResult {
+    // #1493 块 D：rules 非空时统一从 rules tree 重新投影出 flat 五桶，确保后续
+    //   读 flat 等价于读 rules。rules 为空时透传原 state，保留老 fixture 兼容路径。
+    //   注意：rules 非空时 ready 由 evaluateRulesReadiness() 决定，flat 8 路 fail-closed
+    //   不参与最终判定（见下方 `rulesReady !== null` 分支），但 flat 仍用于
+    //   provider-contract / orchestration / missingRequirements 等读路径。
+    if (state.rules && state.rules.length > 0) {
+      state = this.ruleProjection.reprojectFromRules(state)
+    }
+    else {
+      // Issue #1493 C2：normalize() 入口同样观测 rules 空 + flat 非空 legacy 路径。
+      //   生产规约见 types/semantic-state.ts 顶部 docstring。
+      const flatNonEmptyCount
+        = state.trigger.length
+        + state.action.length
+        + state.risk.length
+        + (state.positionConstraint?.length ?? 0)
+        + state.orchestration.length
+      if (flatNonEmptyCount > 0) {
+        this.logger.warn(
+          `[#1493] normalize_rules_missing flatNonEmptyCount=${flatNonEmptyCount}`
+          + ` metric=semantic_state_rules_missing_total+=1`,
+        )
+      }
+    }
     const activeOwners = collectActiveContractOwners(state)
     const orchestrationResult = normalizePhase0Orchestration(
       state.orchestration,
@@ -2202,6 +2231,20 @@ function isBoundaryCancelRequirement(object: string): boolean {
   return /boundary|breakout|breach|cancel|halt|stop|order|grid/u.test(object)
 }
 
+/**
+ * #1493 块 D：rules 真源前置保证后，flat 五桶（trigger/action/risk/positionConstraint
+ * 含 position）已由 `normalize()` 入口的 `reprojectFromRules` 重新派生自 rules tree。
+ *
+ * 因此本函数读 flat 等价于读 rules（AND/OR/sequence/NOT 复合表达式由 projectToFlat
+ * 拆叶子并把 combinationContract 挂到首叶子上，不会被"拆散"成多条独立 owner）。
+ *
+ * rules 为空时本函数仍读取原始 flat — 这条 legacy 路径保留是为兼容老 fixture / 直接
+ * 写 flat 的测试用例；最终 readiness 由 normalize() 决定，rules 空 + flat 非空时
+ * 不再触发 reproject，readiness 走 legacy flat 8 路 fail-closed 路径。
+ *
+ * 完整切流 rules-only readiness（即 rules 空 → ready=false rules_missing）的 fixture
+ * 迁移留给后续 PR，避免单次推动 86 个 readiness spec 同步改写。
+ */
 function collectActiveContractOwners(state: SemanticState): SemanticContractOwnerRef[] {
   const owners: SemanticContractOwnerRef[] = []
 

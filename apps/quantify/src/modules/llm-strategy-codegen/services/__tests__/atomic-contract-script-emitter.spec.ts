@@ -22,21 +22,27 @@ function compileAtomicAst(name: Parameters<typeof buildLockedAtomicState>[0]): S
 }
 
 function compileBreakoutWithRollingHighAst(): StrategyAstV1 {
-  const state = buildLockedAtomicState('breakout-retest')
-  state.trigger.push({
-    id: 'gate-rolling-high-breakout',
-    key: 'price.rolling_extrema_breakout',
-    phase: 'gate',
-    sideScope: 'long',
-    status: 'locked',
-    source: 'user_explicit',
-    openSlots: [],
-    params: {
-      extrema: 'high',
-      event: 'breakout_up',
-      lookbackBars: 55,
-    },
-  })
+  const baseState = buildLockedAtomicState('breakout-retest')
+  const state = {
+    ...baseState,
+    trigger: [
+      ...baseState.trigger,
+      {
+        id: 'gate-rolling-high-breakout',
+        key: 'price.rolling_extrema_breakout' as const,
+        phase: 'gate' as const,
+        sideScope: 'long' as const,
+        status: 'locked' as const,
+        source: 'user_explicit' as const,
+        openSlots: [],
+        params: {
+          extrema: 'high',
+          event: 'breakout_up',
+          lookbackBars: 55,
+        },
+      },
+    ],
+  }
 
   const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
   const ir = new CanonicalSpecV2IrCompilerService().compile({

@@ -44,28 +44,37 @@ import type {
   SemanticTriggerState,
 } from './semantic-state'
 
-/** 读取扁平 trigger 桶。当前 passthrough（同引用）；follow-up PR 切到 rules 投影。 */
-export function readFlatTriggers(state: SemanticState): SemanticTriggerState[] {
-  return state.trigger
+/**
+ * 读取扁平 trigger 桶。
+ *
+ * Issue #1493 M3：返回类型 `ReadonlyArray` + 同引用——避免不必要的 shallow copy，
+ * 同时通过 readonly 编译期阻断 in-place mutation。需要可变副本的调用方（必须先想清楚
+ * 为什么要 mutate flat：rules 才是真源）请显式 `[...readFlatXxx(state)]` spread。
+ *
+ * 真正的"rules-first"路径已由 `SemanticRuleProjectionService.reprojectFromRules`
+ * 接手（#1493 块 B）；本 reader 仅用于 read-side 查询，写路径必须走 rules。
+ */
+export function readFlatTriggers(state: SemanticState): ReadonlyArray<SemanticTriggerState> {
+  return state.trigger ?? []
 }
 
-/** 读取扁平 action 桶。当前 passthrough（同引用）；follow-up PR 切到 rules 投影。 */
-export function readFlatActions(state: SemanticState): SemanticActionState[] {
-  return state.action
+/** 读取扁平 action 桶。语义同 {@link readFlatTriggers}。 */
+export function readFlatActions(state: SemanticState): ReadonlyArray<SemanticActionState> {
+  return state.action ?? []
 }
 
-/** 读取扁平 risk 桶。当前 passthrough（同引用）；follow-up PR 切到 rules 投影。 */
-export function readFlatRisks(state: SemanticState): SemanticRiskState[] {
-  return state.risk
+/** 读取扁平 risk 桶。语义同 {@link readFlatTriggers}。 */
+export function readFlatRisks(state: SemanticState): ReadonlyArray<SemanticRiskState> {
+  return state.risk ?? []
 }
 
 /**
  * 读取扁平 positionConstraint 桶（#1395 引入；grid.range_rebalance 等 bucket=positionConstraint
- * 的 atom 都放这里）。当前 passthrough；follow-up PR 切到 rules 投影。
+ * 的 atom 都放这里）。语义同 {@link readFlatTriggers}。
  *
  * 注意：旧的 `state.position?.constraints` 嵌套桶为 legacy 残留，部分 reader（如
  * canonical-spec-builder.service.ts:1349）仍在查询；新代码统一通过本 helper 读顶层桶。
  */
-export function readFlatPositionConstraints(state: SemanticState): SemanticPositionConstraintState[] {
+export function readFlatPositionConstraints(state: SemanticState): ReadonlyArray<SemanticPositionConstraintState> {
   return state.positionConstraint ?? []
 }

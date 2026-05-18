@@ -41,6 +41,7 @@ import type {
   SemanticRiskState,
   SemanticSlotState,
   SemanticSource,
+  SemanticState,
   SemanticTriggerState,
 } from '../types/semantic-state'
 import type { ParamSlotSchema } from '../atom-contracts/atom-contract-surface.types'
@@ -61,6 +62,104 @@ type FlatBucket = keyof ProjectionOut
 @Injectable()
 export class SemanticRuleProjectionService {
   private readonly logger = new Logger(SemanticRuleProjectionService.name)
+  /** Issue #1493：static 包装用 logger（避免实例化也可调用 invariant） */
+  private static readonly staticLogger = new Logger(`${SemanticRuleProjectionService.name}.static`)
+
+  /**
+   * Issue #1493：把 `rules[]` 重新投影回 flat 五桶并返回新 SemanticState。
+   *
+   * 单一来源原则：`reducer` / `edit` / `readiness` 等下游路径**禁止** in-place
+   * 修改 flat 五桶；任何 rules 树变更后必须经由本方法回写。
+   *
+   * 行为：
+   *   - 不可变返回（structural sharing：非派生字段保持原引用）
+   *   - rules 空 / undefined → 直接 return 原 state（不清空 flat，避免破坏老 fixture）
+   *   - 末端跑 `enforceProvenanceInvariant`（projectToFlat 内部已跑，这里防御性 no-op）
+   *
+   * 不动字段：position / contextSlots / orchestrationContracts / pendingEdit /
+   *   updatedAt / rules 本身 / diagnostics / 其它任何非派生字段。
+   */
+  reprojectFromRules(state: SemanticState): SemanticState {
+    if (!state.rules || state.rules.length === 0) {
+      // Issue #1493 C2：rules 空 + flat 非空 legacy 路径。
+      //   生产规约：planner / dispatcher 路径 rules 永远非空（见 semantic-state.ts
+      //   顶部 docstring 契约）；rules=undefined/[] 仅在老 fixture / pure-flat seed
+      //   场景出现。这里输出结构化 warn 帮助下游线上排查为何某条记录走 legacy 路径。
+      const flatNonEmptyCount
+        = state.trigger.length
+        + state.action.length
+        + state.risk.length
+        + (state.positionConstraint?.length ?? 0)
+        + state.orchestration.length
+      if (flatNonEmptyCount > 0) {
+        this.logger.warn(
+          `[#1493] reproject_skipped_rules_missing flatNonEmptyCount=${flatNonEmptyCount}`
+          + ` metric=semantic_state_rules_missing_total+=1`,
+        )
+      }
+      return state
+    }
+    const projected = this.projectToFlat(state.rules)
+    // Issue #1493 M2：显式再跑一次 invariant—projectToFlat 内部已跑过一次，这里防御性
+    //   no-op，但语义清晰地把 "reprojectFromRules 返回值满足 _provenance invariant"
+    //   写在调用现场，未来若 projectToFlat 实现重抽不再内部跑 invariant，也不会让
+    //   reprojectFromRules 静默退化。
+    SemanticRuleProjectionService.enforceProvenanceInvariantInPlace(projected, state.rules)
+    return {
+      ...state,
+      trigger: projected.trigger,
+      action: projected.action,
+      risk: projected.risk,
+      positionConstraint: projected.positionConstraint,
+      orchestration: projected.orchestration,
+    }
+  }
+
+  /**
+   * Issue #1493：把私有 `enforceProvenanceInvariant` 提升为 public static 入口。
+   *
+   * 调用方在「带外 mutation flat 桶」后可显式跑一次，与 `reprojectFromRules`
+   * 配合形成"flat = pure function of rules"硬约束（见 SemanticFlatAtomProvenance
+   * Major M-1 注释中的 follow-up）。
+   *
+   * 命名后缀 `InPlace` 显式声明语义：会原地修改 `out` 的五个数组（沿用原私有实现
+   * 语义）；纯函数式调用方应先浅拷贝再传入。
+   */
+  static enforceProvenanceInvariantInPlace(
+    out: ProjectionOut,
+    rules: ReadonlyArray<SemanticRule>,
+  ): void {
+    const validRuleIds = new Set<string>()
+    for (const r of rules) validRuleIds.add(r.id)
+
+    const filterBucket = <T extends { _provenance?: SemanticFlatAtomProvenance, key?: string }>(
+      bucket: FlatBucket,
+      arr: T[],
+    ): T[] => {
+      const kept: T[] = []
+      for (const node of arr) {
+        const prov = node._provenance
+        if (!prov || !validRuleIds.has(prov.ruleId)) {
+          const sanitize = (s: string): string => s.replace(/[\r\n]+/g, ' ').slice(0, 200)
+          const srcLabel = prov?.ruleId ? sanitize(prov.ruleId) : 'missing_provenance'
+          const keyLabel = node.key ? sanitize(node.key) : '<unknown>'
+          SemanticRuleProjectionService.staticLogger.warn(
+            `[flat_atom_orphan_drop] bucket=${bucket} source=${srcLabel} key=${keyLabel}`
+            + ` metric=flat_atom_orphan_drop_total{bucket="${bucket}",source="${srcLabel}"}+=1`,
+          )
+          continue
+        }
+        kept.push(node)
+      }
+      return kept
+    }
+
+    out.trigger = filterBucket('trigger', out.trigger)
+    out.action = filterBucket('action', out.action)
+    out.risk = filterBucket('risk', out.risk)
+    out.positionConstraint = filterBucket('positionConstraint', out.positionConstraint)
+    out.orchestration = filterBucket('orchestration', out.orchestration)
+  }
 
   projectToFlat(rules: ReadonlyArray<SemanticRule>): ProjectionOut {
     const out: ProjectionOut = {
@@ -108,7 +207,7 @@ export class SemanticRuleProjectionService {
     // Issue #1447 闸 3：merge / projection 链路末端 invariant 校验。
     //   理论上 projectToFlat 自己产生的 atom 永远有 _provenance.ruleId 且 in-set，
     //   但 invariant 作为 defense-in-depth 兜底任何下游误调用 / 未来重抽路径。
-    this.enforceProvenanceInvariant(out, rules)
+    SemanticRuleProjectionService.enforceProvenanceInvariantInPlace(out, rules)
 
     return out
   }
@@ -334,42 +433,10 @@ export class SemanticRuleProjectionService {
    *
    * TODO(#1447 follow-up)：把 structured logger.warn metric stub 替换为正式
    *   Prometheus / OpenTelemetry counter（沿用 #1445 / #1446 同一 metric pipeline 升级窗口）。
+   *
+   * Issue #1493 M2：删除实例包装方法，调用方统一走
+   *   `SemanticRuleProjectionService.enforceProvenanceInvariantInPlace` static 入口。
    */
-  private enforceProvenanceInvariant(out: ProjectionOut, rules: ReadonlyArray<SemanticRule>): void {
-    const validRuleIds = new Set<string>()
-    for (const r of rules) validRuleIds.add(r.id)
-
-    const filterBucket = <T extends { _provenance?: SemanticFlatAtomProvenance, key?: string }>(
-      bucket: FlatBucket,
-      arr: T[],
-    ): T[] => {
-      const kept: T[] = []
-      for (const node of arr) {
-        const prov = node._provenance
-        if (!prov || !validRuleIds.has(prov.ruleId)) {
-          // 审查 Minor m-5 / m-6（#1447 闸 3 第 1 轮）：去掉拼接字符串里的 trailing space；
-          //   ruleId / key 来自 LLM 输出可能含 \r \n → 净化为单行避免 log injection。
-          const sanitize = (s: string): string => s.replace(/[\r\n]+/g, ' ').slice(0, 200)
-          const srcLabel = prov?.ruleId ? sanitize(prov.ruleId) : 'missing_provenance'
-          const keyLabel = node.key ? sanitize(node.key) : '<unknown>'
-          // structured warn metric stub（与 #1445 / #1446 同 pipeline）
-          this.logger.warn(
-            `[flat_atom_orphan_drop] bucket=${bucket} source=${srcLabel} key=${keyLabel}`
-            + ` metric=flat_atom_orphan_drop_total{bucket="${bucket}",source="${srcLabel}"}+=1`,
-          )
-          continue
-        }
-        kept.push(node)
-      }
-      return kept
-    }
-
-    out.trigger = filterBucket('trigger', out.trigger)
-    out.action = filterBucket('action', out.action)
-    out.risk = filterBucket('risk', out.risk)
-    out.positionConstraint = filterBucket('positionConstraint', out.positionConstraint)
-    out.orchestration = filterBucket('orchestration', out.orchestration)
-  }
 
   /**
    * Issue #1433 R-A：从 atom contract `surface.paramSlots` 反推 owner-level

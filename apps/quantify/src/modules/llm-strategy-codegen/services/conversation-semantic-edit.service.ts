@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type {
   PendingSemanticEdit,
@@ -8,9 +8,12 @@ import type {
 } from '../types/semantic-edit'
 import type { MarketInstrumentSymbolResolution } from '../types/market-instrument-symbol'
 import type { SemanticActionState, SemanticPositionState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
+import type { AtomExpr, SemanticRule } from '../types/atom-expr'
 import { isProcessingCodegenSessionStatus } from '../types/codegen-session-status'
 import { readPendingSemanticEdit, withPendingSemanticEdit } from '../types/semantic-edit'
+import { updateRuleAtomParams } from '../types/atom-expr'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
+import { SemanticRuleProjectionService } from './semantic-rule-projection.service'
 import { resolveEditableRangeParamPairs, resolveEditableScalarParamPaths } from './strategy-semantic-contracts'
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
@@ -25,9 +28,59 @@ type SemanticActionKey = 'open_long' | 'open_short' | 'close_long' | 'close_shor
 
 @Injectable()
 export class ConversationSemanticEditService {
+  // Issue #1493 块 C：rules 树非空时通过 projection 将 flat 五桶重新派生回 state。
+  // flat 直接 mutation 路径保留作为 rules 缺席场景（老 fixture / pure-flat seed）的兜底。
+  private readonly logger = new Logger(ConversationSemanticEditService.name)
+
   constructor(
     private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
+    private readonly projection: SemanticRuleProjectionService = new SemanticRuleProjectionService(),
   ) {}
+
+  /**
+   * Issue #1493 块 C：edit 路径统一收口。
+   *
+   * - 若 `nextState.rules` 存在且非空 → 跑 reprojectFromRules 让 flat 五桶等于
+   *   `projectToFlat(rules)`，确保 rules 是单一真相源；
+   * - 否则（老 fixture / pure-flat 路径）→ 直接返回 `nextState`。
+   */
+  private finalizeEdit(nextState: SemanticState): SemanticState {
+    if (nextState.rules && nextState.rules.length > 0) {
+      return this.projection.reprojectFromRules(nextState)
+    }
+    return nextState
+  }
+
+  /**
+   * Issue #1493 块 C：按 flat atom id 与 `_provenance.conditionPath` 反查到
+   * rules 树叶子并应用 mutator，不可变重建 rules。
+   *
+   * 用法：调用方先在 flat 桶里识别"哪些 atom 需要改"（沿用现有 atomKey/params 匹配），
+   * 拿到匹配 atom 的 `_provenance` 后调用本 helper。
+   *
+   * 未命中 / `_provenance` 缺失 → 直接返回原 rules 引用（前向兼容老 fixture）。
+   */
+  private mutateRulesAtom(
+    rules: readonly SemanticRule[] | undefined,
+    flatAtom: { _provenance?: { ruleId: string, conditionPath: string } } | undefined,
+    mutator: (atom: AtomExpr & { kind: 'atom' }) => AtomExpr & { kind: 'atom' },
+  ): readonly SemanticRule[] | undefined {
+    if (!rules || rules.length === 0) return rules
+    const prov = flatAtom?._provenance
+    if (!prov) return rules
+    try {
+      return updateRuleAtomParams(rules, prov.ruleId, prov.conditionPath, mutator)
+    }
+    catch (err) {
+      // Issue #1493 M1：路径不命中（fixture 不一致）→ fail-open 保留原 rules。
+      //   原本静默 swallow 让 edit / rules 漂移线上无观测，改为结构化 warn 暴露。
+      this.logger.warn(
+        `[#1493] mutateRulesAtom path miss: ruleId=${prov.ruleId} path=${prov.conditionPath} op=edit.mutateRulesAtom`,
+        err,
+      )
+      return rules
+    }
+  }
 
   applyPatch(state: SemanticState, patch: SemanticEditPatch): SemanticState {
     return patch.operations.reduce((next, operation) => {
@@ -305,11 +358,24 @@ export class ConversationSemanticEditService {
       ? readFlatTriggers(state).map((item) => item.id === targetRef ? trigger : item)
       : [trigger, ...readFlatTriggers(state).filter((item) => item.id !== trigger.id)]
 
-    return withPendingSemanticEdit({
+    // Issue #1493 块 C：同步 rules 树。原触发 atom 改成 oscillator.rsi_gte/_lte，
+    // 通过 targetRef 匹配的 flat trigger 的 _provenance 反查回 rules 叶子。
+    const sourceFlatTrigger = targetRef
+      ? readFlatTriggers(state).find(item => item.id === targetRef)
+      : readFlatTriggers(state)[0]
+    const nextRules = this.mutateRulesAtom(state.rules, sourceFlatTrigger, () => ({
+      kind: 'atom',
+      key: trigger.key,
+      params: { ...trigger.params },
+      ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
+    }))
+
+    return withPendingSemanticEdit(this.finalizeEdit({
       ...state,
       trigger: triggers,
+      rules: nextRules,
       updatedAt: new Date().toISOString(),
-    }, null)
+    }), null)
   }
 
   private applyContextReplacement(
@@ -391,11 +457,13 @@ export class ConversationSemanticEditService {
       openSlots: [],
     }
 
-    return {
+    // Issue #1493 块 C：position 不属于 rules 子树（仍是 flat 顶层字段），不需要走
+    // updateRuleAtomParams；但末尾仍跑 finalizeEdit 兜底（rules 非空 → reproject）。
+    return this.finalizeEdit({
       ...state,
       position,
       updatedAt: new Date().toISOString(),
-    }
+    })
   }
 
   private applyIndicatorPeriodReplacement(
@@ -404,6 +472,7 @@ export class ConversationSemanticEditService {
   ): SemanticState {
     const targetIndicator = operation.indicator?.trim().toLowerCase()
     let changed = false
+    let nextRules = state.rules
     const triggers = readFlatTriggers(state).map((trigger) => {
       const triggerIndicator = typeof trigger.params.indicator === 'string'
         ? trigger.params.indicator.trim().toLowerCase()
@@ -429,6 +498,11 @@ export class ConversationSemanticEditService {
       if (!triggerChanged) return trigger
 
       changed = true
+      // Issue #1493 块 C：同步 rules 树。
+      nextRules = this.mutateRulesAtom(nextRules, trigger, atom => ({
+        ...atom,
+        params: nextParams,
+      }))
       return {
         ...trigger,
         params: nextParams,
@@ -441,11 +515,12 @@ export class ConversationSemanticEditService {
 
     if (!changed) return state
 
-    return {
+    return this.finalizeEdit({
       ...state,
       trigger: triggers,
+      rules: nextRules,
       updatedAt: new Date().toISOString(),
-    }
+    })
   }
 
   private applyTriggerNumberReplacement(
@@ -453,6 +528,7 @@ export class ConversationSemanticEditService {
     operation: { from: number, to: number, direction?: 'up' | 'down', text?: string },
   ): SemanticState {
     let changed = false
+    let nextRules = state.rules
     const triggers = readFlatTriggers(state).map((trigger) => {
       if (!this.doesTriggerMatchNumberReplacementDirection(trigger, operation.direction)) {
         return trigger
@@ -462,6 +538,11 @@ export class ConversationSemanticEditService {
       if (nextParams === trigger.params) return trigger
 
       changed = true
+      // Issue #1493 块 C：同步 rules 树
+      nextRules = this.mutateRulesAtom(nextRules, trigger, atom => ({
+        ...atom,
+        params: nextParams,
+      }))
       return {
         ...trigger,
         params: nextParams,
@@ -474,11 +555,12 @@ export class ConversationSemanticEditService {
 
     if (!changed) return state
 
-    return {
+    return this.finalizeEdit({
       ...state,
       trigger: triggers,
+      rules: nextRules,
       updatedAt: new Date().toISOString(),
-    }
+    })
   }
 
   private applySemanticNumberReplacement(
@@ -486,11 +568,17 @@ export class ConversationSemanticEditService {
     operation: { from: number, to: number, unit?: 'bars' | 'percent' | 'plain', text?: string },
   ): SemanticState {
     let changed = false
+    let nextRules = state.rules
     const triggers = readFlatTriggers(state).map((trigger) => {
       const nextParams = this.replaceNumericParamValue(trigger.key, trigger.params, operation.from, operation.to, operation.unit)
       if (nextParams === trigger.params) return trigger
 
       changed = true
+      // Issue #1493 块 C：同步 rules 树
+      nextRules = this.mutateRulesAtom(nextRules, trigger, atom => ({
+        ...atom,
+        params: nextParams,
+      }))
       return {
         ...trigger,
         params: nextParams,
@@ -506,6 +594,10 @@ export class ConversationSemanticEditService {
       if (nextParams === riskItem.params) return riskItem
 
       changed = true
+      nextRules = this.mutateRulesAtom(nextRules, riskItem, atom => ({
+        ...atom,
+        params: nextParams,
+      }))
       return {
         ...riskItem,
         params: nextParams,
@@ -521,13 +613,14 @@ export class ConversationSemanticEditService {
 
     if (!changed) return state
 
-    return {
+    return this.finalizeEdit({
       ...state,
       trigger: triggers,
       risk,
       position,
+      rules: nextRules,
       updatedAt: new Date().toISOString(),
-    }
+    })
   }
 
   private applySemanticRangeReplacement(
@@ -535,11 +628,16 @@ export class ConversationSemanticEditService {
     operation: { from: { lower: number, upper: number }, to: { lower: number, upper: number }, text?: string },
   ): SemanticState {
     let changed = false
+    let nextRules = state.rules
     const triggers = readFlatTriggers(state).map((trigger) => {
       const nextParams = this.replaceRangeParamValue(trigger.key, trigger.params, operation.from, operation.to)
       if (nextParams === trigger.params) return trigger
 
       changed = true
+      nextRules = this.mutateRulesAtom(nextRules, trigger, atom => ({
+        ...atom,
+        params: nextParams,
+      }))
       return {
         ...trigger,
         params: nextParams,
@@ -555,6 +653,10 @@ export class ConversationSemanticEditService {
       if (nextParams === riskItem.params) return riskItem
 
       changed = true
+      nextRules = this.mutateRulesAtom(nextRules, riskItem, atom => ({
+        ...atom,
+        params: nextParams,
+      }))
       return {
         ...riskItem,
         params: nextParams,
@@ -567,12 +669,13 @@ export class ConversationSemanticEditService {
 
     if (!changed) return state
 
-    return {
+    return this.finalizeEdit({
       ...state,
       trigger: triggers,
       risk,
+      rules: nextRules,
       updatedAt: new Date().toISOString(),
-    }
+    })
   }
 
   private doesTriggerMatchNumberReplacementDirection(
@@ -731,9 +834,16 @@ export class ConversationSemanticEditService {
     if (!replacement) return state
 
     let changed = false
-    const actions = readFlatActions(state).map((action) => {
+    let nextRules = state.rules
+    const flatActions = readFlatActions(state)
+    const actions = flatActions.map((action) => {
       if (action.key !== replacement.from) return action
       changed = true
+      // Issue #1493 块 C：同步 rules 树（effects 里 action atom 改 key）
+      nextRules = this.mutateRulesAtom(nextRules, action, atom => ({
+        ...atom,
+        key: replacement.to,
+      }))
       return this.replaceActionState(action, replacement.to, text)
     })
 
@@ -748,16 +858,28 @@ export class ConversationSemanticEditService {
         changed = true
         for (let index = 0; index < actions.length; index += 1) {
           if (actions[index]?.key === pairedFromAction) {
+            // 通过原 flatActions 反查 provenance（actions 已是新值）
+            const origAction = flatActions[index]
+            nextRules = this.mutateRulesAtom(nextRules, origAction, atom => ({
+              ...atom,
+              key: pairedToAction,
+            }))
             actions[index] = this.replaceActionState(actions[index]!, pairedToAction, text)
           }
         }
       }
     }
 
+    const flatTriggers = readFlatTriggers(state)
     const triggers = fromSide && toSide && fromSide !== toSide
-      ? readFlatTriggers(state).map((trigger) => {
+      ? flatTriggers.map((trigger) => {
           if (trigger.sideScope !== fromSide) return trigger
           changed = true
+          // Issue #1493 块 C：rules 树里 atom 的 sideScope 也跟着翻
+          nextRules = this.mutateRulesAtom(nextRules, trigger, atom => ({
+            ...atom,
+            sideScope: toSide,
+          }))
           return {
             ...trigger,
             sideScope: toSide,
@@ -767,7 +889,7 @@ export class ConversationSemanticEditService {
             },
           }
         })
-      : readFlatTriggers(state)
+      : flatTriggers
 
     const position = fromSide && toSide && fromSide !== toSide && state.position
       ? {
@@ -782,13 +904,14 @@ export class ConversationSemanticEditService {
 
     if (!changed) return state
 
-    return {
+    return this.finalizeEdit({
       ...state,
       action: actions,
       trigger: triggers,
       position,
+      rules: nextRules,
       updatedAt: new Date().toISOString(),
-    }
+    })
   }
 
   private replaceActionState(action: SemanticActionState, key: SemanticActionKey, text: string): SemanticActionState {

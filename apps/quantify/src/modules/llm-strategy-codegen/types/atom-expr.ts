@@ -576,3 +576,206 @@ function stableJson(value: unknown): string {
   const obj = value as Record<string, unknown>
   return `{${Object.keys(obj).sort().map(k => `${JSON.stringify(k)}:${stableJson(obj[k])}`).join(',')}}`
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Issue #1493 — updateRuleAtomParams
+//
+// 不可变 helper：定位 ruleId 对应 rule，按 conditionPath 找到目标 atom 叶子，
+// 应用 mutator 返回新 atom，并不可变重建 rule 子树。其它 rule 保持原引用复用。
+//
+// 路径语法（与 SemanticFlatAtomProvenance.conditionPath 对齐）：
+//   condition.atom
+//   condition.and.children[N].atom
+//   condition.or.children[N].atom
+//   condition.not.child.atom
+//   condition.sequence.steps[N].atom
+//   effects[N].atom
+//   effects[N].and.children[M].atom
+//   effects[N].sequence.steps[M].atom
+//   ...（任意 condition/effects 子树叠加 and/or/not/sequence/atom）
+//
+// 路径不命中 → 抛 Error（不静默 fail）。
+// ─────────────────────────────────────────────────────────────────────────────
+
+type AtomExprAtomReadonly = AtomExpr & { kind: 'atom' }
+
+interface PathSegment {
+  readonly key: string
+  readonly index?: number
+}
+
+/**
+ * 解析 dot/bracket 路径串为段序列。
+ *   `condition.and.children[2].atom`
+ *     → [{key:'condition'},{key:'and'},{key:'children',index:2},{key:'atom'}]
+ */
+function parseAtomPath(path: string): PathSegment[] {
+  const segments: PathSegment[] = []
+  // 拆 dot；每段再单独 match bracket index
+  const parts = path.split('.')
+  for (const part of parts) {
+    if (part === '') continue
+    const m = part.match(/^([a-zA-Z_][a-zA-Z0-9_]*)(\[(\d+)\])?$/)
+    if (!m) {
+      throw new Error(`updateRuleAtomParams: malformed path segment "${part}" in "${path}"`)
+    }
+    const key = m[1]
+    const idx = m[3] !== undefined ? Number(m[3]) : undefined
+    segments.push({ key, index: idx })
+  }
+  return segments
+}
+
+/**
+ * 沿 segments 递归下钻，在叶子 atom 节点上应用 mutator，回升时不可变重建路径上每层。
+ *
+ * @param node 当前节点
+ * @param segments 剩余路径段
+ * @param ruleIdForError 错误信息里展示的 rule id
+ * @param fullPath 错误信息里展示的完整原始路径
+ */
+function applyAtomMutator(
+  node: AtomExpr,
+  segments: ReadonlyArray<PathSegment>,
+  mutator: (atom: AtomExprAtomReadonly) => AtomExprAtomReadonly,
+  ruleIdForError: string,
+  fullPath: string,
+): AtomExpr {
+  // path 结尾约定为 `.atom`（与 SemanticFlatAtomProvenance.conditionPath 对齐）：
+  //   - 当前 node 已是 atom 叶，剩余段恰好是 [{key:'atom'}] → 应用 mutator
+  //   - 当前 node 已是 atom 叶，剩余段为空（caller 已消费完）→ 应用 mutator（兼容容错）
+  if (node.kind === 'atom') {
+    if (segments.length === 0) return mutator(node)
+    if (segments.length === 1 && segments[0].key === 'atom' && segments[0].index === undefined) {
+      return mutator(node)
+    }
+    throw new Error(
+      `updateRuleAtomParams: path "${fullPath}" descends into atom leaf with extra segment "${segments[0].key}" in rule "${ruleIdForError}"`,
+    )
+  }
+  if (segments.length === 0) {
+    throw new Error(
+      `updateRuleAtomParams: path "${fullPath}" did not resolve to atom leaf in rule "${ruleIdForError}"`,
+    )
+  }
+  const [seg, ...rest] = segments
+  switch (node.kind) {
+    case 'and':
+    case 'or': {
+      if (seg.key !== node.kind) {
+        throw new Error(
+          `updateRuleAtomParams: path "${fullPath}" expected "${node.kind}" segment but got "${seg.key}" in rule "${ruleIdForError}"`,
+        )
+      }
+      // 下一段必须是 children[i]
+      const [childSeg, ...afterChild] = rest
+      if (!childSeg || childSeg.key !== 'children' || childSeg.index === undefined) {
+        throw new Error(
+          `updateRuleAtomParams: path "${fullPath}" expected "children[N]" after "${node.kind}" in rule "${ruleIdForError}"`,
+        )
+      }
+      const idx = childSeg.index
+      if (idx < 0 || idx >= node.children.length) {
+        throw new Error(
+          `updateRuleAtomParams: path "${fullPath}" children index ${idx} out of range in rule "${ruleIdForError}"`,
+        )
+      }
+      const newChild = applyAtomMutator(node.children[idx], afterChild, mutator, ruleIdForError, fullPath)
+      const newChildren = node.children.map((c, i) => (i === idx ? newChild : c))
+      return { kind: node.kind, children: newChildren } as AtomExpr
+    }
+    case 'not': {
+      if (seg.key !== 'not') {
+        throw new Error(
+          `updateRuleAtomParams: path "${fullPath}" expected "not" segment but got "${seg.key}" in rule "${ruleIdForError}"`,
+        )
+      }
+      const [childSeg, ...afterChild] = rest
+      if (!childSeg || childSeg.key !== 'child') {
+        throw new Error(
+          `updateRuleAtomParams: path "${fullPath}" expected "child" after "not" in rule "${ruleIdForError}"`,
+        )
+      }
+      const newChild = applyAtomMutator(node.child, afterChild, mutator, ruleIdForError, fullPath)
+      return { kind: 'not', child: newChild }
+    }
+    case 'sequence': {
+      if (seg.key !== 'sequence') {
+        throw new Error(
+          `updateRuleAtomParams: path "${fullPath}" expected "sequence" segment but got "${seg.key}" in rule "${ruleIdForError}"`,
+        )
+      }
+      const [stepSeg, ...afterStep] = rest
+      if (!stepSeg || stepSeg.key !== 'steps' || stepSeg.index === undefined) {
+        throw new Error(
+          `updateRuleAtomParams: path "${fullPath}" expected "steps[N]" after "sequence" in rule "${ruleIdForError}"`,
+        )
+      }
+      const idx = stepSeg.index
+      if (idx < 0 || idx >= node.steps.length) {
+        throw new Error(
+          `updateRuleAtomParams: path "${fullPath}" steps index ${idx} out of range in rule "${ruleIdForError}"`,
+        )
+      }
+      const newStep = applyAtomMutator(node.steps[idx], afterStep, mutator, ruleIdForError, fullPath)
+      const newSteps = node.steps.map((s, i) => (i === idx ? newStep : s))
+      return {
+        kind: 'sequence',
+        steps: newSteps,
+        ...(node.withinBars !== undefined ? { withinBars: node.withinBars } : {}),
+        ...(node.nextBarOnly !== undefined ? { nextBarOnly: node.nextBarOnly } : {}),
+      }
+    }
+  }
+}
+
+/**
+ * Issue #1493：定位 rule[ruleId] 对应的 atom 叶子，应用 mutator，不可变重建子树。
+ *
+ * @param rules    rules 数组（不变）
+ * @param ruleId   目标 rule.id
+ * @param conditionPath 形如 `condition.and.children[2].atom` / `effects[0].atom`
+ * @param mutator  接收当前 atom 返回新 atom（必须 kind:'atom'）
+ * @returns 新 rules 数组；未命中 rule 保持原引用复用
+ * @throws 路径不命中 / atom kind 不匹配 / index 越界 时抛 Error
+ */
+export function updateRuleAtomParams(
+  rules: readonly SemanticRule[],
+  ruleId: string,
+  conditionPath: string,
+  mutator: (atom: AtomExprAtomReadonly) => AtomExprAtomReadonly,
+): SemanticRule[] {
+  const idx = rules.findIndex(r => r.id === ruleId)
+  if (idx < 0) {
+    throw new Error(`updateRuleAtomParams: rule "${ruleId}" not found`)
+  }
+  const segments = parseAtomPath(conditionPath)
+  if (segments.length === 0) {
+    throw new Error(`updateRuleAtomParams: path "${conditionPath}" is empty for rule "${ruleId}"`)
+  }
+  const head = segments[0]
+  const target = rules[idx]
+  let newRule: SemanticRule
+  if (head.key === 'condition' && head.index === undefined) {
+    const newCondition = applyAtomMutator(target.condition, segments.slice(1), mutator, ruleId, conditionPath)
+    newRule = { ...target, condition: newCondition }
+  }
+  else if (head.key === 'effects' && head.index !== undefined) {
+    const effIdx = head.index
+    if (effIdx < 0 || effIdx >= target.effects.length) {
+      throw new Error(
+        `updateRuleAtomParams: path "${conditionPath}" effects index ${effIdx} out of range in rule "${ruleId}"`,
+      )
+    }
+    const newEffect = applyAtomMutator(target.effects[effIdx], segments.slice(1), mutator, ruleId, conditionPath)
+    const newEffects = target.effects.map((e, i) => (i === effIdx ? newEffect : e))
+    newRule = { ...target, effects: newEffects }
+  }
+  else {
+    throw new Error(
+      `updateRuleAtomParams: path "${conditionPath}" not found in rule "${ruleId}" (expected to start with "condition" or "effects[N]")`,
+    )
+  }
+  // 其它 rule 保持原引用，仅替换命中 rule
+  return rules.map((r, i) => (i === idx ? newRule : r))
+}

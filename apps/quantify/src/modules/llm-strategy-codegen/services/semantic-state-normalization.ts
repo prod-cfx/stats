@@ -31,7 +31,7 @@ export function buildNormalizedIntentFromSemanticState(state: SemanticState): St
   if (normalizedTriggers.some(trigger => trigger.phase === 'gate')) {
     families.add('state-gated')
   }
-  const grid = buildGridIntent(normalizedTriggers)
+  const grid = buildGridIntent([...normalizedTriggers])
 
   return {
     families: Array.from(families) as StrategyNormalizedIntent['families'],
@@ -145,7 +145,7 @@ export function isTriggerPredicateGroupContract(contract: SemanticAtomContract):
 }
 
 export function normalizeTriggerCombinationContracts(
-  triggers: SemanticTriggerState[],
+  triggers: readonly SemanticTriggerState[],
 ): SemanticTriggerState[] {
   return triggers.map(trigger =>
     normalizeConditionSequenceTrigger(

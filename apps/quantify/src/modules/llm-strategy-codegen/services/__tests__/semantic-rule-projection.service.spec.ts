@@ -446,14 +446,8 @@ describe('SemanticRuleProjectionService (Issue #1395)', () => {
         _provenance: { ruleId: 'dispatcher-noisy-not-in-rules', conditionPath: 'condition.atom' },
       })
 
-      // 重跑 invariant（私有 API 直访）
-      const privateAccess = svc as unknown as {
-        enforceProvenanceInvariant: (
-          o: ReturnType<SemanticRuleProjectionService['projectToFlat']>,
-          r: ReadonlyArray<SemanticRule>,
-        ) => void
-      }
-      privateAccess.enforceProvenanceInvariant(out, rules)
+      // Issue #1493 M2：走 public static 入口 enforceProvenanceInvariantInPlace。
+      SemanticRuleProjectionService.enforceProvenanceInvariantInPlace(out, rules)
 
       // 孤立 BOLL 被 drop，原 RSI trigger 保留
       expect(out.trigger).toHaveLength(baseTriggerCount)
@@ -483,13 +477,7 @@ describe('SemanticRuleProjectionService (Issue #1395)', () => {
         source: 'user_explicit',
         openSlots: [],
       })
-      const privateAccess = svc as unknown as {
-        enforceProvenanceInvariant: (
-          o: ReturnType<SemanticRuleProjectionService['projectToFlat']>,
-          r: ReadonlyArray<SemanticRule>,
-        ) => void
-      }
-      privateAccess.enforceProvenanceInvariant(out, rules)
+      SemanticRuleProjectionService.enforceProvenanceInvariantInPlace(out, rules)
       expect(out.trigger.find(t => t.key === 'bollinger.touch_upper')).toBeUndefined()
     })
 
@@ -611,13 +599,7 @@ describe('SemanticRuleProjectionService (Issue #1395)', () => {
         openSlots: [],
         _provenance: { ruleId: 'orphan-not-in-rules', conditionPath: 'condition.atom' },
       })
-      const privateAccess = svc as unknown as {
-        enforceProvenanceInvariant: (
-          o: ReturnType<SemanticRuleProjectionService['projectToFlat']>,
-          r: ReadonlyArray<SemanticRule>,
-        ) => void
-      }
-      privateAccess.enforceProvenanceInvariant(out, plannerRules)
+      SemanticRuleProjectionService.enforceProvenanceInvariantInPlace(out, plannerRules)
       // 孤立 BOLL 被 drop
       expect(out.trigger.find(t => t.key === 'bollinger.touch_lower')).toBeUndefined()
       // 合规 RSI 保留

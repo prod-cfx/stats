@@ -2275,7 +2275,7 @@ export class SemanticSeedStateBuilderService {
           mode: 'fixed_ratio',
           value: 0,
           sizing: null,
-          positionMode: this.inferPositionModeFromActions(readFlatActions(state)),
+          positionMode: this.inferPositionModeFromActions([...readFlatActions(state)]),
           status: 'open',
           source: 'derived',
           openSlots: [{
@@ -2314,7 +2314,7 @@ export class SemanticSeedStateBuilderService {
         sizing: legacySizingFromNormalized(axis, value, asset),
         mode: legacyModeFromAxis(axis),
         value,
-        positionMode: state.position?.positionMode ?? this.inferPositionModeFromActions(readFlatActions(state)),
+        positionMode: state.position?.positionMode ?? this.inferPositionModeFromActions([...readFlatActions(state)]),
         status: 'locked',
         source: 'derived',
         openSlots: [],

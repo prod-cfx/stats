@@ -6399,7 +6399,7 @@ export class CodegenConversationService {
     state: SemanticState,
     fallbackLogicSnapshot: StrategyLogicSnapshot = {},
   ): StrategyLogicSnapshot {
-    const projectedGrid = this.buildLegacyGrid(readFlatTriggers(state))
+    const projectedGrid = this.buildLegacyGrid([...readFlatTriggers(state)])
     const nextLogicSnapshot: StrategyLogicSnapshot = {
       ...fallbackLogicSnapshot,
       riskRules: fallbackLogicSnapshot.riskRules ? { ...fallbackLogicSnapshot.riskRules } : undefined,
@@ -6757,7 +6757,7 @@ export class CodegenConversationService {
   private normalizeRiskState(state: SemanticState): SemanticState {
     return {
       ...state,
-      risk: normalizeRiskSemantics(readFlatRisks(state)),
+      risk: normalizeRiskSemantics([...readFlatRisks(state)]),
     }
   }
 

@@ -1166,11 +1166,11 @@ describe('SemanticAtomInvariantService', () => {
   })
 
   it('does not collapse conflicting level_set contracts that only differ by absolute spacing', () => {
-    const state = buildContractOrderProgramSemanticState()
+    let state = buildContractOrderProgramSemanticState()
     const canonicalState = buildContractOrderProgramSemanticState()
     const triggerContract = state.trigger[0]?.contracts?.[0]
     if (triggerContract) {
-      state.trigger[0] = {
+      const updatedTrigger = {
         ...state.trigger[0]!,
         contracts: [
           triggerContract,
@@ -1190,6 +1190,10 @@ describe('SemanticAtomInvariantService', () => {
             ),
           },
         ],
+      }
+      state = {
+        ...state,
+        trigger: [updatedTrigger, ...state.trigger.slice(1)],
       }
     }
 
@@ -1418,11 +1422,14 @@ describe('SemanticAtomInvariantService', () => {
   })
 
   it('detects inferred generic expression drift once the trigger is locked', () => {
-    const state = buildCloseOpenExpressionSemanticState()
-    state.trigger = state.trigger.map(trigger => ({
-      ...trigger,
-      source: 'inferred',
-    }))
+    const baseState = buildCloseOpenExpressionSemanticState()
+    const state = {
+      ...baseState,
+      trigger: baseState.trigger.map(trigger => ({
+        ...trigger,
+        source: 'inferred' as const,
+      })),
+    }
     const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
 
     const driftChecks = service.validate({

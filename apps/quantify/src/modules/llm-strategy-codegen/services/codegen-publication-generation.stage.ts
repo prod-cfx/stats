@@ -331,7 +331,7 @@ export class CodegenPublicationGenerationStage {
       locked.positionPct = position.value <= 1 ? position.value * 100 : position.value
     }
 
-    for (const risk of normalizeRiskSemantics(readFlatRisks(args.semanticState))) {
+    for (const risk of normalizeRiskSemantics([...readFlatRisks(args.semanticState)])) {
       if (risk.status !== 'locked') {
         continue
       }
@@ -429,7 +429,7 @@ export class CodegenPublicationGenerationStage {
         key: action.key,
         ...(action.params ? { params: { ...action.params } } : {}),
       })),
-      risk: normalizeRiskSemantics(readFlatRisks(semanticState)).map(risk => ({
+      risk: normalizeRiskSemantics([...readFlatRisks(semanticState)]).map(risk => ({
         key: risk.key,
         params: { ...risk.params },
       })),

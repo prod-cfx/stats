@@ -112,29 +112,33 @@ function buildLockedOrchestration(key: string): SemanticOrchestrationNode {
 }
 
 function buildStateWithLockedAtom(key: AtomContractKey, phase?: 'entry' | 'exit'): SemanticState {
-  const state = emptyState()
+  const base = emptyState()
   const bucket = ATOM_CONTRACT_REGISTRY[key].bucket
   if (bucket === 'trigger') {
-    state.trigger.push(buildLockedTrigger(key, phase ?? 'entry'))
+    return { ...base, trigger: [...base.trigger, buildLockedTrigger(key, phase ?? 'entry')] }
   }
-  else if (bucket === 'action') {
-    state.action.push(buildLockedAction(key))
+  if (bucket === 'action') {
+    return { ...base, action: [...base.action, buildLockedAction(key)] }
   }
-  else if (bucket === 'risk') {
-    if (key === 'risk.partial_take_profit') {
-      state.risk.push(buildLockedRisk(key, { tiers: [{ trigger: { threshold: 5 }, reduceRatio: 0.5 }] }))
+  if (bucket === 'risk') {
+    const riskAtom = key === 'risk.partial_take_profit'
+      ? buildLockedRisk(key, { tiers: [{ trigger: { threshold: 5 }, reduceRatio: 0.5 }] })
+      : buildLockedRisk(key)
+    return { ...base, risk: [...base.risk, riskAtom] }
+  }
+  if (bucket === 'positionConstraint') {
+    return {
+      ...base,
+      positionConstraint: [
+        ...base.positionConstraint,
+        buildLockedConstraint(key as SemanticPositionConstraintState['key']),
+      ],
     }
-    else {
-      state.risk.push(buildLockedRisk(key))
-    }
   }
-  else if (bucket === 'positionConstraint') {
-    state.positionConstraint.push(buildLockedConstraint(key as SemanticPositionConstraintState['key']))
+  if (bucket === 'orchestration') {
+    return { ...base, orchestration: [...base.orchestration, buildLockedOrchestration(key)] }
   }
-  else if (bucket === 'orchestration') {
-    state.orchestration.push(buildLockedOrchestration(key))
-  }
-  return state
+  return base
 }
 
 describe('SemanticExecutableSemanticsService — fulfillsStrategyPhase invariant', () => {
@@ -199,18 +203,18 @@ describe('SemanticExecutableSemanticsService — fulfillsStrategyPhase invariant
     ] as const
     for (const key of PCT_KEYS) {
       it(`${key}: valuePct=0 时不应满足 exit 语义`, () => {
-        const state = emptyState()
-        state.risk.push(buildLockedRisk(key as AtomContractKey, { valuePct: 0 }))
+        const base = emptyState()
+        const state = { ...base, risk: [...base.risk, buildLockedRisk(key as AtomContractKey, { valuePct: 0 })] }
         expect(service.hasExecutableExitSemantics(state)).toBe(false)
       })
       it(`${key}: valuePct 缺失时不应满足 exit 语义`, () => {
-        const state = emptyState()
-        state.risk.push(buildLockedRisk(key as AtomContractKey, {}))
+        const base = emptyState()
+        const state = { ...base, risk: [...base.risk, buildLockedRisk(key as AtomContractKey, {})] }
         expect(service.hasExecutableExitSemantics(state)).toBe(false)
       })
       it(`${key}: valuePct > 0 时应满足 exit 语义`, () => {
-        const state = emptyState()
-        state.risk.push(buildLockedRisk(key as AtomContractKey, { valuePct: 5 }))
+        const base = emptyState()
+        const state = { ...base, risk: [...base.risk, buildLockedRisk(key as AtomContractKey, { valuePct: 5 })] }
         expect(service.hasExecutableExitSemantics(state)).toBe(true)
       })
     }

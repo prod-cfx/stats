@@ -70,107 +70,119 @@ function baseLockedAtomicState(): SemanticState {
 }
 
 export function buildLockedAtomicState(name: LockedAtomicStateName): SemanticState {
-  const state = baseLockedAtomicState()
+  const base = baseLockedAtomicState()
 
   if (name === 'bollinger-volume-entry') {
-    state.contextSlots.timeframe = lockedContextSlot('timeframe', 'contextSlots.timeframe', '15m')
-    state.trigger = [
-      lockedTrigger({
-        id: 'entry-bollinger-lower-touch',
-        key: 'price.detect.indicator_boundary',
-        phase: 'entry',
-        sideScope: 'long',
-        params: {
-          groupId: 'entry-bollinger-volume-confirmation',
-          boundaryRole: 'lower',
-          confirmationMode: 'touch',
-          indicator: { name: 'bollinger', period: 20, stdDev: 2 },
-        },
-      }),
-      lockedTrigger({
-        id: 'entry-volume-relative-average',
-        key: 'volume.relative_average',
-        phase: 'entry',
-        sideScope: 'long',
-        params: {
-          groupId: 'entry-bollinger-volume-confirmation',
-          lookbackBars: 20,
-          multiplier: 1.5,
-          comparator: 'gt',
-        },
-      }),
-      lockedTrigger({
-        id: 'exit-bollinger-upper-touch',
-        key: 'price.detect.indicator_boundary',
-        phase: 'exit',
-        sideScope: 'long',
-        params: {
-          boundaryRole: 'upper',
-          confirmationMode: 'touch',
-          indicator: { name: 'bollinger', period: 20, stdDev: 2 },
-        },
-      }),
-    ]
-    state.action.push({ id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] })
-    return state
+    return {
+      ...base,
+      contextSlots: {
+        ...base.contextSlots,
+        timeframe: lockedContextSlot('timeframe', 'contextSlots.timeframe', '15m'),
+      },
+      trigger: [
+        lockedTrigger({
+          id: 'entry-bollinger-lower-touch',
+          key: 'price.detect.indicator_boundary',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            groupId: 'entry-bollinger-volume-confirmation',
+            boundaryRole: 'lower',
+            confirmationMode: 'touch',
+            indicator: { name: 'bollinger', period: 20, stdDev: 2 },
+          },
+        }),
+        lockedTrigger({
+          id: 'entry-volume-relative-average',
+          key: 'volume.relative_average',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            groupId: 'entry-bollinger-volume-confirmation',
+            lookbackBars: 20,
+            multiplier: 1.5,
+            comparator: 'gt',
+          },
+        }),
+        lockedTrigger({
+          id: 'exit-bollinger-upper-touch',
+          key: 'price.detect.indicator_boundary',
+          phase: 'exit',
+          sideScope: 'long',
+          params: {
+            boundaryRole: 'upper',
+            confirmationMode: 'touch',
+            indicator: { name: 'bollinger', period: 20, stdDev: 2 },
+          },
+        }),
+      ],
+      action: [
+        ...base.action,
+        { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+    }
   }
 
   if (name === 'breakout-retest') {
-    state.trigger = [
+    return {
+      ...base,
+      trigger: [
+        lockedTrigger({
+          id: 'entry-breakout-retest',
+          key: 'condition.sequence',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            sequenceKind: 'breakout_retest',
+            lookbackWindow: '24h',
+            memoryKey: 'breakout',
+          },
+        }),
+      ],
+      risk: [{
+        id: 'risk-remembered-level-stop',
+        key: 'risk.remembered_level_stop',
+        params: { levelKey: 'breakout' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+    }
+  }
+
+  return {
+    ...base,
+    trigger: [
       lockedTrigger({
-        id: 'entry-breakout-retest',
-        key: 'condition.sequence',
+        id: 'entry-ma-above',
+        key: 'indicator.above',
         phase: 'entry',
         sideScope: 'long',
         params: {
-          sequenceKind: 'breakout_retest',
-          lookbackWindow: '24h',
-          memoryKey: 'breakout',
+          indicator: 'ma',
+          referenceRole: 'trend',
+          'reference.period': 20,
+          reference: { indicator: 'ma', period: 20 },
         },
       }),
-    ]
-    state.risk = [{
-      id: 'risk-remembered-level-stop',
-      key: 'risk.remembered_level_stop',
-      params: { levelKey: 'breakout' },
-      status: 'locked',
-      source: 'user_explicit',
-      openSlots: [],
-    }]
-    return state
-  }
-
-  state.trigger = [
-    lockedTrigger({
-      id: 'entry-ma-above',
-      key: 'indicator.above',
-      phase: 'entry',
-      sideScope: 'long',
-      params: {
-        indicator: 'ma',
-        referenceRole: 'trend',
-        'reference.period': 20,
-        reference: { indicator: 'ma', period: 20 },
+    ],
+    risk: [
+      {
+        id: 'risk-atr-stop',
+        key: 'risk.atr_multiple_stop',
+        params: { multiple: 2 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
       },
-    }),
-  ]
-  state.risk = [
-    {
-      id: 'risk-atr-stop',
-      key: 'risk.atr_multiple_stop',
-      params: { multiple: 2 },
-      status: 'locked',
-      source: 'user_explicit',
-      openSlots: [],
-    },
-    {
-      id: 'risk-atr-take-profit',
-      key: 'risk.atr_multiple_take_profit',
-      params: { multiple: 3 },
-      status: 'locked',
-      source: 'user_explicit',
-      openSlots: [],
-    },
-  ]
-  return state
+      {
+        id: 'risk-atr-take-profit',
+        key: 'risk.atr_multiple_take_profit',
+        params: { multiple: 3 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ],
+  }
 }

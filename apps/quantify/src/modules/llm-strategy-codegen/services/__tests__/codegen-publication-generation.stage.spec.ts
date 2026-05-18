@@ -1333,15 +1333,18 @@ describe('codegenPublicationGenerationStage', () => {
       undefined,
       passingSemanticAtomInvariant() as any,
     )
-    const semanticState = buildLockedMaSemanticState()
-    semanticState.risk = [{
-      id: 'risk-1',
-      key: 'risk.stop_loss_pct',
-      params: { valuePct: 5 },
-      status: 'locked',
-      source: 'user_explicit',
-      openSlots: [],
-    }]
+    const baseSemanticState = buildLockedMaSemanticState()
+    const semanticState = {
+      ...baseSemanticState,
+      risk: [{
+        id: 'risk-1',
+        key: 'risk.stop_loss_pct' as const,
+        params: { valuePct: 5 },
+        status: 'locked' as const,
+        source: 'user_explicit' as const,
+        openSlots: [],
+      }],
+    }
 
     const artifacts = await stage.generate({ semanticState })
 

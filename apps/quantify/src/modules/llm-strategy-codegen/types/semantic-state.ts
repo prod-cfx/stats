@@ -1,3 +1,25 @@
+/**
+ * Issue #1493 — Semantic State `rules[]` Single Source of Truth
+ *
+ * flat 五桶字段（trigger / action / risk / positionConstraint / orchestration）
+ * 是 `rules[]` 的派生投影（projectToFlat 输出）。下游**禁止** in-place mutation；
+ * 任何 rules 树变更后必须通过 `SemanticRuleProjectionService.reprojectFromRules`
+ * 回写新 state。
+ *
+ * 这五个字段在 SemanticStateBuckets 中标 readonly 以编译期阻断 in-place push/splice
+ * 等写操作；带外修改 flat（如临时合并 dispatcher atoms）后必须显式调用
+ * `SemanticRuleProjectionService.enforceProvenanceInvariantInPlace` 做 orphan drop。
+ *
+ * **`rules` 字段契约（Issue #1493 C2）**：
+ *   - **生产规约**：planner / dispatcher / reducer / edit 等正式路径产出的 SemanticState
+ *     `rules` 永远非空——它是 single source of truth，flat 五桶仅作派生缓存。
+ *   - **legacy 退化路径**：`rules === undefined` 或 `rules.length === 0` 仅出现在
+ *     旧 fixture / pure-flat seed / 单元测试空 state 等场景；此时 flat 五桶被视为
+ *     独立真源（向后兼容），但 `reprojectFromRules` 与 `normalize()` 入口会输出
+ *     `semantic_state_rules_missing_total` 结构化 warn 帮助线上排查。
+ *   - 新增写路径必须保证 mutation 后 rules 与 flat 通过 `reprojectFromRules` 同步，
+ *     不要新增依赖 rules-空 + flat-非空 的代码分支。
+ */
 import { TIMEFRAME_MS } from '@ai/shared/script-engine/compiled-runtime'
 import type { AtomContractBucket } from '../atom-contracts/atom-contract-types'
 import type { SemanticAtomSupportMetadata, UnsupportedFallbackState } from './semantic-atom-support'
@@ -636,9 +658,22 @@ type SemanticAtomStateByBucket<B extends AtomContractBucket> =
 
 // mapped type 派生 — 关键：用 `[B in AtomContractBucket]` 而非 Record<B, T>，
 // 后者会丢失 per-key 判别（Record 的 value 类型对 union key 是 distributed=false → 退化为 union）。
+//
+// Issue #1493：五桶字段标 readonly，编译期阻断 in-place mutation。
+// 任何写入必须经由 SemanticRuleProjectionService.reprojectFromRules 重新投影。
 export type SemanticStateBuckets = {
-  [B in AtomContractBucket]: SemanticAtomStateByBucket<B>[]
+  readonly [B in AtomContractBucket]: ReadonlyArray<SemanticAtomStateByBucket<B>>
 }
+
+/**
+ * Issue #1493：flat 派生投影类型分级。
+ *
+ * 调用方需要"只读 flat 五桶"语义时优先使用该类型而非 SemanticState 全量，
+ * 显式表达"我只消费派生字段，不写"的依赖契约。
+ */
+export type ProjectedFlatState = Readonly<
+  Pick<SemanticState, 'trigger' | 'action' | 'risk' | 'positionConstraint' | 'orchestration'>
+>
 
 export interface SemanticState extends SemanticStateBuckets {
   version: 1
