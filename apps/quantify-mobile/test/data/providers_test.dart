@@ -1,6 +1,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quantify_mobile/data/mock/mock_account_repository.dart';
+import 'package:quantify_mobile/data/mock/mock_ai_chat_repository.dart';
+import 'package:quantify_mobile/data/mock/mock_api_key_repository.dart';
 import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
+import 'package:quantify_mobile/data/mock/mock_backtest_repository.dart';
+import 'package:quantify_mobile/data/mock/mock_kline_repository.dart';
+import 'package:quantify_mobile/data/mock/mock_long_short_repository.dart';
+import 'package:quantify_mobile/data/mock/mock_orderbook_repository.dart';
+import 'package:quantify_mobile/data/mock/mock_strategy_repository.dart';
+import 'package:quantify_mobile/data/mock/mock_ticker_repository.dart';
+import 'package:quantify_mobile/data/mock/mock_whale_feed_repository.dart';
 import 'package:quantify_mobile/data/mock/unimplemented_repositories.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/repositories.dart';
@@ -37,12 +47,21 @@ void main() {
       );
     });
 
-    test('默认 useMock=true：tickerRepositoryProvider 仅返回实例，不抛异常（PR1 临时态）', () {
+    test('默认 useMock=true：所有 11 个 provider 返回对应的 MockXxxRepository', () {
       final ProviderContainer container = ProviderContainer();
       addTearDown(container.dispose);
 
-      // PR1 阶段 useMock=true 也返回 Unimplemented stub；只要不主动调用方法即不抛。
-      expect(container.read(tickerRepositoryProvider), isNotNull);
+      expect(container.read(authRepositoryProvider), isA<MockAuthRepository>());
+      expect(container.read(tickerRepositoryProvider), isA<MockTickerRepository>());
+      expect(container.read(klineRepositoryProvider), isA<MockKlineRepository>());
+      expect(container.read(orderbookRepositoryProvider), isA<MockOrderbookRepository>());
+      expect(container.read(longShortRepositoryProvider), isA<MockLongShortRepository>());
+      expect(container.read(whaleFeedRepositoryProvider), isA<MockWhaleFeedRepository>());
+      expect(container.read(strategyRepositoryProvider), isA<MockStrategyRepository>());
+      expect(container.read(aiChatRepositoryProvider), isA<MockAiChatRepository>());
+      expect(container.read(backtestRepositoryProvider), isA<MockBacktestRepository>());
+      expect(container.read(accountRepositoryProvider), isA<MockAccountRepository>());
+      expect(container.read(apiKeyRepositoryProvider), isA<MockApiKeyRepository>());
     });
 
     test('override useMock=false：tickerRepository.listTickers() 抛 UnimplementedError', () {

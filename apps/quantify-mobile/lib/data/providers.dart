@@ -1,6 +1,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'mock/mock_account_repository.dart';
+import 'mock/mock_ai_chat_repository.dart';
+import 'mock/mock_api_key_repository.dart';
 import 'mock/mock_auth_repository.dart';
+import 'mock/mock_backtest_repository.dart';
+import 'mock/mock_kline_repository.dart';
+import 'mock/mock_long_short_repository.dart';
+import 'mock/mock_orderbook_repository.dart';
+import 'mock/mock_strategy_repository.dart';
+import 'mock/mock_ticker_repository.dart';
+import 'mock/mock_whale_feed_repository.dart';
 import 'mock/unimplemented_repositories.dart';
 import 'repositories/repositories.dart';
 
@@ -19,7 +29,6 @@ final Provider<bool> useMockProvider = Provider<bool>((Ref ref) {
   return _kUseMockEnv.toLowerCase() != 'false';
 });
 
-// AuthRepository：PR1 即提供完整 Mock 闭环作为模式示例。
 final Provider<AuthRepository> authRepositoryProvider =
     Provider<AuthRepository>((Ref ref) {
   return ref.watch(useMockProvider)
@@ -27,41 +36,72 @@ final Provider<AuthRepository> authRepositoryProvider =
       : UnimplementedAuthRepository();
 });
 
-// 以下 10 个 Repository：PR1 仅落 Unimplemented stub，不读 useMockProvider。
-// PR2 会引入 MockXxxRepository 并在此处加入 `ref.watch(useMockProvider) ? Mock : Unimplemented`。
-// 由于 pages 当前未调用任何 Repository 方法，PR1 合并不会触发 UnimplementedError。
-
 final Provider<TickerRepository> tickerRepositoryProvider =
-    Provider<TickerRepository>((Ref ref) => UnimplementedTickerRepository());
+    Provider<TickerRepository>((Ref ref) {
+  return ref.watch(useMockProvider)
+      ? MockTickerRepository()
+      : UnimplementedTickerRepository();
+});
 
 final Provider<KlineRepository> klineRepositoryProvider =
-    Provider<KlineRepository>((Ref ref) => UnimplementedKlineRepository());
+    Provider<KlineRepository>((Ref ref) {
+  return ref.watch(useMockProvider)
+      ? MockKlineRepository()
+      : UnimplementedKlineRepository();
+});
 
 final Provider<OrderbookRepository> orderbookRepositoryProvider =
-    Provider<OrderbookRepository>(
-        (Ref ref) => UnimplementedOrderbookRepository());
+    Provider<OrderbookRepository>((Ref ref) {
+  return ref.watch(useMockProvider)
+      ? MockOrderbookRepository()
+      : UnimplementedOrderbookRepository();
+});
 
 final Provider<LongShortRepository> longShortRepositoryProvider =
-    Provider<LongShortRepository>(
-        (Ref ref) => UnimplementedLongShortRepository());
+    Provider<LongShortRepository>((Ref ref) {
+  return ref.watch(useMockProvider)
+      ? MockLongShortRepository()
+      : UnimplementedLongShortRepository();
+});
 
 final Provider<WhaleFeedRepository> whaleFeedRepositoryProvider =
-    Provider<WhaleFeedRepository>(
-        (Ref ref) => UnimplementedWhaleFeedRepository());
+    Provider<WhaleFeedRepository>((Ref ref) {
+  return ref.watch(useMockProvider)
+      ? MockWhaleFeedRepository()
+      : UnimplementedWhaleFeedRepository();
+});
 
 final Provider<StrategyRepository> strategyRepositoryProvider =
-    Provider<StrategyRepository>(
-        (Ref ref) => UnimplementedStrategyRepository());
+    Provider<StrategyRepository>((Ref ref) {
+  return ref.watch(useMockProvider)
+      ? MockStrategyRepository()
+      : UnimplementedStrategyRepository();
+});
 
 final Provider<AiChatRepository> aiChatRepositoryProvider =
-    Provider<AiChatRepository>((Ref ref) => UnimplementedAiChatRepository());
+    Provider<AiChatRepository>((Ref ref) {
+  return ref.watch(useMockProvider)
+      ? MockAiChatRepository()
+      : UnimplementedAiChatRepository();
+});
 
 final Provider<BacktestRepository> backtestRepositoryProvider =
-    Provider<BacktestRepository>(
-        (Ref ref) => UnimplementedBacktestRepository());
+    Provider<BacktestRepository>((Ref ref) {
+  return ref.watch(useMockProvider)
+      ? MockBacktestRepository()
+      : UnimplementedBacktestRepository();
+});
 
 final Provider<AccountRepository> accountRepositoryProvider =
-    Provider<AccountRepository>((Ref ref) => UnimplementedAccountRepository());
+    Provider<AccountRepository>((Ref ref) {
+  return ref.watch(useMockProvider)
+      ? MockAccountRepository()
+      : UnimplementedAccountRepository();
+});
 
 final Provider<ApiKeyRepository> apiKeyRepositoryProvider =
-    Provider<ApiKeyRepository>((Ref ref) => UnimplementedApiKeyRepository());
+    Provider<ApiKeyRepository>((Ref ref) {
+  return ref.watch(useMockProvider)
+      ? MockApiKeyRepository()
+      : UnimplementedApiKeyRepository();
+});
