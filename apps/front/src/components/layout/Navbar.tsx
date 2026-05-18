@@ -2,12 +2,14 @@
 
 import { Bell, Bot, ChevronDown, ChevronRight, FileText, Github, LogIn, LogOut, Menu, Search, Send, Settings, X } from 'lucide-react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UserAvatar } from '@/components/account/UserAvatar'
 import { CoinfluxMark } from '@/components/ui/CoinfluxMark'
 import { useToast } from '@/components/ui/toast'
+import { suppressNextAuthGate } from '@/features/auth/auth-gate-suppression'
+import { useAuthSheet } from '@/features/auth/AuthSheetProvider'
 import { useWhaleNotificationInbox } from '@/features/whale-notification/hooks/useWhaleNotificationInbox'
 import { useWhaleNotificationUnreadCount } from '@/features/whale-notification/hooks/useWhaleNotificationUnreadCount'
 import { useAuth } from '@/hooks/use-auth'
@@ -34,6 +36,7 @@ interface SearchEntry {
 
 export const Navbar = () => {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const { t } = useTranslation()
   const { info } = useToast()
@@ -50,6 +53,7 @@ export const Navbar = () => {
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const accountMenuRef = useRef<HTMLDivElement>(null)
   const { session, logout } = useAuth()
+  const { openAuth } = useAuthSheet()
   const { unreadCount, refresh: refreshUnreadCount } = useWhaleNotificationUnreadCount()
   const inbox = useWhaleNotificationInbox()
 
@@ -65,6 +69,21 @@ export const Navbar = () => {
 
   // 辅助函数：为路径添加语言前缀
   const withLng = useCallback((path: string) => `/${currentLng}${path}`, [currentLng])
+
+  const currentRedirect = useMemo(() => {
+    const path = pathname || `/${currentLng}`
+    const query = searchParams?.toString()
+    return query ? `${path}?${query}` : path
+  }, [currentLng, pathname, searchParams])
+
+  const handleLogout = useCallback(() => {
+    suppressNextAuthGate()
+    logout()
+    setAccountMenuOpen(false)
+    if (pathname?.startsWith(`/${currentLng}/account`)) {
+      router.replace(`/${currentLng}`)
+    }
+  }, [currentLng, logout, pathname, router])
 
   const { items: catalogItems } = useMarketDataCatalog()
 
@@ -272,6 +291,12 @@ export const Navbar = () => {
     setAccountMenuOpen(false)
     setMobileMenuOpen(true)
   }
+
+  const openLoginSheet = useCallback(() => {
+    setMobileMenuOpen(false)
+    setAccountMenuOpen(false)
+    openAuth({ lng: currentLng, redirect: currentRedirect })
+  }, [currentLng, currentRedirect, openAuth])
 
   const handleMobileFooterSocialClick = () => {
     info(
@@ -647,10 +672,7 @@ export const Navbar = () => {
                   </Link>
                   <button
                     type="button"
-                    onClick={() => {
-                      logout()
-                      setAccountMenuOpen(false)
-                    }}
+                    onClick={handleLogout}
                     className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left !text-[13px] !font-semibold !leading-5 text-red-500 transition hover:bg-red-500/10"
                   >
                     <LogOut className="h-4 w-4" />
@@ -660,13 +682,14 @@ export const Navbar = () => {
               )}
             </div>
           ) : (
-            <Link
-              href={withLng('/auth/login')}
+            <button
+              type="button"
+              onClick={openLoginSheet}
               className="inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg bg-gradient-to-r from-primary to-secondary px-3 !text-xs !font-semibold !leading-5 whitespace-nowrap !text-white shadow-sm transition-opacity duration-150 hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary md:min-h-8"
             >
               <LogIn className="h-3.5 w-3.5 !text-white" aria-hidden="true" />
               {t('nav.login')}
-            </Link>
+            </button>
           ))}
       </div>
 
@@ -682,6 +705,7 @@ export const Navbar = () => {
             </div>
             <button
               type="button"
+              aria-label={t('nav.closeMenu', { defaultValue: 'Close menu' })}
               onClick={() => setMobileMenuOpen(false)}
               className="p-2 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
             >
@@ -748,6 +772,17 @@ export const Navbar = () => {
                 </Link>
               )
             })}
+
+            {ENABLE_USER_SYSTEM && !session && (
+              <button
+                type="button"
+                onClick={openLoginSheet}
+                className="mt-2 flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-primary to-secondary px-4 py-3 text-base font-semibold !text-white shadow-sm transition-opacity duration-150 hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              >
+                <LogIn className="h-4 w-4 !text-white" aria-hidden="true" />
+                {t('nav.login')}
+              </button>
+            )}
 
             <div className="mt-auto border-t border-[color:var(--cf-border)]/70 pt-6">
               <div className="flex flex-col items-center gap-3">

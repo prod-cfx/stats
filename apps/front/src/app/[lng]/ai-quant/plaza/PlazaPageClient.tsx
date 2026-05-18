@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-storage'
 import { StrategyPlaza } from '@/components/ai-quant/StrategyPlaza'
 import { getSameOriginReturnHref } from '@/components/navigation/return-href'
+import { useAuthSheet } from '@/features/auth/AuthSheetProvider'
 import { useAuth } from '@/hooks/use-auth'
 import {
   createStrategyPlazaRunRequestId,
@@ -40,6 +41,7 @@ export function AiQuantPlazaPageClient() {
   const params = useParams<{ lng: string }>()
   const lng = params?.lng === 'en' ? 'en' : 'zh'
   const router = useRouter()
+  const { openAuth } = useAuthSheet()
   const { session, isLoading } = useAuth()
   const defaultReturnHref = `/${lng}/account?tab=ai-quant`
   const [returnHref, setReturnHref] = useState(defaultReturnHref)
@@ -54,7 +56,7 @@ export function AiQuantPlazaPageClient() {
 
   const goLoginWithIntent = (intent: QuantReturnIntentInput) => {
     setIntent(intent)
-    router.push(`/${lng}/auth/login?redirect=${encodeURIComponent(`/${lng}/ai-quant/plaza`)}`)
+    openAuth({ lng, redirect: `/${lng}/ai-quant/plaza` })
   }
 
   useEffect(() => {

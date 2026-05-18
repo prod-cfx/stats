@@ -5,6 +5,13 @@ import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Navbar } from './Navbar'
 
+const mockOpenAuth = jest.fn()
+const mockLogout = jest.fn()
+const mockRouterReplace = jest.fn()
+let mockSession: null | { email: string, loginMethods: string[], userId: string } = null
+let mockUsePathname = () => '/zh/aggregated-orderbook'
+let mockUseSearchParams = () => new URLSearchParams('tab=depth')
+
 jest.mock('next/link', () => ({
   __esModule: true,
   default: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
@@ -15,8 +22,13 @@ jest.mock('next/link', () => ({
 }))
 
 jest.mock('next/navigation', () => ({
-  usePathname: () => '/zh',
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  usePathname: () => mockUsePathname(),
+  useSearchParams: () => mockUseSearchParams(),
+  useRouter: () => ({ push: jest.fn(), replace: mockRouterReplace }),
+}))
+
+jest.mock('@/features/auth/AuthSheetProvider', () => ({
+  useAuthSheet: () => ({ openAuth: mockOpenAuth }),
 }))
 
 jest.mock('lucide-react', () => ({
@@ -49,6 +61,7 @@ jest.mock('react-i18next', () => ({
         'nav.data': '数据',
         'nav.discover': '发现',
         'nav.login': '登录',
+        'nav.closeMenu': '关闭菜单',
         'nav.long_short_ratio': '多空比',
         'nav.marketData': '行情',
         'nav.openMenu': '打开菜单',
@@ -63,7 +76,7 @@ jest.mock('react-i18next', () => ({
 }))
 
 jest.mock('@/hooks/use-auth', () => ({
-  useAuth: () => ({ session: null, logout: jest.fn() }),
+  useAuth: () => ({ session: mockSession, logout: mockLogout }),
 }))
 
 jest.mock('@/components/ui/toast', () => ({
@@ -120,6 +133,11 @@ describe('Navbar mobile menu', () => {
   beforeEach(() => {
     ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       true
+    mockOpenAuth.mockClear()
+    mockLogout.mockClear()
+    mockSession = null
+    mockUsePathname = () => '/zh/aggregated-orderbook'
+    mockUseSearchParams = () => new URLSearchParams('tab=depth')
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -148,6 +166,7 @@ describe('Navbar mobile menu', () => {
     const dataButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
       button => button.textContent === '数据',
     )
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="关闭菜单"]')).not.toBeNull()
     expect(dataButton).toBeDefined()
     expect(dataButton?.getAttribute('aria-expanded')).toBe('false')
 
@@ -168,5 +187,97 @@ describe('Navbar mobile menu', () => {
     const submenuItems = Array.from(submenu?.querySelectorAll<HTMLAnchorElement>('a') ?? [])
     expect(submenuItems).toHaveLength(3)
     expect(submenuItems[1]?.className).toContain('border-t')
+  })
+
+  it('opens the auth sheet from desktop login without linking to the login route', async () => {
+    await act(async () => {
+      root.render(<Navbar />)
+    })
+
+    expect(container.querySelector('a[href="/zh/auth/login"]')).toBeNull()
+
+    const desktopLoginButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      button => button.textContent === '登录',
+    )
+
+    expect(desktopLoginButton).toBeDefined()
+
+    await act(async () => {
+      desktopLoginButton?.click()
+    })
+
+    expect(mockOpenAuth).toHaveBeenCalledTimes(1)
+    expect(mockOpenAuth).toHaveBeenCalledWith({
+      lng: 'zh',
+      redirect: '/zh/aggregated-orderbook?tab=depth',
+    })
+  })
+
+  it('opens the auth sheet from mobile login and closes the mobile menu', async () => {
+    await act(async () => {
+      root.render(<Navbar />)
+    })
+
+    const mobileMenuButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      button => button.getAttribute('aria-label') === '打开菜单',
+    )
+
+    await act(async () => {
+      mobileMenuButton?.click()
+    })
+
+    const mobileLoginButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+      .filter(button => button.textContent === '登录')
+      .pop()
+
+    expect(mobileLoginButton).toBeDefined()
+
+    await act(async () => {
+      mobileLoginButton?.click()
+    })
+
+    expect(mockOpenAuth).toHaveBeenCalledTimes(1)
+    expect(mockOpenAuth).toHaveBeenCalledWith({
+      lng: 'zh',
+      redirect: '/zh/aggregated-orderbook?tab=depth',
+    })
+    expect(
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+        button => button.textContent === '数据',
+      ),
+    ).toBeUndefined()
+  })
+
+  it('suppresses account auth gate when logging out from the account menu', async () => {
+    const { shouldSuppressAuthGate } = await import('@/features/auth/auth-gate-suppression')
+    mockSession = {
+      email: 'user@example.com',
+      loginMethods: ['email'],
+      userId: 'user-1',
+    }
+    mockUsePathname = () => '/zh/account'
+    mockUseSearchParams = () => new URLSearchParams('tab=settings')
+
+    await act(async () => {
+      root.render(<Navbar />)
+    })
+
+    const accountButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      button => button.getAttribute('aria-label') === '账户设置',
+    )
+    await act(async () => {
+      accountButton?.click()
+    })
+
+    const logoutButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      button => button.textContent === '登出',
+    )
+    await act(async () => {
+      logoutButton?.click()
+    })
+
+    expect(mockLogout).toHaveBeenCalledTimes(1)
+    expect(shouldSuppressAuthGate()).toBe(true)
+    expect(mockRouterReplace).toHaveBeenCalledWith('/zh')
   })
 })

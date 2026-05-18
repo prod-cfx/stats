@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client'
 import { AiQuantPageClient } from './AiQuantPageClient'
 
 const mockPush = jest.fn()
+const openAuthMock = jest.fn()
 const mockFetchBacktestCapabilities = jest.fn()
 let mockSession: { userId: string } | null = { userId: 'u-1' }
 
@@ -31,6 +32,12 @@ jest.mock('@/hooks/use-auth', () => ({
   useAuth: () => ({
     session: mockSession,
     isLoading: false,
+  }),
+}))
+
+jest.mock('@/features/auth/AuthSheetProvider', () => ({
+  useAuthSheet: () => ({
+    openAuth: openAuthMock,
   }),
 }))
 
@@ -65,7 +72,17 @@ jest.mock('@/components/ai-quant/DeployDialog', () => ({
 }))
 
 jest.mock('@/components/ai-quant/GuestAiQuantLanding', () => ({
-  GuestAiQuantLanding: () => <div data-testid="guest" />,
+  GuestAiQuantLanding: ({
+    onRequireLogin,
+  }: {
+    onRequireLogin: (intent: { type: 'chat', draft: string }) => void
+  }) => (
+    <div data-testid="guest">
+      <button data-testid="guest-login-chat" onClick={() => onRequireLogin({ type: 'chat', draft: 'hello' })}>
+        login
+      </button>
+    </div>
+  ),
 }))
 
 jest.mock('@/components/ai-quant/DisplayLogicGraphPreview', () => ({
@@ -491,6 +508,24 @@ describe('AiQuantPageClient backtest range integration', () => {
     const backLink = Array.from(container.querySelectorAll('a')).find(link => link.textContent?.includes('返回'))
 
     expect(backLink?.getAttribute('href')).toBe('/zh/account?tab=ai-quant')
+  })
+
+  it('opens auth sheet for guest actions and preserves return intent', async () => {
+    mockSession = null
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="guest-login-chat"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(openAuthMock).toHaveBeenCalledWith({ lng: 'zh', redirect: '/zh/ai-quant' })
+    expect(mockPush).not.toHaveBeenCalledWith('/zh/auth/login?redirect=%2Fzh%2Fai-quant')
+    expect(localStorage.getItem('ai_quant_return_intent_v1')).toContain('"type":"chat"')
+    expect(localStorage.getItem('ai_quant_return_intent_v1')).toContain('"draft":"hello"')
   })
 
   it('renders a page-level back link to the same-origin source page', async () => {

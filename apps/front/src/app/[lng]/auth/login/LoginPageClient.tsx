@@ -1,11 +1,9 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import React, { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { getTelegramLoginConfigRequest } from '@/features/auth/api'
-import { EmailOtpForm } from '@/features/auth/components/EmailOtpForm'
-import { TelegramLoginButtons } from '@/features/auth/components/TelegramLoginButtons'
+import React, { useEffect } from 'react'
+import { normalizeAuthRedirectOrFallback } from '@/features/auth/auth-redirect'
+import { AuthSheet } from '@/features/auth/components/AuthSheet'
 import { useAuth } from '@/hooks/use-auth'
 
 interface LoginPageClientProps {
@@ -13,13 +11,14 @@ interface LoginPageClientProps {
 }
 
 export function LoginPageClient({ lng }: LoginPageClientProps) {
-  const { t } = useTranslation()
   const router = useRouter()
   const searchParams = useSearchParams()
   const { isAuthenticated } = useAuth()
-  const [betaCode, setBetaCode] = useState('')
-  const [betaCodeGateEnabled, setBetaCodeGateEnabled] = useState(false)
-  const redirect = searchParams?.get('redirect') || `/${lng}/account`
+  const accountRedirect = `/${lng}/account`
+  const redirect = normalizeAuthRedirectOrFallback(searchParams?.get('redirect'), lng, accountRedirect)
+  const closeFallbackPage = () => {
+    router.replace(`/${lng}`)
+  }
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -27,55 +26,21 @@ export function LoginPageClient({ lng }: LoginPageClientProps) {
     }
   }, [isAuthenticated, redirect, router])
 
-  useEffect(() => {
-    let mounted = true
-
-    async function loadLoginConfig() {
-      try {
-        const config = await getTelegramLoginConfigRequest()
-        if (mounted)
-          setBetaCodeGateEnabled(Boolean(config.betaCodeGateEnabled))
-      }
-      catch {
-        if (mounted)
-          setBetaCodeGateEnabled(false)
-      }
-    }
-
-    void loadLoginConfig()
-
-    return () => {
-      mounted = false
-    }
-  }, [])
-
   if (isAuthenticated) return null
 
   return (
-    <main className="flex flex-1 items-center justify-center px-4 py-6 md:px-8">
-      <div className="w-full max-w-[420px] space-y-4 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 py-4 shadow-sm md:px-6 md:py-5">
-        <div className="space-y-1">
-          <h1 className="!text-base !font-semibold !leading-6 text-[color:var(--cf-text-strong)]">
-            {t('nav.login')}
-          </h1>
-          <p className="!text-sm !font-normal !leading-[22px] text-[color:var(--cf-muted)]">
-            {t('auth.loginDesc')}
-          </p>
-        </div>
-
-        <EmailOtpForm
-          betaCode={betaCode}
-          betaCodeGateEnabled={betaCodeGateEnabled}
-          onBetaCodeChange={setBetaCode}
-          onSuccess={() => router.replace(redirect)}
-        />
-
-        <div className="relative py-1 text-center !text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">
-          <span className="px-2">{t('auth.or')}</span>
-        </div>
-
-        <TelegramLoginButtons lng={lng} redirect={redirect} betaCode={betaCodeGateEnabled ? betaCode : undefined} />
-      </div>
+    <main className="relative flex min-h-[calc(100dvh-64px)] flex-1 items-end justify-center overflow-hidden bg-[color:var(--cf-bg)] px-0 pt-24 md:min-h-0 md:items-center md:px-8 md:py-6">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[58dvh] bg-[radial-gradient(circle_at_50%_10%,rgba(139,92,255,0.18),transparent_32%),linear-gradient(180deg,rgba(57,107,255,0.12),transparent_70%)] md:hidden" />
+      <AuthSheet
+        open
+        fallbackPage
+        lng={lng}
+        redirect={redirect}
+        onOpenChange={open => {
+          if (!open) closeFallbackPage()
+        }}
+        onSuccess={nextRedirect => router.replace(normalizeAuthRedirectOrFallback(nextRedirect || redirect, lng, redirect))}
+      />
     </main>
   )
 }

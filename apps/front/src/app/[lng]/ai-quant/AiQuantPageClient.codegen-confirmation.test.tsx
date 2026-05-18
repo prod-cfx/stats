@@ -107,6 +107,12 @@ jest.mock('@/hooks/use-auth', () => ({
   }),
 }))
 
+jest.mock('@/features/auth/AuthSheetProvider', () => ({
+  useAuthSheet: () => ({
+    openAuth: jest.fn(),
+  }),
+}))
+
 jest.mock('./ai-quant-page-conversation', () => {
   const actual = jest.requireActual('./ai-quant-page-conversation') as typeof import('./ai-quant-page-conversation')
   return {

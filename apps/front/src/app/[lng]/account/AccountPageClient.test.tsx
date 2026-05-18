@@ -11,6 +11,7 @@ const mockSendEmailCode = jest.fn()
 const mockBindEmail = jest.fn()
 const mockSuccess = jest.fn()
 const mockError = jest.fn()
+const mockOpenAuth = jest.fn()
 const setInputValue = (input: HTMLInputElement, value: string) => {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
   setter?.call(input, value)
@@ -78,6 +79,10 @@ jest.mock('@/hooks/use-auth', () => ({
   }),
 }))
 
+jest.mock('@/features/auth/AuthSheetProvider', () => ({
+  useAuthSheet: () => ({ openAuth: mockOpenAuth }),
+}))
+
 jest.mock('@/components/account/ExchangeApiSection', () => ({
   ExchangeApiSection: () => <div data-testid="exchange-api-section" />,
 }))
@@ -137,6 +142,36 @@ describe('AccountPageClient', () => {
     expect(container.querySelector('img[src*="api.dicebear.com"]')).toBeNull()
     expect(avatar?.querySelectorAll('span[aria-hidden="true"] > span')).toHaveLength(25)
     expect(avatar?.className).toContain('rounded-full')
+  })
+
+  it('opens the auth sheet with the current account URL when unauthenticated', async () => {
+    mockSession = null as unknown as typeof mockSession
+
+    await act(async () => {
+      root?.render(<AccountPageClient lng="zh" />)
+    })
+
+    expect(mockOpenAuth).toHaveBeenCalledWith({ lng: 'zh', redirect: '/zh/account?tab=settings', closeRedirect: '/zh' })
+    expect(mockReplace).not.toHaveBeenCalledWith('/zh/auth/login')
+  })
+
+  it('logs out without routing to the login page', async () => {
+    mockLogout.mockImplementationOnce(() => {
+      mockSession = null as unknown as typeof mockSession
+    })
+
+    await act(async () => {
+      root?.render(<AccountPageClient lng="zh" />)
+    })
+
+    await act(async () => {
+      ;(Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Logout') as HTMLButtonElement).click()
+      root?.render(<AccountPageClient lng="zh" />)
+    })
+
+    expect(mockLogout).toHaveBeenCalled()
+    expect(mockOpenAuth).not.toHaveBeenCalled()
+    expect(mockReplace).not.toHaveBeenCalledWith('/zh/auth/login')
   })
 
   it('shows the account identifier without the account center prefix', async () => {

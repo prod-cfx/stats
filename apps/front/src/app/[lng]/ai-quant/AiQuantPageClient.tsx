@@ -38,6 +38,7 @@ import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStra
 import { applyCapabilitiesToParamSchema } from '@/components/ai-quant/strategy-param-sync'
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
 import { getSameOriginReturnHref } from '@/components/navigation/return-href'
+import { useAuthSheet } from '@/features/auth/AuthSheetProvider'
 import { useAuth } from '@/hooks/use-auth'
 import {
   deleteAiQuantConversation,
@@ -210,6 +211,7 @@ export function AiQuantPageClient({
   const params = useParams<{ lng: string }>()
   const lng = params?.lng === 'en' ? 'en' : 'zh'
   const router = useRouter()
+  const { openAuth } = useAuthSheet()
   const { session, isLoading } = useAuth()
   const apiConfigHref = buildApiConfigHref(lng)
   const defaultReturnHref = `/${lng}/account?tab=ai-quant`
@@ -1424,7 +1426,7 @@ export function AiQuantPageClient({
 
   const goLoginWithIntent = (intent: QuantReturnIntentInput) => {
     setIntent(intent)
-    router.push(`/${lng}/auth/login?redirect=${encodeURIComponent(`/${lng}/ai-quant`)}`)
+    openAuth({ lng, redirect: `/${lng}/ai-quant` })
   }
 
   useEffect(() => {

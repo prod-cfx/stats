@@ -15,6 +15,7 @@ const mockCreateStrategyPlazaRunRequestId = jest.fn()
 const mockSetIntent = jest.fn()
 const mockGetIntent = jest.fn()
 const mockClearIntent = jest.fn()
+const openAuthMock = jest.fn()
 const mockTranslations: Record<string, string> = {
   'aiQuant.guestLanding.plazaSubtitle': '精选策略模板',
   'aiQuant.plaza': '策略广场',
@@ -88,6 +89,12 @@ jest.mock('@/hooks/use-auth', () => ({
   }),
 }))
 
+jest.mock('@/features/auth/AuthSheetProvider', () => ({
+  useAuthSheet: () => ({
+    openAuth: openAuthMock,
+  }),
+}))
+
 jest.mock('@/components/ai-quant/intent-storage', () => ({
   clearIntent: (...args: Parameters<typeof mockClearIntent>) => mockClearIntent(...args),
   getIntent: (...args: Parameters<typeof mockGetIntent>) => mockGetIntent(...args),
@@ -138,6 +145,7 @@ describe('AiQuantPlazaPageClient', () => {
     mockSetIntent.mockReset()
     mockGetIntent.mockReset()
     mockClearIntent.mockReset()
+    openAuthMock.mockReset()
     mockFetchStrategyPlazaTemplates.mockReset()
     mockRunStrategyPlazaTemplate.mockReset()
     mockStartStrategyPlazaEditSession.mockReset()
@@ -196,7 +204,8 @@ describe('AiQuantPlazaPageClient', () => {
     })
 
     expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-run', templateId: 'ma-cross' })
-    expect(mockPush).toHaveBeenCalledWith('/zh/auth/login?redirect=%2Fzh%2Fai-quant%2Fplaza')
+    expect(openAuthMock).toHaveBeenCalledWith({ lng: 'zh', redirect: '/zh/ai-quant/plaza' })
+    expect(mockPush).not.toHaveBeenCalledWith('/zh/auth/login?redirect=%2Fzh%2Fai-quant%2Fplaza')
   })
 
   it('stores plaza-edit intent before login and redirects back to plaza', async () => {
@@ -212,7 +221,8 @@ describe('AiQuantPlazaPageClient', () => {
     })
 
     expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-edit', templateId: 'ma-cross' })
-    expect(mockPush).toHaveBeenCalledWith('/zh/auth/login?redirect=%2Fzh%2Fai-quant%2Fplaza')
+    expect(openAuthMock).toHaveBeenCalledWith({ lng: 'zh', redirect: '/zh/ai-quant/plaza' })
+    expect(mockPush).not.toHaveBeenCalledWith('/zh/auth/login?redirect=%2Fzh%2Fai-quant%2Fplaza')
   })
 
   it('runs an authenticated plaza template and navigates to strategy detail', async () => {

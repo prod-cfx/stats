@@ -73,4 +73,5 @@ apps/quantify/generated/
 /release/
 .omx/
 .claude/worktrees/
+.worktrees/
 .claude/scheduled_tasks.lock

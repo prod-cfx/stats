@@ -32,6 +32,12 @@ jest.mock('@/hooks/use-auth', () => ({
   }),
 }))
 
+jest.mock('@/features/auth/AuthSheetProvider', () => ({
+  useAuthSheet: () => ({
+    openAuth: jest.fn(),
+  }),
+}))
+
 jest.mock('@/components/account/ai-quant-strategy-store', () => ({
   upsertStrategyDeployment: jest.fn(),
 }))

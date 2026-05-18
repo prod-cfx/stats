@@ -7,8 +7,10 @@ import { StrategyDetailPageClient } from './StrategyDetailPageClient'
 
 const mockFetchDetail = jest.fn()
 const mockMapDetailToRecord = jest.fn()
+const mockOpenAuth = jest.fn()
 const mockDetailProps: Array<Record<string, unknown>> = []
 const stableSession = { userId: 'user-1' }
+let mockSession: { userId: string } | null = stableSession
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -16,9 +18,17 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('@/hooks/use-auth', () => ({
   useAuth: () => ({
-    session: stableSession,
+    session: mockSession,
     isLoading: false,
   }),
+}))
+
+jest.mock('@/features/auth/AuthSheetProvider', () => ({
+  useAuthSheet: () => ({ openAuth: mockOpenAuth }),
+}))
+
+jest.mock('@/features/auth/auth-gate-suppression', () => ({
+  shouldSuppressAuthGate: jest.fn(() => false),
 }))
 
 jest.mock('react-i18next', () => ({
@@ -64,7 +74,9 @@ describe('StrategyDetailPageClient', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     mockDetailProps.length = 0
+    mockSession = stableSession
     mockFetchDetail.mockReset()
+    mockOpenAuth.mockReset()
     mockMapDetailToRecord.mockReset()
     mockFetchDetail.mockResolvedValue({ id: 'detail-1' })
     mockMapDetailToRecord.mockReturnValue({
@@ -114,5 +126,33 @@ describe('StrategyDetailPageClient', () => {
     expect(mockDetailProps.at(-1)).not.toHaveProperty('onUpdateLeverage')
     expect(mockDetailProps.at(-1)).not.toHaveProperty('isUpdatingLeverage')
     expect(mockDetailProps.at(-1)).not.toHaveProperty('leverageUpdateError')
+  })
+
+  it('opens the auth sheet and skips detail fetch when unauthenticated', async () => {
+    mockSession = null
+
+    await act(async () => {
+      root.render(<StrategyDetailPageClient lng="zh" id="inst-1" />)
+    })
+
+    expect(mockOpenAuth).toHaveBeenCalledWith({
+      lng: 'zh',
+      redirect: '/zh/account/ai-quant/strategy/inst-1',
+      closeRedirect: '/zh/account?tab=ai-quant',
+    })
+    expect(mockFetchDetail).not.toHaveBeenCalled()
+  })
+
+  it('suppresses auth sheet after logout on the strategy detail page', async () => {
+    const { shouldSuppressAuthGate } = await import('@/features/auth/auth-gate-suppression')
+    ;(shouldSuppressAuthGate as jest.Mock).mockReturnValueOnce(true)
+    mockSession = null
+
+    await act(async () => {
+      root.render(<StrategyDetailPageClient lng="zh" id="inst-1" />)
+    })
+
+    expect(mockOpenAuth).not.toHaveBeenCalled()
+    expect(mockFetchDetail).not.toHaveBeenCalled()
   })
 })

@@ -4,6 +4,8 @@ import type { AiQuantStrategyRecord } from '@/components/account/ai-quant-strate
 import { useEffect, useState } from 'react'
 import { mapAccountStrategyDetailToRecord } from '@/components/account/ai-quant-strategy-api-adapter'
 import { AiQuantStrategyDetail } from '@/components/account/AiQuantStrategyDetail'
+import { shouldSuppressAuthGate } from '@/features/auth/auth-gate-suppression'
+import { useAuthSheet } from '@/features/auth/AuthSheetProvider'
 import { useAuth } from '@/hooks/use-auth'
 import { fetchAccountAiQuantStrategyDetail } from '@/lib/api'
 
@@ -14,14 +16,17 @@ interface StrategyDetailPageClientProps {
 
 export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientProps) {
   const { session, isLoading } = useAuth()
+  const { openAuth } = useAuthSheet()
   const [strategy, setStrategy] = useState<AiQuantStrategyRecord | null>(null)
   const [isDetailLoading, setIsDetailLoading] = useState(true)
+  const strategyRedirect = `/${lng}/account/ai-quant/strategy/${id}`
 
   useEffect(() => {
     if (!isLoading && !session) {
-      window.location.href = `/${lng}/auth/login?redirect=${encodeURIComponent(`/${lng}/account/ai-quant/strategy/${id}`)}`
+      if (shouldSuppressAuthGate()) return
+      openAuth({ lng, redirect: strategyRedirect, closeRedirect: `/${lng}/account?tab=ai-quant` })
     }
-  }, [id, isLoading, lng, session])
+  }, [isLoading, lng, openAuth, session, strategyRedirect])
 
   useEffect(() => {
     if (isLoading || !session) return

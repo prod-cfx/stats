@@ -40,6 +40,12 @@ jest.mock('@/hooks/use-auth', () => ({
   }),
 }))
 
+jest.mock('@/features/auth/AuthSheetProvider', () => ({
+  useAuthSheet: () => ({
+    openAuth: jest.fn(),
+  }),
+}))
+
 jest.mock('@/components/ai-quant/ConversationSidebar', () => ({
   ConversationSidebar: () => <div data-testid="sidebar" />,
 }))

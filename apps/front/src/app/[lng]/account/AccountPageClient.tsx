@@ -8,6 +8,8 @@ import { AiQuantSection } from '@/components/account/AiQuantSection'
 import { ExchangeApiSection } from '@/components/account/ExchangeApiSection'
 import { UserAvatar } from '@/components/account/UserAvatar'
 import { useToast } from '@/components/ui/toast'
+import { shouldSuppressAuthGate, suppressNextAuthGate } from '@/features/auth/auth-gate-suppression'
+import { useAuthSheet } from '@/features/auth/AuthSheetProvider'
 import { TelegramLoginButtons } from '@/features/auth/components/TelegramLoginButtons'
 import { useAuth } from '@/hooks/use-auth'
 
@@ -35,6 +37,7 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
   const { t } = useTranslation()
   const { error, success } = useToast()
   const { session, isLoading, sendEmailCode, bindEmail, logout } = useAuth()
+  const { openAuth } = useAuthSheet()
   const [bindEmailValue, setBindEmailValue] = useState('')
   const [bindEmailCode, setBindEmailCode] = useState('')
   const [busy, setBusy] = useState(false)
@@ -44,11 +47,17 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
     desktopAvailable: false,
   })
 
+  const searchParamString = searchParams?.toString() ?? ''
+  const accountRedirect = useMemo(() => {
+    return searchParamString ? `/${lng}/account?${searchParamString}` : `/${lng}/account`
+  }, [lng, searchParamString])
+
   useEffect(() => {
     if (!isLoading && !session) {
-      router.replace(`/${lng}/auth/login`)
+      if (shouldSuppressAuthGate()) return
+      openAuth({ lng, redirect: accountRedirect, closeRedirect: `/${lng}` })
     }
-  }, [isLoading, lng, router, session])
+  }, [accountRedirect, isLoading, lng, openAuth, session])
 
   const loginMethods = useMemo(() => new Set(session?.loginMethods || []), [session?.loginMethods])
   const tabParam = searchParams?.get('tab')
@@ -180,8 +189,9 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
             <button
               type="button"
               onClick={() => {
+                suppressNextAuthGate()
                 logout()
-                router.replace(`/${lng}/auth/login`)
+                router.replace(`/${lng}`)
               }}
               className="inline-flex w-fit self-end items-center gap-2 rounded-full border border-[color:var(--cf-border)] px-4 py-2 text-xs font-semibold text-[color:var(--cf-text-strong)] transition hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-500 md:self-auto"
             >

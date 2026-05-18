@@ -6,6 +6,7 @@ import React, { useMemo } from 'react'
 import { I18nextProvider } from 'react-i18next'
 import { ToastProvider } from '@/components/ui/toast'
 import { AuthProvider } from '@/features/auth/AuthProvider'
+import { AuthSheetProvider } from '@/features/auth/AuthSheetProvider'
 import { createAppI18n } from '@/lib/i18n'
 import { I18nSync } from './I18nSync'
 import { ThemeProvider } from './ThemeProvider'
@@ -24,8 +25,10 @@ export function AppProviders({ children, lng = 'zh' }: AppProvidersProps) {
       <ThemeProvider>
         <AuthProvider>
           <ToastProvider>
-            <I18nSync />
-            {children}
+            <AuthSheetProvider>
+              <I18nSync />
+              {children}
+            </AuthSheetProvider>
           </ToastProvider>
         </AuthProvider>
       </ThemeProvider>
