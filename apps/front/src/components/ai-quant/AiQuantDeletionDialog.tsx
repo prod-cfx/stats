@@ -9,6 +9,7 @@ export type AiQuantDeletionDialogKind =
   | 'running'
   | 'with-conversation'
   | 'no-conversation'
+  | 'conversation-only'
 
 export interface AiQuantDeletionDialogProps {
   open: boolean
@@ -51,6 +52,11 @@ function resolveContent(kind: AiQuantDeletionDialogKind, t: (key: string) => str
       return {
         title: t('aiQuant.deleteDialog.noConversationTitle'),
         description: t('aiQuant.deleteDialog.noConversationDescription'),
+      }
+    case 'conversation-only':
+      return {
+        title: t('aiQuant.deleteDialog.conversationOnlyTitle'),
+        description: t('aiQuant.deleteDialog.conversationOnlyDescription'),
       }
     case 'with-conversation':
     default:
@@ -162,6 +168,12 @@ export function AiQuantDeletionDialog({
     primaryHandler = onGoToRunningStrategy ?? null
     secondaryLabel = t('aiQuant.deleteDialog.close')
     secondaryHandler = onClose
+  } else if (kind === 'conversation-only') {
+    primaryLabel = t('aiQuant.deleteDialog.deleteConversation')
+    primaryClassName = DESTRUCTIVE_PRIMARY_CLASS
+    primaryHandler = onConfirm
+    secondaryLabel = t('aiQuant.deleteDialog.cancel')
+    secondaryHandler = onClose
   } else if (kind === 'with-conversation') {
     primaryLabel = deleteStoppedStrategy
       ? t('aiQuant.deleteDialog.deleteConversationAndStrategy')
@@ -193,7 +205,7 @@ export function AiQuantDeletionDialog({
   // - with-conversation：勾选 = 在删除会话之外同时归档策略
   // - no-conversation（plaza）：勾选 = 把主按钮从「保留为只读」切换到「彻底删除策略」
   const showCheckbox = kind === 'with-conversation' || kind === 'no-conversation'
-  const showInfoBlock = kind === 'with-conversation' || kind === 'running' || kind === 'no-conversation'
+  const showInfoBlock = kind === 'with-conversation' || kind === 'running' || kind === 'no-conversation' || kind === 'conversation-only'
   const checkboxLabel = kind === 'no-conversation'
     ? {
         main: t('aiQuant.deleteDialog.deleteStrategyRecord'),

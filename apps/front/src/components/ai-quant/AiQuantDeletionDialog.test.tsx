@@ -12,6 +12,9 @@ const mockTranslations: Record<string, string> = {
   'aiQuant.deleteDialog.cancel': '取消',
   'aiQuant.deleteDialog.close': '关闭',
   'aiQuant.deleteDialog.conversation': '会话',
+  'aiQuant.deleteDialog.conversationOnlyDescription': '删除后，这个会话里的对话内容和生成过程将无法恢复。',
+  'aiQuant.deleteDialog.conversationOnlyTitle': '删除 AI Quant 会话',
+  'aiQuant.deleteDialog.deleteConversation': '删除会话',
   'aiQuant.deleteDialog.deleteConversationAndStrategy': '删除会话和策略',
   'aiQuant.deleteDialog.deleteConversationOnly': '仅删除会话',
   'aiQuant.deleteDialog.deleteStoppedStrategy': '同时删除已停止策略记录',
@@ -58,7 +61,7 @@ afterEach(() => {
 
 interface RenderProps {
   open?: boolean
-  kind?: 'loading' | 'unknown' | 'running' | 'with-conversation' | 'no-conversation'
+  kind?: 'loading' | 'unknown' | 'running' | 'with-conversation' | 'no-conversation' | 'conversation-only'
   pending?: boolean
   errorMessage?: string | null
   conversation?: { title: string } | null
@@ -80,7 +83,7 @@ async function render(props: RenderProps) {
         pending: props.pending ?? false,
         errorMessage: props.errorMessage ?? null,
         conversation: props.conversation ?? { title: 'Conv-1' },
-        strategy: props.strategy ?? { name: 'Stg-1', id: 'stg-1' },
+        strategy: Object.hasOwn(props, 'strategy') ? props.strategy : { name: 'Stg-1', id: 'stg-1' },
         deleteStoppedStrategy: props.deleteStoppedStrategy ?? false,
         onToggleDeleteStoppedStrategy: props.onToggleDeleteStoppedStrategy ?? jest.fn(),
         onConfirm: props.onConfirm ?? jest.fn(),
@@ -111,6 +114,36 @@ describe('AiQuantDeletionDialog', () => {
     await render({ kind: 'with-conversation', deleteStoppedStrategy: true })
     const primary = container.querySelector('[data-testid="ai-quant-deletion-primary"]')
     expect(primary?.textContent).toContain('删除会话和策略')
+  })
+
+  it('conversation-only kind confirms ordinary conversation deletion without strategy controls', async () => {
+    const onConfirm = jest.fn()
+    const onClose = jest.fn()
+
+    await render({
+      kind: 'conversation-only',
+      conversation: { title: 'Price Momentum draft' },
+      strategy: undefined,
+      onConfirm,
+      onClose,
+    })
+
+    const dialog = container.querySelector('[role="dialog"]')
+    expect(dialog?.textContent).toContain('删除 AI Quant 会话')
+    expect(dialog?.textContent).toContain('删除后，这个会话里的对话内容和生成过程将无法恢复。')
+    expect(dialog?.textContent).toContain('Price Momentum draft')
+    expect(dialog?.textContent).toContain('会话')
+    expect(container.querySelector('[data-testid="ai-quant-deletion-primary"]')?.textContent).toContain('删除会话')
+    expect(container.querySelector('[data-testid="ai-quant-deletion-secondary"]')?.textContent).toContain('取消')
+    expect(container.querySelector('input[type="checkbox"]')).toBeNull()
+    expect(container.textContent).not.toContain('策略')
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="ai-quant-deletion-primary"]')?.click()
+    })
+
+    expect(onConfirm).toHaveBeenCalledTimes(1)
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('no-conversation default (unchecked): primary "保留为只读", secondary "取消", checkbox shows "彻底删除策略记录"', async () => {

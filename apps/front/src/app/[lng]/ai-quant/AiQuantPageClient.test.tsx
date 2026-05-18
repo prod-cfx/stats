@@ -201,6 +201,15 @@ jest.mock('@/lib/api', () => ({
   updateAiQuantConversationBacktestDraft: jest.fn(async () => undefined),
 }))
 
+jest.mock('@/lib/toast', () => ({
+  toast: {
+    success: jest.fn(),
+    error: jest.fn(),
+    warning: jest.fn(),
+    info: jest.fn(),
+  },
+}))
+
 function seedConfirmedConversation(now = Date.now()) {
   localStorage.setItem('ai_quant_conversations_v1', JSON.stringify([
     {
@@ -1371,9 +1380,186 @@ describe('AiQuantPageClient backtest range integration', () => {
       await Promise.resolve()
     })
 
+    expect(deleteAiQuantConversation).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('aiQuant.deleteDialog.conversationOnlyTitle')
+    expect(container.textContent).toContain('server-conv-1')
+
+    await act(async () => {
+      ;(container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
     expect(deleteAiQuantConversation).toHaveBeenCalledWith('conv-1')
     expect(container.textContent).not.toContain('server-message-1')
     expect(container.textContent).toContain('server-message-2')
+  })
+
+  it('keeps an ordinary server-owned conversation when delete confirmation is canceled', async () => {
+    localStorage.clear()
+
+    const { listAiQuantConversations, deleteAiQuantConversation } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+      deleteAiQuantConversation: jest.Mock
+    }
+
+    listAiQuantConversations.mockResolvedValue([{
+      id: 'conv-cancel',
+      status: 'CONFIRM_GATE',
+      updatedAt: '2026-04-10T12:00:00.000Z',
+      conversationTitle: 'cancel-conv',
+      conversationMessages: [{ role: 'assistant', content: 'cancel-message' }],
+    }])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      ;(container.querySelector('[data-testid="delete-conv-cancel"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      ;(container.querySelector('[data-testid="ai-quant-deletion-secondary"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+    })
+
+    expect(deleteAiQuantConversation).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('cancel-message')
+    expect(container.querySelector('[data-testid="ai-quant-deletion-primary"]')).toBeNull()
+  })
+
+  it('shows a success toast after deleting an ordinary server-owned conversation', async () => {
+    localStorage.clear()
+
+    const { listAiQuantConversations } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+    }
+    const { toast } = jest.requireMock('@/lib/toast') as {
+      toast: { success: jest.Mock }
+    }
+
+    listAiQuantConversations.mockResolvedValue([{
+      id: 'conv-toast',
+      status: 'CONFIRM_GATE',
+      updatedAt: '2026-04-10T12:00:00.000Z',
+      conversationTitle: 'toast-conv',
+      conversationMessages: [{ role: 'assistant', content: 'toast-message' }],
+    }])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      ;(container.querySelector('[data-testid="delete-conv-toast"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      ;(container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(toast.success).toHaveBeenCalledWith({
+      title: 'aiQuant.deleteDialog.conversationDeleted',
+    })
+  })
+
+  it('keeps the delete dialog open and does not show success toast when ordinary server delete fails', async () => {
+    localStorage.clear()
+
+    const { listAiQuantConversations, deleteAiQuantConversation } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+      deleteAiQuantConversation: jest.Mock
+    }
+    const { toast } = jest.requireMock('@/lib/toast') as {
+      toast: { success: jest.Mock }
+    }
+
+    listAiQuantConversations.mockResolvedValue([{
+      id: 'conv-fail',
+      status: 'CONFIRM_GATE',
+      updatedAt: '2026-04-10T12:00:00.000Z',
+      conversationTitle: 'fail-conv',
+      conversationMessages: [{ role: 'assistant', content: 'fail-message' }],
+    }])
+    deleteAiQuantConversation.mockRejectedValueOnce(new Error('gateway failed'))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      ;(container.querySelector('[data-testid="delete-conv-fail"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      ;(container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain('gateway failed')
+    expect(container.textContent).toContain('fail-message')
+    expect(container.querySelector('[data-testid="ai-quant-deletion-primary"]')).not.toBeNull()
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
+  it('confirms local-only conversation deletion before removing it from local storage', async () => {
+    localStorage.clear()
+    seedConfirmedConversation(Date.now())
+
+    const { toast } = jest.requireMock('@/lib/toast') as {
+      toast: { success: jest.Mock }
+    }
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      ;(container.querySelector('[data-testid="delete-conv-1"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain('aiQuant.deleteDialog.conversationOnlyTitle')
+    expect(localStorage.getItem('ai_quant_conversations_v1')).toContain('"id":"conv-1"')
+
+    await act(async () => {
+      ;(container.querySelector('[data-testid="ai-quant-deletion-secondary"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="ai-quant-deletion-primary"]')).toBeNull()
+    expect(localStorage.getItem('ai_quant_conversations_v1')).toContain('"id":"conv-1"')
+
+    await act(async () => {
+      ;(container.querySelector('[data-testid="delete-conv-1"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      ;(container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(localStorage.getItem('ai_quant_conversations_v1')).not.toContain('"id":"conv-1"')
+    expect(toast.success).toHaveBeenCalledWith({
+      title: 'aiQuant.deleteDialog.conversationDeleted',
+    })
   })
 
   it('blocks deleting a server-owned conversation while its linked strategy is running', async () => {
@@ -1452,6 +1638,16 @@ describe('AiQuantPageClient backtest range integration', () => {
 
     await act(async () => {
       (container.querySelector('[data-testid="delete-conv-missing-strategy"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(deleteAiQuantConversation).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('aiQuant.deleteDialog.conversationOnlyTitle')
+    expect(container.textContent).toContain('missing-strategy-conv')
+
+    await act(async () => {
+      ;(container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement).click()
       await Promise.resolve()
       await Promise.resolve()
     })

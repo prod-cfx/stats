@@ -49,6 +49,7 @@ import {
   updateAiQuantConversationBacktestDraft,
 } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
+import { toast } from '@/lib/toast'
 import { runAiQuantBacktest } from './ai-quant-page-backtest'
 import {
   getSemanticGraphValidationMessage,
@@ -128,7 +129,7 @@ type ConversationDeleteDialogState = {
   serverConversationId: string
   strategyInstanceId: string
   strategy: AccountAiQuantStrategyDetail | null
-  status: 'loading' | 'running' | 'stopped' | 'draft' | 'unknown'
+  status: 'loading' | 'running' | 'stopped' | 'draft' | 'unknown' | 'conversation-only'
   deleteStoppedStrategy: boolean
   pending: boolean
   errorMessage: string | null
@@ -960,10 +961,12 @@ export function AiQuantPageClient({
     serverConversationId: string
     deleteStoppedStrategy?: boolean
   }) {
-    if (args.deleteStoppedStrategy) {
-      await deleteAiQuantConversation(args.serverConversationId, { deleteStoppedStrategy: true })
-    } else {
-      await deleteAiQuantConversation(args.serverConversationId)
+    if (serverOwnedConversations) {
+      if (args.deleteStoppedStrategy) {
+        await deleteAiQuantConversation(args.serverConversationId, { deleteStoppedStrategy: true })
+      } else {
+        await deleteAiQuantConversation(args.serverConversationId)
+      }
     }
     removeDeletedConversation(args.conversation.id)
   }
@@ -975,19 +978,30 @@ export function AiQuantPageClient({
     const strategyInstanceId = targetConversation.publishedStrategyInstanceId?.trim() ?? ''
 
     if (!serverOwnedConversations) {
-      removeDeletedConversation(conversationId)
+      setConversationDeleteDialog({
+        conversation: targetConversation,
+        serverConversationId,
+        strategyInstanceId: '',
+        strategy: null,
+        status: 'conversation-only',
+        deleteStoppedStrategy: false,
+        pending: false,
+        errorMessage: null,
+      })
       return
     }
 
     if (!strategyInstanceId) {
-      try {
-        await deleteConversationByMode({
-          conversation: targetConversation,
-          serverConversationId,
-        })
-      } catch {
-        // Keep the current lightweight sidebar behavior for unbound conversations.
-      }
+      setConversationDeleteDialog({
+        conversation: targetConversation,
+        serverConversationId,
+        strategyInstanceId: '',
+        strategy: null,
+        status: 'conversation-only',
+        deleteStoppedStrategy: false,
+        pending: false,
+        errorMessage: null,
+      })
       return
     }
 
@@ -1000,7 +1014,7 @@ export function AiQuantPageClient({
         status: 'unknown',
         deleteStoppedStrategy: false,
         pending: false,
-        errorMessage: '暂时无法确认该策略是否正在运行。为避免误删运行中的策略，请稍后重试。',
+        errorMessage: t('aiQuant.deleteDialog.unknownDescription'),
       })
       return
     }
@@ -1034,25 +1048,17 @@ export function AiQuantPageClient({
         : curr)
     } catch (error) {
       if (isAccountStrategyNotFoundError(error)) {
-        try {
-          await deleteConversationByMode({
-            conversation: targetConversation,
-            serverConversationId,
-          })
-          setConversationDeleteDialog(null)
-          return
-        } catch (deleteError) {
-          setConversationDeleteDialog(curr => curr && curr.conversation.id === conversationId
-            ? {
-                ...curr,
-                status: 'unknown',
-                errorMessage: deleteError instanceof Error && deleteError.message.trim()
-                  ? deleteError.message
-                  : '删除失败，请稍后重试。',
-              }
-            : curr)
-          return
-        }
+        setConversationDeleteDialog(curr => curr && curr.conversation.id === conversationId
+          ? {
+              ...curr,
+              strategyInstanceId: '',
+              strategy: null,
+              status: 'conversation-only',
+              pending: false,
+              errorMessage: null,
+            }
+          : curr)
+        return
       }
 
       setConversationDeleteDialog(curr => curr && curr.conversation.id === conversationId
@@ -1061,7 +1067,7 @@ export function AiQuantPageClient({
             status: 'unknown',
             errorMessage: error instanceof Error && error.message.trim()
               ? error.message
-              : '暂时无法确认该策略是否正在运行。为避免误删运行中的策略，请稍后重试。',
+              : t('aiQuant.deleteDialog.unknownDescription'),
           }
         : curr)
     }
@@ -1078,6 +1084,11 @@ export function AiQuantPageClient({
         serverConversationId: conversationDeleteDialog.serverConversationId,
         deleteStoppedStrategy: conversationDeleteDialog.deleteStoppedStrategy,
       })
+      toast.success({
+        title: t(conversationDeleteDialog.deleteStoppedStrategy
+          ? 'aiQuant.deleteDialog.conversationAndStrategyDeleted'
+          : 'aiQuant.deleteDialog.conversationDeleted'),
+      })
       setConversationDeleteDialog(null)
     } catch (error) {
       setConversationDeleteDialog(curr => curr
@@ -1086,7 +1097,7 @@ export function AiQuantPageClient({
             pending: false,
             errorMessage: error instanceof Error && error.message.trim()
               ? error.message
-              : '删除失败，请稍后重试。',
+              : t('aiQuant.deleteDialog.deleteFailed'),
           }
         : curr)
     }
@@ -2098,6 +2109,7 @@ export function AiQuantPageClient({
           if (status === 'loading') return 'loading'
           if (status === 'running') return 'running'
           if (status === 'unknown') return 'unknown'
+          if (status === 'conversation-only') return 'conversation-only'
           return 'with-conversation'
         })()}
         pending={conversationDeleteDialog?.pending ?? false}
@@ -2105,7 +2117,7 @@ export function AiQuantPageClient({
         conversation={conversationDeleteDialog
           ? { title: conversationDeleteDialog.conversation.title }
           : null}
-        strategy={conversationDeleteDialog
+        strategy={conversationDeleteDialog && conversationDeleteDialog.strategyInstanceId
           ? {
               name: conversationDeleteDialog.strategy?.name ?? null,
               id: conversationDeleteDialog.strategyInstanceId,
