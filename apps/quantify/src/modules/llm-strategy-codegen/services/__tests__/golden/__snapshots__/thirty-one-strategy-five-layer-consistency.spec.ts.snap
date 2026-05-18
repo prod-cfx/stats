@@ -1,0 +1,126 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`#1496 31-strategy golden harness — five-layer consistency (sample) #1 OKX BTCUSDT perp 双向网格 60000-80000 — 五层 hash + scriptAtoms inline snapshot 1`] = `
+{
+  "astHash": "29562498c214d239",
+  "displayGraphHash": "2bc0ea08ea18c333",
+  "id": 1,
+  "irHash": "cf06065016fe5e1f",
+  "rulesTreeHash": "6e146933847bd52f",
+  "scriptAtoms": [
+    "grid.range_rebalance",
+    "risk.stop_loss_pct",
+    "risk.take_profit_pct",
+  ],
+  "specHash": "cdfc14ac1035dae4",
+}
+`;
+
+exports[`#1496 31-strategy golden harness — five-layer consistency (sample) #2 EMA trend gate + BOLL trigger 双向开仓 — 五层 hash + scriptAtoms inline snapshot 1`] = `
+{
+  "astHash": "6ef895e9205ad11f",
+  "displayGraphHash": "2bc0ea08ea18c333",
+  "id": 2,
+  "irHash": "2aae1a50ef74bb15",
+  "rulesTreeHash": "3adbaffd02a19914",
+  "scriptAtoms": [
+    "bollinger.touch_lower",
+    "bollinger.touch_upper",
+    "indicator.above",
+    "indicator.below",
+    "risk.stop_loss_pct",
+  ],
+  "specHash": "816f63a164651ea1",
+}
+`;
+
+exports[`#1496 31-strategy golden harness — five-layer consistency (sample) #4 BOLL 上/下/中轨双向 + 中轨平仓（不降级 internal boundary） — 五层 hash + scriptAtoms inline snapshot 1`] = `
+{
+  "astHash": "29562498c214d239",
+  "displayGraphHash": "2bc0ea08ea18c333",
+  "id": 4,
+  "irHash": "cf06065016fe5e1f",
+  "rulesTreeHash": "a6bdf726e869ce4e",
+  "scriptAtoms": [
+    "bollinger.touch_lower",
+    "bollinger.touch_middle",
+    "bollinger.touch_upper",
+  ],
+  "specHash": "cdfc14ac1035dae4",
+}
+`;
+
+exports[`#1496 31-strategy golden harness — five-layer consistency (sample) #8 阳线开多 / 阴线平多（candle pattern） — 五层 hash + scriptAtoms inline snapshot 1`] = `
+{
+  "astHash": "fc67adc5ae845fdd",
+  "displayGraphHash": "2bc0ea08ea18c333",
+  "id": 8,
+  "irHash": "56562da6d5d835e4",
+  "rulesTreeHash": "e898d1f20045593a",
+  "scriptAtoms": [],
+  "specHash": "a02d7e5faebdbb08",
+}
+`;
+
+exports[`#1496 31-strategy golden harness — five-layer consistency (sample) #9 EMA7 上穿 EMA21 + 下穿平多（publishable） — 五层 hash + scriptAtoms inline snapshot 1`] = `
+{
+  "astHash": "6ef895e9205ad11f",
+  "displayGraphHash": "2bc0ea08ea18c333",
+  "id": 9,
+  "irHash": "2aae1a50ef74bb15",
+  "rulesTreeHash": "2f0747b6c8f3e0c0",
+  "scriptAtoms": [
+    "indicator.cross_over",
+    "indicator.cross_under",
+  ],
+  "specHash": "816f63a164651ea1",
+}
+`;
+
+exports[`#1496 31-strategy golden harness — five-layer consistency (sample) #21 SOL 30m MA100 + MACD 金叉买入 / 跌破 MA100 OR 死叉卖出 — 五层 hash + scriptAtoms inline snapshot 1`] = `
+{
+  "astHash": "5ee98ae3d25ef486",
+  "displayGraphHash": "2bc0ea08ea18c333",
+  "id": 21,
+  "irHash": "26d00db3ffc780fd",
+  "rulesTreeHash": "f9b45d580be82cf8",
+  "scriptAtoms": [
+    "indicator.above",
+    "indicator.below",
+    "indicator.cross_over",
+    "indicator.cross_under",
+  ],
+  "specHash": "b2796e757c13b2af",
+}
+`;
+
+exports[`#1496 31-strategy golden harness — five-layer consistency (sample) #24 binance BTCUSDT perp 多周期 EMA20 上方买入 / 15m 跌破卖出 — 五层 hash + scriptAtoms inline snapshot 1`] = `
+{
+  "astHash": "ea75bf0515ccdf5f",
+  "displayGraphHash": "2bc0ea08ea18c333",
+  "id": 24,
+  "irHash": "ad9c9b619299d5fd",
+  "rulesTreeHash": "92b1cfd43f8e7af5",
+  "scriptAtoms": [
+    "indicator.above",
+    "indicator.below",
+  ],
+  "specHash": "a52df13f7455f098",
+}
+`;
+
+exports[`#1496 31-strategy golden harness — five-layer consistency (sample) #26 RSI 跌破阈值入场 / 回到阈值出场 — 五层 hash + scriptAtoms inline snapshot 1`] = `
+{
+  "astHash": "6ef895e9205ad11f",
+  "displayGraphHash": "2bc0ea08ea18c333",
+  "id": 26,
+  "irHash": "2aae1a50ef74bb15",
+  "rulesTreeHash": "b02c846315f6e339",
+  "scriptAtoms": [
+    "oscillator.rsi_gte",
+    "oscillator.rsi_lte",
+    "risk.stop_loss_pct",
+  ],
+  "specHash": "816f63a164651ea1",
+}
+`;
