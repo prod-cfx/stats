@@ -14,6 +14,7 @@ import '../pages/market/market_home_page.dart';
 import '../pages/me/api_settings_page.dart';
 import '../pages/me/me_home_page.dart';
 import '../pages/me/theme_settings_page.dart';
+import '../pages/strategy/strategy_detail_page.dart';
 import '../pages/strategy/strategy_home_page.dart';
 import '../pages/whale/whale_home_page.dart';
 import '../shell/main_shell_scaffold.dart';
@@ -142,6 +143,11 @@ GoRouter buildRouter({
         path: r'/market/:symbol([A-Z0-9-]{2,})',
         builder: (BuildContext context, GoRouterState s) =>
             MarketDetailPage(symbol: s.pathParameters['symbol']!),
+      ),
+      GoRoute(
+        path: '/strategy/:id',
+        builder: (BuildContext context, GoRouterState s) =>
+            StrategyDetailPage(id: s.pathParameters['id']!),
       ),
       GoRoute(
         path: '/ai/backtest-config',

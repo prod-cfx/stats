@@ -72,6 +72,14 @@ class UnimplementedStrategyRepository implements StrategyRepository {
   Future<List<StrategyCard>> listMine() => _todo('StrategyRepository');
   @override
   Future<StrategyCard> getDetail(String id) => _todo('StrategyRepository');
+  @override
+  Future<StrategyMarketPage> listMarket({
+    int page = 1,
+    int pageSize = 10,
+    String? query,
+    StrategyCategory? category,
+  }) =>
+      _todo('StrategyRepository');
 }
 
 class UnimplementedAiChatRepository implements AiChatRepository {
