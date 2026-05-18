@@ -1,0 +1,208 @@
+/* ==========================================================
+   Quantify — Design Tokens (single source of truth)
+   Used by both the web app (index.html / styles.css) and
+   the mobile design (mobile/*.jsx).
+   
+   Themes:  light | dark | pink   (set on <html data-theme=...>)
+   Accents: violet | cyan | amber (set on <html data-accent=...>)
+   
+   Both default to light + violet to match the original brand.
+   ========================================================== */
+
+/* ---------- accents (apply on top of any theme) ---------- */
+
+:root,
+[data-accent="violet"] {
+  --accent:        #7C5CFF;
+  --accent-2:      #9B7BFF;
+  --accent-grad:   linear-gradient(180deg, #A78BFA 0%, #7C3AED 100%);
+  --accent-soft:   #F2EEFF;
+  --accent-ring:   rgba(124, 92, 255, 0.22);
+  --accent-shadow: 0 4px 14px rgba(124, 92, 255, 0.28);
+  --accent-pop:    0 16px 48px rgba(124, 92, 255, 0.20);
+  --accent-on:     #ffffff;
+}
+[data-accent="cyan"] {
+  --accent:        #06B6D4;
+  --accent-2:      #22D3EE;
+  --accent-grad:   linear-gradient(180deg, #67E8F9 0%, #0891B2 100%);
+  --accent-soft:   #E0F7FB;
+  --accent-ring:   rgba(6, 182, 212, 0.22);
+  --accent-shadow: 0 4px 14px rgba(6, 182, 212, 0.32);
+  --accent-pop:    0 16px 48px rgba(6, 182, 212, 0.22);
+  --accent-on:     #ffffff;
+}
+[data-accent="amber"] {
+  --accent:        #D97706;
+  --accent-2:      #F59E0B;
+  --accent-grad:   linear-gradient(180deg, #FBBF24 0%, #D97706 100%);
+  --accent-soft:   #FEF3C7;
+  --accent-ring:   rgba(217, 119, 6, 0.22);
+  --accent-shadow: 0 4px 14px rgba(217, 119, 6, 0.32);
+  --accent-pop:    0 16px 48px rgba(217, 119, 6, 0.22);
+  --accent-on:     #ffffff;
+}
+
+/* dark theme needs a slightly softer accent-soft so it shows
+   on a dark surface — overrides per accent below */
+[data-theme="dark"][data-accent="violet"] {
+  --accent-soft: rgba(124, 92, 255, 0.18);
+}
+[data-theme="dark"][data-accent="cyan"] {
+  --accent-soft: rgba(34, 211, 238, 0.18);
+}
+[data-theme="dark"][data-accent="amber"] {
+  --accent-soft: rgba(245, 158, 11, 0.20);
+}
+
+/* ---------- themes ---------- */
+
+:root,
+[data-theme="light"] {
+  /* surfaces */
+  --bg:            #F4F5F8;
+  --bg-elev:       #FFFFFF;
+  --bg-soft:       #F8F9FC;
+  --bg-input:      #FFFFFF;
+
+  /* text */
+  --text:          #0F1623;
+  --text-mid:      #4C5566;
+  --text-dim:      #8A93A6;
+  --text-faint:    #B2B9C7;
+  --text-on-bg:    #0F1623;
+
+  /* lines */
+  --border:        #E6E8EE;
+  --border-soft:   #EFF1F5;
+  --border-strong: #D7DBE4;
+
+  /* status */
+  --ok:            #16A36B;
+  --ok-soft:       #E7F6EE;
+  --warn:          #D98008;
+  --warn-soft:     #FDF2DF;
+  --danger:        #DC4646;
+  --danger-soft:   #FCEAEA;
+  --info:          #2A6FDB;
+  --info-soft:     #E7EFFB;
+
+  /* market */
+  --mk-up:         #16A36B;
+  --mk-dn:         #E5484D;
+  --mk-up-soft:    #E7F6EE;
+  --mk-dn-soft:    #FCEAEA;
+
+  /* shadow */
+  --shadow-sm:     0 1px 2px rgba(15,22,35,0.04);
+  --shadow-md:     0 4px 14px rgba(15,22,35,0.06);
+  --shadow-lg:     0 12px 40px rgba(15,22,35,0.10);
+
+  /* surface meta */
+  --tab-blur:      rgba(255,255,255,0.78);
+  --scrim:         rgba(15,22,35,0.45);
+  color-scheme:    light;
+}
+
+[data-theme="pink"] {
+  --bg:            #FFF1F5;
+  --bg-elev:       #FFFFFF;
+  --bg-soft:       #FCE6EE;
+  --bg-input:      #FFFFFF;
+
+  --text:          #2A0F1F;
+  --text-mid:      #5B3D4C;
+  --text-dim:      #998088;
+  --text-faint:    #C6AEB7;
+  --text-on-bg:    #2A0F1F;
+
+  --border:        #F4D8E3;
+  --border-soft:   #FBE6EE;
+  --border-strong: #E9BFCF;
+
+  --ok:            #16A36B;
+  --ok-soft:       #E7F6EE;
+  --warn:          #D98008;
+  --warn-soft:     #FDF2DF;
+  --danger:        #DC4646;
+  --danger-soft:   #FCEAEA;
+  --info:          #2A6FDB;
+  --info-soft:     #E7EFFB;
+
+  --mk-up:         #16A36B;
+  --mk-dn:         #E5484D;
+  --mk-up-soft:    #E7F6EE;
+  --mk-dn-soft:    #FCEAEA;
+
+  --shadow-sm:     0 1px 2px rgba(170, 60, 110, 0.06);
+  --shadow-md:     0 4px 14px rgba(170, 60, 110, 0.08);
+  --shadow-lg:     0 12px 40px rgba(170, 60, 110, 0.12);
+
+  --tab-blur:      rgba(255,241,245,0.85);
+  --scrim:         rgba(80,20,40,0.5);
+  color-scheme:    light;
+}
+
+[data-theme="dark"] {
+  --bg:            #0F0B22;
+  --bg-elev:       #1A1530;
+  --bg-soft:       #15112A;
+  --bg-input:      #1F1A38;
+
+  --text:          #F5F4FB;
+  --text-mid:      #BAB4D0;
+  --text-dim:      #7C7793;
+  --text-faint:    #555070;
+  --text-on-bg:    #F5F4FB;
+
+  --border:        #2A2542;
+  --border-soft:   #221E38;
+  --border-strong: #3A3553;
+
+  --ok:            #34D399;
+  --ok-soft:       rgba(52, 211, 153, 0.14);
+  --warn:          #FBBF24;
+  --warn-soft:     rgba(251, 191, 36, 0.14);
+  --danger:        #F87171;
+  --danger-soft:   rgba(248, 113, 113, 0.16);
+  --info:          #60A5FA;
+  --info-soft:     rgba(96, 165, 250, 0.16);
+
+  --mk-up:         #34D399;
+  --mk-dn:         #F87171;
+  --mk-up-soft:    rgba(52, 211, 153, 0.14);
+  --mk-dn-soft:    rgba(248, 113, 113, 0.16);
+
+  --shadow-sm:     0 1px 2px rgba(0,0,0,0.40);
+  --shadow-md:     0 4px 14px rgba(0,0,0,0.30);
+  --shadow-lg:     0 12px 40px rgba(0,0,0,0.50);
+
+  --tab-blur:      rgba(26, 21, 48, 0.78);
+  --scrim:         rgba(0,0,0,0.6);
+  color-scheme:    dark;
+}
+
+/* ---------- shared (theme-agnostic) ---------- */
+
+:root {
+  /* legacy aliases — keep --violet-* working everywhere
+     so existing styles.css doesn't need a sweep */
+  --violet:        var(--accent);
+  --violet-2:      var(--accent-2);
+  --violet-grad:   var(--accent-grad);
+  --violet-soft:   var(--accent-soft);
+  --violet-ring:   var(--accent-ring);
+
+  /* radius */
+  --r-card:        14px;
+  --r-input:       10px;
+  --r-pill:        999px;
+
+  /* shadow alias */
+  --shadow-pop:    var(--accent-pop);
+
+  /* font */
+  --font-sans:     "Inter", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
+                   -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono:     "JetBrains Mono", "SFMono-Regular", ui-monospace, monospace;
+}

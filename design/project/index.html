@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-accent="violet">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quantify — AI 量化工作台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    // Apply saved theme + accent BEFORE first paint to avoid flash.
+    (function () {
+      try {
+        var t = JSON.parse(localStorage.getItem("qf2.theme.v1") || "null");
+        if (t && t.theme)  document.documentElement.dataset.theme  = t.theme;
+        if (t && t.accent) document.documentElement.dataset.accent = t.accent;
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <script src="app.js"></script>
+</body>
+</html>

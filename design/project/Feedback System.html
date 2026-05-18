@@ -1,0 +1,1041 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-accent="violet">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quantify — 反馈组件统一设计语言</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tokens.css" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-sans);
+      color: var(--text);
+      background: var(--bg);
+      font-size: 14px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1440px; margin: 0 auto; padding: 56px 40px 120px; }
+
+    /* ---------- header ---------- */
+    .doc-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 48px; padding-bottom: 28px; border-bottom: 1px solid var(--border); }
+    .doc-head h1 { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 6px; }
+    .doc-head .sub { color: var(--text-mid); font-size: 14px; max-width: 560px; }
+    .doc-head .meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); text-align: right; line-height: 1.7; }
+    .doc-head .meta b { color: var(--text); font-weight: 500; }
+
+    /* ---------- section ---------- */
+    .section { margin-bottom: 72px; }
+    .section-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 8px; }
+    .section-head .num { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); letter-spacing: 0.04em; }
+    .section-head h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+    .section-head .en { color: var(--text-dim); font-size: 13px; font-weight: 400; }
+    .section-desc { color: var(--text-mid); font-size: 13px; margin-bottom: 24px; max-width: 760px; }
+
+    /* row: web + mobile side by side */
+    .row { display: grid; grid-template-columns: 1fr 420px; gap: 28px; align-items: start; margin-bottom: 28px; }
+    @media (max-width: 1100px) { .row { grid-template-columns: 1fr; } }
+
+    .pane { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+    .pane-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border-soft); background: var(--bg-soft); }
+    .pane-head .tag { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); letter-spacing: 0.06em; text-transform: uppercase; }
+    .pane-head .name { font-size: 12px; color: var(--text-mid); font-weight: 500; }
+    .pane-body { padding: 28px; }
+
+    /* mobile frame */
+    .phone { width: 360px; height: 560px; margin: 0 auto; background: #0c0c10; border-radius: 38px; padding: 8px; box-shadow: 0 20px 50px rgba(15,22,35,.18), 0 0 0 1px rgba(15,22,35,.04); position: relative; }
+    .phone-screen { width: 100%; height: 100%; background: var(--bg); border-radius: 30px; position: relative; overflow: hidden; }
+    .phone-notch { position: absolute; left: 50%; transform: translateX(-50%); top: 14px; width: 92px; height: 26px; background: #0c0c10; border-radius: 14px; z-index: 50; }
+    .phone-status { position: absolute; top: 0; left: 0; right: 0; height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 26px; font-size: 12px; font-weight: 600; color: var(--text); z-index: 10; }
+    .phone-status .right { display: flex; align-items: center; gap: 5px; }
+
+    /* ---------- icons (inline svg helper via paths) ---------- */
+    .ico { width: 18px; height: 18px; display: inline-block; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .ico-lg { width: 28px; height: 28px; }
+
+    /* ==========================================================
+       TOAST
+       ========================================================== */
+    .toast-stack { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+    .toast-stack.center { align-items: center; }
+
+    .toast {
+      display: inline-flex; align-items: center; gap: 12px;
+      min-width: 280px; max-width: 460px;
+      padding: 12px 14px 12px 14px;
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow-lg);
+      font-size: 13px;
+      color: var(--text);
+    }
+    .toast .leading {
+      width: 28px; height: 28px; border-radius: 8px;
+      display: inline-flex; align-items: center; justify-content: center;
+      flex: 0 0 auto;
+    }
+    .toast .body { flex: 1; min-width: 0; }
+    .toast .body .title { font-weight: 600; }
+    .toast .body .desc { color: var(--text-mid); font-size: 12px; margin-top: 2px; }
+    .toast .action {
+      padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 500;
+      color: var(--accent); background: transparent;
+      border: 0; cursor: pointer;
+    }
+    .toast .action:hover { background: var(--accent-soft); }
+    .toast .close { width: 22px; height: 22px; border-radius: 6px; color: var(--text-dim); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+    .toast .close:hover { background: var(--bg-soft); color: var(--text); }
+
+    .toast.success .leading { background: var(--ok-soft); color: var(--ok); }
+    .toast.error   .leading { background: var(--danger-soft); color: var(--danger); }
+    .toast.warn    .leading { background: var(--warn-soft); color: var(--warn); }
+    .toast.info    .leading { background: var(--info-soft); color: var(--info); }
+    .toast.loading .leading { background: var(--accent-soft); color: var(--accent); }
+    .toast.loading .leading .ico { animation: qfSpin 1s linear infinite; }
+
+    /* compact mobile pill toast (for short success messages) */
+    .toast-pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 16px;
+      background: rgba(15,11,34,0.92);
+      color: #fff;
+      border-radius: 999px;
+      font-size: 13px;
+      box-shadow: 0 8px 24px rgba(15,11,34,0.32);
+    }
+    .toast-pill .dot { width: 16px; height: 16px; border-radius: 50%; background: #16C783; display: inline-flex; align-items: center; justify-content: center; color: #fff; }
+    .toast-pill.error .dot { background: #F2555A; }
+    .toast-pill.loading .dot { background: var(--accent); }
+    .toast-pill.loading .dot .ico { animation: qfSpin 1s linear infinite; }
+
+    /* ==========================================================
+       INLINE BANNER
+       ========================================================== */
+    .banner {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      font-size: 13px;
+    }
+    .banner .leading { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; margin-top: 1px; }
+    .banner .body { flex: 1; }
+    .banner .body .title { font-weight: 600; color: var(--text); }
+    .banner .body .desc { color: var(--text-mid); font-size: 12px; margin-top: 2px; }
+    .banner .body .link { color: var(--accent); font-weight: 500; cursor: pointer; margin-top: 6px; display: inline-block; }
+    .banner.error   { background: var(--danger-soft); border-color: rgba(220,70,70,.20); }
+    .banner.error   .leading { background: rgba(220,70,70,.16); color: var(--danger); }
+    .banner.warn    { background: var(--warn-soft); border-color: rgba(217,128,8,.20); }
+    .banner.warn    .leading { background: rgba(217,128,8,.16); color: var(--warn); }
+    .banner.info    { background: var(--info-soft); border-color: rgba(42,111,219,.20); }
+    .banner.info    .leading { background: rgba(42,111,219,.16); color: var(--info); }
+    .banner.success { background: var(--ok-soft); border-color: rgba(22,163,107,.20); }
+    .banner.success .leading { background: rgba(22,163,107,.16); color: var(--ok); }
+    .banner .close { color: var(--text-dim); cursor: pointer; }
+
+    /* ==========================================================
+       EMPTY STATE
+       ========================================================== */
+    .empty {
+      display: flex; flex-direction: column; align-items: center; text-align: center;
+      padding: 32px 24px;
+      color: var(--text-mid);
+    }
+    .empty .art { position: relative; width: 120px; height: 120px; margin-bottom: 20px; }
+    .empty.lg .art { width: 144px; height: 144px; }
+    .empty .art .ring { position: absolute; inset: 0; border-radius: 50%; background:
+      radial-gradient(circle at 50% 45%, var(--bg-soft) 0 38%, transparent 40%),
+      conic-gradient(from 210deg, var(--border-soft) 0deg 30deg, transparent 30deg 60deg, var(--border-soft) 60deg 90deg, transparent 90deg 120deg, var(--border-soft) 120deg 150deg, transparent 150deg 360deg);
+      mask: radial-gradient(circle at 50% 50%, transparent 36%, #000 38%, #000 62%, transparent 64%);
+      -webkit-mask: radial-gradient(circle at 50% 50%, transparent 36%, #000 38%, #000 62%, transparent 64%);
+      opacity: 0.9;
+    }
+    .empty .art .disc {
+      position: absolute; inset: 14px; border-radius: 50%;
+      background: var(--bg-soft);
+      box-shadow: inset 0 0 0 1px var(--border-soft);
+    }
+    .empty .art .glyph {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      width: 48px; height: 48px;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: var(--text-dim);
+    }
+    .empty .art .glyph .ico { width: 36px; height: 36px; stroke-width: 1.6; }
+    .empty .art .badge {
+      position: absolute; right: 6px; bottom: 8px;
+      width: 30px; height: 30px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--bg-elev);
+      box-shadow: 0 4px 12px rgba(15,22,35,.10), inset 0 0 0 1px var(--border-soft);
+    }
+    .empty .art.tone-info    .badge { color: var(--info); }
+    .empty .art.tone-warn    .badge { color: var(--warn); }
+    .empty .art.tone-danger  .badge { color: var(--danger); }
+    .empty .art.tone-accent  .badge { color: var(--accent); }
+    .empty .art.tone-accent  .glyph { color: var(--accent); }
+
+    .empty h3 { font-size: 15px; font-weight: 600; color: var(--text); margin: 0 0 6px; }
+    .empty p  { font-size: 13px; color: var(--text-mid); margin: 0 0 16px; max-width: 320px; }
+    .empty .actions { display: inline-flex; gap: 10px; }
+
+    /* buttons */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 0 14px; height: 34px; border-radius: 999px;
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      background: var(--bg-elev); color: var(--text); border: 1px solid var(--border);
+    }
+    .btn:hover { border-color: var(--border-strong); background: var(--bg-soft); }
+    .btn-primary { background: var(--accent-grad); color: #fff; border-color: transparent; box-shadow: var(--accent-shadow); }
+    .btn-primary:hover { filter: brightness(1.04); }
+    .btn-ghost { background: transparent; border-color: transparent; color: var(--text-mid); }
+    .btn-ghost:hover { background: var(--bg-soft); color: var(--text); }
+    .btn-danger { background: var(--danger); color: #fff; border-color: transparent; }
+    .btn-sm { height: 30px; padding: 0 12px; font-size: 12px; }
+
+    /* ==========================================================
+       DIALOG
+       ========================================================== */
+    .dialog-stage {
+      position: relative;
+      background: linear-gradient(180deg, rgba(15,22,35,.04), rgba(15,22,35,.10));
+      border-radius: 14px;
+      padding: 28px;
+      min-height: 260px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .dialog {
+      width: 100%; max-width: 380px;
+      background: var(--bg-elev);
+      border-radius: 16px;
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+    }
+    .dialog-body { padding: 24px 24px 8px; text-align: center; }
+    .dialog .icon-wrap {
+      width: 52px; height: 52px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      margin: 0 auto 14px;
+    }
+    .dialog.danger  .icon-wrap { background: var(--danger-soft); color: var(--danger); }
+    .dialog.warn    .icon-wrap { background: var(--warn-soft);   color: var(--warn); }
+    .dialog.info    .icon-wrap { background: var(--info-soft);   color: var(--info); }
+    .dialog.success .icon-wrap { background: var(--ok-soft);     color: var(--ok); }
+    .dialog h4 { font-size: 16px; font-weight: 600; margin: 0 0 6px; color: var(--text); }
+    .dialog .msg { font-size: 13px; color: var(--text-mid); margin: 0 0 18px; }
+    .dialog .footer { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--border-soft); }
+    .dialog .footer.single { grid-template-columns: 1fr; }
+    .dialog .footer button {
+      height: 48px; border: 0; background: transparent; font-size: 14px;
+      color: var(--text); cursor: pointer; font-weight: 500;
+    }
+    .dialog .footer button:hover { background: var(--bg-soft); }
+    .dialog .footer .primary { color: var(--accent); font-weight: 600; }
+    .dialog .footer .danger { color: var(--danger); font-weight: 600; }
+    .dialog .footer button + button { border-left: 1px solid var(--border-soft); }
+
+    /* PC modal variant (with title bar, left aligned, larger) */
+    .dialog-pc {
+      width: 100%; max-width: 460px;
+      background: var(--bg-elev);
+      border-radius: 14px;
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+      text-align: left;
+    }
+    .dialog-pc .head { display: flex; align-items: flex-start; gap: 14px; padding: 22px 24px 8px; }
+    .dialog-pc .head .icon-wrap { width: 40px; height: 40px; border-radius: 12px; display:inline-flex; align-items:center; justify-content:center; flex: 0 0 auto; }
+    .dialog-pc.danger .head .icon-wrap { background: var(--danger-soft); color: var(--danger); }
+    .dialog-pc.warn   .head .icon-wrap { background: var(--warn-soft); color: var(--warn); }
+    .dialog-pc.info   .head .icon-wrap { background: var(--info-soft); color: var(--info); }
+    .dialog-pc .head .meta h4 { font-size: 16px; font-weight: 600; margin: 2px 0 4px; }
+    .dialog-pc .head .meta p  { font-size: 13px; color: var(--text-mid); margin: 0; }
+    .dialog-pc .extra {
+      margin: 12px 24px 0;
+      padding: 10px 12px;
+      background: var(--bg-soft);
+      border-radius: 8px;
+      font-family: var(--font-mono); font-size: 11px; color: var(--text-mid);
+      border: 1px solid var(--border-soft);
+    }
+    .dialog-pc .actions { display: flex; justify-content: flex-end; gap: 8px; padding: 20px 24px 20px; }
+
+    /* ==========================================================
+       In-mobile content frame
+       ========================================================== */
+    .m-screen { position: absolute; inset: 0; padding: 56px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+    .m-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 4px 8px; }
+    .m-header .title { font-size: 17px; font-weight: 600; }
+    .m-header .ic { width: 30px; height: 30px; border-radius: 50%; background: var(--bg-elev); border: 1px solid var(--border); display: inline-flex; align-items: center; justify-content: center; color: var(--text-mid); }
+    .m-list { background: var(--bg-elev); border-radius: 14px; border: 1px solid var(--border-soft); padding: 8px; flex: 1; display: flex; flex-direction: column; }
+    .m-list-row { display: flex; gap: 10px; padding: 10px 8px; border-radius: 10px; }
+    .m-list-row + .m-list-row { border-top: 1px solid var(--border-soft); }
+    .m-list .empty { flex: 1; justify-content: center; }
+
+    /* phone toast position */
+    .phone-toast-top { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); z-index: 60; width: calc(100% - 24px); max-width: 320px; }
+    .phone-toast-bottom { position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%); z-index: 60; }
+
+    /* ==========================================================
+       PC content frame (browser-ish)
+       ========================================================== */
+    .pc-frame {
+      position: relative;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      min-height: 360px;
+      overflow: hidden;
+    }
+    .pc-topbar {
+      height: 44px; padding: 0 16px;
+      display: flex; align-items: center; gap: 12px;
+      background: var(--bg-elev);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .pc-topbar .dots { display: flex; gap: 5px; }
+    .pc-topbar .dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--border-strong); display: inline-block; }
+    .pc-topbar .url { flex: 1; height: 24px; background: var(--bg-soft); border-radius: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); display: flex; align-items: center; padding: 0 10px; }
+    .pc-content { padding: 24px; min-height: 300px; position: relative; }
+
+    /* PC toast container */
+    .pc-toast-stack { position: absolute; top: 60px; right: 24px; display: flex; flex-direction: column; gap: 10px; z-index: 5; align-items: flex-end; }
+
+    /* table-ish row to give context */
+    .ctx-table { background: var(--bg-elev); border: 1px solid var(--border-soft); border-radius: 12px; overflow: hidden; }
+    .ctx-table .row { display: grid; grid-template-columns: 1fr 1fr 100px 80px; gap: 12px; padding: 12px 16px; align-items: center; font-size: 12px; }
+    .ctx-table .row + .row { border-top: 1px solid var(--border-soft); }
+    .ctx-table .row.head { color: var(--text-dim); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; background: var(--bg-soft); }
+    .skeleton-bar { height: 10px; background: linear-gradient(90deg, var(--border-soft), var(--bg-soft), var(--border-soft)); background-size: 200% 100%; animation: qfShimmer 1.6s linear infinite; border-radius: 4px; }
+
+    /* keyframes */
+    @keyframes qfSpin { to { transform: rotate(360deg); } }
+    @keyframes qfShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    @keyframes qfToastIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+    .toast { animation: qfToastIn .25s ease-out; }
+
+    /* ---------- legend / spec tables ---------- */
+    .spec { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; padding: 16px; font-size: 12px; }
+    .spec h5 { font-size: 11px; font-family: var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); margin: 0 0 10px; font-weight: 500; }
+    .spec-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; color: var(--text-mid); font-size: 12px; }
+    .spec-row .sw { width: 14px; height: 14px; border-radius: 4px; }
+    .spec-row .key { font-family: var(--font-mono); font-size: 11px; color: var(--text); min-width: 80px; }
+
+    /* token legend */
+    .tokens { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 32px; }
+    @media (max-width: 900px) { .tokens { grid-template-columns: repeat(2, 1fr); } }
+    .token-card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+    .token-card .sw { width: 28px; height: 28px; border-radius: 8px; margin-bottom: 10px; }
+    .token-card .name { font-size: 12px; font-weight: 600; color: var(--text); }
+    .token-card .role { font-size: 11px; color: var(--text-dim); margin-top: 2px; font-family: var(--font-mono); }
+
+    /* variant grid */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+    .label-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 11px; font-family: var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); }
+    .label-bar i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; background: var(--text-dim); }
+    .label-bar.ok i { background: var(--ok); }
+    .label-bar.error i { background: var(--danger); }
+    .label-bar.warn i { background: var(--warn); }
+    .label-bar.info i { background: var(--info); }
+    .label-bar.accent i { background: var(--accent); }
+
+    /* theme switch chips */
+    .theme-switch { display: inline-flex; padding: 3px; background: var(--bg-soft); border: 1px solid var(--border); border-radius: 999px; gap: 2px; }
+    .theme-switch button { height: 28px; padding: 0 14px; border-radius: 999px; font-size: 12px; color: var(--text-mid); background: transparent; border: 0; cursor: pointer; font-weight: 500; }
+    .theme-switch button.on { background: var(--bg-elev); color: var(--text); box-shadow: var(--shadow-sm); }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ============================================================ -->
+  <!-- header -->
+  <!-- ============================================================ -->
+  <header class="doc-head">
+    <div>
+      <h1>反馈系统 · Feedback System</h1>
+      <div class="sub">Quantify 平台所有异常、空状态、提示弹窗的统一设计语言 — 同一套语义色、同一套图形语言、同一套行为规范，覆盖 Web PC 与 移动端 / App。</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 12px; align-items: flex-end;">
+      <div class="theme-switch" id="themeSwitch">
+        <button data-theme="light" class="on">Light</button>
+        <button data-theme="dark">Dark</button>
+        <button data-theme="pink">Pink</button>
+      </div>
+      <div class="meta">
+        <div><b>覆盖</b> Web PC · Mobile Web · iOS / Android App</div>
+        <div><b>依赖</b> tokens.css （--ok / --warn / --danger / --info）</div>
+        <div><b>版本</b> v1.0 · 2026-05-17</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============================================================ -->
+  <!-- semantic tokens legend -->
+  <!-- ============================================================ -->
+  <div class="tokens">
+    <div class="token-card"><div class="sw" style="background: var(--ok);"></div><div class="name">Success / 成功</div><div class="role">--ok</div></div>
+    <div class="token-card"><div class="sw" style="background: var(--warn);"></div><div class="name">Warning / 警告</div><div class="role">--warn</div></div>
+    <div class="token-card"><div class="sw" style="background: var(--danger);"></div><div class="name">Error / 错误</div><div class="role">--danger</div></div>
+    <div class="token-card"><div class="sw" style="background: var(--info);"></div><div class="name">Info / 提示</div><div class="role">--info</div></div>
+    <div class="token-card"><div class="sw" style="background: var(--accent);"></div><div class="name">Brand / 操作</div><div class="role">--accent</div></div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- 1. TOAST -->
+  <!-- ============================================================ -->
+  <section class="section">
+    <div class="section-head">
+      <span class="num">01</span>
+      <h2>Toast · 轻提示</h2>
+      <span class="en">non-blocking, auto-dismiss after 3.5s · stackable · max 3 visible</span>
+    </div>
+    <div class="section-desc">
+      用于操作反馈或异步事件（保存成功、网络错误、断线重连…）。<b>Web PC</b> 出现在视窗右上角，纵向堆叠；<b>移动端</b> 出现在状态栏正下方（异常类）或贴近主按钮（操作类）。错误 / 警告类默认 <b>不自动消失</b>，必须提供「重试」或「关闭」操作。
+    </div>
+
+    <div class="row">
+      <!-- PC -->
+      <div class="pane">
+        <div class="pane-head"><span class="name">Web PC · 右上角堆叠</span><span class="tag">desktop</span></div>
+        <div class="pane-body" style="background: var(--bg-soft);">
+          <div class="pc-frame">
+            <div class="pc-topbar">
+              <div class="dots"><i></i><i></i><i></i></div>
+              <div class="url">quantify.io / strategies</div>
+            </div>
+            <div class="pc-content">
+              <div class="ctx-table">
+                <div class="row head"><div>策略</div><div>收益</div><div>状态</div><div></div></div>
+                <div class="row"><div class="skeleton-bar" style="width:80%"></div><div class="skeleton-bar" style="width:60%"></div><div class="skeleton-bar" style="width:60%"></div><div class="skeleton-bar" style="width:40%"></div></div>
+                <div class="row"><div class="skeleton-bar" style="width:70%"></div><div class="skeleton-bar" style="width:50%"></div><div class="skeleton-bar" style="width:70%"></div><div class="skeleton-bar" style="width:40%"></div></div>
+                <div class="row"><div class="skeleton-bar" style="width:75%"></div><div class="skeleton-bar" style="width:55%"></div><div class="skeleton-bar" style="width:65%"></div><div class="skeleton-bar" style="width:40%"></div></div>
+              </div>
+
+              <div class="pc-toast-stack">
+                <div class="toast error">
+                  <span class="leading"><svg class="ico" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.01"/><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></span>
+                  <div class="body">
+                    <div class="title">网络连接已断开</div>
+                    <div class="desc">无法获取实时行情，请检查网络后重试</div>
+                  </div>
+                  <button class="action">重试</button>
+                  <span class="close"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span>
+                </div>
+
+                <div class="toast success">
+                  <span class="leading"><svg class="ico" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>
+                  <div class="body">
+                    <div class="title">策略「ETH 反转套利」已部署</div>
+                  </div>
+                  <span class="close"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span>
+                </div>
+
+                <div class="toast loading">
+                  <span class="leading"><svg class="ico" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg></span>
+                  <div class="body">
+                    <div class="title">正在同步交易所数据…</div>
+                    <div class="desc">已完成 3/5，预计 4 秒</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mobile -->
+      <div class="pane">
+        <div class="pane-head"><span class="name">Mobile · 顶部异常 + 底部胶囊</span><span class="tag">mobile</span></div>
+        <div class="pane-body" style="background: var(--bg-soft);">
+          <div class="phone">
+            <div class="phone-screen">
+              <div class="phone-notch"></div>
+              <div class="phone-status"><span>9:41</span><span class="right">●●● <span style="font-weight:400">5G</span> ▮</span></div>
+              <div class="m-screen">
+                <div class="m-header"><span class="title">策略广场</span><span class="ic"><svg class="ico" viewBox="0 0 24 24"><path d="M21 21l-4.3-4.3M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/></svg></span></div>
+                <div class="m-list">
+                  <div class="m-list-row"><div class="skeleton-bar" style="width:30%; height:32px; border-radius:8px"></div><div style="flex:1; display:flex; flex-direction:column; gap:6px; justify-content:center"><div class="skeleton-bar" style="width:70%"></div><div class="skeleton-bar" style="width:40%"></div></div></div>
+                  <div class="m-list-row"><div class="skeleton-bar" style="width:30%; height:32px; border-radius:8px"></div><div style="flex:1; display:flex; flex-direction:column; gap:6px; justify-content:center"><div class="skeleton-bar" style="width:60%"></div><div class="skeleton-bar" style="width:45%"></div></div></div>
+                </div>
+              </div>
+
+              <!-- top error toast -->
+              <div class="phone-toast-top">
+                <div class="toast error" style="width: 100%; min-width: 0;">
+                  <span class="leading"><svg class="ico" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.01"/><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></span>
+                  <div class="body">
+                    <div class="title">网络异常</div>
+                    <div class="desc">请检查网络后下拉刷新</div>
+                  </div>
+                  <button class="action" style="padding:4px 8px">重试</button>
+                </div>
+              </div>
+
+              <!-- bottom pill toast -->
+              <div class="phone-toast-bottom">
+                <div class="toast-pill">
+                  <span class="dot"><svg class="ico" style="width:10px;height:10px" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>
+                  「ETH 反转套利」已载入对话
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- variant grid -->
+    <div class="grid-3" style="margin-top: 4px;">
+
+      <div class="spec">
+        <div class="label-bar ok"><i></i> Success</div>
+        <div class="toast success">
+          <span class="leading"><svg class="ico" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>
+          <div class="body"><div class="title">已保存到草稿箱</div></div>
+        </div>
+        <div class="spec-row" style="margin-top:10px"><span class="key">用途</span> 操作成功反馈</div>
+        <div class="spec-row"><span class="key">时长</span> 3.5s 自动消失</div>
+      </div>
+
+      <div class="spec">
+        <div class="label-bar error"><i></i> Error</div>
+        <div class="toast error">
+          <span class="leading"><svg class="ico" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.01"/><circle cx="12" cy="12" r="10"/></svg></span>
+          <div class="body"><div class="title">请求失败</div><div class="desc">服务暂时不可达 (502)</div></div>
+          <button class="action">重试</button>
+        </div>
+        <div class="spec-row" style="margin-top:10px"><span class="key">用途</span> 网络 / API / 校验错误</div>
+        <div class="spec-row"><span class="key">时长</span> 不自动消失 · 需手动关闭</div>
+      </div>
+
+      <div class="spec">
+        <div class="label-bar warn"><i></i> Warning</div>
+        <div class="toast warn">
+          <span class="leading"><svg class="ico" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.01"/><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></span>
+          <div class="body"><div class="title">行情延迟 &gt; 5 秒</div></div>
+        </div>
+        <div class="spec-row" style="margin-top:10px"><span class="key">用途</span> 风险/降级提醒</div>
+        <div class="spec-row"><span class="key">时长</span> 5s 自动消失</div>
+      </div>
+
+      <div class="spec">
+        <div class="label-bar info"><i></i> Info</div>
+        <div class="toast info">
+          <span class="leading"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8v.01"/></svg></span>
+          <div class="body"><div class="title">回测已加入队列</div><div class="desc">等待 2 个任务</div></div>
+        </div>
+        <div class="spec-row" style="margin-top:10px"><span class="key">用途</span> 中性事件通知</div>
+        <div class="spec-row"><span class="key">时长</span> 4s 自动消失</div>
+      </div>
+
+      <div class="spec">
+        <div class="label-bar accent"><i></i> Loading</div>
+        <div class="toast loading">
+          <span class="leading"><svg class="ico" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg></span>
+          <div class="body"><div class="title">同步交易所数据…</div></div>
+        </div>
+        <div class="spec-row" style="margin-top:10px"><span class="key">用途</span> 长任务进行中</div>
+        <div class="spec-row"><span class="key">时长</span> 持续显示直到结束</div>
+      </div>
+
+      <div class="spec">
+        <div class="label-bar"><i></i> Mobile Pill</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <div class="toast-pill"><span class="dot"><svg class="ico" style="width:10px;height:10px" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>已收藏</div>
+          <div class="toast-pill error"><span class="dot"><svg class="ico" style="width:10px;height:10px" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span>添加失败</div>
+        </div>
+        <div class="spec-row" style="margin-top:10px"><span class="key">用途</span> 移动端单行轻反馈</div>
+        <div class="spec-row"><span class="key">位置</span> 距底部 tab 上 20pt</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- 2. INLINE BANNER -->
+  <!-- ============================================================ -->
+  <section class="section">
+    <div class="section-head">
+      <span class="num">02</span>
+      <h2>Inline Banner · 内嵌横幅</h2>
+      <span class="en">persistent in-page · dismissible · scoped to a card or section</span>
+    </div>
+    <div class="section-desc">
+      用于持续性提示（账户未实名、API key 即将过期、风控降级中…）。<b>嵌入</b> 在卡片或区块顶部，不浮在视窗。所有平台共用同一组件，宽度跟随父容器。
+    </div>
+
+    <div class="row">
+      <div class="pane">
+        <div class="pane-head"><span class="name">Web PC · 嵌入卡片</span><span class="tag">desktop</span></div>
+        <div class="pane-body">
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div class="banner error">
+              <span class="leading"><svg class="ico" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.01"/><circle cx="12" cy="12" r="10"/></svg></span>
+              <div class="body">
+                <div class="title">币安 API Key 已失效</div>
+                <div class="desc">3 个实盘策略已自动暂停。请重新绑定后恢复运行。</div>
+                <a class="link">前往绑定 →</a>
+              </div>
+              <span class="close"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span>
+            </div>
+            <div class="banner warn">
+              <span class="leading"><svg class="ico" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.01"/><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></span>
+              <div class="body">
+                <div class="title">回测数据延迟更新</div>
+                <div class="desc">最近一次更新为 14:32:08，可能与实盘存在 &gt; 30 秒差异。</div>
+              </div>
+            </div>
+            <div class="banner info">
+              <span class="leading"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8v.01"/></svg></span>
+              <div class="body">
+                <div class="title">系统将于 23:00–23:15 进行例行维护</div>
+                <div class="desc">期间 WebSocket 行情会有短暂中断。</div>
+              </div>
+              <span class="close"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span>
+            </div>
+            <div class="banner success">
+              <span class="leading"><svg class="ico" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>
+              <div class="body">
+                <div class="title">所有策略已恢复运行</div>
+              </div>
+              <span class="close"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-head"><span class="name">Mobile · 卡片顶部内嵌</span><span class="tag">mobile</span></div>
+        <div class="pane-body" style="background: var(--bg-soft);">
+          <div class="phone">
+            <div class="phone-screen">
+              <div class="phone-notch"></div>
+              <div class="phone-status"><span>9:41</span><span class="right">●●● 5G ▮</span></div>
+              <div class="m-screen">
+                <div class="m-header"><span class="title">我的策略</span><span class="ic"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span></div>
+
+                <div class="banner error">
+                  <span class="leading"><svg class="ico" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.01"/><circle cx="12" cy="12" r="10"/></svg></span>
+                  <div class="body">
+                    <div class="title">API Key 已失效</div>
+                    <div class="desc">3 个策略已自动暂停</div>
+                    <a class="link">前往绑定 →</a>
+                  </div>
+                </div>
+
+                <div class="m-list">
+                  <div class="m-list-row" style="padding: 14px 8px;">
+                    <div style="width:36px; height:36px; border-radius:10px; background: var(--accent-soft); color: var(--accent); display:flex; align-items:center; justify-content:center; font-weight:600; font-size:12px;">ETH</div>
+                    <div style="flex:1;">
+                      <div style="font-weight:600; font-size:13px;">反转套利 v2</div>
+                      <div style="color: var(--text-dim); font-size:11px; margin-top:2px;">已暂停 · 等待 API 重新绑定</div>
+                    </div>
+                  </div>
+                  <div class="m-list-row" style="padding: 14px 8px;">
+                    <div style="width:36px; height:36px; border-radius:10px; background: var(--bg-soft); color: var(--text-mid); display:flex; align-items:center; justify-content:center; font-weight:600; font-size:12px;">BTC</div>
+                    <div style="flex:1;">
+                      <div style="font-weight:600; font-size:13px;">网格 · 主网</div>
+                      <div style="color: var(--ok); font-size:11px; margin-top:2px;">运行中 · +2.31%</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- 3. EMPTY STATE -->
+  <!-- ============================================================ -->
+  <section class="section">
+    <div class="section-head">
+      <span class="num">03</span>
+      <h2>Empty State · 空状态</h2>
+      <span class="en">illustration + title + description + primary CTA · same artwork across platforms</span>
+    </div>
+    <div class="section-desc">
+      统一图形语言：<b>同心环 + 中央 glyph + 角标</b>。中心 glyph 表达内容类型，右下角小角标表达 <b>状态语义</b>（中性 / 警告 / 错误 / 提示）。PC 与 移动端使用同一套结构，仅尺寸 (144 / 120) 与外边距不同。
+    </div>
+
+    <!-- empty: no data -->
+    <div class="row">
+      <div class="pane">
+        <div class="pane-head"><span class="name">Web PC · 列表无数据 (中性)</span><span class="tag">desktop</span></div>
+        <div class="pane-body">
+          <div class="ctx-table" style="overflow: hidden;">
+            <div class="row head" style="display: grid; grid-template-columns: 1fr 1fr 100px 80px;"><div>策略名称</div><div>累计收益</div><div>夏普</div><div></div></div>
+            <div class="empty lg" style="padding: 56px 24px;">
+              <div class="art">
+                <div class="ring"></div>
+                <div class="disc"></div>
+                <span class="glyph"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg></span>
+              </div>
+              <h3>暂无运行中的策略</h3>
+              <p>从「策略广场」选择一个模板，或直接和 AI 描述你的交易思路开始创建。</p>
+              <div class="actions">
+                <button class="btn btn-primary">+ 新建策略</button>
+                <button class="btn">浏览模板</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pane">
+        <div class="pane-head"><span class="name">Mobile</span><span class="tag">mobile</span></div>
+        <div class="pane-body" style="background: var(--bg-soft);">
+          <div class="phone">
+            <div class="phone-screen">
+              <div class="phone-notch"></div>
+              <div class="phone-status"><span>9:41</span><span class="right">●●● 5G ▮</span></div>
+              <div class="m-screen">
+                <div class="m-header"><span class="title">我的策略</span><span class="ic"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span></div>
+                <div class="m-list">
+                  <div class="empty">
+                    <div class="art">
+                      <div class="ring"></div>
+                      <div class="disc"></div>
+                      <span class="glyph"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg></span>
+                    </div>
+                    <h3>暂无运行中的策略</h3>
+                    <p>和 AI 聊聊你的交易思路，快速创建第一个策略</p>
+                    <div class="actions"><button class="btn btn-primary btn-sm">+ 新建策略</button></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- variants grid -->
+    <div class="grid-3" style="margin-top: 8px;">
+
+      <div class="pane">
+        <div class="pane-head"><span class="name">无搜索结果</span><span class="tag">search</span></div>
+        <div class="pane-body" style="padding: 8px;">
+          <div class="empty">
+            <div class="art tone-info">
+              <div class="ring"></div>
+              <div class="disc"></div>
+              <span class="glyph"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+            </div>
+            <h3>没有找到 “grid eth”</h3>
+            <p>试试更宽泛的关键词，或清除筛选条件。</p>
+            <div class="actions"><button class="btn btn-sm">清除筛选</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-head"><span class="name">网络错误</span><span class="tag">network</span></div>
+        <div class="pane-body" style="padding: 8px;">
+          <div class="empty">
+            <div class="art tone-danger">
+              <div class="ring"></div>
+              <div class="disc"></div>
+              <span class="glyph"><svg class="ico" viewBox="0 0 24 24"><path d="M2 8.5a16 16 0 0 1 20 0"/><path d="M5 12.5a11 11 0 0 1 14 0"/><path d="M8.5 16a6 6 0 0 1 7 0"/><path d="M12 20h.01"/><path d="m2 2 20 20"/></svg></span>
+              <span class="badge"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.01"/><circle cx="12" cy="12" r="10"/></svg></span>
+            </div>
+            <h3>网络连接失败</h3>
+            <p>检查 Wi-Fi 或蜂窝网络后重试。</p>
+            <div class="actions"><button class="btn btn-primary btn-sm">重新加载</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-head"><span class="name">加载失败 (5xx)</span><span class="tag">server</span></div>
+        <div class="pane-body" style="padding: 8px;">
+          <div class="empty">
+            <div class="art tone-warn">
+              <div class="ring"></div>
+              <div class="disc"></div>
+              <span class="glyph"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg></span>
+              <span class="badge"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.01"/><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></span>
+            </div>
+            <h3>服务暂时不可用</h3>
+            <p>错误码 502 · 工程师已收到告警，请稍后再试。</p>
+            <div class="actions"><button class="btn btn-sm">重试</button><button class="btn btn-ghost btn-sm">复制错误码</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-head"><span class="name">无权限 / 未登录</span><span class="tag">auth</span></div>
+        <div class="pane-body" style="padding: 8px;">
+          <div class="empty">
+            <div class="art tone-accent">
+              <div class="ring"></div>
+              <div class="disc"></div>
+              <span class="glyph"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 1 1 8 0v3"/></svg></span>
+            </div>
+            <h3>登录后查看持仓</h3>
+            <p>实盘数据与 API key 仅对本账户可见。</p>
+            <div class="actions"><button class="btn btn-primary btn-sm">登录</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-head"><span class="name">尚未开始</span><span class="tag">getting-started</span></div>
+        <div class="pane-body" style="padding: 8px;">
+          <div class="empty">
+            <div class="art tone-accent">
+              <div class="ring"></div>
+              <div class="disc"></div>
+              <span class="glyph"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20.5V8M5.5 14.5 12 8l6.5 6.5"/><circle cx="12" cy="4" r="1.5"/></svg></span>
+            </div>
+            <h3>还没有交易记录</h3>
+            <p>等策略首次成交后，订单会出现在这里。</p>
+            <div class="actions"><button class="btn btn-sm">查看运行日志</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-head"><span class="name">数据已清空</span><span class="tag">cleared</span></div>
+        <div class="pane-body" style="padding: 8px;">
+          <div class="empty">
+            <div class="art">
+              <div class="ring"></div>
+              <div class="disc"></div>
+              <span class="glyph"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></span>
+            </div>
+            <h3>通知都看完啦</h3>
+            <p>当前没有未读通知。</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- 4. DIALOG -->
+  <!-- ============================================================ -->
+  <section class="section">
+    <div class="section-head">
+      <span class="num">04</span>
+      <h2>Dialog · 弹窗</h2>
+      <span class="en">blocking · for confirmation, destructive actions, fatal errors</span>
+    </div>
+    <div class="section-desc">
+      <b>Web PC</b> 弹窗：title 横向布局、左对齐、按钮在右下角。<br>
+      <b>移动端</b> 弹窗：图标 + 文案居中、按钮上下分布或左右等分，按 iOS / Material 默认风格统一为 <b>等分双按钮</b>，主操作色 = brand violet，危险操作色 = danger。
+    </div>
+
+    <div class="row">
+
+      <div class="pane">
+        <div class="pane-head"><span class="name">Web PC</span><span class="tag">desktop</span></div>
+        <div class="pane-body" style="background: var(--bg-soft);">
+          <div class="dialog-stage" style="min-height: 340px;">
+            <div class="dialog-pc danger">
+              <div class="head">
+                <div class="icon-wrap"><svg class="ico-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v5M12 16.5v.01"/><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>
+                <div class="meta">
+                  <h4>确定停止策略「ETH 反转套利 v2」？</h4>
+                  <p>停止后将立即撤销所有挂单。持仓 0.82 ETH 需手动平仓，否则继续按当前价格暴露在行情中。</p>
+                </div>
+              </div>
+              <div class="extra">positions: 0.82 ETH · open_orders: 3 · pnl_today: +1.42%</div>
+              <div class="actions">
+                <button class="btn btn-ghost">取消</button>
+                <button class="btn btn-danger">停止并撤单</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-head"><span class="name">Mobile · App</span><span class="tag">mobile</span></div>
+        <div class="pane-body" style="background: var(--bg-soft);">
+          <div class="phone">
+            <div class="phone-screen" style="background: rgba(15,22,35,.45);">
+              <div class="phone-notch"></div>
+
+              <!-- dimmed bg content -->
+              <div style="position:absolute; inset:0; background: var(--bg); opacity: 0.4;"></div>
+
+              <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding: 32px 24px;">
+                <div class="dialog danger">
+                  <div class="dialog-body">
+                    <div class="icon-wrap"><svg class="ico" style="width:24px;height:24px" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.01"/><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>
+                    <h4>停止策略？</h4>
+                    <p class="msg">将撤销所有挂单，持仓 0.82 ETH 需手动平仓。</p>
+                  </div>
+                  <div class="footer">
+                    <button>取消</button>
+                    <button class="danger">停止并撤单</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- variant grid -->
+    <div class="grid-3" style="margin-top: 8px;">
+
+      <div class="pane">
+        <div class="pane-head"><span class="name">Danger · 不可逆</span><span class="tag">danger</span></div>
+        <div class="pane-body" style="background: var(--bg-soft);">
+          <div class="dialog danger" style="margin: 0 auto;">
+            <div class="dialog-body">
+              <div class="icon-wrap"><svg class="ico" style="width:24px;height:24px" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></div>
+              <h4>删除策略？</h4>
+              <p class="msg">将删除回测记录与历史信号，此操作不可恢复。</p>
+            </div>
+            <div class="footer"><button>取消</button><button class="danger">删除</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-head"><span class="name">Warn · 二次确认</span><span class="tag">warn</span></div>
+        <div class="pane-body" style="background: var(--bg-soft);">
+          <div class="dialog warn" style="margin: 0 auto;">
+            <div class="dialog-body">
+              <div class="icon-wrap"><svg class="ico" style="width:24px;height:24px" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.01"/><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>
+              <h4>切换到主网交易？</h4>
+              <p class="msg">主网将使用真实资金，请确认你的策略已在测试网充分回测。</p>
+            </div>
+            <div class="footer"><button>取消</button><button class="primary">切换到主网</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-head"><span class="name">Info · 普通确认</span><span class="tag">info</span></div>
+        <div class="pane-body" style="background: var(--bg-soft);">
+          <div class="dialog info" style="margin: 0 auto;">
+            <div class="dialog-body">
+              <div class="icon-wrap"><svg class="ico" style="width:24px;height:24px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8v.01"/></svg></div>
+              <h4>新版本可用</h4>
+              <p class="msg">v2.7.0 包含网格策略性能优化与若干修复。</p>
+            </div>
+            <div class="footer"><button>稍后</button><button class="primary">立即更新</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-head"><span class="name">Success · 操作完成</span><span class="tag">success</span></div>
+        <div class="pane-body" style="background: var(--bg-soft);">
+          <div class="dialog success" style="margin: 0 auto;">
+            <div class="dialog-body">
+              <div class="icon-wrap"><svg class="ico" style="width:24px;height:24px" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <h4>策略已部署</h4>
+              <p class="msg">「ETH 反转套利 v2」已开始监听行情。</p>
+            </div>
+            <div class="footer single"><button class="primary">前往查看</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-head"><span class="name">Error · 致命错误</span><span class="tag">error</span></div>
+        <div class="pane-body" style="background: var(--bg-soft);">
+          <div class="dialog danger" style="margin: 0 auto;">
+            <div class="dialog-body">
+              <div class="icon-wrap"><svg class="ico" style="width:24px;height:24px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M15 9 9 15M9 9l6 6"/></svg></div>
+              <h4>下单失败</h4>
+              <p class="msg">余额不足以下达 0.5 BTC 多单。请充值或调整仓位。</p>
+            </div>
+            <div class="footer"><button>稍后</button><button class="primary">去充值</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-head"><span class="name">Single · 单按钮提示</span><span class="tag">notice</span></div>
+        <div class="pane-body" style="background: var(--bg-soft);">
+          <div class="dialog info" style="margin: 0 auto;">
+            <div class="dialog-body">
+              <div class="icon-wrap"><svg class="ico" style="width:24px;height:24px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8v.01"/></svg></div>
+              <h4>仅支持 Chrome 102+</h4>
+              <p class="msg">为获得最佳体验，请使用最新版 Chrome / Edge / Safari 打开。</p>
+            </div>
+            <div class="footer single"><button class="primary">我知道了</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- 5. spec -->
+  <!-- ============================================================ -->
+  <section class="section">
+    <div class="section-head">
+      <span class="num">05</span>
+      <h2>使用规范 · Spec</h2>
+      <span class="en">when to use which</span>
+    </div>
+
+    <div class="grid-2">
+      <div class="spec">
+        <h5>层级 · 阻塞性 (从低到高)</h5>
+        <div class="spec-row"><span class="sw" style="background: var(--ok);"></span><span class="key">Toast</span> 不阻塞 · 自动消失 · 单条信息</div>
+        <div class="spec-row"><span class="sw" style="background: var(--info);"></span><span class="key">Banner</span> 不阻塞 · 持续显示 · 与上下文关联</div>
+        <div class="spec-row"><span class="sw" style="background: var(--warn);"></span><span class="key">Empty</span> 占位整个内容区 · 替代列表</div>
+        <div class="spec-row"><span class="sw" style="background: var(--danger);"></span><span class="key">Dialog</span> 阻塞 · 需用户决策才能继续</div>
+      </div>
+      <div class="spec">
+        <h5>语义色映射</h5>
+        <div class="spec-row"><span class="sw" style="background: var(--ok);"></span><span class="key">success</span> 操作成功、已保存、已部署</div>
+        <div class="spec-row"><span class="sw" style="background: var(--warn);"></span><span class="key">warn</span> 风险提示、降级、即将到期</div>
+        <div class="spec-row"><span class="sw" style="background: var(--danger);"></span><span class="key">danger</span> 失败、错误、不可逆操作</div>
+        <div class="spec-row"><span class="sw" style="background: var(--info);"></span><span class="key">info</span> 中性通知、提示、系统消息</div>
+        <div class="spec-row"><span class="sw" style="background: var(--accent);"></span><span class="key">accent</span> 进行中 / Loading / 操作主色</div>
+      </div>
+      <div class="spec">
+        <h5>跨平台尺寸</h5>
+        <div class="spec-row"><span class="key">Toast</span> PC 宽 280–460 · Mobile 宽 calc(100% - 24px)</div>
+        <div class="spec-row"><span class="key">Banner</span> 跟随容器宽度 · padding 12 / 14</div>
+        <div class="spec-row"><span class="key">Empty 插画</span> PC 144 · Mobile 120</div>
+        <div class="spec-row"><span class="key">Dialog</span> PC 460 · Mobile (100% - 32)</div>
+        <div class="spec-row"><span class="key">圆角</span> 卡片 14 · pill 999 · banner 12</div>
+      </div>
+      <div class="spec">
+        <h5>行为规则</h5>
+        <div class="spec-row"><span class="key">Error</span> 不自动消失 · 必须有「重试」或「关闭」</div>
+        <div class="spec-row"><span class="key">同类去重</span> 同 key 的 toast 同时只显示一条 · 计数 ×N</div>
+        <div class="spec-row"><span class="key">堆叠上限</span> 同时最多 3 条 toast · 超过排队</div>
+        <div class="spec-row"><span class="key">Dialog</span> Esc / 遮罩点击 = 取消 · 危险操作不允许遮罩关闭</div>
+        <div class="spec-row"><span class="key">Empty CTA</span> 至多 2 个按钮 · 主操作使用 btn-primary</div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  // theme switcher
+  const sw = document.getElementById('themeSwitch');
+  sw.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-theme]');
+    if (!b) return;
+    [...sw.querySelectorAll('button')].forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    document.documentElement.dataset.theme = b.dataset.theme;
+  });
+</script>
+</body>
+</html>

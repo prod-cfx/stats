@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Quantify Mobile App — High-fidelity</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <!-- shared token system (same file the web app uses) -->
+  <link rel="stylesheet" href="../tokens.css"/>
+  <style>
+    html, body { margin: 0; padding: 0; background: #E9EAEE; min-height: 100vh; }
+    body { font-family: "Inter","Noto Sans SC",system-ui,sans-serif; -webkit-font-smoothing: antialiased; }
+    button { font-family: inherit; cursor: default; }
+    /* hide scrollbars on screen content for cleaner artboards */
+    [data-board] *::-webkit-scrollbar { width: 0; height: 0; }
+    [data-board] * { scrollbar-width: none; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="../design-canvas.jsx"></script>
+  <script type="text/babel" src="ios-frame.jsx"></script>
+  <script type="text/babel" src="m-shell.jsx"></script>
+  <script type="text/babel" src="m-screens-1.jsx"></script>
+  <script type="text/babel" src="m-screens-2.jsx"></script>
+  <script type="text/babel" src="m-screens-3.jsx"></script>
+  <script type="text/babel" src="m-screens-4.jsx"></script>
+  <script type="text/babel" src="m-screens-5.jsx"></script>
+
+  <script type="text/babel">
+    // Each Frame is an iPhone-style device. data-theme + data-accent on the
+    // wrapper scope the token vars (defined in tokens.css) to this frame only.
+    function Frame({ children, theme = 'light', accent = 'violet' }) {
+      return (
+        <div data-board data-theme={theme} data-accent={accent} style={{
+          width: 402, height: 874, position: 'relative',
+          borderRadius: 48, overflow: 'hidden', background: '#000',
+          boxShadow: '0 40px 80px rgba(15,22,35,0.18), 0 0 0 1px rgba(15,22,35,0.12)',
+        }}>
+          <div style={{
+            position: 'absolute', top: 11, left: '50%', transform: 'translateX(-50%)',
+            width: 126, height: 37, borderRadius: 24, background: '#000', zIndex: 100, pointerEvents: 'none',
+          }}/>
+          <div style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+            {children}
+          </div>
+          <div style={{
+            position:'absolute', bottom:8, left:'50%', transform:'translateX(-50%)',
+            width:139, height:5, borderRadius:3, background:'rgba(0,0,0,0.32)', zIndex:100, pointerEvents:'none',
+          }}/>
+        </div>
+      );
+    }
+
+    function App() {
+      return (
+        <DesignCanvas>
+          <DCSection id="theming" title="设计系统 · 主题" subtitle="3 背景 × 3 强调色，Web 与 App 共享一套 token">
+            <DCArtboard id="theme-light" label="01 · 白色 + 粉紫 (默认)" width={402} height={874}>
+              <Frame theme="light" accent="violet"><ScreenAIChat/></Frame>
+            </DCArtboard>
+            <DCArtboard id="theme-pink" label="02 · 粉红 + 粉紫" width={402} height={874}>
+              <Frame theme="pink" accent="violet"><ScreenAIChat/></Frame>
+            </DCArtboard>
+            <DCArtboard id="theme-dark-cyan" label="03 · 暗色 + 青蓝" width={402} height={874}>
+              <Frame theme="dark" accent="cyan"><ScreenAIChat/></Frame>
+            </DCArtboard>
+            <DCArtboard id="theme-light-amber" label="04 · 白色 + 琥珀" width={402} height={874}>
+              <Frame theme="light" accent="amber"><ScreenAIChat/></Frame>
+            </DCArtboard>
+            <DCArtboard id="theme-picker" label="05 · 主题选择器" width={402} height={874}>
+              <Frame theme="light" accent="amber"><ScreenThemeSettings theme="light" accent="amber"/></Frame>
+            </DCArtboard>
+            <DCArtboard id="theme-picker-dark" label="06 · 主题选择器 (暗色)" width={402} height={874}>
+              <Frame theme="dark" accent="violet"><ScreenThemeSettings theme="dark" accent="violet"/></Frame>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="onboarding" title="入口与认证" subtitle="登录 · 邮箱 + Telegram">
+            <DCArtboard id="login" label="07 · 登录" width={402} height={874}>
+              <Frame><ScreenLogin/></Frame>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="ai" title="AI 量化" subtitle="对话生成策略 · 回测 · 部署">
+            <DCArtboard id="chat" label="08 · AI 对话 (含回测结果)" width={402} height={874}>
+              <Frame><ScreenAIChat/></Frame>
+            </DCArtboard>
+            <DCArtboard id="config" label="09 · 回测参数 (底部抽屉)" width={402} height={874}>
+              <Frame><ScreenAIConfig/></Frame>
+            </DCArtboard>
+            <DCArtboard id="strat" label="10 · 策略广场" width={402} height={874}>
+              <Frame><ScreenMarket/></Frame>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="market" title="行情数据" subtitle="自选 · K 线 · 盘口 · 多空比">
+            <DCArtboard id="tickers" label="11 · 行情列表" width={402} height={874}>
+              <Frame><ScreenTickers/></Frame>
+            </DCArtboard>
+            <DCArtboard id="trade" label="12 · 交易详情 · K 线 + 盘口" width={402} height={874}>
+              <Frame><ScreenTradingDetail/></Frame>
+            </DCArtboard>
+            <DCArtboard id="ls" label="13 · 多空比" width={402} height={874}>
+              <Frame><ScreenLS/></Frame>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="whale" title="巨鲸动向" subtitle="链上 + 交易所大额异动">
+            <DCArtboard id="whalefeed" label="14 · 实时巨鲸" width={402} height={874}>
+              <Frame><ScreenWhale/></Frame>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="me" title="账户" subtitle="个人中心 · 交易所 API 安全配置">
+            <DCArtboard id="acct" label="15 · 我的" width={402} height={874}>
+              <Frame><ScreenAccount/></Frame>
+            </DCArtboard>
+            <DCArtboard id="api" label="16 · 交易所 API · 验证表单" width={402} height={874}>
+              <Frame><ScreenApiConfig/></Frame>
+            </DCArtboard>
+          </DCSection>
+        </DesignCanvas>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('app')).render(<App/>);
+  </script>
+</body>
+</html>
