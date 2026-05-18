@@ -6,6 +6,7 @@ import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CodegenConversationService } from '../codegen-conversation.service'
+import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 import { CompiledScriptExecutionEnvelopeService } from '../compiled-script-execution-envelope.service'
 import { CompiledScriptParserService } from '../compiled-script-parser.service'
@@ -14,7 +15,6 @@ import { SemanticStateProjectionService } from '../semantic-state-projection.ser
 import { StrategyClarificationQuestionService } from '../strategy-clarification-question.service'
 
 type ConversationInternals = {
-  extractSemanticPatchFromMessage: (message?: string) => CodegenSemanticPatch | undefined
   normalizeSemanticContractReadiness: (
     state: SemanticState,
     strategyVersion: { deployedAtSemanticVersion: string | null },
@@ -73,7 +73,8 @@ function buildSeedStateFromUserMessage(message: string, options: { lockPosition:
   state: SemanticState
 } {
   const conversation = createConversationService()
-  const patch = conversation.extractSemanticPatchFromMessage(message) as CodegenSemanticPatch
+  // Issue #1492：production 已不再用 dispatcher seed；测试辅助直调 dispatcher。
+  const patch = new GenericSeedDispatcher().dispatch(message) as CodegenSemanticPatch
   const seedBuilder = new SemanticSeedStateBuilderService()
   const state = seedBuilder.build(patch, message)
   expect(state).not.toBeNull()
@@ -139,8 +140,8 @@ describe('codegen entry link regression: user message → seed → projection �
 
   for (const item of entryCorpus) {
     it(`入口 dispatcher patch 覆盖语料：${item.name}`, () => {
-      const conversation = createConversationService()
-      const patch = conversation.extractSemanticPatchFromMessage(item.message) as CodegenSemanticPatch
+      // Issue #1492：production 已不再用 dispatcher seed；测试辅助直调 dispatcher。
+      const patch = new GenericSeedDispatcher().dispatch(item.message) as CodegenSemanticPatch
       const triggerKeys = patch.triggers?.map(trigger => `${trigger.key}:${trigger.phase}`) ?? []
       const actionKeys = patch.actions?.map(action => action.key) ?? []
       const atomKeys = patch.atoms?.map(atom => atom.key) ?? []

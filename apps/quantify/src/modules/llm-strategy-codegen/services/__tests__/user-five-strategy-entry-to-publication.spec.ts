@@ -14,6 +14,7 @@ import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CodegenConversationService } from '../codegen-conversation.service'
+import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { CodegenGraphSnapshotService } from '../codegen-graph-snapshot.service'
 import { CodegenPublicationGenerationStage } from '../codegen-publication-generation.stage'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
@@ -29,7 +30,6 @@ import { StrategySummaryBuilderService } from '../strategy-summary-builder.servi
 import { StrategySummaryObservationService } from '../strategy-summary-observation.service'
 
 type ConversationInternals = {
-  extractSemanticPatchFromMessage: (message?: string) => CodegenSemanticPatch | undefined
   normalizeSemanticContractReadiness: (
     state: SemanticState,
     strategyVersion: { deployedAtSemanticVersion: string | null },
@@ -93,7 +93,8 @@ function assertNoForbiddenUserText(payload: unknown): void {
 
 function buildStateFromUserMessage(message: string): SemanticState {
   const conversation = createConversationService()
-  const patch = conversation.extractSemanticPatchFromMessage(message) as CodegenSemanticPatch
+  // Issue #1492：production 已不再用 dispatcher seed 语义；测试辅助场景显式直调。
+  const patch = new GenericSeedDispatcher().dispatch(message) as CodegenSemanticPatch
   const state = new SemanticSeedStateBuilderService().build(patch, message)
   expect(state).not.toBeNull()
   return conversation.normalizeSemanticContractReadiness(

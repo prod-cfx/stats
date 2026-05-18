@@ -89,7 +89,6 @@ import { CodegenConversationStateMachine } from './codegen-conversation-state-ma
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CodegenSessionPublicationPipelineService } from './codegen-session-publication-pipeline.service'
 import { ConversationSemanticEditService } from './conversation-semantic-edit.service'
-import { GenericSeedDispatcher } from './generic-seed-dispatcher.service'
 import {
   InferredConfirmationClassifierService
   
@@ -302,7 +301,6 @@ export class CodegenConversationService {
     private readonly semanticStateReducer: SemanticStateReducerService = new SemanticStateReducerService(),
     private readonly semanticStateProjection: SemanticStateProjectionService = new SemanticStateProjectionService(),
     private readonly semanticStateMerge: SemanticStateMergeService = new SemanticStateMergeService(),
-    private readonly genericSeedDispatcher: GenericSeedDispatcher = new GenericSeedDispatcher(),
     private readonly plannerDispatcherMerge: PlannerDispatcherMergeService = new PlannerDispatcherMergeService(),
     private readonly semanticSeedStateBuilder: SemanticSeedStateBuilderService = new SemanticSeedStateBuilderService(),
     private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
@@ -332,11 +330,9 @@ export class CodegenConversationService {
         status: HttpStatus.UNAUTHORIZED,
       })
     }
-    const seedSemanticState = this.mergeSemanticPatchIntoState(
-      this.createEmptySemanticState(),
-      this.extractSemanticPatchFromMessage(dto.initialMessage),
-      dto.initialMessage ?? undefined,
-    )
+    // Issue #1492：startSession 不再从 dispatcher seed SemanticState，
+    //   planner 是策略语义唯一真源；空 state 直接喂给 planner。
+    const seedSemanticState = this.createEmptySemanticState()
     const plan = await this.planConversationByLlm(dto.initialMessage ?? '', seedSemanticState, {
       providerCode: this.resolveProviderCode(undefined),
       model: undefined,
@@ -1577,13 +1573,8 @@ export class CodegenConversationService {
     const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
       ? this.resolveSemanticClarificationArtifacts(baseSemanticState, responseLocale).clarificationState
       : this.attachSemanticSummaryToClarification(baseClarificationState, baseSemanticState)
-    const preMergedSemanticState = this.reconcileSemanticMissingPlaceholders(
-      this.mergeSemanticPatchIntoState(
-        baseSemanticState,
-        this.extractSemanticPatchFromMessage(dto.message),
-        dto.message,
-      ),
-    )
+    // Issue #1492：continue 轮次不再用 dispatcher seed；baseSemanticState 已 reconcile 过，无需二次调用。
+    const preMergedSemanticState = baseSemanticState
     const constraintPack = inferredConfirmation.constraintPack
     const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, dto.guideConfig)
     const plan = await this.planConversationByLlm(dto.message, preMergedSemanticState, {
@@ -7043,18 +7034,8 @@ export class CodegenConversationService {
       return false
     }
 
-    const seedState = this.mergeSemanticPatchIntoState(
-      this.createEmptySemanticState(),
-      this.extractSemanticPatchFromMessage(normalized),
-      normalized,
-    )
-    const hasExtractedStrategy = readFlatTriggers(seedState).length > 0
-      && readFlatActions(seedState).length > 0
-      && (readFlatRisks(seedState).length > 0 || seedState.position !== null)
-    if (hasExtractedStrategy) {
-      return true
-    }
-
+    // Issue #1492：路由 heuristic 不再调用 dispatcher 解释完整策略；
+    //   仅靠关键词正则探测是否在描述新策略，把语义判定让给 planner。
     const hasKnownTrigger = /\bRSI\b|\bMACD\b|\bEMA\b|\bSMA\b|\bMA\b|均线|布林|突破|跌破|通道|价格/iu.test(normalized)
     const hasAction = /开多|开空|平多|平空|平仓|买入|卖出|做多|做空/u.test(normalized)
     const hasRiskOrPosition = /止损|止盈|仓位|单笔|资金|杠杆/u.test(normalized)
@@ -8567,7 +8548,8 @@ export class CodegenConversationService {
 
       const content = result.content?.trim() ?? ''
       if (!content) {
-        const semanticPatch = this.extractSemanticPatchFromMessage(text)
+        // Issue #1492：planner 空响应不再用 dispatcher fallback 生成语义；
+        //   仅返回澄清提示，让用户重述。
         this.logPlannerFallback('empty_content')
         return {
           kind: 'plan',
@@ -8575,7 +8557,6 @@ export class CodegenConversationService {
             related: true,
             logicReady: false,
             assistantPrompt: this.localizedText(locale, 'I understand the trading idea so far. Please provide the entry and exit trigger conditions, then I will organize the logic graph.', '我先理解到你的交易想法了。请补充入场和出场触发条件，我再整理成逻辑图。'),
-            ...(semanticPatch ? { semanticPatch } : {}),
           } satisfies ConversationPlan,
         }
       }
@@ -8633,15 +8614,10 @@ export class CodegenConversationService {
               ? this.localizedText(locale, 'I have organized the strategy logic. Please confirm the logic graph.', '我已整理出策略逻辑，请确认逻辑图。')
               : this.localizedText(locale, 'I will keep refining the strategy logic. Please provide one key condition.', '我先继续完善策略逻辑，请补充一个关键条件。'))
 
-        const plannerPatch = this.normalizeSemanticPatch(parsed.semanticPatch ?? parsed.semanticUpdates)
-        // Issue #1383：planner JSON 成功也要并跑 dispatcher，
-        //   把 positionConstraint / orchestration 桶 atom（grid.range_rebalance、
-        //   position.dca_schedule、program.event_listener 等）补齐为 union。
-        const dispatcherPatch = this.genericSeedDispatcher.dispatch(text)
-        const semanticPatch = this.plannerDispatcherMerge.mergePlannerAndDispatcherPatches(
-          plannerPatch ?? null,
-          dispatcherPatch ?? null,
-        ) ?? undefined
+        // Issue #1492：planner 成功后不再 union dispatcher patch。
+        //   rules tree 是唯一策略语义真源；缺少 positionConstraint/orchestration 能力
+        //   走 atom contract 升级路径，不在入口 fallback。
+        const semanticPatch = this.normalizeSemanticPatch(parsed.semanticPatch ?? parsed.semanticUpdates) ?? undefined
         return {
           kind: 'plan',
           plan: {
@@ -8652,7 +8628,8 @@ export class CodegenConversationService {
           } satisfies ConversationPlan,
         }
       } catch {
-        const semanticPatch = this.extractSemanticPatchFromMessage(text)
+        // Issue #1492：planner JSON 解析失败不再用 dispatcher fallback；
+        //   仅追问澄清，让用户重述。
         this.logPlannerFallback('invalid_json', { contentLength: content.length })
         return {
           kind: 'plan',
@@ -8660,7 +8637,6 @@ export class CodegenConversationService {
             related: true,
             logicReady: false,
             assistantPrompt: this.localizedText(locale, 'I will keep refining the strategy logic. Please provide the entry and exit conditions.', '我先继续完善策略逻辑，请补充入场和出场条件。'),
-            ...(semanticPatch ? { semanticPatch } : {}),
           } satisfies ConversationPlan,
         }
       }
@@ -8695,13 +8671,16 @@ export class CodegenConversationService {
       const messageText = error instanceof Error ? error.message : String(error)
       const nonRetryableModelError = /model\s+not\s+exist|model.*not.*found/i.test(messageText)
       if (nonRetryableModelError) {
-        const semanticPatch = this.extractSemanticPatchFromMessage(text)
+        // Issue #1492：模型不存在等基础设施失败不再用 dispatcher fallback。
         this.logPlannerFallback('model_not_found', { error: this.summarizePlannerError(error) })
         return {
           related: true,
           logicReady: false,
-          assistantPrompt: this.localizedText(locale, 'I will keep refining the strategy logic. Please provide the entry and exit conditions.', '我先继续完善策略逻辑，请补充入场和出场条件。'),
-          ...(semanticPatch ? { semanticPatch } : {}),
+          assistantPrompt: this.localizedText(
+            locale,
+            'The strategy planning service is temporarily unavailable. Please try again later or contact the administrator.',
+            '策略规划服务暂不可用，请稍后再试或联系管理员。',
+          ),
         }
       }
       this.logPlannerFallback('transport_failure_retrying', {
@@ -8714,7 +8693,7 @@ export class CodegenConversationService {
         //   stage='retry' 时若 schema_reject 直接走 unsupportedFallback，不再叠加 LLM 调用。
         return await resolveOutcome(outcome, 'retry')
       } catch (retryError) {
-        const semanticPatch = this.extractSemanticPatchFromMessage(text)
+        // Issue #1492：transport 重试仍失败不再用 dispatcher fallback。
         this.logPlannerFallback('transport_failure_retry_exhausted', {
           error: this.summarizePlannerError(retryError),
         })
@@ -8722,7 +8701,6 @@ export class CodegenConversationService {
           related: true,
           logicReady: false,
           assistantPrompt: this.localizedText(locale, 'I will keep refining the strategy logic. Please provide the entry and exit conditions.', '我先继续完善策略逻辑，请补充入场和出场条件。'),
-          ...(semanticPatch ? { semanticPatch } : {}),
         }
       }
     }
@@ -8747,13 +8725,6 @@ export class CodegenConversationService {
         '策略表达暂未识别成合规的 rules-first 规则形态，请用更明确的入场 / 出场触发条件与风控约束重新描述。',
       ),
     }
-  }
-
-  private extractSemanticPatchFromMessage(message?: string): CodegenSemanticPatch | undefined {
-    const patch = this.genericSeedDispatcher.dispatch(message)
-    return patch.contextSlots || patch.triggers || patch.actions || patch.risk || patch.position
-      ? patch
-      : undefined
   }
 
   private readPlannerPayload(value: unknown): {

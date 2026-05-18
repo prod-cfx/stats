@@ -21,9 +21,12 @@
  * AC-7 prompts 中至少 N 条产出非 undefined 的 symbols 或 riskRules.exchange——
  * 锁住 dispatcher 必须真实命中至少部分隐式字段。
  *
- * 注意（review M2）：AC-12 webhook 与 AC-7 user prompt 在 codegen-conversation
- * 走同一合并路径（`extractSemanticPatchFromMessage` 私有方法不分流），
- * 故 8 个 prompt 共用同一形态契约。
+ * 注意（review M2 / #1492 更新）：#1492 收敛 codegen 入口为 planner rules tree
+ * 后，dispatcher 已不在生产解释链路上（caller 端的 `extractSemanticPatchFromMessage`
+ * 私有合并路径连同其调用方已一并下线）。本 spec 不再覆盖任何生产消费侧行为，
+ * 但仍保留对 dispatcher 自身输出形态契约的锁定：AC-7 / AC-12 两组共 8 个 prompt
+ * 的 dispatch 输出必须满足同一字段形态，避免未来若 dispatcher 被重新挂回任何
+ * 链路时形态悄悄退化。
  *
  * Refs: #1279
  */

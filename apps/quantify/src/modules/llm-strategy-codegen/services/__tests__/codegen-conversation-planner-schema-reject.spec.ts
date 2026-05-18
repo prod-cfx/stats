@@ -25,7 +25,6 @@ interface SvcShell {
   extractRawPlannerRules: jest.Mock
   readPlannerPayload: jest.Mock
   collectPlannerSchemaMismatchReasons: jest.Mock
-  extractSemanticPatchFromMessage: jest.Mock
   logPlannerFallback: jest.Mock
   localizedText: jest.Mock
   summarizePlannerError: jest.Mock
@@ -44,7 +43,6 @@ function makeService(): { svc: CodegenConversationService, shell: SvcShell, merg
     extractRawPlannerRules: jest.fn().mockReturnValue(undefined),
     readPlannerPayload: jest.fn(v => (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}),
     collectPlannerSchemaMismatchReasons: jest.fn().mockReturnValue([]),
-    extractSemanticPatchFromMessage: jest.fn().mockReturnValue(undefined),
     logPlannerFallback: jest.fn(),
     localizedText: jest.fn((_locale: string, _en: string, zh: string) => zh),
     summarizePlannerError: jest.fn((e: unknown) => String(e)),
@@ -185,6 +183,7 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
     // 主链路必须 reject 走 unsupportedFallback；不会带 semanticPatch 进下游 merge
     expect(plan.semanticPatch).toBeUndefined()
     // merge dispatcher 不应被调用（早 return）
+    // 注：#1492 后 dispatcher 不再参与生产解释链路，本断言锁定该不变量
     expect(shell.genericSeedDispatcher.dispatch).not.toHaveBeenCalled()
   })
 })
