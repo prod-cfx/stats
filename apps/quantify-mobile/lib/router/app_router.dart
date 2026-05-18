@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
+import '../pages/_dev/components_preview_page.dart';
 import '../pages/_dev/theme_preview_page.dart';
 import '../pages/ai/ai_home_page.dart';
 import '../pages/ai/backtest_config_sheet.dart';
@@ -122,6 +123,12 @@ GoRouter buildRouter() {
         GoRoute(
           path: '/_dev/theme-preview',
           builder: (BuildContext context, GoRouterState state) => const ThemePreviewPage(),
+        ),
+      if (kDebugMode)
+        GoRoute(
+          path: '/_dev/components-preview',
+          builder: (BuildContext context, GoRouterState state) =>
+              const ComponentsPreviewPage(),
         ),
     ],
   );

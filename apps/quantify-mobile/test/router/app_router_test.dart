@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/main.dart';
+import 'package:quantify_mobile/pages/_dev/components_preview_page.dart';
 import 'package:quantify_mobile/pages/_dev/theme_preview_page.dart';
 import 'package:quantify_mobile/pages/ai/ai_home_page.dart';
 import 'package:quantify_mobile/pages/ai/backtest_config_sheet.dart';
@@ -175,5 +176,40 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(ThemePreviewPage), findsOneWidget);
+  });
+
+  testWidgets('/_dev/components-preview resolves to ComponentsPreviewPage',
+      (WidgetTester tester) async {
+    final BuildContext ctx = await _pumpApp(tester);
+    ctx.go('/_dev/components-preview');
+    // Do not pumpAndSettle: the preview page renders QzSpinner whose
+    // CircularProgressIndicator animates forever. A single frame commits the
+    // GoRouter transition; the second 350 ms pump is just over the default
+    // GoRouter cupertino/material transition (≈ 300 ms) so the new page
+    // becomes the front-most route before we assert.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.byType(ComponentsPreviewPage), findsOneWidget);
+  });
+
+  testWidgets('theme-preview screen exposes a link to components-preview',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[
+          sharedPreferencesProvider.overrideWithValue(prefs),
+        ],
+        child: const QuantifyMobileApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // The link sits below the sample cards inside a ListView, so scroll
+    // before asserting visibility.
+    final Finder linkFinder =
+        find.byKey(const ValueKey<String>('dev-link-components-preview'));
+    await tester.scrollUntilVisible(linkFinder, 200);
+    expect(linkFinder, findsOneWidget);
   });
 }

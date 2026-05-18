@@ -50,6 +50,25 @@ class ThemePreviewPage extends StatelessWidget {
               child: const Text('Open theme picker'),
             ),
           ),
+          const SizedBox(height: QzSpacing.md),
+          SizedBox(
+            height: 48,
+            child: OutlinedButton(
+              key: const ValueKey<String>('dev-link-components-preview'),
+              // Use push (not go) so theme-preview remains in the navigation
+              // stack — Components Preview can then render a back arrow via
+              // Navigator.canPop.
+              onPressed: () => context.push('/_dev/components-preview'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: outer.text,
+                side: BorderSide(color: outer.border),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(QzRadii.input),
+                ),
+              ),
+              child: const Text('→ Components Preview'),
+            ),
+          ),
         ],
       ),
     );
