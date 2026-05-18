@@ -1,0 +1,141 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Issue #1494 — compileAtomExpr 组合算子调度 leaf AND(rsi_lte, rsi_gte) → allOf 顶层 + 两叶子 predicate 1`] = `
+{
+  "id": "seed_0_and",
+  "predicates": [
+    {
+      "args": [
+        "rsi_14_1h",
+        "const_30",
+      ],
+      "id": "seed_0_a0_oscillator_rsi_lte",
+      "kind": "LTE",
+    },
+    {
+      "args": [
+        "rsi_14_1h",
+        "const_70",
+      ],
+      "id": "seed_0_a1_oscillator_rsi_gte",
+      "kind": "GTE",
+    },
+    {
+      "args": [
+        "seed_0_a0_oscillator_rsi_lte",
+        "seed_0_a1_oscillator_rsi_gte",
+      ],
+      "id": "seed_0_and",
+      "kind": "allOf",
+    },
+  ],
+  "seriesIds": [
+    "close_1h",
+    "const_30",
+    "const_70",
+    "rsi_14_1h",
+  ],
+}
+`;
+
+exports[`Issue #1494 — compileAtomExpr 组合算子调度 leaf NOT(execution.on_start) → NOT predicate 包裹 leaf 1`] = `
+{
+  "id": "seed_0_not",
+  "predicates": [
+    {
+      "args": [
+        "bar_index",
+        "const_1",
+      ],
+      "id": "seed_0_n_execution_on_start",
+      "kind": "EQ",
+    },
+    {
+      "args": [
+        "seed_0_n_execution_on_start",
+      ],
+      "id": "seed_0_not",
+      "kind": "NOT",
+    },
+  ],
+  "seriesIds": [
+    "bar_index",
+    "close_1h",
+    "const_1",
+  ],
+}
+`;
+
+exports[`Issue #1494 — compileAtomExpr 组合算子调度 leaf OR(cross_over, cross_under) → anyOf 顶层 1`] = `
+{
+  "id": "seed_0_or",
+  "predicates": [
+    {
+      "args": [
+        "sma_7_1h",
+        "sma_30_1h",
+      ],
+      "id": "seed_0_o0_indicator_cross_over",
+      "kind": "CROSS_OVER",
+    },
+    {
+      "args": [
+        "sma_7_1h",
+        "sma_30_1h",
+      ],
+      "id": "seed_0_o1_indicator_cross_under",
+      "kind": "CROSS_UNDER",
+    },
+    {
+      "args": [
+        "seed_0_o0_indicator_cross_over",
+        "seed_0_o1_indicator_cross_under",
+      ],
+      "id": "seed_0_or",
+      "kind": "anyOf",
+    },
+  ],
+  "seriesIds": [
+    "close_1h",
+    "sma_30_1h",
+    "sma_7_1h",
+  ],
+}
+`;
+
+exports[`Issue #1494 — compileAtomExpr 组合算子调度 leaf SEQUENCE([cross_over, cross_under]) withinBars=5 → sequence predicate 带 params 1`] = `
+{
+  "id": "seed_0_seq",
+  "predicates": [
+    {
+      "args": [
+        "sma_7_1h",
+        "sma_30_1h",
+      ],
+      "id": "seed_0_s0_indicator_cross_over",
+      "kind": "CROSS_OVER",
+    },
+    {
+      "args": [
+        "sma_7_1h",
+        "sma_30_1h",
+      ],
+      "id": "seed_0_s1_indicator_cross_under",
+      "kind": "CROSS_UNDER",
+    },
+    {
+      "args": [
+        "seed_0_s0_indicator_cross_over",
+        "seed_0_s1_indicator_cross_under",
+      ],
+      "id": "seed_0_seq",
+      "kind": "sequence",
+    },
+  ],
+  "seriesIds": [
+    "close_1h",
+    "sma_30_1h",
+    "sma_7_1h",
+  ],
+}
+`;

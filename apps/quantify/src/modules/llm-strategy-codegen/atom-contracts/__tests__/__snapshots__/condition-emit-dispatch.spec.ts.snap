@@ -1,0 +1,231 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Issue #1494 — core condition atom emit shape snapshot bollinger.touch_upper (default touch semantics) 1`] = `
+{
+  "helpers": [
+    "bollinger",
+  ],
+  "predicates": [
+    {
+      "args": [
+        "close_1h",
+        "upper_band_20_2_1h",
+      ],
+      "id": "rule_0_bollinger_touch_upper",
+      "kind": "compare",
+    },
+  ],
+  "seriesKinds": [
+    {
+      "id": "close_1h",
+      "kind": "PRICE",
+    },
+    {
+      "id": "upper_band_20_2_1h",
+      "kind": "UPPER_BAND",
+    },
+  ],
+}
+`;
+
+exports[`Issue #1494 — core condition atom emit shape snapshot execution.on_start 1`] = `
+{
+  "helpers": [],
+  "predicates": [
+    {
+      "args": [
+        "bar_index",
+        "const_1",
+      ],
+      "id": "rule_0_execution_on_start",
+      "kind": "EQ",
+    },
+  ],
+  "seriesKinds": [
+    {
+      "id": "bar_index",
+      "kind": "BAR_INDEX",
+    },
+    {
+      "id": "close_1h",
+      "kind": "PRICE",
+    },
+    {
+      "id": "const_1",
+      "kind": "CONST",
+    },
+  ],
+}
+`;
+
+exports[`Issue #1494 — core condition atom emit shape snapshot indicator.above (sma period=20) 1`] = `
+{
+  "helpers": [],
+  "predicates": [
+    {
+      "args": [
+        "close_1h",
+        "sma_20_1h",
+      ],
+      "id": "rule_0_indicator_above_1h",
+      "kind": "GTE",
+    },
+  ],
+  "seriesKinds": [
+    {
+      "id": "close_1h",
+      "kind": "PRICE",
+    },
+    {
+      "id": "sma_20_1h",
+      "kind": "SMA",
+    },
+  ],
+}
+`;
+
+exports[`Issue #1494 — core condition atom emit shape snapshot indicator.below (sma period=20) 1`] = `
+{
+  "helpers": [],
+  "predicates": [
+    {
+      "args": [
+        "close_1h",
+        "sma_20_1h",
+      ],
+      "id": "rule_0_indicator_below_1h",
+      "kind": "LTE",
+    },
+  ],
+  "seriesKinds": [
+    {
+      "id": "close_1h",
+      "kind": "PRICE",
+    },
+    {
+      "id": "sma_20_1h",
+      "kind": "SMA",
+    },
+  ],
+}
+`;
+
+exports[`Issue #1494 — core condition atom emit shape snapshot indicator.cross_over (ma golden cross) 1`] = `
+{
+  "helpers": [],
+  "predicates": [
+    {
+      "args": [
+        "sma_7_1h",
+        "sma_30_1h",
+      ],
+      "id": "rule_0_indicator_cross_over",
+      "kind": "CROSS_OVER",
+    },
+  ],
+  "seriesKinds": [
+    {
+      "id": "close_1h",
+      "kind": "PRICE",
+    },
+    {
+      "id": "sma_30_1h",
+      "kind": "SMA",
+    },
+    {
+      "id": "sma_7_1h",
+      "kind": "SMA",
+    },
+  ],
+}
+`;
+
+exports[`Issue #1494 — core condition atom emit shape snapshot indicator.cross_under (ma death cross) 1`] = `
+{
+  "helpers": [],
+  "predicates": [
+    {
+      "args": [
+        "sma_7_1h",
+        "sma_30_1h",
+      ],
+      "id": "rule_0_indicator_cross_under",
+      "kind": "CROSS_UNDER",
+    },
+  ],
+  "seriesKinds": [
+    {
+      "id": "close_1h",
+      "kind": "PRICE",
+    },
+    {
+      "id": "sma_30_1h",
+      "kind": "SMA",
+    },
+    {
+      "id": "sma_7_1h",
+      "kind": "SMA",
+    },
+  ],
+}
+`;
+
+exports[`Issue #1494 — core condition atom emit shape snapshot oscillator.rsi_gte (period=14 threshold=70) 1`] = `
+{
+  "helpers": [],
+  "predicates": [
+    {
+      "args": [
+        "rsi_14_1h",
+        "const_70",
+      ],
+      "id": "rule_0_oscillator_rsi_gte",
+      "kind": "GTE",
+    },
+  ],
+  "seriesKinds": [
+    {
+      "id": "close_1h",
+      "kind": "PRICE",
+    },
+    {
+      "id": "const_70",
+      "kind": "CONST",
+    },
+    {
+      "id": "rsi_14_1h",
+      "kind": "RSI",
+    },
+  ],
+}
+`;
+
+exports[`Issue #1494 — core condition atom emit shape snapshot oscillator.rsi_lte (period=14 threshold=30) 1`] = `
+{
+  "helpers": [],
+  "predicates": [
+    {
+      "args": [
+        "rsi_14_1h",
+        "const_30",
+      ],
+      "id": "rule_0_oscillator_rsi_lte",
+      "kind": "LTE",
+    },
+  ],
+  "seriesKinds": [
+    {
+      "id": "close_1h",
+      "kind": "PRICE",
+    },
+    {
+      "id": "const_30",
+      "kind": "CONST",
+    },
+    {
+      "id": "rsi_14_1h",
+      "kind": "RSI",
+    },
+  ],
+}
+`;

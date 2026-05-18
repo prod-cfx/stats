@@ -47,7 +47,7 @@ import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry
 import { extractAtrStopParams } from './atr-stop-params'
 import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
 import { SizingEvidenceMissingException } from '../exceptions/sizing-evidence-missing.exception'
 import { LIQUIDITY_SWEEP_DEFAULT_RECLAIM_BARS } from '../types/canonical-strategy-ir'
@@ -128,6 +128,8 @@ const _compileContextShapeGuard: [_CompileContextAssignableToIr, _IrContextAssig
 
 @Injectable()
 export class CanonicalSpecV2IrCompilerService {
+  private readonly logger = new Logger(CanonicalSpecV2IrCompilerService.name)
+
   constructor(
     private readonly digest: CanonicalSpecV2DigestService = new CanonicalSpecV2DigestService(),
     private readonly specDescBuilder: SpecDescBuilderService = new SpecDescBuilderService(),
@@ -1208,18 +1210,19 @@ export class CanonicalSpecV2IrCompilerService {
   }
 
   /**
-   * Issue #1395 — AtomExpr 递归编译
+   * Issue #1494 — AtomExpr leaf 接入 atom-emit registry
    *
    * 把 SemanticRule.condition (AtomExpr 树) 递归归约为 PredicateDef.id。
    *   - and  → allOf
    *   - or   → anyOf
    *   - not  → NOT
    *   - sequence → sequence（withinBars / nextBarOnly 编码进 params）
-   *   - atom → MVP fallback：const(1) === const(1) 占位谓词 + 把 atom key 编码进 baseId 便于排查；
-   *     真正的 atom → predicate 映射依赖 atom-emit registry，留待后续 PR 接入。
+   *   - atom → 适配为 CanonicalConditionAtom 后 delegate 到 `compileAtom`，
+   *     由 ATOM_CONTRACT_REGISTRY `emit.irShape`（pr3a-condition）或 legacy switch 兜底；
+   *     未注册 atom 触发 `codegen.canonical_spec_v2_condition_unsupported:<key>` fail-closed。
    *
-   * 占位行为虽然语义恒真，但保证表达式树骨架（allOf/anyOf/NOT/sequence）已就位，
-   * 后续替换 atom kind 分支即可，无需重写组合逻辑。
+   * #1395 时代的 `const(1) === const(1)` 占位逻辑已移除：表达式树骨架仍由
+   * and/or/not/sequence 分支保持；leaf 行为与 CanonicalConditionAtom 完全等价。
    */
   private compileAtomExpr(
     expr: import('../types/atom-expr').AtomExpr,
@@ -1228,16 +1231,18 @@ export class CanonicalSpecV2IrCompilerService {
   ): string {
     switch (expr.kind) {
       case 'atom': {
-        // MVP 占位：const(1) === const(1) — 恒真谓词
-        // 把 atom key 编进 baseId，方便 IR dump 时定位
-        const one = this.ensureConstSeries(context, 1)
-        const safeKey = expr.key.replace(/\W+/g, '_')
-        return this.upsertPredicate(
-          context.predicateMap,
-          `${seed}_atom_${safeKey}`,
-          'EQ',
-          [one, one],
-        )
+        // 契约守门（#1494-M3）：本 case 不做 REGISTRY 预检；leaf 是否可编译由 compileAtom
+        // 自身负责——`ATOM_CONTRACT_REGISTRY[key].emit.irShape === 'pr3a-condition'` 走
+        // REGISTRY emit dispatch，其余 atom 命中 compileAtom 内 legacy switch；两者都
+        // 不命中 → compileAtom default 分支抛 `codegen.canonical_spec_v2_condition_unsupported:<key>`
+        // (参见同文件 default case)。此错误码字符串是「未注册 atom」的稳定契约，被
+        // `services/__tests__/compile-atom-expr-leaf-dispatch.spec.ts` 显式守门
+        // （`__test.unsupported_atom` case）；任何重构禁止改写或吞掉此字符串。
+        //
+        // 为什么不在此处加 REGISTRY/legacy-switch 并行白名单？compileAtom switch 是 source
+        // of truth，并行白名单只会引入 DRY 漂移风险——legacy case 增减需双改两处。
+        const atom = this.atomExprAtomToConditionAtom(expr)
+        return this.compileAtom(atom, context, seed)
       }
       case 'and':
         return this.upsertPredicate(
@@ -1414,6 +1419,73 @@ export class CanonicalSpecV2IrCompilerService {
       slowPeriod: this.readNumber([operand.params.slowPeriod, operand.params.slow], fallback.slowPeriod),
       signalPeriod: this.readNumber([operand.params.signalPeriod, operand.params.signal], fallback.signalPeriod),
     }
+  }
+
+  /**
+   * Issue #1494 — AtomExpr leaf → CanonicalConditionAtom 适配器
+   *
+   * AtomExprAtom 只携带 `key` / `params` / `sideScope`；CanonicalConditionAtom
+   * 额外有 `op` / `value` 两个顶层字段（threshold 类 atom emit body 直读）。
+   * 调用方约定把 `op` / `value` 放进 AtomExprAtom.params（旧 spec / planner 流
+   * 把它们顶在 CanonicalConditionAtom 自身）；此处把它们拎到顶层、其余 params
+   * 透传，保证 emit.irShape `helpers.readNumber([atom.value, ...])` 与
+   * `helpers.resolveComparisonKind(atom.op)` 行为与 spec-v2 入口完全等价。
+   *
+   * `params` 是 `Record<string, unknown>`，需要把非 primitive（含 object / null /
+   * undefined）剔掉以匹配 `CanonicalConditionAtom.params` 的窄类型
+   * （`Record<string, number | string | boolean>`）。
+   */
+  /**
+   * Issue #1494 — `op` 字段白名单。
+   *
+   * `CanonicalConditionAtom['op']` 是窄字面量联合（`'EQ' | 'LTE' | 'GTE' |
+   * 'CROSS_OVER' | 'CROSS_UNDER' | 'GT' | 'LT'`）。adapter 收到的 `params.op`
+   * 是 `unknown`，旧实现 `v as CanonicalConditionAtom['op']` 把任意字符串硬转
+   * 进联合，绕过编译期检查。改成显式白名单后非法值会保持 `op = undefined`，
+   * 由下游 `resolveComparisonKind` 默认分支兜底（返回 `'GTE'`）。
+   */
+  private static readonly VALID_CONDITION_ATOM_OPS: ReadonlySet<NonNullable<CanonicalConditionAtom['op']>>
+    = new Set(['EQ', 'LTE', 'GTE', 'CROSS_OVER', 'CROSS_UNDER', 'GT', 'LT'])
+
+  private atomExprAtomToConditionAtom(
+    expr: import('../types/atom-expr').AtomExprAtom,
+  ): CanonicalConditionAtom {
+    const raw = expr.params ?? {}
+    const params: Record<string, number | string | boolean> = {}
+    let op: CanonicalConditionAtom['op']
+    let value: CanonicalConditionAtom['value']
+    for (const [k, v] of Object.entries(raw)) {
+      if (typeof v !== 'number' && typeof v !== 'string' && typeof v !== 'boolean') {
+        // Issue #1494 M2 — 当前 condition emit 范围内 params 全为 primitive，无回归；
+        // PR3d/PR3e 接入 action / risk atom 时 params 会含嵌套对象（如 `levels: { tp1, tp2 }`），
+        // 静默 `continue` 会丢数据。这里记一条结构化 warn 暴露调用点，便于后续
+        // 升级 CanonicalConditionAtom.params 类型或换 adapter。
+        this.logger.warn(
+          `[#1494] atomExprAtomToConditionAtom dropping non-primitive param: atomKey=${expr.key} paramKey=${k} valueType=${v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v}`,
+        )
+        continue
+      }
+      if (k === 'op') {
+        if (
+          typeof v === 'string'
+          && CanonicalSpecV2IrCompilerService.VALID_CONDITION_ATOM_OPS.has(
+            v as NonNullable<CanonicalConditionAtom['op']>,
+          )
+        ) {
+          op = v as CanonicalConditionAtom['op']
+        }
+        continue
+      }
+      if (k === 'value') {
+        value = v
+        continue
+      }
+      params[k] = v
+    }
+    const atom: CanonicalConditionAtom = { kind: 'atom', key: expr.key, params }
+    if (op !== undefined) atom.op = op
+    if (value !== undefined) atom.value = value
+    return atom
   }
 
   private compileAtom(atom: CanonicalConditionAtom, context: CompileContext, seed: string): string {
