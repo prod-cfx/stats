@@ -301,6 +301,7 @@ export const Navbar = () => {
           {/* Mobile Menu Button */}
           <button
             type="button"
+            aria-label={t('nav.openMenu', { defaultValue: 'Open menu' })}
             className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] md:hidden"
             onClick={openMobileMenu}
           >
@@ -689,17 +690,20 @@ export const Navbar = () => {
           </div>
 
           <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
-            {mobileNavLinks.map(link => {
+            {mobileNavLinks.map((link, index) => {
               const hasChildren = link.children && link.children.length > 0
               const isExpanded = expandedMobileMenus.includes(link.name)
+              const submenuId = `mobile-nav-submenu-${index}`
 
               if (hasChildren) {
                 return (
                   <div key={link.name} className="flex flex-col">
                     <button
                       type="button"
+                      aria-expanded={isExpanded}
+                      aria-controls={submenuId}
                       onClick={() => toggleMobileSubmenu(link.name)}
-                      className="flex items-center justify-between px-2 py-3 text-lg font-medium text-[color:var(--cf-text-strong)]"
+                      className="flex items-center justify-between px-2 py-3 text-lg font-medium text-[color:var(--cf-text-strong)] focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                     >
                       {link.name}
                       <ChevronDown
@@ -708,13 +712,20 @@ export const Navbar = () => {
                     </button>
 
                     {isExpanded && (
-                      <div className="mb-2 flex flex-col overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]">
-                        {link.children!.map(child => (
+                      <div
+                        id={submenuId}
+                        role="region"
+                        aria-label={link.name}
+                        className="mb-2 flex flex-col overflow-hidden rounded-lg bg-[color:var(--cf-surface)]/80 ring-1 ring-inset ring-[color:var(--cf-border)]/60"
+                      >
+                        {link.children!.map((child, index) => (
                           <Link
                             key={child.name}
                             href={child.href}
                             onClick={() => setMobileMenuOpen(false)}
-                            className="border-b border-[color:var(--cf-border)] px-4 py-3 text-base text-[color:var(--cf-text)] last:border-0 hover:bg-[color:var(--cf-surface-hover)]"
+                            className={`px-4 py-3 text-base text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)] ${
+                              index > 0 ? 'border-t border-[color:var(--cf-border)]/70' : ''
+                            }`}
                           >
                             {child.name}
                           </Link>
