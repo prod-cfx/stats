@@ -170,7 +170,7 @@ export class StrategyIntentNormalizerService {
         ...(window ? { window } : {}),
         basis: basis ?? 'prev_close',
       },
-    })
+    }, rule)
   }
 
   private tryNormalizeExecutionIntent(
@@ -196,7 +196,7 @@ export class StrategyIntentNormalizerService {
         orderType: 'market',
         occurrence: 'once',
       },
-    })
+    }, rule)
   }
 
   private normalizeStateHints(checklist: StrategyLogicSnapshot): StrategyNormalizedIntent['stateHints'] {
@@ -264,8 +264,7 @@ export class StrategyIntentNormalizerService {
           ...(stdDev !== null ? { stdDev } : {}),
         },
         resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
-        evidenceText: rule,
-      })
+      }, rule)
     }
 
     if (/下轨|lower/i.test(normalized)) {
@@ -279,8 +278,7 @@ export class StrategyIntentNormalizerService {
           ...(stdDev !== null ? { stdDev } : {}),
         },
         resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
-        evidenceText: rule,
-      })
+      }, rule)
     }
 
     if (/中轨|middle|ma20|均线20/i.test(normalized)) {
@@ -294,8 +292,7 @@ export class StrategyIntentNormalizerService {
           ...(stdDev !== null ? { stdDev } : {}),
         },
         resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
-        evidenceText: rule,
-      })
+      }, rule)
     }
 
     return null
@@ -334,7 +331,7 @@ export class StrategyIntentNormalizerService {
             'reference.period': referencePeriod,
             confirmationMode,
           },
-        })
+        }, rule)
       }
       const unresolvedSlots: UnresolvedSlot[] = []
       const semanticScope = phase === 'entry' ? 'entry' : 'exit'
@@ -385,7 +382,7 @@ export class StrategyIntentNormalizerService {
             'reference.period': referencePeriod,
             confirmationMode,
           },
-        })
+        }, rule)
       }
       const unresolvedSlots: UnresolvedSlot[] = []
       const semanticScope = phase === 'entry' ? 'entry' : 'exit'
@@ -474,7 +471,7 @@ export class StrategyIntentNormalizerService {
         phase,
         sideScope: this.resolveSideScope(rule, phase) ?? (phase === 'entry' ? 'long' : 'long'),
         params: { reference: 'resistance' },
-      })
+      }, rule)
     }
 
     if (/跌破.{0,12}(?:支撑|低点)|失守.{0,12}(?:支撑|低点)|breakdown/iu.test(rule)) {
@@ -483,7 +480,7 @@ export class StrategyIntentNormalizerService {
         phase,
         sideScope: this.resolveSideScope(rule, phase) ?? (phase === 'entry' ? 'short' : 'long'),
         params: { reference: 'support' },
-      })
+      }, rule)
     }
 
     return null
@@ -508,7 +505,7 @@ export class StrategyIntentNormalizerService {
         basis: basis ?? 'position_pnl',
         window: this.extractWindow(rule) ?? 'position',
       },
-    })
+    }, rule)
   }
 
   private tryNormalizeIndicatorThreshold(
@@ -523,7 +520,7 @@ export class StrategyIntentNormalizerService {
           phase,
           sideScope: this.resolveSideScope(rule, phase),
           params: percentMatch?.[1] ? { value: Number(percentMatch[1]) } : {},
-        })
+        }, rule)
       }
       if (/超买|高于|大于|>=|≥/u.test(rule)) {
         return this.createClosedTrigger({
@@ -531,7 +528,7 @@ export class StrategyIntentNormalizerService {
           phase,
           sideScope: this.resolveSideScope(rule, phase),
           params: percentMatch?.[1] ? { value: Number(percentMatch[1]) } : {},
-        })
+        }, rule)
       }
     }
 
@@ -544,7 +541,7 @@ export class StrategyIntentNormalizerService {
           indicator: this.resolveIndicatorName(rule),
           ...this.extractMovingAverageReferenceParams(rule),
         },
-      })
+      }, rule)
     }
 
     if (/均线|ema|sma|ma/iu.test(rule) && /下方|低于|跌破/u.test(rule)) {
@@ -556,7 +553,7 @@ export class StrategyIntentNormalizerService {
           indicator: this.resolveIndicatorName(rule),
           ...this.extractMovingAverageReferenceParams(rule),
         },
-      })
+      }, rule)
     }
 
     return null
@@ -575,7 +572,7 @@ export class StrategyIntentNormalizerService {
           indicator: this.resolveIndicatorName(rule),
           ...this.extractMovingAverageCrossParams(rule),
         },
-      })
+      }, rule)
     }
     if (/死叉|cross under|下穿/u.test(rule)) {
       return this.createClosedTrigger({
@@ -586,7 +583,7 @@ export class StrategyIntentNormalizerService {
           indicator: this.resolveIndicatorName(rule),
           ...this.extractMovingAverageCrossParams(rule),
         },
-      })
+      }, rule)
     }
 
     return null
@@ -686,26 +683,52 @@ export class StrategyIntentNormalizerService {
     checklist: StrategyLogicSnapshot,
     grid: NormalizedGridIntent | null,
   ): NormalizedTriggerAtom[] {
-    const combinedText = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')
+    const allRules = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])]
+    const combinedText = allRules.join(' ')
     const structuredGrid = checklist.grid
+    // #1465 PR review (Minor 历史遗留)：跨规则 join(' ') 后做正则会假阳性匹配，
+    // 例如 entry "突破阻力" + exit "立刻停止" 会被误判为「突破时停止网格」。
+    // 改逐条 rule 判定，避免跨边界错配。
     const breakoutAction = structuredGrid?.breakoutAction
-      ?? (/突破.{0,8}(停|暂停|停止)/u.test(combinedText) ? 'pause' : 'continue')
+      ?? (allRules.some(rule => /突破.{0,8}(停|暂停|停止)/u.test(rule)) ? 'pause' : 'continue')
     if (grid) {
-      return [this.createClosedTrigger({
+      const gridSideScope = grid.sideMode === 'bidirectional'
+        ? 'both'
+        : (grid.sideMode === 'short_only' ? 'short' : 'long')
+      const gridParams = {
+        rangeLower: grid.range.lower,
+        rangeUpper: grid.range.upper,
+        stepPct: grid.stepPct,
+        sideMode: grid.sideMode,
+        recycle: grid.recycle,
+        breakoutAction,
+      }
+      if (combinedText) {
+        return [this.createClosedTrigger({
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          sideScope: gridSideScope,
+          params: gridParams,
+        }, combinedText)]
+      }
+      // #1465 PR review (Major)：explicitGrid 完整但无 rules 文本（combinedText 为空）时，
+      // closed trigger 拿不到 user message 子串作 evidence，planner 闸 1（#1450）必拒。
+      // 降级为 open trigger，由 clarification 路径让用户用自然语言确认后再补 evidence。
+      return [this.createOpenTrigger({
         key: 'grid.range_rebalance',
         phase: 'entry',
-        sideScope: grid.sideMode === 'bidirectional'
-          ? 'both'
-          : (grid.sideMode === 'short_only' ? 'short' : 'long'),
-        params: {
-          rangeLower: grid.range.lower,
-          rangeUpper: grid.range.upper,
-          stepPct: grid.stepPct,
-          sideMode: grid.sideMode,
-          recycle: grid.recycle,
-          breakoutAction,
+        sideScope: gridSideScope,
+        params: gridParams,
+      }, [
+        {
+          slotKey: 'grid.evidenceText',
+          fieldPath: 'triggers[grid].evidenceText',
+          reason: 'missing_definition',
+          questionHint: '请用自然语言确认网格区间与步长，以便记录原话证据。',
+          priority: 'core',
+          affectsExecution: true,
         },
-      })]
+      ])]
     }
 
     if (structuredGrid) {
@@ -763,7 +786,7 @@ export class StrategyIntentNormalizerService {
           ...(structuredGrid.sideMode ? { sideMode: structuredGrid.sideMode } : {}),
           breakoutAction,
         },
-      }, unresolvedSlots, combinedText || JSON.stringify(structuredGrid))]
+      }, unresolvedSlots, combinedText)]
     }
 
     if (!/网格|grid/iu.test(combinedText)) {
@@ -1069,11 +1092,18 @@ export class StrategyIntentNormalizerService {
     return 'indicator'
   }
 
+  /**
+   * #1465：evidenceText 必填，从类型层杜绝「新分支又忘记写」。
+   * planner 闸 1（#1450 PR）校验 evidence.text 是否为 user message 子串；
+   * 兜底 normalizer 产出的 trigger 必须能撑过同一道闸，才能在 planner 失败时支撑 entry/exit 双侧。
+   */
   private createClosedTrigger(
-    trigger: Omit<NormalizedTriggerAtom, 'closureStatus' | 'unresolvedSlots'>,
+    trigger: Omit<NormalizedTriggerAtom, 'closureStatus' | 'unresolvedSlots' | 'evidenceText'>,
+    evidenceText: string,
   ): NormalizedTriggerAtom {
     return {
       ...trigger,
+      evidenceText,
       closureStatus: 'closed',
       unresolvedSlots: [],
     }
