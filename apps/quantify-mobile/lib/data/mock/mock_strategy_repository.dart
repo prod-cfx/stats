@@ -79,4 +79,54 @@ class MockStrategyRepository implements StrategyRepository {
       pageSize: pageSize,
     );
   }
+
+  @override
+  Future<StrategyDetail> getStrategyDetail(String id) async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    final StrategyCard card = await getDetail(id);
+    final Random rng = Random(card.id.hashCode);
+    // 派生 6 项指标。范围参考人类阅读直觉：
+    //   收益率 -10%..+60%（短期可负 / 全期偏多头）
+    //   maxDrawdown -50%..-2%（始终负值）
+    //   sharpe 0.3..2.8
+    //   winRate 0.35..0.85
+    double pickReturn(double lo, double hi) =>
+        lo + rng.nextDouble() * (hi - lo);
+    final List<double> curve =
+        List<double>.generate(60, (int _) => rng.nextDouble());
+    return StrategyDetail(
+      card: card,
+      return7d: pickReturn(-10, 25),
+      return30d: pickReturn(-5, 40),
+      returnAll: pickReturn(-2, 60),
+      maxDrawdown: -pickReturn(2, 50),
+      sharpe: 0.3 + rng.nextDouble() * 2.5,
+      winRate: 0.35 + rng.nextDouble() * 0.5,
+      equityCurve: curve,
+    );
+  }
+
+  @override
+  Future<List<StrategySignal>> listStrategySignals(
+    String id, {
+    int limit = 20,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    final Random rng = Random(id.hashCode ^ 0x515);
+    // 基准价：按 id 派生一个 100..50000 区间的"中枢价"，信号在中枢 ±5% 浮动。
+    final double base = 100 + rng.nextDouble() * 49900;
+    final DateTime now = DateTime.now();
+    return List<StrategySignal>.generate(limit, (int i) {
+      final bool buy = rng.nextBool();
+      final double drift = (rng.nextDouble() - 0.5) * 0.10; // ±5%
+      final double price = base * (1 + drift);
+      final double pnl = (rng.nextDouble() - 0.4) * 12; // 偏正
+      return StrategySignal(
+        time: now.subtract(Duration(minutes: 15 * (i + 1))),
+        side: buy ? StrategySignalSide.buy : StrategySignalSide.sell,
+        price: price,
+        pnlPercent: pnl,
+      );
+    });
+  }
 }

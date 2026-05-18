@@ -80,6 +80,15 @@ class UnimplementedStrategyRepository implements StrategyRepository {
     StrategyCategory? category,
   }) =>
       _todo('StrategyRepository');
+  @override
+  Future<StrategyDetail> getStrategyDetail(String id) =>
+      _todo('StrategyRepository');
+  @override
+  Future<List<StrategySignal>> listStrategySignals(
+    String id, {
+    int limit = 20,
+  }) =>
+      _todo('StrategyRepository');
 }
 
 class UnimplementedAiChatRepository implements AiChatRepository {

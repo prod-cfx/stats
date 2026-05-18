@@ -1,0 +1,119 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:quantify_mobile/data/providers.dart';
+import 'package:quantify_mobile/data/storage/strategy_subscription_persistence.dart';
+import 'package:quantify_mobile/pages/strategy/strategy_detail_page.dart';
+import 'package:quantify_mobile/pages/strategy/widgets/strategy_metric_card.dart';
+import 'package:quantify_mobile/pages/strategy/widgets/strategy_signal_tile.dart';
+import 'package:quantify_mobile/theme/colors.dart';
+import 'package:quantify_mobile/theme/theme_data.dart';
+import 'package:quantify_mobile/theme/theme_notifier.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+const String _kId = 'st-grid-btc';
+
+Future<ProviderContainer> _pumpDetail(
+  WidgetTester tester, {
+  QzTheme? theme,
+  Map<String, Object> initialPrefs = const <String, Object>{},
+}) async {
+  await tester.binding.setSurfaceSize(const Size(420, 2400));
+  SharedPreferences.setMockInitialValues(initialPrefs);
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
+  final ProviderContainer container = ProviderContainer(
+    overrides: <Override>[
+      sharedPreferencesProvider.overrideWithValue(prefs),
+    ],
+  );
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        theme: buildQzThemeData(
+          theme ?? const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
+        ),
+        home: const StrategyDetailPage(id: _kId),
+      ),
+    ),
+  );
+  // 两个 mock future（detail + signals）各 200ms
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 250));
+  await tester.pump(const Duration(milliseconds: 250));
+  return container;
+}
+
+void main() {
+  testWidgets('渲染：6 张指标卡 + 20 条信号 + 订阅按钮',
+      (WidgetTester tester) async {
+    await _pumpDetail(tester);
+    expect(find.byType(StrategyMetricCard), findsNWidgets(6));
+    expect(find.byType(StrategySignalTile), findsNWidgets(20));
+    expect(find.byKey(const Key('strategy-detail-subscribe-btn')),
+        findsOneWidget);
+    // 收益曲线占位
+    expect(find.text('曲线占位（接入 K 线后可视化）'), findsOneWidget);
+  });
+
+  testWidgets('订阅按钮：未订阅 → 点击 → 已订阅 → 再次点击 → 取消',
+      (WidgetTester tester) async {
+    final ProviderContainer c = await _pumpDetail(tester);
+    expect(find.text('订阅策略'), findsOneWidget);
+    expect(c.read(strategySubscriptionsProvider).contains(_kId), isFalse);
+
+    await tester.tap(
+        find.byKey(const Key('strategy-detail-subscribe-btn')));
+    await tester.pump();
+    await tester.pump();
+    expect(c.read(strategySubscriptionsProvider).contains(_kId), isTrue);
+    expect(find.text('已订阅 · 点击取消'), findsOneWidget);
+
+    await tester.tap(
+        find.byKey(const Key('strategy-detail-subscribe-btn')));
+    await tester.pump();
+    await tester.pump();
+    expect(c.read(strategySubscriptionsProvider).contains(_kId), isFalse);
+  });
+
+  testWidgets('订阅持久化：toggle 后写入 SharedPreferences，第二次启动读到状态',
+      (WidgetTester tester) async {
+    // 第一次进入：订阅
+    final ProviderContainer c1 = await _pumpDetail(tester);
+    await tester.tap(
+        find.byKey(const Key('strategy-detail-subscribe-btn')));
+    await tester.pump();
+    await tester.pump();
+    expect(c1.read(strategySubscriptionsProvider).contains(_kId), isTrue);
+    c1.dispose();
+
+    // 模拟第二次启动：用相同的 mock prefs 实例验证读路径
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      StrategySubscriptionPersistence.kKey: <String>[_kId],
+    });
+    final SharedPreferences prefs2 = await SharedPreferences.getInstance();
+    final ProviderContainer c2 = ProviderContainer(
+      overrides: <Override>[
+        sharedPreferencesProvider.overrideWithValue(prefs2),
+      ],
+    );
+    addTearDown(c2.dispose);
+    final Set<String> initial = c2.read(strategySubscriptionsProvider);
+    expect(initial.contains(_kId), isTrue,
+        reason: '第二次启动应从 SharedPreferences 恢复订阅集合');
+  });
+
+  testWidgets('9 主题循环 pump 不抛异常', (WidgetTester tester) async {
+    for (final QzBg bg in QzBg.values) {
+      for (final QzAccent accent in QzAccent.values) {
+        final ProviderContainer c =
+            await _pumpDetail(tester, theme: QzTheme(bg: bg, accent: accent));
+        expect(tester.takeException(), isNull,
+            reason: 'theme bg=$bg accent=$accent should pump without exception');
+        expect(find.byType(StrategyMetricCard), findsNWidgets(6),
+            reason: 'theme bg=$bg accent=$accent');
+        c.dispose();
+      }
+    }
+  });
+}

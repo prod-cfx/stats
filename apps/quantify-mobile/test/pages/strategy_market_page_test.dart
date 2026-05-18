@@ -11,6 +11,7 @@ import 'package:quantify_mobile/router/app_router.dart';
 import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// 简化测试用 router（**故意不含 shell**）：仅验证 `/strategy` 与
 /// `/strategy/:id` 两个 builder 命中，不验证 shell 覆盖语义（那个由
@@ -19,6 +20,8 @@ Future<void> _pump(WidgetTester tester, {QzTheme? theme}) async {
   // 用足够高的 surface 让 ListView.builder 一次性建出整页卡片，
   // 避免 viewport 截断使 widget count 少于 pageSize。
   await tester.binding.setSurfaceSize(const Size(420, 4200));
+  SharedPreferences.setMockInitialValues(<String, Object>{});
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
   final GoRouter router = GoRouter(
     initialLocation: '/strategy',
     routes: <RouteBase>[
@@ -36,6 +39,9 @@ Future<void> _pump(WidgetTester tester, {QzTheme? theme}) async {
   );
   await tester.pumpWidget(
     ProviderScope(
+      overrides: <Override>[
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
       child: MaterialApp.router(
         theme: buildQzThemeData(
           theme ?? const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
@@ -54,9 +60,14 @@ void main() {
   testWidgets('smoke: 真实 buildRouter() 能解析 /strategy/:id 到 StrategyDetailPage',
       (WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(420, 1400));
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
     final GoRouter router = buildRouter();
     await tester.pumpWidget(
       ProviderScope(
+        overrides: <Override>[
+          sharedPreferencesProvider.overrideWithValue(prefs),
+        ],
         child: MaterialApp.router(
           theme: buildQzThemeData(
             const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
@@ -68,9 +79,12 @@ void main() {
     await tester.pump();
     router.go('/strategy/st-grid-btc');
     await tester.pump();
+    // detail + signals 两个 mock future（200ms each）
+    await tester.pump(const Duration(milliseconds: 250));
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byType(StrategyDetailPage), findsOneWidget);
-    expect(find.text('策略 #st-grid-btc（占位）'), findsOneWidget);
+    // 渲染出真实策略名 = 占位页已被替换
+    expect(find.text('BTC 网格搬砖'), findsOneWidget);
   });
 
   testWidgets('默认渲染：初始页加载至少 10 张卡片，fixture ≥ 20',
@@ -132,14 +146,19 @@ void main() {
     expect(find.byType(StrategyCardTile), findsAtLeast(1));
   });
 
-  testWidgets('点击卡片：push 到 /strategy/:id 占位详情',
+  testWidgets('点击卡片：push 到 /strategy/:id 详情页',
       (WidgetTester tester) async {
     await _pump(tester);
     final StrategyCard first = mockFeaturedStrategies.first;
     await tester.tap(find.byKey(Key('strategy-tile-${first.id}')));
-    await tester.pumpAndSettle();
+    // pumpAndSettle 受 mock 200ms delay + 渲染影响：手动驱动两轮 future
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 250));
     expect(find.byType(StrategyDetailPage), findsOneWidget);
-    expect(find.text('策略 #${first.id}（占位）'), findsOneWidget);
+    // 详情页 AppBar 标题 + 真实策略名同时存在
+    expect(find.text('策略详情'), findsOneWidget);
+    expect(find.text(first.name), findsOneWidget);
   });
 
   testWidgets('9 主题循环 pump 不抛异常（验收 #5）',

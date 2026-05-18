@@ -2,8 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'dart:math';
 
+import '../theme/theme_notifier.dart' show sharedPreferencesProvider;
 import 'models/account_models.dart';
 import 'models/api_key_models.dart';
+import 'storage/strategy_subscription_persistence.dart';
 import 'mock/mock_account_repository.dart';
 import 'mock/mock_ai_chat_repository.dart';
 import 'mock/mock_api_key_repository.dart';
@@ -139,3 +141,42 @@ final Provider<ApiConnectionTester> apiConnectionTesterProvider =
     return r.nextBool();
   };
 });
+
+final Provider<StrategySubscriptionPersistence>
+    strategySubscriptionPersistenceProvider =
+    Provider<StrategySubscriptionPersistence>((Ref ref) {
+  return StrategySubscriptionPersistence(ref.watch(sharedPreferencesProvider));
+});
+
+/// 已订阅策略 id 集合。
+///
+/// `build()` 同步从 SharedPreferences 读取（与 ThemeNotifier 同模式：上层
+/// `main()` 已 override `sharedPreferencesProvider` 为 resolved 实例）。
+/// `toggle(id)` 会乐观更新内存状态，再写盘；写盘失败回滚到先前快照避免
+/// 内存与磁盘漂移。
+class StrategySubscriptionsNotifier extends Notifier<Set<String>> {
+  @override
+  Set<String> build() {
+    return ref.watch(strategySubscriptionPersistenceProvider).read();
+  }
+
+  bool isSubscribed(String id) => state.contains(id);
+
+  Future<void> toggle(String id) async {
+    final Set<String> previous = state;
+    final Set<String> next = <String>{...previous};
+    if (!next.add(id)) next.remove(id);
+    state = next;
+    try {
+      await ref.read(strategySubscriptionPersistenceProvider).write(next);
+    } catch (_) {
+      state = previous;
+      rethrow;
+    }
+  }
+}
+
+final NotifierProvider<StrategySubscriptionsNotifier, Set<String>>
+    strategySubscriptionsProvider =
+    NotifierProvider<StrategySubscriptionsNotifier, Set<String>>(
+        StrategySubscriptionsNotifier.new);

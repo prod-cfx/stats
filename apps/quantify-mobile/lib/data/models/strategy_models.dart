@@ -53,3 +53,54 @@ class StrategyMarketPage {
     required this.pageSize,
   });
 }
+
+/// 策略详情：基础卡片 + 6 项收益指标 + 收益曲线占位序列。
+///
+/// 6 项指标按 issue #1514 验收对齐：7d / 30d / 全部收益率、最大回撤、夏普、
+/// 胜率。所有数值由 mock 基于 `Random(id.hashCode)` 派生，**确定性**——
+/// 保证 widget test 多次 pump 同一 id 结果一致。
+class StrategyDetail {
+  final StrategyCard card;
+  final double return7d;
+  final double return30d;
+  final double returnAll;
+  final double maxDrawdown;
+  final double sharpe;
+  final double winRate;
+
+  /// 收益曲线占位采样点（0..1 归一化），与 sparkline 等价但更长。
+  /// 真正的 K 线接入留给后续 issue；当前页仅渲染"占位"提示。
+  final List<double> equityCurve;
+
+  const StrategyDetail({
+    required this.card,
+    required this.return7d,
+    required this.return30d,
+    required this.returnAll,
+    required this.maxDrawdown,
+    required this.sharpe,
+    required this.winRate,
+    required this.equityCurve,
+  });
+}
+
+/// 信号方向：买 / 卖。
+enum StrategySignalSide { buy, sell }
+
+/// 单条历史信号。
+///
+/// [time] 是相对当前时间向前回退派生的时间戳；mock 用 now - i\*15min 倒推，
+/// 保证显示"最近一条在最上"语义且测试时也能合理排序。
+class StrategySignal {
+  final DateTime time;
+  final StrategySignalSide side;
+  final double price;
+  final double pnlPercent;
+
+  const StrategySignal({
+    required this.time,
+    required this.side,
+    required this.price,
+    required this.pnlPercent,
+  });
+}
