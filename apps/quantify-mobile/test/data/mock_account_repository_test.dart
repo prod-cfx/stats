@@ -8,6 +8,8 @@ void main() {
       final MockAccountRepository repo = MockAccountRepository();
       final AccountInfo info = await repo.getInfo();
       expect(info.userId, 'mock-user');
+      expect(info.email, contains('@'));
+      expect(info.uid, isNotEmpty);
       expect(info.totalEquityUsd, greaterThan(0));
     });
   });

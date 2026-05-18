@@ -111,7 +111,12 @@ class UnimplementedApiKeyRepository implements ApiKeyRepository {
   @override
   Future<List<ExchangeApiKey>> listKeys() => _todo('ApiKeyRepository');
   @override
-  Future<ExchangeApiKey> addKey(ExchangeApiKey key) =>
+  Future<ExchangeApiKey> addKey({
+    required String exchange,
+    required String label,
+    required String apiKey,
+    required String apiSecret,
+  }) =>
       _todo('ApiKeyRepository');
   @override
   Future<void> removeKey(String id) => _todo('ApiKeyRepository');

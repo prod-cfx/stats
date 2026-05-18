@@ -1,5 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'dart:math';
+
+import 'models/account_models.dart';
+import 'models/api_key_models.dart';
 import 'mock/mock_account_repository.dart';
 import 'mock/mock_ai_chat_repository.dart';
 import 'mock/mock_api_key_repository.dart';
@@ -104,4 +108,34 @@ final Provider<ApiKeyRepository> apiKeyRepositoryProvider =
   return ref.watch(useMockProvider)
       ? MockApiKeyRepository()
       : UnimplementedApiKeyRepository();
+});
+
+/// 当前账户概要。从 `/me` 主页 watch；写入路径走 repository。
+final FutureProvider<AccountInfo> accountInfoProvider =
+    FutureProvider<AccountInfo>((Ref ref) async {
+  return ref.watch(accountRepositoryProvider).getInfo();
+});
+
+/// 交易所凭据列表。从 `/me` 摘要与 `/me/api` 列表同时 watch；新增/删除后
+/// 调用方应 `ref.invalidate(apiKeysProvider)` 让两处同步刷新。
+final FutureProvider<List<ExchangeApiKey>> apiKeysProvider =
+    FutureProvider<List<ExchangeApiKey>>((Ref ref) async {
+  return ref.watch(apiKeyRepositoryProvider).listKeys();
+});
+
+/// `/me/api` 表单的「测试连接」回调签名。
+typedef ApiConnectionTester = Future<bool> Function();
+
+/// 默认实现：1s loading 后随机成功/失败。
+///
+/// Random 在 provider 创建时实例化，复用同一个种子；widget test 可通过
+/// `apiConnectionTesterProvider.overrideWithValue(() async => true)` 注入
+/// 固定结果以避免 fake clock 与 Future.delayed 的同步问题。
+final Provider<ApiConnectionTester> apiConnectionTesterProvider =
+    Provider<ApiConnectionTester>((Ref ref) {
+  final Random r = Random();
+  return () async {
+    await Future<void>.delayed(const Duration(seconds: 1));
+    return r.nextBool();
+  };
 });
