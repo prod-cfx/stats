@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
+import '../data/models/auth_models.dart';
 import '../pages/_dev/components_preview_page.dart';
 import '../pages/_dev/theme_preview_page.dart';
 import '../pages/ai/ai_home_page.dart';
@@ -26,9 +27,45 @@ import '../shell/main_shell_scaffold.dart';
 ///   `/ai/backtest-config`, `/me/api`, `/me/theme`) are top-level routes that
 ///   intentionally sit outside the shell — pushing them covers the bottom
 ///   tab bar (full-screen modal-style navigation).
-GoRouter buildRouter() {
+/// 需要登录才能访问的路径前缀白名单。
+///
+/// 守卫策略与原型 07 屏一致：`/me`（个人中心 + 子页 `/me/api`、`/me/theme`）
+/// 必须登录；行情/AI/鲸鱼/策略 浏览均允许匿名。
+///
+/// 注意：使用前缀匹配是为了让 `/me/api` 等子路由自动落入守卫，不需要逐条
+/// 枚举。`/login` 永远是公开的，否则会与 redirect 形成死循环。
+const List<String> kAuthProtectedPrefixes = <String>['/me'];
+
+bool _isProtected(String location) {
+  for (final String prefix in kAuthProtectedPrefixes) {
+    if (location == prefix || location.startsWith('$prefix/')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// 构建 app 路由。
+///
+/// 参数：
+/// - [readSession]：同步读取当前 session（GoRouter.redirect 必须同步）。
+///   默认全公开，保证既有 widget test 与无 auth 环境下行为不变。
+/// - [refreshListenable]：session 变化时触发 GoRouter 重新评估 redirect。
+GoRouter buildRouter({
+  AuthSession? Function()? readSession,
+  Listenable? refreshListenable,
+}) {
+  final AuthSession? Function() read = readSession ?? () => null;
   return GoRouter(
     initialLocation: kDebugMode ? '/_dev/theme-preview' : '/ai',
+    refreshListenable: refreshListenable,
+    redirect: (BuildContext context, GoRouterState state) {
+      final bool loggedIn = read() != null;
+      final String loc = state.matchedLocation;
+      if (!loggedIn && _isProtected(loc)) return '/login';
+      if (loggedIn && loc == '/login') return '/ai';
+      return null;
+    },
     routes: <RouteBase>[
       StatefulShellRoute.indexedStack(
         builder: (

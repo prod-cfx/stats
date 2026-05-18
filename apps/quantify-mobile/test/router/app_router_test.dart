@@ -1,7 +1,14 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:quantify_mobile/data/auth/session_controller.dart';
+import 'package:quantify_mobile/data/mock/mock_auth_repository.dart';
+import 'package:quantify_mobile/data/models/auth_models.dart';
+import 'package:quantify_mobile/data/providers.dart';
+import 'package:quantify_mobile/data/storage/secure_token_storage.dart';
 import 'package:quantify_mobile/main.dart';
 import 'package:quantify_mobile/pages/_dev/components_preview_page.dart';
 import 'package:quantify_mobile/pages/_dev/theme_preview_page.dart';
@@ -22,14 +29,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Pumps the app and navigates to `/ai` to bypass the debug-only landing
 /// (`/_dev/theme-preview`). Returns a [BuildContext] anchored on the AI page.
-Future<BuildContext> _pumpApp(WidgetTester tester) async {
+Future<BuildContext> _pumpApp(
+  WidgetTester tester, {
+  InMemoryTokenStorage? storage,
+}) async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
   final SharedPreferences prefs = await SharedPreferences.getInstance();
+  final InMemoryTokenStorage s = storage ?? InMemoryTokenStorage();
+  final ProviderContainer container = ProviderContainer(
+    overrides: <Override>[
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      tokenStorageProvider.overrideWithValue(s),
+      authRepositoryProvider.overrideWithValue(MockAuthRepository()),
+    ],
+  );
+  await container.read(sessionControllerProvider.future);
   await tester.pumpWidget(
-    ProviderScope(
-      overrides: <Override>[
-        sharedPreferencesProvider.overrideWithValue(prefs),
-      ],
+    UncontrolledProviderScope(
+      container: container,
       child: const QuantifyMobileApp(),
     ),
   );
@@ -46,9 +63,20 @@ Future<BuildContext> _pumpApp(WidgetTester tester) async {
 /// keeps tests resilient against future icon swaps.
 Finder _tab(String name) => find.byKey(ValueKey<String>('tab-$name'));
 
+/// 构造一份已登录的 InMemoryTokenStorage，用来绕过 `/me*` 守卫。
+InMemoryTokenStorage _loggedInStorage() {
+  final AuthSession seed = AuthSession(
+    userId: 'u', token: 't', email: 'a@b.com',
+  );
+  return InMemoryTokenStorage(<String, String>{
+    kSessionStorageKey: jsonEncode(seed.toMap()),
+  });
+}
+
 void main() {
   testWidgets('5 tabs render and switch via bottom bar', (WidgetTester tester) async {
-    await _pumpApp(tester);
+    // /me 受守卫保护 → 需要预登录 session 才能切到 me tab。
+    await _pumpApp(tester, storage: _loggedInStorage());
     expect(find.byType(AiHomePage), findsOneWidget);
 
     await tester.tap(_tab('market'));
@@ -147,7 +175,7 @@ void main() {
   });
 
   testWidgets('/me/api resolves to ApiSettingsPage', (WidgetTester tester) async {
-    final BuildContext ctx = await _pumpApp(tester);
+    final BuildContext ctx = await _pumpApp(tester, storage: _loggedInStorage());
     GoRouter.of(ctx).push('/me/api');
     await tester.pumpAndSettle();
 
@@ -155,7 +183,7 @@ void main() {
   });
 
   testWidgets('/me/theme resolves to ThemeSettingsPage', (WidgetTester tester) async {
-    final BuildContext ctx = await _pumpApp(tester);
+    final BuildContext ctx = await _pumpApp(tester, storage: _loggedInStorage());
     GoRouter.of(ctx).push('/me/theme');
     await tester.pumpAndSettle();
 
@@ -166,11 +194,15 @@ void main() {
     // Tests run in debug; the initial route lands here before any go() call.
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final ProviderContainer c = ProviderContainer(overrides: <Override>[
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      tokenStorageProvider.overrideWithValue(InMemoryTokenStorage()),
+      authRepositoryProvider.overrideWithValue(MockAuthRepository()),
+    ]);
+    await c.read(sessionControllerProvider.future);
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: <Override>[
-          sharedPreferencesProvider.overrideWithValue(prefs),
-        ],
+      UncontrolledProviderScope(
+        container: c,
         child: const QuantifyMobileApp(),
       ),
     );
@@ -196,11 +228,15 @@ void main() {
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final ProviderContainer c = ProviderContainer(overrides: <Override>[
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      tokenStorageProvider.overrideWithValue(InMemoryTokenStorage()),
+      authRepositoryProvider.overrideWithValue(MockAuthRepository()),
+    ]);
+    await c.read(sessionControllerProvider.future);
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: <Override>[
-          sharedPreferencesProvider.overrideWithValue(prefs),
-        ],
+      UncontrolledProviderScope(
+        container: c,
         child: const QuantifyMobileApp(),
       ),
     );
@@ -211,5 +247,71 @@ void main() {
         find.byKey(const ValueKey<String>('dev-link-components-preview'));
     await tester.scrollUntilVisible(linkFinder, 200);
     expect(linkFinder, findsOneWidget);
+  });
+
+  testWidgets('未登录访问 /me 重定向到 /login', (WidgetTester tester) async {
+    final BuildContext ctx = await _pumpApp(tester);
+    GoRouter.of(ctx).go('/me');
+    await tester.pumpAndSettle();
+    expect(find.byType(LoginPage), findsOneWidget);
+    expect(find.byType(MeHomePage), findsNothing);
+  });
+
+  testWidgets('未登录访问 /me/api 也被守卫拦回 /login',
+      (WidgetTester tester) async {
+    final BuildContext ctx = await _pumpApp(tester);
+    GoRouter.of(ctx).go('/me/api');
+    await tester.pumpAndSettle();
+    expect(find.byType(LoginPage), findsOneWidget);
+    expect(find.byType(ApiSettingsPage), findsNothing);
+  });
+
+  testWidgets('已登录直接访问 /me 不被拦', (WidgetTester tester) async {
+    final AuthSession seed = AuthSession(
+      userId: 'u', token: 't', email: 'a@b.com',
+    );
+    final InMemoryTokenStorage storage =
+        InMemoryTokenStorage(<String, String>{
+      kSessionStorageKey: jsonEncode(seed.toMap()),
+    });
+    final BuildContext ctx = await _pumpApp(tester, storage: storage);
+    GoRouter.of(ctx).go('/me');
+    await tester.pumpAndSettle();
+    expect(find.byType(MeHomePage), findsOneWidget);
+    expect(find.byType(LoginPage), findsNothing);
+  });
+
+  testWidgets('登出后再访问 /me 弹回 /login', (WidgetTester tester) async {
+    final AuthSession seed = AuthSession(
+      userId: 'u', token: 't', email: 'a@b.com',
+    );
+    final InMemoryTokenStorage storage =
+        InMemoryTokenStorage(<String, String>{
+      kSessionStorageKey: jsonEncode(seed.toMap()),
+    });
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final ProviderContainer container = ProviderContainer(overrides: <Override>[
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      tokenStorageProvider.overrideWithValue(storage),
+      authRepositoryProvider.overrideWithValue(MockAuthRepository()),
+    ]);
+    await container.read(sessionControllerProvider.future);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const QuantifyMobileApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final BuildContext ctx = tester.element(find.byType(Navigator).first);
+    GoRouter.of(ctx).go('/me');
+    await tester.pumpAndSettle();
+    expect(find.byType(MeHomePage), findsOneWidget);
+
+    await container.read(sessionControllerProvider.notifier).logout();
+    await tester.pumpAndSettle();
+    expect(find.byType(LoginPage), findsOneWidget);
+    expect(find.byType(MeHomePage), findsNothing);
   });
 }
