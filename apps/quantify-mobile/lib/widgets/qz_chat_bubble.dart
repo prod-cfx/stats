@@ -1,0 +1,137 @@
+import 'package:flutter/material.dart';
+
+import '../theme/colors.dart';
+import '../theme/theme_context.dart';
+import '../theme/tokens.dart';
+
+/// Chat message role. Mirrors the `role` string field on `ChatTurn`
+/// (`user` / `assistant`) but typed for widget consumption to avoid
+/// stringly-typed branching at render sites.
+enum QzChatRole { user, assistant }
+
+/// Chat message bubble used by the AI conversation page.
+///
+/// - `user` bubbles align trailing, paint with the active accent gradient,
+///   use `accentOn` for the body text.
+/// - `assistant` bubbles align leading, paint with `bgSoft`, use `text` for
+///   the body text.
+///
+/// `codeBlock` is a separate sub-segment rendered with a monospace font on a
+/// `border`-tinted background. Many model replies interleave prose +
+/// code; the page composes those by emitting two adjacent bubbles, but
+/// inline-only callers can pass the snippet via [codeBlock] directly.
+class QzChatBubble extends StatelessWidget {
+  const QzChatBubble({
+    super.key,
+    required this.role,
+    required this.content,
+    this.time,
+    this.codeBlock,
+  });
+
+  final QzChatRole role;
+  final String content;
+  final DateTime? time;
+  final String? codeBlock;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final bool isUser = role == QzChatRole.user;
+    final BorderRadius radius = BorderRadius.circular(QzRadii.card);
+
+    final Color fg = isUser ? c.accentOn : c.text;
+    final Decoration decoration = isUser
+        ? BoxDecoration(gradient: c.accentGrad, borderRadius: radius)
+        : BoxDecoration(
+            color: c.bgSoft,
+            border: Border.all(color: c.border),
+            borderRadius: radius,
+          );
+
+    return LayoutBuilder(
+      builder: (BuildContext ctx, BoxConstraints constraints) {
+        // Cap bubble width at 72% of available width so very long lines wrap
+        // instead of stretching edge-to-edge.
+        final double maxW = constraints.maxWidth * 0.72;
+        return Align(
+          alignment:
+              isUser ? Alignment.centerRight : Alignment.centerLeft,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxW),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: QzSpacing.md,
+                vertical: QzSpacing.sm,
+              ),
+              decoration: decoration,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  if (content.isNotEmpty)
+                    Text(
+                      content,
+                      style: TextStyle(
+                        color: fg,
+                        fontSize: 14,
+                        height: 1.4,
+                      ),
+                    ),
+                  if (codeBlock != null && codeBlock!.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: QzSpacing.sm),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(QzSpacing.sm),
+                      decoration: BoxDecoration(
+                        color: isUser
+                            ? c.accentOn.withValues(alpha: 0.12)
+                            : c.border.withValues(alpha: 0.4),
+                        borderRadius:
+                            BorderRadius.circular(QzRadii.input),
+                      ),
+                      child: Text(
+                        codeBlock!,
+                        style: TextStyle(
+                          color: fg,
+                          fontSize: 12,
+                          height: 1.4,
+                          fontFamily: 'monospace',
+                          fontFamilyFallback: const <String>[
+                            'Menlo',
+                            'Consolas',
+                            'Courier New',
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (time != null) ...<Widget>[
+                    const SizedBox(height: QzSpacing.xxs),
+                    Text(
+                      _formatTime(time!),
+                      style: TextStyle(
+                        color: isUser
+                            ? c.accentOn.withValues(alpha: 0.75)
+                            : c.textDim,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// HH:mm formatter — kept inline because chat bubble timestamp is the only
+  /// caller in the app today and pulling in `intl` for two padded fields is
+  /// disproportionate.
+  static String _formatTime(DateTime t) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(t.hour)}:${two(t.minute)}';
+  }
+}

@@ -6,9 +6,11 @@
 library;
 
 export 'qz_avatar.dart';
+export 'qz_backtest_result_card.dart';
 export 'qz_bottom_tab_bar.dart';
 export 'qz_button.dart';
 export 'qz_card.dart';
+export 'qz_chat_bubble.dart';
 export 'qz_chip.dart';
 export 'qz_empty_state.dart';
 export 'qz_panel.dart';
