@@ -8,8 +8,10 @@
       "status": "covered",
       "failureLayer": "none",
       "trace": [
+        "predicate:CROSS_OVER",
         "rule-block-action:ADD_LONG",
-        "rule-block:probe-action-rule"
+        "rule-block:probe-action-rule",
+        "series:EMA"
       ]
     },
     {

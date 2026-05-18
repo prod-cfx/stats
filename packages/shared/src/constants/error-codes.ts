@@ -208,6 +208,13 @@ export enum ErrorCode {
   READINESS_PER_ORDER_BUDGET_MISSING = 'READINESS_PER_ORDER_BUDGET_MISSING',
   // #1230 compile-time guard：actionable rule action 缺 sizing evidence → 编译期 fail-closed
   SIZING_EVIDENCE_MISSING = 'SIZING_EVIDENCE_MISSING',
+  // ===== Strategy IR Compiler =====
+  // Issue #1457 闸 2：entry rule 全部叶子为状态谓词（如 allOf[indicator.above × N]）→
+  //   配合 signalEvaluation='bar_close' + fillPolicy='next_bar_open' 会演变成每根 K 线
+  //   持续加仓循环；canonical-strategy-ir-compiler 编译期 fail-closed reject。
+  //   m1 重命名（review round 1）：旧名 STATE_PREDICATE_ENTRY_RULE 更准确地表达了
+  //   invariant 内涵——entry rule 必须含至少一个 event leaf；state+event 混合允许。
+  ENTRY_RULE_REQUIRES_EVENT_LEAF = 'ENTRY_RULE_REQUIRES_EVENT_LEAF',
 
   // ===== NL Gateway / Atom 翻牌基建 =====
   INTERNAL_KEY_LEAK_DETECTED = 'INTERNAL_KEY_LEAK_DETECTED',

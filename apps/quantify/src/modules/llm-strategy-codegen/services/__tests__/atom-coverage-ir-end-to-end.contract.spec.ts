@@ -191,6 +191,15 @@ function mutateAsGateTrigger(atomKey: string, conditionParams: CanonicalConditio
  */
 function mutateAsAction(actionType: CanonicalRuleAction['type'], metadata?: CanonicalRuleV2['metadata']): CanonicalStrategySpecV2 {
   const spec = buildBaselineSpec()
+  // Issue #1457：当 mutator 注入 ADD_LONG/ADD_SHORT 时，lifecyclePyramiding 闸激活
+  //   → 强制 baseline-entry 的 OPEN_LONG 携带 event leaf；其他 action 类型不触发
+  //   闸，保留原 state predicate 以保持 baseline 痕迹稳定。
+  if (actionType === 'ADD_LONG' || actionType === 'ADD_SHORT') {
+    const baselineEntry = spec.rules[0]
+    if (baselineEntry && baselineEntry.id === 'baseline-entry') {
+      baselineEntry.condition = { kind: 'atom', key: 'ma.golden_cross', semanticScope: 'market', op: 'CROSS_OVER' }
+    }
+  }
   const sizing = (
     actionType === 'ADD_LONG' || actionType === 'ADD_SHORT'
       ? { mode: 'RATIO' as const, value: 20 }

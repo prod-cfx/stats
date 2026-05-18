@@ -265,6 +265,46 @@ export interface AtomContract<TParams = Record<string, unknown>> {
    *   - context：执行上下文（exchange / symbol / timeframe / market type）
    */
   fulfillsStrategyPhase?: ReadonlyArray<'entry' | 'exit' | 'risk' | 'sizing' | 'context'>
+
+  /**
+   * Issue #1457 闸 2 — Atom 时间性（temporality）单一真相源。
+   *
+   * Review round 1 M1 边界澄清：本字段是 **atom 层** 语义，与 IR compiler 层的
+   *   `PREDICATE_KIND_TEMPORALITY`（predicate-kind-temporality.ts）是两个独立概念。
+   *   两者无映射关系——一个 atom 是 'event' 不等于它编译出的 PredicateDef.kind 是 'event'
+   *   （如 price.percent_change 在 atom 层是 'event'，在 compiler 层会编译成 GT/LT 比较
+   *   谓词，IR kind 是 'state'）。compiler 层 entry-rule event-leaf invariant 只看 IR
+   *   kind 表，不读取本字段。
+   *
+   * 取值（review round 1 M4：引入 'structural'）：
+   *
+   *   'state'      —— 持续真值类 predicate atom（indicator.above / indicator.below /
+   *                   position.has_position / market.regime / volatility.state /
+   *                   trend.direction 等）。这类 atom 出现在 entry rule 叶子时容易
+   *                   演变为"每根 K 线状态满足即触发"，需配合 event leaf 才能成为
+   *                   合法 entry rule。
+   *   'event'      —— rising-edge / 一次性触发 predicate atom（indicator.cross_over /
+   *                   cross_under / bollinger.touch_* / price.breakout_* /
+   *                   condition.sequence / liquidity.sweep / price.candle_pattern 等）。
+   *   'structural' —— 非 predicate-class atom：scope.* / action.* / risk.* /
+   *                   orchestration.* / positionConstraint.* / 网格 program.* 等。
+   *                   这些 atom 不进入 SemanticRule.condition 树，不会作为 IR
+   *                   PredicateDef leaf 出现。本值表达"已审计，非 predicate 形态"。
+   *                   review round 1 M4：旧版被硬贴 'event' 的 scope/action/risk/
+   *                   orchestration atom 统一收敛到此值，避免与 trigger predicate
+   *                   atom 的 event 语义混淆。
+   *
+   * Review round 1 M2 — 当前消费状态：
+   *   - atom 层 'state' / 'event' / 'structural' 当前生产 0 消费（仅 invariant spec
+   *     与 IR layer 文档锚点）。
+   *   - 为 #1458 directional gate 对称配对（如 indicator.above ↔ indicator.below）
+   *     预埋；后续 PR 在 corpus-invariants 或 atom directional 表里读取本字段。
+   *
+   * 单一真相源：atom-contract-registry.ts 内 `ATOM_TEMPORALITY` 表 + `completePr1bRegistry` 注入。
+   * Invariant spec（`__tests__/atom-temporality.invariant.spec.ts`）反向断言：
+   *   每个注册 atom 必须声明 temporality；TS exhaustive Record 在编译期守门。
+   */
+  readonly temporality: 'state' | 'event' | 'structural'
 }
 
 export type AtomContractKey = SupportedAtomKey

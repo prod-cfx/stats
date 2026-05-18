@@ -42,7 +42,7 @@ import { ATOM_PRIVATE_DISPLAY } from './atom-private-display-tokens'
 import { renderDisplayToken, renderEnumDisplayToken } from '../nl-gateway/display-registry'
 import { getGoldenUtterancesForAtom } from '../nl-gateway/utterance-corpus'
 
-type AtomContractSeed = Omit<AtomContract, 'key' | 'bucket' | 'roles' | 'display' | 'emit' | 'corpus'> & {
+type AtomContractSeed = Omit<AtomContract, 'key' | 'bucket' | 'roles' | 'display' | 'emit' | 'corpus' | 'temporality'> & {
   readonly display?: AtomContractDisplay
   readonly emit?: AtomContractEmit
   // #1329 PR3c Round 1 M5：corpus 改为 required。所有 seed 必须显式提供 corpus；
@@ -91,6 +91,8 @@ type CompletedPr1bRegistry<T extends Record<AtomContractKey, AtomContractSeed>> 
     readonly fulfillsStrategyPhase: ReadonlyArray<'entry' | 'exit' | 'risk' | 'sizing' | 'context'>
     // Issue #1395：roles 由 ATOM_ROLES 单一真相源注入
     readonly roles: ReadonlyArray<'predicate' | 'effect'>
+    // Issue #1457 闸 2：temporality 由 ATOM_TEMPORALITY 单一真相源注入
+    readonly temporality: 'state' | 'event' | 'structural'
   }
 }
 
@@ -391,6 +393,119 @@ export function getAtomRoles(key: AtomContractKey): ReadonlyArray<'predicate' | 
   return ATOM_ROLES[key]
 }
 
+// =========================================================
+// ATOM_TEMPORALITY — Issue #1457 闸 2（review round 1 M1 / M2 / M4）
+// =========================================================
+//
+// **重要：本表是 atom 层语义真相源；与 IR compiler 层的 PREDICATE_KIND_TEMPORALITY
+// （predicate-kind-temporality.ts）是两个独立概念，没有映射关系**。compiler 层判断
+// entry rule 是否含 event leaf 不读本表，只读 PREDICATE_KIND_TEMPORALITY。本表用于：
+//   - Issue #1458 directional gate 对称配对（state 类 atom 的方向反义对）
+//   - corpus-invariants / atom directional 表的反向不变量锚点
+//   - 文档/checklist：新 atom 强制按"是否带持续状态"显式选边
+//
+// **当前消费状态（review round 1 M2）**：生产 0 消费，仅 invariant spec 与文档锚点。
+//   为 #1458 directional gate 对称配对预埋；后续 PR 接通真实消费。
+//
+// 取值（review round 1 M4：引入 'structural'）：
+//
+//   'state'      —— 持续真值类 trigger atom（above/below/has_position/market.regime/
+//                   volatility.state/trend.direction/range_position_* 等）
+//   'event'      —— rising-edge trigger atom（cross_over/cross_under/touch_*/
+//                   breakout_*/sequence/candle_pattern/chart_pattern/liquidity.sweep/
+//                   divergence/external.signal/percent_change/detect.indicator_boundary 等）
+//   'structural' —— 非 predicate-class atom：scope.* / action.* / risk.* /
+//                   orchestration program.* / portfolioRisk.* / positionConstraint.* /
+//                   gate.* / strategy.time_window / execution.on_start。这些 atom
+//                   不进入 SemanticRule.condition 谓词树，不会作为 IR PredicateDef
+//                   leaf 出现。旧版被硬贴 'event' 的条目（action.* / risk.* /
+//                   scope.* / orchestration.* 等）统一收敛到此值。
+//
+// 反向不变量：__tests__/atom-temporality.invariant.spec.ts。
+const ATOM_TEMPORALITY = {
+  // ── 状态类：持续真值 ──
+  'indicator.above': 'state',
+  'indicator.below': 'state',
+  'oscillator.rsi_lte': 'state',
+  'oscillator.rsi_gte': 'state',
+  'price.range_position_lte': 'state',
+  'price.range_position_gte': 'state',
+  'volume.threshold': 'state',
+  'volatility.atr_threshold': 'state',
+  'position.has_position': 'state',
+  'position.no_position': 'state',
+  'trend.direction': 'state',
+  'market.regime': 'state',
+  'volatility.state': 'state',
+  // 时间窗与启动事件 / gate / portfolioRisk → review round 1 M4 收敛为 'structural'。
+  //   这些 atom 不进入 SemanticRule.condition 谓词树，不会作为 entry rule 的 IR
+  //   leaf 谓词出现，按 atom 层语义属 structural（非 predicate-class）。
+  //   compiler 层 entry-rule event-leaf invariant 不读本表，由 PREDICATE_KIND_TEMPORALITY
+  //   独立判定，故 'structural' 标注不影响 #1457 闸逻辑。
+  'strategy.time_window': 'structural',
+  'gate.regime': 'structural',
+  'gate.subStrategy': 'structural',
+  'portfolioRisk.drawdown_block': 'structural',
+  'portfolioRisk.symbol_exposure_cap': 'structural',
+  'portfolioRisk.substrategy_exposure_cap': 'structural',
+
+  // ── 事件类：rising-edge / 一次性触发 ──
+  'indicator.cross_over': 'event',
+  'indicator.cross_under': 'event',
+  'indicator.divergence': 'event',
+  'bollinger.touch_upper': 'event',
+  'bollinger.touch_lower': 'event',
+  'bollinger.touch_middle': 'event',
+  'price.breakout_up': 'event',
+  'price.breakout_down': 'event',
+  'price.percent_change': 'event',
+  'price.candle_pattern': 'event',
+  'price.chart_pattern': 'event',
+  'price.detect.indicator_boundary': 'event',
+  'price.previous_extrema_retest': 'event',
+  'liquidity.sweep': 'event',
+  'external.signal': 'event',
+  'condition.sequence': 'event',
+  // 启动事件 → review round 1 M4：非 predicate-class，归 structural
+  'execution.on_start': 'structural',
+
+  // ── action / risk / positionConstraint / orchestration program / scope ──
+  // review round 1 M4：旧版硬贴 'event' 在语义上错乱（action 副作用不是触发谓词，
+  //   risk atom 既能作为触发谓词又能作为副作用，scope 完全是执行上下文）。统一
+  //   归为 'structural' 表达"非 predicate-class atom，已审计"。
+  'action.add_position': 'structural',
+  'action.reverse_position': 'structural',
+  'action.open_long': 'structural',
+  'action.close_long': 'structural',
+  'action.open_short': 'structural',
+  'action.close_short': 'structural',
+
+  'risk.stop_loss_pct': 'structural',
+  'risk.take_profit_pct': 'structural',
+  'risk.atr_stop': 'structural',
+  'risk.atr_take_profit': 'structural',
+  'risk.partial_take_profit': 'structural',
+
+  'position.dca_schedule': 'structural',
+  'position.pyramiding_limit': 'structural',
+  'grid.range_rebalance': 'structural',
+
+  'program.dynamic_grid': 'structural',
+  'program.fixed_grid_gated': 'structural',
+  'program.adaptive_volatility_grid': 'structural',
+  'program.event_listener': 'structural',
+
+  'scope.symbol': 'structural',
+  'scope.leg': 'structural',
+  'scope.timeframe': 'structural',
+  'scope.dataSource': 'structural',
+  'scope.subStrategy': 'structural',
+} as const satisfies Record<AtomContractKey, 'state' | 'event' | 'structural'>
+
+export function getAtomTemporality(key: AtomContractKey): 'state' | 'event' | 'structural' {
+  return ATOM_TEMPORALITY[key]
+}
+
 // Public bucket helpers — 单一对外 API，模块外消费方禁止再读 ATOM_BUCKETS（已 private）
 export function getAllRegisteredAtomKeys(): readonly AtomContractKey[] {
   return Object.keys(ATOM_CONTRACT_REGISTRY) as AtomContractKey[]
@@ -584,6 +699,8 @@ function completePr1bRegistry<const T extends Record<AtomContractKey, AtomContra
       emit: registry[key].emit ?? mergedEmit,
       // Issue #1383 Lane A：从 ATOM_FULFILLS_STRATEGY_PHASE 单一真相源注入。
       fulfillsStrategyPhase: ATOM_FULFILLS_STRATEGY_PHASE[key],
+      // Issue #1457 闸 2：从 ATOM_TEMPORALITY 单一真相源注入。
+      temporality: ATOM_TEMPORALITY[key],
     } as AtomContract
   }
   return completed as CompletedPr1bRegistry<T>

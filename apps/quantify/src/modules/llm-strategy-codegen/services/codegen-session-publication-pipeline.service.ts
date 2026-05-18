@@ -13,6 +13,7 @@ import { CanonicalSpecV2IrCompilerService } from './canonical-spec-v2-ir-compile
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CanonicalStrategyAstCompilerService } from './canonical-strategy-ast-compiler.service'
 import { CodegenConversationStateMachine } from './codegen-conversation-state-machine'
+import { EntryRuleRequiresEventLeafException } from '../exceptions/entry-rule-requires-event-leaf.exception'
 import { CodegenPublicationGenerationStage } from './codegen-publication-generation.stage'
 import { CodegenPublicationPersistenceStage } from './codegen-publication-persistence.stage'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -308,6 +309,7 @@ export class CodegenSessionPublicationPipelineService {
       const publicationGate = this.normalizePublicationGate(
         (error as { publicationGate?: unknown } | null)?.publicationGate,
       )
+        ?? this.buildEntryRuleEventLeafPublicationGate(error)
       const reason = error instanceof Error ? error.message : String(error)
       if (publicationGate) {
         // Issue #1456 闸 1：IR build 入口 assertion / publish 入口 assertion
@@ -396,6 +398,35 @@ export class CodegenSessionPublicationPipelineService {
     }
 
     return value as Record<string, unknown>
+  }
+
+  /**
+   * Issue #1457 闸 2 (review round 1 C2)：把 EntryRuleRequiresEventLeafException 合并
+   * 到 publicationGate 阻断响应。让前端能与 #1456 闸 1 的 CLARIFICATION_PENDING
+   * 一致地展示「未澄清/不合法 IR 被卡」。
+   */
+  private buildEntryRuleEventLeafPublicationGate(error: unknown): Record<string, unknown> | null {
+    if (!(error instanceof EntryRuleRequiresEventLeafException)) {
+      return null
+    }
+    const args = error.args ?? {}
+    const leafKinds = Array.isArray(args.leafKinds) ? args.leafKinds : []
+    const ruleId = typeof args.ruleId === 'string' ? args.ruleId : null
+    return {
+      passed: false,
+      blocked: true,
+      reason: 'entry_rule_requires_event_leaf',
+      code: error.code,
+      pendingItems: [
+        {
+          field: 'ruleBlocks.entry',
+          ruleId,
+          leafKinds,
+          message: error.message,
+        },
+      ],
+      blockedIrFields: ['ruleBlocks'],
+    }
   }
 
   private normalizePublicationGate(value: unknown): Record<string, unknown> | null {

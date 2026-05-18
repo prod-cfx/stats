@@ -5,6 +5,8 @@ import type { CanonicalStrategyIrValidatorService } from './canonical-strategy-i
 import type { GraphOperatorParserService } from './graph-operator-parser.service'
 import type { GraphSemanticProjectionService } from './graph-semantic-projection.service'
 import { Injectable } from '@nestjs/common'
+import { EntryRuleRequiresEventLeafException } from '../exceptions/entry-rule-requires-event-leaf.exception'
+import { collectEntryRuleLeafKinds, leafKindsContainEvent } from './predicate-kind-temporality'
 
 interface CompiledSignals {
   series: SeriesDef[]
@@ -28,6 +30,8 @@ export class CanonicalStrategyIrCompilerService {
     const timeframe = graph.meta.timeframe.split('/')[0] || '1h'
     const entrySignals = this.compilePhaseSignals(graph, 'entry', timeframe)
     const exitSignals = this.compilePhaseSignals(graph, 'exit', timeframe)
+    // Issue #1457 闸 2：entry rule 编译期识别"纯状态谓词"形态，避免每根 K 线持续加仓循环
+    this.assertEntryRuleHasEventLeaf(entrySignals)
     const riskGuards = this.compileRisk(graph.risk)
 
     const ir: CanonicalStrategyIrV1 = {
@@ -337,6 +341,45 @@ export class CanonicalStrategyIrCompilerService {
 
   private readPeriod(node: ParsedOperatorNode | undefined): number | undefined {
     return node?.kind === 'NUMBER' && Number.isFinite(node.value) ? node.value : undefined
+  }
+
+  /**
+   * Issue #1457 闸 2 — entry rule 编译期识别纯状态谓词形态。
+   *
+   * 遍历 entry rule predicateRef 指向的 PredicateDef 树（leaf 与 composite 由
+   * PREDICATE_KIND_TEMPORALITY 分类），收集所有 leaf 的 effective temporality：
+   *   - 若 leaf 集合非空且全部为 'state' → 抛 EntryRuleRequiresEventLeafException（review
+   *     round 1 C2：使用 DomainException + ErrorCode 体系，不再裸 throw Error）。
+   *   - 至少含一个 'event' leaf → 放行。
+   *
+   * Review round 1 M3：NOT 算子做 temporality 翻转——NOT(event) 等价"非翻转瞬间"，本质
+   *   是持续状态；NOT(state) 仍是持续状态（翻转后的另一态）。否则 `NOT(CROSS_OVER)`
+   *   会被错误识别为含 event 而绕过闸。
+   *
+   * Review round 1 m3：predicateRef 为空时改为 invariant assert——entry rule 既然进入
+   *   编译流程，必然产生 predicateRef；空值意味着 compilePhaseSignals 逻辑漂移，主动
+   *   fail-loud 比 silent 放行更稳健。
+   */
+  private assertEntryRuleHasEventLeaf(entrySignals: CompiledSignals): void {
+    // m3: invariant assert，phaseSignals 有 trigger 节点时必然产生 predicateRef
+    if (!entrySignals.predicateRef) {
+      // 无任何 entry trigger → 上层不会构造 ruleBlock，直接放行
+      if (entrySignals.predicates.length === 0) return
+      throw new Error(
+        'codegen.entry_rule_predicate_ref_missing: compilePhaseSignals produced predicates without predicateRef',
+      )
+    }
+
+    const predicateById = new Map<string, PredicateDef>()
+    for (const predicate of entrySignals.predicates) {
+      predicateById.set(predicate.id, predicate)
+    }
+
+    const leafKinds = collectEntryRuleLeafKinds(entrySignals.predicateRef, predicateById)
+    if (leafKinds.length === 0) return
+    if (leafKindsContainEvent(leafKinds)) return
+
+    throw new EntryRuleRequiresEventLeafException({ ruleId: 'entry_long', leafKinds })
   }
 
   private readLookbackFromTree(node: ParsedOperatorNode): number {

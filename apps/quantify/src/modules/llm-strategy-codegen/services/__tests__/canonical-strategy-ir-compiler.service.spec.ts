@@ -101,6 +101,84 @@ describe('canonicalStrategyIrCompilerService', () => {
     expect(() => compiler.compile(graph)).toThrow('codegen.graph_join_ambiguous')
   })
 
+  // ============================================================
+  // Issue #1457 闸 2 — entry rule 事件叶子 invariant（review round 1: m5 中文用例名）
+  // ============================================================
+  describe('#1457 entry rule 事件叶子 invariant', () => {
+    const baseMeta = {
+      exchange: 'binance' as const,
+      symbol: 'BTCUSDT',
+      timeframe: '1h',
+      positionPct: 25,
+      executionTags: [] as string[],
+    }
+
+    const buildGraph = (operator: string, version = 1): StrategyLogicGraphSnapshot => ({
+      version,
+      status: 'confirmed',
+      trigger: [{ id: `trigger-entry-${version}`, phase: 'entry', operator }],
+      actions: [{ id: 'action-buy', action: 'BUY', target: 'BTCUSDT', amount: '25%' }],
+      risk: [],
+      meta: baseMeta,
+    })
+
+    it('纯状态谓词 allOf[GTE×3] 必须被拒绝', () => {
+      const compiler = buildCompiler()
+      const graph = buildGraph('allOf(GTE(CLOSE,EMA(CLOSE,20)),GTE(CLOSE,EMA(CLOSE,60)),GTE(CLOSE,EMA(CLOSE,144)))')
+      expect(() => compiler.compile(graph)).toThrow(/entry_rule_requires_event_leaf/)
+    })
+
+    it('混合 state + event 叶子时放行', () => {
+      const compiler = buildCompiler()
+      const graph = buildGraph('allOf(GTE(CLOSE,EMA(CLOSE,20)),GTE(CLOSE,EMA(CLOSE,60)),CROSS_OVER(EMA(CLOSE,7),EMA(CLOSE,21)))', 2)
+      expect(() => compiler.compile(graph)).not.toThrow()
+    })
+
+    it('单一 event 叶子时放行', () => {
+      const compiler = buildCompiler()
+      const graph = buildGraph('CROSS_OVER(EMA(CLOSE,7),EMA(CLOSE,21))', 3)
+      expect(() => compiler.compile(graph)).not.toThrow()
+    })
+
+    // ── review round 1 M5 边界 case ──
+    it('M5 anyOf[GTE, GTE] 纯状态 → 拒绝', () => {
+      const compiler = buildCompiler()
+      const graph = buildGraph('anyOf(GTE(CLOSE,EMA(CLOSE,20)),GTE(CLOSE,EMA(CLOSE,60)))', 4)
+      expect(() => compiler.compile(graph)).toThrow(/entry_rule_requires_event_leaf/)
+    })
+
+    it('M5 anyOf[GTE, CROSS_OVER] 含 event → 通过', () => {
+      const compiler = buildCompiler()
+      const graph = buildGraph('anyOf(GTE(CLOSE,EMA(CLOSE,20)),CROSS_OVER(EMA(CLOSE,7),EMA(CLOSE,21)))', 5)
+      expect(() => compiler.compile(graph)).not.toThrow()
+    })
+
+    it('M5/M3 单独 NOT(CROSS_OVER) → 拒绝（NOT 翻转视为 state）', () => {
+      const compiler = buildCompiler()
+      const graph = buildGraph('NOT(CROSS_OVER(EMA(CLOSE,7),EMA(CLOSE,21)))', 6)
+      expect(() => compiler.compile(graph)).toThrow(/entry_rule_requires_event_leaf/)
+    })
+
+    it('M5/M3 allOf[GTE, NOT(CROSS_OVER)] → 拒绝（NOT(event) 翻为 state）', () => {
+      const compiler = buildCompiler()
+      const graph = buildGraph('allOf(GTE(CLOSE,EMA(CLOSE,20)),NOT(CROSS_OVER(EMA(CLOSE,7),EMA(CLOSE,21))))', 7)
+      expect(() => compiler.compile(graph)).toThrow(/entry_rule_requires_event_leaf/)
+    })
+
+    it('M5 嵌套 allOf[anyOf[GTE, CROSS_OVER], GTE] → 通过', () => {
+      const compiler = buildCompiler()
+      const graph = buildGraph('allOf(anyOf(GTE(CLOSE,EMA(CLOSE,20)),CROSS_OVER(EMA(CLOSE,7),EMA(CLOSE,21))),GTE(CLOSE,EMA(CLOSE,60)))', 8)
+      expect(() => compiler.compile(graph)).not.toThrow()
+    })
+
+    // m6 time_window 等效形态：纯 GT/LT 时间比较 → 仍是 state → 拒绝
+    it('m6 纯 time_window 风格 entry rule (LT 比较, 无 event leaf) → 拒绝', () => {
+      const compiler = buildCompiler()
+      const graph = buildGraph('allOf(GT(CLOSE,EMA(CLOSE,20)),LT(CLOSE,EMA(CLOSE,144)))', 9)
+      expect(() => compiler.compile(graph)).toThrow(/entry_rule_requires_event_leaf/)
+    })
+  })
+
   it('accepts generic predicate operators on the legacy graph IR path', () => {
     const compiler = buildCompiler()
 

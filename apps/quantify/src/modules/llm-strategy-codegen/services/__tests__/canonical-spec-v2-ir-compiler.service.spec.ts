@@ -4952,12 +4952,9 @@ describe('canonicalSpecV2IrCompilerService position.dca_schedule', () => {
           phase: 'entry',
           sideScope: 'long',
           priority: 200,
-          condition: {
-            kind: 'expression',
-            op: 'GT',
-            left: { kind: 'series', source: 'bar', field: 'close' },
-            right: { kind: 'series', source: 'bar', field: 'open' },
-          },
+          // Issue #1457：entry rule 必须含 event leaf；用 ma.golden_cross (CROSS_OVER)
+          //   作为事件性触发，下游 dca_schedule 测试覆盖面不变。
+          condition: { kind: 'atom', key: 'ma.golden_cross', semanticScope: 'market', op: 'CROSS_OVER' },
           actions: [{ type: 'OPEN_LONG' }],
         },
       ],
@@ -5212,12 +5209,10 @@ describe('canonicalSpecV2IrCompilerService action.add_position', () => {
           phase: 'entry',
           sideScope: 'long',
           priority: 200,
-          condition: {
-            kind: 'expression',
-            op: 'GT',
-            left: { kind: 'series', source: 'bar', field: 'close' },
-            right: { kind: 'series', source: 'bar', field: 'open' },
-          },
+          // Issue #1457：OPEN_LONG entry rule 必须含 event leaf；ma.golden_cross
+          //   (CROSS_OVER) 提供事件性触发，本套用例聚焦 add_position 透传，事件
+          //   触发语义不影响 ADD_LONG 断言。
+          condition: { kind: 'atom', key: 'ma.golden_cross', semanticScope: 'market', op: 'CROSS_OVER' },
           actions: [{ type: 'OPEN_LONG' }],
         },
       ],
@@ -5549,12 +5544,9 @@ describe('canonicalSpecV2IrCompilerService action.add_position', () => {
       phase: 'entry',
       sideScope: 'long',
       priority: 150,
-      condition: {
-        kind: 'expression',
-        op: 'GT',
-        left: { kind: 'series', source: 'bar', field: 'close' },
-        right: { kind: 'series', source: 'bar', field: 'open' },
-      },
+      // Issue #1457：OPEN_LONG entry rule 必须含 event leaf；本用例聚焦 hasAddAction
+      //   guard，事件触发不影响 early-return 路径断言。
+      condition: { kind: 'atom', key: 'ma.golden_cross', semanticScope: 'market', op: 'CROSS_OVER' },
       // metadata.addPosition present but actions list has no ADD_LONG/ADD_SHORT
       actions: [{ type: 'OPEN_LONG' }],
       metadata: {

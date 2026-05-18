@@ -61,6 +61,8 @@ import {
   compileBandTouchPredicate,
   readBandTouchConfirmationMode,
 } from './confirmation-mode-compiler'
+import { EntryRuleRequiresEventLeafException } from '../exceptions/entry-rule-requires-event-leaf.exception'
+import { collectEntryRuleLeafKinds, leafKindsContainEvent } from './predicate-kind-temporality'
 import { SpecDescBuilderService } from './spec-desc-builder.service'
 
 interface CompileCanonicalSpecV2ToIrInput {
@@ -342,6 +344,15 @@ export class CanonicalSpecV2IrCompilerService {
         ? this.resolveOrderProgramPositionMode(input.canonicalSpec.orderPrograms ?? [])
         : this.resolvePositionMode(input.canonicalSpec.rules)
     const lifecyclePyramiding = this.resolveLifecyclePyramiding(input.canonicalSpec.rules, context)
+
+    // Issue #1457 闸 2 (review round 1 C1) — V2 生产管线 entry rule event-leaf invariant
+    //   生产入口：identification of 状态谓词-only entry rule with bare OPEN_LONG/OPEN_SHORT
+    //   动作 → reject 编译，强制策略提供事件性触发叶子（cross/touch/breakout 等）。
+    //   闸内部仅对 OPEN_LONG/OPEN_SHORT 启用（持续加仓循环风险面）；ADD_*/REDUCE_*
+    //   由 dca_schedule / addPosition lifecycle stateKey 兜底，闸跳过这些动作。
+    if (hasOrderPrograms || lifecyclePyramiding.allow) {
+      this.assertEntryRuleBlocksHaveEventLeaves(ruleBlocks, context)
+    }
 
     return {
       irVersion: 'csi.v1',
@@ -2708,6 +2719,43 @@ export class CanonicalSpecV2IrCompilerService {
       })
     }
     return id
+  }
+
+  /**
+   * Issue #1457 闸 2 (review round 1 C1)：V2 compiler 的 entry rule event-leaf invariant。
+   *
+   * 与 legacy CanonicalStrategyIrCompilerService.assertEntryRuleHasEventLeaf 等价：
+   *   - 遍历每条 phase='entry' 的 ruleBlock 的 when 谓词树
+   *   - leaf 全部为 'state' / 'NOT:event'（NOT 翻转视为 state）→ 抛 EntryRuleRequiresEventLeafException
+   *   - 至少一个 'event' leaf → 放行
+   *
+   * 单一真相源：collectEntryRuleLeafKinds / leafKindsContainEvent（predicate-kind-temporality.ts）。
+   *
+   * review round 1 M4 注：atom 层 'structural' temporality（scope/action/risk/orchestration/
+   *   positionConstraint）的 atom 由构造保证不会进入 SemanticRule.condition 谓词树，
+   *   也就不会成为本判定的 leaf。compiler 层 invariant 不读 atom temporality（M1：
+   *   两层语义独立），完全以 IR PredicateDef.kind 为准。
+   */
+  private assertEntryRuleBlocksHaveEventLeaves(
+    ruleBlocks: readonly RuleBlock[],
+    context: CompileContext,
+  ): void {
+    for (const block of ruleBlocks) {
+      if (block.phase !== 'entry') continue
+      if (!block.when) continue
+      // 仅对带"裸 OPEN_LONG/OPEN_SHORT"动作的 entry rule 启用闸——这正是 #1457
+      //   关注的"持续加仓循环"场景。ADD_LONG/ADD_SHORT/REDUCE_* 等 lifecycle
+      //   动作由 dca_schedule maxCount / addPosition maxLayers / position.lifecycle
+      //   stateKey 兜底，即便 entry rule 为纯状态也不会无限加仓。
+      const opensRawPosition = block.actions.some(action =>
+        action.kind === 'OPEN_LONG' || action.kind === 'OPEN_SHORT',
+      )
+      if (!opensRawPosition) continue
+      const leafKinds = collectEntryRuleLeafKinds(block.when, context.predicateMap)
+      if (leafKinds.length === 0) continue
+      if (leafKindsContainEvent(leafKinds)) continue
+      throw new EntryRuleRequiresEventLeafException({ ruleId: block.id, leafKinds })
+    }
   }
 
   private upsertPredicate(
