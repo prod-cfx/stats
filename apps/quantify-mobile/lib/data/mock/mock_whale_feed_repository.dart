@@ -9,9 +9,11 @@ class MockWhaleFeedRepository implements WhaleFeedRepository {
   @override
   Future<List<WhaleEvent>> listRecent({required int limit}) async {
     await Future<void>.delayed(const Duration(milliseconds: 200));
+    // fixture 内是 timestamp 升序，业务期待"最新在前"——倒序后再 take。
+    final List<WhaleEvent> sortedDesc = mockWhaleEvents.reversed.toList();
     final int take =
-        limit > mockWhaleEvents.length ? mockWhaleEvents.length : limit;
-    return mockWhaleEvents.sublist(0, take);
+        limit > sortedDesc.length ? sortedDesc.length : limit;
+    return sortedDesc.sublist(0, take);
   }
 
   /// 每 3 秒从 fixture pool 随机抽一条推流。
