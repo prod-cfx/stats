@@ -1142,7 +1142,7 @@ export const PLANNER_MOCKS_BY_STRATEGY: Readonly<Record<number, readonly Planner
             id: 'r29-pyramid',
             phase: 'gate',
             sideScope: 'long',
-            condition: atom('position.pyramiding_limit', { maxAdds: 3 }),
+            condition: atom('position.pyramiding_limit', { maxLayers: 3 }),
             effects: [],
           },
         ],

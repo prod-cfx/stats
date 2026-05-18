@@ -860,7 +860,8 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       paramSlots: {
         operator: { kind: 'enum', required: false, enum: ['GT', 'GTE', 'LT', 'LTE'], default: 'GT', extractor: { kind: 'enum-zh-map', enumMap: { '大于': 'GT', '超过': 'GT', '大于等于': 'GTE', '小于': 'LT', '低于': 'LT', '小于等于': 'LTE' } } },
-        period: { kind: 'number', required: false, range: [1, 500], default: 14, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 500] } },
+        // #1497: ATR period 收紧到 [1, 100]（业务常用 14；> 100 几乎一定是幻觉）+ multipleOf:1
+        period: { kind: 'number', required: false, range: [1, 100], multipleOf: 1, default: 14, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 100] } },
         threshold: { kind: 'number', required: false, range: [0, 1e6], extractor: { kind: 'number-decimal', pattern: '\\d+(\\.\\d+)?' } },
         thresholdUnit: { kind: 'enum', required: false, enum: ['quote_currency', 'percent'], default: 'quote_currency', extractor: { kind: 'enum-zh-map', enumMap: { 'USDT': 'quote_currency', 'USD': 'quote_currency', '%': 'percent' } } },
       },
@@ -1117,8 +1118,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         //     1) "BOLL(20,2)" / "布林带(20,2)"——括号 + 逗号
         //     2) "BOLL 20 周期、2 倍标准差"——空格 + 数字（period）/ "标准差" 关键字（stdDev）
         //     3) "布林上轨" / "boll 上轨"——无数字，回落 default
-        period: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*(?:[（(]\\s*(\\d+)|(\\d+)\\s*(?:周期|天|根)?)', range: [1, 500] } },
-        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)|(\\d+(?:\\.\\d+)?)\\s*(?:倍\\s*)?标准差', range: [0.1, 10] } },
+        // #1497: BOLL period 收紧到 [2, 200]（业务标准 SMA 窗口下限 2，上限 200）；stdDev 收紧到 [0.5, 5] + multipleOf 0.1
+        period: { kind: 'number', required: false, range: [2, 200], multipleOf: 1, default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*(?:[（(]\\s*(\\d+)|(\\d+)\\s*(?:周期|天|根)?)', range: [2, 200] } },
+        stdDev: { kind: 'number', required: false, range: [0.5, 5], multipleOf: 0.1, default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)|(\\d+(?:\\.\\d+)?)\\s*(?:倍\\s*)?标准差', range: [0.5, 5] } },
         confirmationMode: { kind: 'enum', required: false, enum: ['touch', 'breakout', 'close'], extractor: { kind: 'enum-zh-map', enumMap: { '触及': 'touch', '碰到': 'touch', '触碰': 'touch', '突破': 'breakout', '上破': 'breakout', '跌破': 'breakout', '收盘确认': 'close', '收盘': 'close' } } },
       },
       phaseResolver: 'by-clause-verb',
@@ -1192,8 +1194,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         //     1) "BOLL(20,2)" / "布林带(20,2)"——括号 + 逗号
         //     2) "BOLL 20 周期、2 倍标准差"——空格 + 数字（period）/ "标准差" 关键字（stdDev）
         //     3) "布林上轨" / "boll 上轨"——无数字，回落 default
-        period: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*(?:[（(]\\s*(\\d+)|(\\d+)\\s*(?:周期|天|根)?)', range: [1, 500] } },
-        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)|(\\d+(?:\\.\\d+)?)\\s*(?:倍\\s*)?标准差', range: [0.1, 10] } },
+        // #1497: BOLL period 收紧到 [2, 200]（业务标准 SMA 窗口下限 2，上限 200）；stdDev 收紧到 [0.5, 5] + multipleOf 0.1
+        period: { kind: 'number', required: false, range: [2, 200], multipleOf: 1, default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*(?:[（(]\\s*(\\d+)|(\\d+)\\s*(?:周期|天|根)?)', range: [2, 200] } },
+        stdDev: { kind: 'number', required: false, range: [0.5, 5], multipleOf: 0.1, default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)|(\\d+(?:\\.\\d+)?)\\s*(?:倍\\s*)?标准差', range: [0.5, 5] } },
         confirmationMode: { kind: 'enum', required: false, enum: ['touch', 'breakout', 'close'], extractor: { kind: 'enum-zh-map', enumMap: { '触及': 'touch', '碰到': 'touch', '触碰': 'touch', '突破': 'breakout', '上破': 'breakout', '跌破': 'breakout', '收盘确认': 'close', '收盘': 'close' } } },
       },
       phaseResolver: 'by-clause-verb',
@@ -1271,8 +1274,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         //     1) "BOLL(20,2)" / "布林带(20,2)"——括号 + 逗号
         //     2) "BOLL 20 周期、2 倍标准差"——空格 + 数字（period）/ "标准差" 关键字（stdDev）
         //     3) "布林上轨" / "boll 上轨"——无数字，回落 default
-        period: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*(?:[（(]\\s*(\\d+)|(\\d+)\\s*(?:周期|天|根)?)', range: [1, 500] } },
-        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)|(\\d+(?:\\.\\d+)?)\\s*(?:倍\\s*)?标准差', range: [0.1, 10] } },
+        // #1497: BOLL period 收紧到 [2, 200]（业务标准 SMA 窗口下限 2，上限 200）；stdDev 收紧到 [0.5, 5] + multipleOf 0.1
+        period: { kind: 'number', required: false, range: [2, 200], multipleOf: 1, default: 20, extractor: { kind: 'number-int', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*(?:[（(]\\s*(\\d+)|(\\d+)\\s*(?:周期|天|根)?)', range: [2, 200] } },
+        stdDev: { kind: 'number', required: false, range: [0.5, 5], multipleOf: 0.1, default: 2, extractor: { kind: 'number-decimal', pattern: '(?:BOLL|bollinger|布林带?|布林线)\\s*[（(]\\s*\\d+\\s*[,，]\\s*(\\d+(?:\\.\\d+)?)|(\\d+(?:\\.\\d+)?)\\s*(?:倍\\s*)?标准差', range: [0.5, 5] } },
         confirmationMode: { kind: 'enum', required: false, enum: ['touch', 'breakout', 'close'], extractor: { kind: 'enum-zh-map', enumMap: { '触及': 'touch', '碰到': 'touch', '触碰': 'touch', '突破': 'breakout', '上破': 'breakout', '跌破': 'breakout', '收盘确认': 'close', '收盘': 'close' } } },
       },
       // 中轨触及/回归常作为趋势策略的"获利平仓"信号——保留 fixed-exit。
@@ -1748,7 +1752,8 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       paramSlots: {
         indicator: { kind: 'enum', required: true, enum: ['ma', 'sma', 'ema'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', 'SMA': 'sma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema' } } },
         referenceRole: { kind: 'enum', required: false, enum: ['short_term', 'mid_term', 'long_term'], extractor: { kind: 'enum-zh-map', derive: 'period-range' } },
-        'reference.period': { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '(?:EMA|SMA|MA)\\s*[（(]?\\s*(\\d{1,4})|(\\d{1,4})\\s*(?:日|周期)?均线', range: [1, 500] } },
+        // #1497: period 必须为整数（multipleOf:1），range [1, 500] 保持
+        'reference.period': { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '(?:EMA|SMA|MA)\\s*[（(]?\\s*(\\d{1,4})|(\\d{1,4})\\s*(?:日|周期)?均线', range: [1, 500] } },
         timeframeOverride: { kind: 'enum', required: false, enum: ['true'], default: 'true' },
       },
       phaseResolver: 'by-clause-verb',
@@ -1812,7 +1817,8 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       paramSlots: {
         indicator: { kind: 'enum', required: true, enum: ['ma', 'sma', 'ema'], extractor: { kind: 'enum-zh-map', enumMap: { 'MA': 'ma', 'SMA': 'sma', '均线': 'ma', 'EMA': 'ema', '指数均线': 'ema' } } },
         referenceRole: { kind: 'enum', required: false, enum: ['short_term', 'mid_term', 'long_term'], extractor: { kind: 'enum-zh-map', derive: 'period-range' } },
-        'reference.period': { kind: 'number', required: false, range: [1, 500], extractor: { kind: 'number-int', pattern: '(?:EMA|SMA|MA)\\s*[（(]?\\s*(\\d{1,4})|(\\d{1,4})\\s*(?:日|周期)?均线', range: [1, 500] } },
+        // #1497: period 必须为整数（multipleOf:1），range [1, 500] 保持
+        'reference.period': { kind: 'number', required: false, range: [1, 500], multipleOf: 1, extractor: { kind: 'number-int', pattern: '(?:EMA|SMA|MA)\\s*[（(]?\\s*(\\d{1,4})|(\\d{1,4})\\s*(?:日|周期)?均线', range: [1, 500] } },
         timeframeOverride: { kind: 'enum', required: false, enum: ['true'], default: 'true' },
       },
       phaseResolver: 'by-clause-verb',
@@ -3132,9 +3138,10 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       paramSlots: {
         // Issue #1383 Lane A：ATR period 默认 14（行业标准），supported_executable 起步默认值。
-        period: { kind: 'number', required: false, range: [1, 500], default: 14, extractor: { kind: 'number-decimal', pattern: 'ATR\\s*(\\d+)', range: [1, 500] } },
+        // #1497: period 收紧 [1, 100] + multipleOf:1；multiple 收紧 [0.1, 20] + multipleOf:0.1。
+        period: { kind: 'number', required: false, range: [1, 100], multipleOf: 1, default: 14, extractor: { kind: 'number-decimal', pattern: 'ATR\\s*(\\d+)', range: [1, 100] } },
         pctOfAtr: { kind: 'percent', required: false, range: [0, 100], extractor: { kind: 'percent', pattern: '(\\d+(?:\\.\\d+)?)\\s*%\\s*ATR', range: [0, 100] } },
-        multiple: { kind: 'number', required: false, range: [0, 100], extractor: { kind: 'number-decimal', pattern: '(\\d+(?:\\.\\d+)?)\\s*(?:倍|x)\\s*ATR', range: [0, 100] } },
+        multiple: { kind: 'number', required: false, range: [0.1, 20], multipleOf: 0.1, extractor: { kind: 'number-decimal', pattern: '(\\d+(?:\\.\\d+)?)\\s*(?:倍|x)\\s*ATR', range: [0.1, 20] } },
       },
       phaseResolver: 'fixed-exit',
       sideResolver: 'inherit',
@@ -3423,7 +3430,8 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         },
       },
       paramSlots: {
-        maxLayers: { kind: 'number', required: false, range: [1, 50], extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 50] } },
+        // #1497: maxLayers 收紧到 [1, 10] + multipleOf:1（业务最多 10 层；> 10 几乎一定是幻觉）
+        maxLayers: { kind: 'number', required: false, range: [1, 10], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 10] } },
         layerSizing: { kind: 'percent', required: false, range: [0, 100], extractor: { kind: 'percent', pattern: '\\d+(\\.\\d+)?%', range: [0, 100] } },
       },
       phaseResolver: 'fixed-entry',
@@ -4809,8 +4817,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         },
       },
       paramSlots: {
-        period: { kind: 'number', required: false, range: [1, 500], default: 14 },
-        multiple: { kind: 'number', required: true, range: [0, 100], extractor: { kind: 'number-decimal', pattern: '(\\d+(?:\\.\\d+)?)\\s*(?:倍|x)\\s*ATR.*?(?:止盈|take\\s*profit)', range: [0, 100] } },
+        // #1497: ATR period 收紧 [1, 100] + multipleOf:1；multiple 收紧 [0.1, 20] + multipleOf:0.1
+        period: { kind: 'number', required: false, range: [1, 100], multipleOf: 1, default: 14 },
+        multiple: { kind: 'number', required: true, range: [0.1, 20], multipleOf: 0.1, extractor: { kind: 'number-decimal', pattern: '(\\d+(?:\\.\\d+)?)\\s*(?:倍|x)\\s*ATR.*?(?:止盈|take\\s*profit)', range: [0.1, 20] } },
       },
       phaseResolver: 'fixed-exit',
       sideResolver: 'inherit',
