@@ -898,6 +898,17 @@
     "loggingIn": "登录中...",
     "sendFailed": "发送验证码失败",
     "loginFailed": "登录失败",
+    "emailOtpErrors": {
+      "invalidCode": "验证码不正确，请检查后重试。",
+      "expiredCode": "验证码已过期，请重新获取。",
+      "betaCodeInvalid": "内测码无效，请检查后重试。",
+      "betaCodeUnavailable": "内测码暂时不可用，请更换后重试。",
+      "emailSendFailed": "验证码发送失败，请稍后重试。",
+      "invalidEmail": "请输入有效邮箱地址。",
+      "tooManyRequests": "操作过于频繁，请稍后重试。",
+      "codeRequired": "请先获取验证码。",
+      "validationFailed": "输入格式有误，请检查后重试。"
+    },
     "telegramWeb": "Telegram 网页版",
     "telegramDesktop": "Telegram 桌面应用",
     "telegramWebCompact": "网页版",

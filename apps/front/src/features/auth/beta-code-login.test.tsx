@@ -38,6 +38,36 @@ jest.mock('./api', () => ({
   })),
 }))
 
+async function fillEmail(container: HTMLElement, value = 'user@example.com') {
+  const inputs = Array.from(container.querySelectorAll('input'))
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(inputs[0], value)
+    inputs[0]!.dispatchEvent(new Event('input', { bubbles: true }))
+    await Promise.resolve()
+  })
+  return inputs
+}
+
+async function sendCode(container: HTMLElement) {
+  const sendButton = Array.from(container.querySelectorAll('button')).find(
+    button => button.textContent === 'auth.sendCode',
+  )
+  await act(async () => {
+    sendButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await Promise.resolve()
+  })
+}
+
+async function fillCodeAndSubmit(container: HTMLElement, code = '123456') {
+  const inputs = Array.from(container.querySelectorAll('input'))
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(inputs[1], code)
+    inputs[1]!.dispatchEvent(new Event('input', { bubbles: true }))
+    container.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+  })
+}
+
 describe('beta code login flow', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot> | null
@@ -104,38 +134,82 @@ describe('beta code login flow', () => {
       root?.render(<EmailOtpForm betaCode=" beta-42 " betaCodeGateEnabled onBetaCodeChange={() => {}} onSuccess={() => {}} />)
     })
 
-    const inputs = Array.from(container.querySelectorAll('input'))
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(inputs[0], 'User@Example.COM ')
-      inputs[0]!.dispatchEvent(new Event('input', { bubbles: true }))
-      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(inputs[1], '123456')
-      inputs[1]!.dispatchEvent(new Event('input', { bubbles: true }))
-      container.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
-      await Promise.resolve()
-    })
+    await fillEmail(container, 'User@Example.COM ')
+    await sendCode(container)
+    await fillCodeAndSubmit(container)
 
     expect(loginWithEmailCodeMock).toHaveBeenCalledWith('user@example.com', '123456', ' beta-42 ')
   })
 
-  it('shows get beta code hint when email login fails without a beta code', async () => {
-    loginWithEmailCodeMock.mockRejectedValueOnce(new Error('HTTP_400'))
-
+  it('rejects malformed email before requesting a code', async () => {
     await act(async () => {
-      root?.render(<EmailOtpForm betaCode="" betaCodeGateEnabled onBetaCodeChange={() => {}} onSuccess={() => {}} />)
+      root?.render(<EmailOtpForm betaCode="" betaCodeGateEnabled={false} onBetaCodeChange={() => {}} onSuccess={() => {}} />)
     })
 
-    const inputs = Array.from(container.querySelectorAll('input'))
+    await fillEmail(container, 'foo@')
     await act(async () => {
-      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(inputs[0], 'user@example.com')
-      inputs[0]!.dispatchEvent(new Event('input', { bubbles: true }))
-      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(inputs[1], '123456')
-      inputs[1]!.dispatchEvent(new Event('input', { bubbles: true }))
       container.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
       await Promise.resolve()
     })
 
+    expect(sendEmailCodeMock).not.toHaveBeenCalled()
+    expect(loginWithEmailCodeMock).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('auth.emailOtpErrors.invalidEmail')
+  })
+
+  it('shows get beta code hint when email login fails without a beta code', async () => {
+    await act(async () => {
+      root?.render(<EmailOtpForm betaCode="" betaCodeGateEnabled onBetaCodeChange={() => {}} onSuccess={() => {}} />)
+    })
+
+    await fillEmail(container)
+    await sendCode(container)
+    await fillCodeAndSubmit(container)
+
     expect(container.textContent).toContain('auth.betaCodeRequired')
     expect(container.textContent).not.toContain('HTTP_400')
+    expect(loginWithEmailCodeMock).not.toHaveBeenCalled()
+  })
+
+  it('shows localized email code errors from backend code without raw backend text', async () => {
+    loginWithEmailCodeMock.mockRejectedValueOnce(
+      Object.assign(new Error('Verification code is invalid'), {
+        code: 'AUTH_VERIFICATION_CODE_INVALID',
+        statusCode: 400,
+      }),
+    )
+
+    await act(async () => {
+      root?.render(<EmailOtpForm betaCode="beta-42" betaCodeGateEnabled onBetaCodeChange={() => {}} onSuccess={() => {}} />)
+    })
+
+    await fillEmail(container)
+    await sendCode(container)
+    await fillCodeAndSubmit(container)
+
+    expect(container.textContent).toContain('auth.emailOtpErrors.invalidCode')
+    expect(container.textContent).not.toContain('Verification code is invalid')
+    expect(container.textContent).not.toContain('AUTH_VERIFICATION_CODE_INVALID')
+  })
+
+  it('falls back to localized login failure for unknown auth errors without raw codes', async () => {
+    loginWithEmailCodeMock.mockRejectedValueOnce(
+      Object.assign(new Error('API_ERROR'), {
+        code: 'API_ERROR',
+        statusCode: 500,
+      }),
+    )
+
+    await act(async () => {
+      root?.render(<EmailOtpForm betaCode="beta-42" betaCodeGateEnabled onBetaCodeChange={() => {}} onSuccess={() => {}} />)
+    })
+
+    await fillEmail(container)
+    await sendCode(container)
+    await fillCodeAndSubmit(container)
+
+    expect(container.textContent).toContain('auth.loginFailed')
+    expect(container.textContent).not.toContain('API_ERROR')
   })
 
   it('allows Telegram login intent when beta code is missing', async () => {

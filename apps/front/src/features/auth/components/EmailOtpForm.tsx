@@ -19,12 +19,54 @@ interface EmailOtpFormProps {
   onSuccess: () => void
 }
 
-function getLoginErrorMessage(error: unknown, betaCode: string, t: (key: string) => string): string {
+const EMAIL_OTP_ERROR_KEYS: Record<string, string> = {
+  AUTH_VERIFICATION_CODE_INVALID: 'auth.emailOtpErrors.invalidCode',
+  AUTH_VERIFICATION_CODE_EXPIRED: 'auth.emailOtpErrors.expiredCode',
+  BAD_REQUEST: 'auth.emailOtpErrors.validationFailed',
+  BETA_CODE_INVALID: 'auth.emailOtpErrors.betaCodeInvalid',
+  BETA_CODE_EXHAUSTED: 'auth.emailOtpErrors.betaCodeUnavailable',
+  BETA_CODE_DISABLED: 'auth.emailOtpErrors.betaCodeUnavailable',
+  EMAIL_SEND_FAILED: 'auth.emailOtpErrors.emailSendFailed',
+  INVALID_EMAIL: 'auth.emailOtpErrors.invalidEmail',
+  TOO_MANY_REQUESTS: 'auth.emailOtpErrors.tooManyRequests',
+  HTTP_429: 'auth.emailOtpErrors.tooManyRequests',
+  VALIDATION_ERROR: 'auth.emailOtpErrors.validationFailed',
+}
+
+function isEmailOtpAddressValid(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+function getErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') {
+    return undefined
+  }
+
+  const code = (error as { code?: unknown }).code
+  if (typeof code === 'string' && code.trim()) {
+    return code.trim()
+  }
+
   const message = error instanceof Error ? error.message : ''
-  if (!betaCode.trim() && (message === 'HTTP_400' || message === 'BETA_CODE_REQUIRED')) {
+  if (/^(?:[A-Z][A-Z0-9_]*|HTTP_\d{3})$/.test(message)) {
+    return message
+  }
+
+  return undefined
+}
+
+function getEmailOtpErrorMessage(
+  error: unknown,
+  betaCode: string,
+  t: (key: string) => string,
+  fallbackKey: string,
+): string {
+  const code = getErrorCode(error)
+  if (code === 'BETA_CODE_REQUIRED' || (!betaCode.trim() && code === 'HTTP_400')) {
     return t('auth.betaCodeRequired')
   }
-  return message || t('auth.loginFailed')
+  const translationKey = code ? EMAIL_OTP_ERROR_KEYS[code] : undefined
+  return translationKey ? t(translationKey) : t(fallbackKey)
 }
 
 export function EmailOtpForm({ betaCode, betaCodeGateEnabled, onBetaCodeChange, onSuccess }: EmailOtpFormProps) {
@@ -42,7 +84,8 @@ export function EmailOtpForm({ betaCode, betaCodeGateEnabled, onBetaCodeChange, 
   const timerRef = useRef<number | null>(null)
 
   const normalizedEmail = useMemo(() => normalizeEmailForOtp(email), [email])
-  const canSendCode = useMemo(() => cooldown <= 0 && !sendingCode && Boolean(normalizedEmail), [cooldown, normalizedEmail, sendingCode])
+  const emailValid = useMemo(() => isEmailOtpAddressValid(normalizedEmail), [normalizedEmail])
+  const canSendCode = useMemo(() => cooldown <= 0 && !sendingCode && emailValid, [cooldown, emailValid, sendingCode])
 
   const clearCooldownTimer = () => {
     if (timerRef.current !== null) {
@@ -106,6 +149,10 @@ export function EmailOtpForm({ betaCode, betaCodeGateEnabled, onBetaCodeChange, 
 
   const handleSendCode = async () => {
     setError(null)
+    if (!emailValid) {
+      setError(t('auth.emailOtpErrors.invalidEmail'))
+      return
+    }
     setSendingCode(true)
     try {
       const isResend = hasSentCode && lastSentEmail === normalizedEmail
@@ -129,7 +176,7 @@ export function EmailOtpForm({ betaCode, betaCodeGateEnabled, onBetaCodeChange, 
         startCooldown(normalizedEmail)
         return
       }
-      setError(message || t('auth.sendFailed'))
+      setError(getEmailOtpErrorMessage(e, betaCode, t, 'auth.sendFailed'))
     } finally {
       setSendingCode(false)
     }
@@ -139,13 +186,34 @@ export function EmailOtpForm({ betaCode, betaCodeGateEnabled, onBetaCodeChange, 
     event.preventDefault()
     setError(null)
     setNotice(null)
+
+    if (!emailValid) {
+      setError(t('auth.emailOtpErrors.invalidEmail'))
+      return
+    }
+
+    if (!hasSentCode || lastSentEmail !== normalizedEmail) {
+      setError(t('auth.emailOtpErrors.codeRequired'))
+      return
+    }
+
+    if (code.length !== 6) {
+      setError(t('auth.emailOtpErrors.codeInvalid'))
+      return
+    }
+
+    if (betaCodeGateEnabled && !betaCode.trim()) {
+      setError(t('auth.betaCodeRequired'))
+      return
+    }
+
     setVerifying(true)
 
     try {
       await loginWithEmailCode(normalizedEmail, code, betaCodeGateEnabled ? betaCode : undefined)
       onSuccess()
     } catch (e) {
-      setError(getLoginErrorMessage(e, betaCode, t))
+      setError(getEmailOtpErrorMessage(e, betaCode, t, 'auth.loginFailed'))
     } finally {
       setVerifying(false)
     }

@@ -4,6 +4,7 @@ const mockClient = {
   AuthController_createTelegramDesktopIntent: jest.fn(),
   AuthController_getTelegramWebAuthorizeUrl: jest.fn(),
   AuthController_sendEmailLoginCode: jest.fn(),
+  AuthController_verifyEmailLoginCode: jest.fn(),
 }
 
 jest.mock('@/lib/api-client', () => ({
@@ -22,6 +23,7 @@ describe('auth api telegram redirect passthrough', () => {
     mockClient.AuthController_createTelegramDesktopIntent.mockReset()
     mockClient.AuthController_getTelegramWebAuthorizeUrl.mockReset()
     mockClient.AuthController_sendEmailLoginCode.mockReset()
+    mockClient.AuthController_verifyEmailLoginCode.mockReset()
   })
 
   afterEach(() => {
@@ -103,5 +105,26 @@ describe('auth api telegram redirect passthrough', () => {
 
     const { sendEmailCodeRequest } = await import('./api')
     await expect(sendEmailCodeRequest('dev@example.com')).rejects.toThrow('DEV_EMAIL_FALLBACK_CODE_123456')
+  })
+
+  it('verifyEmailCodeRequest preserves backend error code while keeping backend message', async () => {
+    mockClient.AuthController_verifyEmailLoginCode.mockRejectedValue({
+      response: {
+        status: 400,
+        data: {
+          error: {
+            code: 'AUTH_VERIFICATION_CODE_INVALID',
+            message: 'Verification code is invalid',
+          },
+        },
+      },
+    })
+
+    const { verifyEmailCodeRequest } = await import('./api')
+    await expect(verifyEmailCodeRequest('User@Example.COM ', ' 123456 ', 'beta-42')).rejects.toMatchObject({
+      code: 'AUTH_VERIFICATION_CODE_INVALID',
+      message: 'Verification code is invalid',
+      statusCode: 400,
+    })
   })
 })

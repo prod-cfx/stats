@@ -898,6 +898,17 @@
     "loggingIn": "Logging in...",
     "sendFailed": "Failed to send code",
     "loginFailed": "Login failed",
+    "emailOtpErrors": {
+      "invalidCode": "The verification code is incorrect. Please check and try again.",
+      "expiredCode": "The verification code has expired. Please request a new one.",
+      "betaCodeInvalid": "The beta code is invalid. Please check and try again.",
+      "betaCodeUnavailable": "This beta code is not available. Please try another one.",
+      "emailSendFailed": "Failed to send the verification code. Please try again later.",
+      "invalidEmail": "Please enter a valid email address.",
+      "tooManyRequests": "Too many attempts. Please try again later.",
+      "codeRequired": "Please request a verification code first.",
+      "validationFailed": "Some input is invalid. Please check and try again."
+    },
     "telegramWeb": "Telegram Web",
     "telegramDesktop": "Telegram Desktop App",
     "telegramWebCompact": "Web",

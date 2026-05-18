@@ -3,6 +3,7 @@ import type { AuthLoginMethod, AuthSession } from './types'
 import type { AuthResponseDto } from '@/types/auth'
 import { client, unwrapApiResponse } from '@/lib/api-client'
 import { buildSession } from '@/lib/auth-storage'
+import { ApiError } from '@/lib/errors'
 
 type TelegramDesktopIntentPollState = 'pending' | 'confirmed' | 'expired'
 const DEV_EMAIL_TEST_CODE = '123456'
@@ -14,6 +15,10 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase()
 }
 
+function isEmailAddressValid(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
 function normalizeBetaCode(betaCode?: string) {
   return betaCode?.trim() || undefined
 }
@@ -22,11 +27,18 @@ function authHeader(token?: string): { Authorization?: string } {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
+function getNonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
 async function callClient<T>(operation: () => Promise<unknown>): Promise<T> {
   try {
     const response = await operation()
     return unwrapApiResponse<T>(response as T | { data?: T; message?: string })
   } catch (error) {
+    if (error instanceof ApiError) {
+      throw error
+    }
     if (
       error &&
       typeof error === 'object' &&
@@ -36,22 +48,23 @@ async function callClient<T>(operation: () => Promise<unknown>): Promise<T> {
     ) {
       const response = error.response as {
         status?: number
-        data?: { error?: { message?: unknown }; message?: unknown }
+        data?: { error?: { code?: unknown; message?: unknown }; code?: unknown; message?: unknown }
       }
+      const code =
+        getNonEmptyString(response.data?.error?.code) ??
+        getNonEmptyString(response.data?.code) ??
+        (typeof response.status === 'number' ? `HTTP_${response.status}` : undefined)
       const message =
-        typeof response.data?.error?.message === 'string'
-          ? response.data.error.message
-          : typeof response.data?.message === 'string'
-            ? response.data.message
-            : typeof response.status === 'number'
-              ? `HTTP_${response.status}`
-              : undefined
-      if (message?.trim()) {
-        throw new Error(message)
+        getNonEmptyString(response.data?.error?.message) ??
+        getNonEmptyString(response.data?.message) ??
+        code
+      if (code) {
+        throw new ApiError(message ?? code, code, response.status, response.data)
       }
     }
-    const message = error instanceof Error && error.message.trim() ? error.message : 'API_ERROR'
-    throw new Error(message)
+    const code = getNonEmptyString((error as { code?: unknown })?.code) ?? 'API_ERROR'
+    const message = error instanceof Error && error.message.trim() ? error.message : code
+    throw new ApiError(message, code, undefined, error)
   }
 }
 
@@ -66,7 +79,7 @@ function mergeLoginMethod(session: AuthSession, method: AuthLoginMethod): AuthSe
 
 export async function sendEmailCodeRequest(email: string): Promise<void> {
   const normalized = normalizeEmail(email)
-  if (!normalized || !normalized.includes('@')) {
+  if (!isEmailAddressValid(normalized)) {
     throw new Error('INVALID_EMAIL')
   }
 
@@ -222,7 +235,7 @@ export async function bindEmailRequest(
   code: string,
 ): Promise<AuthSession> {
   const normalized = normalizeEmail(email)
-  if (!normalized || !normalized.includes('@')) {
+  if (!isEmailAddressValid(normalized)) {
     throw new Error('INVALID_EMAIL')
   }
 
