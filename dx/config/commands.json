@@ -461,6 +461,11 @@
       "app": "front",
       "ports": [3001],
       "description": "启动前端开发服务(Mock后端)"
+    },
+    "design": {
+      "command": "python3 -m http.server 4173 --directory design",
+      "description": "启动 design/ 静态预览站（http://localhost:4173/）",
+      "ports": [4173]
     }
   },
   "clean": {
