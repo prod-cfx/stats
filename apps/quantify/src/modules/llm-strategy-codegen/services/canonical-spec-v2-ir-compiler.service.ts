@@ -56,6 +56,11 @@ import { CanonicalSpecV2DigestService } from './canonical-spec-v2-digest.service
 import { CanonicalStrategyIrCanonicalizerService } from './canonical-strategy-ir-canonicalizer.service'
 import { CanonicalStrategyIrValidatorService } from './canonical-strategy-ir-validator.service'
 import { CodegenGraphSnapshotService } from './codegen-graph-snapshot.service'
+import {
+  type BandTouchDirection,
+  compileBandTouchPredicate,
+  readBandTouchConfirmationMode,
+} from './confirmation-mode-compiler'
 import { SpecDescBuilderService } from './spec-desc-builder.service'
 
 interface CompileCanonicalSpecV2ToIrInput {
@@ -1771,27 +1776,35 @@ export class CanonicalSpecV2IrCompilerService {
       case 'bollinger.touch_upper':
       case 'bollinger.touch_lower': {
         context.runtimeRequirements.helpers.add('bollinger')
-        const isUpper = atom.key === 'bollinger.upper_break' || atom.key === 'bollinger.touch_upper'
-        const bandRef = isUpper
+        const direction: BandTouchDirection =
+          atom.key === 'bollinger.upper_break' || atom.key === 'bollinger.touch_upper' ? 'upper' : 'lower'
+        const bandRef = direction === 'upper'
           ? this.ensureBollingerSeries(context, 'UPPER_BAND')
           : this.ensureBollingerSeries(context, 'LOWER_BAND')
-        const confirmationMode = typeof atom.params?.confirmationMode === 'string'
-          ? atom.params.confirmationMode
-          : undefined
-        // touch_* 默认走 touch 语义（GTE/LTE）；显式确认模式（如 close_confirm）走 CROSS_*。
-        // upper_break/lower_break 保持原有 CROSS_* 默认，兼容 builder 既有路径。
         const isTouchKey = atom.key === 'bollinger.touch_upper' || atom.key === 'bollinger.touch_lower'
-        const usesTouchSemantics = isTouchKey && (confirmationMode === undefined || confirmationMode === 'touch')
-        const defaultOp = isUpper
-          ? (usesTouchSemantics ? 'GTE' : 'CROSS_OVER')
-          : (usesTouchSemantics ? 'LTE' : 'CROSS_UNDER')
-        return this.upsertPredicate(
-          context.predicateMap,
-          `${seed}_${atom.key.replace(/\./g, '_')}`,
-          'compare',
-          [closeRef, bandRef],
-          { op: atom.op ?? defaultOp },
-        )
+        // touch_* 系 key 在 confirmationMode 缺省 且未显式传 atom.op 时默认 'touch'，与
+        // #1444 引入 touch_* 时的 happy path 语义保持一致；upper_break / lower_break 维持
+        // helper 内的 breakout 默认（CROSS_*）。显式传 atom.op 时（如 op=GT）尊重 defaultOp 通路，
+        // 避免被默认 touch 语义覆盖。
+        const rawMode = readBandTouchConfirmationMode(atom.params)
+        const confirmationMode = rawMode ?? (isTouchKey && atom.op === undefined ? 'touch' : undefined)
+        const highRef = confirmationMode === 'touch' && direction === 'upper'
+          ? this.ensurePriceSeries(context, 'high')
+          : closeRef
+        const lowRef = confirmationMode === 'touch' && direction === 'lower'
+          ? this.ensurePriceSeries(context, 'low')
+          : closeRef
+        return compileBandTouchPredicate({
+          direction,
+          confirmationMode,
+          bandRef,
+          priceRefs: { close: closeRef, high: highRef, low: lowRef },
+          defaultOp: atom.op,
+          predicateMap: context.predicateMap,
+          seed: `${seed}_${atom.key.replace(/\./g, '_')}`,
+          upsertPredicate: (predicateMap, baseId, kind, args, params) =>
+            this.upsertPredicate(predicateMap, baseId, kind, args, params),
+        })
       }
 
       case 'bollinger.middle_revert':
@@ -4158,24 +4171,30 @@ export class CanonicalSpecV2IrCompilerService {
 
       case 'bollinger.upper_break':
       case 'bollinger.touch_upper': {
-        const confirmationMode = typeof condition.params?.confirmationMode === 'string'
-          ? condition.params.confirmationMode
-          : undefined
-        const isTouchKey = condition.key === 'bollinger.touch_upper'
-        const usesTouchSemantics = isTouchKey && (confirmationMode === undefined || confirmationMode === 'touch')
-        const operator = condition.op ?? (usesTouchSemantics ? 'GTE' : 'CROSS_OVER')
-        return this.describeBollingerBandOperator(operator, 'UPPER_BAND', config)
+        const rawMode = readBandTouchConfirmationMode(condition.params)
+        // touch_* key 缺省 mode 且未显式提供 condition.op 时按 'touch' 处理；upper_break 维持
+        // 原 breakout 默认；显式 op 时尊重 op 派发，避免被默认 touch 覆盖。
+        const mode = rawMode ?? (condition.key === 'bollinger.touch_upper' && condition.op === undefined ? 'touch' : undefined)
+        const bandExpr = `UPPER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev})`
+        if (mode === 'touch') return `GTE(HIGH,${bandExpr})`
+        if (mode === 'close_confirm') return `GTE(CLOSE,${bandExpr})`
+        if (condition.op === 'GTE' || condition.op === 'GT' || condition.op === 'LT' || condition.op === 'LTE' || condition.op === 'EQ') {
+          return `${condition.op}(CLOSE,${bandExpr})`
+        }
+        return `CROSS_OVER(CLOSE,${bandExpr})`
       }
 
       case 'bollinger.lower_break':
       case 'bollinger.touch_lower': {
-        const confirmationMode = typeof condition.params?.confirmationMode === 'string'
-          ? condition.params.confirmationMode
-          : undefined
-        const isTouchKey = condition.key === 'bollinger.touch_lower'
-        const usesTouchSemantics = isTouchKey && (confirmationMode === undefined || confirmationMode === 'touch')
-        const operator = condition.op ?? (usesTouchSemantics ? 'LTE' : 'CROSS_UNDER')
-        return this.describeBollingerBandOperator(operator, 'LOWER_BAND', config)
+        const rawMode = readBandTouchConfirmationMode(condition.params)
+        const mode = rawMode ?? (condition.key === 'bollinger.touch_lower' && condition.op === undefined ? 'touch' : undefined)
+        const bandExpr = `LOWER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev})`
+        if (mode === 'touch') return `LTE(LOW,${bandExpr})`
+        if (mode === 'close_confirm') return `LTE(CLOSE,${bandExpr})`
+        if (condition.op === 'LTE' || condition.op === 'LT' || condition.op === 'GT' || condition.op === 'GTE' || condition.op === 'EQ') {
+          return `${condition.op}(CLOSE,${bandExpr})`
+        }
+        return `CROSS_UNDER(CLOSE,${bandExpr})`
       }
 
       case 'bollinger.middle_revert':

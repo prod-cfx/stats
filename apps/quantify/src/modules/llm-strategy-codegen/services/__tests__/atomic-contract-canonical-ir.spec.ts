@@ -34,8 +34,15 @@ describe('atomic contract canonical IR projection', () => {
     const entryPredicate = findPredicate(ir, predicate => predicate.id === entryBlock?.when)
 
     expect(entryPredicate.kind).toBe('allOf')
+    // Issue #1460：touch confirmation 下 BOLL lower 走 LTE(LOW, lower_band)，不再是 compare(CLOSE, lower_band)
     expect(ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: 'compare', args: expect.arrayContaining([expect.stringContaining('lower_band')]) }),
+      expect.objectContaining({
+        kind: 'LTE',
+        args: expect.arrayContaining([
+          expect.stringContaining('low_'),
+          expect.stringContaining('lower_band'),
+        ]),
+      }),
       expect.objectContaining({ kind: 'compare', args: expect.arrayContaining([expect.stringContaining('sma_volume_20')]) }),
     ]))
     expect(ir.runtimeRequirements?.helpers).toEqual(expect.arrayContaining(['bollinger', 'smaVolume']))

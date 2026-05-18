@@ -2313,7 +2313,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({
         phase: 'entry',
-        operator: 'GTE(CLOSE,UPPER_BAND(CLOSE,20,2))',
+        operator: 'GTE(HIGH,UPPER_BAND(CLOSE,20,2))',
       }),
       expect.objectContaining({
         phase: 'exit',
@@ -2372,22 +2372,22 @@ describe('canonicalSpecV2IrCompilerService', () => {
 
     const fallback = { exchange: 'binance' as const, symbol: 'BTCUSDT', baseTimeframe: '1h', positionPct: 10 }
 
-    it('touch_upper happy path: 默认 touch 语义 → GTE(CLOSE,UPPER_BAND)', () => {
+    it('touch_upper happy path: 默认 touch 语义 → GTE(HIGH,UPPER_BAND)（Issue #1460 真正落地）', () => {
       const compiler = new CanonicalSpecV2IrCompilerService()
       const result = compiler.compile({ canonicalSpec: buildTouchSpec('bollinger.touch_upper'), fallback })
       expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
-        expect.objectContaining({ phase: 'entry', operator: 'GTE(CLOSE,UPPER_BAND(CLOSE,20,2))' }),
+        expect.objectContaining({ phase: 'entry', operator: 'GTE(HIGH,UPPER_BAND(CLOSE,20,2))' }),
       ]))
       expect(result.ir.signalCatalog?.series ?? []).toEqual(expect.arrayContaining([
         expect.objectContaining({ kind: 'UPPER_BAND' }),
       ]))
     })
 
-    it('touch_lower happy path: 默认 touch 语义 → LTE(CLOSE,LOWER_BAND)', () => {
+    it('touch_lower happy path: 默认 touch 语义 → LTE(LOW,LOWER_BAND)（Issue #1460 真正落地）', () => {
       const compiler = new CanonicalSpecV2IrCompilerService()
       const result = compiler.compile({ canonicalSpec: buildTouchSpec('bollinger.touch_lower'), fallback })
       expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
-        expect.objectContaining({ phase: 'entry', operator: 'LTE(CLOSE,LOWER_BAND(CLOSE,20,2))' }),
+        expect.objectContaining({ phase: 'entry', operator: 'LTE(LOW,LOWER_BAND(CLOSE,20,2))' }),
       ]))
       expect(result.ir.signalCatalog?.series ?? []).toEqual(expect.arrayContaining([
         expect.objectContaining({ kind: 'LOWER_BAND' }),
@@ -2408,25 +2408,25 @@ describe('canonicalSpecV2IrCompilerService', () => {
       ]))
     })
 
-    it('touch_upper confirmationMode=close_confirm → 退化为 CROSS_OVER', () => {
+    it('touch_upper confirmationMode=close_confirm → GTE(CLOSE,UPPER_BAND)（Issue #1460）', () => {
       const compiler = new CanonicalSpecV2IrCompilerService()
       const result = compiler.compile({
         canonicalSpec: buildTouchSpec('bollinger.touch_upper', { params: { confirmationMode: 'close_confirm' } }),
         fallback,
       })
       expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
-        expect.objectContaining({ phase: 'entry', operator: 'CROSS_OVER(CLOSE,UPPER_BAND(CLOSE,20,2))' }),
+        expect.objectContaining({ phase: 'entry', operator: 'GTE(CLOSE,UPPER_BAND(CLOSE,20,2))' }),
       ]))
     })
 
-    it('touch_lower confirmationMode=close_confirm → 退化为 CROSS_UNDER', () => {
+    it('touch_lower confirmationMode=close_confirm → LTE(CLOSE,LOWER_BAND)（Issue #1460）', () => {
       const compiler = new CanonicalSpecV2IrCompilerService()
       const result = compiler.compile({
         canonicalSpec: buildTouchSpec('bollinger.touch_lower', { params: { confirmationMode: 'close_confirm' } }),
         fallback,
       })
       expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
-        expect.objectContaining({ phase: 'entry', operator: 'CROSS_UNDER(CLOSE,LOWER_BAND(CLOSE,20,2))' }),
+        expect.objectContaining({ phase: 'entry', operator: 'LTE(CLOSE,LOWER_BAND(CLOSE,20,2))' }),
       ]))
     })
 
@@ -2448,8 +2448,8 @@ describe('canonicalSpecV2IrCompilerService', () => {
       })
       const result = compiler.compile({ canonicalSpec: spec, fallback })
       expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
-        expect.objectContaining({ operator: 'GTE(CLOSE,UPPER_BAND(CLOSE,20,2))' }),
-        expect.objectContaining({ operator: 'LTE(CLOSE,LOWER_BAND(CLOSE,20,2))' }),
+        expect.objectContaining({ operator: 'GTE(HIGH,UPPER_BAND(CLOSE,20,2))' }),
+        expect.objectContaining({ operator: 'LTE(LOW,LOWER_BAND(CLOSE,20,2))' }),
       ]))
       const seriesKinds = (result.ir.signalCatalog?.series ?? []).map(s => s.kind)
       expect(seriesKinds).toEqual(expect.arrayContaining(['UPPER_BAND', 'LOWER_BAND']))
@@ -2482,6 +2482,134 @@ describe('canonicalSpecV2IrCompilerService', () => {
         expect.objectContaining({ phase: 'entry', operator: 'GT(CLOSE,UPPER_BAND(CLOSE,20,2))' }),
       ]))
     })
+  })
+
+  describe('bollinger.{upper,lower}_break × confirmationMode 矩阵', () => {
+    type ConfirmationModeCase = {
+      mode: 'touch' | 'close_confirm' | undefined
+      direction: 'upper' | 'lower'
+      expectedPredicateKind: 'GTE' | 'LTE' | 'CROSS_OVER' | 'CROSS_UNDER'
+      expectedPriceField: 'close' | 'high' | 'low'
+      expectedOperator: string
+    }
+
+    const cases: ConfirmationModeCase[] = [
+      {
+        mode: 'touch',
+        direction: 'upper',
+        expectedPredicateKind: 'GTE',
+        expectedPriceField: 'high',
+        expectedOperator: 'GTE(HIGH,UPPER_BAND(CLOSE,20,2))',
+      },
+      {
+        mode: 'touch',
+        direction: 'lower',
+        expectedPredicateKind: 'LTE',
+        expectedPriceField: 'low',
+        expectedOperator: 'LTE(LOW,LOWER_BAND(CLOSE,20,2))',
+      },
+      {
+        mode: 'close_confirm',
+        direction: 'upper',
+        expectedPredicateKind: 'GTE',
+        expectedPriceField: 'close',
+        expectedOperator: 'GTE(CLOSE,UPPER_BAND(CLOSE,20,2))',
+      },
+      {
+        mode: 'close_confirm',
+        direction: 'lower',
+        expectedPredicateKind: 'LTE',
+        expectedPriceField: 'close',
+        expectedOperator: 'LTE(CLOSE,LOWER_BAND(CLOSE,20,2))',
+      },
+      {
+        mode: undefined,
+        direction: 'upper',
+        expectedPredicateKind: 'CROSS_OVER',
+        expectedPriceField: 'close',
+        expectedOperator: 'CROSS_OVER(CLOSE,UPPER_BAND(CLOSE,20,2))',
+      },
+      {
+        mode: undefined,
+        direction: 'lower',
+        expectedPredicateKind: 'CROSS_UNDER',
+        expectedPriceField: 'close',
+        expectedOperator: 'CROSS_UNDER(CLOSE,LOWER_BAND(CLOSE,20,2))',
+      },
+    ]
+
+    for (const c of cases) {
+      it(`${c.direction} × ${c.mode ?? 'undefined'} → ${c.expectedOperator}`, () => {
+        const compiler = new CanonicalSpecV2IrCompilerService()
+        const atomKey = c.direction === 'upper' ? 'bollinger.upper_break' : 'bollinger.lower_break'
+        const result = compiler.compile({
+          canonicalSpec: {
+            version: 2,
+            market: {
+              exchange: 'okx',
+              symbol: 'BTCUSDT',
+              marketType: 'perp',
+              timeframe: '15m',
+            },
+            indicators: [{ kind: 'bollingerBands', params: { period: 20, stdDev: 2 } }],
+            sizing: { mode: 'RATIO', value: 0.1 },
+            executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+            dataRequirements: { requiredTimeframes: ['15m'] },
+            rules: [
+              {
+                id: 'rule-boll',
+                phase: 'entry',
+                sideScope: c.direction === 'upper' ? 'short' : 'long',
+                priority: 200,
+                condition: {
+                  kind: 'atom',
+                  key: atomKey,
+                  semanticScope: 'market',
+                  ...(c.mode ? { params: { confirmationMode: c.mode } } : {}),
+                },
+                actions: [{
+                  type: c.direction === 'upper' ? 'OPEN_SHORT' : 'OPEN_LONG',
+                  sizing: { mode: 'RATIO', value: 0.1 },
+                }],
+              },
+            ],
+          },
+          fallback: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            positionPct: 10,
+          },
+        })
+
+        // 1) graphSnapshot operator 表达式按 confirmationMode 落地
+        expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+          expect.objectContaining({ phase: 'entry', operator: c.expectedOperator }),
+        ]))
+
+        // 2) IR predicate kind 与左操作数引用按 confirmationMode 落地
+        const expectedBand = c.direction === 'upper' ? 'UPPER_BAND' : 'LOWER_BAND'
+        const expectedPriceSeriesId = `${c.expectedPriceField}_15m`
+        const matchingPredicate = result.ir.signalCatalog.predicates.find(
+          (predicate) => predicate.kind === c.expectedPredicateKind
+            && predicate.args[0] === expectedPriceSeriesId
+            && result.ir.signalCatalog.series.some(
+              (series) => series.id === predicate.args[1] && series.kind === expectedBand,
+            ),
+        )
+        expect(matchingPredicate).toBeDefined()
+
+        // 3) touch 模式下必须实际拉起对应 price field 的 PRICE 序列
+        if (c.mode === 'touch') {
+          expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+              kind: 'PRICE',
+              field: c.expectedPriceField,
+            }),
+          ]))
+        }
+      })
+    }
   })
 
   it('compiles RSI threshold rules into RSI series and graph operators', () => {
