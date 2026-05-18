@@ -37,7 +37,9 @@ describe('UnsupportedFallbackService', () => {
     ], [], 'en')
 
     expect(fallback).not.toBeNull()
-    expect(fallback!.prompt).toContain('I understand you want: volume.spike')
+    // Issue #1495: EN locale 也用 displayName，不漏 internal atom key（如 `volume.spike`）
+    expect(fallback!.prompt).toContain('I understand you want: 成交量放大')
+    expect(fallback!.prompt).not.toContain('volume.spike')
     expect(fallback!.prompt).toContain('Switch to this strategy and continue')
     expect(fallback!.prompt).not.toContain('是否改用')
     expect(fallback!.recommendedStrategy.description).toContain('Go long when MA20 crosses above MA50')
@@ -130,5 +132,52 @@ describe('UnsupportedFallbackService', () => {
   it('returns unclear for empty or ambiguous message', () => {
     expect(service.classifyConfirmation('')).toEqual({ kind: 'unclear' })
     expect(service.classifyConfirmation('再说一下')).toEqual({ kind: 'unclear' })
+  })
+
+  // Issue #1495 M2: zh locale 缺失 displayName 兜底
+  describe('#1495-M2 zh locale displayName 缺失兜底', () => {
+    it('displayName = undefined → zh prompt 含「未支持的功能」兜底，不含 undefined 字面量', () => {
+      const fallback = service.buildPendingFallback([
+        {
+          key: 'volume.spike',
+          displayName: undefined as unknown as string,
+          reasonCode: 'volume_condition_public_beta_unsupported',
+          publicReason: '成交量条件当前公测暂未支持生成和回测。',
+        },
+      ], [], 'zh')
+      expect(fallback).not.toBeNull()
+      expect(fallback!.prompt).toContain('未支持的功能')
+      expect(fallback!.prompt).not.toContain('undefined')
+      expect(fallback!.prompt).not.toContain('volume.spike')
+    })
+
+    it('displayName = "" → zh prompt 走「未支持的功能」兜底，不出现空名字', () => {
+      const fallback = service.buildPendingFallback([
+        {
+          key: 'volume.spike',
+          displayName: '',
+          reasonCode: 'volume_condition_public_beta_unsupported',
+          publicReason: '成交量条件当前公测暂未支持生成和回测。',
+        },
+      ], [], 'zh')
+      expect(fallback).not.toBeNull()
+      expect(fallback!.prompt).toContain('未支持的功能')
+      // 防退化：避免「我听懂了，你要的是 。」这种空名字句式
+      expect(fallback!.prompt).not.toMatch(/你要的是\s*。/u)
+      expect(fallback!.prompt).not.toContain('volume.spike')
+    })
+
+    it('displayName = "   "（全空白）→ trim 后视为空，走「未支持的功能」兜底', () => {
+      const fallback = service.buildPendingFallback([
+        {
+          key: 'volume.spike',
+          displayName: '   ',
+          reasonCode: 'volume_condition_public_beta_unsupported',
+          publicReason: '成交量条件当前公测暂未支持生成和回测。',
+        },
+      ], [], 'zh')
+      expect(fallback).not.toBeNull()
+      expect(fallback!.prompt).toContain('未支持的功能')
+    })
   })
 })

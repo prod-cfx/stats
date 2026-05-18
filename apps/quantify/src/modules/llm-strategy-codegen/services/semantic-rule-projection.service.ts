@@ -483,7 +483,14 @@ export class SemanticRuleProjectionService {
         || v === null
         || (typeof v === 'string' && v.trim() === '')
       if (!missing) continue
-      let questionHint = `请补充 ${atomKey} 的 ${slotKey} 参数。`
+      // Issue #1495: 禁止把 internal key（atomKey / slotKey）拼进 user-facing 文案。
+      //   优先级：contract.clarificationQuestion → display.publicName.zh/en → 通用兜底
+      //   fail-closed 时只用「该条件 / 该参数」，不暴露任何 internal identifier。
+      const displayEntry = (entry as { display?: { publicName?: { zh?: string, en?: string } } } | undefined)?.display
+      // Issue #1495 M1: 用 trim() || 兜底链，防 publicName.zh = '' 时 ?? 短路失效（空串是 non-null，会被 ?? 当合法值）
+      const atomPublicName
+        = (displayEntry?.publicName?.zh?.trim() || displayEntry?.publicName?.en?.trim() || '该条件')
+      let questionHint = `请补充${atomPublicName}的参数。`
       if (typeof clarificationFn === 'function') {
         try {
           const fromContract = clarificationFn(slotKey, params as Record<string, unknown>, 'zh')
@@ -491,8 +498,12 @@ export class SemanticRuleProjectionService {
             questionHint = fromContract
           }
         }
-        catch {
-          // contract 抛错 fail-safe 走 fallback 模板
+        catch (err) {
+          // Issue #1495-m2: contract 抛错 fail-safe 走 fallback 模板，但不再静默吞错；
+          //   structured warn 让 metric/告警可观测
+          this.logger.warn(
+            `[#1495] clarificationQuestion threw: atomKey=${atomKey} slotKey=${slotKey} err=${err instanceof Error ? err.message : String(err)}`,
+          )
         }
       }
       openSlots.push({

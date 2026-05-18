@@ -71,9 +71,13 @@ export class UnsupportedFallbackService {
 
     const replacement = this.resolveReplacement(filtered[0]?.key)
     const unsupportedAtomCopies = filtered.map(atom => ({ ...atom }))
+    // Issue #1495: 禁止把 internal atom key（如 `volume.spike`）漏到 user-facing prompt。
+    //   EN locale 也走 displayName；缺失时只能用通用「unsupported feature」兜底，
+    //   绝不直接写 atom.key（dotted internal identifier）。
+    // Issue #1495 M2: zh locale 也加 displayName 缺失兜底，避免空串/undefined 漏到 prompt
     const names = locale === 'en'
-      ? [...new Set(unsupportedAtomCopies.map(atom => atom.key))].join(', ')
-      : [...new Set(unsupportedAtomCopies.map(atom => atom.displayName))].join('、')
+      ? [...new Set(unsupportedAtomCopies.map(atom => atom.displayName?.trim() || 'an unsupported feature'))].join(', ')
+      : [...new Set(unsupportedAtomCopies.map(atom => atom.displayName?.trim() || '未支持的功能'))].join('、')
     const publicReasons = locale === 'en'
       ? [...new Set(unsupportedAtomCopies.map(atom => atom.reasonCode))]
         .map(reasonCode => `Reason: ${reasonCode}. This semantic is recognized but is not supported by the current public beta execution layer yet.`)
