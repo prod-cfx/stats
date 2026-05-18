@@ -389,7 +389,12 @@ describe('aiQuantProxyService', () => {
 
     expect(quantifyClient.startStrategyPlazaEditSession).toHaveBeenCalledWith(
       'ma-cross',
-      { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' }, locale: 'en' },
+      {
+        userId: 'user-1',
+        headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
+        locale: 'en',
+        timeoutMs: 60_000,
+      },
     )
   })
 

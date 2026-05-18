@@ -224,7 +224,12 @@ export class AiQuantProxyService {
   ): Promise<StrategyPlazaEditSessionResponseDto> {
     return this.quantifyClient.startStrategyPlazaEditSession<StrategyPlazaEditSessionResponseDto>(
       templateId,
-      { userId, headers: this.userHeaders(userId, authorization), locale: options.locale },
+      {
+        userId,
+        headers: this.userHeaders(userId, authorization),
+        locale: options.locale,
+        timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
+      },
     ).catch(error => { throw this.mapQuantifyError(error) })
   }
 
