@@ -22,7 +22,8 @@ import { CodegenGraphSnapshotService as DefaultCodegenGraphSnapshotService } fro
 import { normalizeRiskSemantics } from './semantic-state-normalization'
 import { StrategySummaryObservationService } from './strategy-summary-observation.service'
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
-import { assertSymbolWellFormed, buildSymbol } from './execution-model-source-invariant'
+import { assertExecutionModelFieldsSourced, assertSymbolWellFormed, buildSymbol } from './execution-model-source-invariant'
+import { ExecutionModelSymbolMalformedException } from '../exceptions/execution-model-symbol-malformed.exception'
 
 export interface CompiledScriptValidationResult {
   passed: boolean
@@ -121,6 +122,13 @@ export class CodegenPublicationGenerationStage {
     if (typeof this.publicationGate?.assertClarificationResolvedForIrBuild === 'function') {
       this.publicationGate.assertClarificationResolvedForIrBuild(input.clarificationState)
     }
+
+    // Issue #1459 闸 4 review C1：IR builder 入口统一校验 ExecutionModel 关键字段
+    //   来源（symbol / venue / primaryTimeframe / instrumentType）。覆盖
+    //   contextSlots 必须 user_explicit；不合规即 fail-closed 抛
+    //   ExecutionModelFieldUnsourcedException，由 pipeline outer catch 收口为
+    //   publicationGate.blocked=true。
+    assertExecutionModelFieldsSourced(input.semanticState.contextSlots)
 
     const canonicalSpec = input.canonicalSpecOverride
       ?? this.canonicalSpecBuilder.buildFromSemanticState(input.semanticState)
@@ -318,9 +326,13 @@ export class CodegenPublicationGenerationStage {
     if (symbol) {
       // Issue #1459 闸 4：symbol 拼接收敛入口；优先经 buildSymbol(contextSlots)
       //   走形态正则；contextSlots 缺失再回退到旧 normalize 路径。
-      locked.symbol = args.semanticState.contextSlots.symbol
-        ? buildSymbol({ contextSlots: args.semanticState.contextSlots })
+      const resolvedSymbol = args.semanticState.contextSlots.symbol
+        ? buildSymbol({ contextSlots: args.semanticState.contextSlots, enforceUserExplicit: true })
         : normalizePublishedSymbolValidated(symbol)
+      // Issue #1459 闸 4 review M1：当 contextSlots.symbol 与 canonicalSpec.market.symbol
+      //   都存在时，归一化后必须一致；否则视为 source 漂移，fail-closed。
+      this.assertSymbolSourceAgreement(resolvedSymbol, args.canonicalSpec.market.symbol)
+      locked.symbol = resolvedSymbol
     }
 
     if (timeframe) {
@@ -398,8 +410,10 @@ export class CodegenPublicationGenerationStage {
     // Issue #1459 闸 4：symbol 拼接收敛入口；优先经 buildSymbol(contextSlots)
     //   走形态正则；contextSlots 缺失再回退到 canonicalSpec 路径并 validate。
     const resolvedSymbol = args.semanticState.contextSlots.symbol
-      ? buildSymbol({ contextSlots: args.semanticState.contextSlots })
+      ? buildSymbol({ contextSlots: args.semanticState.contextSlots, enforceUserExplicit: true })
       : normalizePublishedSymbolValidated(symbol)
+    // Issue #1459 闸 4 review M1：两个 source 都存在时必须一致。
+    this.assertSymbolSourceAgreement(resolvedSymbol, args.canonicalSpec.market.symbol)
 
     return {
       symbol: resolvedSymbol,
@@ -531,6 +545,31 @@ export class CodegenPublicationGenerationStage {
       },
       ...(symbol ? { symbols: [symbol] } : {}),
       ...(timeframe ? { timeframes: [timeframe] } : {}),
+    }
+  }
+
+  /**
+   * Issue #1459 闸 4 review M1：contextSlots.symbol 与 canonicalSpec.market.symbol
+   *   归一化后必须一致。两端都存在但不一致 → 抛 ExecutionModelSymbolMalformedException
+   *   (reason='source_disagreement')。canonicalSpec.market.symbol 为 null/空 时不校验
+   *   （仅 contextSlots 为权威 source）。
+   */
+  private assertSymbolSourceAgreement(resolvedSymbol: string, canonicalSymbol: string | null | undefined): void {
+    if (!canonicalSymbol || typeof canonicalSymbol !== 'string' || canonicalSymbol.trim().length === 0) {
+      return
+    }
+    const canonicalNormalized = canonicalSymbol.trim().toUpperCase()
+      .replace(/:(SPOT|PERP)$/u, '')
+      .replace(/-(SWAP|PERP)$/u, '')
+    if (canonicalNormalized !== resolvedSymbol) {
+      throw new ExecutionModelSymbolMalformedException({
+        symbol: resolvedSymbol,
+        reason: 'source_disagreement',
+        detail: {
+          contextSymbol: resolvedSymbol,
+          canonicalSymbol: canonicalNormalized,
+        },
+      })
     }
   }
 

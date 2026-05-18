@@ -117,6 +117,12 @@ describe('executionModelSourceInvariant (#1459 闸 4)', () => {
       expect(() => assertSymbolWellFormed('BTC-USDT-SWAP')).not.toThrow()
     })
 
+    it('ETHBTC / SOLBTC 通过（review M3：BTC/ETH 作为 quote 但单 quote 合法）', () => {
+      expect(() => assertSymbolWellFormed('ETHBTC')).not.toThrow()
+      expect(() => assertSymbolWellFormed('SOLBTC')).not.toThrow()
+      expect(() => assertSymbolWellFormed('SOLETH')).not.toThrow()
+    })
+
     it('剥离 :SPOT / :PERP venue 后缀', () => {
       expect(() => assertSymbolWellFormed('BTCUSDT:PERP')).not.toThrow()
       expect(() => assertSymbolWellFormed('BTCUSDT:SPOT')).not.toThrow()
@@ -156,6 +162,39 @@ describe('executionModelSourceInvariant (#1459 闸 4)', () => {
       expect(() => assertSymbolWellFormed('BTC USDT')).toThrow(ExecutionModelSymbolMalformedException)
       expect(() => assertSymbolWellFormed('BTC.USDT')).toThrow(ExecutionModelSymbolMalformedException)
     })
+
+    describe('-SWAP / -PERP 后缀剥离（review M4）', () => {
+      it('BTCUSDT-SWAP 通过', () => {
+        expect(() => assertSymbolWellFormed('BTCUSDT-SWAP')).not.toThrow()
+      })
+
+      it('BTC-USDT-SWAP 通过（OKX）', () => {
+        expect(() => assertSymbolWellFormed('BTC-USDT-SWAP')).not.toThrow()
+      })
+
+      it('BTC-PERP 通过（Hyperliquid）', () => {
+        expect(() => assertSymbolWellFormed('BTC-PERP')).not.toThrow()
+      })
+
+      it('BTCUSDTUSDT-SWAP 仍拒绝 duplicated_quote', () => {
+        expect(() => assertSymbolWellFormed('BTCUSDTUSDT-SWAP')).toThrow(ExecutionModelSymbolMalformedException)
+      })
+    })
+
+    describe('SUPPORTED_QUOTES 两两组合 duplicated_quote（review m2）', () => {
+      const combos = [
+        ['BTC', 'USDC', 'USDT'],
+        ['BTC', 'USDC', 'USD'],
+        ['BTC', 'BUSD', 'USDT'],
+        ['BTC', 'FDUSD', 'USDT'],
+        ['ETH', 'USD', 'USDT'],
+        ['SOL', 'BTC', 'USDT'],
+        ['DOGE', 'ETH', 'USDT'],
+      ] as const
+      it.each(combos)('base=%s quote1=%s quote2=%s 拒绝', (base, q1, q2) => {
+        expect(() => assertSymbolWellFormed(`${base}${q1}${q2}`)).toThrow(ExecutionModelSymbolMalformedException)
+      })
+    })
   })
 
   describe('buildSymbol（单一入口）', () => {
@@ -174,13 +213,13 @@ describe('executionModelSourceInvariant (#1459 闸 4)', () => {
       expect(() => buildSymbol({ contextSlots: ctx })).toThrow(ExecutionModelFieldUnsourcedException)
     })
 
-    it('contextSlots.symbol source=inferred 默认放行（兼容 fixture），enforceUserExplicit=true 拒绝', () => {
+    it('contextSlots.symbol source=inferred 默认拒绝（review C2）；显式 enforceUserExplicit=false 放行', () => {
       const ctx = buildContextSlots({ symbol: buildSlot('BTCUSDT', 'inferred') })
-      expect(buildSymbol({ contextSlots: ctx })).toBe('BTCUSDT')
-      expect(() => buildSymbol({ contextSlots: ctx, enforceUserExplicit: true })).toThrow(ExecutionModelFieldUnsourcedException)
+      expect(() => buildSymbol({ contextSlots: ctx })).toThrow(ExecutionModelFieldUnsourcedException)
+      expect(buildSymbol({ contextSlots: ctx, enforceUserExplicit: false })).toBe('BTCUSDT')
     })
 
-    it('contextSlots.symbol 缺 evidence 时默认放行；enforceUserExplicit=true 视为 inferred 拒绝', () => {
+    it('contextSlots.symbol 缺 evidence 时默认视为 inferred 拒绝；enforceUserExplicit=false 放行', () => {
       const slotNoEvidence: SemanticSlotState = {
         slotKey: 'symbol',
         fieldPath: 'contextSlots.symbol',
@@ -191,8 +230,8 @@ describe('executionModelSourceInvariant (#1459 闸 4)', () => {
         affectsExecution: true,
       }
       const ctx = buildContextSlots({ symbol: slotNoEvidence })
-      expect(buildSymbol({ contextSlots: ctx })).toBe('BTCUSDT')
-      expect(() => buildSymbol({ contextSlots: ctx, enforceUserExplicit: true })).toThrow(ExecutionModelFieldUnsourcedException)
+      expect(() => buildSymbol({ contextSlots: ctx })).toThrow(ExecutionModelFieldUnsourcedException)
+      expect(buildSymbol({ contextSlots: ctx, enforceUserExplicit: false })).toBe('BTCUSDT')
     })
 
     it('contextSlots.symbol 为 BTCUSDTUSDT user_explicit 仍被形态正则拒绝（始终强制）', () => {

@@ -1,4 +1,5 @@
 import type { SemanticContextSlotState, SemanticSlotState } from '../types/semantic-state'
+import { SUPPORTED_QUOTE_ASSETS } from '../constants/quote-assets'
 import { ExecutionModelFieldUnsourcedException } from '../exceptions/execution-model-field-unsourced.exception'
 import { ExecutionModelSymbolMalformedException } from '../exceptions/execution-model-symbol-malformed.exception'
 
@@ -16,10 +17,11 @@ import { ExecutionModelSymbolMalformedException } from '../exceptions/execution-
  *   - primaryTimeframe  ← contextSlots.timeframe
  *   - instrumentType    ← contextSlots.marketType（'spot' | 'perp' → 'spot' | 'perpetual'）
  *
- * marginMode / positionMode 由 rule 集合 / position 推断，本 invariant 不覆盖。
+ * marginMode / positionMode 由 rule 集合 / position 推断，本 invariant 不覆盖（review
+ * round 1 m3：follow-up Issue 处理）。
  *
  * 通用化：本 helper 不绑 BTC / ETH / USDT / OKX / Binance 具体值；仅约束「来源
- * 必须显式」与「symbol 形态正则合规」。新增 venue / 后缀只需扩 SUPPORTED_QUOTES。
+ * 必须显式」与「symbol 形态正则合规」。新增 venue / 后缀只需扩 SUPPORTED_QUOTE_ASSETS。
  */
 
 const SOURCE_USER_EXPLICIT = 'user_explicit'
@@ -29,13 +31,11 @@ const SYMBOL_CHAR_RE = /^[A-Z0-9_-]+$/u
 const SYMBOL_MAX_LENGTH = 20
 
 /**
- * 常见报价币种。检测双 quote 拼接（如 BTCUSDTUSDT）专用，不参与 venue-specific
- * 后缀剥离（OKX 的 :SPOT/:PERP 由上游 normalizePublishedSymbol 处理）。
- *
- * 严格按长度降序：USDT/USDC 在前，USD 在后，避免「BTC + USDC」被误识别为「BTC +
- * USD + C」。
+ * Issue #1459 闸 4 review M3：使用 `constants/quote-assets.ts` 共享集合，
+ * 与 `canonical-spec-v2-ir-compiler.service.ts` 的 sizing.asset 推断共用同一份，
+ * 避免分叉漏掉 ETHBTC / SOLBTC 这类真实虚拟币 quote。
  */
-const SUPPORTED_QUOTES = ['USDT', 'USDC', 'USD', 'BUSD', 'FDUSD'] as const
+const SUPPORTED_QUOTES = SUPPORTED_QUOTE_ASSETS
 
 export interface ExecutionModelSourcedField {
   /** contextSlots 路径上的字段名（symbol / exchange / marketType / timeframe） */
@@ -54,13 +54,8 @@ export const EXECUTION_MODEL_SOURCED_FIELDS: readonly ExecutionModelSourcedField
 /**
  * 校验单 slot 是否来源合规。返回 trimmed value（合规）或抛 DomainException。
  *
- * 校验链：
- *   1. slot 存在且 status === 'locked'，否则 reason='missing'
- *   2. value 是非空字符串，否则 reason='missing'
- *   3. evidence?.source === 'user_explicit'，否则 reason='inferred'
- *
- * 注：evidence 缺失视为 inferred（fail-closed）；contextSlots 必须由 user_explicit
- * 锚定才放行，避免任何隐式默认值绕过。
+ * Issue #1459 闸 4 review C2：本 helper 由 stage 入口 invoke，
+ * 永远强制 source=user_explicit，不接受 opt-in 关闭。
  */
 export function assertSlotUserExplicit(
   slot: SemanticSlotState | null | undefined,
@@ -82,30 +77,36 @@ export function assertSlotUserExplicit(
 
 /**
  * 集中校验所有白名单字段。返回字段名 → value 映射；任一字段不合规即抛异常。
+ *
+ * Issue #1459 闸 4 review C1：由 `CodegenPublicationGenerationStage.generate()`
+ * 在 IR build 入口调用一次，覆盖 venue / primaryTimeframe / instrumentType
+ * （symbol 通过 buildSymbol 已校验）。
  */
 export function assertExecutionModelFieldsSourced(
-  contextSlots: SemanticContextSlotState,
+  contextSlots: SemanticContextSlotState | null | undefined,
 ): Record<ExecutionModelSourcedField['executionModelField'], string> {
   const result = {} as Record<ExecutionModelSourcedField['executionModelField'], string>
   for (const entry of EXECUTION_MODEL_SOURCED_FIELDS) {
-    result[entry.executionModelField] = assertSlotUserExplicit(
-      contextSlots[entry.contextSlotKey],
-      entry.executionModelField,
-    )
+    const slot = contextSlots ? contextSlots[entry.contextSlotKey] : undefined
+    result[entry.executionModelField] = assertSlotUserExplicit(slot, entry.executionModelField)
   }
   return result
 }
 
 /**
- * symbol 形态正则校验。剥离首段 :SPOT/:PERP venue 后缀（沿用 OKX 习惯），再对
- * 主体做以下检查：
+ * symbol 形态正则校验。剥离首段 `:SPOT/:PERP` / 末尾 `-SWAP/-PERP` venue 后缀，
+ * 再对主体做以下检查：
  *   - 非空（trim 后长度 > 0）
  *   - 长度 ≤ 20
  *   - 字符集 [A-Z0-9_-]
  *   - 不得出现双 quote 拼接（BTCUSDTUSDT / ETHUSDTUSDT / FOOUSDUSDT 等）
+ *
+ * `-SWAP` / `-PERP` 后缀剥离覆盖 OKX `BTC-USDT-SWAP`、Hyperliquid `BTC-PERP`
+ * 等真实 venue 标识符（review M4），剥离后再检测双 quote。
  */
 export function assertSymbolWellFormed(symbol: string): void {
-  const trimmed = symbol.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
+  let trimmed = symbol.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
+  trimmed = trimmed.replace(/-(SWAP|PERP)$/u, '')
   if (trimmed.length === 0) {
     throw new ExecutionModelSymbolMalformedException({ symbol, reason: 'empty' })
   }
@@ -115,7 +116,9 @@ export function assertSymbolWellFormed(symbol: string): void {
   if (!SYMBOL_CHAR_RE.test(trimmed)) {
     throw new ExecutionModelSymbolMalformedException({ symbol, reason: 'illegal_chars' })
   }
-  if (hasDuplicatedQuote(trimmed)) {
+  // 双 quote 检测：先剥可能的 `-` 分隔符（`BTC-USDT` 合法，剥离后是 `BTCUSDT`）
+  const compact = trimmed.replace(/-/gu, '')
+  if (hasDuplicatedQuote(compact)) {
     throw new ExecutionModelSymbolMalformedException({ symbol, reason: 'duplicated_quote' })
   }
 }
@@ -123,37 +126,42 @@ export function assertSymbolWellFormed(symbol: string): void {
 /**
  * 检测 symbol 是否以两段 quote 收尾（如 BTCUSDTUSDT / ETHUSDUSDT）。
  *
- * 算法：遍历支持的 quote 集合，找到与 symbol 后缀匹配的 quote A；剥去 A 后再次
- * 匹配 quote 集合，若仍有任何 quote 匹配后缀 → 视为双 quote。
+ * 算法：
+ *   1. 找到与 symbol 后缀匹配的 quote A（按长度降序，首匹配）
+ *   2. 剥去 A 得 remainder；若 remainder 为空 → 视为单 quote（非法 base，已由 length 校验兜底）
+ *   3. 在 remainder 上再找 quote B；剥去 B 后必须仍有非空 base
+ *      （否则 ETHBTC 这种「ETH base + BTC quote」会被误判：remainder='ETH'，
+ *      虽然 ETH 也在 quote 集合，但剥去后剩 '' → 没有 base，说明 ETH 是真正的 base 而非冗余 quote）
  *
- * 这种检测不会误判合法 「BASE + QUOTE」（如 BTCUSDT）：剥去 USDT 后 BTC 不在
- * quote 集合内。
+ * SUPPORTED_QUOTES 严格按长度降序，避免 USDC 被先匹配成 USD+C。
  */
 function hasDuplicatedQuote(symbol: string): boolean {
   const matchedTail = SUPPORTED_QUOTES.find(quote => symbol.endsWith(quote))
   if (!matchedTail) return false
   const remainder = symbol.slice(0, symbol.length - matchedTail.length)
   if (remainder.length === 0) return false
-  return SUPPORTED_QUOTES.some(quote => remainder.endsWith(quote))
+  const secondQuote = SUPPORTED_QUOTES.find(quote => remainder.endsWith(quote))
+  if (!secondQuote) return false
+  const base = remainder.slice(0, remainder.length - secondQuote.length)
+  return base.length > 0
 }
+
+/**
+ * Issue #1459 闸 4 review M3：导出共享 quote 列表，供 spec / 调用方使用。
+ */
+export { SUPPORTED_QUOTES }
 
 /**
  * symbol 构造单一入口。接受 contextSlots，输出标准化 symbol。
  *
  * Contract：
  *   - 入参：contextSlots.symbol.status === 'locked' 且 value 非空字符串
- *     - 当 `enforceUserExplicit=true` 时：额外要求 evidence.source === 'user_explicit'
- *   - 出参：标准化大写 symbol，剥离 :SPOT/:PERP 后缀，通过形态正则（始终强制）
+ *     - 当 `enforceUserExplicit=true`（**默认**）时：额外要求 evidence.source === 'user_explicit'
+ *   - 出参：标准化大写 symbol，剥离 :SPOT/:PERP / -SWAP/-PERP 后缀，通过形态正则（始终强制）
  *
- * 形态正则是默认强制项（覆盖 BTCUSDTUSDT 等双 quote 拼接），不依赖 enforceUserExplicit。
- * 这把 Issue #1455 实测的 cmpakxase 会话 symbol bug 当场 fail-closed，不绕过 fixture
- * 兼容。
- *
- * `enforceUserExplicit` 默认 false，是为了不破坏既有 stage spec fixture（contextSlots
- * 普遍缺 evidence；语义视为合法但未来不可绕过）。后续 follow-up 收敛 fixture 后改默认值。
- *
- * 调用方禁止再做 `symbol || fallback` 之类的拼接。该 helper 是
- * Issue #1459 验收标准「symbol 拼接收敛到单一 buildSymbol」的落点。
+ * Issue #1459 闸 4 review C2：`enforceUserExplicit` 默认改为 true。生产路径不再
+ * 接受隐式 inferred；fixture 路径如需放行必须显式传 `enforceUserExplicit: false`，
+ * 并附「为何不能 user_explicit」的说明。
  */
 export function buildSymbol(args: {
   contextSlots: SemanticContextSlotState
@@ -163,7 +171,8 @@ export function buildSymbol(args: {
   if (!slot || slot.status !== 'locked' || typeof slot.value !== 'string' || slot.value.trim().length === 0) {
     throw new ExecutionModelFieldUnsourcedException({ field: 'symbol', reason: 'missing' })
   }
-  if (args.enforceUserExplicit) {
+  const enforceUserExplicit = args.enforceUserExplicit !== false
+  if (enforceUserExplicit) {
     const source = slot.evidence?.source
     if (source !== SOURCE_USER_EXPLICIT) {
       throw new ExecutionModelFieldUnsourcedException({
@@ -173,7 +182,7 @@ export function buildSymbol(args: {
       })
     }
   }
-  const normalized = slot.value.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
+  const normalized = slot.value.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '').replace(/-(SWAP|PERP)$/u, '')
   assertSymbolWellFormed(normalized)
   return normalized
 }

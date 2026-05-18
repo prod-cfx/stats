@@ -3,6 +3,9 @@ import { HttpStatus } from '@nestjs/common'
 
 import { DomainException } from '@/common/exceptions/domain.exception'
 
+export type ExecutionModelSourcedField = 'symbol' | 'venue' | 'primaryTimeframe' | 'instrumentType'
+export type ExecutionModelFieldUnsourcedReason = 'missing' | 'inferred'
+
 /**
  * Issue #1459 闸 4：ExecutionModel 字段来源 invariant 拒因。
  *
@@ -11,28 +14,22 @@ import { DomainException } from '@/common/exceptions/domain.exception'
  *   - status === 'locked'
  *   - evidence.source === 'user_explicit'
  *
- * 当字段缺失（contextSlots[field] = null / status !== 'locked'）或来源不合规
- * （source === 'inferred' / 'derived'）时抛此异常。
- *
- * 抛出点：codegen-publication-generation.stage.ts 的 buildSemanticPublishParams /
- *   buildCompiledIrFallback —— IR build 入口在 fallback 默认值绕过之前 fail-closed。
- *
- * Pipeline outer catch（codegen-session-publication-pipeline.service.ts）识别后
- * 把结构化 payload 落到 session.specDesc.publicationGate.blocked=true，前端可与
- * #1456 闸 1 / #1457 闸 2 的拦截一致地展示「字段来源不合规」。
+ * 当字段缺失或来源不合规时抛此异常。outer catch 通过 typed getter
+ * （`field` / `reason` / `actualSource`）读取结构化字段，
+ * 不依赖 `error.args` 的字符串约定，避免下游 refactor 静默漂移。
  */
 export class ExecutionModelFieldUnsourcedException extends DomainException {
   constructor(args: {
-    field: 'symbol' | 'venue' | 'primaryTimeframe' | 'instrumentType'
-    /** 'missing' = contextSlots[field] 为 null / 未 locked；'inferred' = 来源不合规 */
-    reason: 'missing' | 'inferred'
+    field: ExecutionModelSourcedField
+    reason: ExecutionModelFieldUnsourcedReason
     actualSource?: string | null
   }) {
     const sourceHint = args.reason === 'inferred'
-      ? ` (source=${args.actualSource ?? 'unknown'}; require 'user_explicit')`
-      : ' (contextSlots not locked)'
+      ? `（source=${args.actualSource ?? 'unknown'}；要求 'user_explicit'）`
+      : '（contextSlots 未锁定）'
+    const reasonText = args.reason === 'inferred' ? '来源不合规' : '缺失'
     super(
-      `codegen.execution_model_field_unsourced: field '${args.field}' ${args.reason}${sourceHint}`,
+      `策略字段 '${args.field}' ${reasonText}${sourceHint}`,
       {
         code: ErrorCode.EXECUTION_MODEL_FIELD_UNSOURCED,
         status: HttpStatus.BAD_REQUEST,
@@ -43,5 +40,18 @@ export class ExecutionModelFieldUnsourcedException extends DomainException {
         },
       },
     )
+  }
+
+  get field(): ExecutionModelSourcedField {
+    return this.args?.field as ExecutionModelSourcedField
+  }
+
+  get reason(): ExecutionModelFieldUnsourcedReason {
+    return this.args?.reason as ExecutionModelFieldUnsourcedReason
+  }
+
+  get actualSource(): string | null {
+    const value = this.args?.actualSource
+    return typeof value === 'string' ? value : null
   }
 }

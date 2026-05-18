@@ -258,7 +258,7 @@ const responseMapperHelper = new CodegenConversationResponseMapperHelper()
  *   `codegen-publication-generation.stage.ts` 的 normalizePublishedSymbolValidated
  *   行为一致。
  */
-function normalizePublishedSymbol(raw: string): string {
+function normalizePublishedSymbolValidated(raw: string): string {
   const normalized = raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
   assertSymbolWellFormed(normalized)
   return normalized
@@ -1341,7 +1341,7 @@ export class CodegenConversationService {
   }
 
   private normalizeRecoveredSymbol(value: string | null): string | null {
-    return value ? normalizePublishedSymbol(value) : null
+    return value ? normalizePublishedSymbolValidated(value) : null
   }
 
   private normalizeRecoveredMarketType(value: string | null): 'spot' | 'perp' | null {
@@ -4761,7 +4761,7 @@ export class CodegenConversationService {
     }
 
     if (item.key === FIELD_KEY.MARKET_SYMBOL || item.field === 'symbol') {
-      const symbol = normalizePublishedSymbol(normalizedAnswer)
+      const symbol = normalizePublishedSymbolValidated(normalizedAnswer)
       return this.normalizeLogicSnapshot({
         ...checklist,
         symbols: symbol ? [symbol] : checklist.symbols,

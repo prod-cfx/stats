@@ -308,11 +308,24 @@ export class CodegenSessionPublicationPipelineService {
         'published',
       )
     } catch (error) {
-      const publicationGate = this.normalizePublicationGate(
+      // Issue #1459 闸 4 review M6：当上游已带 publicationGate 时优先采纳，
+      //   但若同步 invariant 也命中，附带 supplanted 元数据保留两层信息，
+      //   而不是静默丢失第二层 invariant 异常。
+      const upstream = this.normalizePublicationGate(
         (error as { publicationGate?: unknown } | null)?.publicationGate,
       )
-        ?? this.buildEntryRuleEventLeafPublicationGate(error)
-        ?? this.buildExecutionModelInvariantPublicationGate(error)
+      const entryRuleGate = this.buildEntryRuleEventLeafPublicationGate(error)
+      const invariantGate = this.buildExecutionModelInvariantPublicationGate(error)
+      let publicationGate = upstream ?? entryRuleGate ?? invariantGate
+      if (publicationGate && upstream) {
+        const supplanted = entryRuleGate ?? invariantGate
+        if (supplanted) {
+          this.logger.warn(
+            `[publication-gate] upstream gate supplanted invariant gate; preserving as metadata: ${JSON.stringify({ upstreamReason: upstream.reason, invariantReason: supplanted.reason })}`,
+          )
+          publicationGate = { ...publicationGate, supplantedGate: supplanted }
+        }
+      }
       const reason = error instanceof Error ? error.message : String(error)
       if (publicationGate) {
         // Issue #1456 闸 1：IR build 入口 assertion / publish 入口 assertion
@@ -438,29 +451,41 @@ export class CodegenSessionPublicationPipelineService {
    */
   private buildExecutionModelInvariantPublicationGate(error: unknown): Record<string, unknown> | null {
     if (error instanceof ExecutionModelFieldUnsourcedException) {
-      const args = error.args ?? {}
-      const field = typeof args.field === 'string' ? args.field : 'unknown'
-      const reason = typeof args.reason === 'string' ? args.reason : 'unsourced'
-      const actualSource = typeof args.actualSource === 'string' ? args.actualSource : null
+      // Issue #1459 闸 4 review M5：用 typed getter（field / reason / actualSource）
+      //   读取结构化字段，不依赖 error.args 的字符串约定。
+      const field = error.field
+      if (!field) {
+        // Issue #1459 闸 4 review m6：空字符串 fallback 改为 fail-closed。
+        throw new Error('codegen.execution_model_field_unsourced.field_missing')
+      }
       return {
         passed: false,
         blocked: true,
         reason: 'execution_model_field_unsourced',
         code: error.code,
-        pendingItems: [{ field, reason, actualSource, message: error.message }],
-        blockedIrFields: [`market.${field === 'venue' ? 'venue' : field}`],
+        pendingItems: [{
+          field,
+          reason: error.reason,
+          actualSource: error.actualSource,
+          message: error.message,
+        }],
+        // Issue #1459 闸 4 review m1：直接 `market.${field}`，删除死三元。
+        blockedIrFields: [`market.${field}`],
       }
     }
     if (error instanceof ExecutionModelSymbolMalformedException) {
-      const args = error.args ?? {}
-      const symbol = typeof args.symbol === 'string' ? args.symbol : ''
-      const reason = typeof args.reason === 'string' ? args.reason : 'malformed'
       return {
         passed: false,
         blocked: true,
         reason: 'execution_model_symbol_malformed',
         code: error.code,
-        pendingItems: [{ field: 'symbol', symbol, malformedReason: reason, message: error.message }],
+        pendingItems: [{
+          field: 'symbol',
+          symbol: error.symbol,
+          malformedReason: error.reason,
+          ...(error.detail ? { detail: error.detail } : {}),
+          message: error.message,
+        }],
         blockedIrFields: ['market.symbol'],
       }
     }
