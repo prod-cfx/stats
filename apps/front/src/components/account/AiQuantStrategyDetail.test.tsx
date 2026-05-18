@@ -1269,6 +1269,8 @@ describe('AiQuantStrategyDetail', () => {
     const banner = container.querySelector('[data-testid="strategy-detail-view-only-banner"]')
     expect(banner).toBeTruthy()
     expect(banner?.textContent).toContain('该策略已设为只读')
+    expect(banner?.className).toContain('text-amber-900')
+    expect(banner?.className).toContain('dark:text-amber-100')
 
     // 「运行控制」整段不再渲染：用 h2 标签精确判定（避免 banner 文案
     // 同时包含「重新部署」「停止」等关键词造成误匹配）。

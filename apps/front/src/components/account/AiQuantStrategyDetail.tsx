@@ -956,7 +956,7 @@ export function AiQuantStrategyDetail({
           {isViewOnly && (
             <section
               data-testid="strategy-detail-view-only-banner"
-              className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-200"
+              className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-900 dark:text-amber-100"
             >
               {t('aiQuant.detail.viewOnlyBanner')}
             </section>
@@ -1098,8 +1098,8 @@ export function AiQuantStrategyDetail({
           />
 
           {strategy.compatibilityMetadata?.isLegacySnapshot && (
-            <section className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm leading-[22px] text-amber-200">
-              <p className="!font-semibold text-amber-100">
+            <section className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm leading-[22px] text-amber-900 dark:text-amber-100">
+              <p className="!font-semibold">
                 {t('aiQuant.detail.republishRequired')}
               </p>
               <p className="mt-1">
