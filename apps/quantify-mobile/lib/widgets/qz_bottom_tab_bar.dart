@@ -15,11 +15,16 @@ import '../theme/theme_context.dart';
 ///   later PR; this PR only matches the token color so [Scaffold.extendBody]
 ///   shows whatever sits behind through the alpha channel.
 class QzBottomTabBar extends StatelessWidget {
+  static const int _tabCount = 5;
+
   const QzBottomTabBar({
     super.key,
     required this.currentIndex,
     required this.onTap,
-  });
+  }) : assert(
+          currentIndex >= 0 && currentIndex < _tabCount,
+          'QzBottomTabBar.currentIndex must be in [0, 5)',
+        );
 
   final int currentIndex;
   final ValueChanged<int> onTap;
