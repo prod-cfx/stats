@@ -34,6 +34,24 @@ void main() {
     );
   });
 
+  testWidgets('QzEmptyState golden baseline — full (icon+subtitle+action)',
+      (tester) async {
+    await pumpQz(
+      tester,
+      QzEmptyState(
+        title: 'No strategies yet',
+        subtitle: 'Tap to create your first quant strategy.',
+        icon: Icons.dashboard_outlined,
+        action: TextButton(onPressed: () {}, child: const Text('Create')),
+      ),
+      surfaceSize: const Size(360, 320),
+    );
+    await expectLater(
+      find.byType(QzEmptyState),
+      matchesGoldenFile('goldens/qz_empty_state_full.png'),
+    );
+  });
+
   testWidgets('QzEmptyState renders cleanly under 9 themes', (tester) async {
     await verifyAllThemes(
       tester,
@@ -45,6 +63,24 @@ void main() {
         expect(find.text('Empty'), findsOneWidget);
       },
       surfaceSize: const Size(360, 160),
+    );
+  });
+
+  testWidgets('QzEmptyState full variant renders cleanly under 9 themes',
+      (tester) async {
+    await verifyAllThemes(
+      tester,
+      () => QzEmptyState(
+        title: 'No data',
+        subtitle: 'Refresh to fetch the latest snapshot.',
+        icon: Icons.refresh,
+        action: TextButton(onPressed: () {}, child: const Text('Refresh')),
+      ),
+      (t) async {
+        expect(find.text('No data'), findsOneWidget);
+        expect(find.text('Refresh'), findsOneWidget);
+      },
+      surfaceSize: const Size(360, 320),
     );
   });
 }
