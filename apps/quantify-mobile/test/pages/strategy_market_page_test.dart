@@ -115,6 +115,45 @@ void main() {
     expect(find.byType(FeaturedHeroCard), findsOneWidget);
   });
 
+  testWidgets('搜索有关键词时：hero 隐藏 (#1593)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    // 先确认默认渲染 hero
+    expect(find.byKey(const Key('strategy-featured-hero')), findsOneWidget);
+    // 输入关键词后 hero 应消失
+    await tester.enterText(find.byType(TextField), 'Alpha');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byKey(const Key('strategy-featured-hero')), findsNothing);
+    expect(find.byType(FeaturedHeroCard), findsNothing);
+  });
+
+  testWidgets('分类切到 highReturn：hero 隐藏 (#1593)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    expect(find.byKey(const Key('strategy-featured-hero')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('strategy-chip-highReturn')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byKey(const Key('strategy-featured-hero')), findsNothing);
+    expect(find.byType(FeaturedHeroCard), findsNothing);
+  });
+
+  testWidgets('点击 hero 卡：push 到 /strategy/:id 详情页 (#1593)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    final Finder hero = find.byKey(const Key('strategy-featured-hero'));
+    expect(hero, findsOneWidget);
+    await tester.tap(hero);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
+    expect(find.byType(StrategyDetailPage), findsOneWidget);
+    expect(find.text('策略详情'), findsOneWidget);
+  });
+
   testWidgets('排序行：4 个排序 chip + 结果计数 (#1565)',
       (WidgetTester tester) async {
     await _pump(tester);
