@@ -758,6 +758,102 @@ abstract class AppLocalizations {
   /// **'卖出 / 做空'**
   String get marketDetailSellButton;
 
+  /// No description provided for @marketDetailSubtitlePerpBinance.
+  ///
+  /// In zh, this message translates to:
+  /// **'永续 · Binance'**
+  String get marketDetailSubtitlePerpBinance;
+
+  /// No description provided for @marketDetail24hHigh.
+  ///
+  /// In zh, this message translates to:
+  /// **'24H 高'**
+  String get marketDetail24hHigh;
+
+  /// No description provided for @marketDetail24hLow.
+  ///
+  /// In zh, this message translates to:
+  /// **'24H 低'**
+  String get marketDetail24hLow;
+
+  /// No description provided for @marketDetail24hVolume.
+  ///
+  /// In zh, this message translates to:
+  /// **'24H 量'**
+  String get marketDetail24hVolume;
+
+  /// No description provided for @marketDetailOpenInterest.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓量'**
+  String get marketDetailOpenInterest;
+
+  /// No description provided for @marketDetailPanelOrderbook.
+  ///
+  /// In zh, this message translates to:
+  /// **'盘口'**
+  String get marketDetailPanelOrderbook;
+
+  /// No description provided for @marketDetailPanelTrades.
+  ///
+  /// In zh, this message translates to:
+  /// **'成交'**
+  String get marketDetailPanelTrades;
+
+  /// No description provided for @marketDetailPanelDepth.
+  ///
+  /// In zh, this message translates to:
+  /// **'深度图'**
+  String get marketDetailPanelDepth;
+
+  /// No description provided for @marketDetailColTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'时间'**
+  String get marketDetailColTime;
+
+  /// No description provided for @marketDetailColPrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'价格(USDT)'**
+  String get marketDetailColPrice;
+
+  /// No description provided for @marketDetailColQty.
+  ///
+  /// In zh, this message translates to:
+  /// **'数量(BTC)'**
+  String get marketDetailColQty;
+
+  /// No description provided for @marketDetailDepthBid.
+  ///
+  /// In zh, this message translates to:
+  /// **'BID'**
+  String get marketDetailDepthBid;
+
+  /// No description provided for @marketDetailDepthSpread.
+  ///
+  /// In zh, this message translates to:
+  /// **'SPREAD'**
+  String get marketDetailDepthSpread;
+
+  /// No description provided for @marketDetailDepthAsk.
+  ///
+  /// In zh, this message translates to:
+  /// **'ASK'**
+  String get marketDetailDepthAsk;
+
+  /// No description provided for @marketDetailStarTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏'**
+  String get marketDetailStarTooltip;
+
+  /// No description provided for @marketDetailMoreTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多'**
+  String get marketDetailMoreTooltip;
+
   /// No description provided for @tradeOrderSheetTabLimit.
   ///
   /// In zh, this message translates to:

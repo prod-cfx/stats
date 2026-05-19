@@ -345,6 +345,54 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketDetailSellButton => '卖出 / 做空';
 
   @override
+  String get marketDetailSubtitlePerpBinance => '永续 · Binance';
+
+  @override
+  String get marketDetail24hHigh => '24H 高';
+
+  @override
+  String get marketDetail24hLow => '24H 低';
+
+  @override
+  String get marketDetail24hVolume => '24H 量';
+
+  @override
+  String get marketDetailOpenInterest => '持仓量';
+
+  @override
+  String get marketDetailPanelOrderbook => '盘口';
+
+  @override
+  String get marketDetailPanelTrades => '成交';
+
+  @override
+  String get marketDetailPanelDepth => '深度图';
+
+  @override
+  String get marketDetailColTime => '时间';
+
+  @override
+  String get marketDetailColPrice => '价格';
+
+  @override
+  String get marketDetailColQty => '数量';
+
+  @override
+  String get marketDetailDepthBid => 'BID';
+
+  @override
+  String get marketDetailDepthSpread => 'SPREAD';
+
+  @override
+  String get marketDetailDepthAsk => 'ASK';
+
+  @override
+  String get marketDetailStarTooltip => '收藏';
+
+  @override
+  String get marketDetailMoreTooltip => '更多';
+
+  @override
   String get tradeOrderSheetTabLimit => '限价';
 
   @override

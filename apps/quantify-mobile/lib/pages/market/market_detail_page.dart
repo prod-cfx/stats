@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 import '../../data/models/kline_models.dart';
 import '../../data/models/long_short_models.dart';
 import '../../data/models/ticker_models.dart';
+import '../../data/models/trade_models.dart';
+import '../../data/mock/fixtures/trades.dart' as trade_fixtures;
 import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
@@ -16,11 +18,16 @@ import '../../widgets/qz_card.dart';
 import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_kline_chart.dart';
 import '../../widgets/qz_spinner.dart';
-import '../../widgets/qz_stat_chip.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_trade_order_sheet.dart';
+import 'widgets/depth_panel.dart';
 import 'widgets/long_short_bar.dart';
+import 'widgets/market_detail_stats.dart';
 import 'widgets/orderbook_view.dart';
+import 'widgets/trades_panel.dart';
+
+/// Panel 选项：盘口 / 成交 / 深度图（#1563）。
+enum _DetailPanel { book, trades, depth }
 
 class MarketDetailPage extends ConsumerStatefulWidget {
   const MarketDetailPage({super.key, required this.symbol});
@@ -39,6 +46,11 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
   LongShortRatio? _longShort;
   List<Candle> _candles = const <Candle>[];
   bool _klineError = false;
+  _DetailPanel _panel = _DetailPanel.book;
+  // Mock 阶段 trade 列表生成一次后缓存，避免 panel 切换或 ticker 推流时
+  // 父 widget rebuild 让 TradesPanel 重新构造 36 条 mock。真实接入后由
+  // tradeRepository 推流维护 ring buffer，本字段会被替换为 StreamSubscription。
+  List<Trade>? _trades;
   StreamSubscription<Ticker>? _tickerSub;
   StreamSubscription<Candle>? _candleSub;
   bool _loading = true;
@@ -179,8 +191,25 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10nForBar = AppLocalizations.of(context);
     return Scaffold(
-      appBar: QzTopBar(title: widget.symbol, onBack: () => context.pop()),
+      appBar: QzTopBar(
+        title: widget.symbol,
+        subtitle: l10nForBar.marketDetailSubtitlePerpBinance,
+        onBack: () => context.pop(),
+        actions: <Widget>[
+          IconButton(
+            icon: const Icon(Icons.star_border, size: 20),
+            onPressed: () {},
+            tooltip: l10nForBar.marketDetailStarTooltip,
+          ),
+          IconButton(
+            icon: const Icon(Icons.more_horiz, size: 20),
+            onPressed: () {},
+            tooltip: l10nForBar.marketDetailMoreTooltip,
+          ),
+        ],
+      ),
       bottomNavigationBar: _priceSnapshot == null
           ? null
           : _OrderActionBar(
@@ -201,65 +230,80 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
             );
           }
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(QzSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                _PriceCard(
+                MarketDetailStats(
                   displaySymbol: widget.symbol,
                   ticker: _priceSnapshot!,
                 ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: QzSpacing.lg,
+                  ),
+                  child: QzKlineChart(
+                    candles: _candles,
+                    interval: _interval,
+                    hasError: _klineError,
+                    onRetry: _klineError
+                        ? () {
+                            setState(() => _klineError = false);
+                            unawaited(_loadKline(_interval));
+                          }
+                        : null,
+                    onIntervalChanged: (KlineInterval next) {
+                      if (next == _interval) return;
+                      setState(() {
+                        _interval = next;
+                        _candles = const <Candle>[];
+                        _klineError = false;
+                      });
+                      unawaited(_loadKline(next));
+                      unawaited(_loadLongShort());
+                    },
+                  ),
+                ),
                 const SizedBox(height: QzSpacing.md),
-                QzKlineChart(
-                  candles: _candles,
-                  interval: _interval,
-                  hasError: _klineError,
-                  onRetry: _klineError
-                      ? () {
-                          setState(() => _klineError = false);
-                          unawaited(_loadKline(_interval));
-                        }
-                      : null,
-                  onIntervalChanged: (KlineInterval next) {
-                    if (next == _interval) return;
-                    setState(() {
-                      _interval = next;
-                      _candles = const <Candle>[];
-                      _klineError = false;
-                    });
-                    unawaited(_loadKline(next));
-                    unawaited(_loadLongShort());
+                _PanelTabBar(
+                  panel: _panel,
+                  onChanged: (_DetailPanel next) {
+                    if (next == _panel) return;
+                    setState(() => _panel = next);
                   },
                 ),
-                const SizedBox(height: QzSpacing.md),
-                QzCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      _SectionTitle(l10n.marketDetailSectionOrderbook),
-                      const SizedBox(height: QzSpacing.md),
-                      OrderbookView(symbol: widget.symbol),
-                    ],
+                _PanelBody(
+                  panel: _panel,
+                  symbol: widget.symbol,
+                  mid: _priceSnapshot!.price,
+                  trades: _trades ??= trade_fixtures.buildMockTrades(
+                    symbol: widget.symbol,
+                    mid: _priceSnapshot!.price,
                   ),
                 ),
                 const SizedBox(height: QzSpacing.md),
-                QzCard(
-                  onTap: () => context.push('/market/long-short'),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      _SectionTitle(l10n.marketLongShortTitle),
-                      const SizedBox(height: QzSpacing.md),
-                      if (_longShort == null)
-                        QzEmptyState(title: l10n.marketLongShortLoadError)
-                      else
-                        LongShortBar(
-                          longRatio: _longShort!.longRatio,
-                          shortRatio: _longShort!.shortRatio,
-                        ),
-                    ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: QzSpacing.lg,
+                  ),
+                  child: QzCard(
+                    onTap: () => context.push('/market/long-short'),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        _SectionTitle(l10n.marketLongShortTitle),
+                        const SizedBox(height: QzSpacing.md),
+                        if (_longShort == null)
+                          QzEmptyState(title: l10n.marketLongShortLoadError)
+                        else
+                          LongShortBar(
+                            longRatio: _longShort!.longRatio,
+                            shortRatio: _longShort!.shortRatio,
+                          ),
+                      ],
+                    ),
                   ),
                 ),
+                const SizedBox(height: QzSpacing.md),
               ],
             ),
           );
@@ -269,44 +313,119 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
   }
 }
 
-class _PriceCard extends StatelessWidget {
-  const _PriceCard({required this.displaySymbol, required this.ticker});
+/// 3 段 underline panel tab：盘口 / 成交 / 深度图（#1563）。
+class _PanelTabBar extends StatelessWidget {
+  const _PanelTabBar({required this.panel, required this.onChanged});
 
-  final String displaySymbol;
-  final Ticker ticker;
+  final _DetailPanel panel;
+  final ValueChanged<_DetailPanel> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    return QzCard(
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final List<(_DetailPanel, String)> items = <(_DetailPanel, String)>[
+      (_DetailPanel.book, l10n.marketDetailPanelOrderbook),
+      (_DetailPanel.trades, l10n.marketDetailPanelTrades),
+      (_DetailPanel.depth, l10n.marketDetailPanelDepth),
+    ];
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        QzSpacing.lg,
+        QzSpacing.md,
+        QzSpacing.lg,
+        0,
+      ),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: c.borderSoft)),
+      ),
       child: Row(
         children: <Widget>[
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  '${l10n.marketDetailTickerPrefix}$displaySymbol',
-                  style: TextStyle(color: c.textDim, fontSize: 12),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  ticker.price.toStringAsFixed(2),
-                  style: TextStyle(
-                    color: c.text,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    fontFamilyFallback: QzFont.monoFallback,
-                  ),
-                ),
-              ],
+          for (final (_DetailPanel key, String label) in items)
+            Padding(
+              padding: const EdgeInsets.only(right: 18),
+              child: _PanelTab(
+                label: label,
+                selected: panel == key,
+                onTap: () => onChanged(key),
+              ),
             ),
-          ),
-          QzStatChip(value: ticker.changePercent / 100),
         ],
       ),
     );
+  }
+}
+
+class _PanelTab extends StatelessWidget {
+  const _PanelTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.only(top: 6, bottom: 8),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: selected ? c.text : Colors.transparent,
+              width: 2,
+            ),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? c.text : c.textMid,
+            fontSize: 13,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PanelBody extends StatelessWidget {
+  const _PanelBody({
+    required this.panel,
+    required this.symbol,
+    required this.mid,
+    required this.trades,
+  });
+
+  final _DetailPanel panel;
+  final String symbol;
+  final double mid;
+  final List<Trade> trades;
+
+  @override
+  Widget build(BuildContext context) {
+    switch (panel) {
+      case _DetailPanel.book:
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(
+            QzSpacing.lg,
+            QzSpacing.md,
+            QzSpacing.lg,
+            0,
+          ),
+          child: OrderbookView(symbol: symbol),
+        );
+      case _DetailPanel.trades:
+        return TradesPanel(symbol: symbol, mid: mid, trades: trades);
+      case _DetailPanel.depth:
+        return DepthPanel(symbol: symbol, mid: mid);
+    }
   }
 }
 

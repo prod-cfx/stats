@@ -352,6 +352,54 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketDetailSellButton => 'Sell / Short';
 
   @override
+  String get marketDetailSubtitlePerpBinance => 'Perp · Binance';
+
+  @override
+  String get marketDetail24hHigh => '24H High';
+
+  @override
+  String get marketDetail24hLow => '24H Low';
+
+  @override
+  String get marketDetail24hVolume => '24H Volume';
+
+  @override
+  String get marketDetailOpenInterest => 'Open Interest';
+
+  @override
+  String get marketDetailPanelOrderbook => 'Order Book';
+
+  @override
+  String get marketDetailPanelTrades => 'Trades';
+
+  @override
+  String get marketDetailPanelDepth => 'Depth';
+
+  @override
+  String get marketDetailColTime => 'Time';
+
+  @override
+  String get marketDetailColPrice => 'Price';
+
+  @override
+  String get marketDetailColQty => 'Qty';
+
+  @override
+  String get marketDetailDepthBid => 'BID';
+
+  @override
+  String get marketDetailDepthSpread => 'SPREAD';
+
+  @override
+  String get marketDetailDepthAsk => 'ASK';
+
+  @override
+  String get marketDetailStarTooltip => 'Favorite';
+
+  @override
+  String get marketDetailMoreTooltip => 'More';
+
+  @override
   String get tradeOrderSheetTabLimit => 'Limit';
 
   @override
