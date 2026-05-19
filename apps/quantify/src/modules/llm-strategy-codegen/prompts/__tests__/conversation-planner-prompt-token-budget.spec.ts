@@ -7,7 +7,7 @@
  * 启发式精度：cjk/1.5 + ascii/4 + other/2 经验比例；对中英文混合 prompt 实测
  * 与 OpenAI cl100k_base BPE 比较常**低估**（中文实际更接近 1 token/char 而非 1.5）。
  * 因此为 heuristic 和 real 路径分设阈值：
- *   - HEURISTIC_THRESHOLD = 10000（容忍 heuristic 与真值 ~20% 偏差）
+ *   - HEURISTIC_THRESHOLD = 11000（issue #1550 evidence 契约后从 10000 抬升，~10% safety margin）
  *   - REAL_OPENAI_THRESHOLD = 8000（gpt-5.4-nano 128K context 12x 安全系数）
  *
  * 在 LLM_STRATEGY_CODEGEN_API_KEY 缺失或 SKIP_REAL_LLM_TOKEN_COUNT=1 时降级 heuristic，
@@ -16,8 +16,12 @@
 
 import { buildConversationPlannerSystemPrompt } from '../conversation-planner-system.prompt'
 
+// Issue #1550：prompt 新增 rules[].evidence.text 硬契约 + 12 条 example evidence 引文，
+//   heuristic token estimate（char-based）从 ~9900 → ~10300（cjk/1.5 + ascii/4 派生，
+//   非 OpenAI BPE token）。HEURISTIC_THRESHOLD 同步从 10000 → 11000 维持 ~10% safety margin。
+//   REAL_OPENAI_THRESHOLD（OpenAI usage.prompt_tokens 实测值）保留 8000，未受影响。
 const REAL_OPENAI_THRESHOLD = 8000
-const HEURISTIC_THRESHOLD = 10000
+const HEURISTIC_THRESHOLD = 11000
 
 function charBasedEstimate(text: string): number {
   let cjk = 0
