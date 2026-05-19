@@ -97,6 +97,32 @@
   "marketLongShortTitle": "多空比",
   "marketLongShortLoadError": "多空比加载失败",
   "marketLongShortHistory": "历史",
+  "marketLongShortHistorySection": "历史多空比",
+  "marketLongShortHeroSuffix": "全市场",
+  "marketLongShortTotalNotional": "{total} 总持仓 · 4H 数据",
+  "@marketLongShortTotalNotional": {
+    "placeholders": {
+      "total": {"type": "String"}
+    }
+  },
+  "marketLongShortLongHolding": "多头持仓",
+  "marketLongShortShortHolding": "空头持仓",
+  "marketLongShortExchangesTitle": "交易所分布",
+  "marketLongShortExchangesSortBy": "按多头量排序",
+  "marketLongShortRefreshTooltip": "刷新",
+  "marketLongShortLive": "LIVE",
+  "marketLongShortRowLongPct": "多 {pct}%",
+  "@marketLongShortRowLongPct": {
+    "placeholders": {
+      "pct": {"type": "String"}
+    }
+  },
+  "marketLongShortRowShortPct": "空 {pct}%",
+  "@marketLongShortRowShortPct": {
+    "placeholders": {
+      "pct": {"type": "String"}
+    }
+  },
   "marketDetailSymbolNotFound": "未找到该交易对",
   "marketDetailTickerPrefix": "行情详情：",
   "marketDetailSectionOrderbook": "盘口",

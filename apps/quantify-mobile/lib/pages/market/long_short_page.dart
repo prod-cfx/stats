@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/mock/fixtures/long_short.dart';
 import '../../data/mock/fixtures/tickers.dart';
+import '../../data/models/exchange_long_short_models.dart';
 import '../../data/models/kline_models.dart';
 import '../../data/models/long_short_models.dart';
 import '../../data/providers.dart';
@@ -15,7 +16,9 @@ import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_segmented_tabs.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
+import 'widgets/exchange_long_short_tile.dart';
 import 'widgets/long_short_bar.dart';
+import 'widgets/long_short_hero_card.dart';
 
 class LongShortPage extends ConsumerStatefulWidget {
   const LongShortPage({super.key});
@@ -27,7 +30,7 @@ class LongShortPage extends ConsumerStatefulWidget {
 class _LongShortPageState extends ConsumerState<LongShortPage> {
   String _symbol = 'BTCUSDT';
   KlineInterval _interval = KlineInterval.h1;
-  LongShortRatio? _ratio;
+  MarketLongShortSnapshot? _snapshot;
   bool _loading = true;
   Object? _error;
   int _requestId = 0;
@@ -45,12 +48,12 @@ class _LongShortPageState extends ConsumerState<LongShortPage> {
       _error = null;
     });
     try {
-      final LongShortRatio ratio = await ref
+      final MarketLongShortSnapshot snapshot = await ref
           .read(longShortRepositoryProvider)
-          .getRatio(symbol: _symbol, interval: _interval);
+          .getSnapshot(symbol: _symbol);
       if (!mounted || requestId != _requestId) return;
       setState(() {
-        _ratio = ratio;
+        _snapshot = snapshot;
         _loading = false;
       });
     } catch (error) {
@@ -64,12 +67,24 @@ class _LongShortPageState extends ConsumerState<LongShortPage> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final QzColorScheme c = context.qzScheme;
     final List<String> symbols = mockTickers
         .map((ticker) => ticker.symbol)
         .take(8)
         .toList();
     return Scaffold(
-      appBar: QzTopBar(title: AppLocalizations.of(context).marketLongShortTitle),
+      appBar: QzTopBar(
+        title: l10n.marketLongShortTitle,
+        actions: <Widget>[
+          IconButton(
+            icon: const Icon(Icons.refresh, size: 20),
+            color: c.text,
+            tooltip: l10n.marketLongShortRefreshTooltip,
+            onPressed: _loading ? null : _load,
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(QzSpacing.lg),
         child: Column(
@@ -92,29 +107,81 @@ class _LongShortPageState extends ConsumerState<LongShortPage> {
               value: _intervalLabel(_interval),
               onChanged: (String value) {
                 setState(() => _interval = _intervalFromLabel(value));
-                _load();
               },
             ),
             const SizedBox(height: QzSpacing.md),
-            QzCard(
-              child: Builder(
-                builder: (BuildContext context) {
-                  if (_loading) return const Center(child: QzSpinner());
-                  if (_error != null || _ratio == null) {
-                    return QzEmptyState(title: AppLocalizations.of(context).marketLongShortLoadError);
-                  }
-                  return LongShortBar(
-                    longRatio: _ratio!.longRatio,
-                    shortRatio: _ratio!.shortRatio,
-                    height: 36,
-                  );
-                },
+            if (_loading)
+              const QzCard(
+                padding: EdgeInsets.symmetric(vertical: 48),
+                child: Center(child: QzSpinner()),
+              )
+            else if (_error != null || _snapshot == null)
+              QzCard(
+                child: QzEmptyState(
+                  title: l10n.marketLongShortLoadError,
+                ),
+              )
+            else ...<Widget>[
+              LongShortHeroCard(snapshot: _snapshot!),
+              const SizedBox(height: QzSpacing.md),
+              _ExchangeSectionHeader(
+                title: l10n.marketLongShortExchangesTitle,
+                hint: l10n.marketLongShortExchangesSortBy,
               ),
-            ),
+              QzCard(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: <Widget>[
+                    for (int i = 0; i < _snapshot!.exchanges.length; i++)
+                      ExchangeLongShortTile(
+                        rank: i + 1,
+                        item: _snapshot!.exchanges[i],
+                        showDivider: i < _snapshot!.exchanges.length - 1,
+                      ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: QzSpacing.md),
             _HistoryCard(symbol: _symbol),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ExchangeSectionHeader extends StatelessWidget {
+  const _ExchangeSectionHeader({required this.title, required this.hint});
+
+  final String title;
+  final String hint;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, QzSpacing.sm, 4, 10),
+      child: Row(
+        children: <Widget>[
+          Text(
+            title,
+            style: TextStyle(
+              color: c.textMid,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            hint,
+            style: TextStyle(
+              color: c.textDim,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -136,7 +203,7 @@ class _HistoryCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            l10n.marketLongShortHistory,
+            l10n.marketLongShortHistorySection,
             style: TextStyle(
               color: c.textMid,
               fontSize: 14,

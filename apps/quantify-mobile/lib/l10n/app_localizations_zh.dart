@@ -291,6 +291,45 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketLongShortHistory => '历史';
 
   @override
+  String get marketLongShortHistorySection => '历史多空比';
+
+  @override
+  String get marketLongShortHeroSuffix => '全市场';
+
+  @override
+  String marketLongShortTotalNotional(String total) {
+    return '$total 总持仓 · 4H 数据';
+  }
+
+  @override
+  String get marketLongShortLongHolding => '多头持仓';
+
+  @override
+  String get marketLongShortShortHolding => '空头持仓';
+
+  @override
+  String get marketLongShortExchangesTitle => '交易所分布';
+
+  @override
+  String get marketLongShortExchangesSortBy => '按多头量排序';
+
+  @override
+  String get marketLongShortRefreshTooltip => '刷新';
+
+  @override
+  String get marketLongShortLive => 'LIVE';
+
+  @override
+  String marketLongShortRowLongPct(String pct) {
+    return '多 $pct%';
+  }
+
+  @override
+  String marketLongShortRowShortPct(String pct) {
+    return '空 $pct%';
+  }
+
+  @override
   String get marketDetailSymbolNotFound => '未找到该交易对';
 
   @override

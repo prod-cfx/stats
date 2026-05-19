@@ -1,6 +1,8 @@
+import '../models/exchange_long_short_models.dart';
 import '../models/kline_models.dart';
 import '../models/long_short_models.dart';
 import '../repositories/long_short_repository.dart';
+import 'fixtures/exchange_long_short.dart';
 import 'fixtures/long_short.dart';
 
 class MockLongShortRepository implements LongShortRepository {
@@ -18,5 +20,11 @@ class MockLongShortRepository implements LongShortRepository {
       shortRatio: pair[1],
       timestamp: DateTime.fromMillisecondsSinceEpoch(1_716_000_000_000),
     );
+  }
+
+  @override
+  Future<MarketLongShortSnapshot> getSnapshot({required String symbol}) async {
+    await Future<void>.delayed(const Duration(milliseconds: 220));
+    return mockMarketLongShortBySymbol[symbol] ?? fallbackSnapshot(symbol);
   }
 }

@@ -55,6 +55,10 @@ class UnimplementedLongShortRepository implements LongShortRepository {
     required KlineInterval interval,
   }) =>
       _todo('LongShortRepository');
+
+  @override
+  Future<MarketLongShortSnapshot> getSnapshot({required String symbol}) =>
+      _todo('LongShortRepository');
 }
 
 class UnimplementedWhaleFeedRepository implements WhaleFeedRepository {

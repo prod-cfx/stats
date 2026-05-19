@@ -94,6 +94,32 @@
   "marketLongShortTitle": "Long/Short",
   "marketLongShortLoadError": "Long/short data load failed",
   "marketLongShortHistory": "History",
+  "marketLongShortHistorySection": "Historical long/short",
+  "marketLongShortHeroSuffix": "market",
+  "marketLongShortTotalNotional": "{total} open interest · 4H data",
+  "@marketLongShortTotalNotional": {
+    "placeholders": {
+      "total": {"type": "String"}
+    }
+  },
+  "marketLongShortLongHolding": "Long open",
+  "marketLongShortShortHolding": "Short open",
+  "marketLongShortExchangesTitle": "Exchange split",
+  "marketLongShortExchangesSortBy": "Sorted by long size",
+  "marketLongShortRefreshTooltip": "Refresh",
+  "marketLongShortLive": "LIVE",
+  "marketLongShortRowLongPct": "Long {pct}%",
+  "@marketLongShortRowLongPct": {
+    "placeholders": {
+      "pct": {"type": "String"}
+    }
+  },
+  "marketLongShortRowShortPct": "Short {pct}%",
+  "@marketLongShortRowShortPct": {
+    "placeholders": {
+      "pct": {"type": "String"}
+    }
+  },
   "marketDetailSymbolNotFound": "Symbol not found",
   "marketDetailTickerPrefix": "Market Detail: ",
   "marketDetailSectionOrderbook": "Order Book",

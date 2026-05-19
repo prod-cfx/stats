@@ -298,6 +298,45 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketLongShortHistory => 'History';
 
   @override
+  String get marketLongShortHistorySection => 'Historical long/short';
+
+  @override
+  String get marketLongShortHeroSuffix => 'market';
+
+  @override
+  String marketLongShortTotalNotional(String total) {
+    return '$total open interest · 4H data';
+  }
+
+  @override
+  String get marketLongShortLongHolding => 'Long open';
+
+  @override
+  String get marketLongShortShortHolding => 'Short open';
+
+  @override
+  String get marketLongShortExchangesTitle => 'Exchange split';
+
+  @override
+  String get marketLongShortExchangesSortBy => 'Sorted by long size';
+
+  @override
+  String get marketLongShortRefreshTooltip => 'Refresh';
+
+  @override
+  String get marketLongShortLive => 'LIVE';
+
+  @override
+  String marketLongShortRowLongPct(String pct) {
+    return 'Long $pct%';
+  }
+
+  @override
+  String marketLongShortRowShortPct(String pct) {
+    return 'Short $pct%';
+  }
+
+  @override
   String get marketDetailSymbolNotFound => 'Symbol not found';
 
   @override

@@ -3,6 +3,7 @@ export 'ai_chat_models.dart';
 export 'api_key_models.dart';
 export 'auth_models.dart';
 export 'backtest_models.dart';
+export 'exchange_long_short_models.dart';
 export 'kline_models.dart';
 export 'long_short_models.dart';
 export 'orderbook_models.dart';

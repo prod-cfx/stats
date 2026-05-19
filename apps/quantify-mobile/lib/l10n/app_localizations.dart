@@ -662,6 +662,72 @@ abstract class AppLocalizations {
   /// **'历史'**
   String get marketLongShortHistory;
 
+  /// No description provided for @marketLongShortHistorySection.
+  ///
+  /// In zh, this message translates to:
+  /// **'历史多空比'**
+  String get marketLongShortHistorySection;
+
+  /// No description provided for @marketLongShortHeroSuffix.
+  ///
+  /// In zh, this message translates to:
+  /// **'全市场'**
+  String get marketLongShortHeroSuffix;
+
+  /// No description provided for @marketLongShortTotalNotional.
+  ///
+  /// In zh, this message translates to:
+  /// **'{total} 总持仓 · 4H 数据'**
+  String marketLongShortTotalNotional(String total);
+
+  /// No description provided for @marketLongShortLongHolding.
+  ///
+  /// In zh, this message translates to:
+  /// **'多头持仓'**
+  String get marketLongShortLongHolding;
+
+  /// No description provided for @marketLongShortShortHolding.
+  ///
+  /// In zh, this message translates to:
+  /// **'空头持仓'**
+  String get marketLongShortShortHolding;
+
+  /// No description provided for @marketLongShortExchangesTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易所分布'**
+  String get marketLongShortExchangesTitle;
+
+  /// No description provided for @marketLongShortExchangesSortBy.
+  ///
+  /// In zh, this message translates to:
+  /// **'按多头量排序'**
+  String get marketLongShortExchangesSortBy;
+
+  /// No description provided for @marketLongShortRefreshTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新'**
+  String get marketLongShortRefreshTooltip;
+
+  /// No description provided for @marketLongShortLive.
+  ///
+  /// In zh, this message translates to:
+  /// **'LIVE'**
+  String get marketLongShortLive;
+
+  /// No description provided for @marketLongShortRowLongPct.
+  ///
+  /// In zh, this message translates to:
+  /// **'多 {pct}%'**
+  String marketLongShortRowLongPct(String pct);
+
+  /// No description provided for @marketLongShortRowShortPct.
+  ///
+  /// In zh, this message translates to:
+  /// **'空 {pct}%'**
+  String marketLongShortRowShortPct(String pct);
+
   /// No description provided for @marketDetailSymbolNotFound.
   ///
   /// In zh, this message translates to:

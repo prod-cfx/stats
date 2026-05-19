@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/mock/fixtures/candles.dart';
 import 'package:quantify_mobile/data/mock/fixtures/orderbook.dart';
 import 'package:quantify_mobile/data/mock/fixtures/tickers.dart';
+import 'package:quantify_mobile/data/models/exchange_long_short_models.dart';
 import 'package:quantify_mobile/data/models/kline_models.dart';
 import 'package:quantify_mobile/data/models/long_short_models.dart';
 import 'package:quantify_mobile/data/models/orderbook_models.dart';
@@ -112,6 +113,24 @@ class _FakeLongShortRepository implements LongShortRepository {
     symbol: symbol,
     longRatio: 0.58,
     shortRatio: 0.42,
+    timestamp: DateTime(2026),
+  );
+
+  @override
+  Future<MarketLongShortSnapshot> getSnapshot({
+    required String symbol,
+  }) async => MarketLongShortSnapshot(
+    symbol: symbol,
+    baseAsset: 'BTC',
+    assetGlyph: 'B',
+    assetGradientStart: const Color(0xFFF7931A),
+    assetGradientEnd: const Color(0xFFC16100),
+    totalNotional: '\$0',
+    longNotional: '\$0',
+    shortNotional: '\$0',
+    longPct: 50,
+    shortPct: 50,
+    exchanges: const <ExchangeLongShort>[],
     timestamp: DateTime(2026),
   );
 }
