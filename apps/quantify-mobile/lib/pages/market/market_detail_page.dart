@@ -18,6 +18,7 @@ import '../../widgets/qz_kline_chart.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_stat_chip.dart';
 import '../../widgets/qz_top_bar.dart';
+import '../../widgets/qz_trade_order_sheet.dart';
 import 'widgets/long_short_bar.dart';
 import 'widgets/orderbook_view.dart';
 
@@ -158,10 +159,34 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
     super.dispose();
   }
 
+  Future<void> _openOrderSheet(TradeDirection direction) async {
+    final TradeOrderResult? result = await QzTradeOrderSheet.show(
+      context,
+      symbol: widget.symbol,
+      direction: direction,
+      markPrice: _priceSnapshot?.price,
+    );
+    if (!mounted || result == null) return;
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(l10n.tradeOrderSheetSuccessToast),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: QzTopBar(title: widget.symbol, onBack: () => context.pop()),
+      bottomNavigationBar: _priceSnapshot == null
+          ? null
+          : _OrderActionBar(
+              onBuy: () => _openOrderSheet(TradeDirection.buy),
+              onSell: () => _openOrderSheet(TradeDirection.sell),
+            ),
       body: Builder(
         builder: (BuildContext context) {
           final AppLocalizations l10n = AppLocalizations.of(context);
@@ -280,6 +305,99 @@ class _PriceCard extends StatelessWidget {
           ),
           QzStatChip(value: ticker.changePercent / 100),
         ],
+      ),
+    );
+  }
+}
+
+/// 交易详情底部固定双按钮 bar。
+///
+/// 用 `bottomNavigationBar` 而非 `Positioned`：自动处理键盘 inset、SafeArea
+/// 与 Scaffold body 内容剪裁，比手工 stack 更稳。
+class _OrderActionBar extends StatelessWidget {
+  const _OrderActionBar({required this.onBuy, required this.onSell});
+
+  final VoidCallback onBuy;
+  final VoidCallback onSell;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(
+          QzSpacing.lg,
+          QzSpacing.sm,
+          QzSpacing.lg,
+          QzSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: c.bgElev,
+          border: Border(top: BorderSide(color: c.borderSoft)),
+        ),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: _ActionButton(
+                key: const Key('market-detail-buy'),
+                label: l10n.marketDetailBuyButton,
+                color: c.marketUp,
+                onPressed: onBuy,
+              ),
+            ),
+            const SizedBox(width: QzSpacing.sm),
+            Expanded(
+              child: _ActionButton(
+                key: const Key('market-detail-sell'),
+                label: l10n.marketDetailSellButton,
+                color: c.marketDown,
+                onPressed: onSell,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    super.key,
+    required this.label,
+    required this.color,
+    required this.onPressed,
+  });
+
+  final String label;
+  final Color color;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(QzRadii.input),
+        child: Container(
+          height: 44,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(QzRadii.input),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
       ),
     );
   }

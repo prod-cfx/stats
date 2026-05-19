@@ -268,6 +268,73 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketDetailSectionOrderbook => 'Order Book';
 
   @override
+  String get marketDetailBuyButton => 'Buy / Long';
+
+  @override
+  String get marketDetailSellButton => 'Sell / Short';
+
+  @override
+  String get tradeOrderSheetTabLimit => 'Limit';
+
+  @override
+  String get tradeOrderSheetTabMarket => 'Market';
+
+  @override
+  String get tradeOrderSheetTabConditional => 'Conditional';
+
+  @override
+  String get tradeOrderSheetMarginCross => 'Cross';
+
+  @override
+  String get tradeOrderSheetMarginIsolated => 'Isolated';
+
+  @override
+  String get tradeOrderSheetFieldPrice => 'Price';
+
+  @override
+  String get tradeOrderSheetFieldAmount => 'Amount';
+
+  @override
+  String get tradeOrderSheetFieldTriggerPrice => 'Trigger Price';
+
+  @override
+  String get tradeOrderSheetFieldTakeProfit => 'Take Profit';
+
+  @override
+  String get tradeOrderSheetFieldStopLoss => 'Stop Loss';
+
+  @override
+  String get tradeOrderSheetMarketPriceHint => 'Market';
+
+  @override
+  String get tradeOrderSheetLeverageLabel => 'Leverage';
+
+  @override
+  String get tradeOrderSheetEstLiqPrice => 'Est. Liq. Price';
+
+  @override
+  String get tradeOrderSheetEstLiqPlaceholder => '—';
+
+  @override
+  String get tradeOrderSheetErrorPriceRequired => 'Enter a valid price';
+
+  @override
+  String get tradeOrderSheetErrorAmountRequired => 'Enter a valid amount';
+
+  @override
+  String get tradeOrderSheetErrorTriggerRequired =>
+      'Enter a valid trigger price';
+
+  @override
+  String get tradeOrderSheetSubmitBuyPrefix => 'Buy ';
+
+  @override
+  String get tradeOrderSheetSubmitSellPrefix => 'Sell ';
+
+  @override
+  String get tradeOrderSheetSuccessToast => 'Order placed';
+
+  @override
   String get orderbookLoadError => 'Order book load failed';
 
   @override

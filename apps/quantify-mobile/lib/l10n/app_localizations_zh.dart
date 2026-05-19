@@ -261,6 +261,72 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketDetailSectionOrderbook => '盘口';
 
   @override
+  String get marketDetailBuyButton => '买入 / 做多';
+
+  @override
+  String get marketDetailSellButton => '卖出 / 做空';
+
+  @override
+  String get tradeOrderSheetTabLimit => '限价';
+
+  @override
+  String get tradeOrderSheetTabMarket => '市价';
+
+  @override
+  String get tradeOrderSheetTabConditional => '条件委托';
+
+  @override
+  String get tradeOrderSheetMarginCross => '全仓';
+
+  @override
+  String get tradeOrderSheetMarginIsolated => '逐仓';
+
+  @override
+  String get tradeOrderSheetFieldPrice => '价格';
+
+  @override
+  String get tradeOrderSheetFieldAmount => '数量';
+
+  @override
+  String get tradeOrderSheetFieldTriggerPrice => '触发价';
+
+  @override
+  String get tradeOrderSheetFieldTakeProfit => '止盈价';
+
+  @override
+  String get tradeOrderSheetFieldStopLoss => '止损价';
+
+  @override
+  String get tradeOrderSheetMarketPriceHint => '市价';
+
+  @override
+  String get tradeOrderSheetLeverageLabel => '杠杆';
+
+  @override
+  String get tradeOrderSheetEstLiqPrice => '预计强平价';
+
+  @override
+  String get tradeOrderSheetEstLiqPlaceholder => '—';
+
+  @override
+  String get tradeOrderSheetErrorPriceRequired => '请输入有效的价格';
+
+  @override
+  String get tradeOrderSheetErrorAmountRequired => '请输入有效的数量';
+
+  @override
+  String get tradeOrderSheetErrorTriggerRequired => '请输入有效的触发价';
+
+  @override
+  String get tradeOrderSheetSubmitBuyPrefix => '买入 ';
+
+  @override
+  String get tradeOrderSheetSubmitSellPrefix => '卖出 ';
+
+  @override
+  String get tradeOrderSheetSuccessToast => '下单成功';
+
+  @override
   String get orderbookLoadError => '盘口加载失败';
 
   @override

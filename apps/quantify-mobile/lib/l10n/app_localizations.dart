@@ -602,6 +602,138 @@ abstract class AppLocalizations {
   /// **'盘口'**
   String get marketDetailSectionOrderbook;
 
+  /// No description provided for @marketDetailBuyButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'买入 / 做多'**
+  String get marketDetailBuyButton;
+
+  /// No description provided for @marketDetailSellButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'卖出 / 做空'**
+  String get marketDetailSellButton;
+
+  /// No description provided for @tradeOrderSheetTabLimit.
+  ///
+  /// In zh, this message translates to:
+  /// **'限价'**
+  String get tradeOrderSheetTabLimit;
+
+  /// No description provided for @tradeOrderSheetTabMarket.
+  ///
+  /// In zh, this message translates to:
+  /// **'市价'**
+  String get tradeOrderSheetTabMarket;
+
+  /// No description provided for @tradeOrderSheetTabConditional.
+  ///
+  /// In zh, this message translates to:
+  /// **'条件委托'**
+  String get tradeOrderSheetTabConditional;
+
+  /// No description provided for @tradeOrderSheetMarginCross.
+  ///
+  /// In zh, this message translates to:
+  /// **'全仓'**
+  String get tradeOrderSheetMarginCross;
+
+  /// No description provided for @tradeOrderSheetMarginIsolated.
+  ///
+  /// In zh, this message translates to:
+  /// **'逐仓'**
+  String get tradeOrderSheetMarginIsolated;
+
+  /// No description provided for @tradeOrderSheetFieldPrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'价格'**
+  String get tradeOrderSheetFieldPrice;
+
+  /// No description provided for @tradeOrderSheetFieldAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'数量'**
+  String get tradeOrderSheetFieldAmount;
+
+  /// No description provided for @tradeOrderSheetFieldTriggerPrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'触发价'**
+  String get tradeOrderSheetFieldTriggerPrice;
+
+  /// No description provided for @tradeOrderSheetFieldTakeProfit.
+  ///
+  /// In zh, this message translates to:
+  /// **'止盈价'**
+  String get tradeOrderSheetFieldTakeProfit;
+
+  /// No description provided for @tradeOrderSheetFieldStopLoss.
+  ///
+  /// In zh, this message translates to:
+  /// **'止损价'**
+  String get tradeOrderSheetFieldStopLoss;
+
+  /// No description provided for @tradeOrderSheetMarketPriceHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'市价'**
+  String get tradeOrderSheetMarketPriceHint;
+
+  /// No description provided for @tradeOrderSheetLeverageLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'杠杆'**
+  String get tradeOrderSheetLeverageLabel;
+
+  /// No description provided for @tradeOrderSheetEstLiqPrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'预计强平价'**
+  String get tradeOrderSheetEstLiqPrice;
+
+  /// No description provided for @tradeOrderSheetEstLiqPlaceholder.
+  ///
+  /// In zh, this message translates to:
+  /// **'—'**
+  String get tradeOrderSheetEstLiqPlaceholder;
+
+  /// No description provided for @tradeOrderSheetErrorPriceRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入有效的价格'**
+  String get tradeOrderSheetErrorPriceRequired;
+
+  /// No description provided for @tradeOrderSheetErrorAmountRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入有效的数量'**
+  String get tradeOrderSheetErrorAmountRequired;
+
+  /// No description provided for @tradeOrderSheetErrorTriggerRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入有效的触发价'**
+  String get tradeOrderSheetErrorTriggerRequired;
+
+  /// No description provided for @tradeOrderSheetSubmitBuyPrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'买入 '**
+  String get tradeOrderSheetSubmitBuyPrefix;
+
+  /// No description provided for @tradeOrderSheetSubmitSellPrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'卖出 '**
+  String get tradeOrderSheetSubmitSellPrefix;
+
+  /// No description provided for @tradeOrderSheetSuccessToast.
+  ///
+  /// In zh, this message translates to:
+  /// **'下单成功'**
+  String get tradeOrderSheetSuccessToast;
+
   /// No description provided for @orderbookLoadError.
   ///
   /// In zh, this message translates to:
