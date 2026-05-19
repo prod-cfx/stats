@@ -15,7 +15,8 @@ import '../../widgets/qz_notification_bell.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../whale/widgets/whale_notification_sheet.dart';
-import 'widgets/ticker_row.dart';
+import 'widgets/ticker_row.dart'
+    show TickerRow, kTickerRowNameFlex, kTickerRowPriceFlex, kTickerRowChangeFlex;
 
 /// 行情列表「自选」固定收藏集合（mock 阶段）。真实接入后由后端返回。
 const Set<String> _kFavoriteSet = <String>{
@@ -281,41 +282,52 @@ class _MarketHomePageState extends ConsumerState<MarketHomePage> {
               ],
             ),
           ),
-          if (!_loading && _error == null)
-            _ColumnHeader(
-              name: l10n.marketHomeColumnName,
-              price: l10n.marketHomeColumnPrice,
-              change: l10n.marketHomeColumnChange,
-            ),
           Expanded(
-            child: Builder(
-              builder: (BuildContext context) {
-                if (_loading) return const Center(child: QzSpinner());
-                if (_error != null) {
-                  return QzEmptyState(title: l10n.marketHomeLoadError);
-                }
-                if (visible.isEmpty) {
-                  final String title = _searchQuery.isNotEmpty
-                      ? l10n.marketHomeSearchEmpty
-                      : (_tab == _MarketTab.watchlist
-                          ? l10n.marketHomeWatchlistEmpty
-                          : l10n.marketHomeEmpty);
-                  return QzEmptyState(title: title);
-                }
-                return ListView.separated(
-                  itemCount: visible.length,
-                  separatorBuilder: (BuildContext context, int index) =>
-                      Divider(height: 1, color: c.borderSoft),
-                  itemBuilder: (BuildContext context, int index) {
-                    final Ticker ticker = visible[index];
-                    return TickerRow(
-                      key: Key('ticker-row-${ticker.symbol}'),
-                      ticker: ticker,
-                      onTap: () => context.push('/market/${ticker.symbol}'),
-                    );
-                  },
-                );
-              },
+            child: Container(
+              color: c.bgElev,
+              child: Column(
+                children: <Widget>[
+                  if (!_loading && _error == null)
+                    _ColumnHeader(
+                      name: l10n.marketHomeColumnName,
+                      price: l10n.marketHomeColumnPrice,
+                      change: l10n.marketHomeColumnChange,
+                    ),
+                  Expanded(
+                    child: Builder(
+                      builder: (BuildContext context) {
+                        if (_loading) return const Center(child: QzSpinner());
+                        if (_error != null) {
+                          return QzEmptyState(title: l10n.marketHomeLoadError);
+                        }
+                        if (visible.isEmpty) {
+                          final String title = _searchQuery.isNotEmpty
+                              ? l10n.marketHomeSearchEmpty
+                              : (_tab == _MarketTab.watchlist
+                                  ? l10n.marketHomeWatchlistEmpty
+                                  : l10n.marketHomeEmpty);
+                          return QzEmptyState(title: title);
+                        }
+                        return ListView.separated(
+                          itemCount: visible.length,
+                          separatorBuilder:
+                              (BuildContext context, int index) =>
+                                  Divider(height: 1, color: c.borderSoft),
+                          itemBuilder: (BuildContext context, int index) {
+                            final Ticker ticker = visible[index];
+                            return TickerRow(
+                              key: Key('ticker-row-${ticker.symbol}'),
+                              ticker: ticker,
+                              onTap: () =>
+                                  context.push('/market/${ticker.symbol}'),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -388,20 +400,26 @@ class _ColumnHeader extends StatelessWidget {
     final TextStyle style =
         TextStyle(color: c.textDim, fontSize: 11, fontWeight: FontWeight.w500);
     return Container(
-      color: c.bgElev,
+      decoration: BoxDecoration(
+        color: c.bgElev,
+        border: Border(bottom: BorderSide(color: c.borderSoft)),
+      ),
       padding: const EdgeInsets.symmetric(
         horizontal: QzSpacing.lg,
-        vertical: QzSpacing.sm,
+        vertical: 10,
       ),
       child: Row(
         children: <Widget>[
-          Expanded(flex: 6, child: Text(name, style: style)),
           Expanded(
-            flex: 5,
+            flex: kTickerRowNameFlex,
+            child: Text(name, style: style),
+          ),
+          Expanded(
+            flex: kTickerRowPriceFlex,
             child: Text(price, style: style, textAlign: TextAlign.right),
           ),
           Expanded(
-            flex: 5,
+            flex: kTickerRowChangeFlex,
             child: Text(change, style: style, textAlign: TextAlign.right),
           ),
         ],

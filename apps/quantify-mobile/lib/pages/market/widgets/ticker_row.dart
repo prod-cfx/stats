@@ -11,6 +11,30 @@ import '../../../theme/tokens.dart';
 import '../../../widgets/qz_avatar.dart';
 import '../../../widgets/qz_stat_chip.dart';
 
+/// 三列 flex 配比；与 [MarketHomePage] 的 _ColumnHeader 保持一致：
+/// 名称/量 12 | 最新价 10 | 24H 涨跌 10。
+const int kTickerRowNameFlex = 12;
+const int kTickerRowPriceFlex = 10;
+const int kTickerRowChangeFlex = 10;
+
+/// 设计稿常用的 quote 资产；非这些后缀则原样展示。
+const List<String> _kKnownQuotes = <String>[
+  'USDT',
+  'USDC',
+  'USD',
+  'BUSD',
+  'BTC',
+  'ETH',
+  'DAI',
+  'TUSD',
+];
+
+/// 行情列表中的一行（issue #1598 三列布局）。
+///
+/// 布局：
+/// - 左列：头像 + 主符号 `BTC` + 小字 `/ USDT` + 24H 量。
+/// - 中列：最新价，右对齐，等宽字体。
+/// - 右列：24H 涨跌 chip，右对齐。
 class TickerRow extends ConsumerStatefulWidget {
   const TickerRow({super.key, required this.ticker, this.onTap});
 
@@ -59,12 +83,23 @@ class _TickerRowState extends ConsumerState<TickerRow> {
     super.dispose();
   }
 
+  /// 将 symbol 拆为 base + quote；未识别 quote 时 quote 为空，整串作为 base。
+  ({String base, String quote}) _split(String symbol) {
+    for (final String q in _kKnownQuotes) {
+      if (symbol.length > q.length && symbol.endsWith(q)) {
+        return (base: symbol.substring(0, symbol.length - q.length), quote: q);
+      }
+    }
+    return (base: symbol, quote: '');
+  }
+
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
-    final String initial = _ticker.symbol.isEmpty
+    final ({String base, String quote}) parts = _split(_ticker.symbol);
+    final String initial = parts.base.isEmpty
         ? '?'
-        : _ticker.symbol.substring(0, 1);
+        : parts.base.substring(0, 1);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -72,50 +107,75 @@ class _TickerRowState extends ConsumerState<TickerRow> {
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: QzSpacing.lg,
-            vertical: QzSpacing.md,
+            vertical: 12,
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
-              QzAvatar(label: initial, monospace: true),
-              const SizedBox(width: QzSpacing.md),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                flex: kTickerRowNameFlex,
+                child: Row(
                   children: <Widget>[
-                    Text(
-                      _ticker.symbol,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: c.text,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
+                    QzAvatar(label: initial, monospace: true),
+                    const SizedBox(width: QzSpacing.sm),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          RichText(
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            text: TextSpan(
+                              style: TextStyle(
+                                color: c.text,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              children: <InlineSpan>[
+                                TextSpan(text: parts.base),
+                                if (parts.quote.isNotEmpty)
+                                  TextSpan(
+                                    text: ' / ${parts.quote}',
+                                    style: TextStyle(
+                                      color: c.textDim,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Vol ${_formatVolume(_ticker.volume24h)}',
+                            style: TextStyle(color: c.textDim, fontSize: 11),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '24h ${_formatVolume(_ticker.volume24h)}',
-                      style: TextStyle(color: c.textDim, fontSize: 12),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: QzSpacing.md),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: <Widget>[
-                  Text(
-                    _ticker.price.toStringAsFixed(2),
-                    style: TextStyle(
-                      color: c.text,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      fontFamilyFallback: QzFont.monoFallback,
-                    ),
+              Expanded(
+                flex: kTickerRowPriceFlex,
+                child: Text(
+                  _ticker.price.toStringAsFixed(2),
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    color: c.text,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    fontFamilyFallback: QzFont.monoFallback,
                   ),
-                  const SizedBox(height: 6),
-                  QzStatChip(value: _ticker.changePercent / 100),
-                ],
+                ),
+              ),
+              Expanded(
+                flex: kTickerRowChangeFlex,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: QzStatChip(value: _ticker.changePercent / 100),
+                ),
               ),
             ],
           ),
