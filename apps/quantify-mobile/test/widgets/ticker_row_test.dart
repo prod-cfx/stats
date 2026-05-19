@@ -10,6 +10,7 @@ import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/market/widgets/ticker_row.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
+import 'package:quantify_mobile/widgets/qz_avatar.dart';
 import 'package:quantify_mobile/widgets/qz_stat_chip.dart';
 
 class _StubTickerRepository implements TickerRepository {
@@ -109,10 +110,53 @@ void main() {
     expect(chipCenter.dx, greaterThan(priceCenter.dx));
   });
 
-  testWidgets('展示 24H 量（K/M/B 格式）', (WidgetTester tester) async {
+  testWidgets('展示 24H 量（Vol \$xx.xB/M 格式）', (WidgetTester tester) async {
     await _pump(tester, const TickerRow(ticker: btcSpot));
-    // 2.13e10 -> 21.3B
-    expect(find.text('Vol 21.3B'), findsOneWidget);
+    // 2.13e10 -> $21.3B
+    expect(find.text('Vol \$21.3B'), findsOneWidget);
+  });
+
+  testWidgets('头像应用资产专属 tone（BTC 橙）', (WidgetTester tester) async {
+    await _pump(tester, const TickerRow(ticker: btcSpot));
+    final QzAvatar avatar = tester.widget<QzAvatar>(find.byType(QzAvatar));
+    expect(avatar.backgroundColor, const Color(0xFFF7931A));
+  });
+
+  testWidgets('头像应用资产专属 tone（ETH 蓝）', (WidgetTester tester) async {
+    await _pump(tester, const TickerRow(ticker: ethSpot));
+    final QzAvatar avatar = tester.widget<QzAvatar>(find.byType(QzAvatar));
+    expect(avatar.backgroundColor, const Color(0xFF627EEA));
+  });
+
+  testWidgets('未识别资产头像回退到主题 accent (tone 为空)',
+      (WidgetTester tester) async {
+    const Ticker oddSymbol = Ticker(
+      symbol: 'FOOBAR',
+      price: 1.23,
+      changePercent: 0,
+      volume24h: 1000,
+      kind: MarketKind.spot,
+    );
+    await _pump(tester, const TickerRow(ticker: oddSymbol));
+    final QzAvatar avatar = tester.widget<QzAvatar>(find.byType(QzAvatar));
+    expect(avatar.backgroundColor, isNull);
+  });
+
+  testWidgets('涨跌 chip 为 solid variant（涨）', (WidgetTester tester) async {
+    await _pump(tester, const TickerRow(ticker: btcSpot));
+    final QzStatChip chip =
+        tester.widget<QzStatChip>(find.byType(QzStatChip));
+    expect(chip.variant, QzStatChipVariant.solid);
+    expect(chip.minWidth, 70);
+    expect(find.text('+2.50%'), findsOneWidget);
+  });
+
+  testWidgets('涨跌 chip 为 solid variant（跌）', (WidgetTester tester) async {
+    await _pump(tester, const TickerRow(ticker: ethSpot));
+    final QzStatChip chip =
+        tester.widget<QzStatChip>(find.byType(QzStatChip));
+    expect(chip.variant, QzStatChipVariant.solid);
+    expect(find.text('-1.25%'), findsOneWidget);
   });
 
   testWidgets('点击行触发 onTap', (WidgetTester tester) async {

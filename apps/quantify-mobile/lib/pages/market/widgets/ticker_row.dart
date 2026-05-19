@@ -29,6 +29,22 @@ const List<String> _kKnownQuotes = <String>[
   'TUSD',
 ];
 
+/// 资产专属品牌色（与 `design/project/mobile/m-screens-2.jsx` 的
+/// `TICKERS[*].tone` 1:1 对齐）。未匹配的资产回退到默认 accent。
+const Map<String, Color> _kAssetTone = <String, Color>{
+  'BTC': Color(0xFFF7931A),
+  'ETH': Color(0xFF627EEA),
+  'SOL': Color(0xFF9945FF),
+  'BNB': Color(0xFFF0B90B),
+  'XRP': Color(0xFF23292F),
+  'DOGE': Color(0xFFC2A633),
+  'TON': Color(0xFF0098EA),
+  'AVAX': Color(0xFFE84142),
+};
+
+/// Resolve brand tone for the given base symbol; `null` falls back to theme accent.
+Color? tickerAssetTone(String base) => _kAssetTone[base.toUpperCase()];
+
 /// 行情列表中的一行（issue #1598 三列布局）。
 ///
 /// 布局：
@@ -116,7 +132,11 @@ class _TickerRowState extends ConsumerState<TickerRow> {
                 flex: kTickerRowNameFlex,
                 child: Row(
                   children: <Widget>[
-                    QzAvatar(label: initial, monospace: true),
+                    QzAvatar(
+                      label: initial,
+                      monospace: true,
+                      backgroundColor: tickerAssetTone(parts.base),
+                    ),
                     const SizedBox(width: QzSpacing.sm),
                     Expanded(
                       child: Column(
@@ -148,7 +168,7 @@ class _TickerRowState extends ConsumerState<TickerRow> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Vol ${_formatVolume(_ticker.volume24h)}',
+                            'Vol \$${_formatVolume(_ticker.volume24h)}',
                             style: TextStyle(color: c.textDim, fontSize: 11),
                           ),
                         ],
@@ -174,7 +194,11 @@ class _TickerRowState extends ConsumerState<TickerRow> {
                 flex: kTickerRowChangeFlex,
                 child: Align(
                   alignment: Alignment.centerRight,
-                  child: QzStatChip(value: _ticker.changePercent / 100),
+                  child: QzStatChip(
+                    value: _ticker.changePercent / 100,
+                    variant: QzStatChipVariant.solid,
+                    minWidth: 70,
+                  ),
                 ),
               ),
             ],
