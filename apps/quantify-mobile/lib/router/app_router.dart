@@ -58,7 +58,10 @@ GoRouter buildRouter({
 }) {
   final AuthSession? Function() read = readSession ?? () => null;
   return GoRouter(
-    initialLocation: kDebugMode ? '/_dev/theme-preview' : '/ai',
+    // 默认入口：未登录用户落到 `/login`（与原型 07 屏一致）。
+    // `/_dev/theme-preview` 与 `/_dev/components-preview` 仍通过显式路径访问，
+    // 不再作为 debug 模式 landing。已登录场景由下方 redirect 把 `/login` 引到 `/ai`。
+    initialLocation: '/login',
     refreshListenable: refreshListenable,
     redirect: (BuildContext context, GoRouterState state) {
       final bool loggedIn = read() != null;

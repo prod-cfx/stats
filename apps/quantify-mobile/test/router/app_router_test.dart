@@ -51,8 +51,8 @@ Future<BuildContext> _pumpApp(
     ),
   );
   await tester.pumpAndSettle();
-  // Default initial route is /_dev/theme-preview in debug; navigate to /ai.
-  // GoRouter.of needs a context *below* the Router widget — Navigator works.
+  // Default initial route is /login (公开浏览也需先穿过登录页跳转）。测试场景
+  // 需要直接落到 /ai，借 Navigator context 调 GoRouter.go。
   final BuildContext bootCtx = tester.element(find.byType(Navigator).first);
   GoRouter.of(bootCtx).go('/ai');
   await tester.pumpAndSettle();
@@ -177,7 +177,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(MarketDetailPage), findsOneWidget);
-    expect(find.text('行情详情：BTCUSDT'), findsWidgets);
+    // MarketDetailPage 当前以 symbol 本身作为页面标题（见 market_detail_page.dart：
+    // `title: widget.symbol`），故断言文案与之保持一致；旧的「行情详情：BTCUSDT」
+    // 字面量已随页面重构移除。
+    expect(find.text('BTCUSDT'), findsWidgets);
   });
 
   testWidgets('/ai/backtest-config resolves to BacktestConfigSheet', (
@@ -216,10 +219,9 @@ void main() {
     expect(find.byType(ThemeSettingsPage), findsOneWidget);
   });
 
-  testWidgets('/_dev/theme-preview is the debug-mode landing', (
-    WidgetTester tester,
-  ) async {
-    // Tests run in debug; the initial route lands here before any go() call.
+  testWidgets('未登录首次启动落在 /login', (WidgetTester tester) async {
+    // Verifies issue #1586 acceptance criterion: default landing is /login,
+    // not /_dev/theme-preview, even in debug builds.
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final ProviderContainer c = ProviderContainer(
@@ -233,6 +235,16 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(container: c, child: const QuantifyMobileApp()),
     );
+    await tester.pumpAndSettle();
+    expect(find.byType(LoginPage), findsOneWidget);
+    expect(find.byType(ThemePreviewPage), findsNothing);
+  });
+
+  testWidgets('/_dev/theme-preview 仍可通过显式路径打开', (
+    WidgetTester tester,
+  ) async {
+    final BuildContext ctx = await _pumpApp(tester);
+    GoRouter.of(ctx).go('/_dev/theme-preview');
     await tester.pumpAndSettle();
     expect(find.byType(ThemePreviewPage), findsOneWidget);
   });
@@ -268,6 +280,10 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(container: c, child: const QuantifyMobileApp()),
     );
+    await tester.pumpAndSettle();
+    // 默认 landing 已切到 /login（见 issue #1586），所以这里显式跳到主题预览。
+    final BuildContext bootCtx = tester.element(find.byType(Navigator).first);
+    GoRouter.of(bootCtx).go('/_dev/theme-preview');
     await tester.pumpAndSettle();
     // The link sits below the sample cards inside a ListView, so scroll
     // before asserting visibility.
