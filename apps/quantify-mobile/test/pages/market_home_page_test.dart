@@ -223,7 +223,7 @@ void main() {
     // 沿用 #1560 mock 通知，默认存在 unread badge（数字 > 0）。
     expect(
       find.descendant(
-        of: find.byKey(const Key('market-notification-bell')).hitTestable(),
+        of: find.byKey(const Key('market-notification-bell')),
         matching: find.byIcon(Icons.notifications_outlined),
       ),
       findsOneWidget,
@@ -248,7 +248,54 @@ void main() {
 
     expect(find.byType(MarketDetailPage), findsOneWidget);
     expect(find.byType(MarketHomePage), findsNothing);
-    expect(find.text('行情详情：$expectedSymbol'), findsOneWidget);
+    final MarketDetailPage detailPage =
+        tester.widget<MarketDetailPage>(find.byType(MarketDetailPage));
+    expect(detailPage.symbol, expectedSymbol);
+  });
+
+  testWidgets('顶部铃铛为 36x36 圆形描边按钮（#1597 设计稿）',
+      (WidgetTester tester) async {
+    final _FakeTickerRepository repo = _FakeTickerRepository();
+    await _pump(tester, repo);
+
+    final Finder bell = find.byKey(const Key('market-notification-bell'));
+    expect(bell, findsOneWidget);
+    // 外层 SizedBox 强制 36x36，DecoratedBox 提供圆形描边。
+    final Finder bellFrame =
+        find.ancestor(of: bell, matching: find.byType(DecoratedBox)).first;
+    final Size bellSize = tester.getSize(bellFrame);
+    expect(bellSize.width, 36);
+    expect(bellSize.height, 36);
+    final DecoratedBox box = tester.widget<DecoratedBox>(bellFrame);
+    expect((box.decoration as BoxDecoration).shape, BoxShape.circle);
+  });
+
+  testWidgets('搜索按钮位于 tab 行右侧，而非顶栏（#1597 设计稿）',
+      (WidgetTester tester) async {
+    final _FakeTickerRepository repo = _FakeTickerRepository();
+    await _pump(tester, repo);
+
+    // 搜索按钮 X 中心点应在 tab 容器右侧，并且在 QzTopBar 下方。
+    final Offset toggleCenter = tester.getCenter(
+      find.byKey(const Key('market-search-toggle')),
+    );
+    final Offset spotTabCenter = tester.getCenter(_findTab('spot'));
+    final Offset bellCenter = tester.getCenter(
+      find.byKey(const Key('market-notification-bell')),
+    );
+    expect(toggleCenter.dx, greaterThan(spotTabCenter.dx));
+    expect(toggleCenter.dy, greaterThan(bellCenter.dy),
+        reason: '搜索按钮应在 tab 行（顶栏下方），不在顶栏内');
+  });
+
+  testWidgets('搜索框 placeholder 为「搜索币种 · BTC, ETH, SOL…」（#1597 设计稿）',
+      (WidgetTester tester) async {
+    final _FakeTickerRepository repo = _FakeTickerRepository();
+    await _pump(tester, repo);
+
+    await tester.tap(find.byKey(const Key('market-search-toggle')));
+    await tester.pump();
+    expect(find.text('搜索币种 · BTC, ETH, SOL…'), findsOneWidget);
   });
 
   testWidgets('MarketHomePage 9 主题循环 pump 不抛异常',

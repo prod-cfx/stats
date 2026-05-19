@@ -14,6 +14,7 @@ class QzNotificationBell extends StatelessWidget {
     required this.onTap,
     required this.tooltip,
     this.iconKey,
+    this.circular = false,
   });
 
   /// 未读数量；<= 0 时不渲染 badge。
@@ -24,38 +25,76 @@ class QzNotificationBell extends StatelessWidget {
   /// 为内部 IconButton 提供独立 key，便于 widget test 定位（避免 Stack 多子节点干扰）。
   final Key? iconKey;
 
+  /// 渲染为设计稿中 36x36 带描边的圆形按钮（market 行情页样式）。默认为普通 IconButton，
+  /// 沿用 whale / strategy 等页面的低强度顶栏样式。
+  final bool circular;
+
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final String label = unread > 9 ? '9+' : '$unread';
+    final Widget button = circular
+        ? SizedBox(
+            width: 36,
+            height: 36,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: c.bgElev,
+                shape: BoxShape.circle,
+                border: Border.all(color: c.border),
+              ),
+              child: IconButton(
+                key: iconKey,
+                onPressed: onTap,
+                padding: EdgeInsets.zero,
+                iconSize: 18,
+                splashRadius: 18,
+                tooltip: tooltip,
+                constraints: const BoxConstraints(
+                  minWidth: 36,
+                  minHeight: 36,
+                  maxWidth: 36,
+                  maxHeight: 36,
+                ),
+                icon: Icon(
+                  Icons.notifications_outlined,
+                  color: c.textMid,
+                ),
+              ),
+            ),
+          )
+        : IconButton(
+            key: iconKey,
+            onPressed: onTap,
+            icon: Icon(Icons.notifications_outlined, size: 20, color: c.text),
+            tooltip: tooltip,
+          );
     return Stack(
       alignment: Alignment.center,
       children: <Widget>[
-        IconButton(
-          key: iconKey,
-          onPressed: onTap,
-          icon: Icon(Icons.notifications_outlined, size: 20, color: c.text),
-          tooltip: tooltip,
-        ),
+        button,
         if (unread > 0)
           Positioned(
             right: 6,
             top: 6,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
-              padding: const EdgeInsets.symmetric(horizontal: 3),
-              decoration: BoxDecoration(
-                color: c.statusDanger,
-                borderRadius: BorderRadius.circular(7),
-                border: Border.all(color: c.bgElev, width: 1.5),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
+            child: IgnorePointer(
+              child: Container(
+                constraints:
+                    const BoxConstraints(minWidth: 14, minHeight: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                decoration: BoxDecoration(
+                  color: c.statusDanger,
+                  borderRadius: BorderRadius.circular(7),
+                  border: Border.all(color: c.bgElev, width: 1.5),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),

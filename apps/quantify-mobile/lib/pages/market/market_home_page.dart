@@ -31,7 +31,8 @@ enum _MarketTab { watchlist, spot, perp, gainers, losers }
 /// 行情列表首页（issue #1561）。
 ///
 /// QzTopBar + 通知铃铛（复用 #1560 的 WhaleNotificationSheet 数据/弹层），
-/// 顶栏右侧搜索 IconButton 可展开行内搜索框（push 布局，不遮挡列表）。
+/// 通知铃铛为 36x36 圆形描边样式（issue #1597 对齐设计稿 ScreenTickers）。
+/// tab 行右侧搜索 IconButton 可展开行内搜索框（push 布局，不遮挡列表）。
 /// 5 个二级 tab：自选 / 现货 / 合约 / 涨幅榜 / 跌幅榜。
 class MarketHomePage extends ConsumerStatefulWidget {
   const MarketHomePage({super.key});
@@ -177,25 +178,14 @@ class _MarketHomePageState extends ConsumerState<MarketHomePage> {
       appBar: QzTopBar(
         title: l10n.marketHomeTitle,
         actions: <Widget>[
-          IconButton(
-            key: const Key('market-search-toggle'),
-            onPressed: _toggleSearch,
-            icon: Icon(
-              _searchOpen ? Icons.close : Icons.search,
-              size: 20,
-              color: c.text,
-            ),
-            tooltip: _searchOpen
-                ? l10n.marketHomeSearchClose
-                : l10n.marketHomeSearchTooltip,
-          ),
           QzNotificationBell(
             iconKey: const Key('market-notification-bell'),
             unread: _unreadCount,
             onTap: _openNotifications,
             tooltip: l10n.marketHomeNotificationTooltip,
+            circular: true,
           ),
-          const SizedBox(width: QzSpacing.xs),
+          const SizedBox(width: QzSpacing.md),
         ],
       ),
       body: Column(
@@ -250,20 +240,45 @@ class _MarketHomePageState extends ConsumerState<MarketHomePage> {
               border: Border(bottom: BorderSide(color: c.borderSoft)),
             ),
             padding:
-                const EdgeInsets.fromLTRB(QzSpacing.lg, 4, QzSpacing.lg, 0),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: <Widget>[
-                  for (final ({_MarketTab tab, String label}) item in tabs)
-                    _SubTab(
-                      key: Key('market-tab-${item.tab.name}'),
-                      label: item.label,
-                      selected: _tab == item.tab,
-                      onTap: () => setState(() => _tab = item.tab),
+                const EdgeInsets.fromLTRB(QzSpacing.lg, 4, QzSpacing.sm, 0),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: <Widget>[
+                        for (final ({_MarketTab tab, String label}) item
+                            in tabs)
+                          _SubTab(
+                            key: Key('market-tab-${item.tab.name}'),
+                            label: item.label,
+                            selected: _tab == item.tab,
+                            onTap: () => setState(() => _tab = item.tab),
+                          ),
+                      ],
                     ),
-                ],
-              ),
+                  ),
+                ),
+                IconButton(
+                  key: const Key('market-search-toggle'),
+                  onPressed: _toggleSearch,
+                  iconSize: 18,
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.all(QzSpacing.sm),
+                  constraints: const BoxConstraints(
+                    minWidth: 30,
+                    minHeight: 30,
+                  ),
+                  icon: Icon(
+                    _searchOpen ? Icons.close : Icons.search,
+                    color: _searchOpen ? c.text : c.textMid,
+                  ),
+                  tooltip: _searchOpen
+                      ? l10n.marketHomeSearchClose
+                      : l10n.marketHomeSearchTooltip,
+                ),
+              ],
             ),
           ),
           if (!_loading && _error == null)
