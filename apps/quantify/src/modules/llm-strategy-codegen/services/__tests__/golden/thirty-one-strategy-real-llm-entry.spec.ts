@@ -568,8 +568,12 @@ else {
   })
 }
 
-// Minor m8：编译期断言 fixture 数量保持 31；若有人加/删 fixture 必须同步更新本 spec 的
+// Minor m8：运行时断言 fixture 数量保持 31；若有人加/删 fixture 必须同步更新本 spec 的
 //   override 表（CONTRACT_OVERRIDES）与 expectedSemanticContract 派生逻辑。
-type _Fixture31Guard = typeof THIRTY_ONE_STRATEGIES extends { readonly length: 31 } ? true : never
-const _FIXTURE_31_GUARD: _Fixture31Guard = true
-void _FIXTURE_31_GUARD
+//   原编译期断言 `typeof THIRTY_ONE_STRATEGIES extends { length: 31 }` 在 fixture 声明为
+//   `readonly ThirtyOneStrategyFixture[]`（非 tuple）时 length 类型是 number → guard 永远
+//   为 never，被生产 tsc 抓 TS2322（jest isolatedModules 不查所以静默）。改成 module-load
+//   时的简单 throw，效果等价、不引入 TS 类型噪音。
+if (THIRTY_ONE_STRATEGIES.length !== 31) {
+  throw new Error(`[#1550] thirty-one-strategy-real-llm-entry expects 31 fixtures, got ${THIRTY_ONE_STRATEGIES.length}`)
+}
