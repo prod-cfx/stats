@@ -34,7 +34,7 @@ enum _MarketTab { watchlist, spot, perp, gainers, losers }
 /// QzTopBar + 通知铃铛（复用 #1560 的 WhaleNotificationSheet 数据/弹层），
 /// 通知铃铛为 36x36 圆形描边样式（issue #1597 对齐设计稿 ScreenTickers）。
 /// tab 行右侧搜索 IconButton 可展开行内搜索框（push 布局，不遮挡列表）。
-/// 5 个二级 tab：自选 / 现货 / 合约 / 涨幅榜 / 跌幅榜。
+/// 5 个二级 tab：自选 / 现货 / 合约 / 涨幅榜 / 跌幅榜，默认选中「自选」（#1600）。
 class MarketHomePage extends ConsumerStatefulWidget {
   const MarketHomePage({super.key});
 
@@ -43,7 +43,8 @@ class MarketHomePage extends ConsumerStatefulWidget {
 }
 
 class _MarketHomePageState extends ConsumerState<MarketHomePage> {
-  _MarketTab _tab = _MarketTab.spot;
+  // 默认选中「自选」，对齐设计稿 ScreenTickers（issue #1600）。
+  _MarketTab _tab = _MarketTab.watchlist;
   List<Ticker> _tickers = <Ticker>[];
   bool _loading = true;
   Object? _error;

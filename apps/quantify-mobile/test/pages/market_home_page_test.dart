@@ -77,25 +77,15 @@ Finder _findTab(String tabName) {
 }
 
 void main() {
-  testWidgets('/market 默认现货 tab 推流变价 + 切自选展示 5 条', (WidgetTester tester) async {
+  testWidgets('/market 默认自选 tab 展示 5 条 + 推流变价生效（#1600）',
+      (WidgetTester tester) async {
     final _FakeTickerRepository repo = _FakeTickerRepository();
     await _pump(tester, repo);
 
-    // 默认 spot tab：mockTickers 里 kind=spot 的条目数。
-    final int spotCount = mockTickers
-        .where((Ticker t) => t.kind == MarketKind.spot)
-        .length;
-    expect(spotCount, greaterThan(0),
-        reason: 'fixtures 至少包含 1 条 spot 行情，否则 spot tab 用例无意义');
-    expect(find.byType(TickerRow), findsNWidgets(spotCount));
-
-    // 切到「自选」tab，5 条收藏。
-    await tester.tap(_findTab('watchlist'));
-    await tester.pumpAndSettle();
+    // 默认 watchlist tab：固定 5 条收藏（_kFavoriteSet）。
     expect(find.byType(TickerRow), findsNWidgets(5));
 
     // BTCUSDT 在自选中，推一笔变价应反映在 UI。
-    // 注意：tab 切到自选后才首次挂载 BTCUSDT 行并注册 listener，
     // broadcast stream 是异步派发，需要 pumpAndSettle 让订阅完成 + 断言 key 存在。
     await tester.pumpAndSettle();
     expect(
@@ -116,7 +106,7 @@ void main() {
     expect(find.text('70123.45'), findsOneWidget);
   });
 
-  testWidgets('5 tabs 切换：现货 / 合约 / 涨幅榜 / 跌幅榜 / 自选 过滤与排序生效',
+  testWidgets('5 tabs 切换：自选 / 现货 / 合约 / 涨幅榜 / 跌幅榜 过滤与排序生效',
       (WidgetTester tester) async {
     final _FakeTickerRepository repo = _FakeTickerRepository();
     await _pump(tester, repo);
@@ -134,7 +124,11 @@ void main() {
         .where((Ticker t) => t.changePercent < 0)
         .length;
 
-    // 默认现货。
+    // 默认 watchlist：5 条收藏。
+    expect(find.byType(TickerRow), findsNWidgets(5));
+
+    await tester.tap(_findTab('spot'));
+    await tester.pump();
     expect(find.byType(TickerRow), findsNWidgets(spotCount));
 
     await tester.tap(_findTab('perp'));
@@ -169,6 +163,27 @@ void main() {
     await tester.tap(_findTab('watchlist'));
     await tester.pump();
     expect(find.byType(TickerRow), findsNWidgets(5));
+  });
+
+  testWidgets('默认选中 watchlist tab：底部 underline + 加粗文字（#1600）',
+      (WidgetTester tester) async {
+    final _FakeTickerRepository repo = _FakeTickerRepository();
+    await _pump(tester, repo);
+
+    // 默认 watchlist 必须有 underline 加粗样式；spot 等其它 tab 无 underline。
+    final Finder watchlistText = find.descendant(
+      of: _findTab('watchlist'),
+      matching: find.byType(Text),
+    );
+    final Text watchlistLabel = tester.widget<Text>(watchlistText);
+    expect(watchlistLabel.style!.fontWeight, FontWeight.w700);
+
+    final Finder spotText = find.descendant(
+      of: _findTab('spot'),
+      matching: find.byType(Text),
+    );
+    final Text spotLabel = tester.widget<Text>(spotText);
+    expect(spotLabel.style!.fontWeight, FontWeight.w500);
   });
 
   testWidgets('搜索按钮展开行内搜索框并即时过滤当前 tab', (WidgetTester tester) async {
@@ -238,7 +253,7 @@ void main() {
     final _FakeTickerRepository repo = _FakeTickerRepository();
     await _pump(tester, repo);
 
-    // 默认现货 tab，首行点击进入详情。
+    // 默认 watchlist tab，首行点击进入详情。
     final TickerRow firstRow =
         tester.widget<TickerRow>(find.byType(TickerRow).first);
     final String expectedSymbol = firstRow.ticker.symbol;
@@ -307,8 +322,8 @@ void main() {
           _FakeTickerRepository(),
           theme: QzTheme(bg: bg, accent: accent),
         );
-        // 默认 spot tab，至少应有 1 行。
-        expect(find.byType(TickerRow), findsAtLeastNWidgets(1));
+        // 默认 watchlist tab：固定 5 条收藏。
+        expect(find.byType(TickerRow), findsNWidgets(5));
         expect(
           tester.takeException(),
           isNull,
