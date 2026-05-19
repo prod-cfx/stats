@@ -54,6 +54,42 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiSendButton => '发送';
 
   @override
+  String get aiAppBarHistoryTooltip => '历史会话';
+
+  @override
+  String get aiAppBarNewSessionTooltip => '新建会话';
+
+  @override
+  String get aiAppBarParamsTooltip => '参数';
+
+  @override
+  String get aiSessionDrawerTitle => '策略方案';
+
+  @override
+  String get aiSessionDrawerSubtitle => '每个方案独立上下文 · 互不污染';
+
+  @override
+  String get aiSessionNewButton => '新建方案';
+
+  @override
+  String get aiSessionEmptyHint => '暂无会话，点击「新建方案」开始一个策略对话。';
+
+  @override
+  String get aiSessionUntitled => '新方案';
+
+  @override
+  String get aiQuickReply1 => '再跑一次回测';
+
+  @override
+  String get aiQuickReply2 => '把止损改成 1.5%';
+
+  @override
+  String get aiQuickReply3 => '换成 ETH 看看';
+
+  @override
+  String get aiQuickReply4 => '部署到 Binance';
+
+  @override
   String get backtestSheetTitle => '回测参数';
 
   @override

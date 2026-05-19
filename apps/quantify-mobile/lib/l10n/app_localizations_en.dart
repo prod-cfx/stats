@@ -55,6 +55,43 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiSendButton => 'Send';
 
   @override
+  String get aiAppBarHistoryTooltip => 'Sessions';
+
+  @override
+  String get aiAppBarNewSessionTooltip => 'New session';
+
+  @override
+  String get aiAppBarParamsTooltip => 'Params';
+
+  @override
+  String get aiSessionDrawerTitle => 'Strategies';
+
+  @override
+  String get aiSessionDrawerSubtitle => 'Each session has its own context';
+
+  @override
+  String get aiSessionNewButton => 'New Strategy';
+
+  @override
+  String get aiSessionEmptyHint =>
+      'No sessions yet. Tap \"New Strategy\" to begin.';
+
+  @override
+  String get aiSessionUntitled => 'Untitled';
+
+  @override
+  String get aiQuickReply1 => 'Run backtest again';
+
+  @override
+  String get aiQuickReply2 => 'Set stop loss to 1.5%';
+
+  @override
+  String get aiQuickReply3 => 'Try ETH instead';
+
+  @override
+  String get aiQuickReply4 => 'Deploy to Binance';
+
+  @override
   String get backtestSheetTitle => 'Backtest Settings';
 
   @override

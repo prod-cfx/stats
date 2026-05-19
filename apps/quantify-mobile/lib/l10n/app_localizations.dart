@@ -188,6 +188,78 @@ abstract class AppLocalizations {
   /// **'发送'**
   String get aiSendButton;
 
+  /// No description provided for @aiAppBarHistoryTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'历史会话'**
+  String get aiAppBarHistoryTooltip;
+
+  /// No description provided for @aiAppBarNewSessionTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建会话'**
+  String get aiAppBarNewSessionTooltip;
+
+  /// No description provided for @aiAppBarParamsTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'参数'**
+  String get aiAppBarParamsTooltip;
+
+  /// No description provided for @aiSessionDrawerTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略方案'**
+  String get aiSessionDrawerTitle;
+
+  /// No description provided for @aiSessionDrawerSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'每个方案独立上下文 · 互不污染'**
+  String get aiSessionDrawerSubtitle;
+
+  /// No description provided for @aiSessionNewButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建方案'**
+  String get aiSessionNewButton;
+
+  /// No description provided for @aiSessionEmptyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无会话，点击「新建方案」开始一个策略对话。'**
+  String get aiSessionEmptyHint;
+
+  /// No description provided for @aiSessionUntitled.
+  ///
+  /// In zh, this message translates to:
+  /// **'新方案'**
+  String get aiSessionUntitled;
+
+  /// No description provided for @aiQuickReply1.
+  ///
+  /// In zh, this message translates to:
+  /// **'再跑一次回测'**
+  String get aiQuickReply1;
+
+  /// No description provided for @aiQuickReply2.
+  ///
+  /// In zh, this message translates to:
+  /// **'把止损改成 1.5%'**
+  String get aiQuickReply2;
+
+  /// No description provided for @aiQuickReply3.
+  ///
+  /// In zh, this message translates to:
+  /// **'换成 ETH 看看'**
+  String get aiQuickReply3;
+
+  /// No description provided for @aiQuickReply4.
+  ///
+  /// In zh, this message translates to:
+  /// **'部署到 Binance'**
+  String get aiQuickReply4;
+
   /// No description provided for @backtestSheetTitle.
   ///
   /// In zh, this message translates to:

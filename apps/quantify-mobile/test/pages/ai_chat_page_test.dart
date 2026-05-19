@@ -9,10 +9,9 @@ import 'package:quantify_mobile/theme/colors.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 
-/// Minimal router: AiHomePage at `/ai`, BacktestConfigSheet at
-/// `/ai/backtest-config`. Sized 400×800 so the input bar + a few bubbles
-/// fit without forcing a scroll; some assertions rely on widgets being
-/// `findsOneWidget` rather than `findsAny`.
+/// Pump AI page with a minimal router. Sized 400×1200 so 3 mock sessions +
+/// input bar fit; await an extra 100ms tick so `_loadSessions` (50ms repo
+/// delay) resolves before assertions.
 Future<void> _pump(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(400, 1200));
   final GoRouter router = GoRouter(
@@ -47,6 +46,9 @@ Future<void> _pump(WidgetTester tester) async {
     ),
   );
   await tester.pump();
+  // 让 postFrame loadSessions（50ms 延迟）解析
+  await tester.pump(const Duration(milliseconds: 100));
+  await tester.pump();
 }
 
 void main() {
@@ -57,16 +59,9 @@ void main() {
     // Send "hi"
     await tester.enterText(find.byKey(const Key('ai-chat-input')), 'hi');
     await tester.tap(find.byKey(const Key('ai-send-button')));
-    // Spin frames over the mock's 200 ms reply delay + the 250 ms-per-char
-    // streaming cadence. Each pump advances the clock without forcing
-    // pumpAndSettle (Timer.periodic would never settle).
+    // 等 200ms 思考延迟 + 流式
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.text('hi'), findsOneWidget);
-
-    // Wait for the full mock reply to stream in. The mock returns:
-    // 已收到："hi"。这是一段 mock 回复。
-    // (~22 chars; 22 * 250 ms = 5.5 s). Spin extra frames to flush the
-    // final Timer tick.
     for (int i = 0; i < 30; i++) {
       await tester.pump(const Duration(milliseconds: 250));
     }
@@ -81,14 +76,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('回测参数'), findsOneWidget);
 
-    // Submit with default values (last 30 days, 10000 capital, leverage 1×).
-    // The sheet is taller than the 800×400 widget-test surface, so scroll
-    // the submit button into view before tapping.
     await tester
         .ensureVisible(find.byKey(const Key('backtest-submit')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('backtest-submit')));
-    // Mock backtest delays 200 ms.
     await tester.pump(const Duration(milliseconds: 250));
     await tester.pumpAndSettle();
 
@@ -103,7 +94,6 @@ void main() {
     await tester.tap(find.byKey(const Key('ai-backtest-button')));
     await tester.pumpAndSettle();
 
-    // Clear start date input → 触发 "请输入正确的起止时间"
     await tester.enterText(find.byKey(const Key('backtest-start')), '');
     await tester
         .ensureVisible(find.byKey(const Key('backtest-submit')));
@@ -112,7 +102,138 @@ void main() {
     await tester.pump();
 
     expect(find.text('请输入正确的起止时间（YYYY-MM-DD）'), findsOneWidget);
-    // 抽屉仍在 — 没 pop 回 AI 页
     expect(find.text('回测参数'), findsOneWidget);
+  });
+
+  testWidgets('多会话：顶栏点击历史按钮 → 抽屉列出 3 条 mock 会话 → 切换会话',
+      (WidgetTester tester) async {
+    await _pump(tester);
+
+    // 顶栏标题展示当前会话标题（默认第一条 — 倒序后 = BTC 趋势 · 双均线）
+    expect(find.text('BTC 趋势 · 双均线'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('ai-appbar-history')));
+    await tester.pumpAndSettle();
+
+    // 3 条 mock session tile 都在
+    expect(find.byKey(const Key('ai-session-tile-s1')), findsOneWidget);
+    expect(find.byKey(const Key('ai-session-tile-s2')), findsOneWidget);
+    expect(find.byKey(const Key('ai-session-tile-s3')), findsOneWidget);
+
+    // 切到 ETH
+    await tester.tap(find.byKey(const Key('ai-session-tile-s2')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ETH 4H 均值回归'), findsOneWidget);
+  });
+
+  testWidgets('快捷回复 chips：点击直接发送，user 气泡渲染',
+      (WidgetTester tester) async {
+    await _pump(tester);
+
+    // 点第一个 chip：「再跑一次回测」
+    await tester.tap(find.byKey(const Key('ai-quick-reply-0')));
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.text('再跑一次回测'), findsWidgets);
+    // 让 stream timer 跑完，避免 "A Timer is still pending"
+    for (int i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 250));
+    }
+  });
+
+  testWidgets('typing indicator：发送消息后到 reply 到达前显示',
+      (WidgetTester tester) async {
+    await _pump(tester);
+
+    await tester.enterText(find.byKey(const Key('ai-chat-input')), '测试 typing');
+    await tester.tap(find.byKey(const Key('ai-send-button')));
+    // 还没过 200ms 思考延迟 → indicator 可见
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byKey(const Key('ai-typing-indicator')), findsOneWidget);
+
+    // 思考延迟过后 → indicator 消失（流式开始）
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byKey(const Key('ai-typing-indicator')), findsNothing);
+
+    for (int i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 250));
+    }
+  });
+
+  testWidgets('params 气泡：mock s1 session 渲染 fast_ma=5 / slow_ma=20',
+      (WidgetTester tester) async {
+    await _pump(tester);
+
+    // 默认进入 s1 → 含 params 气泡（fast_ma=5 / slow_ma=20）。
+    // params 行通过 RichText 内嵌 TextSpan 渲染，无法用 find.text 命中；
+    // 以 Key 为准 + 校验 RichText 子节点的纯文本拼接含 fast_ma 即可。
+    final Finder paramsBubble =
+        find.byKey(const Key('ai-bubble-params'));
+    expect(paramsBubble, findsOneWidget);
+    final Iterable<RichText> richTexts =
+        tester.widgetList<RichText>(find.descendant(
+      of: paramsBubble,
+      matching: find.byType(RichText),
+    ));
+    final String joined = richTexts
+        .map((RichText r) => r.text.toPlainText())
+        .join('|');
+    expect(joined, contains('fast_ma'));
+    expect(joined, contains('slow_ma'));
+  });
+
+  testWidgets('删除当前会话 → 自动切到最近会话',
+      (WidgetTester tester) async {
+    await _pump(tester);
+
+    await tester.tap(find.byKey(const Key('ai-appbar-history')));
+    await tester.pumpAndSettle();
+
+    // 当前 s1 — 抽屉里 s1 tile 上才有删除按钮
+    await tester.tap(find.byKey(const Key('ai-session-delete-s1')));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+
+    // s1 不再存在；关掉 drawer 后顶栏标题切到 ETH
+    expect(find.byKey(const Key('ai-session-tile-s1')), findsNothing);
+    await tester.tap(find.byKey(const Key('ai-drawer-close')));
+    await tester.pumpAndSettle();
+    expect(find.text('ETH 4H 均值回归'), findsOneWidget);
+  });
+
+  testWidgets('草稿不串台：在 s1 输入后切到 s2 输入框为空，再切回 s1 草稿仍在',
+      (WidgetTester tester) async {
+    await _pump(tester);
+
+    await tester.enterText(
+        find.byKey(const Key('ai-chat-input')), 'draft for s1');
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('ai-appbar-history')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ai-session-tile-s2')));
+    await tester.pumpAndSettle();
+
+    // s2 输入应为空
+    expect(
+      (tester.widget(find.byKey(const Key('ai-chat-input'))) as TextField)
+          .controller!
+          .text,
+      isEmpty,
+    );
+
+    // 切回 s1
+    await tester.tap(find.byKey(const Key('ai-appbar-history')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ai-session-tile-s1')));
+    await tester.pumpAndSettle();
+
+    expect(
+      (tester.widget(find.byKey(const Key('ai-chat-input'))) as TextField)
+          .controller!
+          .text,
+      'draft for s1',
+    );
   });
 }

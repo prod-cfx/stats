@@ -4,20 +4,60 @@ import '../models/ai_chat_models.dart';
 import '../repositories/ai_chat_repository.dart';
 import 'fixtures/ai_chat.dart';
 
-/// Mock AI 对话 Repository。
+/// Mock AI 对话 Repository — 多会话内存实现（#1557）。
 ///
 /// 单例语义：
 /// - `_controller` 在常驻 `Provider`（非 `autoDispose`）下生命周期与应用同长，不显式 close
-/// - `watchSession(sessionId)` 在 mock 阶段忽略 `sessionId` 始终共享同一 broadcast；
-///   真实 API 接入时按 sessionId 路由
-/// - 若后续切 `autoDispose` 或测试中 toggle `useMockProvider`，需补 dispose 路径
+/// - `_sessions` 在进程生命周期内累积；切到真实 API 时由 `Unimplemented` 接管
+/// - `sendMessageTo` 模拟一段 200ms 网络延迟，返回 assistant 回复并同步追加到对应 session
 class MockAiChatRepository implements AiChatRepository {
+  MockAiChatRepository() : _sessions = buildMockSessions();
+
+  final List<AiSession> _sessions;
   final StreamController<ChatTurn> _controller =
       StreamController<ChatTurn>.broadcast();
   int _seq = 0;
 
   @override
-  Future<ChatTurn> sendMessage(ChatTurn turn) async {
+  Future<List<AiSession>> listSessions() async {
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    // 按 updatedAt 倒序返回；不暴露内部列表引用。
+    final List<AiSession> sorted = List<AiSession>.of(_sessions)
+      ..sort((AiSession a, AiSession b) => b.updatedAt.compareTo(a.updatedAt));
+    return sorted;
+  }
+
+  @override
+  Future<AiSession> createSession({String? title}) async {
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final DateTime now = DateTime.now();
+    final AiSession fresh = AiSession(
+      id: 's-${now.microsecondsSinceEpoch}',
+      title: title?.trim().isNotEmpty == true ? title!.trim() : '新方案',
+      category: '未分类',
+      updatedAt: now,
+      messages: <ChatTurn>[
+        ChatTurn(
+          id: 'greet-${now.microsecondsSinceEpoch}',
+          role: 'assistant',
+          content: mockGreeting,
+          timestamp: now,
+        ),
+      ],
+    );
+    _sessions.insert(0, fresh);
+    return fresh;
+  }
+
+  @override
+  Future<void> deleteSession(String sessionId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    _sessions.removeWhere((AiSession s) => s.id == sessionId);
+  }
+
+  @override
+  Future<ChatTurn> sendMessageTo(String sessionId, ChatTurn turn) async {
+    // 200ms「思考」延迟，给 typing indicator 留显示窗口。
     await Future<void>.delayed(const Duration(milliseconds: 200));
     _controller.add(turn);
     _seq++;
@@ -30,13 +70,26 @@ class MockAiChatRepository implements AiChatRepository {
       ),
     );
     _controller.add(reply);
+    // 把 user turn + reply 同步追加到对应 session，并刷新 updatedAt。
+    final int idx = _sessions.indexWhere((AiSession s) => s.id == sessionId);
+    if (idx >= 0) {
+      final AiSession s = _sessions[idx];
+      _sessions[idx] = s.copyWith(
+        updatedAt: DateTime.now(),
+        messages: <ChatTurn>[...s.messages, turn, reply],
+      );
+    }
     return reply;
   }
 
   @override
   Stream<ChatTurn> watchSession(String sessionId) async* {
-    for (final ChatTurn turn in mockChatTurns) {
-      yield turn;
+    // mock 阶段：直接吐当前 session 历史；未来按 sessionId 路由。
+    final int idx = _sessions.indexWhere((AiSession s) => s.id == sessionId);
+    if (idx >= 0) {
+      for (final ChatTurn t in _sessions[idx].messages) {
+        yield t;
+      }
     }
     yield* _controller.stream;
   }

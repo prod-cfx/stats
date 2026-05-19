@@ -1,0 +1,285 @@
+import 'package:flutter/material.dart';
+
+import '../data/models/ai_chat_models.dart';
+import '../l10n/app_localizations.dart';
+import '../theme/colors.dart';
+import '../theme/theme_context.dart';
+import '../theme/tokens.dart';
+
+/// AI 多会话历史抽屉（#1557）。
+///
+/// 左侧 Drawer，宽度 ~82% 屏宽。包含：
+/// - 头部：标题「策略方案」+ 副标题 + 「新建方案」CTA
+/// - 列表：每条 session（标题 + 分类副本 + CAGR 标签 + 更新时间 + 消息数）
+/// - 当前会话高亮（accentSoft 背景）；可点删除按钮
+class QzAiSessionDrawer extends StatelessWidget {
+  const QzAiSessionDrawer({
+    super.key,
+    required this.sessions,
+    required this.currentId,
+    required this.onSelect,
+    required this.onCreate,
+    required this.onDelete,
+  });
+
+  final List<AiSession> sessions;
+  final String? currentId;
+  final ValueChanged<String> onSelect;
+  final VoidCallback onCreate;
+  final ValueChanged<String> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final double width = MediaQuery.of(context).size.width * 0.82;
+    return Drawer(
+      backgroundColor: c.bg,
+      width: width,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                QzSpacing.lg,
+                QzSpacing.md,
+                QzSpacing.lg,
+                QzSpacing.md,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              l10n.aiSessionDrawerTitle,
+                              style: TextStyle(
+                                color: c.text,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: QzSpacing.xxs),
+                            Text(
+                              l10n.aiSessionDrawerSubtitle,
+                              style: TextStyle(
+                                color: c.textDim,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        key: const Key('ai-drawer-close'),
+                        icon: Icon(Icons.close, color: c.textDim, size: 20),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: QzSpacing.md),
+                  SizedBox(
+                    height: 40,
+                    child: ElevatedButton.icon(
+                      key: const Key('ai-drawer-new-session'),
+                      onPressed: onCreate,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: c.accent,
+                        foregroundColor: c.accentOn,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(QzRadii.input),
+                        ),
+                      ),
+                      icon: const Icon(Icons.add, size: 16),
+                      label: Text(l10n.aiSessionNewButton),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: c.border),
+            Expanded(
+              child: sessions.isEmpty
+                  ? _Empty(scheme: c, hint: l10n.aiSessionEmptyHint)
+                  : ListView.separated(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: QzSpacing.sm,
+                        vertical: QzSpacing.sm,
+                      ),
+                      itemCount: sessions.length,
+                      separatorBuilder:
+                          (BuildContext _, int _) =>
+                              const SizedBox(height: 4),
+                      itemBuilder: (BuildContext ctx, int i) {
+                        final AiSession s = sessions[i];
+                        return _SessionTile(
+                          session: s,
+                          isCurrent: s.id == currentId,
+                          onTap: () => onSelect(s.id),
+                          onDelete: () => onDelete(s.id),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionTile extends StatelessWidget {
+  const _SessionTile({
+    required this.session,
+    required this.isCurrent,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  final AiSession session;
+  final bool isCurrent;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return InkWell(
+      key: Key('ai-session-tile-${session.id}'),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(QzRadii.input),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: QzSpacing.md,
+          vertical: QzSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: isCurrent ? c.accentSoft : Colors.transparent,
+          border: Border.all(
+            color: isCurrent ? c.accent.withValues(alpha: 0.3) : Colors.transparent,
+          ),
+          borderRadius: BorderRadius.circular(QzRadii.input),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: isCurrent ? c.accent : c.bgSoft,
+                borderRadius: BorderRadius.circular(QzRadii.input),
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                Icons.auto_awesome,
+                size: 16,
+                color: isCurrent ? c.accentOn : c.textDim,
+              ),
+            ),
+            const SizedBox(width: QzSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Flexible(
+                        child: Text(
+                          session.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: isCurrent ? c.accent : c.text,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      if (session.cagrLabel != null) ...<Widget>[
+                        const SizedBox(width: QzSpacing.xs),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: c.marketUp.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            session.cagrLabel!,
+                            style: TextStyle(
+                              color: c.marketUp,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              fontFamily: 'monospace',
+                              fontFamilyFallback: const <String>[
+                                'Menlo',
+                                'Consolas',
+                                'Courier New',
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    session.category,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: c.textDim, fontSize: 11),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    '${session.messages.length} 条消息',
+                    style: TextStyle(color: c.textFaint, fontSize: 10),
+                  ),
+                ],
+              ),
+            ),
+            if (isCurrent)
+              IconButton(
+                key: Key('ai-session-delete-${session.id}'),
+                onPressed: onDelete,
+                visualDensity: VisualDensity.compact,
+                icon: Icon(
+                  Icons.delete_outline,
+                  size: 16,
+                  color: c.textDim,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Empty extends StatelessWidget {
+  const _Empty({required this.scheme, required this.hint});
+  final QzColorScheme scheme;
+  final String hint;
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(QzSpacing.lg),
+        child: Text(
+          hint,
+          textAlign: TextAlign.center,
+          style: TextStyle(color: scheme.textDim, fontSize: 13),
+        ),
+      ),
+    );
+  }
+}

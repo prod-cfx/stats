@@ -31,12 +31,17 @@ class QzChatBubble extends StatelessWidget {
     required this.content,
     this.time,
     this.codeBlock,
+    this.params,
   });
 
   final QzChatRole role;
   final String content;
   final DateTime? time;
   final String? codeBlock;
+
+  /// 当传入时，气泡末尾追加一个等宽字体代码块渲染策略参数（#1557）。
+  /// 与 [codeBlock] 互斥：如二者同时存在，[params] 优先。
+  final Map<String, String>? params;
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +108,57 @@ class QzChatBubble extends StatelessWidget {
                         height: 1.4,
                       ),
                     ),
-                  if (codeBlock != null && codeBlock!.isNotEmpty) ...<Widget>[
+                  if (params != null && params!.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: QzSpacing.sm),
+                    Container(
+                      key: const Key('ai-bubble-params'),
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(QzSpacing.sm),
+                      decoration: BoxDecoration(
+                        color: isUser
+                            ? c.accentOn.withValues(alpha: 0.12)
+                            : c.border.withValues(alpha: 0.4),
+                        borderRadius:
+                            BorderRadius.circular(QzRadii.input),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          for (final MapEntry<String, String> e
+                              in params!.entries)
+                            Padding(
+                              padding:
+                                  const EdgeInsets.only(bottom: 2),
+                              child: RichText(
+                                text: TextSpan(
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    height: 1.7,
+                                    fontFamily: 'monospace',
+                                    fontFamilyFallback: const <String>[
+                                      'Menlo',
+                                      'Consolas',
+                                      'Courier New',
+                                    ],
+                                  ),
+                                  children: <InlineSpan>[
+                                    TextSpan(
+                                      text: '${e.key} ',
+                                      style: TextStyle(color: c.textDim),
+                                    ),
+                                    TextSpan(
+                                      text: '= ${e.value}',
+                                      style: TextStyle(color: fg),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ] else if (codeBlock != null && codeBlock!.isNotEmpty) ...<Widget>[
                     const SizedBox(height: QzSpacing.sm),
                     Container(
                       width: double.infinity,

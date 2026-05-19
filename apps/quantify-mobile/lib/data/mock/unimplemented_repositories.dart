@@ -93,7 +93,15 @@ class UnimplementedStrategyRepository implements StrategyRepository {
 
 class UnimplementedAiChatRepository implements AiChatRepository {
   @override
-  Future<ChatTurn> sendMessage(ChatTurn turn) => _todo('AiChatRepository');
+  Future<List<AiSession>> listSessions() => _todo('AiChatRepository');
+  @override
+  Future<AiSession> createSession({String? title}) =>
+      _todo('AiChatRepository');
+  @override
+  Future<void> deleteSession(String sessionId) => _todo('AiChatRepository');
+  @override
+  Future<ChatTurn> sendMessageTo(String sessionId, ChatTurn turn) =>
+      _todo('AiChatRepository');
   @override
   Stream<ChatTurn> watchSession(String sessionId) => _todo('AiChatRepository');
   @override
