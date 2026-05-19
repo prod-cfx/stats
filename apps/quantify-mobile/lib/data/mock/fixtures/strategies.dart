@@ -13,6 +13,9 @@ import '../../models/strategy_models.dart';
 /// - `mockFeaturedStrategies.last` 应是 subscribers 最低的策略（当前为
 ///   `st-new-perp-skew` = 14），保证按 hot 默认排序时不出现在首页 10 条内，
 ///   `上拉加载` 测试才能可靠触发 loadMore (#1565)。
+///
+/// `pair` / `period` 字段在 #1595 引入，用于卡片头部"类型 · 币对 · 周期"行。
+/// 选值不影响排序与筛选，仅用于展示；保持 const fixture。
 const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
   // grid
   StrategyCard(
@@ -26,6 +29,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     category: StrategyCategory.grid,
     status: StrategyStatusBadge.hot,
     verified: true,
+    pair: 'BTC/USDT',
+    period: '30D',
   ),
   StrategyCard(
     id: 'st-grid-stable',
@@ -36,6 +41,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 54,
     tags: <String>['grid', 'BUSDUSDT'],
     category: StrategyCategory.grid,
+    pair: 'BUSD/USDT',
+    period: '14D',
   ),
   StrategyCard(
     id: 'st-new-grid-link',
@@ -46,6 +53,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 26,
     tags: <String>['grid', 'LINKUSDT'],
     category: StrategyCategory.grid,
+    pair: 'LINK/USDT',
+    period: '30D',
   ),
 
   // trend
@@ -60,6 +69,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     category: StrategyCategory.trend,
     status: StrategyStatusBadge.official,
     verified: true,
+    pair: 'SOL/USDT',
+    period: '90D',
   ),
   StrategyCard(
     id: 'st-mom-eth',
@@ -72,6 +83,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     category: StrategyCategory.trend,
     status: StrategyStatusBadge.pro,
     verified: true,
+    pair: 'ETH/USDT',
+    period: '90D',
   ),
   StrategyCard(
     id: 'st-trend-eth',
@@ -82,6 +95,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 215,
     tags: <String>['trend', 'ETHUSDT'],
     category: StrategyCategory.trend,
+    pair: 'ETH/USDT',
+    period: '30D',
   ),
   StrategyCard(
     id: 'st-mom-doge',
@@ -92,6 +107,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 890,
     tags: <String>['momentum', 'DOGEUSDT'],
     category: StrategyCategory.trend,
+    pair: 'DOGE/USDT',
+    period: '7D',
   ),
   StrategyCard(
     id: 'st-mom-sol',
@@ -102,6 +119,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 305,
     tags: <String>['trend', 'SOLUSDT'],
     category: StrategyCategory.trend,
+    pair: 'SOL/USDT',
+    period: '30D',
   ),
   StrategyCard(
     id: 'st-new-ai',
@@ -114,6 +133,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     category: StrategyCategory.trend,
     status: StrategyStatusBadge.newListing,
     verified: true,
+    pair: '多币种',
+    period: '14D',
   ),
   StrategyCard(
     id: 'st-new-sentiment',
@@ -124,6 +145,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 19,
     tags: <String>['onchain', 'experimental'],
     category: StrategyCategory.trend,
+    pair: '多币种',
+    period: '30D',
   ),
   StrategyCard(
     id: 'st-new-defi',
@@ -134,6 +157,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 31,
     tags: <String>['defi', 'rotation'],
     category: StrategyCategory.trend,
+    pair: '多币种',
+    period: '90D',
   ),
   StrategyCard(
     id: 'st-new-mom-l2',
@@ -144,6 +169,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 37,
     tags: <String>['momentum', 'L2'],
     category: StrategyCategory.trend,
+    pair: 'ARB-OP',
+    period: '30D',
   ),
 
   // reversal
@@ -156,6 +183,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 188,
     tags: <String>['meanrev', 'BNBUSDT'],
     category: StrategyCategory.reversal,
+    pair: 'BNB/USDT',
+    period: '30D',
   ),
   StrategyCard(
     id: 'st-new-btc-mr',
@@ -166,6 +195,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 28,
     tags: <String>['meanrev', 'BTCUSDT'],
     category: StrategyCategory.reversal,
+    pair: 'BTC/USDT',
+    period: '7D',
   ),
 
   // hedge
@@ -178,6 +209,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 142,
     tags: <String>['neutral', 'BTC', 'ETH'],
     category: StrategyCategory.hedge,
+    pair: 'BTC-ETH',
+    period: '90D',
   ),
   StrategyCard(
     id: 'st-pair-altl1',
@@ -188,6 +221,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 121,
     tags: <String>['pair', 'SOL', 'AVAX'],
     category: StrategyCategory.hedge,
+    pair: 'SOL-AVAX',
+    period: '30D',
   ),
   StrategyCard(
     id: 'st-new-eth-vol',
@@ -198,6 +233,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 22,
     tags: <String>['vol', 'ETHUSDT'],
     category: StrategyCategory.hedge,
+    pair: 'ETH/USDT',
+    period: '14D',
   ),
 
   // highFreq
@@ -210,6 +247,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 411,
     tags: <String>['grid', 'PEPEUSDT'],
     category: StrategyCategory.highFreq,
+    pair: 'PEPE/USDT',
+    period: '7D',
   ),
 
   // arbitrage（放在末尾以满足 "last subscribers 最低" 的测试约定）
@@ -222,6 +261,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 98,
     tags: <String>['arbitrage', 'stable'],
     category: StrategyCategory.arbitrage,
+    pair: '多币种',
+    period: '14D',
   ),
   StrategyCard(
     id: 'st-cash-usdt',
@@ -232,6 +273,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 320,
     tags: <String>['yield', 'USDT'],
     category: StrategyCategory.arbitrage,
+    pair: 'USDT',
+    period: '1Y',
   ),
   StrategyCard(
     id: 'st-funding-eth',
@@ -242,6 +285,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 76,
     tags: <String>['funding', 'ETHUSDT'],
     category: StrategyCategory.arbitrage,
+    pair: 'ETH/USDT',
+    period: '14D',
   ),
   StrategyCard(
     id: 'st-new-perp-skew',
@@ -252,6 +297,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 14,
     tags: <String>['basis', 'perp'],
     category: StrategyCategory.arbitrage,
+    pair: '多币种',
+    period: '7D',
   ),
 ];
 
@@ -266,6 +313,8 @@ const List<StrategyCard> mockMyStrategies = <StrategyCard>[
     subscribers: 1,
     tags: <String>['grid', 'mine'],
     category: StrategyCategory.highFreq,
+    pair: 'BTC/USDT',
+    period: '7D',
   ),
   StrategyCard(
     id: 'st-mine-2',
@@ -276,5 +325,7 @@ const List<StrategyCard> mockMyStrategies = <StrategyCard>[
     subscribers: 1,
     tags: <String>['momentum', 'mine'],
     category: StrategyCategory.trend,
+    pair: 'ETH/USDT',
+    period: '30D',
   ),
 ];

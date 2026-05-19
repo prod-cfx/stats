@@ -41,6 +41,12 @@ class StrategyCard {
   /// 作者认证标（蓝 V）。
   final bool verified;
 
+  /// 交易币对，例如 `BTC/USDT`、`多币种`（#1595）。
+  final String pair;
+
+  /// 周期标签，例如 `7D` / `30D` / `1Y`（#1595）。
+  final String period;
+
   const StrategyCard({
     required this.id,
     required this.name,
@@ -52,6 +58,8 @@ class StrategyCard {
     required this.category,
     this.status,
     this.verified = false,
+    this.pair = '',
+    this.period = '',
   });
 }
 
