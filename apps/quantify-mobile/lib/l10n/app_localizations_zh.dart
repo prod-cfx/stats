@@ -747,22 +747,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get themeToggleReduceMotion => '减少动画';
 
   @override
-  String get strategyHomeTitle => '策略';
+  String get strategyHomeTitle => '策略广场';
 
   @override
-  String get strategyHomeSearchHint => '搜索策略 / 作者 / 标签';
+  String get strategyHomeSubtitle => '精选策略 · 一键载入对话';
+
+  @override
+  String get strategyHomeSearchHint => '搜索策略 · 币对 · 作者';
 
   @override
   String get strategyHomeEmpty => '暂无匹配策略';
 
   @override
-  String get strategyCategoryHighReturn => '高收益';
+  String get strategyCategoryTrend => '趋势';
 
   @override
-  String get strategyCategoryLowDrawdown => '低回撤';
+  String get strategyCategoryGrid => '网格';
 
   @override
-  String get strategyCategoryNewListing => '新上架';
+  String get strategyCategoryArbitrage => '套利';
+
+  @override
+  String get strategyCategoryReversal => '反转';
+
+  @override
+  String get strategyCategoryHedge => '对冲';
+
+  @override
+  String get strategyCategoryHighFreq => '高频';
 
   @override
   String get strategyDetailTitle => '策略详情';

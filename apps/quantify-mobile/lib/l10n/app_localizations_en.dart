@@ -759,22 +759,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get themeToggleReduceMotion => 'Reduce Motion';
 
   @override
-  String get strategyHomeTitle => 'Strategy';
+  String get strategyHomeTitle => 'Strategy Plaza';
 
   @override
-  String get strategyHomeSearchHint => 'Search strategy / author / tag';
+  String get strategyHomeSubtitle => 'Curated · one-tap to chat';
+
+  @override
+  String get strategyHomeSearchHint => 'Search strategy · pair · author';
 
   @override
   String get strategyHomeEmpty => 'No matching strategies';
 
   @override
-  String get strategyCategoryHighReturn => 'High Return';
+  String get strategyCategoryTrend => 'Trend';
 
   @override
-  String get strategyCategoryLowDrawdown => 'Low Drawdown';
+  String get strategyCategoryGrid => 'Grid';
 
   @override
-  String get strategyCategoryNewListing => 'New';
+  String get strategyCategoryArbitrage => 'Arbitrage';
+
+  @override
+  String get strategyCategoryReversal => 'Reversal';
+
+  @override
+  String get strategyCategoryHedge => 'Hedge';
+
+  @override
+  String get strategyCategoryHighFreq => 'HighFreq';
 
   @override
   String get strategyDetailTitle => 'Strategy Detail';

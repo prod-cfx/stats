@@ -25,9 +25,12 @@ class CategoryChipBar extends StatelessWidget {
     final List<({StrategyCategory key, String label})> entries =
         <({StrategyCategory key, String label})>[
       (key: StrategyCategory.all, label: l10n.commonAll),
-      (key: StrategyCategory.highReturn, label: l10n.strategyCategoryHighReturn),
-      (key: StrategyCategory.lowDrawdown, label: l10n.strategyCategoryLowDrawdown),
-      (key: StrategyCategory.newListing, label: l10n.strategyCategoryNewListing),
+      (key: StrategyCategory.trend, label: l10n.strategyCategoryTrend),
+      (key: StrategyCategory.grid, label: l10n.strategyCategoryGrid),
+      (key: StrategyCategory.arbitrage, label: l10n.strategyCategoryArbitrage),
+      (key: StrategyCategory.reversal, label: l10n.strategyCategoryReversal),
+      (key: StrategyCategory.hedge, label: l10n.strategyCategoryHedge),
+      (key: StrategyCategory.highFreq, label: l10n.strategyCategoryHighFreq),
     ];
     return SizedBox(
       height: 40,

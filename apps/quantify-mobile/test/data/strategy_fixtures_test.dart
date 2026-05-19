@@ -8,11 +8,14 @@ void main() {
       expect(mockFeaturedStrategies.length, greaterThanOrEqualTo(20));
     });
 
-    test('覆盖全部 3 个非 all category，每类至少 1 条', () {
+    test('覆盖全部 6 个非 all category，每类至少 1 条 (#1594)', () {
       for (final StrategyCategory cat in <StrategyCategory>[
-        StrategyCategory.highReturn,
-        StrategyCategory.lowDrawdown,
-        StrategyCategory.newListing,
+        StrategyCategory.trend,
+        StrategyCategory.grid,
+        StrategyCategory.arbitrage,
+        StrategyCategory.reversal,
+        StrategyCategory.hedge,
+        StrategyCategory.highFreq,
       ]) {
         final int n = mockFeaturedStrategies
             .where((StrategyCard s) => s.category == cat)

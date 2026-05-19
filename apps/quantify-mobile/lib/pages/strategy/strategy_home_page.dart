@@ -13,6 +13,7 @@ import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_search_bar.dart';
 import '../../widgets/qz_sheet.dart';
 import '../../widgets/qz_spinner.dart';
+import '../../widgets/qz_top_bar.dart';
 import 'widgets/category_chip_bar.dart';
 import 'widgets/featured_hero_card.dart';
 import 'widgets/strategy_card_tile.dart';
@@ -217,8 +218,9 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     final QzColorScheme c = context.qzScheme;
     final Set<String> favorites = ref.watch(strategyFavoritesProvider);
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.strategyHomeTitle),
+      appBar: QzTopBar(
+        title: l10n.strategyHomeTitle,
+        subtitle: l10n.strategyHomeSubtitle,
         actions: <Widget>[
           IconButton(
             key: const Key('strategy-filter-btn'),

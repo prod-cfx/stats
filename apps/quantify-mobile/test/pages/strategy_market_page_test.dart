@@ -128,11 +128,11 @@ void main() {
     expect(find.byType(FeaturedHeroCard), findsNothing);
   });
 
-  testWidgets('分类切到 highReturn：hero 隐藏 (#1593)',
+  testWidgets('分类切到 trend：hero 隐藏 (#1593 / #1594)',
       (WidgetTester tester) async {
     await _pump(tester);
     expect(find.byKey(const Key('strategy-featured-hero')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('strategy-chip-highReturn')));
+    await tester.tap(find.byKey(const Key('strategy-chip-trend')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const Key('strategy-featured-hero')), findsNothing);
@@ -152,6 +152,26 @@ void main() {
     await tester.pump();
     expect(find.byType(StrategyDetailPage), findsOneWidget);
     expect(find.text('策略详情'), findsOneWidget);
+  });
+
+  testWidgets('顶部栏：策略广场 + 副标题 + 筛选按钮 + 7 个分类 chip (#1594)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    // 标题 + 副标题
+    expect(find.text('策略广场'), findsOneWidget);
+    expect(find.text('精选策略 · 一键载入对话'), findsOneWidget);
+    // 右上筛选按钮
+    expect(find.byKey(const Key('strategy-filter-btn')), findsOneWidget);
+    // 搜索占位
+    expect(find.text('搜索策略 · 币对 · 作者'), findsOneWidget);
+    // 7 个分类 chip key
+    expect(find.byKey(const Key('strategy-chip-all')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-chip-trend')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-chip-grid')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-chip-arbitrage')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-chip-reversal')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-chip-hedge')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-chip-highFreq')), findsOneWidget);
   });
 
   testWidgets('排序行：4 个排序 chip + 结果计数 (#1565)',
@@ -190,23 +210,22 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('切换 "高收益" chip：筛选只剩 highReturn 类',
+  testWidgets('切换 "趋势" chip：筛选只剩 trend 类 (#1594)',
       (WidgetTester tester) async {
     await _pump(tester);
-    final StrategyCard nonHighReturn = mockFeaturedStrategies
+    final StrategyCard nonTrend = mockFeaturedStrategies
         .firstWhere((StrategyCard s) =>
-            s.category != StrategyCategory.highReturn);
-    // 默认全部时，非 highReturn 项可能在前 10 内（取决于顺序）
-    await tester.tap(find.byKey(const Key('strategy-chip-highReturn')));
+            s.category != StrategyCategory.trend);
+    await tester.tap(find.byKey(const Key('strategy-chip-trend')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
-    // 切换后非 highReturn 名字应消失
-    expect(find.text(nonHighReturn.name), findsNothing);
-    // highReturn 至少存在 1 张
-    final StrategyCard highReturnFirst = mockFeaturedStrategies
+    // 切换后非 trend 名字应消失
+    expect(find.text(nonTrend.name), findsNothing);
+    // trend 至少存在 1 张
+    final StrategyCard trendFirst = mockFeaturedStrategies
         .firstWhere(
-            (StrategyCard s) => s.category == StrategyCategory.highReturn);
-    expect(find.text(highReturnFirst.name), findsOneWidget);
+            (StrategyCard s) => s.category == StrategyCategory.trend);
+    expect(find.text(trendFirst.name), findsOneWidget);
   });
 
   testWidgets('搜索：输入作者名子串过滤生效', (WidgetTester tester) async {

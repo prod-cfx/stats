@@ -1,5 +1,16 @@
 /// 策略分类（页面顶部 chip 切换用）。
-enum StrategyCategory { all, highReturn, lowDrawdown, newListing }
+///
+/// 对齐设计稿 `design/project/mobile/m-screens-2.jsx` `TAG_FILTERS`：
+/// `全部 / 趋势 / 网格 / 套利 / 反转 / 对冲 / 高频`。
+enum StrategyCategory {
+  all,
+  trend,
+  grid,
+  arbitrage,
+  reversal,
+  hedge,
+  highFreq,
+}
 
 /// 策略卡 status badge 类型（#1565）。
 ///

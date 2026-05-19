@@ -1559,13 +1559,19 @@ abstract class AppLocalizations {
   /// No description provided for @strategyHomeTitle.
   ///
   /// In zh, this message translates to:
-  /// **'策略'**
+  /// **'策略广场'**
   String get strategyHomeTitle;
+
+  /// No description provided for @strategyHomeSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'精选策略 · 一键载入对话'**
+  String get strategyHomeSubtitle;
 
   /// No description provided for @strategyHomeSearchHint.
   ///
   /// In zh, this message translates to:
-  /// **'搜索策略 / 作者 / 标签'**
+  /// **'搜索策略 · 币对 · 作者'**
   String get strategyHomeSearchHint;
 
   /// No description provided for @strategyHomeEmpty.
@@ -1574,23 +1580,41 @@ abstract class AppLocalizations {
   /// **'暂无匹配策略'**
   String get strategyHomeEmpty;
 
-  /// No description provided for @strategyCategoryHighReturn.
+  /// No description provided for @strategyCategoryTrend.
   ///
   /// In zh, this message translates to:
-  /// **'高收益'**
-  String get strategyCategoryHighReturn;
+  /// **'趋势'**
+  String get strategyCategoryTrend;
 
-  /// No description provided for @strategyCategoryLowDrawdown.
+  /// No description provided for @strategyCategoryGrid.
   ///
   /// In zh, this message translates to:
-  /// **'低回撤'**
-  String get strategyCategoryLowDrawdown;
+  /// **'网格'**
+  String get strategyCategoryGrid;
 
-  /// No description provided for @strategyCategoryNewListing.
+  /// No description provided for @strategyCategoryArbitrage.
   ///
   /// In zh, this message translates to:
-  /// **'新上架'**
-  String get strategyCategoryNewListing;
+  /// **'套利'**
+  String get strategyCategoryArbitrage;
+
+  /// No description provided for @strategyCategoryReversal.
+  ///
+  /// In zh, this message translates to:
+  /// **'反转'**
+  String get strategyCategoryReversal;
+
+  /// No description provided for @strategyCategoryHedge.
+  ///
+  /// In zh, this message translates to:
+  /// **'对冲'**
+  String get strategyCategoryHedge;
+
+  /// No description provided for @strategyCategoryHighFreq.
+  ///
+  /// In zh, this message translates to:
+  /// **'高频'**
+  String get strategyCategoryHighFreq;
 
   /// No description provided for @strategyDetailTitle.
   ///

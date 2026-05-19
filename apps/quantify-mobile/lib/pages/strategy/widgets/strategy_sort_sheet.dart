@@ -51,9 +51,12 @@ class _StrategySortSheetState extends State<StrategySortSheet> {
     final AppLocalizations l10n = AppLocalizations.of(ctx);
     return switch (c) {
       StrategyCategory.all => l10n.commonAll,
-      StrategyCategory.highReturn => l10n.strategyCategoryHighReturn,
-      StrategyCategory.lowDrawdown => l10n.strategyCategoryLowDrawdown,
-      StrategyCategory.newListing => l10n.strategyCategoryNewListing,
+      StrategyCategory.trend => l10n.strategyCategoryTrend,
+      StrategyCategory.grid => l10n.strategyCategoryGrid,
+      StrategyCategory.arbitrage => l10n.strategyCategoryArbitrage,
+      StrategyCategory.reversal => l10n.strategyCategoryReversal,
+      StrategyCategory.hedge => l10n.strategyCategoryHedge,
+      StrategyCategory.highFreq => l10n.strategyCategoryHighFreq,
     };
   }
 

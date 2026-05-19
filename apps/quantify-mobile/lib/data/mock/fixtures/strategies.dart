@@ -1,10 +1,20 @@
 import '../../models/strategy_models.dart';
 
-/// 策略广场 mock fixtures：22 条，覆盖 4 个 category（all 不需要专属数据）。
+/// 策略广场 mock fixtures：22 条，覆盖 6 个非 all category。
 ///
-/// 分布：highReturn=8 / lowDrawdown=6 / newListing=8。每条带 author + tags。
+/// 分布按设计稿 `TAG_FILTERS`（趋势 / 网格 / 套利 / 反转 / 对冲 / 高频）映射，
+/// 保证每类至少 1 条；具体归类参考各条 tags。
+///
+/// 排序约定（被现有 widget test 依赖，请勿轻易破坏）：
+/// - `mockFeaturedStrategies.first` 应是一张非 official-hero 的代表卡（当前为
+///   `st-grid-btc`，status=hot）。`getFeaturedHero()` 优先取 official 标记，
+///   因此 first 不会被 `_listItems` 去重剔除；点击 first.id 的列表 tile 能
+///   稳定命中 (#1565 / #1593 / #1594)。
+/// - `mockFeaturedStrategies.last` 应是 subscribers 最低的策略（当前为
+///   `st-new-perp-skew` = 14），保证按 hot 默认排序时不出现在首页 10 条内，
+///   `上拉加载` 测试才能可靠触发 loadMore (#1565)。
 const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
-  // highReturn × 8
+  // grid
   StrategyCard(
     id: 'st-grid-btc',
     name: 'BTC 网格搬砖',
@@ -13,10 +23,32 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 12.4,
     subscribers: 320,
     tags: <String>['grid', 'BTCUSDT'],
-    category: StrategyCategory.highReturn,
+    category: StrategyCategory.grid,
     status: StrategyStatusBadge.hot,
     verified: true,
   ),
+  StrategyCard(
+    id: 'st-grid-stable',
+    name: '稳定币低波网格',
+    description: '极窄区间小步长高频。',
+    author: '夜行者',
+    pnlPercent: 2.9,
+    subscribers: 54,
+    tags: <String>['grid', 'BUSDUSDT'],
+    category: StrategyCategory.grid,
+  ),
+  StrategyCard(
+    id: 'st-new-grid-link',
+    name: 'LINK 自适应网格',
+    description: 'ATR 自适应步长。',
+    author: '量化新人',
+    pnlPercent: 13.7,
+    subscribers: 26,
+    tags: <String>['grid', 'LINKUSDT'],
+    category: StrategyCategory.grid,
+  ),
+
+  // trend
   StrategyCard(
     id: 'st-dca-sol',
     name: 'SOL 定投',
@@ -25,7 +57,7 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 22.3,
     subscribers: 540,
     tags: <String>['dca', 'SOLUSDT'],
-    category: StrategyCategory.highReturn,
+    category: StrategyCategory.trend,
     status: StrategyStatusBadge.official,
     verified: true,
   ),
@@ -37,7 +69,7 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 31.7,
     subscribers: 612,
     tags: <String>['momentum', 'ETHUSDT'],
-    category: StrategyCategory.highReturn,
+    category: StrategyCategory.trend,
     status: StrategyStatusBadge.pro,
     verified: true,
   ),
@@ -49,7 +81,7 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 8.7,
     subscribers: 215,
     tags: <String>['trend', 'ETHUSDT'],
-    category: StrategyCategory.highReturn,
+    category: StrategyCategory.trend,
   ),
   StrategyCard(
     id: 'st-mom-doge',
@@ -59,17 +91,7 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 45.2,
     subscribers: 890,
     tags: <String>['momentum', 'DOGEUSDT'],
-    category: StrategyCategory.highReturn,
-  ),
-  StrategyCard(
-    id: 'st-grid-pepe',
-    name: 'PEPE 高频网格',
-    description: '高波动 meme 币短周期网格。',
-    author: '夜行者',
-    pnlPercent: 28.9,
-    subscribers: 411,
-    tags: <String>['grid', 'PEPEUSDT'],
-    category: StrategyCategory.highReturn,
+    category: StrategyCategory.trend,
   ),
   StrategyCard(
     id: 'st-mom-sol',
@@ -79,82 +101,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 36.8,
     subscribers: 305,
     tags: <String>['trend', 'SOLUSDT'],
-    category: StrategyCategory.highReturn,
+    category: StrategyCategory.trend,
   ),
-  StrategyCard(
-    id: 'st-mr-bnb',
-    name: 'BNB 均值回归',
-    description: '回踩均线分批进场，目标 ATR。',
-    author: '稳健派',
-    pnlPercent: 15.1,
-    subscribers: 188,
-    tags: <String>['meanrev', 'BNBUSDT'],
-    category: StrategyCategory.highReturn,
-  ),
-
-  // lowDrawdown × 6
-  StrategyCard(
-    id: 'st-arb-stable',
-    name: '稳定币套利',
-    description: '跨交易所稳定币价差套利。',
-    author: '套利工坊',
-    pnlPercent: 3.1,
-    subscribers: 98,
-    tags: <String>['arbitrage', 'stable'],
-    category: StrategyCategory.lowDrawdown,
-  ),
-  StrategyCard(
-    id: 'st-mn-btceth',
-    name: 'BTC/ETH 市场中性',
-    description: '配对交易，对冲方向性风险。',
-    author: '量化老王',
-    pnlPercent: 4.6,
-    subscribers: 142,
-    tags: <String>['neutral', 'BTC', 'ETH'],
-    category: StrategyCategory.lowDrawdown,
-  ),
-  StrategyCard(
-    id: 'st-cash-usdt',
-    name: 'USDT 理财增强',
-    description: '稳定币短期借贷收益。',
-    author: '稳健派',
-    pnlPercent: 6.8,
-    subscribers: 320,
-    tags: <String>['yield', 'USDT'],
-    category: StrategyCategory.lowDrawdown,
-  ),
-  StrategyCard(
-    id: 'st-funding-eth',
-    name: 'ETH 资金费率套利',
-    description: '永续 - 现货资金费率收割。',
-    author: '套利工坊',
-    pnlPercent: 5.4,
-    subscribers: 76,
-    tags: <String>['funding', 'ETHUSDT'],
-    category: StrategyCategory.lowDrawdown,
-  ),
-  StrategyCard(
-    id: 'st-grid-stable',
-    name: '稳定币低波网格',
-    description: '极窄区间小步长高频。',
-    author: '夜行者',
-    pnlPercent: 2.9,
-    subscribers: 54,
-    tags: <String>['grid', 'BUSDUSDT'],
-    category: StrategyCategory.lowDrawdown,
-  ),
-  StrategyCard(
-    id: 'st-pair-altl1',
-    name: 'L1 龙头配对',
-    description: 'SOL/AVAX 多空对冲。',
-    author: 'Alpha Hunter',
-    pnlPercent: 7.2,
-    subscribers: 121,
-    tags: <String>['pair', 'SOL', 'AVAX'],
-    category: StrategyCategory.lowDrawdown,
-  ),
-
-  // newListing × 8
   StrategyCard(
     id: 'st-new-ai',
     name: 'AI 信号合集 v1',
@@ -163,19 +111,9 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 18.0,
     subscribers: 42,
     tags: <String>['ai', 'experimental'],
-    category: StrategyCategory.newListing,
+    category: StrategyCategory.trend,
     status: StrategyStatusBadge.newListing,
     verified: true,
-  ),
-  StrategyCard(
-    id: 'st-new-btc-mr',
-    name: 'BTC 短周期均值回归',
-    description: '5 分钟级别布林反转。',
-    author: '量化新人',
-    pnlPercent: 9.4,
-    subscribers: 28,
-    tags: <String>['meanrev', 'BTCUSDT'],
-    category: StrategyCategory.newListing,
   ),
   StrategyCard(
     id: 'st-new-sentiment',
@@ -185,7 +123,7 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 11.6,
     subscribers: 19,
     tags: <String>['onchain', 'experimental'],
-    category: StrategyCategory.newListing,
+    category: StrategyCategory.trend,
   ),
   StrategyCard(
     id: 'st-new-defi',
@@ -195,17 +133,7 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 14.2,
     subscribers: 31,
     tags: <String>['defi', 'rotation'],
-    category: StrategyCategory.newListing,
-  ),
-  StrategyCard(
-    id: 'st-new-eth-vol',
-    name: 'ETH 波动率收割',
-    description: '隐含波动率高低双卖。',
-    author: 'Vol Trader',
-    pnlPercent: 7.8,
-    subscribers: 22,
-    tags: <String>['vol', 'ETHUSDT'],
-    category: StrategyCategory.newListing,
+    category: StrategyCategory.trend,
   ),
   StrategyCard(
     id: 'st-new-mom-l2',
@@ -215,7 +143,105 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 19.5,
     subscribers: 37,
     tags: <String>['momentum', 'L2'],
-    category: StrategyCategory.newListing,
+    category: StrategyCategory.trend,
+  ),
+
+  // reversal
+  StrategyCard(
+    id: 'st-mr-bnb',
+    name: 'BNB 均值回归',
+    description: '回踩均线分批进场，目标 ATR。',
+    author: '稳健派',
+    pnlPercent: 15.1,
+    subscribers: 188,
+    tags: <String>['meanrev', 'BNBUSDT'],
+    category: StrategyCategory.reversal,
+  ),
+  StrategyCard(
+    id: 'st-new-btc-mr',
+    name: 'BTC 短周期均值回归',
+    description: '5 分钟级别布林反转。',
+    author: '量化新人',
+    pnlPercent: 9.4,
+    subscribers: 28,
+    tags: <String>['meanrev', 'BTCUSDT'],
+    category: StrategyCategory.reversal,
+  ),
+
+  // hedge
+  StrategyCard(
+    id: 'st-mn-btceth',
+    name: 'BTC/ETH 市场中性',
+    description: '配对交易，对冲方向性风险。',
+    author: '量化老王',
+    pnlPercent: 4.6,
+    subscribers: 142,
+    tags: <String>['neutral', 'BTC', 'ETH'],
+    category: StrategyCategory.hedge,
+  ),
+  StrategyCard(
+    id: 'st-pair-altl1',
+    name: 'L1 龙头配对',
+    description: 'SOL/AVAX 多空对冲。',
+    author: 'Alpha Hunter',
+    pnlPercent: 7.2,
+    subscribers: 121,
+    tags: <String>['pair', 'SOL', 'AVAX'],
+    category: StrategyCategory.hedge,
+  ),
+  StrategyCard(
+    id: 'st-new-eth-vol',
+    name: 'ETH 波动率收割',
+    description: '隐含波动率高低双卖。',
+    author: 'Vol Trader',
+    pnlPercent: 7.8,
+    subscribers: 22,
+    tags: <String>['vol', 'ETHUSDT'],
+    category: StrategyCategory.hedge,
+  ),
+
+  // highFreq
+  StrategyCard(
+    id: 'st-grid-pepe',
+    name: 'PEPE 高频网格',
+    description: '高波动 meme 币短周期网格。',
+    author: '夜行者',
+    pnlPercent: 28.9,
+    subscribers: 411,
+    tags: <String>['grid', 'PEPEUSDT'],
+    category: StrategyCategory.highFreq,
+  ),
+
+  // arbitrage（放在末尾以满足 "last subscribers 最低" 的测试约定）
+  StrategyCard(
+    id: 'st-arb-stable',
+    name: '稳定币套利',
+    description: '跨交易所稳定币价差套利。',
+    author: '套利工坊',
+    pnlPercent: 3.1,
+    subscribers: 98,
+    tags: <String>['arbitrage', 'stable'],
+    category: StrategyCategory.arbitrage,
+  ),
+  StrategyCard(
+    id: 'st-cash-usdt',
+    name: 'USDT 理财增强',
+    description: '稳定币短期借贷收益。',
+    author: '稳健派',
+    pnlPercent: 6.8,
+    subscribers: 320,
+    tags: <String>['yield', 'USDT'],
+    category: StrategyCategory.arbitrage,
+  ),
+  StrategyCard(
+    id: 'st-funding-eth',
+    name: 'ETH 资金费率套利',
+    description: '永续 - 现货资金费率收割。',
+    author: '套利工坊',
+    pnlPercent: 5.4,
+    subscribers: 76,
+    tags: <String>['funding', 'ETHUSDT'],
+    category: StrategyCategory.arbitrage,
   ),
   StrategyCard(
     id: 'st-new-perp-skew',
@@ -225,17 +251,7 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     pnlPercent: 6.3,
     subscribers: 14,
     tags: <String>['basis', 'perp'],
-    category: StrategyCategory.newListing,
-  ),
-  StrategyCard(
-    id: 'st-new-grid-link',
-    name: 'LINK 自适应网格',
-    description: 'ATR 自适应步长。',
-    author: '量化新人',
-    pnlPercent: 13.7,
-    subscribers: 26,
-    tags: <String>['grid', 'LINKUSDT'],
-    category: StrategyCategory.newListing,
+    category: StrategyCategory.arbitrage,
   ),
 ];
 
@@ -249,7 +265,7 @@ const List<StrategyCard> mockMyStrategies = <StrategyCard>[
     pnlPercent: -1.5,
     subscribers: 1,
     tags: <String>['grid', 'mine'],
-    category: StrategyCategory.highReturn,
+    category: StrategyCategory.highFreq,
   ),
   StrategyCard(
     id: 'st-mine-2',
@@ -259,6 +275,6 @@ const List<StrategyCard> mockMyStrategies = <StrategyCard>[
     pnlPercent: 5.8,
     subscribers: 1,
     tags: <String>['momentum', 'mine'],
-    category: StrategyCategory.newListing,
+    category: StrategyCategory.trend,
   ),
 ];
