@@ -1,15 +1,7 @@
 name: quantify-mobile CI
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/quantify-mobile/**'
-      - '.github/workflows/quantify-mobile.yml'
-  pull_request:
-    paths:
-      - 'apps/quantify-mobile/**'
-      - '.github/workflows/quantify-mobile.yml'
+  workflow_dispatch:
 
 concurrency:
   group: quantify-mobile-${{ github.ref }}
