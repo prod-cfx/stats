@@ -10,6 +10,8 @@ class ThemePersistence {
 
   static const String kBg = 'qz.theme.bg';
   static const String kAccent = 'qz.theme.accent';
+  static const String kAutoFollowSystem = 'qz.theme.autoFollowSystem';
+  static const String kReduceMotion = 'qz.theme.reduceMotion';
 
   final SharedPreferences _prefs;
 
@@ -33,4 +35,12 @@ class ThemePersistence {
 
   Future<void> writeBg(QzBg bg) => _prefs.setString(kBg, bg.name);
   Future<void> writeAccent(QzAccent a) => _prefs.setString(kAccent, a.name);
+
+  bool? readAutoFollowSystem() => _prefs.getBool(kAutoFollowSystem);
+  bool? readReduceMotion() => _prefs.getBool(kReduceMotion);
+
+  Future<void> writeAutoFollowSystem(bool v) =>
+      _prefs.setBool(kAutoFollowSystem, v);
+  Future<void> writeReduceMotion(bool v) =>
+      _prefs.setBool(kReduceMotion, v);
 }

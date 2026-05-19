@@ -95,10 +95,12 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
           );
       if (!mounted) return;
       Navigator.of(context).pop(true);
-    } catch (e) {
+    } catch (_) {
+      // 不把后端异常原文塞给用户 SnackBar，避免暴露请求体片段 / 内部
+      // 字段名 / stack trace 片段。统一显示固定通用文案；详细错误走日志。
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${AppLocalizations.of(context).meApiFormSaveFailedPrefix}$e')),
+        SnackBar(content: Text(AppLocalizations.of(context).meApiFormSaveFailed)),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -182,7 +184,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                     children: <Widget>[
                       _WarningBanner(exchange: widget.exchange),
                       const SizedBox(height: 18),
-                      _Label(text: 'API Key', required: true),
+                      _Label(text: l10n.meApiFormApiKeyLabel, required: true),
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: _apiKey,
@@ -194,7 +196,7 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                         ),
                       ),
                       const SizedBox(height: 14),
-                      _Label(text: 'Secret', required: true),
+                      _Label(text: l10n.meApiFormSecretLabel, required: true),
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: _secret,
@@ -227,6 +229,10 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                         decoration: _inputDecoration(c),
                         validator: _validateLabel,
                       ),
+                      const SizedBox(height: 18),
+                      _Label(text: l10n.meApiFormPermissionSection),
+                      const SizedBox(height: 8),
+                      _PermissionList(l10n: l10n),
                       const SizedBox(height: 18),
                       OutlinedButton(
                         onPressed: _testing ? null : _testConnection,
@@ -377,6 +383,109 @@ class _ExchangeBadge extends StatelessWidget {
           fontSize: 18,
           fontWeight: FontWeight.w800,
         ),
+      ),
+    );
+  }
+}
+
+/// 「授权权限」区块（原型 `m-screens-4.jsx:1146-1152`）。
+/// 4 行权限说明（现货读/现货交易/合约读/合约交易）+ 1 行红色禁止行
+/// （提币 必须关闭）。所有值为静态文案，不接 API。
+class _PermissionList extends StatelessWidget {
+  const _PermissionList({required this.l10n});
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: <Widget>[
+        _PermissionRow(
+          label: l10n.meApiFormPermSpotRead,
+          value: l10n.meApiFormPermRequired,
+          tone: _PermTone.ok,
+        ),
+        const SizedBox(height: 8),
+        _PermissionRow(
+          label: l10n.meApiFormPermSpotTrade,
+          value: l10n.meApiFormPermRequired,
+          tone: _PermTone.ok,
+        ),
+        const SizedBox(height: 8),
+        _PermissionRow(
+          label: l10n.meApiFormPermFuturesRead,
+          value: l10n.meApiFormPermOptional,
+          tone: _PermTone.ok,
+        ),
+        const SizedBox(height: 8),
+        _PermissionRow(
+          label: l10n.meApiFormPermFuturesTrade,
+          value: l10n.meApiFormPermOptional,
+          tone: _PermTone.ok,
+        ),
+        const SizedBox(height: 8),
+        _PermissionRow(
+          label: l10n.meApiFormPermWithdrawLabel,
+          value: l10n.meApiFormPermWithdrawValue,
+          tone: _PermTone.blocked,
+        ),
+      ],
+    );
+  }
+}
+
+enum _PermTone { ok, blocked }
+
+class _PermissionRow extends StatelessWidget {
+  const _PermissionRow({
+    required this.label,
+    required this.value,
+    required this.tone,
+  });
+  final String label;
+  final String value;
+  final _PermTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final bool blocked = tone == _PermTone.blocked;
+    final Color fg = blocked ? c.statusDanger : c.statusOk;
+    final Color bg = blocked
+        ? c.statusDanger.withValues(alpha: 0.10)
+        : c.statusOk.withValues(alpha: 0.10);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(QzRadii.input),
+      ),
+      child: Row(
+        children: <Widget>[
+          Icon(
+            blocked ? Icons.block : Icons.check_circle_outline,
+            size: 16,
+            color: fg,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: c.text,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: fg,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }

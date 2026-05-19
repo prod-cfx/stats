@@ -534,15 +534,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get meHomeLoadErrorPrefix => '加载失败：';
 
   @override
-  String get meStatsTotalEquity => '总权益';
-
-  @override
-  String get meStatsAvailableBalance => '可用余额';
-
-  @override
-  String get meStatsUnrealizedPnl => '未实现盈亏';
-
-  @override
   String get meHeaderTelegramBound => 'Telegram 已绑定';
 
   @override
@@ -565,12 +556,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get meSettingsSecurity => '安全设置';
-
-  @override
-  String get meSettingsApiManage => '管理交易所凭据';
-
-  @override
-  String get meSettingsApiConfiguredSuffix => ' 个已配置';
 
   @override
   String get meSettingsNotConfigured => '未配置';
@@ -644,6 +629,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get meApiFormSaveFailedPrefix => '保存失败：';
 
   @override
+  String get meApiFormSaveFailed => '保存失败，请稍后重试';
+
+  @override
+  String get meApiFormApiKeyLabel => 'API Key';
+
+  @override
+  String get meApiFormSecretLabel => 'Secret';
+
+  @override
   String get meApiFormNoteTooLong => '备注最多 30 字';
 
   @override
@@ -693,6 +687,54 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get themePreviewStartBacktest => '开始回测';
+
+  @override
+  String get themeToggleAutoFollowSystem => '自动跟随系统';
+
+  @override
+  String get themeToggleReduceMotion => '减少动画';
+
+  @override
+  String get meStatsActiveStrategies => '活跃策略';
+
+  @override
+  String get meStatsCumulativeReturn => '累计收益';
+
+  @override
+  String get meStatsWinRate => '胜率';
+
+  @override
+  String get meHeaderCopyUid => '复制 UID';
+
+  @override
+  String get meHeaderUidCopied => 'UID 已复制';
+
+  @override
+  String get meApiFormPermissionSection => '授权权限';
+
+  @override
+  String get meApiFormPermSpotRead => '现货读';
+
+  @override
+  String get meApiFormPermSpotTrade => '现货交易';
+
+  @override
+  String get meApiFormPermFuturesRead => '合约读';
+
+  @override
+  String get meApiFormPermFuturesTrade => '合约交易';
+
+  @override
+  String get meApiFormPermRequired => '必需';
+
+  @override
+  String get meApiFormPermOptional => '可选';
+
+  @override
+  String get meApiFormPermWithdrawLabel => '提币';
+
+  @override
+  String get meApiFormPermWithdrawValue => '必须关闭';
 
   @override
   String get strategyHomeTitle => '策略';

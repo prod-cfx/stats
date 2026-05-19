@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -121,10 +122,67 @@ void main() {
     expect(find.text('退出登录'), findsOneWidget);
   });
 
-  testWidgets('已配置交易所 API 摘要显示数量', (WidgetTester tester) async {
+  testWidgets('「我的」首页内联展开三家交易所 API（多行 + 管理/连接）',
+      (WidgetTester tester) async {
     await _pumpMe(tester, initialSession: kSession);
-    // mock_api_keys fixture 默认有 2 条
-    expect(find.textContaining('已配置'), findsOneWidget);
+    // 多行槽位（每家一行 + 状态 + 按钮）
+    expect(find.text('Binance'), findsOneWidget);
+    expect(find.text('OKX'), findsOneWidget);
+    expect(find.text('Hyperliquid'), findsOneWidget);
+    // mock_api_keys fixture 默认 Binance / OKX 已配置 → 「管理」x2 + 「连接」x1
+    expect(find.text('管理'), findsNWidgets(2));
+    expect(find.text('连接'), findsOneWidget);
+  });
+
+  testWidgets(
+      '点击「连接」(Hyperliquid 未配置) 打开 api_form_sheet 并预填该交易所',
+      (WidgetTester tester) async {
+    await _pumpMe(tester, initialSession: kSession);
+    // Hyperliquid 默认未配置 → 行尾按钮为「连接」
+    await tester.tap(find.text('连接'));
+    await tester.pumpAndSettle();
+    // sheet 标题里包含「Hyperliquid API」（_ExchangeBadge 旁标题文案）
+    expect(find.text('Hyperliquid API'), findsOneWidget);
+  });
+
+  testWidgets('统计卡主字段为活跃策略 / 累计收益 / 胜率', (WidgetTester tester) async {
+    await _pumpMe(tester, initialSession: kSession);
+    expect(find.text('活跃策略'), findsOneWidget);
+    expect(find.text('累计收益'), findsOneWidget);
+    expect(find.text('胜率'), findsOneWidget);
+  });
+
+  testWidgets('header 显示 Telegram 已绑定 chip', (WidgetTester tester) async {
+    await _pumpMe(tester, initialSession: kSession);
+    expect(find.text('Telegram 已绑定'), findsOneWidget);
+  });
+
+  testWidgets('UID 复制按钮点击 → Clipboard.setData(uid) + SnackBar',
+      (WidgetTester tester) async {
+    // Clipboard mock：记录调用
+    final List<MethodCall> clipboardCalls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform,
+            (MethodCall call) async {
+      if (call.method == 'Clipboard.setData') {
+        clipboardCalls.add(call);
+      }
+      return null;
+    });
+    await _pumpMe(tester, initialSession: kSession);
+    // header 内 IconButton + Icons.copy
+    final Finder copyBtn = find.byIcon(Icons.copy);
+    expect(copyBtn, findsOneWidget);
+    await tester.tap(copyBtn);
+    await tester.pump();
+    expect(clipboardCalls, hasLength(1));
+    expect(
+      (clipboardCalls.single.arguments as Map<dynamic, dynamic>)['text'],
+      'cmp42glf60001yxqs0ivc09ff',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('UID 已复制'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
   });
 
   testWidgets('退出登录 → session 清零，自动跳 /login',

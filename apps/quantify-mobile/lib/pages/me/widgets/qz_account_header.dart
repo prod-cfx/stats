@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/tokens.dart';
@@ -75,9 +76,27 @@ class QzAccountHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              // 复制按钮：当前迭代仅渲染，onTap 留给后续 Issue 接入剪贴板 + toast。
+              // 复制按钮：点击 → Clipboard.setData(uid) → SnackBar 提示。
               IconButton(
-                onPressed: null,
+                tooltip: AppLocalizations.of(context).meHeaderCopyUid,
+                onPressed: () async {
+                  // 极少数情况 Clipboard API 会抛（权限拒绝 / 平台异常），
+                  // 包 try/catch 避免未处理异常冒泡到 Flutter framework。
+                  try {
+                    await Clipboard.setData(ClipboardData(text: uid));
+                  } catch (_) {
+                    return;
+                  }
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        AppLocalizations.of(context).meHeaderUidCopied,
+                      ),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
                 style: IconButton.styleFrom(
                   backgroundColor: const Color(0x1FFFFFFF),
                   padding: EdgeInsets.zero,

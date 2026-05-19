@@ -86,6 +86,121 @@ class ThemeSettingsPage extends ConsumerWidget {
             onPick: (QzAccent a) =>
                 ref.read(themeProvider.notifier).setAccent(a),
           ),
+          const SizedBox(height: QzSpacing.xxl),
+          _PrefsTogglesCard(
+            theme: theme,
+            scheme: c,
+            l10n: l10n,
+            onAutoFollow: (bool v) =>
+                ref.read(themeProvider.notifier).setAutoFollowSystem(v),
+            onReduceMotion: (bool v) =>
+                ref.read(themeProvider.notifier).setReduceMotion(v),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 「自动跟随系统」+「减少动画」开关卡（原型 `m-screens-5.jsx:105-118`）。
+class _PrefsTogglesCard extends StatelessWidget {
+  const _PrefsTogglesCard({
+    required this.theme,
+    required this.scheme,
+    required this.l10n,
+    required this.onAutoFollow,
+    required this.onReduceMotion,
+  });
+  final QzTheme theme;
+  final QzColorScheme scheme;
+  final AppLocalizations l10n;
+  final ValueChanged<bool> onAutoFollow;
+  final ValueChanged<bool> onReduceMotion;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.bgElev,
+        border: Border.all(color: scheme.border),
+        borderRadius: BorderRadius.circular(QzRadii.card),
+      ),
+      child: Column(
+        children: <Widget>[
+          _TogglePrefRow(
+            switchKey: const ValueKey<String>('themeToggleAutoFollowSystem'),
+            label: l10n.themeToggleAutoFollowSystem,
+            value: theme.autoFollowSystem,
+            scheme: scheme,
+            onChanged: onAutoFollow,
+            last: false,
+          ),
+          _TogglePrefRow(
+            switchKey: const ValueKey<String>('themeToggleReduceMotion'),
+            label: l10n.themeToggleReduceMotion,
+            value: theme.reduceMotion,
+            scheme: scheme,
+            onChanged: onReduceMotion,
+            last: true,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TogglePrefRow extends StatelessWidget {
+  const _TogglePrefRow({
+    required this.switchKey,
+    required this.label,
+    required this.value,
+    required this.scheme,
+    required this.onChanged,
+    required this.last,
+  });
+  final Key switchKey;
+  final String label;
+  final bool value;
+  final QzColorScheme scheme;
+  final ValueChanged<bool> onChanged;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: QzSpacing.lg,
+        vertical: 10,
+      ),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: last ? Colors.transparent : scheme.borderSoft,
+          ),
+        ),
+      ),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: scheme.text,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Switch.adaptive(
+            key: switchKey,
+            value: value,
+            onChanged: onChanged,
+            // 同时指定 thumb + track 颜色：Android 端使用 thumb；iOS 端
+            // CupertinoSwitch 不支持 thumbColor，但会读 trackColor 控制 on
+            // 状态轨道色，从而保证两端 accent 视觉一致。activeColor 已 deprecated。
+            activeThumbColor: scheme.accent,
+            activeTrackColor: scheme.accent,
+          ),
         ],
       ),
     );

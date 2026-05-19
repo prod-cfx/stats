@@ -109,8 +109,38 @@ void main() {
     expect(find.text('API Key'), findsOneWidget);
     expect(find.text('Secret'), findsOneWidget);
     expect(find.text('备注'), findsOneWidget);
+    // 「测试连接」在长 sheet 底部，授权权限区块下方 → 滚动后再断言
+    await tester.dragUntilVisible(
+      find.text('测试连接'),
+      find.byType(ListView).last,
+      const Offset(0, -200),
+    );
     expect(find.text('测试连接'), findsOneWidget);
     expect(find.text('验证并保存'), findsOneWidget);
+  });
+
+  testWidgets('表单包含「授权权限」区块（4 行权限 + 提币禁止行）',
+      (WidgetTester tester) async {
+    await _pumpApi(tester);
+    await tester.tap(find.text('连接'));
+    await tester.pumpAndSettle();
+    // 授权权限块在长 sheet 底部；逐项 dragUntilVisible 让 5 行权限都进
+    // 视口（textInScrollable matcher 只断言已挂载的 widget，权限行可能在
+    // 视口之外但实际已 build；保险起见显式滚到「提币」让整块上来）。
+    final Finder list = find.byType(ListView).last;
+    await tester.dragUntilVisible(
+      find.text('提币'),
+      list,
+      const Offset(0, -200),
+    );
+    expect(find.text('授权权限'), findsOneWidget);
+    expect(find.text('现货读'), findsOneWidget);
+    expect(find.text('现货交易'), findsOneWidget);
+    expect(find.text('合约读'), findsOneWidget);
+    expect(find.text('合约交易'), findsOneWidget);
+    expect(find.text('提币'), findsOneWidget);
+    expect(find.text('必须关闭'), findsOneWidget);
+    expect(find.byIcon(Icons.block), findsOneWidget);
   });
 
   testWidgets('表单空提交 → 错误提示，长度 < 16 → 错误提示',
@@ -140,8 +170,7 @@ void main() {
     await _pumpApi(tester, tester0: () async => true);
     await tester.tap(find.text('连接'));
     await tester.pumpAndSettle();
-    // 确保「测试连接」按钮在可视区内，否则 tap() 在 fake render 下可能 miss。
-    await tester.ensureVisible(find.text('测试连接'));
+    // 表单字段在长 sheet 顶部，先填写。
     await tester.enterText(
       find.byType(TextFormField).at(0),
       'AAAAAAAAAAAAAAAAAAAAAAAA',
@@ -149,6 +178,12 @@ void main() {
     await tester.enterText(
       find.byType(TextFormField).at(1),
       'BBBBBBBBBBBBBBBBBBBBBBBB',
+    );
+    // 滚到「测试连接」可见，避免 sheet 长度变化把按钮顶出 viewport。
+    await tester.dragUntilVisible(
+      find.text('测试连接'),
+      find.byType(ListView).last,
+      const Offset(0, -200),
     );
     await tester.tap(find.text('测试连接'));
     // 注入的 tester0 是无延迟的 Future，所以一帧即可拿到结果。

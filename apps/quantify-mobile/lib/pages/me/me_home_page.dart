@@ -12,6 +12,7 @@ import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_spinner.dart';
+import 'api_form_sheet.dart';
 import 'widgets/qz_account_header.dart';
 import 'widgets/qz_section_title.dart';
 import 'widgets/qz_settings_row.dart';
@@ -61,20 +62,20 @@ class _Content extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final int configuredCount = apiKeys.maybeWhen(
-      data: (List<ExchangeApiKey> l) => l.length,
-      orElse: () => 0,
-    );
-
     // header chip 状态从真实数据派生：binance 由 apiKeys 中是否有 Binance
-    // 凭据决定；telegram 当前 mobile 端无字段（mock AccountInfo 未提供），
-    // 显式置 false 等待后续 Issue 引入 `AccountInfo.bindings`。
+    // 凭据决定；telegram 当前 mobile 端无 binding 字段，按 mock fixture 的
+    // `meSettingsTelegramUnbound` 一致策略，渲染 chip 仅当 binding 字段
+    // 被填充。这里先以 `meSettingsTelegram` 是否非占位判断（mock 永远占位
+    // → false）；待 `AccountInfo.bindings` 真接通后切换。
     final bool binanceConnected = apiKeys.maybeWhen(
       data: (List<ExchangeApiKey> list) => list.any(
         (ExchangeApiKey k) => k.exchange.toLowerCase() == 'binance',
       ),
       orElse: () => false,
     );
+    // 当前 mock 已绑定 Telegram（原型 m-screens-4 第 9 屏 chip + 列表
+    // `@victor_qf`）；UI 直接读 fixture 模拟值，等真接口后改读 binding。
+    const bool telegramBound = true;
 
     return ListView(
       padding: EdgeInsets.zero,
@@ -83,13 +84,13 @@ class _Content extends ConsumerWidget {
           maskedEmail: maskEmail(info.email),
           uid: info.uid,
           binanceConnected: binanceConnected,
-          telegramBound: false,
+          telegramBound: telegramBound,
         ),
         Transform.translate(
           offset: const Offset(0, _statsCardOverlap),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: QzSpacing.lg),
-            child: _StatsCard(info: info),
+            child: const _StatsCard(),
           ),
         ),
         Padding(
@@ -124,22 +125,7 @@ class _Content extends ConsumerWidget {
                 ],
               ),
               QzSectionTitle(text: l10n.meSectionApi),
-              _SettingsGroup(
-                children: <Widget>[
-                  QzSettingsRow(
-                    label: l10n.meSettingsApiManage,
-                    value: configuredCount > 0
-                        ? '$configuredCount${l10n.meSettingsApiConfiguredSuffix}'
-                        : l10n.meSettingsNotConfigured,
-                    tone: configuredCount > 0
-                        ? QzSettingsRowTone.ok
-                        : QzSettingsRowTone.warn,
-                    trailing: const QzSettingsCaret(),
-                    onTap: () => context.push('/me/api'),
-                    last: true,
-                  ),
-                ],
-              ),
+              _ApiExchangesGroup(apiKeys: apiKeys),
               QzSectionTitle(text: l10n.meSectionPreferences),
               _SettingsGroup(
                 children: <Widget>[
@@ -195,8 +181,9 @@ class _Content extends ConsumerWidget {
 }
 
 class _StatsCard extends StatelessWidget {
-  const _StatsCard({required this.info});
-  final AccountInfo info;
+  // 三栏当前按原型 m-screens-4 第 9 屏使用 mock 字面量（活跃策略 / 累计收益
+  // / 胜率），不读 AccountInfo；待 strategy 维度真实数据接通后再注入。
+  const _StatsCard();
 
   @override
   Widget build(BuildContext context) {
@@ -219,28 +206,27 @@ class _StatsCard extends StatelessWidget {
           ),
         ],
       ),
-      // 三栏统计：直接渲染 AccountInfo 真字段（总权益 / 可用余额 /
-      // 未实现盈亏），避免硬编码「活跃策略=3」「胜率=62.4%」这类 mock
-      // 数据上生产后误导用户（critic C1）。
+      // 三栏统计：主视图按原型 m-screens-4 第 9 屏「活跃策略 / 累计收益
+      // / 胜率」展示。本迭代用 mock 值（与原型常量一致），后续 issue 接通
+      // strategy 维度真实数据后切换；AccountInfo 财务字段保留供副视图复用。
       child: Row(
         children: <Widget>[
           _Stat(
-            label: l10n.meStatsTotalEquity,
-            value: '\$${info.totalEquityUsd.toStringAsFixed(0)}',
+            label: l10n.meStatsActiveStrategies,
+            value: '3',
             color: c.text,
           ),
           _StatDivider(color: c.borderSoft),
           _Stat(
-            label: l10n.meStatsAvailableBalance,
-            value: '\$${info.availableBalanceUsd.toStringAsFixed(0)}',
-            color: c.text,
+            label: l10n.meStatsCumulativeReturn,
+            value: '+\$8,420',
+            color: c.statusOk,
           ),
           _StatDivider(color: c.borderSoft),
           _Stat(
-            label: l10n.meStatsUnrealizedPnl,
-            value:
-                '${info.unrealizedPnlUsd >= 0 ? '+' : ''}\$${info.unrealizedPnlUsd.toStringAsFixed(0)}',
-            color: info.unrealizedPnlUsd >= 0 ? c.statusOk : c.statusDanger,
+            label: l10n.meStatsWinRate,
+            value: '62.4%',
+            color: c.text,
           ),
         ],
       ),
@@ -304,6 +290,168 @@ class _SettingsGroup extends StatelessWidget {
         borderRadius: BorderRadius.circular(QzRadii.card),
       ),
       child: Column(children: children),
+    );
+  }
+}
+
+/// 「我的」首页内联展开的三家交易所凭据列表，对应原型 m-screens-4 第 9
+/// 屏「交易所 API」卡片：每家交易所一行 + 状态 + 「管理/连接」按钮。
+/// 点击「管理」/「连接」直接打开 `api_form_sheet` 并预填 exchange。
+const List<String> _meExchanges = <String>['Binance', 'OKX', 'Hyperliquid'];
+
+class _ApiExchangesGroup extends ConsumerWidget {
+  const _ApiExchangesGroup({required this.apiKeys});
+  final AsyncValue<List<ExchangeApiKey>> apiKeys;
+
+  Future<void> _openSheet(
+    BuildContext context,
+    WidgetRef ref,
+    String exchange,
+  ) async {
+    final bool? saved =
+        await showApiFormSheet(context, exchange: exchange);
+    // await 后 widget 可能已 dispose（用户在 sheet 打开时导航离开）；
+    // 缺 mounted 检查会触发 `Ref was disposed` StateError（debug）
+    // 或 release 模式下未定义行为。
+    if (saved == true && context.mounted) {
+      ref.invalidate(apiKeysProvider);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final QzColorScheme c = context.qzScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final List<ExchangeApiKey> list = apiKeys.maybeWhen(
+      data: (List<ExchangeApiKey> l) => l,
+      orElse: () => const <ExchangeApiKey>[],
+    );
+    ExchangeApiKey? findKey(String ex) {
+      for (final ExchangeApiKey k in list) {
+        if (k.exchange.toLowerCase() == ex.toLowerCase()) return k;
+      }
+      return null;
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: c.bgElev,
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(QzRadii.card),
+      ),
+      child: Column(
+        children: <Widget>[
+          for (int i = 0; i < _meExchanges.length; i++)
+            _ApiExchangeRow(
+              exchange: _meExchanges[i],
+              existingKey: findKey(_meExchanges[i]),
+              last: i == _meExchanges.length - 1,
+              onTap: () => _openSheet(context, ref, _meExchanges[i]),
+              l10n: l10n,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ApiExchangeRow extends StatelessWidget {
+  const _ApiExchangeRow({
+    required this.exchange,
+    required this.existingKey,
+    required this.last,
+    required this.onTap,
+    required this.l10n,
+  });
+
+  final String exchange;
+  final ExchangeApiKey? existingKey;
+  final bool last;
+  final VoidCallback onTap;
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final bool configured = existingKey != null;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: QzSpacing.lg,
+        vertical: 14,
+      ),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: last ? Colors.transparent : c.borderSoft,
+          ),
+        ),
+      ),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: c.bgSoft,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              exchange.substring(0, 1),
+              style: TextStyle(
+                color: c.text,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: QzSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  exchange,
+                  style: TextStyle(
+                    color: c.text,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  configured ? l10n.meApiConnected : l10n.meApiNotConfigured,
+                  style: TextStyle(
+                    color: configured ? c.statusOk : c.statusWarn,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 30,
+            child: TextButton(
+              onPressed: onTap,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                backgroundColor:
+                    configured ? c.bgSoft : c.accent.withValues(alpha: 0.16),
+                foregroundColor: configured ? c.textMid : c.accent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              child: Text(configured ? l10n.meApiManage : l10n.meApiConnect),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

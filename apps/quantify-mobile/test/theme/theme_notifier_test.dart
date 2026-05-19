@@ -27,6 +27,22 @@ class _ThrowingPersistence implements ThemePersistence {
   Future<void> writeAccent(QzAccent a) async {
     throw StateError('simulated prefs failure');
   }
+
+  @override
+  bool? readAutoFollowSystem() => null;
+
+  @override
+  bool? readReduceMotion() => null;
+
+  @override
+  Future<void> writeAutoFollowSystem(bool v) async {
+    throw StateError('simulated prefs failure');
+  }
+
+  @override
+  Future<void> writeReduceMotion(bool v) async {
+    throw StateError('simulated prefs failure');
+  }
 }
 
 ProviderContainer _container(SharedPreferences prefs) {
@@ -109,6 +125,28 @@ void main() {
       throwsA(isA<StateError>()),
     );
     expect(container.read(themeProvider), initial);
+  });
+
+  test('setAutoFollowSystem / setReduceMotion persists and round-trips',
+      () async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final ProviderContainer container = _container(prefs);
+    addTearDown(container.dispose);
+
+    expect(container.read(themeProvider).autoFollowSystem, isFalse);
+    expect(container.read(themeProvider).reduceMotion, isFalse);
+
+    await container.read(themeProvider.notifier).setAutoFollowSystem(true);
+    await container.read(themeProvider.notifier).setReduceMotion(true);
+    expect(container.read(themeProvider).autoFollowSystem, isTrue);
+    expect(container.read(themeProvider).reduceMotion, isTrue);
+
+    // Round-trip new container reading the same prefs.
+    final SharedPreferences prefs2 = await SharedPreferences.getInstance();
+    final ProviderContainer container2 = _container(prefs2);
+    addTearDown(container2.dispose);
+    expect(container2.read(themeProvider).autoFollowSystem, isTrue);
+    expect(container2.read(themeProvider).reduceMotion, isTrue);
   });
 
   test('corrupted prefs entries are ignored (fallback applies)', () async {

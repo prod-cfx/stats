@@ -542,15 +542,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get meHomeLoadErrorPrefix => 'Load failed: ';
 
   @override
-  String get meStatsTotalEquity => 'Total Equity';
-
-  @override
-  String get meStatsAvailableBalance => 'Available Balance';
-
-  @override
-  String get meStatsUnrealizedPnl => 'Unrealized PnL';
-
-  @override
   String get meHeaderTelegramBound => 'Telegram Linked';
 
   @override
@@ -573,12 +564,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get meSettingsSecurity => 'Security';
-
-  @override
-  String get meSettingsApiManage => 'Manage Exchange Keys';
-
-  @override
-  String get meSettingsApiConfiguredSuffix => ' configured';
 
   @override
   String get meSettingsNotConfigured => 'Not configured';
@@ -652,6 +637,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get meApiFormSaveFailedPrefix => 'Save failed: ';
 
   @override
+  String get meApiFormSaveFailed => 'Save failed, please try again later';
+
+  @override
+  String get meApiFormApiKeyLabel => 'API Key';
+
+  @override
+  String get meApiFormSecretLabel => 'Secret';
+
+  @override
   String get meApiFormNoteTooLong => 'Note must be under 30 characters';
 
   @override
@@ -702,6 +696,54 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get themePreviewStartBacktest => 'Start Backtest';
+
+  @override
+  String get themeToggleAutoFollowSystem => 'Auto Follow System';
+
+  @override
+  String get themeToggleReduceMotion => 'Reduce Motion';
+
+  @override
+  String get meStatsActiveStrategies => 'Active Strategies';
+
+  @override
+  String get meStatsCumulativeReturn => 'Cumulative Return';
+
+  @override
+  String get meStatsWinRate => 'Win Rate';
+
+  @override
+  String get meHeaderCopyUid => 'Copy UID';
+
+  @override
+  String get meHeaderUidCopied => 'UID copied';
+
+  @override
+  String get meApiFormPermissionSection => 'Authorized Permissions';
+
+  @override
+  String get meApiFormPermSpotRead => 'Spot Read';
+
+  @override
+  String get meApiFormPermSpotTrade => 'Spot Trade';
+
+  @override
+  String get meApiFormPermFuturesRead => 'Futures Read';
+
+  @override
+  String get meApiFormPermFuturesTrade => 'Futures Trade';
+
+  @override
+  String get meApiFormPermRequired => 'Required';
+
+  @override
+  String get meApiFormPermOptional => 'Optional';
+
+  @override
+  String get meApiFormPermWithdrawLabel => 'Withdrawal';
+
+  @override
+  String get meApiFormPermWithdrawValue => 'Must Disable';
 
   @override
   String get strategyHomeTitle => 'Strategy';
