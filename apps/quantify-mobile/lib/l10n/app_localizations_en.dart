@@ -244,10 +244,49 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketHomeTabWatchlist => 'Watchlist';
 
   @override
+  String get marketHomeTabSpot => 'Spot';
+
+  @override
+  String get marketHomeTabPerp => 'Perp';
+
+  @override
+  String get marketHomeTabGainers => 'Gainers';
+
+  @override
+  String get marketHomeTabLosers => 'Losers';
+
+  @override
   String get marketHomeLoadError => 'Market data load failed';
 
   @override
   String get marketHomeEmpty => 'No market data';
+
+  @override
+  String get marketHomeWatchlistEmpty => 'No watchlist items';
+
+  @override
+  String get marketHomeSearchEmpty => 'No matching symbols';
+
+  @override
+  String get marketHomeSearchTooltip => 'Search';
+
+  @override
+  String get marketHomeSearchClose => 'Close search';
+
+  @override
+  String get marketHomeSearchPlaceholder => 'Search symbol · BTC, ETH, SOL…';
+
+  @override
+  String get marketHomeNotificationTooltip => 'Notifications';
+
+  @override
+  String get marketHomeColumnName => 'Name / 24H Vol';
+
+  @override
+  String get marketHomeColumnPrice => 'Last';
+
+  @override
+  String get marketHomeColumnChange => '24H Chg';
 
   @override
   String get marketLongShortTitle => 'Long/Short';

@@ -554,6 +554,30 @@ abstract class AppLocalizations {
   /// **'自选'**
   String get marketHomeTabWatchlist;
 
+  /// No description provided for @marketHomeTabSpot.
+  ///
+  /// In zh, this message translates to:
+  /// **'现货'**
+  String get marketHomeTabSpot;
+
+  /// No description provided for @marketHomeTabPerp.
+  ///
+  /// In zh, this message translates to:
+  /// **'合约'**
+  String get marketHomeTabPerp;
+
+  /// No description provided for @marketHomeTabGainers.
+  ///
+  /// In zh, this message translates to:
+  /// **'涨幅榜'**
+  String get marketHomeTabGainers;
+
+  /// No description provided for @marketHomeTabLosers.
+  ///
+  /// In zh, this message translates to:
+  /// **'跌幅榜'**
+  String get marketHomeTabLosers;
+
   /// No description provided for @marketHomeLoadError.
   ///
   /// In zh, this message translates to:
@@ -565,6 +589,60 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'暂无行情'**
   String get marketHomeEmpty;
+
+  /// No description provided for @marketHomeWatchlistEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无自选'**
+  String get marketHomeWatchlistEmpty;
+
+  /// No description provided for @marketHomeSearchEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'无匹配结果'**
+  String get marketHomeSearchEmpty;
+
+  /// No description provided for @marketHomeSearchTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索'**
+  String get marketHomeSearchTooltip;
+
+  /// No description provided for @marketHomeSearchClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭搜索'**
+  String get marketHomeSearchClose;
+
+  /// No description provided for @marketHomeSearchPlaceholder.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索币种 · BTC, ETH, SOL…'**
+  String get marketHomeSearchPlaceholder;
+
+  /// No description provided for @marketHomeNotificationTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知'**
+  String get marketHomeNotificationTooltip;
+
+  /// No description provided for @marketHomeColumnName.
+  ///
+  /// In zh, this message translates to:
+  /// **'名称 / 24H量'**
+  String get marketHomeColumnName;
+
+  /// No description provided for @marketHomeColumnPrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'最新价'**
+  String get marketHomeColumnPrice;
+
+  /// No description provided for @marketHomeColumnChange.
+  ///
+  /// In zh, this message translates to:
+  /// **'24H 涨跌'**
+  String get marketHomeColumnChange;
 
   /// No description provided for @marketLongShortTitle.
   ///

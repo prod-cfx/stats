@@ -7,6 +7,7 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/qz_notification_bell.dart';
 import '../../widgets/qz_top_bar.dart';
 import 'tabs/whale_discover_tab.dart';
 import 'tabs/whale_holdings_tab.dart';
@@ -71,7 +72,7 @@ class _WhaleHomePageState extends ConsumerState<WhaleHomePage> {
             icon: Icon(Icons.search, size: 20, color: c.text),
             tooltip: l10n.whaleSearchTooltip,
           ),
-          _NotificationBell(
+          QzNotificationBell(
             unread: _unreadCount,
             onTap: _openNotifications,
             tooltip: l10n.whaleNotificationTooltip,
@@ -159,53 +160,3 @@ class _SubTab extends StatelessWidget {
   }
 }
 
-/// 铃铛 + 未读 badge。badge 用 Stack + Positioned 覆盖在 IconButton 上。
-class _NotificationBell extends StatelessWidget {
-  const _NotificationBell({
-    required this.unread,
-    required this.onTap,
-    required this.tooltip,
-  });
-
-  final int unread;
-  final VoidCallback onTap;
-  final String tooltip;
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    return Stack(
-      alignment: Alignment.center,
-      children: <Widget>[
-        IconButton(
-          onPressed: onTap,
-          icon: Icon(Icons.notifications_outlined, size: 20, color: c.text),
-          tooltip: tooltip,
-        ),
-        if (unread > 0)
-          Positioned(
-            right: 6,
-            top: 6,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
-              padding: const EdgeInsets.symmetric(horizontal: 3),
-              decoration: BoxDecoration(
-                color: c.statusDanger,
-                borderRadius: BorderRadius.circular(7),
-                border: Border.all(color: c.bgElev, width: 1.5),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                '$unread',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}

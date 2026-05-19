@@ -237,10 +237,49 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketHomeTabWatchlist => '自选';
 
   @override
+  String get marketHomeTabSpot => '现货';
+
+  @override
+  String get marketHomeTabPerp => '合约';
+
+  @override
+  String get marketHomeTabGainers => '涨幅榜';
+
+  @override
+  String get marketHomeTabLosers => '跌幅榜';
+
+  @override
   String get marketHomeLoadError => '行情加载失败';
 
   @override
   String get marketHomeEmpty => '暂无行情';
+
+  @override
+  String get marketHomeWatchlistEmpty => '暂无自选';
+
+  @override
+  String get marketHomeSearchEmpty => '无匹配结果';
+
+  @override
+  String get marketHomeSearchTooltip => '搜索';
+
+  @override
+  String get marketHomeSearchClose => '关闭搜索';
+
+  @override
+  String get marketHomeSearchPlaceholder => '搜索币种 · BTC, ETH, SOL…';
+
+  @override
+  String get marketHomeNotificationTooltip => '通知';
+
+  @override
+  String get marketHomeColumnName => '名称 / 24H量';
+
+  @override
+  String get marketHomeColumnPrice => '最新价';
+
+  @override
+  String get marketHomeColumnChange => '24H 涨跌';
 
   @override
   String get marketLongShortTitle => '多空比';

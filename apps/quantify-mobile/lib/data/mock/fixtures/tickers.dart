@@ -2,42 +2,51 @@ import '../../models/ticker_models.dart';
 
 /// 静态行情列表，用于 `MockTickerRepository.listTickers`。
 /// 真实 API 接入后应替换为 `GET /markets/tickers` 等聚合接口的响应。
+///
+/// `kind` 用于 #1561「现货 / 合约」tab 本地过滤，mock 阶段将主流大币标为
+/// 永续合约（BTC/ETH/SOL/BNB/XRP/DOGE/AVAX/NEAR/OP/SUI/PEPE），其余默认为现货。
 const List<Ticker> mockTickers = <Ticker>[
   Ticker(
     symbol: 'BTCUSDT',
     price: 68250.42,
     changePercent: 1.82,
     volume24h: 2.13e10,
+    kind: MarketKind.perp,
   ),
   Ticker(
     symbol: 'ETHUSDT',
     price: 3520.18,
     changePercent: -0.74,
     volume24h: 1.05e10,
+    kind: MarketKind.perp,
   ),
   Ticker(
     symbol: 'SOLUSDT',
     price: 178.55,
     changePercent: 3.21,
     volume24h: 2.4e9,
+    kind: MarketKind.perp,
   ),
   Ticker(
     symbol: 'BNBUSDT',
     price: 612.30,
     changePercent: 0.45,
     volume24h: 1.1e9,
+    kind: MarketKind.perp,
   ),
   Ticker(
     symbol: 'XRPUSDT',
     price: 0.5234,
     changePercent: -1.12,
     volume24h: 8.7e8,
+    kind: MarketKind.perp,
   ),
   Ticker(
     symbol: 'DOGEUSDT',
     price: 0.1582,
     changePercent: 4.66,
     volume24h: 1.5e9,
+    kind: MarketKind.perp,
   ),
   Ticker(
     symbol: 'ADAUSDT',
@@ -50,6 +59,7 @@ const List<Ticker> mockTickers = <Ticker>[
     price: 38.72,
     changePercent: -2.05,
     volume24h: 5.1e8,
+    kind: MarketKind.perp,
   ),
   Ticker(
     symbol: 'AAVEUSDT',
@@ -100,13 +110,21 @@ const List<Ticker> mockTickers = <Ticker>[
     price: 7.18,
     changePercent: 4.22,
     volume24h: 4.1e8,
+    kind: MarketKind.perp,
   ),
-  Ticker(symbol: 'OPUSDT', price: 2.48, changePercent: -2.11, volume24h: 1.7e8),
+  Ticker(
+    symbol: 'OPUSDT',
+    price: 2.48,
+    changePercent: -2.11,
+    volume24h: 1.7e8,
+    kind: MarketKind.perp,
+  ),
   Ticker(
     symbol: 'PEPEUSDT',
     price: 0.000011,
     changePercent: 5.43,
     volume24h: 6.4e8,
+    kind: MarketKind.perp,
   ),
   Ticker(
     symbol: 'SHIBUSDT',
@@ -114,7 +132,13 @@ const List<Ticker> mockTickers = <Ticker>[
     changePercent: -0.86,
     volume24h: 4.4e8,
   ),
-  Ticker(symbol: 'SUIUSDT', price: 1.03, changePercent: 2.36, volume24h: 3.5e8),
+  Ticker(
+    symbol: 'SUIUSDT',
+    price: 1.03,
+    changePercent: 2.36,
+    volume24h: 3.5e8,
+    kind: MarketKind.perp,
+  ),
   Ticker(
     symbol: 'TRXUSDT',
     price: 0.1187,
