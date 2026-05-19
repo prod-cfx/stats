@@ -172,6 +172,8 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
                               item: item,
                               onTap: () =>
                                   context.push('/strategy/${item.card.id}'),
+                              onLoadConversation: () => context
+                                  .go('/ai?loadStrategy=${item.card.id}'),
                             );
                           },
                         ),

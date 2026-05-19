@@ -557,6 +557,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyDetailSubscribersSuffix => ' 订阅';
 
   @override
+  String get strategyCardLoadConversation => '载入对话';
+
+  @override
+  String get strategyDetailLoadConversation => '载入到对话';
+
+  @override
+  String aiLoadStrategyUserMessage(String name, String category, String tags) {
+    return '请基于策略「$name」（$category）重新生成，并保留相同标签：$tags。';
+  }
+
+  @override
+  String aiLoadStrategyReply(String name) {
+    return '好的，已基于策略「$name」准备复刻方案，建议参数：';
+  }
+
+  @override
+  String get aiLoadStrategyGuestHint => '请先登录后再载入策略对话';
+
+  @override
   String get strategySignalBuy => '买入';
 
   @override

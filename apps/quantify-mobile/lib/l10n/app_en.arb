@@ -187,6 +187,23 @@
   "strategyDetailSubscribe": "Subscribe",
   "strategyDetailSubscribed": "Subscribed · Tap to cancel",
   "strategyDetailSubscribersSuffix": " subscribers",
+  "strategyCardLoadConversation": "Load chat",
+  "strategyDetailLoadConversation": "Load into chat",
+  "aiLoadStrategyUserMessage": "Please regenerate based on strategy \"{name}\" ({category}), keeping the same tags: {tags}.",
+  "@aiLoadStrategyUserMessage": {
+    "placeholders": {
+      "name": {"type": "String"},
+      "category": {"type": "String"},
+      "tags": {"type": "String"}
+    }
+  },
+  "aiLoadStrategyReply": "Sure — here is a draft based on strategy \"{name}\". Suggested params:",
+  "@aiLoadStrategyReply": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "aiLoadStrategyGuestHint": "Please log in to load strategy chat",
   "strategySignalBuy": "Buy",
   "strategySignalSell": "Sell",
   "whaleFeedTitle": "Whale Activity",

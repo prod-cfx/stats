@@ -1190,6 +1190,36 @@ abstract class AppLocalizations {
   /// **' 订阅'**
   String get strategyDetailSubscribersSuffix;
 
+  /// No description provided for @strategyCardLoadConversation.
+  ///
+  /// In zh, this message translates to:
+  /// **'载入对话'**
+  String get strategyCardLoadConversation;
+
+  /// No description provided for @strategyDetailLoadConversation.
+  ///
+  /// In zh, this message translates to:
+  /// **'载入到对话'**
+  String get strategyDetailLoadConversation;
+
+  /// No description provided for @aiLoadStrategyUserMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'请基于策略「{name}」（{category}）重新生成，并保留相同标签：{tags}。'**
+  String aiLoadStrategyUserMessage(String name, String category, String tags);
+
+  /// No description provided for @aiLoadStrategyReply.
+  ///
+  /// In zh, this message translates to:
+  /// **'好的，已基于策略「{name}」准备复刻方案，建议参数：'**
+  String aiLoadStrategyReply(String name);
+
+  /// No description provided for @aiLoadStrategyGuestHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先登录后再载入策略对话'**
+  String get aiLoadStrategyGuestHint;
+
   /// No description provided for @strategySignalBuy.
   ///
   /// In zh, this message translates to:

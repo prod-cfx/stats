@@ -8,8 +8,10 @@ import 'package:go_router/go_router.dart';
 import '../../data/models/ai_chat_models.dart';
 import '../../data/models/backtest_models.dart';
 import '../../data/models/deploy_models.dart';
+import '../../data/models/strategy_models.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/ai_chat_repository.dart';
+import '../../data/repositories/strategy_repository.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
@@ -66,6 +68,12 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
 
   bool _initialized = false;
   bool get _isSending => _isThinking || _isStreaming;
+
+  /// 已处理过的 `?loadStrategy=<id>` 值，避免同一 query 重复注入消息。
+  ///
+  /// 用 String? 是因为 GoRouter 在 query 切换为空时也会 rebuild：保留上一次
+  /// 处理的 id，新 query 与之相同就跳过；不同（含 null → 非空）则触发一次。
+  String? _lastLoadedStrategyId;
 
   @override
   void initState() {
@@ -324,12 +332,118 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
           if (_sessions[id] != null) _sessions[id]!,
       ];
 
+  /// 处理 `?loadStrategy=<id>` query：拉策略详情 → 选/建会话 → 注入预设消息。
+  ///
+  /// 设计：
+  /// - 必须等 `_loadSessions()` 完成（_initialized == true）才能动手，否则
+  ///   会话 map 是空的，新建出的会话会被随后的 listSessions 覆盖。
+  /// - 当前会话**为空**（仅 greeting）→ 复用；否则新建一个以策略命名的会话。
+  /// - 注入「user 文本 + assistant params」两条消息，params 来源策略 card 字段
+  ///   （symbol/period 暂从 tags / category 派生，模型无此字段时回退 mock 默认）。
+  Future<void> _handleLoadStrategy(String id) async {
+    if (!_initialized) return;
+    final StrategyRepository repo =
+        ref.read(strategyRepositoryProvider);
+    StrategyDetail detail;
+    try {
+      detail = await repo.getStrategyDetail(id);
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+
+    final AiChatRepository chatRepo = ref.read(aiChatRepositoryProvider);
+    final AppLocalizations l10n = AppLocalizations.of(context);
+
+    String targetId;
+    final AiSession? cur =
+        _currentId == null ? null : _sessions[_currentId!];
+    // greeting-only 会话视为空：仅 1 条 assistant 消息
+    final bool curIsEmpty = cur != null &&
+        cur.messages.length <= 1 &&
+        cur.messages.every((ChatTurn t) => t.role == 'assistant');
+    if (cur != null && curIsEmpty) {
+      targetId = cur.id;
+    } else {
+      final AiSession fresh =
+          await chatRepo.createSession(title: detail.card.name);
+      if (!mounted) return;
+      setState(() {
+        _sessions[fresh.id] = fresh;
+        _order.insert(0, fresh.id);
+        _currentId = fresh.id;
+        _input.text = '';
+        _backtest = null;
+      });
+      targetId = fresh.id;
+    }
+
+    final String tagsStr = detail.card.tags.isEmpty
+        ? '-'
+        : detail.card.tags.take(3).join(' / ');
+    final String userText = l10n.aiLoadStrategyUserMessage(
+      detail.card.name,
+      detail.card.category.name,
+      tagsStr,
+    );
+    final String replyText = l10n.aiLoadStrategyReply(detail.card.name);
+
+    final DateTime now = DateTime.now();
+    final ChatTurn userTurn = ChatTurn(
+      id: 'load-user-${now.microsecondsSinceEpoch}',
+      role: 'user',
+      content: userText,
+      timestamp: now,
+    );
+    final ChatTurn paramsTurn = ChatTurn(
+      id: 'load-params-${now.microsecondsSinceEpoch + 1}',
+      role: 'assistant',
+      content: replyText,
+      timestamp: now.add(const Duration(milliseconds: 1)),
+      kind: ChatTurnKind.params,
+      params: <String, String>{
+        'strategy_id': detail.card.id,
+        'name': detail.card.name,
+        'category': detail.card.category.name,
+        'tags': tagsStr,
+        'return_7d': '${detail.return7d.toStringAsFixed(2)}%',
+        'max_drawdown': '${detail.maxDrawdown.toStringAsFixed(2)}%',
+      },
+    );
+
+    final AiSession? target = _sessions[targetId];
+    if (target == null) return;
+    setState(() {
+      _sessions[targetId] = target.copyWith(
+        messages: <ChatTurn>[...target.messages, userTurn, paramsTurn],
+        updatedAt: now,
+      );
+    });
+    _scrollToBottom();
+  }
+
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final AiSession? current =
         _currentId == null ? null : _sessions[_currentId!];
+
+    // 处理 `?loadStrategy=<id>` query — 必须在初始化完成后才动手。
+    // GoRouterState 在 shell 内分支也能读到当前 location 的 uri。
+    final String? loadStrategyId = GoRouterState.of(context)
+        .uri
+        .queryParameters['loadStrategy'];
+    if (_initialized &&
+        loadStrategyId != null &&
+        loadStrategyId.isNotEmpty &&
+        loadStrategyId != _lastLoadedStrategyId) {
+      _lastLoadedStrategyId = loadStrategyId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _handleLoadStrategy(loadStrategyId);
+      });
+    }
 
     final List<String> quickReplies = <String>[
       l10n.aiQuickReply1,

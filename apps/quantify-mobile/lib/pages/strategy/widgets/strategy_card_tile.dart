@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../data/models/strategy_models.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/theme_context.dart';
 import '../../../theme/tokens.dart';
@@ -15,10 +16,17 @@ class StrategyCardTile extends StatelessWidget {
     super.key,
     required this.item,
     required this.onTap,
+    this.onLoadConversation,
   });
 
   final StrategyMarketItem item;
   final VoidCallback onTap;
+
+  /// 「载入对话」按钮回调（#1559）。
+  ///
+  /// 不为 null 时在右下角渲染 ghost 风格按钮；点击不冒泡 QzCard 的 onTap，
+  /// 避免把卡片当作整体点击触发跳转详情。
+  final VoidCallback? onLoadConversation;
 
   @override
   Widget build(BuildContext context) {
@@ -102,6 +110,56 @@ class StrategyCardTile extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+            if (onLoadConversation != null) ...<Widget>[
+              const SizedBox(height: QzSpacing.sm),
+              Align(
+                alignment: Alignment.centerRight,
+                child: _LoadConversationButton(
+                  key: Key('strategy-card-load-chat-${card.id}'),
+                  onPressed: onLoadConversation!,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 「载入对话」ghost 按钮（图标 + 文字）。
+///
+/// 单独抽出来是为了独立测试 + 避免把 hover/splash 样式渗到 QzCard 自身。
+class _LoadConversationButton extends StatelessWidget {
+  const _LoadConversationButton({super.key, required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(QzRadii.pill),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: QzSpacing.sm,
+          vertical: 6,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.chat_bubble_outline, size: 14, color: c.accent),
+            const SizedBox(width: 4),
+            Text(
+              l10n.strategyCardLoadConversation,
+              style: TextStyle(
+                color: c.accent,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),

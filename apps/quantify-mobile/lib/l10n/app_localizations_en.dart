@@ -567,6 +567,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyDetailSubscribersSuffix => ' subscribers';
 
   @override
+  String get strategyCardLoadConversation => 'Load chat';
+
+  @override
+  String get strategyDetailLoadConversation => 'Load into chat';
+
+  @override
+  String aiLoadStrategyUserMessage(String name, String category, String tags) {
+    return 'Please regenerate based on strategy \"$name\" ($category), keeping the same tags: $tags.';
+  }
+
+  @override
+  String aiLoadStrategyReply(String name) {
+    return 'Sure — here is a draft based on strategy \"$name\". Suggested params:';
+  }
+
+  @override
+  String get aiLoadStrategyGuestHint => 'Please log in to load strategy chat';
+
+  @override
   String get strategySignalBuy => 'Buy';
 
   @override

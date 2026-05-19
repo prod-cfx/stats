@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../data/models/strategy_models.dart';
 import '../../data/providers.dart';
@@ -153,15 +154,34 @@ class StrategyDetailPage extends ConsumerWidget {
             QzSpacing.lg,
             QzSpacing.sm,
           ),
-          child: QzButton(
-            key: const Key('strategy-detail-subscribe-btn'),
-            label: subscribed ? l10n.strategyDetailSubscribed : l10n.strategyDetailSubscribe,
-            variant:
-                subscribed ? QzButtonVariant.ghost : QzButtonVariant.accent,
-            expanded: true,
-            onPressed: () => ref
-                .read(strategySubscriptionsProvider.notifier)
-                .toggle(id),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: QzButton(
+                  key: const Key('strategy-detail-load-chat-btn'),
+                  label: l10n.strategyDetailLoadConversation,
+                  variant: QzButtonVariant.ghost,
+                  expanded: true,
+                  onPressed: () => context.go('/ai?loadStrategy=$id'),
+                ),
+              ),
+              const SizedBox(width: QzSpacing.sm),
+              Expanded(
+                child: QzButton(
+                  key: const Key('strategy-detail-subscribe-btn'),
+                  label: subscribed
+                      ? l10n.strategyDetailSubscribed
+                      : l10n.strategyDetailSubscribe,
+                  variant: subscribed
+                      ? QzButtonVariant.ghost
+                      : QzButtonVariant.accent,
+                  expanded: true,
+                  onPressed: () => ref
+                      .read(strategySubscriptionsProvider.notifier)
+                      .toggle(id),
+                ),
+              ),
+            ],
           ),
         ),
       ),

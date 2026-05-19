@@ -190,6 +190,23 @@
   "strategyDetailSubscribe": "订阅策略",
   "strategyDetailSubscribed": "已订阅 · 点击取消",
   "strategyDetailSubscribersSuffix": " 订阅",
+  "strategyCardLoadConversation": "载入对话",
+  "strategyDetailLoadConversation": "载入到对话",
+  "aiLoadStrategyUserMessage": "请基于策略「{name}」（{category}）重新生成，并保留相同标签：{tags}。",
+  "@aiLoadStrategyUserMessage": {
+    "placeholders": {
+      "name": {"type": "String"},
+      "category": {"type": "String"},
+      "tags": {"type": "String"}
+    }
+  },
+  "aiLoadStrategyReply": "好的，已基于策略「{name}」准备复刻方案，建议参数：",
+  "@aiLoadStrategyReply": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "aiLoadStrategyGuestHint": "请先登录后再载入策略对话",
   "strategySignalBuy": "买入",
   "strategySignalSell": "卖出",
   "whaleFeedTitle": "巨鲸动向",
