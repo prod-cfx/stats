@@ -36,6 +36,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get commonView => '查看';
 
   @override
+  String get commonYes => '是';
+
+  @override
+  String get commonNo => '否';
+
+  @override
   String get devPreviewPrimaryButton => '主按钮';
 
   @override
@@ -93,19 +99,46 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backtestSheetTitle => '回测参数';
 
   @override
-  String get backtestFieldSymbol => '交易对';
+  String get backtestSheetSubtitle => '策略参数请通过对话调整';
 
   @override
-  String get backtestFieldPeriod => '周期';
+  String get backtestFieldCapital => '初始资金';
 
   @override
-  String get backtestFieldLeverage => '杠杆';
+  String get backtestFieldRange => '历史回测区间';
 
   @override
-  String get backtestFieldCapital => '初始资金 (USD)';
+  String get backtestRangeCustom => '自定义';
 
   @override
-  String get backtestStartButton => '开始回测';
+  String get backtestFieldSlippage => '滑点';
+
+  @override
+  String get backtestFieldFee => '手续费';
+
+  @override
+  String get backtestFieldFillSource => '成交价来源';
+
+  @override
+  String get backtestFillOpen => '开盘价';
+
+  @override
+  String get backtestFillClose => '收盘价';
+
+  @override
+  String get backtestFillAvg => '平均价';
+
+  @override
+  String get backtestFieldPartialData => '允许部分覆盖数据继续回测';
+
+  @override
+  String get backtestShieldHint => '回测结果仅供参考，不构成投资建议；AI 会保留当前对话的策略参数，想换参数请回到对话修改。';
+
+  @override
+  String get backtestCollapseButton => '收起';
+
+  @override
+  String get backtestStartButton => '确认并开始回测';
 
   @override
   String get backtestErrorInvalidDate => '请输入正确的起止时间（YYYY-MM-DD）';
@@ -115,6 +148,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get backtestErrorInvalidCapital => '请输入正数初始资金';
+
+  @override
+  String get backtestErrorInvalidSlippage => '请输入非负滑点（bps）';
+
+  @override
+  String get backtestErrorInvalidFee => '请输入非负手续费（bps）';
 
   @override
   String get backtestErrorFailedPrefix => '回测失败：';

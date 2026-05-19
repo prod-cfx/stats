@@ -87,11 +87,21 @@ void main() {
     expect(find.text('+18.20%'), findsOneWidget);
   });
 
-  testWidgets('回测抽屉：空白起止时间 → 显示校验错误，不 pop',
+  testWidgets('回测抽屉：自定义区间留空起止时间 → 显示校验错误，不 pop',
       (WidgetTester tester) async {
     await _pump(tester);
+    // 自定义模式下 sheet 内容更长，给一个更高的测试 surface 避免按钮被裁
+    await tester.binding.setSurfaceSize(const Size(400, 1800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('ai-backtest-button')));
+    await tester.pumpAndSettle();
+
+    // 切到「自定义」区间，露出 start/end 文本框
+    await tester.ensureVisible(find.byKey(const Key('backtest-range-custom')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('backtest-range-custom')));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byKey(const Key('backtest-start')), '');
@@ -103,6 +113,26 @@ void main() {
 
     expect(find.text('请输入正确的起止时间（YYYY-MM-DD）'), findsOneWidget);
     expect(find.text('回测参数'), findsOneWidget);
+  });
+
+  testWidgets('回测抽屉：新字段渲染齐全（区间 chips / 滑点 / 手续费 / 成交价来源 / shield banner）',
+      (WidgetTester tester) async {
+    await _pump(tester);
+
+    await tester.tap(find.byKey(const Key('ai-backtest-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('backtest-range-7D')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-range-30D')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-range-90D')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-range-1Y')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-range-custom')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-slippage')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-fee')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-fill-source')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-partial-data')), findsOneWidget);
+    expect(find.byKey(const Key('backtest-collapse')), findsOneWidget);
+    expect(find.text('确认并开始回测'), findsOneWidget);
   });
 
   testWidgets('多会话：顶栏点击历史按钮 → 抽屉列出 3 条 mock 会话 → 切换会话',

@@ -92,22 +92,55 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiQuickReply4 => 'Deploy to Binance';
 
   @override
+  String get commonYes => 'Yes';
+
+  @override
+  String get commonNo => 'No';
+
+  @override
   String get backtestSheetTitle => 'Backtest Settings';
 
   @override
-  String get backtestFieldSymbol => 'Symbol';
+  String get backtestSheetSubtitle => 'Strategy params come from the chat context';
 
   @override
-  String get backtestFieldPeriod => 'Period';
+  String get backtestFieldCapital => 'Initial Capital';
 
   @override
-  String get backtestFieldLeverage => 'Leverage';
+  String get backtestFieldRange => 'Historical Range';
 
   @override
-  String get backtestFieldCapital => 'Initial Capital (USD)';
+  String get backtestRangeCustom => 'Custom';
 
   @override
-  String get backtestStartButton => 'Start Backtest';
+  String get backtestFieldSlippage => 'Slippage';
+
+  @override
+  String get backtestFieldFee => 'Fee';
+
+  @override
+  String get backtestFieldFillSource => 'Fill Price Source';
+
+  @override
+  String get backtestFillOpen => 'Open';
+
+  @override
+  String get backtestFillClose => 'Close';
+
+  @override
+  String get backtestFillAvg => 'Average';
+
+  @override
+  String get backtestFieldPartialData => 'Allow partial data coverage';
+
+  @override
+  String get backtestShieldHint => 'Backtest results are for reference only and not investment advice. Strategy parameters stay tied to this chat — edit the conversation to change them.';
+
+  @override
+  String get backtestCollapseButton => 'Collapse';
+
+  @override
+  String get backtestStartButton => 'Confirm & Run';
 
   @override
   String get backtestErrorInvalidDate =>
@@ -119,6 +152,12 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get backtestErrorInvalidCapital =>
       'Please enter a positive capital amount';
+
+  @override
+  String get backtestErrorInvalidSlippage => 'Slippage must be a non-negative number (bps)';
+
+  @override
+  String get backtestErrorInvalidFee => 'Fee must be a non-negative number (bps)';
 
   @override
   String get backtestErrorFailedPrefix => 'Backtest failed: ';

@@ -152,6 +152,18 @@ abstract class AppLocalizations {
   /// **'查看'**
   String get commonView;
 
+  /// No description provided for @commonYes.
+  ///
+  /// In zh, this message translates to:
+  /// **'是'**
+  String get commonYes;
+
+  /// No description provided for @commonNo.
+  ///
+  /// In zh, this message translates to:
+  /// **'否'**
+  String get commonNo;
+
   /// No description provided for @devPreviewPrimaryButton.
   ///
   /// In zh, this message translates to:
@@ -266,24 +278,6 @@ abstract class AppLocalizations {
   /// **'回测参数'**
   String get backtestSheetTitle;
 
-  /// No description provided for @backtestFieldSymbol.
-  ///
-  /// In zh, this message translates to:
-  /// **'交易对'**
-  String get backtestFieldSymbol;
-
-  /// No description provided for @backtestFieldPeriod.
-  ///
-  /// In zh, this message translates to:
-  /// **'周期'**
-  String get backtestFieldPeriod;
-
-  /// No description provided for @backtestFieldLeverage.
-  ///
-  /// In zh, this message translates to:
-  /// **'杠杆'**
-  String get backtestFieldLeverage;
-
   /// No description provided for @backtestFieldCapital.
   ///
   /// In zh, this message translates to:
@@ -319,6 +313,90 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'回测失败：'**
   String get backtestErrorFailedPrefix;
+
+  /// No description provided for @backtestSheetSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略参数请通过对话调整'**
+  String get backtestSheetSubtitle;
+
+  /// No description provided for @backtestFieldRange.
+  ///
+  /// In zh, this message translates to:
+  /// **'历史回测区间'**
+  String get backtestFieldRange;
+
+  /// No description provided for @backtestRangeCustom.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义'**
+  String get backtestRangeCustom;
+
+  /// No description provided for @backtestFieldSlippage.
+  ///
+  /// In zh, this message translates to:
+  /// **'滑点'**
+  String get backtestFieldSlippage;
+
+  /// No description provided for @backtestFieldFee.
+  ///
+  /// In zh, this message translates to:
+  /// **'手续费'**
+  String get backtestFieldFee;
+
+  /// No description provided for @backtestFieldFillSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'成交价来源'**
+  String get backtestFieldFillSource;
+
+  /// No description provided for @backtestFillOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'开盘价'**
+  String get backtestFillOpen;
+
+  /// No description provided for @backtestFillClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'收盘价'**
+  String get backtestFillClose;
+
+  /// No description provided for @backtestFillAvg.
+  ///
+  /// In zh, this message translates to:
+  /// **'平均价'**
+  String get backtestFillAvg;
+
+  /// No description provided for @backtestFieldPartialData.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许部分覆盖数据继续回测'**
+  String get backtestFieldPartialData;
+
+  /// No description provided for @backtestShieldHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'回测结果仅供参考，不构成投资建议；AI 会保留当前对话的策略参数，想换参数请回到对话修改。'**
+  String get backtestShieldHint;
+
+  /// No description provided for @backtestCollapseButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'收起'**
+  String get backtestCollapseButton;
+
+  /// No description provided for @backtestErrorInvalidSlippage.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入非负滑点（bps）'**
+  String get backtestErrorInvalidSlippage;
+
+  /// No description provided for @backtestErrorInvalidFee.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入非负手续费（bps）'**
+  String get backtestErrorInvalidFee;
 
   /// No description provided for @backtestResultTitle.
   ///
