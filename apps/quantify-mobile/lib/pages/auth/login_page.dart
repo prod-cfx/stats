@@ -495,11 +495,22 @@ class _LoginForm extends StatelessWidget {
           // 欢迎语
           Text(
             l10n.authLoginWelcome,
+            key: const ValueKey<String>('login-welcome-title'),
             style: TextStyle(
               color: c.text,
               fontSize: 20,
               fontWeight: FontWeight.w700,
               letterSpacing: -0.2,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            l10n.authLoginWelcomeSubtitle,
+            key: const ValueKey<String>('login-welcome-subtitle'),
+            style: TextStyle(
+              color: c.textDim,
+              fontSize: 13,
+              height: 1.5,
             ),
           ),
           const SizedBox(height: QzSpacing.lg),
@@ -566,7 +577,7 @@ class _LoginForm extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: QzSpacing.sm),
                 child: Text(
-                  l10n.commonOr,
+                  l10n.authLoginOr,
                   style: TextStyle(color: c.textDim, fontSize: 12),
                 ),
               ),

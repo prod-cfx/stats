@@ -177,6 +177,17 @@ void main() {
     expect(find.text('对话生成 · 历史回测 · API 部署'), findsOneWidget);
   });
 
+  testWidgets('表单区显示「欢迎回来」+「使用邮箱或 Telegram 继续」副标题',
+      (WidgetTester tester) async {
+    await _pumpLogin(tester);
+    expect(find.byKey(const ValueKey<String>('login-welcome-title')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('login-welcome-subtitle')),
+        findsOneWidget);
+    expect(find.text('欢迎回来'), findsOneWidget);
+    expect(find.text('使用邮箱或 Telegram 继续'), findsOneWidget);
+  });
+
   testWidgets('密码框右侧存在「忘记?」链接，点击不导致跳转',
       (WidgetTester tester) async {
     await _pumpLogin(tester);

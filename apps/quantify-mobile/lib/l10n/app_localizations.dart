@@ -284,47 +284,17 @@ abstract class AppLocalizations {
   /// **'回测参数'**
   String get backtestSheetTitle;
 
-  /// No description provided for @backtestFieldCapital.
-  ///
-  /// In zh, this message translates to:
-  /// **'初始资金 (USD)'**
-  String get backtestFieldCapital;
-
-  /// No description provided for @backtestStartButton.
-  ///
-  /// In zh, this message translates to:
-  /// **'开始回测'**
-  String get backtestStartButton;
-
-  /// No description provided for @backtestErrorInvalidDate.
-  ///
-  /// In zh, this message translates to:
-  /// **'请输入正确的起止时间（YYYY-MM-DD）'**
-  String get backtestErrorInvalidDate;
-
-  /// No description provided for @backtestErrorEndBeforeStart.
-  ///
-  /// In zh, this message translates to:
-  /// **'结束时间必须晚于开始时间'**
-  String get backtestErrorEndBeforeStart;
-
-  /// No description provided for @backtestErrorInvalidCapital.
-  ///
-  /// In zh, this message translates to:
-  /// **'请输入正数初始资金'**
-  String get backtestErrorInvalidCapital;
-
-  /// No description provided for @backtestErrorFailedPrefix.
-  ///
-  /// In zh, this message translates to:
-  /// **'回测失败：'**
-  String get backtestErrorFailedPrefix;
-
   /// No description provided for @backtestSheetSubtitle.
   ///
   /// In zh, this message translates to:
   /// **'策略参数请通过对话调整'**
   String get backtestSheetSubtitle;
+
+  /// No description provided for @backtestFieldCapital.
+  ///
+  /// In zh, this message translates to:
+  /// **'初始资金'**
+  String get backtestFieldCapital;
 
   /// No description provided for @backtestFieldRange.
   ///
@@ -392,6 +362,30 @@ abstract class AppLocalizations {
   /// **'收起'**
   String get backtestCollapseButton;
 
+  /// No description provided for @backtestStartButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认并开始回测'**
+  String get backtestStartButton;
+
+  /// No description provided for @backtestErrorInvalidDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入正确的起止时间（YYYY-MM-DD）'**
+  String get backtestErrorInvalidDate;
+
+  /// No description provided for @backtestErrorEndBeforeStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'结束时间必须晚于开始时间'**
+  String get backtestErrorEndBeforeStart;
+
+  /// No description provided for @backtestErrorInvalidCapital.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入正数初始资金'**
+  String get backtestErrorInvalidCapital;
+
   /// No description provided for @backtestErrorInvalidSlippage.
   ///
   /// In zh, this message translates to:
@@ -403,6 +397,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'请输入非负手续费（bps）'**
   String get backtestErrorInvalidFee;
+
+  /// No description provided for @backtestErrorFailedPrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'回测失败：'**
+  String get backtestErrorFailedPrefix;
 
   /// No description provided for @backtestResultTitle.
   ///
@@ -557,8 +557,20 @@ abstract class AppLocalizations {
   /// No description provided for @authLoginWelcome.
   ///
   /// In zh, this message translates to:
-  /// **'欢迎回到 Quantify'**
+  /// **'欢迎回来'**
   String get authLoginWelcome;
+
+  /// No description provided for @authLoginWelcomeSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用邮箱或 Telegram 继续'**
+  String get authLoginWelcomeSubtitle;
+
+  /// No description provided for @authLoginOr.
+  ///
+  /// In zh, this message translates to:
+  /// **'或者'**
+  String get authLoginOr;
 
   /// No description provided for @authLoginEmailLabel.
   ///
@@ -587,7 +599,7 @@ abstract class AppLocalizations {
   /// No description provided for @authLoginTelegramButton.
   ///
   /// In zh, this message translates to:
-  /// **'使用 Telegram 一键登录'**
+  /// **'通过 Telegram 登录'**
   String get authLoginTelegramButton;
 
   /// No description provided for @authLoginEmailRequired.
@@ -1142,6 +1154,36 @@ abstract class AppLocalizations {
   /// **'加载失败：'**
   String get meHomeLoadErrorPrefix;
 
+  /// No description provided for @meStatsActiveStrategies.
+  ///
+  /// In zh, this message translates to:
+  /// **'活跃策略'**
+  String get meStatsActiveStrategies;
+
+  /// No description provided for @meStatsCumulativeReturn.
+  ///
+  /// In zh, this message translates to:
+  /// **'累计收益'**
+  String get meStatsCumulativeReturn;
+
+  /// No description provided for @meStatsWinRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'胜率'**
+  String get meStatsWinRate;
+
+  /// No description provided for @meHeaderCopyUid.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制 UID'**
+  String get meHeaderCopyUid;
+
+  /// No description provided for @meHeaderUidCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'UID 已复制'**
+  String get meHeaderUidCopied;
+
   /// No description provided for @meHeaderTelegramBound.
   ///
   /// In zh, this message translates to:
@@ -1273,6 +1315,60 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'仅保留读取 + 下单权限'**
   String get meApiFormPermissionHint;
+
+  /// No description provided for @meApiFormPermissionSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'授权权限'**
+  String get meApiFormPermissionSection;
+
+  /// No description provided for @meApiFormPermSpotRead.
+  ///
+  /// In zh, this message translates to:
+  /// **'现货读'**
+  String get meApiFormPermSpotRead;
+
+  /// No description provided for @meApiFormPermSpotTrade.
+  ///
+  /// In zh, this message translates to:
+  /// **'现货交易'**
+  String get meApiFormPermSpotTrade;
+
+  /// No description provided for @meApiFormPermFuturesRead.
+  ///
+  /// In zh, this message translates to:
+  /// **'合约读'**
+  String get meApiFormPermFuturesRead;
+
+  /// No description provided for @meApiFormPermFuturesTrade.
+  ///
+  /// In zh, this message translates to:
+  /// **'合约交易'**
+  String get meApiFormPermFuturesTrade;
+
+  /// No description provided for @meApiFormPermRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'必需'**
+  String get meApiFormPermRequired;
+
+  /// No description provided for @meApiFormPermOptional.
+  ///
+  /// In zh, this message translates to:
+  /// **'可选'**
+  String get meApiFormPermOptional;
+
+  /// No description provided for @meApiFormPermWithdrawLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'提币'**
+  String get meApiFormPermWithdrawLabel;
+
+  /// No description provided for @meApiFormPermWithdrawValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'必须关闭'**
+  String get meApiFormPermWithdrawValue;
 
   /// No description provided for @meApiFormWarningMust.
   ///
@@ -1459,90 +1555,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'减少动画'**
   String get themeToggleReduceMotion;
-
-  /// No description provided for @meStatsActiveStrategies.
-  ///
-  /// In zh, this message translates to:
-  /// **'活跃策略'**
-  String get meStatsActiveStrategies;
-
-  /// No description provided for @meStatsCumulativeReturn.
-  ///
-  /// In zh, this message translates to:
-  /// **'累计收益'**
-  String get meStatsCumulativeReturn;
-
-  /// No description provided for @meStatsWinRate.
-  ///
-  /// In zh, this message translates to:
-  /// **'胜率'**
-  String get meStatsWinRate;
-
-  /// No description provided for @meHeaderCopyUid.
-  ///
-  /// In zh, this message translates to:
-  /// **'复制 UID'**
-  String get meHeaderCopyUid;
-
-  /// No description provided for @meHeaderUidCopied.
-  ///
-  /// In zh, this message translates to:
-  /// **'UID 已复制'**
-  String get meHeaderUidCopied;
-
-  /// No description provided for @meApiFormPermissionSection.
-  ///
-  /// In zh, this message translates to:
-  /// **'授权权限'**
-  String get meApiFormPermissionSection;
-
-  /// No description provided for @meApiFormPermSpotRead.
-  ///
-  /// In zh, this message translates to:
-  /// **'现货读'**
-  String get meApiFormPermSpotRead;
-
-  /// No description provided for @meApiFormPermSpotTrade.
-  ///
-  /// In zh, this message translates to:
-  /// **'现货交易'**
-  String get meApiFormPermSpotTrade;
-
-  /// No description provided for @meApiFormPermFuturesRead.
-  ///
-  /// In zh, this message translates to:
-  /// **'合约读'**
-  String get meApiFormPermFuturesRead;
-
-  /// No description provided for @meApiFormPermFuturesTrade.
-  ///
-  /// In zh, this message translates to:
-  /// **'合约交易'**
-  String get meApiFormPermFuturesTrade;
-
-  /// No description provided for @meApiFormPermRequired.
-  ///
-  /// In zh, this message translates to:
-  /// **'必需'**
-  String get meApiFormPermRequired;
-
-  /// No description provided for @meApiFormPermOptional.
-  ///
-  /// In zh, this message translates to:
-  /// **'可选'**
-  String get meApiFormPermOptional;
-
-  /// No description provided for @meApiFormPermWithdrawLabel.
-  ///
-  /// In zh, this message translates to:
-  /// **'提币'**
-  String get meApiFormPermWithdrawLabel;
-
-  /// No description provided for @meApiFormPermWithdrawValue.
-  ///
-  /// In zh, this message translates to:
-  /// **'必须关闭'**
-  String get meApiFormPermWithdrawValue;
 
   /// No description provided for @strategyHomeTitle.
   ///

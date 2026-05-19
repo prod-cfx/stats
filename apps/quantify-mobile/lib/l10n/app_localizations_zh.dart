@@ -135,7 +135,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backtestFieldPartialData => '允许部分覆盖数据继续回测';
 
   @override
-  String get backtestShieldHint => '回测结果仅供参考，不构成投资建议；AI 会保留当前对话的策略参数，想换参数请回到对话修改。';
+  String get backtestShieldHint =>
+      '回测结果仅供参考，不构成投资建议；AI 会保留当前对话的策略参数，想换参数请回到对话修改。';
 
   @override
   String get backtestCollapseButton => '收起';
@@ -237,7 +238,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authLoginTitle => '登录';
 
   @override
-  String get authLoginWelcome => '欢迎回到 Quantify';
+  String get authLoginWelcome => '欢迎回来';
+
+  @override
+  String get authLoginWelcomeSubtitle => '使用邮箱或 Telegram 继续';
+
+  @override
+  String get authLoginOr => '或者';
 
   @override
   String get authLoginEmailLabel => '邮箱';
@@ -252,7 +259,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authLoginButton => '登录';
 
   @override
-  String get authLoginTelegramButton => '使用 Telegram 一键登录';
+  String get authLoginTelegramButton => '通过 Telegram 登录';
 
   @override
   String get authLoginEmailRequired => '请输入邮箱';
@@ -537,6 +544,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get meHomeLoadErrorPrefix => '加载失败：';
 
   @override
+  String get meStatsActiveStrategies => '活跃策略';
+
+  @override
+  String get meStatsCumulativeReturn => '累计收益';
+
+  @override
+  String get meStatsWinRate => '胜率';
+
+  @override
+  String get meHeaderCopyUid => '复制 UID';
+
+  @override
+  String get meHeaderUidCopied => 'UID 已复制';
+
+  @override
   String get meHeaderTelegramBound => 'Telegram 已绑定';
 
   @override
@@ -601,6 +623,33 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get meApiFormPermissionHint => '仅保留读取 + 下单权限';
+
+  @override
+  String get meApiFormPermissionSection => '授权权限';
+
+  @override
+  String get meApiFormPermSpotRead => '现货读';
+
+  @override
+  String get meApiFormPermSpotTrade => '现货交易';
+
+  @override
+  String get meApiFormPermFuturesRead => '合约读';
+
+  @override
+  String get meApiFormPermFuturesTrade => '合约交易';
+
+  @override
+  String get meApiFormPermRequired => '必需';
+
+  @override
+  String get meApiFormPermOptional => '可选';
+
+  @override
+  String get meApiFormPermWithdrawLabel => '提币';
+
+  @override
+  String get meApiFormPermWithdrawValue => '必须关闭';
 
   @override
   String get meApiFormWarningMust => '必须 ';
@@ -696,48 +745,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get themeToggleReduceMotion => '减少动画';
-
-  @override
-  String get meStatsActiveStrategies => '活跃策略';
-
-  @override
-  String get meStatsCumulativeReturn => '累计收益';
-
-  @override
-  String get meStatsWinRate => '胜率';
-
-  @override
-  String get meHeaderCopyUid => '复制 UID';
-
-  @override
-  String get meHeaderUidCopied => 'UID 已复制';
-
-  @override
-  String get meApiFormPermissionSection => '授权权限';
-
-  @override
-  String get meApiFormPermSpotRead => '现货读';
-
-  @override
-  String get meApiFormPermSpotTrade => '现货交易';
-
-  @override
-  String get meApiFormPermFuturesRead => '合约读';
-
-  @override
-  String get meApiFormPermFuturesTrade => '合约交易';
-
-  @override
-  String get meApiFormPermRequired => '必需';
-
-  @override
-  String get meApiFormPermOptional => '可选';
-
-  @override
-  String get meApiFormPermWithdrawLabel => '提币';
-
-  @override
-  String get meApiFormPermWithdrawValue => '必须关闭';
 
   @override
   String get strategyHomeTitle => '策略';

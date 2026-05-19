@@ -36,6 +36,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commonView => 'View';
 
   @override
+  String get commonYes => 'Yes';
+
+  @override
+  String get commonNo => 'No';
+
+  @override
   String get devPreviewPrimaryButton => 'Primary';
 
   @override
@@ -95,16 +101,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiQuickReply4 => 'Deploy to Binance';
 
   @override
-  String get commonYes => 'Yes';
-
-  @override
-  String get commonNo => 'No';
-
-  @override
   String get backtestSheetTitle => 'Backtest Settings';
 
   @override
-  String get backtestSheetSubtitle => 'Strategy params come from the chat context';
+  String get backtestSheetSubtitle =>
+      'Strategy params come from the chat context';
 
   @override
   String get backtestFieldCapital => 'Initial Capital';
@@ -137,7 +138,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backtestFieldPartialData => 'Allow partial data coverage';
 
   @override
-  String get backtestShieldHint => 'Backtest results are for reference only and not investment advice. Strategy parameters stay tied to this chat — edit the conversation to change them.';
+  String get backtestShieldHint =>
+      'Backtest results are for reference only and not investment advice. Strategy parameters stay tied to this chat — edit the conversation to change them.';
 
   @override
   String get backtestCollapseButton => 'Collapse';
@@ -157,10 +159,12 @@ class AppLocalizationsEn extends AppLocalizations {
       'Please enter a positive capital amount';
 
   @override
-  String get backtestErrorInvalidSlippage => 'Slippage must be a non-negative number (bps)';
+  String get backtestErrorInvalidSlippage =>
+      'Slippage must be a non-negative number (bps)';
 
   @override
-  String get backtestErrorInvalidFee => 'Fee must be a non-negative number (bps)';
+  String get backtestErrorInvalidFee =>
+      'Fee must be a non-negative number (bps)';
 
   @override
   String get backtestErrorFailedPrefix => 'Backtest failed: ';
@@ -243,7 +247,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authLoginTitle => 'Login';
 
   @override
-  String get authLoginWelcome => 'Welcome back to Quantify';
+  String get authLoginWelcome => 'Welcome back';
+
+  @override
+  String get authLoginWelcomeSubtitle => 'Continue with email or Telegram';
+
+  @override
+  String get authLoginOr => 'or';
 
   @override
   String get authLoginEmailLabel => 'Email';
@@ -545,6 +555,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get meHomeLoadErrorPrefix => 'Load failed: ';
 
   @override
+  String get meStatsActiveStrategies => 'Active Strategies';
+
+  @override
+  String get meStatsCumulativeReturn => 'Cumulative Return';
+
+  @override
+  String get meStatsWinRate => 'Win Rate';
+
+  @override
+  String get meHeaderCopyUid => 'Copy UID';
+
+  @override
+  String get meHeaderUidCopied => 'UID copied';
+
+  @override
   String get meHeaderTelegramBound => 'Telegram Linked';
 
   @override
@@ -609,6 +634,33 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get meApiFormPermissionHint => 'Read + trade permissions only';
+
+  @override
+  String get meApiFormPermissionSection => 'Authorized Permissions';
+
+  @override
+  String get meApiFormPermSpotRead => 'Spot Read';
+
+  @override
+  String get meApiFormPermSpotTrade => 'Spot Trade';
+
+  @override
+  String get meApiFormPermFuturesRead => 'Futures Read';
+
+  @override
+  String get meApiFormPermFuturesTrade => 'Futures Trade';
+
+  @override
+  String get meApiFormPermRequired => 'Required';
+
+  @override
+  String get meApiFormPermOptional => 'Optional';
+
+  @override
+  String get meApiFormPermWithdrawLabel => 'Withdrawal';
+
+  @override
+  String get meApiFormPermWithdrawValue => 'Must Disable';
 
   @override
   String get meApiFormWarningMust => 'You must ';
@@ -705,48 +757,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get themeToggleReduceMotion => 'Reduce Motion';
-
-  @override
-  String get meStatsActiveStrategies => 'Active Strategies';
-
-  @override
-  String get meStatsCumulativeReturn => 'Cumulative Return';
-
-  @override
-  String get meStatsWinRate => 'Win Rate';
-
-  @override
-  String get meHeaderCopyUid => 'Copy UID';
-
-  @override
-  String get meHeaderUidCopied => 'UID copied';
-
-  @override
-  String get meApiFormPermissionSection => 'Authorized Permissions';
-
-  @override
-  String get meApiFormPermSpotRead => 'Spot Read';
-
-  @override
-  String get meApiFormPermSpotTrade => 'Spot Trade';
-
-  @override
-  String get meApiFormPermFuturesRead => 'Futures Read';
-
-  @override
-  String get meApiFormPermFuturesTrade => 'Futures Trade';
-
-  @override
-  String get meApiFormPermRequired => 'Required';
-
-  @override
-  String get meApiFormPermOptional => 'Optional';
-
-  @override
-  String get meApiFormPermWithdrawLabel => 'Withdrawal';
-
-  @override
-  String get meApiFormPermWithdrawValue => 'Must Disable';
 
   @override
   String get strategyHomeTitle => 'Strategy';
