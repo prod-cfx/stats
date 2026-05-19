@@ -238,22 +238,41 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
     final DateTime now = DateTime.now();
     final List<Widget> result = <Widget>[];
 
-    void appendGroup(String label, List<_FeedItem> rows) {
+    // 派生 displayTimestamp：与分组语义对齐，解决 issue #1602
+    // mock fixture timestamp 写死 2024-05 导致行内显示 `731 天前` 的穿帮。
+    // - groupNow （最近 5 分钟）：now - i*30s （0~5min）
+    // - group15  （15 分钟内）：  now - (5min + i*60s) （5~15min）
+    // - group1h  （过去 1 小时）：now - (15min + i*5min) （15~60min）
+    DateTime displayFor(String groupKey, int index) {
+      switch (groupKey) {
+        case 'now':
+          return now.subtract(Duration(seconds: 30 * index));
+        case '15m':
+          return now.subtract(Duration(minutes: 5) + Duration(seconds: 60 * index));
+        case '1h':
+        default:
+          return now.subtract(Duration(minutes: 15) + Duration(minutes: 5 * index));
+      }
+    }
+
+    void appendGroup(String label, String groupKey, List<_FeedItem> rows) {
       if (rows.isEmpty) return;
       result.add(_GroupHeader(label: label, count: rows.length));
-      for (final _FeedItem item in rows) {
+      for (int i = 0; i < rows.length; i++) {
+        final _FeedItem item = rows[i];
         result.add(QzWhaleRow(
           key: ValueKey<String>(item.event.id),
           event: item.event,
           highlight: item.highlight,
           now: now,
+          displayTimestamp: displayFor(groupKey, i),
         ));
       }
     }
 
-    appendGroup(l10n.whaleGroupNow, groupNow);
-    appendGroup(l10n.whaleGroup15m, group15);
-    appendGroup(l10n.whaleGroup1h, group1h);
+    appendGroup(l10n.whaleGroupNow, 'now', groupNow);
+    appendGroup(l10n.whaleGroup15m, '15m', group15);
+    appendGroup(l10n.whaleGroup1h, '1h', group1h);
     return result;
   }
 }

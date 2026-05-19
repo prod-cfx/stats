@@ -14,17 +14,25 @@ import '../../../theme/tokens.dart';
 /// - 高亮：新条目从顶部插入后，外层在 700ms 内将 `highlight=true` 切回 false；
 ///   行内用 [AnimatedContainer] 在 700ms 内淡出 `accentSoft` 背景。
 /// - 相对时间显示由外部注入 `now` 计算，不读 fixture 真实墙钟，避免测试 flake。
+/// - 当外部提供 `displayTimestamp` 时，相对时间基于它计算而不是 `event.timestamp`，
+///   解决 issue #1602：mock fixture timestamp 写死 2024-05，与分组语义冲突
+///   （行内会显示 `731 天前` 而分组是 `最近 5 分钟`）。生产侧不传则回退原逻辑。
 class QzWhaleRow extends StatelessWidget {
   const QzWhaleRow({
     super.key,
     required this.event,
     this.highlight = false,
     DateTime? now,
+    this.displayTimestamp,
   }) : _now = now;
 
   final WhaleEvent event;
   final bool highlight;
   final DateTime? _now;
+
+  /// 可选：相对时间渲染基于此 timestamp 而非 `event.timestamp`。
+  /// 用于 mock 场景与分组保持一致；真实数据场景传 null 即可。
+  final DateTime? displayTimestamp;
 
   /// 暴露给测试的纯函数：金额格式化为 `$1.25M` / `$12.5M` / `$320K`。
   static String formatAmountUsd(double amountUsd) {
@@ -63,7 +71,8 @@ class QzWhaleRow extends StatelessWidget {
     final Color dirColor = isIn ? c.statusOk : c.statusDanger;
     final IconData dirIcon = isIn ? Icons.arrow_downward : Icons.arrow_upward;
     final DateTime now = _now ?? DateTime.now();
-    final String relTime = _localizedRelativeTime(l10n, event.timestamp, now);
+    final DateTime tsForDisplay = displayTimestamp ?? event.timestamp;
+    final String relTime = _localizedRelativeTime(l10n, tsForDisplay, now);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 700),
       color: highlight ? c.accentSoft : Colors.transparent,

@@ -225,6 +225,23 @@ void main() {
     }
   });
 
+  testWidgets('mock fixture 场景行内不出现 731 天前 / 天前 时间穿帮 (issue #1602)',
+      (WidgetTester tester) async {
+    final _FakeWhaleFeedRepository repo = _FakeWhaleFeedRepository();
+    await _pump(tester, repo);
+    addTearDown(() async => repo.dispose());
+
+    // 任何 row 都不应显示「天前」级别的相对时间
+    expect(find.textContaining('天前'), findsNothing,
+        reason: 'mock fixture timestamp 2024-05 不应直接作为相对时间基准');
+    // 至少有一条行显示「刚刚」或「分钟前」/「小时前」
+    final bool hasNearLabel = find.textContaining('刚刚').evaluate().isNotEmpty ||
+        find.textContaining('分钟前').evaluate().isNotEmpty ||
+        find.textContaining('小时前').evaluate().isNotEmpty;
+    expect(hasNearLabel, isTrue,
+        reason: '应当看到近期相对时间标签（刚刚 / 分钟前 / 小时前）');
+  });
+
   test('QzWhaleRow.formatAmountUsd 覆盖三档边界', () {
     expect(QzWhaleRow.formatAmountUsd(500), '\$500');
     expect(QzWhaleRow.formatAmountUsd(12_500), '\$13K');
