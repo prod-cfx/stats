@@ -1718,6 +1718,12 @@ abstract class AppLocalizations {
   /// **'载入到对话'**
   String get strategyDetailLoadConversation;
 
+  /// No description provided for @strategyHomeLoadedToast.
+  ///
+  /// In zh, this message translates to:
+  /// **'「{name}」已载入对话'**
+  String strategyHomeLoadedToast(String name);
+
   /// No description provided for @strategyHomeFeaturedBadge.
   ///
   /// In zh, this message translates to:

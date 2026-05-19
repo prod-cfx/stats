@@ -841,6 +841,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyDetailLoadConversation => 'Load into chat';
 
   @override
+  String strategyHomeLoadedToast(String name) {
+    return '\"$name\" loaded into chat';
+  }
+
+  @override
   String get strategyHomeFeaturedBadge => 'Pick of the week';
 
   @override

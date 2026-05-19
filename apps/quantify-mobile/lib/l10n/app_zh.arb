@@ -293,6 +293,12 @@
   "strategyDetailSubscribersSuffix": " 订阅",
   "strategyCardLoadConversation": "载入对话",
   "strategyDetailLoadConversation": "载入到对话",
+  "strategyHomeLoadedToast": "「{name}」已载入对话",
+  "@strategyHomeLoadedToast": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
   "strategyHomeFeaturedBadge": "本周推荐",
   "strategyHomeFeaturedSubtitle": "市场中性 · 低回撤",
   "strategyHomeFeaturedView": "查看 →",

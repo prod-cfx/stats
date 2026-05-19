@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -47,6 +49,13 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
   List<StrategyMarketItem> _items = <StrategyMarketItem>[];
   StrategyMarketItem? _featured;
 
+  /// 载入对话 toast：与设计稿 `fireToast`(#1596) 一致。
+  /// 显示约 700ms 后跳到 `/ai?loadStrategy=$id`，dispose / 重复点击需安全取消。
+  String? _toast;
+  Timer? _toastTimer;
+  Timer? _navTimer;
+  static const Duration _kLoadConversationDelay = Duration(milliseconds: 700);
+
   @override
   void initState() {
     super.initState();
@@ -62,7 +71,30 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     _scrollCtrl.removeListener(_onScroll);
     _scrollCtrl.dispose();
     _queryCtrl.dispose();
+    _toastTimer?.cancel();
+    _navTimer?.cancel();
     super.dispose();
+  }
+
+  /// 点击「载入对话」：显示 toast，~700ms 后跳转 `/ai?loadStrategy=$id`。
+  /// 重复点击会取消上一次的 timer，避免叠加跳转；dispose 后所有 timer 安全取消。
+  void _onLoadConversation(StrategyMarketItem item) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final String id = item.card.id;
+    final String msg = l10n.strategyHomeLoadedToast(item.card.name);
+    _toastTimer?.cancel();
+    _navTimer?.cancel();
+    setState(() => _toast = msg);
+    // 在跳转前清掉 toast 文本，避免跨页残留；跳转交给独立 timer，并在
+    // 触发前再次校验 mounted，防止 dispose 后还调 router。
+    _toastTimer = Timer(const Duration(milliseconds: 2400), () {
+      if (!mounted) return;
+      setState(() => _toast = null);
+    });
+    _navTimer = Timer(_kLoadConversationDelay, () {
+      if (!mounted) return;
+      context.go('/ai?loadStrategy=$id');
+    });
   }
 
   void _onScroll() {
@@ -230,8 +262,10 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: <Widget>[
+          Column(
+            children: <Widget>[
           Padding(
             padding: const EdgeInsets.fromLTRB(
                 QzSpacing.lg, QzSpacing.sm, QzSpacing.lg, QzSpacing.sm),
@@ -304,17 +338,81 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
                                   .read(strategyFavoritesProvider.notifier)
                                   .toggle(id),
                               onTap: () => context.push('/strategy/$id'),
-                              onLoadConversation: () => context
-                                  .go('/ai?loadStrategy=$id'),
+                              onLoadConversation: () =>
+                                  _onLoadConversation(item),
                             );
                           },
                         );
                         }),
             ),
           ),
+            ],
+          ),
+          if (_toast != null)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 24,
+              child: Center(
+                child: _LoadConversationToast(
+                  key: const Key('strategy-load-conversation-toast'),
+                  text: _toast!,
+                ),
+              ),
+            ),
         ],
       ),
       backgroundColor: c.bg,
+    );
+  }
+}
+
+/// 「策略载入对话」toast（#1596）：深色半透明胶囊 + 绿色 check + 文案。
+class _LoadConversationToast extends StatelessWidget {
+  const _LoadConversationToast({super.key, required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 320),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xEB0F0B22),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: const <BoxShadow>[
+            BoxShadow(
+              color: Color(0x520F0B22),
+              blurRadius: 24,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Icon(
+              Icons.check_circle,
+              color: Color(0xFF16C783),
+              size: 16,
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                text,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

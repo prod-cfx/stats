@@ -37,6 +37,12 @@ Future<void> _pump(WidgetTester tester, {QzTheme? theme}) async {
         builder: (BuildContext context, GoRouterState s) =>
             StrategyDetailPage(id: s.pathParameters['id']!),
       ),
+      GoRoute(
+        path: '/ai',
+        builder: (BuildContext context, GoRouterState s) => const Scaffold(
+          body: Center(child: Text('ai-stub')),
+        ),
+      ),
     ],
   );
   await tester.pumpWidget(
@@ -289,6 +295,51 @@ void main() {
             reason: 'theme bg=$bg accent=$accent should pump without exception');
       }
     }
+  });
+
+  testWidgets('点击载入对话：先显示 toast，再约 700ms 后跳转到 /ai?loadStrategy= (#1596)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    final StrategyCard first = mockFeaturedStrategies.first;
+    final Finder loadBtn =
+        find.byKey(Key('strategy-card-load-chat-${first.id}'));
+    expect(loadBtn, findsOneWidget);
+    await tester.tap(loadBtn);
+    // 先 pump 一帧，让 setState 生效但不让 700ms timer 触发
+    await tester.pump();
+    expect(
+      find.byKey(const Key('strategy-load-conversation-toast')),
+      findsOneWidget,
+      reason: 'toast 应在点击后立即显示',
+    );
+    expect(find.text('「${first.name}」已载入对话'), findsOneWidget);
+    // 600ms 时还不应跳走（界面仍在 StrategyHomePage）
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.byType(StrategyHomePage), findsOneWidget,
+        reason: '未到 700ms 时不应跳转');
+    // 推过 700ms 阈值 + buffer，到达 /ai
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+    expect(find.text('ai-stub'), findsOneWidget,
+        reason: '700ms 后应跳到 /ai 路由');
+  });
+
+  testWidgets('载入对话点击后立刻 pop 路由：dispose 不抛 setState after dispose (#1596)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    final StrategyCard first = mockFeaturedStrategies.first;
+    await tester
+        .tap(find.byKey(Key('strategy-card-load-chat-${first.id}')));
+    await tester.pump(); // toast 显示
+    expect(find.byKey(const Key('strategy-load-conversation-toast')),
+        findsOneWidget);
+    // 立即跳走原页面：换一个空 widget 模拟 dispose
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    // 等过 toast (2.4s) + nav timer 触发：dispose 后回调中 mounted 检查应阻止 setState
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pump(const Duration(seconds: 2));
+    expect(tester.takeException(), isNull,
+        reason: 'dispose 后的 toast/nav timer 不应抛异常');
   });
 
   testWidgets('上拉加载：滚到底部触发分页，itemCount 增加',

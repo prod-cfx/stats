@@ -828,6 +828,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyDetailLoadConversation => '载入到对话';
 
   @override
+  String strategyHomeLoadedToast(String name) {
+    return '「$name」已载入对话';
+  }
+
+  @override
   String get strategyHomeFeaturedBadge => '本周推荐';
 
   @override

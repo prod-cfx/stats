@@ -290,6 +290,12 @@
   "strategyDetailSubscribersSuffix": " subscribers",
   "strategyCardLoadConversation": "Load chat",
   "strategyDetailLoadConversation": "Load into chat",
+  "strategyHomeLoadedToast": "\"{name}\" loaded into chat",
+  "@strategyHomeLoadedToast": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
   "strategyHomeFeaturedBadge": "Pick of the week",
   "strategyHomeFeaturedSubtitle": "Market neutral · low drawdown",
   "strategyHomeFeaturedView": "View →",
