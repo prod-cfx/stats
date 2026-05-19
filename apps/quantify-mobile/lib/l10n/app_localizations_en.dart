@@ -64,6 +64,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiAppBarParamsTooltip => 'Params';
 
   @override
+  String get aiAppBarParamsButton => 'Params';
+
+  @override
   String get aiSessionDrawerTitle => 'Strategies';
 
   @override

@@ -218,6 +218,12 @@ abstract class AppLocalizations {
   /// **'参数'**
   String get aiAppBarParamsTooltip;
 
+  /// No description provided for @aiAppBarParamsButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'参数'**
+  String get aiAppBarParamsButton;
+
   /// No description provided for @aiSessionDrawerTitle.
   ///
   /// In zh, this message translates to:

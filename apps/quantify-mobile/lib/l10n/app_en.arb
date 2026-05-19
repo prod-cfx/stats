@@ -20,6 +20,7 @@
   "aiAppBarHistoryTooltip": "Sessions",
   "aiAppBarNewSessionTooltip": "New session",
   "aiAppBarParamsTooltip": "Params",
+  "aiAppBarParamsButton": "Params",
   "aiSessionDrawerTitle": "Strategies",
   "aiSessionDrawerSubtitle": "Each session has its own context",
   "aiSessionNewButton": "New Strategy",

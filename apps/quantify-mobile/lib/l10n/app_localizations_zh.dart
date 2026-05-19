@@ -69,6 +69,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiAppBarParamsTooltip => '参数';
 
   @override
+  String get aiAppBarParamsButton => '参数';
+
+  @override
   String get aiSessionDrawerTitle => '策略方案';
 
   @override

@@ -105,16 +105,14 @@ void main() {
   ) async {
     await _pumpApp(tester);
 
-    // AiHomePage exposes a debug-only counter in its AppBar (cleared of the
-    // floating bottom tab bar) so hit-test routing succeeds.
-    final Finder incBtn = find.byKey(const Key('ai-counter-inc'));
-    await tester.tap(incBtn);
-    await tester.tap(incBtn);
-    await tester.tap(incBtn);
+    // AiHomePage 输入框草稿在 tab 切换时应被 IndexedStack 保留 — 通过
+    // chat input 写入一段草稿，再来回切换，验证 branch state 不丢。
+    final Finder input = find.byKey(const Key('ai-chat-input'));
+    await tester.enterText(input, 'draft-preserve-1590');
     await tester.pump();
-    expect(find.text('count: 3'), findsOneWidget);
+    expect(find.text('draft-preserve-1590'), findsOneWidget);
 
-    // Switch to market and back; counter state should survive.
+    // Switch to market and back; input draft should survive.
     await tester.tap(_tab('market'));
     await tester.pumpAndSettle();
     expect(find.byType(MarketHomePage), findsOneWidget);
@@ -122,7 +120,7 @@ void main() {
     await tester.tap(_tab('ai'));
     await tester.pumpAndSettle();
     expect(find.byType(AiHomePage), findsOneWidget);
-    expect(find.text('count: 3'), findsOneWidget);
+    expect(find.text('draft-preserve-1590'), findsOneWidget);
   });
 
   testWidgets('tapping the active tab is safe (initialLocation path)', (

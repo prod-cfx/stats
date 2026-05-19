@@ -232,6 +232,25 @@ void main() {
     expect(find.text('ETH 4H 均值回归'), findsOneWidget);
   });
 
+  testWidgets('顶部栏：不再显示 debug count，渲染新建会话图标 + 参数 pill（#1590）',
+      (WidgetTester tester) async {
+    await _pump(tester);
+
+    // #1590 验收：移除 debug-only `count: 0`，确认 widget tree 中不存在。
+    expect(find.textContaining('count:'), findsNothing);
+    expect(find.byKey(const Key('ai-counter-inc')), findsNothing);
+
+    // 新建会话图标按钮 + 参数 pill 都要在。
+    expect(find.byKey(const Key('ai-appbar-new-session')), findsOneWidget);
+    expect(find.byKey(const Key('ai-backtest-button')), findsOneWidget);
+    expect(find.text('参数'), findsOneWidget);
+
+    // 点参数按钮 → 打开回测参数 sheet。
+    await tester.tap(find.byKey(const Key('ai-backtest-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('回测参数'), findsOneWidget);
+  });
+
   testWidgets('草稿不串台：在 s1 输入后切到 s2 输入框为空，再切回 s1 草稿仍在',
       (WidgetTester tester) async {
     await _pump(tester);

@@ -23,6 +23,7 @@
   "aiAppBarHistoryTooltip": "历史会话",
   "aiAppBarNewSessionTooltip": "新建会话",
   "aiAppBarParamsTooltip": "参数",
+  "aiAppBarParamsButton": "参数",
   "aiSessionDrawerTitle": "策略方案",
   "aiSessionDrawerSubtitle": "每个方案独立上下文 · 互不污染",
   "aiSessionNewButton": "新建方案",

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -34,8 +33,6 @@ import '../../widgets/qz_typing_indicator.dart';
 /// - assistant 回复前 200ms 思考窗显示 `QzTypingIndicator`，到达后切回流式逐字
 /// - 草稿按 sessionId 独立存储（`_drafts`），切会话不串台
 ///
-/// Debug-mode `ai-counter-inc` AppBar 按钮保留，被
-/// `test/router/app_router_test.dart` 'branch state is preserved' 依赖。
 class AiHomePage extends ConsumerStatefulWidget {
   const AiHomePage({super.key});
 
@@ -58,7 +55,6 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
   /// 当前会话的「正在思考」窗口（reply 到达前的 200ms）。
   bool _isThinking = false;
   bool _isStreaming = false;
-  int _count = 0;
 
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
@@ -501,23 +497,36 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
               ),
         actions: <Widget>[
           IconButton(
-            key: const Key('ai-backtest-button'),
-            tooltip: l10n.aiBacktestButton,
-            icon: const Icon(Icons.tune),
-            onPressed: current == null || _isSending ? null : _openBacktestSheet,
-          ),
-          IconButton(
             key: const Key('ai-appbar-new-session'),
             tooltip: l10n.aiAppBarNewSessionTooltip,
             icon: const Icon(Icons.add_comment_outlined),
             onPressed: _createSession,
           ),
-          if (kDebugMode)
-            TextButton(
-              key: const Key('ai-counter-inc'),
-              onPressed: () => setState(() => _count += 1),
-              child: Text('count: $_count'),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: QzSpacing.sm,
+              vertical: QzSpacing.sm,
             ),
+            child: TextButton.icon(
+              key: const Key('ai-backtest-button'),
+              onPressed: current == null || _isSending ? null : _openBacktestSheet,
+              icon: const Icon(Icons.tune, size: 14),
+              label: Text(l10n.aiAppBarParamsButton),
+              style: TextButton.styleFrom(
+                backgroundColor: c.accentSoft,
+                foregroundColor: c.accent,
+                disabledForegroundColor: c.textDim,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: const StadiumBorder(),
+                textStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
       body: SafeArea(
