@@ -68,10 +68,17 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
     try {
       final List<WhaleEvent> history = await repo.listRecent(limit: 30);
       if (!mounted) return;
+      // issue #1603: 历史接口理论上不应返回重复 id，但 mock / 后端
+      // 重试链路存在重复风险；这里统一按首次出现保留，保障 ListView key 唯一。
+      final Set<String> seen = <String>{};
+      final List<WhaleEvent> deduped = <WhaleEvent>[
+        for (final WhaleEvent e in history)
+          if (seen.add(e.id)) e,
+      ];
       setState(() {
         _items
           ..clear()
-          ..addAll(history.map((WhaleEvent e) => _FeedItem(e, highlight: false)));
+          ..addAll(deduped.map((WhaleEvent e) => _FeedItem(e, highlight: false)));
         _loading = false;
       });
       _sub = repo.watchFeed().listen(_onPush);
@@ -88,13 +95,22 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
     if (!_passesFilter(event)) return;
     if (!mounted) return;
     setState(() {
+      // issue #1603: 推流可能与历史/重连重发产生相同 event.id，
+      // 必须先按 id 去重再插入；否则同一 id 在 ListView 中出现两次会触发
+      // RenderSliverMultiBoxAdaptor._debugVerifyChildOrder 断言失败以及
+      // Duplicate Key 异常。
+      _items.removeWhere((_FeedItem it) => it.event.id == event.id);
       _items.insert(0, _FeedItem(event, highlight: true));
     });
     Future<void>.delayed(const Duration(milliseconds: 700), () {
       if (!mounted) return;
       setState(() {
-        if (_items.isNotEmpty && _items.first.event.id == event.id) {
-          _items.first.highlight = false;
+        // 按 id 定位目标 row，避免在 700ms 内被其它推流挤下时找错对象。
+        for (final _FeedItem it in _items) {
+          if (it.event.id == event.id) {
+            it.highlight = false;
+            break;
+          }
         }
       });
     });

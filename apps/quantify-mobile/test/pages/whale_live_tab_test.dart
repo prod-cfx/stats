@@ -242,6 +242,63 @@ void main() {
         reason: '应当看到近期相对时间标签（刚刚 / 分钟前 / 小时前）');
   });
 
+  testWidgets('推流相同 id 不会触发 Duplicate Key / ListView child order 异常 (issue #1603)',
+      (WidgetTester tester) async {
+    final _FakeWhaleFeedRepository repo = _FakeWhaleFeedRepository();
+    await _pump(tester, repo);
+    addTearDown(() async => repo.dispose());
+
+    final WhaleEvent first = WhaleEvent(
+      id: 'w-dup-001',
+      symbol: 'BTCUSDT',
+      amountUsd: 2_500_000,
+      direction: 'in',
+      fromLabel: 'A',
+      toLabel: 'B',
+      timestamp: DateTime.now(),
+    );
+    repo.emit(first);
+    await tester.pump();
+    await tester.pump();
+
+    // 重发相同 id（可能来自后端重试 / 重连）
+    final WhaleEvent dup = WhaleEvent(
+      id: 'w-dup-001',
+      symbol: 'BTCUSDT',
+      amountUsd: 3_000_000,
+      direction: 'in',
+      fromLabel: 'A2',
+      toLabel: 'B2',
+      timestamp: DateTime.now(),
+    );
+    repo.emit(dup);
+    await tester.pump();
+    await tester.pump();
+
+    // 同 id 应只出现一次
+    expect(find.byKey(const ValueKey<String>('w-dup-001')), findsOneWidget);
+    // 不应抛任何异常
+    expect(tester.takeException(), isNull);
+
+    // 等待 700ms 高亮回调过期
+    await tester.pump(const Duration(milliseconds: 750));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('历史接口返回重复 id 时 ListView 也只渲染一次 (issue #1603)',
+      (WidgetTester tester) async {
+    final WhaleEvent base = mockWhaleEvents.first;
+    final _FakeWhaleFeedRepository repo = _FakeWhaleFeedRepository(
+      history: <WhaleEvent>[base, base, ...mockWhaleEvents.skip(1)],
+    );
+    await _pump(tester, repo);
+    addTearDown(() async => repo.dispose());
+
+    expect(find.byKey(ValueKey<String>(base.id)), findsOneWidget,
+        reason: '历史中重复 id 必须去重后只渲染一次');
+    expect(tester.takeException(), isNull);
+  });
+
   test('QzWhaleRow.formatAmountUsd 覆盖三档边界', () {
     expect(QzWhaleRow.formatAmountUsd(500), '\$500');
     expect(QzWhaleRow.formatAmountUsd(12_500), '\$13K');
