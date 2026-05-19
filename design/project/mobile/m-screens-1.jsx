@@ -143,7 +143,18 @@ function ScreenLogin() {
             通过 Telegram 登录
           </button>
 
-          <div style={{textAlign:'center', fontSize:11, color:M.dim, marginTop:14, lineHeight:1.6}}>
+          {/* guest entry — low-commitment way to explore the product */}
+          <button data-guest style={{
+            width:'100%', height:40, marginTop:12, borderRadius:12, border:0,
+            background:'transparent', color:M.mid, fontSize:13, fontWeight:500, cursor:'pointer',
+            display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+          }}>
+            <Ico d="M12 11a4 4 0 100-8 4 4 0 000 8zm-7 9a7 7 0 0114 0" w={14} sw={1.6}/>
+            <span>以游客身份先看看</span>
+            <span style={{color:M.faint, fontSize:11}}>· 无需注册</span>
+          </button>
+
+          <div style={{textAlign:'center', fontSize:11, color:M.dim, marginTop:10, lineHeight:1.6}}>
             继续即表示同意 <span style={{color:M.violet}}>服务条款</span> 与 <span style={{color:M.violet}}>隐私政策</span>
           </div>
         </div>

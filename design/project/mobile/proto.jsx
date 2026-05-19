@@ -124,6 +124,8 @@ function App() {
     if (screen === 'me' && txt === '退出登录') { setScreen('login'); return; }
     // 登录 button on login screen
     if (screen === 'login' && txt === '登录') { setScreen('ai'); return; }
+    // 游客登录 — explore without an account
+    if (screen === 'login' && e.target.closest('[data-guest]')) { setScreen('ai'); return; }
   }, [screen, sheet]);
 
   const current = ALL.find(s => s.k === screen) || TAB_SCREENS[0];
