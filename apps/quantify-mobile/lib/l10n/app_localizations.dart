@@ -284,6 +284,114 @@ abstract class AppLocalizations {
   /// **' 笔'**
   String get backtestResultTradesSuffix;
 
+  /// No description provided for @deployButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'一键部署'**
+  String get deployButton;
+
+  /// No description provided for @deploySheetTitleExchange.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择交易所'**
+  String get deploySheetTitleExchange;
+
+  /// No description provided for @deploySheetTitleAuthorize.
+  ///
+  /// In zh, this message translates to:
+  /// **'授权部署'**
+  String get deploySheetTitleAuthorize;
+
+  /// No description provided for @deploySheetTitleDeploying.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在部署…'**
+  String get deploySheetTitleDeploying;
+
+  /// No description provided for @deploySheetTitleDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'部署成功'**
+  String get deploySheetTitleDone;
+
+  /// No description provided for @deployExchangeConfigured.
+  ///
+  /// In zh, this message translates to:
+  /// **'已配置'**
+  String get deployExchangeConfigured;
+
+  /// No description provided for @deployExchangeNotConfigured.
+  ///
+  /// In zh, this message translates to:
+  /// **'未配置'**
+  String get deployExchangeNotConfigured;
+
+  /// No description provided for @deployExchangeEmptyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未配置任何交易所 API，去「我的 / API」添加后再试。'**
+  String get deployExchangeEmptyHint;
+
+  /// No description provided for @deployGoConfigureButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'去配置 API'**
+  String get deployGoConfigureButton;
+
+  /// No description provided for @deployAuthorizePermissionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'将向交易所申请以下权限'**
+  String get deployAuthorizePermissionTitle;
+
+  /// No description provided for @deployAuthorizePermissionSpot.
+  ///
+  /// In zh, this message translates to:
+  /// **'现货下单'**
+  String get deployAuthorizePermissionSpot;
+
+  /// No description provided for @deployAuthorizePermissionFutures.
+  ///
+  /// In zh, this message translates to:
+  /// **'合约下单'**
+  String get deployAuthorizePermissionFutures;
+
+  /// No description provided for @deployAuthorizePermissionBalance.
+  ///
+  /// In zh, this message translates to:
+  /// **'读取余额'**
+  String get deployAuthorizePermissionBalance;
+
+  /// No description provided for @deployAuthorizeConfirmButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'同意并部署'**
+  String get deployAuthorizeConfirmButton;
+
+  /// No description provided for @deployDoneToast.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略已部署'**
+  String get deployDoneToast;
+
+  /// No description provided for @deployDoneCloseButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'完成'**
+  String get deployDoneCloseButton;
+
+  /// No description provided for @deploySystemMessagePrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略已部署到 '**
+  String get deploySystemMessagePrefix;
+
+  /// No description provided for @deploySystemMessageInstanceInfix.
+  ///
+  /// In zh, this message translates to:
+  /// **' · 实例 ID '**
+  String get deploySystemMessageInstanceInfix;
+
   /// No description provided for @authLoginTitle.
   ///
   /// In zh, this message translates to:

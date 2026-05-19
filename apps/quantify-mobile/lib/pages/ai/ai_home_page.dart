@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../data/models/ai_chat_models.dart';
 import '../../data/models/backtest_models.dart';
+import '../../data/models/deploy_models.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/ai_chat_repository.dart';
 import '../../l10n/app_localizations.dart';
@@ -16,6 +17,7 @@ import '../../theme/tokens.dart';
 import '../../widgets/qz_backtest_result_card.dart';
 import '../../widgets/qz_button.dart';
 import '../../widgets/qz_chat_bubble.dart';
+import '../../widgets/qz_deploy_sheet.dart';
 
 /// AI conversation page — root of the `/ai` tab.
 ///
@@ -144,6 +146,27 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     }
   }
 
+  Future<void> _openDeploySheet() async {
+    final DeploymentResult? result = await QzDeploySheet.show(context);
+    if (!mounted || result == null) return;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final String msg =
+        '${l10n.deploySystemMessagePrefix}${result.exchange.toUpperCase()}'
+        '${l10n.deploySystemMessageInstanceInfix}${result.instanceId}';
+    setState(() {
+      _messages.add(ChatTurn(
+        id: 'system-${DateTime.now().microsecondsSinceEpoch}',
+        role: 'system',
+        content: msg,
+        timestamp: result.deployedAt,
+      ));
+    });
+    _scrollToBottom();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(l10n.deployDoneToast)),
+    );
+  }
+
   void _scrollToBottom() {
     // Defer to next frame so newly-added items are laid out before we jump.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -195,15 +218,33 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                       itemBuilder: (BuildContext ctx, int i) {
                         if (i < _messages.length) {
                           final ChatTurn t = _messages[i];
+                          final QzChatRole role = switch (t.role) {
+                            'user' => QzChatRole.user,
+                            'system' => QzChatRole.system,
+                            _ => QzChatRole.assistant,
+                          };
                           return QzChatBubble(
-                            role: t.role == 'user'
-                                ? QzChatRole.user
-                                : QzChatRole.assistant,
+                            role: role,
                             content: t.content,
-                            time: t.timestamp,
+                            // system 类提示不展示时间，避免与 12px 文案抢眼。
+                            time: role == QzChatRole.system
+                                ? null
+                                : t.timestamp,
                           );
                         }
-                        return QzBacktestResultCard(result: _backtest!);
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            QzBacktestResultCard(result: _backtest!),
+                            const SizedBox(height: QzSpacing.sm),
+                            QzButton(
+                              key: const Key('ai-deploy-button'),
+                              label: AppLocalizations.of(ctx).deployButton,
+                              variant: QzButtonVariant.accent,
+                              onPressed: _openDeploySheet,
+                            ),
+                          ],
+                        );
                       },
                     ),
             ),

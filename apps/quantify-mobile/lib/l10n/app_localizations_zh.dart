@@ -102,6 +102,60 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backtestResultTradesSuffix => ' 笔';
 
   @override
+  String get deployButton => '一键部署';
+
+  @override
+  String get deploySheetTitleExchange => '选择交易所';
+
+  @override
+  String get deploySheetTitleAuthorize => '授权部署';
+
+  @override
+  String get deploySheetTitleDeploying => '正在部署…';
+
+  @override
+  String get deploySheetTitleDone => '部署成功';
+
+  @override
+  String get deployExchangeConfigured => '已配置';
+
+  @override
+  String get deployExchangeNotConfigured => '未配置';
+
+  @override
+  String get deployExchangeEmptyHint => '尚未配置任何交易所 API，去「我的 / API」添加后再试。';
+
+  @override
+  String get deployGoConfigureButton => '去配置 API';
+
+  @override
+  String get deployAuthorizePermissionTitle => '将向交易所申请以下权限';
+
+  @override
+  String get deployAuthorizePermissionSpot => '现货下单';
+
+  @override
+  String get deployAuthorizePermissionFutures => '合约下单';
+
+  @override
+  String get deployAuthorizePermissionBalance => '读取余额';
+
+  @override
+  String get deployAuthorizeConfirmButton => '同意并部署';
+
+  @override
+  String get deployDoneToast => '策略已部署';
+
+  @override
+  String get deployDoneCloseButton => '完成';
+
+  @override
+  String get deploySystemMessagePrefix => '策略已部署到 ';
+
+  @override
+  String get deploySystemMessageInstanceInfix => ' · 实例 ID ';
+
+  @override
   String get authLoginTitle => '登录';
 
   @override

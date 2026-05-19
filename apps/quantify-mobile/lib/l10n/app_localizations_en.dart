@@ -105,6 +105,62 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backtestResultTradesSuffix => '';
 
   @override
+  String get deployButton => 'One-click Deploy';
+
+  @override
+  String get deploySheetTitleExchange => 'Select Exchange';
+
+  @override
+  String get deploySheetTitleAuthorize => 'Authorize Deployment';
+
+  @override
+  String get deploySheetTitleDeploying => 'Deploying…';
+
+  @override
+  String get deploySheetTitleDone => 'Deployed';
+
+  @override
+  String get deployExchangeConfigured => 'Configured';
+
+  @override
+  String get deployExchangeNotConfigured => 'Not configured';
+
+  @override
+  String get deployExchangeEmptyHint =>
+      'No exchange API configured yet. Add one in Me / API first.';
+
+  @override
+  String get deployGoConfigureButton => 'Configure API';
+
+  @override
+  String get deployAuthorizePermissionTitle =>
+      'The exchange will be asked for:';
+
+  @override
+  String get deployAuthorizePermissionSpot => 'Spot trading';
+
+  @override
+  String get deployAuthorizePermissionFutures => 'Futures trading';
+
+  @override
+  String get deployAuthorizePermissionBalance => 'Read balance';
+
+  @override
+  String get deployAuthorizeConfirmButton => 'Agree & deploy';
+
+  @override
+  String get deployDoneToast => 'Strategy deployed';
+
+  @override
+  String get deployDoneCloseButton => 'Done';
+
+  @override
+  String get deploySystemMessagePrefix => 'Strategy deployed to ';
+
+  @override
+  String get deploySystemMessageInstanceInfix => ' · instance ID ';
+
+  @override
   String get authLoginTitle => 'Login';
 
   @override

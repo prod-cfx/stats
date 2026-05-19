@@ -5,9 +5,13 @@ import '../theme/theme_context.dart';
 import '../theme/tokens.dart';
 
 /// Chat message role. Mirrors the `role` string field on `ChatTurn`
-/// (`user` / `assistant`) but typed for widget consumption to avoid
-/// stringly-typed branching at render sites.
-enum QzChatRole { user, assistant }
+/// (`user` / `assistant` / `system`) but typed for widget consumption to
+/// avoid stringly-typed branching at render sites.
+///
+/// `system` is a non-conversational notice injected by the app itself (e.g.
+/// 「策略已部署到 Binance · 实例 ID xxx」after a successful one-click deploy);
+/// rendered as a centered hairline pill, not a left/right bubble.
+enum QzChatRole { user, assistant, system }
 
 /// Chat message bubble used by the AI conversation page.
 ///
@@ -37,6 +41,27 @@ class QzChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
+    if (role == QzChatRole.system) {
+      // 居中提示条：弱化背景 + 细边框，与左右气泡区分开。
+      return Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: QzSpacing.md,
+            vertical: QzSpacing.xs,
+          ),
+          decoration: BoxDecoration(
+            color: c.bgSoft,
+            border: Border.all(color: c.border),
+            borderRadius: BorderRadius.circular(QzRadii.pill),
+          ),
+          child: Text(
+            content,
+            style: TextStyle(color: c.textDim, fontSize: 12, height: 1.4),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     final bool isUser = role == QzChatRole.user;
     final BorderRadius radius = BorderRadius.circular(QzRadii.card);
 
