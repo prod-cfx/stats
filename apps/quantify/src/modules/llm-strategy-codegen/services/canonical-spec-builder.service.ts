@@ -62,6 +62,7 @@ const FIELD_KEY = {
   RISK_ATR_MULTIPLE_STOP: 'risk.atr_multiple_stop',
   RISK_ATR_MULTIPLE_TAKE_PROFIT: 'risk.atr_multiple_take_profit',
   RISK_ATR_STOP: 'risk.atr_stop',
+  RISK_ATR_TAKE_PROFIT: 'risk.atr_take_profit',
   RISK_CONDITION_EXPRESSION: 'risk.condition_expression',
   RISK_MAX_DRAWDOWN_PCT: 'risk.max_drawdown_pct',
   RISK_MAX_SINGLE_LOSS_PCT: 'risk.max_single_loss_pct',
@@ -1720,7 +1721,7 @@ export class CanonicalSpecBuilderService {
   ): CanonicalRuleV2[] {
     const actionKeys = new Set(readFlatActions(state)
       .filter(action => action.status === 'locked')
-      .map(action => action.key))
+      .map(action => this.normalizeSemanticActionKey(action.key)))
     const counters: Record<'entry' | 'exit' | 'gate', number> = {
       entry: 0,
       exit: 0,
@@ -1815,10 +1816,6 @@ export class CanonicalSpecBuilderService {
       )),
     )
 
-    // When no entry trigger group explicitly references "加仓/补仓/scale in", the
-    // add_position action came from a non-trigger clause (e.g. "盈利后加仓").
-    // In that case we bind add_position to ALL entry groups (not just evidence-tagged ones).
-    const addPositionHasEvidenceTriggers = this.hasAnyAddPositionEvidenceTriggers(executableGroups)
     const dcaScheduleHasEvidenceTriggers = this.hasAnyDcaScheduleEvidenceTriggers(executableGroups)
 
     for (const group of executableGroups) {
@@ -1826,7 +1823,30 @@ export class CanonicalSpecBuilderService {
         continue
       }
 
-      const condition = this.buildConditionFromSemanticTriggerCombinationGroup(group.members, group.join, defaultTimeframe)
+      const positionPresenceGateTriggers = group.phase === 'entry'
+        ? group.members.filter(trigger => this.isPositionPresenceGateTrigger(trigger))
+        : []
+      const conditionMembers = positionPresenceGateTriggers.length > 0
+        ? group.members.filter(trigger => !this.isPositionPresenceGateTrigger(trigger))
+        : group.members
+
+      for (const gateTrigger of positionPresenceGateTriggers) {
+        const gateCondition = this.buildConditionFromSemanticTriggerGroup([gateTrigger], defaultTimeframe)
+        if (!gateCondition || !this.isNoPositionGateCondition(gateCondition)) {
+          continue
+        }
+        counters.gate += 1
+        rules.push({
+          id: `semantic-gate-${counters.gate}`,
+          phase: 'gate',
+          sideScope: gateTrigger.sideScope ?? group.sideScope,
+          priority: this.resolveSemanticRulePriority('gate', counters.gate),
+          condition: gateCondition,
+          actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+        })
+      }
+
+      const condition = this.buildConditionFromSemanticTriggerCombinationGroup(conditionMembers, group.join, defaultTimeframe)
       if (!condition) {
         continue
       }
@@ -1835,7 +1855,6 @@ export class CanonicalSpecBuilderService {
         group,
         [...readFlatActions(state)],
         state.position,
-        addPositionHasEvidenceTriggers,
         dcaScheduleHasEvidenceTriggers,
       )
       if (!lifecycleAction && !this.isSemanticTriggerGroupActionAllowed(group, actionKeys)) {
@@ -1884,6 +1903,11 @@ export class CanonicalSpecBuilderService {
     rules.push(...this.buildRiskRulesFromSemanticState([...readFlatRisks(state)], state.position, [...readFlatActions(state)]))
 
     return rules
+  }
+
+  private isPositionPresenceGateTrigger(trigger: SemanticTriggerState): boolean {
+    return trigger.key === ATOM_CONTRACT_REGISTRY['position.has_position'].key
+      || trigger.key === ATOM_CONTRACT_REGISTRY['position.no_position'].key
   }
 
   private isSemanticTriggerGroupActionAllowed(
@@ -2037,7 +2061,7 @@ export class CanonicalSpecBuilderService {
     actionKey: string,
     sizing: CanonicalStrategySpecV2['sizing'],
   ): CanonicalRuleV2['actions'] {
-    switch (actionKey) {
+    switch (this.normalizeSemanticActionKey(actionKey)) {
       case 'open_long':
         return [this.buildOpenAction('OPEN_LONG', sizing, 'action.open_long')]
       case 'open_short':
@@ -2051,17 +2075,34 @@ export class CanonicalSpecBuilderService {
     }
   }
 
+  private normalizeSemanticActionKey(actionKey: string): string {
+    switch (actionKey) {
+      case 'action.open_long':
+        return 'open_long'
+      case 'action.open_short':
+        return 'open_short'
+      case 'action.close_long':
+        return 'close_long'
+      case 'action.close_short':
+        return 'close_short'
+      default:
+        return actionKey
+    }
+  }
+
   private resolveLifecycleActionForTriggerGroup(
     group: SemanticTriggerCombinationGroup,
     actions: SemanticActionState[],
     position: SemanticPositionState | null,
-    addPositionHasEvidenceTriggers = true,
     dcaScheduleHasEvidenceTriggers = true,
   ): SemanticActionState | null {
     const lockedActions = actions.filter(action => action.status === 'locked')
     if (group.phase === 'entry') {
       const explicitAddPosition = lockedActions.find(action => action.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key)
-      if (explicitAddPosition && (this.shouldBindAddPositionAction(group, position) || !addPositionHasEvidenceTriggers)) {
+      if (
+        explicitAddPosition
+        && this.shouldBindAddPositionAction(group, explicitAddPosition, position)
+      ) {
         return explicitAddPosition
       }
 
@@ -2102,9 +2143,14 @@ export class CanonicalSpecBuilderService {
 
   private shouldBindAddPositionAction(
     group: SemanticTriggerCombinationGroup,
+    action: SemanticActionState,
     position: SemanticPositionState | null,
   ): boolean {
     if (group.actionKey === ATOM_CONTRACT_REGISTRY['action.add_position'].key) {
+      return true
+    }
+
+    if (this.groupSharesRuleProvenanceWithAction(group, action)) {
       return true
     }
 
@@ -2115,12 +2161,16 @@ export class CanonicalSpecBuilderService {
     return false
   }
 
-  private hasAnyAddPositionEvidenceTriggers(groups: readonly SemanticTriggerCombinationGroup[]): boolean {
-    return groups.some(g =>
-      g.phase === 'entry'
-      && (g.actionKey === ATOM_CONTRACT_REGISTRY['action.add_position'].key
-        || g.members.some(t => this.textContainsPositionLifecycleAction(t.evidence?.text, /加仓|补仓|scale\s*in/iu))),
-    )
+  private groupSharesRuleProvenanceWithAction(
+    group: SemanticTriggerCombinationGroup,
+    action: SemanticActionState,
+  ): boolean {
+    const actionRuleId = (action as { _provenance?: { ruleId?: unknown } })._provenance?.ruleId
+    if (typeof actionRuleId !== 'string' || actionRuleId.length === 0) return false
+    return group.members.some((trigger) => {
+      const triggerRuleId = (trigger as { _provenance?: { ruleId?: unknown } })._provenance?.ruleId
+      return triggerRuleId === actionRuleId
+    })
   }
 
   private hasAnyDcaScheduleEvidenceTriggers(groups: readonly SemanticTriggerCombinationGroup[]): boolean {
@@ -2174,7 +2224,13 @@ export class CanonicalSpecBuilderService {
   }
 
   private textContainsPositionLifecycleAction(text: string | undefined, pattern: RegExp): boolean {
-    return typeof text === 'string' && pattern.test(text)
+    if (typeof text !== 'string') return false
+    const semanticSlotEvidencePrefix = /^semantic\.[\w.]+:/u
+    const naturalText = text
+      .split('\n')
+      .filter(line => !semanticSlotEvidencePrefix.test(line.trim()))
+      .join('\n')
+    return pattern.test(naturalText)
   }
 
   private buildActionsForSemanticLifecycleAction(
@@ -2784,6 +2840,34 @@ export class CanonicalSpecBuilderService {
             key: 'risk.atr_stop',
             semanticScope: 'position',
             params: atrParams,
+          },
+          actions: [{ type: 'FORCE_EXIT' }],
+          metadata: {
+            semanticKey: risk.key,
+          },
+        })
+        continue
+      }
+      if (risk.key === FIELD_KEY.RISK_ATR_TAKE_PROFIT) {
+        const multiple = typeof risk.params.multiple === 'number' && Number.isFinite(risk.params.multiple)
+          ? risk.params.multiple
+          : typeof risk.params.multiplier === 'number' && Number.isFinite(risk.params.multiplier)
+            ? risk.params.multiplier
+            : null
+        if (multiple === null || multiple <= 0) continue
+        const period = typeof risk.params.period === 'number' && Number.isInteger(risk.params.period) && risk.params.period > 0
+          ? risk.params.period
+          : 14
+        rules.push({
+          id: `semantic-${risk.id || 'risk-atr-take-profit'}`,
+          phase: 'risk',
+          sideScope,
+          priority: priority--,
+          condition: {
+            kind: 'atom',
+            key: 'risk.atr_take_profit',
+            semanticScope: 'position',
+            params: { period, multiple },
           },
           actions: [{ type: 'FORCE_EXIT' }],
           metadata: {
@@ -4295,13 +4379,33 @@ export class CanonicalSpecBuilderService {
     trigger: SemanticTriggerState,
     defaultTimeframe: string | null,
   ): Record<string, number | string | boolean> | null {
-    const lower = this.readSemanticGridNumber(trigger.params, 'rangeMin')
+    let lower = this.readSemanticGridNumber(trigger.params, 'rangeMin')
       ?? this.readSemanticGridNumber(trigger.params, 'rangeLower')
       ?? this.readSemanticGridRangeNumber(trigger.params, 'lower')
-    const upper = this.readSemanticGridNumber(trigger.params, 'rangeMax')
+    let upper = this.readSemanticGridNumber(trigger.params, 'rangeMax')
       ?? this.readSemanticGridNumber(trigger.params, 'rangeUpper')
       ?? this.readSemanticGridRangeNumber(trigger.params, 'upper')
     let stepPct = this.readSemanticGridNumber(trigger.params, 'stepPct')
+    const levels = this.readSemanticGridNumber(trigger.params, 'levels') ?? 20
+    const centerOffsetPct = this.readSemanticGridNumber(trigger.params, 'centerOffsetPct')
+
+    if (
+      (lower === null || upper === null)
+      && centerOffsetPct !== null
+      && levels !== null
+      && Number.isInteger(levels)
+      && levels >= 2
+    ) {
+      const halfRangePct = centerOffsetPct > 0
+        ? centerOffsetPct
+        : (stepPct !== null && stepPct > 0 ? stepPct : null)
+      if (halfRangePct !== null && halfRangePct > 0 && halfRangePct < 100) {
+        lower = 1 - halfRangePct / 100
+        upper = 1 + halfRangePct / 100
+        const levelsPerWiderSide = Math.max(1, Math.ceil(levels / 2))
+        stepPct = halfRangePct / levelsPerWiderSide
+      }
+    }
 
     // #1412: stepPct 缺席而 levels + range 都在场时，按几何间距反推 stepPct。
     //   公式：ratio = (upper / lower) ^ (1 / (levels - 1))；stepPct = (ratio - 1) * 100
@@ -4309,7 +4413,6 @@ export class CanonicalSpecBuilderService {
     //   产品 UI 实测路径「20 格 + 区间 79200-80200」由此派生 stepPct ≈ 0.0664%。
     //   m2 守卫：levels 必须为正整数（避免 levels=2.5 之类非整数语义不合法的派生）
     if (stepPct === null) {
-      const levels = this.readSemanticGridNumber(trigger.params, 'levels')
       if (
         levels !== null
         && Number.isInteger(levels)
@@ -4322,6 +4425,18 @@ export class CanonicalSpecBuilderService {
         const ratio = Math.pow(upper / lower, 1 / (levels - 1))
         stepPct = (ratio - 1) * 100
       }
+    }
+
+    if (
+      (lower === null || upper === null)
+      && stepPct !== null
+      && levels !== null
+      && Number.isInteger(levels)
+      && levels >= 2
+      && stepPct > 0
+    ) {
+      lower = 1
+      upper = Math.pow(1 + stepPct / 100, levels - 1)
     }
 
     if (
@@ -4356,7 +4471,10 @@ export class CanonicalSpecBuilderService {
     key: string,
   ): number | null {
     const value = params[key]
-    return typeof value === 'number' && Number.isFinite(value) ? value : null
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value !== 'string') return null
+    const parsed = Number(value.trim().match(/-?\d+(?:\.\d+)?/u)?.[0])
+    return Number.isFinite(parsed) ? parsed : null
   }
 
   private readSemanticGridRangeNumber(
@@ -4369,13 +4487,19 @@ export class CanonicalSpecBuilderService {
     }
 
     const value = (range as Record<string, unknown>)[key]
-    return typeof value === 'number' && Number.isFinite(value) ? value : null
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value !== 'string') return null
+    const parsed = Number(value.trim().match(/-?\d+(?:\.\d+)?/u)?.[0])
+    return Number.isFinite(parsed) ? parsed : null
   }
 
   private resolveGridSideModeFromSemanticTrigger(
     trigger: SemanticTriggerState,
   ): 'long_only' | 'short_only' | 'bidirectional' {
     const sideMode = trigger.params.sideMode
+    if (sideMode === 'both') {
+      return 'bidirectional'
+    }
     if (sideMode === 'long_only' || sideMode === 'short_only' || sideMode === 'bidirectional') {
       return sideMode
     }
@@ -4388,6 +4512,29 @@ export class CanonicalSpecBuilderService {
     }
 
     return 'bidirectional'
+  }
+
+  private normalizeSingleBarCandlePattern(pattern: string): string {
+    const normalized = pattern.trim().toLowerCase()
+    if (
+      normalized === 'bullish_candle'
+      || normalized === 'bullish'
+      || normalized === 'green_candle'
+      || normalized === 'candle_up'
+      || normalized === 'close_gt_open'
+    ) {
+      return 'single_bull_bar'
+    }
+    if (
+      normalized === 'bearish_candle'
+      || normalized === 'bearish'
+      || normalized === 'red_candle'
+      || normalized === 'candle_down'
+      || normalized === 'close_lt_open'
+    ) {
+      return 'single_bear_bar'
+    }
+    return normalized
   }
 
   private resolveNormalizedRiskExpressionSideScope(
@@ -4642,7 +4789,8 @@ export class CanonicalSpecBuilderService {
           semanticScope: 'market',
         }
       case ATOM_CONTRACT_REGISTRY['price.percent_change'].key: {
-        const valuePct = typeof trigger.params.valuePct === 'number' ? trigger.params.valuePct : null
+        const rawValuePct = typeof trigger.params.valuePct === 'number' ? trigger.params.valuePct : null
+        const valuePct = this.normalizePercentChangeValuePct(rawValuePct, trigger.params.direction)
         if (valuePct === null || !Number.isFinite(valuePct) || valuePct === 0) {
           return null
         }
@@ -5055,7 +5203,7 @@ export class CanonicalSpecBuilderService {
         // P4-2: 白名单 patterns（Issue #1391 后续加 single_bull_bar / single_bear_bar）；
         //   缺失 pattern 或 direction → fail-closed (null)
         const cpPattern = typeof trigger.params.pattern === 'string'
-          ? trigger.params.pattern.trim().toLowerCase()
+          ? this.normalizeSingleBarCandlePattern(trigger.params.pattern)
           : null
         if (
           cpPattern !== 'engulfing'
@@ -5112,6 +5260,29 @@ export class CanonicalSpecBuilderService {
           params: {
             pattern: chPattern,
             direction: chDirection,
+          },
+        }
+      }
+      case ATOM_CONTRACT_REGISTRY['external.signal'].key: {
+        const provider = typeof trigger.params.provider === 'string'
+          ? trigger.params.provider.trim().toLowerCase()
+          : 'webhook'
+        const signalId = typeof trigger.params.signalId === 'string'
+          ? trigger.params.signalId.trim()
+          : null
+        const secret = typeof trigger.params.secret === 'string'
+          ? trigger.params.secret.trim()
+          : 'configured'
+        if (provider !== 'webhook' || !signalId || secret !== 'configured') return null
+        return {
+          kind: 'atom',
+          key: 'external.signal',
+          semanticScope: 'market',
+          op: 'EQ',
+          params: {
+            provider,
+            signalId,
+            secret,
           },
         }
       }
@@ -5335,6 +5506,22 @@ export class CanonicalSpecBuilderService {
     }
 
     return DEFAULT_INDICATOR_PARAMS.rsi.period
+  }
+
+  private normalizePercentChangeValuePct(rawValuePct: number | null, direction: unknown): number | null {
+    if (rawValuePct === null || !Number.isFinite(rawValuePct)) {
+      return null
+    }
+
+    if (direction === 'down') {
+      return -Math.abs(rawValuePct)
+    }
+
+    if (direction === 'up') {
+      return Math.abs(rawValuePct)
+    }
+
+    return rawValuePct
   }
 
   private buildConditionFromIndicatorBoundaryTrigger(

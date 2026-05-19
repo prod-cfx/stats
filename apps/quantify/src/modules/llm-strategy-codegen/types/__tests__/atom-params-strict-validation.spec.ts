@@ -163,6 +163,63 @@ describe('Issue #1395 mute-spider S5 — atom params strict validation', () => {
     expect(ok).toBe(true)
   })
 
+  it('single bar candle aliases 合法 → strict valid（planner 口语值不应 quarantine）', () => {
+    expect(isAtomParamsStrictlyValid('price.candle_pattern', {
+      pattern: 'bullish_candle',
+    })).toBe(true)
+    expect(isAtomParamsStrictlyValid('price.candle_pattern', {
+      pattern: 'close_lt_open',
+    })).toBe(true)
+  })
+
+  it('enum-zh-map alias 合法 → strict valid（grid 中文枚举不应被误 quarantine）', () => {
+    expect(isAtomParamsStrictlyValid('grid.range_rebalance', {
+      sideMode: '双向',
+      breakoutAction: '立即停止',
+    })).toBe(true)
+    expect(isAtomParamsStrictlyValid('grid.range_rebalance', {
+      sideMode: 'both',
+      breakoutAction: 'stop',
+    })).toBe(true)
+    expect(isAtomParamsStrictlyValid('grid.range_rebalance', {
+      sideMode: 'bidirectional',
+      breakoutAction: 'cancel',
+    })).toBe(true)
+  })
+
+  it('number slot 兼容 planner 百分号/单位字符串 → strict valid', () => {
+    expect(isAtomParamsStrictlyValid('grid.range_rebalance', {
+      centerOffsetPct: '0.4%',
+      levels: '10格',
+      perGridSizing: '10 USDT',
+    })).toBe(true)
+  })
+
+  it('number slot 兼容带上下文的 planner 字符串 → strict valid', () => {
+    expect(isAtomParamsStrictlyValid('grid.range_rebalance', {
+      centerOffsetPct: '上下各0.4%',
+      levels: '共10格',
+      perGridSizing: '每格10 USDT',
+    })).toBe(true)
+  })
+
+  it('grid 当前价中心哨兵 centerOffsetPct=0 + levels/stepPct → strict valid', () => {
+    expect(isAtomParamsStrictlyValid('grid.range_rebalance', {
+      centerOffsetPct: 0,
+      levels: 10,
+      stepPct: 0.4,
+      sideMode: 'both',
+      breakoutAction: 'stop',
+      perGridSizing: 10,
+    })).toBe(true)
+  })
+
+  it('enum-zh-map 未声明 alias → strict invalid', () => {
+    expect(isAtomParamsStrictlyValid('grid.range_rebalance', {
+      breakoutAction: '随便处理',
+    })).toBe(false)
+  })
+
   // ───────────────────────────── A3 兼容（未注册 atom + unknown slot key）─────────────────
   it('A3 mock atom（key 不在 registry）→ strict 跳过 = 合法（不 break A3）', () => {
     expect(isAtomParamsStrictlyValid('atom.x', { threshold: 65 })).toBe(true)

@@ -106,7 +106,7 @@ import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { resolveSemanticClarificationMetadata } from './semantic-clarification-metadata'
  
 import { SemanticClarificationQuestionRendererService } from './semantic-clarification-question-renderer.service'
-import { SemanticContractReadinessService } from './semantic-contract-readiness.service'
+import { SemanticContractReadinessService, type MissingSemanticContractRequirement } from './semantic-contract-readiness.service'
 import { SemanticExecutableSemanticsService } from './semantic-executable-semantics.service'
 import { SemanticOpenSlotAnswerResolverService } from './semantic-open-slot-answer-resolver.service'
 import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
@@ -338,6 +338,7 @@ export class CodegenConversationService {
       model: undefined,
       locale: responseLocale,
     }, [])
+    const plannerValidationReport = this.buildPlannerValidationReport(plan)
     let initialSemanticState = this.applyConversationPlanToSemanticState({
       currentState: seedSemanticState,
       plan,
@@ -383,6 +384,7 @@ export class CodegenConversationService {
           latestSpecDesc: null,
           rejectReason: null,
           strategyInstanceId: null,
+          ...(plannerValidationReport ? { validationReport: plannerValidationReport } : {}),
         } as unknown as Prisma.LlmStrategyCodegenSessionCreateInput)
 
         const response = this.finalizeSessionResponse({
@@ -395,6 +397,7 @@ export class CodegenConversationService {
           assistantPrompt: unsupportedFallback.prompt,
           clarificationState,
           unsupportedFallback: unsupportedFallback as unknown as Record<string, unknown>,
+          ...(plannerValidationReport ? { validationReport: plannerValidationReport as CodegenSessionResponseDto['validationReport'] } : {}),
         })
         return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
       }
@@ -425,6 +428,7 @@ export class CodegenConversationService {
         latestSpecDesc: null,
         rejectReason: null,
         strategyInstanceId: null,
+        ...(plannerValidationReport ? { validationReport: plannerValidationReport } : {}),
       } as unknown as Prisma.LlmStrategyCodegenSessionCreateInput)
 
       const response = this.finalizeSessionResponse({
@@ -433,6 +437,7 @@ export class CodegenConversationService {
         missingFields: [],
         assistantPrompt,
         clarificationState,
+        ...(plannerValidationReport ? { validationReport: plannerValidationReport as CodegenSessionResponseDto['validationReport'] } : {}),
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
@@ -493,6 +498,7 @@ export class CodegenConversationService {
       latestSpecDesc: initialSpecDesc as Prisma.InputJsonValue,
       rejectReason: null,
       strategyInstanceId: null,
+      ...(plannerValidationReport ? { validationReport: plannerValidationReport } : {}),
     } as unknown as Prisma.LlmStrategyCodegenSessionCreateInput)
 
     const response = this.finalizeSessionResponse({
@@ -503,6 +509,7 @@ export class CodegenConversationService {
       canonicalDigest: initialCanonicalDigest,
       assistantPrompt: bootstrap.assistantPrompt,
       clarificationState,
+      ...(plannerValidationReport ? { validationReport: plannerValidationReport as CodegenSessionResponseDto['validationReport'] } : {}),
     })
     return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
   }
@@ -1207,6 +1214,45 @@ export class CodegenConversationService {
     }
   }
 
+  private buildPlannerValidationReport(
+    plan: Pick<ConversationPlan, 'diagnostics'>,
+  ): CodegenSessionResponseDto['validationReport'] | undefined {
+    if (!plan.diagnostics) {
+      return undefined
+    }
+    return {
+      ok: false,
+      errors: this.buildPlannerValidationErrors(plan.diagnostics),
+      diagnostics: plan.diagnostics,
+    }
+  }
+
+  private buildPlannerValidationErrors(
+    diagnostics: Record<string, unknown>,
+  ): NonNullable<CodegenSessionResponseDto['validationReport']>['errors'] {
+    const nodeId = typeof diagnostics.gate === 'string' ? diagnostics.gate : undefined
+    const entry = diagnostics.entry && typeof diagnostics.entry === 'object' && !Array.isArray(diagnostics.entry)
+      ? diagnostics.entry as Record<string, unknown>
+      : {}
+    const rejectReasons = Array.isArray(entry.rejectReasons)
+      ? entry.rejectReasons.filter((reason): reason is string => typeof reason === 'string' && reason.length > 0)
+      : []
+
+    if (rejectReasons.length === 0) {
+      return [{
+        code: 'planner_schema_diagnostics',
+        message: 'Planner schema diagnostics are present.',
+        ...(nodeId ? { nodeId } : {}),
+      }]
+    }
+
+    return rejectReasons.map(reason => ({
+      code: reason,
+      message: `Planner schema rejected semantic patch: ${reason}`,
+      ...(nodeId ? { nodeId } : {}),
+    }))
+  }
+
   private buildRecoveredSnapshotPosition(
     strategyConfig: Record<string, unknown> | null,
     paramsSnapshot: Record<string, unknown> | null,
@@ -1582,6 +1628,7 @@ export class CodegenConversationService {
       model: dto.model,
       locale: responseLocale,
     }, constraintPack.conversationHistory ?? [])
+    const plannerValidationReport = this.buildPlannerValidationReport(plan)
     const plannedSemanticState = this.reconcileSemanticMissingPlaceholders(
       this.applyConversationPlanToSemanticState({
         currentState: preMergedSemanticState,
@@ -1691,6 +1738,7 @@ export class CodegenConversationService {
             : {}),
           assistantPrompt,
           clarificationState,
+          ...(plannerValidationReport ? { validationReport: plannerValidationReport as CodegenSessionResponseDto['validationReport'] } : {}),
         })
         return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
       }
@@ -1714,6 +1762,7 @@ export class CodegenConversationService {
             : {}),
         }),
         ...terminalPlannerEditArtifactReset,
+        ...(plannerValidationReport ? { validationReport: plannerValidationReport } : {}),
       } as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
       const response = this.finalizeSessionResponse({
@@ -1737,6 +1786,7 @@ export class CodegenConversationService {
           : {}),
         assistantPrompt,
         clarificationState,
+        ...(plannerValidationReport ? { validationReport: plannerValidationReport as CodegenSessionResponseDto['validationReport'] } : {}),
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
@@ -1775,15 +1825,18 @@ export class CodegenConversationService {
           dto.message,
           assistantPrompt,
         )
-        await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-          status: consumedUnrelatedStatus,
-          semanticState: baseSemanticState,
-          clarificationState: clarificationStateAfterAnswers,
-          constraintPack: {
-            ...constraintPack,
-            conversationHistory: historyAfterConsumedUnrelated,
-          },
-        }))
+        await this.sessionsRepo.updateSession(session.id, {
+          ...this.stateMachine.buildConversationUpdate({
+            status: consumedUnrelatedStatus,
+            semanticState: baseSemanticState,
+            clarificationState: clarificationStateAfterAnswers,
+            constraintPack: {
+              ...constraintPack,
+              conversationHistory: historyAfterConsumedUnrelated,
+            },
+          }),
+          ...(plannerValidationReport ? { validationReport: plannerValidationReport } : {}),
+        } as Prisma.LlmStrategyCodegenSessionUpdateInput)
       }
       const response = this.finalizeSessionResponse({
         id: session.id,
@@ -1799,6 +1852,7 @@ export class CodegenConversationService {
           '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
         ),
         clarificationState: clarificationStateAfterAnswers,
+        ...(plannerValidationReport ? { validationReport: plannerValidationReport as CodegenSessionResponseDto['validationReport'] } : {}),
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
@@ -1825,6 +1879,7 @@ export class CodegenConversationService {
           },
         }),
         ...terminalPlannerEditArtifactReset,
+        ...(plannerValidationReport ? { validationReport: plannerValidationReport } : {}),
       } as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
       const response = this.finalizeSessionResponse({
@@ -1833,6 +1888,7 @@ export class CodegenConversationService {
         missingFields: [],
         assistantPrompt: plannerAssistantPrompt,
         clarificationState,
+        ...(plannerValidationReport ? { validationReport: plannerValidationReport as CodegenSessionResponseDto['validationReport'] } : {}),
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
@@ -1843,6 +1899,7 @@ export class CodegenConversationService {
       missingFields: [],
       assistantPrompt: plannerAssistantPrompt,
       clarificationState,
+      ...(plannerValidationReport ? { validationReport: plannerValidationReport as CodegenSessionResponseDto['validationReport'] } : {}),
     })
     return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
   }
@@ -3506,8 +3563,7 @@ export class CodegenConversationService {
         ? fallbackState.items.filter(item => item.blocking && item.status === 'pending')
         : []
       const preservedFallbackItems = pendingFallbackItems.filter(item =>
-        !this.isSemanticClarificationItem(item)
-        && !this.isResolvedBySemanticState(item, semanticState),
+        !this.isResolvedBySemanticState(item, semanticState),
       )
       if (preservedFallbackItems.length > 0) {
         return {
@@ -3586,10 +3642,16 @@ export class CodegenConversationService {
     semanticState: SemanticState,
   ): boolean {
     if (item.reason === 'missing_entry_rules' || item.field === 'entryRules') {
+      if (semanticState.rules && semanticState.rules.length > 0) {
+        return this.semanticContractReadiness.evaluateRulesReadiness(semanticState.rules).hasEntry
+      }
       return this.executableSemantics.hasExecutableEntrySemantics(semanticState)
     }
 
     if (item.reason === 'missing_exit_rules' || item.field === 'exitRules') {
+      if (semanticState.rules && semanticState.rules.length > 0) {
+        return this.semanticContractReadiness.evaluateRulesReadiness(semanticState.rules).hasExit
+      }
       return this.executableSemantics.hasExecutableExitSemantics(semanticState)
     }
 
@@ -3773,7 +3835,8 @@ export class CodegenConversationService {
     locale: CodegenConversationLocale = 'zh',
   ): StrategyClarificationItem {
     const isContractReadinessSlot = isContractReadinessSemanticSlot(slot)
-    const isStateGateSlot = !isContractReadinessSlot && (slot.priority === 'behavior' || slot.slotKey === 'regimeDefinition')
+    const isOrchestrationSlot = slot.slotKey.startsWith('orchestration.')
+    const isStateGateSlot = !isContractReadinessSlot && !isOrchestrationSlot && (slot.priority === 'behavior' || slot.slotKey === 'regimeDefinition')
     const isContextSlot = slot.priority === 'context'
     const isGridSlot = slot.slotKey.startsWith('grid.')
     const contextReasonMap: Partial<Record<SemanticSlotState['slotKey'], string>> = {
@@ -3787,6 +3850,8 @@ export class CodegenConversationService {
       ? 'stateGates.marketRegime'
       : isContextSlot
         ? slot.slotKey
+      : isOrchestrationSlot
+        ? slot.fieldPath
       : isContractReadinessSlot
         ? slot.fieldPath
       : isGridSlot
@@ -3796,6 +3861,8 @@ export class CodegenConversationService {
       ? 'ambiguous_state_gate'
       : isContextSlot
         ? (contextReasonMap[slot.slotKey] ?? 'missing_execution_context')
+      : isOrchestrationSlot
+        ? 'missing_semantic_contract_runtime_requirement'
       : isContractReadinessSlot
         ? toContractReadinessClarificationReason(slot)
       : isGridSlot
@@ -3864,6 +3931,9 @@ export class CodegenConversationService {
     const openPositionConstraintSlots = state.positionConstraint
       .flatMap(constraint => constraint.openSlots)
       .filter(isBlockingSemanticOpenSlot)
+    const openOrchestrationSlots = state.orchestration
+      .flatMap(node => node.openSlots)
+      .filter(isBlockingSemanticOpenSlot)
     const openContextSlots = Object.values(state.contextSlots)
       .filter(isBlockingSemanticOpenSlot)
 
@@ -3874,6 +3944,7 @@ export class CodegenConversationService {
       ...openPositionConstraintSlots,
       ...openActionSlots,
       ...openRiskSlots,
+      ...openOrchestrationSlots,
       ...openContextSlots,
     ]
   }
@@ -3881,15 +3952,99 @@ export class CodegenConversationService {
   private buildClarificationFromSemanticState(
     semanticState: SemanticState,
   ): StrategyClarificationStateWithSummary {
-    const normalizedSemanticState = semanticState
+    const readiness = this.semanticContractReadiness.normalize(semanticState, this.currentStrategyVersion())
+    const normalizedSemanticState = readiness.state
+    const rulesTreeReadinessItems = this.buildRulesTreeReadinessClarificationItems(readiness.missingRequirements)
+    const readinessOpenSlotItems = this.listOpenSemanticSlots(normalizedSemanticState)
+      .map(slot => this.buildSemanticClarificationItem(slot))
     const semanticSafetyItems = this.buildSemanticSafetyClarificationItems(normalizedSemanticState)
+    const items = this.dedupeClarificationItems([
+      ...rulesTreeReadinessItems,
+      ...readinessOpenSlotItems,
+      ...semanticSafetyItems,
+    ])
     const semanticBaseState: StrategyClarificationStateWithSummary = {
-      status: semanticSafetyItems.length > 0 ? 'NEEDS_CLARIFICATION' : 'CLEAR',
-      items: semanticSafetyItems,
+      status: items.length > 0 ? 'NEEDS_CLARIFICATION' : 'CLEAR',
+      items,
       summary: this.buildSemanticClarificationSummary(normalizedSemanticState),
     }
 
     return this.mergeSemanticClarificationState(normalizedSemanticState, semanticBaseState)
+  }
+
+  private buildRulesTreeReadinessClarificationItems(
+    requirements: readonly MissingSemanticContractRequirement[],
+  ): StrategyClarificationItem[] {
+    return requirements
+      .filter(requirement =>
+        requirement.errorCode === 'READINESS_RULES_TREE_EMPTY'
+        || requirement.errorCode === 'READINESS_RULES_TREE_MISSING_ENTRY'
+        || requirement.errorCode === 'READINESS_RULES_TREE_MISSING_EXIT',
+      )
+      .map((requirement): StrategyClarificationItem => {
+        const detail = this.resolveRulesTreeReadinessClarificationDetail(requirement.errorCode)
+        return {
+          key: detail.key,
+          field: detail.field,
+          reason: detail.reason,
+          question: detail.question,
+          blocking: true,
+          status: 'pending',
+          priority: 90,
+        }
+      })
+  }
+
+  private resolveRulesTreeReadinessClarificationDetail(errorCode: string | undefined): {
+    key: string
+    field: StrategyClarificationItem['field']
+    reason: StrategyClarificationItem['reason']
+    question: string
+  } {
+    switch (errorCode) {
+      case 'READINESS_RULES_TREE_EMPTY':
+        return {
+          key: 'rulesTree.empty',
+          field: 'entryRules',
+          reason: 'missing_entry_rules',
+          question: '当前还没有形成可执行规则。请补充入场条件、出场条件、风控和仓位。',
+        }
+      case 'READINESS_RULES_TREE_MISSING_ENTRY':
+        return {
+          key: 'rulesTree.entry',
+          field: 'entryRules',
+          reason: 'missing_entry_rules',
+          question: '请补充入场条件，例如什么价格或指标条件触发开仓。',
+        }
+      case 'READINESS_RULES_TREE_MISSING_EXIT':
+        return {
+          key: 'rulesTree.exit',
+          field: 'exitRules',
+          reason: 'missing_exit_rules',
+          question: '请补充出场条件，例如什么价格或指标条件触发平仓。',
+        }
+      default:
+        return {
+          key: 'rulesTree.readiness',
+          field: 'entryRules',
+          reason: 'missing_semantic_contract_requirement',
+          question: '请补充完整的可执行规则。',
+        }
+    }
+  }
+
+  private dedupeClarificationItems(items: readonly StrategyClarificationItem[]): StrategyClarificationItem[] {
+    const seen = new Set<string>()
+    const deduped: StrategyClarificationItem[] = []
+    for (const item of items) {
+      const key = `${item.key}::${item.reason}::${item.fieldPath ?? item.field}`
+      if (seen.has(key)) {
+        continue
+      }
+      seen.add(key)
+      deduped.push(item)
+    }
+    return deduped
   }
 
   private buildSemanticSafetyClarificationItems(state: SemanticState): StrategyClarificationItem[] {
@@ -3898,13 +4053,15 @@ export class CodegenConversationService {
       return []
     }
 
-    const hasShortIntent = readFlatActions(state).some(action =>
+    const hasShortAction = readFlatActions(state).some(action =>
       action.status === 'locked'
       && (action.key === 'open_short' || action.key === 'close_short' || action.key === 'reduce_short'),
-    ) || readFlatTriggers(state).some(trigger =>
-      trigger.status === 'locked'
-      && (trigger.sideScope === 'short' || trigger.sideScope === 'both'),
     )
+    const hasShortScopedTrigger = readFlatTriggers(state).some(trigger =>
+      trigger.status === 'locked'
+      && trigger.sideScope === 'short',
+    )
+    const hasShortIntent = hasShortAction || hasShortScopedTrigger
     if (!hasShortIntent) {
       return []
     }
@@ -4281,6 +4438,7 @@ export class CodegenConversationService {
     status: LlmCodegenSessionStatus
     latestDraftCode: Prisma.JsonValue | null
     latestSpecDesc: Prisma.JsonValue | null
+    validationReport?: Prisma.JsonValue | null
     semanticGraph?: Prisma.JsonValue | null
     semanticState?: Prisma.JsonValue | null
     constraintPack?: Prisma.JsonValue | null
@@ -4360,6 +4518,7 @@ export class CodegenConversationService {
             : null),
       specDesc: effectiveSpecDesc,
       canonicalDigest: this.readCanonicalDigest(effectiveSpecDesc),
+      validationReport: (this.readJsonRecord(session.validationReport) as CodegenSessionResponseDto['validationReport']) ?? null,
       semanticGraph: this.readJsonRecord(session.semanticGraph) ?? this.readJsonRecord(latestSnapshot?.semanticGraph),
       unsupportedFallback: semanticState.unsupportedFallback
         ? semanticState.unsupportedFallback as unknown as Record<string, unknown>
@@ -5281,6 +5440,7 @@ export class CodegenConversationService {
       status: LlmCodegenSessionStatus
       latestDraftCode: Prisma.JsonValue | null
       latestSpecDesc: Prisma.JsonValue | null
+      validationReport?: Prisma.JsonValue | null
       constraintPack?: Prisma.JsonValue | null
       semanticState?: Prisma.JsonValue | null
       rejectReason: string | null
@@ -8542,7 +8702,7 @@ export class CodegenConversationService {
         providerCode: options?.providerCode ?? DEFAULT_PROVIDER_CODE,
         model: options?.model,
         temperature: 0,
-        maxTokens: 1500,
+        maxTokens: 4000,
         messages: baseMessages,
       })
 
@@ -8562,7 +8722,7 @@ export class CodegenConversationService {
       }
 
       try {
-        const parsedValue = JSON.parse(content) as unknown
+        const parsedValue = JSON.parse(this.extractPlannerJsonContent(content)) as unknown
         let parsed = this.readPlannerPayload(parsedValue)
         const schemaMismatchReasons = this.collectPlannerSchemaMismatchReasons(parsedValue, parsed)
         if (schemaMismatchReasons.length > 0) {
@@ -8579,6 +8739,7 @@ export class CodegenConversationService {
         //   ⚠️ 顺序：硬校验必须在 #1395 quarantine 之前，使用 raw planner 原值。
         //   否则 quarantine 会把 invalid rule 全剪光 → rules=[] → 误归因为
         //   `rules_missing_or_empty` 而非真实的 `rule_shape_invalid`，reminder/metric 失真。
+        this.normalizePlannerEvidence(parsed, text)
         const rawPlannerSemanticPatch = parsed.semanticPatch ?? parsed.semanticUpdates
         if (rawPlannerSemanticPatch !== undefined && rawPlannerSemanticPatch !== null) {
           const schemaCheck = this.plannerDispatcherMerge.validatePlannerSemanticPatch(
@@ -8599,6 +8760,22 @@ export class CodegenConversationService {
         //   - 不再因任一 rule 失败 strip 整个 rules 字段；空数组也合法
         const rawRules = this.extractRawPlannerRules(parsed)
         const validation = this.validatePlannerRules(rawRules)
+        if (
+          Array.isArray(rawRules)
+          && rawRules.length > 0
+          && validation.rules.length === 0
+          && validation.quarantine.length > 0
+        ) {
+          this.logger.warn(
+            `[#1395] planner rules 全部进 quarantine（${validation.quarantine.length}/${rawRules.length}）：`
+            + validation.quarantine.map(q => `idx=${q.index} ${q.errorPath}`).join('; '),
+          )
+          return {
+            kind: 'schema_reject',
+            reminder: this.buildPlannerRulesQuarantineReminder(validation),
+            reasons: ['rule_shape_invalid'],
+          }
+        }
         this.applyValidatedPlannerRules(parsed, validation)
         if (validation.quarantine.length > 0) {
           this.logger.warn(
@@ -8724,6 +8901,13 @@ export class CodegenConversationService {
         'I could not parse the strategy logic into a supported rules-first form. Please re-describe the entry / exit triggers and risk constraints more explicitly.',
         '策略表达暂未识别成合规的 rules-first 规则形态，请用更明确的入场 / 出场触发条件与风控约束重新描述。',
       ),
+      diagnostics: {
+        gate: 'RulesTreeEntryGate',
+        entry: {
+          rejectReasons: [...reasons],
+          result: 'unsupported',
+        },
+      },
     }
   }
 
@@ -8744,6 +8928,89 @@ export class CodegenConversationService {
       assistantPrompt?: unknown
       semanticPatch?: unknown
       semanticUpdates?: unknown
+    }
+  }
+
+  private extractPlannerJsonContent(content: string): string {
+    const trimmed = content.trim()
+    const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu)
+    if (fenced?.[1]) return fenced[1].trim()
+
+    const firstObject = trimmed.indexOf('{')
+    const lastObject = trimmed.lastIndexOf('}')
+    if (firstObject >= 0 && lastObject > firstObject) {
+      return trimmed.slice(firstObject, lastObject + 1).trim()
+    }
+
+    return trimmed
+  }
+
+  private normalizePlannerEvidence(
+    parsed: {
+      semanticPatch?: unknown
+      semanticUpdates?: unknown
+    },
+    userMessage: string,
+  ): void {
+    const patch = parsed.semanticPatch ?? parsed.semanticUpdates
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return
+    const rules = (patch as { rules?: unknown }).rules
+    if (!Array.isArray(rules)) return
+    const fallbackEvidence = userMessage.trim()
+    if (!fallbackEvidence) return
+
+    for (const rule of rules) {
+      if (!rule || typeof rule !== 'object' || Array.isArray(rule)) continue
+      const record = rule as { evidence?: { text?: unknown }, condition?: unknown, effects?: unknown }
+      const evidenceText = typeof record.evidence?.text === 'string' ? record.evidence.text.trim() : ''
+      if (!evidenceText || !userMessage.includes(evidenceText)) {
+        record.evidence = { text: fallbackEvidence }
+      }
+      this.normalizePlannerAtomExprEvidence(record.condition, userMessage, fallbackEvidence)
+      if (Array.isArray(record.effects)) {
+        for (const effect of record.effects) {
+          this.normalizePlannerAtomExprEvidence(effect, userMessage, fallbackEvidence)
+        }
+      }
+    }
+  }
+
+  private normalizePlannerAtomExprEvidence(
+    node: unknown,
+    userMessage: string,
+    fallbackEvidence: string,
+  ): void {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return
+    const record = node as {
+      kind?: unknown
+      evidence?: { text?: unknown }
+      children?: unknown[]
+      child?: unknown
+      steps?: unknown[]
+    }
+    if (record.kind === 'atom') {
+      const evidenceText = typeof record.evidence?.text === 'string' ? record.evidence.text.trim() : ''
+      if (!evidenceText || !userMessage.includes(evidenceText)) {
+        record.evidence = { text: fallbackEvidence }
+      }
+      return
+    }
+    if (record.kind === 'and' || record.kind === 'or') {
+      if (Array.isArray(record.children)) {
+        for (const child of record.children) {
+          this.normalizePlannerAtomExprEvidence(child, userMessage, fallbackEvidence)
+        }
+      }
+      return
+    }
+    if (record.kind === 'not') {
+      this.normalizePlannerAtomExprEvidence(record.child, userMessage, fallbackEvidence)
+      return
+    }
+    if (record.kind === 'sequence' && Array.isArray(record.steps)) {
+      for (const step of record.steps) {
+        this.normalizePlannerAtomExprEvidence(step, userMessage, fallbackEvidence)
+      }
     }
   }
 
@@ -8866,6 +9133,22 @@ export class CodegenConversationService {
         mutable.__zodQuarantine = validation.quarantine
       }
     }
+  }
+
+  private buildPlannerRulesQuarantineReminder(
+    validation: {
+      quarantine: Array<{ index: number, errorPath: string, rawSnippet: string }>
+    },
+  ): string {
+    return [
+      '上一轮 planner 输出的 semanticPatch.rules[] 全部未通过规则树参数校验，禁止输出空 rules。',
+      '- 必须重出至少一条合法 rules-first rule',
+      '- rule.condition / rule.effects 的 atom params 必须符合 atom contract',
+      '- 不要把无法执行的旧扁平字段或无效 params 放进 rules tree',
+      '本次具体违反：',
+      ...validation.quarantine.slice(0, 12).map(item => `  · rules[${item.index}] ${item.errorPath}`),
+      '请重出合规 semanticPatch.rules[]；若无法表达，明确返回不支持，不要生成空 rules。',
+    ].join('\n')
   }
 
   private snippetOf(value: unknown): string {

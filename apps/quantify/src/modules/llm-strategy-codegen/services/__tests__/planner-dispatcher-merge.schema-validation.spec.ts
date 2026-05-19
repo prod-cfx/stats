@@ -135,6 +135,32 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
     }
   })
 
+  it('accepts grid range rebalance as a rules-tree condition leaf', () => {
+    const patch = {
+      rules: [
+        {
+          id: 'grid-range',
+          phase: 'entry',
+          sideScope: 'both',
+          condition: {
+            kind: 'atom',
+            key: 'grid.range_rebalance',
+            params: { rangeLower: 60000, rangeUpper: 80000, stepPct: 0.5, sideMode: 'both' },
+          },
+          effects: [{ kind: 'atom', key: 'grid.range_rebalance', params: { rangeLower: 60000, rangeUpper: 80000, stepPct: 0.5, sideMode: 'both' } }],
+          evidence: { text: '价格区间 60000-80000，采用双向网格，每格间距 0.5%' },
+        },
+      ],
+    }
+
+    const result = svc.validatePlannerSemanticPatch(
+      patch,
+      '价格区间 60000-80000，采用双向网格，每格间距 0.5%',
+    )
+
+    expect(result.ok).toBe(true)
+  })
+
   it('passes for a compliant rules[] patch', () => {
     const patch = {
       rules: [

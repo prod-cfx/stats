@@ -80,6 +80,38 @@ describe('SemanticContractReadinessService', () => {
     expect(result.state.action[0].openSlots).toBeUndefined()
   })
 
+  it('does not reopen add-position constraint when top-level positionConstraint already covers it', () => {
+    const state = createSemanticState({
+      action: [{
+        id: 'add-position',
+        key: 'action.add_position',
+        params: {
+          addMode: 'drawdown_pct',
+          sideScope: 'long',
+          constraint: '最多加 1 次，最大总敞口 300 USDT。',
+          drawdownThreshold: 5,
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      positionConstraint: [{
+        id: 'pyramiding-limit',
+        key: 'position.pyramiding_limit',
+        params: { maxLayers: 1 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.state.action[0].openSlots ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ slotKey: 'action.add_position.constraint', status: 'open' }),
+    ]))
+  })
+
   it('keeps executable indicator above and below MA aliases supported during readiness', () => {
     const state = createSemanticState({
       trigger: [{

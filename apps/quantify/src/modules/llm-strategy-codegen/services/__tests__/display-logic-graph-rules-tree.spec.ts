@@ -103,6 +103,48 @@ describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () =>
     expect(conditionItems[0]!.text).toMatch(/然后\s/u)
   })
 
+  it('renders EMA20 above from nested reference period in rules tree graph', () => {
+    const rules: SemanticRule[] = [{
+      id: 'rule-ema20-graph',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: {
+        kind: 'atom',
+        key: 'indicator.above',
+        params: { indicator: 'ema', reference: { period: 20 }, timeframe: '15m' },
+      },
+      effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+    }]
+    const graph = service.buildDisplayLogicGraph(baseState({ rules }))
+    const allText = graph.blocks.flatMap(block => block.items).map(item => item.text).join('\n')
+    expect(allText).toContain('EMA20')
+    expect(allText).toContain('15m')
+    expect(allText).not.toContain('指标高于阈值')
+  })
+
+  it('renders rolling channel breakout high/low references in rules tree graph', () => {
+    const rules: SemanticRule[] = [{
+      id: 'rule-channel-breakout-graph',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: {
+        kind: 'and',
+        children: [
+          { kind: 'atom', key: 'price.breakout_up', params: { period: 24, reference: 'channel_high' } },
+          { kind: 'atom', key: 'price.breakout_down', params: { period: 24, reference: 'channel_low' } },
+        ],
+      },
+      effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+    }]
+    const graph = service.buildDisplayLogicGraph(baseState({ rules }))
+    const allText = graph.blocks.flatMap(block => block.items).map(item => item.text).join('\n')
+    expect(allText).toMatch(/滚动|过去|最近|前/u)
+    expect(allText).toContain('24')
+    expect(allText).toContain('高点')
+    expect(allText).toContain('低点')
+    expect(allText).not.toContain('向上突破（24，0%）')
+  })
+
   // Issue #1495-M3: 嵌套组合 AND(OR(a, b), c) 边界覆盖
   it('嵌套 AND(OR(a, b), c) → 单个 IF block + 单条 condition item，文本含 OR + AND 双连接词', () => {
     const rules: SemanticRule[] = [{

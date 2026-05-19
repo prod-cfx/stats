@@ -42,6 +42,7 @@ export const PREDICATE_KIND_TEMPORALITY: Readonly<Record<PredicateDef['kind'], P
   TOUCH_LEVEL_UP: 'event', // 自下而上触及一根 level 时触发
   TOUCH_LEVEL_DOWN: 'event', // 自上而下触及一根 level 时触发
   sequence: 'event', // 多步序列条件，最终 step 满足时一次触发
+  externalSignal: 'event', // webhook / 外部事件到达时触发
   // ── composite：组合算子，由子节点判定 ──
   AND: 'composite',
   OR: 'composite',

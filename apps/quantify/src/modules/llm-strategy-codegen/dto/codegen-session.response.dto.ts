@@ -164,6 +164,7 @@ export class CodegenSessionResponseDto {
       message: string
       nodeId?: string
     }>
+    diagnostics?: Record<string, unknown>
   } | null
 
   @ApiPropertyOptional({ description: '发布后生成的策略实例 ID', nullable: true })

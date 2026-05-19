@@ -95,6 +95,46 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
     expect(view.summary).toContain('1.5')
   })
 
+  it('renders EMA20 above from nested reference period', () => {
+    const rules: SemanticRule[] = [{
+      id: 'rule-ema20-above',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: {
+        kind: 'atom',
+        key: 'indicator.above',
+        params: { indicator: 'ema', reference: { period: 20 }, timeframe: '15m' },
+      },
+      effects: [],
+    }]
+    const view = service.buildConversationView(baseState({ rules }))
+    expect(view.summary).toContain('EMA20')
+    expect(view.summary).toContain('15m')
+    expect(view.summary).not.toContain('指标高于阈值')
+  })
+
+  it('renders rolling channel breakout with high/low reference', () => {
+    const rules: SemanticRule[] = [{
+      id: 'rule-channel-breakout',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: {
+        kind: 'and',
+        children: [
+          { kind: 'atom', key: 'price.breakout_up', params: { period: 24, reference: 'channel_high' } },
+          { kind: 'atom', key: 'price.breakout_down', params: { period: 24, reference: 'channel_low' } },
+        ],
+      },
+      effects: [],
+    }]
+    const view = service.buildConversationView(baseState({ rules }))
+    expect(view.summary).toMatch(/滚动|过去|最近|前/u)
+    expect(view.summary).toContain('24')
+    expect(view.summary).toContain('高点')
+    expect(view.summary).toContain('低点')
+    expect(view.summary).not.toContain('向上突破（24，0%）')
+  })
+
   it('s6：sequence 突破→回踩 顺序保留 "先 X，然后 Y"', () => {
     const rules: SemanticRule[] = [{
       id: 'rule-s6',

@@ -50,6 +50,10 @@ const CONDITION_ALLOWED_BUCKETS: ReadonlySet<string> = new Set([
   'orchestration',  // orchestration-gate
 ])
 
+const CONDITION_ALLOWED_POSITION_CONSTRAINT_ATOMS: ReadonlySet<string> = new Set([
+  'grid.range_rebalance',
+])
+
 const EFFECTS_ALLOWED_BUCKETS: ReadonlySet<string> = new Set([
   'action',
   'risk',              // risk 作 effect / 副作用
@@ -230,7 +234,12 @@ export class PlannerDispatcherMergeService {
     const conditionLeaves = collectAtomLeaves(semRule.condition)
     for (const leaf of conditionLeaves) {
       const bucket = getBucket(leaf.key)
-      if (bucket !== undefined && !CONDITION_ALLOWED_BUCKETS.has(bucket)) {
+      const conditionAllowed = bucket !== undefined
+        && (
+          CONDITION_ALLOWED_BUCKETS.has(bucket)
+          || (bucket === 'positionConstraint' && CONDITION_ALLOWED_POSITION_CONSTRAINT_ATOMS.has(leaf.key))
+        )
+      if (bucket !== undefined && !conditionAllowed) {
         reasons.add('condition_leaf_bucket_invalid')
         detailNotes.push(`rules[${ruleIndex}].condition 含非法叶子 atom key=${leaf.key} bucket=${bucket}（应来自 trigger/risk/orchestration-gate 桶）`)
       }

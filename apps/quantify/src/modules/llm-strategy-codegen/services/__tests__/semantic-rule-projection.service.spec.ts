@@ -46,11 +46,10 @@ describe('SemanticRuleProjectionService (Issue #1395)', () => {
     expect(out.trigger).toHaveLength(2)
     expect(out.trigger[0]!.contracts?.length ?? 0).toBeGreaterThan(0)
     expect(out.trigger[1]!.contracts?.length ?? 0).toBe(0)
-    // action 投影需依赖 ATOM_CONTRACT_REGISTRY['action.open_long'].bucket === 'action'
-    // 若 registry 中尚未注册该 key，projection 应安全 skip，本断言用 conditional
-    if (out.action.length > 0) {
-      expect(out.action[0]!.key).toBe('action.open_long')
-    }
+    expect(out.action).toHaveLength(1)
+    expect(out.action[0]!.key).toBe('action.open_long')
+    expect(out.action[0]!.status).toBe('locked')
+    expect(out.action[0]!._provenance?.ruleId).toBe('r2')
   })
 
   it('handles OR combination', () => {
@@ -89,6 +88,34 @@ describe('SemanticRuleProjectionService (Issue #1395)', () => {
     for (const r of out.risk) {
       expect(['risk.atr_stop', 'risk.atr_take_profit']).toContain(r.key)
     }
+  })
+
+  it('projects condition leaves by registry bucket instead of forcing all leaves into trigger', () => {
+    const rules: SemanticRule[] = [{
+      id: 'r-condition-buckets',
+      phase: 'exit',
+      sideScope: 'long',
+      condition: {
+        kind: 'and',
+        children: [
+          { kind: 'atom', key: 'price.breakout_down', params: { period: 24 } },
+          { kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
+          { kind: 'atom', key: 'portfolioRisk.drawdown_block', params: { thresholdPct: 15 } },
+          { kind: 'atom', key: 'grid.range_rebalance', params: { lower: 60000, upper: 80000, stepPct: 0.5 } },
+        ],
+      },
+      effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+    }]
+
+    const out = svc.projectToFlat(rules)
+
+    expect(out.trigger.map(node => node.key)).toEqual(['price.breakout_down'])
+    expect(out.risk.map(node => node.key)).toContain('risk.stop_loss_pct')
+    expect(out.orchestration.map(node => node.key)).toContain('portfolioRisk.drawdown_block')
+    expect(out.positionConstraint.map(node => node.key)).toContain('grid.range_rebalance')
+    expect(out.trigger.some(node => node.key === 'risk.stop_loss_pct')).toBe(false)
+    expect(out.trigger.some(node => node.key === 'portfolioRisk.drawdown_block')).toBe(false)
+    expect(out.trigger.some(node => node.key === 'grid.range_rebalance')).toBe(false)
   })
 
   it('returns empty buckets for empty rules', () => {
@@ -179,6 +206,68 @@ describe('SemanticRuleProjectionService (Issue #1395)', () => {
     const out = svc.projectToFlat(rules)
     expect(out.orchestration).toHaveLength(1)
     expect(out.orchestration[0].kind).toBe('portfolioRisk')
+  })
+
+  it('projects orchestration atom params into runtime-readiness fields', () => {
+    const rules: SemanticRule[] = [{
+      id: 'r-orchestration-shape',
+      phase: 'entry',
+      sideScope: 'both',
+      condition: { kind: 'atom', key: 'grid.range_rebalance', params: { sideMode: 'both', breakoutAction: 'stop' } },
+      effects: [
+        {
+          kind: 'atom',
+          key: 'program.fixed_grid_gated',
+          params: {
+            anchorPrice: 70000,
+            lowerBound: 60000,
+            upperBound: 80000,
+            levelCount: 10,
+            stepPct: 0.5,
+            sizing: { mode: 'fixed_pct', value: 10 },
+            onDeactivate: 'cancel',
+          },
+        },
+        {
+          kind: 'atom',
+          key: 'portfolioRisk.drawdown_block',
+          params: { thresholdPct: 15 },
+        },
+      ],
+    }]
+
+    const out = svc.projectToFlat(rules)
+    const program = out.orchestration.find(node => node.key === 'program.fixed_grid_gated')
+    const drawdown = out.orchestration.find(node => node.key === 'portfolioRisk.drawdown_block')
+    const implicitGate = out.orchestration.find(node => node.id === 'r-orchestration-shape-eff-0-implicit-gate')
+
+    expect(implicitGate).toMatchObject({
+      kind: 'gate',
+      key: 'gate.regime',
+      status: 'locked',
+      target: { phase: 'entry', sideScope: 'both' },
+      effectWhenFalse: 'block_new_entries',
+    })
+    expect(program).toMatchObject({
+      programKind: 'fixed_grid_gated',
+      activeWhenRef: 'r-orchestration-shape-eff-0-implicit-gate',
+      onDeactivate: 'cancel',
+      rebuildPolicy: 'static',
+      gridParams: {
+        anchorPrice: 70000,
+        lowerBound: 60000,
+        upperBound: 80000,
+        levelCount: 10,
+        stepPct: 0.5,
+      },
+      sizing: { mode: 'fixed_pct', value: 10 },
+    })
+    expect(drawdown).toMatchObject({
+      kind: 'portfolioRisk',
+      scope: 'portfolio',
+      mode: 'enforce',
+      thresholdPct: 15,
+    })
   })
 
   it('R-C: 多 orchestration leaf 在同 rule 内全部投影（每条独立 id）', () => {

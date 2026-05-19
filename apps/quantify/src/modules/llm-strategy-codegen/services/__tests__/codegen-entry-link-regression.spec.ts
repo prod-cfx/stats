@@ -258,6 +258,79 @@ describe('codegen entry link regression: user message → seed → projection �
     expect(clarificationState.items.map(item => item.reason)).not.toContain('missing_semantic_position_sizing')
   })
 
+  it('rules tree readiness failure produces visible clarification item instead of CLEAR:0', () => {
+    const conversation = createConversationService()
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      rules: [],
+      trigger: [],
+      action: [],
+      risk: [],
+      position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-05-19T00:00:00.000Z',
+    }
+
+    const clarificationState = conversation.buildClarificationFromSemanticState(state)
+
+    expect(clarificationState.status).toBe('NEEDS_CLARIFICATION')
+    expect(clarificationState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'rulesTree.empty',
+        reason: 'missing_entry_rules',
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it('rules tree missing exit stays visible even when an entry rule carries risk effect', () => {
+    const conversation = createConversationService()
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      rules: [{
+        id: 'entry-with-risk-only',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.breakout_up', params: { period: 24 } },
+        effects: [
+          { kind: 'atom', key: 'action.open_long', params: {} },
+          { kind: 'atom', key: 'risk.remembered_level_stop', params: { levelKey: 'previous_extrema' } },
+        ],
+      }],
+      trigger: [],
+      action: [],
+      risk: [],
+      position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-05-19T00:00:00.000Z',
+    }
+
+    const normalized = conversation.normalizeSemanticContractReadiness(
+      state,
+      { deployedAtSemanticVersion: CURRENT_SEMANTIC_VERSION },
+    ) as SemanticState
+    const clarificationState = conversation.buildClarificationFromSemanticState(normalized)
+
+    expect(clarificationState.status).toBe('NEEDS_CLARIFICATION')
+    expect(clarificationState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'rulesTree.exit',
+        reason: 'missing_exit_rules',
+        status: 'pending',
+      }),
+    ]))
+  })
+
   it('仓位的 ATR 止损比例不误识别为仓位大小', () => {
     const { state } = buildSeedStateFromUserMessage('BTCUSDT okx 永续 1h 价格下跌3%开多 价格上涨5%平多 仓位的 2% ATR 作为止损', { lockPosition: false })
 

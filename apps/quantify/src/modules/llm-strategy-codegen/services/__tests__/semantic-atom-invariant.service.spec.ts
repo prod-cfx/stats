@@ -1421,6 +1421,117 @@ describe('SemanticAtomInvariantService', () => {
     ]))
   })
 
+  it('keeps position sizing when rules-tree projection uses dotted action atom keys', () => {
+    const baseState = buildSemanticState()
+    const state: SemanticState = {
+      ...baseState,
+      action: [
+        { id: 'open-long', key: 'action.open_long', status: 'locked', source: 'user_explicit' },
+        { id: 'close-long', key: 'action.close_long', status: 'locked', source: 'user_explicit' },
+      ],
+    }
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.position_sizing',
+        status: 'passed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('keeps position sizing for rules-tree projected EMA cross flat actions', () => {
+    const baseState = buildSemanticState()
+    const state: SemanticState = {
+      ...baseState,
+      trigger: [
+        {
+          id: 'entry-ema-cross-cond-0',
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { indicator: 'ema', fastPeriod: 7, slowPeriod: 21 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-ema-cross-cond-0',
+          key: 'indicator.cross_under',
+          phase: 'exit',
+          sideScope: 'long',
+          params: { indicator: 'ema', fastPeriod: 7, slowPeriod: 21 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      action: [
+        { id: 'entry-ema-cross-eff-0', key: 'action.open_long', params: {}, status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'exit-ema-cross-eff-0', key: 'action.close_long', params: {}, status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [],
+    }
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.position_sizing',
+        status: 'passed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('normalizes percent-change direction when valuePct is positive for a down move', () => {
+    const baseState = buildSemanticState()
+    const state: SemanticState = {
+      ...baseState,
+      trigger: [
+        {
+          id: 'entry-price-drop-cond-0',
+          key: 'price.percent_change',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { direction: 'down', valuePct: 1, window: '3m' },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-take-profit-pct-cond-0',
+          key: 'price.percent_change',
+          phase: 'exit',
+          sideScope: 'long',
+          params: { direction: 'up', valuePct: 2, basis: 'entry_avg_price', window: '15m' },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      action: [
+        { id: 'open-long', key: 'action.open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'close-long', key: 'action.close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+    }
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.price_percent_change',
+        status: 'passed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
   it('detects inferred generic expression drift once the trigger is locked', () => {
     const baseState = buildCloseOpenExpressionSemanticState()
     const state = {

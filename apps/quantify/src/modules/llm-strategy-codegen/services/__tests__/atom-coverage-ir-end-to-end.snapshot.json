@@ -15,12 +15,51 @@
       ]
     },
     {
+      "key": "action.close_long",
+      "category": "action",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "rule-block-action:CLOSE_LONG",
+        "rule-block:probe-action-rule"
+      ]
+    },
+    {
+      "key": "action.close_short",
+      "category": "action",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "rule-block-action:CLOSE_SHORT",
+        "rule-block:probe-action-rule"
+      ]
+    },
+    {
       "key": "action.grid_ladder",
       "category": "action",
       "status": "skipped",
       "failureLayer": "none",
       "trace": [],
       "note": "action atom 不映射到单一 CanonicalRuleAction.type（orderProgram / 组合 action）"
+    },
+    {
+      "key": "action.open_long",
+      "category": "action",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "rule-block:probe-action-rule"
+      ]
+    },
+    {
+      "key": "action.open_short",
+      "category": "action",
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "rule-block-action:OPEN_SHORT",
+        "rule-block:probe-action-rule"
+      ]
     },
     {
       "key": "action.reduce_position",

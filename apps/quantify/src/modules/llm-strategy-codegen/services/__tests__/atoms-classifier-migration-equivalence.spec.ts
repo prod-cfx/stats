@@ -107,20 +107,15 @@ describe('atoms-classifier-migration-equivalence', () => {
   // Skip in generic loop; tested separately below.
   const specialCaseKeys = new Set(['risk.partial_take_profit'])
 
-  // Atoms that exist in REGISTRY but NOT in legacy ATOMS (only in REGISTRY since PR1)
-  // #1364 AC-4: orchestration / scope / portfolioRisk / gate / program keys 已移出
-  // REGISTRY_ONLY_KEYS，现在通过 registry adapter 正常 resolve；这里只剩下 lifecycle
-  // action dotted keys（legacy ATOMS 使用裸标签 'open_long' 等）。
-  const legacyMissingKeys = new Set([
+  const dottedActionKeys = [
     'action.open_long',
     'action.close_long',
     'action.open_short',
     'action.close_short',
-  ])
+  ] as const
 
   describe('full equivalence for atoms present in both sources', () => {
     for (const key of registryKeys) {
-      if (legacyMissingKeys.has(key)) continue
       if (specialCaseKeys.has(key)) continue
 
       it(`${key}: classification + category + version + reasonCode all agree`, () => {
@@ -151,12 +146,12 @@ describe('atoms-classifier-migration-equivalence', () => {
     }
   })
 
-  describe('legacyMissingKeys sanity — 这些 key 必须在 legacy 中确为 unknown', () => {
-    // 防漂移：任何 legacyMissingKeys 条目若 legacy 端能识别，立即报错提醒维护者清理白名单。
-    for (const key of legacyMissingKeys) {
-      it(`${key}: legacy resolve 必须为 unsupported_unknown`, () => {
+  describe('dotted lifecycle action keys resolve as supported executable', () => {
+    for (const key of dottedActionKeys) {
+      it(`${key}: legacy resolve 必须为 supported_executable`, () => {
         const legacy = service.resolve(key)
-        expect(legacy.supportStatus).toBe('unsupported_unknown')
+        expect(legacy.supportStatus).toBe('supported_executable')
+        expect(legacy.category).toBe('action')
       })
     }
   })

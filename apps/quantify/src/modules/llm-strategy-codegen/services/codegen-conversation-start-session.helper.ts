@@ -9,6 +9,7 @@ export interface ConversationPlan {
   logicReady: boolean
   assistantPrompt: string
   semanticPatch?: CodegenSemanticPatch
+  diagnostics?: Record<string, unknown>
 }
 
 export interface CanonicalCompileabilityReport {

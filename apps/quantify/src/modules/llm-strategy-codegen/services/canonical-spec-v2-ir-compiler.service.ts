@@ -1761,6 +1761,28 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      case 'external.signal': {
+        const provider = typeof atom.params?.provider === 'string'
+          ? atom.params.provider.trim().toLowerCase()
+          : 'webhook'
+        const signalId = typeof atom.params?.signalId === 'string'
+          ? atom.params.signalId.trim()
+          : null
+        const secret = typeof atom.params?.secret === 'string'
+          ? atom.params.secret.trim()
+          : 'configured'
+        if (provider !== 'webhook' || !signalId || secret !== 'configured') {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}`)
+        }
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_external_signal_${signalId}`,
+          'externalSignal',
+          [],
+          { provider, signalId, secret, sourceFeedId: `webhook.${signalId}`, ttlMs: 60_000 },
+        )
+      }
+
       case 'order_program.active_range': {
         const programId = typeof atom.params?.programId === 'string' ? atom.params.programId : null
         const activePredicate = programId ? context.orderProgramActivePredicateMap.get(programId) : null
@@ -2842,29 +2864,15 @@ export class CanonicalSpecV2IrCompilerService {
     args: string[],
     params?: PredicateDef['params'],
   ): string {
-    const paramsSignature = params ? JSON.stringify(Object.keys(params).sort().reduce<Record<string, number | string | boolean>>((acc, key) => {
-      const value = params[key]
-      if (value !== undefined) {
-        acc[key] = value
-      }
-      return acc
-    }, {})) : ''
-    const signature = `${kind}:${args.join('|')}:${paramsSignature}`
+    const signature = this.buildPredicateSignature(kind, args, params)
     const existing = [...predicateMap.values()].find(predicate => {
-      const existingParamsSignature = predicate.params ? JSON.stringify(Object.keys(predicate.params).sort().reduce<Record<string, number | string | boolean>>((acc, key) => {
-        const value = predicate.params?.[key]
-        if (value !== undefined) {
-          acc[key] = value
-        }
-        return acc
-      }, {})) : ''
-      return `${predicate.kind}:${predicate.args.join('|')}:${existingParamsSignature}` === signature
+      return this.buildPredicateSignature(predicate.kind, predicate.args, predicate.params) === signature
     })
     if (existing) {
       return existing.id
     }
 
-    const id = baseId.replace(/\W+/g, '_')
+    const id = this.resolveCollisionFreePredicateId(predicateMap, baseId, signature)
     predicateMap.set(id, {
       id,
       kind,
@@ -2872,6 +2880,39 @@ export class CanonicalSpecV2IrCompilerService {
       ...(params ? { params } : {}),
     })
     return id
+  }
+
+  private resolveCollisionFreePredicateId(
+    predicateMap: ReadonlyMap<string, PredicateDef>,
+    baseId: string,
+    signature: string,
+  ): string {
+    const sanitized = baseId.replace(/\W+/g, '_')
+    const current = predicateMap.get(sanitized)
+    if (!current) {
+      return sanitized
+    }
+    const currentSignature = this.buildPredicateSignature(current.kind, current.args, current.params)
+    if (currentSignature === signature) {
+      return sanitized
+    }
+    const hash = createHash('sha256').update(signature).digest('hex').slice(0, 12)
+    return `${sanitized}_${hash}`
+  }
+
+  private buildPredicateSignature(
+    kind: PredicateDef['kind'],
+    args: readonly string[],
+    params?: PredicateDef['params'],
+  ): string {
+    const paramsSignature = params ? JSON.stringify(Object.keys(params).sort().reduce<Record<string, number | string | boolean>>((acc, key) => {
+      const value = params[key]
+      if (value !== undefined) {
+        acc[key] = value
+      }
+      return acc
+    }, {})) : ''
+    return `${kind}:${args.join('|')}:${paramsSignature}`
   }
 
   private tryCompileRiskPredicate(rule: CanonicalRuleV2, context: CompileContext): RiskPredicateDef | null {

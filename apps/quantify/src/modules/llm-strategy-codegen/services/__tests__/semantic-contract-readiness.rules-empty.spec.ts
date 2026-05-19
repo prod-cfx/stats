@@ -50,6 +50,15 @@ function baseState(overrides: Partial<SemanticState> = {}): SemanticState {
   }
 }
 
+function lockedExecutableContext(): SemanticState['contextSlots'] {
+  return {
+    exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请选择交易所', affectsExecution: true },
+    symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '请选择交易标的', affectsExecution: true },
+    marketType: { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'perp', status: 'locked', priority: 'context', questionHint: '请选择市场类型', affectsExecution: true },
+    timeframe: { slotKey: 'timeframe', fieldPath: 'contextSlots.timeframe', value: '15m', status: 'locked', priority: 'context', questionHint: '请选择周期', affectsExecution: true },
+  }
+}
+
 describe('#1493 块 D — readiness rules-as-source-of-truth', () => {
   const svc = new SemanticContractReadinessService()
 
@@ -69,7 +78,7 @@ describe('#1493 块 D — readiness rules-as-source-of-truth', () => {
       }),
     ]
     // 传入 flat=[] 强制证伪：rules 才是真源
-    const state = baseState({ rules, trigger: [], action: [], risk: [] })
+    const state = baseState({ rules, trigger: [], action: [], risk: [], contextSlots: lockedExecutableContext() })
 
     const result = svc.normalize(state)
 
@@ -102,6 +111,7 @@ describe('#1493 块 D — readiness rules-as-source-of-truth', () => {
     // 上游"flat 拆开成多 entry"伪造：reproject 会把它彻底覆盖
     const state = baseState({
       rules,
+      contextSlots: lockedExecutableContext(),
       trigger: [
         // 假装上游错误地把 AND 拆成两条独立 trigger（没 combinationContract）
         // 验证：normalize 后这套伪造 flat 被 reproject 替换

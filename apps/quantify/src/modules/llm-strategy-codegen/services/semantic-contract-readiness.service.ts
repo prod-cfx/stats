@@ -35,6 +35,7 @@ import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/seman
 import { SemanticRuleProjectionService } from './semantic-rule-projection.service'
 
 type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position'
+type ExecutableContextField = keyof SemanticState['contextSlots']
 type SemanticSubstrateRequirement =
   | SemanticRuntimeRequirement
   | SemanticStateRequirement
@@ -47,6 +48,18 @@ type SemanticSubstrateRequirementKind =
 interface Phase0OrchestrationNormalizationResult {
   state: SemanticState['orchestration']
   hasBlockingSlots: boolean
+}
+
+interface ExecutableContextGateResult {
+  state: SemanticState
+  hasBlockingSlots: boolean
+}
+
+const EXECUTABLE_CONTEXT_QUESTION_HINTS: Record<ExecutableContextField, string> = {
+  exchange: '请选择交易所',
+  symbol: '请选择交易标的',
+  marketType: '请选择市场类型',
+  timeframe: '请选择周期',
 }
 
 export type MissingSemanticContractRequirementKind = 'capability_missing' | 'timeframe_mismatch'
@@ -126,6 +139,30 @@ export class SemanticContractReadinessService {
         )
       }
     }
+    const hasRules = Boolean(state.rules && state.rules.length > 0)
+    const rulesReadinessForMissing = hasRules
+      ? this.evaluateRulesReadiness(state.rules)
+      : null
+    const flatNonEmptyCountForEmptyRules
+      = state.trigger.length
+      + state.action.length
+      + state.risk.length
+      + (state.positionConstraint?.length ?? 0)
+      + state.orchestration.length
+    const rulesTreeMissingRequirements: MissingSemanticContractRequirement[] = !hasRules && flatNonEmptyCountForEmptyRules === 0
+      ? [{
+          ownerKind: 'position',
+          ownerId: 'rules_tree',
+          contractId: 'rules_tree.empty',
+          domain: 'state',
+          verb: 'define',
+          object: 'rules_tree',
+          errorCode: 'READINESS_RULES_TREE_EMPTY',
+        }]
+      : []
+    const rulesReadinessMissingRequirements = rulesReadinessForMissing
+      ? this.buildRulesReadinessMissingRequirements(rulesReadinessForMissing)
+      : []
     const activeOwners = collectActiveContractOwners(state)
     const orchestrationResult = normalizePhase0Orchestration(
       state.orchestration,
@@ -144,6 +181,8 @@ export class SemanticContractReadinessService {
     const providerContracts = providerNormalization.contracts
     const resolution = this.semanticAtomContractService.resolve(providerContracts)
     const missingRequirements = [
+      ...rulesTreeMissingRequirements,
+      ...rulesReadinessMissingRequirements,
       ...this.collectMissingRequirements(supportedOwners, resolution.capabilities, state),
       ...this.validateTimeframePairing(supportedOwners, state),
     ]
@@ -183,19 +222,22 @@ export class SemanticContractReadinessService {
     const { state: afterDataSourceBinding, hasBlockingSlots: dataSourceBindingHasBlockingSlots } =
       applyDataSourceScopeBindingFailClosed(timeframeBound.state)
     // Phase 5 S10 (#1111): 多 subStrategy 策略对 owner 加 missing_binding fail-closed（与 symbol 平行串联）
-    const { state: nextState, hasBlockingSlots: subStrategyBindingHasBlockingSlots } =
+    const { state: nextStateBeforeContextGate, hasBlockingSlots: subStrategyBindingHasBlockingSlots } =
       applySubStrategyScopeBindingFailClosed(afterDataSourceBinding)
+    const executableContextGate = state.rules && state.rules.length > 0
+      ? applyExecutableContextGate(nextStateBeforeContextGate)
+      : { state: nextStateBeforeContextGate, hasBlockingSlots: false }
+    const nextState = executableContextGate.state
 
     // Issue #1395 (mute-spider) Stage I.A：state.rules 非空时优先走 rules-tree 判定，
     //   绕过扁平桶 8 路 binding/blocking-owner-open-slots fail-closed（这些信号在
     //   rules-first 形态下与真实结构背离）。仍保留 missingRequirements / orchestration /
     //   provider-shape 校验，因为它们独立于扁平桶 → rules 派生链。
-    const rulesReady = state.rules && state.rules.length > 0
-      ? this.evaluateRulesReadiness(state.rules)
-      : null
+    const rulesReady = rulesReadinessForMissing
 
     const flatReady
       = unsupportedOrUnknownOwnerKeys.size === 0
+      && rulesTreeMissingRequirements.length === 0
       && missingRequirements.length === 0
       && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey)
       && !hasBlockingOwnerOpenSlots(nextState)
@@ -212,9 +254,9 @@ export class SemanticContractReadinessService {
           && missingRequirements.length === 0
           && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey)
           && !orchestrationResult.hasBlockingSlots
+          && !executableContextGate.hasBlockingSlots
           && rulesReady.hasEntry
           && rulesReady.hasExit
-          && rulesReady.hasRisk
         )
       : flatReady
 
@@ -223,6 +265,38 @@ export class SemanticContractReadinessService {
       ready,
       missingRequirements,
     }
+  }
+
+  private buildRulesReadinessMissingRequirements(
+    rulesReady: RulesReadinessSummary,
+  ): MissingSemanticContractRequirement[] {
+    const requirements: MissingSemanticContractRequirement[] = []
+
+    if (rulesReady.missing.includes('missing_entry')) {
+      requirements.push({
+        ownerKind: 'position',
+        ownerId: 'rules_tree',
+        contractId: 'rules_tree.missing_entry',
+        domain: 'state',
+        verb: 'define',
+        object: 'entry_rule',
+        errorCode: 'READINESS_RULES_TREE_MISSING_ENTRY',
+      })
+    }
+
+    if (rulesReady.missing.includes('missing_exit')) {
+      requirements.push({
+        ownerKind: 'position',
+        ownerId: 'rules_tree',
+        contractId: 'rules_tree.missing_exit',
+        domain: 'state',
+        verb: 'define',
+        object: 'exit_rule',
+        errorCode: 'READINESS_RULES_TREE_MISSING_EXIT',
+      })
+    }
+
+    return requirements
   }
 
   private normalizeProviderContracts(
@@ -453,7 +527,8 @@ export class SemanticContractReadinessService {
    *   或 condition/effects 中含 grid.range_rebalance 且 breakoutAction ∈ {stop, pause}（grid 越界停止视作出场语义）；
    *   或任意 rule 含 grid.range_rebalance（rangeRebalance 即自带循环出场语义）；
    * - hasRisk: effects 中出现 risk.* atom（含 stop_loss_pct / take_profit_pct / atr_stop / atr_take_profit / partial_take_profit）；
-   *   或任意 rule 含 grid.range_rebalance（grid range_rebalance 自带越界风控约束）；
+   *   或任意 rule 含 grid.range_rebalance（grid range_rebalance 自带越界风控约束）。风险语义用于报告，不作为
+   *   rules tree readiness 硬阻断；是否追问风险由 clarification 层按闭环出场语义决定。
    * - hasPosition: effects 中出现 grid.range_rebalance 或 position-domain atom（key 前缀 `position.` / `sizing.`）。
    */
   evaluateRulesReadiness(rules: readonly SemanticRule[] | undefined): RulesReadinessSummary {
@@ -489,14 +564,27 @@ export class SemanticContractReadinessService {
       }
 
       const effectKeys = new Set(effectLeaves.map(l => l.key))
+      const fulfillsPhase = (leaf: AtomExprAtom, phase: 'entry' | 'exit'): boolean => {
+        const contract = ATOM_CONTRACT_REGISTRY[leaf.key as keyof typeof ATOM_CONTRACT_REGISTRY]
+        return contract?.fulfillsStrategyPhase?.includes(phase) === true
+      }
+      const entryCapableEffect = effectLeaves.some(leaf => fulfillsPhase(leaf, 'entry'))
+      const exitCapableEffect = effectLeaves.some(leaf => fulfillsPhase(leaf, 'exit'))
+      const exitCapableRiskEffect = effectLeaves.some((leaf) => {
+        if (!leaf.key.startsWith('risk.')) return false
+        return fulfillsPhase(leaf, 'exit')
+      })
 
       if (rule.phase === 'entry' || rule.phase === 'gate') {
-        if (effectKeys.has('action.open_long') || effectKeys.has('action.open_short')) {
+        if (effectKeys.has('action.open_long') || effectKeys.has('action.open_short') || entryCapableEffect) {
           summary.hasEntry = true
+        }
+        if (exitCapableRiskEffect) {
+          summary.hasExit = true
         }
       }
       if (rule.phase === 'exit') {
-        if (effectKeys.has('action.close_long') || effectKeys.has('action.close_short')) {
+        if (effectKeys.has('action.close_long') || effectKeys.has('action.close_short') || exitCapableEffect) {
           summary.hasExit = true
         }
       }
@@ -522,7 +610,6 @@ export class SemanticContractReadinessService {
 
     if (!summary.hasEntry) summary.missing.push('missing_entry')
     if (!summary.hasExit) summary.missing.push('missing_exit')
-    if (!summary.hasRisk) summary.missing.push('missing_risk')
 
     return summary
   }
@@ -543,6 +630,33 @@ function collectAtomLeavesSafe(expr: AtomExpr | undefined): AtomExprAtom[] {
   }
   catch {
     return []
+  }
+}
+
+function applyExecutableContextGate(state: SemanticState): ExecutableContextGateResult {
+  const contextSlots = { ...state.contextSlots }
+  let changed = false
+
+  for (const field of ['exchange', 'symbol', 'marketType', 'timeframe'] as const) {
+    if (contextSlots[field]) continue
+    contextSlots[field] = {
+      slotKey: field,
+      fieldPath: `contextSlots.${field}`,
+      value: null,
+      status: 'open',
+      priority: 'context',
+      questionHint: EXECUTABLE_CONTEXT_QUESTION_HINTS[field],
+      affectsExecution: true,
+    }
+    changed = true
+  }
+
+  const nextState = changed ? { ...state, contextSlots } : state
+  return {
+    state: nextState,
+    hasBlockingSlots: Object.values(nextState.contextSlots).some(slot =>
+      slot ? isBlockingSemanticOpenSlot(slot) : false,
+    ),
   }
 }
 
@@ -2357,7 +2471,16 @@ function isExecutableIndicatorReferenceAlias(owner: SemanticContractOwnerRef): b
   const indicator = readParamString(owner.params, 'indicator')?.toLowerCase() ?? ''
   const referenceRole = readParamString(owner.params, 'referenceRole') ?? ''
   const referencePeriod = owner.params['reference.period']
-  const hasReferencePeriod = typeof referencePeriod === 'number' && Number.isFinite(referencePeriod) && referencePeriod > 0
+  const period = owner.params.period
+  const hasReferencePeriod = (
+    typeof referencePeriod === 'number'
+    && Number.isFinite(referencePeriod)
+    && referencePeriod > 0
+  ) || (
+    typeof period === 'number'
+    && Number.isFinite(period)
+    && period > 0
+  )
   const hasReferencePeriodOpenSlot = owner.openSlots.some(slot =>
     slot.status === 'open'
     && slot.affectsExecution
@@ -2365,7 +2488,6 @@ function isExecutableIndicatorReferenceAlias(owner: SemanticContractOwnerRef): b
   )
 
   return (indicator === 'ma' || indicator === 'sma' || indicator === 'ema')
-    && referenceRole.length > 0
     && (hasReferencePeriod || hasReferencePeriodOpenSlot)
 }
 
@@ -2552,7 +2674,7 @@ function buildContractOpenSlotMap(
 
 function buildAddPositionConstraintRelationshipSlots(state: SemanticState): Map<string, SemanticSlotState[]> {
   const slotsByOwnerKey = new Map<string, SemanticSlotState[]>()
-  if (hasActiveAddPositionConstraint(state.position)) {
+  if (hasActiveAddPositionConstraint(state)) {
     return slotsByOwnerKey
   }
 
@@ -2578,13 +2700,20 @@ function buildAddPositionConstraintRelationshipSlots(state: SemanticState): Map<
   return slotsByOwnerKey
 }
 
-function hasActiveAddPositionConstraint(position: SemanticPositionState | null): boolean {
+function hasActiveAddPositionConstraint(state: SemanticState): boolean {
+  const topLevel = state.positionConstraint?.some(isActiveAddPositionConstraint) ?? false
+  if (topLevel) return true
+
   // DEPRECATED Task 6: position.constraints moved to top-level positionConstraint[]
-  return (position as { constraints?: SemanticPositionConstraintState[] } | null)?.constraints?.some(constraint =>
+  return (state.position as { constraints?: SemanticPositionConstraintState[] } | null)?.constraints?.some(isActiveAddPositionConstraint) ?? false
+}
+
+function isActiveAddPositionConstraint(constraint: SemanticPositionConstraintState): boolean {
+  return (
     constraint.status !== 'superseded'
     // eslint-disable-next-line atom-keys/no-atom-key-literal -- position.max_exposure_pct not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
-    && (constraint.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key || constraint.key === 'position.max_exposure_pct'),
-  ) ?? false
+    && (constraint.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key || constraint.key === 'position.max_exposure_pct')
+  )
 }
 
 function hasContractSubstrate(contract: Partial<SemanticAtomContract>): boolean {

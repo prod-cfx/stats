@@ -1,6 +1,87 @@
 import { evaluateExprPool, invalidateMemoryOperand } from './evaluate-expr-pool'
 
 describe('evaluateExprPool', () => {
+  it('evaluates externalSignal predicates from webhook event inbox', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 10_000,
+        eventInbox: {
+          'webhook.whale_buy': [
+            { id: 'evt-1', ts: 9_500, payload: { signalId: 'whale_buy' } },
+          ],
+        },
+      },
+      [{
+        id: 'external_signal_whale_buy',
+        nodeType: 'predicate',
+        sourceRef: 'external.signal',
+        payload: {
+          kind: 'externalSignal',
+          params: { provider: 'webhook', signalId: 'whale_buy', secret: 'configured' },
+        },
+        deps: [],
+      }],
+      ['external_signal_whale_buy'],
+    )
+
+    expect(values.external_signal_whale_buy).toBe(true)
+  })
+
+  it('evaluates externalSignal from the scoped feed before generic webhook state', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 10_000,
+        eventInbox: {
+          webhook: [
+            { id: 'evt-stale-other', ts: 9_900, payload: { signalId: 'other' } },
+          ],
+          'webhook.whale_buy': [
+            { id: 'evt-1', ts: 9_900, payload: { signalId: 'whale_buy' } },
+          ],
+        },
+      },
+      [{
+        id: 'external_signal_whale_buy',
+        nodeType: 'predicate',
+        sourceRef: 'external.signal',
+        payload: {
+          kind: 'externalSignal',
+          params: { provider: 'webhook', signalId: 'whale_buy', secret: 'configured', sourceFeedId: 'webhook.whale_buy' },
+        },
+        deps: [],
+      }],
+      ['external_signal_whale_buy'],
+    )
+
+    expect(values.external_signal_whale_buy).toBe(true)
+  })
+
+  it('fails closed for expired externalSignal events', () => {
+    const values = evaluateExprPool(
+      {
+        timestamp: 10_000,
+        eventInbox: {
+          'webhook.whale_buy': [
+            { id: 'evt-1', ts: 8_000, payload: { signalId: 'whale_buy' } },
+          ],
+        },
+      },
+      [{
+        id: 'external_signal_whale_buy',
+        nodeType: 'predicate',
+        sourceRef: 'external.signal',
+        payload: {
+          kind: 'externalSignal',
+          params: { provider: 'webhook', signalId: 'whale_buy', secret: 'configured', sourceFeedId: 'webhook.whale_buy', ttlMs: 1_000 },
+        },
+        deps: [],
+      }],
+      ['external_signal_whale_buy'],
+    )
+
+    expect(values.external_signal_whale_buy).toBe(false)
+  })
+
   it('evaluates CANDLE_PATTERN series and predicate from runtime bars', () => {
     const exprPool: Array<{
       id: string

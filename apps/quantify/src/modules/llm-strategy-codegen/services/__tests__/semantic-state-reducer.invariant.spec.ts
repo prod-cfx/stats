@@ -534,4 +534,177 @@ describe('SemanticStateReducerService — rules invariant (#1493 块 B)', () => 
     expect(exitSlot?.evidence?.source).toBe('user_explicit')
     expect(exitSlot?.evidence?.text).toBe('触碰即触发')
   })
+
+  it('fills pending exchange slot from okx without clearing rules', () => {
+    const ruleId = 'rule-entry-bollinger-lower'
+    const initialRule: SemanticRule = {
+      id: ruleId,
+      phase: 'entry',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'bollinger.touch_lower', params: { period: 20, stdDev: 2 } },
+      effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+    }
+    const initial: SemanticState = {
+      version: 1,
+      families: [],
+      trigger: [],
+      action: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'open',
+          priority: 'context',
+          questionHint: '请选择交易所。',
+          affectsExecution: true,
+        },
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-05-18T00:00:00.000Z',
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      rules: [initialRule],
+    }
+
+    const next = service.applyClarificationAnswer({
+      currentState: initial,
+      targetSlotKey: 'exchange',
+      targetFieldPath: 'contextSlots.exchange',
+      answer: 'okx',
+      messageIndex: 8,
+    })
+
+    expect(next.rules).toHaveLength(1)
+    expect(next.rules).toEqual(initial.rules)
+    expect(next.contextSlots.exchange).toEqual(expect.objectContaining({
+      slotKey: 'exchange',
+      fieldPath: 'contextSlots.exchange',
+      value: 'okx',
+      status: 'locked',
+    }))
+    assertFlatEqualsProjection(next)
+  })
+
+  it('normalizes legacy contextSlots marketType slot answer without clearing rules', () => {
+    const ruleId = 'rule-entry-bollinger-lower'
+    const initialRule: SemanticRule = {
+      id: ruleId,
+      phase: 'entry',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'bollinger.touch_lower', params: { period: 20, stdDev: 2 } },
+      effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+    }
+    const initial: SemanticState = {
+      version: 1,
+      families: [],
+      trigger: [],
+      action: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: {
+          slotKey: 'contextSlots.marketType',
+          fieldPath: 'contextSlots.marketType',
+          status: 'open',
+          priority: 'context',
+          questionHint: '请选择市场类型。',
+          affectsExecution: true,
+        },
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-05-18T00:00:00.000Z',
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      rules: [initialRule],
+    }
+
+    const next = service.applyClarificationAnswer({
+      currentState: initial,
+      targetSlotKey: 'contextSlots.marketType',
+      targetFieldPath: 'contextSlots.marketType',
+      answer: '合约',
+      messageIndex: 10,
+    })
+
+    expect(next.rules).toHaveLength(1)
+    expect(next.rules).toEqual(initial.rules)
+    expect(next.contextSlots.marketType).toEqual(expect.objectContaining({
+      slotKey: 'contextSlots.marketType',
+      fieldPath: 'contextSlots.marketType',
+      value: 'perp',
+      status: 'locked',
+    }))
+    assertFlatEqualsProjection(next)
+  })
+
+  it('fills negative reverse-position answer without re-planning', () => {
+    const ruleId = 'rule-exit-close-long'
+    const initialRule: SemanticRule = {
+      id: ruleId,
+      phase: 'exit',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', reference: { period: 20 } } },
+      effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+    }
+    const initial: SemanticState = {
+      version: 1,
+      families: [],
+      trigger: [],
+      action: [{
+        id: `${ruleId}-eff-0`,
+        key: 'action.close_long',
+        params: {},
+        status: 'open',
+        source: 'user_explicit',
+        openSlots: [{
+          slotKey: 'action.reverse_position.confirmation',
+          fieldPath: 'actions[0].params.reversePosition',
+          status: 'open',
+          priority: 'behavior',
+          questionHint: '平仓后是否反手？',
+          affectsExecution: true,
+        }],
+        _provenance: { ruleId, conditionPath: 'effects[0].atom' },
+      }],
+      risk: [],
+      position: null,
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-05-18T00:00:00.000Z',
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      rules: [initialRule],
+    }
+
+    const next = service.applyClarificationAnswer({
+      currentState: initial,
+      targetSlotKey: 'action.reverse_position.confirmation',
+      targetFieldPath: 'actions[0].params.reversePosition',
+      answer: '不需要',
+      messageIndex: 9,
+    })
+
+    expect(next.rules).toHaveLength(1)
+    expect(next.rules?.[0].effects).toEqual([
+      { kind: 'atom', key: 'action.close_long', params: { reversePosition: false } },
+    ])
+    expect(next.action[0]).toEqual(expect.objectContaining({
+      key: 'action.close_long',
+      status: 'locked',
+      params: expect.objectContaining({ reversePosition: false }),
+    }))
+    expect(next.action[0]?.openSlots).toEqual([])
+    assertFlatEqualsProjection(next)
+  })
 })

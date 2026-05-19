@@ -1,14 +1,17 @@
 import type { CodegenSemanticPatch } from '../../types/codegen-semantic-patch'
+import type { SemanticRule } from '../../types/atom-expr'
 import type { SemanticCapabilityShape, SemanticSlotState, SemanticState } from '../../types/semantic-state'
 import type { SemanticOpenSlotAnswerResolverResult } from '../semantic-open-slot-answer-resolver.service'
 import { buildSemanticSlotId } from '../../types/semantic-state'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { SemanticContractShapeNormalizerService } from '../semantic-contract-shape-normalizer.service'
 import { SemanticOpenSlotAnswerResolverService } from '../semantic-open-slot-answer-resolver.service'
+import { SemanticRuleProjectionService } from '../semantic-rule-projection.service'
 import { buildGridClarificationSlot } from './fixtures/build-grid-slot'
 
 describe('semanticOpenSlotAnswerResolverService', () => {
   const service = new SemanticOpenSlotAnswerResolverService()
+  const projection = new SemanticRuleProjectionService()
 
   // ─────────────────────────────────────────────────────────────────
   // Issue #1409: atom-driven 通用通道（替代 level-set special-case）
@@ -138,6 +141,119 @@ describe('semanticOpenSlotAnswerResolverService', () => {
     expect(result.nextState.position?.constraints?.[0].params.levels).toBe(20)
   })
 
+  it('keeps atom-driven pending slot answer after rules reproject', () => {
+    const ruleId = 'rule-grid-range'
+    const slot: SemanticSlotState = {
+      slotKey: 'grid.range_rebalance.levels',
+      fieldPath: `${ruleId}-eff-0.params.levels`,
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认网格数量。',
+      affectsExecution: true,
+      atomKey: 'grid.range_rebalance',
+      paramSlotKey: 'levels',
+    }
+    const initialRule: SemanticRule = {
+      id: ruleId,
+      phase: 'entry',
+      sideScope: 'both',
+      condition: { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', reference: { period: 20 } } },
+      effects: [{ kind: 'atom', key: 'grid.range_rebalance', params: { rangeLower: 79200, rangeUpper: 80200, sideMode: 'both' } }],
+    }
+    const state = createSemanticState({
+      positionConstraint: [{
+        id: `${ruleId}-eff-0`,
+        key: 'grid.range_rebalance',
+        params: { rangeLower: 79200, rangeUpper: 80200, sideMode: 'both' },
+        status: 'open',
+        source: 'user_explicit',
+        openSlots: [slot],
+        _provenance: { ruleId, conditionPath: 'effects[0].atom' },
+      }],
+      rules: [initialRule],
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: '20格',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotId: buildSemanticSlotId(slot),
+          slotKey: slot.slotKey,
+          fieldPath: slot.fieldPath,
+        }],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.answer).toEqual({ levels: 20 })
+    expect(result.nextState.rules?.[0].effects).toEqual([
+      { kind: 'atom', key: 'grid.range_rebalance', params: { rangeLower: 79200, rangeUpper: 80200, sideMode: 'both', levels: 20 } },
+    ])
+
+    const reprojected = projection.reprojectFromRules(result.nextState)
+    expect(reprojected.positionConstraint[0]).toEqual(expect.objectContaining({
+      key: 'grid.range_rebalance',
+      params: expect.objectContaining({ levels: 20 }),
+      status: 'locked',
+    }))
+    expect(reprojected.positionConstraint[0].openSlots).toEqual([])
+  })
+
+  it('locks legacy marketType context pending slot through reducer without clearing rules', () => {
+    const ruleId = 'rule-entry-bollinger-lower'
+    const marketTypeSlot: SemanticSlotState = {
+      slotKey: 'contextSlots.marketType',
+      fieldPath: 'contextSlots.marketType',
+      status: 'open',
+      priority: 'context',
+      questionHint: '请选择市场类型。',
+      affectsExecution: true,
+    }
+    const initialRule: SemanticRule = {
+      id: ruleId,
+      phase: 'entry',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'bollinger.touch_lower', params: { period: 20, stdDev: 2 } },
+      effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+    }
+    const state = createSemanticState({
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: marketTypeSlot,
+        timeframe: null,
+      },
+      rules: [initialRule],
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: '合约',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotKey: marketTypeSlot.slotKey,
+          fieldPath: marketTypeSlot.fieldPath,
+        }],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.answer).toEqual({ marketType: 'perp' })
+    expect(result.nextState.contextSlots.marketType).toEqual(expect.objectContaining({
+      slotKey: 'contextSlots.marketType',
+      fieldPath: 'contextSlots.marketType',
+      value: 'perp',
+      status: 'locked',
+    }))
+    expect(result.nextState.rules).toEqual([initialRule])
+    expect(projection.reprojectFromRules(result.nextState).contextSlots.marketType?.value).toBe('perp')
+  })
+
   it('#1409 atom-driven: writes levels answer (20格) into trigger.params via extractSingleSlot', () => {
     const slot = buildGridClarificationSlot('levels')
     const state = createSemanticState({
@@ -167,6 +283,62 @@ describe('semanticOpenSlotAnswerResolverService', () => {
     expect(result.nextState.trigger[0].status).toBe('locked')
     expect(result.nextState.trigger[0].openSlots).toEqual([])
     expect(result.closedSlots).toEqual([{ slotKey: slot.slotKey, fieldPath: slot.fieldPath }])
+  })
+
+  it('keeps pending reverse-position answer after rules reproject', () => {
+    const ruleId = 'rule-exit-close-long'
+    const slot: SemanticSlotState = {
+      slotKey: 'action.reverse_position.confirmation',
+      fieldPath: 'actions[0].params.reversePosition',
+      status: 'open',
+      priority: 'behavior',
+      questionHint: '平仓后是否反手？',
+      affectsExecution: true,
+    }
+    const initialRule: SemanticRule = {
+      id: ruleId,
+      phase: 'exit',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', reference: { period: 20 } } },
+      effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+    }
+    const state = createSemanticState({
+      action: [{
+        id: `${ruleId}-eff-0`,
+        key: 'action.close_long',
+        params: {},
+        status: 'open',
+        source: 'user_explicit',
+        openSlots: [slot],
+        _provenance: { ruleId, conditionPath: 'effects[0].atom' },
+      }],
+      rules: [initialRule],
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: '不需要',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotId: buildSemanticSlotId(slot),
+          slotKey: slot.slotKey,
+          fieldPath: slot.fieldPath,
+        }],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.rules?.[0].effects).toEqual([
+      { kind: 'atom', key: 'action.close_long', params: { reversePosition: false } },
+    ])
+
+    const reprojected = projection.reprojectFromRules(result.nextState)
+    expect(reprojected.action[0]).toEqual(expect.objectContaining({
+      key: 'action.close_long',
+      params: expect.objectContaining({ reversePosition: false }),
+    }))
   })
 
   it('#1409 atom-driven: writes rangeLower answer (区间 79200-80200) into trigger.params', () => {

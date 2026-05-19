@@ -110,13 +110,36 @@ describe('CanonicalSpecBuilderService.resolveGridParamsFromSemanticTrigger — #
     expect(result).toBeNull()
   })
 
-  it('levels 缺席且 stepPct 缺席 → return null（无足够信息派生）', () => {
+  it('levels 缺席且 stepPct 缺席 → 默认 20 格派生 stepPct', () => {
     const trigger = makeGridTrigger({
       rangeLower: 79200,
       rangeUpper: 80200,
     })
     const result = builder.resolveGridParamsFromSemanticTrigger(trigger, '15m')
-    expect(result).toBeNull()
+    expect(result).toEqual(expect.objectContaining({
+      rangeMin: 79200,
+      rangeMax: 80200,
+      timeframe: '15m',
+    }))
+    expect(result?.levelCount).toBeGreaterThanOrEqual(19)
+    expect(result?.stepPct).toBeGreaterThan(0)
+  })
+
+  it('centerOffsetPct=0 + stepPct + levels → 按当前价中心哨兵归一相对网格', () => {
+    const trigger = makeGridTrigger({
+      centerOffsetPct: 0,
+      stepPct: 0.4,
+      levels: 10,
+      sideMode: 'both',
+    })
+    const result = builder.resolveGridParamsFromSemanticTrigger(trigger, '1m')
+    expect(result).toEqual(expect.objectContaining({
+      rangeMin: 0.996,
+      rangeMax: 1.004,
+      stepPct: 0.08,
+      timeframe: '1m',
+    }))
+    expect(result?.levelCount).toBeGreaterThanOrEqual(10)
   })
 
   it('levels < 2 → 派生不触发（return null）', () => {

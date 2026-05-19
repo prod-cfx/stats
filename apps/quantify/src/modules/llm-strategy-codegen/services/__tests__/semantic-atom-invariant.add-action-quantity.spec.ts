@@ -58,4 +58,11 @@ describe('SemanticAtomInvariantService — readAstOpenActionPositionSizings ADD_
     const candidates = anySvc.readAstOpenActionPositionSizings(buildAst(['OPEN_LONG', 'ADD_LONG']))
     expect(candidates).toHaveLength(2)
   })
+
+  it('fixed_quote 默认 USDT asset 可与省略 asset 的下游快照匹配', () => {
+    expect(anySvc.matchesPositionSizingSnapshot(
+      { mode: 'fixed_quote', value: 100 },
+      { mode: 'fixed_quote', value: 100, asset: 'USDT' },
+    )).toBe(true)
+  })
 })

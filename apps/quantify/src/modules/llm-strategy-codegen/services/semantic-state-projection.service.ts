@@ -272,9 +272,6 @@ export class SemanticStateProjectionService {
     const rules = state.rules ?? []
     const eligible = rules
       .filter(r => r.phase === 'entry' || r.phase === 'exit')
-      // Issue #1443 防御性兜底：过滤 always-on + action effects 噪音 rule
-      //   （与 PlannerDispatcherMergeService.filterAlwaysOnActionNoiseRules 同规则）
-      .filter(r => !this.isAlwaysOnActionNoiseRule(r))
     if (eligible.length === 0) return []
 
     const blocks: SemanticDisplayLogicGraphBlock[] = []
@@ -1377,11 +1374,11 @@ export class SemanticStateProjectionService {
           return `${trigger.phase === 'entry' ? '入场' : '出场'}：价格相对${basisLabel}${direction}${pctText}`
         }
 
-        if (trigger.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key && trigger.params['reference.period']) {
+        if (trigger.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key && this.readIndicatorReferencePeriod(trigger.params) !== null) {
           return this.formatIndicatorCompareTriggerSummary(trigger)
         }
 
-        if (trigger.key === ATOM_CONTRACT_REGISTRY['indicator.below'].key && trigger.params['reference.period']) {
+        if (trigger.key === ATOM_CONTRACT_REGISTRY['indicator.below'].key && this.readIndicatorReferencePeriod(trigger.params) !== null) {
           return this.formatIndicatorCompareTriggerSummary(trigger)
         }
 
@@ -1397,14 +1394,13 @@ export class SemanticStateProjectionService {
         }
 
         if (trigger.key === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key || trigger.key === ATOM_CONTRACT_REGISTRY['price.breakout_down'].key) {
-          const period = typeof trigger.params.period === 'number' ? trigger.params.period : null
           const bufferPct = typeof trigger.params.bufferPct === 'number' ? trigger.params.bufferPct : null
           const phase = trigger.phase === 'entry' ? '入场' : '出场'
-          const direction = trigger.key === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key ? '突破' : '跌回'
-          const target = trigger.key === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key ? '高点' : '低点'
-          const periodText = period === null ? `近期${target}` : `最近 ${period} 根 K 线${target}`
           const bufferText = bufferPct === null ? '' : `，突破缓冲 ${this.formatNumber(bufferPct)}%`
-          const condition = `价格${direction}${periodText}${bufferText}`
+          const channelCondition = this.formatChannelBreakoutCondition(trigger.key, trigger.params)
+          const condition = channelCondition.length > 0
+            ? `${channelCondition}${bufferText}`
+            : this.formatGenericBreakoutCondition(trigger.key, trigger.params, bufferText)
           return `${phase}：${condition}${this.formatActionSuffix(trigger, condition)}`
         }
 
@@ -1581,7 +1577,7 @@ export class SemanticStateProjectionService {
         trigger.key,
         trigger.sideScope ?? '',
         String(trigger.params.indicator ?? 'ma').toLowerCase(),
-        String(trigger.params['reference.period']),
+        String(this.readIndicatorReferencePeriod(trigger.params)),
       ].join('|')
       groups.set(groupKey, [...(groups.get(groupKey) ?? []), trigger])
     }
@@ -1826,7 +1822,7 @@ export class SemanticStateProjectionService {
   private isGroupableIndicatorCompareTrigger(trigger: SemanticState['trigger'][number]): boolean {
     return isTimeframeGroupableTriggerKey(trigger.key)
       && (trigger.phase === 'entry' || trigger.phase === 'exit')
-      && typeof trigger.params['reference.period'] === 'number'
+      && this.readIndicatorReferencePeriod(trigger.params) !== null
       && typeof trigger.params.timeframe === 'string'
       && trigger.params.timeframe.trim().length > 0
   }
@@ -1856,14 +1852,43 @@ export class SemanticStateProjectionService {
   // 注：以下 trigger.key 字面比较均为"文案分支"——能力判定已在 isXxxTriggerKey 上游 registry 守门，
   //   此处用 key 选择中文措辞（"上方"/"低于"），属于展示层渲染逻辑，非能力白名单。
   private formatIndicatorCompareCondition(trigger: SemanticState['trigger'][number]): string {
-    const period = typeof trigger.params['reference.period'] === 'number'
-      ? this.formatNumber(trigger.params['reference.period'])
-      : String(trigger.params['reference.period'] ?? '')
+    const periodValue = this.readIndicatorReferencePeriod(trigger.params)
+    const period = periodValue === null ? '' : this.formatNumber(periodValue)
     const indicator = this.formatIndicatorName(trigger)
     const reference = `${indicator}${period}`
     return trigger.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key
       ? `价格在 ${reference} 上方`
       : `价格低于 ${reference}`
+  }
+
+  private readIndicatorReferencePeriod(params: Record<string, unknown>): number | null {
+    const reference = this.readUnknownShape(params.reference)
+    return this.readFiniteNumber(reference?.period) ?? this.readFiniteNumber(params['reference.period'])
+  }
+
+  private formatChannelBreakoutCondition(atomKey: string, params: Record<string, unknown>): string {
+    const reference = this.readString(params.reference)
+    const isBreakoutUp = atomKey === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key
+    const isBreakoutDown = atomKey === ATOM_CONTRACT_REGISTRY['price.breakout_down'].key
+    if (!(isBreakoutUp && reference === 'channel_high') && !(isBreakoutDown && reference === 'channel_low')) {
+      return ''
+    }
+
+    const period = this.readFiniteNumber(params.period)
+    const windowText = period === null
+      ? '滚动'
+      : `过去 ${this.formatNumber(period)} 根 K 线滚动`
+    return isBreakoutUp
+      ? `价格突破${windowText}高点`
+      : `价格跌破${windowText}低点`
+  }
+
+  private formatGenericBreakoutCondition(atomKey: string, params: Record<string, unknown>, bufferText: string): string {
+    const period = this.readFiniteNumber(params.period)
+    const direction = atomKey === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key ? '突破' : '跌破'
+    const target = atomKey === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key ? '高点' : '低点'
+    const periodText = period === null ? `近期${target}` : `最近 ${this.formatNumber(period)} 根 K 线${target}`
+    return `价格${direction}${periodText}${bufferText}`
   }
 
   private formatIndicatorName(trigger: SemanticState['trigger'][number]): string {
@@ -1875,8 +1900,9 @@ export class SemanticStateProjectionService {
   private uniqueSortedIndicatorPeriods(triggers: ReadonlyArray<SemanticState['trigger'][number]>): number[] {
     const periods = new Set<number>()
     for (const trigger of triggers) {
-      if (typeof trigger.params['reference.period'] === 'number') {
-        periods.add(trigger.params['reference.period'])
+      const period = this.readIndicatorReferencePeriod(trigger.params)
+      if (period !== null) {
+        periods.add(period)
       }
     }
 
@@ -1889,8 +1915,8 @@ export class SemanticStateProjectionService {
     return [...triggers].sort((left, right) => {
       const timeframeDelta = String(left.params.timeframe ?? '').localeCompare(String(right.params.timeframe ?? ''))
       if (timeframeDelta !== 0) return timeframeDelta
-      const leftPeriod = typeof left.params['reference.period'] === 'number' ? left.params['reference.period'] : Number.MAX_SAFE_INTEGER
-      const rightPeriod = typeof right.params['reference.period'] === 'number' ? right.params['reference.period'] : Number.MAX_SAFE_INTEGER
+      const leftPeriod = this.readIndicatorReferencePeriod(left.params) ?? Number.MAX_SAFE_INTEGER
+      const rightPeriod = this.readIndicatorReferencePeriod(right.params) ?? Number.MAX_SAFE_INTEGER
       if (leftPeriod !== rightPeriod) return leftPeriod - rightPeriod
       return left.id.localeCompare(right.id)
     })
@@ -2697,6 +2723,12 @@ export class SemanticStateProjectionService {
     return typeof value === 'number' && Number.isFinite(value) ? value : null
   }
 
+  private readUnknownShape(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null
+  }
+
   private describeRiskExpressionEffect(rawEffect: unknown): string {
     if (!rawEffect || typeof rawEffect !== 'object') {
       return '执行风控'
@@ -3141,6 +3173,9 @@ export class SemanticStateProjectionService {
   private renderAtomExpr(expr: AtomExpr): string {
     switch (expr.kind) {
       case 'atom': {
+        const semanticSummary = this.tryRenderRulesTreeAtomSummary(expr.key, expr.params)
+        if (semanticSummary && semanticSummary.length > 0) return semanticSummary
+
         const summary = this.tryAtomContractSummary(expr.key, expr.params, 'zh')
         if (summary && summary.length > 0) return summary
         // 退化：未注册 summaryTemplate 时取 publicName.zh
@@ -3179,6 +3214,32 @@ export class SemanticStateProjectionService {
         return modifiers.length > 0 ? `${body}（${modifiers.join('，')}）` : body
       }
     }
+  }
+
+  private tryRenderRulesTreeAtomSummary(atomKey: string, params: Record<string, unknown>): string | null {
+    if (atomKey === ATOM_CONTRACT_REGISTRY['indicator.above'].key || atomKey === ATOM_CONTRACT_REGISTRY['indicator.below'].key) {
+      const period = this.readIndicatorReferencePeriod(params)
+      if (period === null) return null
+
+      const indicator = this.readString(params.indicator)?.toUpperCase() ?? 'MA'
+      const timeframe = this.readString(params.timeframe)
+      const prefix = timeframe ? `${timeframe} ` : ''
+      const reference = `${indicator}${this.formatNumber(period)}`
+      return atomKey === ATOM_CONTRACT_REGISTRY['indicator.above'].key
+        ? `${prefix}价格在 ${reference} 上方`
+        : `${prefix}价格低于 ${reference}`
+    }
+
+    if (atomKey === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key || atomKey === ATOM_CONTRACT_REGISTRY['price.breakout_down'].key) {
+      const channelCondition = this.formatChannelBreakoutCondition(atomKey, params)
+      if (channelCondition.length > 0) {
+        const bufferPct = this.readFiniteNumber(params.bufferPct)
+        const bufferText = bufferPct === null ? '' : `，突破缓冲 ${this.formatNumber(bufferPct)}%`
+        return `${channelCondition}${bufferText}`
+      }
+    }
+
+    return null
   }
 
   private formatRulePhaseLabel(phase: SemanticRulePhase): string {
@@ -3274,4 +3335,3 @@ export class SemanticStateProjectionService {
     return value * 10080
   }
 }
-

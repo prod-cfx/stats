@@ -83,6 +83,24 @@ const LEGACY_FLAT_PLAN_JSON = JSON.stringify({
   },
 })
 
+const BAD_EVIDENCE_PLAN_JSON = JSON.stringify({
+  related: true,
+  logicReady: false,
+  assistantPrompt: 'ok',
+  semanticPatch: {
+    rules: [
+      {
+        id: 'r1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
+        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        evidence: { text: 'LLM 改写过的非原文证据' },
+      },
+    ],
+  },
+})
+
 const USER_MESSAGE = '5min K 线里面 价格在 EMA20/60/144 上方时做多开仓 都位于下方只开空 入场是 BOLL 下轨开多 上轨开空 币安 BTCUSDT 永续 风控亏损 5% 止损'
 
 describe('#1445 CodegenConversation planner schema reject → retry → unsupportedFallback', () => {
@@ -96,8 +114,44 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
       [],
     )
     expect(shell.aiService.chat).toHaveBeenCalledTimes(1)
+    expect(shell.aiService.chat).toHaveBeenCalledWith(expect.objectContaining({
+      maxTokens: expect.any(Number),
+    }))
+    expect(shell.aiService.chat.mock.calls[0][0].maxTokens).toBeGreaterThanOrEqual(4000)
+    expect(shell.aiService.chat.mock.calls[0][0].responseFormat).toBeUndefined()
     expect(plan.related).toBe(true)
     expect(plan.semanticPatch).toBeDefined()
+  })
+
+  it('parses fenced planner JSON without falling back to empty rules', async () => {
+    const { svc, shell } = makeService()
+    shell.aiService.chat.mockResolvedValueOnce({ content: `\`\`\`json\n${COMPLIANT_PLAN_JSON}\n\`\`\`` })
+    const plan = await (svc as unknown as { planConversationByLlm: Function }).planConversationByLlm(
+      USER_MESSAGE,
+      { rules: [] },
+      { providerCode: 'test', locale: 'zh' },
+      [],
+    )
+
+    expect(shell.logPlannerFallback).not.toHaveBeenCalledWith('invalid_json', expect.any(Object))
+    expect(plan.semanticPatch).toBeDefined()
+  })
+
+  it('normalizes planner rule and leaf evidence to the user message before schema validation', async () => {
+    const { svc, shell } = makeService()
+    shell.aiService.chat.mockResolvedValueOnce({ content: BAD_EVIDENCE_PLAN_JSON })
+    const plan = await (svc as unknown as { planConversationByLlm: Function }).planConversationByLlm(
+      USER_MESSAGE,
+      { rules: [] },
+      { providerCode: 'test', locale: 'zh' },
+      [],
+    )
+
+    const patch = plan.semanticPatch as { rules?: Array<{ evidence?: { text?: string }, condition?: { evidence?: { text?: string } }, effects?: Array<{ evidence?: { text?: string } }> }> }
+    expect(plan.semanticPatch).toBeDefined()
+    expect(patch.rules?.[0]?.evidence?.text).toBe(USER_MESSAGE)
+    expect(patch.rules?.[0]?.condition?.evidence?.text).toBe(USER_MESSAGE)
+    expect(patch.rules?.[0]?.effects?.[0]?.evidence?.text).toBe(USER_MESSAGE)
   })
 
   it('initial reject (legacy atoms[]) → planner retried once', async () => {

@@ -467,6 +467,7 @@ export class SemanticSeedStateBuilderService {
       params: { ...leaf.params },
       status: 'locked',
       source: 'user_explicit',
+      evidence: leaf.evidence ?? rule.evidence,
     }
   }
 

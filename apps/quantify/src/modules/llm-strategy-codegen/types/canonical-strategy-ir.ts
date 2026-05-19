@@ -181,6 +181,7 @@ export interface PredicateDef {
     | 'sequence'
     | 'compare'
     | 'cross'
+    | 'externalSignal'
   args: string[]
   params?: Record<string, number | string | boolean>
 }

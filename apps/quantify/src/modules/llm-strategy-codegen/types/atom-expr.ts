@@ -17,6 +17,10 @@ import type { ParamSlotSchema } from '../atom-contracts/atom-contract-surface.ty
 export const ATOM_EXPR_MAX_DEPTH = 8
 export const ATOM_EXPR_MIN_CHILDREN = 2
 
+export interface AtomExprEvidence {
+  readonly text: string
+}
+
 /**
  * 叶子：原子节点
  * sideScope 缺省时由父 rule.sideScope 派生
@@ -26,6 +30,7 @@ export interface AtomExprAtom {
   readonly key: string
   readonly params: Record<string, unknown>
   readonly sideScope?: 'long' | 'short' | 'both'
+  readonly evidence?: AtomExprEvidence
 }
 
 /** AND：≥2 个子节点，全部满足 */
@@ -82,6 +87,7 @@ export const atomSchema = z.object({
   key: z.string().min(1),
   params: z.record(z.unknown()),
   sideScope: z.enum(['long', 'short', 'both']).optional(),
+  evidence: z.object({ text: z.string().min(1) }).passthrough().optional(),
 })
 
 /** AND 组合：≥2 个子节点 */
@@ -138,6 +144,7 @@ export interface SemanticRule {
   readonly condition: AtomExpr
   /** 副作用绑定（开/平仓、风控、加仓约束等）；顶层不组合，每条独立 */
   readonly effects: ReadonlyArray<AtomExpr>
+  readonly evidence?: AtomExprEvidence
 }
 
 export const semanticRuleSchema = z.object({
@@ -146,6 +153,7 @@ export const semanticRuleSchema = z.object({
   sideScope: z.enum(['long', 'short', 'both']),
   condition: atomExprSchema,
   effects: z.array(atomExprSchema),
+  evidence: z.object({ text: z.string().min(1) }).passthrough().optional(),
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -205,21 +213,51 @@ export function isAtomParamsStrictlyValid(key: string, params: Record<string, un
     if (!slot) continue // 未声明 slot → 不校
     if (slot.kind === 'enum' && slot.enum && slot.enum.length > 0) {
       if (typeof raw !== 'string' && typeof raw !== 'number') return false
-      if (!slot.enum.includes(String(raw))) return false
+      const rawValue = String(raw)
+      if (!slot.enum.includes(rawValue)) {
+        const enumMap = slot.extractor?.kind === 'enum-zh-map' ? slot.extractor.enumMap : undefined
+        const mapped = enumMap?.[rawValue]
+        if (!mapped || !slot.enum.includes(String(mapped))) return false
+      }
     }
     if (slot.kind === 'number' || slot.kind === 'percent') {
-      if (typeof raw !== 'number' || !Number.isFinite(raw)) return false
+      const numeric = typeof raw === 'number'
+        ? raw
+        : typeof raw === 'string'
+          ? Number(raw.trim().match(/-?\d+(?:\.\d+)?/u)?.[0])
+          : Number.NaN
+      if (!Number.isFinite(numeric)) return false
+      if (key === 'grid.range_rebalance' && slotKey === 'centerOffsetPct' && numeric === 0) {
+        const levels = readLooseNumber(params.levels)
+        const stepPct = readLooseNumber(params.stepPct)
+        const hasExplicitRange = readLooseNumber(params.rangeMin) !== null
+          || readLooseNumber(params.rangeMax) !== null
+          || readLooseNumber(params.rangeLower) !== null
+          || readLooseNumber(params.rangeUpper) !== null
+        if (!hasExplicitRange && levels !== null && Number.isInteger(levels) && levels >= 2 && stepPct !== null && stepPct > 0) {
+          continue
+        }
+      }
       if (slot.range) {
         const [min, max] = slot.range
-        if (raw < min || raw > max) return false
+        if (numeric < min || numeric > max) return false
       }
       if (typeof slot.multipleOf === 'number' && slot.multipleOf > 0) {
-        const q = raw / slot.multipleOf
+        const q = numeric / slot.multipleOf
         if (Math.abs(q - Math.round(q)) > 1e-9) return false
       }
     }
   }
   return true
+}
+
+function readLooseNumber(value: unknown): number | null {
+  const numeric = typeof value === 'number'
+    ? value
+    : typeof value === 'string'
+      ? Number(value.trim().match(/-?\d+(?:\.\d+)?/u)?.[0])
+      : Number.NaN
+  return Number.isFinite(numeric) ? numeric : null
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

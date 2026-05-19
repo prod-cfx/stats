@@ -80,6 +80,7 @@ export const TRIGGER_DISPLAY_CONTRACT_REGISTRY: Record<NormalizedTriggerAtomKey,
   'price.candle_pattern':             { displayRoles: ['entryPredicate', 'exitPredicate'] },
   'price.chart_pattern':              { displayRoles: ['entryPredicate', 'exitPredicate'] },
   'liquidity.sweep':                  { displayRoles: ['entryPredicate', 'exitPredicate'] },
+  'external.signal':                  { displayRoles: ['entryPredicate', 'exitPredicate'] },
 
   // --- entryPredicate 单向 ---
   'volume.relative_average':          { displayRoles: ['entryPredicate'] },

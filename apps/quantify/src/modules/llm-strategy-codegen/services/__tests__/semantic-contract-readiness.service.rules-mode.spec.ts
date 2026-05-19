@@ -128,7 +128,7 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     expect(r.missing).toEqual(['rules_empty'])
   })
 
-  it('rules 非空但全无 effects → 报 missing_entry/exit/risk', () => {
+  it('rules 非空但全无 effects → 报 missing_entry/exit；risk 不作为硬阻断', () => {
     const rules: SemanticRule[] = [
       rule({
         id: 'r1',
@@ -140,7 +140,7 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     const r = svc.evaluateRulesReadiness(rules)
     expect(r.missing).toContain('missing_entry')
     expect(r.missing).toContain('missing_exit')
-    expect(r.missing).toContain('missing_risk')
+    expect(r.missing).not.toContain('missing_risk')
   })
 
   it('grid.range_rebalance with breakoutAction=stop 强化 exit', () => {
@@ -179,5 +179,65 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     expect(r.hasEntry).toBe(true)
     expect(r.hasExit).toBe(true)
     expect(r.hasRisk).toBe(true)
+  })
+
+  it('risk effect that fulfills exit counts as rules-tree exit', () => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'r-risk-exit',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: sequence(
+          atom('price.breakout_up', { period: 24, reference: 'channel_high' }),
+          atom('price.previous_extrema_retest', { memoryKey: 'auto', retestKind: 'not_break' }),
+        ),
+        effects: [
+          atom('action.open_long'),
+          atom('risk.remembered_level_stop', { levelKey: 'previous_extrema' }),
+        ],
+      }),
+    ]
+
+    const r = svc.evaluateRulesReadiness(rules)
+
+    expect(r.hasEntry).toBe(true)
+    expect(r.hasExit).toBe(true)
+    expect(r.hasRisk).toBe(true)
+    expect(r.missing).not.toContain('missing_exit')
+  })
+
+  it('program effect that fulfills entry counts as rules-tree entry', () => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'r-program-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: andExpr(
+          atom('price.range_position_gte', { lookbackBars: 48, thresholdPct: 0.3 }),
+          atom('price.range_position_lte', { lookbackBars: 48, thresholdPct: 0.7 }),
+        ),
+        effects: [
+          atom('program.adaptive_volatility_grid', {
+            atrPeriod: 14,
+            atrMultiplier: 1.5,
+            rangeMultiplier: 3,
+            levelCount: 6,
+          }),
+        ],
+      }),
+      rule({
+        id: 'r-exit',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: atom('price.range_position_gte', { lookbackBars: 48, thresholdPct: 0.7 }),
+        effects: [atom('action.close_long')],
+      }),
+    ]
+
+    const r = svc.evaluateRulesReadiness(rules)
+
+    expect(r.hasEntry).toBe(true)
+    expect(r.hasExit).toBe(true)
+    expect(r.missing).toEqual([])
   })
 })

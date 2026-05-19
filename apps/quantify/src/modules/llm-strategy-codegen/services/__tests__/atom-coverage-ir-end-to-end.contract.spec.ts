@@ -356,6 +356,10 @@ const SPECIAL_TRIGGER_MUTATORS: Record<string, SpecMutation> = {
  * registry 里的 action atom key 用 snake_case；ruleAction.type 用 SCREAMING_SNAKE。
  */
 const ACTION_TYPE_MAP: Record<string, CanonicalRuleAction['type'] | null> = {
+  'action.open_long': 'OPEN_LONG',
+  'action.open_short': 'OPEN_SHORT',
+  'action.close_long': 'CLOSE_LONG',
+  'action.close_short': 'CLOSE_SHORT',
   'open_long': 'OPEN_LONG',
   'open_short': 'OPEN_SHORT',
   'close_long': 'CLOSE_LONG',

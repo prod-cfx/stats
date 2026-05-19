@@ -8,8 +8,6 @@ import type {
   SemanticContextSlotState,
   SemanticEvidence,
   SemanticPositionState,
-  SemanticPositionConstraintState,
-  SemanticRiskState,
   SemanticSlotState,
   SemanticState,
   SemanticTriggerState,
@@ -18,6 +16,7 @@ import { buildSemanticSlotId } from '../types/semantic-state'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
 import { GenericSeedDispatcher } from './generic-seed-dispatcher.service'
 import { pickPendingClarificationTarget } from './strategy-clarification-question.service'
+import { SemanticStateReducerService } from './semantic-state-reducer.service'
 import {
   readFlatActions,
   readFlatPositionConstraints,
@@ -65,9 +64,15 @@ export class SemanticOpenSlotAnswerResolverService {
   constructor(
     private readonly seedExtractor: GenericSeedDispatcher = new GenericSeedDispatcher(),
     private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
+    private readonly semanticStateReducer: SemanticStateReducerService = new SemanticStateReducerService(),
   ) {}
 
   resolve(input: SemanticOpenSlotAnswerResolverInput): SemanticOpenSlotAnswerResolverResult {
+    const pendingSlotAnswer = this.resolvePendingSlotAnswer(input.currentState, input.message, input.clarificationState)
+    if (pendingSlotAnswer) {
+      return pendingSlotAnswer
+    }
+
     // 通用通道（#1409）：active pending slot 含 atomKey+paramSlotKey 时走 atom-driven 抽参
     const generic = this.resolveSingleSlotViaAtom(input.currentState, input.message, input.clarificationState)
     if (generic) {
@@ -85,6 +90,78 @@ export class SemanticOpenSlotAnswerResolverService {
     }
 
     return fulfillSemanticFragment(input.currentState, this.seedExtractor.dispatch(input.message), this.symbolResolver)
+  }
+
+  private resolvePendingSlotAnswer(
+    state: SemanticState,
+    message: string,
+    clarificationState: unknown,
+  ): SemanticOpenSlotAnswerResolverResult | null {
+    const activeTarget = pickPendingClarificationTarget(readPendingClarificationItems(clarificationState))
+    if (!activeTarget) {
+      return null
+    }
+
+    const contextSlot = findActiveOpenContextSlot(state, activeTarget)
+    if (contextSlot) {
+      const resolved = resolveKnownPendingSlotValue(contextSlot.slot, message)
+      if (!resolved) {
+        return null
+      }
+
+      const nextState = this.semanticStateReducer.applyClarificationAnswer({
+        currentState: state,
+        targetSlotKey: contextSlot.slot.slotKey,
+        targetFieldPath: contextSlot.slot.fieldPath,
+        targetSlotId: buildSemanticSlotId(contextSlot.slot),
+        answer: message,
+      })
+      if (nextState === state) {
+        return null
+      }
+
+      return {
+        consumed: true,
+        nextState,
+        answer: { [contextSlot.contextKey]: resolved.value },
+        closedSlotKeys: [contextSlot.slot.slotKey],
+        closedSlots: [{ slotKey: contextSlot.slot.slotKey, fieldPath: contextSlot.slot.fieldPath }],
+      }
+    }
+
+    const slotRef = findActiveOpenSlotRef(state, activeTarget)
+    if (!slotRef) {
+      return null
+    }
+
+    const resolved = resolveKnownPendingSlotValue(slotRef.slot, message)
+    if (!resolved) {
+      return null
+    }
+
+    const paramSlotKey = slotRef.slot.paramSlotKey ?? inferParamSlotKey(slotRef.slot)
+    if (!paramSlotKey) {
+      return null
+    }
+
+    const nextState = this.semanticStateReducer.applyClarificationAnswer({
+      currentState: state,
+      targetSlotKey: slotRef.slot.slotKey,
+      targetFieldPath: slotRef.slot.fieldPath,
+      targetSlotId: buildSemanticSlotId(slotRef.slot),
+      answer: message,
+    })
+    if (nextState === state) {
+      return null
+    }
+
+    return {
+      consumed: true,
+      nextState,
+      answer: { [paramSlotKey]: resolved.value },
+      closedSlotKeys: [slotRef.slot.slotKey],
+      closedSlots: [{ slotKey: slotRef.slot.slotKey, fieldPath: slotRef.slot.fieldPath }],
+    }
   }
 
   private resolveSingleSlotViaAtom(
@@ -114,7 +191,13 @@ export class SemanticOpenSlotAnswerResolverService {
       return null
     }
 
-    const nextState = applyExtractedValueToOwner(state, slotRef, paramSlotKey, result.value)
+    const nextState = this.semanticStateReducer.applyClarificationAnswer({
+      currentState: state,
+      targetSlotKey: slotRef.slot.slotKey,
+      targetFieldPath: slotRef.slot.fieldPath,
+      targetSlotId: buildSemanticSlotId(slotRef.slot),
+      answer: String(result.value),
+    })
     if (nextState === state) {
       return null
     }
@@ -162,6 +245,79 @@ export class SemanticOpenSlotAnswerResolverService {
   }
 }
 
+function findActiveOpenContextSlot(
+  state: SemanticState,
+  activeTarget: { slotId?: unknown; slotKey?: unknown; fieldPath?: unknown },
+): { contextKey: keyof SemanticContextSlotState, slot: SemanticSlotState } | null {
+  const matchSlot = (slot: SemanticSlotState): boolean => {
+    if (slot.status !== 'open') return false
+    if (typeof activeTarget.slotId === 'string' && buildSemanticSlotId(slot) === activeTarget.slotId) {
+      return true
+    }
+    if (typeof activeTarget.slotKey === 'string' && typeof activeTarget.fieldPath === 'string') {
+      return slot.slotKey === activeTarget.slotKey && slot.fieldPath === activeTarget.fieldPath
+    }
+    return false
+  }
+
+  for (const contextKey of ['exchange', 'symbol', 'marketType', 'timeframe'] as const) {
+    const slot = state.contextSlots[contextKey]
+    if (slot && matchSlot(slot)) {
+      return { contextKey, slot }
+    }
+  }
+
+  return null
+}
+
+function resolveKnownPendingSlotValue(
+  slot: SemanticSlotState,
+  answer: string,
+): { value: string | boolean, status: 'locked' } | null {
+  const normalized = answer.trim()
+  const slotLabel = `${slot.slotKey} ${slot.fieldPath}`.toLowerCase()
+  if (!normalized) {
+    return null
+  }
+
+  if (slotLabel.includes('exchange') && /^okx$/iu.test(normalized)) {
+    return { value: 'okx', status: 'locked' }
+  }
+
+  if (slotLabel.includes('timeframe') && /^(1m|3m|5m|15m|30m|1h|4h|1d)$/iu.test(normalized)) {
+    return { value: normalized.toLowerCase(), status: 'locked' }
+  }
+
+  if (slotLabel.includes('markettype') || slotLabel.includes('market_type') || slotLabel.includes('market type')) {
+    if (/现货|spot/iu.test(normalized)) {
+      return { value: 'spot', status: 'locked' }
+    }
+    if (/合约|永续|perp|\bcontract\b/iu.test(normalized)) {
+      return { value: 'perp', status: 'locked' }
+    }
+  }
+
+  if (slotLabel.includes('reverse') && /不需要|不用|否|no/iu.test(normalized)) {
+    return { value: false, status: 'locked' }
+  }
+
+  if (slotLabel.includes('add_position') && /不加仓|不需要|不用|否|no/iu.test(normalized)) {
+    return { value: 'none', status: 'locked' }
+  }
+
+  return null
+}
+
+function inferParamSlotKey(slot: SemanticSlotState): string | null {
+  const paramsPath = slot.fieldPath.match(/(?:^|\.)params\.([A-Za-z0-9_]+)$/u)
+  if (paramsPath?.[1]) {
+    return paramsPath[1]
+  }
+
+  const slotKeyPath = slot.slotKey.match(/\.([A-Za-z0-9_]+)$/u)
+  return slotKeyPath?.[1] ?? null
+}
+
 function findActiveOpenSlotRef(
   state: SemanticState,
   activeTarget: { slotId?: unknown; slotKey?: unknown; fieldPath?: unknown },
@@ -204,111 +360,6 @@ function findActiveOpenSlotRef(
     if (slot) return { ownerKind: 'positionConstraint', ownerId: constraint.id, slot }
   }
   return null
-}
-
-function applyExtractedValueToOwner(
-  state: SemanticState,
-  slotRef: ActiveOpenSlotRef,
-  paramSlotKey: string,
-  value: unknown,
-): SemanticState {
-  const removeSlot = (slots: readonly SemanticSlotState[]): SemanticSlotState[] =>
-    slots.filter(s => !(s.slotKey === slotRef.slot.slotKey && s.fieldPath === slotRef.slot.fieldPath))
-  const nextStatusFor = (slots: readonly SemanticSlotState[]) =>
-    slots.some(s => s.status === 'open') ? 'open' as const : 'locked' as const
-
-  if (slotRef.ownerKind === 'trigger') {
-    return {
-      ...state,
-      trigger: state.trigger.map((owner) => {
-        if (owner.id !== slotRef.ownerId) return owner
-        const openSlots = removeSlot(owner.openSlots)
-        return {
-          ...owner,
-          params: { ...owner.params, [paramSlotKey]: value },
-          openSlots,
-          status: nextStatusFor(openSlots),
-          source: 'user_explicit',
-        } satisfies SemanticTriggerState
-      }),
-    }
-  }
-  if (slotRef.ownerKind === 'action') {
-    return {
-      ...state,
-      action: state.action.map((owner) => {
-        if (owner.id !== slotRef.ownerId) return owner
-        const openSlots = removeSlot(owner.openSlots ?? [])
-        return {
-          ...owner,
-          params: { ...(owner.params ?? {}), [paramSlotKey]: value },
-          openSlots,
-          status: nextStatusFor(openSlots),
-          source: 'user_explicit',
-        } satisfies SemanticActionState
-      }),
-    }
-  }
-  if (slotRef.ownerKind === 'risk') {
-    return {
-      ...state,
-      risk: state.risk.map((owner) => {
-        if (owner.id !== slotRef.ownerId) return owner
-        const openSlots = removeSlot(owner.openSlots)
-        return {
-          ...owner,
-          params: { ...owner.params, [paramSlotKey]: value },
-          openSlots,
-          status: nextStatusFor(openSlots),
-          source: 'user_explicit',
-        } satisfies SemanticRiskState
-      }),
-    }
-  }
-  if (slotRef.ownerKind === 'position') {
-    // M1: position 顶层 SemanticPositionState 没有通用 `params` 字段
-    //   （sizing/mode/value 由 resolvePositionSizingAnswer 独立路径处理）。
-    //   若未来在 state.position.openSlots 注册 atom-driven slot，需要先扩
-    //   SemanticPositionState 字段；当前直接拒绝通用通道，避免静默吞值。
-    return state
-  }
-  if (slotRef.ownerKind === 'positionConstraint') {
-    // #1395 扁平桶 + 旧嵌套桶都同步写——以 owner.id 匹配的桶为准；另一桶 noop。
-    //
-    // M2 invariant：两桶若同时存在同 slotId 但不同 ownerId 的 open slot 视为 state corruption；
-    //   当前 dispatcher / seed-builder 一次写入只产 1 个 grid constraint，不会触发该场景。
-    //   若未来出现需开 follow-up issue 跟踪（#1422 收口扁平桶 SoT）。
-    //
-    // m1 引用稳定：仅当桶里存在 owner.id 匹配项时才 map 出新数组，否则保持原引用避免下游 memo 失效。
-    const updateConstraint = (owner: SemanticPositionConstraintState): SemanticPositionConstraintState => {
-      if (owner.id !== slotRef.ownerId) return owner
-      const openSlots = removeSlot(owner.openSlots)
-      return {
-        ...owner,
-        params: { ...owner.params, [paramSlotKey]: value },
-        openSlots,
-        status: nextStatusFor(openSlots),
-        source: 'user_explicit',
-      } satisfies SemanticPositionConstraintState
-    }
-    const flatConstraints = readFlatPositionConstraints(state)
-    const nestedConstraints = state.position?.constraints ?? []
-    const flatHasOwner = flatConstraints.some(c => c.id === slotRef.ownerId)
-    const nestedHasOwner = nestedConstraints.some(c => c.id === slotRef.ownerId)
-    const nextFlatConstraints = flatHasOwner ? flatConstraints.map(updateConstraint) : flatConstraints
-    const nextNestedConstraints = nestedHasOwner ? nestedConstraints.map(updateConstraint) : nestedConstraints
-    const nextState: SemanticState = nextFlatConstraints === flatConstraints
-      ? state
-      : { ...state, positionConstraint: nextFlatConstraints }
-    if (state.position && nextNestedConstraints !== nestedConstraints) {
-      return {
-        ...nextState,
-        position: { ...state.position, constraints: nextNestedConstraints },
-      }
-    }
-    return nextState
-  }
-  return state
 }
 
 function resolvePositionSizingAnswer(

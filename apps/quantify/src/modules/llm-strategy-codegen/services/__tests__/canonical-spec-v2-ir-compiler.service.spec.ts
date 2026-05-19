@@ -3198,6 +3198,105 @@ describe('canonicalSpecV2IrCompilerService', () => {
     }))
   })
 
+  it('lifts entry no-position predicate into gate guard without dropping entry condition', () => {
+    const semanticState: SemanticState = {
+      version: 1,
+      families: ['single-leg', 'state-gated'],
+      trigger: [
+        {
+          id: 'entry-no-position',
+          key: 'position.no_position',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { sideScope: 'long' },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'entry-bullish-candle',
+          key: 'price.candle_pattern',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { pattern: 'consecutive_body', direction: 'bullish', minBars: 1 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-bearish-candle',
+          key: 'price.candle_pattern',
+          phase: 'exit',
+          sideScope: 'long',
+          params: { pattern: 'consecutive_body', direction: 'bearish', minBars: 1 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      action: [
+        { id: 'open-long', key: 'action.open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'close-long', key: 'action.close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      contextSlots: {
+        exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请选择交易所', affectsExecution: true },
+        symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '请选择交易标的', affectsExecution: true },
+        marketType: { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'perp', status: 'locked', priority: 'context', questionHint: '请选择市场类型', affectsExecution: true },
+        timeframe: { slotKey: 'timeframe', fieldPath: 'contextSlots.timeframe', value: '1m', status: 'locked', priority: 'context', questionHint: '请选择周期', affectsExecution: true },
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-05-19T00:00:00.000Z',
+    }
+    const canonicalSpec = new CanonicalSpecBuilderService().buildFromSemanticState(semanticState)
+    const result = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: { exchange: 'okx', symbol: 'BTCUSDT', baseTimeframe: '1m', positionPct: 10 },
+    })
+
+    expect(canonicalSpec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'gate',
+        condition: expect.objectContaining({ key: 'position.no_position' }),
+        actions: [expect.objectContaining({ type: 'BLOCK_NEW_ENTRY' })],
+      }),
+      expect.objectContaining({
+        phase: 'entry',
+        condition: expect.objectContaining({ key: 'price.candle_pattern' }),
+        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+      }),
+    ]))
+    expect(result.ir.riskPolicy.guards).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'MAX_POSITION_PCT',
+        value: 0,
+        onBreach: 'BLOCK_NEW_ENTRY',
+        appliesTo: 'long',
+      }),
+    ]))
+    expect(result.ir.ruleBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        actions: [expect.objectContaining({ kind: 'OPEN_LONG' })],
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        actions: [expect.objectContaining({ kind: 'CLOSE_LONG' })],
+      }),
+    ]))
+  })
+
   it('compiles breakout and risk guards into deterministic IR', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 

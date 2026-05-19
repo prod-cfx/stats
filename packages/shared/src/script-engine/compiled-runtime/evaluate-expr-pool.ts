@@ -185,6 +185,8 @@ function evaluatePredicate(
       return evaluateGenericCompare(node, left, right, ctx, executionModel, exprIndex, seriesMemo)
     case 'cross':
       return evaluateGenericCross(node, ctx, executionModel, exprIndex, seriesMemo)
+    case 'externalSignal':
+      return evaluateExternalSignal(node, ctx)
     case 'sequence':
       return evaluateGenericSequence(node, values, ctx)
     case 'TOUCH_LEVEL_DOWN':
@@ -196,6 +198,84 @@ function evaluatePredicate(
     default:
       return false
   }
+}
+
+function evaluateExternalSignal(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): boolean {
+  const provider = typeof node.payload.params?.provider === 'string'
+    ? node.payload.params.provider
+    : 'webhook'
+  const signalId = typeof node.payload.params?.signalId === 'string'
+    ? node.payload.params.signalId
+    : ''
+  if (provider !== 'webhook' || signalId.length === 0) {
+    return false
+  }
+
+  const sourceFeedId = typeof node.payload.params?.sourceFeedId === 'string' && node.payload.params.sourceFeedId.length > 0
+    ? node.payload.params.sourceFeedId
+    : `webhook.${signalId}`
+  const ttlMs = typeof node.payload.params?.ttlMs === 'number' && Number.isFinite(node.payload.params.ttlMs)
+    ? node.payload.params.ttlMs
+    : 60_000
+  const now = resolveRuntimeTimestamp(ctx)
+  if (now === null) {
+    return false
+  }
+
+  const inbox = ctx.eventInbox?.[sourceFeedId]
+    ?? ctx.eventInbox?.[`webhook:${signalId}`]
+  if (!Array.isArray(inbox)) {
+    return false
+  }
+
+  return inbox.some((event) => {
+    if (
+      !event
+      || typeof event.id !== 'string'
+      || event.id.length === 0
+      || typeof event.ts !== 'number'
+      || !Number.isFinite(event.ts)
+      || now - event.ts > ttlMs
+      || isExternalSignalEventConsumed(ctx, event.id)
+    ) {
+      return false
+    }
+    const payload = event?.payload
+    if (!payload || typeof payload !== 'object') {
+      return false
+    }
+    return payload.signalId === signalId
+      || payload.signal_id === signalId
+      || payload.id === signalId
+  })
+}
+
+function resolveRuntimeTimestamp(ctx: StrategyExecutionContextV1): number | null {
+  if (typeof ctx.timestamp === 'number' && Number.isFinite(ctx.timestamp)) {
+    return ctx.timestamp
+  }
+  const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+  const lastBar = bars[bars.length - 1]
+  return typeof lastBar?.timestamp === 'number' && Number.isFinite(lastBar.timestamp)
+    ? lastBar.timestamp
+    : null
+}
+
+function isExternalSignalEventConsumed(ctx: StrategyExecutionContextV1, eventId: string): boolean {
+  const consumed = ctx.consumedEventIds ?? ctx.semanticRuntimeState?.externalSignal?.consumedEventIds
+  if (Array.isArray(consumed)) {
+    return consumed.includes(eventId)
+  }
+  if (consumed instanceof Set) {
+    return consumed.has(eventId)
+  }
+  if (consumed && typeof consumed === 'object') {
+    return Boolean((consumed as Record<string, unknown>)[eventId])
+  }
+  return false
 }
 
 function evaluateLevelSet(

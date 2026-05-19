@@ -44,7 +44,7 @@ type ReducerWorkingState = Omit<
 }
 
 interface SupportedSlotReduction {
-  paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct' | 'sideMode' | 'reference' | 'lookbackBars' | 'multiplier'
+  paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct' | 'sideMode' | 'reference' | 'lookbackBars' | 'multiplier' | 'levels' | 'centerOffsetPct'
   paramValue: number | string
   slotValue: number | string
   extraParams?: Record<string, number | string>
@@ -253,6 +253,11 @@ export class SemanticStateReducerService {
         ? {
             ...input.currentState.position,
             openSlots: input.currentState.position.openSlots?.map(slot => ({ ...slot })),
+            constraints: input.currentState.position.constraints?.map(constraint => ({
+              ...constraint,
+              params: { ...constraint.params },
+              openSlots: constraint.openSlots.map(slot => ({ ...slot })),
+            })),
           }
         : null,
       positionConstraint: structuredClone(input.currentState.positionConstraint ?? []) as SemanticPositionConstraintState[],
@@ -312,6 +317,9 @@ export class SemanticStateReducerService {
       }
       recordSlotEvidence(trigger, slot)
 
+      if (slot.paramSlotKey) {
+        trigger.openSlots = trigger.openSlots.filter(item => item.status === 'open')
+      }
       trigger.status = trigger.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
       if (input.applyEquivalentConfirmationSlots && reduction.paramKey === 'confirmationMode') {
         this.applyEquivalentConfirmationSlotReduction(
@@ -345,12 +353,15 @@ export class SemanticStateReducerService {
       }
 
       const paramKey = this.resolveActionParamKey(slot)
+      const slotReduction = this.reduceKnownActionSlot(slot, answerText)
+      const paramValue = slotReduction?.paramValue ?? answerText
+      const slotValue = slotReduction?.slotValue ?? answerText
       action.params = {
         ...(action.params ?? {}),
-        [paramKey]: answerText,
+        [paramKey]: paramValue,
       }
       updateRuleFromOwner(action, () => ({ ...(action.params ?? {}) }))
-      slot.value = answerText
+      slot.value = slotValue
       slot.status = 'locked'
       slot.evidence = {
         text: answerText,
@@ -358,6 +369,9 @@ export class SemanticStateReducerService {
         source: 'user_explicit',
       }
       recordSlotEvidence(action, slot)
+      if (slot.paramSlotKey) {
+        action.openSlots = (action.openSlots ?? []).filter(item => item.status === 'open')
+      }
       action.status = (action.openSlots ?? []).every(item => item.status !== 'open') ? 'locked' : 'open'
       if (action.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key && paramKey === 'constraint') {
         const result = this.applyAddPositionConstraintAnswer(nextState, answerText, input.messageIndex)
@@ -454,6 +468,42 @@ export class SemanticStateReducerService {
         source: 'user_explicit',
       }
       recordSlotEvidence(constraint, slot)
+      if (slot.paramSlotKey) {
+        constraint.openSlots = constraint.openSlots.filter(item => item.status === 'open')
+      }
+      constraint.status = constraint.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+      break
+    }
+
+    for (const constraint of nextState.position?.constraints ?? []) {
+      const slot = constraint.openSlots.find((item) => {
+        if (input.targetSlotId) {
+          return buildSemanticSlotId(item) === input.targetSlotId
+        }
+
+        return item.slotKey === input.targetSlotKey
+          && (input.targetFieldPath ? item.fieldPath === input.targetFieldPath : true)
+      })
+      if (!slot || slot.status !== 'open') continue
+
+      const paramKey = this.resolvePositionConstraintParamKey(slot)
+      if (!paramKey) {
+        break
+      }
+
+      constraint.params[paramKey] = this.parsePositionConstraintParamAnswer(paramKey, answerText, input.messageIndex)
+      updateRuleFromOwner(constraint, () => ({ ...constraint.params }))
+      slot.value = answerText
+      slot.status = 'locked'
+      slot.evidence = {
+        text: answerText,
+        messageIndex: input.messageIndex,
+        source: 'user_explicit',
+      }
+      recordSlotEvidence(constraint, slot)
+      if (slot.paramSlotKey) {
+        constraint.openSlots = constraint.openSlots.filter(item => item.status === 'open')
+      }
       constraint.status = constraint.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
       break
     }
@@ -490,6 +540,9 @@ export class SemanticStateReducerService {
             source: 'user_explicit',
           }
           recordSlotEvidence(risk, slot)
+          if (slot.paramSlotKey) {
+            risk.openSlots = risk.openSlots.filter(item => item.status === 'open')
+          }
           risk.status = risk.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
           break
         }
@@ -546,7 +599,7 @@ export class SemanticStateReducerService {
           && (input.targetFieldPath ? slot.fieldPath === input.targetFieldPath : true)
       if (!matchesTarget) continue
 
-      const reduction = this.reduceSupportedContextSlot(slot.slotKey, answerText)
+      const reduction = this.reduceSupportedContextSlot(contextKey, answerText)
       if (!reduction) {
         break
       }
@@ -594,6 +647,27 @@ export class SemanticStateReducerService {
     return slot.slotKey
   }
 
+  private reduceKnownActionSlot(
+    slot: SemanticSlotState,
+    answerText: string,
+  ): { paramValue: string | boolean, slotValue: string | boolean } | null {
+    const normalized = answerText.trim()
+    const slotLabel = `${slot.slotKey} ${slot.fieldPath}`.toLowerCase()
+    if (!normalized) {
+      return null
+    }
+
+    if (slotLabel.includes('reverse') && /不需要|不用|否|no/iu.test(normalized)) {
+      return { paramValue: false, slotValue: false }
+    }
+
+    if (slotLabel.includes('add_position') && /不加仓|不需要|不用|否|no/iu.test(normalized)) {
+      return { paramValue: 'none', slotValue: 'none' }
+    }
+
+    return null
+  }
+
   private resolveRiskParamKey(slot: SemanticSlotState): string | null {
     const paramsPath = slot.fieldPath.match(/(?:^|\.)params\.([A-Za-z0-9_]+)$/u)
     if (paramsPath?.[1]) {
@@ -635,6 +709,20 @@ export class SemanticStateReducerService {
     if (paramKey === 'maxCount') {
       const value = this.parsePositiveIntegerAnswer(answerText)
       return value ?? answerText
+    }
+
+    if (paramKey === 'levels') {
+      const value = this.parsePositiveIntegerAnswer(answerText)
+      return value ?? answerText
+    }
+
+    if (paramKey === 'rangeLower' || paramKey === 'rangeUpper' || paramKey === 'stepPct' || paramKey === 'centerOffsetPct') {
+      const value = this.parseGridNumericAnswer(paramKey === 'stepPct' ? 'grid.stepPct' : paramKey, answerText)
+      return value ?? answerText
+    }
+
+    if (paramKey === 'sideMode') {
+      return this.parseGridSideModeAnswer(answerText) ?? answerText
     }
 
     if (paramKey === 'capitalCap' || paramKey === 'perOrderSizing') {
@@ -1211,6 +1299,13 @@ export class SemanticStateReducerService {
       }
     }
 
+    if (slot.paramSlotKey) {
+      const reduction = this.reduceAtomParamSlot(slot.paramSlotKey, answerText)
+      if (reduction) {
+        return reduction
+      }
+    }
+
     // eslint-disable-next-line atom-keys/no-atom-key-literal -- grid.range.lower / grid.range.upper / grid.stepPct are slot key labels, not atom key routing
     if (normalizedGridSlotKey === 'grid.range.lower' || normalizedGridSlotKey === 'grid.range.upper' || normalizedGridSlotKey === 'grid.stepPct') {
       const value = this.parseGridNumericAnswer(normalizedGridSlotKey, answerText)
@@ -1243,6 +1338,28 @@ export class SemanticStateReducerService {
         paramValue: sideMode,
         slotValue: sideMode,
       }
+    }
+
+    return null
+  }
+
+  private reduceAtomParamSlot(
+    paramSlotKey: string,
+    answerText: string,
+  ): SupportedSlotReduction | null {
+    if (paramSlotKey === 'levels') {
+      const levels = this.parsePositiveIntegerAnswer(answerText)
+      return levels === null ? null : { paramKey: 'levels', paramValue: levels, slotValue: levels }
+    }
+
+    if (paramSlotKey === 'rangeLower' || paramSlotKey === 'rangeUpper' || paramSlotKey === 'stepPct' || paramSlotKey === 'centerOffsetPct') {
+      const value = this.parseGridNumericAnswer(paramSlotKey === 'stepPct' ? 'grid.stepPct' : paramSlotKey, answerText)
+      return value === null ? null : { paramKey: paramSlotKey, paramValue: value, slotValue: value }
+    }
+
+    if (paramSlotKey === 'sideMode') {
+      const sideMode = this.parseGridSideModeAnswer(answerText)
+      return sideMode ? { paramKey: 'sideMode', paramValue: sideMode, slotValue: sideMode } : null
     }
 
     return null

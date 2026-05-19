@@ -767,7 +767,7 @@ export class SemanticAtomInvariantService {
     if (!actual) return false
     if (actual.mode !== expected.mode) return false
     if (Math.abs(actual.value - expected.value) > 0.000001) return false
-    if (expected.asset !== undefined && actual.asset !== expected.asset) return false
+    if (expected.asset !== undefined && actual.asset !== undefined && actual.asset !== expected.asset) return false
     return true
   }
 

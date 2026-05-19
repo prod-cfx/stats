@@ -34,6 +34,7 @@ import type {
 import type {
   SemanticActionState,
   SemanticFlatAtomProvenance,
+  SemanticExpression,
   SemanticNodeStatus,
   SemanticOrchestrationNode,
   SemanticPositionConstraintKey,
@@ -171,7 +172,7 @@ export class SemanticRuleProjectionService {
     }
 
     for (const rule of rules) {
-      this.projectCondition(rule, out.trigger)
+      this.projectCondition(rule, out)
 
       let effectIndex = 0
       for (const eff of rule.effects) {
@@ -261,24 +262,35 @@ export class SemanticRuleProjectionService {
     }
   }
 
-  private projectCondition(rule: SemanticRule, triggers: SemanticTriggerState[]): void {
+  private projectCondition(rule: SemanticRule, out: ProjectionOut): void {
+    const triggers = out.trigger
     const expr = rule.condition
     const startIndex = triggers.length
     let leafCount = 0
+    let triggerLeafCount = 0
     // 审查 Minor m-1（#1447 闸 3 第 1 轮）：删除冗余 collectedLeaves，leafCount 已等价。
     this.walkLeavesWithPath(expr, 'condition', (leaf, leafPath) => {
-      triggers.push(this.atomToTrigger(leaf, rule, leafCount, {
+      const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string } | undefined>)[leaf.key]
+      const provenance = {
         ruleId: rule.id,
         conditionPath: leafPath,
-      }))
+      }
+      const baseId = `${rule.id}-cond-${leafCount}`
+      if (!contract || typeof contract.bucket !== 'string' || contract.bucket === 'trigger') {
+        triggers.push(this.atomToTrigger(leaf, rule, leafCount, provenance))
+        triggerLeafCount += 1
+      }
+      else {
+        this.dispatchEffectLeaf(contract.bucket, leaf, baseId, out, provenance)
+      }
       leafCount += 1
     })
 
-    if (leafCount === 0) return
+    if (triggerLeafCount === 0) return
 
     // AND/OR → combinationContract 挂到第一个 member
     const join = this.toJoinKind(expr)
-    if (join && leafCount >= 2) {
+    if (join && triggerLeafCount >= 2) {
       const groupId = `rule-${rule.id}-grp`
       const contract = buildTriggerCombinationContract({
         groupId,
@@ -384,20 +396,7 @@ export class SemanticRuleProjectionService {
         {
           const kind = this.inferOrchestrationKind(leaf.key)
           if (!kind) return
-          // 审查 Minor #1：params 浅拷贝（与其它 case 对称）。14 变体的专属字段
-          //   如 gridParams / sizing / dynamicGridStep 等含嵌套对象，下游若就地
-          //   mutate 会污染原 leaf；如需 fail-closed 校验请补 deep clone。
-          out.orchestration.push({
-            id: baseId,
-            kind,
-            key: leaf.key,
-            params: { ...leaf.params },
-            status: meta.status,
-            source: meta.source,
-            openSlots: meta.openSlots,
-            contracts: [],
-            _provenance: provenance,
-          })
+          out.orchestration.push(...this.atomToOrchestrationNodes(leaf, baseId, kind, meta, provenance))
         }
         return
       default:
@@ -415,6 +414,172 @@ export class SemanticRuleProjectionService {
     if (key.startsWith('scope.')) return 'scope'
     if (key.startsWith('portfolioRisk.')) return 'portfolioRisk'
     return null
+  }
+
+  private atomToOrchestrationNodes(
+    leaf: AtomExprAtom,
+    baseId: string,
+    kind: SemanticOrchestrationNode['kind'],
+    meta: { status: SemanticNodeStatus, source: SemanticSource, openSlots: SemanticSlotState[] },
+    provenance: SemanticFlatAtomProvenance,
+  ): SemanticOrchestrationNode[] {
+    const base: SemanticOrchestrationNode = {
+      id: baseId,
+      kind,
+      key: leaf.key,
+      params: { ...leaf.params },
+      status: meta.status,
+      source: meta.source,
+      openSlots: meta.openSlots,
+      contracts: [],
+      _provenance: provenance,
+    }
+
+    if (leaf.key === 'portfolioRisk.drawdown_block') {
+      return [{
+        ...base,
+        scope: this.readEnum(leaf.params.scope, ['portfolio', 'symbol', 'subStrategy'] as const) ?? 'portfolio',
+        mode: this.readEnum(leaf.params.mode, ['observe', 'enforce'] as const) ?? 'enforce',
+        thresholdPct: this.readNumber(leaf.params.thresholdPct) ?? this.readNumber(leaf.params.pct),
+      }]
+    }
+
+    if (leaf.key === 'scope.symbol') {
+      const symbols = Array.isArray(leaf.params.symbols)
+        ? leaf.params.symbols.filter((item): item is string => typeof item === 'string' && item.trim() !== '').map(item => item.trim())
+        : []
+      if (symbols.length === 0) return []
+      return [{
+        ...base,
+        symbolScopeKind: 'symbol',
+        symbols,
+        primarySymbol: this.readString(leaf.params.primarySymbol) ?? symbols[0],
+      }]
+    }
+
+    if (leaf.key === 'scope.timeframe') {
+      const primaryTimeframe = this.readString(leaf.params.primaryTimeframe)
+      const requiredTimeframes = Array.isArray(leaf.params.requiredTimeframes)
+        ? leaf.params.requiredTimeframes.filter((item): item is string => typeof item === 'string' && item.trim() !== '').map(item => item.trim())
+        : []
+      if (!primaryTimeframe || requiredTimeframes.length === 0) return []
+      return [{
+        ...base,
+        timeframeScopeKind: 'timeframe',
+        primaryTimeframe: primaryTimeframe as SemanticOrchestrationNode['primaryTimeframe'],
+        requiredTimeframes: requiredTimeframes as SemanticOrchestrationNode['requiredTimeframes'],
+        alignmentPolicy: this.readEnum(leaf.params.alignmentPolicy, ['strict', 'tolerant'] as const) ?? 'strict',
+      }]
+    }
+
+    if (leaf.key === 'program.fixed_grid_gated') {
+      const gateId = this.readString(leaf.params.activeWhenRef) ?? `${baseId}-implicit-gate`
+      return [
+        ...(leaf.params.activeWhenRef ? [] : [this.buildImplicitAlwaysOnGate(gateId, baseId, provenance)]),
+        {
+          ...base,
+          programKind: 'fixed_grid_gated',
+          activeWhenRef: gateId,
+          onDeactivate: this.readEnum(leaf.params.onDeactivate, ['cancel', 'keep', 'close'] as const) ?? 'cancel',
+          rebuildPolicy: 'static',
+          gridParams: this.normalizeFixedGridParams(leaf.params),
+          sizing: this.normalizeProgramSizing(leaf.params.sizing) ?? this.normalizeProgramSizing(leaf.params) ?? { mode: 'fixed_pct', value: 10 },
+        },
+      ]
+    }
+
+    if (leaf.key === 'program.adaptive_volatility_grid') {
+      const gateId = this.readString(leaf.params.activeWhenRef) ?? `${baseId}-implicit-gate`
+      return [
+        ...(leaf.params.activeWhenRef ? [] : [this.buildImplicitAlwaysOnGate(gateId, baseId, provenance)]),
+        {
+          ...base,
+          programKind: 'adaptive_volatility_grid',
+          activeWhenRef: gateId,
+          onDeactivate: this.readEnum(leaf.params.onDeactivate, ['cancel', 'keep', 'close'] as const) ?? 'cancel',
+          rebuildPolicy: 'atr_window',
+          atrPeriod: this.readNumber(leaf.params.atrPeriod) ?? 14,
+          atrMultiplier: this.readNumber(leaf.params.atrMultiplier) ?? 1.5,
+          rangeMultiplier: this.readNumber(leaf.params.rangeMultiplier) ?? 3,
+          atrDriftPct: this.readNumber(leaf.params.atrDriftPct) ?? 20,
+          rebuildCooldownSec: this.readNumber(leaf.params.rebuildCooldownSec) ?? 300,
+          minStepPct: this.readNumber(leaf.params.minStepPct) ?? 0.2,
+          maxStepPct: this.readNumber(leaf.params.maxStepPct) ?? 2,
+          levelCount: this.readNumber(leaf.params.levelCount) ?? 6,
+          sizing: this.normalizeProgramSizing(leaf.params.sizing) ?? this.normalizeProgramSizing(leaf.params) ?? { mode: 'fixed_pct', value: 10 },
+        },
+      ]
+    }
+
+    return [base]
+  }
+
+  private buildImplicitAlwaysOnGate(
+    id: string,
+    sourceId: string,
+    provenance: SemanticFlatAtomProvenance,
+  ): SemanticOrchestrationNode {
+    const activeWhen: SemanticExpression = {
+      kind: 'predicate',
+      op: 'GT',
+      left: { kind: 'series', source: 'bar', field: 'close' },
+      right: { kind: 'indicator', name: 'ema', params: { period: 1 } },
+    }
+    return {
+      id,
+      kind: 'gate',
+      key: 'gate.regime',
+      params: { sourceProgramId: sourceId, implicit: true },
+      status: 'locked',
+      source: 'derived',
+      openSlots: [],
+      contracts: [],
+      target: { phase: 'entry', sideScope: 'both' },
+      activeWhen,
+      effectWhenFalse: 'block_new_entries',
+      _provenance: provenance,
+    }
+  }
+
+  private normalizeFixedGridParams(params: Readonly<Record<string, unknown>>): SemanticOrchestrationNode['gridParams'] {
+    const lowerBound = this.readNumber(params.lowerBound) ?? this.readNumber(params.lower)
+    const upperBound = this.readNumber(params.upperBound) ?? this.readNumber(params.upper)
+    const anchorPrice = this.readNumber(params.anchorPrice)
+      ?? (lowerBound !== undefined && upperBound !== undefined ? (lowerBound + upperBound) / 2 : 1)
+    const levelCount = this.readNumber(params.levelCount) ?? this.readNumber(params.levels) ?? 10
+    const stepPct = this.readNumber(params.stepPct) ?? 1
+    return {
+      anchorPrice,
+      levelCount,
+      stepPct,
+      ...(lowerBound !== undefined ? { lowerBound } : {}),
+      ...(upperBound !== undefined ? { upperBound } : {}),
+    }
+  }
+
+  private normalizeProgramSizing(value: unknown): SemanticOrchestrationNode['sizing'] | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const record = value as Record<string, unknown>
+    const mode = this.readEnum(record.mode, ['fixed_quote', 'fixed_base', 'fixed_pct'] as const)
+    const amount = this.readNumber(record.value) ?? this.readNumber(record.quote) ?? this.readNumber(record.pct)
+    if (!mode || amount === undefined || amount <= 0) return undefined
+    return { mode, value: amount }
+  }
+
+  private readNumber(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value !== 'string') return undefined
+    const parsed = Number(value.trim().match(/^-?\d+(?:\.\d+)?/u)?.[0])
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+
+  private readString(value: unknown): string | undefined {
+    return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+  }
+
+  private readEnum<const T extends readonly string[]>(value: unknown, allowed: T): T[number] | undefined {
+    if (typeof value !== 'string') return undefined
+    return allowed.includes(value) ? value as T[number] : undefined
   }
 
   /**
