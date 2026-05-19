@@ -88,23 +88,41 @@ Future<void> _pump(
 }
 
 void main() {
-  testWidgets('Live tab 初始渲染 ≥10 条 QzWhaleRow', (WidgetTester tester) async {
+  testWidgets('Live tab 初始渲染 ≥1 条 QzWhaleRow (默认 BTC + ≥\$5M, issue #1604)',
+      (WidgetTester tester) async {
     final _FakeWhaleFeedRepository repo = _FakeWhaleFeedRepository();
     await _pump(tester, repo);
     addTearDown(() async => repo.dispose());
 
     expect(find.byType(WhaleLiveTab), findsOneWidget);
-    expect(find.byType(QzWhaleRow), findsAtLeastNWidgets(10));
+    // 默认 BTC + ≥$5M 过滤后行数会显著减少，但 mock 数据集足够保证 ≥1 条。
+    expect(find.byType(QzWhaleRow), findsAtLeastNWidgets(1));
     expect(mockWhaleEvents.length, greaterThanOrEqualTo(30));
   });
 
-  testWidgets('点击 BTC chip 仅显示 BTC 事件', (WidgetTester tester) async {
+  testWidgets('默认筛选条对齐设计稿：BTC chip 选中 + ≥\$5M pill 选中 + LIVE 可见 (issue #1604)',
+      (WidgetTester tester) async {
     final _FakeWhaleFeedRepository repo = _FakeWhaleFeedRepository();
     await _pump(tester, repo);
     addTearDown(() async => repo.dispose());
 
-    await tester.tap(find.widgetWithText(QzChip, 'BTC'));
-    await tester.pump();
+    final QzChip btcChip =
+        tester.widget<QzChip>(find.widgetWithText(QzChip, 'BTC'));
+    expect(btcChip.tone, QzChipTone.accent, reason: '默认必须选中 BTC');
+
+    expect(find.widgetWithText(QzChip, '≥ \$5M'), findsOneWidget,
+        reason: '默认阈值显示为 ≥ \$5M pill');
+    final QzChip amountChip =
+        tester.widget<QzChip>(find.widgetWithText(QzChip, '≥ \$5M'));
+    expect(amountChip.tone, QzChipTone.accent, reason: '阈值 pill 应为选中态');
+
+    expect(find.text('LIVE'), findsOneWidget);
+  });
+
+  testWidgets('默认 BTC chip 下所有 row 都是 BTC', (WidgetTester tester) async {
+    final _FakeWhaleFeedRepository repo = _FakeWhaleFeedRepository();
+    await _pump(tester, repo);
+    addTearDown(() async => repo.dispose());
 
     final Iterable<QzWhaleRow> rows =
         tester.widgetList<QzWhaleRow>(find.byType(QzWhaleRow));
@@ -157,15 +175,14 @@ void main() {
     await _pump(tester, repo);
     addTearDown(() async => repo.dispose());
 
-    await tester.tap(find.widgetWithText(QzChip, 'BTC'));
-    await tester.pump();
+    // 默认 BTC + ≥$5M。直接复用默认状态测试 ETH 事件不会被插入。
     final int beforeBtc =
         tester.widgetList<QzWhaleRow>(find.byType(QzWhaleRow)).length;
 
     repo.emit(WhaleEvent(
       id: 'w-eth-emit',
       symbol: 'ETHUSDT',
-      amountUsd: 4_000_000,
+      amountUsd: 6_000_000,
       direction: 'in',
       fromLabel: 'X',
       toLabel: 'Y',
@@ -214,7 +231,8 @@ void main() {
       for (final QzAccent accent in QzAccent.values) {
         final _FakeWhaleFeedRepository repo = _FakeWhaleFeedRepository();
         await _pump(tester, repo, theme: QzTheme(bg: bg, accent: accent));
-        expect(find.byType(QzWhaleRow), findsAtLeastNWidgets(10));
+        // issue #1604：默认 BTC + ≥$5M 过滤后行数减少；保留 ≥1 条作为渲染存活信号。
+        expect(find.byType(QzWhaleRow), findsAtLeastNWidgets(1));
         expect(
           tester.takeException(),
           isNull,
@@ -251,7 +269,7 @@ void main() {
     final WhaleEvent first = WhaleEvent(
       id: 'w-dup-001',
       symbol: 'BTCUSDT',
-      amountUsd: 2_500_000,
+      amountUsd: 7_500_000,
       direction: 'in',
       fromLabel: 'A',
       toLabel: 'B',
@@ -265,7 +283,7 @@ void main() {
     final WhaleEvent dup = WhaleEvent(
       id: 'w-dup-001',
       symbol: 'BTCUSDT',
-      amountUsd: 3_000_000,
+      amountUsd: 8_000_000,
       direction: 'in',
       fromLabel: 'A2',
       toLabel: 'B2',

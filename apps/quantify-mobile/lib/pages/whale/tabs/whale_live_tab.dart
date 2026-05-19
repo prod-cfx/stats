@@ -44,11 +44,15 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
   bool _loading = true;
   Object? _error;
 
-  static const String _kAllSymbol = '';
   static const List<String> _symbolFilterKeys = <String>['', 'BTC', 'ETH', 'SOL'];
 
-  String _symbolFilter = _kAllSymbol;
-  double _minAmount = 0;
+  /// issue #1604：默认与 hero `BTC 净流入 · 1H` 对齐，避免默认 `全部` 与 hero
+  /// 状态不一致。
+  String _symbolFilter = 'BTC';
+
+  /// issue #1604：默认阈值 ≥ $5M，对齐设计稿 `m-screens-4.jsx` 的 `WhaleLive`
+  /// filter strip。
+  double _minAmount = 5_000_000;
 
   @override
   void initState() {
@@ -155,79 +159,108 @@ class _WhaleLiveTabState extends ConsumerState<WhaleLiveTab> {
     );
   }
 
-  Widget _buildFilterBar(QzColorScheme c, AppLocalizations l10n) {
-    final List<({String label, double value})> amountChoices =
-        <({String label, double value})>[
+  /// 阈值候选项（issue #1604）。集中定义供 filter pill 标签和 picker sheet 共用。
+  List<({String label, double value})> _amountChoices(AppLocalizations l10n) {
+    return <({String label, double value})>[
       (label: l10n.whaleFilterAll, value: 0),
       (label: '≥ \$1M', value: 1_000_000),
       (label: '≥ \$5M', value: 5_000_000),
       (label: '≥ \$10M', value: 10_000_000),
     ];
+  }
+
+  String _amountPillLabel(AppLocalizations l10n) {
+    for (final ({String label, double value}) c in _amountChoices(l10n)) {
+      if (c.value == _minAmount) return c.label;
+    }
+    return l10n.whaleFilterAll;
+  }
+
+  Future<void> _openAmountPicker(
+      BuildContext context, AppLocalizations l10n, QzColorScheme c) async {
+    final List<({String label, double value})> choices = _amountChoices(l10n);
+    final double? picked = await showModalBottomSheet<double>(
+      context: context,
+      backgroundColor: c.bgElev,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (BuildContext ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              for (final ({String label, double value}) choice in choices)
+                ListTile(
+                  title: Text(
+                    choice.label,
+                    style: TextStyle(color: c.text, fontSize: 14),
+                  ),
+                  trailing: choice.value == _minAmount
+                      ? Icon(Icons.check, size: 18, color: c.marketUp)
+                      : null,
+                  onTap: () => Navigator.of(ctx).pop(choice.value),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (picked == null) return;
+    setState(() => _minAmount = picked);
+  }
+
+  /// issue #1604：单行 filter strip = 资产 chips · 阈值 pill · LIVE。
+  /// 资产 chips 用横向滚动避免窄屏溢出；阈值 pill 点击打开 sheet 替代裸 dropdown。
+  Widget _buildFilterBar(QzColorScheme c, AppLocalizations l10n) {
     return Container(
       width: double.infinity,
-      color: c.bgElev,
+      decoration: BoxDecoration(
+        color: c.bgElev,
+        border: Border(bottom: BorderSide(color: c.borderSoft, width: 1)),
+      ),
       padding: const EdgeInsets.fromLTRB(
         QzSpacing.lg,
         QzSpacing.sm,
         QzSpacing.lg,
-        QzSpacing.md,
+        QzSpacing.sm,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: <Widget>[
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: <Widget>[
-                      for (final String s in _symbolFilterKeys) ...<Widget>[
-                        GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => setState(() => _symbolFilter = s),
-                          child: QzChip(
-                            label: s.isEmpty ? l10n.commonAll : s,
-                            tone: _symbolFilter == s
-                                ? QzChipTone.accent
-                                : QzChipTone.neutral,
-                          ),
-                        ),
-                        const SizedBox(width: QzSpacing.sm),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              _LivePulse(label: l10n.whaleLiveLabel),
-            ],
-          ),
-          const SizedBox(height: QzSpacing.sm),
-          Row(
-            children: <Widget>[
-              Text(l10n.whaleThresholdLabel,
-                  style: TextStyle(color: c.textMid, fontSize: 12)),
-              const SizedBox(width: QzSpacing.sm),
-              DropdownButton<double>(
-                value: _minAmount,
-                style: TextStyle(color: c.text, fontSize: 13),
-                dropdownColor: c.bgElev,
-                underline: const SizedBox.shrink(),
-                items: <DropdownMenuItem<double>>[
-                  for (final ({String label, double value}) choice
-                      in amountChoices)
-                    DropdownMenuItem<double>(
-                      value: choice.value,
-                      child: Text(choice.label),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: <Widget>[
+                  for (final String s in _symbolFilterKeys) ...<Widget>[
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => setState(() => _symbolFilter = s),
+                      child: QzChip(
+                        label: s.isEmpty ? l10n.commonAll : s,
+                        tone: _symbolFilter == s
+                            ? QzChipTone.accent
+                            : QzChipTone.neutral,
+                      ),
                     ),
+                    const SizedBox(width: QzSpacing.sm),
+                  ],
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _openAmountPicker(context, l10n, c),
+                    child: QzChip(
+                      label: _amountPillLabel(l10n),
+                      tone: _minAmount > 0
+                          ? QzChipTone.accent
+                          : QzChipTone.neutral,
+                    ),
+                  ),
                 ],
-                onChanged: (double? v) {
-                  if (v == null) return;
-                  setState(() => _minAmount = v);
-                },
               ),
-            ],
+            ),
           ),
+          const SizedBox(width: QzSpacing.sm),
+          _LivePulse(label: l10n.whaleLiveLabel),
         ],
       ),
     );
