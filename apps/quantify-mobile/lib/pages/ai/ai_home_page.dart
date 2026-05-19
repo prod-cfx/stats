@@ -501,6 +501,12 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
               ),
         actions: <Widget>[
           IconButton(
+            key: const Key('ai-backtest-button'),
+            tooltip: l10n.aiBacktestButton,
+            icon: const Icon(Icons.tune),
+            onPressed: current == null || _isSending ? null : _openBacktestSheet,
+          ),
+          IconButton(
             key: const Key('ai-appbar-new-session'),
             tooltip: l10n.aiAppBarNewSessionTooltip,
             icon: const Icon(Icons.add_comment_outlined),
@@ -573,7 +579,6 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
               isSending: _isSending,
               enabled: current != null,
               onSend: _send,
-              onBacktest: _openBacktestSheet,
             ),
           ],
         ),
@@ -623,26 +628,59 @@ class _Empty extends StatelessWidget {
   }
 }
 
-class _InputBar extends StatelessWidget {
+/// 设计稿 `ScreenAIChat` 输入区：圆角容器，内嵌 34x34 send icon button。
+///
+/// 监听 controller 变化以驱动 send 按钮的启用/渐变态。
+class _InputBar extends StatefulWidget {
   const _InputBar({
     required this.controller,
     required this.isSending,
     required this.enabled,
     required this.onSend,
-    required this.onBacktest,
   });
 
   final TextEditingController controller;
   final bool isSending;
   final bool enabled;
   final VoidCallback onSend;
-  final VoidCallback onBacktest;
+
+  @override
+  State<_InputBar> createState() => _InputBarState();
+}
+
+class _InputBarState extends State<_InputBar> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _InputBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onChanged);
+      widget.controller.addListener(_onChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onChanged);
+    super.dispose();
+  }
+
+  void _onChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    final bool canInteract = enabled && !isSending;
+    final bool canInteract = widget.enabled && !widget.isSending;
+    final bool hasText = widget.controller.text.trim().isNotEmpty;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(
         QzSpacing.lg,
@@ -654,23 +692,25 @@ class _InputBar extends StatelessWidget {
         color: c.bgElev,
         border: Border(top: BorderSide(color: c.border)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: <Widget>[
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: c.bgInput,
-                border: Border.all(color: c.border),
-                borderRadius: BorderRadius.circular(QzRadii.input),
-              ),
-              padding: const EdgeInsets.symmetric(
-                horizontal: QzSpacing.md,
-                vertical: QzSpacing.xs,
-              ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: c.bgInput,
+          border: Border.all(color: hasText ? c.accent : c.border),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        padding: const EdgeInsets.fromLTRB(
+          QzSpacing.lg,
+          QzSpacing.sm,
+          QzSpacing.sm,
+          QzSpacing.sm,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: <Widget>[
+            Expanded(
               child: TextField(
                 key: const Key('ai-chat-input'),
-                controller: controller,
+                controller: widget.controller,
                 enabled: canInteract,
                 minLines: 1,
                 maxLines: 4,
@@ -680,27 +720,95 @@ class _InputBar extends StatelessWidget {
                   hintStyle: TextStyle(color: c.textDim, fontSize: 14),
                   border: InputBorder.none,
                   isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 6),
                 ),
-                onSubmitted: (_) => onSend(),
+                onSubmitted: (_) => widget.onSend(),
               ),
             ),
+            const SizedBox(width: QzSpacing.sm),
+            _SendIconButton(
+              // 视觉上的禁用态由 hasText 决定，但 tap 永远可达：
+              // `_send` 内部已对 empty / sending 做了守卫，并且这样
+              // 可以避免 `enterText → tap` 时 listener 尚未 rebuild
+              // 而 InkWell.onTap 仍为 null 导致 tap 被吞的问题。
+              enabled: hasText,
+              tappable: canInteract,
+              loading: widget.isSending,
+              onPressed: widget.onSend,
+              scheme: c,
+              tooltip: l10n.aiSendButton,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 34x34 内嵌 send icon button：有输入时显示 accent 渐变与阴影，否则为 muted 禁用态。
+class _SendIconButton extends StatelessWidget {
+  const _SendIconButton({
+    required this.enabled,
+    required this.tappable,
+    required this.loading,
+    required this.onPressed,
+    required this.scheme,
+    required this.tooltip,
+  });
+
+  /// 视觉启用（有文本输入），驱动渐变 + accent 阴影。
+  final bool enabled;
+  /// 是否响应 tap（会话存在且未在发送中）。
+  final bool tappable;
+  final bool loading;
+  final VoidCallback onPressed;
+  final QzColorScheme scheme;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget child = loading
+        ? SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(scheme.accentOn),
+            ),
+          )
+        : Icon(
+            Icons.arrow_upward_rounded,
+            size: 18,
+            color: enabled ? scheme.accentOn : scheme.textDim,
+          );
+
+    final BoxDecoration decoration = enabled
+        ? BoxDecoration(
+            gradient: scheme.accentGrad,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: <BoxShadow>[scheme.accentShadow],
+          )
+        : BoxDecoration(
+            color: scheme.bgSoft,
+            borderRadius: BorderRadius.circular(10),
+          );
+
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: const Key('ai-send-button'),
+          onTap: tappable && !loading ? onPressed : null,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            width: 34,
+            height: 34,
+            alignment: Alignment.center,
+            decoration: decoration,
+            child: child,
           ),
-          const SizedBox(width: QzSpacing.sm),
-          QzButton(
-            key: const Key('ai-backtest-button'),
-            label: l10n.aiBacktestButton,
-            variant: QzButtonVariant.ghost,
-            onPressed: canInteract ? onBacktest : null,
-          ),
-          const SizedBox(width: QzSpacing.sm),
-          QzButton(
-            key: const Key('ai-send-button'),
-            label: l10n.aiSendButton,
-            variant: QzButtonVariant.accent,
-            onPressed: canInteract ? onSend : null,
-            loading: isSending,
-          ),
-        ],
+        ),
       ),
     );
   }
