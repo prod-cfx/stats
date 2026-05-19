@@ -132,6 +132,43 @@ void main() {
     expect(find.byIcon(Icons.notifications_outlined), findsOneWidget);
   });
 
+  testWidgets(
+      '顶部 action 含搜索 icon + 36x36 圆形铃铛（对齐设计稿 iconBtn）',
+      (WidgetTester tester) async {
+    await _pump(tester);
+
+    // 搜索 icon 渲染（设计稿 iconBtn 风格）。
+    expect(find.byIcon(Icons.search), findsOneWidget);
+
+    // 铃铛使用 36x36 SizedBox（QzNotificationBell circular=true 路径）。
+    final Finder bellIcon = find.byIcon(Icons.notifications_outlined);
+    expect(bellIcon, findsOneWidget);
+    final SizedBox bellBox = tester.widget<SizedBox>(
+      find
+          .ancestor(of: bellIcon, matching: find.byType(SizedBox))
+          .first,
+    );
+    expect(bellBox.width, 36);
+    expect(bellBox.height, 36);
+  });
+
+  testWidgets('QzTopBar 应用 SafeArea 顶部 inset，标题不与状态栏重叠',
+      (WidgetTester tester) async {
+    // 模拟带刘海的设备：top padding = 44。
+    await tester.binding.setSurfaceSize(const Size(420, 3000));
+    tester.view.padding = FakeViewPadding(
+      top: 44 * tester.view.devicePixelRatio,
+    );
+    addTearDown(() => tester.view.resetPadding());
+
+    await _pump(tester);
+
+    // 标题位置 y >= 44（status bar 高度），证明 SafeArea 顶部 padding 生效。
+    final Offset titlePos = tester.getTopLeft(find.text('巨鲸动向'));
+    expect(titlePos.dy, greaterThanOrEqualTo(44),
+        reason: '标题应位于状态栏下方');
+  });
+
   testWidgets('点击铃铛弹出通知中心 sheet，含 4 个 tab',
       (WidgetTester tester) async {
     await _pump(tester);

@@ -67,17 +67,19 @@ class _WhaleHomePageState extends ConsumerState<WhaleHomePage> {
         title: l10n.whaleFeedTitle,
         subtitle: l10n.whaleTopBarSubtitle,
         actions: <Widget>[
-          IconButton(
-            onPressed: () {},
-            icon: Icon(Icons.search, size: 20, color: c.text),
+          _CircularIconAction(
+            icon: Icons.search,
             tooltip: l10n.whaleSearchTooltip,
+            onTap: () {},
           ),
+          const SizedBox(width: QzSpacing.xs),
           QzNotificationBell(
             unread: _unreadCount,
             onTap: _openNotifications,
             tooltip: l10n.whaleNotificationTooltip,
+            circular: true,
           ),
-          const SizedBox(width: QzSpacing.xs),
+          const SizedBox(width: QzSpacing.md),
         ],
       ),
       body: Column(
@@ -114,6 +116,50 @@ class _WhaleHomePageState extends ConsumerState<WhaleHomePage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 36x36 soft/elevated 圆形按钮，对齐设计稿 `iconBtn`
+/// (`design/project/mobile/m-screens-3.jsx:277`)。
+class _CircularIconAction extends StatelessWidget {
+  const _CircularIconAction({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: c.bgElev,
+          shape: BoxShape.circle,
+          border: Border.all(color: c.border),
+        ),
+        child: IconButton(
+          onPressed: onTap,
+          padding: EdgeInsets.zero,
+          iconSize: 18,
+          splashRadius: 18,
+          tooltip: tooltip,
+          constraints: const BoxConstraints(
+            minWidth: 36,
+            minHeight: 36,
+            maxWidth: 36,
+            maxHeight: 36,
+          ),
+          icon: Icon(icon, color: c.textMid),
+        ),
       ),
     );
   }

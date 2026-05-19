@@ -7,11 +7,16 @@ import '../theme/theme_context.dart';
 /// (`design/project/mobile/m-shell.jsx:144`).
 ///
 /// Implemented as a [PreferredSizeWidget] so callers can drop it into
-/// `Scaffold.appBar`. The reported [preferredSize] is the *toolbar* height
-/// (56dp); status-bar inset is added by [Scaffold] itself via the AppBar
-/// slot's wrapping [SafeArea], which means body content offsets correctly
-/// even on devices with a notch. Do not wrap this widget in an additional
-/// `SafeArea(top: true)` outside `Scaffold.appBar` — that would double-pad.
+/// `Scaffold.appBar`. Unlike Material [AppBar], `Scaffold.appBar` slot does
+/// not auto-pad the *content* of an arbitrary PreferredSizeWidget for the
+/// status-bar / notch — Scaffold only allocates `preferredSize.height` of
+/// vertical space below the system status bar inset by using `MediaQuery`
+/// top padding as part of the AppBar's effective size. To match Material
+/// AppBar behavior we therefore:
+///   * report `preferredSize = toolbar + status-bar inset` via [MediaQuery]
+///     (so [Scaffold] reserves enough space for both),
+///   * wrap the toolbar row in [SafeArea](top: true) so title/actions sit
+///     below the notch instead of behind it.
 class QzTopBar extends StatelessWidget implements PreferredSizeWidget {
   const QzTopBar({
     super.key,
@@ -50,67 +55,76 @@ class QzTopBar extends StatelessWidget implements PreferredSizeWidget {
           )
         : leading;
 
-    // Body content sits *under* preferredSize. We expose the static toolbar
-    // height (56dp) here and let Scaffold's AppBar slot allocate the status
-    // bar inset on top of it — that's the contract Scaffold checks. The
-    // toolbar paints below the status bar because we wrap it in SafeArea
-    // *outside* this PreferredSizeWidget when host code uses Scaffold.appBar
-    // (Scaffold does this automatically for any AppBar-shaped widget).
-    return Container(
-      height: _toolbarHeight,
-      decoration: BoxDecoration(
-        color: transparent ? Colors.transparent : c.bgElev,
-        border: transparent
-            ? null
-            : Border(
-                bottom: BorderSide(color: c.borderSoft),
-              ),
-      ),
-      child: Row(
-          children: <Widget>[
-            ?resolvedLeading,
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: resolvedLeading == null ? 16 : 0,
+    // [preferredSize] reports just the toolbar height (56dp). Material's
+    // [Scaffold] expands that by `MediaQuery.padding.top` for the AppBar
+    // slot, so visible space below the status bar matches preferredSize.
+    // To make the toolbar paint *below* the notch (not behind it) we wrap
+    // the row in [SafeArea](top: true, bottom: false). The Container's
+    // total height becomes `status-bar inset + 56dp`, matching the slot
+    // size Scaffold reserves.
+    return Material(
+      color: transparent ? Colors.transparent : c.bgElev,
+      child: Container(
+        decoration: BoxDecoration(
+          border: transparent
+              ? null
+              : Border(
+                  bottom: BorderSide(color: c.borderSoft),
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: c.text,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
-                    if (subtitle != null) ...<Widget>[
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: c.textDim,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            ...actions,
-            // Symmetric right padding so the title doesn't kiss the screen
-            // edge when [actions] is empty.
-            const SizedBox(width: 8),
-          ],
         ),
-      );
+        child: SafeArea(
+          top: true,
+          bottom: false,
+          child: SizedBox(
+            height: _toolbarHeight,
+            child: Row(
+              children: <Widget>[
+                ?resolvedLeading,
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: resolvedLeading == null ? 16 : 0,
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: c.text,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                        if (subtitle != null) ...<Widget>[
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: c.textDim,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                ...actions,
+                // Symmetric right padding so the title doesn't kiss the
+                // screen edge when [actions] is empty.
+                const SizedBox(width: 8),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
