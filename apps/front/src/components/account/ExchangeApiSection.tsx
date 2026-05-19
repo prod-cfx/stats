@@ -441,7 +441,7 @@ export function ExchangeApiSection() {
                 value={forms[configExchangeId].name}
                 onChange={event => setFormValue(configExchangeId, 'name', event.target.value)}
                 placeholder={t('aiQuant.accountName')}
-                className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)]"
+                className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)] md:!text-sm"
               />
               <label className="flex items-center gap-2 !text-sm !font-semibold !leading-[22px] text-[color:var(--cf-muted)]">
                 <input
@@ -464,7 +464,7 @@ export function ExchangeApiSection() {
                     value={forms[configExchangeId].apiKey}
                     onChange={event => setFormValue(configExchangeId, 'apiKey', event.target.value)}
                     placeholder={t('aiQuant.apiKey')}
-                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)]"
+                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)] md:!text-sm"
                   />
                   <input
                     value={forms[configExchangeId].apiSecret}
@@ -472,7 +472,7 @@ export function ExchangeApiSection() {
                     autoComplete="off"
                     onChange={event => setFormValue(configExchangeId, 'apiSecret', event.target.value)}
                     placeholder={t('aiQuant.secretKey')}
-                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)]"
+                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)] md:!text-sm"
                   />
                 </>
               )}
@@ -483,7 +483,7 @@ export function ExchangeApiSection() {
                   autoComplete="off"
                   onChange={event => setFormValue(configExchangeId, 'passphrase', event.target.value)}
                   placeholder={t('aiQuant.passphrase')}
-                  className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)]"
+                  className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)] md:!text-sm"
                 />
               )}
               {configExchangeId === 'hyperliquid' && (
@@ -492,7 +492,7 @@ export function ExchangeApiSection() {
                     value={forms[configExchangeId].mainWalletAddress}
                     onChange={event => setFormValue(configExchangeId, 'mainWalletAddress', event.target.value)}
                     placeholder={t('aiQuant.walletAddress')}
-                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)]"
+                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)] md:!text-sm"
                   />
                   <input
                     value={forms[configExchangeId].agentPrivateKey}
@@ -500,7 +500,7 @@ export function ExchangeApiSection() {
                     autoComplete="off"
                     onChange={event => setFormValue(configExchangeId, 'agentPrivateKey', event.target.value)}
                     placeholder={t('aiQuant.agentPrivateKey')}
-                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)]"
+                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] placeholder:text-[color:var(--cf-muted)] md:!text-sm"
                   />
                 </>
               )}

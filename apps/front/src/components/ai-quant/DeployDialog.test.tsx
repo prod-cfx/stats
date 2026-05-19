@@ -80,6 +80,8 @@ describe('DeployDialog', () => {
 
     const leverageSelect = container.querySelector('select[name="deployment-leverage"]') as HTMLSelectElement | null
     if (leverageSelect) {
+      expect(leverageSelect.className).toContain('!text-base')
+      expect(leverageSelect.className).toContain('md:!text-sm')
       leverageSelect.value = '5'
       leverageSelect.dispatchEvent(new Event('change', { bubbles: true }))
     }

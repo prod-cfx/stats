@@ -208,7 +208,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
                 <select
                   value={config[field.key] || ''}
                   onChange={e => handleConfigChange(field.key, e.target.value)}
-                  className="focus:border-primary w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-sm text-[color:var(--cf-text-strong)] focus:outline-none"
+                  className="focus:border-primary w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-base text-[color:var(--cf-text-strong)] focus:outline-none md:text-sm"
                 >
                   {field.options.map(opt => (
                     <option key={opt.value} value={opt.value}>
@@ -221,7 +221,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
                   type={field.type === 'number' ? 'number' : 'text'}
                   value={config[field.key] || ''}
                   onChange={e => handleConfigChange(field.key, e.target.value)}
-                  className="focus:border-primary w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-sm text-[color:var(--cf-text-strong)] focus:outline-none"
+                  className="focus:border-primary w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-base text-[color:var(--cf-text-strong)] focus:outline-none md:text-sm"
                 />
               )}
             </div>

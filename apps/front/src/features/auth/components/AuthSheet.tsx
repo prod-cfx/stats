@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { getTelegramLoginConfigRequest } from '@/features/auth/api'
 import { EmailOtpForm } from '@/features/auth/components/EmailOtpForm'
 import { TelegramLoginButtons } from '@/features/auth/components/TelegramLoginButtons'
+import { useMobileKeyboardInset } from '@/hooks/useMobileKeyboardInset'
 
 interface AuthSheetProps {
   open: boolean
@@ -42,6 +43,7 @@ export function AuthSheet({
   const overlayRef = useRef<HTMLDivElement | null>(null)
   const closeButtonRef = useRef<HTMLButtonElement | null>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
+  const mobileKeyboard = useMobileKeyboardInset({ enabled: open && !fallbackPage })
 
   useEffect(() => {
     if (!open) {
@@ -161,7 +163,10 @@ export function AuthSheet({
       aria-modal={fallbackPage ? undefined : true}
       aria-labelledby="auth-sheet-title"
       tabIndex={-1}
-      className="cf-mobile-login-sheet relative z-10 w-full max-w-none space-y-4 rounded-t-[28px] border border-b-0 border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-[0_-18px_48px_rgba(15,23,42,0.14)] md:max-w-[420px] md:rounded-lg md:border md:px-6 md:py-5 md:shadow-sm"
+      className="cf-mobile-login-sheet relative z-10 w-full max-w-none translate-y-[calc(-1*var(--mobile-keyboard-inset))] space-y-4 rounded-t-[28px] border border-b-0 border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-[0_-18px_48px_rgba(15,23,42,0.14)] transition-transform duration-150 md:max-w-[420px] md:translate-y-0 md:rounded-lg md:border md:px-6 md:py-5 md:shadow-sm"
+      onBlur={mobileKeyboard.onBlur}
+      onFocus={mobileKeyboard.onFocus}
+      style={mobileKeyboard.style}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">

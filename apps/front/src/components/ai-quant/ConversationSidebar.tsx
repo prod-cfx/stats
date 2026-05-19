@@ -111,7 +111,7 @@ function ConversationListItem({
               onCancelRename()
             }
           }}
-          className="h-8 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]"
+          className="h-8 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] md:!text-sm"
         />
       ) : (
         <button

@@ -12,6 +12,7 @@ import remarkGfm from 'remark-gfm'
 import { validateBacktestRange } from './backtest-range'
 import { parseDynamicParamInputValue } from './dynamic-params'
 import { PublicationGateCard } from './PublicationGateCard'
+import { useMobileKeyboardInset } from '@/hooks/useMobileKeyboardInset'
 
 export interface QuantMessage {
   id: string
@@ -378,6 +379,7 @@ export function QuantChatPanel({
   )
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const mobileComposerRef = useRef<HTMLDivElement>(null)
+  const mobileKeyboard = useMobileKeyboardInset({ enabled: mobileMode })
   const visibleBacktestSettingFields = useMemo(
     () => BACKTEST_SETTING_FIELDS.filter(field => field.key !== 'backtestLeverage' || backtestMarketType === 'perp'),
     [backtestMarketType],
@@ -501,7 +503,10 @@ export function QuantChatPanel({
     }))
   }
   const mobileComposerStyle = mobileMode
-    ? ({ '--quant-mobile-composer-height': `${mobileComposerHeight}px` } as CSSProperties)
+    ? ({
+        '--quant-mobile-composer-height': `${mobileComposerHeight}px`,
+        ...mobileKeyboard.style,
+      } as CSSProperties)
     : undefined
 
   return (
@@ -598,7 +603,7 @@ export function QuantChatPanel({
                       </span>
                       <input
                         type="datetime-local"
-                        className="focus:border-primary h-9 w-full rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] outline-none"
+                        className="focus:border-primary h-9 w-full rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] outline-none md:!text-sm"
                         value={toDateTimeLocalValue(backtestDraftValues.backtestStart)}
                         onChange={event => {
                           updateBacktestDraftValue(
@@ -615,7 +620,7 @@ export function QuantChatPanel({
                       </span>
                       <input
                         type="datetime-local"
-                        className="focus:border-primary h-9 w-full rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] outline-none"
+                        className="focus:border-primary h-9 w-full rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] outline-none md:!text-sm"
                         value={toDateTimeLocalValue(backtestDraftValues.backtestEnd)}
                         onChange={event => {
                           updateBacktestDraftValue(
@@ -635,7 +640,7 @@ export function QuantChatPanel({
                   const showError =
                     Boolean(error) &&
                     (submittedBacktestSettings || touchedBacktestFields[field.key])
-                  const fieldClassName = `h-9 w-full appearance-none rounded-full border bg-[color:var(--cf-surface)] px-3.5 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] outline-none focus:border-primary ${
+                  const fieldClassName = `h-9 w-full appearance-none rounded-full border bg-[color:var(--cf-surface)] px-3.5 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] outline-none focus:border-primary md:!text-sm ${
                     showError ? 'border-red-500' : 'border-[color:var(--cf-border)]'
                   }`
 
@@ -752,7 +757,8 @@ export function QuantChatPanel({
       {/* Chat Area */}
       <div
         ref={chatScrollRef}
-        className={mobileMode ? 'min-w-0 flex-1 overflow-y-auto bg-[color:var(--cf-bg)] px-4 pt-3 pb-[calc(var(--quant-mobile-composer-height)_+_1rem)] md:pb-3' : 'min-w-0 flex-1 overflow-y-auto bg-[color:var(--cf-bg)] p-4'}
+        data-testid="quant-chat-scroll"
+        className={mobileMode ? 'min-w-0 flex-1 overflow-y-auto bg-[color:var(--cf-bg)] px-4 pt-3 pb-[calc(var(--quant-mobile-composer-height)_+_var(--mobile-keyboard-inset)_+_1rem)] md:pb-3' : 'min-w-0 flex-1 overflow-y-auto bg-[color:var(--cf-bg)] p-4'}
         onScroll={updateScrollToLatestVisibility}
       >
         <div className={mobileMode ? 'space-y-5 pb-2' : 'space-y-6'}>
@@ -851,14 +857,18 @@ export function QuantChatPanel({
           type="button"
           onClick={scrollToLatest}
           aria-label={t('aiQuant.scrollToLatest', { defaultValue: '回到最新对话' })}
-          className="fixed left-1/2 bottom-[calc(var(--quant-mobile-composer-height)_+_0.75rem)] z-40 inline-flex h-10 w-10 -translate-x-1/2 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]/95 text-[color:var(--cf-text-strong)] shadow-[0_8px_22px_rgba(15,23,42,0.18)] backdrop-blur md:absolute"
+          className="fixed left-1/2 bottom-[calc(var(--quant-mobile-composer-height)_+_var(--mobile-keyboard-inset)_+_0.75rem)] z-40 inline-flex h-10 w-10 -translate-x-1/2 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]/95 text-[color:var(--cf-text-strong)] shadow-[0_8px_22px_rgba(15,23,42,0.18)] backdrop-blur md:absolute"
         >
           <ArrowDown className="h-5 w-5" />
         </button>
       )}
 
       {/* Input Area */}
-      <div ref={mobileMode ? mobileComposerRef : undefined} className={mobileMode ? 'fixed inset-x-0 bottom-0 z-30 border-t border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-10px_28px_rgba(15,23,42,0.16)] md:static md:shadow-none' : 'border-t border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4'}>
+      <div
+        ref={mobileMode ? mobileComposerRef : undefined}
+        data-testid={mobileMode ? 'quant-mobile-composer' : undefined}
+        className={mobileMode ? 'fixed inset-x-0 bottom-0 z-30 translate-y-[calc(-1*var(--mobile-keyboard-inset))] border-t border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-10px_28px_rgba(15,23,42,0.16)] transition-transform duration-150 md:static md:translate-y-0 md:shadow-none' : 'border-t border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4'}
+      >
         {mobileMode && (
           <div
             data-testid="quant-mobile-skill-toolbar"
@@ -940,6 +950,8 @@ export function QuantChatPanel({
               : t('aiQuant.inputPlaceholder')}
             value={input}
             onChange={event => setInput(event.target.value)}
+            onBlur={mobileKeyboard.onBlur}
+            onFocus={mobileKeyboard.onFocus}
             onKeyDown={event => {
               if (event.key !== 'Enter' || event.shiftKey) return
               if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return

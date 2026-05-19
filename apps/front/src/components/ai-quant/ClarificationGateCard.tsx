@@ -55,7 +55,7 @@ export function ClarificationGateCard({
             placeholder={t('aiQuant.clarificationGateInputPlaceholder', {
               defaultValue: 'Enter your answer',
             })}
-            className="min-w-0 flex-1 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-amber-950 outline-none transition-colors placeholder:text-amber-500 focus:border-amber-500"
+            className="min-w-0 flex-1 rounded-lg border border-amber-300 bg-white px-3 py-2 text-base text-amber-950 outline-none transition-colors placeholder:text-amber-500 focus:border-amber-500 md:text-sm"
           />
           <button
             data-testid="clarification-freeform-submit"

@@ -328,7 +328,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={t('bottomPanel.searchPlaceholder')}
-                  className="bg-transparent text-xs text-[color:var(--cf-text)] placeholder-[color:var(--cf-muted)] outline-none w-[220px]"
+                  className="w-[220px] bg-transparent text-base text-[color:var(--cf-text)] placeholder-[color:var(--cf-muted)] outline-none md:text-xs"
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -410,7 +410,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder={t('bottomPanel.searchAssetPlaceholder')}
-                    className="bg-transparent text-xs text-[color:var(--cf-text)] placeholder-[color:var(--cf-muted)] outline-none w-[220px]"
+                    className="w-[220px] bg-transparent text-base text-[color:var(--cf-text)] placeholder-[color:var(--cf-muted)] outline-none md:text-xs"
                   />
                 </div>
                 <button

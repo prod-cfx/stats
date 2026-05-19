@@ -442,7 +442,7 @@ export const Navbar = () => {
                 onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={t('nav.search') || 'Search...'}
-                className={`h-full w-full border-none bg-transparent px-2 text-sm text-[color:var(--cf-text)] outline-none ${
+                className={`h-full w-full border-none bg-transparent px-2 text-base text-[color:var(--cf-text)] outline-none md:text-sm ${
                   searchOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
                 }`}
               />

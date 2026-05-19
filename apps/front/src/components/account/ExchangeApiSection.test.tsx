@@ -46,6 +46,7 @@ jest.mock('react-i18next', () => ({
         'aiQuant.unbindApiConfig': 'Unbind',
         'aiQuant.updateApiConfig': 'Update API Config',
         'aiQuant.useTestnet': 'Use testnet / paper trading',
+        'common.cancel': 'Cancel',
         'aiQuant.validation.requiredBinanceCredentials': 'Binance API key and secret are required.',
         'aiQuant.validation.requiredHyperliquidCredentials': 'Hyperliquid wallet address and agent private key are required.',
         'aiQuant.validation.requiredOkxDemoCredentials': 'Please save an OKX demo trading API key before returning to Strategy Plaza.',
@@ -156,6 +157,11 @@ describe('ExchangeApiSection', () => {
     return dialog
   }
 
+  function expectMobileSafeInput(input: HTMLInputElement | HTMLSelectElement) {
+    expect(input.className).toContain('!text-base')
+    expect(input.className).toContain('md:!text-sm')
+  }
+
   async function flushPromises() {
     await act(async () => {
       await Promise.resolve()
@@ -221,6 +227,33 @@ describe('ExchangeApiSection', () => {
 
     expect(actions?.className).toContain('justify-end')
     expect(actions?.className).toContain('md:justify-start')
+  })
+
+  it('keeps API config dialog inputs at 16px on mobile', async () => {
+    await renderSection()
+
+    const binanceCard = findExchangeCard('Binance API')
+    await act(async () => {
+      clickButton(binanceCard, 'Not configured')
+    })
+
+    const binanceDialog = getDialog()
+    expectMobileSafeInput(findInput(binanceDialog, 'Account Name'))
+    expectMobileSafeInput(findInput(binanceDialog, 'API Key'))
+    expectMobileSafeInput(findInput(binanceDialog, 'Secret Key'))
+
+    await act(async () => {
+      clickButton(binanceDialog, 'Cancel')
+    })
+
+    const hyperliquidCard = findExchangeCard('Hyperliquid API')
+    await act(async () => {
+      clickButton(hyperliquidCard, 'Not configured')
+    })
+
+    const hyperliquidDialog = getDialog()
+    expectMobileSafeInput(findInput(hyperliquidDialog, 'Wallet Address'))
+    expectMobileSafeInput(findInput(hyperliquidDialog, 'Agent Private Key'))
   })
 
   it('trims OKX credential fields before saving a new binding', async () => {

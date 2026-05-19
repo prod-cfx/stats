@@ -109,6 +109,34 @@ describe('AuthSheet', () => {
     expect(telegram?.getAttribute('data-redirect')).toBe('/zh/ai-quant')
   })
 
+  it('uses mobile keyboard inset for the login sheet', async () => {
+    const listeners: Record<string, Array<() => void>> = {}
+    const visualViewport = {
+      height: 580,
+      offsetTop: 0,
+      addEventListener: jest.fn((event: string, listener: () => void) => {
+        listeners[event] = [...(listeners[event] ?? []), listener]
+      }),
+      removeEventListener: jest.fn(),
+    }
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: visualViewport })
+    const { AuthSheet } = await import('./AuthSheet')
+
+    act(() => {
+      root.render(<AuthSheet open lng="zh" onOpenChange={onOpenChangeMock} />)
+    })
+
+    await act(async () => {
+      container.querySelector<HTMLInputElement>('[data-testid="beta-code-proxy"]')?.focus()
+      listeners.resize?.forEach(listener => listener())
+    })
+
+    const panel = container.querySelector<HTMLElement>('[data-testid="auth-sheet-panel"]')
+    expect(panel?.style.getPropertyValue('--mobile-keyboard-inset')).toBe('220px')
+    expect(panel?.className).toContain('translate-y-[calc(-1*var(--mobile-keyboard-inset))]')
+  })
+
   it('closes when close is clicked and calls onSuccess after email success', async () => {
     const { AuthSheet } = await import('./AuthSheet')
 

@@ -103,7 +103,7 @@ export function GuestAiQuantLanding({ onRequireLogin }: GuestAiQuantLandingProps
               }
             }}
             placeholder={t('aiQuant.inputPlaceholder')}
-            className="min-h-[88px] w-full resize-none bg-transparent !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)] outline-none placeholder:text-[color:var(--cf-muted)]"
+            className="min-h-[88px] w-full resize-none bg-transparent !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] outline-none placeholder:text-[color:var(--cf-muted)] md:!text-sm"
           />
           <div className="mt-3 flex items-center justify-between">
             <div className="flex items-center gap-2">

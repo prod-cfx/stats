@@ -238,4 +238,43 @@ describe('LoginPage bottom sheet', () => {
     })
     expect(document.activeElement).toBe(submitButton)
   })
+
+  it('moves the mobile login sheet above the visual viewport keyboard', async () => {
+    const listeners: Record<string, Array<() => void>> = {}
+    const visualViewport = {
+      height: 560,
+      offsetTop: 0,
+      addEventListener: jest.fn((event: string, listener: () => void) => {
+        listeners[event] = [...(listeners[event] ?? []), listener]
+      }),
+      removeEventListener: jest.fn(),
+    }
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: visualViewport })
+    const { default: LoginPage } = await import('./page')
+
+    act(() => {
+      root.render(
+        <App>
+          <LoginPage />
+        </App>,
+      )
+    })
+
+    const entryButton = container.querySelector('[data-testid="login-sheet-entry"]') as HTMLButtonElement
+    act(() => {
+      entryButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    const dialog = container.querySelector<HTMLElement>('[role="dialog"]')
+    const usernameInput = dialog?.querySelector<HTMLInputElement>('input[autocomplete="username"]')
+
+    act(() => {
+      usernameInput?.focus()
+      listeners.resize?.forEach(listener => listener())
+    })
+
+    expect(dialog?.style.getPropertyValue('--mobile-keyboard-inset')).toBe('240px')
+    expect(dialog?.className).toContain('login-sheet--keyboard-aware')
+  })
 })

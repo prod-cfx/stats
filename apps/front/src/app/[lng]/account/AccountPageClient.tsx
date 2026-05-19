@@ -225,13 +225,13 @@ export function AccountPageClient({ lng }: AccountPageClientProps) {
                       value={bindEmailValue}
                       onChange={event => setBindEmailValue(event.target.value)}
                       placeholder={t('account.inputEmail')}
-                      className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-xs text-[color:var(--cf-text)] outline-none transition focus:border-violet-500 sm:w-[180px]"
+                      className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-base text-[color:var(--cf-text)] outline-none transition focus:border-violet-500 sm:w-[180px] md:text-xs"
                     />
                     <input
                       value={bindEmailCode}
                       onChange={event => setBindEmailCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
                       placeholder={t('account.inputCode')}
-                      className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-xs text-[color:var(--cf-text)] outline-none transition focus:border-violet-500 sm:w-[110px]"
+                      className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-base text-[color:var(--cf-text)] outline-none transition focus:border-violet-500 sm:w-[110px] md:text-xs"
                     />
                     <button
                       type="button"

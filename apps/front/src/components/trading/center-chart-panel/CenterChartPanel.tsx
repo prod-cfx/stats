@@ -194,7 +194,7 @@ export const CenterChartPanel = ({
                         placeholder={t('chart.modal.search')}
                         value={indicatorSearch}
                         onChange={e => setIndicatorSearch(e.target.value)}
-                        className="w-full rounded-lg border-0 bg-transparent py-1 pr-2 pl-7 !text-xs !font-normal !leading-5 text-[color:var(--cf-text)] focus:outline-none"
+                        className="w-full rounded-lg border-0 bg-transparent py-1 pr-2 pl-7 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] focus:outline-none md:!text-xs md:!leading-5"
                       />
                     </div>
                   </div>

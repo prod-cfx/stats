@@ -211,6 +211,80 @@ describe('QuantChatPanel range settings', () => {
     expect(skillItems.at(-1)?.getAttribute('data-testid')).toBe('quant-mobile-api-link')
   })
 
+  it('applies mobile keyboard inset to the composer and message padding', async () => {
+    const listeners: Record<string, Array<() => void>> = {}
+    const visualViewport = {
+      height: 520,
+      offsetTop: 0,
+      addEventListener: jest.fn((event: string, listener: () => void) => {
+        listeners[event] = [...(listeners[event] ?? []), listener]
+      }),
+      removeEventListener: jest.fn(),
+    }
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: visualViewport })
+
+    await act(async () => {
+      root?.render(
+        <QuantChatPanel
+          messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
+          paramSchema={null}
+          paramValues={baseParams}
+          onParamChange={() => {}}
+          onSend={() => {}}
+          onRunBacktest={() => {}}
+          onConfirmBacktestParams={() => {}}
+          mobileMode
+        />,
+      )
+    })
+
+    const shell = container.querySelector('section')
+    const composer = container.querySelector('[data-testid="quant-mobile-composer"]')
+    const messages = container.querySelector('[data-testid="quant-chat-scroll"]')
+    const textarea = container.querySelector('textarea')
+
+    await act(async () => {
+      textarea?.focus()
+      listeners.resize?.forEach(listener => listener())
+    })
+
+    expect(shell?.style.getPropertyValue('--mobile-keyboard-inset')).toBe('280px')
+    expect(composer?.className).toContain('translate-y-[calc(-1*var(--mobile-keyboard-inset))]')
+    expect(messages?.className).toContain('var(--mobile-keyboard-inset)')
+  })
+
+  it('keeps the mobile scroll-to-latest button above the keyboard inset', async () => {
+    await act(async () => {
+      root?.render(
+        <QuantChatPanel
+          messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
+          paramSchema={null}
+          paramValues={baseParams}
+          onParamChange={() => {}}
+          onSend={() => {}}
+          onRunBacktest={() => {}}
+          onConfirmBacktestParams={() => {}}
+          mobileMode
+        />,
+      )
+    })
+
+    const messages = container.querySelector<HTMLElement>('[data-testid="quant-chat-scroll"]')
+    Object.defineProperty(messages, 'scrollHeight', { configurable: true, value: 1000 })
+    Object.defineProperty(messages, 'scrollTop', { configurable: true, value: 0 })
+    Object.defineProperty(messages, 'clientHeight', { configurable: true, value: 500 })
+
+    await act(async () => {
+      messages?.dispatchEvent(new Event('scroll', { bubbles: true }))
+    })
+
+    const scrollButton = container.querySelector<HTMLButtonElement>(
+      '[aria-label="aiQuant.scrollToLatest"]',
+    )
+    expect(scrollButton?.className).toContain('var(--mobile-keyboard-inset)')
+  })
+
   it('collapses generated strategy code until the user views all', async () => {
     const codeLines = Array.from({ length: 20 }, (_, index) => `const line${index + 1} = ${index + 1}`).join('\n')
 
@@ -307,6 +381,10 @@ describe('QuantChatPanel range settings', () => {
     })
     const dateInputs = container.querySelectorAll('input[type="datetime-local"]')
     expect(dateInputs).toHaveLength(2)
+    dateInputs.forEach(input => {
+      expect(input.className).toContain('!text-base')
+      expect(input.className).toContain('md:!text-sm')
+    })
 
     const startInput = dateInputs[0] as HTMLInputElement
     await act(async () => {
@@ -382,6 +460,14 @@ describe('QuantChatPanel range settings', () => {
 
     const numberInputs = container.querySelectorAll('input[type="number"]')
     expect(numberInputs).toHaveLength(4)
+    numberInputs.forEach(input => {
+      expect(input.className).toContain('!text-base')
+      expect(input.className).toContain('md:!text-sm')
+    })
+    container.querySelectorAll('select').forEach(select => {
+      expect(select.className).toContain('!text-base')
+      expect(select.className).toContain('md:!text-sm')
+    })
     expect((numberInputs[0] as HTMLInputElement).min).toBe('0.01')
     expect((numberInputs[0] as HTMLInputElement).step).toBe('0.01')
     expect((numberInputs[1] as HTMLInputElement).min).toBe('1')

@@ -618,7 +618,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                       setIsDropdownOpen(true)
                     }}
                     onFocus={() => setIsDropdownOpen(true)}
-                    className="focus:border-primary relative z-10 w-44 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] py-1.5 pr-10 pl-9 !text-xs !font-normal !leading-5 text-[color:var(--cf-text-strong)] transition-colors focus:outline-none"
+                    className="focus:border-primary relative z-10 w-44 rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] py-1.5 pr-10 pl-9 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text-strong)] transition-colors focus:outline-none md:!text-xs md:!leading-5"
                   />
                   <div className="pointer-events-none absolute top-1/2 right-3 z-10 -translate-y-1/2 text-[color:var(--cf-muted)]">
                     <ChevronDown
@@ -639,7 +639,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                         placeholder={t('common.search')}
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
-                        className="focus:border-primary w-full rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2 py-1 !text-xs !font-normal !leading-5 text-[color:var(--cf-text-strong)] focus:outline-none"
+                        className="focus:border-primary w-full rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2 py-1 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text-strong)] focus:outline-none md:!text-xs md:!leading-5"
                         autoFocus
                       />
                     </div>

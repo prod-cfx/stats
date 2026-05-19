@@ -119,6 +119,19 @@ describe('beta code login flow', () => {
     expect(container.textContent).toContain('auth.betaCodeHint')
   })
 
+  it('keeps email inputs at 16px on mobile to prevent iOS focus zoom', async () => {
+    await act(async () => {
+      root?.render(<EmailOtpForm betaCode="" betaCodeGateEnabled onBetaCodeChange={() => {}} onSuccess={() => {}} />)
+    })
+
+    const inputs = Array.from(container.querySelectorAll('input'))
+    expect(inputs).toHaveLength(3)
+    inputs.forEach(input => {
+      expect(input.className).toContain('!text-base')
+      expect(input.className).toContain('md:!text-sm')
+    })
+  })
+
   it('hides beta code field in the email form when beta gate is disabled', async () => {
     await act(async () => {
       root?.render(<EmailOtpForm betaCode="" betaCodeGateEnabled={false} onBetaCodeChange={() => {}} onSuccess={() => {}} />)

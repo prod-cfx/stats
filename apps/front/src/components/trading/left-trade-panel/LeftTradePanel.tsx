@@ -108,7 +108,7 @@ export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftT
               type="text"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              className="w-full bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded px-3 py-2 text-right text-sm focus:outline-none focus:border-orange-400 transition-colors"
+              className="w-full rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-right text-base transition-colors focus:border-orange-400 focus:outline-none md:text-sm"
             />
             <button type="button" className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] bg-[color:var(--cf-surface-hover)] px-1.5 py-0.5 rounded text-[color:var(--cf-text)] hover:opacity-90 transition-colors">
               {t('tradePanel.bestPrice')}
@@ -122,7 +122,7 @@ export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftT
             type="text"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="w-full bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded px-3 py-2 text-right text-sm focus:outline-none focus:border-orange-400 transition-colors"
+            className="w-full rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-right text-base transition-colors focus:border-orange-400 focus:outline-none md:text-sm"
             placeholder="0.00"
           />
         </div>

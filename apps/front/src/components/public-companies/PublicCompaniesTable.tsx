@@ -494,7 +494,7 @@ export const PublicCompaniesTable = () => {
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               placeholder={t('publicCompanies.searchPlaceholder')}
-              className="w-full rounded-lg border-0 bg-transparent py-2 pr-3 pl-9 !text-xs !font-normal !leading-5 text-[color:var(--cf-text)] transition-colors placeholder:text-[color:var(--cf-muted)] focus:ring-0 focus:outline-none"
+              className="w-full rounded-lg border-0 bg-transparent py-2 pr-3 pl-9 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] transition-colors placeholder:text-[color:var(--cf-muted)] focus:ring-0 focus:outline-none md:!text-xs md:!leading-5"
             />
           </div>
         </div>

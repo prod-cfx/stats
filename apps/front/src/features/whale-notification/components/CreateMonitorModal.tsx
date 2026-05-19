@@ -162,7 +162,7 @@ export function CreateMonitorModal({
                 value={presetAddress ?? address}
                 onChange={e => setAddress(e.target.value)}
                 readOnly={Boolean(presetAddress)}
-                className="w-full min-w-0 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-sm text-[color:var(--cf-text-strong)]"
+                className="w-full min-w-0 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-base text-[color:var(--cf-text-strong)] md:text-sm"
               />
             </div>
             <div className="space-y-2">
@@ -173,7 +173,7 @@ export function CreateMonitorModal({
                 value={addressNote}
                 onChange={e => setAddressNote(e.target.value)}
                 placeholder={t('whaleTracking.notifications.modal.optional')}
-                className="w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-sm text-[color:var(--cf-text-strong)]"
+                className="w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-base text-[color:var(--cf-text-strong)] md:text-sm"
               />
             </div>
           </>
@@ -187,7 +187,7 @@ export function CreateMonitorModal({
             <select
               value={symbol}
               onChange={e => setSymbol(e.target.value)}
-              className="w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-sm text-[color:var(--cf-text-strong)]"
+              className="w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-base text-[color:var(--cf-text-strong)] md:text-sm"
             >
               {MONITOR_SYMBOL_OPTIONS.map(item => (
                 <option key={item} value={item}>{item}</option>
@@ -205,7 +205,7 @@ export function CreateMonitorModal({
             min={1}
             value={threshold}
             onChange={e => setThreshold(e.target.value)}
-            className="w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-sm text-[color:var(--cf-text-strong)]"
+            className="w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-base text-[color:var(--cf-text-strong)] md:text-sm"
           />
         </div>
 

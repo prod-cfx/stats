@@ -108,6 +108,8 @@ describe('ClarificationGateCard', () => {
     ) as HTMLButtonElement | null
 
     expect(input).not.toBeNull()
+    expect(input?.className).toContain('text-base')
+    expect(input?.className).toContain('md:text-sm')
     expect(submit?.disabled).toBe(true)
 
     await act(async () => {

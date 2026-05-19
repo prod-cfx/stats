@@ -146,6 +146,11 @@ body {
   animation: login-sheet-enter 220ms ease-out;
 }
 
+.login-sheet--keyboard-aware {
+  transform: translateY(calc(-1 * var(--mobile-keyboard-inset, 0px)));
+  transition: transform 150ms ease-out;
+}
+
 .login-sheet-header {
   display: flex;
   align-items: center;
@@ -294,5 +299,9 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .login-sheet {
     animation: none;
+  }
+
+  .login-sheet--keyboard-aware {
+    transition: none;
   }
 }

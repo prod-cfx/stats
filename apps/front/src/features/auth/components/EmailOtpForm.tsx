@@ -240,7 +240,7 @@ export function EmailOtpForm({ betaCode, betaCodeGateEnabled, onBetaCodeChange, 
           type="email"
           value={email}
           onChange={event => handleEmailChange(event.target.value)}
-          className="h-10 w-full rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 !text-sm !font-normal !leading-[22px] outline-none transition focus:border-primary"
+          className="h-10 w-full rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 !text-base !font-normal !leading-[22px] outline-none transition focus:border-primary md:!text-sm"
           placeholder={t('auth.emailPlaceholder')}
           required
         />
@@ -253,7 +253,7 @@ export function EmailOtpForm({ betaCode, betaCodeGateEnabled, onBetaCodeChange, 
             type="text"
             value={code}
             onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-            className="h-10 min-w-0 flex-1 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 !text-sm !font-normal !leading-[22px] outline-none transition focus:border-primary"
+            className="h-10 min-w-0 flex-1 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 !text-base !font-normal !leading-[22px] outline-none transition focus:border-primary md:!text-sm"
             placeholder={t('auth.codePlaceholder')}
             required
           />
@@ -287,7 +287,7 @@ export function EmailOtpForm({ betaCode, betaCodeGateEnabled, onBetaCodeChange, 
             type="text"
             value={betaCode}
             onChange={event => onBetaCodeChange(event.target.value)}
-            className="h-10 w-full rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 !text-sm !font-normal !leading-[22px] outline-none transition focus:border-primary"
+            className="h-10 w-full rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3.5 !text-base !font-normal !leading-[22px] outline-none transition focus:border-primary md:!text-sm"
             placeholder={t('auth.betaCodePlaceholder')}
           />
           <p className="!text-xs !font-normal !leading-5 text-[color:var(--cf-muted)]">

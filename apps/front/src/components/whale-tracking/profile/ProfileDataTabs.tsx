@@ -931,7 +931,7 @@ export const ProfileDataTabs = ({
                           value={assetFilter}
                           onChange={e => setAssetFilter(e.target.value)}
                           placeholder={t('whaleTracking.profile.assetFilter.placeholder')}
-                          className="focus:border-primary w-full rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-8 py-1.5 text-xs text-[color:var(--cf-text-strong)] focus:outline-none"
+                          className="focus:border-primary w-full rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-8 py-1.5 text-base text-[color:var(--cf-text-strong)] focus:outline-none md:text-xs"
                         />
                         {assetFilter && (
                           <button

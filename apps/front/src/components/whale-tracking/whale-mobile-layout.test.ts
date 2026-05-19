@@ -48,6 +48,7 @@ describe('issue #1350 whale mobile layouts', () => {
     expect(profileTabs).toContain('overflow-x-auto')
     expect(profileTabs).toContain('data-testid="profile-mobile-card-list"')
     expect(createMonitorModal).toContain('w-full sm:w-auto')
+    expect(createMonitorModal).toContain('text-base text-[color:var(--cf-text-strong)] md:text-sm')
     expect(statsModal).toContain('flex-col gap-3 sm:flex-row')
   })
 

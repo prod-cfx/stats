@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { useMobileKeyboardInset } from '@/hooks/useMobileKeyboardInset'
 import { loginAdmin } from '@/lib/api'
 
 const REMEMBER_KEY = 'admin.login.remember'
@@ -36,6 +37,7 @@ export default function LoginPage() {
   }, [])
   const [remember, setRemember] = useState(initialCredentials.remember)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const mobileKeyboard = useMobileKeyboardInset({ enabled: sheetOpen })
 
   const closeSheet = useCallback(() => {
     setSheetOpen(false)
@@ -161,8 +163,11 @@ export default function LoginPage() {
           role={sheetOpen ? 'dialog' : undefined}
           aria-modal={sheetOpen ? 'true' : undefined}
           aria-labelledby="login-sheet-title"
-          className="login-sheet auth-card"
+          className="login-sheet login-sheet--keyboard-aware auth-card"
           onKeyDown={handleSheetKeyDown}
+          onBlur={mobileKeyboard.onBlur}
+          onFocus={mobileKeyboard.onFocus}
+          style={mobileKeyboard.style}
         >
           <div className="login-sheet-header">
             <Typography.Title id="login-sheet-title" level={2} className="login-sheet-title">

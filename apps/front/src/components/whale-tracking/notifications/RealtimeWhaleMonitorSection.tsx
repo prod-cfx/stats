@@ -120,7 +120,7 @@ export function RealtimeWhaleMonitorSection({
           <select
             value={selectedSymbol}
             onChange={e => setSelectedSymbol(e.target.value)}
-            className="min-w-0 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text)] focus:border-primary focus:outline-none"
+            className="min-w-0 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-1.5 !text-base !font-semibold !leading-[22px] text-[color:var(--cf-text)] focus:border-primary focus:outline-none md:!text-xs md:!leading-5"
           >
             {symbolOptions.map(symbol => (
               <option key={symbol} value={symbol}>{symbol}</option>
@@ -134,7 +134,7 @@ export function RealtimeWhaleMonitorSection({
               const value = e.target.value
               setThresholdDraftBySymbol(prev => ({ ...prev, [selectedSymbol]: value }))
             }}
-            className="w-full min-w-0 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-1.5 !text-xs !font-semibold !leading-5 text-[color:var(--cf-text)] focus:border-primary focus:outline-none md:w-[140px]"
+            className="w-full min-w-0 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-1.5 !text-base !font-semibold !leading-[22px] text-[color:var(--cf-text)] focus:border-primary focus:outline-none md:w-[140px] md:!text-xs md:!leading-5"
           />
           <button
             type="button"

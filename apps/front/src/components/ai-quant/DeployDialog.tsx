@@ -142,7 +142,7 @@ export function DeployDialog({
             <select
               value={selectedAccountId}
               onChange={event => onSelectAccount(event.target.value)}
-              className="mt-1 h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]"
+              className="mt-1 h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] md:!text-sm"
             >
               <option value="">{t('aiQuant.deployDialog.selectAccount')}...</option>
               {availableAccounts.map(account => (
@@ -158,7 +158,7 @@ export function DeployDialog({
                 name="deployment-leverage"
                 value={typeof selectedLeverage === 'number' ? String(selectedLeverage) : ''}
                 onChange={event => onSelectLeverage?.(Number(event.target.value))}
-                className="mt-1 h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 !text-sm !font-normal !leading-[22px] text-[color:var(--cf-text)]"
+                className="mt-1 h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 !text-base !font-normal !leading-[22px] text-[color:var(--cf-text)] md:!text-sm"
               >
                 <option value="">{isEn ? 'Select leverage' : '选择杠杆'}</option>
                 {leverageOptions.map(option => (

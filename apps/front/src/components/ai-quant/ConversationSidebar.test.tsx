@@ -219,6 +219,8 @@ describe('ConversationSidebar', () => {
 
     const input = sheet!.querySelector<HTMLInputElement>('[data-testid="conversation-title-input-other"]')
     expect(input).not.toBeNull()
+    expect(input?.className).toContain('!text-base')
+    expect(input?.className).toContain('md:!text-sm')
 
     await act(async () => {
       const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
