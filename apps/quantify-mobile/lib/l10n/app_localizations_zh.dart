@@ -725,6 +725,127 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyDetailLoadConversation => '载入到对话';
 
   @override
+  String get strategyHomeFeaturedBadge => '本周推荐';
+
+  @override
+  String get strategyHomeFeaturedSubtitle => '市场中性 · 低回撤';
+
+  @override
+  String get strategyHomeFeaturedView => '查看 →';
+
+  @override
+  String get strategyHomeStatCagr => 'CAGR';
+
+  @override
+  String get strategyHomeStatSharpe => 'Sharpe';
+
+  @override
+  String get strategyHomeStatDrawdown => '回撤';
+
+  @override
+  String get strategyHomeSortHot => '热门';
+
+  @override
+  String get strategyHomeSortReturn => '收益';
+
+  @override
+  String get strategyHomeSortSharpe => 'Sharpe';
+
+  @override
+  String get strategyHomeSortLowDrawdown => '低回撤';
+
+  @override
+  String get strategyHomeSortLabel => '排序';
+
+  @override
+  String strategyHomeResultCount(int count) {
+    return '$count 个';
+  }
+
+  @override
+  String get strategyHomeFilterButton => '筛选 & 排序';
+
+  @override
+  String get strategyHomeSheetCategory => '类型';
+
+  @override
+  String get strategyHomeSheetSort => '排序方式';
+
+  @override
+  String strategyHomeSheetApply(int count) {
+    return '查看 $count 个结果';
+  }
+
+  @override
+  String get strategyBadgeHot => '🔥 热门';
+
+  @override
+  String get strategyBadgeNew => 'NEW';
+
+  @override
+  String get strategyBadgeOfficial => '官方';
+
+  @override
+  String get strategyBadgePro => 'PRO';
+
+  @override
+  String get strategyCardStatSharpe => 'Sharpe';
+
+  @override
+  String get strategyCardStatDrawdown => '回撤';
+
+  @override
+  String get strategyCardStatWinRate => '胜率';
+
+  @override
+  String get strategyCardStatUsers => '使用';
+
+  @override
+  String get strategyDetailEquityTab7d => '7D';
+
+  @override
+  String get strategyDetailEquityTab30d => '30D';
+
+  @override
+  String get strategyDetailEquityTab90d => '90D';
+
+  @override
+  String get strategyDetailEquityTab1y => '1Y';
+
+  @override
+  String get strategyDetailParamsTitle => '策略参数';
+
+  @override
+  String get strategyDetailParamType => '类型';
+
+  @override
+  String get strategyDetailParamSymbol => '交易品种';
+
+  @override
+  String get strategyDetailParamPeriod => '交易周期';
+
+  @override
+  String get strategyDetailParamStopLoss => '止损';
+
+  @override
+  String get strategyDetailParamPosition => '仓位';
+
+  @override
+  String get strategyDetailParamLeverage => '杠杆';
+
+  @override
+  String get strategyDetailReviewsTitle => '用户评价';
+
+  @override
+  String get strategyDetailReviewsEmpty => '暂无评价';
+
+  @override
+  String get strategyDetailShareButton => '分享';
+
+  @override
+  String get strategyDetailShareToast => '已复制策略链接到剪贴板';
+
+  @override
   String aiLoadStrategyUserMessage(String name, String category, String tags) {
     return '请基于策略「$name」（$category）重新生成，并保留相同标签：$tags。';
   }

@@ -85,13 +85,21 @@ class UnimplementedStrategyRepository implements StrategyRepository {
   }) =>
       _todo('StrategyRepository');
   @override
+  Future<StrategyMarketItem> getFeaturedHero() => _todo('StrategyRepository');
+  @override
   Future<StrategyDetail> getStrategyDetail(String id) =>
+      _todo('StrategyRepository');
+  @override
+  Future<List<StrategyReview>> listReviews(String id, {int limit = 3}) =>
       _todo('StrategyRepository');
   @override
   Future<List<StrategySignal>> listStrategySignals(
     String id, {
     int limit = 20,
   }) =>
+      _todo('StrategyRepository');
+  @override
+  Future<List<double>> getEquityCurve(String id, EquityTimeframe timeframe) =>
       _todo('StrategyRepository');
 }
 

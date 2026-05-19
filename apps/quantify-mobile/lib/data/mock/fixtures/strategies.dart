@@ -14,6 +14,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 320,
     tags: <String>['grid', 'BTCUSDT'],
     category: StrategyCategory.highReturn,
+    status: StrategyStatusBadge.hot,
+    verified: true,
   ),
   StrategyCard(
     id: 'st-dca-sol',
@@ -24,6 +26,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 540,
     tags: <String>['dca', 'SOLUSDT'],
     category: StrategyCategory.highReturn,
+    status: StrategyStatusBadge.official,
+    verified: true,
   ),
   StrategyCard(
     id: 'st-mom-eth',
@@ -34,6 +38,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 612,
     tags: <String>['momentum', 'ETHUSDT'],
     category: StrategyCategory.highReturn,
+    status: StrategyStatusBadge.pro,
+    verified: true,
   ),
   StrategyCard(
     id: 'st-trend-eth',
@@ -158,6 +164,8 @@ const List<StrategyCard> mockFeaturedStrategies = <StrategyCard>[
     subscribers: 42,
     tags: <String>['ai', 'experimental'],
     category: StrategyCategory.newListing,
+    status: StrategyStatusBadge.newListing,
+    verified: true,
   ),
   StrategyCard(
     id: 'st-new-btc-mr',

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/storage/strategy_subscription_persistence.dart';
 import 'package:quantify_mobile/pages/strategy/strategy_detail_page.dart';
+import 'package:quantify_mobile/pages/strategy/widgets/equity_curve_view.dart';
 import 'package:quantify_mobile/pages/strategy/widgets/strategy_metric_card.dart';
 import 'package:quantify_mobile/pages/strategy/widgets/strategy_signal_tile.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
@@ -41,23 +42,42 @@ Future<ProviderContainer> _pumpDetail(
       ),
     ),
   );
-  // 两个 mock future（detail + signals）各 200ms
+  // 4 个 mock future：detail+signals 200ms / reviews 150ms / equity 120ms
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 250));
   await tester.pump(const Duration(milliseconds: 250));
+  // equity 由 detail data 渲染完之后再 watch，所以要再多 pump 一次
+  await tester.pump(const Duration(milliseconds: 200));
+  await tester.pump();
   return container;
 }
 
 void main() {
-  testWidgets('渲染：6 张指标卡 + 20 条信号 + 订阅按钮',
+  testWidgets('渲染：6 张指标卡 + 20 条信号 + 订阅 / 分享按钮 + equity 真实图（#1565）',
       (WidgetTester tester) async {
     await _pumpDetail(tester);
     expect(find.byType(StrategyMetricCard), findsNWidgets(6));
     expect(find.byType(StrategySignalTile), findsNWidgets(20));
     expect(find.byKey(const Key('strategy-detail-subscribe-btn')),
         findsOneWidget);
-    // 收益曲线占位
-    expect(find.text('曲线占位（接入 K 线后可视化）'), findsOneWidget);
+    expect(find.byKey(const Key('strategy-detail-share-btn')), findsOneWidget);
+    // equity 真实图替代占位文字（#1565）
+    expect(find.byType(EquityCurveView), findsOneWidget);
+    expect(find.text('曲线占位（接入 K 线后可视化）'), findsNothing);
+    // 策略参数 + 用户评价区块
+    expect(find.text('策略参数'), findsOneWidget);
+    expect(find.text('用户评价'), findsOneWidget);
+  });
+
+  testWidgets('equity 时间维度切换：tap 90D tab 不抛异常 (#1565)',
+      (WidgetTester tester) async {
+    await _pumpDetail(tester);
+    await tester.tap(find.byKey(const Key('strategy-detail-tf-d90')));
+    await tester.pump();
+    // 等 equity provider mock 120ms 完成
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
+    expect(find.byType(EquityCurveView), findsOneWidget);
   });
 
   testWidgets('订阅按钮：未订阅 → 点击 → 已订阅 → 再次点击 → 取消',

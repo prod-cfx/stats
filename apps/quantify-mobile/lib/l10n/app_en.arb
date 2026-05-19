@@ -256,6 +256,55 @@
   "strategyDetailSubscribersSuffix": " subscribers",
   "strategyCardLoadConversation": "Load chat",
   "strategyDetailLoadConversation": "Load into chat",
+  "strategyHomeFeaturedBadge": "Pick of the week",
+  "strategyHomeFeaturedSubtitle": "Market neutral · low drawdown",
+  "strategyHomeFeaturedView": "View →",
+  "strategyHomeStatCagr": "CAGR",
+  "strategyHomeStatSharpe": "Sharpe",
+  "strategyHomeStatDrawdown": "Drawdown",
+  "strategyHomeSortHot": "Hot",
+  "strategyHomeSortReturn": "Return",
+  "strategyHomeSortSharpe": "Sharpe",
+  "strategyHomeSortLowDrawdown": "Low DD",
+  "strategyHomeSortLabel": "Sort",
+  "strategyHomeResultCount": "{count} items",
+  "@strategyHomeResultCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "strategyHomeFilterButton": "Filter & sort",
+  "strategyHomeSheetCategory": "Category",
+  "strategyHomeSheetSort": "Sort by",
+  "strategyHomeSheetApply": "View {count} results",
+  "@strategyHomeSheetApply": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "strategyBadgeHot": "🔥 Hot",
+  "strategyBadgeNew": "NEW",
+  "strategyBadgeOfficial": "Official",
+  "strategyBadgePro": "PRO",
+  "strategyCardStatSharpe": "Sharpe",
+  "strategyCardStatDrawdown": "Drawdown",
+  "strategyCardStatWinRate": "Win rate",
+  "strategyCardStatUsers": "Users",
+  "strategyDetailEquityTab7d": "7D",
+  "strategyDetailEquityTab30d": "30D",
+  "strategyDetailEquityTab90d": "90D",
+  "strategyDetailEquityTab1y": "1Y",
+  "strategyDetailParamsTitle": "Parameters",
+  "strategyDetailParamType": "Type",
+  "strategyDetailParamSymbol": "Symbol",
+  "strategyDetailParamPeriod": "Period",
+  "strategyDetailParamStopLoss": "Stop loss",
+  "strategyDetailParamPosition": "Position",
+  "strategyDetailParamLeverage": "Leverage",
+  "strategyDetailReviewsTitle": "User reviews",
+  "strategyDetailReviewsEmpty": "No reviews yet",
+  "strategyDetailShareButton": "Share",
+  "strategyDetailShareToast": "Strategy link copied to clipboard",
   "aiLoadStrategyUserMessage": "Please regenerate based on strategy \"{name}\" ({category}), keeping the same tags: {tags}.",
   "@aiLoadStrategyUserMessage": {
     "placeholders": {

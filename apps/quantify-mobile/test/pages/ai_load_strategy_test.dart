@@ -82,8 +82,11 @@ void main() {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('strategy-tile-st-grid-btc')));
     await tester.pump();
+    // detail+signals 200ms / reviews 150ms / equity 120ms
     await tester.pump(const Duration(milliseconds: 250));
     await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
     expect(
       find.byKey(const Key('strategy-detail-load-chat-btn')),
       findsOneWidget,

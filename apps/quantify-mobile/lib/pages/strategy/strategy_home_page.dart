@@ -11,14 +11,17 @@ import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_search_bar.dart';
+import '../../widgets/qz_sheet.dart';
 import '../../widgets/qz_spinner.dart';
 import 'widgets/category_chip_bar.dart';
+import 'widgets/featured_hero_card.dart';
 import 'widgets/strategy_card_tile.dart';
+import 'widgets/strategy_sort_sheet.dart';
 
-/// 策略广场（原型 10）。
+/// 策略广场（原型 m-screens-2 / issue #1565）。
 ///
-/// 顶部：搜索栏 + 分类 chip 条
-/// 中部：`ListView.builder` + RefreshIndicator（下拉刷新）+ 滚动到底部 loadMore
+/// 顶部：搜索栏 + 分类 chip 条 + 排序行 + 筛选 sheet
+/// 中部：featured hero（仅当 category=all 且无 query 时显示） + 列表
 /// 底部：分页 loading 指示
 class StrategyHomePage extends ConsumerStatefulWidget {
   const StrategyHomePage({super.key});
@@ -35,17 +38,22 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
 
   StrategyCategory _category = StrategyCategory.all;
   String _query = '';
+  StrategySortKey _sort = StrategySortKey.hot;
   int _page = 1;
   bool _hasMore = true;
   bool _loading = true;
   bool _loadingMore = false;
   List<StrategyMarketItem> _items = <StrategyMarketItem>[];
+  StrategyMarketItem? _featured;
 
   @override
   void initState() {
     super.initState();
     _scrollCtrl.addListener(_onScroll);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _reload());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _reload();
+      _loadFeatured();
+    });
   }
 
   @override
@@ -66,6 +74,18 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     }
   }
 
+  Future<void> _loadFeatured() async {
+    final StrategyRepository repo = ref.read(strategyRepositoryProvider);
+    try {
+      final StrategyMarketItem hero = await repo.getFeaturedHero();
+      if (!mounted) return;
+      setState(() => _featured = hero);
+    } catch (e, st) {
+      // featured 失败不影响主列表，但留可观测信号便于排查接入真实接口后的故障。
+      debugPrint('[StrategyHome] loadFeatured failed: $e\n$st');
+    }
+  }
+
   Future<void> _reload() async {
     final StrategyRepository repo = ref.read(strategyRepositoryProvider);
     setState(() {
@@ -80,7 +100,7 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     );
     if (!mounted) return;
     setState(() {
-      _items = res.items;
+      _items = _applySort(res.items, _sort);
       _hasMore = res.hasMore;
       _loading = false;
     });
@@ -100,10 +120,31 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     if (!mounted) return;
     setState(() {
       _page = next;
-      _items = <StrategyMarketItem>[..._items, ...res.items];
+      _items = _applySort(<StrategyMarketItem>[..._items, ...res.items], _sort);
       _hasMore = res.hasMore;
       _loadingMore = false;
     });
+  }
+
+  /// 在当前内存列表上排序，避免 repository 接口暴露 sortKey。
+  ///
+  /// hot=按 users 降序；cagr=按 cagr 降序；sharpe=按 sharpe 降序；
+  /// mddLow=按 mdd 升序（值越大越接近 0，回撤越小）。
+  List<StrategyMarketItem> _applySort(
+    List<StrategyMarketItem> items,
+    StrategySortKey k,
+  ) {
+    final List<StrategyMarketItem> sorted = <StrategyMarketItem>[...items];
+    sorted.sort((StrategyMarketItem a, StrategyMarketItem b) {
+      return switch (k) {
+        StrategySortKey.hot => b.stats.users.compareTo(a.stats.users),
+        StrategySortKey.cagr => b.stats.cagr.compareTo(a.stats.cagr),
+        StrategySortKey.sharpe => b.stats.sharpe.compareTo(a.stats.sharpe),
+        StrategySortKey.mddLow =>
+          b.stats.maxDrawdown.compareTo(a.stats.maxDrawdown),
+      };
+    });
+    return sorted;
   }
 
   void _onCategoryChanged(StrategyCategory c) {
@@ -117,12 +158,76 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     _reload();
   }
 
+  void _onSortChanged(StrategySortKey k) {
+    if (k == _sort) return;
+    setState(() {
+      _sort = k;
+      _items = _applySort(_items, k);
+    });
+  }
+
+  Future<void> _openFilterSheet() async {
+    final StrategySortFilterResult? res =
+        await QzSheet.show<StrategySortFilterResult>(
+      context: context,
+      builder: (BuildContext ctx) => StrategySortSheet(
+        initialCategory: _category,
+        initialSort: _sort,
+        resultCount: _items.length,
+      ),
+    );
+    if (res == null || !mounted) return;
+    final bool catChanged = res.category != _category;
+    if (catChanged) {
+      setState(() {
+        _category = res.category;
+        _sort = res.sort;
+      });
+      _reload();
+    } else {
+      setState(() {
+        _category = res.category;
+        _sort = res.sort;
+        _items = _applySort(_items, _sort);
+      });
+    }
+  }
+
+  bool get _showFeatured =>
+      _featured != null &&
+      _category == StrategyCategory.all &&
+      _query.isEmpty;
+
+  /// 列表渲染用的视图项：当 hero 卡显示时，剔除列表中与 hero 同 id 的策略，
+  /// 避免同一张卡同时出现在 hero 和列表里。
+  ///
+  /// 注意：仅在 [_showFeatured] 为 true 时访问 `_featured!`，依赖该 getter
+  /// 内部已保证 `_featured != null`；如未来改 [_showFeatured] 实现，请同步检查这里。
+  List<StrategyMarketItem> get _listItems {
+    if (!_showFeatured) return _items;
+    final String heroId = _featured!.card.id;
+    return _items
+        .where((StrategyMarketItem it) => it.card.id != heroId)
+        .toList(growable: false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
+    final Set<String> favorites = ref.watch(strategyFavoritesProvider);
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.strategyHomeTitle)),
+      appBar: AppBar(
+        title: Text(l10n.strategyHomeTitle),
+        actions: <Widget>[
+          IconButton(
+            key: const Key('strategy-filter-btn'),
+            tooltip: l10n.strategyHomeFilterButton,
+            icon: const Icon(Icons.tune),
+            onPressed: _openFilterSheet,
+          ),
+        ],
+      ),
       body: Column(
         children: <Widget>[
           Padding(
@@ -138,13 +243,18 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
             selected: _category,
             onChanged: _onCategoryChanged,
           ),
-          const SizedBox(height: QzSpacing.sm),
+          _SortRow(
+            sort: _sort,
+            resultCount: _items.length,
+            onChanged: _onSortChanged,
+          ),
+          const SizedBox(height: QzSpacing.xs),
           Expanded(
             child: RefreshIndicator(
               onRefresh: _reload,
               child: _loading
                   ? const Center(child: QzSpinner())
-                  : _items.isEmpty
+                  : _listItems.isEmpty && !_showFeatured
                       ? ListView(
                           // RefreshIndicator 要求可滚动 child
                           physics: const AlwaysScrollableScrollPhysics(),
@@ -153,35 +263,157 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
                             QzEmptyState(title: l10n.strategyHomeEmpty),
                           ],
                         )
-                      : ListView.builder(
+                      : Builder(builder: (BuildContext _) {
+                          final List<StrategyMarketItem> listItems = _listItems;
+                          return ListView.builder(
                           controller: _scrollCtrl,
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.symmetric(
                               horizontal: QzSpacing.lg),
-                          itemCount: _items.length + (_loadingMore ? 1 : 0),
-                          itemBuilder: (BuildContext ctx, int i) {
-                            if (i >= _items.length) {
+                          itemCount: listItems.length +
+                              (_showFeatured ? 1 : 0) +
+                              (_loadingMore ? 1 : 0),
+                          itemBuilder: (BuildContext ctx, int rawI) {
+                            int i = rawI;
+                            if (_showFeatured) {
+                              if (i == 0) {
+                                return FeaturedHeroCard(
+                                  key: const Key('strategy-featured-hero'),
+                                  item: _featured!,
+                                  onTap: () => context
+                                      .push('/strategy/${_featured!.card.id}'),
+                                );
+                              }
+                              i -= 1;
+                            }
+                            if (i >= listItems.length) {
                               return const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 16),
                                 child: Center(child: QzSpinner()),
                               );
                             }
-                            final StrategyMarketItem item = _items[i];
+                            final StrategyMarketItem item = listItems[i];
+                            final String id = item.card.id;
                             return StrategyCardTile(
-                              key: Key('strategy-tile-${item.card.id}'),
+                              key: Key('strategy-tile-$id'),
                               item: item,
-                              onTap: () =>
-                                  context.push('/strategy/${item.card.id}'),
+                              starred: favorites.contains(id),
+                              onToggleStar: () => ref
+                                  .read(strategyFavoritesProvider.notifier)
+                                  .toggle(id),
+                              onTap: () => context.push('/strategy/$id'),
                               onLoadConversation: () => context
-                                  .go('/ai?loadStrategy=${item.card.id}'),
+                                  .go('/ai?loadStrategy=$id'),
                             );
                           },
-                        ),
+                        );
+                        }),
             ),
           ),
         ],
       ),
       backgroundColor: c.bg,
+    );
+  }
+}
+
+/// 排序行（#1565）：标签 + 4 个 chip + 结果计数。
+class _SortRow extends StatelessWidget {
+  const _SortRow({
+    required this.sort,
+    required this.resultCount,
+    required this.onChanged,
+  });
+
+  final StrategySortKey sort;
+  final int resultCount;
+  final ValueChanged<StrategySortKey> onChanged;
+
+  String _label(BuildContext ctx, StrategySortKey k) {
+    final AppLocalizations l10n = AppLocalizations.of(ctx);
+    return switch (k) {
+      StrategySortKey.hot => l10n.strategyHomeSortHot,
+      StrategySortKey.cagr => l10n.strategyHomeSortReturn,
+      StrategySortKey.sharpe => l10n.strategyHomeSortSharpe,
+      StrategySortKey.mddLow => l10n.strategyHomeSortLowDrawdown,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final QzColorScheme c = context.qzScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          QzSpacing.lg, QzSpacing.xs, QzSpacing.lg, 0),
+      child: Row(
+        children: <Widget>[
+          Text(
+            l10n.strategyHomeSortLabel,
+            style: TextStyle(color: c.textDim, fontSize: 11),
+          ),
+          const SizedBox(width: QzSpacing.xs),
+          for (final StrategySortKey k in StrategySortKey.values) ...<Widget>[
+            _SortChip(
+              key: Key('strategy-sort-${k.name}'),
+              label: _label(context, k),
+              selected: k == sort,
+              onTap: () => onChanged(k),
+            ),
+            const SizedBox(width: 2),
+          ],
+          const Spacer(),
+          Text(
+            l10n.strategyHomeResultCount(resultCount),
+            style: TextStyle(
+              color: c.textDim,
+              fontSize: 11,
+              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SortChip extends StatelessWidget {
+  const _SortChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: QzSpacing.sm, vertical: 4),
+          decoration: BoxDecoration(
+            color: selected ? c.accentSoft : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? c.accent : c.textDim,
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -5,6 +5,7 @@ import 'dart:math';
 import '../theme/theme_notifier.dart' show sharedPreferencesProvider;
 import 'models/account_models.dart';
 import 'models/api_key_models.dart';
+import 'storage/strategy_favorites_persistence.dart';
 import 'storage/strategy_subscription_persistence.dart';
 import 'mock/mock_account_repository.dart';
 import 'mock/mock_ai_chat_repository.dart';
@@ -180,3 +181,40 @@ final NotifierProvider<StrategySubscriptionsNotifier, Set<String>>
     strategySubscriptionsProvider =
     NotifierProvider<StrategySubscriptionsNotifier, Set<String>>(
         StrategySubscriptionsNotifier.new);
+
+final Provider<StrategyFavoritesPersistence>
+    strategyFavoritesPersistenceProvider =
+    Provider<StrategyFavoritesPersistence>((Ref ref) {
+  return StrategyFavoritesPersistence(ref.watch(sharedPreferencesProvider));
+});
+
+/// 已收藏（星标）策略 id 集合（#1565）。
+///
+/// 与 [StrategySubscriptionsNotifier] 同 toggle/写盘/回滚模式：乐观更新内存，
+/// 写盘失败回滚保证内存与磁盘一致。
+class StrategyFavoritesNotifier extends Notifier<Set<String>> {
+  @override
+  Set<String> build() {
+    return ref.watch(strategyFavoritesPersistenceProvider).read();
+  }
+
+  bool isFavorite(String id) => state.contains(id);
+
+  Future<void> toggle(String id) async {
+    final Set<String> previous = state;
+    final Set<String> next = <String>{...previous};
+    if (!next.add(id)) next.remove(id);
+    state = next;
+    try {
+      await ref.read(strategyFavoritesPersistenceProvider).write(next);
+    } catch (_) {
+      state = previous;
+      rethrow;
+    }
+  }
+}
+
+final NotifierProvider<StrategyFavoritesNotifier, Set<String>>
+    strategyFavoritesProvider =
+    NotifierProvider<StrategyFavoritesNotifier, Set<String>>(
+        StrategyFavoritesNotifier.new);

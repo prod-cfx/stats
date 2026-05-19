@@ -259,6 +259,55 @@
   "strategyDetailSubscribersSuffix": " 订阅",
   "strategyCardLoadConversation": "载入对话",
   "strategyDetailLoadConversation": "载入到对话",
+  "strategyHomeFeaturedBadge": "本周推荐",
+  "strategyHomeFeaturedSubtitle": "市场中性 · 低回撤",
+  "strategyHomeFeaturedView": "查看 →",
+  "strategyHomeStatCagr": "CAGR",
+  "strategyHomeStatSharpe": "Sharpe",
+  "strategyHomeStatDrawdown": "回撤",
+  "strategyHomeSortHot": "热门",
+  "strategyHomeSortReturn": "收益",
+  "strategyHomeSortSharpe": "Sharpe",
+  "strategyHomeSortLowDrawdown": "低回撤",
+  "strategyHomeSortLabel": "排序",
+  "strategyHomeResultCount": "{count} 个",
+  "@strategyHomeResultCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "strategyHomeFilterButton": "筛选 & 排序",
+  "strategyHomeSheetCategory": "类型",
+  "strategyHomeSheetSort": "排序方式",
+  "strategyHomeSheetApply": "查看 {count} 个结果",
+  "@strategyHomeSheetApply": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "strategyBadgeHot": "🔥 热门",
+  "strategyBadgeNew": "NEW",
+  "strategyBadgeOfficial": "官方",
+  "strategyBadgePro": "PRO",
+  "strategyCardStatSharpe": "Sharpe",
+  "strategyCardStatDrawdown": "回撤",
+  "strategyCardStatWinRate": "胜率",
+  "strategyCardStatUsers": "使用",
+  "strategyDetailEquityTab7d": "7D",
+  "strategyDetailEquityTab30d": "30D",
+  "strategyDetailEquityTab90d": "90D",
+  "strategyDetailEquityTab1y": "1Y",
+  "strategyDetailParamsTitle": "策略参数",
+  "strategyDetailParamType": "类型",
+  "strategyDetailParamSymbol": "交易品种",
+  "strategyDetailParamPeriod": "交易周期",
+  "strategyDetailParamStopLoss": "止损",
+  "strategyDetailParamPosition": "仓位",
+  "strategyDetailParamLeverage": "杠杆",
+  "strategyDetailReviewsTitle": "用户评价",
+  "strategyDetailReviewsEmpty": "暂无评价",
+  "strategyDetailShareButton": "分享",
+  "strategyDetailShareToast": "已复制策略链接到剪贴板",
   "aiLoadStrategyUserMessage": "请基于策略「{name}」（{category}）重新生成，并保留相同标签：{tags}。",
   "@aiLoadStrategyUserMessage": {
     "placeholders": {

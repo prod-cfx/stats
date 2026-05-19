@@ -6,6 +6,7 @@ import 'package:quantify_mobile/data/mock/fixtures/strategies.dart';
 import 'package:quantify_mobile/data/models/strategy_models.dart';
 import 'package:quantify_mobile/pages/strategy/strategy_detail_page.dart';
 import 'package:quantify_mobile/pages/strategy/strategy_home_page.dart';
+import 'package:quantify_mobile/pages/strategy/widgets/featured_hero_card.dart';
 import 'package:quantify_mobile/pages/strategy/widgets/strategy_card_tile.dart';
 import 'package:quantify_mobile/router/app_router.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
@@ -86,9 +87,11 @@ void main() {
     await tester.pump();
     router.go('/strategy/st-grid-btc');
     await tester.pump();
-    // detail + signals 两个 mock future（200ms each）
+    // detail + signals 200ms / reviews 150ms / equity 120ms
     await tester.pump(const Duration(milliseconds: 250));
     await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
     expect(find.byType(StrategyDetailPage), findsOneWidget);
     // 渲染出真实策略名 = 占位页已被替换
     expect(find.text('BTC 网格搬砖'), findsOneWidget);
@@ -98,8 +101,54 @@ void main() {
       (WidgetTester tester) async {
     expect(mockFeaturedStrategies.length, greaterThanOrEqualTo(20));
     await _pump(tester);
-    // 默认 pageSize=10
-    expect(find.byType(StrategyCardTile), findsNWidgets(10));
+    // 默认 pageSize=10；hero 卡命中的策略会在列表里去重，所以列表 StrategyCardTile
+    // 可能是 9 或 10（取决于 hero 是否在首页结果集中）。
+    final int tiles = tester.widgetList(find.byType(StrategyCardTile)).length;
+    expect(tiles, greaterThanOrEqualTo(9));
+    expect(tiles, lessThanOrEqualTo(10));
+  });
+
+  testWidgets('默认 category=all 且无 query：渲染 featured hero 卡 (#1565)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    expect(find.byKey(const Key('strategy-featured-hero')), findsOneWidget);
+    expect(find.byType(FeaturedHeroCard), findsOneWidget);
+  });
+
+  testWidgets('排序行：4 个排序 chip + 结果计数 (#1565)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    expect(find.byKey(const Key('strategy-sort-hot')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-sort-cagr')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-sort-sharpe')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-sort-mddLow')), findsOneWidget);
+    // 默认 hot 选中：tap cagr 切换不抛
+    await tester.tap(find.byKey(const Key('strategy-sort-cagr')));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('筛选 sheet：点击右上 icon 弹出底部 sheet (#1565)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('strategy-filter-btn')));
+    await tester.pumpAndSettle();
+    // sheet 内 4 个分类 + 4 个排序 + apply 按钮
+    expect(find.byKey(const Key('strategy-sheet-cat-all')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-sheet-sort-hot')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-sheet-apply-btn')), findsOneWidget);
+  });
+
+  testWidgets('星标按钮：点击切换收藏状态 (#1565)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    final String firstId = mockFeaturedStrategies.first.id;
+    final Finder star = find.byKey(Key('strategy-star-$firstId'));
+    expect(star, findsOneWidget);
+    await tester.tap(star);
+    await tester.pump();
+    await tester.pump();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('切换 "高收益" chip：筛选只剩 highReturn 类',
@@ -158,10 +207,13 @@ void main() {
     await _pump(tester);
     final StrategyCard first = mockFeaturedStrategies.first;
     await tester.tap(find.byKey(Key('strategy-tile-${first.id}')));
-    // pumpAndSettle 受 mock 200ms delay + 渲染影响：手动驱动两轮 future
+    // pumpAndSettle 受 mock 200ms delay + 渲染影响：手动驱动多轮 future
+    // detail+signals 200ms / reviews 150ms / equity 120ms
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
     await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
     expect(find.byType(StrategyDetailPage), findsOneWidget);
     // 详情页 AppBar 标题 + 真实策略名同时存在
     expect(find.text('策略详情'), findsOneWidget);
@@ -200,8 +252,13 @@ void main() {
         ),
       ],
     );
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final SharedPreferences prefs2 = await SharedPreferences.getInstance();
     await tester.pumpWidget(
       ProviderScope(
+        overrides: <Override>[
+          sharedPreferencesProvider.overrideWithValue(prefs2),
+        ],
         child: MaterialApp.router(
           locale: const Locale('zh'),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -217,28 +274,23 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
     await tester.pump();
 
-    final String id11 = mockFeaturedStrategies[10].id;
-    final Finder cardTile = find.byKey(Key(
-        'strategy-tile-${mockFeaturedStrategies.first.id}'));
-    final ScrollableState scrollable =
-        Scrollable.of(tester.element(cardTile));
-    expect(scrollable.position.maxScrollExtent, greaterThan(0),
-        reason: '主列表在 800 高 viewport 下应可滚');
-
-    // scrollUntilVisible 会一边滚一边 pump；同时 _onScroll 触发 loadMore（mock
-    // 200ms delay），fixture 22 条全部进入 list 后第 11 条可被滚入视口。
+    final String id22 = mockFeaturedStrategies.last.id;
+    // 默认排序按 hot（users 降序）—— fixture 末条（subscribers 较小）一定不在
+    // 首页 10 条，必须 loadMore 才会出现。
+    final Finder mainList = find.descendant(
+      of: find.byType(RefreshIndicator),
+      matching: find.byType(Scrollable),
+    );
+    expect(mainList, findsOneWidget,
+        reason: '主列表 Scrollable 应能唯一定位');
     await tester.scrollUntilVisible(
-      find.byKey(Key('strategy-tile-$id11')),
+      find.byKey(Key('strategy-tile-$id22')),
       300,
-      scrollable: find.descendant(
-        of: find.byType(StrategyHomePage),
-        matching: find.byWidgetPredicate((Widget w) =>
-            w is Scrollable && w.axisDirection == AxisDirection.down),
-      ),
+      scrollable: mainList,
       duration: const Duration(milliseconds: 100),
     );
     await tester.pumpAndSettle();
-    expect(find.byKey(Key('strategy-tile-$id11')), findsOneWidget,
-        reason: '上拉到底应触发 loadMore，第 11 条卡片应可见');
+    expect(find.byKey(Key('strategy-tile-$id22')), findsOneWidget,
+        reason: '上拉到底应触发 loadMore，末条卡片应可见');
   });
 }

@@ -35,6 +35,28 @@ class MockStrategyRepository implements StrategyRepository {
     return List<double>.generate(30, (int _) => rng.nextDouble());
   }
 
+  /// 派生 4 格指标：cagr / sharpe / 最大回撤 / 胜率 / 使用人数。
+  ///
+  /// 与 [getStrategyDetail] 的指标语义保持一致，但范围适配卡片列表更紧凑
+  /// 的显示：cagr 跟随 [StrategyCard.pnlPercent] 量级，winRate 用 0..1。
+  static StrategyMarketStats _statsFor(StrategyCard c) {
+    final Random rng = Random(c.id.hashCode ^ 0x1A2B);
+    final double sharpe = 0.6 + rng.nextDouble() * 2.6; // 0.6..3.2
+    // 高收益类回撤偏大，低回撤类偏小
+    final double mddBase =
+        c.category == StrategyCategory.lowDrawdown ? 3 : 10;
+    final double mddSpan =
+        c.category == StrategyCategory.lowDrawdown ? 6 : 20;
+    final double winRate = 0.42 + rng.nextDouble() * 0.45; // 0.42..0.87
+    return StrategyMarketStats(
+      cagr: c.pnlPercent,
+      sharpe: sharpe,
+      maxDrawdown: -(mddBase + rng.nextDouble() * mddSpan),
+      winRate: winRate,
+      users: c.subscribers,
+    );
+  }
+
   @override
   Future<StrategyMarketPage> listMarket({
     int page = 1,
@@ -69,14 +91,32 @@ class MockStrategyRepository implements StrategyRepository {
         ? const <StrategyCard>[]
         : all.sublist(start, end);
     final List<StrategyMarketItem> items = pageItems
-        .map((StrategyCard c) =>
-            StrategyMarketItem(card: c, sparkline: _sparklineFor(c.id)))
+        .map((StrategyCard c) => StrategyMarketItem(
+              card: c,
+              sparkline: _sparklineFor(c.id),
+              stats: _statsFor(c),
+            ))
         .toList();
     return StrategyMarketPage(
       items: items,
       hasMore: end < all.length,
       page: page,
       pageSize: pageSize,
+    );
+  }
+
+  @override
+  Future<StrategyMarketItem> getFeaturedHero() async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    // 优先取 official 标记的策略，否则 fallback 第一条
+    final StrategyCard hero = mockFeaturedStrategies.firstWhere(
+      (StrategyCard s) => s.status == StrategyStatusBadge.official,
+      orElse: () => mockFeaturedStrategies.first,
+    );
+    return StrategyMarketItem(
+      card: hero,
+      sparkline: _sparklineFor(hero.id),
+      stats: _statsFor(hero),
     );
   }
 
@@ -107,6 +147,30 @@ class MockStrategyRepository implements StrategyRepository {
   }
 
   @override
+  Future<List<StrategyReview>> listReviews(String id, {int limit = 3}) async {
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    final List<({String user, String text})> pool =
+        <({String user, String text})>[
+      (user: 'Alice', text: '已经跑了 3 个月，表现稳定，回撤可控。'),
+      (user: 'Bob', text: '参数需要微调，整体不错。'),
+      (user: 'Carol', text: '震荡行情收益还行，趋势行情建议手动止盈。'),
+      (user: 'Dan', text: '小仓位试了一周，胜率比预期高。'),
+      (user: 'Eve', text: '回撤期心态需要稳，止损一定要带。'),
+      (user: 'Frank', text: '官方策略文档比较清楚，新手友好。'),
+    ];
+    final Random rng = Random(id.hashCode ^ 0xCAFE);
+    return List<StrategyReview>.generate(limit, (int i) {
+      final ({String user, String text}) e = pool[(i + rng.nextInt(2)) % pool.length];
+      // 3..5 星
+      return StrategyReview(
+        user: e.user,
+        stars: 3 + rng.nextInt(3),
+        text: e.text,
+      );
+    });
+  }
+
+  @override
   Future<List<StrategySignal>> listStrategySignals(
     String id, {
     int limit = 20,
@@ -128,5 +192,30 @@ class MockStrategyRepository implements StrategyRepository {
         pnlPercent: pnl,
       );
     });
+  }
+
+  @override
+  Future<List<double>> getEquityCurve(
+    String id,
+    EquityTimeframe timeframe,
+  ) async {
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    // 不同 timeframe 用不同 salt，确保切换 tab 时曲线形状真的会变。
+    final int salt = switch (timeframe) {
+      EquityTimeframe.d7 => 0x07,
+      EquityTimeframe.d30 => 0x1E,
+      EquityTimeframe.d90 => 0x5A,
+      EquityTimeframe.y1 => 0x365,
+    };
+    final Random rng = Random(id.hashCode ^ salt);
+    // 模拟一段累积收益曲线：从 1.0 起步，每步 ±1.5% 漂移，保留趋势性。
+    final List<double> points = <double>[];
+    double v = 1.0;
+    for (int i = 0; i < 60; i++) {
+      final double step = (rng.nextDouble() - 0.45) * 0.03;
+      v = (v + step).clamp(0.6, 1.8);
+      points.add(v);
+    }
+    return points;
   }
 }

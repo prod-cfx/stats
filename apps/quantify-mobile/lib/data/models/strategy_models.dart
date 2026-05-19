@@ -1,6 +1,14 @@
 /// 策略分类（页面顶部 chip 切换用）。
 enum StrategyCategory { all, highReturn, lowDrawdown, newListing }
 
+/// 策略卡 status badge 类型（#1565）。
+///
+/// - [hot]：🔥 热门
+/// - [newListing]：NEW
+/// - [official]：官方
+/// - [pro]：PRO
+enum StrategyStatusBadge { hot, newListing, official, pro }
+
 /// 策略卡片元数据。
 ///
 /// 保持 const 构造以便 fixtures 维持 `const List` 字面量。sparkline 数据**不**
@@ -16,6 +24,12 @@ class StrategyCard {
   final List<String> tags;
   final StrategyCategory category;
 
+  /// status badge（#1565）。null 不渲染。
+  final StrategyStatusBadge? status;
+
+  /// 作者认证标（蓝 V）。
+  final bool verified;
+
   const StrategyCard({
     required this.id,
     required this.name,
@@ -25,18 +39,45 @@ class StrategyCard {
     required this.subscribers,
     required this.tags,
     required this.category,
+    this.status,
+    this.verified = false,
   });
 }
 
-/// 策略广场列表项：卡片 + 运行时派生的 sparkline 序列。
+/// 4 格指标 + featured hero 卡共享的"广场摘要"数据（#1565）。
 ///
-/// 把 sparkline 拆出来是为了让 [StrategyCard] 仍是 const-friendly model（fixture
-/// 字面量保持紧凑），同时让 mock 层有自由度按 id 生成确定性折线数据。
+/// 由 mock 基于 `Random(id.hashCode)` 派生，保证同一 id 多次调用一致——
+/// widget test / golden 复现友好。
+class StrategyMarketStats {
+  final double cagr;
+  final double sharpe;
+  final double maxDrawdown; // 负值
+  final double winRate; // 0..1
+  final int users;
+
+  const StrategyMarketStats({
+    required this.cagr,
+    required this.sharpe,
+    required this.maxDrawdown,
+    required this.winRate,
+    required this.users,
+  });
+}
+
+/// 策略广场列表项：卡片 + 运行时派生的 sparkline 序列 + 4 格指标。
+///
+/// 把 sparkline / stats 拆出来是为了让 [StrategyCard] 仍是 const-friendly model
+/// （fixture 字面量保持紧凑），同时让 mock 层有自由度按 id 生成确定性数据。
 class StrategyMarketItem {
   final StrategyCard card;
   final List<double> sparkline;
+  final StrategyMarketStats stats;
 
-  const StrategyMarketItem({required this.card, required this.sparkline});
+  const StrategyMarketItem({
+    required this.card,
+    required this.sparkline,
+    required this.stats,
+  });
 }
 
 /// 分页结果。
@@ -51,6 +92,27 @@ class StrategyMarketPage {
     required this.hasMore,
     required this.page,
     required this.pageSize,
+  });
+}
+
+/// equity curve 时间维度（#1565）。
+enum EquityTimeframe { d7, d30, d90, y1 }
+
+/// 用户评价（#1565）。
+class StrategyReview {
+  /// 评价人昵称
+  final String user;
+
+  /// 星评 1..5
+  final int stars;
+
+  /// 文字内容
+  final String text;
+
+  const StrategyReview({
+    required this.user,
+    required this.stars,
+    required this.text,
   });
 }
 

@@ -735,6 +735,127 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyDetailLoadConversation => 'Load into chat';
 
   @override
+  String get strategyHomeFeaturedBadge => 'Pick of the week';
+
+  @override
+  String get strategyHomeFeaturedSubtitle => 'Market neutral · low drawdown';
+
+  @override
+  String get strategyHomeFeaturedView => 'View →';
+
+  @override
+  String get strategyHomeStatCagr => 'CAGR';
+
+  @override
+  String get strategyHomeStatSharpe => 'Sharpe';
+
+  @override
+  String get strategyHomeStatDrawdown => 'Drawdown';
+
+  @override
+  String get strategyHomeSortHot => 'Hot';
+
+  @override
+  String get strategyHomeSortReturn => 'Return';
+
+  @override
+  String get strategyHomeSortSharpe => 'Sharpe';
+
+  @override
+  String get strategyHomeSortLowDrawdown => 'Low DD';
+
+  @override
+  String get strategyHomeSortLabel => 'Sort';
+
+  @override
+  String strategyHomeResultCount(int count) {
+    return '$count items';
+  }
+
+  @override
+  String get strategyHomeFilterButton => 'Filter & sort';
+
+  @override
+  String get strategyHomeSheetCategory => 'Category';
+
+  @override
+  String get strategyHomeSheetSort => 'Sort by';
+
+  @override
+  String strategyHomeSheetApply(int count) {
+    return 'View $count results';
+  }
+
+  @override
+  String get strategyBadgeHot => '🔥 Hot';
+
+  @override
+  String get strategyBadgeNew => 'NEW';
+
+  @override
+  String get strategyBadgeOfficial => 'Official';
+
+  @override
+  String get strategyBadgePro => 'PRO';
+
+  @override
+  String get strategyCardStatSharpe => 'Sharpe';
+
+  @override
+  String get strategyCardStatDrawdown => 'Drawdown';
+
+  @override
+  String get strategyCardStatWinRate => 'Win rate';
+
+  @override
+  String get strategyCardStatUsers => 'Users';
+
+  @override
+  String get strategyDetailEquityTab7d => '7D';
+
+  @override
+  String get strategyDetailEquityTab30d => '30D';
+
+  @override
+  String get strategyDetailEquityTab90d => '90D';
+
+  @override
+  String get strategyDetailEquityTab1y => '1Y';
+
+  @override
+  String get strategyDetailParamsTitle => 'Parameters';
+
+  @override
+  String get strategyDetailParamType => 'Type';
+
+  @override
+  String get strategyDetailParamSymbol => 'Symbol';
+
+  @override
+  String get strategyDetailParamPeriod => 'Period';
+
+  @override
+  String get strategyDetailParamStopLoss => 'Stop loss';
+
+  @override
+  String get strategyDetailParamPosition => 'Position';
+
+  @override
+  String get strategyDetailParamLeverage => 'Leverage';
+
+  @override
+  String get strategyDetailReviewsTitle => 'User reviews';
+
+  @override
+  String get strategyDetailReviewsEmpty => 'No reviews yet';
+
+  @override
+  String get strategyDetailShareButton => 'Share';
+
+  @override
+  String get strategyDetailShareToast => 'Strategy link copied to clipboard';
+
+  @override
   String aiLoadStrategyUserMessage(String name, String category, String tags) {
     return 'Please regenerate based on strategy \"$name\" ($category), keeping the same tags: $tags.';
   }

@@ -1514,6 +1514,240 @@ abstract class AppLocalizations {
   /// **'载入到对话'**
   String get strategyDetailLoadConversation;
 
+  /// No description provided for @strategyHomeFeaturedBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'本周推荐'**
+  String get strategyHomeFeaturedBadge;
+
+  /// No description provided for @strategyHomeFeaturedSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'市场中性 · 低回撤'**
+  String get strategyHomeFeaturedSubtitle;
+
+  /// No description provided for @strategyHomeFeaturedView.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看 →'**
+  String get strategyHomeFeaturedView;
+
+  /// No description provided for @strategyHomeStatCagr.
+  ///
+  /// In zh, this message translates to:
+  /// **'CAGR'**
+  String get strategyHomeStatCagr;
+
+  /// No description provided for @strategyHomeStatSharpe.
+  ///
+  /// In zh, this message translates to:
+  /// **'Sharpe'**
+  String get strategyHomeStatSharpe;
+
+  /// No description provided for @strategyHomeStatDrawdown.
+  ///
+  /// In zh, this message translates to:
+  /// **'回撤'**
+  String get strategyHomeStatDrawdown;
+
+  /// No description provided for @strategyHomeSortHot.
+  ///
+  /// In zh, this message translates to:
+  /// **'热门'**
+  String get strategyHomeSortHot;
+
+  /// No description provided for @strategyHomeSortReturn.
+  ///
+  /// In zh, this message translates to:
+  /// **'收益'**
+  String get strategyHomeSortReturn;
+
+  /// No description provided for @strategyHomeSortSharpe.
+  ///
+  /// In zh, this message translates to:
+  /// **'Sharpe'**
+  String get strategyHomeSortSharpe;
+
+  /// No description provided for @strategyHomeSortLowDrawdown.
+  ///
+  /// In zh, this message translates to:
+  /// **'低回撤'**
+  String get strategyHomeSortLowDrawdown;
+
+  /// No description provided for @strategyHomeSortLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'排序'**
+  String get strategyHomeSortLabel;
+
+  /// No description provided for @strategyHomeResultCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 个'**
+  String strategyHomeResultCount(int count);
+
+  /// No description provided for @strategyHomeFilterButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'筛选 & 排序'**
+  String get strategyHomeFilterButton;
+
+  /// No description provided for @strategyHomeSheetCategory.
+  ///
+  /// In zh, this message translates to:
+  /// **'类型'**
+  String get strategyHomeSheetCategory;
+
+  /// No description provided for @strategyHomeSheetSort.
+  ///
+  /// In zh, this message translates to:
+  /// **'排序方式'**
+  String get strategyHomeSheetSort;
+
+  /// No description provided for @strategyHomeSheetApply.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看 {count} 个结果'**
+  String strategyHomeSheetApply(int count);
+
+  /// No description provided for @strategyBadgeHot.
+  ///
+  /// In zh, this message translates to:
+  /// **'🔥 热门'**
+  String get strategyBadgeHot;
+
+  /// No description provided for @strategyBadgeNew.
+  ///
+  /// In zh, this message translates to:
+  /// **'NEW'**
+  String get strategyBadgeNew;
+
+  /// No description provided for @strategyBadgeOfficial.
+  ///
+  /// In zh, this message translates to:
+  /// **'官方'**
+  String get strategyBadgeOfficial;
+
+  /// No description provided for @strategyBadgePro.
+  ///
+  /// In zh, this message translates to:
+  /// **'PRO'**
+  String get strategyBadgePro;
+
+  /// No description provided for @strategyCardStatSharpe.
+  ///
+  /// In zh, this message translates to:
+  /// **'Sharpe'**
+  String get strategyCardStatSharpe;
+
+  /// No description provided for @strategyCardStatDrawdown.
+  ///
+  /// In zh, this message translates to:
+  /// **'回撤'**
+  String get strategyCardStatDrawdown;
+
+  /// No description provided for @strategyCardStatWinRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'胜率'**
+  String get strategyCardStatWinRate;
+
+  /// No description provided for @strategyCardStatUsers.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用'**
+  String get strategyCardStatUsers;
+
+  /// No description provided for @strategyDetailEquityTab7d.
+  ///
+  /// In zh, this message translates to:
+  /// **'7D'**
+  String get strategyDetailEquityTab7d;
+
+  /// No description provided for @strategyDetailEquityTab30d.
+  ///
+  /// In zh, this message translates to:
+  /// **'30D'**
+  String get strategyDetailEquityTab30d;
+
+  /// No description provided for @strategyDetailEquityTab90d.
+  ///
+  /// In zh, this message translates to:
+  /// **'90D'**
+  String get strategyDetailEquityTab90d;
+
+  /// No description provided for @strategyDetailEquityTab1y.
+  ///
+  /// In zh, this message translates to:
+  /// **'1Y'**
+  String get strategyDetailEquityTab1y;
+
+  /// No description provided for @strategyDetailParamsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略参数'**
+  String get strategyDetailParamsTitle;
+
+  /// No description provided for @strategyDetailParamType.
+  ///
+  /// In zh, this message translates to:
+  /// **'类型'**
+  String get strategyDetailParamType;
+
+  /// No description provided for @strategyDetailParamSymbol.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易品种'**
+  String get strategyDetailParamSymbol;
+
+  /// No description provided for @strategyDetailParamPeriod.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易周期'**
+  String get strategyDetailParamPeriod;
+
+  /// No description provided for @strategyDetailParamStopLoss.
+  ///
+  /// In zh, this message translates to:
+  /// **'止损'**
+  String get strategyDetailParamStopLoss;
+
+  /// No description provided for @strategyDetailParamPosition.
+  ///
+  /// In zh, this message translates to:
+  /// **'仓位'**
+  String get strategyDetailParamPosition;
+
+  /// No description provided for @strategyDetailParamLeverage.
+  ///
+  /// In zh, this message translates to:
+  /// **'杠杆'**
+  String get strategyDetailParamLeverage;
+
+  /// No description provided for @strategyDetailReviewsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'用户评价'**
+  String get strategyDetailReviewsTitle;
+
+  /// No description provided for @strategyDetailReviewsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无评价'**
+  String get strategyDetailReviewsEmpty;
+
+  /// No description provided for @strategyDetailShareButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'分享'**
+  String get strategyDetailShareButton;
+
+  /// No description provided for @strategyDetailShareToast.
+  ///
+  /// In zh, this message translates to:
+  /// **'已复制策略链接到剪贴板'**
+  String get strategyDetailShareToast;
+
   /// No description provided for @aiLoadStrategyUserMessage.
   ///
   /// In zh, this message translates to:
