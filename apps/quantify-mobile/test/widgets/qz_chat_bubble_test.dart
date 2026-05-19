@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/widgets/qz_chat_bubble.dart';
 
@@ -29,6 +30,28 @@ void main() {
       ),
       (WidgetTester t) async {
         expect(find.text('好的，基于 EMA20/60 的趋势策略已生成。'), findsOneWidget);
+        // #1589: assistant 必须带左侧 bot avatar。
+        expect(
+          find.byKey(const Key('ai-bubble-bot-avatar')),
+          findsOneWidget,
+        );
+      },
+    );
+  });
+
+  testWidgets('user bubble does not render bot avatar',
+      (WidgetTester tester) async {
+    await verifyAllThemes(
+      tester,
+      () => const QzChatBubble(
+        role: QzChatRole.user,
+        content: 'ping',
+      ),
+      (WidgetTester t) async {
+        expect(
+          find.byKey(const Key('ai-bubble-bot-avatar')),
+          findsNothing,
+        );
       },
     );
   });

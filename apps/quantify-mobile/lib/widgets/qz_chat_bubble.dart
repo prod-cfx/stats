@@ -15,15 +15,15 @@ enum QzChatRole { user, assistant, system }
 
 /// Chat message bubble used by the AI conversation page.
 ///
-/// - `user` bubbles align trailing, paint with the active accent gradient,
-///   use `accentOn` for the body text.
-/// - `assistant` bubbles align leading, paint with `bgSoft`, use `text` for
-///   the body text.
+/// 设计稿对齐 `design/project/mobile/m-screens-1.jsx` 的 `Bubble`：
+/// - `assistant`：左侧 30x30 bot icon（`accentSoft` 背景 + `accent` 前景）
+///   + 气泡 `bgElev` 白底、`borderSoft` 描边、圆角 4/16/16/16。
+/// - `user`：trailing 对齐，气泡 `accentSoft` 浅紫底、`text` 正文色、
+///   圆角 16/16/4/16（不再使用 `accentGrad` 紫色渐变 + `accentOn` 白字）。
 ///
-/// `codeBlock` is a separate sub-segment rendered with a monospace font on a
-/// `border`-tinted background. Many model replies interleave prose +
-/// code; the page composes those by emitting two adjacent bubbles, but
-/// inline-only callers can pass the snippet via [codeBlock] directly.
+/// `codeBlock` 与 `params` 仍以子段形式渲染，沿用既有 mono 字体与
+/// 浅边框块（仅 user 气泡的描述色权重从 `accentOn` 系切到 `text` 系，
+/// 因为底色不再是高对比的紫色渐变）。
 class QzChatBubble extends StatelessWidget {
   const QzChatBubble({
     super.key,
@@ -42,6 +42,20 @@ class QzChatBubble extends StatelessWidget {
   /// 当传入时，气泡末尾追加一个等宽字体代码块渲染策略参数（#1557）。
   /// 与 [codeBlock] 互斥：如二者同时存在，[params] 优先。
   final Map<String, String>? params;
+
+  /// 设计稿对齐：assistant `4/16/16/16`，user `16/16/4/16`。
+  static const BorderRadius _assistantRadius = BorderRadius.only(
+    topLeft: Radius.circular(4),
+    topRight: Radius.circular(16),
+    bottomRight: Radius.circular(16),
+    bottomLeft: Radius.circular(16),
+  );
+  static const BorderRadius _userRadius = BorderRadius.only(
+    topLeft: Radius.circular(16),
+    topRight: Radius.circular(16),
+    bottomRight: Radius.circular(4),
+    bottomLeft: Radius.circular(16),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -68,139 +82,164 @@ class QzChatBubble extends StatelessWidget {
       );
     }
     final bool isUser = role == QzChatRole.user;
-    final BorderRadius radius = BorderRadius.circular(QzRadii.card);
+    final BorderRadius radius = isUser ? _userRadius : _assistantRadius;
 
-    final Color fg = isUser ? c.accentOn : c.text;
+    // 设计稿统一用 c.text 正文色；user 气泡背景从紫色渐变切到浅紫底，
+    // 不再需要 accentOn 白字。
+    final Color fg = c.text;
     final Decoration decoration = isUser
-        ? BoxDecoration(gradient: c.accentGrad, borderRadius: radius)
+        ? BoxDecoration(color: c.accentSoft, borderRadius: radius)
         : BoxDecoration(
-            color: c.bgSoft,
-            border: Border.all(color: c.border),
+            color: c.bgElev,
+            border: Border.all(color: c.borderSoft),
             borderRadius: radius,
           );
 
     return LayoutBuilder(
       builder: (BuildContext ctx, BoxConstraints constraints) {
-        // Cap bubble width at 72% of available width so very long lines wrap
-        // instead of stretching edge-to-edge.
-        final double maxW = constraints.maxWidth * 0.72;
-        return Align(
-          alignment:
-              isUser ? Alignment.centerRight : Alignment.centerLeft,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxW),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: QzSpacing.md,
-                vertical: QzSpacing.sm,
-              ),
-              decoration: decoration,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  if (content.isNotEmpty)
-                    Text(
-                      content,
-                      style: TextStyle(
-                        color: fg,
-                        fontSize: 14,
-                        height: 1.4,
-                      ),
+        // Cap bubble width: user 78%（无 avatar 占位），assistant 留出
+        // 30px avatar + 8px gap 后允许 82% 内容宽度（与设计稿一致）。
+        final double avatarReserve = isUser ? 0 : 30 + QzSpacing.sm;
+        final double maxW =
+            (constraints.maxWidth - avatarReserve) * (isUser ? 0.78 : 0.82);
+        final Widget bubble = ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxW),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: QzSpacing.md,
+              vertical: QzSpacing.sm,
+            ),
+            decoration: decoration,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (content.isNotEmpty)
+                  Text(
+                    content,
+                    style: TextStyle(
+                      color: fg,
+                      fontSize: 14,
+                      height: 1.4,
                     ),
-                  if (params != null && params!.isNotEmpty) ...<Widget>[
-                    const SizedBox(height: QzSpacing.sm),
-                    Container(
-                      key: const Key('ai-bubble-params'),
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(QzSpacing.sm),
-                      decoration: BoxDecoration(
-                        color: isUser
-                            ? c.accentOn.withValues(alpha: 0.12)
-                            : c.border.withValues(alpha: 0.4),
-                        borderRadius:
-                            BorderRadius.circular(QzRadii.input),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          for (final MapEntry<String, String> e
-                              in params!.entries)
-                            Padding(
-                              padding:
-                                  const EdgeInsets.only(bottom: 2),
-                              child: RichText(
-                                text: TextSpan(
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    height: 1.7,
-                                    fontFamily: 'monospace',
-                                    fontFamilyFallback: const <String>[
-                                      'Menlo',
-                                      'Consolas',
-                                      'Courier New',
-                                    ],
-                                  ),
-                                  children: <InlineSpan>[
-                                    TextSpan(
-                                      text: '${e.key} ',
-                                      style: TextStyle(color: c.textDim),
-                                    ),
-                                    TextSpan(
-                                      text: '= ${e.value}',
-                                      style: TextStyle(color: fg),
-                                    ),
+                  ),
+                if (params != null && params!.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: QzSpacing.sm),
+                  Container(
+                    key: const Key('ai-bubble-params'),
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(QzSpacing.sm),
+                    decoration: BoxDecoration(
+                      color: c.border.withValues(alpha: 0.4),
+                      borderRadius:
+                          BorderRadius.circular(QzRadii.input),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        for (final MapEntry<String, String> e
+                            in params!.entries)
+                          Padding(
+                            padding:
+                                const EdgeInsets.only(bottom: 2),
+                            child: RichText(
+                              text: TextSpan(
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  height: 1.7,
+                                  fontFamily: 'monospace',
+                                  fontFamilyFallback: const <String>[
+                                    'Menlo',
+                                    'Consolas',
+                                    'Courier New',
                                   ],
                                 ),
+                                children: <InlineSpan>[
+                                  TextSpan(
+                                    text: '${e.key} ',
+                                    style: TextStyle(color: c.textDim),
+                                  ),
+                                  TextSpan(
+                                    text: '= ${e.value}',
+                                    style: TextStyle(color: fg),
+                                  ),
+                                ],
                               ),
                             ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ] else if (codeBlock != null && codeBlock!.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: QzSpacing.sm),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(QzSpacing.sm),
+                    decoration: BoxDecoration(
+                      color: c.border.withValues(alpha: 0.4),
+                      borderRadius:
+                          BorderRadius.circular(QzRadii.input),
+                    ),
+                    child: Text(
+                      codeBlock!,
+                      style: TextStyle(
+                        color: fg,
+                        fontSize: 12,
+                        height: 1.4,
+                        fontFamily: 'monospace',
+                        fontFamilyFallback: const <String>[
+                          'Menlo',
+                          'Consolas',
+                          'Courier New',
                         ],
                       ),
                     ),
-                  ] else if (codeBlock != null && codeBlock!.isNotEmpty) ...<Widget>[
-                    const SizedBox(height: QzSpacing.sm),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(QzSpacing.sm),
-                      decoration: BoxDecoration(
-                        color: isUser
-                            ? c.accentOn.withValues(alpha: 0.12)
-                            : c.border.withValues(alpha: 0.4),
-                        borderRadius:
-                            BorderRadius.circular(QzRadii.input),
-                      ),
-                      child: Text(
-                        codeBlock!,
-                        style: TextStyle(
-                          color: fg,
-                          fontSize: 12,
-                          height: 1.4,
-                          fontFamily: 'monospace',
-                          fontFamilyFallback: const <String>[
-                            'Menlo',
-                            'Consolas',
-                            'Courier New',
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                  if (time != null) ...<Widget>[
-                    const SizedBox(height: QzSpacing.xxs),
-                    Text(
-                      _formatTime(time!),
-                      style: TextStyle(
-                        color: isUser
-                            ? c.accentOn.withValues(alpha: 0.75)
-                            : c.textDim,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
+                  ),
                 ],
-              ),
+                if (time != null) ...<Widget>[
+                  const SizedBox(height: QzSpacing.xxs),
+                  Text(
+                    _formatTime(time!),
+                    style: TextStyle(color: c.textDim, fontSize: 10),
+                  ),
+                ],
+              ],
             ),
+          ),
+        );
+
+        if (isUser) {
+          return Align(
+            alignment: Alignment.centerRight,
+            child: bubble,
+          );
+        }
+        // assistant: Row(左侧 bot icon + 气泡)，与设计稿一致。
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Container(
+                key: const Key('ai-bubble-bot-avatar'),
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: c.accentSoft,
+                  borderRadius: BorderRadius.circular(QzSpacing.sm),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.smart_toy_outlined,
+                  size: 16,
+                  color: c.accent,
+                ),
+              ),
+              const SizedBox(width: QzSpacing.sm),
+              Flexible(child: bubble),
+            ],
           ),
         );
       },
