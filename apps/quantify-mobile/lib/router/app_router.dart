@@ -16,7 +16,7 @@ import '../pages/me/me_home_page.dart';
 import '../pages/me/theme_settings_page.dart';
 import '../pages/strategy/strategy_detail_page.dart';
 import '../pages/strategy/strategy_home_page.dart';
-import '../pages/whale/whale_feed_page.dart';
+import '../pages/whale/whale_home_page.dart';
 import '../shell/main_shell_scaffold.dart';
 
 /// App-wide router.
@@ -99,7 +99,7 @@ GoRouter buildRouter({
               GoRoute(
                 path: '/whale',
                 builder: (BuildContext context, GoRouterState state) =>
-                    const WhaleFeedPage(),
+                    const WhaleHomePage(),
               ),
             ],
           ),

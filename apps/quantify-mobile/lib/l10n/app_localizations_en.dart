@@ -619,6 +619,148 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleTimeDaysAgoSuffix => ' days ago';
 
   @override
+  String get whaleTopBarSubtitle => 'On-chain + Exchanges';
+
+  @override
+  String get whaleTabDiscover => 'Discover';
+
+  @override
+  String get whaleTabLive => 'Live';
+
+  @override
+  String get whaleTabHoldings => 'Holdings';
+
+  @override
+  String get whaleTabWatch => 'Watch';
+
+  @override
+  String whaleNetFlowLabel(String symbol) {
+    return '$symbol net inflow · 1H';
+  }
+
+  @override
+  String get whaleStatBigTrades => 'Big trades';
+
+  @override
+  String get whaleStatActiveWhales => 'Active whales';
+
+  @override
+  String get whaleStatNetAccumulation => 'Net acc.';
+
+  @override
+  String get whaleStatPast1h => 'Past 1H';
+
+  @override
+  String get whaleLiveLabel => 'LIVE';
+
+  @override
+  String get whaleGroupNow => 'Last 5 min';
+
+  @override
+  String get whaleGroup15m => 'Within 15 min';
+
+  @override
+  String get whaleGroup1h => 'Past 1 hour';
+
+  @override
+  String get whaleAddWatchAddress => 'Add watch address';
+
+  @override
+  String get whaleSectionSmartMoney => 'Smart Money';
+
+  @override
+  String get whaleSectionSmartMoneySub => 'Top 5 PnL 7D · on-chain + exchanges';
+
+  @override
+  String get whaleSectionViewAll => 'View all ›';
+
+  @override
+  String get whaleSectionTrending => 'Trending assets';
+
+  @override
+  String get whaleSectionTrendingSub => 'Whale 7D net accumulation';
+
+  @override
+  String get whaleSectionEmergingWhales => 'Emerging whales';
+
+  @override
+  String get whaleSectionEmergingWhalesTitle => '6 new whales in past 24H';
+
+  @override
+  String get whaleSectionEmergingWhalesSub =>
+      'Net +1,840 BTC · avg position \$42M';
+
+  @override
+  String get whaleSectionExchangeFlow => 'Exchange BTC balance';
+
+  @override
+  String get whaleSectionExchangeFlowSub =>
+      '24H net change · negative = outflow';
+
+  @override
+  String get whaleSectionTopHolders => 'Top holders';
+
+  @override
+  String get whaleSectionTopHoldersSub => 'Public labels · 7D change';
+
+  @override
+  String get whaleSectionMyWatch => 'My watchlist';
+
+  @override
+  String get whaleSectionMyWatchCountSuffix => ' addresses';
+
+  @override
+  String get whaleSectionRecentAlerts => 'Recent alerts';
+
+  @override
+  String get whaleSectionRecentAlertsAction => 'Rules ›';
+
+  @override
+  String get whaleWatchPnl7d => '7D PnL';
+
+  @override
+  String get whaleHoldingsLabel24h => '24H';
+
+  @override
+  String get whaleSmartMoneyHoldingsPrefix => 'Holdings · ';
+
+  @override
+  String get whaleWinRatePrefix => 'Win rate ';
+
+  @override
+  String get whaleTrendingParticipantsSuffix => ' whales';
+
+  @override
+  String get whaleNotificationTitle => 'Notifications';
+
+  @override
+  String get whaleNotificationTabAll => 'All';
+
+  @override
+  String get whaleNotificationTabAlert => 'Whale alerts';
+
+  @override
+  String get whaleNotificationTabWatch => 'Watch hits';
+
+  @override
+  String get whaleNotificationTabSystem => 'System';
+
+  @override
+  String get whaleNotificationMarkAllRead => 'Mark all read';
+
+  @override
+  String get whaleNotificationEmpty => 'No notifications';
+
+  @override
+  String get whaleSearchTooltip => 'Search';
+
+  @override
+  String get whaleNotificationTooltip => 'Notifications';
+
+  @override
+  String get whaleNotificationCloseTooltip => 'Close';
+
+  @override
   String get klineLoadError => 'K-line load failed';
 
   @override

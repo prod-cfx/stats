@@ -1286,6 +1286,282 @@ abstract class AppLocalizations {
   /// **' 天前'**
   String get whaleTimeDaysAgoSuffix;
 
+  /// No description provided for @whaleTopBarSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'链上 + 交易所'**
+  String get whaleTopBarSubtitle;
+
+  /// No description provided for @whaleTabDiscover.
+  ///
+  /// In zh, this message translates to:
+  /// **'发现'**
+  String get whaleTabDiscover;
+
+  /// No description provided for @whaleTabLive.
+  ///
+  /// In zh, this message translates to:
+  /// **'实时'**
+  String get whaleTabLive;
+
+  /// No description provided for @whaleTabHoldings.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓'**
+  String get whaleTabHoldings;
+
+  /// No description provided for @whaleTabWatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'监控'**
+  String get whaleTabWatch;
+
+  /// No description provided for @whaleNetFlowLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'{symbol} 净流入 · 1H'**
+  String whaleNetFlowLabel(String symbol);
+
+  /// No description provided for @whaleStatBigTrades.
+  ///
+  /// In zh, this message translates to:
+  /// **'大额交易'**
+  String get whaleStatBigTrades;
+
+  /// No description provided for @whaleStatActiveWhales.
+  ///
+  /// In zh, this message translates to:
+  /// **'活跃巨鲸'**
+  String get whaleStatActiveWhales;
+
+  /// No description provided for @whaleStatNetAccumulation.
+  ///
+  /// In zh, this message translates to:
+  /// **'净增持'**
+  String get whaleStatNetAccumulation;
+
+  /// No description provided for @whaleStatPast1h.
+  ///
+  /// In zh, this message translates to:
+  /// **'过去 1H'**
+  String get whaleStatPast1h;
+
+  /// No description provided for @whaleLiveLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'LIVE'**
+  String get whaleLiveLabel;
+
+  /// No description provided for @whaleGroupNow.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近 5 分钟'**
+  String get whaleGroupNow;
+
+  /// No description provided for @whaleGroup15m.
+  ///
+  /// In zh, this message translates to:
+  /// **'15 分钟内'**
+  String get whaleGroup15m;
+
+  /// No description provided for @whaleGroup1h.
+  ///
+  /// In zh, this message translates to:
+  /// **'过去 1 小时'**
+  String get whaleGroup1h;
+
+  /// No description provided for @whaleAddWatchAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加地址监控'**
+  String get whaleAddWatchAddress;
+
+  /// No description provided for @whaleSectionSmartMoney.
+  ///
+  /// In zh, this message translates to:
+  /// **'聪明钱榜'**
+  String get whaleSectionSmartMoney;
+
+  /// No description provided for @whaleSectionSmartMoneySub.
+  ///
+  /// In zh, this message translates to:
+  /// **'过去 7 日盈利前 5 · 链上 + 交易所合并'**
+  String get whaleSectionSmartMoneySub;
+
+  /// No description provided for @whaleSectionViewAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看全部 ›'**
+  String get whaleSectionViewAll;
+
+  /// No description provided for @whaleSectionTrending.
+  ///
+  /// In zh, this message translates to:
+  /// **'趋势资产'**
+  String get whaleSectionTrending;
+
+  /// No description provided for @whaleSectionTrendingSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'巨鲸 7D 净增持'**
+  String get whaleSectionTrendingSub;
+
+  /// No description provided for @whaleSectionEmergingWhales.
+  ///
+  /// In zh, this message translates to:
+  /// **'新晋巨鲸'**
+  String get whaleSectionEmergingWhales;
+
+  /// No description provided for @whaleSectionEmergingWhalesTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'过去 24H 出现 6 个新巨鲸'**
+  String get whaleSectionEmergingWhalesTitle;
+
+  /// No description provided for @whaleSectionEmergingWhalesSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'累计净增持 1,840 BTC · 平均建仓 \$42M'**
+  String get whaleSectionEmergingWhalesSub;
+
+  /// No description provided for @whaleSectionExchangeFlow.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易所 BTC 余额'**
+  String get whaleSectionExchangeFlow;
+
+  /// No description provided for @whaleSectionExchangeFlowSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'24H 净变动 · 负值=资金离场'**
+  String get whaleSectionExchangeFlowSub;
+
+  /// No description provided for @whaleSectionTopHolders.
+  ///
+  /// In zh, this message translates to:
+  /// **'头部地址持仓'**
+  String get whaleSectionTopHolders;
+
+  /// No description provided for @whaleSectionTopHoldersSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'公开标签 · 7D 变化'**
+  String get whaleSectionTopHoldersSub;
+
+  /// No description provided for @whaleSectionMyWatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的监控'**
+  String get whaleSectionMyWatch;
+
+  /// No description provided for @whaleSectionMyWatchCountSuffix.
+  ///
+  /// In zh, this message translates to:
+  /// **' 个地址'**
+  String get whaleSectionMyWatchCountSuffix;
+
+  /// No description provided for @whaleSectionRecentAlerts.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近告警'**
+  String get whaleSectionRecentAlerts;
+
+  /// No description provided for @whaleSectionRecentAlertsAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'规则 ›'**
+  String get whaleSectionRecentAlertsAction;
+
+  /// No description provided for @whaleWatchPnl7d.
+  ///
+  /// In zh, this message translates to:
+  /// **'7D PnL'**
+  String get whaleWatchPnl7d;
+
+  /// No description provided for @whaleHoldingsLabel24h.
+  ///
+  /// In zh, this message translates to:
+  /// **'24H'**
+  String get whaleHoldingsLabel24h;
+
+  /// No description provided for @whaleSmartMoneyHoldingsPrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'主要持仓 · '**
+  String get whaleSmartMoneyHoldingsPrefix;
+
+  /// No description provided for @whaleWinRatePrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'胜率 '**
+  String get whaleWinRatePrefix;
+
+  /// No description provided for @whaleTrendingParticipantsSuffix.
+  ///
+  /// In zh, this message translates to:
+  /// **' 个巨鲸参与'**
+  String get whaleTrendingParticipantsSuffix;
+
+  /// No description provided for @whaleNotificationTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知中心'**
+  String get whaleNotificationTitle;
+
+  /// No description provided for @whaleNotificationTabAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部'**
+  String get whaleNotificationTabAll;
+
+  /// No description provided for @whaleNotificationTabAlert.
+  ///
+  /// In zh, this message translates to:
+  /// **'巨鲸预警'**
+  String get whaleNotificationTabAlert;
+
+  /// No description provided for @whaleNotificationTabWatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'监控触发'**
+  String get whaleNotificationTabWatch;
+
+  /// No description provided for @whaleNotificationTabSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统'**
+  String get whaleNotificationTabSystem;
+
+  /// No description provided for @whaleNotificationMarkAllRead.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部已读'**
+  String get whaleNotificationMarkAllRead;
+
+  /// No description provided for @whaleNotificationEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无通知'**
+  String get whaleNotificationEmpty;
+
+  /// No description provided for @whaleSearchTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索'**
+  String get whaleSearchTooltip;
+
+  /// No description provided for @whaleNotificationTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知'**
+  String get whaleNotificationTooltip;
+
+  /// No description provided for @whaleNotificationCloseTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get whaleNotificationCloseTooltip;
+
   /// No description provided for @klineLoadError.
   ///
   /// In zh, this message translates to:

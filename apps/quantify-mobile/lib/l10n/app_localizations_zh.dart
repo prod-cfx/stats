@@ -609,6 +609,146 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleTimeDaysAgoSuffix => ' 天前';
 
   @override
+  String get whaleTopBarSubtitle => '链上 + 交易所';
+
+  @override
+  String get whaleTabDiscover => '发现';
+
+  @override
+  String get whaleTabLive => '实时';
+
+  @override
+  String get whaleTabHoldings => '持仓';
+
+  @override
+  String get whaleTabWatch => '监控';
+
+  @override
+  String whaleNetFlowLabel(String symbol) {
+    return '$symbol 净流入 · 1H';
+  }
+
+  @override
+  String get whaleStatBigTrades => '大额交易';
+
+  @override
+  String get whaleStatActiveWhales => '活跃巨鲸';
+
+  @override
+  String get whaleStatNetAccumulation => '净增持';
+
+  @override
+  String get whaleStatPast1h => '过去 1H';
+
+  @override
+  String get whaleLiveLabel => 'LIVE';
+
+  @override
+  String get whaleGroupNow => '最近 5 分钟';
+
+  @override
+  String get whaleGroup15m => '15 分钟内';
+
+  @override
+  String get whaleGroup1h => '过去 1 小时';
+
+  @override
+  String get whaleAddWatchAddress => '添加地址监控';
+
+  @override
+  String get whaleSectionSmartMoney => '聪明钱榜';
+
+  @override
+  String get whaleSectionSmartMoneySub => '过去 7 日盈利前 5 · 链上 + 交易所合并';
+
+  @override
+  String get whaleSectionViewAll => '查看全部 ›';
+
+  @override
+  String get whaleSectionTrending => '趋势资产';
+
+  @override
+  String get whaleSectionTrendingSub => '巨鲸 7D 净增持';
+
+  @override
+  String get whaleSectionEmergingWhales => '新晋巨鲸';
+
+  @override
+  String get whaleSectionEmergingWhalesTitle => '过去 24H 出现 6 个新巨鲸';
+
+  @override
+  String get whaleSectionEmergingWhalesSub => '累计净增持 1,840 BTC · 平均建仓 \$42M';
+
+  @override
+  String get whaleSectionExchangeFlow => '交易所 BTC 余额';
+
+  @override
+  String get whaleSectionExchangeFlowSub => '24H 净变动 · 负值=资金离场';
+
+  @override
+  String get whaleSectionTopHolders => '头部地址持仓';
+
+  @override
+  String get whaleSectionTopHoldersSub => '公开标签 · 7D 变化';
+
+  @override
+  String get whaleSectionMyWatch => '我的监控';
+
+  @override
+  String get whaleSectionMyWatchCountSuffix => ' 个地址';
+
+  @override
+  String get whaleSectionRecentAlerts => '最近告警';
+
+  @override
+  String get whaleSectionRecentAlertsAction => '规则 ›';
+
+  @override
+  String get whaleWatchPnl7d => '7D PnL';
+
+  @override
+  String get whaleHoldingsLabel24h => '24H';
+
+  @override
+  String get whaleSmartMoneyHoldingsPrefix => '主要持仓 · ';
+
+  @override
+  String get whaleWinRatePrefix => '胜率 ';
+
+  @override
+  String get whaleTrendingParticipantsSuffix => ' 个巨鲸参与';
+
+  @override
+  String get whaleNotificationTitle => '通知中心';
+
+  @override
+  String get whaleNotificationTabAll => '全部';
+
+  @override
+  String get whaleNotificationTabAlert => '巨鲸预警';
+
+  @override
+  String get whaleNotificationTabWatch => '监控触发';
+
+  @override
+  String get whaleNotificationTabSystem => '系统';
+
+  @override
+  String get whaleNotificationMarkAllRead => '全部已读';
+
+  @override
+  String get whaleNotificationEmpty => '暂无通知';
+
+  @override
+  String get whaleSearchTooltip => '搜索';
+
+  @override
+  String get whaleNotificationTooltip => '通知';
+
+  @override
+  String get whaleNotificationCloseTooltip => '关闭';
+
+  @override
   String get klineLoadError => 'K 线加载失败';
 
   @override

@@ -22,7 +22,7 @@ import 'package:quantify_mobile/pages/me/api_settings_page.dart';
 import 'package:quantify_mobile/pages/me/me_home_page.dart';
 import 'package:quantify_mobile/pages/me/theme_settings_page.dart';
 import 'package:quantify_mobile/pages/strategy/strategy_home_page.dart';
-import 'package:quantify_mobile/pages/whale/whale_feed_page.dart';
+import 'package:quantify_mobile/pages/whale/whale_home_page.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 import 'package:quantify_mobile/widgets/qz_bottom_tab_bar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -89,7 +89,7 @@ void main() {
 
     await tester.tap(_tab('whale'));
     await tester.pumpAndSettle();
-    expect(find.byType(WhaleFeedPage), findsOneWidget);
+    expect(find.byType(WhaleHomePage), findsOneWidget);
 
     await tester.tap(_tab('strategy'));
     await tester.pumpAndSettle();
