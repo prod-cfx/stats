@@ -542,6 +542,78 @@ abstract class AppLocalizations {
   /// **'Telegram 登录失败：'**
   String get authTelegramLoginFailedPrefix;
 
+  /// No description provided for @authLoginHeroTitleLine1.
+  ///
+  /// In zh, this message translates to:
+  /// **'把交易想法'**
+  String get authLoginHeroTitleLine1;
+
+  /// No description provided for @authLoginHeroTitleLine2.
+  ///
+  /// In zh, this message translates to:
+  /// **'变成可回测的策略'**
+  String get authLoginHeroTitleLine2;
+
+  /// No description provided for @authLoginHeroSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'对话生成 · 历史回测 · API 部署'**
+  String get authLoginHeroSubtitle;
+
+  /// No description provided for @authLoginForgotPassword.
+  ///
+  /// In zh, this message translates to:
+  /// **'忘记?'**
+  String get authLoginForgotPassword;
+
+  /// No description provided for @authLoginGuestButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'以游客身份先看看'**
+  String get authLoginGuestButton;
+
+  /// No description provided for @authLoginGuestHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'· 无需注册'**
+  String get authLoginGuestHint;
+
+  /// No description provided for @authLoginTermsPrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续即表示同意 '**
+  String get authLoginTermsPrefix;
+
+  /// No description provided for @authLoginTermsLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务条款'**
+  String get authLoginTermsLink;
+
+  /// No description provided for @authLoginTermsAnd.
+  ///
+  /// In zh, this message translates to:
+  /// **' 与 '**
+  String get authLoginTermsAnd;
+
+  /// No description provided for @authLoginPrivacyLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'隐私政策'**
+  String get authLoginPrivacyLink;
+
+  /// No description provided for @authLoginGuestFailedPrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'游客登录失败：'**
+  String get authLoginGuestFailedPrefix;
+
+  /// No description provided for @authLoginForgotMockToast.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置密码（mock）'**
+  String get authLoginForgotMockToast;
+
   /// No description provided for @marketHomeTitle.
   ///
   /// In zh, this message translates to:
@@ -815,13 +887,13 @@ abstract class AppLocalizations {
   /// No description provided for @marketDetailColPrice.
   ///
   /// In zh, this message translates to:
-  /// **'价格(USDT)'**
+  /// **'价格'**
   String get marketDetailColPrice;
 
   /// No description provided for @marketDetailColQty.
   ///
   /// In zh, this message translates to:
-  /// **'数量(BTC)'**
+  /// **'数量'**
   String get marketDetailColQty;
 
   /// No description provided for @marketDetailDepthBid.

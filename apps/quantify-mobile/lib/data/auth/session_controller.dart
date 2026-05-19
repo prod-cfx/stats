@@ -14,6 +14,10 @@ const String kSessionStorageKey = 'auth_session';
 /// 真实模式应替换为后端返回的真实身份。
 const String kTelegramMockEmail = 'telegram-user@mock';
 
+/// 游客身份在 mock 模式下的占位 email。
+/// 真实模式应替换为后端 issuance 的临时 guest session（短 TTL、只读权限）。
+const String kGuestMockEmail = 'guest@quantify.local';
+
 /// 管理当前用户 session，桥接 [AuthRepository] 与持久化层。
 ///
 /// - `build()` 从 [TokenStorage] 恢复上次 session；启动时 `main()` 必须
@@ -59,6 +63,26 @@ class SessionController extends AsyncNotifier<AuthSession?> {
 
   Future<void> loginTelegram() async {
     await loginEmail(email: kTelegramMockEmail, password: '');
+  }
+
+  /// 游客登录：本地构造一个 `isGuest=true` 的 [AuthSession] 写盘，**不调用**
+  /// `_repo.login`——避免切真实后端时以空密码触发 401 与日志噪声。后续真实接入
+  /// 应改为后端 issuance 的临时 guest token（短 TTL、只读权限）。
+  Future<void> loginGuest() async {
+    state = const AsyncLoading<AuthSession?>();
+    state = await AsyncValue.guard<AuthSession?>(() async {
+      final AuthSession session = AuthSession(
+        userId: 'guest-local',
+        token: 'guest-local',
+        email: kGuestMockEmail,
+        isGuest: true,
+      );
+      await _storage.write(
+        kSessionStorageKey,
+        jsonEncode(session.toMap()),
+      );
+      return session;
+    });
   }
 
   Future<void> logout() async {

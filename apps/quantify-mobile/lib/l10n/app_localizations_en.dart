@@ -238,6 +238,42 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authTelegramLoginFailedPrefix => 'Telegram login failed: ';
 
   @override
+  String get authLoginHeroTitleLine1 => 'Turn trading ideas';
+
+  @override
+  String get authLoginHeroTitleLine2 => 'into backtestable strategies';
+
+  @override
+  String get authLoginHeroSubtitle => 'Chat · Backtest · Deploy via API';
+
+  @override
+  String get authLoginForgotPassword => 'Forgot?';
+
+  @override
+  String get authLoginGuestButton => 'Continue as guest';
+
+  @override
+  String get authLoginGuestHint => '· No signup';
+
+  @override
+  String get authLoginTermsPrefix => 'By continuing you agree to our ';
+
+  @override
+  String get authLoginTermsLink => 'Terms of Service';
+
+  @override
+  String get authLoginTermsAnd => ' and ';
+
+  @override
+  String get authLoginPrivacyLink => 'Privacy Policy';
+
+  @override
+  String get authLoginGuestFailedPrefix => 'Guest login failed: ';
+
+  @override
+  String get authLoginForgotMockToast => 'Reset password (mock)';
+
+  @override
   String get marketHomeTitle => 'Market';
 
   @override

@@ -231,6 +231,42 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authTelegramLoginFailedPrefix => 'Telegram 登录失败：';
 
   @override
+  String get authLoginHeroTitleLine1 => '把交易想法';
+
+  @override
+  String get authLoginHeroTitleLine2 => '变成可回测的策略';
+
+  @override
+  String get authLoginHeroSubtitle => '对话生成 · 历史回测 · API 部署';
+
+  @override
+  String get authLoginForgotPassword => '忘记?';
+
+  @override
+  String get authLoginGuestButton => '以游客身份先看看';
+
+  @override
+  String get authLoginGuestHint => '· 无需注册';
+
+  @override
+  String get authLoginTermsPrefix => '继续即表示同意 ';
+
+  @override
+  String get authLoginTermsLink => '服务条款';
+
+  @override
+  String get authLoginTermsAnd => ' 与 ';
+
+  @override
+  String get authLoginPrivacyLink => '隐私政策';
+
+  @override
+  String get authLoginGuestFailedPrefix => '游客登录失败：';
+
+  @override
+  String get authLoginForgotMockToast => '重置密码（mock）';
+
+  @override
   String get marketHomeTitle => '行情';
 
   @override

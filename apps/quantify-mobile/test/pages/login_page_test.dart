@@ -147,7 +147,10 @@ void main() {
       (WidgetTester tester) async {
     final (:ProviderContainer container, :InMemoryTokenStorage storage) =
         await _pumpLogin(tester);
-    await tester.tap(find.byKey(const ValueKey<String>('login-telegram')));
+    final Finder tg = find.byKey(const ValueKey<String>('login-telegram'));
+    await tester.ensureVisible(tg);
+    await tester.pumpAndSettle();
+    await tester.tap(tg);
     await tester.pumpAndSettle();
 
     expect(find.text('AI_HOME_PLACEHOLDER'), findsOneWidget);
@@ -156,5 +159,93 @@ void main() {
       container.read(sessionControllerProvider).valueOrNull?.email,
       kTelegramMockEmail,
     );
+  });
+
+  testWidgets('hero 区域渲染品牌 Logo + 大标题 + 副标题',
+      (WidgetTester tester) async {
+    await _pumpLogin(tester);
+    expect(find.byKey(const ValueKey<String>('login-hero')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('login-brand')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('login-hero-title-1')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('login-hero-title-2')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('login-hero-subtitle')),
+        findsOneWidget);
+    expect(find.text('把交易想法'), findsOneWidget);
+    expect(find.text('变成可回测的策略'), findsOneWidget);
+    expect(find.text('对话生成 · 历史回测 · API 部署'), findsOneWidget);
+  });
+
+  testWidgets('密码框右侧存在「忘记?」链接，点击不导致跳转',
+      (WidgetTester tester) async {
+    await _pumpLogin(tester);
+    final Finder forgot =
+        find.byKey(const ValueKey<String>('login-forgot-password'));
+    expect(forgot, findsOneWidget);
+    await tester.tap(forgot);
+    await tester.pump(); // SnackBar 入场
+    // 不应离开登录页
+    expect(find.text('AI_HOME_PLACEHOLDER'), findsNothing);
+  });
+
+  testWidgets('游客按钮 → mock guest 登录 → 跳 /ai',
+      (WidgetTester tester) async {
+    final (:ProviderContainer container, :InMemoryTokenStorage storage) =
+        await _pumpLogin(tester);
+    final Finder guest = find.byKey(const ValueKey<String>('login-guest'));
+    expect(guest, findsOneWidget);
+    // hero 300px + 表单整体使按钮可能超出默认 800px 窗口，先滚到可见再点。
+    await tester.ensureVisible(guest);
+    await tester.pumpAndSettle();
+    await tester.tap(guest);
+    await tester.pumpAndSettle();
+
+    expect(find.text('AI_HOME_PLACEHOLDER'), findsOneWidget);
+    expect(storage.snapshot.containsKey(kSessionStorageKey), isTrue);
+    expect(
+      container.read(sessionControllerProvider).valueOrNull?.email,
+      kGuestMockEmail,
+    );
+  });
+
+  testWidgets('底部服务条款 / 隐私政策文字存在', (WidgetTester tester) async {
+    await _pumpLogin(tester);
+    final Finder terms = find.byKey(const ValueKey<String>('login-terms'));
+    expect(terms, findsOneWidget);
+    await tester.ensureVisible(terms);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('服务条款'), findsOneWidget);
+    expect(find.textContaining('隐私政策'), findsOneWidget);
+  });
+
+  testWidgets('点击服务条款 link → 弹 SnackBar，不跳转',
+      (WidgetTester tester) async {
+    await _pumpLogin(tester);
+    final Finder terms = find.byKey(const ValueKey<String>('login-terms'));
+    expect(terms, findsOneWidget);
+    await tester.ensureVisible(terms);
+    await tester.pumpAndSettle();
+    // Text.rich 内的 TextSpan + TapGestureRecognizer 在 widget test 里没有
+    // 独立 widget，无法直接 tapOnText 子串，借助 tester.tapOnText 的
+    // textRange 接口定位「服务条款」TextSpan。
+    await tester.tapOnText(find.textRange.ofSubstring('服务条款'));
+    await tester.pump(); // SnackBar 入场
+    // SnackBar 内容 == authLoginTermsLink
+    expect(find.widgetWithText(SnackBar, '服务条款'), findsOneWidget);
+    expect(find.text('AI_HOME_PLACEHOLDER'), findsNothing);
+  });
+
+  testWidgets('点击隐私政策 link → 弹 SnackBar，不跳转',
+      (WidgetTester tester) async {
+    await _pumpLogin(tester);
+    final Finder terms = find.byKey(const ValueKey<String>('login-terms'));
+    expect(terms, findsOneWidget);
+    await tester.ensureVisible(terms);
+    await tester.pumpAndSettle();
+    await tester.tapOnText(find.textRange.ofSubstring('隐私政策'));
+    await tester.pump();
+    expect(find.widgetWithText(SnackBar, '隐私政策'), findsOneWidget);
+    expect(find.text('AI_HOME_PLACEHOLDER'), findsNothing);
   });
 }
