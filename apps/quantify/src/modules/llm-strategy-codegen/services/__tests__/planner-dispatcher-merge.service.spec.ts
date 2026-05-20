@@ -394,7 +394,7 @@ describe('PlannerDispatcherMergeService', () => {
       }],
     } as unknown as CodegenSemanticPatch
     const merged = svc.mergePlannerAndDispatcherPatches(planner, null)
-    const rules = (merged as { rules?: Array<{ effects: Array<{ key?: string }> }> })?.rules
+    const rules = (merged as unknown as { rules?: Array<{ effects: ReadonlyArray<{ key?: string }> }> })?.rules
     expect(rules).toHaveLength(1)
     expect(rules?.[0].effects).toEqual([
       expect.objectContaining({ key: 'position.dca_schedule' }),
