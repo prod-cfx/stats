@@ -60,6 +60,10 @@ type ProjectionOut = {
 /** Issue #1447 闸 3：用于 orphan drop 度量的 bucket label 集合（与 ProjectionOut 同步） */
 type FlatBucket = keyof ProjectionOut
 
+const ADD_POSITION_ATOM_KEY = ATOM_CONTRACT_REGISTRY['action.add_position'].key
+const POSITION_NO_POSITION_ATOM_KEY = ATOM_CONTRACT_REGISTRY['position.no_position'].key
+const POSITION_PYRAMIDING_LIMIT_ATOM_KEY = ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
+
 @Injectable()
 export class SemanticRuleProjectionService {
   private readonly logger = new Logger(SemanticRuleProjectionService.name)
@@ -100,20 +104,111 @@ export class SemanticRuleProjectionService {
       }
       return state
     }
-    const projected = this.projectToFlat(state.rules)
+    const normalizedRules = this.prunePyramidingRulesWithoutAddAction(state.rules)
+    const projected = this.projectToFlat(normalizedRules)
     // Issue #1493 M2：显式再跑一次 invariant—projectToFlat 内部已跑过一次，这里防御性
     //   no-op，但语义清晰地把 "reprojectFromRules 返回值满足 _provenance invariant"
     //   写在调用现场，未来若 projectToFlat 实现重抽不再内部跑 invariant，也不会让
     //   reprojectFromRules 静默退化。
-    SemanticRuleProjectionService.enforceProvenanceInvariantInPlace(projected, state.rules)
+    SemanticRuleProjectionService.enforceProvenanceInvariantInPlace(projected, normalizedRules)
     return {
       ...state,
+      rules: normalizedRules,
       trigger: projected.trigger,
       action: projected.action,
       risk: projected.risk,
       positionConstraint: projected.positionConstraint,
       orchestration: projected.orchestration,
     }
+  }
+
+  private prunePyramidingRulesWithoutAddAction(rules: ReadonlyArray<SemanticRule>): ReadonlyArray<SemanticRule> {
+    if (this.rulesContainAtomKey(rules, ADD_POSITION_ATOM_KEY)) {
+      return rules
+    }
+
+    let changed = false
+    const next: SemanticRule[] = []
+    for (const rule of rules) {
+      if (this.exprContainsAtomKey(rule.condition, POSITION_PYRAMIDING_LIMIT_ATOM_KEY)) {
+        changed = true
+        continue
+      }
+
+      const effects: AtomExpr[] = []
+      for (const effect of rule.effects) {
+        const pruned = this.pruneAtomKeyFromExpr(effect, POSITION_PYRAMIDING_LIMIT_ATOM_KEY)
+        if (!pruned) {
+          changed = true
+          continue
+        }
+        if (pruned !== effect) changed = true
+        effects.push(pruned)
+      }
+
+      if (
+        effects.length === 0
+        && rule.condition.kind === 'atom'
+        && rule.condition.key === POSITION_NO_POSITION_ATOM_KEY
+      ) {
+        changed = true
+        continue
+      }
+
+      next.push(effects.length === rule.effects.length && effects.every((effect, index) => effect === rule.effects[index])
+        ? rule
+        : { ...rule, effects })
+    }
+
+    return changed ? next : rules
+  }
+
+  private rulesContainAtomKey(rules: ReadonlyArray<SemanticRule>, atomKey: string): boolean {
+    return rules.some(rule =>
+      this.exprContainsAtomKey(rule.condition, atomKey)
+      || rule.effects.some(effect => this.exprContainsAtomKey(effect, atomKey)),
+    )
+  }
+
+  private exprContainsAtomKey(expr: AtomExpr, atomKey: string): boolean {
+    if (expr.kind === 'atom') return expr.key === atomKey
+    if (expr.kind === 'and' || expr.kind === 'or') {
+      return expr.children.some(child => this.exprContainsAtomKey(child, atomKey))
+    }
+    if (expr.kind === 'not') return this.exprContainsAtomKey(expr.child, atomKey)
+    return expr.steps.some(step => this.exprContainsAtomKey(step, atomKey))
+  }
+
+  private pruneAtomKeyFromExpr(expr: AtomExpr, atomKey: string): AtomExpr | null {
+    if (expr.kind === 'atom') {
+      return expr.key === atomKey ? null : expr
+    }
+
+    if (expr.kind === 'and' || expr.kind === 'or') {
+      const children = expr.children
+        .map(child => this.pruneAtomKeyFromExpr(child, atomKey))
+        .filter((child): child is AtomExpr => child !== null)
+      if (children.length === 0) return null
+      if (children.length === 1) return children[0]!
+      return children.length === expr.children.length && children.every((child, index) => child === expr.children[index])
+        ? expr
+        : { ...expr, children }
+    }
+
+    if (expr.kind === 'not') {
+      const child = this.pruneAtomKeyFromExpr(expr.child, atomKey)
+      if (!child) return null
+      return child === expr.child ? expr : { ...expr, child }
+    }
+
+    const steps = expr.steps
+      .map(step => this.pruneAtomKeyFromExpr(step, atomKey))
+      .filter((step): step is AtomExpr => step !== null)
+    if (steps.length === 0) return null
+    if (steps.length === 1) return steps[0]!
+    return steps.length === expr.steps.length && steps.every((step, index) => step === expr.steps[index])
+      ? expr
+      : { ...expr, steps }
   }
 
   /**

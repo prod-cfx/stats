@@ -8,6 +8,7 @@
 
 import type { SemanticRule } from '../../types/atom-expr'
 import type { SemanticState } from '../../types/semantic-state'
+import { SemanticRuleProjectionService } from '../semantic-rule-projection.service'
 import { SemanticStateProjectionService } from '../semantic-state-projection.service'
 
 function baseState(overrides: Partial<SemanticState>): SemanticState {
@@ -487,5 +488,81 @@ describe('Issue #1443 — renderRule 通用 UI 简化', () => {
     expect(view.summary).not.toContain('once')
     // "市价" 是 default 渲染应被跳过
     expect(view.summary).not.toContain('（市价')
+  })
+})
+
+describe('rules projection — pyramiding lifecycle guard noise', () => {
+  const ruleProjection = new SemanticRuleProjectionService()
+  const stateProjection = new SemanticStateProjectionService()
+
+  it('drops pyramiding_limit gate when no add_position action exists', () => {
+    const rules: SemanticRule[] = [
+      {
+        id: 'entry-ema',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 60 } },
+        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      },
+      {
+        id: 'exit-ema',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_under', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 60 } },
+        effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+      },
+      {
+        id: 'synthetic-pyramiding-gate',
+        phase: 'gate',
+        sideScope: 'both',
+        condition: { kind: 'atom', key: 'position.no_position', params: { sideScope: 'both' } },
+        effects: [{ kind: 'atom', key: 'position.pyramiding_limit', params: { maxLayers: 1, layerSizing: { kind: 'ratio', value: 0.01, unit: 'ratio' } } }],
+      },
+    ]
+
+    const state = ruleProjection.reprojectFromRules(baseState({
+      rules,
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.01,
+        positionMode: 'long_only',
+        sizing: { kind: 'ratio', value: 0.01, unit: 'ratio' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    }))
+    const summary = stateProjection.buildConversationView(state).summary
+
+    expect(state.rules?.map(rule => rule.id)).not.toContain('synthetic-pyramiding-gate')
+    expect(state.positionConstraint).toHaveLength(0)
+    expect(summary).not.toContain('金字塔')
+    expect(summary).not.toContain('最多1次加仓')
+    expect(summary).not.toContain('无任意方向仓位')
+    expect(summary).toContain('仓位：1%')
+  })
+
+  it('keeps pyramiding_limit when add_position action exists', () => {
+    const rules: SemanticRule[] = [
+      {
+        id: 'add-profit',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.percent_change', params: { basis: 'entry_avg_price', direction: 'up', valuePct: 3 } },
+        effects: [
+          { kind: 'atom', key: 'action.add_position', params: { addMode: 'profit_pct', profitThreshold: 3, sizing: { kind: 'ratio', value: 0.5, unit: 'ratio' } } },
+          { kind: 'atom', key: 'position.pyramiding_limit', params: { maxLayers: 3 } },
+        ],
+      },
+    ]
+
+    const state = ruleProjection.reprojectFromRules(baseState({ rules }))
+
+    expect(state.positionConstraint).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'position.pyramiding_limit',
+        params: expect.objectContaining({ maxLayers: 3 }),
+      }),
+    ]))
   })
 })
