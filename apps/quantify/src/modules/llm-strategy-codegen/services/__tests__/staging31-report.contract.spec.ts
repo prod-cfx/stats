@@ -120,6 +120,26 @@ describe('staging31 hard gate report contract', () => {
     })).toBe(false)
   })
 
+  it('does not infer long add action from 最多 in short-side UI text', () => {
+    expect(hasUiAstScriptMismatch({
+      rulesTree: [{
+        sideScope: 'short',
+        condition: { key: 'price.percent_change' },
+        effects: [{ key: 'action.add_position' }],
+      }],
+      uiSummaryOrGraph: {
+        graph: {
+          blocks: [{ items: [{ kind: 'action', text: '加仓：加空，最多 3 次' }] }],
+        },
+      },
+      ast: {
+        decisionPrograms: [{ actions: [{ kind: 'ADD_SHORT' }] }],
+        guards: [],
+      },
+      scriptOrError: { script: 'const DECISION_PROGRAMS = [{"actions":[{"kind":"ADD_SHORT"}]}] as const' },
+    })).toBe(false)
+  })
+
   it('fails the hard gate unless all 31 real cases pass cleanly', () => {
     const clean = {
       total: 31,

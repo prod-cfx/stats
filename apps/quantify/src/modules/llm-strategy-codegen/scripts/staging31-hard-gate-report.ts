@@ -761,8 +761,8 @@ function inferUiAddActions(items: unknown[]): string[] {
   const texts = items
     .map(item => (item as { text?: unknown }).text)
     .filter((text): text is string => typeof text === 'string')
-  const hasLong = texts.some(text => text.includes('开多') || text.includes('做多') || text.includes('多'))
-  const hasShort = texts.some(text => text.includes('开空') || text.includes('做空') || text.includes('空'))
+  const hasLong = texts.some(text => /开多|做多|多头|平多|加多|补多/u.test(text))
+  const hasShort = texts.some(text => /开空|做空|空头|平空|加空|补空/u.test(text))
   if (hasLong && hasShort) return ['ADD_LONG', 'ADD_SHORT']
   if (hasShort) return ['ADD_SHORT']
   return ['ADD_LONG']
