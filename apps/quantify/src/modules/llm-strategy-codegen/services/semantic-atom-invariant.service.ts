@@ -708,7 +708,7 @@ export class SemanticAtomInvariantService {
     const astCandidates = this.readAstOpenActionPositionSizings(input.ast)
     const ast = {
       passed: astCandidates.length > 0
-        && astCandidates.some(candidate => this.matchesPositionSizingSnapshot(candidate, expectedIr)),
+        && astCandidates.every(candidate => this.matchesPositionSizingSnapshot(candidate, expectedIr)),
       expected: expectedIr,
       candidates: astCandidates,
     }
