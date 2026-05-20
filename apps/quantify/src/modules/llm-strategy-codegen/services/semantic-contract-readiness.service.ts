@@ -700,7 +700,11 @@ function isCompatibleDcaExitRule(
   effectLeaves: readonly AtomExprAtom[],
 ): boolean {
   if (!sideScopesOverlap(rule.sideScope, dcaSideScope)) return false
-  return effectLeaves.some(leaf => isExitCapableAtomForSide(leaf, dcaSideScope))
+  return effectLeaves.some((leaf) => {
+    const leafSideScope = leaf.sideScope ?? rule.sideScope
+    return sideScopesOverlap(leafSideScope, dcaSideScope)
+      && isExitCapableAtomForSide(leaf, dcaSideScope)
+  })
 }
 
 function sideScopesOverlap(a: SemanticRuleSideScope, b: SemanticRuleSideScope): boolean {

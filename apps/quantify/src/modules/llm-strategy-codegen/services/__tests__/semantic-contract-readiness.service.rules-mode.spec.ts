@@ -17,6 +17,10 @@ function atom(key: string, params: Record<string, unknown> = {}): AtomExpr {
   return { kind: 'atom', key, params }
 }
 
+function atomWithSide(key: string, sideScope: 'long' | 'short' | 'both', params: Record<string, unknown> = {}): AtomExpr {
+  return { kind: 'atom', key, sideScope, params }
+}
+
 function andExpr(...children: AtomExpr[]): AtomExpr {
   return { kind: 'and', children }
 }
@@ -426,6 +430,49 @@ describe('semanticContractReadinessService.normalize DCA exit contract in rules 
           basis: 'entry_avg_price',
         }),
         effects: [atom('action.close_short')],
+      }),
+    ]))
+
+    expect(result.ready).toBe(false)
+    expect(result.missingRequirements).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        domain: 'guard',
+        verb: 'define',
+        object: 'dca_exit_rule',
+      }),
+    ]))
+  })
+
+  it('does not satisfy long DCA with a short-only risk leaf under a both-side rule', () => {
+    const result = svc.normalize(stateWithRules([
+      rule({
+        id: 'entry-long-dca',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: atom('strategy.time_window', { window: 'daily' }),
+        effects: [
+          atom('action.open_long'),
+          atom('position.dca_schedule', {
+            triggerMode: 'time_interval',
+            timeIntervalBars: 1,
+            perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+          }),
+        ],
+      }),
+      rule({
+        id: 'both-side-short-risk',
+        phase: 'exit',
+        sideScope: 'both',
+        condition: atom('price.percent_change', {
+          direction: 'up',
+          thresholdPct: 5,
+          basis: 'entry_avg_price',
+        }),
+        effects: [atomWithSide('risk.stop_loss_pct', 'short', {
+          valuePct: 5,
+          direction: 'loss',
+          basis: 'entry_avg_price',
+        })],
       }),
     ]))
 
