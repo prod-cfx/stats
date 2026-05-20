@@ -381,7 +381,8 @@
           "base": "BTC",
           "quote": "USDT",
           "quoteSource": "explicit"
-        }
+        },
+        "timeframe": "15m"
       },
       "position": {
         "mode": "fixed_ratio",
@@ -2773,20 +2774,6 @@
       },
       "triggers": [
         {
-          "key": "indicator.cross_under",
-          "phase": "exit",
-          "params": {
-            "indicator": "ma",
-            "period": 50,
-            "fastPeriod": 50
-          },
-          "evidence": {
-            "text": "价格跌破 MA50 平多",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
           "key": "indicator.below",
           "phase": "exit",
           "params": {
@@ -2814,20 +2801,6 @@
         }
       ],
       "atoms": [
-        {
-          "key": "indicator.cross_under",
-          "phase": "exit",
-          "params": {
-            "indicator": "ma",
-            "period": 50,
-            "fastPeriod": 50
-          },
-          "evidence": {
-            "text": "价格跌破 MA50 平多",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
         {
           "key": "indicator.below",
           "phase": "exit",
@@ -2970,20 +2943,6 @@
       },
       "triggers": [
         {
-          "key": "indicator.cross_under",
-          "phase": "exit",
-          "params": {
-            "indicator": "ma",
-            "period": 100,
-            "fastPeriod": 100
-          },
-          "evidence": {
-            "text": "价格跌破 MA100 close long",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
           "key": "indicator.below",
           "phase": "exit",
           "params": {
@@ -3011,20 +2970,6 @@
         }
       ],
       "atoms": [
-        {
-          "key": "indicator.cross_under",
-          "phase": "exit",
-          "params": {
-            "indicator": "ma",
-            "period": 100,
-            "fastPeriod": 100
-          },
-          "evidence": {
-            "text": "价格跌破 MA100 close long",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
         {
           "key": "indicator.below",
           "phase": "exit",
@@ -3799,7 +3744,8 @@
           "base": "BTC",
           "quote": "USDT",
           "quoteSource": "explicit"
-        }
+        },
+        "timeframe": "15m"
       },
       "position": {
         "mode": "fixed_ratio",
@@ -5062,8 +5008,13 @@
           "phase": "entry",
           "params": {
             "dropPct": -5,
-            "perOrderBudget": 5,
-            "maxOrders": 5
+            "perOrderSizing": {
+              "kind": "quote",
+              "value": 5,
+              "asset": "USDT"
+            },
+            "triggerMode": "price_interval",
+            "priceIntervalPct": -5
           },
           "evidence": {
             "text": "价格每跌 5% 补仓一次",
@@ -5704,7 +5655,8 @@
           "base": "BTC",
           "quote": "USDT",
           "quoteSource": "explicit"
-        }
+        },
+        "timeframe": "15m"
       },
       "position": {
         "mode": "fixed_ratio",
@@ -6146,23 +6098,6 @@
           "sideScope": "long"
         },
         {
-          "key": "indicator.cross_under",
-          "phase": "entry",
-          "params": {
-            "indicator": "ema",
-            "value": 30,
-            "period": 14,
-            "fastPeriod": 14,
-            "slowPeriod": 30,
-            "signalPeriod": 20
-          },
-          "evidence": {
-            "text": "RSI14 跌破 30 且价格站上 ema20 时买入",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
           "key": "indicator.above",
           "phase": "entry",
           "params": {
@@ -6212,23 +6147,6 @@
             "period": 14,
             "value": 30,
             "thresholdRole": "lower_threshold"
-          },
-          "evidence": {
-            "text": "RSI14 跌破 30 且价格站上 ema20 时买入",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
-          "key": "indicator.cross_under",
-          "phase": "entry",
-          "params": {
-            "indicator": "ema",
-            "value": 30,
-            "period": 14,
-            "fastPeriod": 14,
-            "slowPeriod": 30,
-            "signalPeriod": 20
           },
           "evidence": {
             "text": "RSI14 跌破 30 且价格站上 ema20 时买入",
@@ -7341,7 +7259,8 @@
           "base": "BTC",
           "quote": "USDT",
           "quoteSource": "explicit"
-        }
+        },
+        "timeframe": "15m"
       },
       "position": {
         "mode": "fixed_ratio",
@@ -7367,22 +7286,6 @@
           "params": {
             "period": 20,
             "reference": "channel_low"
-          },
-          "evidence": {
-            "text": "价格下破最近 20 根 K 线前低且跌破 ema60 时开空",
-            "source": "user_explicit"
-          },
-          "sideScope": "short"
-        },
-        {
-          "key": "indicator.cross_under",
-          "phase": "entry",
-          "params": {
-            "indicator": "ema",
-            "value": 60,
-            "period": 20,
-            "fastPeriod": 20,
-            "slowPeriod": 60
           },
           "evidence": {
             "text": "价格下破最近 20 根 K 线前低且跌破 ema60 时开空",
@@ -7424,22 +7327,6 @@
           "params": {
             "period": 20,
             "reference": "channel_low"
-          },
-          "evidence": {
-            "text": "价格下破最近 20 根 K 线前低且跌破 ema60 时开空",
-            "source": "user_explicit"
-          },
-          "sideScope": "short"
-        },
-        {
-          "key": "indicator.cross_under",
-          "phase": "entry",
-          "params": {
-            "indicator": "ema",
-            "value": 60,
-            "period": 20,
-            "fastPeriod": 20,
-            "slowPeriod": 60
           },
           "evidence": {
             "text": "价格下破最近 20 根 K 线前低且跌破 ema60 时开空",
@@ -8077,7 +7964,7 @@
           "key": "price.candle_pattern",
           "phase": "entry",
           "params": {
-            "pattern": "hammer",
+            "pattern": "single_bear_bar",
             "direction": "bearish",
             "sourceText": "bearish hammer candle pattern confirmed"
           },
@@ -8104,7 +7991,7 @@
           "key": "price.candle_pattern",
           "phase": "entry",
           "params": {
-            "pattern": "hammer",
+            "pattern": "single_bear_bar",
             "direction": "bearish",
             "sourceText": "bearish hammer candle pattern confirmed"
           },
@@ -8168,7 +8055,7 @@
           "key": "price.candle_pattern",
           "phase": "entry",
           "params": {
-            "pattern": "doji",
+            "pattern": "single_bull_bar",
             "direction": "bullish",
             "sourceText": "bullish doji 出现后开多"
           },
@@ -8195,7 +8082,7 @@
           "key": "price.candle_pattern",
           "phase": "entry",
           "params": {
-            "pattern": "doji",
+            "pattern": "single_bull_bar",
             "direction": "bullish",
             "sourceText": "bullish doji 出现后开多"
           },
@@ -8422,7 +8309,8 @@
           "base": "BTC",
           "quote": "USDT",
           "quoteSource": "default_usdt"
-        }
+        },
+        "timeframe": "15m"
       },
       "triggers": [
         {

@@ -1347,12 +1347,12 @@
       "contextSlots": {
         "exchange": "binance",
         "symbol": {
-          "value": "BTCUSDTUSDT",
-          "source": "inferred",
-          "evidenceText": "btcusdt",
-          "base": "BTCUSDT",
+          "value": "BTCUSDT",
+          "source": "user_explicit",
+          "evidenceText": "BTCUSDT",
+          "base": "BTC",
           "quote": "USDT",
-          "quoteSource": "default_usdt"
+          "quoteSource": "explicit"
         },
         "marketType": "perp"
       }
@@ -1385,12 +1385,12 @@
       "contextSlots": {
         "exchange": "binance",
         "symbol": {
-          "value": "PRIMARYUSDT",
-          "source": "inferred",
-          "evidenceText": "Primary",
-          "base": "PRIMARY",
+          "value": "BTCUSDT",
+          "source": "user_explicit",
+          "evidenceText": "BTCUSDT",
+          "base": "BTC",
           "quote": "USDT",
-          "quoteSource": "default_usdt"
+          "quoteSource": "explicit"
         },
         "marketType": "spot"
       }
@@ -1541,12 +1541,12 @@
     "patch": {
       "contextSlots": {
         "symbol": {
-          "value": "LONGUSDT",
-          "source": "inferred",
-          "evidenceText": "Long",
+          "value": "LONGBTC",
+          "source": "user_explicit",
+          "evidenceText": "LONGBTC",
           "base": "LONG",
-          "quote": "USDT",
-          "quoteSource": "default_usdt"
+          "quote": "BTC",
+          "quoteSource": "explicit"
         }
       }
     }
@@ -1820,20 +1820,6 @@
             "source": "user_explicit"
           },
           "sideScope": "long"
-        },
-        {
-          "key": "indicator.cross_under",
-          "phase": "entry",
-          "params": {
-            "indicator": "rsi",
-            "period": 30,
-            "fastPeriod": 30
-          },
-          "evidence": {
-            "text": "RSI 跌破 30 开多",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
         }
       ],
       "actions": [
@@ -1869,20 +1855,6 @@
             "period": 14,
             "value": 30,
             "thresholdRole": "lower_threshold"
-          },
-          "evidence": {
-            "text": "RSI 跌破 30 开多",
-            "source": "user_explicit"
-          },
-          "sideScope": "long"
-        },
-        {
-          "key": "indicator.cross_under",
-          "phase": "entry",
-          "params": {
-            "indicator": "rsi",
-            "period": 30,
-            "fastPeriod": 30
           },
           "evidence": {
             "text": "RSI 跌破 30 开多",
@@ -2277,6 +2249,23 @@
         },
         "timeframe": "1h"
       },
+      "position": {
+        "mode": "fixed_ratio",
+        "value": 0.5,
+        "positionMode": "long_only",
+        "sizing": {
+          "kind": "ratio",
+          "value": 0.5,
+          "unit": "ratio"
+        },
+        "status": "locked",
+        "source": "user_explicit",
+        "evidence": {
+          "text": "盈利 3% 后加仓 50%",
+          "source": "user_explicit"
+        },
+        "openSlots": []
+      },
       "triggers": [
         {
           "key": "price.breakout_up",
@@ -2308,23 +2297,12 @@
           "params": {
             "sideScope": "long",
             "addMode": "profit_pct",
-            "addRatio": 3,
             "profitThreshold": 3,
-            "drawdownThreshold": 3
-          },
-          "evidence": {
-            "text": "盈利 3% 后加仓 50%",
-            "source": "user_explicit"
-          }
-        }
-      ],
-      "risk": [
-        {
-          "key": "risk.take_profit_pct",
-          "phase": "exit",
-          "params": {
-            "valuePct": 3,
-            "basis": "entry_avg_price"
+            "sizing": {
+              "kind": "ratio",
+              "value": 0.5,
+              "unit": "ratio"
+            }
           },
           "evidence": {
             "text": "盈利 3% 后加仓 50%",
@@ -2362,9 +2340,12 @@
           "params": {
             "sideScope": "long",
             "addMode": "profit_pct",
-            "addRatio": 3,
             "profitThreshold": 3,
-            "drawdownThreshold": 3
+            "sizing": {
+              "kind": "ratio",
+              "value": 0.5,
+              "unit": "ratio"
+            }
           },
           "evidence": {
             "text": "盈利 3% 后加仓 50%",
@@ -2373,14 +2354,13 @@
           "sideScope": "both"
         },
         {
-          "key": "risk.take_profit_pct",
-          "phase": "exit",
+          "key": "position.pyramiding_limit",
+          "phase": "entry",
           "params": {
-            "valuePct": 3,
-            "basis": "entry_avg_price"
+            "maxLayers": 3
           },
           "evidence": {
-            "text": "盈利 3% 后加仓 50%",
+            "text": "最多加 3 层",
             "source": "user_explicit"
           },
           "sideScope": "both"
@@ -2404,16 +2384,77 @@
         },
         "marketType": "spot"
       },
+      "position": {
+        "mode": "fixed_quote",
+        "value": 200,
+        "positionMode": "long_only",
+        "sizing": {
+          "kind": "quote",
+          "value": 200,
+          "asset": "USDT"
+        },
+        "status": "locked",
+        "source": "user_explicit",
+        "evidence": {
+          "text": "回撤 5% 加投 200 USDT",
+          "source": "user_explicit"
+        },
+        "openSlots": []
+      },
+      "actions": [
+        {
+          "key": "action.add_position",
+          "phase": "entry",
+          "params": {
+            "sideScope": "long",
+            "addMode": "drawdown_pct",
+            "drawdownThreshold": 5,
+            "sizing": {
+              "kind": "quote",
+              "value": 200,
+              "asset": "USDT"
+            }
+          },
+          "evidence": {
+            "text": "回撤 5% 加投 200 USDT",
+            "source": "user_explicit"
+          }
+        }
+      ],
       "atoms": [
         {
           "key": "position.dca_schedule",
           "phase": "entry",
           "params": {
-            "perOrderBudget": 100,
-            "maxOrders": 100
+            "perOrderSizing": {
+              "kind": "quote",
+              "value": 100,
+              "asset": "USDT"
+            },
+            "triggerMode": "time_interval",
+            "timeIntervalBars": 1
           },
           "evidence": {
             "text": "ETH 现货每天定投 100 USDT",
+            "source": "user_explicit"
+          },
+          "sideScope": "both"
+        },
+        {
+          "key": "action.add_position",
+          "phase": "entry",
+          "params": {
+            "sideScope": "long",
+            "addMode": "drawdown_pct",
+            "drawdownThreshold": 5,
+            "sizing": {
+              "kind": "quote",
+              "value": 200,
+              "asset": "USDT"
+            }
+          },
+          "evidence": {
+            "text": "回撤 5% 加投 200 USDT",
             "source": "user_explicit"
           },
           "sideScope": "both"

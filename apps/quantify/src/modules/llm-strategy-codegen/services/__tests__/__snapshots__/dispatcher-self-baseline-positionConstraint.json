@@ -250,8 +250,13 @@
           "phase": "entry",
           "params": {
             "dropPct": -5,
-            "perOrderBudget": 5,
-            "maxOrders": 5
+            "perOrderSizing": {
+              "kind": "quote",
+              "value": 5,
+              "asset": "USDT"
+            },
+            "triggerMode": "price_interval",
+            "priceIntervalPct": -5
           },
           "evidence": {
             "text": "每跌 5% 补仓一次",
@@ -338,22 +343,6 @@
             "source": "user_explicit"
           },
           "sideScope": "both"
-        },
-        {
-          "key": "indicator.cross_under",
-          "phase": "entry",
-          "params": {
-            "indicator": "ma",
-            "fastPeriod": 20,
-            "slowPeriod": 50,
-            "period": 20,
-            "value": 50
-          },
-          "evidence": {
-            "text": "跌破前低停止补仓",
-            "source": "user_explicit"
-          },
-          "sideScope": "short"
         }
       ],
       "actions": [
@@ -405,22 +394,6 @@
             "source": "user_explicit"
           },
           "sideScope": "both"
-        },
-        {
-          "key": "indicator.cross_under",
-          "phase": "entry",
-          "params": {
-            "indicator": "ma",
-            "fastPeriod": 20,
-            "slowPeriod": 50,
-            "period": 20,
-            "value": 50
-          },
-          "evidence": {
-            "text": "跌破前低停止补仓",
-            "source": "user_explicit"
-          },
-          "sideScope": "short"
         }
       ]
     }
@@ -475,8 +448,13 @@
           "phase": "entry",
           "params": {
             "dropPct": 2,
-            "perOrderBudget": 2,
-            "maxOrders": 2
+            "perOrderSizing": {
+              "kind": "quote",
+              "value": 2,
+              "asset": "USDT"
+            },
+            "triggerMode": "price_interval",
+            "priceIntervalPct": 2
           },
           "evidence": {
             "text": "DCA every time price drops 2%",
@@ -586,17 +564,17 @@
       },
       "position": {
         "mode": "fixed_quote",
-        "value": 3000,
+        "value": 100,
         "positionMode": "long_only",
         "sizing": {
           "kind": "quote",
-          "value": 3000,
+          "value": 100,
           "asset": "USDT"
         },
         "status": "locked",
         "source": "user_explicit",
         "evidence": {
-          "text": "总投入 3000 USDT",
+          "text": "每天定投补仓 100 USDT",
           "source": "user_explicit"
         },
         "openSlots": []
@@ -629,22 +607,6 @@
             "source": "user_explicit"
           },
           "sideScope": "both"
-        },
-        {
-          "key": "indicator.cross_under",
-          "phase": "entry",
-          "params": {
-            "indicator": "ma",
-            "fastPeriod": 20,
-            "slowPeriod": 50,
-            "period": 20,
-            "value": 50
-          },
-          "evidence": {
-            "text": "跌破前低停止补仓",
-            "source": "user_explicit"
-          },
-          "sideScope": "short"
         }
       ],
       "actions": [
@@ -689,8 +651,13 @@
           "key": "position.dca_schedule",
           "phase": "entry",
           "params": {
-            "perOrderBudget": 100,
-            "maxOrders": 100
+            "perOrderSizing": {
+              "kind": "quote",
+              "value": 100,
+              "asset": "USDT"
+            },
+            "triggerMode": "time_interval",
+            "timeIntervalBars": 1
           },
           "evidence": {
             "text": "每天定投补仓 100 USDT",
@@ -709,22 +676,6 @@
             "source": "user_explicit"
           },
           "sideScope": "both"
-        },
-        {
-          "key": "indicator.cross_under",
-          "phase": "entry",
-          "params": {
-            "indicator": "ma",
-            "fastPeriod": 20,
-            "slowPeriod": 50,
-            "period": 20,
-            "value": 50
-          },
-          "evidence": {
-            "text": "跌破前低停止补仓",
-            "source": "user_explicit"
-          },
-          "sideScope": "short"
         }
       ]
     }
@@ -852,8 +803,13 @@
           "phase": "entry",
           "params": {
             "dropPct": -5,
-            "perOrderBudget": 5,
-            "maxOrders": 5
+            "perOrderSizing": {
+              "kind": "quote",
+              "value": 5,
+              "asset": "USDT"
+            },
+            "triggerMode": "price_interval",
+            "priceIntervalPct": -5
           },
           "evidence": {
             "text": "价格每跌 5% 补仓一次",
@@ -906,6 +862,23 @@
         },
         "timeframe": "15m",
         "marketType": "perp"
+      },
+      "position": {
+        "mode": "fixed_ratio",
+        "value": 0.2,
+        "positionMode": "long_only",
+        "sizing": {
+          "kind": "ratio",
+          "value": 0.2,
+          "unit": "ratio"
+        },
+        "status": "locked",
+        "source": "user_explicit",
+        "evidence": {
+          "text": "每次加仓 20%",
+          "source": "user_explicit"
+        },
+        "openSlots": []
       },
       "triggers": [
         {
@@ -1112,6 +1085,23 @@
         },
         "timeframe": "1h"
       },
+      "position": {
+        "mode": "fixed_ratio",
+        "value": 0.5,
+        "positionMode": "long_only",
+        "sizing": {
+          "kind": "ratio",
+          "value": 0.5,
+          "unit": "ratio"
+        },
+        "status": "locked",
+        "source": "user_explicit",
+        "evidence": {
+          "text": "盈利 3% 后加仓 50%",
+          "source": "user_explicit"
+        },
+        "openSlots": []
+      },
       "triggers": [
         {
           "key": "price.breakout_up",
@@ -1143,23 +1133,12 @@
           "params": {
             "sideScope": "long",
             "addMode": "profit_pct",
-            "addRatio": 3,
             "profitThreshold": 3,
-            "drawdownThreshold": 3
-          },
-          "evidence": {
-            "text": "盈利 3% 后加仓 50%",
-            "source": "user_explicit"
-          }
-        }
-      ],
-      "risk": [
-        {
-          "key": "risk.take_profit_pct",
-          "phase": "exit",
-          "params": {
-            "valuePct": 3,
-            "basis": "entry_avg_price"
+            "sizing": {
+              "kind": "ratio",
+              "value": 0.5,
+              "unit": "ratio"
+            }
           },
           "evidence": {
             "text": "盈利 3% 后加仓 50%",
@@ -1197,22 +1176,12 @@
           "params": {
             "sideScope": "long",
             "addMode": "profit_pct",
-            "addRatio": 3,
             "profitThreshold": 3,
-            "drawdownThreshold": 3
-          },
-          "evidence": {
-            "text": "盈利 3% 后加仓 50%",
-            "source": "user_explicit"
-          },
-          "sideScope": "both"
-        },
-        {
-          "key": "risk.take_profit_pct",
-          "phase": "exit",
-          "params": {
-            "valuePct": 3,
-            "basis": "entry_avg_price"
+            "sizing": {
+              "kind": "ratio",
+              "value": 0.5,
+              "unit": "ratio"
+            }
           },
           "evidence": {
             "text": "盈利 3% 后加仓 50%",

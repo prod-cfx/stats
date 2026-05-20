@@ -1758,7 +1758,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       intent: {
         keywords: ['均线', 'MA', 'EMA', 'RSI', 'MACD', 'DIF', 'DEA', 'indicator'] as const,
         verbs: {
-          cross_under: ['下穿', '死叉', '跌破', '向下穿过', 'cross under', 'crosses below'] as const,
+          cross_under: ['下穿', '死叉', '向下穿过', 'cross under', 'crosses below'] as const,
         },
       },
       // 跨子句对偶：与 cross_over 互为镜像；"EMA7 上穿 EMA21 时开多；下穿 时平多"

@@ -20,17 +20,17 @@
       },
       "position": {
         "mode": "fixed_ratio",
-        "value": 0.1,
+        "value": 0.2,
         "positionMode": "long_only",
         "sizing": {
           "kind": "ratio",
-          "value": 0.1,
+          "value": 0.2,
           "unit": "ratio"
         },
         "status": "locked",
         "source": "user_explicit",
         "evidence": {
-          "text": "单笔 10%",
+          "text": "回踩 MA20 不破后加仓 20%",
           "source": "user_explicit"
         },
         "openSlots": []
@@ -83,9 +83,13 @@
           "params": {
             "sideScope": "long",
             "addMode": "signal_confirm",
-            "addRatio": 20,
             "profitThreshold": 20,
-            "drawdownThreshold": 20
+            "drawdownThreshold": 20,
+            "sizing": {
+              "kind": "ratio",
+              "value": 0.2,
+              "unit": "ratio"
+            }
           },
           "evidence": {
             "text": "回踩 MA20 不破后加仓 20%",
@@ -126,9 +130,13 @@
           "params": {
             "sideScope": "long",
             "addMode": "signal_confirm",
-            "addRatio": 20,
             "profitThreshold": 20,
-            "drawdownThreshold": 20
+            "drawdownThreshold": 20,
+            "sizing": {
+              "kind": "ratio",
+              "value": 0.2,
+              "unit": "ratio"
+            }
           },
           "evidence": {
             "text": "回踩 MA20 不破后加仓 20%",
@@ -186,17 +194,17 @@
       },
       "position": {
         "mode": "fixed_ratio",
-        "value": 0.1,
+        "value": 0.3,
         "positionMode": "long_only",
         "sizing": {
           "kind": "ratio",
-          "value": 0.1,
+          "value": 0.3,
           "unit": "ratio"
         },
         "status": "locked",
         "source": "user_explicit",
         "evidence": {
-          "text": "单笔 10%",
+          "text": "盈利后加仓 30%",
           "source": "user_explicit"
         },
         "openSlots": []
@@ -235,23 +243,12 @@
           "params": {
             "sideScope": "long",
             "addMode": "profit_pct",
-            "addRatio": 30,
             "profitThreshold": 30,
-            "drawdownThreshold": 30
-          },
-          "evidence": {
-            "text": "盈利后加仓 30%",
-            "source": "user_explicit"
-          }
-        }
-      ],
-      "risk": [
-        {
-          "key": "risk.take_profit_pct",
-          "phase": "exit",
-          "params": {
-            "valuePct": 30,
-            "basis": "entry_avg_price"
+            "sizing": {
+              "kind": "ratio",
+              "value": 0.3,
+              "unit": "ratio"
+            }
           },
           "evidence": {
             "text": "盈利后加仓 30%",
@@ -292,22 +289,12 @@
           "params": {
             "sideScope": "long",
             "addMode": "profit_pct",
-            "addRatio": 30,
             "profitThreshold": 30,
-            "drawdownThreshold": 30
-          },
-          "evidence": {
-            "text": "盈利后加仓 30%",
-            "source": "user_explicit"
-          },
-          "sideScope": "both"
-        },
-        {
-          "key": "risk.take_profit_pct",
-          "phase": "exit",
-          "params": {
-            "valuePct": 30,
-            "basis": "entry_avg_price"
+            "sizing": {
+              "kind": "ratio",
+              "value": 0.3,
+              "unit": "ratio"
+            }
           },
           "evidence": {
             "text": "盈利后加仓 30%",
@@ -578,17 +565,17 @@
       },
       "position": {
         "mode": "fixed_ratio",
-        "value": 0.1,
+        "value": 0.3,
         "positionMode": "long_only",
         "sizing": {
           "kind": "ratio",
-          "value": 0.1,
+          "value": 0.3,
           "unit": "ratio"
         },
         "status": "locked",
         "source": "user_explicit",
         "evidence": {
-          "text": "单笔 10%",
+          "text": "回撤 5% 补仓 30%",
           "source": "user_explicit"
         },
         "openSlots": []
@@ -627,9 +614,12 @@
           "params": {
             "sideScope": "long",
             "addMode": "drawdown_pct",
-            "addRatio": -5,
-            "profitThreshold": -5,
-            "drawdownThreshold": -5
+            "drawdownThreshold": 5,
+            "sizing": {
+              "kind": "ratio",
+              "value": 0.3,
+              "unit": "ratio"
+            }
           },
           "evidence": {
             "text": "回撤 5% 补仓 30%",
@@ -670,9 +660,12 @@
           "params": {
             "sideScope": "long",
             "addMode": "drawdown_pct",
-            "addRatio": -5,
-            "profitThreshold": -5,
-            "drawdownThreshold": -5
+            "drawdownThreshold": 5,
+            "sizing": {
+              "kind": "ratio",
+              "value": 0.3,
+              "unit": "ratio"
+            }
           },
           "evidence": {
             "text": "回撤 5% 补仓 30%",
@@ -809,17 +802,17 @@
       },
       "position": {
         "mode": "fixed_ratio",
-        "value": 0.1,
+        "value": 0.2,
         "positionMode": "long_only",
         "sizing": {
           "kind": "ratio",
-          "value": 0.1,
+          "value": 0.2,
           "unit": "ratio"
         },
         "status": "locked",
         "source": "user_explicit",
         "evidence": {
-          "text": "单笔 10%",
+          "text": "每次加仓 20%",
           "source": "user_explicit"
         },
         "openSlots": []
@@ -859,22 +852,7 @@
             "sideScope": "long",
             "addMode": "profit_pct",
             "addRatio": 2,
-            "profitThreshold": 2,
-            "drawdownThreshold": 2
-          },
-          "evidence": {
-            "text": "盈利 2% 后加仓",
-            "source": "user_explicit"
-          }
-        }
-      ],
-      "risk": [
-        {
-          "key": "risk.take_profit_pct",
-          "phase": "exit",
-          "params": {
-            "valuePct": 2,
-            "basis": "entry_avg_price"
+            "profitThreshold": 2
           },
           "evidence": {
             "text": "盈利 2% 后加仓",
@@ -916,21 +894,7 @@
             "sideScope": "long",
             "addMode": "profit_pct",
             "addRatio": 2,
-            "profitThreshold": 2,
-            "drawdownThreshold": 2
-          },
-          "evidence": {
-            "text": "盈利 2% 后加仓",
-            "source": "user_explicit"
-          },
-          "sideScope": "both"
-        },
-        {
-          "key": "risk.take_profit_pct",
-          "phase": "exit",
-          "params": {
-            "valuePct": 2,
-            "basis": "entry_avg_price"
+            "profitThreshold": 2
           },
           "evidence": {
             "text": "盈利 2% 后加仓",

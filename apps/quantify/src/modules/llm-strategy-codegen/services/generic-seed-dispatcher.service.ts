@@ -37,6 +37,7 @@ import type { SemanticPositionSizingContract } from '../types/semantic-state'
  */
 import { Injectable } from '@nestjs/common'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+import { isTimeframeGroupableTriggerKey } from '../atom-contracts/trigger-display-contract'
 import {
   matchKeyword,
   matchVerbDirection,
@@ -696,9 +697,13 @@ function removeInPlace<T>(items: T[], predicate: (item: T) => boolean): void {
  * contextSlots 抽取（NL 通用解析，不读 atom-key）
  * ────────────────────────────────────────────────────────────────────────── */
 
-const EXCHANGE_RE = /\b(okx|binance|bybit|coinbase|kraken|huobi|gate|bitget)\b/i
+const EXCHANGE_RE = /\b(okx|binance|bybit|coinbase|kraken|huobi|gate|bitget)\b|欧易|币安/i
+const EXCHANGE_ALIASES: Readonly<Record<string, string>> = {
+  '欧易': 'okx',
+  '币安': 'binance',
+}
 // quote 枚举从 SYMBOL_QUOTES 派生，两处保持单一真相源（M1）
-const SYMBOL_RE = new RegExp(`([A-Z]{2,10})[\\s/]?(${SYMBOL_QUOTES.join('|')})\\b`)
+const SYMBOL_RE = new RegExp(`([A-Z]{2,10})[\\s/]?(${SYMBOL_QUOTES.join('|')})\\b`, 'i')
 const TIMEFRAME_RE = /\b(1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w)\b/i
 /**
  * PR2c-final-2 Step1：复合 timeframe 形态识别（短 token surface 精度补齐）。
@@ -713,7 +718,8 @@ const TIMEFRAME_RE = /\b(1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w)\b/i
  * 与 BUCKET_LITERALS / atom-key prefix 集合不交叉，AC-13 / no-atom-key-literal
  * 不会误报。
  */
-const TIMEFRAME_COMPOUND_RE = /(?<![A-Za-z0-9])(\d{1,3})\s*(分钟|小时|天|周|min(?:ute)?s?|hours?|days?|weeks?|m|h|d|w)(?![A-Za-z0-9])/i
+const TIMEFRAME_COMPOUND_RE = /(?<![A-Za-z0-9])(\d{1,3})\s*(分钟|小时|天|周(?!期)|min(?:ute)?s?|hours?|days?|weeks?|m|h|d|w)(?![A-Za-z0-9])/i
+const TIMEFRAME_TOKEN_RE = /(?<![A-Za-z0-9])(?:(1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w)|(\d{1,3})\s*(分钟|小时|天|周(?!期)|min(?:ute)?s?|hours?|days?|weeks?|m|h|d|w))(?![A-Za-z0-9])/gi
 const TIMEFRAME_UNIT_TO_CANONICAL: Readonly<Record<string, 'm' | 'h' | 'd' | 'w'>> = {
   '分钟': 'm',
   'min': 'm',
@@ -734,17 +740,33 @@ const TIMEFRAME_UNIT_TO_CANONICAL: Readonly<Record<string, 'm' | 'h' | 'd' | 'w'
   'weeks': 'w',
   'w': 'w',
 }
-function tryNormalizeTimeframe(text: string): string | undefined {
-  // 优先匹配标准简写（避免 '15分钟' 中的 '15m' 子串先被命中产生错位）
-  const direct = text.match(TIMEFRAME_RE)
-  if (direct) return direct[1].toLowerCase()
-  const compound = text.match(TIMEFRAME_COMPOUND_RE)
-  if (!compound) return undefined
-  const value = Number.parseInt(compound[1], 10)
+function normalizeCompoundTimeframe(valueRaw: string | undefined, unitRaw: string | undefined): string | undefined {
+  if (!valueRaw || !unitRaw) return undefined
+  const value = Number.parseInt(valueRaw, 10)
   if (Number.isNaN(value) || value <= 0) return undefined
-  const unit = TIMEFRAME_UNIT_TO_CANONICAL[compound[2].toLowerCase()]
+  const unit = TIMEFRAME_UNIT_TO_CANONICAL[unitRaw.toLowerCase()]
   if (!unit) return undefined
   return `${value}${unit}`
+}
+function tryNormalizeTimeframes(text: string): string[] {
+  const values: string[] = []
+  const seen = new Set<string>()
+  for (const match of text.matchAll(TIMEFRAME_TOKEN_RE)) {
+    const timeframe = typeof match[1] === 'string' && match[1].length > 0
+      ? match[1].toLowerCase()
+      : normalizeCompoundTimeframe(match[2], match[3])
+    if (!timeframe || seen.has(timeframe)) continue
+    seen.add(timeframe)
+    values.push(timeframe)
+  }
+  return values
+}
+function tryNormalizeTimeframe(text: string): string | undefined {
+  const firstByPosition = tryNormalizeTimeframes(text)[0]
+  if (firstByPosition) return firstByPosition
+  const compound = text.match(TIMEFRAME_COMPOUND_RE)
+  if (!compound) return undefined
+  return normalizeCompoundTimeframe(compound[1], compound[2])
 }
 // #1296：加 \b 边界，避免 'perpetual swap' / 'perplexity' 等英文长词被前缀误命中；
 // 中文 '合约' / '永续' 不需要边界（CJK 字符默认无 word char 邻接歧义）。
@@ -801,10 +823,14 @@ function tryInferShortSymbol(text: string): InferredSymbolSlot | undefined {
   return undefined
 }
 
+function normalizeExchange(value: string): string {
+  return EXCHANGE_ALIASES[value] ?? value.toLowerCase()
+}
+
 function extractContextSlots(text: string): ContextSlots | undefined {
   const slots: ContextSlots = {}
   const exMatch = text.match(EXCHANGE_RE)
-  if (exMatch) slots.exchange = exMatch[1].toLowerCase()
+  if (exMatch) slots.exchange = normalizeExchange(exMatch[1] ?? exMatch[0])
   const symMatch = text.match(SYMBOL_RE)
   if (symMatch) {
     const base = symMatch[1].toUpperCase()
@@ -996,47 +1022,56 @@ export class GenericSeedDispatcher {
 
     for (const clause of clauses) {
       const matches = this.matchClauseAgainstRegistry(clause)
+      const clauseTimeframes = tryNormalizeTimeframes(clause)
       for (const m of matches) {
         const contract = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract>)[m.atomKey]
         if (!contract) continue
         const slot = BUCKET_TO_PATCH_SLOT[contract.bucket]
 
-        const params = { ...m.params }
+        const timeframeFanout = clauseTimeframes.length > 1 && isTimeframeGroupableTriggerKey(m.atomKey)
+          ? clauseTimeframes
+          : [null]
         const phase = m.phase ?? 'entry'
         const sideScope = m.sideScope ?? 'both'
 
-        // Issue #1338 Phase 4：dedupe key 用 (atomKey, phase, sideScope, sorted params JSON)，
-        // 跨 clause 等价命中只保留首条。
-        const sortedParams = Object.fromEntries(
-          Object.entries(params).sort(([a], [b]) => a.localeCompare(b)),
-        )
-        const dedupeKey = `${m.atomKey}|${phase}|${sideScope}|${JSON.stringify(sortedParams)}`
-        if (atomDedupeKeys.has(dedupeKey)) continue
-        atomDedupeKeys.add(dedupeKey)
-        if (slot) {
-          if (slotDedupeKeys[slot].has(dedupeKey)) continue
-          slotDedupeKeys[slot].add(dedupeKey)
-        }
+        for (const fanoutTimeframe of timeframeFanout) {
+          const params = fanoutTimeframe === null
+            ? { ...m.params }
+            : { ...m.params, timeframe: fanoutTimeframe }
 
-        // evidence.source 由 atom surface.evidenceProvenance 声明（数据驱动，无 atom-key 字面量比较）。
-        // external.signal 声明 'webhook'；其余 atom 省略，默认 'user_explicit'。
-        const evidenceSource: NonNullable<AtomContractSurface['evidenceProvenance']> = contract.surface?.evidenceProvenance ?? 'user_explicit'
-        const evidence = { text: m.clauseText, source: evidenceSource }
-        // phase は resolver が解決した後に全 slot に記録する（M1: actionMatchesFulfilledPhases が
-        // action.phase を参照できるよう action にも phase を付与）。
-        // sideScope は triggers のみ意味を持つため引き続き trigger 限定。
-        const node: PatchAtomNode = {
-          key: m.atomKey,
-          phase,
-          params,
-          evidence,
-        }
-        if (slot === 'triggers') {
-          node.sideScope = sideScope
-        }
-        atomItems.push({ ...node, sideScope })
-        if (slot) {
-          slotItems[slot].push(node)
+          // Issue #1338 Phase 4：dedupe key 用 (atomKey, phase, sideScope, sorted params JSON)，
+          // 跨 clause 等价命中只保留首条。
+          const sortedParams = Object.fromEntries(
+            Object.entries(params).sort(([a], [b]) => a.localeCompare(b)),
+          )
+          const dedupeKey = `${m.atomKey}|${phase}|${sideScope}|${JSON.stringify(sortedParams)}`
+          if (atomDedupeKeys.has(dedupeKey)) continue
+          atomDedupeKeys.add(dedupeKey)
+          if (slot) {
+            if (slotDedupeKeys[slot].has(dedupeKey)) continue
+            slotDedupeKeys[slot].add(dedupeKey)
+          }
+
+          // evidence.source 由 atom surface.evidenceProvenance 声明（数据驱动，无 atom-key 字面量比较）。
+          // external.signal 声明 'webhook'；其余 atom 省略，默认 'user_explicit'。
+          const evidenceSource: NonNullable<AtomContractSurface['evidenceProvenance']> = contract.surface?.evidenceProvenance ?? 'user_explicit'
+          const evidence = { text: m.clauseText, source: evidenceSource }
+          // phase は resolver が解決した後に全 slot に記録する（M1: actionMatchesFulfilledPhases が
+          // action.phase を参照できるよう action にも phase を付与）。
+          // sideScope は triggers のみ意味を持つため引き続き trigger 限定。
+          const node: PatchAtomNode = {
+            key: m.atomKey,
+            phase,
+            params,
+            evidence,
+          }
+          if (slot === 'triggers') {
+            node.sideScope = sideScope
+          }
+          atomItems.push({ ...node, sideScope })
+          if (slot) {
+            slotItems[slot].push(node)
+          }
         }
       }
     }

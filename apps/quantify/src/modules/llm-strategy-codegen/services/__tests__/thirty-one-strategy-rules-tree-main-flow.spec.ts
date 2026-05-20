@@ -446,4 +446,39 @@ describe('31-strategy rules tree main flow regressions', () => {
       }),
     ])
   })
+
+  it('keeps compact multi-timeframe EMA confirmations through dispatcher fallback rules tree into canonical spec', () => {
+    const text = '15min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约 单笔10%'
+    const dispatcherPatch = new GenericSeedDispatcher().dispatch(text)
+    const fallback = new PlannerDispatcherMergeService().buildRulesTreeFallbackFromDispatcher(dispatcherPatch, text)
+    const state = new SemanticSeedStateBuilderService().build(fallback, text)
+    const projected = state ? new SemanticRuleProjectionService().reprojectFromRules(state) : null
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(projected!)
+    const entryRule = spec.rules.find(rule => rule.phase === 'entry')
+    const exitRule = spec.rules.find(rule => rule.phase === 'exit')
+    const entryChildren = entryRule?.condition.kind === 'AND' ? entryRule.condition.children : []
+    const entryTimeframes = entryChildren
+      .filter(child => child.kind === 'atom' && child.key === 'indicator.above')
+      .map(child => child.kind === 'atom' ? child.params?.timeframe : undefined)
+      .sort()
+
+    expect(spec.market).toEqual(expect.objectContaining({
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
+      defaultTimeframe: '15m',
+      timeframes: ['15m', '1h', '4h'],
+    }))
+    expect(spec.dataRequirements.requiredTimeframes).toEqual(['15m', '1h', '4h'])
+    expect(entryTimeframes).toEqual(['15m', '1h', '4h'])
+    expect(exitRule?.condition).toEqual(expect.objectContaining({
+      kind: 'atom',
+      key: 'indicator.below',
+      params: expect.objectContaining({
+        indicator: 'ema',
+        'reference.period': 20,
+      }),
+    }))
+  })
 })
