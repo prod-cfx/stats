@@ -1496,6 +1496,67 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 
+  it('compiles moving-average relative compare atoms as MA fast series versus MA reference series', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const canonicalSpec = {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        defaultTimeframe: '1h',
+        timeframes: ['1h'],
+      },
+      indicators: [],
+      sizing: { mode: 'RATIO', value: 0.1 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['1h'],
+      },
+      rules: [{
+        id: 'entry-ma50-above-ma200',
+        phase: 'entry',
+        priority: 100,
+        sideScope: 'long',
+        condition: {
+          kind: 'atom',
+          key: 'indicator.above',
+          semanticScope: 'market',
+          op: 'GTE',
+          params: {
+            indicator: 'ma',
+            period: 50,
+            reference: { period: 200 },
+            referenceRole: 'long_term',
+          } as unknown as Record<string, string | number | boolean>,
+        },
+        actions: [{ type: 'OPEN_LONG' }],
+      }],
+    } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'sma_50_1h', kind: 'SMA', timeframe: '1h', params: { period: 50 } }),
+      expect.objectContaining({ id: 'sma_200_1h', kind: 'SMA', timeframe: '1h', params: { period: 200 } }),
+    ]))
+    expect(result.ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'GTE', args: ['sma_50_1h', 'sma_200_1h'] }),
+    ]))
+  })
+
   it('emits one entry decision for semantic multi-timeframe confirmation strategies', () => {
     const semanticState: SemanticState = {
       version: 1,

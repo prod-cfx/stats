@@ -1924,6 +1924,13 @@ export class SemanticStateProjectionService {
     const period = periodValue === null ? '' : this.formatNumber(periodValue)
     const indicator = this.formatIndicatorName(trigger)
     const reference = `${indicator}${period}`
+    const ownPeriod = this.readFiniteNumber(trigger.params.period)
+    if (ownPeriod !== null && periodValue !== null) {
+      const left = `${indicator}${this.formatNumber(ownPeriod)}`
+      return trigger.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key
+        ? `${left} 在 ${reference} 上方`
+        : `${left} 低于 ${reference}`
+    }
     return trigger.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key
       ? `价格在 ${reference} 上方`
       : `价格低于 ${reference}`
@@ -3354,6 +3361,13 @@ export class SemanticStateProjectionService {
       const timeframe = this.readString(params.timeframe)
       const prefix = timeframe ? `${timeframe} ` : ''
       const reference = `${indicator}${this.formatNumber(period)}`
+      const ownPeriod = this.readFiniteNumber(params.period)
+      if (ownPeriod !== null) {
+        const left = `${indicator}${this.formatNumber(ownPeriod)}`
+        return atomKey === ATOM_CONTRACT_REGISTRY['indicator.above'].key
+          ? `${prefix}${left} 在 ${reference} 上方`
+          : `${prefix}${left} 低于 ${reference}`
+      }
       return atomKey === ATOM_CONTRACT_REGISTRY['indicator.above'].key
         ? `${prefix}价格在 ${reference} 上方`
         : `${prefix}价格低于 ${reference}`

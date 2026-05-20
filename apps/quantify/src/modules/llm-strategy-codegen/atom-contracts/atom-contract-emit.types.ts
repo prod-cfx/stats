@@ -124,6 +124,11 @@ export interface IrCompileHelpers {
     atom: AtomIrCompileInput,
     timeframe: string,
   ) => string
+  resolveIndicatorCompareLeftRef: (
+    ctx: IrCompileContext,
+    atom: AtomIrCompileInput,
+    timeframe: string,
+  ) => string
   upsertPredicate: (
     predicateMap: Map<string, PredicateDef>,
     baseId: string,
@@ -503,4 +508,3 @@ export interface AtomContractEmit {
   readonly riskPredicateShape?: RiskPredicateShape | null
   readonly evidenceSource: EvidenceSource
 }
-

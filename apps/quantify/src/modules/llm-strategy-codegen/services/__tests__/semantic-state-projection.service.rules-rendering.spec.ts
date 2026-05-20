@@ -113,6 +113,25 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
     expect(view.summary).not.toContain('指标高于阈值')
   })
 
+  it('renders moving-average relative compare from left period and nested reference period', () => {
+    const rules: SemanticRule[] = [{
+      id: 'rule-ma50-above-ma200',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: {
+        kind: 'atom',
+        key: 'indicator.above',
+        params: { indicator: 'ma', period: 50, reference: { period: 200 }, timeframe: '1h' },
+      },
+      effects: [],
+    }]
+    const view = service.buildConversationView(baseState({ rules }))
+    expect(view.summary).toContain('MA50')
+    expect(view.summary).toContain('MA200')
+    expect(view.summary).toContain('1h')
+    expect(view.summary).not.toContain('价格在 MA200 上方')
+  })
+
   it('renders rolling channel breakout with high/low reference', () => {
     const rules: SemanticRule[] = [{
       id: 'rule-channel-breakout',

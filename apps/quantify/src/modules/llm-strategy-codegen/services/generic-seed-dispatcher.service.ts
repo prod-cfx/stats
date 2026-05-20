@@ -713,7 +713,7 @@ const TIMEFRAME_RE = /\b(1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w)\b/i
  * 与 BUCKET_LITERALS / atom-key prefix 集合不交叉，AC-13 / no-atom-key-literal
  * 不会误报。
  */
-const TIMEFRAME_COMPOUND_RE = /\b(\d{1,3})\s*(分钟|小时|天|周|min(?:ute)?s?|hours?|days?|weeks?|m|h|d|w)\b/i
+const TIMEFRAME_COMPOUND_RE = /(?<![A-Za-z0-9])(\d{1,3})\s*(分钟|小时|天|周|min(?:ute)?s?|hours?|days?|weeks?|m|h|d|w)(?![A-Za-z0-9])/i
 const TIMEFRAME_UNIT_TO_CANONICAL: Readonly<Record<string, 'm' | 'h' | 'd' | 'w'>> = {
   '分钟': 'm',
   'min': 'm',
