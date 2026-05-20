@@ -64,7 +64,75 @@ const PROJECTION_PARAM_VALUE_LABELS: Readonly<Record<string, Readonly<Record<str
     breakout: { zh: '突破后触发', en: 'on breakout' },
     close: { zh: '收盘确认后触发', en: 'on close' },
   },
+  sideMode: {
+    long_only: { zh: '只做多', en: 'long only' },
+    short_only: { zh: '只做空', en: 'short only' },
+    both: { zh: '双向', en: 'both' },
+    bidirectional: { zh: '双向', en: 'bidirectional' },
+  },
+  breakoutAction: {
+    continue: { zh: '越界后继续', en: 'continue on breakout' },
+    stop: { zh: '越界后停止', en: 'stop on breakout' },
+  },
 } as const
+
+const PROJECTION_PARAM_SLOT_LABELS: Readonly<Record<string, {
+  zh: (value: string) => string
+  en: (value: string) => string
+}>> = {
+  centerOffsetPct: {
+    zh: value => `中心上下各 ${value}%`,
+    en: value => `center offset ${value}%`,
+  },
+  levels: {
+    zh: value => `共 ${value} 格`,
+    en: value => `${value} levels`,
+  },
+  levelCount: {
+    zh: value => `共 ${value} 格`,
+    en: value => `${value} levels`,
+  },
+  gridCount: {
+    zh: value => `共 ${value} 格`,
+    en: value => `${value} levels`,
+  },
+  stepPct: {
+    zh: value => `每格 ${value}%`,
+    en: value => `step ${value}%`,
+  },
+  gridStepPct: {
+    zh: value => `每格 ${value}%`,
+    en: value => `step ${value}%`,
+  },
+  spacingPct: {
+    zh: value => `每格 ${value}%`,
+    en: value => `step ${value}%`,
+  },
+  perGridSizing: {
+    zh: value => `每格 ${value}`,
+    en: value => `${value} per grid`,
+  },
+  perOrderBudget: {
+    zh: value => `每单 ${value}`,
+    en: value => `${value} per order`,
+  },
+} as const
+
+const PROJECTION_PARAM_PAIR_LABELS: ReadonlyArray<{
+  lowerKeys: readonly string[]
+  upperKeys: readonly string[]
+  zh: (lower: string, upper: string) => string
+  en: (lower: string, upper: string) => string
+}> = [{
+  lowerKeys: ['rangeLower', 'rangeMin', 'lower'],
+  upperKeys: ['rangeUpper', 'rangeMax', 'upper'],
+  zh: (lower, upper) => `区间 ${lower}-${upper}`,
+  en: (lower, upper) => `range ${lower}-${upper}`,
+}]
+
+const PROJECTION_ALWAYS_RENDER_DEFAULT_PARAM_SLOTS: ReadonlySet<string> = new Set([
+  'sideMode',
+])
 
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
@@ -2493,18 +2561,37 @@ export class SemanticStateProjectionService {
     const publicNameForLocale = publicName?.[locale]?.trim()
     if (!publicNameForLocale || baseSummary !== publicNameForLocale) return baseSummary
 
-    type ParamSlot = { kind?: string, default?: unknown, enum?: readonly string[] }
+    type ParamSlot = { kind?: string, default?: unknown, enum?: readonly string[], range?: readonly [number, number] }
     type SurfaceShape = { paramSlots?: Record<string, ParamSlot> }
     const entry = (ATOM_CONTRACT_REGISTRY as Record<string, { surface?: SurfaceShape } | undefined>)[atomKey]
     const paramSlots = entry?.surface?.paramSlots
     if (!paramSlots) return baseSummary
 
     const rendered: string[] = []
+    const consumedSlotKeys = new Set<string>()
+    for (const pair of PROJECTION_PARAM_PAIR_LABELS) {
+      const lower = this.readFirstFiniteParam(params, pair.lowerKeys)
+      const upper = this.readFirstFiniteParam(params, pair.upperKeys)
+      if (lower === null || upper === null) continue
+      for (const key of [...pair.lowerKeys, ...pair.upperKeys]) consumedSlotKeys.add(key)
+      rendered.push(locale === 'zh'
+        ? pair.zh(this.formatNumber(lower), this.formatNumber(upper))
+        : pair.en(this.formatNumber(lower), this.formatNumber(upper)))
+    }
+
     for (const [slotKey, slot] of Object.entries(paramSlots)) {
+      if (consumedSlotKeys.has(slotKey)) continue
       const v = (params as Record<string, unknown>)[slotKey]
       if (v === undefined || v === null || v === '') continue
       // 值 === default → 跳过（技术兜底，无价值）
-      if (slot && 'default' in slot && slot.default !== undefined && slot.default === v) continue
+      if (
+        slot
+        && 'default' in slot
+        && slot.default !== undefined
+        && slot.default === v
+        && !PROJECTION_ALWAYS_RENDER_DEFAULT_PARAM_SLOTS.has(slotKey)
+      ) continue
+      if (this.isInvalidPositiveNumericSlotPlaceholder(slot, v)) continue
       const label = this.renderParamValueLabel(slotKey, slot.kind, v, locale)
       if (label && label.length > 0) rendered.push(label)
     }
@@ -2530,10 +2617,14 @@ export class SemanticStateProjectionService {
     locale: 'zh' | 'en',
   ): string {
     if (kind === 'percent' && typeof value === 'number' && Number.isFinite(value)) {
-      return `${Math.abs(value)}%`
+      const valueText = `${Math.abs(value)}`
+      const label = PROJECTION_PARAM_SLOT_LABELS[slotKey]?.[locale]
+      return label ? label(valueText) : `${valueText}%`
     }
     if (kind === 'number' && typeof value === 'number' && Number.isFinite(value)) {
-      return `${value}`
+      const valueText = this.formatNumber(value)
+      const label = PROJECTION_PARAM_SLOT_LABELS[slotKey]?.[locale]
+      return label ? label(valueText) : valueText
     }
     if (kind === 'duration' && typeof value === 'string' && value.length > 0) {
       return value
@@ -2547,6 +2638,24 @@ export class SemanticStateProjectionService {
       return ''
     }
     return ''
+  }
+
+  private readFirstFiniteParam(params: Record<string, unknown>, keys: readonly string[]): number | null {
+    for (const key of keys) {
+      const value = params[key]
+      if (typeof value === 'number' && Number.isFinite(value)) return value
+    }
+    return null
+  }
+
+  private isInvalidPositiveNumericSlotPlaceholder(
+    slot: { kind?: string, range?: readonly [number, number] },
+    value: unknown,
+  ): boolean {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return false
+    if (slot.kind !== 'number' && slot.kind !== 'percent') return false
+    const min = slot.range?.[0]
+    return typeof min === 'number' && min > 0 && value <= 0
   }
 
   /**
@@ -3277,7 +3386,7 @@ export class SemanticStateProjectionService {
   private renderRule(rule: SemanticRule): string {
     const phaseLabel = this.formatRulePhaseLabel(rule.phase)
     // effects 通常是 action / risk 副作用，渲染后用 "→" 衔接条件，保留可读性
-    const effectParts = (rule.effects ?? [])
+    const rawEffectParts = (rule.effects ?? [])
       .map(effect => this.renderAtomExpr(effect))
       .filter(s => s.length > 0)
 
@@ -3295,11 +3404,14 @@ export class SemanticStateProjectionService {
     let bodyText: string
     if (isAlwaysOnCondition) {
       // 跳过 always-on condition；只输出 effects（如 "止损 5% 强制平仓"）
+      const effectParts = this.dedupeKeepOrder(rawEffectParts)
       bodyText = effectParts.length > 0 ? effectParts.join('，') : ''
     }
     else {
       const condition = this.renderAtomExpr(rule.condition)
       if (!condition || condition.length === 0) return ''
+      const effectParts = this.dedupeKeepOrder(rawEffectParts)
+        .filter(effect => effect !== condition)
       const effectSuffix = effectParts.length > 0 ? ` → ${effectParts.join('，')}` : ''
       bodyText = `${condition}${effectSuffix}`
     }

@@ -95,6 +95,52 @@ describe('Issue #1403 子故障 D — grid + 止损 summary/compileability 不�
       const view = projection.buildConversationView(gridState())
       expect(view.summary).toMatch(/网格区间再平衡/)
     })
+
+    it('rules tree 中 grid condition/effect 同时存在时摘要不泄漏内部参数且不重复渲染', () => {
+      const state = {
+        ...gridState(),
+        rules: [{
+          id: 'r-grid',
+          phase: 'entry' as const,
+          sideScope: 'both' as const,
+          condition: {
+            kind: 'atom' as const,
+            key: 'grid.range_rebalance',
+            params: {
+              rangeLower: 79200,
+              rangeUpper: 80200,
+              centerOffsetPct: 0,
+              levels: 0,
+              stepPct: 0.1,
+              perGridSizing: 10,
+              sideMode: 'both',
+            },
+          },
+          effects: [{
+            kind: 'atom' as const,
+            key: 'grid.range_rebalance',
+            params: {
+              rangeLower: 79200,
+              rangeUpper: 80200,
+              centerOffsetPct: 0,
+              levels: 0,
+              stepPct: 0.1,
+              perGridSizing: 10,
+              sideMode: 'both',
+            },
+          }],
+        }],
+      } as unknown as SemanticState
+
+      const view = projection.buildConversationView(state)
+
+      expect(view.summary).toContain('双向网格')
+      expect(view.summary).toContain('区间 79200-80200')
+      expect(view.summary).toContain('每格 0.1%')
+      expect(view.summary).toContain('每格 10')
+      expect(view.summary).not.toContain('0，0')
+      expect(view.summary).not.toContain('→ 网格区间再平衡')
+    })
   })
 
   describe('B. evaluateCanonicalCompileability 在 spec.orderPrograms 非空时视为 entry+exit 自洽', () => {
