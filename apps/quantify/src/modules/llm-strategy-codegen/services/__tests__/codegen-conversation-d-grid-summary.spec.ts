@@ -134,12 +134,103 @@ describe('Issue #1403 子故障 D — grid + 止损 summary/compileability 不�
 
       const view = projection.buildConversationView(state)
 
-      expect(view.summary).toContain('双向网格')
+      expect(view.summary).toContain('双向')
       expect(view.summary).toContain('区间 79200-80200')
       expect(view.summary).toContain('每格 0.1%')
       expect(view.summary).toContain('每格 10')
       expect(view.summary).not.toContain('0，0')
       expect(view.summary).not.toContain('→ 网格区间再平衡')
+    })
+
+    it('rules tree 已承载 grid 时，bucket 补偿摘要只保留仓位，不重复渲染同一约束 atom', () => {
+      const state = {
+        ...gridState(),
+        position: {
+          mode: 'fixed_ratio',
+          value: 0.1,
+          sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+          positionMode: 'long_short',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        rules: [{
+          id: 'r-grid',
+          phase: 'entry' as const,
+          sideScope: 'both' as const,
+          condition: {
+            kind: 'atom' as const,
+            key: 'grid.range_rebalance',
+            params: {
+              rangeLower: 60000,
+              rangeUpper: 80000,
+              stepPct: 0.5,
+              perGridSizing: 10,
+              sideMode: 'both',
+            },
+          },
+          effects: [{
+            kind: 'atom' as const,
+            key: 'grid.range_rebalance',
+            params: {
+              rangeLower: 60000,
+              rangeUpper: 80000,
+              stepPct: 0.5,
+              perGridSizing: 10,
+              sideMode: 'both',
+            },
+          }],
+        }],
+      } as unknown as SemanticState
+
+      const view = projection.buildConversationView(state)
+      const gridMentions = view.summary.match(/网格区间再平衡/g) ?? []
+
+      expect(gridMentions).toHaveLength(1)
+      expect(view.summary).toContain('仓位：10%')
+      expect(view.summary).toContain('区间 60000-80000')
+      expect(view.summary).toContain('每格 0.5%')
+    })
+
+    it('退出规则里的持仓技术 guard 不渲染到用户摘要，但止损止盈仍保留', () => {
+      const state = {
+        ...gridState(),
+        rules: [
+          {
+            id: 'r-stop-loss',
+            phase: 'exit' as const,
+            sideScope: 'both' as const,
+            condition: {
+              kind: 'and' as const,
+              children: [
+                { kind: 'atom' as const, key: 'position.has_position', params: { sideScope: 'any' } },
+                { kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
+              ],
+            },
+            effects: [{ kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } }],
+          },
+          {
+            id: 'r-take-profit',
+            phase: 'exit' as const,
+            sideScope: 'both' as const,
+            condition: {
+              kind: 'and' as const,
+              children: [
+                { kind: 'atom' as const, key: 'position.has_position', params: { sideScope: 'any' } },
+                { kind: 'atom' as const, key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } },
+              ],
+            },
+            effects: [{ kind: 'atom' as const, key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } }],
+          },
+        ],
+      } as unknown as SemanticState
+
+      const view = projection.buildConversationView(state)
+
+      expect(view.summary).not.toContain('已有任意方向仓位')
+      expect(view.summary).not.toContain('阻止新开仓')
+      expect(view.summary).toContain('止损')
+      expect(view.summary).toContain('止盈')
     })
   })
 

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticOrchestrationNode, SemanticSlotState, SemanticState } from '../types/semantic-state'
 import type { AtomExpr, SemanticRule, SemanticRulePhase, SemanticRuleSideScope } from '../types/atom-expr'
+import { collectAtomLeaves } from '../types/atom-expr'
 import { isEntryPredicateTriggerKey, isExitPredicateTriggerKey, isTimeframeGroupableTriggerKey } from '../atom-contracts/trigger-display-contract'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
@@ -19,6 +20,13 @@ import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from 
 //   UI 无价值。新增 always-on atom 只需扩此集合。
 const ALWAYS_ON_ATOM_KEYS: ReadonlySet<string> = new Set([
   'execution.on_start',
+])
+
+// 技术性 guard atom：参与 rules tree 执行语义，但不应污染普通用户摘要。
+// 这些 guard 只表达运行期持仓状态门控，不是用户写下的交易条件本体。
+const TECHNICAL_RULE_CONDITION_ATOM_KEYS: ReadonlySet<string> = new Set([
+  'position.has_position',
+  'position.no_position',
 ])
 
 /**
@@ -241,7 +249,8 @@ export class SemanticStateProjectionService {
     const triggerSummary = this.buildTriggerSummary(deterministicTriggers, false)
     const actionSummary = this.buildActionSummary(deterministicActions, state)
     const riskSummary = this.buildRiskSummary(deterministicRisk)
-    const positionSummary = this.buildPositionSummary(state.position, state.positionConstraint)
+    const ruleAtomKeys = this.collectRuleAtomKeys(state.rules ?? [])
+    const positionSummary = this.buildPositionSummary(state.position, state.positionConstraint, ruleAtomKeys)
     const executionContext = this.buildExecutionContext(state.contextSlots)
     const inferredDefaults = this.buildInferredDefaults(deterministicRisk)
     // #1152 contract parity：orchestration locked 节点必须计入 deterministic 判定与 summary，
@@ -2914,7 +2923,11 @@ export class SemanticStateProjectionService {
     return '前收盘'
   }
 
-  private buildPositionSummary(position: SemanticState['position'], constraints: SemanticState['positionConstraint'] = []): string {
+  private buildPositionSummary(
+    position: SemanticState['position'],
+    constraints: SemanticState['positionConstraint'] = [],
+    omitConstraintKeys: ReadonlySet<string> = new Set(),
+  ): string {
     // #1169：position.status==='locked' 即可进入；validateSemanticPositionContract 对
     //   constraint_only 模式（sizing=null）会判 invalid 导致早退，而 constraints 路径仍可渲染。
     //   只对"有 sizing 时"再做合约校验；纯 constraint_only 路径直接走 constraints 渲染。
@@ -2964,6 +2977,7 @@ export class SemanticStateProjectionService {
     const constraintParts: string[] = []
     for (const constraint of constraints ?? []) {
       if (constraint.status === 'superseded') continue
+      if (omitConstraintKeys.has(constraint.key)) continue
       try {
         const entry = getLegacyEntry(constraint.key)
         const renderer = entry?.displayRenderer
@@ -2991,6 +3005,21 @@ export class SemanticStateProjectionService {
       return constraintParts.join('；')
     }
     return ''
+  }
+
+  private collectRuleAtomKeys(rules: readonly SemanticRule[]): ReadonlySet<string> {
+    const keys = new Set<string>()
+    for (const rule of rules) {
+      for (const atom of collectAtomLeaves(rule.condition)) {
+        keys.add(atom.key)
+      }
+      for (const effect of rule.effects ?? []) {
+        for (const atom of collectAtomLeaves(effect)) {
+          keys.add(atom.key)
+        }
+      }
+    }
+    return keys
   }
 
   private hasValidLockedPosition(position: SemanticState['position']): position is SemanticState['position'] & { status: 'locked' } {
@@ -3352,6 +3381,39 @@ export class SemanticStateProjectionService {
     }
   }
 
+  private renderUserFacingRuleCondition(expr: AtomExpr): string {
+    switch (expr.kind) {
+      case 'atom':
+        if (TECHNICAL_RULE_CONDITION_ATOM_KEYS.has(expr.key)) {
+          return ''
+        }
+        return this.renderAtomExpr(expr)
+      case 'and': {
+        const parts = this.dedupeKeepOrder(expr.children.map(child => this.renderUserFacingRuleCondition(child)).filter(s => s.length > 0))
+        return parts.join(' 同时 ')
+      }
+      case 'or': {
+        const parts = this.dedupeKeepOrder(expr.children.map(child => this.renderUserFacingRuleCondition(child)).filter(s => s.length > 0))
+        return parts.join(' 或 ')
+      }
+      case 'not': {
+        const child = this.renderUserFacingRuleCondition(expr.child)
+        return child.length > 0 ? `非 ${child}` : ''
+      }
+      case 'sequence': {
+        const parts = this.dedupeKeepOrder(expr.steps.map(step => this.renderUserFacingRuleCondition(step)).filter(s => s.length > 0))
+        if (parts.length === 0) return ''
+        const head = `先 ${parts[0]}`
+        const tail = parts.slice(1).map(p => `然后 ${p}`).join('，')
+        const body = tail.length > 0 ? `${head}，${tail}` : head
+        const modifiers: string[] = []
+        if (expr.nextBarOnly === true) modifiers.push('下一根')
+        if (typeof expr.withinBars === 'number' && expr.withinBars > 0) modifiers.push(`${expr.withinBars} 根内`)
+        return modifiers.length > 0 ? `${body}（${modifiers.join('，')}）` : body
+      }
+    }
+  }
+
   private tryRenderRulesTreeAtomSummary(atomKey: string, params: Record<string, unknown>): string | null {
     if (atomKey === ATOM_CONTRACT_REGISTRY['indicator.above'].key || atomKey === ATOM_CONTRACT_REGISTRY['indicator.below'].key) {
       const period = this.readIndicatorReferencePeriod(params)
@@ -3422,12 +3484,16 @@ export class SemanticStateProjectionService {
       bodyText = effectParts.length > 0 ? effectParts.join('，') : ''
     }
     else {
-      const condition = this.renderAtomExpr(rule.condition)
-      if (!condition || condition.length === 0) return ''
       const effectParts = this.dedupeKeepOrder(rawEffectParts)
-        .filter(effect => effect !== condition)
-      const effectSuffix = effectParts.length > 0 ? ` → ${effectParts.join('，')}` : ''
-      bodyText = `${condition}${effectSuffix}`
+      const condition = this.renderUserFacingRuleCondition(rule.condition)
+      if (!condition || condition.length === 0) {
+        bodyText = effectParts.length > 0 ? effectParts.join('，') : ''
+      }
+      else {
+        const visibleEffectParts = effectParts.filter(effect => effect !== condition)
+        const effectSuffix = visibleEffectParts.length > 0 ? ` → ${visibleEffectParts.join('，')}` : ''
+        bodyText = `${condition}${effectSuffix}`
+      }
     }
 
     if (bodyText.length === 0) return ''
