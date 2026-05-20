@@ -1847,14 +1847,12 @@ export class CanonicalSpecBuilderService {
         continue
       }
 
-      const positionPresenceGateTriggers = group.phase === 'entry'
-        ? group.members.filter(trigger => this.isPositionPresenceGateTrigger(trigger))
-        : []
+      const positionPresenceGateTriggers = group.members.filter(trigger => this.isPositionPresenceGateTrigger(trigger))
       const conditionMembers = positionPresenceGateTriggers.length > 0
         ? group.members.filter(trigger => !this.isPositionPresenceGateTrigger(trigger))
         : group.members
 
-      for (const gateTrigger of positionPresenceGateTriggers) {
+      for (const gateTrigger of group.phase === 'entry' ? positionPresenceGateTriggers : []) {
         const gateCondition = this.buildConditionFromSemanticTriggerGroup([gateTrigger], defaultTimeframe)
         if (!gateCondition || !this.isNoPositionGateCondition(gateCondition)) {
           continue
