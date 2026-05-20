@@ -8741,7 +8741,6 @@ export class CodegenConversationService {
         //   ⚠️ 顺序：硬校验必须在 #1395 quarantine 之前，使用 raw planner 原值。
         //   否则 quarantine 会把 invalid rule 全剪光 → rules=[] → 误归因为
         //   `rules_missing_or_empty` 而非真实的 `rule_shape_invalid`，reminder/metric 失真。
-        this.normalizePlannerEvidence(parsed, text)
         const rawPlannerSemanticPatch = parsed.semanticPatch ?? parsed.semanticUpdates
         if (rawPlannerSemanticPatch !== undefined && rawPlannerSemanticPatch !== null) {
           const schemaCheck = this.plannerDispatcherMerge.validatePlannerSemanticPatch(
@@ -8754,6 +8753,7 @@ export class CodegenConversationService {
             )
             return { kind: 'schema_reject', reminder: schemaCheck.reminder, reasons: schemaCheck.reasons }
           }
+          this.normalizePlannerEvidence(parsed, text)
         }
 
         // Issue #1395：planner semanticPatch.rules[] 逐条 zod graceful parse
@@ -8853,12 +8853,10 @@ export class CodegenConversationService {
         const retryOutcome = await classifyOnce(outcome.reminder)
         if (retryOutcome.kind === 'plan') return retryOutcome.plan
         this.plannerDispatcherMerge.emitPlannerSchemaRejectMetric('retry', 1)
-        return this.buildPlannerSchemaRulesTreeFallback(locale, retryOutcome.reasons, text)
-          ?? this.buildPlannerSchemaUnsupportedFallback(locale, retryOutcome.reasons)
+        return this.buildPlannerSchemaUnsupportedFallback(locale, retryOutcome.reasons)
       }
       // 已是 retry 仍 reject → unsupportedFallback
-      return this.buildPlannerSchemaRulesTreeFallback(locale, outcome.reasons, text)
-        ?? this.buildPlannerSchemaUnsupportedFallback(locale, outcome.reasons)
+      return this.buildPlannerSchemaUnsupportedFallback(locale, outcome.reasons)
     }
 
     try {
@@ -8900,60 +8898,6 @@ export class CodegenConversationService {
           assistantPrompt: this.localizedText(locale, 'I will keep refining the strategy logic. Please provide the entry and exit conditions.', '我先继续完善策略逻辑，请补充入场和出场条件。'),
         }
       }
-    }
-  }
-
-  /**
-   * planner rules-first schema reject 后，允许 deterministic dispatcher 从 atom registry
-   * 重建最小合法 rulesTree。该 fallback 仍输出 rules[]，不把旧 flat patch 直接喂下游。
-   */
-  private buildPlannerSchemaRulesTreeFallback(
-    locale: CodegenConversationLocale,
-    reasons: ReadonlyArray<string>,
-    message: string,
-  ): ConversationPlan | null {
-    let dispatcherPatch: CodegenSemanticPatch | null = null
-    try {
-      dispatcherPatch = this.genericSeedDispatcher.dispatch(message) as CodegenSemanticPatch
-    } catch (error) {
-      this.logPlannerFallback('schema_reject_rules_tree_fallback_dispatch_error', {
-        reasons: reasons.join(','),
-        error: this.summarizePlannerError(error),
-      })
-      return null
-    }
-
-    const semanticPatch = this.plannerDispatcherMerge.buildRulesTreeFallbackFromDispatcher(
-      dispatcherPatch,
-      message,
-    )
-    const ruleCount = semanticPatch?.rules?.length ?? 0
-    if (!semanticPatch || ruleCount === 0) {
-      this.logPlannerFallback('schema_reject_rules_tree_fallback_empty', { reasons: reasons.join(',') })
-      return null
-    }
-
-    this.logPlannerFallback('schema_reject_rules_tree_fallback', {
-      reasons: reasons.join(','),
-      ruleCount: String(ruleCount),
-    })
-    return {
-      related: true,
-      logicReady: true,
-      assistantPrompt: this.localizedText(
-        locale,
-        'I have organized the strategy logic from deterministic rules-tree extraction. Please confirm the logic graph.',
-        '我已通过确定性规则树抽取整理出策略逻辑，请确认逻辑图。',
-      ),
-      semanticPatch,
-      diagnostics: {
-        gate: 'RulesTreeEntryGate',
-        entry: {
-          rejectReasons: [...reasons],
-          result: 'deterministic_fallback',
-          ruleCount,
-        },
-      },
     }
   }
 

@@ -102,12 +102,6 @@ const BAD_EVIDENCE_PLAN_JSON = JSON.stringify({
 })
 
 const USER_MESSAGE = '5min K 线里面 价格在 EMA20/60/144 上方时做多开仓 都位于下方只开空 入场是 BOLL 下轨开多 上轨开空 币安 BTCUSDT 永续 风控亏损 5% 止损'
-const DISPATCHER_FALLBACK_PATCH = {
-  triggers: [
-    { key: 'bollinger.touch_lower', phase: 'entry', sideScope: 'long', params: {}, evidence: { text: USER_MESSAGE } },
-  ],
-}
-
 describe('#1445 CodegenConversation planner schema reject → retry → unsupportedFallback', () => {
   it('initial compliant rules[] → no retry, returns plan with semanticPatch', async () => {
     const { svc, shell } = makeService()
@@ -142,9 +136,11 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
     expect(plan.semanticPatch).toBeDefined()
   })
 
-  it('normalizes planner rule and leaf evidence to the user message before schema validation', async () => {
+  it('rejects planner rule and leaf evidence before any normalization can make it pass', async () => {
     const { svc, shell } = makeService()
-    shell.aiService.chat.mockResolvedValueOnce({ content: BAD_EVIDENCE_PLAN_JSON })
+    shell.aiService.chat
+      .mockResolvedValueOnce({ content: BAD_EVIDENCE_PLAN_JSON })
+      .mockResolvedValueOnce({ content: BAD_EVIDENCE_PLAN_JSON })
     const plan = await (svc as unknown as { planConversationByLlm: Function }).planConversationByLlm(
       USER_MESSAGE,
       { rules: [] },
@@ -152,11 +148,12 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
       [],
     )
 
-    const patch = plan.semanticPatch as { rules?: Array<{ evidence?: { text?: string }, condition?: { evidence?: { text?: string } }, effects?: Array<{ evidence?: { text?: string } }> }> }
-    expect(plan.semanticPatch).toBeDefined()
-    expect(patch.rules?.[0]?.evidence?.text).toBe(USER_MESSAGE)
-    expect(patch.rules?.[0]?.condition?.evidence?.text).toBe(USER_MESSAGE)
-    expect(patch.rules?.[0]?.effects?.[0]?.evidence?.text).toBe(USER_MESSAGE)
+    expect(plan.logicReady).toBe(false)
+    expect(plan.semanticPatch).toBeUndefined()
+    expect(shell.logPlannerFallback).toHaveBeenCalledWith(
+      'schema_reject_unsupported',
+      expect.objectContaining({ reasons: expect.stringContaining('evidence_text_not_substring') }),
+    )
   })
 
   it('initial reject (legacy atoms[]) → planner retried once', async () => {
@@ -204,12 +201,11 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
     metricSpy.mockRestore()
   })
 
-  it('initial reject + retry still reject + dispatcher atoms → deterministic rules-tree fallback', async () => {
+  it('initial reject + retry still reject + dispatcher atoms → unsupportedFallback without executable semanticPatch', async () => {
     const { svc, shell, mergeSvc } = makeService()
     shell.aiService.chat
       .mockResolvedValueOnce({ content: LEGACY_FLAT_PLAN_JSON })
       .mockResolvedValueOnce({ content: LEGACY_FLAT_PLAN_JSON })
-    shell.genericSeedDispatcher.dispatch.mockReturnValueOnce(DISPATCHER_FALLBACK_PATCH)
     const metricSpy = jest.spyOn(mergeSvc, 'emitPlannerSchemaRejectMetric')
 
     const plan = await (svc as unknown as { planConversationByLlm: Function }).planConversationByLlm(
@@ -220,20 +216,12 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
     )
 
     expect(shell.aiService.chat).toHaveBeenCalledTimes(2)
-    expect(shell.genericSeedDispatcher.dispatch).toHaveBeenCalledWith(USER_MESSAGE)
-    expect(plan.logicReady).toBe(true)
-    expect(plan.semanticPatch?.rules).toEqual([
-      expect.objectContaining({
-        id: 'dispatcher-fallback-1',
-        phase: 'entry',
-        sideScope: 'long',
-        condition: expect.objectContaining({ key: 'bollinger.touch_lower' }),
-        effects: [expect.objectContaining({ key: 'action.open_long' })],
-      }),
-    ])
+    expect(shell.genericSeedDispatcher.dispatch).not.toHaveBeenCalled()
+    expect(plan.logicReady).toBe(false)
+    expect(plan.semanticPatch).toBeUndefined()
     expect(plan.diagnostics).toEqual(expect.objectContaining({
       gate: 'RulesTreeEntryGate',
-      entry: expect.objectContaining({ result: 'deterministic_fallback' }),
+      entry: expect.objectContaining({ result: 'unsupported' }),
     }))
     const stages = metricSpy.mock.calls.map(c => c[0])
     expect(stages).toEqual(expect.arrayContaining(['initial', 'retry']))
@@ -275,8 +263,8 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
       { providerCode: 'test', locale: 'zh' },
       [],
     )
-    // 主链路必须 reject；dispatcher 空 fallback 不会带 semanticPatch 进下游 merge
+    // 主链路必须 reject；dispatcher 不再作为 schema reject 后的语义 fallback。
     expect(plan.semanticPatch).toBeUndefined()
-    expect(shell.genericSeedDispatcher.dispatch).toHaveBeenCalledWith(USER_MESSAGE)
+    expect(shell.genericSeedDispatcher.dispatch).not.toHaveBeenCalled()
   })
 })
