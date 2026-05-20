@@ -833,18 +833,6 @@ export class PlannerDispatcherMergeService {
         ...(constraints ? { constraints } : {}),
       }
     }
-    try {
-      this.overrideRulesLeafParamsFromDispatcher(merged, dispatcher)
-    }
-    catch (err) {
-      this.logger.warn(`overrideRulesLeafParamsFromDispatcher (execution slots path) 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
-    }
-    try {
-      this.bindDispatcherLifecycleEffectsIntoPlannerRules(merged, dispatcher)
-    }
-    catch (err) {
-      this.logger.warn(`bindDispatcherLifecycleEffectsIntoPlannerRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
-    }
     return merged
   }
 

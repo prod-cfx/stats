@@ -187,6 +187,38 @@ describe('PlannerDispatcherMergeService', () => {
     expect(merged?.orchestration?.nodes).toHaveLength(1)
   })
 
+  it('execution-slot merge does not mutate planner rules with dispatcher lifecycle effects or params', () => {
+    const planner = {
+      contextSlots: { symbol: 'BTCUSDT' },
+      rules: [{
+        id: 'planner-r1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down' } },
+        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = {
+      contextSlots: { exchange: 'okx' },
+      atoms: [{
+        key: 'action.add_position',
+        sideScope: 'long',
+        params: { addMode: 'drawdown_pct', drawdownThreshold: 5 },
+      }],
+      position: {
+        constraints: [{
+          key: 'position.dca_schedule',
+          params: { triggerMode: 'time_interval' },
+        }],
+      },
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher)
+
+    expect(merged?.contextSlots).toEqual({ symbol: 'BTCUSDT', exchange: 'okx' })
+    expect((merged as { rules?: unknown[] })?.rules).toEqual((planner as { rules: unknown[] }).rules)
+  })
+
   // ───────────────────────────────────────────────────────────────────────────
   // Issue #1428 R-B：rules-first 路径下 dispatcher atom lift 为 single-leaf rule
   //   （cross-clause inheritance 回归——planner 直产 rules 时 dispatcher 通过
