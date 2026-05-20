@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 
 import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
-import type { AtomExpr, AtomExprAtom, SemanticRule } from '../types/atom-expr'
+import type { AtomExpr, AtomExprAtom, SemanticRule, SemanticRuleSideScope } from '../types/atom-expr'
 import { collectAtomLeaves } from '../types/atom-expr'
 import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gate.types'
 import type {
@@ -363,7 +363,7 @@ export class SemanticContractReadinessService {
     return activeOwners.flatMap(owner =>
       owner.contracts.flatMap(contract =>
         contract.requires
-          .filter(requirement => !this.hasCapability(capabilities, requirement, state))
+          .filter(requirement => !this.hasCapability(capabilities, requirement, state, owner))
           .map(requirement => ({
             ownerKind: owner.ownerKind,
             ownerId: owner.ownerId,
@@ -431,8 +431,9 @@ export class SemanticContractReadinessService {
     capabilities: readonly SemanticCapability[],
     requirement: SemanticRequirement,
     state: SemanticState,
+    owner: SemanticContractOwnerRef,
   ): boolean {
-    if (isDcaExitRuleRequirement(requirement) && hasRulesTreeExplicitExitSemantics(state.rules)) {
+    if (isDcaExitRuleRequirement(requirement) && hasRulesTreeExplicitExitSemantics(state.rules, owner)) {
       return true
     }
 
@@ -648,23 +649,71 @@ function isDcaExitRuleRequirement(requirement: SemanticRequirement): boolean {
     && requirement.object === 'dca_exit_rule'
 }
 
-function hasRulesTreeExplicitExitSemantics(rules: readonly SemanticRule[] | undefined): boolean {
+function hasRulesTreeExplicitExitSemantics(
+  rules: readonly SemanticRule[] | undefined,
+  owner: SemanticContractOwnerRef,
+): boolean {
   if (!rules || rules.length === 0) return false
+  const dcaSideScopes = findDcaOwnerSideScopes(rules, owner)
+  if (dcaSideScopes.length === 0) return false
 
   for (const rule of rules) {
     const effectLeaves = rule.effects.flatMap(collectAtomLeavesSafe)
-    if (rule.phase === 'exit' && effectLeaves.some(isExitCapableAtom)) {
+    if (
+      rule.phase === 'exit'
+      && dcaSideScopes.some(sideScope => isCompatibleDcaExitRule(rule, sideScope, effectLeaves))
+    ) {
       return true
     }
     if (
       (rule.phase === 'entry' || rule.phase === 'gate')
-      && effectLeaves.some(leaf => leaf.key.startsWith('risk.') && isExitCapableAtom(leaf))
+      && dcaSideScopes.some(sideScope => isCompatibleDcaExitRule(rule, sideScope, effectLeaves))
     ) {
       return true
     }
   }
 
   return false
+}
+
+function findDcaOwnerSideScopes(
+  rules: readonly SemanticRule[],
+  owner: SemanticContractOwnerRef,
+): SemanticRuleSideScope[] {
+  const sideScopes = new Set<SemanticRuleSideScope>()
+  for (const rule of rules) {
+    if (owner.sourceRuleId && rule.id !== owner.sourceRuleId) continue
+    const effectLeaves = rule.effects.flatMap(collectAtomLeavesSafe)
+    if (effectLeaves.some(leaf => leaf.key === owner.atomKey)) {
+      sideScopes.add(rule.sideScope)
+    }
+  }
+  return [...sideScopes]
+}
+
+function isCompatibleDcaExitRule(
+  rule: SemanticRule,
+  dcaSideScope: SemanticRuleSideScope,
+  effectLeaves: readonly AtomExprAtom[],
+): boolean {
+  if (!sideScopesOverlap(rule.sideScope, dcaSideScope)) return false
+  return effectLeaves.some(leaf => isExitCapableAtomForSide(leaf, dcaSideScope))
+}
+
+function sideScopesOverlap(a: SemanticRuleSideScope, b: SemanticRuleSideScope): boolean {
+  return a === 'both' || b === 'both' || a === b
+}
+
+function isExitCapableAtomForSide(leaf: AtomExprAtom, sideScope: SemanticRuleSideScope): boolean {
+  if (sideScope === 'long') {
+    return leaf.key === 'action.close_long'
+      || (leaf.key !== 'action.close_short' && leaf.key.startsWith('risk.') && isExitCapableAtom(leaf))
+  }
+  if (sideScope === 'short') {
+    return leaf.key === 'action.close_short'
+      || (leaf.key !== 'action.close_long' && leaf.key.startsWith('risk.') && isExitCapableAtom(leaf))
+  }
+  return isExitCapableAtom(leaf)
 }
 
 function isExitCapableAtom(leaf: AtomExprAtom): boolean {
