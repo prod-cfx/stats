@@ -380,6 +380,27 @@ describe('PlannerDispatcherMergeService', () => {
     expect(rules).toHaveLength(1)
   })
 
+  it('Issue #1443: always-on DCA lifecycle rule drops mixed action noise only', () => {
+    const planner = {
+      rules: [{
+        id: 'planner-r-dca',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: { timing: 'on_start' } },
+        effects: [
+          { kind: 'atom', key: 'position.dca_schedule', params: { triggerMode: 'time_interval' } },
+          { kind: 'atom', key: 'action.close_long', params: {} },
+        ],
+      }],
+    } as unknown as CodegenSemanticPatch
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, null)
+    const rules = (merged as { rules?: Array<{ effects: Array<{ key?: string }> }> })?.rules
+    expect(rules).toHaveLength(1)
+    expect(rules?.[0].effects).toEqual([
+      expect.objectContaining({ key: 'position.dca_schedule' }),
+    ])
+  })
+
   it('Issue #1443: 非 always-on condition + action effects → 保留（正常业务 rule）', () => {
     const planner = {
       rules: [{

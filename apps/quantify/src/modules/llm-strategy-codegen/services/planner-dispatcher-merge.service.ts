@@ -990,19 +990,33 @@ export class PlannerDispatcherMergeService {
     const isAlwaysOnCondition = (rule: SemanticRule): boolean =>
       rule.condition.kind === 'atom' && MERGE_ALWAYS_ON_ATOM_KEYS.has(rule.condition.key)
 
+    const effectHasAction = (effect: AtomExpr): boolean => {
+      for (const leaf of collectAtomLeaves(effect)) {
+        if (getBucket(leaf.key) === 'action') return true
+      }
+      return false
+    }
     const hasActionEffect = (rule: SemanticRule): boolean => {
       for (const eff of rule.effects) {
-        for (const leaf of collectAtomLeaves(eff)) {
-          if (getBucket(leaf.key) === 'action') return true
-        }
+        if (effectHasAction(eff)) return true
       }
       return false
     }
     const hasLifecycleEffect = (rule: SemanticRule): boolean =>
       rule.effects.some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === DCA_SCHEDULE_ATOM_KEY))
 
-    const kept = rules.filter(rule => !(isAlwaysOnCondition(rule) && hasActionEffect(rule) && !hasLifecycleEffect(rule)))
-    if (kept.length !== rules.length) {
+    let mutated = false
+    const kept = rules.flatMap((rule) => {
+      if (!isAlwaysOnCondition(rule) || !hasActionEffect(rule)) return [rule]
+      if (!hasLifecycleEffect(rule)) {
+        mutated = true
+        return []
+      }
+      const effects = rule.effects.filter(effect => !effectHasAction(effect))
+      mutated = mutated || effects.length !== rule.effects.length
+      return effects.length > 0 ? [{ ...rule, effects }] : []
+    })
+    if (mutated) {
       merged.rules = kept
     }
   }
