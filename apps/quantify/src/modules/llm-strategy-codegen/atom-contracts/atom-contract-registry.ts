@@ -94,6 +94,18 @@ function formatDcaScheduleSizing(rawSizing: unknown): string {
   return `每次 ${formatAtomDisplayNumber(value)} ${asset}`
 }
 
+function formatDcaCapitalCap(rawCap: unknown): string {
+  if (typeof rawCap === 'number' && Number.isFinite(rawCap)) {
+    return `资金上限 ${formatAtomDisplayNumber(rawCap)} USDT`
+  }
+  if (!rawCap || typeof rawCap !== 'object' || Array.isArray(rawCap)) return ''
+  const cap = rawCap as Record<string, unknown>
+  const value = cap.value
+  if (typeof value !== 'number' || !Number.isFinite(value)) return ''
+  const asset = typeof cap.asset === 'string' && cap.asset.trim() ? cap.asset.trim() : 'USDT'
+  return `资金上限 ${formatAtomDisplayNumber(value)} ${asset}`
+}
+
 function formatAddPositionSummary(params: Record<string, unknown>): string {
   const addRatio = typeof params.addRatio === 'number' ? params.addRatio : null
   const addMode = typeof params.addMode === 'string' ? params.addMode : null
@@ -3422,10 +3434,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         const maxCountVal = params.maxCount
         const maxCount = typeof maxCountVal === 'number' ? `最多 ${maxCountVal} 次` : ''
         const perOrderSizing = formatDcaScheduleSizing(params.perOrderSizing)
-        const capitalCapVal = params.capitalCap
-        const capitalCap = typeof capitalCapVal === 'number' && Number.isFinite(capitalCapVal)
-          ? `资金上限 ${formatAtomDisplayNumber(capitalCapVal)} USDT`
-          : ''
+        const capitalCap = formatDcaCapitalCap(params.capitalCap)
         const triggerModeVal = params.triggerMode
         const triggerMode = typeof triggerModeVal === 'string'
           ? (ATOM_PRIVATE_DISPLAY.dcaTriggerMode[triggerModeVal as keyof typeof ATOM_PRIVATE_DISPLAY.dcaTriggerMode]?.zh ?? triggerModeVal)

@@ -891,7 +891,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     displayRenderer: ({ params }) => {
       const maxCount = typeof params?.maxCount === 'number' ? `最多 ${params.maxCount} 次` : ''
       const perOrderSizing = formatDcaSizing(params?.perOrderSizing)
-      const capitalCap = typeof params?.capitalCap === 'number' ? `资金上限 ${formatDisplayNumber(params.capitalCap)} USDT` : ''
+      const capitalCap = formatDcaCapitalCap(params?.capitalCap)
       const triggerMode = typeof params?.triggerMode === 'string' ? renderDcaTriggerMode(params.triggerMode) : ''
       const parts = [triggerMode, perOrderSizing, maxCount, capitalCap].filter(Boolean)
       return parts.length > 0
@@ -1342,6 +1342,18 @@ function formatDcaSizing(rawSizing: unknown): string {
   }
   const asset = typeof sizing.asset === 'string' && sizing.asset.trim() ? sizing.asset.trim() : 'USDT'
   return `每次 ${formatDisplayNumber(value)} ${asset}`
+}
+
+function formatDcaCapitalCap(rawCap: unknown): string {
+  if (typeof rawCap === 'number' && Number.isFinite(rawCap)) {
+    return `资金上限 ${formatDisplayNumber(rawCap)} USDT`
+  }
+  if (!rawCap || typeof rawCap !== 'object' || Array.isArray(rawCap)) return ''
+  const cap = rawCap as Record<string, unknown>
+  const value = cap.value
+  if (typeof value !== 'number' || !Number.isFinite(value)) return ''
+  const asset = typeof cap.asset === 'string' && cap.asset.trim() ? cap.asset.trim() : 'USDT'
+  return `资金上限 ${formatDisplayNumber(value)} ${asset}`
 }
 
 function formatDisplayNumber(value: number): string {
