@@ -136,7 +136,7 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
     expect(plan.semanticPatch).toBeDefined()
   })
 
-  it('rejects planner rule and leaf evidence before any normalization can make it pass', async () => {
+  it('normalizes non-substring evidence as warning without retrying or blocking script generation', async () => {
     const { svc, shell } = makeService()
     shell.aiService.chat
       .mockResolvedValueOnce({ content: BAD_EVIDENCE_PLAN_JSON })
@@ -148,11 +148,15 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
       [],
     )
 
-    expect(plan.logicReady).toBe(false)
-    expect(plan.semanticPatch).toBeUndefined()
-    expect(shell.logPlannerFallback).toHaveBeenCalledWith(
+    expect(shell.aiService.chat).toHaveBeenCalledTimes(1)
+    expect(plan.semanticPatch).toBeDefined()
+    expect(plan.diagnostics).toEqual(expect.objectContaining({
+      gate: 'RulesTreeEntryGate',
+      warnings: expect.arrayContaining(['evidence_text_not_substring']),
+    }))
+    expect(shell.logPlannerFallback).not.toHaveBeenCalledWith(
       'schema_reject_unsupported',
-      expect.objectContaining({ reasons: expect.stringContaining('evidence_text_not_substring') }),
+      expect.anything(),
     )
   })
 

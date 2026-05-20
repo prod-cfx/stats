@@ -626,6 +626,8 @@ export interface LlmSemanticGraphValidationError {
 export interface LlmSemanticGraphValidationReport {
   ok: boolean
   errors: LlmSemanticGraphValidationError[]
+  warnings?: string[]
+  diagnostics?: Record<string, unknown>
 }
 
 export interface StartLlmCodegenSessionPayload {

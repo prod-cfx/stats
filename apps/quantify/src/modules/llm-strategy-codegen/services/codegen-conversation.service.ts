@@ -1222,11 +1222,22 @@ export class CodegenConversationService {
     if (!plan.diagnostics) {
       return undefined
     }
+    const errors = this.buildPlannerValidationErrors(plan.diagnostics)
+    const warnings = this.readPlannerValidationWarnings(plan.diagnostics)
     return {
-      ok: false,
-      errors: this.buildPlannerValidationErrors(plan.diagnostics),
+      ok: errors.length === 0,
+      errors,
+      ...(warnings.length > 0 ? { warnings } : {}),
       diagnostics: plan.diagnostics,
     }
+  }
+
+  private readPlannerValidationWarnings(
+    diagnostics: Record<string, unknown>,
+  ): string[] {
+    return Array.isArray(diagnostics.warnings)
+      ? diagnostics.warnings.filter((reason): reason is string => typeof reason === 'string' && reason.length > 0)
+      : []
   }
 
   private buildPlannerValidationErrors(
@@ -1239,6 +1250,11 @@ export class CodegenConversationService {
     const rejectReasons = Array.isArray(entry.rejectReasons)
       ? entry.rejectReasons.filter((reason): reason is string => typeof reason === 'string' && reason.length > 0)
       : []
+    const warnings = this.readPlannerValidationWarnings(diagnostics)
+
+    if (rejectReasons.length === 0 && warnings.length > 0) {
+      return []
+    }
 
     if (rejectReasons.length === 0) {
       return [{
@@ -8742,6 +8758,7 @@ export class CodegenConversationService {
         //   否则 quarantine 会把 invalid rule 全剪光 → rules=[] → 误归因为
         //   `rules_missing_or_empty` 而非真实的 `rule_shape_invalid`，reminder/metric 失真。
         const rawPlannerSemanticPatch = parsed.semanticPatch ?? parsed.semanticUpdates
+        let plannerSchemaWarnings: readonly string[] = []
         if (rawPlannerSemanticPatch !== undefined && rawPlannerSemanticPatch !== null) {
           const schemaCheck = this.plannerDispatcherMerge.validatePlannerSemanticPatch(
             rawPlannerSemanticPatch,
@@ -8753,6 +8770,7 @@ export class CodegenConversationService {
             )
             return { kind: 'schema_reject', reminder: schemaCheck.reminder, reasons: schemaCheck.reasons }
           }
+          plannerSchemaWarnings = schemaCheck.warnings ?? []
           this.normalizePlannerEvidence(parsed, text)
         }
 
@@ -8820,6 +8838,17 @@ export class CodegenConversationService {
             logicReady,
             assistantPrompt,
             ...(semanticPatch ? { semanticPatch } : {}),
+            ...(plannerSchemaWarnings.length > 0
+              ? {
+                  diagnostics: {
+                    gate: 'RulesTreeEntryGate',
+                    warnings: [...plannerSchemaWarnings],
+                    entry: {
+                      result: 'warning',
+                    },
+                  },
+                }
+              : {}),
           } satisfies ConversationPlan,
         }
       } catch {

@@ -6,7 +6,7 @@
  *   - rules[] 但缺 condition → reject (rule_shape_invalid)
  *   - rules[] 但缺 evidence.text → reject (evidence_text_missing)
  *   - 合规 rules[] → 通过
- *   - evidence.text 非 user message 子串 → reject (evidence_text_not_substring)
+ *   - evidence.text 非 user message 子串 → warning (evidence_text_not_substring)，不阻断脚本生成
  *   - condition 内叶子来自 action 桶 → reject (condition_leaf_bucket_invalid)
  *   - effects 内叶子来自 trigger 桶 → reject (effects_leaf_bucket_invalid)
  *   - 用 cmp9d849x0nyxx5qsf0wdfcp3 原 user message + 9 个扁平 atoms[] → reject
@@ -75,7 +75,7 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
     }
   })
 
-  it('rejects when evidence.text is not substring of user message', () => {
+  it('downgrades non-substring evidence.text to warning without rejecting valid rules', () => {
     const patch = {
       rules: [
         {
@@ -89,9 +89,9 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
       ],
     }
     const result = svc.validatePlannerSemanticPatch(patch, userMessage)
-    expect(result.ok).toBe(false)
-    if (result.ok === false) {
-      expect(result.reasons).toContain('evidence_text_not_substring')
+    expect(result.ok).toBe(true)
+    if (result.ok === true) {
+      expect(result.warnings).toContain('evidence_text_not_substring')
     }
   })
 

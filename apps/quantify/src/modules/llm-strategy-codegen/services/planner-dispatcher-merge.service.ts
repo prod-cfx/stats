@@ -8,12 +8,13 @@ import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry
  * Issue #1445：planner 输出 schema 硬校验结果。
  *
  * - `ok: true`：semanticPatch 符合 rules-first 表达式树契约
- * - `ok: false`：列出全部违反项；`reminder` 是要拼回 user message 末尾的提示串，
+ * - `ok: false`：列出全部阻断项；`reminder` 是要拼回 user message 末尾的提示串，
  *    供 conversation 层做单轮重试
+ * - `warnings`：只进入诊断，不阻断脚本生成
  */
 export type PlannerPatchValidation =
-  | { ok: true }
-  | { ok: false, reasons: PlannerSchemaRejectReason[], reminder: string }
+  | { ok: true, warnings?: PlannerSchemaRejectReason[] }
+  | { ok: false, reasons: PlannerSchemaRejectReason[], reminder: string, warnings?: PlannerSchemaRejectReason[] }
 
 /**
  * Issue #1445：planner schema reject 原因 label，按违反类型聚合，便于 metric 维度收敛。
@@ -24,7 +25,7 @@ export type PlannerSchemaRejectReason =
   | 'legacy_flat_field'             // 出现旧 atoms/triggers/actions/risks/positionConstraints/orchestration 顶层字段
   | 'rule_shape_invalid'            // rule 缺 id/phase/sideScope/condition/effects 或 zod 不通过
   | 'evidence_text_missing'         // rule 或叶子 atom 缺 evidence.text
-  | 'evidence_text_not_substring'   // evidence.text 不是 user message 子串
+  | 'evidence_text_not_substring'   // evidence.text 不是 user message 子串（warning-only）
   | 'condition_leaf_bucket_invalid' // condition 内叶子来自非法 bucket
   | 'effects_leaf_bucket_invalid'   // effects 内叶子来自非法 bucket
 
@@ -118,7 +119,8 @@ export class PlannerDispatcherMergeService {
    *      出现在 `semanticPatch` 顶层一律 reject
    *   3. 每条 rule 必有 `id / phase / sideScope / condition / effects`
    *      （走 zod `semanticRuleSchema`，包含 AtomExpr 子树结构校验）
-   *   4. 每条 rule + 每个叶子 atom 必有 `evidence.text`，且为 user message 子串
+   *   4. 每条 rule 必有 `evidence.text`；不是 user message 子串时降级为 warning，
+   *      由 conversation 层归一化为用户原文，不阻断脚本生成
    *   5. condition 内叶子 atom 来自 trigger / risk / orchestration-gate 桶
    *      effects 内叶子来自 action / risk / positionConstraint / orchestration 桶
    *      （按 `ATOM_CONTRACT_REGISTRY[*].bucket` 派生；未注册 atom fail-open）
@@ -127,13 +129,14 @@ export class PlannerDispatcherMergeService {
    *
    * @param plannerPatch planner LLM 原始 `semanticPatch` 字段（未经 normalize）；
    *   接受 unknown 以容忍 LLM 偏离 schema
-   * @param userMessage 触发本次 planner 调用的 user message，evidence.text 必须是其子串
+   * @param userMessage 触发本次 planner 调用的 user message，用于校准 evidence.text 诊断
    */
   validatePlannerSemanticPatch(
     plannerPatch: unknown,
     userMessage: string,
   ): PlannerPatchValidation {
     const reasons = new Set<PlannerSchemaRejectReason>()
+    const warnings = new Set<PlannerSchemaRejectReason>()
     const detailNotes: string[] = []
 
     if (!plannerPatch || typeof plannerPatch !== 'object' || Array.isArray(plannerPatch)) {
@@ -187,8 +190,7 @@ export class PlannerDispatcherMergeService {
         detailNotes.push(`rules[${i}].evidence.text 必填`)
       }
       else if (message && !message.includes(ruleEvidenceText.trim())) {
-        reasons.add('evidence_text_not_substring')
-        detailNotes.push(`rules[${i}].evidence.text 必须是 user message 子串`)
+        warnings.add('evidence_text_not_substring')
       }
 
       // condition / effects 叶子 atom 校验：bucket + evidence.text
@@ -198,12 +200,16 @@ export class PlannerDispatcherMergeService {
         semRule,
         message,
         reasons,
+        warnings,
         detailNotes,
       })
     }
 
-    if (reasons.size === 0) return { ok: true }
-    return this.buildRejectResult(reasons, detailNotes)
+    if (reasons.size === 0) {
+      const warningList = Array.from(warnings)
+      return warningList.length > 0 ? { ok: true, warnings: warningList } : { ok: true }
+    }
+    return this.buildRejectResult(reasons, detailNotes, warnings)
   }
 
   /**
@@ -220,20 +226,27 @@ export class PlannerDispatcherMergeService {
   private buildRejectResult(
     reasons: Set<PlannerSchemaRejectReason>,
     detailNotes: ReadonlyArray<string>,
+    warnings: Set<PlannerSchemaRejectReason> = new Set(),
   ): PlannerPatchValidation {
     const reasonList = Array.from(reasons)
+    const warningList = Array.from(warnings)
     const reminder = [
       '上一轮 planner 输出未通过 schema 硬校验，必须按 rules-first 表达式树形态重出：',
       '- semanticPatch.rules[] 必填且非空',
       '- 禁止使用旧扁平字段（atoms/triggers/actions/risks/positionConstraints/orchestration）',
       '- 每条 rule 必须含 id / phase / sideScope / condition (AtomExpr) / effects (AtomExpr[])',
-      '- 每条 rule 与每个叶子 atom 必须有 evidence.text，且为 user message 子串',
+      '- 每条 rule 必须有 evidence.text；叶子 atom 若带 evidence.text，也必须非空',
       '- condition 内叶子 atom 来自 trigger / risk(谓词) / orchestration-gate 桶；effects 内叶子来自 action / risk(副作用) / positionConstraint / orchestration-effect 桶',
       '本次具体违反：',
       ...detailNotes.slice(0, 12).map(s => `  · ${s}`),
       '请重出合规 semanticPatch.rules[] 形态。',
     ].join('\n')
-    return { ok: false, reasons: reasonList, reminder }
+    return {
+      ok: false,
+      reasons: reasonList,
+      reminder,
+      ...(warningList.length > 0 ? { warnings: warningList } : {}),
+    }
   }
 
   private collectLeafAtomViolations(args: {
@@ -242,9 +255,10 @@ export class PlannerDispatcherMergeService {
     semRule: SemanticRule
     message: string
     reasons: Set<PlannerSchemaRejectReason>
+    warnings: Set<PlannerSchemaRejectReason>
     detailNotes: string[]
   }): void {
-    const { ruleIndex, ruleRaw, semRule, message, reasons, detailNotes } = args
+    const { ruleIndex, ruleRaw, semRule, message, reasons, warnings, detailNotes } = args
 
     type ContractShape = { bucket?: string }
     const getBucket = (key: string): string | undefined =>
@@ -277,27 +291,28 @@ export class PlannerDispatcherMergeService {
       }
     }
 
-    // leaf evidence.text：planner 在 leaf atom 上若声明 evidence，则其 text 必为 user message 子串
-    // 注：leaf evidence 不强制必填（rule.evidence.text 已强制）；仅在出现时校验合规性
+    // leaf evidence.text：planner 在 leaf atom 上若声明 evidence，则 text 必须非空；
+    // 非 user message 子串只作为 warning，随后由 conversation 层归一化。
     const rawCondition = (ruleRaw as { condition?: unknown }).condition
-    this.checkLeafEvidenceSubstring(rawCondition, message, `rules[${ruleIndex}].condition`, reasons, detailNotes)
+    this.checkLeafEvidenceSubstring(rawCondition, message, `rules[${ruleIndex}].condition`, reasons, warnings, detailNotes)
     const rawEffects = Array.isArray((ruleRaw as { effects?: unknown }).effects)
       ? ((ruleRaw as { effects?: unknown[] }).effects ?? [])
       : []
     for (let ei = 0; ei < rawEffects.length; ei++) {
-      this.checkLeafEvidenceSubstring(rawEffects[ei], message, `rules[${ruleIndex}].effects[${ei}]`, reasons, detailNotes)
+      this.checkLeafEvidenceSubstring(rawEffects[ei], message, `rules[${ruleIndex}].effects[${ei}]`, reasons, warnings, detailNotes)
     }
   }
 
   /**
    * 递归检查 raw AtomExpr 树叶子 atom 的 evidence.text 子串约束。
-   * leaf.evidence 可选；提供时其 text 必须是 user message 子串（与 rule.evidence 一致）。
+   * leaf.evidence 可选；提供时其 text 必须非空，非 user message 子串只记 warning。
    */
   private checkLeafEvidenceSubstring(
     node: unknown,
     message: string,
     pathPrefix: string,
     reasons: Set<PlannerSchemaRejectReason>,
+    warnings: Set<PlannerSchemaRejectReason>,
     detailNotes: string[],
   ): void {
     if (!node || typeof node !== 'object' || Array.isArray(node)) return
@@ -311,8 +326,7 @@ export class PlannerDispatcherMergeService {
           detailNotes.push(`${pathPrefix} 叶子 atom 含 evidence 但 text 缺失/为空`)
         }
         else if (message && !message.includes(text.trim())) {
-          reasons.add('evidence_text_not_substring')
-          detailNotes.push(`${pathPrefix} 叶子 atom evidence.text 不是 user message 子串`)
+          warnings.add('evidence_text_not_substring')
         }
       }
       return
@@ -321,20 +335,20 @@ export class PlannerDispatcherMergeService {
       const children = (node as { children?: unknown[] }).children
       if (Array.isArray(children)) {
         for (let i = 0; i < children.length; i++) {
-          this.checkLeafEvidenceSubstring(children[i], message, `${pathPrefix}.children[${i}]`, reasons, detailNotes)
+          this.checkLeafEvidenceSubstring(children[i], message, `${pathPrefix}.children[${i}]`, reasons, warnings, detailNotes)
         }
       }
       return
     }
     if (kind === 'not') {
-      this.checkLeafEvidenceSubstring((node as { child?: unknown }).child, message, `${pathPrefix}.child`, reasons, detailNotes)
+      this.checkLeafEvidenceSubstring((node as { child?: unknown }).child, message, `${pathPrefix}.child`, reasons, warnings, detailNotes)
       return
     }
     if (kind === 'sequence') {
       const steps = (node as { steps?: unknown[] }).steps
       if (Array.isArray(steps)) {
         for (let i = 0; i < steps.length; i++) {
-          this.checkLeafEvidenceSubstring(steps[i], message, `${pathPrefix}.steps[${i}]`, reasons, detailNotes)
+          this.checkLeafEvidenceSubstring(steps[i], message, `${pathPrefix}.steps[${i}]`, reasons, warnings, detailNotes)
         }
       }
     }
