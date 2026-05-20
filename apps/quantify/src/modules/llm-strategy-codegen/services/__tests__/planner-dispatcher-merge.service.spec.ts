@@ -245,9 +245,9 @@ describe('PlannerDispatcherMergeService', () => {
     }
     const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
     const rules = (merged as { rules?: Array<{ id: string, condition: { key?: string } }> })?.rules
-    expect(rules).toHaveLength(2)
-    expect(rules?.[1].id).toMatch(/^dispatcher-lift-/u)
-    expect(rules?.[1].condition.key).toBe('bollinger.touch_lower')
+    expect(rules).toHaveLength(1)
+    expect(rules?.[0].id).toMatch(/^dispatcher-lift-/u)
+    expect(rules?.[0].condition.key).toBe('bollinger.touch_lower')
   })
 
   it('R-B: rules 中已有同签名 leaf 时不重复 lift', () => {

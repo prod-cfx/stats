@@ -1055,13 +1055,13 @@ export class PlannerDispatcherMergeService {
     const isShortActionExpr = (expr: AtomExpr): boolean =>
       collectAtomLeaves(expr).some(leaf => shortActionKeys.has(leaf.key))
 
-    const nextRules = rules
-      .filter(rule => rule.sideScope !== 'short')
-      .map(rule => ({
-        ...rule,
-        effects: rule.effects.filter(effect => !isShortActionExpr(effect)),
-      }))
-      .filter(rule => rule.effects.length > 0)
+    const nextRules = rules.flatMap((rule) => {
+      const hasShortAction = rule.effects.some(isShortActionExpr)
+      if (rule.sideScope === 'short' && hasShortAction) return []
+      const effects = rule.effects.filter(effect => !isShortActionExpr(effect))
+      if (hasShortAction && rule.effects.length > 0 && effects.length === 0) return []
+      return [{ ...rule, effects }]
+    })
 
     if (nextRules.length !== rules.length || nextRules.some((rule, index) => rule.effects.length !== rules[index]?.effects.length)) {
       merged.rules = nextRules
