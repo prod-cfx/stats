@@ -10,6 +10,7 @@
  *  - grid 越界 breakoutAction=stop：exit 强化
  */
 import type { AtomExpr, SemanticRule } from '../../types/atom-expr'
+import type { SemanticState } from '../../types/semantic-state'
 import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
 
 function atom(key: string, params: Record<string, unknown> = {}): AtomExpr {
@@ -143,6 +144,23 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     expect(r.missing).not.toContain('missing_risk')
   })
 
+  it('entry-only executable rules still require explicit exit semantics', () => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'entry-only',
+        phase: 'entry',
+        condition: atom('external.signal', { provider: 'webhook', signalId: 'whale_buy' }),
+        effects: [atom('action.open_long')],
+      }),
+    ]
+
+    const r = svc.evaluateRulesReadiness(rules)
+
+    expect(r.hasEntry).toBe(true)
+    expect(r.hasExit).toBe(false)
+    expect(r.missing).toContain('missing_exit')
+  })
+
   it('grid.range_rebalance with breakoutAction=stop 强化 exit', () => {
     const rules: SemanticRule[] = [
       rule({
@@ -241,3 +259,159 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     expect(r.missing).toEqual([])
   })
 })
+
+describe('semanticContractReadinessService.normalize DCA exit contract in rules tree', () => {
+  const svc = new SemanticContractReadinessService()
+
+  it('treats an explicit sibling exit rule as satisfying position.dca_schedule dca_exit_rule', () => {
+    const result = svc.normalize(stateWithRules([
+      rule({
+        id: 'entry-dca-daily',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: atom('strategy.time_window', { window: 'daily' }),
+        effects: [
+          atom('action.open_long'),
+          atom('position.dca_schedule', {
+          triggerMode: 'time_interval',
+          timeIntervalBars: 1,
+          perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+          }),
+        ],
+      }),
+      rule({
+        id: 'exit-drawdown-stop',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: atom('price.percent_change', {
+          direction: 'down',
+          thresholdPct: 5,
+          basis: 'entry_avg_price',
+        }),
+        effects: [atom('action.close_long')],
+      }),
+      rule({
+        id: 'entry-drawdown-add',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: atom('price.percent_change', {
+          direction: 'down',
+          valuePct: 5,
+          basis: 'entry_avg_price',
+        }),
+        effects: [
+          atom('action.add_position', {
+            addMode: 'drawdown_pct',
+            drawdownThreshold: 5,
+            sizing: { kind: 'quote', value: 200, asset: 'USDT' },
+          }),
+        ],
+      }),
+    ]))
+
+    expect(result.ready).toBe(true)
+    expect(result.missingRequirements).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        domain: 'guard',
+        verb: 'define',
+        object: 'dca_exit_rule',
+      }),
+    ]))
+  })
+
+  it('still requires a dca_exit_rule when DCA has no exit semantics', () => {
+    const result = svc.normalize(stateWithRules([
+      rule({
+        id: 'entry-dca-daily',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: atom('strategy.time_window', { window: 'daily' }),
+        effects: [
+          atom('action.open_long'),
+          atom('position.dca_schedule', {
+          triggerMode: 'time_interval',
+          timeIntervalBars: 1,
+          perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+          }),
+        ],
+      }),
+    ]))
+
+    expect(result.ready).toBe(false)
+    expect(result.missingRequirements).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        domain: 'guard',
+        verb: 'define',
+        object: 'dca_exit_rule',
+      }),
+    ]))
+  })
+})
+
+function stateWithRules(rules: SemanticRule[]): SemanticState {
+  return {
+    version: 1,
+    families: [],
+    trigger: [],
+    action: [],
+    risk: [],
+    positionConstraint: [],
+    orchestration: [],
+    orchestrationContracts: [],
+    position: {
+      mode: 'constraint_only',
+      value: 0,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'derived',
+      openSlots: [],
+      constraints: [{
+        id: 'entry-dca-daily-leaf-position.dca_schedule',
+        key: 'position.dca_schedule',
+        params: {
+          triggerMode: 'time_interval',
+          timeIntervalBars: 1,
+          perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+        },
+        status: 'open',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'contract-seed-position-constraint-1-position-dca-schedule',
+          kind: 'position',
+          capabilities: [
+            { domain: 'runtime', verb: 'schedule', object: 'dca_orders', shape: {} },
+            { domain: 'capital', verb: 'allocate', object: 'per_order_budget', shape: { kind: 'quote', value: 100, asset: 'USDT' } },
+          ],
+          requires: [{ domain: 'guard', verb: 'define', object: 'dca_exit_rule' }],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+    },
+    contextSlots: {
+      exchange: lockedContextSlot('exchange', 'okx'),
+      symbol: lockedContextSlot('symbol', 'ETHUSDT'),
+      marketType: lockedContextSlot('marketType', 'spot'),
+      timeframe: lockedContextSlot('timeframe', '1d'),
+    },
+    normalizationNotes: [],
+    rules,
+    updatedAt: '2026-05-20T00:00:00.000Z',
+  }
+}
+
+function lockedContextSlot(slotKey: 'exchange' | 'symbol' | 'marketType' | 'timeframe', value: string) {
+  return {
+    slotKey,
+    fieldPath: `contextSlots.${slotKey}`,
+    value,
+    status: 'locked' as const,
+    priority: 'context' as const,
+    questionHint: '',
+    affectsExecution: true,
+  }
+}

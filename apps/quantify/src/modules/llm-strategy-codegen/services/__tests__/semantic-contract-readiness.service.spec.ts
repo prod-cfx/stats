@@ -2799,6 +2799,78 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
     }
   }
 
+  function contextSlot(field: 'exchange' | 'symbol' | 'marketType', value: string) {
+    return {
+      slotKey: `context.${field}`,
+      fieldPath: `contextSlots.${field}`,
+      value,
+      status: 'locked' as const,
+      priority: 'core' as const,
+      affectsExecution: true,
+      questionHint: '',
+    }
+  }
+
+  it('treats explicit multi-timeframe trigger members in the same rule as ready', () => {
+    const ema20Above = (timeframe: string) => ({
+      kind: 'atom' as const,
+      key: 'indicator.above',
+      params: { indicator: 'ema', 'reference.period': 20, timeframe },
+    })
+    const ema20Below = (timeframe: string) => ({
+      kind: 'atom' as const,
+      key: 'indicator.below',
+      params: { indicator: 'ema', 'reference.period': 20, timeframe },
+    })
+
+    const state = createSemanticState({
+      contextSlots: {
+        exchange: contextSlot('exchange', 'binance'),
+        symbol: contextSlot('symbol', 'BTCUSDT'),
+        marketType: contextSlot('marketType', 'perpetual'),
+        timeframe: timeframeSlot('15m'),
+      },
+      rules: [{
+        id: 'entry-mtf-ema20',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'and',
+          children: [
+            ema20Above('15m'),
+            ema20Above('1h'),
+            ema20Above('4h'),
+          ],
+        },
+        effects: [{
+          kind: 'atom',
+          key: 'action.open_long',
+          params: {},
+        }],
+      }, {
+        id: 'exit-ema20',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: ema20Below('15m'),
+        effects: [{
+          kind: 'atom',
+          key: 'action.close_long',
+          params: {},
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingRequirements.filter(r => r.kind === 'timeframe_mismatch')).toEqual([])
+    expect(result.state.trigger.flatMap(trigger => trigger.openSlots ?? [])).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: expect.stringContaining('contract.timeframe_mismatch.trigger.'),
+      }),
+    ]))
+  })
+
   it('reports ready=true when trigger timeframe aligns with execution context timeframe', () => {
     const state = createSemanticState({
       contextSlots: {

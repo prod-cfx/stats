@@ -166,6 +166,7 @@ class Staging31RunnerModule {}
 export interface Staging31CaseReport {
   index: number
   input: string
+  completedInput: string
   assistantResponse: string
   rulesTree: unknown
   projectedFlat: unknown
@@ -195,10 +196,14 @@ interface Staging31FullReport {
     supportedActionReportedUnsupported: number
     clarificationClearsRulesTree: number
     uiScriptMismatch: number
+    strategyScriptMismatch: number
+    dispatcherFallbackUsed: number
     unsupportedWithGeneratedScript: number
   }
   cases: Staging31CaseReport[]
 }
+
+export type Staging31HardGateSummary = Staging31FullReport['summary']
 
 interface Args {
   env: string
@@ -231,6 +236,7 @@ export function assertStaging31ReportShape(report: Staging31CaseReport): void {
   const requiredKeys: Array<keyof Staging31CaseReport> = [
     'index',
     'input',
+    'completedInput',
     'assistantResponse',
     'rulesTree',
     'projectedFlat',
@@ -417,7 +423,7 @@ function inferSizing(input: string): string {
   return '10%'
 }
 
-function inferClarificationAnswer(input: string, item: StrategyClarificationItem): string {
+export function inferClarificationAnswer(input: string, item: StrategyClarificationItem): string {
   const field = `${item.field ?? ''} ${item.fieldPath ?? ''} ${item.slotKey ?? ''} ${item.reason ?? ''} ${item.question ?? ''}`.toLowerCase()
   if (item.allowedAnswers?.length) {
     const allowed = item.allowedAnswers.map(value => value.toLowerCase())
@@ -447,7 +453,10 @@ function inferClarificationAnswer(input: string, item: StrategyClarificationItem
     return input
   }
   if (field.includes('missing_exit_rules') || field.includes('exitrules')) {
-    return '按入场均价亏损 5% 止损，盈利 10% 止盈时平仓。'
+    if (/(?:出场|平仓|平多|平空|卖出|止损|止盈|回到|跌破|突破区间上沿|停止网格|撤销)/u.test(input)) {
+      return input
+    }
+    return '价格相对入场均价下跌 5% 时平仓。'
   }
   if (field.includes('grid')) {
     if (field.includes('breakout') || field.includes('cancel') || field.includes('撤销') || field.includes('停止')) {
@@ -598,7 +607,7 @@ export function hasUiAstScriptMismatch(args: {
 
   const astExecutableActions = collectAstExecutableActions(args.ast)
   const scriptActions = collectScriptExecutableActions(args.scriptOrError)
-  return scriptActions.length > 0 && !sameStringSet(astExecutableActions, scriptActions)
+  return !sameStringSet(astExecutableActions, scriptActions)
 }
 
 function collectRulesTreeSemanticActions(rulesTree: unknown): string[] {
@@ -610,6 +619,20 @@ function collectRulesTreeSemanticActions(rulesTree: unknown): string[] {
     }
     if (collectAtomKeys(item.condition).includes('grid.range_rebalance')) {
       return ['OPEN_LONG', 'OPEN_SHORT', 'CLOSE_LONG', 'CLOSE_SHORT']
+    }
+    if (collectAtomKeys(item.effects).includes('grid.range_rebalance')) {
+      return ['OPEN_LONG', 'OPEN_SHORT', 'CLOSE_LONG', 'CLOSE_SHORT']
+    }
+    if (collectAtomKeys(item.effects).includes('position.dca_schedule')) {
+      const dcaActions = item.sideScope === 'short'
+        ? ['ADD_SHORT']
+        : item.sideScope === 'both'
+          ? ['ADD_LONG', 'ADD_SHORT']
+          : ['ADD_LONG']
+      return [
+        ...dcaActions,
+        ...collectRiskSemanticActions(item.condition, item.effects, item.sideScope),
+      ]
     }
     return [
       ...collectActionKeys(item.effects, item.sideScope),
@@ -626,8 +649,9 @@ function collectActionKeys(effects: unknown, sideScope?: unknown): string[] {
       key === 'program.fixed_grid_gated'
       || key === 'program.dynamic_grid'
       || key === 'program.adaptive_volatility_grid'
+      || key === 'grid.range_rebalance'
     ) {
-      return ['OPEN_LONG', 'OPEN_SHORT']
+      return ['OPEN_LONG', 'OPEN_SHORT', 'CLOSE_LONG', 'CLOSE_SHORT']
     }
     if (key === 'portfolioRisk.drawdown_block') {
       return []
@@ -689,6 +713,15 @@ function collectUiGraphSemanticActions(uiSummaryOrGraph: unknown): string[] {
       .filter(item => (item as { kind?: unknown }).kind === 'action')
       .flatMap((item) => {
         const text = (item as { text?: unknown }).text
+        if (typeof text === 'string' && text.includes('DCA')) {
+          return inferUiAddActions(items)
+        }
+        if (typeof text === 'string' && items.some(other => {
+          const otherText = (other as { text?: unknown }).text
+          return typeof otherText === 'string' && otherText.includes('DCA')
+        })) {
+          return []
+        }
         if (typeof text === 'string' && (text.includes('止损') || text.includes('止盈'))) {
           return inferUiRiskCloseActions(items)
         }
@@ -747,6 +780,7 @@ function collectAstSemanticActions(ast: unknown): string[] {
     ...collectAstGuardSemanticActions(ast),
     ...collectAstRiskPredicateActions(ast),
     ...collectAstOrchestrationProgramActions(ast),
+    ...collectAstOrderProgramActions(ast),
   ])
 }
 
@@ -756,6 +790,7 @@ function collectAstExecutableActions(ast: unknown): string[] {
     ...collectAstGuardExecutableActions(ast),
     ...collectAstRiskPredicateActions(ast),
     ...collectAstOrchestrationProgramActions(ast),
+    ...collectAstOrderProgramActions(ast),
   ])
 }
 
@@ -806,6 +841,19 @@ function collectAstOrchestrationProgramActions(ast: unknown): string[] {
   })
 }
 
+function collectAstOrderProgramActions(ast: unknown): string[] {
+  const programs = (ast as { orderPrograms?: unknown } | null)?.orderPrograms
+  if (!Array.isArray(programs)) return []
+  return programs.flatMap((program) => {
+    const payload = (program as { payload?: { kind?: unknown, sidePolicy?: unknown, side?: unknown } }).payload
+    if (payload?.kind !== 'LIMIT_LADDER') return []
+    if (payload.sidePolicy === 'spot_grid') return ['OPEN_LONG', 'OPEN_SHORT', 'CLOSE_LONG', 'CLOSE_SHORT']
+    if (payload.sidePolicy === 'perp_neutral') return ['OPEN_LONG', 'OPEN_SHORT', 'CLOSE_LONG', 'CLOSE_SHORT']
+    if (payload.side === 'sell') return ['OPEN_SHORT']
+    return ['OPEN_LONG']
+  })
+}
+
 function collectAstRiskPredicateActions(ast: unknown): string[] {
   const predicates = (ast as { riskPredicates?: unknown } | null)?.riskPredicates
   if (!Array.isArray(predicates)) return []
@@ -832,7 +880,86 @@ function inferForceExitCloseActions(ast: unknown): string[] {
 function collectScriptExecutableActions(scriptOrError: unknown): string[] {
   const script = (scriptOrError as { script?: unknown } | null)?.script
   if (typeof script !== 'string' || script.length === 0) return []
-  return uniqueSorted(new ScriptProfileExtractorService().extract(script).actions)
+  const actions: string[] = [...new ScriptProfileExtractorService().extract(script).actions]
+  const decisionActions = collectProgramDecisionActions(readScriptConst(script, 'DECISION_PROGRAMS'))
+  actions.push(...decisionActions)
+  actions.push(...collectProgramGuardActions(readScriptConst(script, 'GUARD_PROGRAMS')))
+  actions.push(...collectProgramRiskPredicateActions(readScriptConst(script, 'RISK_PREDICATES'), decisionActions))
+  actions.push(...collectProgramOrchestrationActions(readScriptConst(script, 'ORCHESTRATION_PROGRAMS')))
+  actions.push(...collectProgramOrderActions(readScriptConst(script, 'ORDER_PROGRAMS')))
+  return uniqueSorted(actions)
+}
+
+function readScriptConst(script: string, name: string): unknown {
+  const match = new RegExp(`const ${name} = ([\\s\\S]*?) as const`).exec(script)
+  if (!match?.[1]) return null
+  try {
+    return JSON.parse(match[1])
+  }
+  catch {
+    return null
+  }
+}
+
+function collectProgramDecisionActions(programs: unknown): string[] {
+  if (!Array.isArray(programs)) return []
+  return programs.flatMap((program) => {
+    const actions = (program as { actions?: unknown }).actions
+    if (!Array.isArray(actions)) return []
+    return actions
+      .map(action => toCanonicalAction((action as { kind?: unknown }).kind))
+      .filter((key): key is string => typeof key === 'string')
+  })
+}
+
+function collectProgramGuardActions(programs: unknown): string[] {
+  if (!Array.isArray(programs)) return []
+  return programs
+    .map(program => toCanonicalAction((program as { payload?: { onBreach?: unknown } }).payload?.onBreach))
+    .filter((key): key is string => typeof key === 'string')
+}
+
+function collectProgramRiskPredicateActions(programs: unknown, decisionActions: readonly string[]): string[] {
+  if (!Array.isArray(programs)) return []
+  const closeActions = inferForceExitCloseActionsFromActions(decisionActions)
+  return programs.flatMap((program) => {
+    const actions = (program as { payload?: { actions?: unknown } }).payload?.actions
+    if (!Array.isArray(actions)) return []
+    return actions.flatMap((action) => {
+      const kind = toCanonicalAction((action as { kind?: unknown }).kind)
+      return kind === 'FORCE_EXIT' ? closeActions : [kind]
+    })
+  }).filter((key): key is string => typeof key === 'string')
+}
+
+function inferForceExitCloseActionsFromActions(decisionActions: readonly string[]): string[] {
+  const hasLong = decisionActions.includes('OPEN_LONG') || decisionActions.includes('CLOSE_LONG')
+  const hasShort = decisionActions.includes('OPEN_SHORT') || decisionActions.includes('CLOSE_SHORT')
+  if (hasLong && hasShort) return ['CLOSE_LONG', 'CLOSE_SHORT']
+  if (hasShort) return ['CLOSE_SHORT']
+  return ['CLOSE_LONG']
+}
+
+function collectProgramOrchestrationActions(programs: unknown): string[] {
+  if (!Array.isArray(programs)) return []
+  return programs.flatMap((program) => {
+    const kind = (program as { programKind?: unknown }).programKind
+    return kind === 'fixed_grid_gated' || kind === 'dynamic_grid' || kind === 'adaptive_volatility_grid'
+      ? ['OPEN_LONG', 'OPEN_SHORT', 'CLOSE_LONG', 'CLOSE_SHORT']
+      : []
+  })
+}
+
+function collectProgramOrderActions(programs: unknown): string[] {
+  if (!Array.isArray(programs)) return []
+  return programs.flatMap((program) => {
+    const payload = (program as { payload?: { kind?: unknown, sidePolicy?: unknown, side?: unknown } }).payload
+    if (payload?.kind !== 'LIMIT_LADDER') return []
+    if (payload.sidePolicy === 'spot_grid') return ['OPEN_LONG', 'OPEN_SHORT', 'CLOSE_LONG', 'CLOSE_SHORT']
+    if (payload.sidePolicy === 'perp_neutral') return ['OPEN_LONG', 'OPEN_SHORT', 'CLOSE_LONG', 'CLOSE_SHORT']
+    if (payload.side === 'sell') return ['OPEN_SHORT']
+    return ['OPEN_LONG']
+  })
 }
 
 function toCanonicalAction(value: unknown): string | null {
@@ -885,6 +1012,64 @@ function readInput(messages: SessionRow['messages'], fallback: string): string {
   return messages?.find(message => message.role === 'user')?.content ?? fallback
 }
 
+function buildCompletedInput(messages: SessionRow['messages'], fallback: string): string {
+  const userMessages = messages?.filter(message => message.role === 'user').map(message => message.content.trim()).filter(Boolean) ?? []
+  return userMessages.length > 0 ? userMessages.join('\n') : fallback
+}
+
+function hasDispatcherFallbackRules(rulesTree: unknown): boolean {
+  if (!Array.isArray(rulesTree)) return false
+  return rulesTree.some(rule => typeof (rule as { id?: unknown }).id === 'string'
+    && ((rule as { id: string }).id.startsWith('dispatcher-fallback-')))
+}
+
+function extractExpectedSizing(text: string): { mode: 'RATIO' | 'QUOTE', value: number, asset?: string } | null {
+  const normalized = text.replace(/\s+/gu, ' ').replace(/％/gu, '%')
+  const sizingClause = normalized.match(/(?:单笔|仓位|固定仓位|每次|每笔|每格|使用|用|投入|加投|加仓)[^。；;\n,，]{0,24}?(百分之?\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*%|\d+(?:\.\d+)?\s*(?:USDT|USDC|USD|U|刀|美元))/iu)?.[0]
+  if (!sizingClause) return null
+  if (/每格/u.test(sizingClause) && /(?:间距|步长|spacing)/iu.test(sizingClause) && !/(?:USDT|USDC|USD|U|刀|美元)/iu.test(sizingClause)) {
+    return null
+  }
+  const quote = sizingClause.match(/(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U|刀|美元)/iu)
+  if (quote?.[1]) {
+    const assetRaw = quote[2].toUpperCase()
+    const asset = assetRaw === 'U' ? 'USDT' : assetRaw === '刀' || assetRaw === '美元' ? 'USD' : assetRaw
+    return { mode: 'QUOTE', value: Number(quote[1]), asset }
+  }
+  const percent = sizingClause.match(/百分之?\s*(\d+(?:\.\d+)?)/u)
+    ?? sizingClause.match(/(\d+(?:\.\d+)?)\s*%/u)
+  if (!percent?.[1]) return null
+  return { mode: 'RATIO', value: Number(percent[1]) / 100 }
+}
+
+function readSpecSizing(canonicalSpec: unknown): { mode: 'RATIO' | 'QUOTE', value: number, asset?: string } | null {
+  const sizing = (canonicalSpec as { sizing?: { mode?: unknown, value?: unknown, asset?: unknown } } | null)?.sizing
+  if (!sizing) return null
+  if (sizing.mode !== 'RATIO' && sizing.mode !== 'QUOTE') return null
+  if (typeof sizing.value !== 'number' || !Number.isFinite(sizing.value)) return null
+  return {
+    mode: sizing.mode,
+    value: sizing.value,
+    ...(typeof sizing.asset === 'string' ? { asset: sizing.asset } : {}),
+  }
+}
+
+function sameSizing(expected: { mode: 'RATIO' | 'QUOTE', value: number, asset?: string }, actual: { mode: 'RATIO' | 'QUOTE', value: number, asset?: string } | null): boolean {
+  if (!actual || expected.mode !== actual.mode) return false
+  if (Math.abs(expected.value - actual.value) > 1e-9) return false
+  if (expected.mode === 'QUOTE' && expected.asset && actual.asset && expected.asset !== actual.asset) return false
+  return true
+}
+
+function hasStrategyScriptMismatch(args: {
+  completedInput: string
+  canonicalSpec: unknown
+}): boolean {
+  const expectedSizing = extractExpectedSizing(args.completedInput)
+  if (expectedSizing && !sameSizing(expectedSizing, readSpecSizing(args.canonicalSpec))) return true
+  return false
+}
+
 function classifyResult(args: {
   clarification: StrategyClarificationState | null
   readinessReady: boolean
@@ -913,11 +1098,12 @@ async function buildCaseReport(input: {
 }): Promise<Staging31CaseReport> {
   const failures: string[] = []
   if (!input.row) {
-    failures.push('session_missing')
-    return {
-      index: input.index,
-      input: input.fallbackInput,
-      assistantResponse: '',
+      failures.push('session_missing')
+      return {
+        index: input.index,
+        input: input.fallbackInput,
+        completedInput: input.fallbackInput,
+        assistantResponse: '',
       rulesTree: null,
       projectedFlat: null,
       contextPositionRisk: null,
@@ -953,6 +1139,7 @@ async function buildCaseReport(input: {
   const rulesEmpty = !Array.isArray(rulesTree) || rulesTree.length === 0
   const clarificationClear = clarification?.status === 'CLEAR'
   if (rulesEmpty) failures.push('rules_tree_empty')
+  if (hasDispatcherFallbackRules(rulesTree)) failures.push('dispatcher_fallback_used')
   if (rulesEmpty && clarificationClear) failures.push('empty_rules_with_clear')
   if (rulesEmpty && clarificationClear) failures.push('clarification_clears_rules_tree')
   if (clarification?.status === 'NEEDS_CLARIFICATION') failures.push('clarification_not_resolved_to_script')
@@ -990,18 +1177,26 @@ async function buildCaseReport(input: {
       if (hasUiAstScriptMismatch({ rulesTree, uiSummaryOrGraph, ast, scriptOrError })) {
         failures.push('ui_script_mismatch')
       }
+      if (hasStrategyScriptMismatch({
+        completedInput: buildCompletedInput(input.row.messages, input.fallbackInput),
+        canonicalSpec,
+      })) {
+        failures.push('strategy_script_mismatch')
+      }
     }
     catch (error) {
       scriptOrError = { error: error instanceof Error ? error.message : String(error) }
     }
   }
 
-  const unsupported = Boolean(input.row.reject_reason) || /暂未识别成合规|不支持|unsupported/i.test(readAssistant(input.row.messages))
+  const assistantUnsupported = /暂未识别成合规|不支持|unsupported/i.test(readAssistant(input.row.messages))
+  const unsupported = assistantUnsupported || (Boolean(input.row.reject_reason) && readiness?.ready !== true)
   if (unsupported && scriptGenerated) failures.push('unsupported_with_generated_script')
 
   return {
     index: input.index,
     input: readInput(input.row.messages, input.fallbackInput),
+    completedInput: buildCompletedInput(input.row.messages, input.fallbackInput),
     assistantResponse: readAssistant(input.row.messages),
     rulesTree,
     projectedFlat: reportState ? summarizeFlat(reportState) : null,
@@ -1041,8 +1236,25 @@ function summarize(cases: Staging31CaseReport[]): Staging31FullReport['summary']
     supportedActionReportedUnsupported: countFailure('supported_action_reported_unsupported'),
     clarificationClearsRulesTree: countFailure('clarification_clears_rules_tree'),
     uiScriptMismatch: countFailure('ui_script_mismatch'),
+    strategyScriptMismatch: countFailure('strategy_script_mismatch'),
+    dispatcherFallbackUsed: countFailure('dispatcher_fallback_used'),
     unsupportedWithGeneratedScript: countFailure('unsupported_with_generated_script'),
   }
+}
+
+export function isStaging31HardGatePassing(summary: Staging31HardGateSummary): boolean {
+  return summary.total === 31
+    && summary.pass === 31
+    && summary.needsClarification === 0
+    && summary.unsupported === 0
+    && summary.fail === 0
+    && summary.emptyRulesWithClear === 0
+    && summary.supportedActionReportedUnsupported === 0
+    && summary.clarificationClearsRulesTree === 0
+    && summary.uiScriptMismatch === 0
+    && summary.strategyScriptMismatch === 0
+    && summary.dispatcherFallbackUsed === 0
+    && summary.unsupportedWithGeneratedScript === 0
 }
 
 async function run(): Promise<void> {
@@ -1104,6 +1316,9 @@ async function run(): Promise<void> {
     await mkdir(dirname(out), { recursive: true })
     await writeFile(out, `${JSON.stringify(fullReport, null, 2)}\n`, 'utf8')
     process.stdout.write(`${JSON.stringify(fullReport.summary)}\n`)
+    if (!isStaging31HardGatePassing(fullReport.summary)) {
+      process.exitCode = 1
+    }
   }
   finally {
     client.release()

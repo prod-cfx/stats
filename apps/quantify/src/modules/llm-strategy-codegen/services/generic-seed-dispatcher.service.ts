@@ -94,6 +94,9 @@ const INDICATOR_KEYWORDS = new Set([
   'TWO', 'USE', 'WAY', 'WHO', 'YOU', 'AGO', 'API', 'APP', 'BOT',
   // 交易所 / 市场类型 token，避免 "在 okx 买 btc" 推断为 OKXUSDT。
   'OKX', 'BINANCE', 'HYPERLIQUID', 'SPOT', 'PERP', 'SWAP', 'CONTRACT',
+  'EXCHANGE', 'TIMEFRAME', 'MARKETTYPE', 'SYMBOL', 'POSITION',
+  'EXECUTIONCONTEXT', 'RULESTREE', 'SEMANTIC', 'ACTION', 'ADD',
+  'EXIT', 'ENTRY', 'RISK', 'CONSTRAINT', 'SIZING',
 ])
 
 /** 短句 token 形态：3-10 位大写字母 */
@@ -493,7 +496,7 @@ type ExtractedSizingRole = {
 }
 
 const SIZING_SLOT_RE = /(?:sizing|size|budget)/iu
-const SIZING_ROLE_PREFIX_RE = /(?:仓位|资金(?!费率)|比例|使用|投入|固定|单笔|每格|每次|每笔|每单|用)\s*(?:使用|用|投入)?\s*[：:]?\s*$/u
+const SIZING_ROLE_PREFIX_RE = /(?:仓位|资金(?!费率)|比例|使用|投入|固定|单笔|每格|每次|每笔|每单|用|加投|加仓|补仓)\s*(?:使用|用|投入)?\s*[：:]?\s*$/u
 const SIZING_ROLE_SUFFIX_RE = /^\s*(?:仓位|资金(?!费率)|比例)/u
 const RISK_ROLE_NEAR_RE = /(?:止损|止盈|亏损|盈利|ATR|atr)\s*$/u
 
@@ -585,7 +588,7 @@ function extractParamsWithSizingRoles(
   clause: string,
   atomKey: string,
 ): Record<string, unknown> {
-  const params = extractParams(paramSlots, clause, atomKey)
+  const params = normalizeLifecycleParams(atomKey, clause, extractParams(paramSlots, clause, atomKey))
   const hasSizingSlot = Object.keys(paramSlots).some(slotKey => SIZING_SLOT_RE.test(slotKey))
   if (!hasSizingSlot) return params
 
@@ -600,6 +603,93 @@ function extractParamsWithSizingRoles(
     }
   }
   return params
+}
+
+function normalizeLifecycleParams(
+  atomKey: string,
+  clause: string,
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  if (atomKey === ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key) {
+    return normalizeDcaScheduleParams(clause, params)
+  }
+
+  if (atomKey === ATOM_CONTRACT_REGISTRY['action.add_position'].key) {
+    const sizingRole = extractSizingRoleFromText(clause)
+    const next = { ...params }
+    if (typeof next.drawdownThreshold === 'number') next.drawdownThreshold = Math.abs(next.drawdownThreshold)
+    if (typeof next.profitThreshold === 'number') next.profitThreshold = Math.abs(next.profitThreshold)
+    if (next.addMode === 'drawdown_pct') delete next.profitThreshold
+    if (next.addMode === 'profit_pct') delete next.drawdownThreshold
+    if (sizingRole) {
+      next.sizing = toPerOrderSizingShape(sizingRole.sizing)
+      delete next.addRatio
+    }
+    else if (typeof next.addRatio === 'number') {
+      next.addRatio = Math.abs(next.addRatio)
+    }
+    return next
+  }
+
+  return params
+}
+
+function normalizeDcaScheduleParams(
+  clause: string,
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...params }
+  const sizingRole = extractSizingRoleFromText(clause)
+  const perOrderBudget = typeof params.perOrderBudget === 'number' && Number.isFinite(params.perOrderBudget)
+    ? params.perOrderBudget
+    : null
+  if (sizingRole) {
+    next.perOrderSizing = toPerOrderSizingShape(sizingRole.sizing)
+  }
+  else if (perOrderBudget !== null && perOrderBudget > 0) {
+    next.perOrderSizing = { kind: 'quote', value: perOrderBudget, asset: 'USDT' }
+  }
+  delete next.perOrderBudget
+
+  const explicitMaxCount = clause.match(/最多\s*(\d{1,4})\s*(?:次|笔|单)/u)
+  if (explicitMaxCount) {
+    next.maxCount = Number(explicitMaxCount[1])
+  }
+  delete next.maxOrders
+
+  const capitalCap = clause.match(/(?:总(?:投入|资金|预算|金额)|上限|不超过)\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|[uU](?![A-Za-z0-9])|刀|美元)/iu)
+  if (capitalCap) {
+    next.capitalCap = {
+      kind: 'quote',
+      value: Number(capitalCap[1]),
+      asset: normalizeQuoteAsset(capitalCap[2]),
+    }
+  }
+
+  if (/每天|每日/u.test(clause)) {
+    next.triggerMode = 'time_interval'
+    next.timeIntervalBars = 1
+  }
+  else if (/每周|每星期/u.test(clause)) {
+    next.triggerMode = 'time_interval'
+    next.timeIntervalBars = 7
+  }
+  else if (/每月/u.test(clause)) {
+    next.triggerMode = 'time_interval'
+    next.timeIntervalBars = 30
+  }
+  else if (typeof params.dropPct === 'number' && Number.isFinite(params.dropPct)) {
+    next.triggerMode = 'price_interval'
+    next.priceIntervalPct = params.dropPct
+  }
+
+  return next
+}
+
+function removeInPlace<T>(items: T[], predicate: (item: T) => boolean): void {
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (predicate(items[i]!)) items.splice(i, 1)
+  }
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -965,6 +1055,8 @@ export class GenericSeedDispatcher {
       slotDedupeKeys,
     )
 
+    this.applySemanticConflictResolution(atomItems, slotItems)
+
     // review C3：替代 `as never` 类型逃生，使用 patch schema 自身派生的精确 cast；
     // 未来 PR3+ 改 CodegenSemanticPatch 字段类型时编译器能抓到 mismatch。
     const mergedSlotItems: Record<'triggers' | 'actions' | 'risk', PatchAtomNode[]> = {
@@ -988,6 +1080,30 @@ export class GenericSeedDispatcher {
     }
 
     return patch
+  }
+
+  private applySemanticConflictResolution(
+    atomItems: PatchAtomNode[],
+    slotItems: Record<'triggers' | 'actions' | 'risk', PatchAtomNode[]>,
+  ): void {
+    const addPositionKey = ATOM_CONTRACT_REGISTRY['action.add_position'].key
+    const takeProfitKey = ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key
+    const addPositionClauses = new Set(
+      atomItems
+        .filter(item => item.key === addPositionKey)
+        .map(item => readPatchEvidenceText(item))
+        .filter((text): text is string => typeof text === 'string' && text.trim().length > 0),
+    )
+    if (addPositionClauses.size === 0) return
+
+    const isConflictingTakeProfit = (item: PatchAtomNode): boolean => {
+      if (item.key !== takeProfitKey) return false
+      const evidence = readPatchEvidenceText(item)
+      return typeof evidence === 'string' && addPositionClauses.has(evidence)
+    }
+
+    removeInPlace(atomItems, isConflictingTakeProfit)
+    removeInPlace(slotItems.risk, isConflictingTakeProfit)
   }
 
   /**
@@ -1293,4 +1409,11 @@ export class GenericSeedDispatcher {
       sideScope,
     }
   }
+}
+
+function readPatchEvidenceText(item: { evidence?: unknown }): string | null {
+  const evidence = item.evidence
+  if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) return null
+  const text = (evidence as { text?: unknown }).text
+  return typeof text === 'string' ? text : null
 }

@@ -890,8 +890,10 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     goldenUtterances: getGoldenUtterancesForAtom('position.dca_schedule'),
     displayRenderer: ({ params }) => {
       const maxCount = typeof params?.maxCount === 'number' ? `最多 ${params.maxCount} 次` : ''
+      const perOrderSizing = formatDcaSizing(params?.perOrderSizing)
+      const capitalCap = typeof params?.capitalCap === 'number' ? `资金上限 ${formatDisplayNumber(params.capitalCap)} USDT` : ''
       const triggerMode = typeof params?.triggerMode === 'string' ? renderDcaTriggerMode(params.triggerMode) : ''
-      const parts = [triggerMode, maxCount].filter(Boolean)
+      const parts = [triggerMode, perOrderSizing, maxCount, capitalCap].filter(Boolean)
       return parts.length > 0
         ? renderDisplayToken('atom.position.dca_schedule.display', { parts: parts.join('，') })
         : renderDisplayToken('atom.position.dca_schedule.display.empty')
@@ -1325,6 +1327,25 @@ function renderBoundaryRole(boundaryRole: string): string {
 
 function renderDcaTriggerMode(triggerMode: string): string {
   return renderEnumDisplayToken('enum.dca.triggerMode', triggerMode)
+}
+
+function formatDcaSizing(rawSizing: unknown): string {
+  if (!rawSizing || typeof rawSizing !== 'object' || Array.isArray(rawSizing)) return ''
+  const sizing = rawSizing as Record<string, unknown>
+  const value = sizing.value
+  if (typeof value !== 'number' || !Number.isFinite(value)) return ''
+  const kind = typeof sizing.kind === 'string' ? sizing.kind : ''
+  if (kind === 'ratio') {
+    const unit = sizing.unit === 'percent' ? '%' : ''
+    const ratioValue = unit === '%' ? value : value * 100
+    return `每次 ${formatDisplayNumber(ratioValue)}%`
+  }
+  const asset = typeof sizing.asset === 'string' && sizing.asset.trim() ? sizing.asset.trim() : 'USDT'
+  return `每次 ${formatDisplayNumber(value)} ${asset}`
+}
+
+function formatDisplayNumber(value: number): string {
+  return `${Number.parseFloat(Number(value).toFixed(6))}`
 }
 
 function objectParam(params: Record<string, unknown>, key: string): Record<string, unknown> {

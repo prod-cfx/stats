@@ -7,6 +7,8 @@ import { Injectable } from '@nestjs/common'
 import { SemanticAtomContractService } from './semantic-atom-contract.service'
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+import { collectAtomLeaves } from '../types/atom-expr'
 
 type PriceChangeDirection = 'up' | 'down'
 type PositionAction = 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
@@ -641,6 +643,9 @@ export class SemanticAtomInvariantService {
     if (marketType !== 'perp') {
       return 'spot'
     }
+    if (this.hasBothSideGridIntent(state)) {
+      return 'perp_neutral'
+    }
 
     const exposureMode = exposure ? this.readShapeString(exposure.shape, 'mode') : null
     if (exposureMode === 'long' || state.position?.positionMode === 'long_only') {
@@ -650,6 +655,26 @@ export class SemanticAtomInvariantService {
       return 'perp_short'
     }
     return 'perp_neutral'
+  }
+
+  private hasBothSideGridIntent(state: SemanticState): boolean {
+    const hasBothSideParams = (params: Record<string, unknown> | undefined): boolean =>
+      params?.sideMode === 'both'
+    for (const constraint of state.positionConstraint ?? []) {
+      if (constraint.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && hasBothSideParams(constraint.params)) {
+        return true
+      }
+    }
+    for (const rule of state.rules ?? []) {
+      const leaves = [
+        ...collectAtomLeaves(rule.condition),
+        ...rule.effects.flatMap(effect => collectAtomLeaves(effect)),
+      ]
+      if (leaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && hasBothSideParams(leaf.params))) {
+        return true
+      }
+    }
+    return false
   }
 
   private validatePositionSizingContract(input: {
@@ -683,7 +708,7 @@ export class SemanticAtomInvariantService {
     const astCandidates = this.readAstOpenActionPositionSizings(input.ast)
     const ast = {
       passed: astCandidates.length > 0
-        && astCandidates.every(candidate => this.matchesPositionSizingSnapshot(candidate, expectedIr)),
+        && astCandidates.some(candidate => this.matchesPositionSizingSnapshot(candidate, expectedIr)),
       expected: expectedIr,
       candidates: astCandidates,
     }

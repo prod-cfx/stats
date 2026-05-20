@@ -102,6 +102,11 @@ const BAD_EVIDENCE_PLAN_JSON = JSON.stringify({
 })
 
 const USER_MESSAGE = '5min K 线里面 价格在 EMA20/60/144 上方时做多开仓 都位于下方只开空 入场是 BOLL 下轨开多 上轨开空 币安 BTCUSDT 永续 风控亏损 5% 止损'
+const DISPATCHER_FALLBACK_PATCH = {
+  triggers: [
+    { key: 'bollinger.touch_lower', phase: 'entry', sideScope: 'long', params: {}, evidence: { text: USER_MESSAGE } },
+  ],
+}
 
 describe('#1445 CodegenConversation planner schema reject → retry → unsupportedFallback', () => {
   it('initial compliant rules[] → no retry, returns plan with semanticPatch', async () => {
@@ -199,6 +204,42 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
     metricSpy.mockRestore()
   })
 
+  it('initial reject + retry still reject + dispatcher atoms → deterministic rules-tree fallback', async () => {
+    const { svc, shell, mergeSvc } = makeService()
+    shell.aiService.chat
+      .mockResolvedValueOnce({ content: LEGACY_FLAT_PLAN_JSON })
+      .mockResolvedValueOnce({ content: LEGACY_FLAT_PLAN_JSON })
+    shell.genericSeedDispatcher.dispatch.mockReturnValueOnce(DISPATCHER_FALLBACK_PATCH)
+    const metricSpy = jest.spyOn(mergeSvc, 'emitPlannerSchemaRejectMetric')
+
+    const plan = await (svc as unknown as { planConversationByLlm: Function }).planConversationByLlm(
+      USER_MESSAGE,
+      { rules: [] },
+      { providerCode: 'test', locale: 'zh' },
+      [],
+    )
+
+    expect(shell.aiService.chat).toHaveBeenCalledTimes(2)
+    expect(shell.genericSeedDispatcher.dispatch).toHaveBeenCalledWith(USER_MESSAGE)
+    expect(plan.logicReady).toBe(true)
+    expect(plan.semanticPatch?.rules).toEqual([
+      expect.objectContaining({
+        id: 'dispatcher-fallback-1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({ key: 'bollinger.touch_lower' }),
+        effects: [expect.objectContaining({ key: 'action.open_long' })],
+      }),
+    ])
+    expect(plan.diagnostics).toEqual(expect.objectContaining({
+      gate: 'RulesTreeEntryGate',
+      entry: expect.objectContaining({ result: 'deterministic_fallback' }),
+    }))
+    const stages = metricSpy.mock.calls.map(c => c[0])
+    expect(stages).toEqual(expect.arrayContaining(['initial', 'retry']))
+    metricSpy.mockRestore()
+  })
+
   it('#1445 retry budget: transport-failure + transport-retry reject → no extra schema-retry (≤2 LLM calls total)', async () => {
     // 防护 retry 风暴：transport-failure 后的 retry 已用掉单轮重试预算，
     //   若该次 LLM 返回 schema-reject，必须直接走 unsupportedFallback，
@@ -234,10 +275,8 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
       { providerCode: 'test', locale: 'zh' },
       [],
     )
-    // 主链路必须 reject 走 unsupportedFallback；不会带 semanticPatch 进下游 merge
+    // 主链路必须 reject；dispatcher 空 fallback 不会带 semanticPatch 进下游 merge
     expect(plan.semanticPatch).toBeUndefined()
-    // merge dispatcher 不应被调用（早 return）
-    // 注：#1492 后 dispatcher 不再参与生产解释链路，本断言锁定该不变量
-    expect(shell.genericSeedDispatcher.dispatch).not.toHaveBeenCalled()
+    expect(shell.genericSeedDispatcher.dispatch).toHaveBeenCalledWith(USER_MESSAGE)
   })
 })

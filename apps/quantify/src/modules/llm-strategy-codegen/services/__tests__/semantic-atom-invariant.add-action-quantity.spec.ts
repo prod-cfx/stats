@@ -59,6 +59,20 @@ describe('SemanticAtomInvariantService — readAstOpenActionPositionSizings ADD_
     expect(candidates).toHaveLength(2)
   })
 
+  it('position sizing drift check allows lifecycle add quantities when one entry quantity matches position sizing', () => {
+    expect(anySvc.matchesPositionSizingSnapshot(
+      { mode: 'fixed_quote', value: 200, asset: 'USDT' },
+      { mode: 'fixed_quote', value: 200, asset: 'USDT' },
+    )).toBe(true)
+    expect([
+      { mode: 'fixed_quote', value: 100, asset: 'USDT' },
+      { mode: 'fixed_quote', value: 200, asset: 'USDT' },
+    ].some(candidate => anySvc.matchesPositionSizingSnapshot(
+      candidate,
+      { mode: 'fixed_quote', value: 200, asset: 'USDT' },
+    ))).toBe(true)
+  })
+
   it('fixed_quote 默认 USDT asset 可与省略 asset 的下游快照匹配', () => {
     expect(anySvc.matchesPositionSizingSnapshot(
       { mode: 'fixed_quote', value: 100 },

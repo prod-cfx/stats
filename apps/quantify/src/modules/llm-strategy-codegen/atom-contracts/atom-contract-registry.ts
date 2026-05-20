@@ -75,6 +75,48 @@ type NotApplicableEmit = Omit<AtomContractEmit, 'irShape'> & {
   readonly irShape: NotApplicableIrShapeBuilder
 }
 
+function formatAtomDisplayNumber(value: number): string {
+  return `${Number.parseFloat(Number(value).toFixed(6))}`
+}
+
+function formatDcaScheduleSizing(rawSizing: unknown): string {
+  if (!rawSizing || typeof rawSizing !== 'object' || Array.isArray(rawSizing)) return ''
+  const sizing = rawSizing as Record<string, unknown>
+  const value = sizing.value
+  if (typeof value !== 'number' || !Number.isFinite(value)) return ''
+  const kind = typeof sizing.kind === 'string' ? sizing.kind : ''
+  if (kind === 'ratio') {
+    const unit = sizing.unit === 'percent' ? '%' : ''
+    const ratioValue = unit === '%' ? value : value * 100
+    return `每次 ${formatAtomDisplayNumber(ratioValue)}%`
+  }
+  const asset = typeof sizing.asset === 'string' && sizing.asset.trim() ? sizing.asset.trim() : 'USDT'
+  return `每次 ${formatAtomDisplayNumber(value)} ${asset}`
+}
+
+function formatAddPositionSummary(params: Record<string, unknown>): string {
+  const addRatio = typeof params.addRatio === 'number' ? params.addRatio : null
+  const addMode = typeof params.addMode === 'string' ? params.addMode : null
+  const profitThreshold = typeof params.profitThreshold === 'number' ? params.profitThreshold : null
+  const drawdownThreshold = typeof params.drawdownThreshold === 'number' ? params.drawdownThreshold : null
+  const sizingText = formatDcaScheduleSizing(params.sizing).replace(/^每次\s*/u, '')
+  const perAddText = sizingText ? `，每次 ${sizingText}` : ''
+  const ratioPct = addRatio !== null ? `${formatAtomDisplayNumber(addRatio * 100)}%` : null
+
+  if (addMode === 'profit_pct') {
+    const triggerPart = profitThreshold !== null ? `盈利 ${formatAtomDisplayNumber(profitThreshold)}% 后` : '盈利后'
+    return ratioPct ? `加仓：${triggerPart}加仓 ${ratioPct}` : `加仓：${triggerPart}加仓${perAddText}`
+  }
+  if (addMode === 'drawdown_pct') {
+    const triggerPart = drawdownThreshold !== null ? `回撤 ${formatAtomDisplayNumber(drawdownThreshold)}% 后` : '回撤后'
+    return ratioPct ? `加仓：${triggerPart}加仓 ${ratioPct}` : `加仓：${triggerPart}加仓${perAddText}`
+  }
+  if (addMode === 'signal_confirm') {
+    return ratioPct ? `加仓：信号确认后加仓 ${ratioPct}` : `加仓：信号确认后加仓${perAddText}`
+  }
+  return ratioPct ? `加仓：每次 ${ratioPct}` : (sizingText ? `加仓：每次 ${sizingText}` : '加仓')
+}
+
 // Issue #1279 PR3a Phase 2 + PR3e：seed 的 `emit` 字段若被显式指定（已兑现为 real
 // 'pr3a-condition'），编译期保留其原始字面量类型；未指定时由 `completePr1bRegistry`
 // 注入 `NotApplicableEmit`（PR3e 起非 condition bucket atom 默认状态）。
@@ -2754,30 +2796,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         profitThreshold: (v) => `${v}%`,
         drawdownThreshold: (v) => `${v}%`,
       },
-      summaryTemplate: (_p, locale) => ATOM_PUBLIC_NAMES['action.add_position'][locale],
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['action.add_position'].en
+        return formatAddPositionSummary(params)
+      },
     },
-    summaryContribution: ({ params }) => {
-      // inline 自定义：addMode + addRatio 精简摘要
-      const addRatio = typeof params.addRatio === 'number' ? params.addRatio : null
-      const addMode = typeof params.addMode === 'string' ? params.addMode : null
-      const profitThreshold = typeof params.profitThreshold === 'number' ? params.profitThreshold : null
-      const drawdownThreshold = typeof params.drawdownThreshold === 'number' ? params.drawdownThreshold : null
-
-      const ratioPct = addRatio !== null ? `${Math.round(addRatio * 100)}%` : null
-
-      if (addMode === 'profit_pct') {
-        const triggerPart = profitThreshold !== null ? `盈利 ${profitThreshold}% 后` : '盈利后'
-        return ratioPct ? `加仓：${triggerPart}加仓 ${ratioPct}` : `加仓：${triggerPart}加仓`
-      }
-      if (addMode === 'drawdown_pct') {
-        const triggerPart = drawdownThreshold !== null ? `回撤 ${drawdownThreshold}% 后` : '回撤后'
-        return ratioPct ? `加仓：${triggerPart}加仓 ${ratioPct}` : `加仓：${triggerPart}加仓`
-      }
-      if (addMode === 'signal_confirm') {
-        return ratioPct ? `加仓：信号确认后加仓 ${ratioPct}` : '加仓：信号确认后加仓'
-      }
-      return ratioPct ? `加仓：每次 ${ratioPct}` : '加仓'
-    },
+    summaryContribution: ({ params }) => formatAddPositionSummary(params),
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: (slotKey) => {
       if (slotKey === 'action.add_position.constraint') {
@@ -2792,7 +2816,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     surface: {
       intent: {
         // critic m1 fix: 删除 '加码'/'追仓'（extractor/utterance/fixture 全仓 0 命中的凭空同义词）
-        keywords: ['加仓', '补仓', 'add position', 'scale in', 'pullback'] as const,
+        keywords: ['加仓', '补仓', '加投', 'add position', 'scale in', 'pullback'] as const,
         verbs: {
           // critic M2 fix: 移除通用连接词 '后'/'时'/'when'/'after'，仅保留语义触发词
           fixed: ['回踩', '盈利', '回撤'] as const,
@@ -3397,11 +3421,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         if (locale === 'en') return ATOM_PUBLIC_NAMES['position.dca_schedule'].en
         const maxCountVal = params.maxCount
         const maxCount = typeof maxCountVal === 'number' ? `最多 ${maxCountVal} 次` : ''
+        const perOrderSizing = formatDcaScheduleSizing(params.perOrderSizing)
+        const capitalCapVal = params.capitalCap
+        const capitalCap = typeof capitalCapVal === 'number' && Number.isFinite(capitalCapVal)
+          ? `资金上限 ${formatAtomDisplayNumber(capitalCapVal)} USDT`
+          : ''
         const triggerModeVal = params.triggerMode
         const triggerMode = typeof triggerModeVal === 'string'
           ? (ATOM_PRIVATE_DISPLAY.dcaTriggerMode[triggerModeVal as keyof typeof ATOM_PRIVATE_DISPLAY.dcaTriggerMode]?.zh ?? triggerModeVal)
           : ''
-        const parts = [triggerMode, maxCount].filter(Boolean)
+        const parts = [triggerMode, perOrderSizing, maxCount, capitalCap].filter(Boolean)
         return parts.length > 0 ? `DCA 补仓计划：${parts.join('，')}` : 'DCA 补仓计划'
       },
     },
@@ -3461,7 +3490,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['最多加仓', '金字塔', '加仓层数', 'pyramiding', 'max adds', 'max layers'] as const,
+        keywords: ['最多加仓', '最多加', '金字塔', '加仓层数', 'pyramiding', 'max adds', 'max layers'] as const,
         verbs: {
           fixed: ['最多', '不超过', 'max', 'up to'] as const,
         },

@@ -122,16 +122,16 @@ describe('#1493 块 D — readiness rules-as-source-of-truth', () => {
 
     const result = svc.normalize(state)
 
-    // reproject 后 entry rule 的 AND 两叶子在 trigger 桶里，且首叶子带 combinationContract
+    // reproject 后 entry rule 的 AND 两叶子在 trigger 桶里，且每个 member 都带同一 combinationContract
     const entryTriggers = result.state.trigger.filter(t => t.phase === 'entry')
     expect(entryTriggers.length).toBe(2)
     const isCombinationContract = (c: { capabilities?: ReadonlyArray<{ object?: string }> }) =>
       (c.capabilities ?? []).some(cap => cap.object === 'predicate_group')
     const firstHasCombination = (entryTriggers[0].contracts ?? []).some(isCombinationContract)
     expect(firstHasCombination).toBe(true)
-    // 第二个叶子不该带 combinationContract（语义"不被拆散"——一组 AND 共享一个 combination 描述）
     const secondHasCombination = (entryTriggers[1].contracts ?? []).some(isCombinationContract)
-    expect(secondHasCombination).toBe(false)
+    expect(secondHasCombination).toBe(true)
+    expect(entryTriggers[1].contracts?.[0]).toEqual(entryTriggers[0].contracts?.[0])
     // rules 判定：entry + exit + risk 齐备
     expect(result.ready).toBe(true)
   })

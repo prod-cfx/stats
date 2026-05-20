@@ -28,7 +28,7 @@ describe('SemanticRuleProjectionService (Issue #1395)', () => {
     expect(out.trigger[0]!.sideScope).toBe('long')
   })
 
-  it('projects AND of 2 atoms to 2 triggers + combination contract on first', () => {
+  it('projects AND of 2 atoms to 2 triggers + combination contract on every member', () => {
     const rules: SemanticRule[] = [{
       id: 'r2',
       phase: 'entry',
@@ -45,7 +45,8 @@ describe('SemanticRuleProjectionService (Issue #1395)', () => {
     const out = svc.projectToFlat(rules)
     expect(out.trigger).toHaveLength(2)
     expect(out.trigger[0]!.contracts?.length ?? 0).toBeGreaterThan(0)
-    expect(out.trigger[1]!.contracts?.length ?? 0).toBe(0)
+    expect(out.trigger[1]!.contracts?.length ?? 0).toBeGreaterThan(0)
+    expect(out.trigger[1]!.contracts?.[0]).toEqual(out.trigger[0]!.contracts?.[0])
     expect(out.action).toHaveLength(1)
     expect(out.action[0]!.key).toBe('action.open_long')
     expect(out.action[0]!.status).toBe('locked')

@@ -94,6 +94,7 @@ import {
   
   
 } from './inferred-confirmation-classifier.service'
+import { GenericSeedDispatcher } from './generic-seed-dispatcher.service'
 import { canonicalizeStrategySymbolInput, isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
 import { PlannerDispatcherMergeService } from './planner-dispatcher-merge.service'
@@ -308,6 +309,7 @@ export class CodegenConversationService {
     private readonly unsupportedFallback: UnsupportedFallbackService = new UnsupportedFallbackService(),
     private readonly semanticContractReadiness: SemanticContractReadinessService = new SemanticContractReadinessService(),
     private readonly semanticQuestionRenderer: SemanticClarificationQuestionRendererService = new SemanticClarificationQuestionRendererService(),
+    private readonly genericSeedDispatcher: GenericSeedDispatcher = new GenericSeedDispatcher(),
     // Issue #1383 Lane A：注入 SemanticExecutableSemanticsService，registry-driven，
     //   本服务内不再保留硬编码 capability.domain/verb 判定。
     private readonly executableSemantics: SemanticExecutableSemanticsService = new SemanticExecutableSemanticsService(),
@@ -8791,10 +8793,26 @@ export class CodegenConversationService {
               ? this.localizedText(locale, 'I have organized the strategy logic. Please confirm the logic graph.', '我已整理出策略逻辑，请确认逻辑图。')
               : this.localizedText(locale, 'I will keep refining the strategy logic. Please provide one key condition.', '我先继续完善策略逻辑，请补充一个关键条件。'))
 
-        // Issue #1492：planner 成功后不再 union dispatcher patch。
-        //   rules tree 是唯一策略语义真源；缺少 positionConstraint/orchestration 能力
-        //   走 atom contract 升级路径，不在入口 fallback。
-        const semanticPatch = this.normalizeSemanticPatch(parsed.semanticPatch ?? parsed.semanticUpdates) ?? undefined
+        // Issue #1492：planner 成功后不再 union dispatcher rules/atoms。
+        //   rules tree 仍是唯一策略语义真源；但 exchange/symbol/timeframe/position sizing
+        //   属执行槽位，deterministic dispatcher 的数值抽取比 LLM 更稳定，允许只校准
+        //   context/position，禁止借此补 rule。
+        const plannerSemanticPatch = this.normalizeSemanticPatch(parsed.semanticPatch ?? parsed.semanticUpdates) ?? undefined
+        let semanticPatch = plannerSemanticPatch
+        if (plannerSemanticPatch) {
+          try {
+            const dispatcherPatch = this.genericSeedDispatcher.dispatch(text) as CodegenSemanticPatch
+            semanticPatch = this.plannerDispatcherMerge.mergeDeterministicExecutionSlots(
+              plannerSemanticPatch,
+              dispatcherPatch,
+            ) ?? plannerSemanticPatch
+          }
+          catch (error) {
+            this.logger.warn(
+              `deterministic execution slot merge failed, keeping planner semanticPatch: ${error instanceof Error ? error.message : String(error)}`,
+            )
+          }
+        }
         return {
           kind: 'plan',
           plan: {
@@ -8835,10 +8853,12 @@ export class CodegenConversationService {
         const retryOutcome = await classifyOnce(outcome.reminder)
         if (retryOutcome.kind === 'plan') return retryOutcome.plan
         this.plannerDispatcherMerge.emitPlannerSchemaRejectMetric('retry', 1)
-        return this.buildPlannerSchemaUnsupportedFallback(locale, retryOutcome.reasons)
+        return this.buildPlannerSchemaRulesTreeFallback(locale, retryOutcome.reasons, text)
+          ?? this.buildPlannerSchemaUnsupportedFallback(locale, retryOutcome.reasons)
       }
       // 已是 retry 仍 reject → unsupportedFallback
-      return this.buildPlannerSchemaUnsupportedFallback(locale, outcome.reasons)
+      return this.buildPlannerSchemaRulesTreeFallback(locale, outcome.reasons, text)
+        ?? this.buildPlannerSchemaUnsupportedFallback(locale, outcome.reasons)
     }
 
     try {
@@ -8880,6 +8900,60 @@ export class CodegenConversationService {
           assistantPrompt: this.localizedText(locale, 'I will keep refining the strategy logic. Please provide the entry and exit conditions.', '我先继续完善策略逻辑，请补充入场和出场条件。'),
         }
       }
+    }
+  }
+
+  /**
+   * planner rules-first schema reject 后，允许 deterministic dispatcher 从 atom registry
+   * 重建最小合法 rulesTree。该 fallback 仍输出 rules[]，不把旧 flat patch 直接喂下游。
+   */
+  private buildPlannerSchemaRulesTreeFallback(
+    locale: CodegenConversationLocale,
+    reasons: ReadonlyArray<string>,
+    message: string,
+  ): ConversationPlan | null {
+    let dispatcherPatch: CodegenSemanticPatch | null = null
+    try {
+      dispatcherPatch = this.genericSeedDispatcher.dispatch(message) as CodegenSemanticPatch
+    } catch (error) {
+      this.logPlannerFallback('schema_reject_rules_tree_fallback_dispatch_error', {
+        reasons: reasons.join(','),
+        error: this.summarizePlannerError(error),
+      })
+      return null
+    }
+
+    const semanticPatch = this.plannerDispatcherMerge.buildRulesTreeFallbackFromDispatcher(
+      dispatcherPatch,
+      message,
+    )
+    const ruleCount = semanticPatch?.rules?.length ?? 0
+    if (!semanticPatch || ruleCount === 0) {
+      this.logPlannerFallback('schema_reject_rules_tree_fallback_empty', { reasons: reasons.join(',') })
+      return null
+    }
+
+    this.logPlannerFallback('schema_reject_rules_tree_fallback', {
+      reasons: reasons.join(','),
+      ruleCount: String(ruleCount),
+    })
+    return {
+      related: true,
+      logicReady: true,
+      assistantPrompt: this.localizedText(
+        locale,
+        'I have organized the strategy logic from deterministic rules-tree extraction. Please confirm the logic graph.',
+        '我已通过确定性规则树抽取整理出策略逻辑，请确认逻辑图。',
+      ),
+      semanticPatch,
+      diagnostics: {
+        gate: 'RulesTreeEntryGate',
+        entry: {
+          rejectReasons: [...reasons],
+          result: 'deterministic_fallback',
+          ruleCount,
+        },
+      },
     }
   }
 
@@ -9168,7 +9242,17 @@ export class CodegenConversationService {
   }
 
   private logPlannerFallback(
-    reason: 'empty_content' | 'schema_mismatch' | 'invalid_json' | 'model_not_found' | 'transport_failure_retrying' | 'transport_failure_retry_exhausted' | 'schema_reject_unsupported',
+    reason:
+      | 'empty_content'
+      | 'schema_mismatch'
+      | 'invalid_json'
+      | 'model_not_found'
+      | 'transport_failure_retrying'
+      | 'transport_failure_retry_exhausted'
+      | 'schema_reject_unsupported'
+      | 'schema_reject_rules_tree_fallback_dispatch_error'
+      | 'schema_reject_rules_tree_fallback_empty'
+      | 'schema_reject_rules_tree_fallback',
     context: Record<string, string | number | boolean | undefined> = {},
   ): void {
     const contextSuffix = Object.entries(context)

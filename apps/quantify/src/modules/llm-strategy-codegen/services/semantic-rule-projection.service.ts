@@ -288,7 +288,9 @@ export class SemanticRuleProjectionService {
 
     if (triggerLeafCount === 0) return
 
-    // AND/OR → combinationContract 挂到第一个 member
+    // AND/OR → 同一个 combinationContract 挂到每个 trigger member。
+    // 只挂第一个会让后续 trigger 走 implicit singleton group，canonical 只能看到
+    // 第一片条件，导致规则树里的 AND/OR 参数在 flat -> canonical 断裂。
     const join = this.toJoinKind(expr)
     if (join && triggerLeafCount >= 2) {
       const groupId = `rule-${rule.id}-grp`
@@ -298,11 +300,12 @@ export class SemanticRuleProjectionService {
         phase: this.phaseToTriggerPhase(rule.phase),
         sideScope: rule.sideScope,
       })
-      const first = triggers[startIndex]
-      if (first) {
-        triggers[startIndex] = {
-          ...first,
-          contracts: [...(first.contracts ?? []), contract],
+      for (let index = startIndex; index < triggers.length; index += 1) {
+        const trigger = triggers[index]
+        if (!trigger || trigger._provenance?.ruleId !== rule.id) continue
+        triggers[index] = {
+          ...trigger,
+          contracts: [...(trigger.contracts ?? []), contract],
         }
       }
     }
@@ -509,6 +512,15 @@ export class SemanticRuleProjectionService {
           sizing: this.normalizeProgramSizing(leaf.params.sizing) ?? this.normalizeProgramSizing(leaf.params) ?? { mode: 'fixed_pct', value: 10 },
         },
       ]
+    }
+
+    if (leaf.key === 'gate.regime') {
+      // Rules-tree gate effects are predicate-level filters. The rule condition itself
+      // remains the executable source; projecting this bare effect into orchestration
+      // creates a phase0 runtime node without target/activeWhen and blocks codegen.
+      if (!leaf.params.activeWhen && !leaf.params.target && !leaf.params.effectWhenFalse) {
+        return []
+      }
     }
 
     return [base]

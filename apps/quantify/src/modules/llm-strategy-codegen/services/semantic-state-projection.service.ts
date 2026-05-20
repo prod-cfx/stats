@@ -2588,6 +2588,8 @@ export class SemanticStateProjectionService {
     const addMode = this.readString(action.params?.addMode as unknown)
     const addRatio = this.readFiniteNumber(action.params?.addRatio as unknown)
     const addRatioPct = addRatio !== null ? this.formatPercent(addRatio * 100) : null
+    const sizingText = this.formatAddPositionSizing((action.params as Record<string, unknown> | undefined)?.sizing)
+    const perAddText = sizingText ? `，每次${sizingText}` : ''
 
     // #1158：profitThreshold / drawdownThreshold 单位为 percent（如 2 表示 2%），不需要 * 100
     if (addMode === 'profit_pct') {
@@ -2597,7 +2599,7 @@ export class SemanticStateProjectionService {
         : '盈利后'
       return addRatioPct !== null
         ? `加仓：${triggerText}加仓，每次${addRatioPct}%`
-        : `加仓：${triggerText}加仓`
+        : `加仓：${triggerText}加仓${perAddText}`
     }
 
     if (addMode === 'drawdown_pct') {
@@ -2607,20 +2609,38 @@ export class SemanticStateProjectionService {
         : '回撤后'
       return addRatioPct !== null
         ? `加仓：${triggerText}加仓，每次${addRatioPct}%`
-        : `加仓：${triggerText}加仓`
+        : `加仓：${triggerText}加仓${perAddText}`
     }
 
     if (addMode === 'signal_confirm') {
       return addRatioPct !== null
         ? `加仓：信号确认后加仓，每次${addRatioPct}%`
-        : '加仓：信号确认后加仓'
+        : `加仓：信号确认后加仓${perAddText}`
     }
 
     if (addRatioPct !== null) {
       return `加仓：每次${addRatioPct}%`
     }
+    if (sizingText) {
+      return `加仓：每次${sizingText}`
+    }
 
     return '加仓'
+  }
+
+  private formatAddPositionSizing(rawSizing: unknown): string {
+    const sizing = this.readUnknownShape(rawSizing)
+    if (!sizing) return ''
+    const value = this.readFiniteNumber(sizing.value)
+    if (value === null) return ''
+    const kind = this.readString(sizing.kind)
+    if (kind === 'ratio') {
+      const unit = this.readString(sizing.unit)
+      const ratioValue = unit === 'percent' ? value : value * 100
+      return `${this.formatPercent(ratioValue)}%`
+    }
+    const asset = this.readString(sizing.asset) ?? 'USDT'
+    return `${this.formatNumber(value)} ${asset}`
   }
 
   private buildContractOrderProgramSummary(action: SemanticState['action'][number], state: SemanticState, index?: CapabilityEvidenceIndex): string {
