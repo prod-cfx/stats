@@ -681,13 +681,16 @@ function findDcaOwnerSideScopes(
   owner: SemanticContractOwnerRef,
 ): SemanticRuleSideScope[] {
   const sideScopes = new Set<SemanticRuleSideScope>()
+  let matchedRuleCount = 0
   for (const rule of rules) {
     if (owner.sourceRuleId && rule.id !== owner.sourceRuleId) continue
     const effectLeaves = rule.effects.flatMap(collectAtomLeavesSafe)
     if (effectLeaves.some(leaf => leaf.key === owner.atomKey)) {
+      matchedRuleCount += 1
       sideScopes.add(rule.sideScope)
     }
   }
+  if (!owner.sourceRuleId && matchedRuleCount > 1) return []
   return [...sideScopes]
 }
 
@@ -2528,6 +2531,7 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
         ownerKind: 'position',
         ownerId: positionConstraintOwnerId(constraint),
         atomKey: constraint.key,
+        sourceRuleId: constraint._provenance?.ruleId,
         params: constraint.params,
         support: constraint.support,
         status: constraint.status,
@@ -2543,6 +2547,7 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
         ownerKind: 'position',
         ownerId: positionConstraintOwnerId(constraint),
         atomKey: constraint.key,
+        sourceRuleId: constraint._provenance?.ruleId,
         params: constraint.params,
         support: constraint.support,
         status: constraint.status,

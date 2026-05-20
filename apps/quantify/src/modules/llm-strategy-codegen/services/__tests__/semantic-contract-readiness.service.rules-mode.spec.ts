@@ -385,6 +385,59 @@ describe('semanticContractReadinessService.normalize DCA exit contract in rules 
       }),
     ]))
   })
+
+  it('does not let a short DCA rule and short exit satisfy an unrelated long DCA rule', () => {
+    const result = svc.normalize(stateWithRules([
+      rule({
+        id: 'entry-long-dca',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: atom('strategy.time_window', { window: 'daily' }),
+        effects: [
+          atom('action.open_long'),
+          atom('position.dca_schedule', {
+            triggerMode: 'time_interval',
+            timeIntervalBars: 1,
+            perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+          }),
+        ],
+      }),
+      rule({
+        id: 'entry-short-dca',
+        phase: 'entry',
+        sideScope: 'short',
+        condition: atom('strategy.time_window', { window: 'daily' }),
+        effects: [
+          atom('action.open_short'),
+          atom('position.dca_schedule', {
+            triggerMode: 'time_interval',
+            timeIntervalBars: 1,
+            perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+          }),
+        ],
+      }),
+      rule({
+        id: 'exit-short-stop',
+        phase: 'exit',
+        sideScope: 'short',
+        condition: atom('price.percent_change', {
+          direction: 'up',
+          thresholdPct: 5,
+          basis: 'entry_avg_price',
+        }),
+        effects: [atom('action.close_short')],
+      }),
+    ]))
+
+    expect(result.ready).toBe(false)
+    expect(result.missingRequirements).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        domain: 'guard',
+        verb: 'define',
+        object: 'dca_exit_rule',
+      }),
+    ]))
+  })
 })
 
 function stateWithRules(rules: SemanticRule[]): SemanticState {
