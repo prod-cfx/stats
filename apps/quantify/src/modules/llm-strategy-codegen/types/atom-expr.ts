@@ -227,14 +227,20 @@ export function isAtomParamsStrictlyValid(key: string, params: Record<string, un
           ? Number(raw.trim().match(/-?\d+(?:\.\d+)?/u)?.[0])
           : Number.NaN
       if (!Number.isFinite(numeric)) return false
+      const gridHasExplicitRangeAndStep = key === 'grid.range_rebalance'
+        && hasGridExplicitRangeAndStep(params)
+      if (
+        key === 'grid.range_rebalance'
+        && numeric === 0
+        && gridHasExplicitRangeAndStep
+        && (slotKey === 'centerOffsetPct' || slotKey === 'levels')
+      ) {
+        continue
+      }
       if (key === 'grid.range_rebalance' && slotKey === 'centerOffsetPct' && numeric === 0) {
         const levels = readLooseNumber(params.levels)
         const stepPct = readLooseNumber(params.stepPct)
-        const hasExplicitRange = readLooseNumber(params.rangeMin) !== null
-          || readLooseNumber(params.rangeMax) !== null
-          || readLooseNumber(params.rangeLower) !== null
-          || readLooseNumber(params.rangeUpper) !== null
-        if (!hasExplicitRange && levels !== null && Number.isInteger(levels) && levels >= 2 && stepPct !== null && stepPct > 0) {
+        if (!hasGridExplicitRange(params) && levels !== null && Number.isInteger(levels) && levels >= 2 && stepPct !== null && stepPct > 0) {
           continue
         }
       }
@@ -249,6 +255,24 @@ export function isAtomParamsStrictlyValid(key: string, params: Record<string, un
     }
   }
   return true
+}
+
+function hasGridExplicitRangeAndStep(params: Record<string, unknown>): boolean {
+  const lower = readLooseNumber(params.rangeMin) ?? readLooseNumber(params.rangeLower)
+  const upper = readLooseNumber(params.rangeMax) ?? readLooseNumber(params.rangeUpper)
+  const stepPct = readLooseNumber(params.stepPct)
+  return lower !== null
+    && upper !== null
+    && upper > lower
+    && stepPct !== null
+    && stepPct > 0
+}
+
+function hasGridExplicitRange(params: Record<string, unknown>): boolean {
+  return readLooseNumber(params.rangeMin) !== null
+    || readLooseNumber(params.rangeMax) !== null
+    || readLooseNumber(params.rangeLower) !== null
+    || readLooseNumber(params.rangeUpper) !== null
 }
 
 function readLooseNumber(value: unknown): number | null {
