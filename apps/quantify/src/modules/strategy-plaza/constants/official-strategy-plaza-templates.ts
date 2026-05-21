@@ -277,7 +277,7 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
       deploymentExecutionConfig: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
     },
     editSeed: {
-      initialMessage: '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 MACD 16/34/12 金叉死叉策略。入场规则：MACD DIF 上穿 DEA 时做多开仓；出场规则：MACD DIF 下穿 DEA 时平多；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.5%。',
+      initialMessage: '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 MACD 16/34/12 金叉做多、死叉平多策略。入场规则：MACD DIF 上穿 DEA 时做多开仓；出场规则：MACD DIF 下穿 DEA 时平多；本策略只做多，不做空；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.5%。',
       guideConfig: {
         symbolExample: 'ETH-USDT-SWAP',
         timeframeExample: '15m',
@@ -287,7 +287,7 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
       },
       locales: {
         en: {
-          initialMessage: 'Create a MACD 16/34/12 crossover strategy on OKX Demo ETH-USDT-SWAP perpetual, 15m timeframe. Entry rule: open long when MACD DIF crosses above DEA. Exit rule: close long when MACD DIF crosses below DEA. Risk controls: 35% position, 2x leverage, 2% stop loss, 0.5% take profit.',
+          initialMessage: 'Create a long-only MACD 16/34/12 strategy on OKX Demo ETH-USDT-SWAP perpetual, 15m timeframe. Entry rule: open long when MACD DIF crosses above DEA. Exit rule: close long when MACD DIF crosses below DEA. This strategy does not open short positions. Risk controls: 35% position, 2x leverage, 2% stop loss, 0.5% take profit.',
           guideConfig: {
             symbolExample: 'ETH-USDT-SWAP',
             timeframeExample: '15m',

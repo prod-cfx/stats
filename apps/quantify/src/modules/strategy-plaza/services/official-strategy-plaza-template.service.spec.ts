@@ -96,6 +96,16 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     expect(template.editSeed.initialMessage).not.toContain('网格区间策略')
   })
 
+  it('describes the MACD plaza edit seed as long-only entry plus close-long exit', () => {
+    const template = service.getRequired('macd-cross')
+
+    expect(template.editSeed.initialMessage).toContain('金叉做多、死叉平多')
+    expect(template.editSeed.initialMessage).toContain('不做空')
+    expect(template.editSeed.initialMessage).not.toContain('金叉死叉策略')
+    expect(template.editSeed.locales?.en?.initialMessage).toContain('long-only')
+    expect(template.editSeed.locales?.en?.initialMessage).toContain('does not open short positions')
+  })
+
   it('throws when template id is not found', () => {
     expect(() => service.getRequired('missing-template')).toThrow(StrategyPlazaTemplateNotFoundException)
   })
