@@ -45,6 +45,7 @@ export class CanonicalStrategyAstCompilerService {
       ...(riskPredicates.length > 0 ? { riskPredicates } : {}),
       decisionPrograms,
       orderPrograms,
+      ...((ir.orchestrationPortfolioRisks ?? []).length > 0 ? { orchestrationPortfolioRisks: ir.orchestrationPortfolioRisks } : {}),
       ...((ir.orchestrationPrograms ?? []).length > 0 ? { orchestrationPrograms: ir.orchestrationPrograms } : {}),
       // Phase 5 S2 (#1104): scope.symbol substrate
       ...((ir.orchestrationScopes ?? []).length > 0 ? { orchestrationScopes: ir.orchestrationScopes } : {}),

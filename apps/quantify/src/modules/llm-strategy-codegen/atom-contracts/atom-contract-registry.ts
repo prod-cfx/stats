@@ -3344,8 +3344,8 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         if (locale === 'en') return ATOM_PUBLIC_NAMES['portfolioRisk.drawdown_block'].en
         const thresholdPct = typeof params.thresholdPct === 'number' ? params.thresholdPct : 0
         const mode = typeof params.mode === 'string' ? params.mode : 'enforce'
-        if (mode === 'observe') return `账户回撤超过 ${thresholdPct}% 时仅记录`
-        return `账户回撤超过 ${thresholdPct}% 时阻止开新仓`
+        if (mode === 'observe') return `账户最大回撤超过 ${thresholdPct}% 时仅记录`
+        return `账户最大回撤超过 ${thresholdPct}% 时阻止开新仓`
       },
     },
     surface: {

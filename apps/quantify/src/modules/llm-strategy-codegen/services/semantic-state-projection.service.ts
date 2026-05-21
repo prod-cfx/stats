@@ -516,7 +516,7 @@ export class SemanticStateProjectionService {
         const registryEntry = ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block']
         let text: string
         try {
-          text = registryEntry.display.summaryTemplate(node.params, 'zh')
+          text = registryEntry.display.summaryTemplate(this.buildOrchestrationDisplayParams(node), 'zh')
         }
         catch {
           continue
@@ -3110,7 +3110,7 @@ export class SemanticStateProjectionService {
       let text: string | undefined
       try {
         // #1329 follow-up Phase 3d/3e: 已迁入 REGISTRY 的 atom 走 renderLegacyDisplay REGISTRY-first 路径
-        const rendered = renderLegacyDisplay(node.key, (node.params ?? {}) as Record<string, unknown>)
+        const rendered = renderLegacyDisplay(node.key, this.buildOrchestrationDisplayParams(node))
         text = rendered || getLegacyEntry(node.key)?.publicName || node.key
       }
       catch {
@@ -3119,6 +3119,14 @@ export class SemanticStateProjectionService {
       parts.push(text)
     }
     return parts.join('；')
+  }
+
+  private buildOrchestrationDisplayParams(node: SemanticOrchestrationNode): Record<string, unknown> {
+    return {
+      ...((node.params ?? {}) as Record<string, unknown>),
+      ...('thresholdPct' in node ? { thresholdPct: node.thresholdPct } : {}),
+      ...('mode' in node ? { mode: node.mode } : {}),
+    }
   }
 
   private compareTriggers(left: SemanticState['trigger'][number], right: SemanticState['trigger'][number]): number {

@@ -49,8 +49,8 @@ export const DISPLAY_TOKENS = [
   { token: 'atom.gate.regime.short.display', kind: 'atom', zh: '只在价格低于 {indicator} 时允许做空' },
   { token: 'atom.gate.regime.both.display', kind: 'atom', zh: '{longLine}；{shortLine}' },
   { token: 'atom.portfolioRisk.drawdown_block.name', kind: 'atom', zh: '组合回撤护栏' },
-  { token: 'atom.portfolioRisk.drawdown_block.display.enforce', kind: 'atom', zh: '账户回撤超过 {thresholdPct}% 时阻止开新仓' },
-  { token: 'atom.portfolioRisk.drawdown_block.display.observe', kind: 'atom', zh: '账户回撤超过 {thresholdPct}% 时仅记录' },
+  { token: 'atom.portfolioRisk.drawdown_block.display.enforce', kind: 'atom', zh: '账户最大回撤超过 {thresholdPct}% 时熔断并阻止开新仓' },
+  { token: 'atom.portfolioRisk.drawdown_block.display.observe', kind: 'atom', zh: '账户最大回撤超过 {thresholdPct}% 时仅记录' },
   // Phase 5 S8 (#1119): symbol exposure cap tokens
   { token: 'atom.portfolioRisk.symbol_exposure_cap.name', kind: 'atom', zh: '标的敞口护栏' },
   { token: 'atom.portfolioRisk.symbol_exposure_cap.display.enforce.block', kind: 'atom', zh: '{symbolLabel}单标的敞口超过 {notionalCapPct}% 时阻止开新仓' },

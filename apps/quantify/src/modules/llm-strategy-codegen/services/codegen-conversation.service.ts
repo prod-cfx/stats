@@ -3367,12 +3367,8 @@ export class CodegenConversationService {
   }
 
   private ensureProtectiveRiskSlot(state: SemanticState): SemanticState {
-    if (this.hasProtectiveRisk(readFlatRisks(state))) {
+    if (this.hasProtectiveRisk(state)) {
       return this.removeSatisfiedProtectiveRiskSlot(state)
-    }
-
-    if (!this.hasLockedExitSemantics(state)) {
-      return state
     }
 
     if (
@@ -3385,31 +3381,15 @@ export class CodegenConversationService {
       return state
     }
 
-    return {
-      ...state,
-      risk: [
-        ...readFlatRisks(state),
-        {
-          id: 'risk-protective-exit',
-          key: 'risk.protective_exit',
-          params: {},
-          status: 'open',
-          source: 'derived',
-          openSlots: [{
-            slotKey: 'risk.protective_exit',
-            fieldPath: 'risk[protective].params',
-            status: 'open',
-            priority: 'risk',
-            questionHint: '请确认止损类保护规则（例如亏损 5% 止损）。',
-            affectsExecution: true,
-          }],
-        },
-      ],
-    }
+    return state
   }
 
-  private hasProtectiveRisk(riskItems: SemanticState['risk']): boolean {
-    return riskItems.some((risk) => {
+  private hasProtectiveRisk(state: SemanticState): boolean {
+    if (this.hasProtectiveOrchestrationRisk(state)) {
+      return true
+    }
+
+    return readFlatRisks(state).some((risk) => {
       if (risk.status !== 'locked') {
         return false
       }
@@ -3441,6 +3421,18 @@ export class CodegenConversationService {
         || risk.key === FIELD_KEY.RISK_MAX_DRAWDOWN_PCT
         || risk.key === FIELD_KEY.RISK_MAX_SINGLE_LOSS_PCT
     })
+  }
+
+  private hasProtectiveOrchestrationRisk(state: SemanticState): boolean {
+    return (state.orchestration ?? []).some(node =>
+      node.kind === 'portfolioRisk'
+      && node.key === 'portfolioRisk.drawdown_block'
+      && node.status === 'locked'
+      && node.mode === 'enforce'
+      && typeof node.thresholdPct === 'number'
+      && Number.isFinite(node.thresholdPct)
+      && node.thresholdPct > 0,
+    )
   }
 
   private hasBoundaryCancelGuardCapability(risk: SemanticRiskState): boolean {
@@ -3499,7 +3491,7 @@ export class CodegenConversationService {
   }
 
   private removeSatisfiedProtectiveRiskSlot(state: SemanticState): SemanticState {
-    if (!this.hasProtectiveRisk(readFlatRisks(state))) {
+    if (!this.hasProtectiveRisk(state)) {
       return state
     }
 
@@ -3678,7 +3670,7 @@ export class CodegenConversationService {
     }
 
     if (this.isProtectiveRiskClarificationItem(item)) {
-      return this.hasProtectiveRisk(readFlatRisks(semanticState))
+      return this.hasProtectiveRisk(semanticState)
     }
 
     if (this.isTakeProfitClarificationItem(item)) {
@@ -6933,9 +6925,18 @@ export class CodegenConversationService {
   }
 
   private normalizeRiskState(state: SemanticState): SemanticState {
+    const normalizedRisk = normalizeRiskSemantics([...readFlatRisks(state)])
+    const hasPortfolioDrawdownOrchestration = (state.orchestration ?? []).some(node =>
+      node.kind === 'portfolioRisk'
+      && node.key === 'portfolioRisk.drawdown_block'
+      && node.status !== 'superseded',
+    ) === true
+
     return {
       ...state,
-      risk: normalizeRiskSemantics([...readFlatRisks(state)]),
+      risk: hasPortfolioDrawdownOrchestration
+        ? normalizedRisk.filter(risk => risk.key !== 'portfolioRisk.drawdown_block')
+        : normalizedRisk,
     }
   }
 

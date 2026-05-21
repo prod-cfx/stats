@@ -5,6 +5,7 @@ import type {
   SemanticActionState,
   SemanticAtomContract,
   SemanticContextSlotState,
+  SemanticOrchestrationContract,
   SemanticOrchestrationNode,
   SemanticPositionConstraintState,
   SemanticPositionState,
@@ -69,6 +70,10 @@ export class SemanticStateMergeService {
       position: this.mergePosition(input.persisted.position, input.derived.position),
       contextSlots: this.mergeContextSlots(input.persisted.contextSlots, input.derived.contextSlots),
       normalizationNotes: [...new Set([...input.persisted.normalizationNotes, ...input.derived.normalizationNotes])],
+      orchestrationContracts: this.mergeOrchestrationContracts(
+        input.persisted.orchestrationContracts,
+        input.derived.orchestrationContracts,
+      ),
       updatedAt: new Date().toISOString(),
       ...(mergedRules !== undefined ? { rules: mergedRules as SemanticState['rules'] } : {}),
     }
@@ -308,6 +313,7 @@ export class SemanticStateMergeService {
           [...persistedNode.openSlots],
           [...derivedNode.openSlots],
         ),
+        contracts: this.mergeOrchestrationContracts(persistedNode.contracts, derivedNode.contracts),
         evidence: stronger.evidence ?? weaker.evidence,
       } as SemanticOrchestrationNode
     }
@@ -319,7 +325,17 @@ export class SemanticStateMergeService {
     return {
       ...node,
       params: { ...node.params },
+      evidence: node.evidence ? { ...node.evidence } : undefined,
       openSlots: node.openSlots.map(slot => ({ ...slot })),
+      contracts: node.contracts.map(contract => this.cloneOrchestrationContract(contract)),
+      activeWhen: node.activeWhen ? { ...node.activeWhen } : undefined,
+      gridParams: node.gridParams ? { ...node.gridParams } : undefined,
+      sizing: node.sizing ? { ...node.sizing } : undefined,
+      dynamicGridStep: node.dynamicGridStep ? { ...node.dynamicGridStep } : undefined,
+      idempotencyKey: node.idempotencyKey ? { ...node.idempotencyKey } : undefined,
+      symbols: node.symbols ? [...node.symbols] : undefined,
+      requiredTimeframes: node.requiredTimeframes ? [...node.requiredTimeframes] : undefined,
+      legSizing: node.legSizing ? { ...node.legSizing } : undefined,
     }
   }
 
@@ -384,6 +400,87 @@ export class SemanticStateMergeService {
       // DEPRECATED Task 6: position.constraints moved to top-level positionConstraint[]
       evidence: stronger.evidence ?? weaker.evidence,
     }
+  }
+
+  private cloneOrchestrationContract(
+    contract: SemanticOrchestrationContract,
+  ): SemanticOrchestrationContract {
+    return {
+      ...contract,
+      capabilities: contract.capabilities.map(capability => ({
+        ...capability,
+        shape: capability.shape ? { ...capability.shape } : undefined,
+      })),
+      requires: contract.requires.map(requirement => ({ ...requirement })),
+      params: { ...contract.params },
+      runtimeRequirements: contract.runtimeRequirements.map(requirement => ({ ...requirement })),
+      stateRequirements: contract.stateRequirements.map(requirement => ({ ...requirement })),
+      orderRequirements: contract.orderRequirements.map(requirement => ({ ...requirement })),
+      openSlots: contract.openSlots.map(slot => ({ ...slot })),
+      effects: contract.effects?.map(effect => ({
+        ...effect,
+        shape: effect.shape ? { ...effect.shape } : undefined,
+      })),
+      target: contract.target ? { ...contract.target } : undefined,
+    }
+  }
+
+  private mergeOrchestrationContracts(
+    persisted: readonly SemanticOrchestrationContract[],
+    derived: readonly SemanticOrchestrationContract[],
+  ): SemanticOrchestrationContract[] {
+    const next = derived.map(contract => this.cloneOrchestrationContract(contract))
+
+    for (const persistedContract of persisted) {
+      const matchIndex = next.findIndex(candidate => this.isSameOrchestrationContractIdentity(persistedContract, candidate))
+      if (matchIndex < 0) {
+        next.push(this.cloneOrchestrationContract(persistedContract))
+        continue
+      }
+
+      const derivedContract = next[matchIndex]!
+      next[matchIndex] = {
+        ...this.cloneOrchestrationContract(persistedContract),
+        ...this.cloneOrchestrationContract(derivedContract),
+        id: persistedContract.id,
+        params: { ...persistedContract.params, ...derivedContract.params },
+        capabilities: [...persistedContract.capabilities, ...derivedContract.capabilities].map(capability => ({
+          ...capability,
+          shape: capability.shape ? { ...capability.shape } : undefined,
+        })),
+        requires: [...persistedContract.requires, ...derivedContract.requires].map(requirement => ({ ...requirement })),
+        runtimeRequirements: [...persistedContract.runtimeRequirements, ...derivedContract.runtimeRequirements].map(requirement => ({ ...requirement })),
+        stateRequirements: [...persistedContract.stateRequirements, ...derivedContract.stateRequirements].map(requirement => ({ ...requirement })),
+        orderRequirements: [...persistedContract.orderRequirements, ...derivedContract.orderRequirements].map(requirement => ({ ...requirement })),
+        openSlots: this.mergeOpenSlots([...persistedContract.openSlots], [...derivedContract.openSlots]),
+      }
+    }
+
+    return next
+  }
+
+  private isSameOrchestrationContractIdentity(
+    left: SemanticOrchestrationContract,
+    right: SemanticOrchestrationContract,
+  ): boolean {
+    if (left.id === right.id) {
+      return true
+    }
+    if (left.kind !== right.kind) {
+      return false
+    }
+
+    const leftKeys = this.collectOrchestrationContractSemanticKeys(left)
+    const rightKeys = this.collectOrchestrationContractSemanticKeys(right)
+    return [...leftKeys].some(key => rightKeys.has(key))
+  }
+
+  private collectOrchestrationContractSemanticKeys(contract: SemanticOrchestrationContract): Set<string> {
+    return new Set([
+      ...contract.capabilities.map(capability => this.semanticTupleKey(capability)),
+      ...contract.requires.map(requirement => this.semanticTupleKey(requirement)),
+      ...(contract.effects ?? []).map(effect => this.semanticTupleKey(effect)),
+    ])
   }
 
   private mergePositionConstraints(

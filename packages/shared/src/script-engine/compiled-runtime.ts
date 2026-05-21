@@ -5,6 +5,7 @@ export { evaluateGuards } from './compiled-runtime/evaluate-guards'
 export { isNaturalSweepCombination, liquiditySweepDetector } from './compiled-runtime/liquidity-sweep-detector'
 export type { LiquiditySweepDetectorInput, LiquiditySweepDirection, LiquiditySweepReference } from './compiled-runtime/liquidity-sweep-detector'
 export { evaluateRiskPredicates } from './compiled-runtime/evaluate-risk-predicates'
+export { evaluateOrchestrationPortfolioRisks } from './compiled-runtime/evaluate-orchestration-portfolio-risks'
 export {
   runDecisionPrograms,
   applySymbolScopeRouting,
