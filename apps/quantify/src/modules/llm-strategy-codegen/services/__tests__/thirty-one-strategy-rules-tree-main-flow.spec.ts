@@ -7,6 +7,7 @@ import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { PlannerDispatcherMergeService } from '../planner-dispatcher-merge.service'
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticRuleProjectionService } from '../semantic-rule-projection.service'
+import { SemanticStateProjectionService } from '../semantic-state-projection.service'
 
 function buildBaseState(overrides: Partial<SemanticState>): SemanticState {
   return {
@@ -478,6 +479,82 @@ describe('31-strategy rules tree main flow regressions', () => {
       params: expect.objectContaining({
         indicator: 'ema',
         'reference.period': 20,
+      }),
+    }))
+  })
+
+  it('normalizes planner duplicated centered-percent grid rules into one executable grid program', () => {
+    const text = 'OKX 现货 ETHUSDT、1m 网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT、限价单并相邻网格自动挂反向单、不用趋势信号开仓；当价格突破上下边界时执行“立即停止并撤销所有未成交订单”'
+    const gridParams = {
+      rangeLower: 0,
+      rangeUpper: 0,
+      centerOffsetPct: 0.4,
+      levels: 10,
+      sideMode: 'both',
+      breakoutAction: 'stop',
+      stepPct: 0.08,
+      perGridSizing: 10,
+      perOrderSizing: { kind: 'quote', value: 10, asset: 'USDT' },
+    }
+    const plannerPatch: CodegenSemanticPatch = {
+      contextSlots: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        marketType: 'spot',
+        timeframe: '1m',
+      },
+      position: {
+        mode: 'fixed_quote',
+        value: 10,
+        positionMode: 'long_only',
+        sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      rules: [
+        {
+          id: 'planner-grid-entry',
+          phase: 'entry',
+          sideScope: 'both',
+          condition: { kind: 'atom', key: 'grid.range_rebalance', params: gridParams },
+          effects: [{ kind: 'atom', key: 'grid.range_rebalance', params: gridParams }],
+        },
+        {
+          id: 'planner-grid-exit',
+          phase: 'exit',
+          sideScope: 'both',
+          condition: { kind: 'atom', key: 'grid.range_rebalance', params: gridParams },
+          effects: [{ kind: 'atom', key: 'grid.range_rebalance', params: gridParams }],
+        },
+      ],
+    }
+
+    const state = new SemanticSeedStateBuilderService().build(plannerPatch, text)
+    const projected = state ? new SemanticRuleProjectionService().reprojectFromRules(state) : null
+    const view = new SemanticStateProjectionService().buildConversationView(projected!)
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(projected!)
+
+    expect(projected?.rules?.filter(rule => JSON.stringify(rule).includes('grid.range_rebalance'))).toHaveLength(1)
+    expect(view.summary).toContain('网格区间再平衡')
+    expect(view.summary).toContain('中心上下各 0.4%')
+    expect(view.summary).toContain('共 10 格')
+    expect(view.summary).not.toContain('区间 0-0')
+    expect(view.summary).not.toContain('出场：网格区间再平衡')
+    expect(spec.orderPrograms?.[0]).toEqual(expect.objectContaining({
+      kind: 'contract_order_program',
+      mode: 'spot',
+      orderType: 'limit',
+      recycleOnFill: true,
+      cancelOnStop: true,
+      budget: { mode: 'per_order_quote', value: 10, asset: 'USDT' },
+      levelSet: expect.objectContaining({
+        mode: 'centered_percent_range',
+        centerTiming: 'deployment',
+        centerSource: 'last_price',
+        halfRangePct: 0.4,
+        gridCount: 10,
+        spacingPct: 0.08,
       }),
     }))
   })

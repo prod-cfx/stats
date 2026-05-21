@@ -63,6 +63,7 @@ type FlatBucket = keyof ProjectionOut
 const ADD_POSITION_ATOM_KEY = ATOM_CONTRACT_REGISTRY['action.add_position'].key
 const POSITION_NO_POSITION_ATOM_KEY = ATOM_CONTRACT_REGISTRY['position.no_position'].key
 const POSITION_PYRAMIDING_LIMIT_ATOM_KEY = ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
+const GRID_RANGE_REBALANCE_ATOM_KEY = ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key
 
 @Injectable()
 export class SemanticRuleProjectionService {
@@ -104,7 +105,9 @@ export class SemanticRuleProjectionService {
       }
       return state
     }
-    const normalizedRules = this.prunePyramidingRulesWithoutAddAction(state.rules)
+    const normalizedRules = this.normalizeRulesForProjection(
+      this.prunePyramidingRulesWithoutAddAction(state.rules),
+    )
     const projected = this.projectToFlat(normalizedRules)
     // Issue #1493 M2：显式再跑一次 invariant—projectToFlat 内部已跑过一次，这里防御性
     //   no-op，但语义清晰地把 "reprojectFromRules 返回值满足 _provenance invariant"
@@ -120,6 +123,126 @@ export class SemanticRuleProjectionService {
       positionConstraint: projected.positionConstraint,
       orchestration: projected.orchestration,
     }
+  }
+
+  private normalizeRulesForProjection(rules: ReadonlyArray<SemanticRule>): ReadonlyArray<SemanticRule> {
+    let changed = false
+    const sanitized = rules.map((rule) => {
+      const next = this.sanitizeGridRule(rule)
+      if (next !== rule) changed = true
+      return next
+    })
+
+    const seenGridSignatures = new Map<string, number>()
+    const deduped: SemanticRule[] = []
+    for (const rule of sanitized) {
+      const signature = this.gridRuleSignature(rule)
+      if (!signature) {
+        deduped.push(rule)
+        continue
+      }
+
+      const existingIndex = seenGridSignatures.get(signature)
+      if (existingIndex === undefined) {
+        seenGridSignatures.set(signature, deduped.length)
+        deduped.push(rule.phase === 'entry' ? rule : { ...rule, phase: 'entry' })
+        if (rule.phase !== 'entry') changed = true
+        continue
+      }
+
+      const existing = deduped[existingIndex]
+      if (existing && existing.phase !== 'entry' && rule.phase === 'entry') {
+        deduped[existingIndex] = rule
+      }
+      changed = true
+    }
+
+    return changed ? deduped : rules
+  }
+
+  private sanitizeGridRule(rule: SemanticRule): SemanticRule {
+    let changed = false
+    const condition = this.sanitizeGridExpr(rule.condition)
+    if (condition !== rule.condition) changed = true
+    const effects = rule.effects.map((effect) => {
+      const next = this.sanitizeGridExpr(effect)
+      if (next !== effect) changed = true
+      return next
+    })
+    return changed ? { ...rule, condition, effects } : rule
+  }
+
+  private sanitizeGridExpr(expr: AtomExpr): AtomExpr {
+    if (expr.kind === 'atom') {
+      if (expr.key !== GRID_RANGE_REBALANCE_ATOM_KEY) return expr
+      const params = this.sanitizeGridParams(expr.params ?? {})
+      return params === expr.params ? expr : { ...expr, params }
+    }
+    if (expr.kind === 'and' || expr.kind === 'or') {
+      let changed = false
+      const children = expr.children.map((child) => {
+        const next = this.sanitizeGridExpr(child)
+        if (next !== child) changed = true
+        return next
+      })
+      return changed ? { ...expr, children } : expr
+    }
+    if (expr.kind === 'not') {
+      const child = this.sanitizeGridExpr(expr.child)
+      return child === expr.child ? expr : { ...expr, child }
+    }
+    let changed = false
+    const steps = expr.steps.map((step) => {
+      const next = this.sanitizeGridExpr(step)
+      if (next !== step) changed = true
+      return next
+    })
+    return changed ? { ...expr, steps } : expr
+  }
+
+  private sanitizeGridParams(params: Record<string, unknown>): Record<string, unknown> {
+    const centerOffsetPct = this.readNumber(params.centerOffsetPct)
+    const levels = this.readNumber(params.levels)
+    if (centerOffsetPct === undefined || centerOffsetPct <= 0 || levels === undefined || levels < 2) {
+      return params
+    }
+
+    const lower = this.readNumber(params.rangeLower ?? params.rangeMin ?? params.lower)
+    const upper = this.readNumber(params.rangeUpper ?? params.rangeMax ?? params.upper)
+    if (lower !== undefined && upper !== undefined && lower > 0 && upper > lower) {
+      return params
+    }
+
+    const next = { ...params }
+    for (const key of ['rangeLower', 'rangeUpper', 'rangeMin', 'rangeMax', 'lower', 'upper'] as const) {
+      delete next[key]
+    }
+    return next
+  }
+
+  private gridRuleSignature(rule: SemanticRule): string | null {
+    const leaves = [
+      ...this.collectExprLeaves(rule.condition),
+      ...rule.effects.flatMap(effect => this.collectExprLeaves(effect)),
+    ].filter(leaf => leaf.key === GRID_RANGE_REBALANCE_ATOM_KEY)
+    if (leaves.length === 0) return null
+    if (leaves.length !== this.collectExprLeaves(rule.condition).length + rule.effects.flatMap(effect => this.collectExprLeaves(effect)).length) {
+      return null
+    }
+    const first = leaves[0]
+    if (!first) return null
+    return `${rule.sideScope}|${JSON.stringify(this.sortRecord(first.params ?? {}))}`
+  }
+
+  private collectExprLeaves(expr: AtomExpr): AtomExprAtom[] {
+    if (expr.kind === 'atom') return [expr]
+    if (expr.kind === 'and' || expr.kind === 'or') return expr.children.flatMap(child => this.collectExprLeaves(child))
+    if (expr.kind === 'not') return this.collectExprLeaves(expr.child)
+    return expr.steps.flatMap(step => this.collectExprLeaves(step))
+  }
+
+  private sortRecord(value: Record<string, unknown>): Record<string, unknown> {
+    return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)))
   }
 
   private prunePyramidingRulesWithoutAddAction(rules: ReadonlyArray<SemanticRule>): ReadonlyArray<SemanticRule> {
