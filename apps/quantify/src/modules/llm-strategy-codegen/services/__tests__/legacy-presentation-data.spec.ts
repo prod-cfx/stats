@@ -165,6 +165,15 @@ describe('legacy-presentation-data (transition pure helpers)', () => {
     // unknown triggerMode 值原样出现（graceful）；不含 atom internal key
     expect(dcaText).not.toContain('position.dca_schedule')
 
+    const dcaSizingText = renderLegacyDisplay('position.dca_schedule', {
+      triggerMode: 'time_interval',
+      perOrderSizing: { kind: 'quote', asset: 'USDT', value: 100 },
+      maxCount: 1,
+      capitalCap: { kind: 'quote', value: 300, asset: 'USDC' },
+    })
+    expect(dcaSizingText).toContain('100 USDT')
+    expect(dcaSizingText).toContain('300 USDC')
+
     const candleText = renderLegacyDisplay('price.candle_pattern', { pattern: 'bearish_engulfing', direction: 'bullish' })
     expect(typeof candleText).toBe('string')
     expect(candleText.length).toBeGreaterThan(0)

@@ -214,6 +214,57 @@ describe('Issue #1395 mute-spider S5 — atom params strict validation', () => {
     })).toBe(true)
   })
 
+  it('grid 显式区间 + stepPct 时容忍 planner levels/centerOffsetPct=0 占位', () => {
+    expect(isAtomParamsStrictlyValid('grid.range_rebalance', {
+      rangeLower: 60000,
+      rangeUpper: 80000,
+      centerOffsetPct: 0,
+      levels: 0,
+      stepPct: 0.5,
+      sideMode: 'both',
+      recycle: 'true',
+      breakoutAction: 'stop',
+    })).toBe(true)
+  })
+
+  it('gracefulParseSemanticRule：grid 显式区间 + stepPct + 0 占位不应进 quarantine', () => {
+    const result = gracefulParseSemanticRule({
+      id: 'entry-bidirectional-grid',
+      phase: 'entry',
+      sideScope: 'both',
+      condition: {
+        kind: 'atom',
+        key: 'grid.range_rebalance',
+        params: {
+          rangeLower: 79200,
+          rangeUpper: 80200,
+          centerOffsetPct: 0,
+          levels: 0,
+          sideMode: 'both',
+          recycle: 'true',
+          breakoutAction: 'stop',
+          stepPct: 0.1,
+        },
+      },
+      effects: [{
+        kind: 'atom',
+        key: 'grid.range_rebalance',
+        params: {
+          rangeLower: 79200,
+          rangeUpper: 80200,
+          centerOffsetPct: 0,
+          levels: 0,
+          sideMode: 'both',
+          recycle: 'true',
+          breakoutAction: 'stop',
+          stepPct: 0.1,
+        },
+      }],
+    })
+
+    expect(result.ok).toBe(true)
+  })
+
   it('enum-zh-map 未声明 alias → strict invalid', () => {
     expect(isAtomParamsStrictlyValid('grid.range_rebalance', {
       breakoutAction: '随便处理',

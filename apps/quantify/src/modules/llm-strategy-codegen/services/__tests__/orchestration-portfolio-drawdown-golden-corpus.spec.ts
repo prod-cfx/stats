@@ -242,7 +242,7 @@ describe('orchestration portfolioRisk.drawdown_block — golden corpus (Phase 5 
 
       const flat = graph.blocks.flatMap(b => b.items.map(i => i.text)).join(' ')
       // 中文 label：当前 presentation 渲染为「账户回撤超过 10% 时阻止开新仓」
-      expect(flat).toContain('账户回撤')
+      expect(flat).toContain('账户最大回撤')
       expect(flat).toContain('10')
       expect(flat).toContain('阻止')
       expect(flat).not.toContain('portfolioRisk.drawdown_block')

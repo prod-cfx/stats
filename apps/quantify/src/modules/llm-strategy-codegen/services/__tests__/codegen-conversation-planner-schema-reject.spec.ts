@@ -10,6 +10,7 @@
  */
 import { Logger } from '@nestjs/common'
 import { CodegenConversationService } from '../codegen-conversation.service'
+import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { PlannerDispatcherMergeService } from '../planner-dispatcher-merge.service'
 
 interface SvcShell {
@@ -102,7 +103,6 @@ const BAD_EVIDENCE_PLAN_JSON = JSON.stringify({
 })
 
 const USER_MESSAGE = '5min K 线里面 价格在 EMA20/60/144 上方时做多开仓 都位于下方只开空 入场是 BOLL 下轨开多 上轨开空 币安 BTCUSDT 永续 风控亏损 5% 止损'
-
 describe('#1445 CodegenConversation planner schema reject → retry → unsupportedFallback', () => {
   it('initial compliant rules[] → no retry, returns plan with semanticPatch', async () => {
     const { svc, shell } = makeService()
@@ -137,9 +137,11 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
     expect(plan.semanticPatch).toBeDefined()
   })
 
-  it('normalizes planner rule and leaf evidence to the user message before schema validation', async () => {
+  it('normalizes non-substring evidence as warning without retrying or blocking script generation', async () => {
     const { svc, shell } = makeService()
-    shell.aiService.chat.mockResolvedValueOnce({ content: BAD_EVIDENCE_PLAN_JSON })
+    shell.aiService.chat
+      .mockResolvedValueOnce({ content: BAD_EVIDENCE_PLAN_JSON })
+      .mockResolvedValueOnce({ content: BAD_EVIDENCE_PLAN_JSON })
     const plan = await (svc as unknown as { planConversationByLlm: Function }).planConversationByLlm(
       USER_MESSAGE,
       { rules: [] },
@@ -147,11 +149,16 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
       [],
     )
 
-    const patch = plan.semanticPatch as { rules?: Array<{ evidence?: { text?: string }, condition?: { evidence?: { text?: string } }, effects?: Array<{ evidence?: { text?: string } }> }> }
+    expect(shell.aiService.chat).toHaveBeenCalledTimes(1)
     expect(plan.semanticPatch).toBeDefined()
-    expect(patch.rules?.[0]?.evidence?.text).toBe(USER_MESSAGE)
-    expect(patch.rules?.[0]?.condition?.evidence?.text).toBe(USER_MESSAGE)
-    expect(patch.rules?.[0]?.effects?.[0]?.evidence?.text).toBe(USER_MESSAGE)
+    expect(plan.diagnostics).toEqual(expect.objectContaining({
+      gate: 'RulesTreeEntryGate',
+      warnings: expect.arrayContaining(['evidence_text_not_substring']),
+    }))
+    expect(shell.logPlannerFallback).not.toHaveBeenCalledWith(
+      'schema_reject_unsupported',
+      expect.anything(),
+    )
   })
 
   it('initial reject (legacy atoms[]) → planner retried once', async () => {
@@ -199,6 +206,33 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
     metricSpy.mockRestore()
   })
 
+  it('initial reject + retry still reject + dispatcher atoms → unsupportedFallback without executable semanticPatch', async () => {
+    const { svc, shell, mergeSvc } = makeService()
+    shell.aiService.chat
+      .mockResolvedValueOnce({ content: LEGACY_FLAT_PLAN_JSON })
+      .mockResolvedValueOnce({ content: LEGACY_FLAT_PLAN_JSON })
+    const metricSpy = jest.spyOn(mergeSvc, 'emitPlannerSchemaRejectMetric')
+
+    const plan = await (svc as unknown as { planConversationByLlm: Function }).planConversationByLlm(
+      USER_MESSAGE,
+      { rules: [] },
+      { providerCode: 'test', locale: 'zh' },
+      [],
+    )
+
+    expect(shell.aiService.chat).toHaveBeenCalledTimes(2)
+    expect(shell.genericSeedDispatcher.dispatch).not.toHaveBeenCalled()
+    expect(plan.logicReady).toBe(false)
+    expect(plan.semanticPatch).toBeUndefined()
+    expect(plan.diagnostics).toEqual(expect.objectContaining({
+      gate: 'RulesTreeEntryGate',
+      entry: expect.objectContaining({ result: 'unsupported' }),
+    }))
+    const stages = metricSpy.mock.calls.map(c => c[0])
+    expect(stages).toEqual(expect.arrayContaining(['initial', 'retry']))
+    metricSpy.mockRestore()
+  })
+
   it('#1445 retry budget: transport-failure + transport-retry reject → no extra schema-retry (≤2 LLM calls total)', async () => {
     // 防护 retry 风暴：transport-failure 后的 retry 已用掉单轮重试预算，
     //   若该次 LLM 返回 schema-reject，必须直接走 unsupportedFallback，
@@ -234,10 +268,81 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
       { providerCode: 'test', locale: 'zh' },
       [],
     )
-    // 主链路必须 reject 走 unsupportedFallback；不会带 semanticPatch 进下游 merge
+    // 主链路必须 reject；dispatcher 不再作为 schema reject 后的语义 fallback。
     expect(plan.semanticPatch).toBeUndefined()
-    // merge dispatcher 不应被调用（早 return）
-    // 注：#1492 后 dispatcher 不再参与生产解释链路，本断言锁定该不变量
     expect(shell.genericSeedDispatcher.dispatch).not.toHaveBeenCalled()
+  })
+
+  it('planner asks for core semantics but deterministic rules tree can recover multi-timeframe EMA rules', async () => {
+    const text = '15min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约'
+    const { svc, shell } = makeService()
+    shell.genericSeedDispatcher.dispatch.mockImplementation(message => new GenericSeedDispatcher().dispatch(message))
+    shell.aiService.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '当前还没有形成可执行规则。请补充入场条件、出场条件、风控和仓位。',
+      }),
+    })
+
+    const plan = await (svc as unknown as { planConversationByLlm: Function }).planConversationByLlm(
+      text,
+      { rules: [] },
+      { providerCode: 'test', locale: 'zh' },
+      [],
+    )
+
+    expect(plan.semanticPatch?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({ kind: 'atom', key: 'indicator.above' }),
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'long',
+        condition: expect.objectContaining({ kind: 'atom', key: 'indicator.below' }),
+      }),
+    ]))
+    expect(JSON.stringify(plan.semanticPatch?.rules)).toContain('"timeframe":"15m"')
+    expect(JSON.stringify(plan.semanticPatch?.rules)).toContain('"timeframe":"1h"')
+    expect(JSON.stringify(plan.semanticPatch?.rules)).toContain('"timeframe":"4h"')
+  })
+
+  it('planner asks for core semantics but deterministic rules tree can recover EMA cross with drawdown guard', async () => {
+    const text = 'SOL 1d，EMA20 上穿 EMA60 开多，下穿平仓，最大回撤 15% 熔断'
+    const { svc, shell } = makeService()
+    shell.genericSeedDispatcher.dispatch.mockImplementation(message => new GenericSeedDispatcher().dispatch(message))
+    shell.aiService.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '当前还没有形成可执行规则。请补充入场条件、出场条件、风控和仓位。',
+      }),
+    })
+
+    const plan = await (svc as unknown as { planConversationByLlm: Function }).planConversationByLlm(
+      text,
+      { rules: [] },
+      { providerCode: 'test', locale: 'zh' },
+      [],
+    )
+
+    expect(plan.semanticPatch?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({ kind: 'atom', key: 'indicator.cross_over' }),
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'long',
+        condition: expect.objectContaining({ kind: 'atom', key: 'indicator.cross_under' }),
+      }),
+    ]))
+    expect(JSON.stringify(plan.semanticPatch)).toContain('portfolioRisk.drawdown_block')
+    expect(JSON.stringify(plan.semanticPatch)).toContain('"thresholdPct":15')
+    const gateRule = plan.semanticPatch?.rules?.find(rule => rule.phase === 'gate')
+    expect(JSON.stringify(gateRule?.effects)).not.toContain('action.open_long')
   })
 })

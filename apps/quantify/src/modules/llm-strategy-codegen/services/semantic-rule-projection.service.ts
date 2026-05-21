@@ -60,6 +60,11 @@ type ProjectionOut = {
 /** Issue #1447 闸 3：用于 orphan drop 度量的 bucket label 集合（与 ProjectionOut 同步） */
 type FlatBucket = keyof ProjectionOut
 
+const ADD_POSITION_ATOM_KEY = ATOM_CONTRACT_REGISTRY['action.add_position'].key
+const POSITION_NO_POSITION_ATOM_KEY = ATOM_CONTRACT_REGISTRY['position.no_position'].key
+const POSITION_PYRAMIDING_LIMIT_ATOM_KEY = ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
+const GRID_RANGE_REBALANCE_ATOM_KEY = ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key
+
 @Injectable()
 export class SemanticRuleProjectionService {
   private readonly logger = new Logger(SemanticRuleProjectionService.name)
@@ -100,20 +105,233 @@ export class SemanticRuleProjectionService {
       }
       return state
     }
-    const projected = this.projectToFlat(state.rules)
+    const normalizedRules = this.normalizeRulesForProjection(
+      this.prunePyramidingRulesWithoutAddAction(state.rules),
+    )
+    const projected = this.projectToFlat(normalizedRules)
     // Issue #1493 M2：显式再跑一次 invariant—projectToFlat 内部已跑过一次，这里防御性
     //   no-op，但语义清晰地把 "reprojectFromRules 返回值满足 _provenance invariant"
     //   写在调用现场，未来若 projectToFlat 实现重抽不再内部跑 invariant，也不会让
     //   reprojectFromRules 静默退化。
-    SemanticRuleProjectionService.enforceProvenanceInvariantInPlace(projected, state.rules)
+    SemanticRuleProjectionService.enforceProvenanceInvariantInPlace(projected, normalizedRules)
     return {
       ...state,
+      rules: normalizedRules,
       trigger: projected.trigger,
       action: projected.action,
       risk: projected.risk,
       positionConstraint: projected.positionConstraint,
       orchestration: projected.orchestration,
     }
+  }
+
+  private normalizeRulesForProjection(rules: ReadonlyArray<SemanticRule>): ReadonlyArray<SemanticRule> {
+    let changed = false
+    const sanitized = rules.map((rule) => {
+      const next = this.sanitizeGridRule(rule)
+      if (next !== rule) changed = true
+      return next
+    })
+
+    const seenGridSignatures = new Map<string, number>()
+    const deduped: SemanticRule[] = []
+    for (const rule of sanitized) {
+      const signature = this.gridRuleSignature(rule)
+      if (!signature) {
+        deduped.push(rule)
+        continue
+      }
+
+      const existingIndex = seenGridSignatures.get(signature)
+      if (existingIndex === undefined) {
+        seenGridSignatures.set(signature, deduped.length)
+        deduped.push(rule.phase === 'entry' ? rule : { ...rule, phase: 'entry' })
+        if (rule.phase !== 'entry') changed = true
+        continue
+      }
+
+      const existing = deduped[existingIndex]
+      if (existing && existing.phase !== 'entry' && rule.phase === 'entry') {
+        deduped[existingIndex] = rule
+      }
+      changed = true
+    }
+
+    return changed ? deduped : rules
+  }
+
+  private sanitizeGridRule(rule: SemanticRule): SemanticRule {
+    let changed = false
+    const condition = this.sanitizeGridExpr(rule.condition)
+    if (condition !== rule.condition) changed = true
+    const effects = rule.effects.map((effect) => {
+      const next = this.sanitizeGridExpr(effect)
+      if (next !== effect) changed = true
+      return next
+    })
+    return changed ? { ...rule, condition, effects } : rule
+  }
+
+  private sanitizeGridExpr(expr: AtomExpr): AtomExpr {
+    if (expr.kind === 'atom') {
+      if (expr.key !== GRID_RANGE_REBALANCE_ATOM_KEY) return expr
+      const params = this.sanitizeGridParams(expr.params ?? {})
+      return params === expr.params ? expr : { ...expr, params }
+    }
+    if (expr.kind === 'and' || expr.kind === 'or') {
+      let changed = false
+      const children = expr.children.map((child) => {
+        const next = this.sanitizeGridExpr(child)
+        if (next !== child) changed = true
+        return next
+      })
+      return changed ? { ...expr, children } : expr
+    }
+    if (expr.kind === 'not') {
+      const child = this.sanitizeGridExpr(expr.child)
+      return child === expr.child ? expr : { ...expr, child }
+    }
+    let changed = false
+    const steps = expr.steps.map((step) => {
+      const next = this.sanitizeGridExpr(step)
+      if (next !== step) changed = true
+      return next
+    })
+    return changed ? { ...expr, steps } : expr
+  }
+
+  private sanitizeGridParams(params: Record<string, unknown>): Record<string, unknown> {
+    const centerOffsetPct = this.readNumber(params.centerOffsetPct)
+    const levels = this.readNumber(params.levels)
+    if (centerOffsetPct === undefined || centerOffsetPct <= 0 || levels === undefined || levels < 2) {
+      return params
+    }
+
+    const lower = this.readNumber(params.rangeLower ?? params.rangeMin ?? params.lower)
+    const upper = this.readNumber(params.rangeUpper ?? params.rangeMax ?? params.upper)
+    if (lower !== undefined && upper !== undefined && lower > 0 && upper > lower) {
+      return params
+    }
+
+    const next = { ...params }
+    for (const key of ['rangeLower', 'rangeUpper', 'rangeMin', 'rangeMax', 'lower', 'upper'] as const) {
+      delete next[key]
+    }
+    return next
+  }
+
+  private gridRuleSignature(rule: SemanticRule): string | null {
+    const leaves = [
+      ...this.collectExprLeaves(rule.condition),
+      ...rule.effects.flatMap(effect => this.collectExprLeaves(effect)),
+    ].filter(leaf => leaf.key === GRID_RANGE_REBALANCE_ATOM_KEY)
+    if (leaves.length === 0) return null
+    if (leaves.length !== this.collectExprLeaves(rule.condition).length + rule.effects.flatMap(effect => this.collectExprLeaves(effect)).length) {
+      return null
+    }
+    const first = leaves[0]
+    if (!first) return null
+    return `${rule.sideScope}|${JSON.stringify(this.sortRecord(first.params ?? {}))}`
+  }
+
+  private collectExprLeaves(expr: AtomExpr): AtomExprAtom[] {
+    if (expr.kind === 'atom') return [expr]
+    if (expr.kind === 'and' || expr.kind === 'or') return expr.children.flatMap(child => this.collectExprLeaves(child))
+    if (expr.kind === 'not') return this.collectExprLeaves(expr.child)
+    return expr.steps.flatMap(step => this.collectExprLeaves(step))
+  }
+
+  private sortRecord(value: Record<string, unknown>): Record<string, unknown> {
+    return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)))
+  }
+
+  private prunePyramidingRulesWithoutAddAction(rules: ReadonlyArray<SemanticRule>): ReadonlyArray<SemanticRule> {
+    if (this.rulesContainAtomKey(rules, ADD_POSITION_ATOM_KEY)) {
+      return rules
+    }
+
+    let changed = false
+    const next: SemanticRule[] = []
+    for (const rule of rules) {
+      if (this.exprContainsAtomKey(rule.condition, POSITION_PYRAMIDING_LIMIT_ATOM_KEY)) {
+        changed = true
+        continue
+      }
+
+      const effects: AtomExpr[] = []
+      for (const effect of rule.effects) {
+        const pruned = this.pruneAtomKeyFromExpr(effect, POSITION_PYRAMIDING_LIMIT_ATOM_KEY)
+        if (!pruned) {
+          changed = true
+          continue
+        }
+        if (pruned !== effect) changed = true
+        effects.push(pruned)
+      }
+
+      if (
+        effects.length === 0
+        && rule.condition.kind === 'atom'
+        && rule.condition.key === POSITION_NO_POSITION_ATOM_KEY
+      ) {
+        changed = true
+        continue
+      }
+
+      next.push(effects.length === rule.effects.length && effects.every((effect, index) => effect === rule.effects[index])
+        ? rule
+        : { ...rule, effects })
+    }
+
+    return changed ? next : rules
+  }
+
+  private rulesContainAtomKey(rules: ReadonlyArray<SemanticRule>, atomKey: string): boolean {
+    return rules.some(rule =>
+      this.exprContainsAtomKey(rule.condition, atomKey)
+      || rule.effects.some(effect => this.exprContainsAtomKey(effect, atomKey)),
+    )
+  }
+
+  private exprContainsAtomKey(expr: AtomExpr, atomKey: string): boolean {
+    if (expr.kind === 'atom') return expr.key === atomKey
+    if (expr.kind === 'and' || expr.kind === 'or') {
+      return expr.children.some(child => this.exprContainsAtomKey(child, atomKey))
+    }
+    if (expr.kind === 'not') return this.exprContainsAtomKey(expr.child, atomKey)
+    return expr.steps.some(step => this.exprContainsAtomKey(step, atomKey))
+  }
+
+  private pruneAtomKeyFromExpr(expr: AtomExpr, atomKey: string): AtomExpr | null {
+    if (expr.kind === 'atom') {
+      return expr.key === atomKey ? null : expr
+    }
+
+    if (expr.kind === 'and' || expr.kind === 'or') {
+      const children = expr.children
+        .map(child => this.pruneAtomKeyFromExpr(child, atomKey))
+        .filter((child): child is AtomExpr => child !== null)
+      if (children.length === 0) return null
+      if (children.length === 1) return children[0]!
+      return children.length === expr.children.length && children.every((child, index) => child === expr.children[index])
+        ? expr
+        : { ...expr, children }
+    }
+
+    if (expr.kind === 'not') {
+      const child = this.pruneAtomKeyFromExpr(expr.child, atomKey)
+      if (!child) return null
+      return child === expr.child ? expr : { ...expr, child }
+    }
+
+    const steps = expr.steps
+      .map(step => this.pruneAtomKeyFromExpr(step, atomKey))
+      .filter((step): step is AtomExpr => step !== null)
+    if (steps.length === 0) return null
+    if (steps.length === 1) return steps[0]!
+    return steps.length === expr.steps.length && steps.every((step, index) => step === expr.steps[index])
+      ? expr
+      : { ...expr, steps }
   }
 
   /**
@@ -288,7 +506,9 @@ export class SemanticRuleProjectionService {
 
     if (triggerLeafCount === 0) return
 
-    // AND/OR → combinationContract 挂到第一个 member
+    // AND/OR → 同一个 combinationContract 挂到每个 trigger member。
+    // 只挂第一个会让后续 trigger 走 implicit singleton group，canonical 只能看到
+    // 第一片条件，导致规则树里的 AND/OR 参数在 flat -> canonical 断裂。
     const join = this.toJoinKind(expr)
     if (join && triggerLeafCount >= 2) {
       const groupId = `rule-${rule.id}-grp`
@@ -298,11 +518,12 @@ export class SemanticRuleProjectionService {
         phase: this.phaseToTriggerPhase(rule.phase),
         sideScope: rule.sideScope,
       })
-      const first = triggers[startIndex]
-      if (first) {
-        triggers[startIndex] = {
-          ...first,
-          contracts: [...(first.contracts ?? []), contract],
+      for (let index = startIndex; index < triggers.length; index += 1) {
+        const trigger = triggers[index]
+        if (!trigger || trigger._provenance?.ruleId !== rule.id) continue
+        triggers[index] = {
+          ...trigger,
+          contracts: [...(trigger.contracts ?? []), contract],
         }
       }
     }
@@ -509,6 +730,15 @@ export class SemanticRuleProjectionService {
           sizing: this.normalizeProgramSizing(leaf.params.sizing) ?? this.normalizeProgramSizing(leaf.params) ?? { mode: 'fixed_pct', value: 10 },
         },
       ]
+    }
+
+    if (leaf.key === 'gate.regime') {
+      // Rules-tree gate effects are predicate-level filters. The rule condition itself
+      // remains the executable source; projecting this bare effect into orchestration
+      // creates a phase0 runtime node without target/activeWhen and blocks codegen.
+      if (!leaf.params.activeWhen && !leaf.params.target && !leaf.params.effectWhenFalse) {
+        return []
+      }
     }
 
     return [base]

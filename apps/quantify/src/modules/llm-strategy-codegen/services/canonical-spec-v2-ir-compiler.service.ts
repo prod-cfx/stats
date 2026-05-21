@@ -1611,13 +1611,13 @@ export class CanonicalSpecV2IrCompilerService {
         const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
           ? atom.params.timeframe.trim()
           : context.timeframe
-        const closeRef = this.ensurePriceSeries(context, 'close', timeframe)
-        const indicatorRef = this.ensureIndicatorReferenceSeries(context, atom, timeframe)
+        const leftRef = this.resolveIndicatorCompareLeftRef(context, atom, timeframe)
+        const rightRef = this.ensureIndicatorReferenceSeries(context, atom, timeframe)
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}_${timeframe}`,
           atom.key === 'indicator.above' ? 'GTE' : 'LTE',
-          [closeRef, indicatorRef],
+          [leftRef, rightRef],
         )
       }
 
@@ -2529,7 +2529,7 @@ export class CanonicalSpecV2IrCompilerService {
     const indicator = typeof atom.params?.indicator === 'string'
       ? atom.params.indicator.trim().toLowerCase()
       : ''
-    const period = this.readNumber([atom.params?.['reference.period'], atom.params?.period], context.movingAverage.slow)
+    const period = this.readNumber([this.readNestedParam(atom.params, 'reference', 'period'), atom.params?.['reference.period'], atom.params?.period], context.movingAverage.slow)
 
     if (indicator === 'ema') {
       return this.ensureIndicatorSeries(context, 'EMA', period, timeframe)
@@ -2540,6 +2540,30 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:${indicator}`)
+  }
+
+  private resolveIndicatorCompareLeftRef(
+    context: CompileContext,
+    atom: CanonicalConditionAtom,
+    timeframe: string,
+  ): string {
+    const ownPeriod = this.readOptionalNumber(atom.params?.period)
+    const referencePeriod = this.readOptionalNumber(this.readNestedParam(atom.params, 'reference', 'period'))
+      ?? this.readOptionalNumber(atom.params?.['reference.period'])
+    if (ownPeriod === null || referencePeriod === null) {
+      return this.ensurePriceSeries(context, 'close', timeframe)
+    }
+
+    const indicator = typeof atom.params?.indicator === 'string'
+      ? atom.params.indicator.trim().toLowerCase()
+      : ''
+    if (indicator === 'ema') {
+      return this.ensureIndicatorSeries(context, 'EMA', ownPeriod, timeframe)
+    }
+    if (indicator === 'ma' || indicator === 'sma' || indicator.length === 0) {
+      return this.ensureIndicatorSeries(context, 'SMA', ownPeriod, timeframe)
+    }
+    return this.ensurePriceSeries(context, 'close', timeframe)
   }
 
   private resolveMovingAverageAtomConfig(
@@ -2850,6 +2874,7 @@ export class CanonicalSpecV2IrCompilerService {
         action.kind === 'OPEN_LONG' || action.kind === 'OPEN_SHORT',
       )
       if (!opensRawPosition) continue
+      if (block.metadata?.dcaSchedule) continue
       const leafKinds = collectEntryRuleLeafKinds(block.when, context.predicateMap)
       if (leafKinds.length === 0) continue
       if (leafKindsContainEvent(leafKinds)) continue
@@ -4570,6 +4595,21 @@ export class CanonicalSpecV2IrCompilerService {
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
   }
 
+  private readNestedParam(params: Record<string, unknown> | undefined, objectKey: string, fieldKey: string): unknown {
+    const value = params?.[objectKey]
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    return (value as Record<string, unknown>)[fieldKey]
+  }
+
+  private readOptionalNumber(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) return parsed
+    }
+    return null
+  }
+
   private readNumber(candidates: unknown[], fallback: number): number {
     for (const candidate of candidates) {
       if (typeof candidate === 'number' && Number.isFinite(candidate)) {
@@ -4628,6 +4668,7 @@ export class CanonicalSpecV2IrCompilerService {
         ensureStateContextSeries: this.ensureStateContextSeries.bind(this),
         ensureConstSeries: this.ensureConstSeries.bind(this),
         ensureIndicatorReferenceSeries: this.ensureIndicatorReferenceSeries.bind(this),
+        resolveIndicatorCompareLeftRef: this.resolveIndicatorCompareLeftRef.bind(this),
         upsertPredicate: this.upsertPredicate.bind(this),
         readNumber: this.readNumber.bind(this),
         resolveComparisonKind: this.resolveComparisonKind.bind(this),

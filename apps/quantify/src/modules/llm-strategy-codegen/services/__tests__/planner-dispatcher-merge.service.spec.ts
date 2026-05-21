@@ -187,6 +187,221 @@ describe('PlannerDispatcherMergeService', () => {
     expect(merged?.orchestration?.nodes).toHaveLength(1)
   })
 
+  it('execution-slot merge does not mutate planner rules with dispatcher lifecycle effects or params', () => {
+    const planner = {
+      contextSlots: { symbol: 'BTCUSDT' },
+      rules: [{
+        id: 'planner-r1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down' } },
+        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = {
+      contextSlots: { exchange: 'okx' },
+      atoms: [{
+        key: 'action.add_position',
+        sideScope: 'long',
+        params: { addMode: 'drawdown_pct', drawdownThreshold: 5 },
+      }],
+      position: {
+        constraints: [{
+          key: 'position.dca_schedule',
+          params: { triggerMode: 'time_interval' },
+        }],
+      },
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher)
+
+    expect(merged?.contextSlots).toEqual({ symbol: 'BTCUSDT', exchange: 'okx' })
+    expect((merged as { rules?: unknown[] })?.rules).toEqual((planner as { rules: unknown[] }).rules)
+  })
+
+  it('execution-slot merge does not append single EMA entries already covered by planner AND rule', () => {
+    const planner = {
+      rules: [
+        {
+          id: 'entry-long-ema-stack-15m',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: {
+            kind: 'and',
+            children: [
+              { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', 'reference.period': 20 } },
+              { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', 'reference.period': 60 } },
+              { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', 'reference.period': 144 } },
+            ],
+          },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'exit-long-below-ema20-15m',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'indicator.below', params: { indicator: 'ema', 'reference.period': 20 } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = {
+      atoms: [
+        { key: 'indicator.above', phase: 'entry', sideScope: 'long', params: { indicator: 'ema', 'reference.period': 20 } },
+        { key: 'indicator.above', phase: 'entry', sideScope: 'long', params: { indicator: 'ema', 'reference.period': 60 } },
+        { key: 'indicator.above', phase: 'entry', sideScope: 'long', params: { indicator: 'ema', 'reference.period': 144 } },
+        { key: 'indicator.below', phase: 'exit', sideScope: 'long', params: { indicator: 'ema', 'reference.period': 20 } },
+        { key: 'action.open_long', phase: 'entry', sideScope: 'long', params: {} },
+        { key: 'action.close_long', phase: 'exit', sideScope: 'long', params: {} },
+      ],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher)
+
+    expect((merged as { rules?: Array<{ id?: string }> })?.rules?.map(rule => rule.id)).toEqual([
+      'entry-long-ema-stack-15m',
+      'exit-long-below-ema20-15m',
+    ])
+  })
+
+  it('execution-slot merge does not append EMA cross rules when planner params are richer', () => {
+    const planner = {
+      rules: [
+        {
+          id: 'entry-ema7-crossup-ema21-long',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: {
+            kind: 'atom',
+            key: 'indicator.cross_over',
+            params: { value: 21, period: 7, semantic: 'cross_up', indicator: 'ema', fastPeriod: 7, slowPeriod: 21, signalPeriod: 9 },
+          },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'exit-ema7-crossdown-ema21-close-long',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: {
+            kind: 'atom',
+            key: 'indicator.cross_under',
+            params: { value: 21, period: 7, semantic: 'cross_down', indicator: 'ema', fastPeriod: 7, slowPeriod: 21, signalPeriod: 9 },
+          },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = {
+      atoms: [
+        { key: 'indicator.cross_over', phase: 'entry', sideScope: 'long', params: { value: 21, period: 7, indicator: 'ema', fastPeriod: 7, slowPeriod: 21 } },
+        { key: 'indicator.cross_under', phase: 'exit', sideScope: 'long', params: { value: 21, period: 7, indicator: 'ema', fastPeriod: 7, slowPeriod: 21 } },
+        { key: 'action.open_long', phase: 'entry', sideScope: 'long', params: {} },
+        { key: 'action.close_long', phase: 'exit', sideScope: 'long', params: {} },
+      ],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher)
+
+    expect((merged as { rules?: Array<{ id?: string }> })?.rules?.map(rule => rule.id)).toEqual([
+      'entry-ema7-crossup-ema21-long',
+      'exit-ema7-crossdown-ema21-close-long',
+    ])
+  })
+
+  it('execution-slot merge does not append MACD cross rules when dispatcher has only indicator name', () => {
+    const planner = {
+      rules: [
+        {
+          id: 'entry-macd-cross-golden',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: {
+            kind: 'atom',
+            key: 'indicator.cross_over',
+            params: { value: 0, period: 0, semantic: 'cross_up', indicator: 'macd', fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 },
+          },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'exit-macd-cross-dead',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: {
+            kind: 'atom',
+            key: 'indicator.cross_under',
+            params: { value: 0, period: 0, semantic: 'cross_down', indicator: 'macd', fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 },
+          },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = {
+      atoms: [
+        { key: 'indicator.cross_over', phase: 'entry', sideScope: 'long', params: { indicator: 'macd' } },
+        { key: 'indicator.cross_under', phase: 'exit', sideScope: 'long', params: { indicator: 'macd' } },
+        { key: 'action.open_long', phase: 'entry', sideScope: 'long', params: {} },
+        { key: 'action.close_long', phase: 'exit', sideScope: 'long', params: {} },
+      ],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher)
+
+    expect((merged as { rules?: Array<{ id?: string }> })?.rules?.map(rule => rule.id)).toEqual([
+      'entry-macd-cross-golden',
+      'exit-macd-cross-dead',
+    ])
+  })
+
+  it('execution-slot merge does not append MA and MACD component rules when planner has compound rules', () => {
+    const planner = {
+      rules: [
+        {
+          id: 'entry-sol-ma100-macd-golden-long',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: {
+            kind: 'and',
+            children: [
+              { kind: 'atom', key: 'indicator.above', params: { indicator: 'ma', 'reference.period': 100 } },
+              { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'macd', fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 } },
+            ],
+          },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'exit-sol-ma100-or-macd-dead-long',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: {
+            kind: 'or',
+            children: [
+              { kind: 'atom', key: 'indicator.below', params: { indicator: 'ma', 'reference.period': 100 } },
+              { kind: 'atom', key: 'indicator.cross_under', params: { indicator: 'macd', fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 } },
+            ],
+          },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = {
+      atoms: [
+        { key: 'indicator.above', phase: 'entry', sideScope: 'long', params: { indicator: 'ma', referenceRole: 'long_term', 'reference.period': 100, timeframeOverride: 'true' } },
+        { key: 'indicator.cross_over', phase: 'entry', sideScope: 'long', params: { indicator: 'macd' } },
+        { key: 'indicator.below', phase: 'exit', sideScope: 'long', params: { indicator: 'ma', referenceRole: 'long_term', 'reference.period': 100, timeframeOverride: 'true' } },
+        { key: 'indicator.cross_under', phase: 'exit', sideScope: 'long', params: { indicator: 'macd', period: 100, fastPeriod: 100 } },
+        { key: 'action.open_long', phase: 'entry', sideScope: 'long', params: {} },
+        { key: 'action.close_long', phase: 'exit', sideScope: 'long', params: {} },
+      ],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher)
+
+    expect((merged as { rules?: Array<{ id?: string }> })?.rules?.map(rule => rule.id)).toEqual([
+      'entry-sol-ma100-macd-golden-long',
+      'exit-sol-ma100-or-macd-dead-long',
+    ])
+  })
+
   // ───────────────────────────────────────────────────────────────────────────
   // Issue #1428 R-B：rules-first 路径下 dispatcher atom lift 为 single-leaf rule
   //   （cross-clause inheritance 回归——planner 直产 rules 时 dispatcher 通过
@@ -213,9 +428,9 @@ describe('PlannerDispatcherMergeService', () => {
     }
     const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
     const rules = (merged as { rules?: Array<{ id: string, condition: { key?: string } }> })?.rules
-    expect(rules).toHaveLength(2)
-    expect(rules?.[1].id).toMatch(/^dispatcher-lift-/u)
-    expect(rules?.[1].condition.key).toBe('bollinger.touch_lower')
+    expect(rules).toHaveLength(1)
+    expect(rules?.[0].id).toMatch(/^dispatcher-lift-/u)
+    expect(rules?.[0].condition.key).toBe('bollinger.touch_lower')
   })
 
   it('R-B: rules 中已有同签名 leaf 时不重复 lift', () => {
@@ -346,6 +561,27 @@ describe('PlannerDispatcherMergeService', () => {
     const merged = svc.mergePlannerAndDispatcherPatches(planner, null)
     const rules = (merged as { rules?: unknown[] })?.rules
     expect(rules).toHaveLength(1)
+  })
+
+  it('Issue #1443: always-on DCA lifecycle rule drops mixed action noise only', () => {
+    const planner = {
+      rules: [{
+        id: 'planner-r-dca',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: { timing: 'on_start' } },
+        effects: [
+          { kind: 'atom', key: 'position.dca_schedule', params: { triggerMode: 'time_interval' } },
+          { kind: 'atom', key: 'action.close_long', params: {} },
+        ],
+      }],
+    } as unknown as CodegenSemanticPatch
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, null)
+    const rules = (merged as unknown as { rules?: Array<{ effects: ReadonlyArray<{ key?: string }> }> })?.rules
+    expect(rules).toHaveLength(1)
+    expect(rules?.[0].effects).toEqual([
+      expect.objectContaining({ key: 'position.dca_schedule' }),
+    ])
   })
 
   it('Issue #1443: 非 always-on condition + action effects → 保留（正常业务 rule）', () => {

@@ -91,6 +91,20 @@ describe('SemanticStateProjectionService — render contract (#1154)', () => {
     expect(view.summary).toMatch(/每次\s*30\s*%/)
   })
 
+  it('action.add_position fixed quote sizing 渲染为每次金额', () => {
+    const action: SemanticActionState = {
+      id: 'add-1',
+      key: 'action.add_position',
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+      params: { addMode: 'drawdown_pct', drawdownThreshold: 5, sizing: { kind: 'quote', asset: 'USDT', value: 200 } },
+    }
+    const view = service.buildConversationView(baseState({ action: [action] }))
+    expect(view.summary).toMatch(/回撤\s*5\s*%\s*后加仓/)
+    expect(view.summary).toContain('每次200 USDT')
+  })
+
   it('risk.partial_take_profit 两档 tiers 必须出现在 riskSummary', () => {
     const risk = {
       id: 'ptp-1',

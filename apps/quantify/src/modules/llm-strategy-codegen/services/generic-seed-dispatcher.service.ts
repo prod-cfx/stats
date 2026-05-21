@@ -37,6 +37,7 @@ import type { SemanticPositionSizingContract } from '../types/semantic-state'
  */
 import { Injectable } from '@nestjs/common'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+import { isTimeframeGroupableTriggerKey } from '../atom-contracts/trigger-display-contract'
 import {
   matchKeyword,
   matchVerbDirection,
@@ -94,6 +95,9 @@ const INDICATOR_KEYWORDS = new Set([
   'TWO', 'USE', 'WAY', 'WHO', 'YOU', 'AGO', 'API', 'APP', 'BOT',
   // 交易所 / 市场类型 token，避免 "在 okx 买 btc" 推断为 OKXUSDT。
   'OKX', 'BINANCE', 'HYPERLIQUID', 'SPOT', 'PERP', 'SWAP', 'CONTRACT',
+  'EXCHANGE', 'TIMEFRAME', 'MARKETTYPE', 'SYMBOL', 'POSITION',
+  'EXECUTIONCONTEXT', 'RULESTREE', 'SEMANTIC', 'ACTION', 'ADD',
+  'EXIT', 'ENTRY', 'RISK', 'CONSTRAINT', 'SIZING',
 ])
 
 /** 短句 token 形态：3-10 位大写字母 */
@@ -493,7 +497,7 @@ type ExtractedSizingRole = {
 }
 
 const SIZING_SLOT_RE = /(?:sizing|size|budget)/iu
-const SIZING_ROLE_PREFIX_RE = /(?:仓位|资金(?!费率)|比例|使用|投入|固定|单笔|每格|每次|每笔|每单|用)\s*(?:使用|用|投入)?\s*[：:]?\s*$/u
+const SIZING_ROLE_PREFIX_RE = /(?:仓位|资金(?!费率)|比例|使用|投入|固定|单笔|每格|每次|每笔|每单|用|加投|加仓|补仓|账户权益(?:的)?|权益(?:的)?|账户资金(?:的)?|(?:使用|用|投入).*(?:账户权益|权益|账户资金)(?:的)?)\s*(?:使用|用|投入)?\s*[：:]?\s*$/u
 const SIZING_ROLE_SUFFIX_RE = /^\s*(?:仓位|资金(?!费率)|比例)/u
 const RISK_ROLE_NEAR_RE = /(?:止损|止盈|亏损|盈利|ATR|atr)\s*$/u
 
@@ -585,7 +589,7 @@ function extractParamsWithSizingRoles(
   clause: string,
   atomKey: string,
 ): Record<string, unknown> {
-  const params = extractParams(paramSlots, clause, atomKey)
+  const params = normalizeLifecycleParams(atomKey, clause, extractParams(paramSlots, clause, atomKey))
   const hasSizingSlot = Object.keys(paramSlots).some(slotKey => SIZING_SLOT_RE.test(slotKey))
   if (!hasSizingSlot) return params
 
@@ -602,13 +606,110 @@ function extractParamsWithSizingRoles(
   return params
 }
 
+function normalizeLifecycleParams(
+  atomKey: string,
+  clause: string,
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  if (atomKey === ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key) {
+    return normalizeDcaScheduleParams(clause, params)
+  }
+
+  if (atomKey === ATOM_CONTRACT_REGISTRY['action.add_position'].key) {
+    const sizingRole = extractSizingRoleFromText(clause)
+    const next = { ...params }
+    if (typeof next.drawdownThreshold === 'number') next.drawdownThreshold = Math.abs(next.drawdownThreshold)
+    if (typeof next.profitThreshold === 'number') next.profitThreshold = Math.abs(next.profitThreshold)
+    if (next.addMode === 'drawdown_pct') delete next.profitThreshold
+    if (next.addMode === 'profit_pct') delete next.drawdownThreshold
+    if (sizingRole) {
+      next.sizing = toPerOrderSizingShape(sizingRole.sizing)
+      delete next.addRatio
+    }
+    else if (typeof next.addRatio === 'number') {
+      next.addRatio = Math.abs(next.addRatio)
+    }
+    return next
+  }
+
+  if (atomKey === ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key) {
+    const next = { ...params }
+    if (typeof next.thresholdPct === 'number') next.thresholdPct = Math.abs(next.thresholdPct)
+    return next
+  }
+
+  return params
+}
+
+function normalizeDcaScheduleParams(
+  clause: string,
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...params }
+  const sizingRole = extractSizingRoleFromText(clause)
+  const perOrderBudget = typeof params.perOrderBudget === 'number' && Number.isFinite(params.perOrderBudget)
+    ? params.perOrderBudget
+    : null
+  if (sizingRole) {
+    next.perOrderSizing = toPerOrderSizingShape(sizingRole.sizing)
+  }
+  else if (perOrderBudget !== null && perOrderBudget > 0) {
+    next.perOrderSizing = { kind: 'quote', value: perOrderBudget, asset: 'USDT' }
+  }
+  delete next.perOrderBudget
+
+  const explicitMaxCount = clause.match(/最多\s*(\d{1,4})\s*(?:次|笔|单)/u)
+  if (explicitMaxCount) {
+    next.maxCount = Number(explicitMaxCount[1])
+  }
+  delete next.maxOrders
+
+  const capitalCap = clause.match(/(?:总(?:投入|资金|预算|金额)|上限|不超过)\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|[uU](?![A-Za-z0-9])|刀|美元)/iu)
+  if (capitalCap) {
+    next.capitalCap = {
+      kind: 'quote',
+      value: Number(capitalCap[1]),
+      asset: normalizeQuoteAsset(capitalCap[2]),
+    }
+  }
+
+  if (/每天|每日/u.test(clause)) {
+    next.triggerMode = 'time_interval'
+    next.timeIntervalBars = 1
+  }
+  else if (/每周|每星期/u.test(clause)) {
+    next.triggerMode = 'time_interval'
+    next.timeIntervalBars = 7
+  }
+  else if (/每月/u.test(clause)) {
+    next.triggerMode = 'time_interval'
+    next.timeIntervalBars = 30
+  }
+  else if (typeof params.dropPct === 'number' && Number.isFinite(params.dropPct)) {
+    next.triggerMode = 'price_interval'
+    next.priceIntervalPct = params.dropPct
+  }
+
+  return next
+}
+
+function removeInPlace<T>(items: T[], predicate: (item: T) => boolean): void {
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (predicate(items[i]!)) items.splice(i, 1)
+  }
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
  * contextSlots 抽取（NL 通用解析，不读 atom-key）
  * ────────────────────────────────────────────────────────────────────────── */
 
-const EXCHANGE_RE = /\b(okx|binance|bybit|coinbase|kraken|huobi|gate|bitget)\b/i
+const EXCHANGE_RE = /\b(okx|binance|bybit|coinbase|kraken|huobi|gate|bitget)\b|欧易|币安/i
+const EXCHANGE_ALIASES: Readonly<Record<string, string>> = {
+  '欧易': 'okx',
+  '币安': 'binance',
+}
 // quote 枚举从 SYMBOL_QUOTES 派生，两处保持单一真相源（M1）
-const SYMBOL_RE = new RegExp(`([A-Z]{2,10})[\\s/]?(${SYMBOL_QUOTES.join('|')})\\b`)
+const SYMBOL_RE = new RegExp(`([A-Z]{2,10})[\\s/]?(${SYMBOL_QUOTES.join('|')})\\b`, 'i')
 const TIMEFRAME_RE = /\b(1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w)\b/i
 /**
  * PR2c-final-2 Step1：复合 timeframe 形态识别（短 token surface 精度补齐）。
@@ -623,7 +724,9 @@ const TIMEFRAME_RE = /\b(1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w)\b/i
  * 与 BUCKET_LITERALS / atom-key prefix 集合不交叉，AC-13 / no-atom-key-literal
  * 不会误报。
  */
-const TIMEFRAME_COMPOUND_RE = /\b(\d{1,3})\s*(分钟|小时|天|周|min(?:ute)?s?|hours?|days?|weeks?|m|h|d|w)\b/i
+const TIMEFRAME_COMPOUND_RE = /(?<![A-Za-z0-9])(\d{1,3})\s*(分钟|小时|天|周(?!期)|min(?:ute)?s?|hours?|days?|weeks?|m|h|d|w)(?![A-Za-z0-9])/i
+const TIMEFRAME_DAILY_RE = /(?<![A-Za-z0-9])(?:日线|日K|daily)(?![A-Za-z0-9])/iu
+const TIMEFRAME_TOKEN_RE = /(?<![A-Za-z0-9])(?:(1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w)|(\d{1,3})\s*(分钟|小时|天|周(?!期)|min(?:ute)?s?|hours?|days?|weeks?|m|h|d|w)|(日线|日K|daily))(?![A-Za-z0-9])/gi
 const TIMEFRAME_UNIT_TO_CANONICAL: Readonly<Record<string, 'm' | 'h' | 'd' | 'w'>> = {
   '分钟': 'm',
   'min': 'm',
@@ -644,17 +747,36 @@ const TIMEFRAME_UNIT_TO_CANONICAL: Readonly<Record<string, 'm' | 'h' | 'd' | 'w'
   'weeks': 'w',
   'w': 'w',
 }
-function tryNormalizeTimeframe(text: string): string | undefined {
-  // 优先匹配标准简写（避免 '15分钟' 中的 '15m' 子串先被命中产生错位）
-  const direct = text.match(TIMEFRAME_RE)
-  if (direct) return direct[1].toLowerCase()
-  const compound = text.match(TIMEFRAME_COMPOUND_RE)
-  if (!compound) return undefined
-  const value = Number.parseInt(compound[1], 10)
+function normalizeCompoundTimeframe(valueRaw: string | undefined, unitRaw: string | undefined): string | undefined {
+  if (!valueRaw || !unitRaw) return undefined
+  const value = Number.parseInt(valueRaw, 10)
   if (Number.isNaN(value) || value <= 0) return undefined
-  const unit = TIMEFRAME_UNIT_TO_CANONICAL[compound[2].toLowerCase()]
+  const unit = TIMEFRAME_UNIT_TO_CANONICAL[unitRaw.toLowerCase()]
   if (!unit) return undefined
   return `${value}${unit}`
+}
+function tryNormalizeTimeframes(text: string): string[] {
+  const values: string[] = []
+  const seen = new Set<string>()
+  for (const match of text.matchAll(TIMEFRAME_TOKEN_RE)) {
+    const timeframe = typeof match[1] === 'string' && match[1].length > 0
+      ? match[1].toLowerCase()
+      : typeof match[4] === 'string' && match[4].length > 0
+        ? '1d'
+        : normalizeCompoundTimeframe(match[2], match[3])
+    if (!timeframe || seen.has(timeframe)) continue
+    seen.add(timeframe)
+    values.push(timeframe)
+  }
+  return values
+}
+function tryNormalizeTimeframe(text: string): string | undefined {
+  const firstByPosition = tryNormalizeTimeframes(text)[0]
+  if (firstByPosition) return firstByPosition
+  if (TIMEFRAME_DAILY_RE.test(text)) return '1d'
+  const compound = text.match(TIMEFRAME_COMPOUND_RE)
+  if (!compound) return undefined
+  return normalizeCompoundTimeframe(compound[1], compound[2])
 }
 // #1296：加 \b 边界，避免 'perpetual swap' / 'perplexity' 等英文长词被前缀误命中；
 // 中文 '合约' / '永续' 不需要边界（CJK 字符默认无 word char 邻接歧义）。
@@ -711,10 +833,14 @@ function tryInferShortSymbol(text: string): InferredSymbolSlot | undefined {
   return undefined
 }
 
+function normalizeExchange(value: string): string {
+  return EXCHANGE_ALIASES[value] ?? value.toLowerCase()
+}
+
 function extractContextSlots(text: string): ContextSlots | undefined {
   const slots: ContextSlots = {}
   const exMatch = text.match(EXCHANGE_RE)
-  if (exMatch) slots.exchange = exMatch[1].toLowerCase()
+  if (exMatch) slots.exchange = normalizeExchange(exMatch[1] ?? exMatch[0])
   const symMatch = text.match(SYMBOL_RE)
   if (symMatch) {
     const base = symMatch[1].toUpperCase()
@@ -906,47 +1032,56 @@ export class GenericSeedDispatcher {
 
     for (const clause of clauses) {
       const matches = this.matchClauseAgainstRegistry(clause)
+      const clauseTimeframes = tryNormalizeTimeframes(clause)
       for (const m of matches) {
         const contract = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract>)[m.atomKey]
         if (!contract) continue
         const slot = BUCKET_TO_PATCH_SLOT[contract.bucket]
 
-        const params = { ...m.params }
+        const timeframeFanout = clauseTimeframes.length > 1 && isTimeframeGroupableTriggerKey(m.atomKey)
+          ? clauseTimeframes
+          : [null]
         const phase = m.phase ?? 'entry'
         const sideScope = m.sideScope ?? 'both'
 
-        // Issue #1338 Phase 4：dedupe key 用 (atomKey, phase, sideScope, sorted params JSON)，
-        // 跨 clause 等价命中只保留首条。
-        const sortedParams = Object.fromEntries(
-          Object.entries(params).sort(([a], [b]) => a.localeCompare(b)),
-        )
-        const dedupeKey = `${m.atomKey}|${phase}|${sideScope}|${JSON.stringify(sortedParams)}`
-        if (atomDedupeKeys.has(dedupeKey)) continue
-        atomDedupeKeys.add(dedupeKey)
-        if (slot) {
-          if (slotDedupeKeys[slot].has(dedupeKey)) continue
-          slotDedupeKeys[slot].add(dedupeKey)
-        }
+        for (const fanoutTimeframe of timeframeFanout) {
+          const params = fanoutTimeframe === null
+            ? { ...m.params }
+            : { ...m.params, timeframe: fanoutTimeframe }
 
-        // evidence.source 由 atom surface.evidenceProvenance 声明（数据驱动，无 atom-key 字面量比较）。
-        // external.signal 声明 'webhook'；其余 atom 省略，默认 'user_explicit'。
-        const evidenceSource: NonNullable<AtomContractSurface['evidenceProvenance']> = contract.surface?.evidenceProvenance ?? 'user_explicit'
-        const evidence = { text: m.clauseText, source: evidenceSource }
-        // phase は resolver が解決した後に全 slot に記録する（M1: actionMatchesFulfilledPhases が
-        // action.phase を参照できるよう action にも phase を付与）。
-        // sideScope は triggers のみ意味を持つため引き続き trigger 限定。
-        const node: PatchAtomNode = {
-          key: m.atomKey,
-          phase,
-          params,
-          evidence,
-        }
-        if (slot === 'triggers') {
-          node.sideScope = sideScope
-        }
-        atomItems.push({ ...node, sideScope })
-        if (slot) {
-          slotItems[slot].push(node)
+          // Issue #1338 Phase 4：dedupe key 用 (atomKey, phase, sideScope, sorted params JSON)，
+          // 跨 clause 等价命中只保留首条。
+          const sortedParams = Object.fromEntries(
+            Object.entries(params).sort(([a], [b]) => a.localeCompare(b)),
+          )
+          const dedupeKey = `${m.atomKey}|${phase}|${sideScope}|${JSON.stringify(sortedParams)}`
+          if (atomDedupeKeys.has(dedupeKey)) continue
+          atomDedupeKeys.add(dedupeKey)
+          if (slot) {
+            if (slotDedupeKeys[slot].has(dedupeKey)) continue
+            slotDedupeKeys[slot].add(dedupeKey)
+          }
+
+          // evidence.source 由 atom surface.evidenceProvenance 声明（数据驱动，无 atom-key 字面量比较）。
+          // external.signal 声明 'webhook'；其余 atom 省略，默认 'user_explicit'。
+          const evidenceSource: NonNullable<AtomContractSurface['evidenceProvenance']> = contract.surface?.evidenceProvenance ?? 'user_explicit'
+          const evidence = { text: m.clauseText, source: evidenceSource }
+          // phase は resolver が解決した後に全 slot に記録する（M1: actionMatchesFulfilledPhases が
+          // action.phase を参照できるよう action にも phase を付与）。
+          // sideScope は triggers のみ意味を持つため引き続き trigger 限定。
+          const node: PatchAtomNode = {
+            key: m.atomKey,
+            phase,
+            params,
+            evidence,
+          }
+          if (slot === 'triggers') {
+            node.sideScope = sideScope
+          }
+          atomItems.push({ ...node, sideScope })
+          if (slot) {
+            slotItems[slot].push(node)
+          }
         }
       }
     }
@@ -964,6 +1099,8 @@ export class GenericSeedDispatcher {
       atomDedupeKeys,
       slotDedupeKeys,
     )
+
+    this.applySemanticConflictResolution(atomItems, slotItems)
 
     // review C3：替代 `as never` 类型逃生，使用 patch schema 自身派生的精确 cast；
     // 未来 PR3+ 改 CodegenSemanticPatch 字段类型时编译器能抓到 mismatch。
@@ -988,6 +1125,30 @@ export class GenericSeedDispatcher {
     }
 
     return patch
+  }
+
+  private applySemanticConflictResolution(
+    atomItems: PatchAtomNode[],
+    slotItems: Record<'triggers' | 'actions' | 'risk', PatchAtomNode[]>,
+  ): void {
+    const addPositionKey = ATOM_CONTRACT_REGISTRY['action.add_position'].key
+    const takeProfitKey = ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key
+    const addPositionClauses = new Set(
+      atomItems
+        .filter(item => item.key === addPositionKey)
+        .map(item => readPatchEvidenceText(item))
+        .filter((text): text is string => typeof text === 'string' && text.trim().length > 0),
+    )
+    if (addPositionClauses.size === 0) return
+
+    const isConflictingTakeProfit = (item: PatchAtomNode): boolean => {
+      if (item.key !== takeProfitKey) return false
+      const evidence = readPatchEvidenceText(item)
+      return typeof evidence === 'string' && addPositionClauses.has(evidence)
+    }
+
+    removeInPlace(atomItems, isConflictingTakeProfit)
+    removeInPlace(slotItems.risk, isConflictingTakeProfit)
   }
 
   /**
@@ -1293,4 +1454,11 @@ export class GenericSeedDispatcher {
       sideScope,
     }
   }
+}
+
+function readPatchEvidenceText(item: { evidence?: unknown }): string | null {
+  const evidence = item.evidence
+  if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) return null
+  const text = (evidence as { text?: unknown }).text
+  return typeof text === 'string' ? text : null
 }

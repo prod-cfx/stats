@@ -94,6 +94,7 @@ import {
   
   
 } from './inferred-confirmation-classifier.service'
+import { GenericSeedDispatcher } from './generic-seed-dispatcher.service'
 import { canonicalizeStrategySymbolInput, isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
 import { PlannerDispatcherMergeService } from './planner-dispatcher-merge.service'
@@ -308,6 +309,7 @@ export class CodegenConversationService {
     private readonly unsupportedFallback: UnsupportedFallbackService = new UnsupportedFallbackService(),
     private readonly semanticContractReadiness: SemanticContractReadinessService = new SemanticContractReadinessService(),
     private readonly semanticQuestionRenderer: SemanticClarificationQuestionRendererService = new SemanticClarificationQuestionRendererService(),
+    private readonly genericSeedDispatcher: GenericSeedDispatcher = new GenericSeedDispatcher(),
     // Issue #1383 Lane A：注入 SemanticExecutableSemanticsService，registry-driven，
     //   本服务内不再保留硬编码 capability.domain/verb 判定。
     private readonly executableSemantics: SemanticExecutableSemanticsService = new SemanticExecutableSemanticsService(),
@@ -1220,11 +1222,22 @@ export class CodegenConversationService {
     if (!plan.diagnostics) {
       return undefined
     }
+    const errors = this.buildPlannerValidationErrors(plan.diagnostics)
+    const warnings = this.readPlannerValidationWarnings(plan.diagnostics)
     return {
-      ok: false,
-      errors: this.buildPlannerValidationErrors(plan.diagnostics),
+      ok: errors.length === 0,
+      errors,
+      ...(warnings.length > 0 ? { warnings } : {}),
       diagnostics: plan.diagnostics,
     }
+  }
+
+  private readPlannerValidationWarnings(
+    diagnostics: Record<string, unknown>,
+  ): string[] {
+    return Array.isArray(diagnostics.warnings)
+      ? diagnostics.warnings.filter((reason): reason is string => typeof reason === 'string' && reason.length > 0)
+      : []
   }
 
   private buildPlannerValidationErrors(
@@ -1237,6 +1250,11 @@ export class CodegenConversationService {
     const rejectReasons = Array.isArray(entry.rejectReasons)
       ? entry.rejectReasons.filter((reason): reason is string => typeof reason === 'string' && reason.length > 0)
       : []
+    const warnings = this.readPlannerValidationWarnings(diagnostics)
+
+    if (rejectReasons.length === 0 && warnings.length > 0) {
+      return []
+    }
 
     if (rejectReasons.length === 0) {
       return [{
@@ -3349,12 +3367,8 @@ export class CodegenConversationService {
   }
 
   private ensureProtectiveRiskSlot(state: SemanticState): SemanticState {
-    if (this.hasProtectiveRisk(readFlatRisks(state))) {
+    if (this.hasProtectiveRisk(state)) {
       return this.removeSatisfiedProtectiveRiskSlot(state)
-    }
-
-    if (!this.hasLockedExitSemantics(state)) {
-      return state
     }
 
     if (
@@ -3367,31 +3381,15 @@ export class CodegenConversationService {
       return state
     }
 
-    return {
-      ...state,
-      risk: [
-        ...readFlatRisks(state),
-        {
-          id: 'risk-protective-exit',
-          key: 'risk.protective_exit',
-          params: {},
-          status: 'open',
-          source: 'derived',
-          openSlots: [{
-            slotKey: 'risk.protective_exit',
-            fieldPath: 'risk[protective].params',
-            status: 'open',
-            priority: 'risk',
-            questionHint: '请确认止损类保护规则（例如亏损 5% 止损）。',
-            affectsExecution: true,
-          }],
-        },
-      ],
-    }
+    return state
   }
 
-  private hasProtectiveRisk(riskItems: SemanticState['risk']): boolean {
-    return riskItems.some((risk) => {
+  private hasProtectiveRisk(state: SemanticState): boolean {
+    if (this.hasProtectiveOrchestrationRisk(state)) {
+      return true
+    }
+
+    return readFlatRisks(state).some((risk) => {
       if (risk.status !== 'locked') {
         return false
       }
@@ -3423,6 +3421,18 @@ export class CodegenConversationService {
         || risk.key === FIELD_KEY.RISK_MAX_DRAWDOWN_PCT
         || risk.key === FIELD_KEY.RISK_MAX_SINGLE_LOSS_PCT
     })
+  }
+
+  private hasProtectiveOrchestrationRisk(state: SemanticState): boolean {
+    return (state.orchestration ?? []).some(node =>
+      node.kind === 'portfolioRisk'
+      && node.key === 'portfolioRisk.drawdown_block'
+      && node.status === 'locked'
+      && node.mode === 'enforce'
+      && typeof node.thresholdPct === 'number'
+      && Number.isFinite(node.thresholdPct)
+      && node.thresholdPct > 0,
+    )
   }
 
   private hasBoundaryCancelGuardCapability(risk: SemanticRiskState): boolean {
@@ -3481,7 +3491,7 @@ export class CodegenConversationService {
   }
 
   private removeSatisfiedProtectiveRiskSlot(state: SemanticState): SemanticState {
-    if (!this.hasProtectiveRisk(readFlatRisks(state))) {
+    if (!this.hasProtectiveRisk(state)) {
       return state
     }
 
@@ -3660,7 +3670,7 @@ export class CodegenConversationService {
     }
 
     if (this.isProtectiveRiskClarificationItem(item)) {
-      return this.hasProtectiveRisk(readFlatRisks(semanticState))
+      return this.hasProtectiveRisk(semanticState)
     }
 
     if (this.isTakeProfitClarificationItem(item)) {
@@ -6915,9 +6925,18 @@ export class CodegenConversationService {
   }
 
   private normalizeRiskState(state: SemanticState): SemanticState {
+    const normalizedRisk = normalizeRiskSemantics([...readFlatRisks(state)])
+    const hasPortfolioDrawdownOrchestration = (state.orchestration ?? []).some(node =>
+      node.kind === 'portfolioRisk'
+      && node.key === 'portfolioRisk.drawdown_block'
+      && node.status !== 'superseded',
+    ) === true
+
     return {
       ...state,
-      risk: normalizeRiskSemantics([...readFlatRisks(state)]),
+      risk: hasPortfolioDrawdownOrchestration
+        ? normalizedRisk.filter(risk => risk.key !== 'portfolioRisk.drawdown_block')
+        : normalizedRisk,
     }
   }
 
@@ -8739,8 +8758,8 @@ export class CodegenConversationService {
         //   ⚠️ 顺序：硬校验必须在 #1395 quarantine 之前，使用 raw planner 原值。
         //   否则 quarantine 会把 invalid rule 全剪光 → rules=[] → 误归因为
         //   `rules_missing_or_empty` 而非真实的 `rule_shape_invalid`，reminder/metric 失真。
-        this.normalizePlannerEvidence(parsed, text)
         const rawPlannerSemanticPatch = parsed.semanticPatch ?? parsed.semanticUpdates
+        let plannerSchemaWarnings: readonly string[] = []
         if (rawPlannerSemanticPatch !== undefined && rawPlannerSemanticPatch !== null) {
           const schemaCheck = this.plannerDispatcherMerge.validatePlannerSemanticPatch(
             rawPlannerSemanticPatch,
@@ -8752,6 +8771,8 @@ export class CodegenConversationService {
             )
             return { kind: 'schema_reject', reminder: schemaCheck.reminder, reasons: schemaCheck.reasons }
           }
+          plannerSchemaWarnings = schemaCheck.warnings ?? []
+          this.normalizePlannerEvidence(parsed, text)
         }
 
         // Issue #1395：planner semanticPatch.rules[] 逐条 zod graceful parse
@@ -8791,10 +8812,45 @@ export class CodegenConversationService {
               ? this.localizedText(locale, 'I have organized the strategy logic. Please confirm the logic graph.', '我已整理出策略逻辑，请确认逻辑图。')
               : this.localizedText(locale, 'I will keep refining the strategy logic. Please provide one key condition.', '我先继续完善策略逻辑，请补充一个关键条件。'))
 
-        // Issue #1492：planner 成功后不再 union dispatcher patch。
-        //   rules tree 是唯一策略语义真源；缺少 positionConstraint/orchestration 能力
-        //   走 atom contract 升级路径，不在入口 fallback。
-        const semanticPatch = this.normalizeSemanticPatch(parsed.semanticPatch ?? parsed.semanticUpdates) ?? undefined
+        // Planner 成功给出 rules tree 时，rules tree 是唯一策略语义真源；
+        // deterministic dispatcher 只校准执行槽位，禁止 union 补 rule。
+        const plannerSemanticPatch = this.normalizeSemanticPatch(parsed.semanticPatch ?? parsed.semanticUpdates) ?? undefined
+        let semanticPatch = plannerSemanticPatch
+        if (plannerSemanticPatch) {
+          try {
+            const dispatcherPatch = this.genericSeedDispatcher.dispatch(text) as CodegenSemanticPatch
+            semanticPatch = this.plannerDispatcherMerge.mergeDeterministicExecutionSlots(
+              plannerSemanticPatch,
+              dispatcherPatch,
+              text,
+            ) ?? plannerSemanticPatch
+          }
+          catch (error) {
+            this.logger.warn(
+              `deterministic execution slot merge failed, keeping planner semanticPatch: ${error instanceof Error ? error.message : String(error)}`,
+            )
+          }
+        }
+        else {
+          // Planner 有效返回但未给 semanticPatch，且 deterministic dispatcher 能从原文
+          // 形成合法 rules tree 时，把它作为 rules-first 主链路补救。仍不覆盖空响应、
+          // 非法 JSON、transport/model 失败，也不接收 legacy flat atoms 直通。
+          try {
+            const dispatcherPatch = this.genericSeedDispatcher.dispatch(text) as CodegenSemanticPatch
+            semanticPatch = this.plannerDispatcherMerge.buildRulesTreeFallbackFromDispatcher(
+              dispatcherPatch,
+              text,
+            ) ?? undefined
+            if (semanticPatch) {
+              this.logPlannerFallback('deterministic_rules_tree_recovered')
+            }
+          }
+          catch (error) {
+            this.logger.warn(
+              `deterministic rules tree recovery failed, keeping planner clarification: ${error instanceof Error ? error.message : String(error)}`,
+            )
+          }
+        }
         return {
           kind: 'plan',
           plan: {
@@ -8802,6 +8858,17 @@ export class CodegenConversationService {
             logicReady,
             assistantPrompt,
             ...(semanticPatch ? { semanticPatch } : {}),
+            ...(plannerSchemaWarnings.length > 0
+              ? {
+                  diagnostics: {
+                    gate: 'RulesTreeEntryGate',
+                    warnings: [...plannerSchemaWarnings],
+                    entry: {
+                      result: 'warning',
+                    },
+                  },
+                }
+              : {}),
           } satisfies ConversationPlan,
         }
       } catch {
@@ -8829,6 +8896,8 @@ export class CodegenConversationService {
       if (outcome.kind === 'plan') return outcome.plan
       // schema reject
       this.plannerDispatcherMerge.emitPlannerSchemaRejectMetric(stage, 1)
+      const deterministicFallback = this.buildSchemaRejectRulesTreeFallback(outcome.reasons, text, locale)
+      if (deterministicFallback) return deterministicFallback
       if (stage === 'initial') {
         // 单轮重试：把 reminder 作为 extra system feedback 追加；planner 必须按
         //   rules-first 形态重出。
@@ -8908,6 +8977,54 @@ export class CodegenConversationService {
           result: 'unsupported',
         },
       },
+    }
+  }
+
+  private buildSchemaRejectRulesTreeFallback(
+    reasons: ReadonlyArray<string>,
+    text: string,
+    locale: CodegenConversationLocale,
+  ): ConversationPlan | null {
+    if (!reasons.includes('rules_missing_or_empty')) return null
+    try {
+      const dispatcherPatch = this.genericSeedDispatcher.dispatch(text) as CodegenSemanticPatch
+      const semanticPatch = this.plannerDispatcherMerge.buildRulesTreeFallbackFromDispatcher(
+        dispatcherPatch,
+        text,
+      )
+      if (!semanticPatch) {
+        this.logPlannerFallback('schema_reject_rules_tree_fallback_empty', {
+          reasons: reasons.join(','),
+        })
+        return null
+      }
+      this.logPlannerFallback('schema_reject_rules_tree_fallback', {
+        reasons: reasons.join(','),
+      })
+      return {
+        related: true,
+        logicReady: false,
+        assistantPrompt: this.localizedText(
+          locale,
+          'I have organized the strategy logic. Please confirm the logic graph.',
+          '我已整理出策略逻辑，请确认逻辑图。',
+        ),
+        semanticPatch,
+        diagnostics: {
+          gate: 'RulesTreeEntryGate',
+          entry: {
+            rejectReasons: [...reasons],
+            result: 'fallback',
+          },
+        },
+      }
+    }
+    catch (error) {
+      this.logPlannerFallback('schema_reject_rules_tree_fallback_dispatch_error', {
+        reasons: reasons.join(','),
+        error: this.summarizePlannerError(error),
+      })
+      return null
     }
   }
 
@@ -9168,7 +9285,18 @@ export class CodegenConversationService {
   }
 
   private logPlannerFallback(
-    reason: 'empty_content' | 'schema_mismatch' | 'invalid_json' | 'model_not_found' | 'transport_failure_retrying' | 'transport_failure_retry_exhausted' | 'schema_reject_unsupported',
+    reason:
+      | 'empty_content'
+      | 'schema_mismatch'
+      | 'invalid_json'
+      | 'model_not_found'
+      | 'transport_failure_retrying'
+      | 'transport_failure_retry_exhausted'
+      | 'deterministic_rules_tree_recovered'
+      | 'schema_reject_unsupported'
+      | 'schema_reject_rules_tree_fallback_dispatch_error'
+      | 'schema_reject_rules_tree_fallback_empty'
+      | 'schema_reject_rules_tree_fallback',
     context: Record<string, string | number | boolean | undefined> = {},
   ): void {
     const contextSuffix = Object.entries(context)

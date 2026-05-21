@@ -49,13 +49,13 @@ export const CONDITION_ATOM_EMITS = {
       const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
         ? atom.params.timeframe.trim()
         : c.timeframe
-      const closeRefLocal = helpers.ensurePriceSeries(c, 'close', timeframe)
+      const leftRef = helpers.resolveIndicatorCompareLeftRef(c, atom, timeframe)
       const indicatorRef = helpers.ensureIndicatorReferenceSeries(c, atom, timeframe)
       return helpers.upsertPredicate(
         c.predicateMap,
         `${seed}_${atom.key.replace(/\./g, '_')}_${timeframe}`,
         'GTE',
-        [closeRefLocal, indicatorRef],
+        [leftRef, indicatorRef],
       )
     },
   },
@@ -66,13 +66,13 @@ export const CONDITION_ATOM_EMITS = {
       const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
         ? atom.params.timeframe.trim()
         : c.timeframe
-      const closeRefLocal = helpers.ensurePriceSeries(c, 'close', timeframe)
+      const leftRef = helpers.resolveIndicatorCompareLeftRef(c, atom, timeframe)
       const indicatorRef = helpers.ensureIndicatorReferenceSeries(c, atom, timeframe)
       return helpers.upsertPredicate(
         c.predicateMap,
         `${seed}_${atom.key.replace(/\./g, '_')}_${timeframe}`,
         'LTE',
-        [closeRefLocal, indicatorRef],
+        [leftRef, indicatorRef],
       )
     },
   },

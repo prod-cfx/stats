@@ -164,6 +164,7 @@ export class CodegenSessionResponseDto {
       message: string
       nodeId?: string
     }>
+    warnings?: string[]
     diagnostics?: Record<string, unknown>
   } | null
 

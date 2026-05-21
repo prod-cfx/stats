@@ -1,4 +1,4 @@
-import type { ActionDef, IrOrchestrationLegScope, IrOrchestrationProgram, IrOrchestrationScope, LevelSetDef, OrderProgram, PositionLifecycleActionMetadata, RiskGuard, RiskPredicateDef, RuntimeRequirements, SeriesDef, PredicateDef } from './canonical-strategy-ir'
+import type { ActionDef, IrOrchestrationLegScope, IrOrchestrationPortfolioRisk, IrOrchestrationProgram, IrOrchestrationScope, LevelSetDef, OrderProgram, PositionLifecycleActionMetadata, RiskGuard, RiskPredicateDef, RuntimeRequirements, SeriesDef, PredicateDef } from './canonical-strategy-ir'
 
 export interface StrategyAstV1 {
   astVersion: 'csa.v1'
@@ -31,6 +31,7 @@ export interface StrategyAstV1 {
   riskPredicates?: RiskPredicateProgramNode[]
   decisionPrograms: DecisionProgramNode[]
   orderPrograms: OrderProgramNode[]
+  orchestrationPortfolioRisks?: IrOrchestrationPortfolioRisk[]
   orchestrationPrograms?: IrOrchestrationProgram[]
   // Phase 5 S2 (#1104): scope.symbol substrate
   orchestrationScopes?: IrOrchestrationScope[]

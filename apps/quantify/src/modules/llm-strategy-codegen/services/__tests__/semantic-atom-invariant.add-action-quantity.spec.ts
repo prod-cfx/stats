@@ -59,6 +59,46 @@ describe('SemanticAtomInvariantService — readAstOpenActionPositionSizings ADD_
     expect(candidates).toHaveLength(2)
   })
 
+  it('position sizing drift check fails when any open/add action quantity drifts', () => {
+    const checks = anySvc.validatePositionSizingContract({
+      semanticState: {
+        position: {
+          sizing: { kind: 'quote', value: 200, asset: 'USDT' },
+          mode: 'fixed_quote',
+          value: 200,
+          positionMode: 'long_only',
+          status: 'locked',
+          source: 'user_explicit',
+        },
+      },
+      canonicalSpec: {
+        sizing: { mode: 'QUOTE', value: 200, asset: 'USDT' },
+      },
+      ir: {
+        portfolio: { sizing: { mode: 'fixed_quote', value: 200, asset: 'USDT' } },
+      },
+      ast: {
+        decisionPrograms: [
+          {
+            actions: [
+              { kind: 'OPEN_LONG', quantity: { mode: 'fixed_quote', value: 200, asset: 'USDT' } },
+              { kind: 'ADD_LONG', quantity: { mode: 'fixed_quote', value: 100, asset: 'USDT' } },
+            ],
+          },
+        ],
+        orderPrograms: [],
+      },
+    })
+
+    expect(checks).toEqual([
+      expect.objectContaining({
+        key: 'semantic_contract.position_sizing',
+        status: 'failed',
+        level: 'critical',
+      }),
+    ])
+  })
+
   it('fixed_quote 默认 USDT asset 可与省略 asset 的下游快照匹配', () => {
     expect(anySvc.matchesPositionSizingSnapshot(
       { mode: 'fixed_quote', value: 100 },

@@ -928,6 +928,18 @@ export class NaturalLanguageGatewayService {
       })
     }
 
+    const circuitBreakerPattern = /(?:账户)?\s*(?:最大)?\s*回撤\s*(?:超过|大于|达到|达|过)?\s*(\d+(?:\.\d+)?)\s*%\s*(?:熔断|暂停|停止|停用|禁用|停止策略|暂停策略)/giu
+    for (const match of text.matchAll(circuitBreakerPattern)) {
+      const thresholdPct = Number(match[1])
+      if (thresholdPct <= 0 || thresholdPct > 100) continue
+      frames.push({
+        kind: 'portfolio_drawdown',
+        thresholdPct,
+        mode: 'enforce',
+        evidenceText: match[0].trim(),
+      })
+    }
+
     const observePattern = /(?:账户)?\s*回撤\s*(?:超过|大于|过)?\s*(\d+(?:\.\d+)?)\s*%\s*(?:仅|只)?\s*(?:记录|观察|observe)/giu
     for (const match of text.matchAll(observePattern)) {
       const thresholdPct = Number(match[1])
@@ -940,7 +952,21 @@ export class NaturalLanguageGatewayService {
       })
     }
 
-    return frames
+    return this.dedupePortfolioDrawdownFrames(frames)
+  }
+
+  private dedupePortfolioDrawdownFrames(
+    frames: PortfolioDrawdownFrameDraft[],
+  ): PortfolioDrawdownFrameDraft[] {
+    const byKey = new Map<string, PortfolioDrawdownFrameDraft>()
+    for (const frame of frames) {
+      const key = `${frame.mode}:${frame.thresholdPct}`
+      const existing = byKey.get(key)
+      if (!existing || frame.evidenceText.length > existing.evidenceText.length) {
+        byKey.set(key, frame)
+      }
+    }
+    return [...byKey.values()]
   }
 
   /**

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 
 import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
-import type { AtomExpr, AtomExprAtom, SemanticRule } from '../types/atom-expr'
+import type { AtomExpr, AtomExprAtom, SemanticRule, SemanticRuleSideScope } from '../types/atom-expr'
 import { collectAtomLeaves } from '../types/atom-expr'
 import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gate.types'
 import type {
@@ -84,6 +84,7 @@ interface SemanticContractOwnerRef {
   ownerKind: SemanticContractOwnerKind
   ownerId: string
   atomKey: string
+  sourceRuleId?: string
   params: Record<string, unknown>
   support?: SemanticAtomSupportMetadata
   status: SemanticNodeStatus
@@ -362,7 +363,7 @@ export class SemanticContractReadinessService {
     return activeOwners.flatMap(owner =>
       owner.contracts.flatMap(contract =>
         contract.requires
-          .filter(requirement => !this.hasCapability(capabilities, requirement, state))
+          .filter(requirement => !this.hasCapability(capabilities, requirement, state, owner))
           .map(requirement => ({
             ownerKind: owner.ownerKind,
             ownerId: owner.ownerId,
@@ -392,6 +393,7 @@ export class SemanticContractReadinessService {
     }
 
     const mismatches: MissingSemanticContractRequirement[] = []
+    const multiTimeframeTriggerRuleIds = collectMultiTimeframeTriggerRuleIds(activeOwners)
 
     for (const owner of activeOwners) {
       if (isTimeframeOverride(owner.params)) {
@@ -400,6 +402,9 @@ export class SemanticContractReadinessService {
 
       const declared = readDeclaredTimeframe(owner)
       if (!declared || declared === consumerTimeframe) {
+        continue
+      }
+      if (isExplicitMultiTimeframeTriggerMember(owner, multiTimeframeTriggerRuleIds)) {
         continue
       }
 
@@ -426,7 +431,12 @@ export class SemanticContractReadinessService {
     capabilities: readonly SemanticCapability[],
     requirement: SemanticRequirement,
     state: SemanticState,
+    owner: SemanticContractOwnerRef,
   ): boolean {
+    if (isDcaExitRuleRequirement(requirement) && hasRulesTreeExplicitExitSemantics(state.rules, owner)) {
+      return true
+    }
+
     // PR3.4: use CapabilityEvidenceIndex for per_order_budget to unify evidence scanning
     // Q1 fix: filter to locked owners — unsupported/open atoms must not count as satisfied evidence
     if (requirement.domain === 'capital' && requirement.verb === 'allocate' && requirement.object === 'per_order_budget') {
@@ -631,6 +641,94 @@ function collectAtomLeavesSafe(expr: AtomExpr | undefined): AtomExprAtom[] {
   catch {
     return []
   }
+}
+
+function isDcaExitRuleRequirement(requirement: SemanticRequirement): boolean {
+  return requirement.domain === 'guard'
+    && requirement.verb === 'define'
+    && requirement.object === 'dca_exit_rule'
+}
+
+function hasRulesTreeExplicitExitSemantics(
+  rules: readonly SemanticRule[] | undefined,
+  owner: SemanticContractOwnerRef,
+): boolean {
+  if (!rules || rules.length === 0) return false
+  const dcaSideScopes = findDcaOwnerSideScopes(rules, owner)
+  if (dcaSideScopes.length === 0) return false
+
+  for (const rule of rules) {
+    const effectLeaves = rule.effects.flatMap(collectAtomLeavesSafe)
+    if (
+      rule.phase === 'exit'
+      && dcaSideScopes.some(sideScope => isCompatibleDcaExitRule(rule, sideScope, effectLeaves))
+    ) {
+      return true
+    }
+    if (
+      (rule.phase === 'entry' || rule.phase === 'gate')
+      && dcaSideScopes.some(sideScope => isCompatibleDcaExitRule(rule, sideScope, effectLeaves))
+    ) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function findDcaOwnerSideScopes(
+  rules: readonly SemanticRule[],
+  owner: SemanticContractOwnerRef,
+): SemanticRuleSideScope[] {
+  const sideScopes = new Set<SemanticRuleSideScope>()
+  let matchedRuleCount = 0
+  for (const rule of rules) {
+    if (owner.sourceRuleId && rule.id !== owner.sourceRuleId) continue
+    const effectLeaves = rule.effects.flatMap(collectAtomLeavesSafe)
+    if (effectLeaves.some(leaf => leaf.key === owner.atomKey)) {
+      matchedRuleCount += 1
+      sideScopes.add(rule.sideScope)
+    }
+  }
+  if (!owner.sourceRuleId && matchedRuleCount > 1) return []
+  return [...sideScopes]
+}
+
+function isCompatibleDcaExitRule(
+  rule: SemanticRule,
+  dcaSideScope: SemanticRuleSideScope,
+  effectLeaves: readonly AtomExprAtom[],
+): boolean {
+  if (!sideScopesOverlap(rule.sideScope, dcaSideScope)) return false
+  return effectLeaves.some((leaf) => {
+    const leafSideScope = leaf.sideScope ?? rule.sideScope
+    return sideScopesOverlap(leafSideScope, dcaSideScope)
+      && isExitCapableAtomForSide(leaf, dcaSideScope)
+  })
+}
+
+function sideScopesOverlap(a: SemanticRuleSideScope, b: SemanticRuleSideScope): boolean {
+  return a === 'both' || b === 'both' || a === b
+}
+
+function isExitCapableAtomForSide(leaf: AtomExprAtom, sideScope: SemanticRuleSideScope): boolean {
+  if (sideScope === 'long') {
+    return leaf.key === 'action.close_long'
+      || (leaf.key !== 'action.close_short' && leaf.key.startsWith('risk.') && isExitCapableAtom(leaf))
+  }
+  if (sideScope === 'short') {
+    return leaf.key === 'action.close_short'
+      || (leaf.key !== 'action.close_long' && leaf.key.startsWith('risk.') && isExitCapableAtom(leaf))
+  }
+  return isExitCapableAtom(leaf)
+}
+
+function isExitCapableAtom(leaf: AtomExprAtom): boolean {
+  if (leaf.key === 'action.close_long' || leaf.key === 'action.close_short') {
+    return true
+  }
+  const contract = ATOM_CONTRACT_REGISTRY[leaf.key as keyof typeof ATOM_CONTRACT_REGISTRY]
+  return contract?.fulfillsStrategyPhase?.includes('exit') === true
 }
 
 function applyExecutableContextGate(state: SemanticState): ExecutableContextGateResult {
@@ -2368,6 +2466,7 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
         ownerKind: 'trigger',
         ownerId: trigger.id,
         atomKey: trigger.key,
+        sourceRuleId: trigger._provenance?.ruleId,
         params: trigger.params,
         support: trigger.support,
         status: trigger.status,
@@ -2436,6 +2535,7 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
         ownerKind: 'position',
         ownerId: positionConstraintOwnerId(constraint),
         atomKey: constraint.key,
+        sourceRuleId: constraint._provenance?.ruleId,
         params: constraint.params,
         support: constraint.support,
         status: constraint.status,
@@ -2451,6 +2551,7 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
         ownerKind: 'position',
         ownerId: positionConstraintOwnerId(constraint),
         atomKey: constraint.key,
+        sourceRuleId: constraint._provenance?.ruleId,
         params: constraint.params,
         support: constraint.support,
         status: constraint.status,
@@ -2909,6 +3010,45 @@ function readDeclaredTimeframe(owner: SemanticContractOwnerRef): string | null {
   }
 
   return null
+}
+
+function collectMultiTimeframeTriggerRuleIds(
+  activeOwners: readonly SemanticContractOwnerRef[],
+): Set<string> {
+  const timeframesByRuleId = new Map<string, Set<string>>()
+
+  for (const owner of activeOwners) {
+    if (owner.ownerKind !== 'trigger' || !owner.sourceRuleId) {
+      continue
+    }
+
+    const declared = readDeclaredTimeframe(owner)
+    if (!declared) {
+      continue
+    }
+
+    const timeframes = timeframesByRuleId.get(owner.sourceRuleId) ?? new Set<string>()
+    timeframes.add(declared)
+    timeframesByRuleId.set(owner.sourceRuleId, timeframes)
+  }
+
+  const multiTimeframeRuleIds = new Set<string>()
+  for (const [ruleId, timeframes] of timeframesByRuleId.entries()) {
+    if (timeframes.size >= 2) {
+      multiTimeframeRuleIds.add(ruleId)
+    }
+  }
+
+  return multiTimeframeRuleIds
+}
+
+function isExplicitMultiTimeframeTriggerMember(
+  owner: SemanticContractOwnerRef,
+  multiTimeframeTriggerRuleIds: ReadonlySet<string>,
+): boolean {
+  return owner.ownerKind === 'trigger'
+    && typeof owner.sourceRuleId === 'string'
+    && multiTimeframeTriggerRuleIds.has(owner.sourceRuleId)
 }
 
 function isTimeframeOverride(params: Record<string, unknown>): boolean {

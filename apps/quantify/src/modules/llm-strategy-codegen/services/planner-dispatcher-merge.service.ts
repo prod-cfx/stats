@@ -8,12 +8,13 @@ import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry
  * Issue #1445：planner 输出 schema 硬校验结果。
  *
  * - `ok: true`：semanticPatch 符合 rules-first 表达式树契约
- * - `ok: false`：列出全部违反项；`reminder` 是要拼回 user message 末尾的提示串，
+ * - `ok: false`：列出全部阻断项；`reminder` 是要拼回 user message 末尾的提示串，
  *    供 conversation 层做单轮重试
+ * - `warnings`：只进入诊断，不阻断脚本生成
  */
 export type PlannerPatchValidation =
-  | { ok: true }
-  | { ok: false, reasons: PlannerSchemaRejectReason[], reminder: string }
+  | { ok: true, warnings?: PlannerSchemaRejectReason[] }
+  | { ok: false, reasons: PlannerSchemaRejectReason[], reminder: string, warnings?: PlannerSchemaRejectReason[] }
 
 /**
  * Issue #1445：planner schema reject 原因 label，按违反类型聚合，便于 metric 维度收敛。
@@ -24,7 +25,7 @@ export type PlannerSchemaRejectReason =
   | 'legacy_flat_field'             // 出现旧 atoms/triggers/actions/risks/positionConstraints/orchestration 顶层字段
   | 'rule_shape_invalid'            // rule 缺 id/phase/sideScope/condition/effects 或 zod 不通过
   | 'evidence_text_missing'         // rule 或叶子 atom 缺 evidence.text
-  | 'evidence_text_not_substring'   // evidence.text 不是 user message 子串
+  | 'evidence_text_not_substring'   // evidence.text 不是 user message 子串（warning-only）
   | 'condition_leaf_bucket_invalid' // condition 内叶子来自非法 bucket
   | 'effects_leaf_bucket_invalid'   // effects 内叶子来自非法 bucket
 
@@ -71,6 +72,19 @@ const MERGE_ALWAYS_ON_ATOM_KEYS: ReadonlySet<string> = new Set([
   'execution.on_start',
 ])
 
+const DCA_SCHEDULE_ATOM_KEY = ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key
+const ADD_POSITION_ATOM_KEY = ATOM_CONTRACT_REGISTRY['action.add_position'].key
+const EXECUTION_ON_START_ATOM_KEY = ATOM_CONTRACT_REGISTRY['execution.on_start'].key
+
+type FallbackPredicateAtom = {
+  key: string
+  phase?: 'entry' | 'exit' | 'risk' | 'gate'
+  sideScope?: 'long' | 'short' | 'both'
+  params?: Record<string, unknown>
+  evidence?: { text?: unknown }
+  sourceActionKey?: string
+}
+
 /**
  * Issue #1383：planner 输出常常只包含 trigger/action/risk 桶；positionConstraint /
  * orchestration 桶 atom（如 grid.range_rebalance、position.dca_schedule、
@@ -89,6 +103,22 @@ const MERGE_ALWAYS_ON_ATOM_KEYS: ReadonlySet<string> = new Set([
 export class PlannerDispatcherMergeService {
   private readonly logger = new Logger(PlannerDispatcherMergeService.name)
 
+  buildRulesTreeFallbackFromDispatcher(
+    dispatcherPatch: CodegenSemanticPatch | null | undefined,
+    userMessage: string,
+  ): CodegenSemanticPatch | null {
+    if (!this.isNonEmpty(dispatcherPatch)) return null
+    const rules = this.buildFallbackRules(dispatcherPatch as CodegenSemanticPatch, userMessage)
+    if (rules.length === 0) return null
+    const dispatcher = dispatcherPatch as CodegenSemanticPatch
+    const position = this.buildFallbackPositionFromDispatcherConstraints(dispatcher)
+    return {
+      ...(dispatcher.contextSlots ? { contextSlots: dispatcher.contextSlots } : {}),
+      ...(position ? { position } : dispatcher.position ? { position: dispatcher.position } : {}),
+      rules,
+    }
+  }
+
   /**
    * Issue #1445：planner LLM raw `semanticPatch` 输出硬校验。
    *
@@ -98,7 +128,8 @@ export class PlannerDispatcherMergeService {
    *      出现在 `semanticPatch` 顶层一律 reject
    *   3. 每条 rule 必有 `id / phase / sideScope / condition / effects`
    *      （走 zod `semanticRuleSchema`，包含 AtomExpr 子树结构校验）
-   *   4. 每条 rule + 每个叶子 atom 必有 `evidence.text`，且为 user message 子串
+   *   4. 每条 rule 必有 `evidence.text`；不是 user message 子串时降级为 warning，
+   *      由 conversation 层归一化为用户原文，不阻断脚本生成
    *   5. condition 内叶子 atom 来自 trigger / risk / orchestration-gate 桶
    *      effects 内叶子来自 action / risk / positionConstraint / orchestration 桶
    *      （按 `ATOM_CONTRACT_REGISTRY[*].bucket` 派生；未注册 atom fail-open）
@@ -107,13 +138,14 @@ export class PlannerDispatcherMergeService {
    *
    * @param plannerPatch planner LLM 原始 `semanticPatch` 字段（未经 normalize）；
    *   接受 unknown 以容忍 LLM 偏离 schema
-   * @param userMessage 触发本次 planner 调用的 user message，evidence.text 必须是其子串
+   * @param userMessage 触发本次 planner 调用的 user message，用于校准 evidence.text 诊断
    */
   validatePlannerSemanticPatch(
     plannerPatch: unknown,
     userMessage: string,
   ): PlannerPatchValidation {
     const reasons = new Set<PlannerSchemaRejectReason>()
+    const warnings = new Set<PlannerSchemaRejectReason>()
     const detailNotes: string[] = []
 
     if (!plannerPatch || typeof plannerPatch !== 'object' || Array.isArray(plannerPatch)) {
@@ -167,8 +199,7 @@ export class PlannerDispatcherMergeService {
         detailNotes.push(`rules[${i}].evidence.text 必填`)
       }
       else if (message && !message.includes(ruleEvidenceText.trim())) {
-        reasons.add('evidence_text_not_substring')
-        detailNotes.push(`rules[${i}].evidence.text 必须是 user message 子串`)
+        warnings.add('evidence_text_not_substring')
       }
 
       // condition / effects 叶子 atom 校验：bucket + evidence.text
@@ -178,12 +209,16 @@ export class PlannerDispatcherMergeService {
         semRule,
         message,
         reasons,
+        warnings,
         detailNotes,
       })
     }
 
-    if (reasons.size === 0) return { ok: true }
-    return this.buildRejectResult(reasons, detailNotes)
+    if (reasons.size === 0) {
+      const warningList = Array.from(warnings)
+      return warningList.length > 0 ? { ok: true, warnings: warningList } : { ok: true }
+    }
+    return this.buildRejectResult(reasons, detailNotes, warnings)
   }
 
   /**
@@ -200,20 +235,27 @@ export class PlannerDispatcherMergeService {
   private buildRejectResult(
     reasons: Set<PlannerSchemaRejectReason>,
     detailNotes: ReadonlyArray<string>,
+    warnings: Set<PlannerSchemaRejectReason> = new Set(),
   ): PlannerPatchValidation {
     const reasonList = Array.from(reasons)
+    const warningList = Array.from(warnings)
     const reminder = [
       '上一轮 planner 输出未通过 schema 硬校验，必须按 rules-first 表达式树形态重出：',
       '- semanticPatch.rules[] 必填且非空',
       '- 禁止使用旧扁平字段（atoms/triggers/actions/risks/positionConstraints/orchestration）',
       '- 每条 rule 必须含 id / phase / sideScope / condition (AtomExpr) / effects (AtomExpr[])',
-      '- 每条 rule 与每个叶子 atom 必须有 evidence.text，且为 user message 子串',
+      '- 每条 rule 必须有 evidence.text；叶子 atom 若带 evidence.text，也必须非空',
       '- condition 内叶子 atom 来自 trigger / risk(谓词) / orchestration-gate 桶；effects 内叶子来自 action / risk(副作用) / positionConstraint / orchestration-effect 桶',
       '本次具体违反：',
       ...detailNotes.slice(0, 12).map(s => `  · ${s}`),
       '请重出合规 semanticPatch.rules[] 形态。',
     ].join('\n')
-    return { ok: false, reasons: reasonList, reminder }
+    return {
+      ok: false,
+      reasons: reasonList,
+      reminder,
+      ...(warningList.length > 0 ? { warnings: warningList } : {}),
+    }
   }
 
   private collectLeafAtomViolations(args: {
@@ -222,9 +264,10 @@ export class PlannerDispatcherMergeService {
     semRule: SemanticRule
     message: string
     reasons: Set<PlannerSchemaRejectReason>
+    warnings: Set<PlannerSchemaRejectReason>
     detailNotes: string[]
   }): void {
-    const { ruleIndex, ruleRaw, semRule, message, reasons, detailNotes } = args
+    const { ruleIndex, ruleRaw, semRule, message, reasons, warnings, detailNotes } = args
 
     type ContractShape = { bucket?: string }
     const getBucket = (key: string): string | undefined =>
@@ -257,27 +300,28 @@ export class PlannerDispatcherMergeService {
       }
     }
 
-    // leaf evidence.text：planner 在 leaf atom 上若声明 evidence，则其 text 必为 user message 子串
-    // 注：leaf evidence 不强制必填（rule.evidence.text 已强制）；仅在出现时校验合规性
+    // leaf evidence.text：planner 在 leaf atom 上若声明 evidence，则 text 必须非空；
+    // 非 user message 子串只作为 warning，随后由 conversation 层归一化。
     const rawCondition = (ruleRaw as { condition?: unknown }).condition
-    this.checkLeafEvidenceSubstring(rawCondition, message, `rules[${ruleIndex}].condition`, reasons, detailNotes)
+    this.checkLeafEvidenceSubstring(rawCondition, message, `rules[${ruleIndex}].condition`, reasons, warnings, detailNotes)
     const rawEffects = Array.isArray((ruleRaw as { effects?: unknown }).effects)
       ? ((ruleRaw as { effects?: unknown[] }).effects ?? [])
       : []
     for (let ei = 0; ei < rawEffects.length; ei++) {
-      this.checkLeafEvidenceSubstring(rawEffects[ei], message, `rules[${ruleIndex}].effects[${ei}]`, reasons, detailNotes)
+      this.checkLeafEvidenceSubstring(rawEffects[ei], message, `rules[${ruleIndex}].effects[${ei}]`, reasons, warnings, detailNotes)
     }
   }
 
   /**
    * 递归检查 raw AtomExpr 树叶子 atom 的 evidence.text 子串约束。
-   * leaf.evidence 可选；提供时其 text 必须是 user message 子串（与 rule.evidence 一致）。
+   * leaf.evidence 可选；提供时其 text 必须非空，非 user message 子串只记 warning。
    */
   private checkLeafEvidenceSubstring(
     node: unknown,
     message: string,
     pathPrefix: string,
     reasons: Set<PlannerSchemaRejectReason>,
+    warnings: Set<PlannerSchemaRejectReason>,
     detailNotes: string[],
   ): void {
     if (!node || typeof node !== 'object' || Array.isArray(node)) return
@@ -291,8 +335,7 @@ export class PlannerDispatcherMergeService {
           detailNotes.push(`${pathPrefix} 叶子 atom 含 evidence 但 text 缺失/为空`)
         }
         else if (message && !message.includes(text.trim())) {
-          reasons.add('evidence_text_not_substring')
-          detailNotes.push(`${pathPrefix} 叶子 atom evidence.text 不是 user message 子串`)
+          warnings.add('evidence_text_not_substring')
         }
       }
       return
@@ -301,23 +344,456 @@ export class PlannerDispatcherMergeService {
       const children = (node as { children?: unknown[] }).children
       if (Array.isArray(children)) {
         for (let i = 0; i < children.length; i++) {
-          this.checkLeafEvidenceSubstring(children[i], message, `${pathPrefix}.children[${i}]`, reasons, detailNotes)
+          this.checkLeafEvidenceSubstring(children[i], message, `${pathPrefix}.children[${i}]`, reasons, warnings, detailNotes)
         }
       }
       return
     }
     if (kind === 'not') {
-      this.checkLeafEvidenceSubstring((node as { child?: unknown }).child, message, `${pathPrefix}.child`, reasons, detailNotes)
+      this.checkLeafEvidenceSubstring((node as { child?: unknown }).child, message, `${pathPrefix}.child`, reasons, warnings, detailNotes)
       return
     }
     if (kind === 'sequence') {
       const steps = (node as { steps?: unknown[] }).steps
       if (Array.isArray(steps)) {
         for (let i = 0; i < steps.length; i++) {
-          this.checkLeafEvidenceSubstring(steps[i], message, `${pathPrefix}.steps[${i}]`, reasons, detailNotes)
+          this.checkLeafEvidenceSubstring(steps[i], message, `${pathPrefix}.steps[${i}]`, reasons, warnings, detailNotes)
         }
       }
     }
+  }
+
+  private buildFallbackRules(dispatcher: CodegenSemanticPatch, userMessage: string): SemanticRule[] {
+    const predicateAtoms = this.collectFallbackPredicateAtoms(dispatcher)
+    if (predicateAtoms.length === 0) return []
+    const effectAtoms = this.collectFallbackEffectAtoms(dispatcher)
+    const rules: SemanticRule[] = this.buildCompositeFallbackRules(predicateAtoms, effectAtoms, userMessage)
+    const compositeCoveredPredicates = this.collectCompositeCoveredPredicates(predicateAtoms)
+    const seen = new Set<string>()
+
+    for (const predicate of predicateAtoms) {
+      if (compositeCoveredPredicates.has(predicate)) continue
+      const phase = predicate.phase === 'exit' ? 'exit' : predicate.phase === 'gate' ? 'gate' : 'entry'
+      const sideScope = this.normalizeFallbackRuleSideScope(predicate, phase, dispatcher, userMessage)
+      const effects = this.resolveFallbackEffects({
+        phase,
+        sideScope,
+        effectAtoms,
+        predicate,
+      })
+      if (effects.length === 0) continue
+      const condition: AtomExprAtom = {
+        kind: 'atom',
+        key: predicate.key,
+        params: predicate.params ?? {},
+        ...(sideScope ? { sideScope } : {}),
+        ...this.resolveFallbackEvidence(predicate, userMessage),
+      }
+      const signature = `${phase}|${sideScope}|${condition.key}|${JSON.stringify(condition.params)}|${effects.map(e => e.key).join(',')}`
+      if (seen.has(signature)) continue
+      seen.add(signature)
+      rules.push({
+        id: `dispatcher-fallback-${rules.length + 1}`,
+        phase,
+        sideScope,
+        condition,
+        effects,
+        ...this.resolveFallbackEvidence(predicate, userMessage),
+      })
+    }
+
+    return rules
+  }
+
+  private collectCompositeCoveredPredicates(
+    predicateAtoms: ReadonlyArray<FallbackPredicateAtom>,
+  ): ReadonlySet<FallbackPredicateAtom> {
+    const covered = new Set<FallbackPredicateAtom>()
+    const pullback = this.findPullbackReclaimPredicate(predicateAtoms)
+    if (!pullback) return covered
+    const trend = predicateAtoms.find(predicate =>
+      predicate !== pullback
+      && predicate.phase !== 'exit'
+      && predicate.key === pullback.key
+      && this.readNumericParam(predicate.params, 'reference.period') !== this.readNumericParam(pullback.params, 'reference.period'),
+    )
+    if (trend) covered.add(trend)
+    covered.add(pullback)
+
+    const pullbackEvidence = this.readEvidenceText(pullback)
+    const previousExtremaRetestKey = ATOM_CONTRACT_REGISTRY['price.previous_extrema_retest'].key
+    for (const predicate of predicateAtoms) {
+      if (predicate.key !== previousExtremaRetestKey) continue
+      if (this.readEvidenceText(predicate) === pullbackEvidence) covered.add(predicate)
+    }
+    return covered
+  }
+
+  private buildCompositeFallbackRules(
+    predicateAtoms: ReadonlyArray<FallbackPredicateAtom>,
+    effectAtoms: ReadonlyArray<AtomExprAtom>,
+    userMessage: string,
+  ): SemanticRule[] {
+    const rules: SemanticRule[] = []
+    const pullback = this.findPullbackReclaimPredicate(predicateAtoms)
+    if (!pullback) return rules
+
+    const trend = predicateAtoms.find(predicate =>
+      predicate !== pullback
+      && predicate.phase !== 'exit'
+      && predicate.key === pullback.key
+      && this.readNumericParam(predicate.params, 'reference.period') !== this.readNumericParam(pullback.params, 'reference.period'),
+    )
+    if (!trend) return rules
+
+    const sideScope = pullback.sideScope ?? trend.sideScope ?? 'long'
+    const effects = this.resolveFallbackEffects({
+      phase: 'entry',
+      sideScope,
+      effectAtoms,
+      predicate: pullback,
+    })
+    if (effects.length === 0) return rules
+
+    const pullbackPeriod = this.readNumericParam(pullback.params, 'reference.period')
+    const pullbackIndicator = typeof pullback.params?.indicator === 'string' ? pullback.params.indicator : 'ma'
+    const evidence = this.resolveFallbackEvidence(pullback, userMessage)
+    rules.push({
+      id: 'dispatcher-fallback-composite-1',
+      phase: 'entry',
+      sideScope,
+      condition: {
+        kind: 'and',
+        children: [
+          {
+            kind: 'atom',
+            key: trend.key,
+            params: trend.params ?? {},
+            ...(trend.sideScope ? { sideScope: trend.sideScope } : {}),
+            ...this.resolveFallbackEvidence(trend, userMessage),
+          },
+          {
+            kind: 'atom',
+            key: ATOM_CONTRACT_REGISTRY['condition.sequence'].key,
+            params: {
+              sequenceKind: 'pullback_reclaim',
+              reference: {
+                indicator: pullbackIndicator,
+                ...(pullbackPeriod !== null ? { period: pullbackPeriod } : {}),
+              },
+              'reference.indicator': pullbackIndicator,
+              ...(pullbackPeriod !== null ? { 'reference.period': pullbackPeriod } : {}),
+            },
+            ...(pullback.sideScope ? { sideScope: pullback.sideScope } : {}),
+            ...evidence,
+          },
+        ],
+      },
+      effects,
+      ...evidence,
+    })
+    return rules
+  }
+
+  private findPullbackReclaimPredicate(
+    predicateAtoms: ReadonlyArray<FallbackPredicateAtom>,
+  ): FallbackPredicateAtom | null {
+    return predicateAtoms.find((predicate) => {
+      if (predicate.phase === 'exit') return false
+      const evidence = this.readEvidenceText(predicate)
+      if (!evidence) return false
+      return /回踩|回测|pullback|retest/iu.test(evidence) && /重新\s*站上|重回|站回|reclaim/iu.test(evidence)
+    }) ?? null
+  }
+
+  private normalizeFallbackRuleSideScope(
+    predicate: FallbackPredicateAtom,
+    phase: 'entry' | 'exit' | 'gate',
+    dispatcher: CodegenSemanticPatch,
+    userMessage: string,
+  ): 'long' | 'short' | 'both' {
+    const current = predicate.sideScope ?? 'both'
+    if (phase !== 'exit' || current !== 'short') return current
+    const evidence = this.readEvidenceText(predicate) ?? userMessage
+    const explicitShortExit = /平空|空单|空仓|close\s+short/iu.test(evidence)
+    if (explicitShortExit) return current
+    const hasShortIntent = this.hasShortEntryIntent(dispatcher, userMessage)
+    return hasShortIntent ? current : 'long'
+  }
+
+  private hasShortEntryIntent(dispatcher: CodegenSemanticPatch, userMessage: string): boolean {
+    const actionOpenShortKey = ATOM_CONTRACT_REGISTRY['action.open_short'].key
+    if ([...(dispatcher.actions ?? []), ...(dispatcher.atoms ?? [])].some(atom => atom.key === actionOpenShortKey)) return true
+    return /开空|做空|空单|卖空|short/iu.test(userMessage)
+  }
+
+  private readEvidenceText(item: { evidence?: { text?: unknown } }): string | null {
+    const text = item.evidence?.text
+    return typeof text === 'string' && text.trim().length > 0 ? text.trim() : null
+  }
+
+  private readNumericParam(params: Record<string, unknown> | undefined, key: string): number | null {
+    const direct = params?.[key]
+    if (typeof direct === 'number' && Number.isFinite(direct)) return direct
+    const value = key.split('.').reduce<unknown>((current, part) => {
+      if (!current || typeof current !== 'object') return undefined
+      return (current as Record<string, unknown>)[part]
+    }, params)
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
+  private buildFallbackPositionFromDispatcherConstraints(
+    dispatcher: CodegenSemanticPatch,
+  ): CodegenSemanticPatch['position'] | null {
+    const constraints = (dispatcher.atoms ?? [])
+      .filter(atom => this.readAtomBucket(atom.key) === 'positionConstraint')
+      .map(atom => ({
+        key: atom.key as NonNullable<CodegenSemanticPatch['position']>['constraints'][number]['key'],
+        params: atom.params ?? {},
+        ...(atom.evidence ? { evidence: atom.evidence } : {}),
+        ...(atom.source ? { source: atom.source } : {}),
+        ...(atom.openSlots ? { openSlots: atom.openSlots } : {}),
+        ...(atom.contracts ? { contracts: atom.contracts } : {}),
+      }))
+
+    if (constraints.length === 0) return dispatcher.position ?? null
+
+    const existingConstraints = dispatcher.position?.constraints ?? []
+    return {
+      mode: dispatcher.position?.mode ?? 'constraint_only',
+      value: dispatcher.position?.value ?? 0,
+      positionMode: dispatcher.position?.positionMode ?? 'long_only',
+      status: dispatcher.position?.status ?? 'locked',
+      source: dispatcher.position?.source ?? 'user_explicit',
+      openSlots: dispatcher.position?.openSlots ?? [],
+      ...(dispatcher.position?.sizing !== undefined ? { sizing: dispatcher.position.sizing } : {}),
+      constraints: this.unionDedupByKeyAndHash(existingConstraints, constraints, 'right') ?? constraints,
+    }
+  }
+
+  private collectFallbackPredicateAtoms(dispatcher: CodegenSemanticPatch): FallbackPredicateAtom[] {
+    const out: FallbackPredicateAtom[] = []
+    const push = (item: typeof out[number]): void => {
+      if (typeof item.key !== 'string' || item.key.length === 0) return
+      out.push(item)
+    }
+    for (const trigger of dispatcher.triggers ?? []) push(trigger)
+    for (const atom of dispatcher.atoms ?? []) {
+      const bucket = this.readAtomBucket(atom.key)
+      if (
+        bucket === 'trigger'
+        || bucket === 'risk'
+        || bucket === 'orchestration'
+        || (bucket === 'positionConstraint' && CONDITION_ALLOWED_POSITION_CONSTRAINT_ATOMS.has(atom.key))
+      ) {
+        push(atom)
+      }
+      const addPositionPredicate = this.buildAddPositionTriggerPredicate(atom)
+      if (addPositionPredicate) push(addPositionPredicate)
+    }
+    const dcaAtom = this.findDispatcherDcaScheduleAtom(dispatcher)
+    if (dcaAtom) {
+      push({
+        key: EXECUTION_ON_START_ATOM_KEY,
+        phase: 'entry',
+        sideScope: 'long',
+        params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
+        evidence: dcaAtom.evidence,
+        sourceActionKey: DCA_SCHEDULE_ATOM_KEY,
+      })
+    }
+    return this.dedupeFallbackAtoms(out)
+  }
+
+  private collectFallbackEffectAtoms(dispatcher: CodegenSemanticPatch): AtomExprAtom[] {
+    const out: AtomExprAtom[] = []
+    const push = (key: string, params: Record<string, unknown> = {}, sideScope?: 'long' | 'short' | 'both'): void => {
+      if (!key) return
+      out.push({
+        kind: 'atom',
+        key,
+        params,
+        ...(sideScope ? { sideScope } : {}),
+      })
+    }
+    for (const action of dispatcher.actions ?? []) {
+      push(action.key, action.params ?? {})
+    }
+    for (const risk of dispatcher.risk ?? []) {
+      push(risk.key, risk.params ?? {})
+    }
+    for (const atom of dispatcher.atoms ?? []) {
+      const bucket = this.readAtomBucket(atom.key)
+      if (bucket === 'action' || bucket === 'risk' || bucket === 'orchestration') {
+        push(atom.key, atom.params ?? {}, atom.sideScope)
+      }
+    }
+    const dcaAtom = this.findDispatcherDcaScheduleAtom(dispatcher)
+    if (dcaAtom && !out.some(effect => effect.key === ADD_POSITION_ATOM_KEY)) {
+      push(ADD_POSITION_ATOM_KEY, {
+        lifecycleKind: 'dca_schedule',
+        sizing: (dcaAtom.params ?? {}).perOrderSizing,
+        actionSide: 'long',
+      }, 'long')
+    }
+    return this.dedupeFallbackEffects(out)
+  }
+
+  private findDispatcherDcaScheduleAtom(
+    dispatcher: CodegenSemanticPatch,
+  ): { params?: Record<string, unknown>, evidence?: { text?: unknown } } | null {
+    return (dispatcher.atoms ?? []).find(atom => atom.key === DCA_SCHEDULE_ATOM_KEY) ?? null
+  }
+
+  private resolveFallbackEffects(args: {
+    phase: 'entry' | 'exit' | 'gate'
+    sideScope: 'long' | 'short' | 'both'
+    effectAtoms: ReadonlyArray<AtomExprAtom>
+    predicate: { phase?: 'entry' | 'exit' | 'risk' | 'gate', sideScope?: 'long' | 'short' | 'both', sourceActionKey?: string }
+  }): AtomExprAtom[] {
+    const phaseMatched = args.effectAtoms
+      .filter(atom => this.effectMatchesRule(atom, args.phase, args.sideScope))
+      .filter(atom => args.predicate.sourceActionKey === ADD_POSITION_ATOM_KEY || atom.key !== ADD_POSITION_ATOM_KEY)
+    if (args.predicate.sourceActionKey === ADD_POSITION_ATOM_KEY && phaseMatched.length > 0) {
+      return this.dedupeFallbackEffects(phaseMatched.filter(atom => atom.key === ADD_POSITION_ATOM_KEY))
+    }
+    if (args.predicate.sourceActionKey === DCA_SCHEDULE_ATOM_KEY) {
+      const defaults = this.defaultActionEffects(args.phase, args.sideScope)
+      return this.dedupeFallbackEffects([...phaseMatched, ...defaults])
+    }
+    const defaults = this.defaultActionEffects(args.phase, args.sideScope)
+    return this.dedupeFallbackEffects([...phaseMatched, ...defaults])
+  }
+
+  private effectMatchesRule(
+    atom: AtomExprAtom,
+    phase: 'entry' | 'exit' | 'gate',
+    sideScope: 'long' | 'short' | 'both',
+  ): boolean {
+    const key = atom.key
+    if (phase === 'entry') {
+      if (key === ADD_POSITION_ATOM_KEY) {
+        return sideScope === 'both' || atom.sideScope === undefined || atom.sideScope === sideScope || atom.sideScope === 'both'
+      }
+      if (sideScope === 'long') return key === ATOM_CONTRACT_REGISTRY['action.open_long'].key
+      if (sideScope === 'short') return key === ATOM_CONTRACT_REGISTRY['action.open_short'].key
+      return key === ATOM_CONTRACT_REGISTRY['action.open_long'].key || key === ATOM_CONTRACT_REGISTRY['action.open_short'].key
+    }
+    if (phase === 'exit') {
+      if (sideScope === 'long') return key === ATOM_CONTRACT_REGISTRY['action.close_long'].key
+      if (sideScope === 'short') return key === ATOM_CONTRACT_REGISTRY['action.close_short'].key
+      return key === ATOM_CONTRACT_REGISTRY['action.close_long'].key || key === ATOM_CONTRACT_REGISTRY['action.close_short'].key
+    }
+    return this.readAtomBucket(key) !== 'action'
+  }
+
+  private buildAddPositionTriggerPredicate(atom: {
+    key: string
+    phase?: 'entry' | 'exit' | 'risk' | 'gate'
+    sideScope?: 'long' | 'short' | 'both'
+    params?: Record<string, unknown>
+    evidence?: { text?: unknown }
+  }): {
+      key: string
+      phase: 'entry'
+      sideScope: 'long' | 'short' | 'both'
+      params: Record<string, unknown>
+      evidence?: { text?: unknown }
+      sourceActionKey: string
+    } | null {
+    if (atom.key !== ADD_POSITION_ATOM_KEY) return null
+    const params = atom.params ?? {}
+    const addMode = typeof params.addMode === 'string' ? params.addMode : null
+    const sideScope = atom.sideScope ?? 'long'
+    if (addMode === 'profit_pct' && typeof params.profitThreshold === 'number') {
+      return {
+        key: 'price.percent_change',
+        phase: 'entry',
+        sideScope,
+        params: {
+          basis: 'entry_avg_price',
+          direction: 'up',
+          valuePct: Math.abs(params.profitThreshold),
+        },
+        ...(atom.evidence ? { evidence: atom.evidence } : {}),
+        sourceActionKey: ADD_POSITION_ATOM_KEY,
+      }
+    }
+    if (addMode === 'drawdown_pct' && typeof params.drawdownThreshold === 'number') {
+      return {
+        key: 'price.percent_change',
+        phase: 'entry',
+        sideScope,
+        params: {
+          basis: 'entry_avg_price',
+          direction: 'down',
+          valuePct: Math.abs(params.drawdownThreshold),
+        },
+        ...(atom.evidence ? { evidence: atom.evidence } : {}),
+        sourceActionKey: ADD_POSITION_ATOM_KEY,
+      }
+    }
+    return null
+  }
+
+  private defaultActionEffects(phase: 'entry' | 'exit' | 'gate', sideScope: 'long' | 'short' | 'both'): AtomExprAtom[] {
+    if (phase === 'gate') return []
+    const keys = phase === 'entry'
+      ? (sideScope === 'long'
+          ? [ATOM_CONTRACT_REGISTRY['action.open_long'].key]
+          : sideScope === 'short'
+            ? [ATOM_CONTRACT_REGISTRY['action.open_short'].key]
+            : [ATOM_CONTRACT_REGISTRY['action.open_long'].key, ATOM_CONTRACT_REGISTRY['action.open_short'].key])
+      : (sideScope === 'long'
+          ? [ATOM_CONTRACT_REGISTRY['action.close_long'].key]
+          : sideScope === 'short'
+            ? [ATOM_CONTRACT_REGISTRY['action.close_short'].key]
+            : [ATOM_CONTRACT_REGISTRY['action.close_long'].key, ATOM_CONTRACT_REGISTRY['action.close_short'].key])
+    return keys.map(key => ({ kind: 'atom' as const, key, params: {} }))
+  }
+
+  private resolveFallbackEvidence(
+    atom: { evidence?: { text?: unknown } },
+    userMessage: string,
+  ): { evidence?: { text: string } } {
+    const text = typeof atom.evidence?.text === 'string' && atom.evidence.text.trim().length > 0
+      ? atom.evidence.text.trim()
+      : userMessage.trim()
+    return text ? { evidence: { text } } : {}
+  }
+
+  private readAtomBucket(key: string): string | undefined {
+    return (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string } | undefined>)[key]?.bucket
+  }
+
+  private dedupeFallbackAtoms<T extends { key: string, phase?: unknown, sideScope?: unknown, params?: unknown }>(items: T[]): T[] {
+    const seen = new Set<string>()
+    const out: T[] = []
+    for (const item of items) {
+      const signature = `${item.key}|${String(item.phase ?? '')}|${String(item.sideScope ?? '')}|${JSON.stringify(item.params ?? {})}`
+      if (seen.has(signature)) continue
+      seen.add(signature)
+      out.push(item)
+    }
+    return out
+  }
+
+  private dedupeFallbackEffects(items: AtomExprAtom[]): AtomExprAtom[] {
+    const seen = new Set<string>()
+    const out: AtomExprAtom[] = []
+    for (const item of items) {
+      const signature = `${item.key}|${this.normalizedEffectSideSignature(item)}|${JSON.stringify(item.params ?? {})}`
+      if (seen.has(signature)) continue
+      seen.add(signature)
+      out.push(item)
+    }
+    return out
+  }
+
+  private normalizedEffectSideSignature(item: AtomExprAtom): string {
+    if (item.key.endsWith('_long')) return 'long'
+    if (item.key.endsWith('_short')) return 'short'
+    return item.sideScope === 'long' || item.sideScope === 'short' ? item.sideScope : 'both'
   }
 
   mergePlannerAndDispatcherPatches(
@@ -413,13 +889,9 @@ export class PlannerDispatcherMergeService {
     }
 
     // Issue #1428 R-D（先于 R-B 跑）：对 merged.rules 中每个 atom leaf，若 dispatcher
-    //   桶含同 (key, sideScope) entry 且其 params 严格 superset 当前 leaf params，
-    //   用 dispatcher params 覆盖 leaf params。原则与现行 `position: dispatcher 优先`
-    //   一致——dispatcher regex 抽到的用户原话精细 params（如 BOLL(5,1) / valuePct=-1）
-    //   比 LLM 默认值填充更准确。
-    //
-    //   守门：仅在 strict superset 场景覆盖；若 dispatcher params 缺关键 slot
-    //   或与 planner 完全无交集，保留 planner 版本（fail-open，零回归）。
+    //   桶含同 (key, sideScope) entry，则从 dispatcher 候选补齐 leaf 缺失 params。
+    //   已由 planner 明确给出的 params 永不覆盖；dispatcher regex 抽到的用户原话精细
+    //   params（如 BOLL(5,1) / grid sizing）只作为缺省补充。
     //
     //   审查问题 Major #2：两条 pass 各自外层 try/catch，异常时 log + 保留 merged
     //     原状返回，绝不破坏现行 merge 的 fail-open 承诺。
@@ -440,6 +912,30 @@ export class PlannerDispatcherMergeService {
       this.logger.warn(`liftDispatcherAtomsIntoRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
     }
 
+    try {
+      this.composeDispatcherRulesIntoMergedRules(merged, dispatcher)
+    }
+    catch (err) {
+      this.logger.warn(`composeDispatcherRulesIntoMergedRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
+    }
+
+    // Planner 可能把「买入/卖出」类 long-only 动词扩写成反手做空。
+    // Dispatcher 的 verb-side resolver 是 deterministic 证据源；若 dispatcher 完全没有 short
+    // 意图，则裁掉 planner rules 中的 short action/rule，避免展示层污染主链路。
+    try {
+      this.prunePlannerShortActionsWithoutDispatcherIntent(merged, dispatcher)
+    }
+    catch (err) {
+      this.logger.warn(`prunePlannerShortActionsWithoutDispatcherIntent 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
+    }
+
+    try {
+      this.bindDispatcherLifecycleEffectsIntoPlannerRules(merged, dispatcher)
+    }
+    catch (err) {
+      this.logger.warn(`bindDispatcherLifecycleEffectsIntoPlannerRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
+    }
+
     // Issue #1443：过滤掉 "always-on condition + action effects" 噪音 rule。
     //   这类 rule 通常是 planner/dispatcher 把 trigger 和 action 错绑（trigger 缺失或
     //   被识别为 execution.on_start always-on），让 UI 出现"出场：平多" / "入场：开多"
@@ -454,6 +950,415 @@ export class PlannerDispatcherMergeService {
     }
 
     return merged
+  }
+
+  mergeDeterministicExecutionSlots(
+    plannerPatch: CodegenSemanticPatch | null | undefined,
+    dispatcherPatch: CodegenSemanticPatch | null | undefined,
+    userMessage = '',
+  ): CodegenSemanticPatch | null {
+    if (!this.isNonEmpty(plannerPatch)) {
+      return this.buildRulesTreeFallbackFromDispatcher(dispatcherPatch, userMessage) ?? plannerPatch ?? null
+    }
+    if (!this.isNonEmpty(dispatcherPatch)) return plannerPatch as CodegenSemanticPatch
+    const planner = plannerPatch as CodegenSemanticPatch
+    const dispatcher = dispatcherPatch as CodegenSemanticPatch
+    const merged: CodegenSemanticPatch = { ...planner }
+    if (planner.contextSlots || dispatcher.contextSlots) {
+      const plannerContext = planner.contextSlots ?? {}
+      const dispatcherContext = dispatcher.contextSlots ?? {}
+      const dispatcherSymbol = (dispatcherContext as { symbol?: { source?: unknown } }).symbol
+      merged.contextSlots = {
+        ...plannerContext,
+        ...dispatcherContext,
+        ...(
+          plannerContext.symbol
+          && dispatcherSymbol
+          && dispatcherSymbol.source !== 'user_explicit'
+            ? { symbol: plannerContext.symbol }
+            : {}
+        ),
+      }
+    }
+    if (dispatcher.position) {
+      const constraints = this.unionDedupByKeyAndHash(
+        planner.position?.constraints,
+        dispatcher.position.constraints,
+        'right',
+      )
+      merged.position = {
+        ...dispatcher.position,
+        ...(constraints ? { constraints } : {}),
+      }
+    }
+    try {
+      this.mergeDeterministicRulesIntoPlanner(merged, dispatcher, userMessage)
+    }
+    catch (err) {
+      this.logger.warn(`mergeDeterministicRulesIntoPlanner 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
+    }
+    return merged
+  }
+
+  private mergeDeterministicRulesIntoPlanner(
+    merged: CodegenSemanticPatch,
+    dispatcher: CodegenSemanticPatch,
+    userMessage: string,
+  ): void {
+    const rules = merged.rules
+    if (!rules || rules.length === 0) return
+
+    const deterministicRules = this.buildFallbackRules(dispatcher, userMessage)
+      .filter(rule => rule.effects.length > 0)
+    if (deterministicRules.length === 0) return
+
+    const corrected = rules.map((rule) => {
+      const replacement = this.findMovingAverageBreakoutCorrection(rule, deterministicRules)
+      if (!replacement) return rule
+      return {
+        ...rule,
+        condition: replacement.condition,
+        evidence: replacement.evidence ?? rule.evidence,
+      }
+    })
+
+    const nextRules = [...corrected]
+    for (const deterministicRule of deterministicRules) {
+      if (!this.shouldAppendDeterministicCoreTradeRule(deterministicRule)) continue
+      if (this.isDeterministicRuleCovered(nextRules, deterministicRule)) continue
+      nextRules.push(deterministicRule)
+    }
+    merged.rules = nextRules
+  }
+
+  private shouldAppendDeterministicCoreTradeRule(rule: SemanticRule): boolean {
+    const leaves = collectAtomLeaves(rule.condition)
+    if (leaves.length !== 1) return false
+    const conditionKey = leaves[0]?.key
+    const allowedConditionKeys = new Set<string>([
+      ATOM_CONTRACT_REGISTRY['indicator.above'].key,
+      ATOM_CONTRACT_REGISTRY['indicator.below'].key,
+      ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key,
+      ATOM_CONTRACT_REGISTRY['indicator.cross_under'].key,
+    ])
+    if (!conditionKey || !allowedConditionKeys.has(conditionKey)) return false
+
+    const allowedActionKeys = new Set<string>([
+      ATOM_CONTRACT_REGISTRY['action.open_long'].key,
+      ATOM_CONTRACT_REGISTRY['action.open_short'].key,
+      ATOM_CONTRACT_REGISTRY['action.close_long'].key,
+      ATOM_CONTRACT_REGISTRY['action.close_short'].key,
+    ])
+    return rule.effects.some(effect =>
+      collectAtomLeaves(effect).some(leaf => allowedActionKeys.has(leaf.key)),
+    )
+  }
+
+  private findMovingAverageBreakoutCorrection(
+    plannerRule: SemanticRule,
+    deterministicRules: readonly SemanticRule[],
+  ): SemanticRule | null {
+    const leaves = collectAtomLeaves(plannerRule.condition)
+    if (leaves.length !== 1) return null
+    const leaf = leaves[0]
+    if (!leaf) return null
+
+    const replacementKey = leaf.key === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key
+      ? ATOM_CONTRACT_REGISTRY['indicator.above'].key
+      : leaf.key === ATOM_CONTRACT_REGISTRY['price.breakout_down'].key
+        ? ATOM_CONTRACT_REGISTRY['indicator.below'].key
+        : null
+    if (!replacementKey) return null
+    if (!this.hasMovingAverageEvidence(plannerRule, leaf)) return null
+
+    const plannerPeriod = this.readNumericParam(leaf.params, 'period')
+    return deterministicRules.find((rule) => {
+      if (rule.phase !== plannerRule.phase) return false
+      if (rule.sideScope !== plannerRule.sideScope) return false
+      const deterministicLeaves = collectAtomLeaves(rule.condition)
+      if (deterministicLeaves.length !== 1) return false
+      const deterministicLeaf = deterministicLeaves[0]
+      if (!deterministicLeaf || deterministicLeaf.key !== replacementKey) return false
+      if (plannerPeriod === null) return true
+      return this.readNumericParam(deterministicLeaf.params, 'reference.period') === plannerPeriod
+    }) ?? null
+  }
+
+  private hasMovingAverageEvidence(rule: SemanticRule, leaf: AtomExprAtom): boolean {
+    const evidenceText = [
+      rule.evidence?.text,
+      leaf.evidence?.text,
+      ...rule.effects.flatMap(effect => collectAtomLeaves(effect).map(effectLeaf => effectLeaf.evidence?.text)),
+    ].filter((text): text is string => typeof text === 'string')
+      .join(' ')
+    return /(?:EMA|SMA|MA)\s*\d{1,4}|\d{1,4}\s*(?:日|周期)?均线/iu.test(evidenceText)
+  }
+
+  private isDeterministicRuleCovered(
+    rules: readonly SemanticRule[],
+    deterministicRule: SemanticRule,
+  ): boolean {
+    const deterministicLeaves = collectAtomLeaves(deterministicRule.condition)
+    if (deterministicLeaves.length === 0) return true
+
+    return rules.some((rule) => {
+      if (rule.phase !== deterministicRule.phase) return false
+      if (rule.sideScope !== deterministicRule.sideScope) return false
+      if (!this.ruleEffectsCover(rule, deterministicRule)) return false
+      const leaves = collectAtomLeaves(rule.condition)
+      return deterministicLeaves.every(candidate =>
+        leaves.some(existing => this.atomLeafMatches(existing, candidate)),
+      )
+    })
+  }
+
+  private ruleEffectsCover(existingRule: SemanticRule, candidateRule: SemanticRule): boolean {
+    const existingEffects = existingRule.effects.flatMap(effect => collectAtomLeaves(effect))
+    const candidateEffects = candidateRule.effects.flatMap(effect => collectAtomLeaves(effect))
+    return candidateEffects.every(candidate =>
+      existingEffects.some(existing => this.atomLeafMatches(existing, candidate)),
+    )
+  }
+
+  private atomLeafMatches(existing: AtomExprAtom, candidate: AtomExprAtom): boolean {
+    if (existing.key !== candidate.key) return false
+    if (this.stableParamsHash(existing.params) === this.stableParamsHash(candidate.params)) return true
+    if (this.semanticAtomLeafMatches(existing, candidate)) return true
+    return this.paramsSubsetMatch(existing.params, candidate.params)
+  }
+
+  private semanticAtomLeafMatches(existing: AtomExprAtom, candidate: AtomExprAtom): boolean {
+    const existingIndicator = this.readStringParam(existing.params, 'indicator')
+    const candidateIndicator = this.readStringParam(candidate.params, 'indicator')
+    if (existingIndicator && candidateIndicator && !this.indicatorAliasesMatch(existingIndicator, candidateIndicator)) return false
+
+    if (
+      existing.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key
+      || existing.key === ATOM_CONTRACT_REGISTRY['indicator.below'].key
+    ) {
+      const existingPeriod = this.readNumericParam(existing.params, 'reference.period')
+      const candidatePeriod = this.readNumericParam(candidate.params, 'reference.period')
+      if (existingPeriod !== null || candidatePeriod !== null) return existingPeriod === candidatePeriod
+      return Boolean(existingIndicator && candidateIndicator)
+    }
+
+    if (
+      existing.key === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key
+      || existing.key === ATOM_CONTRACT_REGISTRY['indicator.cross_under'].key
+    ) {
+      if (existingIndicator === 'macd' && candidateIndicator === 'macd') return true
+      if (existingIndicator && candidateIndicator && this.isMovingAverageIndicatorName(existingIndicator) && this.isMovingAverageIndicatorName(candidateIndicator)) {
+        return this.movingAverageCrossParamsMatch(existing.params, candidate.params)
+      }
+    }
+
+    return false
+  }
+
+  private movingAverageCrossParamsMatch(
+    existingParams: Record<string, unknown> | undefined,
+    candidateParams: Record<string, unknown> | undefined,
+  ): boolean {
+    const pairs: Array<[string, string]> = [
+      ['fastPeriod', 'fastPeriod'],
+      ['slowPeriod', 'slowPeriod'],
+      ['period', 'period'],
+      ['value', 'value'],
+    ]
+    let compared = false
+    for (const [existingKey, candidateKey] of pairs) {
+      const existingValue = this.readNumericParam(existingParams, existingKey)
+      const candidateValue = this.readNumericParam(candidateParams, candidateKey)
+      if (existingValue === null && candidateValue === null) continue
+      if (existingValue === null || candidateValue === null) return false
+      if (Math.abs(existingValue - candidateValue) > 1e-9) return false
+      compared = true
+    }
+    return compared
+  }
+
+  private paramsSubsetMatch(
+    existingParams: Record<string, unknown> | undefined,
+    candidateParams: Record<string, unknown> | undefined,
+  ): boolean {
+    const candidate = candidateParams ?? {}
+    const existing = existingParams ?? {}
+    for (const [key, candidateValue] of Object.entries(candidate)) {
+      const existingValue = this.readParamByPath(existing, key)
+      if (existingValue === undefined) return false
+      if (!this.paramValuesMatch(existingValue, candidateValue)) return false
+    }
+    return true
+  }
+
+  private readParamByPath(params: Record<string, unknown>, key: string): unknown {
+    if (Object.prototype.hasOwnProperty.call(params, key)) return params[key]
+    return key.split('.').reduce<unknown>((current, part) => {
+      if (!current || typeof current !== 'object') return undefined
+      return (current as Record<string, unknown>)[part]
+    }, params)
+  }
+
+  private readStringParam(params: Record<string, unknown> | undefined, key: string): string | null {
+    const direct = params?.[key]
+    return typeof direct === 'string' && direct.trim().length > 0 ? direct.trim().toLowerCase() : null
+  }
+
+  private indicatorAliasesMatch(left: string, right: string): boolean {
+    return this.normalizeIndicatorAlias(left) === this.normalizeIndicatorAlias(right)
+  }
+
+  private normalizeIndicatorAlias(value: string): string {
+    const normalized = value.trim().toLowerCase()
+    return normalized === 'sma' ? 'ma' : normalized
+  }
+
+  private isMovingAverageIndicatorName(value: string): boolean {
+    const normalized = this.normalizeIndicatorAlias(value)
+    return normalized === 'ma' || normalized === 'ema'
+  }
+
+  private paramValuesMatch(existingValue: unknown, candidateValue: unknown): boolean {
+    if (typeof existingValue === 'number' || typeof candidateValue === 'number') {
+      return Number.isFinite(Number(existingValue))
+        && Number.isFinite(Number(candidateValue))
+        && Math.abs(Number(existingValue) - Number(candidateValue)) <= 1e-9
+    }
+    if (typeof existingValue === 'string' || typeof candidateValue === 'string') {
+      return this.normalizeIndicatorAlias(String(existingValue)) === this.normalizeIndicatorAlias(String(candidateValue))
+    }
+    return JSON.stringify(existingValue) === JSON.stringify(candidateValue)
+  }
+
+  private bindDispatcherLifecycleEffectsIntoPlannerRules(
+    merged: CodegenSemanticPatch,
+    dispatcher: CodegenSemanticPatch,
+  ): void {
+    const rules = merged.rules
+    if (!rules || rules.length === 0) return
+    const dispatcherActions = [...(dispatcher.actions ?? []), ...(dispatcher.atoms ?? [])]
+      .filter(atom => atom.key === ADD_POSITION_ATOM_KEY)
+    const dispatcherDca = this.findDispatcherDcaScheduleAtom(dispatcher)
+    if (dispatcherActions.length === 0 && !dispatcherDca) return
+
+    let mutated = false
+    const nextRules = rules.map((rule) => {
+      if (rule.condition.kind === 'atom') {
+        const condition = rule.condition
+        const matched = dispatcherActions.find((action) => {
+          const predicate = this.buildAddPositionTriggerPredicate(action)
+          if (!predicate) return false
+          return predicate.key === condition.key
+            && this.paramsLooselyMatch(condition.params, predicate.params)
+        })
+        if (matched && !rule.effects.some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === ADD_POSITION_ATOM_KEY))) {
+          const matchedSideScope = (matched as { sideScope?: 'long' | 'short' | 'both' }).sideScope
+          mutated = true
+          return {
+            ...rule,
+            effects: [
+              ...this.removeLifecycleOpenScaffoldEffects(rule.effects, matchedSideScope ?? rule.sideScope)
+                .filter(effect => !collectAtomLeaves(effect).some(leaf => leaf.key === DCA_SCHEDULE_ATOM_KEY)),
+              {
+                kind: 'atom' as const,
+                key: ADD_POSITION_ATOM_KEY,
+                params: matched.params ?? {},
+                ...(matchedSideScope ? { sideScope: matchedSideScope } : {}),
+              },
+            ],
+          }
+        }
+      }
+      if (dispatcherDca && this.shouldAttachDcaSchedule(rule)) {
+        const evidenceText = typeof dispatcherDca.evidence?.text === 'string' && dispatcherDca.evidence.text.trim().length > 0
+          ? dispatcherDca.evidence.text.trim()
+          : null
+        mutated = true
+        return {
+          ...rule,
+          effects: [
+            ...this.removeLifecycleOpenScaffoldEffects(rule.effects, rule.sideScope),
+            {
+              kind: 'atom' as const,
+              key: DCA_SCHEDULE_ATOM_KEY,
+              params: dispatcherDca.params ?? {},
+              ...(evidenceText ? { evidence: { text: evidenceText } } : {}),
+            },
+          ],
+        }
+      }
+      if (rule.effects.length > 0) return rule
+      if (rule.condition.kind !== 'atom') return rule
+      const condition = rule.condition
+      const matched = dispatcherActions.find((action) => {
+        const predicate = this.buildAddPositionTriggerPredicate(action)
+        if (!predicate) return false
+        return predicate.key === condition.key
+          && this.paramsLooselyMatch(condition.params, predicate.params)
+      })
+      if (!matched) return rule
+      const matchedSideScope = (matched as { sideScope?: 'long' | 'short' | 'both' }).sideScope
+      mutated = true
+      return {
+        ...rule,
+        effects: [{
+          kind: 'atom' as const,
+          key: ADD_POSITION_ATOM_KEY,
+          params: matched.params ?? {},
+          ...(matchedSideScope ? { sideScope: matchedSideScope } : {}),
+        }],
+      }
+    })
+    if (mutated) merged.rules = nextRules
+  }
+
+  private removeLifecycleOpenScaffoldEffects(
+    effects: readonly AtomExpr[],
+    sideScope: 'long' | 'short' | 'both' | undefined,
+  ): AtomExpr[] {
+    const openKeys = new Set<string>()
+    if (sideScope === 'short') {
+      openKeys.add(ATOM_CONTRACT_REGISTRY['action.open_short'].key)
+    }
+    else if (sideScope === 'both') {
+      openKeys.add(ATOM_CONTRACT_REGISTRY['action.open_long'].key)
+      openKeys.add(ATOM_CONTRACT_REGISTRY['action.open_short'].key)
+    }
+    else {
+      openKeys.add(ATOM_CONTRACT_REGISTRY['action.open_long'].key)
+    }
+    return effects.filter(effect => !collectAtomLeaves(effect).some(leaf => openKeys.has(leaf.key)))
+  }
+
+  private shouldAttachDcaSchedule(rule: SemanticRule): boolean {
+    const leaves = [
+      ...collectAtomLeaves(rule.condition),
+      ...rule.effects.flatMap(effect => collectAtomLeaves(effect)),
+    ]
+    const hasDca = leaves.some(leaf => leaf.key === DCA_SCHEDULE_ATOM_KEY)
+    if (hasDca) return false
+    const hasOpenLong = leaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['action.open_long'].key)
+    const hasSchedulePredicate = leaves.some(leaf =>
+      leaf.key === ATOM_CONTRACT_REGISTRY['strategy.time_window'].key
+      || leaf.key === ATOM_CONTRACT_REGISTRY['execution.on_start'].key,
+    )
+    return rule.phase === 'entry' && hasOpenLong && hasSchedulePredicate
+  }
+
+  private paramsLooselyMatch(left: Record<string, unknown> | undefined, right: Record<string, unknown> | undefined): boolean {
+    const leftParams = left ?? {}
+    const rightParams = right ?? {}
+    const comparableKeys = ['basis', 'direction', 'valuePct']
+    for (const key of comparableKeys) {
+      if (!(key in leftParams) || !(key in rightParams)) continue
+      const l = leftParams[key]
+      const r = rightParams[key]
+      if (typeof l === 'number' || typeof r === 'number') {
+        if (Math.abs(Math.abs(Number(l)) - Math.abs(Number(r))) > 1e-9) return false
+      }
+      else if (String(l) !== String(r)) return false
+    }
+    return true
   }
 
   /**
@@ -479,37 +1384,98 @@ export class PlannerDispatcherMergeService {
     const isAlwaysOnCondition = (rule: SemanticRule): boolean =>
       rule.condition.kind === 'atom' && MERGE_ALWAYS_ON_ATOM_KEYS.has(rule.condition.key)
 
-    const hasActionEffect = (rule: SemanticRule): boolean => {
-      for (const eff of rule.effects) {
-        for (const leaf of collectAtomLeaves(eff)) {
-          if (getBucket(leaf.key) === 'action') return true
-        }
+    const effectHasAction = (effect: AtomExpr): boolean => {
+      for (const leaf of collectAtomLeaves(effect)) {
+        if (getBucket(leaf.key) === 'action') return true
       }
       return false
     }
+    const hasActionEffect = (rule: SemanticRule): boolean => {
+      for (const eff of rule.effects) {
+        if (effectHasAction(eff)) return true
+      }
+      return false
+    }
+    const hasLifecycleEffect = (rule: SemanticRule): boolean =>
+      rule.effects.some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === DCA_SCHEDULE_ATOM_KEY))
 
-    const kept = rules.filter(rule => !(isAlwaysOnCondition(rule) && hasActionEffect(rule)))
-    if (kept.length !== rules.length) {
+    let mutated = false
+    const kept = rules.flatMap((rule) => {
+      if (!isAlwaysOnCondition(rule) || !hasActionEffect(rule)) return [rule]
+      if (!hasLifecycleEffect(rule)) {
+        mutated = true
+        return []
+      }
+      const effects = rule.effects.filter(effect => !effectHasAction(effect))
+      mutated = mutated || effects.length !== rule.effects.length
+      return effects.length > 0 ? [{ ...rule, effects }] : []
+    })
+    if (mutated) {
       merged.rules = kept
     }
   }
 
+  private prunePlannerShortActionsWithoutDispatcherIntent(
+    merged: CodegenSemanticPatch,
+    dispatcher: CodegenSemanticPatch,
+  ): void {
+    const rules = merged.rules
+    if (!rules || rules.length === 0) return
+
+    const dispatcherLeaves = [
+      ...(dispatcher.atoms ?? []),
+      ...(dispatcher.triggers ?? []),
+      ...(dispatcher.actions ?? []),
+      ...(dispatcher.risk ?? []),
+    ]
+    const hasDispatcherShortIntent = dispatcherLeaves.some(leaf =>
+      (leaf as { sideScope?: unknown }).sideScope === 'short'
+      || leaf.key === ATOM_CONTRACT_REGISTRY['action.open_short'].key
+      || leaf.key === ATOM_CONTRACT_REGISTRY['action.close_short'].key,
+    )
+    if (hasDispatcherShortIntent) return
+
+    const hasDispatcherLongIntent = dispatcherLeaves.some(leaf =>
+      (leaf as { sideScope?: unknown }).sideScope === 'long'
+      || leaf.key === ATOM_CONTRACT_REGISTRY['action.open_long'].key
+      || leaf.key === ATOM_CONTRACT_REGISTRY['action.close_long'].key,
+    )
+    if (!hasDispatcherLongIntent) return
+
+    const shortActionKeys: ReadonlySet<string> = new Set([
+      ATOM_CONTRACT_REGISTRY['action.open_short'].key,
+      ATOM_CONTRACT_REGISTRY['action.close_short'].key,
+    ])
+    const isShortActionExpr = (expr: AtomExpr): boolean =>
+      collectAtomLeaves(expr).some(leaf => shortActionKeys.has(leaf.key))
+
+    const nextRules = rules.flatMap((rule) => {
+      const hasShortAction = rule.effects.some(isShortActionExpr)
+      if (rule.sideScope === 'short' && hasShortAction) return []
+      const effects = rule.effects.filter(effect => !isShortActionExpr(effect))
+      if (hasShortAction && rule.effects.length > 0 && effects.length === 0) return []
+      return [{ ...rule, effects }]
+    })
+
+    if (nextRules.length !== rules.length || nextRules.some((rule, index) => rule.effects.length !== rules[index]?.effects.length)) {
+      merged.rules = nextRules
+    }
+  }
+
   /**
-   * Issue #1428 R-D：rules leaf params dispatcher-first override（strict superset 覆盖）。
+   * Issue #1428 R-D：rules leaf params dispatcher fill（非破坏式补齐）。
    *
    * 触发条件（必须全部满足）：
    *   1. merged.rules 非空
    *   2. dispatcher 桶（atoms / triggers / actions / risk）含同 (key, sideScope) entry
-   *   3. dispatcher entry params 是 leaf params 的 strict superset（每个 leaf params key
-   *      都在 dispatcher 中且值相等，且 dispatcher 还含 leaf 没有的 key）
-   *      —— 或 leaf params 为空而 dispatcher params 非空
+   *   3. dispatcher entry params 含 leaf 缺失的 key
    *
    * 不触发：
-   *   - 两者 params 完全相同 → 没必要覆盖
-   *   - 两者 params 有交集但值冲突 → 保留 planner（避免误覆盖 planner 有意校正的值）
+   *   - 两者 params 完全相同 → 没必要补齐
+   *   - 两者 params 有交集但值冲突 → 保留 planner 对应 key，仅补齐其它缺失 key
    *   - dispatcher 无同 key entry → 保留 planner
    *
-   * 行为：用 dispatcher params 整体替换 leaf.params；不动 condition 树结构。
+   * 行为：缺失 key 从 dispatcher 候选中按发现顺序填入；不动 condition 树结构。
    */
   private overrideRulesLeafParamsFromDispatcher(
     merged: CodegenSemanticPatch,
@@ -518,8 +1484,9 @@ export class PlannerDispatcherMergeService {
     const rules = merged.rules
     if (!rules || rules.length === 0) return
 
-    // 收集 dispatcher 所有桶里的 atom，按 (key, sideScope) 索引；同签名取第一个非空 params
-    const dispatcherByKey = new Map<string, Record<string, unknown>>()
+    // 收集 dispatcher 所有桶里的 atom，按 (key, sideScope) 索引；同签名保留全部候选，
+    // 让互补候选可共同补齐同一个 planner leaf。
+    const dispatcherByKey = new Map<string, Array<Record<string, unknown>>>()
     const indexBucket = (
       source: ReadonlyArray<{ key: string, sideScope?: 'long' | 'short' | 'both', params?: Record<string, unknown> }> | undefined,
     ): void => {
@@ -528,7 +1495,9 @@ export class PlannerDispatcherMergeService {
         const params = entry.params
         if (!params || Object.keys(params).length === 0) continue
         const sig = `${entry.key}|${entry.sideScope ?? 'both'}`
-        if (!dispatcherByKey.has(sig)) dispatcherByKey.set(sig, params)
+        const bucket = dispatcherByKey.get(sig) ?? []
+        bucket.push(params)
+        dispatcherByKey.set(sig, bucket)
       }
     }
     indexBucket(dispatcher.atoms)
@@ -544,11 +1513,14 @@ export class PlannerDispatcherMergeService {
       //   抓（'both' 是更宽泛的 side，覆盖 long/short 安全）。不反向（planner 'both'
       //   不抓 dispatcher 'long'/'short'），避免把宽泛 leaf 误绑到具体 side params。
       //   反向 long↔short 也不互换（避免做空策略被覆盖为做多 params）。
-      const dispatcherParams = dispatcherByKey.get(sig)
-        ?? dispatcherByKey.get(`${leaf.key}|both`)
-      if (!dispatcherParams) return leaf
-      if (!this.isStrictSuperset(dispatcherParams, leaf.params)) return leaf
-      return { ...leaf, params: { ...dispatcherParams } }
+      const candidates = [
+        ...(dispatcherByKey.get(sig) ?? []),
+        ...(sig === `${leaf.key}|both` ? [] : (dispatcherByKey.get(`${leaf.key}|both`) ?? [])),
+      ]
+      if (candidates.length === 0) return leaf
+      const filledParams = this.fillMissingParams(leaf.params, candidates)
+      if (filledParams === leaf.params) return leaf
+      return { ...leaf, params: filledParams }
     }
 
     const overrideExpr = (expr: AtomExpr, ruleSideScope: 'long' | 'short' | 'both'): AtomExpr => {
@@ -575,34 +1547,19 @@ export class PlannerDispatcherMergeService {
     }
   }
 
-  /**
-   * 判定 `superset` 是否是 `subset` 的 strict superset：
-   *   - subset 为空且 superset 非空 → true（dispatcher 比 planner 多任何 slot）
-   *   - subset 所有 key 都在 superset 且值相等 + superset 还含 subset 没有的 key → true
-   *   - 否则 → false（含值冲突 / superset 无新 slot）
-   *
-   * 注：值比较用 JSON.stringify 处理嵌套对象；数组 / 对象顺序敏感，与
-   *   `stableParamsHash` 不同（这里允许 LLM 与 dispatcher 写出键序差异的"相等" params
-   *   —— 比较前先 stableValue 排序）。
-   */
-  private isStrictSuperset(
-    superset: Record<string, unknown>,
-    subset: Record<string, unknown> | undefined,
-  ): boolean {
-    const subKeys = subset ? Object.keys(subset) : []
-    const superKeys = Object.keys(superset)
-    if (subKeys.length === 0) return superKeys.length > 0
-    // 快速路径：superset 必须严格更多 key（正确性由下方 key 包含 + 值相等检查兜底；
-    //   下面循环里任一 subKey 不在 superset 或值不相等都会返回 false → 值冲突场景
-    //   也走 false 分支，回退到调用方"保留 planner 版本"的语义，与 #1428 R-D 设计一致）
-    if (superKeys.length <= subKeys.length) return false
-    for (const k of subKeys) {
-      if (!(k in superset)) return false
-      const a = JSON.stringify(this.stableValue(superset[k]))
-      const b = JSON.stringify(this.stableValue((subset as Record<string, unknown>)[k]))
-      if (a !== b) return false
+  private fillMissingParams(
+    base: Record<string, unknown> | undefined,
+    candidates: ReadonlyArray<Record<string, unknown>>,
+  ): Record<string, unknown> | undefined {
+    let filled: Record<string, unknown> | undefined
+    for (const candidate of candidates) {
+      for (const [key, value] of Object.entries(candidate)) {
+        if (base && key in base) continue
+        if (filled && key in filled) continue
+        filled = filled ? { ...filled, [key]: value } : { ...(base ?? {}), [key]: value }
+      }
     }
-    return true
+    return filled ?? base
   }
 
   /**
@@ -729,6 +1686,50 @@ export class PlannerDispatcherMergeService {
     if (lifted.length > 0) {
       merged.rules = [...rules, ...lifted]
     }
+  }
+
+  private composeDispatcherRulesIntoMergedRules(
+    merged: CodegenSemanticPatch,
+    dispatcher: CodegenSemanticPatch,
+  ): void {
+    const rules = merged.rules
+    if (!rules || rules.length === 0) return
+    const predicates = this.collectFallbackPredicateAtoms(dispatcher)
+    const compositeRules = this.buildCompositeFallbackRules(
+      predicates,
+      this.collectFallbackEffectAtoms(dispatcher),
+      '',
+    )
+    if (compositeRules.length === 0) return
+    const hasEquivalentComposite = rules.some(rule =>
+      collectAtomLeaves(rule.condition).some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['condition.sequence'].key)
+      && collectAtomLeaves(rule.condition).some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key),
+    )
+    if (hasEquivalentComposite) return
+
+    const covered = this.collectCompositeCoveredPredicates(predicates)
+    const kept = rules.filter(rule => !this.isRuleCoveredByComposite(rule, covered))
+    merged.rules = [...compositeRules, ...kept]
+  }
+
+  private isRuleCoveredByComposite(
+    rule: SemanticRule,
+    coveredPredicates: ReadonlySet<FallbackPredicateAtom>,
+  ): boolean {
+    if (coveredPredicates.size === 0) return false
+    const conditionLeaves = collectAtomLeaves(rule.condition)
+    if (conditionLeaves.length === 0) return false
+    return conditionLeaves.every(leaf =>
+      Array.from(coveredPredicates).some(predicate => this.fallbackPredicateMatchesLeaf(predicate, leaf)),
+    )
+  }
+
+  private fallbackPredicateMatchesLeaf(predicate: FallbackPredicateAtom, leaf: AtomExprAtom): boolean {
+    if (predicate.key !== leaf.key) return false
+    const predicatePeriod = this.readNumericParam(predicate.params, 'reference.period')
+    const leafPeriod = this.readNumericParam(leaf.params, 'reference.period')
+    if (predicatePeriod !== null || leafPeriod !== null) return predicatePeriod === leafPeriod
+    return true
   }
 
   /**

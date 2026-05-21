@@ -10,7 +10,7 @@ exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁（zh/e
 
 exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁（zh/en 对称） summaryTemplate(portfolioRisk.drawdown_block, en) 非空且字节稳定: portfolioRisk.drawdown_block-en 1`] = `"Portfolio drawdown guard"`;
 
-exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁（zh/en 对称） summaryTemplate(portfolioRisk.drawdown_block, zh) 非空且字节稳定: portfolioRisk.drawdown_block-zh 1`] = `"账户回撤超过 15% 时阻止开新仓"`;
+exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁（zh/en 对称） summaryTemplate(portfolioRisk.drawdown_block, zh) 非空且字节稳定: portfolioRisk.drawdown_block-zh 1`] = `"账户最大回撤超过 15% 时阻止开新仓"`;
 
 exports[`#1331 W1：13 orchestration atom summaryTemplate 字节稳定锁（zh/en 对称） summaryTemplate(portfolioRisk.substrategy_exposure_cap, en) 非空且字节稳定: portfolioRisk.substrategy_exposure_cap-en 1`] = `"block new entries when sub-strategy exposure exceeds 40%"`;
 

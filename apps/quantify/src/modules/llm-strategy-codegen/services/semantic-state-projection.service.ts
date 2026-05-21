@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticOrchestrationNode, SemanticSlotState, SemanticState } from '../types/semantic-state'
 import type { AtomExpr, SemanticRule, SemanticRulePhase, SemanticRuleSideScope } from '../types/atom-expr'
+import { collectAtomLeaves } from '../types/atom-expr'
 import { isEntryPredicateTriggerKey, isExitPredicateTriggerKey, isTimeframeGroupableTriggerKey } from '../atom-contracts/trigger-display-contract'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
@@ -19,6 +20,13 @@ import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from 
 //   UI 无价值。新增 always-on atom 只需扩此集合。
 const ALWAYS_ON_ATOM_KEYS: ReadonlySet<string> = new Set([
   'execution.on_start',
+])
+
+// 技术性 guard atom：参与 rules tree 执行语义，但不应污染普通用户摘要。
+// 这些 guard 只表达运行期持仓状态门控，不是用户写下的交易条件本体。
+const TECHNICAL_RULE_CONDITION_ATOM_KEYS: ReadonlySet<string> = new Set([
+  'position.has_position',
+  'position.no_position',
 ])
 
 /**
@@ -64,7 +72,75 @@ const PROJECTION_PARAM_VALUE_LABELS: Readonly<Record<string, Readonly<Record<str
     breakout: { zh: '突破后触发', en: 'on breakout' },
     close: { zh: '收盘确认后触发', en: 'on close' },
   },
+  sideMode: {
+    long_only: { zh: '只做多', en: 'long only' },
+    short_only: { zh: '只做空', en: 'short only' },
+    both: { zh: '双向', en: 'both' },
+    bidirectional: { zh: '双向', en: 'bidirectional' },
+  },
+  breakoutAction: {
+    continue: { zh: '越界后继续', en: 'continue on breakout' },
+    stop: { zh: '越界后停止', en: 'stop on breakout' },
+  },
 } as const
+
+const PROJECTION_PARAM_SLOT_LABELS: Readonly<Record<string, {
+  zh: (value: string) => string
+  en: (value: string) => string
+}>> = {
+  centerOffsetPct: {
+    zh: value => `中心上下各 ${value}%`,
+    en: value => `center offset ${value}%`,
+  },
+  levels: {
+    zh: value => `共 ${value} 格`,
+    en: value => `${value} levels`,
+  },
+  levelCount: {
+    zh: value => `共 ${value} 格`,
+    en: value => `${value} levels`,
+  },
+  gridCount: {
+    zh: value => `共 ${value} 格`,
+    en: value => `${value} levels`,
+  },
+  stepPct: {
+    zh: value => `每格 ${value}%`,
+    en: value => `step ${value}%`,
+  },
+  gridStepPct: {
+    zh: value => `每格 ${value}%`,
+    en: value => `step ${value}%`,
+  },
+  spacingPct: {
+    zh: value => `每格 ${value}%`,
+    en: value => `step ${value}%`,
+  },
+  perGridSizing: {
+    zh: value => `每格 ${value}`,
+    en: value => `${value} per grid`,
+  },
+  perOrderBudget: {
+    zh: value => `每单 ${value}`,
+    en: value => `${value} per order`,
+  },
+} as const
+
+const PROJECTION_PARAM_PAIR_LABELS: ReadonlyArray<{
+  lowerKeys: readonly string[]
+  upperKeys: readonly string[]
+  zh: (lower: string, upper: string) => string
+  en: (lower: string, upper: string) => string
+}> = [{
+  lowerKeys: ['rangeLower', 'rangeMin', 'lower'],
+  upperKeys: ['rangeUpper', 'rangeMax', 'upper'],
+  zh: (lower, upper) => `区间 ${lower}-${upper}`,
+  en: (lower, upper) => `range ${lower}-${upper}`,
+}]
+
+const PROJECTION_ALWAYS_RENDER_DEFAULT_PARAM_SLOTS: ReadonlySet<string> = new Set([
+  'sideMode',
+])
 
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
@@ -173,7 +249,8 @@ export class SemanticStateProjectionService {
     const triggerSummary = this.buildTriggerSummary(deterministicTriggers, false)
     const actionSummary = this.buildActionSummary(deterministicActions, state)
     const riskSummary = this.buildRiskSummary(deterministicRisk)
-    const positionSummary = this.buildPositionSummary(state.position, state.positionConstraint)
+    const ruleAtomKeys = this.collectRuleAtomKeys(state.rules ?? [])
+    const positionSummary = this.buildPositionSummary(state.position, state.positionConstraint, ruleAtomKeys)
     const executionContext = this.buildExecutionContext(state.contextSlots)
     const inferredDefaults = this.buildInferredDefaults(deterministicRisk)
     // #1152 contract parity：orchestration locked 节点必须计入 deterministic 判定与 summary，
@@ -439,7 +516,7 @@ export class SemanticStateProjectionService {
         const registryEntry = ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block']
         let text: string
         try {
-          text = registryEntry.display.summaryTemplate(node.params, 'zh')
+          text = registryEntry.display.summaryTemplate(this.buildOrchestrationDisplayParams(node), 'zh')
         }
         catch {
           continue
@@ -1856,6 +1933,13 @@ export class SemanticStateProjectionService {
     const period = periodValue === null ? '' : this.formatNumber(periodValue)
     const indicator = this.formatIndicatorName(trigger)
     const reference = `${indicator}${period}`
+    const ownPeriod = this.readFiniteNumber(trigger.params.period)
+    if (ownPeriod !== null && periodValue !== null) {
+      const left = `${indicator}${this.formatNumber(ownPeriod)}`
+      return trigger.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key
+        ? `${left} 在 ${reference} 上方`
+        : `${left} 低于 ${reference}`
+    }
     return trigger.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key
       ? `价格在 ${reference} 上方`
       : `价格低于 ${reference}`
@@ -2493,18 +2577,37 @@ export class SemanticStateProjectionService {
     const publicNameForLocale = publicName?.[locale]?.trim()
     if (!publicNameForLocale || baseSummary !== publicNameForLocale) return baseSummary
 
-    type ParamSlot = { kind?: string, default?: unknown, enum?: readonly string[] }
+    type ParamSlot = { kind?: string, default?: unknown, enum?: readonly string[], range?: readonly [number, number] }
     type SurfaceShape = { paramSlots?: Record<string, ParamSlot> }
     const entry = (ATOM_CONTRACT_REGISTRY as Record<string, { surface?: SurfaceShape } | undefined>)[atomKey]
     const paramSlots = entry?.surface?.paramSlots
     if (!paramSlots) return baseSummary
 
     const rendered: string[] = []
+    const consumedSlotKeys = new Set<string>()
+    for (const pair of PROJECTION_PARAM_PAIR_LABELS) {
+      const lower = this.readFirstFiniteParam(params, pair.lowerKeys)
+      const upper = this.readFirstFiniteParam(params, pair.upperKeys)
+      if (lower === null || upper === null) continue
+      for (const key of [...pair.lowerKeys, ...pair.upperKeys]) consumedSlotKeys.add(key)
+      rendered.push(locale === 'zh'
+        ? pair.zh(this.formatNumber(lower), this.formatNumber(upper))
+        : pair.en(this.formatNumber(lower), this.formatNumber(upper)))
+    }
+
     for (const [slotKey, slot] of Object.entries(paramSlots)) {
+      if (consumedSlotKeys.has(slotKey)) continue
       const v = (params as Record<string, unknown>)[slotKey]
       if (v === undefined || v === null || v === '') continue
       // 值 === default → 跳过（技术兜底，无价值）
-      if (slot && 'default' in slot && slot.default !== undefined && slot.default === v) continue
+      if (
+        slot
+        && 'default' in slot
+        && slot.default !== undefined
+        && slot.default === v
+        && !PROJECTION_ALWAYS_RENDER_DEFAULT_PARAM_SLOTS.has(slotKey)
+      ) continue
+      if (this.isInvalidPositiveNumericSlotPlaceholder(slot, v)) continue
       const label = this.renderParamValueLabel(slotKey, slot.kind, v, locale)
       if (label && label.length > 0) rendered.push(label)
     }
@@ -2530,10 +2633,14 @@ export class SemanticStateProjectionService {
     locale: 'zh' | 'en',
   ): string {
     if (kind === 'percent' && typeof value === 'number' && Number.isFinite(value)) {
-      return `${Math.abs(value)}%`
+      const valueText = `${Math.abs(value)}`
+      const label = PROJECTION_PARAM_SLOT_LABELS[slotKey]?.[locale]
+      return label ? label(valueText) : `${valueText}%`
     }
     if (kind === 'number' && typeof value === 'number' && Number.isFinite(value)) {
-      return `${value}`
+      const valueText = this.formatNumber(value)
+      const label = PROJECTION_PARAM_SLOT_LABELS[slotKey]?.[locale]
+      return label ? label(valueText) : valueText
     }
     if (kind === 'duration' && typeof value === 'string' && value.length > 0) {
       return value
@@ -2547,6 +2654,24 @@ export class SemanticStateProjectionService {
       return ''
     }
     return ''
+  }
+
+  private readFirstFiniteParam(params: Record<string, unknown>, keys: readonly string[]): number | null {
+    for (const key of keys) {
+      const value = params[key]
+      if (typeof value === 'number' && Number.isFinite(value)) return value
+    }
+    return null
+  }
+
+  private isInvalidPositiveNumericSlotPlaceholder(
+    slot: { kind?: string, range?: readonly [number, number] },
+    value: unknown,
+  ): boolean {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return false
+    if (slot.kind !== 'number' && slot.kind !== 'percent') return false
+    const min = slot.range?.[0]
+    return typeof min === 'number' && min > 0 && value <= 0
   }
 
   /**
@@ -2588,6 +2713,8 @@ export class SemanticStateProjectionService {
     const addMode = this.readString(action.params?.addMode as unknown)
     const addRatio = this.readFiniteNumber(action.params?.addRatio as unknown)
     const addRatioPct = addRatio !== null ? this.formatPercent(addRatio * 100) : null
+    const sizingText = this.formatAddPositionSizing((action.params as Record<string, unknown> | undefined)?.sizing)
+    const perAddText = sizingText ? `，每次${sizingText}` : ''
 
     // #1158：profitThreshold / drawdownThreshold 单位为 percent（如 2 表示 2%），不需要 * 100
     if (addMode === 'profit_pct') {
@@ -2597,7 +2724,7 @@ export class SemanticStateProjectionService {
         : '盈利后'
       return addRatioPct !== null
         ? `加仓：${triggerText}加仓，每次${addRatioPct}%`
-        : `加仓：${triggerText}加仓`
+        : `加仓：${triggerText}加仓${perAddText}`
     }
 
     if (addMode === 'drawdown_pct') {
@@ -2607,20 +2734,38 @@ export class SemanticStateProjectionService {
         : '回撤后'
       return addRatioPct !== null
         ? `加仓：${triggerText}加仓，每次${addRatioPct}%`
-        : `加仓：${triggerText}加仓`
+        : `加仓：${triggerText}加仓${perAddText}`
     }
 
     if (addMode === 'signal_confirm') {
       return addRatioPct !== null
         ? `加仓：信号确认后加仓，每次${addRatioPct}%`
-        : '加仓：信号确认后加仓'
+        : `加仓：信号确认后加仓${perAddText}`
     }
 
     if (addRatioPct !== null) {
       return `加仓：每次${addRatioPct}%`
     }
+    if (sizingText) {
+      return `加仓：每次${sizingText}`
+    }
 
     return '加仓'
+  }
+
+  private formatAddPositionSizing(rawSizing: unknown): string {
+    const sizing = this.readUnknownShape(rawSizing)
+    if (!sizing) return ''
+    const value = this.readFiniteNumber(sizing.value)
+    if (value === null) return ''
+    const kind = this.readString(sizing.kind)
+    if (kind === 'ratio') {
+      const unit = this.readString(sizing.unit)
+      const ratioValue = unit === 'percent' ? value : value * 100
+      return `${this.formatPercent(ratioValue)}%`
+    }
+    const asset = this.readString(sizing.asset) ?? 'USDT'
+    return `${this.formatNumber(value)} ${asset}`
   }
 
   private buildContractOrderProgramSummary(action: SemanticState['action'][number], state: SemanticState, index?: CapabilityEvidenceIndex): string {
@@ -2778,7 +2923,11 @@ export class SemanticStateProjectionService {
     return '前收盘'
   }
 
-  private buildPositionSummary(position: SemanticState['position'], constraints: SemanticState['positionConstraint'] = []): string {
+  private buildPositionSummary(
+    position: SemanticState['position'],
+    constraints: SemanticState['positionConstraint'] = [],
+    omitConstraintKeys: ReadonlySet<string> = new Set(),
+  ): string {
     // #1169：position.status==='locked' 即可进入；validateSemanticPositionContract 对
     //   constraint_only 模式（sizing=null）会判 invalid 导致早退，而 constraints 路径仍可渲染。
     //   只对"有 sizing 时"再做合约校验；纯 constraint_only 路径直接走 constraints 渲染。
@@ -2828,6 +2977,7 @@ export class SemanticStateProjectionService {
     const constraintParts: string[] = []
     for (const constraint of constraints ?? []) {
       if (constraint.status === 'superseded') continue
+      if (omitConstraintKeys.has(constraint.key)) continue
       try {
         const entry = getLegacyEntry(constraint.key)
         const renderer = entry?.displayRenderer
@@ -2855,6 +3005,21 @@ export class SemanticStateProjectionService {
       return constraintParts.join('；')
     }
     return ''
+  }
+
+  private collectRuleAtomKeys(rules: readonly SemanticRule[]): ReadonlySet<string> {
+    const keys = new Set<string>()
+    for (const rule of rules) {
+      for (const atom of collectAtomLeaves(rule.condition)) {
+        keys.add(atom.key)
+      }
+      for (const effect of rule.effects ?? []) {
+        for (const atom of collectAtomLeaves(effect)) {
+          keys.add(atom.key)
+        }
+      }
+    }
+    return keys
   }
 
   private hasValidLockedPosition(position: SemanticState['position']): position is SemanticState['position'] & { status: 'locked' } {
@@ -2945,7 +3110,7 @@ export class SemanticStateProjectionService {
       let text: string | undefined
       try {
         // #1329 follow-up Phase 3d/3e: 已迁入 REGISTRY 的 atom 走 renderLegacyDisplay REGISTRY-first 路径
-        const rendered = renderLegacyDisplay(node.key, (node.params ?? {}) as Record<string, unknown>)
+        const rendered = renderLegacyDisplay(node.key, this.buildOrchestrationDisplayParams(node))
         text = rendered || getLegacyEntry(node.key)?.publicName || node.key
       }
       catch {
@@ -2954,6 +3119,14 @@ export class SemanticStateProjectionService {
       parts.push(text)
     }
     return parts.join('；')
+  }
+
+  private buildOrchestrationDisplayParams(node: SemanticOrchestrationNode): Record<string, unknown> {
+    return {
+      ...((node.params ?? {}) as Record<string, unknown>),
+      ...('thresholdPct' in node ? { thresholdPct: node.thresholdPct } : {}),
+      ...('mode' in node ? { mode: node.mode } : {}),
+    }
   }
 
   private compareTriggers(left: SemanticState['trigger'][number], right: SemanticState['trigger'][number]): number {
@@ -3202,6 +3375,8 @@ export class SemanticStateProjectionService {
         return `非 ${this.renderAtomExpr(expr.child)}`
       }
       case 'sequence': {
+        const pullbackReclaim = this.tryRenderPullbackReclaimSequence(expr)
+        if (pullbackReclaim) return pullbackReclaim
         const parts = this.dedupeKeepOrder(expr.steps.map(step => this.renderAtomExpr(step)).filter(s => s.length > 0))
         if (parts.length === 0) return ''
         // 第 0 步 "先 X"；后续步骤 "然后 Y"；保持自然中文顺序
@@ -3216,18 +3391,71 @@ export class SemanticStateProjectionService {
     }
   }
 
+  private renderUserFacingRuleCondition(expr: AtomExpr): string {
+    switch (expr.kind) {
+      case 'atom':
+        if (TECHNICAL_RULE_CONDITION_ATOM_KEYS.has(expr.key)) {
+          return ''
+        }
+        return this.renderAtomExpr(expr)
+      case 'and': {
+        const parts = this.dedupeKeepOrder(expr.children.map(child => this.renderUserFacingRuleCondition(child)).filter(s => s.length > 0))
+        return parts.join(' 同时 ')
+      }
+      case 'or': {
+        const parts = this.dedupeKeepOrder(expr.children.map(child => this.renderUserFacingRuleCondition(child)).filter(s => s.length > 0))
+        return parts.join(' 或 ')
+      }
+      case 'not': {
+        const child = this.renderUserFacingRuleCondition(expr.child)
+        return child.length > 0 ? `非 ${child}` : ''
+      }
+      case 'sequence': {
+        const pullbackReclaim = this.tryRenderPullbackReclaimSequence(expr)
+        if (pullbackReclaim) return pullbackReclaim
+        const parts = this.dedupeKeepOrder(expr.steps.map(step => this.renderUserFacingRuleCondition(step)).filter(s => s.length > 0))
+        if (parts.length === 0) return ''
+        const head = `先 ${parts[0]}`
+        const tail = parts.slice(1).map(p => `然后 ${p}`).join('，')
+        const body = tail.length > 0 ? `${head}，${tail}` : head
+        const modifiers: string[] = []
+        if (expr.nextBarOnly === true) modifiers.push('下一根')
+        if (typeof expr.withinBars === 'number' && expr.withinBars > 0) modifiers.push(`${expr.withinBars} 根内`)
+        return modifiers.length > 0 ? `${body}（${modifiers.join('，')}）` : body
+      }
+    }
+  }
+
   private tryRenderRulesTreeAtomSummary(atomKey: string, params: Record<string, unknown>): string | null {
     if (atomKey === ATOM_CONTRACT_REGISTRY['indicator.above'].key || atomKey === ATOM_CONTRACT_REGISTRY['indicator.below'].key) {
-      const period = this.readIndicatorReferencePeriod(params)
+      const period = this.readIndicatorReferencePeriod(params) ?? this.readFiniteNumber(params.period)
       if (period === null) return null
 
       const indicator = this.readString(params.indicator)?.toUpperCase() ?? 'MA'
       const timeframe = this.readString(params.timeframe)
       const prefix = timeframe ? `${timeframe} ` : ''
       const reference = `${indicator}${this.formatNumber(period)}`
+      const ownPeriod = this.readIndicatorReferencePeriod(params) === null ? null : this.readFiniteNumber(params.period)
+      if (ownPeriod !== null) {
+        const left = `${indicator}${this.formatNumber(ownPeriod)}`
+        return atomKey === ATOM_CONTRACT_REGISTRY['indicator.above'].key
+          ? `${prefix}${left} 在 ${reference} 上方`
+          : `${prefix}${left} 低于 ${reference}`
+      }
       return atomKey === ATOM_CONTRACT_REGISTRY['indicator.above'].key
         ? `${prefix}价格在 ${reference} 上方`
         : `${prefix}价格低于 ${reference}`
+    }
+
+    if (atomKey === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key || atomKey === ATOM_CONTRACT_REGISTRY['indicator.cross_under'].key) {
+      const period = this.readFiniteNumber(params.period)
+      const fastPeriod = this.readFiniteNumber(params.fastPeriod)
+      const slowPeriod = this.readFiniteNumber(params.slowPeriod)
+      if (period !== null && fastPeriod === null && slowPeriod === null) {
+        const indicator = this.readString(params.indicator)?.toUpperCase() ?? 'MA'
+        const direction = atomKey === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key ? '上穿' : '下穿'
+        return `价格${direction} ${indicator}${this.formatNumber(period)}`
+      }
     }
 
     if (atomKey === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key || atomKey === ATOM_CONTRACT_REGISTRY['price.breakout_down'].key) {
@@ -3240,6 +3468,22 @@ export class SemanticStateProjectionService {
     }
 
     return null
+  }
+
+  private tryRenderPullbackReclaimSequence(expr: Extract<AtomExpr, { kind: 'sequence' }>): string | null {
+    if (expr.steps.length !== 2) return null
+    const first = expr.steps[0]
+    const second = expr.steps[1]
+    if (!first || !second || first.kind !== 'atom' || second.kind !== 'atom') return null
+    if (first.key !== ATOM_CONTRACT_REGISTRY['indicator.below'].key) return null
+    if (second.key !== ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key && second.key !== ATOM_CONTRACT_REGISTRY['indicator.above'].key) return null
+    const firstPeriod = this.readIndicatorReferencePeriod(first.params) ?? this.readFiniteNumber(first.params.period)
+    const secondPeriod = this.readIndicatorReferencePeriod(second.params) ?? this.readFiniteNumber(second.params.period)
+    if (firstPeriod === null || secondPeriod === null || firstPeriod !== secondPeriod) return null
+    const firstIndicator = this.readString(first.params.indicator)?.toUpperCase() ?? 'MA'
+    const secondIndicator = this.readString(second.params.indicator)?.toUpperCase() ?? firstIndicator
+    if (firstIndicator !== secondIndicator) return null
+    return `回踩 ${firstIndicator}${this.formatNumber(firstPeriod)} 后重新站上`
   }
 
   private formatRulePhaseLabel(phase: SemanticRulePhase): string {
@@ -3257,7 +3501,7 @@ export class SemanticStateProjectionService {
   private renderRule(rule: SemanticRule): string {
     const phaseLabel = this.formatRulePhaseLabel(rule.phase)
     // effects 通常是 action / risk 副作用，渲染后用 "→" 衔接条件，保留可读性
-    const effectParts = (rule.effects ?? [])
+    const rawEffectParts = (rule.effects ?? [])
       .map(effect => this.renderAtomExpr(effect))
       .filter(s => s.length > 0)
 
@@ -3275,13 +3519,20 @@ export class SemanticStateProjectionService {
     let bodyText: string
     if (isAlwaysOnCondition) {
       // 跳过 always-on condition；只输出 effects（如 "止损 5% 强制平仓"）
+      const effectParts = this.dedupeKeepOrder(rawEffectParts)
       bodyText = effectParts.length > 0 ? effectParts.join('，') : ''
     }
     else {
-      const condition = this.renderAtomExpr(rule.condition)
-      if (!condition || condition.length === 0) return ''
-      const effectSuffix = effectParts.length > 0 ? ` → ${effectParts.join('，')}` : ''
-      bodyText = `${condition}${effectSuffix}`
+      const effectParts = this.dedupeKeepOrder(rawEffectParts)
+      const condition = this.renderUserFacingRuleCondition(rule.condition)
+      if (!condition || condition.length === 0) {
+        bodyText = effectParts.length > 0 ? effectParts.join('，') : ''
+      }
+      else {
+        const visibleEffectParts = effectParts.filter(effect => effect !== condition)
+        const effectSuffix = visibleEffectParts.length > 0 ? ` → ${visibleEffectParts.join('，')}` : ''
+        bodyText = `${condition}${effectSuffix}`
+      }
     }
 
     if (bodyText.length === 0) return ''

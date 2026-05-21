@@ -50,6 +50,7 @@ import type { SizingAnchor, SizingAxis } from './per-trade-sizing-resolver.servi
 import type { CanonicalOrchestrationLegSizing, CanonicalOrchestrationLegSizingMode } from '../types/canonical-strategy-spec'
 import { normalizeLegacyPositionSizing, validateSemanticExpressionContract, validateSemanticPositionContract, validateSemanticRiskContract } from './strategy-semantic-contracts'
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
+import { collectAtomLeaves } from '../types/atom-expr'
 
 // PR3b: 非 atom 字段路径的类型化引用（Issue #1279 AC-4）
 // 这些 key 不在 ATOM_CONTRACT_REGISTRY,但恰好匹配 lint 规则的 prefix regex,
@@ -1600,6 +1601,9 @@ export class CanonicalSpecBuilderService {
     if (marketType !== 'perp') {
       return 'spot'
     }
+    if (this.hasBothSideGridIntent(state)) {
+      return 'perp_neutral'
+    }
 
     const exposureMode = exposure ? this.readShapeString(exposure.shape, 'mode') : null
     if (exposureMode === 'long' || state.position?.positionMode === 'long_only') {
@@ -1609,6 +1613,26 @@ export class CanonicalSpecBuilderService {
       return 'perp_short'
     }
     return 'perp_neutral'
+  }
+
+  private hasBothSideGridIntent(state: SemanticState): boolean {
+    const hasBothSideParams = (params: Record<string, unknown> | undefined): boolean =>
+      params?.sideMode === 'both'
+    for (const constraint of state.positionConstraint ?? []) {
+      if (constraint.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && hasBothSideParams(constraint.params)) {
+        return true
+      }
+    }
+    for (const rule of state.rules ?? []) {
+      const leaves = [
+        ...collectAtomLeaves(rule.condition),
+        ...rule.effects.flatMap(effect => collectAtomLeaves(effect)),
+      ]
+      if (leaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && hasBothSideParams(leaf.params))) {
+        return true
+      }
+    }
+    return false
   }
 
   private readShapeNumber(shape: SemanticCapabilityShape, key: string): number | null {
@@ -1823,14 +1847,12 @@ export class CanonicalSpecBuilderService {
         continue
       }
 
-      const positionPresenceGateTriggers = group.phase === 'entry'
-        ? group.members.filter(trigger => this.isPositionPresenceGateTrigger(trigger))
-        : []
+      const positionPresenceGateTriggers = group.members.filter(trigger => this.isPositionPresenceGateTrigger(trigger))
       const conditionMembers = positionPresenceGateTriggers.length > 0
         ? group.members.filter(trigger => !this.isPositionPresenceGateTrigger(trigger))
         : group.members
 
-      for (const gateTrigger of positionPresenceGateTriggers) {
+      for (const gateTrigger of group.phase === 'entry' ? positionPresenceGateTriggers : []) {
         const gateCondition = this.buildConditionFromSemanticTriggerGroup([gateTrigger], defaultTimeframe)
         if (!gateCondition || !this.isNoPositionGateCondition(gateCondition)) {
           continue
@@ -1877,7 +1899,10 @@ export class CanonicalSpecBuilderService {
           sideScope,
           priority: this.resolveSemanticRulePriority(group.phase, counters[group.phase]),
           condition: group.phase === 'entry'
-            ? this.attachSemanticGateConditions(condition, gateConditions, sideScope)
+            ? this.normalizeLifecycleEntryCondition(
+                this.attachSemanticGateConditions(condition, gateConditions, sideScope),
+                lifecycleAction,
+              )
             : condition,
           actions,
           ...(metadata ? { metadata } : {}),
@@ -2355,8 +2380,14 @@ export class CanonicalSpecBuilderService {
       ? this.findActivePositionConstraint(position, 'position.dca_schedule')
       : null
     if (dcaSchedule) {
-      const maxCount = this.readFiniteNumber(dcaSchedule.params.maxCount)
+      const configuredMaxCount = this.readFiniteNumber(dcaSchedule.params.maxCount)
+        ?? this.readFiniteNumber(dcaSchedule.params.maxOrders)
+      const perOrderBudget = this.readFiniteNumber(dcaSchedule.params.perOrderBudget)
+        ?? this.readFiniteNumber((dcaSchedule.params.perOrderSizing as { value?: unknown } | undefined)?.value)
+      const maxCount = configuredMaxCount ?? (perOrderBudget !== null ? 1 : null)
       const capitalCap = this.readDcaCapitalCapValue(dcaSchedule.params.capitalCap)
+        ?? this.readDcaCapitalCapValue(dcaSchedule.params.maxTotalQuote)
+        ?? (maxCount !== null && perOrderBudget !== null ? maxCount * perOrderBudget : null)
       const maxExposure = this.findPositionConstraint(position, 'position.max_exposure_pct')
       const triggerMode = typeof dcaSchedule.params.triggerMode === 'string' ? dcaSchedule.params.triggerMode : undefined
       const priceIntervalPct = this.readFiniteNumber(dcaSchedule.params.priceIntervalPct)
@@ -2505,6 +2536,39 @@ export class CanonicalSpecBuilderService {
       ...(this.hasGenericPredicateForm([condition, ...matchingGateConditions]) ? { predicateForm: 'generic' as const } : {}),
       children: [condition, ...matchingGateConditions],
     }
+  }
+
+  private normalizeLifecycleEntryCondition(
+    condition: CanonicalConditionNode,
+    action: SemanticActionState,
+  ): CanonicalConditionNode {
+    if (action.key !== ATOM_CONTRACT_REGISTRY['action.add_position'].key || action.params?.lifecycleKind !== 'dca_schedule') {
+      return condition
+    }
+    if (condition.kind === 'atom' && condition.key === ATOM_CONTRACT_REGISTRY['strategy.time_window'].key) {
+      return {
+        kind: 'atom',
+        key: 'execution.on_start',
+        semanticScope: 'market',
+      }
+    }
+    if (
+      condition.kind === 'AND'
+      && condition.children.every(child =>
+        child.kind === 'atom'
+        && (
+          child.key === ATOM_CONTRACT_REGISTRY['strategy.time_window'].key
+          || child.key === ATOM_CONTRACT_REGISTRY['execution.on_start'].key
+        ),
+      )
+    ) {
+      return {
+        kind: 'atom',
+        key: 'execution.on_start',
+        semanticScope: 'market',
+      }
+    }
+    return condition
   }
 
   private hasGenericPredicateForm(conditions: CanonicalConditionNode[]): boolean {
@@ -5079,16 +5143,38 @@ export class CanonicalSpecBuilderService {
           semanticScope: 'market',
           op: 'EQ',
           value: typeof trigger.params.value === 'string' ? trigger.params.value : undefined,
-        }
+      }
       case ATOM_CONTRACT_REGISTRY['volume.threshold'].key: {
-        const value = this.readNumberParam(trigger.params.value)
-        if (value === null) {
-          return null
-        }
         const operator = this.readGateThresholdOperator(trigger.params.operator)
         const metric = this.readStringParam(trigger.params.metric) ?? 'base_volume'
         const unit = this.readStringParam(trigger.params.unit)
         const period = this.readNumberParam(trigger.params.period)
+        const mode = this.readStringParam(trigger.params.mode)
+        const multiplier = this.readNumberParam(trigger.params.multiplier)
+        const refWindow = this.readNumberParam(trigger.params.refWindow)
+        const timeframe = this.readTriggerParamTimeframe(trigger.params) ?? defaultTimeframe
+        if (mode === 'relative_to_sma' && multiplier !== null) {
+          return {
+            kind: 'atom',
+            key: 'volume.threshold',
+            semanticScope: 'market',
+            predicateForm: 'generic',
+            op: operator,
+            params: {
+              metric,
+              mode,
+              multiplier,
+              refWindow: refWindow ?? 20,
+              ...(unit ? { unit } : {}),
+              ...(timeframe ? { timeframe } : {}),
+            },
+          }
+        }
+
+        const value = this.readNumberParam(trigger.params.value)
+        if (value === null) {
+          return null
+        }
         return {
           kind: 'atom',
           key: 'volume.threshold',
@@ -5125,7 +5211,10 @@ export class CanonicalSpecBuilderService {
       case ATOM_CONTRACT_REGISTRY['strategy.time_window'].key: {
         const timezone = this.readStringParam(trigger.params.timezone)
         const windowsParam = trigger.params.windows
-        if (!timezone || !Array.isArray(windowsParam) || windowsParam.length === 0) {
+        const windows = Array.isArray(windowsParam)
+          ? windowsParam
+          : (typeof windowsParam === 'string' && windowsParam.trim().length > 0 ? [windowsParam.trim()] : [])
+        if (!timezone || windows.length === 0) {
           return null
         }
         return {
@@ -5136,7 +5225,7 @@ export class CanonicalSpecBuilderService {
           value: 1,
           params: {
             timezone,
-            windows: JSON.stringify(windowsParam),
+            windows: JSON.stringify(windows),
           },
         }
       }

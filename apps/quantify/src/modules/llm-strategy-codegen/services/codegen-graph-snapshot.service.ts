@@ -189,9 +189,7 @@ export class CodegenGraphSnapshotService {
     return {
       kind: 'atom',
       key: condition.key,
-      params: {
-        ...(condition.params ?? {}),
-      },
+      params: this.flattenPrimitiveParams(condition.params ?? {}),
     }
   }
 
@@ -203,6 +201,23 @@ export class CodegenGraphSnapshotService {
         ? value
         : true,
     }
+  }
+
+  private flattenPrimitiveParams(params: Record<string, unknown>): Record<string, string | number | boolean> {
+    const out: Record<string, string | number | boolean> = {}
+    for (const [key, value] of Object.entries(params)) {
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        out[key] = value
+        continue
+      }
+      if (!value || typeof value !== 'object' || Array.isArray(value)) continue
+      for (const [nestedKey, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+        if (typeof nestedValue === 'string' || typeof nestedValue === 'number' || typeof nestedValue === 'boolean') {
+          out[`${key}.${nestedKey}`] = nestedValue
+        }
+      }
+    }
+    return out
   }
 
   private resolvePredicateNodeId(ruleId: string, path: string[], nodes: SemanticPredicateGraphNode[]): string {
