@@ -725,7 +725,8 @@ const TIMEFRAME_RE = /\b(1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w)\b/i
  * 不会误报。
  */
 const TIMEFRAME_COMPOUND_RE = /(?<![A-Za-z0-9])(\d{1,3})\s*(分钟|小时|天|周(?!期)|min(?:ute)?s?|hours?|days?|weeks?|m|h|d|w)(?![A-Za-z0-9])/i
-const TIMEFRAME_TOKEN_RE = /(?<![A-Za-z0-9])(?:(1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w)|(\d{1,3})\s*(分钟|小时|天|周(?!期)|min(?:ute)?s?|hours?|days?|weeks?|m|h|d|w))(?![A-Za-z0-9])/gi
+const TIMEFRAME_DAILY_RE = /(?<![A-Za-z0-9])(?:日线|日K|daily)(?![A-Za-z0-9])/iu
+const TIMEFRAME_TOKEN_RE = /(?<![A-Za-z0-9])(?:(1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w)|(\d{1,3})\s*(分钟|小时|天|周(?!期)|min(?:ute)?s?|hours?|days?|weeks?|m|h|d|w)|(日线|日K|daily))(?![A-Za-z0-9])/gi
 const TIMEFRAME_UNIT_TO_CANONICAL: Readonly<Record<string, 'm' | 'h' | 'd' | 'w'>> = {
   '分钟': 'm',
   'min': 'm',
@@ -760,7 +761,9 @@ function tryNormalizeTimeframes(text: string): string[] {
   for (const match of text.matchAll(TIMEFRAME_TOKEN_RE)) {
     const timeframe = typeof match[1] === 'string' && match[1].length > 0
       ? match[1].toLowerCase()
-      : normalizeCompoundTimeframe(match[2], match[3])
+      : typeof match[4] === 'string' && match[4].length > 0
+        ? '1d'
+        : normalizeCompoundTimeframe(match[2], match[3])
     if (!timeframe || seen.has(timeframe)) continue
     seen.add(timeframe)
     values.push(timeframe)
@@ -770,6 +773,7 @@ function tryNormalizeTimeframes(text: string): string[] {
 function tryNormalizeTimeframe(text: string): string | undefined {
   const firstByPosition = tryNormalizeTimeframes(text)[0]
   if (firstByPosition) return firstByPosition
+  if (TIMEFRAME_DAILY_RE.test(text)) return '1d'
   const compound = text.match(TIMEFRAME_COMPOUND_RE)
   if (!compound) return undefined
   return normalizeCompoundTimeframe(compound[1], compound[2])

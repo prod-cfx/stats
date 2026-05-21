@@ -526,6 +526,135 @@ describe('31-strategy rules tree main flow regressions', () => {
     expect(view.summary).toContain('EMA7 下穿 EMA21')
   })
 
+  it('keeps trend filter plus MA pullback reclaim as ordinary rules without orchestration exposure cap', () => {
+    const text = 'ETH 日线在 MA120 上方时，只做多；价格回踩 MA20 后重新站上 MA20 买入,ETH 日线在 MA120 下方时平仓，仓位10%'
+    const dispatcherPatch = new GenericSeedDispatcher().dispatch(text)
+    const fallback = new PlannerDispatcherMergeService().buildRulesTreeFallbackFromDispatcher(dispatcherPatch, text)
+    const state = new SemanticSeedStateBuilderService().build(fallback, text)
+    const projected = state ? new SemanticRuleProjectionService().reprojectFromRules(state) : null
+    const view = new SemanticStateProjectionService().buildConversationView(projected!)
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(projected!)
+
+    const serializedRules = JSON.stringify(projected?.rules)
+    const entryRule = projected?.rules?.find(rule =>
+      rule.phase === 'entry'
+      && JSON.stringify(rule.condition).includes('condition.sequence')
+      && JSON.stringify(rule.condition).includes('indicator.above')
+      && rule.effects.some(effect => JSON.stringify(effect).includes('action.open_long')),
+    )
+    const exitRule = spec.rules.find(rule => rule.phase === 'exit')
+
+    expect(projected?.contextSlots.symbol?.value).toBe('ETHUSDT')
+    expect(projected?.contextSlots.timeframe?.value).toBe('1d')
+    expect(projected?.position?.sizing).toEqual({ kind: 'ratio', value: 0.1, unit: 'ratio' })
+    expect(serializedRules).toContain('condition.sequence')
+    expect(serializedRules).toContain('pullback_reclaim')
+    expect(serializedRules).toContain('indicator.above')
+    expect(serializedRules).toContain('indicator.below')
+    expect(serializedRules).not.toContain('portfolioRisk.substrategy_exposure_cap')
+    expect(projected?.orchestration).toHaveLength(0)
+    expect(entryRule).toBeDefined()
+    expect(exitRule?.condition).toEqual(expect.objectContaining({
+      kind: 'atom',
+      key: 'indicator.below',
+      params: expect.objectContaining({
+        indicator: 'ma',
+        'reference.period': 120,
+      }),
+    }))
+    expect(view.summary).toContain('MA120')
+    expect(view.summary).toContain('MA20')
+  })
+
+  it('lets dispatcher composite rules override planner orchestration hallucination for long-only pullback reclaim', () => {
+    const text = 'ETH 日线在 MA120 上方时，只做多；价格回踩 MA20 后重新站上 MA20 买入,ETH 日线在 MA120 下方时平仓，仓位10%'
+    const plannerPatch: CodegenSemanticPatch = {
+      rules: [
+        {
+          id: 'planner-gate-long-ma120-above',
+          phase: 'gate',
+          sideScope: 'long',
+          condition: {
+            kind: 'atom',
+            key: 'indicator.above',
+            params: { indicator: 'ma', 'reference.period': 120 },
+            evidence: { text: 'ETH 日线在 MA120 上方时' },
+          },
+          effects: [{
+            kind: 'atom',
+            key: 'portfolioRisk.substrategy_exposure_cap',
+            params: { mode: 'enforce', notionalCapPct: 100, effectWhenTriggered: 'block_new_entries' },
+          }],
+          evidence: { text: 'ETH 日线在 MA120 上方时' },
+        },
+        {
+          id: 'planner-exit-ma120-below',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: {
+            kind: 'atom',
+            key: 'indicator.below',
+            params: { indicator: 'ma', 'reference.period': 120 },
+            evidence: { text: 'ETH 日线在 MA120 下方时平仓' },
+          },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+          evidence: { text: 'ETH 日线在 MA120 下方时平仓' },
+        },
+      ],
+    }
+    const dispatcherPatch = new GenericSeedDispatcher().dispatch(text)
+    const merged = new PlannerDispatcherMergeService().mergePlannerAndDispatcherPatches(plannerPatch, dispatcherPatch)
+    const state = new SemanticSeedStateBuilderService().build(merged!, text)
+    const projected = new SemanticRuleProjectionService().reprojectFromRules(state)
+    const view = new SemanticStateProjectionService().buildConversationView(projected)
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(projected)
+    const serializedRules = JSON.stringify(projected.rules)
+
+    expect(serializedRules).toContain('condition.sequence')
+    expect(serializedRules).toContain('pullback_reclaim')
+    expect(view.summary).toContain('MA20')
+    expect(serializedRules).not.toContain('portfolioRisk.substrategy_exposure_cap')
+    expect(projected.orchestration).toHaveLength(0)
+    expect(spec.rules.find(rule => rule.phase === 'entry')?.condition).toEqual(expect.objectContaining({
+      kind: 'AND',
+    }))
+    expect(spec.rules.find(rule => rule.phase === 'exit')?.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'CLOSE_LONG' }),
+    ]))
+  })
+
+  it('renders rules-tree MA period params in pullback reclaim summaries', () => {
+    const state = buildBaseState({
+      rules: [
+        {
+          id: 'entry-ma120-ma20-pullback',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: {
+            kind: 'and',
+            children: [
+              { kind: 'atom', key: 'indicator.above', params: { indicator: 'ma', period: 120, timeframe: '1d' } },
+              {
+                kind: 'sequence',
+                steps: [
+                  { kind: 'atom', key: 'indicator.below', params: { indicator: 'ma', period: 20, timeframe: '1d' } },
+                  { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ma', period: 20, timeframe: '1d' } },
+                ],
+              },
+            ],
+          },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+      ],
+    })
+    const view = new SemanticStateProjectionService().buildConversationView(state)
+
+    expect(view.summary).toContain('价格在 MA120 上方')
+    expect(view.summary).toContain('回踩 MA20 后重新站上')
+    expect(view.summary).not.toContain('指标高于阈值')
+    expect(view.summary).not.toContain('MA短周期')
+  })
+
   it('normalizes planner duplicated centered-percent grid rules into one executable grid program', () => {
     const text = 'OKX 现货 ETHUSDT、1m 网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT、限价单并相邻网格自动挂反向单、不用趋势信号开仓；当价格突破上下边界时执行“立即停止并撤销所有未成交订单”'
     const gridParams = {

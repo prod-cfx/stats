@@ -76,6 +76,15 @@ const DCA_SCHEDULE_ATOM_KEY = ATOM_CONTRACT_REGISTRY['position.dca_schedule'].ke
 const ADD_POSITION_ATOM_KEY = ATOM_CONTRACT_REGISTRY['action.add_position'].key
 const EXECUTION_ON_START_ATOM_KEY = ATOM_CONTRACT_REGISTRY['execution.on_start'].key
 
+type FallbackPredicateAtom = {
+  key: string
+  phase?: 'entry' | 'exit' | 'risk' | 'gate'
+  sideScope?: 'long' | 'short' | 'both'
+  params?: Record<string, unknown>
+  evidence?: { text?: unknown }
+  sourceActionKey?: string
+}
+
 /**
  * Issue #1383：planner 输出常常只包含 trigger/action/risk 桶；positionConstraint /
  * orchestration 桶 atom（如 grid.range_rebalance、position.dca_schedule、
@@ -358,12 +367,14 @@ export class PlannerDispatcherMergeService {
     const predicateAtoms = this.collectFallbackPredicateAtoms(dispatcher)
     if (predicateAtoms.length === 0) return []
     const effectAtoms = this.collectFallbackEffectAtoms(dispatcher)
-    const rules: SemanticRule[] = []
+    const rules: SemanticRule[] = this.buildCompositeFallbackRules(predicateAtoms, effectAtoms, userMessage)
+    const compositeCoveredPredicates = this.collectCompositeCoveredPredicates(predicateAtoms)
     const seen = new Set<string>()
 
     for (const predicate of predicateAtoms) {
+      if (compositeCoveredPredicates.has(predicate)) continue
       const phase = predicate.phase === 'exit' ? 'exit' : predicate.phase === 'gate' ? 'gate' : 'entry'
-      const sideScope = predicate.sideScope ?? 'both'
+      const sideScope = this.normalizeFallbackRuleSideScope(predicate, phase, dispatcher, userMessage)
       const effects = this.resolveFallbackEffects({
         phase,
         sideScope,
@@ -375,7 +386,7 @@ export class PlannerDispatcherMergeService {
         kind: 'atom',
         key: predicate.key,
         params: predicate.params ?? {},
-        ...(predicate.sideScope ? { sideScope: predicate.sideScope } : {}),
+        ...(sideScope ? { sideScope } : {}),
         ...this.resolveFallbackEvidence(predicate, userMessage),
       }
       const signature = `${phase}|${sideScope}|${condition.key}|${JSON.stringify(condition.params)}|${effects.map(e => e.key).join(',')}`
@@ -392,6 +403,138 @@ export class PlannerDispatcherMergeService {
     }
 
     return rules
+  }
+
+  private collectCompositeCoveredPredicates(
+    predicateAtoms: ReadonlyArray<FallbackPredicateAtom>,
+  ): ReadonlySet<FallbackPredicateAtom> {
+    const covered = new Set<FallbackPredicateAtom>()
+    const pullback = this.findPullbackReclaimPredicate(predicateAtoms)
+    if (!pullback) return covered
+    const trend = predicateAtoms.find(predicate =>
+      predicate !== pullback
+      && predicate.phase !== 'exit'
+      && predicate.key === pullback.key
+      && this.readNumericParam(predicate.params, 'reference.period') !== this.readNumericParam(pullback.params, 'reference.period'),
+    )
+    if (trend) covered.add(trend)
+    covered.add(pullback)
+
+    const pullbackEvidence = this.readEvidenceText(pullback)
+    const previousExtremaRetestKey = ATOM_CONTRACT_REGISTRY['price.previous_extrema_retest'].key
+    for (const predicate of predicateAtoms) {
+      if (predicate.key !== previousExtremaRetestKey) continue
+      if (this.readEvidenceText(predicate) === pullbackEvidence) covered.add(predicate)
+    }
+    return covered
+  }
+
+  private buildCompositeFallbackRules(
+    predicateAtoms: ReadonlyArray<FallbackPredicateAtom>,
+    effectAtoms: ReadonlyArray<AtomExprAtom>,
+    userMessage: string,
+  ): SemanticRule[] {
+    const rules: SemanticRule[] = []
+    const pullback = this.findPullbackReclaimPredicate(predicateAtoms)
+    if (!pullback) return rules
+
+    const trend = predicateAtoms.find(predicate =>
+      predicate !== pullback
+      && predicate.phase !== 'exit'
+      && predicate.key === pullback.key
+      && this.readNumericParam(predicate.params, 'reference.period') !== this.readNumericParam(pullback.params, 'reference.period'),
+    )
+    if (!trend) return rules
+
+    const sideScope = pullback.sideScope ?? trend.sideScope ?? 'long'
+    const effects = this.resolveFallbackEffects({
+      phase: 'entry',
+      sideScope,
+      effectAtoms,
+      predicate: pullback,
+    })
+    if (effects.length === 0) return rules
+
+    const pullbackPeriod = this.readNumericParam(pullback.params, 'reference.period')
+    const pullbackIndicator = typeof pullback.params?.indicator === 'string' ? pullback.params.indicator : 'ma'
+    const evidence = this.resolveFallbackEvidence(pullback, userMessage)
+    rules.push({
+      id: 'dispatcher-fallback-composite-1',
+      phase: 'entry',
+      sideScope,
+      condition: {
+        kind: 'and',
+        children: [
+          {
+            kind: 'atom',
+            key: trend.key,
+            params: trend.params ?? {},
+            ...(trend.sideScope ? { sideScope: trend.sideScope } : {}),
+            ...this.resolveFallbackEvidence(trend, userMessage),
+          },
+          {
+            kind: 'atom',
+            key: ATOM_CONTRACT_REGISTRY['condition.sequence'].key,
+            params: {
+              sequenceKind: 'pullback_reclaim',
+              reference: {
+                indicator: pullbackIndicator,
+                ...(pullbackPeriod !== null ? { period: pullbackPeriod } : {}),
+              },
+              'reference.indicator': pullbackIndicator,
+              ...(pullbackPeriod !== null ? { 'reference.period': pullbackPeriod } : {}),
+            },
+            ...(pullback.sideScope ? { sideScope: pullback.sideScope } : {}),
+            ...evidence,
+          },
+        ],
+      },
+      effects,
+      ...evidence,
+    })
+    return rules
+  }
+
+  private findPullbackReclaimPredicate(
+    predicateAtoms: ReadonlyArray<FallbackPredicateAtom>,
+  ): FallbackPredicateAtom | null {
+    return predicateAtoms.find((predicate) => {
+      if (predicate.phase === 'exit') return false
+      const evidence = this.readEvidenceText(predicate)
+      if (!evidence) return false
+      return /回踩|回测|pullback|retest/iu.test(evidence) && /重新\s*站上|重回|站回|reclaim/iu.test(evidence)
+    }) ?? null
+  }
+
+  private normalizeFallbackRuleSideScope(
+    predicate: FallbackPredicateAtom,
+    phase: 'entry' | 'exit' | 'gate',
+    dispatcher: CodegenSemanticPatch,
+    userMessage: string,
+  ): 'long' | 'short' | 'both' {
+    const current = predicate.sideScope ?? 'both'
+    if (phase !== 'exit' || current !== 'short') return current
+    const evidence = this.readEvidenceText(predicate) ?? userMessage
+    const explicitShortExit = /平空|空单|空仓|close\s+short/iu.test(evidence)
+    if (explicitShortExit) return current
+    const hasShortIntent = this.hasShortEntryIntent(dispatcher, userMessage)
+    return hasShortIntent ? current : 'long'
+  }
+
+  private hasShortEntryIntent(dispatcher: CodegenSemanticPatch, userMessage: string): boolean {
+    const actionOpenShortKey = ATOM_CONTRACT_REGISTRY['action.open_short'].key
+    if ([...(dispatcher.actions ?? []), ...(dispatcher.atoms ?? [])].some(atom => atom.key === actionOpenShortKey)) return true
+    return /开空|做空|空单|卖空|short/iu.test(userMessage)
+  }
+
+  private readEvidenceText(item: { evidence?: { text?: unknown } }): string | null {
+    const text = item.evidence?.text
+    return typeof text === 'string' && text.trim().length > 0 ? text.trim() : null
+  }
+
+  private readNumericParam(params: Record<string, unknown> | undefined, key: string): number | null {
+    const value = params?.[key]
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
   }
 
   private buildFallbackPositionFromDispatcherConstraints(
@@ -423,22 +566,8 @@ export class PlannerDispatcherMergeService {
     }
   }
 
-  private collectFallbackPredicateAtoms(dispatcher: CodegenSemanticPatch): Array<{
-    key: string
-    phase?: 'entry' | 'exit' | 'risk' | 'gate'
-    sideScope?: 'long' | 'short' | 'both'
-    params?: Record<string, unknown>
-    evidence?: { text?: unknown }
-    sourceActionKey?: string
-  }> {
-    const out: Array<{
-      key: string
-      phase?: 'entry' | 'exit' | 'risk' | 'gate'
-      sideScope?: 'long' | 'short' | 'both'
-      params?: Record<string, unknown>
-      evidence?: { text?: unknown }
-      sourceActionKey?: string
-    }> = []
+  private collectFallbackPredicateAtoms(dispatcher: CodegenSemanticPatch): FallbackPredicateAtom[] {
+    const out: FallbackPredicateAtom[] = []
     const push = (item: typeof out[number]): void => {
       if (typeof item.key !== 'string' || item.key.length === 0) return
       out.push(item)
@@ -514,7 +643,7 @@ export class PlannerDispatcherMergeService {
   private resolveFallbackEffects(args: {
     phase: 'entry' | 'exit' | 'gate'
     sideScope: 'long' | 'short' | 'both'
-    effectAtoms: AtomExprAtom[]
+    effectAtoms: ReadonlyArray<AtomExprAtom>
     predicate: { phase?: 'entry' | 'exit' | 'risk' | 'gate', sideScope?: 'long' | 'short' | 'both', sourceActionKey?: string }
   }): AtomExprAtom[] {
     const phaseMatched = args.effectAtoms
@@ -776,6 +905,13 @@ export class PlannerDispatcherMergeService {
     }
     catch (err) {
       this.logger.warn(`liftDispatcherAtomsIntoRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
+    }
+
+    try {
+      this.composeDispatcherRulesIntoMergedRules(merged, dispatcher)
+    }
+    catch (err) {
+      this.logger.warn(`composeDispatcherRulesIntoMergedRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
     }
 
     // Planner 可能把「买入/卖出」类 long-only 动词扩写成反手做空。
@@ -1306,6 +1442,50 @@ export class PlannerDispatcherMergeService {
     if (lifted.length > 0) {
       merged.rules = [...rules, ...lifted]
     }
+  }
+
+  private composeDispatcherRulesIntoMergedRules(
+    merged: CodegenSemanticPatch,
+    dispatcher: CodegenSemanticPatch,
+  ): void {
+    const rules = merged.rules
+    if (!rules || rules.length === 0) return
+    const predicates = this.collectFallbackPredicateAtoms(dispatcher)
+    const compositeRules = this.buildCompositeFallbackRules(
+      predicates,
+      this.collectFallbackEffectAtoms(dispatcher),
+      '',
+    )
+    if (compositeRules.length === 0) return
+    const hasEquivalentComposite = rules.some(rule =>
+      collectAtomLeaves(rule.condition).some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['condition.sequence'].key)
+      && collectAtomLeaves(rule.condition).some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key),
+    )
+    if (hasEquivalentComposite) return
+
+    const covered = this.collectCompositeCoveredPredicates(predicates)
+    const kept = rules.filter(rule => !this.isRuleCoveredByComposite(rule, covered))
+    merged.rules = [...compositeRules, ...kept]
+  }
+
+  private isRuleCoveredByComposite(
+    rule: SemanticRule,
+    coveredPredicates: ReadonlySet<FallbackPredicateAtom>,
+  ): boolean {
+    if (coveredPredicates.size === 0) return false
+    const conditionLeaves = collectAtomLeaves(rule.condition)
+    if (conditionLeaves.length === 0) return false
+    return conditionLeaves.every(leaf =>
+      Array.from(coveredPredicates).some(predicate => this.fallbackPredicateMatchesLeaf(predicate, leaf)),
+    )
+  }
+
+  private fallbackPredicateMatchesLeaf(predicate: FallbackPredicateAtom, leaf: AtomExprAtom): boolean {
+    if (predicate.key !== leaf.key) return false
+    const predicatePeriod = this.readNumericParam(predicate.params, 'reference.period')
+    const leafPeriod = this.readNumericParam(leaf.params, 'reference.period')
+    if (predicatePeriod !== null || leafPeriod !== null) return predicatePeriod === leafPeriod
+    return true
   }
 
   /**

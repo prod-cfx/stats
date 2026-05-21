@@ -4752,6 +4752,22 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       },
       summaryTemplate: (params, locale) => {
         if (locale === 'en') return ATOM_PUBLIC_NAMES['condition.sequence'].en
+        if (params.sequenceKind === 'pullback_reclaim') {
+          const reference = params.reference && typeof params.reference === 'object' && !Array.isArray(params.reference)
+            ? params.reference as Record<string, unknown>
+            : null
+          const indicator = typeof params['reference.indicator'] === 'string'
+            ? params['reference.indicator']
+            : typeof reference?.indicator === 'string'
+              ? reference.indicator
+              : 'MA'
+          const period = typeof params['reference.period'] === 'number'
+            ? params['reference.period']
+            : typeof reference?.period === 'number'
+              ? reference.period
+              : null
+          return `回踩 ${indicator.toUpperCase()}${period === null ? '' : period} 后重新站上`
+        }
         const count = typeof params.count === 'number' ? `连续 ${params.count} 根` : '条件序列'
         const dir = params.direction === 'down' ? '阴线' : params.direction === 'up' ? '阳线' : ''
         const nb = params.nextBarOnly === 'true' ? '（下一根触发）' : ''

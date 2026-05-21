@@ -3367,6 +3367,8 @@ export class SemanticStateProjectionService {
         return `非 ${this.renderAtomExpr(expr.child)}`
       }
       case 'sequence': {
+        const pullbackReclaim = this.tryRenderPullbackReclaimSequence(expr)
+        if (pullbackReclaim) return pullbackReclaim
         const parts = this.dedupeKeepOrder(expr.steps.map(step => this.renderAtomExpr(step)).filter(s => s.length > 0))
         if (parts.length === 0) return ''
         // 第 0 步 "先 X"；后续步骤 "然后 Y"；保持自然中文顺序
@@ -3401,6 +3403,8 @@ export class SemanticStateProjectionService {
         return child.length > 0 ? `非 ${child}` : ''
       }
       case 'sequence': {
+        const pullbackReclaim = this.tryRenderPullbackReclaimSequence(expr)
+        if (pullbackReclaim) return pullbackReclaim
         const parts = this.dedupeKeepOrder(expr.steps.map(step => this.renderUserFacingRuleCondition(step)).filter(s => s.length > 0))
         if (parts.length === 0) return ''
         const head = `先 ${parts[0]}`
@@ -3416,14 +3420,14 @@ export class SemanticStateProjectionService {
 
   private tryRenderRulesTreeAtomSummary(atomKey: string, params: Record<string, unknown>): string | null {
     if (atomKey === ATOM_CONTRACT_REGISTRY['indicator.above'].key || atomKey === ATOM_CONTRACT_REGISTRY['indicator.below'].key) {
-      const period = this.readIndicatorReferencePeriod(params)
+      const period = this.readIndicatorReferencePeriod(params) ?? this.readFiniteNumber(params.period)
       if (period === null) return null
 
       const indicator = this.readString(params.indicator)?.toUpperCase() ?? 'MA'
       const timeframe = this.readString(params.timeframe)
       const prefix = timeframe ? `${timeframe} ` : ''
       const reference = `${indicator}${this.formatNumber(period)}`
-      const ownPeriod = this.readFiniteNumber(params.period)
+      const ownPeriod = this.readIndicatorReferencePeriod(params) === null ? null : this.readFiniteNumber(params.period)
       if (ownPeriod !== null) {
         const left = `${indicator}${this.formatNumber(ownPeriod)}`
         return atomKey === ATOM_CONTRACT_REGISTRY['indicator.above'].key
@@ -3433,6 +3437,17 @@ export class SemanticStateProjectionService {
       return atomKey === ATOM_CONTRACT_REGISTRY['indicator.above'].key
         ? `${prefix}价格在 ${reference} 上方`
         : `${prefix}价格低于 ${reference}`
+    }
+
+    if (atomKey === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key || atomKey === ATOM_CONTRACT_REGISTRY['indicator.cross_under'].key) {
+      const period = this.readFiniteNumber(params.period)
+      const fastPeriod = this.readFiniteNumber(params.fastPeriod)
+      const slowPeriod = this.readFiniteNumber(params.slowPeriod)
+      if (period !== null && fastPeriod === null && slowPeriod === null) {
+        const indicator = this.readString(params.indicator)?.toUpperCase() ?? 'MA'
+        const direction = atomKey === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key ? '上穿' : '下穿'
+        return `价格${direction} ${indicator}${this.formatNumber(period)}`
+      }
     }
 
     if (atomKey === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key || atomKey === ATOM_CONTRACT_REGISTRY['price.breakout_down'].key) {
@@ -3445,6 +3460,22 @@ export class SemanticStateProjectionService {
     }
 
     return null
+  }
+
+  private tryRenderPullbackReclaimSequence(expr: Extract<AtomExpr, { kind: 'sequence' }>): string | null {
+    if (expr.steps.length !== 2) return null
+    const first = expr.steps[0]
+    const second = expr.steps[1]
+    if (!first || !second || first.kind !== 'atom' || second.kind !== 'atom') return null
+    if (first.key !== ATOM_CONTRACT_REGISTRY['indicator.below'].key) return null
+    if (second.key !== ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key && second.key !== ATOM_CONTRACT_REGISTRY['indicator.above'].key) return null
+    const firstPeriod = this.readIndicatorReferencePeriod(first.params) ?? this.readFiniteNumber(first.params.period)
+    const secondPeriod = this.readIndicatorReferencePeriod(second.params) ?? this.readFiniteNumber(second.params.period)
+    if (firstPeriod === null || secondPeriod === null || firstPeriod !== secondPeriod) return null
+    const firstIndicator = this.readString(first.params.indicator)?.toUpperCase() ?? 'MA'
+    const secondIndicator = this.readString(second.params.indicator)?.toUpperCase() ?? firstIndicator
+    if (firstIndicator !== secondIndicator) return null
+    return `回踩 ${firstIndicator}${this.formatNumber(firstPeriod)} 后重新站上`
   }
 
   private formatRulePhaseLabel(phase: SemanticRulePhase): string {
