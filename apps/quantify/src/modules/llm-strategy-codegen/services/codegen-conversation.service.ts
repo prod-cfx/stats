@@ -4479,13 +4479,25 @@ export class CodegenConversationService {
           ...(sessionSpecDesc.publishedSnapshotId !== undefined ? { publishedSnapshotId: sessionSpecDesc.publishedSnapshotId } : {}),
         }
       : {}
-    const effectiveSpecDesc = snapshotSpecDesc
+    const sessionDisplayGraph = sessionSpecDesc?.displayLogicGraph
+    const hasSessionDisplayGraph = Boolean(
+      sessionDisplayGraph
+      && typeof sessionDisplayGraph === 'object'
+      && !Array.isArray(sessionDisplayGraph)
+      && Array.isArray((sessionDisplayGraph as { blocks?: unknown }).blocks),
+    )
+    const effectiveSpecDesc = hasSessionDisplayGraph && sessionSpecDesc
       ? {
-          ...snapshotSpecDesc,
-          ...sessionSpecMetadata,
+          ...sessionSpecDesc,
           ...(snapshotLockedParams ? { lockedParams: snapshotLockedParams } : {}),
         }
-      : sessionSpecDesc
+      : snapshotSpecDesc
+        ? {
+            ...snapshotSpecDesc,
+            ...sessionSpecMetadata,
+            ...(snapshotLockedParams ? { lockedParams: snapshotLockedParams } : {}),
+          }
+        : sessionSpecDesc
     const sessionConsistencyReport = sessionSpecDesc?.consistencyReport
     const sessionPublishedSnapshotId = typeof sessionSpecDesc?.publishedSnapshotId === 'string'
       ? sessionSpecDesc.publishedSnapshotId
