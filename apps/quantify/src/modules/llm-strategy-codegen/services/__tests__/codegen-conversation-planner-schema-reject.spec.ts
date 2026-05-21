@@ -206,7 +206,7 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
     metricSpy.mockRestore()
   })
 
-  it('initial reject + retry still reject + dispatcher atoms → unsupportedFallback without executable semanticPatch', async () => {
+  it('initial reject + retry still reject + no deterministic rules tree → unsupportedFallback without executable semanticPatch', async () => {
     const { svc, shell, mergeSvc } = makeService()
     shell.aiService.chat
       .mockResolvedValueOnce({ content: LEGACY_FLAT_PLAN_JSON })
@@ -221,7 +221,7 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
     )
 
     expect(shell.aiService.chat).toHaveBeenCalledTimes(2)
-    expect(shell.genericSeedDispatcher.dispatch).not.toHaveBeenCalled()
+    expect(shell.genericSeedDispatcher.dispatch).toHaveBeenCalled()
     expect(plan.logicReady).toBe(false)
     expect(plan.semanticPatch).toBeUndefined()
     expect(plan.diagnostics).toEqual(expect.objectContaining({
@@ -268,9 +268,59 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
       { providerCode: 'test', locale: 'zh' },
       [],
     )
-    // 主链路必须 reject；dispatcher 不再作为 schema reject 后的语义 fallback。
+    // Planner raw legacy flat output must not pass through merge as semanticPatch.
+    // Deterministic recovery is allowed to try, but this fixture has no legal rules tree.
     expect(plan.semanticPatch).toBeUndefined()
-    expect(shell.genericSeedDispatcher.dispatch).not.toHaveBeenCalled()
+    expect(shell.genericSeedDispatcher.dispatch).toHaveBeenCalled()
+  })
+
+  it('schema reject with invalid rule shape can recover exact staging multi-timeframe EMA rules from user text', async () => {
+    const text = '15min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约'
+    const { svc, shell } = makeService()
+    shell.genericSeedDispatcher.dispatch.mockImplementation(message => new GenericSeedDispatcher().dispatch(message))
+    shell.aiService.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: false,
+          assistantPrompt: '当前还没有形成可执行规则。请补充入场条件、出场条件、风控和仓位。',
+          semanticPatch: {
+            rules: [
+              {
+                id: 'bad-mtf-entry',
+                phase: 'entry',
+                sideScope: 'long',
+                condition: { kind: 'and', children: [] },
+                effects: [],
+              },
+            ],
+          },
+        }),
+      })
+
+    const plan = await (svc as unknown as { planConversationByLlm: Function }).planConversationByLlm(
+      text,
+      { rules: [] },
+      { providerCode: 'test', locale: 'zh' },
+      [],
+    )
+
+    expect(shell.aiService.chat).toHaveBeenCalledTimes(1)
+    expect(plan.semanticPatch?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({ kind: 'atom', key: 'indicator.above' }),
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'long',
+        condition: expect.objectContaining({ kind: 'atom', key: 'indicator.below' }),
+      }),
+    ]))
+    expect(JSON.stringify(plan.semanticPatch?.rules)).toContain('"timeframe":"15m"')
+    expect(JSON.stringify(plan.semanticPatch?.rules)).toContain('"timeframe":"1h"')
+    expect(JSON.stringify(plan.semanticPatch?.rules)).toContain('"timeframe":"4h"')
   })
 
   it('planner asks for core semantics but deterministic rules tree can recover multi-timeframe EMA rules', async () => {

@@ -8985,7 +8985,6 @@ export class CodegenConversationService {
     text: string,
     locale: CodegenConversationLocale,
   ): ConversationPlan | null {
-    if (!reasons.includes('rules_missing_or_empty')) return null
     try {
       const dispatcherPatch = this.genericSeedDispatcher.dispatch(text) as CodegenSemanticPatch
       const semanticPatch = this.plannerDispatcherMerge.buildRulesTreeFallbackFromDispatcher(
