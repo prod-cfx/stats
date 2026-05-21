@@ -952,7 +952,9 @@ export class PlannerDispatcherMergeService {
     dispatcherPatch: CodegenSemanticPatch | null | undefined,
     userMessage = '',
   ): CodegenSemanticPatch | null {
-    if (!this.isNonEmpty(plannerPatch)) return plannerPatch ?? null
+    if (!this.isNonEmpty(plannerPatch)) {
+      return this.buildRulesTreeFallbackFromDispatcher(dispatcherPatch, userMessage) ?? plannerPatch ?? null
+    }
     if (!this.isNonEmpty(dispatcherPatch)) return plannerPatch as CodegenSemanticPatch
     const planner = plannerPatch as CodegenSemanticPatch
     const dispatcher = dispatcherPatch as CodegenSemanticPatch
@@ -1062,7 +1064,7 @@ export class PlannerDispatcherMergeService {
         ? ATOM_CONTRACT_REGISTRY['indicator.below'].key
         : null
     if (!replacementKey) return null
-    if (leaf.params?.reference !== 'unknown') return null
+    if (!this.hasMovingAverageEvidence(plannerRule, leaf)) return null
 
     const plannerPeriod = this.readNumericParam(leaf.params, 'period')
     return deterministicRules.find((rule) => {
@@ -1075,6 +1077,16 @@ export class PlannerDispatcherMergeService {
       if (plannerPeriod === null) return true
       return this.readNumericParam(deterministicLeaf.params, 'reference.period') === plannerPeriod
     }) ?? null
+  }
+
+  private hasMovingAverageEvidence(rule: SemanticRule, leaf: AtomExprAtom): boolean {
+    const evidenceText = [
+      rule.evidence?.text,
+      leaf.evidence?.text,
+      ...rule.effects.flatMap(effect => collectAtomLeaves(effect).map(effectLeaf => effectLeaf.evidence?.text)),
+    ].filter((text): text is string => typeof text === 'string')
+      .join(' ')
+    return /(?:EMA|SMA|MA)\s*\d{1,4}|\d{1,4}\s*(?:日|周期)?均线/iu.test(evidenceText)
   }
 
   private isDeterministicRuleCovered(

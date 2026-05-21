@@ -6613,7 +6613,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
                 condition: {
                   kind: 'atom',
                   key: 'price.breakout_up',
-                  params: { period: 20, bufferPct: 0, reference: 'unknown' },
+                  params: { period: 20, bufferPct: 0, reference: 'channel_high' },
                   evidence: { text: 'ETH 1小时突破 MA20 买入' },
                 },
                 effects: [
@@ -6742,6 +6742,47 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         }),
       })
       mockRepo.createSession.mockResolvedValue({ id: 's-reported-sol-drawdown-planner-missing-core' })
+
+      await service.startSession({
+        userId: 'u1',
+        initialMessage: 'SOL 1d，EMA20 上穿 EMA60 开多，下穿平仓，最大回撤 15% 熔断',
+      })
+      const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+      const semanticState = createPayload.semanticState as Record<string, any>
+
+      expect(semanticState.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({ indicator: 'ema', fastPeriod: 20, slowPeriod: 60 }),
+        }),
+        expect.objectContaining({
+          key: 'indicator.cross_under',
+          phase: 'exit',
+          sideScope: 'long',
+          params: expect.objectContaining({ indicator: 'ema', fastPeriod: 20, slowPeriod: 60 }),
+        }),
+      ]))
+      expect(semanticState.action).toEqual(expect.arrayContaining([
+        expect.objectContaining({ key: 'action.open_long' }),
+        expect.objectContaining({ key: 'action.close_long' }),
+      ]))
+      expect(semanticState.orchestration).toEqual(expect.arrayContaining([
+        expect.objectContaining({ key: 'portfolioRisk.drawdown_block', thresholdPct: 15 }),
+      ]))
+    })
+
+    it('recovers SOL core trading rules when planner returns an empty semantic patch', async () => {
+      mockAi.chat.mockResolvedValue({
+        content: JSON.stringify({
+          related: true,
+          logicReady: false,
+          assistantPrompt: '我当前理解的策略是：已识别部分条件，但仍未完整。',
+          semanticPatch: {},
+        }),
+      })
+      mockRepo.createSession.mockResolvedValue({ id: 's-reported-sol-empty-planner-patch' })
 
       await service.startSession({
         userId: 'u1',

@@ -8896,6 +8896,8 @@ export class CodegenConversationService {
       if (outcome.kind === 'plan') return outcome.plan
       // schema reject
       this.plannerDispatcherMerge.emitPlannerSchemaRejectMetric(stage, 1)
+      const deterministicFallback = this.buildSchemaRejectRulesTreeFallback(outcome.reasons, text, locale)
+      if (deterministicFallback) return deterministicFallback
       if (stage === 'initial') {
         // 单轮重试：把 reminder 作为 extra system feedback 追加；planner 必须按
         //   rules-first 形态重出。
@@ -8975,6 +8977,54 @@ export class CodegenConversationService {
           result: 'unsupported',
         },
       },
+    }
+  }
+
+  private buildSchemaRejectRulesTreeFallback(
+    reasons: ReadonlyArray<string>,
+    text: string,
+    locale: CodegenConversationLocale,
+  ): ConversationPlan | null {
+    if (!reasons.includes('rules_missing_or_empty')) return null
+    try {
+      const dispatcherPatch = this.genericSeedDispatcher.dispatch(text) as CodegenSemanticPatch
+      const semanticPatch = this.plannerDispatcherMerge.buildRulesTreeFallbackFromDispatcher(
+        dispatcherPatch,
+        text,
+      )
+      if (!semanticPatch) {
+        this.logPlannerFallback('schema_reject_rules_tree_fallback_empty', {
+          reasons: reasons.join(','),
+        })
+        return null
+      }
+      this.logPlannerFallback('schema_reject_rules_tree_fallback', {
+        reasons: reasons.join(','),
+      })
+      return {
+        related: true,
+        logicReady: false,
+        assistantPrompt: this.localizedText(
+          locale,
+          'I have organized the strategy logic. Please confirm the logic graph.',
+          '我已整理出策略逻辑，请确认逻辑图。',
+        ),
+        semanticPatch,
+        diagnostics: {
+          gate: 'RulesTreeEntryGate',
+          entry: {
+            rejectReasons: [...reasons],
+            result: 'fallback',
+          },
+        },
+      }
+    }
+    catch (error) {
+      this.logPlannerFallback('schema_reject_rules_tree_fallback_dispatch_error', {
+        reasons: reasons.join(','),
+        error: this.summarizePlannerError(error),
+      })
+      return null
     }
   }
 
