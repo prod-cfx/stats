@@ -4497,7 +4497,7 @@ export class CodegenConversationService {
             ...sessionSpecMetadata,
             ...(snapshotLockedParams ? { lockedParams: snapshotLockedParams } : {}),
           }
-        : null
+        : sessionSpecDesc
     const sessionConsistencyReport = sessionSpecDesc?.consistencyReport
     const sessionPublishedSnapshotId = typeof sessionSpecDesc?.publishedSnapshotId === 'string'
       ? sessionSpecDesc.publishedSnapshotId
