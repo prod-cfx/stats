@@ -10821,6 +10821,92 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
   })
 
+  it('keeps published session displayLogicGraph from semantic view instead of canonical snapshot', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-published-display-graph',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      checklist: {},
+      latestDraftCode: 'export default {}',
+      latestSpecDesc: {
+        viewType: 'canonical-semantic-view.v1',
+        canonicalDigest: 'sha256:semantic-view',
+        displayLogicGraph: {
+          blocks: [
+            {
+              type: 'IF',
+              items: [
+                {
+                  kind: 'condition',
+                  id: 'condition-rule-entry',
+                  text: '价格在 EMA20 上方 同时 价格在 EMA60 上方 同时 价格在 EMA144 上方 时做多开仓',
+                },
+                {
+                  kind: 'action',
+                  id: 'action-rule-entry-0',
+                  text: '开多',
+                },
+              ],
+            },
+          ],
+        },
+      },
+      rejectReason: null,
+      clarificationState: {
+        status: 'CLEAR',
+        items: [],
+      },
+      strategyInstanceId: 'strategy-1',
+    })
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-1',
+      scriptSnapshot: 'export default {}',
+      specSnapshot: {
+        version: 2,
+        rules: [
+          {
+            id: 'rule-entry',
+            phase: 'entry',
+            condition: { kind: 'and', children: [] },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      },
+      lockedParams: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        timeframe: '15m',
+        marketType: 'perp',
+      },
+      consistencyReport: { status: 'PASSED' },
+      strategyConfig: {},
+      backtestConfigDefaults: {},
+      deploymentExecutionDefaults: {},
+      deploymentExecutionConstraints: {},
+    })
+
+    const result = await service.getSession('s-published-display-graph', 'u1')
+
+    expect(result.specDesc).toEqual(expect.objectContaining({
+      viewType: 'canonical-semantic-view.v1',
+      displayLogicGraph: expect.objectContaining({
+        blocks: expect.arrayContaining([
+          expect.objectContaining({
+            items: expect.arrayContaining([
+              expect.objectContaining({
+                text: expect.stringContaining('EMA20'),
+              }),
+            ]),
+          }),
+        ]),
+      }),
+      lockedParams: expect.objectContaining({
+        symbol: 'ETHUSDT',
+      }),
+    }))
+    expect(JSON.stringify(result.specDesc)).not.toContain('"kind":"and"')
+  })
+
 
   it('enters confirm gate when planner semanticPatch and server-side semantics are already sufficient', async () => {
     mockRepo.findById.mockResolvedValue({
