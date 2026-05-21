@@ -104,6 +104,8 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     expect(template.editSeed.initialMessage).not.toContain('金叉死叉策略')
     expect(template.editSeed.locales?.en?.initialMessage).toContain('long-only')
     expect(template.editSeed.locales?.en?.initialMessage).toContain('does not open short positions')
+    expect(template.editSeed.guideConfig?.exitRuleExample).toBe('MACD DIF 下穿 DEA 时平多')
+    expect(template.editSeed.locales?.en?.guideConfig?.exitRuleExample).toBe('MACD DIF crosses below DEA to close long')
   })
 
   it('throws when template id is not found', () => {

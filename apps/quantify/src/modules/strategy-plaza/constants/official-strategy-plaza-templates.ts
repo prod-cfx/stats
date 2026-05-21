@@ -282,7 +282,7 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
         symbolExample: 'ETH-USDT-SWAP',
         timeframeExample: '15m',
         entryRuleExample: 'MACD DIF 上穿 DEA',
-        exitRuleExample: 'MACD DIF 下穿 DEA',
+        exitRuleExample: 'MACD DIF 下穿 DEA 时平多',
         riskRuleExample: 'OKX 模拟盘，仓位 35%，2 倍杠杆',
       },
       locales: {
@@ -292,7 +292,7 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
             symbolExample: 'ETH-USDT-SWAP',
             timeframeExample: '15m',
             entryRuleExample: 'MACD DIF crosses above DEA',
-            exitRuleExample: 'MACD DIF crosses below DEA',
+            exitRuleExample: 'MACD DIF crosses below DEA to close long',
             riskRuleExample: 'OKX Demo, 35% position, 2x leverage',
           },
         },
