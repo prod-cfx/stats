@@ -550,7 +550,7 @@ export class PlannerDispatcherMergeService {
       if (sideScope === 'short') return key === ATOM_CONTRACT_REGISTRY['action.close_short'].key
       return key === ATOM_CONTRACT_REGISTRY['action.close_long'].key || key === ATOM_CONTRACT_REGISTRY['action.close_short'].key
     }
-    return true
+    return this.readAtomBucket(key) !== 'action'
   }
 
   private buildAddPositionTriggerPredicate(atom: {

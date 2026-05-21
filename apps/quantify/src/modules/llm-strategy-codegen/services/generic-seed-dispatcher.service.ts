@@ -632,6 +632,12 @@ function normalizeLifecycleParams(
     return next
   }
 
+  if (atomKey === ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key) {
+    const next = { ...params }
+    if (typeof next.thresholdPct === 'number') next.thresholdPct = Math.abs(next.thresholdPct)
+    return next
+  }
+
   return params
 }
 

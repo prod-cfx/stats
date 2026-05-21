@@ -3352,7 +3352,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       intent: {
         keywords: ['账户回撤', '最大回撤', '组合回撤', '熔断', 'drawdown', 'account drawdown', 'max drawdown'] as const,
         verbs: {
-          gte: ['超过', '达到', '触及', 'exceeds', 'reaches'] as const,
+          gte: ['超过', '达到', '触及', '熔断', '停止', '阻止', 'exceeds', 'reaches'] as const,
         },
       },
       paramSlots: {

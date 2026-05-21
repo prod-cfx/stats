@@ -10,6 +10,7 @@
  */
 import { Logger } from '@nestjs/common'
 import { CodegenConversationService } from '../codegen-conversation.service'
+import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { PlannerDispatcherMergeService } from '../planner-dispatcher-merge.service'
 
 interface SvcShell {
@@ -270,5 +271,78 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
     // 主链路必须 reject；dispatcher 不再作为 schema reject 后的语义 fallback。
     expect(plan.semanticPatch).toBeUndefined()
     expect(shell.genericSeedDispatcher.dispatch).not.toHaveBeenCalled()
+  })
+
+  it('planner asks for core semantics but deterministic rules tree can recover multi-timeframe EMA rules', async () => {
+    const text = '15min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约'
+    const { svc, shell } = makeService()
+    shell.genericSeedDispatcher.dispatch.mockImplementation(message => new GenericSeedDispatcher().dispatch(message))
+    shell.aiService.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '当前还没有形成可执行规则。请补充入场条件、出场条件、风控和仓位。',
+      }),
+    })
+
+    const plan = await (svc as unknown as { planConversationByLlm: Function }).planConversationByLlm(
+      text,
+      { rules: [] },
+      { providerCode: 'test', locale: 'zh' },
+      [],
+    )
+
+    expect(plan.semanticPatch?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({ kind: 'atom', key: 'indicator.above' }),
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'long',
+        condition: expect.objectContaining({ kind: 'atom', key: 'indicator.below' }),
+      }),
+    ]))
+    expect(JSON.stringify(plan.semanticPatch?.rules)).toContain('"timeframe":"15m"')
+    expect(JSON.stringify(plan.semanticPatch?.rules)).toContain('"timeframe":"1h"')
+    expect(JSON.stringify(plan.semanticPatch?.rules)).toContain('"timeframe":"4h"')
+  })
+
+  it('planner asks for core semantics but deterministic rules tree can recover EMA cross with drawdown guard', async () => {
+    const text = 'SOL 1d，EMA20 上穿 EMA60 开多，下穿平仓，最大回撤 15% 熔断'
+    const { svc, shell } = makeService()
+    shell.genericSeedDispatcher.dispatch.mockImplementation(message => new GenericSeedDispatcher().dispatch(message))
+    shell.aiService.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '当前还没有形成可执行规则。请补充入场条件、出场条件、风控和仓位。',
+      }),
+    })
+
+    const plan = await (svc as unknown as { planConversationByLlm: Function }).planConversationByLlm(
+      text,
+      { rules: [] },
+      { providerCode: 'test', locale: 'zh' },
+      [],
+    )
+
+    expect(plan.semanticPatch?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({ kind: 'atom', key: 'indicator.cross_over' }),
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'long',
+        condition: expect.objectContaining({ kind: 'atom', key: 'indicator.cross_under' }),
+      }),
+    ]))
+    expect(JSON.stringify(plan.semanticPatch)).toContain('portfolioRisk.drawdown_block')
+    expect(JSON.stringify(plan.semanticPatch)).toContain('"thresholdPct":15')
+    const gateRule = plan.semanticPatch?.rules?.find(rule => rule.phase === 'gate')
+    expect(JSON.stringify(gateRule?.effects)).not.toContain('action.open_long')
   })
 })

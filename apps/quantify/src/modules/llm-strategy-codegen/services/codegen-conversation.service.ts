@@ -8811,10 +8811,8 @@ export class CodegenConversationService {
               ? this.localizedText(locale, 'I have organized the strategy logic. Please confirm the logic graph.', '我已整理出策略逻辑，请确认逻辑图。')
               : this.localizedText(locale, 'I will keep refining the strategy logic. Please provide one key condition.', '我先继续完善策略逻辑，请补充一个关键条件。'))
 
-        // Issue #1492：planner 成功后不再 union dispatcher rules/atoms。
-        //   rules tree 仍是唯一策略语义真源；但 exchange/symbol/timeframe/position sizing
-        //   属执行槽位，deterministic dispatcher 的数值抽取比 LLM 更稳定，允许只校准
-        //   context/position，禁止借此补 rule。
+        // Planner 成功给出 rules tree 时，rules tree 是唯一策略语义真源；
+        // deterministic dispatcher 只校准执行槽位，禁止 union 补 rule。
         const plannerSemanticPatch = this.normalizeSemanticPatch(parsed.semanticPatch ?? parsed.semanticUpdates) ?? undefined
         let semanticPatch = plannerSemanticPatch
         if (plannerSemanticPatch) {
@@ -8828,6 +8826,26 @@ export class CodegenConversationService {
           catch (error) {
             this.logger.warn(
               `deterministic execution slot merge failed, keeping planner semanticPatch: ${error instanceof Error ? error.message : String(error)}`,
+            )
+          }
+        }
+        else {
+          // Planner 有效返回但未给 semanticPatch，且 deterministic dispatcher 能从原文
+          // 形成合法 rules tree 时，把它作为 rules-first 主链路补救。仍不覆盖空响应、
+          // 非法 JSON、transport/model 失败，也不接收 legacy flat atoms 直通。
+          try {
+            const dispatcherPatch = this.genericSeedDispatcher.dispatch(text) as CodegenSemanticPatch
+            semanticPatch = this.plannerDispatcherMerge.buildRulesTreeFallbackFromDispatcher(
+              dispatcherPatch,
+              text,
+            ) ?? undefined
+            if (semanticPatch) {
+              this.logPlannerFallback('deterministic_rules_tree_recovered')
+            }
+          }
+          catch (error) {
+            this.logger.warn(
+              `deterministic rules tree recovery failed, keeping planner clarification: ${error instanceof Error ? error.message : String(error)}`,
             )
           }
         }
@@ -9222,6 +9240,7 @@ export class CodegenConversationService {
       | 'model_not_found'
       | 'transport_failure_retrying'
       | 'transport_failure_retry_exhausted'
+      | 'deterministic_rules_tree_recovered'
       | 'schema_reject_unsupported'
       | 'schema_reject_rules_tree_fallback_dispatch_error'
       | 'schema_reject_rules_tree_fallback_empty'
