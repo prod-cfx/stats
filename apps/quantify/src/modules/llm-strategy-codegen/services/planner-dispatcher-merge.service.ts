@@ -369,10 +369,18 @@ export class PlannerDispatcherMergeService {
     const effectAtoms = this.collectFallbackEffectAtoms(dispatcher)
     const rules: SemanticRule[] = this.buildCompositeFallbackRules(predicateAtoms, effectAtoms, userMessage)
     const compositeCoveredPredicates = this.collectCompositeCoveredPredicates(predicateAtoms)
+    const multiTimeframeCoveredPredicates = this.appendMultiTimeframeEntryRules(
+      rules,
+      predicateAtoms,
+      effectAtoms,
+      dispatcher,
+      userMessage,
+    )
     const seen = new Set<string>()
 
     for (const predicate of predicateAtoms) {
       if (compositeCoveredPredicates.has(predicate)) continue
+      if (multiTimeframeCoveredPredicates.has(predicate)) continue
       const phase = predicate.phase === 'exit' ? 'exit' : predicate.phase === 'gate' ? 'gate' : 'entry'
       const sideScope = this.normalizeFallbackRuleSideScope(predicate, phase, dispatcher, userMessage)
       const effects = this.resolveFallbackEffects({
@@ -393,7 +401,7 @@ export class PlannerDispatcherMergeService {
       if (seen.has(signature)) continue
       seen.add(signature)
       rules.push({
-        id: `dispatcher-fallback-${rules.length + 1}`,
+        id: `deterministic-rule-${rules.length + 1}`,
         phase,
         sideScope,
         condition,
@@ -403,6 +411,69 @@ export class PlannerDispatcherMergeService {
     }
 
     return rules
+  }
+
+  private appendMultiTimeframeEntryRules(
+    rules: SemanticRule[],
+    predicateAtoms: ReadonlyArray<FallbackPredicateAtom>,
+    effectAtoms: ReadonlyArray<AtomExprAtom>,
+    dispatcher: CodegenSemanticPatch,
+    userMessage: string,
+  ): ReadonlySet<FallbackPredicateAtom> {
+    const covered = new Set<FallbackPredicateAtom>()
+    const groups = new Map<string, FallbackPredicateAtom[]>()
+    for (const predicate of predicateAtoms) {
+      if (predicate.phase === 'exit' || predicate.phase === 'gate' || predicate.phase === 'risk') continue
+      const timeframe = this.readStringParam(predicate.params, 'timeframe')
+      if (!timeframe) continue
+      const phase = 'entry'
+      const sideScope = this.normalizeFallbackRuleSideScope(predicate, phase, dispatcher, userMessage)
+      const effects = this.resolveFallbackEffects({ phase, sideScope, effectAtoms, predicate })
+      if (effects.length === 0) continue
+      const key = [
+        phase,
+        sideScope,
+        predicate.key,
+        this.readEvidenceText(predicate) ?? '',
+        JSON.stringify(this.omitParams(predicate.params ?? {}, ['timeframe'])),
+        effects.map(effect => `${effect.key}:${this.normalizedEffectSideSignature(effect)}`).join(','),
+      ].join('|')
+      const list = groups.get(key) ?? []
+      list.push(predicate)
+      groups.set(key, list)
+    }
+
+    let index = 0
+    for (const group of groups.values()) {
+      const uniqueTimeframes = new Set(group.map(predicate => this.readStringParam(predicate.params, 'timeframe')).filter(Boolean))
+      if (group.length < 2 || uniqueTimeframes.size < 2) continue
+      const first = group[0]
+      if (!first) continue
+      const phase = 'entry'
+      const sideScope = this.normalizeFallbackRuleSideScope(first, phase, dispatcher, userMessage)
+      const effects = this.resolveFallbackEffects({ phase, sideScope, effectAtoms, predicate: first })
+      if (effects.length === 0) continue
+      const evidence = this.resolveFallbackEvidence(first, userMessage)
+      rules.push({
+        id: `deterministic-entry-mtf-${++index}`,
+        phase,
+        sideScope,
+        condition: {
+          kind: 'and',
+          children: group.map(predicate => ({
+            kind: 'atom' as const,
+            key: predicate.key,
+            params: predicate.params ?? {},
+            ...(predicate.sideScope ? { sideScope: predicate.sideScope } : {}),
+            ...this.resolveFallbackEvidence(predicate, userMessage),
+          })),
+        },
+        effects,
+        ...evidence,
+      })
+      group.forEach(predicate => covered.add(predicate))
+    }
+    return covered
   }
 
   private collectCompositeCoveredPredicates(
@@ -459,7 +530,7 @@ export class PlannerDispatcherMergeService {
     const pullbackIndicator = typeof pullback.params?.indicator === 'string' ? pullback.params.indicator : 'ma'
     const evidence = this.resolveFallbackEvidence(pullback, userMessage)
     rules.push({
-      id: 'dispatcher-fallback-composite-1',
+      id: 'deterministic-composite-1',
       phase: 'entry',
       sideScope,
       condition: {
@@ -540,6 +611,19 @@ export class PlannerDispatcherMergeService {
       return (current as Record<string, unknown>)[part]
     }, params)
     return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
+  private omitParams(
+    params: Record<string, unknown>,
+    keys: ReadonlyArray<string>,
+  ): Record<string, unknown> {
+    const out: Record<string, unknown> = {}
+    const omitted = new Set(keys)
+    for (const [key, value] of Object.entries(params)) {
+      if (omitted.has(key)) continue
+      out[key] = value
+    }
+    return out
   }
 
   private buildFallbackPositionFromDispatcherConstraints(

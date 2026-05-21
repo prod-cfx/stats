@@ -6667,7 +6667,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect(flow.result.assistantPrompt ?? '').toContain('1h')
       expect(flow.result.assistantPrompt ?? '').toContain('4h')
       expect(flow.result.assistantPrompt ?? '').toContain('EMA20')
+      expect(flow.result.assistantPrompt ?? '').toContain('入场：15m / 1h / 4h 价格在 EMA20 上方')
+      expect(flow.result.assistantPrompt ?? '').not.toContain('入场：15m 价格在 EMA20 上方 → 开多；入场：1h 价格在 EMA20 上方')
       expect(flow.result.assistantPrompt ?? '').not.toContain('入场：价格在 EMA20 上方 → 开多')
+      expect((flow.semanticState.rules as Array<{ phase?: string }>).filter(rule => rule.phase === 'entry')).toHaveLength(1)
       expect(flow.semanticState.trigger).toEqual(expect.arrayContaining([
         expect.objectContaining({ key: 'indicator.above', phase: 'entry', params: expect.objectContaining({ timeframe: '15m', 'reference.period': 20 }) }),
         expect.objectContaining({ key: 'indicator.above', phase: 'entry', params: expect.objectContaining({ timeframe: '1h', 'reference.period': 20 }) }),

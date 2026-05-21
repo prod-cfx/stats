@@ -306,12 +306,13 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
     )
 
     expect(shell.aiService.chat).toHaveBeenCalledTimes(1)
+    const entryRules = plan.semanticPatch?.rules?.filter(rule => rule.phase === 'entry') ?? []
+    expect(entryRules).toHaveLength(1)
+    expect(entryRules[0]).toEqual(expect.objectContaining({
+      sideScope: 'long',
+      condition: expect.objectContaining({ kind: 'and' }),
+    }))
     expect(plan.semanticPatch?.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'long',
-        condition: expect.objectContaining({ kind: 'atom', key: 'indicator.above' }),
-      }),
       expect.objectContaining({
         phase: 'exit',
         sideScope: 'long',
@@ -342,12 +343,13 @@ describe('#1445 CodegenConversation planner schema reject → retry → unsuppor
       [],
     )
 
+    const entryRules = plan.semanticPatch?.rules?.filter(rule => rule.phase === 'entry') ?? []
+    expect(entryRules).toHaveLength(1)
+    expect(entryRules[0]).toEqual(expect.objectContaining({
+      sideScope: 'long',
+      condition: expect.objectContaining({ kind: 'and' }),
+    }))
     expect(plan.semanticPatch?.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'long',
-        condition: expect.objectContaining({ kind: 'atom', key: 'indicator.above' }),
-      }),
       expect.objectContaining({
         phase: 'exit',
         sideScope: 'long',

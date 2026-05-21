@@ -3361,6 +3361,8 @@ export class SemanticStateProjectionService {
         return '已识别条件，参数待补充'
       }
       case 'and': {
+        const grouped = this.tryRenderMultiTimeframeIndicatorCompareAnd(expr)
+        if (grouped) return grouped
         // 审查 R2-2 修复：≥2 个子节点 fallback 到相同 "已识别条件，参数待补充" 时
         //   会拼成「已识别条件，参数待补充 同时 已识别条件，参数待补充」乘积量噪声。
         //   parts 去重保持顺序（首次保留），保证一句兜底文案对用户只显示一次。
@@ -3399,6 +3401,8 @@ export class SemanticStateProjectionService {
         }
         return this.renderAtomExpr(expr)
       case 'and': {
+        const grouped = this.tryRenderMultiTimeframeIndicatorCompareAnd(expr)
+        if (grouped) return grouped
         const parts = this.dedupeKeepOrder(expr.children.map(child => this.renderUserFacingRuleCondition(child)).filter(s => s.length > 0))
         return parts.join(' 同时 ')
       }
@@ -3424,6 +3428,57 @@ export class SemanticStateProjectionService {
         return modifiers.length > 0 ? `${body}（${modifiers.join('，')}）` : body
       }
     }
+  }
+
+  private tryRenderMultiTimeframeIndicatorCompareAnd(expr: Extract<AtomExpr, { kind: 'and' }>): string | null {
+    const atoms = expr.children.filter((child): child is Extract<AtomExpr, { kind: 'atom' }> => child.kind === 'atom')
+    if (atoms.length !== expr.children.length || atoms.length < 2) return null
+    const first = atoms[0]
+    if (!first) return null
+    if (first.key !== ATOM_CONTRACT_REGISTRY['indicator.above'].key && first.key !== ATOM_CONTRACT_REGISTRY['indicator.below'].key) {
+      return null
+    }
+
+    const signature = this.indicatorCompareAtomSignature(first)
+    if (!signature) return null
+    for (const atom of atoms.slice(1)) {
+      if (atom.key !== first.key) return null
+      if (this.indicatorCompareAtomSignature(atom) !== signature) return null
+    }
+
+    const triggers = atoms.map((atom, index) => ({
+      id: `rules-tree-and-${index}`,
+      key: atom.key,
+      phase: 'entry',
+      status: 'locked',
+      params: atom.params,
+    } as SemanticState['trigger'][number]))
+    const timeframes = this.uniqueSortedTimeframes(triggers)
+    if (timeframes.length < 2) return null
+    return `${timeframes.join(' / ')} ${this.formatIndicatorCompareCondition(triggers[0])}`
+  }
+
+  private indicatorCompareAtomSignature(atom: Extract<AtomExpr, { kind: 'atom' }>): string | null {
+    const referencePeriod = this.readIndicatorReferencePeriod(atom.params)
+    if (referencePeriod === null) return null
+    const timeframe = this.readString(atom.params.timeframe)
+    if (!timeframe) return null
+    const ownPeriod = this.readFiniteNumber(atom.params.period)
+    return JSON.stringify({
+      indicator: this.readString(atom.params.indicator)?.toUpperCase() ?? 'MA',
+      ownPeriod,
+      referencePeriod,
+      params: this.omitTimeframeParam(atom.params),
+    })
+  }
+
+  private omitTimeframeParam(params: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(params)) {
+      if (key === 'timeframe') continue
+      out[key] = value
+    }
+    return out
   }
 
   private tryRenderRulesTreeAtomSummary(atomKey: string, params: Record<string, unknown>): string | null {

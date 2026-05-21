@@ -1,4 +1,5 @@
 import type { CodegenSemanticPatch } from '../../types/codegen-semantic-patch'
+import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { PlannerDispatcherMergeService } from '../planner-dispatcher-merge.service'
 
 describe('PlannerDispatcherMergeService', () => {
@@ -262,6 +263,26 @@ describe('PlannerDispatcherMergeService', () => {
       'entry-long-ema-stack-15m',
       'exit-long-below-ema20-15m',
     ])
+  })
+
+  it('builds one multi-timeframe EMA entry rule instead of three independent open-long rules', () => {
+    const text = '15min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const patch = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
+    const entryRules = patch?.rules?.filter(rule => rule.phase === 'entry') ?? []
+    const exitRules = patch?.rules?.filter(rule => rule.phase === 'exit') ?? []
+
+    expect(entryRules).toHaveLength(1)
+    expect(entryRules[0]).toEqual(expect.objectContaining({
+      phase: 'entry',
+      sideScope: 'long',
+      effects: [expect.objectContaining({ key: 'action.open_long' })],
+      condition: expect.objectContaining({ kind: 'and' }),
+    }))
+    const children = (entryRules[0]?.condition as { children?: Array<{ params?: Record<string, unknown> }> }).children ?? []
+    expect(children.map(child => child.params?.timeframe).sort()).toEqual(['15m', '1h', '4h'])
+    expect(exitRules).toHaveLength(1)
   })
 
   it('execution-slot merge does not append EMA cross rules when planner params are richer', () => {
