@@ -533,7 +533,12 @@ export class PlannerDispatcherMergeService {
   }
 
   private readNumericParam(params: Record<string, unknown> | undefined, key: string): number | null {
-    const value = params?.[key]
+    const direct = params?.[key]
+    if (typeof direct === 'number' && Number.isFinite(direct)) return direct
+    const value = key.split('.').reduce<unknown>((current, part) => {
+      if (!current || typeof current !== 'object') return undefined
+      return (current as Record<string, unknown>)[part]
+    }, params)
     return typeof value === 'number' && Number.isFinite(value) ? value : null
   }
 
@@ -1099,14 +1104,36 @@ export class PlannerDispatcherMergeService {
     return rules.some((rule) => {
       if (rule.phase !== deterministicRule.phase) return false
       if (rule.sideScope !== deterministicRule.sideScope) return false
+      if (!this.ruleEffectsCover(rule, deterministicRule)) return false
       const leaves = collectAtomLeaves(rule.condition)
-      if (leaves.length !== deterministicLeaves.length) return false
-      return deterministicLeaves.every((candidate, index) => {
-        const existing = leaves[index]
-        return existing?.key === candidate.key
-          && this.stableParamsHash(existing.params) === this.stableParamsHash(candidate.params)
-      })
+      return deterministicLeaves.every(candidate =>
+        leaves.some(existing => this.atomLeafMatches(existing, candidate)),
+      )
     })
+  }
+
+  private ruleEffectsCover(existingRule: SemanticRule, candidateRule: SemanticRule): boolean {
+    const existingEffects = existingRule.effects.flatMap(effect => collectAtomLeaves(effect))
+    const candidateEffects = candidateRule.effects.flatMap(effect => collectAtomLeaves(effect))
+    return candidateEffects.every(candidate =>
+      existingEffects.some(existing => this.atomLeafMatches(existing, candidate)),
+    )
+  }
+
+  private atomLeafMatches(existing: AtomExprAtom, candidate: AtomExprAtom): boolean {
+    if (existing.key !== candidate.key) return false
+    const existingIndicator = existing.params?.indicator
+    const candidateIndicator = candidate.params?.indicator
+    if (
+      existingIndicator !== undefined
+      && candidateIndicator !== undefined
+      && String(existingIndicator).toLowerCase() !== String(candidateIndicator).toLowerCase()
+    ) return false
+
+    const existingPeriod = this.readNumericParam(existing.params, 'reference.period')
+    const candidatePeriod = this.readNumericParam(candidate.params, 'reference.period')
+    if (existingPeriod !== null || candidatePeriod !== null) return existingPeriod === candidatePeriod
+    return this.stableParamsHash(existing.params) === this.stableParamsHash(candidate.params)
   }
 
   private bindDispatcherLifecycleEffectsIntoPlannerRules(

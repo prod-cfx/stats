@@ -219,6 +219,51 @@ describe('PlannerDispatcherMergeService', () => {
     expect((merged as { rules?: unknown[] })?.rules).toEqual((planner as { rules: unknown[] }).rules)
   })
 
+  it('execution-slot merge does not append single EMA entries already covered by planner AND rule', () => {
+    const planner = {
+      rules: [
+        {
+          id: 'entry-long-ema-stack-15m',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: {
+            kind: 'and',
+            children: [
+              { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', 'reference.period': 20 } },
+              { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', 'reference.period': 60 } },
+              { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', 'reference.period': 144 } },
+            ],
+          },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'exit-long-below-ema20-15m',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'indicator.below', params: { indicator: 'ema', 'reference.period': 20 } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = {
+      atoms: [
+        { key: 'indicator.above', phase: 'entry', sideScope: 'long', params: { indicator: 'ema', 'reference.period': 20 } },
+        { key: 'indicator.above', phase: 'entry', sideScope: 'long', params: { indicator: 'ema', 'reference.period': 60 } },
+        { key: 'indicator.above', phase: 'entry', sideScope: 'long', params: { indicator: 'ema', 'reference.period': 144 } },
+        { key: 'indicator.below', phase: 'exit', sideScope: 'long', params: { indicator: 'ema', 'reference.period': 20 } },
+        { key: 'action.open_long', phase: 'entry', sideScope: 'long', params: {} },
+        { key: 'action.close_long', phase: 'exit', sideScope: 'long', params: {} },
+      ],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher)
+
+    expect((merged as { rules?: Array<{ id?: string }> })?.rules?.map(rule => rule.id)).toEqual([
+      'entry-long-ema-stack-15m',
+      'exit-long-below-ema20-15m',
+    ])
+  })
+
   // ───────────────────────────────────────────────────────────────────────────
   // Issue #1428 R-B：rules-first 路径下 dispatcher atom lift 为 single-leaf rule
   //   （cross-clause inheritance 回归——planner 直产 rules 时 dispatcher 通过
