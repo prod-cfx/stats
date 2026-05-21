@@ -6567,6 +6567,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       flow = await continueReportedConversation(sessionId, flow.semanticState, '对的继续')
 
       expect(flow.result.assistantPrompt ?? '').toContain('MA20')
+      expect(flow.result.assistantPrompt ?? '').not.toContain('MA20 在 MA20 上方')
       expect(flow.result.assistantPrompt ?? '').not.toContain('向上突破（1，0%）')
       expect(flow.semanticState.trigger).toEqual(expect.arrayContaining([
         expect.objectContaining({
@@ -6591,6 +6592,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       )
       expect(script).toEqual(expect.stringContaining('"period":20'))
       expect(script).toEqual(expect.stringContaining('atr'))
+      expect(script).not.toEqual(expect.stringContaining('"period":21'))
+      expect(script).not.toEqual(expect.stringContaining('sma_21_1h'))
       expect(script).not.toEqual(expect.stringContaining('HIGHEST_HIGH'))
       expect(script).not.toEqual(expect.stringContaining('highest_high_1_1h'))
     })
