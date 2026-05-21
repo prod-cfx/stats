@@ -8822,6 +8822,7 @@ export class CodegenConversationService {
             semanticPatch = this.plannerDispatcherMerge.mergeDeterministicExecutionSlots(
               plannerSemanticPatch,
               dispatcherPatch,
+              text,
             ) ?? plannerSemanticPatch
           }
           catch (error) {

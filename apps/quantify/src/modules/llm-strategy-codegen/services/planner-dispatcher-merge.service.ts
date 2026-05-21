@@ -950,6 +950,7 @@ export class PlannerDispatcherMergeService {
   mergeDeterministicExecutionSlots(
     plannerPatch: CodegenSemanticPatch | null | undefined,
     dispatcherPatch: CodegenSemanticPatch | null | undefined,
+    userMessage = '',
   ): CodegenSemanticPatch | null {
     if (!this.isNonEmpty(plannerPatch)) return plannerPatch ?? null
     if (!this.isNonEmpty(dispatcherPatch)) return plannerPatch as CodegenSemanticPatch
@@ -983,7 +984,117 @@ export class PlannerDispatcherMergeService {
         ...(constraints ? { constraints } : {}),
       }
     }
+    try {
+      this.mergeDeterministicRulesIntoPlanner(merged, dispatcher, userMessage)
+    }
+    catch (err) {
+      this.logger.warn(`mergeDeterministicRulesIntoPlanner 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
+    }
     return merged
+  }
+
+  private mergeDeterministicRulesIntoPlanner(
+    merged: CodegenSemanticPatch,
+    dispatcher: CodegenSemanticPatch,
+    userMessage: string,
+  ): void {
+    const rules = merged.rules
+    if (!rules || rules.length === 0) return
+
+    const deterministicRules = this.buildFallbackRules(dispatcher, userMessage)
+      .filter(rule => rule.effects.length > 0)
+    if (deterministicRules.length === 0) return
+
+    const corrected = rules.map((rule) => {
+      const replacement = this.findMovingAverageBreakoutCorrection(rule, deterministicRules)
+      if (!replacement) return rule
+      return {
+        ...rule,
+        condition: replacement.condition,
+        evidence: replacement.evidence ?? rule.evidence,
+      }
+    })
+
+    const nextRules = [...corrected]
+    for (const deterministicRule of deterministicRules) {
+      if (!this.shouldAppendDeterministicCoreTradeRule(deterministicRule)) continue
+      if (this.isDeterministicRuleCovered(nextRules, deterministicRule)) continue
+      nextRules.push(deterministicRule)
+    }
+    merged.rules = nextRules
+  }
+
+  private shouldAppendDeterministicCoreTradeRule(rule: SemanticRule): boolean {
+    const leaves = collectAtomLeaves(rule.condition)
+    if (leaves.length !== 1) return false
+    const conditionKey = leaves[0]?.key
+    const allowedConditionKeys = new Set<string>([
+      ATOM_CONTRACT_REGISTRY['indicator.above'].key,
+      ATOM_CONTRACT_REGISTRY['indicator.below'].key,
+      ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key,
+      ATOM_CONTRACT_REGISTRY['indicator.cross_under'].key,
+    ])
+    if (!conditionKey || !allowedConditionKeys.has(conditionKey)) return false
+
+    const allowedActionKeys = new Set<string>([
+      ATOM_CONTRACT_REGISTRY['action.open_long'].key,
+      ATOM_CONTRACT_REGISTRY['action.open_short'].key,
+      ATOM_CONTRACT_REGISTRY['action.close_long'].key,
+      ATOM_CONTRACT_REGISTRY['action.close_short'].key,
+    ])
+    return rule.effects.some(effect =>
+      collectAtomLeaves(effect).some(leaf => allowedActionKeys.has(leaf.key)),
+    )
+  }
+
+  private findMovingAverageBreakoutCorrection(
+    plannerRule: SemanticRule,
+    deterministicRules: readonly SemanticRule[],
+  ): SemanticRule | null {
+    const leaves = collectAtomLeaves(plannerRule.condition)
+    if (leaves.length !== 1) return null
+    const leaf = leaves[0]
+    if (!leaf) return null
+
+    const replacementKey = leaf.key === ATOM_CONTRACT_REGISTRY['price.breakout_up'].key
+      ? ATOM_CONTRACT_REGISTRY['indicator.above'].key
+      : leaf.key === ATOM_CONTRACT_REGISTRY['price.breakout_down'].key
+        ? ATOM_CONTRACT_REGISTRY['indicator.below'].key
+        : null
+    if (!replacementKey) return null
+    if (leaf.params?.reference !== 'unknown') return null
+
+    const plannerPeriod = this.readNumericParam(leaf.params, 'period')
+    return deterministicRules.find((rule) => {
+      if (rule.phase !== plannerRule.phase) return false
+      if (rule.sideScope !== plannerRule.sideScope) return false
+      const deterministicLeaves = collectAtomLeaves(rule.condition)
+      if (deterministicLeaves.length !== 1) return false
+      const deterministicLeaf = deterministicLeaves[0]
+      if (!deterministicLeaf || deterministicLeaf.key !== replacementKey) return false
+      if (plannerPeriod === null) return true
+      return this.readNumericParam(deterministicLeaf.params, 'reference.period') === plannerPeriod
+    }) ?? null
+  }
+
+  private isDeterministicRuleCovered(
+    rules: readonly SemanticRule[],
+    deterministicRule: SemanticRule,
+  ): boolean {
+    const deterministicLeaves = collectAtomLeaves(deterministicRule.condition)
+    if (deterministicLeaves.length === 0) return true
+
+    return rules.some((rule) => {
+      if (rule.phase !== deterministicRule.phase) return false
+      if (rule.sideScope !== deterministicRule.sideScope) return false
+      const leaves = collectAtomLeaves(rule.condition)
+      if (leaves.length !== deterministicLeaves.length) return false
+      return deterministicLeaves.every((candidate, index) => {
+        const existing = leaves[index]
+        return existing?.key === candidate.key
+          && this.stableParamsHash(existing.params) === this.stableParamsHash(candidate.params)
+      })
+    })
   }
 
   private bindDispatcherLifecycleEffectsIntoPlannerRules(

@@ -6598,6 +6598,62 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect(script).not.toEqual(expect.stringContaining('highest_high_1_1h'))
     })
 
+    it('corrects planner channel breakout degradation for ETH MA20 on first turn', async () => {
+      mockAi.chat.mockResolvedValue({
+        content: JSON.stringify({
+          related: true,
+          logicReady: false,
+          assistantPrompt: '我当前理解的策略是：入场：向上突破（20，0%） → 开多',
+          semanticPatch: {
+            rules: [
+              {
+                id: 'entry-eth-1h-breakout-ma20',
+                phase: 'entry',
+                sideScope: 'long',
+                condition: {
+                  kind: 'atom',
+                  key: 'price.breakout_up',
+                  params: { period: 20, bufferPct: 0, reference: 'unknown' },
+                  evidence: { text: 'ETH 1小时突破 MA20 买入' },
+                },
+                effects: [
+                  {
+                    kind: 'atom',
+                    key: 'action.open_long',
+                    params: {},
+                    evidence: { text: '买入' },
+                  },
+                ],
+                evidence: { text: 'ETH 1小时突破 MA20 买入' },
+              },
+            ],
+          },
+        }),
+      })
+      mockRepo.createSession.mockResolvedValue({ id: 's-reported-eth-ma20-planner-degraded' })
+
+      await service.startSession({
+        userId: 'u1',
+        initialMessage: 'ETH 1小时突破 MA20 买入，止损设为 2 倍 ATR，盈利达到 3 倍 ATR 后止盈。',
+      })
+      const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+      const semanticState = createPayload.semanticState as Record<string, any>
+
+      expect(semanticState.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.above',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            'reference.period': 20,
+          }),
+        }),
+      ]))
+      expect(JSON.stringify(semanticState.trigger)).not.toContain('price.breakout_up')
+      expect(JSON.stringify(semanticState.rules)).not.toContain('price.breakout_up')
+    })
+
     it('keeps 15m 1h 4h EMA20 confirmation through prompt and generated script', async () => {
       const sessionId = 's-reported-btc-mtf-ema-conversation'
       let flow = await startReportedConversation(
@@ -6651,6 +6707,70 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect(script).toEqual(expect.stringContaining('ORCHESTRATION_PORTFOLIO_RISKS'))
       expect(script).toEqual(expect.stringContaining('"thresholdPct":15'))
       expect(script).toEqual(expect.stringContaining('evaluateOrchestrationPortfolioRisks'))
+    })
+
+    it('adds missing EMA20/EMA60 entry and exit when planner only returns drawdown rule', async () => {
+      mockAi.chat.mockResolvedValue({
+        content: JSON.stringify({
+          related: true,
+          logicReady: false,
+          assistantPrompt: '我当前理解的策略是：前置：账户最大回撤超过 15% 时阻止开新仓',
+          semanticPatch: {
+            rules: [
+              {
+                id: 'gate-max-drawdown-15pct-fuse',
+                phase: 'gate',
+                sideScope: 'both',
+                condition: {
+                  kind: 'atom',
+                  key: 'portfolioRisk.drawdown_block',
+                  params: { thresholdPct: 15 },
+                  evidence: { text: '最大回撤 15% 熔断' },
+                },
+                effects: [
+                  {
+                    kind: 'atom',
+                    key: 'portfolioRisk.drawdown_block',
+                    params: { thresholdPct: 15 },
+                    evidence: { text: '最大回撤 15% 熔断' },
+                  },
+                ],
+                evidence: { text: '最大回撤 15% 熔断' },
+              },
+            ],
+          },
+        }),
+      })
+      mockRepo.createSession.mockResolvedValue({ id: 's-reported-sol-drawdown-planner-missing-core' })
+
+      await service.startSession({
+        userId: 'u1',
+        initialMessage: 'SOL 1d，EMA20 上穿 EMA60 开多，下穿平仓，最大回撤 15% 熔断',
+      })
+      const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+      const semanticState = createPayload.semanticState as Record<string, any>
+
+      expect(semanticState.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({ indicator: 'ema', fastPeriod: 20, slowPeriod: 60 }),
+        }),
+        expect.objectContaining({
+          key: 'indicator.cross_under',
+          phase: 'exit',
+          sideScope: 'long',
+          params: expect.objectContaining({ indicator: 'ema', fastPeriod: 20, slowPeriod: 60 }),
+        }),
+      ]))
+      expect(semanticState.action).toEqual(expect.arrayContaining([
+        expect.objectContaining({ key: 'action.open_long' }),
+        expect.objectContaining({ key: 'action.close_long' }),
+      ]))
+      expect(semanticState.orchestration).toEqual(expect.arrayContaining([
+        expect.objectContaining({ key: 'portfolioRisk.drawdown_block', thresholdPct: 15 }),
+      ]))
     })
 
     it('does not let planner risk mirror of portfolio drawdown route to unsupported fallback', () => {
