@@ -497,7 +497,7 @@ type ExtractedSizingRole = {
 }
 
 const SIZING_SLOT_RE = /(?:sizing|size|budget)/iu
-const SIZING_ROLE_PREFIX_RE = /(?:仓位|资金(?!费率)|比例|使用|投入|固定|单笔|每格|每次|每笔|每单|用|加投|加仓|补仓)\s*(?:使用|用|投入)?\s*[：:]?\s*$/u
+const SIZING_ROLE_PREFIX_RE = /(?:仓位|资金(?!费率)|比例|使用|投入|固定|单笔|每格|每次|每笔|每单|用|加投|加仓|补仓|账户权益(?:的)?|权益(?:的)?|账户资金(?:的)?|(?:使用|用|投入).*(?:账户权益|权益|账户资金)(?:的)?)\s*(?:使用|用|投入)?\s*[：:]?\s*$/u
 const SIZING_ROLE_SUFFIX_RE = /^\s*(?:仓位|资金(?!费率)|比例)/u
 const RISK_ROLE_NEAR_RE = /(?:止损|止盈|亏损|盈利|ATR|atr)\s*$/u
 

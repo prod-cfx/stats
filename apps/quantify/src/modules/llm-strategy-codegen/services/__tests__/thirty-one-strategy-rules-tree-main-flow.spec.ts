@@ -483,6 +483,49 @@ describe('31-strategy rules tree main flow regressions', () => {
     }))
   })
 
+  it('keeps full OKX perp EMA cross wording through dispatcher fallback rules tree into canonical spec', () => {
+    const text = '创建一个 OKX BTCUSDT 永续合约策略，使用 15 分钟 K 线。当 EMA7 上穿 EMA21 时开多；当 EMA7 下穿 EMA21 时平多。每次使用账户权益的 10% 开仓，杠杆 1 倍，逐仓不要使用，使用全仓 cross。'
+    const dispatcherPatch = new GenericSeedDispatcher().dispatch(text)
+    const fallback = new PlannerDispatcherMergeService().buildRulesTreeFallbackFromDispatcher(dispatcherPatch, text)
+    const state = new SemanticSeedStateBuilderService().build(fallback, text)
+    const projected = state ? new SemanticRuleProjectionService().reprojectFromRules(state) : null
+    const view = new SemanticStateProjectionService().buildConversationView(projected!)
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(projected!)
+
+    const entryRule = spec.rules.find(rule => rule.phase === 'entry')
+    const exitRule = spec.rules.find(rule => rule.phase === 'exit')
+
+    expect(projected?.contextSlots.exchange?.value).toBe('okx')
+    expect(projected?.contextSlots.symbol?.value).toBe('BTCUSDT')
+    expect(projected?.contextSlots.marketType?.value).toBe('perp')
+    expect(projected?.contextSlots.timeframe?.value).toBe('15m')
+    expect(projected?.position?.sizing).toEqual({ kind: 'ratio', value: 0.1, unit: 'ratio' })
+    expect(projected?.rules?.map(rule => rule.condition.kind === 'atom' ? rule.condition.key : '')).toEqual(expect.arrayContaining([
+      'indicator.cross_over',
+      'indicator.cross_under',
+    ]))
+    expect(entryRule?.condition).toEqual(expect.objectContaining({
+      kind: 'atom',
+      key: 'ma.golden_cross',
+      op: 'CROSS_OVER',
+      params: expect.objectContaining({ indicator: 'ema', fastPeriod: 7, slowPeriod: 21 }),
+    }))
+    expect(exitRule?.condition).toEqual(expect.objectContaining({
+      kind: 'atom',
+      key: 'ma.death_cross',
+      op: 'CROSS_UNDER',
+      params: expect.objectContaining({ indicator: 'ema', fastPeriod: 7, slowPeriod: 21 }),
+    }))
+    expect(entryRule?.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'OPEN_LONG' }),
+    ]))
+    expect(exitRule?.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'CLOSE_LONG' }),
+    ]))
+    expect(view.summary).toContain('EMA7 上穿 EMA21')
+    expect(view.summary).toContain('EMA7 下穿 EMA21')
+  })
+
   it('normalizes planner duplicated centered-percent grid rules into one executable grid program', () => {
     const text = 'OKX 现货 ETHUSDT、1m 网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT、限价单并相邻网格自动挂反向单、不用趋势信号开仓；当价格突破上下边界时执行“立即停止并撤销所有未成交订单”'
     const gridParams = {

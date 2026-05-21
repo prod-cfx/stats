@@ -187,6 +187,12 @@ describe('user reported five strategies: entry -> middle -> publication generati
       expectedAnyKeys: ['grid.range_rebalance'],
       publication: true,
     },
+    {
+      name: '策略11 OKX 永续 EMA7/21 上下穿 + 权益百分比仓位',
+      message: '创建一个 OKX BTCUSDT 永续合约策略，使用 15 分钟 K 线。当 EMA7 上穿 EMA21 时开多；当 EMA7 下穿 EMA21 时平多。每次使用账户权益的 10% 开仓，杠杆 1 倍，逐仓不要使用，使用全仓 cross。',
+      expectedAnyKeys: ['indicator.cross_over', 'indicator.cross_under', 'open_long', 'close_long'],
+      publication: true,
+    },
   ]
 
   for (const strategy of strategies) {
