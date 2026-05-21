@@ -1122,18 +1122,112 @@ export class PlannerDispatcherMergeService {
 
   private atomLeafMatches(existing: AtomExprAtom, candidate: AtomExprAtom): boolean {
     if (existing.key !== candidate.key) return false
-    const existingIndicator = existing.params?.indicator
-    const candidateIndicator = candidate.params?.indicator
-    if (
-      existingIndicator !== undefined
-      && candidateIndicator !== undefined
-      && String(existingIndicator).toLowerCase() !== String(candidateIndicator).toLowerCase()
-    ) return false
+    if (this.stableParamsHash(existing.params) === this.stableParamsHash(candidate.params)) return true
+    if (this.semanticAtomLeafMatches(existing, candidate)) return true
+    return this.paramsSubsetMatch(existing.params, candidate.params)
+  }
 
-    const existingPeriod = this.readNumericParam(existing.params, 'reference.period')
-    const candidatePeriod = this.readNumericParam(candidate.params, 'reference.period')
-    if (existingPeriod !== null || candidatePeriod !== null) return existingPeriod === candidatePeriod
-    return this.stableParamsHash(existing.params) === this.stableParamsHash(candidate.params)
+  private semanticAtomLeafMatches(existing: AtomExprAtom, candidate: AtomExprAtom): boolean {
+    const existingIndicator = this.readStringParam(existing.params, 'indicator')
+    const candidateIndicator = this.readStringParam(candidate.params, 'indicator')
+    if (existingIndicator && candidateIndicator && !this.indicatorAliasesMatch(existingIndicator, candidateIndicator)) return false
+
+    if (
+      existing.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key
+      || existing.key === ATOM_CONTRACT_REGISTRY['indicator.below'].key
+    ) {
+      const existingPeriod = this.readNumericParam(existing.params, 'reference.period')
+      const candidatePeriod = this.readNumericParam(candidate.params, 'reference.period')
+      if (existingPeriod !== null || candidatePeriod !== null) return existingPeriod === candidatePeriod
+      return Boolean(existingIndicator && candidateIndicator)
+    }
+
+    if (
+      existing.key === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key
+      || existing.key === ATOM_CONTRACT_REGISTRY['indicator.cross_under'].key
+    ) {
+      if (existingIndicator === 'macd' && candidateIndicator === 'macd') return true
+      if (existingIndicator && candidateIndicator && this.isMovingAverageIndicatorName(existingIndicator) && this.isMovingAverageIndicatorName(candidateIndicator)) {
+        return this.movingAverageCrossParamsMatch(existing.params, candidate.params)
+      }
+    }
+
+    return false
+  }
+
+  private movingAverageCrossParamsMatch(
+    existingParams: Record<string, unknown> | undefined,
+    candidateParams: Record<string, unknown> | undefined,
+  ): boolean {
+    const pairs: Array<[string, string]> = [
+      ['fastPeriod', 'fastPeriod'],
+      ['slowPeriod', 'slowPeriod'],
+      ['period', 'period'],
+      ['value', 'value'],
+    ]
+    let compared = false
+    for (const [existingKey, candidateKey] of pairs) {
+      const existingValue = this.readNumericParam(existingParams, existingKey)
+      const candidateValue = this.readNumericParam(candidateParams, candidateKey)
+      if (existingValue === null && candidateValue === null) continue
+      if (existingValue === null || candidateValue === null) return false
+      if (Math.abs(existingValue - candidateValue) > 1e-9) return false
+      compared = true
+    }
+    return compared
+  }
+
+  private paramsSubsetMatch(
+    existingParams: Record<string, unknown> | undefined,
+    candidateParams: Record<string, unknown> | undefined,
+  ): boolean {
+    const candidate = candidateParams ?? {}
+    const existing = existingParams ?? {}
+    for (const [key, candidateValue] of Object.entries(candidate)) {
+      const existingValue = this.readParamByPath(existing, key)
+      if (existingValue === undefined) return false
+      if (!this.paramValuesMatch(existingValue, candidateValue)) return false
+    }
+    return true
+  }
+
+  private readParamByPath(params: Record<string, unknown>, key: string): unknown {
+    if (Object.prototype.hasOwnProperty.call(params, key)) return params[key]
+    return key.split('.').reduce<unknown>((current, part) => {
+      if (!current || typeof current !== 'object') return undefined
+      return (current as Record<string, unknown>)[part]
+    }, params)
+  }
+
+  private readStringParam(params: Record<string, unknown> | undefined, key: string): string | null {
+    const direct = params?.[key]
+    return typeof direct === 'string' && direct.trim().length > 0 ? direct.trim().toLowerCase() : null
+  }
+
+  private indicatorAliasesMatch(left: string, right: string): boolean {
+    return this.normalizeIndicatorAlias(left) === this.normalizeIndicatorAlias(right)
+  }
+
+  private normalizeIndicatorAlias(value: string): string {
+    const normalized = value.trim().toLowerCase()
+    return normalized === 'sma' ? 'ma' : normalized
+  }
+
+  private isMovingAverageIndicatorName(value: string): boolean {
+    const normalized = this.normalizeIndicatorAlias(value)
+    return normalized === 'ma' || normalized === 'ema'
+  }
+
+  private paramValuesMatch(existingValue: unknown, candidateValue: unknown): boolean {
+    if (typeof existingValue === 'number' || typeof candidateValue === 'number') {
+      return Number.isFinite(Number(existingValue))
+        && Number.isFinite(Number(candidateValue))
+        && Math.abs(Number(existingValue) - Number(candidateValue)) <= 1e-9
+    }
+    if (typeof existingValue === 'string' || typeof candidateValue === 'string') {
+      return this.normalizeIndicatorAlias(String(existingValue)) === this.normalizeIndicatorAlias(String(candidateValue))
+    }
+    return JSON.stringify(existingValue) === JSON.stringify(candidateValue)
   }
 
   private bindDispatcherLifecycleEffectsIntoPlannerRules(

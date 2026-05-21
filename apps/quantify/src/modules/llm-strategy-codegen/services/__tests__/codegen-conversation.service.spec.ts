@@ -6814,6 +6814,247 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       ]))
     })
 
+    it('does not duplicate EMA7/EMA21 cross rules with dispatcher fallback on first turn', async () => {
+      const initialMessage = 'EMA7 上穿 EMA21 时开多；下穿 时平多。'
+      mockAi.chat.mockResolvedValue({
+        content: JSON.stringify({
+          related: true,
+          logicReady: false,
+          assistantPrompt: '我当前理解的策略是：入场：EMA7 上穿 EMA21 → 开多；出场：EMA7 下穿 EMA21 → 平多',
+          semanticPatch: {
+            rules: [
+              {
+                id: 'entry-ema7-crossup-ema21-long',
+                phase: 'entry',
+                sideScope: 'long',
+                evidence: { text: initialMessage },
+                condition: {
+                  kind: 'atom',
+                  key: 'indicator.cross_over',
+                  params: {
+                    value: 21,
+                    period: 7,
+                    semantic: 'cross_up',
+                    indicator: 'ema',
+                    fastPeriod: 7,
+                    slowPeriod: 21,
+                    signalPeriod: 9,
+                  },
+                  evidence: { text: initialMessage },
+                },
+                effects: [{ kind: 'atom', key: 'action.open_long', params: {}, evidence: { text: initialMessage } }],
+              },
+              {
+                id: 'exit-ema7-crossdown-ema21-close-long',
+                phase: 'exit',
+                sideScope: 'long',
+                evidence: { text: initialMessage },
+                condition: {
+                  kind: 'atom',
+                  key: 'indicator.cross_under',
+                  params: {
+                    value: 21,
+                    period: 7,
+                    semantic: 'cross_down',
+                    indicator: 'ema',
+                    fastPeriod: 7,
+                    slowPeriod: 21,
+                    signalPeriod: 9,
+                  },
+                  evidence: { text: initialMessage },
+                },
+                effects: [{ kind: 'atom', key: 'action.close_long', params: {}, evidence: { text: initialMessage } }],
+              },
+            ],
+          },
+        }),
+      })
+      mockRepo.createSession.mockResolvedValue({ id: 's-reported-ema-cross-no-duplicate' })
+
+      await service.startSession({
+        userId: 'u1',
+        initialMessage,
+      })
+      const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+      const semanticState = createPayload.semanticState as Record<string, any>
+
+      expect((semanticState.rules as Array<{ id?: string }>).map(rule => rule.id)).toEqual([
+        'entry-ema7-crossup-ema21-long',
+        'exit-ema7-crossdown-ema21-close-long',
+      ])
+      expect(semanticState.trigger.filter((item: { key?: string }) => item.key === 'indicator.cross_over')).toHaveLength(1)
+      expect(semanticState.trigger.filter((item: { key?: string }) => item.key === 'indicator.cross_under')).toHaveLength(1)
+      expect(semanticState.action.filter((item: { key?: string }) => item.key === 'action.open_long')).toHaveLength(1)
+      expect(semanticState.action.filter((item: { key?: string }) => item.key === 'action.close_long')).toHaveLength(1)
+    })
+
+    it('does not duplicate MACD cross rules with dispatcher fallback on first turn', async () => {
+      const initialMessage = 'OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖出'
+      mockAi.chat.mockResolvedValue({
+        content: JSON.stringify({
+          related: true,
+          logicReady: false,
+          assistantPrompt: '我当前理解的策略是：入场：MACD 金叉 → 开多；出场：MACD 死叉 → 平多',
+          semanticPatch: {
+            contextSlots: {
+              symbol: 'BTCUSDT',
+              timeframe: '1h',
+              exchange: 'okx',
+            },
+            rules: [
+              {
+                id: 'entry-macd-cross-golden',
+                phase: 'entry',
+                sideScope: 'long',
+                evidence: { text: initialMessage },
+                condition: {
+                  kind: 'atom',
+                  key: 'indicator.cross_over',
+                  params: {
+                    value: 0,
+                    period: 0,
+                    semantic: 'cross_up',
+                    indicator: 'macd',
+                    fastPeriod: 12,
+                    slowPeriod: 26,
+                    signalPeriod: 9,
+                  },
+                  evidence: { text: initialMessage },
+                },
+                effects: [{ kind: 'atom', key: 'action.open_long', params: {}, evidence: { text: initialMessage } }],
+              },
+              {
+                id: 'exit-macd-cross-dead',
+                phase: 'exit',
+                sideScope: 'long',
+                evidence: { text: initialMessage },
+                condition: {
+                  kind: 'atom',
+                  key: 'indicator.cross_under',
+                  params: {
+                    value: 0,
+                    period: 0,
+                    semantic: 'cross_down',
+                    indicator: 'macd',
+                    fastPeriod: 12,
+                    slowPeriod: 26,
+                    signalPeriod: 9,
+                  },
+                  evidence: { text: initialMessage },
+                },
+                effects: [{ kind: 'atom', key: 'action.close_long', params: {}, evidence: { text: initialMessage } }],
+              },
+            ],
+          },
+        }),
+      })
+      mockRepo.createSession.mockResolvedValue({ id: 's-reported-macd-cross-no-duplicate' })
+
+      await service.startSession({
+        userId: 'u1',
+        initialMessage,
+      })
+      const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+      const semanticState = createPayload.semanticState as Record<string, any>
+
+      expect((semanticState.rules as Array<{ id?: string }>).map(rule => rule.id)).toEqual([
+        'entry-macd-cross-golden',
+        'exit-macd-cross-dead',
+      ])
+      expect(semanticState.trigger.filter((item: { key?: string }) => item.key === 'indicator.cross_over')).toHaveLength(1)
+      expect(semanticState.trigger.filter((item: { key?: string }) => item.key === 'indicator.cross_under')).toHaveLength(1)
+      expect(semanticState.action.filter((item: { key?: string }) => item.key === 'action.open_long')).toHaveLength(1)
+      expect(semanticState.action.filter((item: { key?: string }) => item.key === 'action.close_long')).toHaveLength(1)
+    })
+
+    it('does not duplicate MA100 and MACD component rules with dispatcher fallback on first turn', async () => {
+      const initialMessage = 'SOL 30分钟价格在 MA100 上方，MACD 金叉买入；跌破 MA100 或 MACD 死叉卖出。'
+      mockAi.chat.mockResolvedValue({
+        content: JSON.stringify({
+          related: true,
+          logicReady: false,
+          assistantPrompt: '我当前理解的策略是：入场：价格在 MA100 上方 且 MACD 金叉 → 开多；出场：跌破 MA100 或 MACD 死叉 → 平多',
+          semanticPatch: {
+            contextSlots: {
+              symbol: 'SOLUSDT',
+              timeframe: '30m',
+            },
+            rules: [
+              {
+                id: 'entry-sol-ma100-macd-golden-long',
+                phase: 'entry',
+                sideScope: 'long',
+                evidence: { text: initialMessage },
+                condition: {
+                  kind: 'and',
+                  evidence: { text: initialMessage },
+                  children: [
+                    {
+                      kind: 'atom',
+                      key: 'indicator.above',
+                      params: { indicator: 'ma', 'reference.period': 100 },
+                      evidence: { text: initialMessage },
+                    },
+                    {
+                      kind: 'atom',
+                      key: 'indicator.cross_over',
+                      params: { indicator: 'macd', fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 },
+                      evidence: { text: initialMessage },
+                    },
+                  ],
+                },
+                effects: [{ kind: 'atom', key: 'action.open_long', params: {}, evidence: { text: initialMessage } }],
+              },
+              {
+                id: 'exit-sol-ma100-or-macd-dead-long',
+                phase: 'exit',
+                sideScope: 'long',
+                evidence: { text: initialMessage },
+                condition: {
+                  kind: 'or',
+                  evidence: { text: initialMessage },
+                  children: [
+                    {
+                      kind: 'atom',
+                      key: 'indicator.below',
+                      params: { indicator: 'ma', 'reference.period': 100 },
+                      evidence: { text: initialMessage },
+                    },
+                    {
+                      kind: 'atom',
+                      key: 'indicator.cross_under',
+                      params: { indicator: 'macd', fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 },
+                      evidence: { text: initialMessage },
+                    },
+                  ],
+                },
+                effects: [{ kind: 'atom', key: 'action.close_long', params: {}, evidence: { text: initialMessage } }],
+              },
+            ],
+          },
+        }),
+      })
+      mockRepo.createSession.mockResolvedValue({ id: 's-reported-sol-ma100-macd-no-duplicate' })
+
+      await service.startSession({
+        userId: 'u1',
+        initialMessage,
+      })
+      const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+      const semanticState = createPayload.semanticState as Record<string, any>
+
+      expect((semanticState.rules as Array<{ id?: string }>).map(rule => rule.id)).toEqual([
+        'entry-sol-ma100-macd-golden-long',
+        'exit-sol-ma100-or-macd-dead-long',
+      ])
+      expect(semanticState.trigger.filter((item: { key?: string }) => item.key === 'indicator.above')).toHaveLength(1)
+      expect(semanticState.trigger.filter((item: { key?: string }) => item.key === 'indicator.cross_over')).toHaveLength(1)
+      expect(semanticState.trigger.filter((item: { key?: string }) => item.key === 'indicator.below')).toHaveLength(1)
+      expect(semanticState.trigger.filter((item: { key?: string }) => item.key === 'indicator.cross_under')).toHaveLength(1)
+      expect(semanticState.action.filter((item: { key?: string }) => item.key === 'action.open_long')).toHaveLength(1)
+      expect(semanticState.action.filter((item: { key?: string }) => item.key === 'action.close_long')).toHaveLength(1)
+    })
+
     it('does not let planner risk mirror of portfolio drawdown route to unsupported fallback', () => {
       const normalized = (service as any).normalizeRiskState({
         version: 1,
