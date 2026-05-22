@@ -21,7 +21,7 @@ import '../shell/main_shell_scaffold.dart';
 
 /// App-wide router.
 ///
-/// - 5 bottom tabs (`/ai`, `/market`, `/whale`, `/strategy`, `/me`) live inside
+/// - 5 bottom tabs (`/ai`, `/market`, `/strategy`, `/whale`, `/me`) live inside
 ///   a single [StatefulShellRoute.indexedStack] so each branch preserves its
 ///   own navigation + widget state across tab switches.
 /// - Sub-views (`/login`, `/market/:symbol`, `/market/long-short`,
@@ -100,18 +100,18 @@ GoRouter buildRouter({
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(
-                path: '/whale',
+                path: '/strategy',
                 builder: (BuildContext context, GoRouterState state) =>
-                    const WhaleHomePage(),
+                    const StrategyHomePage(),
               ),
             ],
           ),
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(
-                path: '/strategy',
+                path: '/whale',
                 builder: (BuildContext context, GoRouterState state) =>
-                    const StrategyHomePage(),
+                    const WhaleHomePage(),
               ),
             ],
           ),

@@ -7,7 +7,7 @@ import '../theme/theme_context.dart';
 /// Bottom tab bar matching the `MTabBar` design (`design/project/mobile/m-shell.jsx`).
 ///
 /// Visual contract:
-/// - 5 fixed items (AI 量化, 行情, 巨鲸, 策略, 我的) — each tagged with a stable
+/// - 5 fixed items (AI 量化, 行情, 策略, 巨鲸, 我的) — each tagged with a stable
 ///   `ValueKey('tab-<name>')` so widget tests can target items without
 ///   depending on which Material icon ships with the build.
 /// - Active tab shows a 42x28 rounded pill behind the icon, filled with
@@ -43,8 +43,8 @@ class QzBottomTabBar extends StatelessWidget {
     final List<_TabSpec> tabs = <_TabSpec>[
       _TabSpec(keyName: 'ai', icon: Icons.auto_awesome, label: 'AI 量化'),
       _TabSpec(keyName: 'market', icon: Icons.show_chart, label: l10n.tabMarket),
-      _TabSpec(keyName: 'whale', icon: Icons.water_drop_outlined, label: l10n.tabWhale),
       _TabSpec(keyName: 'strategy', icon: Icons.dashboard_outlined, label: l10n.tabStrategy),
+      _TabSpec(keyName: 'whale', icon: Icons.water_drop_outlined, label: l10n.tabWhale),
       _TabSpec(keyName: 'me', icon: Icons.person_outline, label: l10n.tabMe),
     ];
     return Material(

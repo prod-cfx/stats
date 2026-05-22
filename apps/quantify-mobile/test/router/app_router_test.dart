@@ -87,13 +87,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(MarketHomePage), findsOneWidget);
 
-    await tester.tap(_tab('whale'));
-    await tester.pumpAndSettle();
-    expect(find.byType(WhaleHomePage), findsOneWidget);
-
     await tester.tap(_tab('strategy'));
     await tester.pumpAndSettle();
     expect(find.byType(StrategyHomePage), findsOneWidget);
+
+    await tester.tap(_tab('whale'));
+    await tester.pumpAndSettle();
+    expect(find.byType(WhaleHomePage), findsOneWidget);
 
     await tester.tap(_tab('me'));
     await tester.pumpAndSettle();

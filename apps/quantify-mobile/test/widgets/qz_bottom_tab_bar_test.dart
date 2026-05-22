@@ -58,11 +58,11 @@ void main() {
       ),
       surfaceSize: const Size(360, 80),
     );
-    // Locate the pill Container that wraps the active 'whale' icon —
+    // Locate the pill Container that wraps the active 'strategy' icon —
     // the closest ancestor Container of the icon must carry a non-null
     // background color (the accentSoft pill); inactive items have a
     // transparent pill slot.
-    final Finder activeIcon = find.byKey(const ValueKey<String>('tab-whale'));
+    final Finder activeIcon = find.byKey(const ValueKey<String>('tab-strategy'));
     final Finder activePill = find
         .ancestor(of: activeIcon, matching: find.byType(Container))
         .first;
