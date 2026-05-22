@@ -267,6 +267,46 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
 describe('semanticContractReadinessService.normalize DCA exit contract in rules tree', () => {
   const svc = new SemanticContractReadinessService()
 
+  it('routes risk effect open slot fieldPath through typed rule effects path', () => {
+    const result = svc.normalize(stateWithRules([
+      rule({
+        id: 'entry-with-missing-risk-slot',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: atom('price.cross_above_ma', { period: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.stop_loss_pct')],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }),
+      rule({
+        id: 'exit',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: atom('price.cross_below_ma', { period: 20 }),
+        effects: {
+          actions: [atom('action.close_long')],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }),
+    ]))
+
+    const riskSlot = result.state.risk
+      .flatMap(risk => risk.openSlots ?? [])
+      .find(slot => slot.slotKey.includes('risk.stop_loss_pct.valuePct'))
+
+    expect(riskSlot).toEqual(expect.objectContaining({
+      fieldPath: expect.stringContaining('rules[0].effects.risks[0]'),
+    }))
+    expect(riskSlot?.fieldPath).not.toContain('risk[')
+  })
+
   it('treats an explicit sibling exit rule as satisfying position.dca_schedule dca_exit_rule', () => {
     const result = svc.normalize(stateWithRules([
       rule({

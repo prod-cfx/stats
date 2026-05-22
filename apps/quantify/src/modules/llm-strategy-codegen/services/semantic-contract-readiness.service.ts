@@ -8,6 +8,7 @@ import type {
   SemanticAtomContract,
   SemanticCapability,
   SemanticCapabilityDomain,
+  SemanticFlatAtomProvenance,
   SemanticNodeStatus,
   SemanticOrderRequirement,
   SemanticPositionConstraintState,
@@ -67,6 +68,8 @@ export type MissingSemanticContractRequirementKind = 'capability_missing' | 'tim
 export interface MissingSemanticContractRequirement extends SemanticRequirement {
   ownerKind: SemanticContractOwnerKind
   ownerId: string
+  sourceRuleId?: string
+  sourceRulePath?: string
   contractId: string
   kind?: MissingSemanticContractRequirementKind
   errorCode?: string
@@ -85,6 +88,7 @@ interface SemanticContractOwnerRef {
   ownerId: string
   atomKey: string
   sourceRuleId?: string
+  sourceRulePath?: string
   params: Record<string, unknown>
   support?: SemanticAtomSupportMetadata
   status: SemanticNodeStatus
@@ -198,15 +202,30 @@ export class SemanticContractReadinessService {
     const baseNextState: SemanticState = {
       ...state,
       trigger: readFlatTriggers(state).map(trigger =>
-        mergeOwnerOpenSlots(trigger, slotsByOwnerKey.get(ownerKey('trigger', trigger.id))),
+        mergeOwnerOpenSlots(
+          withTypedRuleOpenSlotPaths(trigger, state),
+          slotsByOwnerKey.get(ownerKey('trigger', trigger.id)),
+        ),
       ),
       action: readFlatActions(state).map(action =>
-        mergeOwnerOpenSlots(action, slotsByOwnerKey.get(ownerKey('action', action.id))),
+        mergeOwnerOpenSlots(
+          withTypedRuleOpenSlotPaths(action, state),
+          slotsByOwnerKey.get(ownerKey('action', action.id)),
+        ),
       ),
       risk: readFlatRisks(state).map(risk =>
-        mergeOwnerOpenSlots(risk, slotsByOwnerKey.get(ownerKey('risk', risk.id))),
+        mergeOwnerOpenSlots(
+          withTypedRuleOpenSlotPaths(risk, state),
+          slotsByOwnerKey.get(ownerKey('risk', risk.id)),
+        ),
       ),
       position: mergePositionOpenSlots(state.position, slotsByOwnerKey),
+      positionConstraint: state.positionConstraint?.map(constraint =>
+        mergeOwnerOpenSlots(
+          withTypedRuleOpenSlotPaths(constraint, state),
+          slotsByOwnerKey.get(ownerKey('position', positionConstraintOwnerId(constraint))),
+        ),
+      ),
       orchestration: orchestrationResult.state,
     }
     // Phase 5 S2 (#1104): 多 scope 策略对 trigger/action/risk/positionConstraint 加 missing_binding fail-closed
@@ -367,6 +386,8 @@ export class SemanticContractReadinessService {
           .map(requirement => ({
             ownerKind: owner.ownerKind,
             ownerId: owner.ownerId,
+            ...(owner.sourceRuleId ? { sourceRuleId: owner.sourceRuleId } : {}),
+            ...(owner.sourceRulePath ? { sourceRulePath: owner.sourceRulePath } : {}),
             contractId: contract.id,
             domain: requirement.domain,
             verb: requirement.verb,
@@ -2462,11 +2483,13 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
 
   for (const trigger of readFlatTriggers(state)) {
     if (trigger.status !== 'superseded' && trigger.contracts?.length) {
+      const sourceRulePath = buildSourceRulePath(state, trigger._provenance)
       owners.push({
         ownerKind: 'trigger',
         ownerId: trigger.id,
         atomKey: trigger.key,
         sourceRuleId: trigger._provenance?.ruleId,
+        sourceRulePath,
         params: trigger.params,
         support: trigger.support,
         status: trigger.status,
@@ -2478,10 +2501,13 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
 
   for (const action of readFlatActions(state)) {
     if (action.status !== 'superseded' && action.contracts?.length) {
+      const sourceRulePath = buildSourceRulePath(state, action._provenance)
       owners.push({
         ownerKind: 'action',
         ownerId: action.id,
         atomKey: action.key,
+        sourceRuleId: action._provenance?.ruleId,
+        sourceRulePath,
         params: {},
         support: action.support,
         status: action.status,
@@ -2493,10 +2519,13 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
 
   for (const risk of readFlatRisks(state)) {
     if (risk.status !== 'superseded' && risk.contracts?.length) {
+      const sourceRulePath = buildSourceRulePath(state, risk._provenance)
       owners.push({
         ownerKind: 'risk',
         ownerId: risk.id,
         atomKey: risk.key,
+        sourceRuleId: risk._provenance?.ruleId,
+        sourceRulePath,
         params: risk.params,
         support: risk.support,
         status: risk.status,
@@ -2531,11 +2560,13 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
 
   for (const constraint of state.position?.constraints ?? []) {
     if (constraint.status !== 'superseded' && constraint.contracts?.length) {
+      const sourceRulePath = buildSourceRulePath(state, constraint._provenance)
       owners.push({
         ownerKind: 'position',
         ownerId: positionConstraintOwnerId(constraint),
         atomKey: constraint.key,
         sourceRuleId: constraint._provenance?.ruleId,
+        sourceRulePath,
         params: constraint.params,
         support: constraint.support,
         status: constraint.status,
@@ -2547,11 +2578,13 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
 
   for (const constraint of state.positionConstraint ?? []) {
     if (constraint.status !== 'superseded' && constraint.contracts?.length) {
+      const sourceRulePath = buildSourceRulePath(state, constraint._provenance)
       owners.push({
         ownerKind: 'position',
         ownerId: positionConstraintOwnerId(constraint),
         atomKey: constraint.key,
         sourceRuleId: constraint._provenance?.ruleId,
+        sourceRulePath,
         params: constraint.params,
         support: constraint.support,
         status: constraint.status,
@@ -2595,6 +2628,59 @@ function isExecutableIndicatorReferenceAlias(owner: SemanticContractOwnerRef): b
 function readParamString(params: Record<string, unknown>, key: string): string | null {
   const value = params[key]
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function withTypedRuleOpenSlotPaths<T extends {
+  _provenance?: SemanticFlatAtomProvenance
+  openSlots?: SemanticSlotState[]
+}>(
+  owner: T,
+  state: SemanticState,
+): T {
+  const sourceRulePath = buildSourceRulePath(state, owner._provenance)
+  if (!sourceRulePath || !owner.openSlots?.length) {
+    return owner
+  }
+
+  let changed = false
+  const openSlots = owner.openSlots.map((slot) => {
+    if (!slot.paramSlotKey) {
+      return slot
+    }
+
+    const fieldPath = `${sourceRulePath}.params.${slot.paramSlotKey}`
+    if (slot.fieldPath === fieldPath) {
+      return slot
+    }
+
+    changed = true
+    return {
+      ...slot,
+      fieldPath,
+    }
+  })
+
+  return changed ? { ...owner, openSlots } : owner
+}
+
+function buildSourceRulePath(
+  state: SemanticState,
+  provenance: SemanticFlatAtomProvenance | undefined,
+): string | undefined {
+  if (!provenance) {
+    return undefined
+  }
+
+  const ruleIndex = state.rules?.findIndex(rule => rule.id === provenance.ruleId) ?? -1
+  if (ruleIndex < 0) {
+    return undefined
+  }
+
+  return `rules[${ruleIndex}].${stripAtomLeafSuffix(provenance.conditionPath)}`
+}
+
+function stripAtomLeafSuffix(path: string): string {
+  return path.endsWith('.atom') ? path.slice(0, -'.atom'.length) : path
 }
 
 function buildMissingRequirementSlots(
@@ -3056,6 +3142,10 @@ function isTimeframeOverride(params: Record<string, unknown>): boolean {
 }
 
 function buildTimeframeMismatchFieldPath(requirement: MissingSemanticContractRequirement): string {
+  if (requirement.sourceRulePath) {
+    return `${requirement.sourceRulePath}.params.timeframe`
+  }
+
   if (requirement.ownerKind === 'position') {
     return isPositionConstraintOwnerId(requirement.ownerId)
       ? `position.constraints[${positionConstraintIdFromOwnerId(requirement.ownerId)}].params.timeframe`
@@ -3069,6 +3159,10 @@ function buildRequirementFieldPath(
   requirement: MissingSemanticContractRequirement,
   capabilityKey: string,
 ): string {
+  if (requirement.sourceRulePath) {
+    return `${requirement.sourceRulePath}.contracts[${requirement.contractId}].requires.${capabilityKey}`
+  }
+
   if (requirement.ownerKind === 'position' && isPositionConstraintOwnerId(requirement.ownerId)) {
     return `position.constraints[${positionConstraintIdFromOwnerId(requirement.ownerId)}].contracts[${requirement.contractId}].requires.${capabilityKey}`
   }
@@ -3087,6 +3181,10 @@ function buildCapabilityShapeFieldPath(
 ): string {
   const capabilityKey = `${capability.domain}.${capability.verb}.${capability.object}`
 
+  if (owner.sourceRulePath) {
+    return `${owner.sourceRulePath}.contracts[${contract.id}].capabilities[${capabilityKey}].shape`
+  }
+
   if (owner.ownerKind === 'position' && isPositionConstraintOwnerId(owner.ownerId)) {
     return `position.constraints[${positionConstraintIdFromOwnerId(owner.ownerId)}].contracts[${contract.id}].capabilities[${capabilityKey}].shape`
   }
@@ -3102,6 +3200,10 @@ function buildContractFieldPath(
   owner: SemanticContractOwnerRef,
   contractId: string,
 ): string {
+  if (owner.sourceRulePath) {
+    return `${owner.sourceRulePath}.contracts[${contractId}]`
+  }
+
   if (owner.ownerKind === 'position' && isPositionConstraintOwnerId(owner.ownerId)) {
     return `position.constraints[${positionConstraintIdFromOwnerId(owner.ownerId)}].contracts[${contractId}]`
   }
