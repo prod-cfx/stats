@@ -1023,13 +1023,19 @@ export class PlannerDispatcherMergeService {
     return (ATOM_CONTRACT_REGISTRY as Record<string, { roles?: readonly string[] } | undefined>)[key]?.roles?.includes(role) ?? false
   }
 
-  private dedupeFallbackAtoms<T extends { key: string, phase?: unknown, sideScope?: unknown, params?: unknown }>(items: T[]): T[] {
-    const seen = new Set<string>()
+  private dedupeFallbackAtoms<T extends { key: string, phase?: unknown, sideScope?: unknown, params?: unknown, sourceActionKey?: unknown }>(items: T[]): T[] {
+    const seen = new Map<string, number>()
     const out: T[] = []
     for (const item of items) {
       const signature = `${item.key}|${String(item.phase ?? '')}|${String(item.sideScope ?? '')}|${JSON.stringify(item.params ?? {})}`
-      if (seen.has(signature)) continue
-      seen.add(signature)
+      const seenIndex = seen.get(signature)
+      if (seenIndex !== undefined) {
+        if (out[seenIndex]?.sourceActionKey === undefined && item.sourceActionKey !== undefined) {
+          out[seenIndex] = item
+        }
+        continue
+      }
+      seen.set(signature, out.length)
       out.push(item)
     }
     return out

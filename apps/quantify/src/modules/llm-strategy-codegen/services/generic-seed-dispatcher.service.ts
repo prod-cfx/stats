@@ -1314,6 +1314,7 @@ export class GenericSeedDispatcher {
     }
     for (const trigger of flatPatch.triggers ?? []) push(trigger)
     for (const atom of flatPatch.atoms ?? []) push(atom)
+    this.pushTypedLifecyclePredicates(out, flatPatch)
     if (/webhook/iu.test(userMessage) && !out.some(item => item.key === ATOM_CONTRACT_REGISTRY['external.signal'].key)) {
       out.push({
         key: ATOM_CONTRACT_REGISTRY['external.signal'].key,
@@ -1333,6 +1334,60 @@ export class GenericSeedDispatcher {
       })
     }
     return mergeCompatiblePatchAtomNodes(out)
+  }
+
+  private pushTypedLifecyclePredicates(out: PatchAtomNode[], flatPatch: CodegenSemanticPatch): void {
+    const dcaKey = ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key
+    const addPositionKey = ATOM_CONTRACT_REGISTRY['action.add_position'].key
+    const onStartKey = ATOM_CONTRACT_REGISTRY['execution.on_start'].key
+    const percentChangeKey = ATOM_CONTRACT_REGISTRY['price.percent_change'].key
+
+    const dcaAtom = (flatPatch.atoms ?? []).find(atom => atom.key === dcaKey)
+    if (dcaAtom) {
+      out.push({
+        key: onStartKey,
+        phase: 'entry',
+        sideScope: dcaAtom.sideScope ?? 'long',
+        params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
+        evidence: dcaAtom.evidence,
+      })
+    }
+
+    const addAtoms = [
+      ...(flatPatch.actions ?? []).filter(atom => atom.key === addPositionKey),
+      ...(flatPatch.atoms ?? []).filter(atom => atom.key === addPositionKey),
+    ]
+    for (const atom of addAtoms) {
+      const params = atom.params ?? {}
+      const addMode = typeof params.addMode === 'string' ? params.addMode : null
+      const sideScope = atom.sideScope ?? 'long'
+      if (addMode === 'profit_pct' && typeof params.profitThreshold === 'number') {
+        out.push({
+          key: percentChangeKey,
+          phase: 'entry',
+          sideScope,
+          params: {
+            basis: 'entry_avg_price',
+            direction: 'up',
+            valuePct: Math.abs(params.profitThreshold),
+          },
+          evidence: atom.evidence,
+        })
+      }
+      if (addMode === 'drawdown_pct' && typeof params.drawdownThreshold === 'number') {
+        out.push({
+          key: percentChangeKey,
+          phase: 'entry',
+          sideScope,
+          params: {
+            basis: 'entry_avg_price',
+            direction: 'down',
+            valuePct: Math.abs(params.drawdownThreshold),
+          },
+          evidence: atom.evidence,
+        })
+      }
+    }
   }
 
   private resolveTypedRulePhaseForAtom(key: string, phase: unknown): SemanticRule['phase'] {

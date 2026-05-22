@@ -3,6 +3,13 @@ import { semanticRuleSchema } from '../../types/atom-expr'
 
 describe('Issue #1395 — planner rules zod gate', () => {
   const plannerRulesSchema = z.array(semanticRuleSchema).optional()
+  const emptyEffects = {
+    actions: [],
+    risks: [],
+    positions: [],
+    orchestration: [],
+    programs: [],
+  }
 
   it('accepts well-formed rules array', () => {
     const ok = plannerRulesSchema.safeParse([
@@ -11,7 +18,7 @@ describe('Issue #1395 — planner rules zod gate', () => {
         phase: 'entry',
         sideScope: 'long',
         condition: { kind: 'atom', key: 'rsi.gte', params: { threshold: 65 } },
-        effects: [],
+        effects: emptyEffects,
       },
     ])
     expect(ok.success).toBe(true)
@@ -24,7 +31,7 @@ describe('Issue #1395 — planner rules zod gate', () => {
         phase: 'foo',
         sideScope: 'long',
         condition: { kind: 'atom', key: 'x', params: {} },
-        effects: [],
+        effects: emptyEffects,
       },
     ])
     expect(bad.success).toBe(false)
@@ -37,7 +44,7 @@ describe('Issue #1395 — planner rules zod gate', () => {
         phase: 'entry',
         sideScope: 'long',
         condition: { kind: 'and', children: [{ kind: 'atom', key: 'x', params: {} }] },
-        effects: [],
+        effects: emptyEffects,
       },
     ])
     expect(bad.success).toBe(false)
@@ -62,7 +69,7 @@ describe('Issue #1395 — planner rules zod gate', () => {
             { kind: 'atom', key: 'c', params: {} },
           ],
         },
-        effects: [],
+        effects: emptyEffects,
       },
     ])
     expect(ok.success).toBe(true)
@@ -75,7 +82,7 @@ describe('Issue #1395 — planner rules zod gate', () => {
         phase: 'entry',
         sideScope: 'long',
         condition: { kind: 'xor', children: [] } as never,
-        effects: [],
+        effects: emptyEffects,
       },
     ])
     expect(bad.success).toBe(false)
@@ -88,7 +95,7 @@ describe('Issue #1395 — planner rules zod gate', () => {
         phase: 'entry',
         sideScope: 'long',
         condition: { kind: 'atom', key: '', params: {} },
-        effects: [],
+        effects: emptyEffects,
       },
     ])
     expect(bad.success).toBe(false)

@@ -58,11 +58,13 @@ describe('31-strategy rules tree main flow regressions', () => {
           key: 'grid.range_rebalance',
           params: { sideMode: 'both', breakoutAction: 'stop' },
         },
-        effects: [{
-          kind: 'atom',
-          key: 'action.open_long',
-          params: {},
-        }],
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
       }],
     }
     const dispatcherPatch: CodegenSemanticPatch = {
@@ -177,7 +179,13 @@ describe('31-strategy rules tree main flow regressions', () => {
           key: 'execution.on_start',
           params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
         },
-        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
       }],
     }
     const dispatcherPatch = new GenericSeedDispatcher().dispatch('ETH 现货每天定投 100 USDT，回撤 5% 加投 200 USDT')
@@ -187,7 +195,7 @@ describe('31-strategy rules tree main flow regressions', () => {
       listRuleEffects(rule.effects).some(effect => effect.kind === 'atom' && effect.key === 'position.dca_schedule'),
     )
 
-    expect(entryRule?.effects).toEqual(expect.arrayContaining([
+    expect(listRuleEffects(entryRule?.effects)).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'position.dca_schedule',
         params: expect.objectContaining({

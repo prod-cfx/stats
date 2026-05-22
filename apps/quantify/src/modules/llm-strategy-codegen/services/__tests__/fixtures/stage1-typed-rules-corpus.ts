@@ -183,8 +183,8 @@ export const STAGE1_TYPED_RULES_CORPUS: Stage1TypedRulesCorpusCase[] = [
   {
     id: 'stage1-030-dca',
     text: 'ETH 现货每天定投 100 USDT，回撤 5% 加投 200 USDT',
-    expectedPhases: ['program'],
-    expectedEffectRoles: ['programs'],
+    expectedPhases: ['entry', 'program'],
+    expectedEffectRoles: ['actions', 'positions', 'programs'],
   },
   {
     id: 'stage1-031-adaptive-vol-grid',
