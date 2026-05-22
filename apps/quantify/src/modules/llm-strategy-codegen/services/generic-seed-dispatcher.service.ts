@@ -1260,12 +1260,7 @@ export class GenericSeedDispatcher {
     if (!role) return false
     const effectPhase = effect.params.phase
     if (effectPhase === undefined || effectPhase === null) return true
-    if (effectPhase === phase) return true
-    if (role === 'actions') {
-      return phase === 'program' && effect.key !== ATOM_CONTRACT_REGISTRY['action.open_long'].key
-    }
-    if (role === 'programs') return phase === 'program'
-    return role === 'risks' || role === 'positions' || role === 'orchestration'
+    return effectPhase === phase
   }
 
   private hasProgramStrategySignal(userMessage: string): boolean {
@@ -1374,6 +1369,7 @@ export class GenericSeedDispatcher {
     for (const item of flatPatch.risk ?? []) pushAtom(item)
     for (const item of flatPatch.atoms ?? []) pushAtom(item)
     const contextSlots = flatPatch.contextSlots ?? {}
+    const symbolEvidence = this.findEvidenceText(userMessage, this.escapeRegexText(contextSlots.symbol))
     if (typeof contextSlots.symbol === 'string' && contextSlots.symbol.trim().length > 0) {
       pushAtom({
         key: ATOM_CONTRACT_REGISTRY['scope.symbol'].key,
@@ -1382,8 +1378,10 @@ export class GenericSeedDispatcher {
           symbols: [contextSlots.symbol],
           primarySymbol: contextSlots.symbol,
         },
+        ...(symbolEvidence ? { evidence: { text: symbolEvidence } } : {}),
       })
     }
+    const timeframeEvidence = this.findTimeframeEvidence(userMessage, contextSlots.timeframe)
     if (typeof contextSlots.timeframe === 'string' && contextSlots.timeframe.trim().length > 0) {
       pushAtom({
         key: ATOM_CONTRACT_REGISTRY['scope.timeframe'].key,
@@ -1393,8 +1391,10 @@ export class GenericSeedDispatcher {
           requiredTimeframes: [contextSlots.timeframe],
           alignmentPolicy: 'tolerant',
         },
+        ...(timeframeEvidence ? { evidence: { text: timeframeEvidence } } : {}),
       })
     }
+    const exchangeEvidence = this.findEvidenceText(userMessage, this.escapeRegexText(contextSlots.exchange))
     if (typeof contextSlots.exchange === 'string' && contextSlots.exchange.trim().length > 0) {
       pushAtom({
         key: ATOM_CONTRACT_REGISTRY['scope.dataSource'].key,
@@ -1403,6 +1403,7 @@ export class GenericSeedDispatcher {
           dataSourceFeedId: contextSlots.exchange,
           dataSourceSchemaRef: 'ohlcv',
         },
+        ...(exchangeEvidence ? { evidence: { text: exchangeEvidence } } : {}),
       })
     }
     if (flatPatch.position?.sizing) {
@@ -1413,46 +1414,60 @@ export class GenericSeedDispatcher {
         ...(isEvidenceWithText(flatPatch.position.evidence) ? { evidence: { text: flatPatch.position.evidence.text } } : {}),
       })
     }
-    else if ((flatPatch.actions ?? []).length > 0 && !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'positions')) {
+    else if (
+      !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'positions')
+      && this.hasSizingIntent(userMessage)
+    ) {
+      const evidence = this.findEvidenceText(userMessage, '(?:单笔|仓位|资金|每次|每格|一点|使用|用|USDT|USDC|USD|U|%|percent)')
       out.push({
         kind: 'atom',
         key: 'position.sizing',
-        params: { sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' }, phase: 'entry' },
+        params: { phase: 'entry' },
+        ...(evidence ? { evidence: { text: evidence } } : {}),
       })
     }
-    if (!out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'positions')) {
-      out.push({
-        kind: 'atom',
-        key: 'position.sizing',
-        params: { sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' }, phase: 'entry' },
-      })
-    }
-    if (!out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'actions')) {
+    if (
+      !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'actions')
+      && this.hasOpenActionIntent(userMessage)
+    ) {
+      const evidence = this.findEvidenceText(userMessage, '(?:买入|买|开多|开空|开仓|做多|做空|进场|open|buy|long|short|enter)')
       pushAtom({
         key: ATOM_CONTRACT_REGISTRY['action.open_long'].key,
         phase: 'entry',
         params: {},
+        ...(evidence ? { evidence: { text: evidence } } : {}),
       })
     }
     if (
-      /止损|止盈|回撤|熔断|突破|停止|stop|take profit|drawdown/iu.test(userMessage)
+      this.hasRiskIntent(userMessage)
       && !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'risks')
     ) {
+      const evidence = this.findEvidenceText(userMessage, '(?:止损|止盈|风控|风险|回撤|熔断|stop\\s*loss|take\\s*profit|risk|drawdown)')
       pushAtom({
         key: ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key,
         phase: 'exit',
-        params: { valuePct: 5 },
+        params: {},
+        ...(evidence ? { evidence: { text: evidence } } : {}),
       })
     }
-    if (!out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'orchestration')) {
+    if (
+      !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'orchestration')
+      && this.hasTimeframeIntent(userMessage)
+    ) {
+      const evidence = this.findTimeframeEvidence(userMessage)
       pushAtom({
         key: ATOM_CONTRACT_REGISTRY['scope.timeframe'].key,
         params: {
           timeframeScopeKind: 'timeframe',
-          primaryTimeframe: '1h',
-          requiredTimeframes: ['1h'],
+          ...(typeof contextSlots.timeframe === 'string' && contextSlots.timeframe.trim().length > 0
+            ? {
+                primaryTimeframe: contextSlots.timeframe,
+                requiredTimeframes: [contextSlots.timeframe],
+              }
+            : {}),
           alignmentPolicy: 'tolerant',
         },
+        ...(evidence ? { evidence: { text: evidence } } : {}),
       })
     }
     if (!out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'programs')) {
@@ -1465,22 +1480,71 @@ export class GenericSeedDispatcher {
         || atom.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key,
       )
       const hasPortfolioProgram = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key)
+      const explicitProgramEvidence = this.findEvidenceText(userMessage, '(?:定投|加仓|熔断|最大回撤|webhook)')
       const programKey = hasAdaptive
         ? ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key
         : hasGrid
           ? ATOM_CONTRACT_REGISTRY['program.dynamic_grid'].key
-          : hasEvent || hasProgramLikePosition || hasPortfolioProgram || /定投|加仓|熔断|最大回撤|webhook/iu.test(userMessage)
+          : hasEvent || hasProgramLikePosition || hasPortfolioProgram || explicitProgramEvidence
             ? ATOM_CONTRACT_REGISTRY['program.event_listener'].key
             : null
       if (programKey) {
+        const atomEvidence = atoms.find(atom =>
+          (programKey === ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key && atom.key === ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key)
+          || (programKey === ATOM_CONTRACT_REGISTRY['program.dynamic_grid'].key && atom.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
+          || (programKey === ATOM_CONTRACT_REGISTRY['program.event_listener'].key && (
+            atom.key === ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key
+            || atom.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
+            || atom.key === ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key
+          ))
+        )?.evidence
         pushAtom({
           key: programKey,
           phase: 'program',
           params: { programKind: programKey.slice('program.'.length) },
+          ...(isEvidenceWithText(atomEvidence)
+            ? { evidence: { text: atomEvidence.text } }
+            : explicitProgramEvidence
+              ? { evidence: { text: explicitProgramEvidence } }
+              : {}),
         })
       }
     }
     return out
+  }
+
+  private hasOpenActionIntent(userMessage: string): boolean {
+    return /买入|买|开多|开空|开仓|做多|做空|进场|open|buy|long|short|enter/iu.test(userMessage)
+  }
+
+  private hasRiskIntent(userMessage: string): boolean {
+    return /止损|止盈|风控|风险|回撤|熔断|stop\s*loss|take\s*profit|risk|drawdown/iu.test(userMessage)
+  }
+
+  private hasSizingIntent(userMessage: string): boolean {
+    return /单笔|仓位|资金|每次|每格|一点|使用|用|USDT|USDC|USD|U|%|percent/iu.test(userMessage)
+  }
+
+  private hasTimeframeIntent(userMessage: string): boolean {
+    return /(?:\d+\s*(?:m|min|分钟|小时|h|d|天|日线|周线)|K\s*线|周期|timeframe)/iu.test(userMessage)
+  }
+
+  private findTimeframeEvidence(userMessage: string, timeframe?: unknown): string | null {
+    if (typeof timeframe === 'string' && timeframe.trim().length > 0) {
+      const exact = this.findEvidenceText(userMessage, this.escapeRegexText(timeframe))
+      if (exact) return exact
+    }
+    return this.findEvidenceText(userMessage, '(?:\\d+\\s*(?:m|min|分钟|小时|h|d|天)|日线|周线|K\\s*线|周期|timeframe)')
+  }
+
+  private findEvidenceText(userMessage: string, pattern: string): string | null {
+    const match = new RegExp(pattern, 'iu').exec(userMessage)
+    if (!match) return null
+    return match[0]
+  }
+
+  private escapeRegexText(value: unknown): string {
+    return typeof value === 'string' ? value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : ''
   }
 
   private applySemanticConflictResolution(

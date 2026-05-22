@@ -8,6 +8,10 @@ function ruleEffectKeys(rule: NonNullable<ReturnType<GenericSeedDispatcher['disp
     .map(leaf => leaf.key)
 }
 
+function ruleEffectLeaves(rule: NonNullable<ReturnType<GenericSeedDispatcher['dispatch']>['rules']>[number]) {
+  return listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))
+}
+
 function ruleConditionKeys(rule: NonNullable<ReturnType<GenericSeedDispatcher['dispatch']>['rules']>[number]): string[] {
   return collectAtomLeaves(rule.condition).map(leaf => leaf.key)
 }
@@ -59,5 +63,51 @@ describe('stage1 typed rules corpus fixture', () => {
     expect(programRule).toBeDefined()
     expect(ruleConditionKeys(programRule!)).toContain('grid.range_rebalance')
     expect(ruleEffectKeys(programRule!)).not.toContain('action.open_long')
+  })
+
+  it('scopes entry position sizing away from exit and program rules', () => {
+    const patch = new GenericSeedDispatcher().dispatch('BTC 1小时突破 MA20 买入，单笔使用 10% 资金，跌破 MA20 卖出，启用最大回撤 15% 熔断')
+    const exitRule = patch.rules?.find(rule => rule.phase === 'exit')
+    const programRule = patch.rules?.find(rule => rule.phase === 'program')
+
+    expect(exitRule).toBeDefined()
+    expect(programRule).toBeDefined()
+    expect(ruleEffectKeys(exitRule!)).not.toContain('position.sizing')
+    expect(ruleEffectKeys(programRule!)).not.toContain('position.sizing')
+  })
+
+  it('does not fabricate default effects without explicit text evidence', () => {
+    const patch = new GenericSeedDispatcher().dispatch('BTC 1小时 RSI 低于 30')
+    const effects = (patch.rules ?? []).flatMap(rule => ruleEffectLeaves(rule))
+
+    expect(effects.map(effect => effect.key)).not.toContain('action.open_long')
+    expect(effects.map(effect => effect.key)).not.toContain('position.sizing')
+    expect(effects.map(effect => effect.key)).not.toContain('risk.stop_loss_pct')
+    expect(effects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'scope.timeframe',
+          evidence: expect.objectContaining({ text: expect.stringContaining('1小时') }),
+        }),
+      ]),
+    )
+  })
+
+  it('attaches evidence text to inferred fallback effects', () => {
+    const patch = new GenericSeedDispatcher().dispatch('BTC 连续跌三根 15 分钟 K 线后，如果下一根开始放量反弹就买一点。')
+    const effects = (patch.rules ?? []).flatMap(rule => ruleEffectLeaves(rule))
+
+    expect(effects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'action.open_long',
+          evidence: expect.objectContaining({ text: expect.stringContaining('买') }),
+        }),
+        expect.objectContaining({
+          key: 'position.sizing',
+          evidence: expect.objectContaining({ text: expect.stringContaining('一点') }),
+        }),
+      ]),
+    )
   })
 })

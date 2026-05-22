@@ -58,7 +58,7 @@ export const STAGE1_TYPED_RULES_CORPUS: Stage1TypedRulesCorpusCase[] = [
     id: 'stage1-009-deployment-centered-grid',
     text: 'OKX 现货 ETHUSDT、1m 网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT、限价单并相邻网格自动挂反向单、不用趋势信号开仓；当价格突破上下边界时执行“立即停止并撤销所有未成交订单”',
     expectedPhases: ['program'],
-    expectedEffectRoles: ['positions', 'orchestration', 'programs', 'risks'],
+    expectedEffectRoles: ['positions', 'orchestration', 'programs'],
   },
   {
     id: 'stage1-010-tight-range-grid',
@@ -154,7 +154,7 @@ export const STAGE1_TYPED_RULES_CORPUS: Stage1TypedRulesCorpusCase[] = [
     id: 'stage1-025-webhook-event',
     text: 'OKX 合约 BTCUSDT 15m，收到 webhook 事件 signalId 为 whale_buy 且 secret 已配置时开多，每次 100',
     expectedPhases: ['program'],
-    expectedEffectRoles: ['actions', 'positions', 'orchestration', 'programs'],
+    expectedEffectRoles: ['programs'],
   },
   {
     id: 'stage1-026-rsi-band',
@@ -184,12 +184,12 @@ export const STAGE1_TYPED_RULES_CORPUS: Stage1TypedRulesCorpusCase[] = [
     id: 'stage1-030-dca',
     text: 'ETH 现货每天定投 100 USDT，回撤 5% 加投 200 USDT',
     expectedPhases: ['program'],
-    expectedEffectRoles: ['actions', 'positions', 'orchestration', 'programs'],
+    expectedEffectRoles: ['programs'],
   },
   {
     id: 'stage1-031-adaptive-vol-grid',
     text: 'SOL 现货，30 分钟。价格在最近 24 小时区间的 0.3–0.7 分位之间运行时，启用自适应波动率网格；价格突破区间上沿则停止网格并平仓。',
     expectedPhases: ['program'],
-    expectedEffectRoles: ['actions', 'risks', 'positions', 'orchestration', 'programs'],
+    expectedEffectRoles: ['positions', 'orchestration', 'programs'],
   },
 ]
