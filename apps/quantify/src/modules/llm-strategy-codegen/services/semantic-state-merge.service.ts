@@ -1235,18 +1235,20 @@ export class SemanticStateMergeService {
       return `shape:${rule.phase}|${rule.sideScope}|${condHash}|effects:${effectsHash}`
     }
 
-    // ── Pass 1：按 id 折叠 ──
+    // ── Pass 1：按 id+phase 折叠 ──
+    // phase 是生命周期身份，不能把 program rule 与 exit rule 因同 id 合成一条。
     const byId = new Map<string, SemanticRule>()
     const idOrder: string[] = []
     const noIdRules: SemanticRule[] = []
     const ingest = (rule: SemanticRule): void => {
       if (rule.id && rule.id.length > 0) {
-        if (!byId.has(rule.id)) idOrder.push(rule.id)
+        const idKey = `${rule.id}|${rule.phase}`
+        if (!byId.has(idKey)) idOrder.push(idKey)
         // 审查 M2 + Task 6：同 id 折叠时 effects 若 derived 缺省/空数组 → 保留 persisted；
         // typed RuleEffects 逐 role 合并，避免 risks patch 清空 programs。
-        const existing = byId.get(rule.id)
+        const existing = byId.get(idKey)
         const mergedEffects = this.mergeRuleEffects(existing?.effects, rule.effects)
-        byId.set(rule.id, { ...rule, effects: mergedEffects })
+        byId.set(idKey, { ...rule, effects: mergedEffects })
       }
       else {
         noIdRules.push(rule)
@@ -1320,21 +1322,19 @@ export class SemanticStateMergeService {
     persisted: RuleEffects | undefined,
     derived: RuleEffects,
   ): RuleEffects {
-    if (!persisted) return this.cloneRuleEffects(derived)
+    if (!persisted) return this.cloneRuleEffectsAsTyped(derived)
     if (listRuleEffects(derived).length === 0) return this.cloneRuleEffects(persisted)
-    if (listRuleEffects(persisted).length === 0) return this.cloneRuleEffects(derived)
+    if (listRuleEffects(persisted).length === 0) return this.cloneRuleEffectsAsTyped(derived)
 
-    if (isRuleEffectsByRole(persisted) && isRuleEffectsByRole(derived)) {
-      return {
-        actions: this.mergeRuleEffectRole(persisted.actions, derived.actions),
-        risks: this.mergeRuleEffectRole(persisted.risks, derived.risks),
-        positions: this.mergeRuleEffectRole(persisted.positions, derived.positions),
-        orchestration: this.mergeRuleEffectRole(persisted.orchestration, derived.orchestration),
-        programs: this.mergeRuleEffectRole(persisted.programs, derived.programs),
-      } satisfies RuleEffectsByRole
-    }
-
-    return this.cloneRuleEffects(derived)
+    const persistedTyped = this.normalizeRuleEffectsToTyped(persisted)
+    const derivedTyped = this.normalizeRuleEffectsToTyped(derived)
+    return {
+      actions: this.mergeRuleEffectRole(persistedTyped.actions, derivedTyped.actions),
+      risks: this.mergeRuleEffectRole(persistedTyped.risks, derivedTyped.risks),
+      positions: this.mergeRuleEffectRole(persistedTyped.positions, derivedTyped.positions),
+      orchestration: this.mergeRuleEffectRole(persistedTyped.orchestration, derivedTyped.orchestration),
+      programs: this.mergeRuleEffectRole(persistedTyped.programs, derivedTyped.programs),
+    } satisfies RuleEffectsByRole
   }
 
   private mergeRuleEffectRole(
@@ -1365,6 +1365,30 @@ export class SemanticStateMergeService {
       positions: typedEffects.positions.map(effect => this.cloneAtomExpr(effect)),
       orchestration: typedEffects.orchestration.map(effect => this.cloneAtomExpr(effect)),
       programs: typedEffects.programs.map(effect => this.cloneAtomExpr(effect)),
+    } satisfies RuleEffectsByRole
+  }
+
+  private cloneRuleEffectsAsTyped(effects: RuleEffects): RuleEffectsByRole {
+    return this.normalizeRuleEffectsToTyped(effects)
+  }
+
+  private normalizeRuleEffectsToTyped(effects: RuleEffects): RuleEffectsByRole {
+    if (isRuleEffectsByRole(effects)) {
+      return {
+        actions: effects.actions.map(effect => this.cloneAtomExpr(effect)),
+        risks: effects.risks.map(effect => this.cloneAtomExpr(effect)),
+        positions: effects.positions.map(effect => this.cloneAtomExpr(effect)),
+        orchestration: effects.orchestration.map(effect => this.cloneAtomExpr(effect)),
+        programs: effects.programs.map(effect => this.cloneAtomExpr(effect)),
+      } satisfies RuleEffectsByRole
+    }
+
+    return {
+      actions: effects.map(effect => this.cloneAtomExpr(effect)),
+      risks: [],
+      positions: [],
+      orchestration: [],
+      programs: [],
     } satisfies RuleEffectsByRole
   }
 
