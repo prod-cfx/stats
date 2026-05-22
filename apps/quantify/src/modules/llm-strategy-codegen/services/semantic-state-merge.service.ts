@@ -1383,13 +1383,34 @@ export class SemanticStateMergeService {
       } satisfies RuleEffectsByRole
     }
 
+    const typed = this.emptyRuleEffects()
+    for (const effect of effects) {
+      typed[this.resolveLegacyRuleEffectRole(effect)].push(this.cloneAtomExpr(effect))
+    }
+    return typed
+  }
+
+  private emptyRuleEffects(): RuleEffectsByRole {
     return {
-      actions: effects.map(effect => this.cloneAtomExpr(effect)),
+      actions: [],
       risks: [],
       positions: [],
       orchestration: [],
       programs: [],
     } satisfies RuleEffectsByRole
+  }
+
+  private resolveLegacyRuleEffectRole(effect: AtomExpr): keyof RuleEffectsByRole {
+    const leaves = collectAtomLeaves(effect)
+    if (leaves.some(leaf => leaf.key.startsWith('program.'))) return 'programs'
+    if (leaves.some(leaf => this.resolveAtomBucket(leaf.key) === 'risk' || leaf.key.startsWith('risk.'))) return 'risks'
+    if (leaves.some(leaf => this.resolveAtomBucket(leaf.key) === 'positionConstraint' || leaf.key.startsWith('position.'))) return 'positions'
+    if (leaves.some(leaf => this.resolveAtomBucket(leaf.key) === 'orchestration' || leaf.key.startsWith('orchestration.'))) return 'orchestration'
+    return 'actions'
+  }
+
+  private resolveAtomBucket(key: string): string | undefined {
+    return (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string } | undefined>)[key]?.bucket
   }
 
   private cloneAtomExpr(effect: AtomExpr): AtomExpr {

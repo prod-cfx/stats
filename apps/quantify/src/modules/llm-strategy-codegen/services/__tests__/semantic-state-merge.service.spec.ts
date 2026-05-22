@@ -196,6 +196,64 @@ describe('SemanticStateMergeService', () => {
     })
   })
 
+  it('classifies legacy array effects by atom bucket before merging typed roles', () => {
+    const condition = { kind: 'atom' as const, key: 'context.always', params: {} }
+    const risk = { kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { valuePct: 5 } }
+    const position = { kind: 'atom' as const, key: 'position.pyramiding_limit', params: { maxLayers: 3 } }
+    const program = { kind: 'atom' as const, key: 'program.dynamic_grid', params: { levelCount: 5 } }
+    const action = { kind: 'atom' as const, key: 'action.open_long', params: {} }
+
+    const persisted: SemanticState = {
+      version: 1,
+      families: ['grid.range_rebalance'],
+      trigger: [],
+      action: [],
+      risk: [],
+      position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-05-22T10:00:00.000Z',
+      rules: [{
+        id: 'rule-program',
+        phase: 'program',
+        sideScope: 'both',
+        condition,
+        effects: [risk, position, program],
+      }],
+    }
+    const derived: SemanticState = {
+      ...persisted,
+      updatedAt: '2026-05-22T10:01:00.000Z',
+      rules: [{
+        id: 'rule-program',
+        phase: 'program',
+        sideScope: 'both',
+        condition,
+        effects: {
+          actions: [action],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    }
+
+    const merged = service.merge({ persisted, derived })
+    const [mergedRule] = merged.rules ?? []
+
+    expect(mergedRule?.effects).toEqual({
+      actions: [action],
+      risks: [risk],
+      positions: [position],
+      orchestration: [],
+      programs: [program],
+    })
+  })
+
   it('does not mutate typed rule inputs while merging effects', () => {
     const condition = { kind: 'atom' as const, key: 'context.always', params: {} }
     const program = { kind: 'atom' as const, key: 'program.dynamic_grid', params: { levelCount: 5 } }
