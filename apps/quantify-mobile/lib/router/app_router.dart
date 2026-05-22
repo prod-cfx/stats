@@ -11,7 +11,6 @@ import '../pages/auth/login_page.dart';
 import '../pages/market/long_short_page.dart';
 import '../pages/market/market_detail_page.dart';
 import '../pages/market/market_home_page.dart';
-import '../pages/me/api_settings_page.dart';
 import '../pages/me/me_home_page.dart';
 import '../pages/me/theme_settings_page.dart';
 import '../pages/strategy/strategy_detail_page.dart';
@@ -33,16 +32,18 @@ import '../shell/main_shell_scaffold.dart';
 ///   Reordering branches without updating `QzBottomTabBar` + the two
 ///   navigation tests below will break the index ↔ tab mapping.
 /// - Sub-views (`/login`, `/market/:symbol`, `/market/long-short`,
-///   `/ai/backtest-config`, `/me/api`, `/me/theme`) are top-level routes that
+///   `/ai/backtest-config`, `/me/theme`) are top-level routes that
 ///   intentionally sit outside the shell — pushing them covers the bottom
 ///   tab bar (full-screen modal-style navigation).
 /// 需要登录才能访问的路径前缀白名单。
 ///
-/// 守卫策略与原型 07 屏一致：`/me`（个人中心 + 子页 `/me/api`、`/me/theme`）
-/// 必须登录；行情/AI/鲸鱼/策略 浏览均允许匿名。
+/// 守卫策略与原型 07 屏一致：`/me`（个人中心 + 子页 `/me/theme`）必须登录；
+/// 行情/AI/鲸鱼/策略 浏览均允许匿名。
 ///
-/// 注意：使用前缀匹配是为了让 `/me/api` 等子路由自动落入守卫，不需要逐条
-/// 枚举。`/login` 永远是公开的，否则会与 redirect 形成死循环。
+/// 注意：使用前缀匹配是为了让 `/me/*` 子路由自动落入守卫，不需要逐条枚举。
+/// `/login` 永远是公开的，否则会与 redirect 形成死循环。
+/// API 配置入口（issue #1648）：「我的」首页与一键部署弹层均直接打开
+/// `showApiFormSheet`，不再保留独立 `/me/api` 列表页。
 const List<String> kAuthProtectedPrefixes = <String>['/me'];
 
 bool _isProtected(String location) {
@@ -164,10 +165,6 @@ GoRouter buildRouter({
         path: '/ai/backtest-config',
         builder: (BuildContext context, GoRouterState state) =>
             const BacktestConfigSheet(),
-      ),
-      GoRoute(
-        path: '/me/api',
-        builder: (BuildContext context, GoRouterState state) => const ApiSettingsPage(),
       ),
       GoRoute(
         path: '/me/theme',

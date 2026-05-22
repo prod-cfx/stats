@@ -119,14 +119,15 @@ final FutureProvider<AccountInfo> accountInfoProvider =
   return ref.watch(accountRepositoryProvider).getInfo();
 });
 
-/// 交易所凭据列表。从 `/me` 摘要与 `/me/api` 列表同时 watch；新增/删除后
-/// 调用方应 `ref.invalidate(apiKeysProvider)` 让两处同步刷新。
+/// 交易所凭据列表。被「我的」首页摘要、API 表单 sheet、一键部署弹层共同
+/// watch；新增/删除后调用方应 `ref.invalidate(apiKeysProvider)` 让各处同步
+/// 刷新（issue #1648：入口统一为 bottom sheet 后无独立列表页）。
 final FutureProvider<List<ExchangeApiKey>> apiKeysProvider =
     FutureProvider<List<ExchangeApiKey>>((Ref ref) async {
   return ref.watch(apiKeyRepositoryProvider).listKeys();
 });
 
-/// `/me/api` 表单的「测试连接」回调签名。
+/// API 配置表单的「测试连接」回调签名。
 typedef ApiConnectionTester = Future<bool> Function();
 
 /// 默认实现：1s loading 后随机成功/失败。

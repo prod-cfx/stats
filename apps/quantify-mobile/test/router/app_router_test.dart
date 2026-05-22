@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,7 +19,6 @@ import 'package:quantify_mobile/pages/auth/login_page.dart';
 import 'package:quantify_mobile/pages/market/long_short_page.dart';
 import 'package:quantify_mobile/pages/market/market_detail_page.dart';
 import 'package:quantify_mobile/pages/market/market_home_page.dart';
-import 'package:quantify_mobile/pages/me/api_settings_page.dart';
 import 'package:quantify_mobile/pages/me/me_home_page.dart';
 import 'package:quantify_mobile/pages/me/theme_settings_page.dart';
 import 'package:quantify_mobile/pages/strategy/strategy_home_page.dart';
@@ -224,17 +224,22 @@ void main() {
     expect(find.byType(BacktestConfigSheet), findsOneWidget);
   });
 
-  testWidgets('/me/api resolves to ApiSettingsPage', (
-    WidgetTester tester,
-  ) async {
-    final BuildContext ctx = await _pumpApp(
-      tester,
-      storage: _loggedInStorage(),
+  test('/me/api 已下线（issue #1648）→ router 不再注册该路径', () {
+    // API 配置入口统一为 bottom sheet（me_home + deploy sheet 均直接打开
+    // `showApiFormSheet`），独立列表页 `/me/api` 已移除。守护这条测试，
+    // 避免未来误恢复路由造成入口双轨。
+    final String source =
+        File('lib/router/app_router.dart').readAsStringSync();
+    expect(
+      source.contains("path: '/me/api'"),
+      isFalse,
+      reason: '/me/api 已下线，不应在 router 中重新注册',
     );
-    GoRouter.of(ctx).push('/me/api');
-    await tester.pumpAndSettle();
-
-    expect(find.byType(ApiSettingsPage), findsOneWidget);
+    expect(
+      source.contains('ApiSettingsPage'),
+      isFalse,
+      reason: 'ApiSettingsPage 已删除，不应被 router 引用',
+    );
   });
 
   testWidgets('/me/theme resolves to ThemeSettingsPage', (
@@ -331,14 +336,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(LoginPage), findsOneWidget);
     expect(find.byType(MeHomePage), findsNothing);
-  });
-
-  testWidgets('未登录访问 /me/api 也被守卫拦回 /login', (WidgetTester tester) async {
-    final BuildContext ctx = await _pumpApp(tester);
-    GoRouter.of(ctx).go('/me/api');
-    await tester.pumpAndSettle();
-    expect(find.byType(LoginPage), findsOneWidget);
-    expect(find.byType(ApiSettingsPage), findsNothing);
   });
 
   testWidgets('已登录直接访问 /me 不被拦', (WidgetTester tester) async {

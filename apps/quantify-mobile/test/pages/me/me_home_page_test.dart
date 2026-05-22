@@ -207,7 +207,7 @@ void main() {
       QzBg.values.length * QzAccent.values.length,
       9,
       reason:
-          '主题枚举数量变了，更新 me_home_page_test 与 api_settings_page_test',
+          '主题枚举数量变了，更新 me_home_page_test',
     );
     for (final QzBg bg in QzBg.values) {
       for (final QzAccent acc in QzAccent.values) {

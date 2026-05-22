@@ -210,10 +210,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deployExchangeEmptyHint =>
-      'No exchange API configured yet. Add one in Me / API first.';
+      'No exchange API configured yet. Add one to continue.';
 
   @override
-  String get deployGoConfigureButton => 'Configure API';
+  String get deployGoConfigureButton => 'Add API';
 
   @override
   String get deployAuthorizePermissionTitle =>

@@ -123,9 +123,26 @@ void main() {
 
     expect(find.text('选择交易所'), findsOneWidget);
     expect(
-      find.text('尚未配置任何交易所 API，去「我的 / API」添加后再试。'),
+      find.text('尚未配置任何交易所 API，添加后再试。'),
       findsOneWidget,
     );
     expect(find.byKey(const Key('deploy-go-configure')), findsOneWidget);
+  });
+
+  testWidgets('QzDeploySheet: 点击「添加 API」直接打开 API 表单 sheet（issue #1648）',
+      (WidgetTester tester) async {
+    // 入口统一为底部表单：未配置时点击引导按钮应先关闭 deploy sheet，
+    // 再打开 Binance API 表单 bottom sheet，不再跳转独立列表页。
+    await _pumpSheet(tester, repo: _FakeApiKeyRepo.empty());
+
+    await tester.tap(find.byKey(const Key('deploy-go-configure')));
+    await tester.pumpAndSettle();
+
+    // deploy sheet 已关闭：标题不再可见
+    expect(find.text('选择交易所'), findsNothing);
+    // API 表单 sheet 弹出：标题 / 字段可见
+    expect(find.text('Binance API'), findsOneWidget);
+    expect(find.text('API Key'), findsOneWidget);
+    expect(find.text('Secret'), findsOneWidget);
   });
 }

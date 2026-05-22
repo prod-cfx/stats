@@ -202,10 +202,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deployExchangeNotConfigured => '未配置';
 
   @override
-  String get deployExchangeEmptyHint => '尚未配置任何交易所 API，去「我的 / API」添加后再试。';
+  String get deployExchangeEmptyHint => '尚未配置任何交易所 API，添加后再试。';
 
   @override
-  String get deployGoConfigureButton => '去配置 API';
+  String get deployGoConfigureButton => '添加 API';
 
   @override
   String get deployAuthorizePermissionTitle => '将向交易所申请以下权限';

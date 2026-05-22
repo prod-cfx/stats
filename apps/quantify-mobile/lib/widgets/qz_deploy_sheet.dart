@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../data/models/api_key_models.dart';
 import '../data/models/deploy_models.dart';
 import '../data/providers.dart';
 import '../l10n/app_localizations.dart';
+import '../pages/me/api_form_sheet.dart';
 import '../theme/colors.dart';
 import '../theme/theme_context.dart';
 import '../theme/tokens.dart';
@@ -45,13 +45,19 @@ class _QzDeploySheetState extends ConsumerState<QzDeploySheet> {
   ExchangeApiKey? _selected;
   DeploymentResult? _result;
 
-  /// 通过测试需要：跳转 `/me/api` 前必须先 pop sheet，避免栈错位 + sheet
-  /// 残留 barrier。pop(null) 表示用户中断本次部署。
-  void _goConfigureApi() {
+  /// 部署引导入口（issue #1648）：未配置任何 API 时，直接打开 API 表单
+  /// bottom sheet（默认 Binance，覆盖最常见用户首选），跳过独立列表页。
+  /// 先 pop 当前 deploy sheet 避免栈错位 + barrier 叠加；pop(null) 表示
+  /// 用户中断本次部署。保存成功后由 `apiKeysProvider` 失效驱动后续刷新。
+  Future<void> _goConfigureApi() async {
     final BuildContext ctx = context;
     Navigator.of(ctx).pop();
-    // pop 后调用方仍在 AI 页栈顶；用 ctx.push 不会丢失对话状态。
-    ctx.push('/me/api');
+    if (!ctx.mounted) return;
+    final bool? saved =
+        await showApiFormSheet(ctx, exchange: 'Binance');
+    if (saved == true && ctx.mounted) {
+      ref.invalidate(apiKeysProvider);
+    }
   }
 
   void _pickExchange(ExchangeApiKey key) {
