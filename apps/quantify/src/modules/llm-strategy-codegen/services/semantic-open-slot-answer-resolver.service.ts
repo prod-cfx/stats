@@ -92,6 +92,10 @@ export class SemanticOpenSlotAnswerResolverService {
       return symbolAnswer
     }
 
+    if (!canConsumeSemanticFragment(input.currentState, input.clarificationState)) {
+      return { consumed: false, nextState: input.currentState }
+    }
+
     return fulfillSemanticFragment(input.currentState, this.seedExtractor.dispatch(input.message), this.symbolResolver)
   }
 
@@ -462,6 +466,17 @@ function canConsumeSymbolAnswer(symbolSlot: SemanticSlotState, clarificationStat
   }
 
   return activeItem.slotKey === symbolSlot.slotKey && activeItem.fieldPath === symbolSlot.fieldPath
+}
+
+function canConsumeSemanticFragment(state: SemanticState, clarificationState: unknown): boolean {
+  const activeTarget = pickPendingClarificationTarget(readPendingClarificationItems(clarificationState))
+  if (!activeTarget) {
+    return true
+  }
+
+  const slotRef = findActiveOpenSlotRef(state, activeTarget)
+  return slotRef?.ownerKind === 'trigger'
+    && (slotRef.slot.slotKey === ENTRY_TRIGGER_SLOT_KEY || slotRef.slot.slotKey === EXIT_TRIGGER_SLOT_KEY)
 }
 
 function fulfillSemanticFragment(
