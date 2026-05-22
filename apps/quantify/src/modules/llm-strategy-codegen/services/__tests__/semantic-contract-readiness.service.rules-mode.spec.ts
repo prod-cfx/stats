@@ -10,6 +10,7 @@
  *  - grid 越界 breakoutAction=stop：exit 强化
  */
 import type { AtomExpr, SemanticRule } from '../../types/atom-expr'
+import type { StrategyVersionInfo } from '../../nl-gateway/version-gate/version-gate.types'
 import type { SemanticState } from '../../types/semantic-state'
 import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
 
@@ -266,6 +267,7 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
 
 describe('semanticContractReadinessService.normalize DCA exit contract in rules tree', () => {
   const svc = new SemanticContractReadinessService()
+  const CURRENT_VERSION: StrategyVersionInfo = { deployedAtSemanticVersion: '2026.05.W02' }
 
   it('routes risk effect open slot fieldPath through typed rule effects path', () => {
     const result = svc.normalize(stateWithRules([
@@ -305,6 +307,86 @@ describe('semanticContractReadinessService.normalize DCA exit contract in rules 
       fieldPath: expect.stringContaining('rules[0].effects.risks[0]'),
     }))
     expect(riskSlot?.fieldPath).not.toContain('risk[')
+  })
+
+  it('routes orchestration effect open slot fieldPath through typed rule effects path', () => {
+    const result = svc.normalize(stateWithRules([
+      rule({
+        id: 'entry-with-missing-orchestration-slot',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: atom('price.cross_above_ma', { period: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [],
+          positions: [],
+          orchestration: [atom('portfolioRisk.drawdown_block')],
+          programs: [],
+        },
+      }),
+      rule({
+        id: 'exit',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: atom('price.cross_below_ma', { period: 20 }),
+        effects: {
+          actions: [atom('action.close_long')],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }),
+    ]), CURRENT_VERSION)
+
+    const orchestrationSlot = result.state.orchestration
+      .flatMap(node => node.openSlots ?? [])
+      .find(slot => slot.slotKey.includes('orchestration.portfolio_drawdown.threshold_pct'))
+
+    expect(orchestrationSlot).toEqual(expect.objectContaining({
+      fieldPath: expect.stringContaining('rules[0].effects.orchestration[0]'),
+    }))
+    expect(orchestrationSlot?.fieldPath).not.toContain('orchestration.portfolioRisk')
+  })
+
+  it('routes program effect readiness slot fieldPath through typed rule effects path', () => {
+    const result = svc.normalize(stateWithRules([
+      rule({
+        id: 'entry-with-program-slot',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: atom('price.cross_above_ma', { period: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [atom('program.fixed_grid_gated', { levelCount: 1 })],
+        },
+      }),
+      rule({
+        id: 'exit',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: atom('price.cross_below_ma', { period: 20 }),
+        effects: {
+          actions: [atom('action.close_long')],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }),
+    ]), CURRENT_VERSION)
+
+    const programSlot = result.state.orchestration
+      .find(node => node.key === 'program.fixed_grid_gated')
+      ?.openSlots?.find(slot => slot.slotKey === 'orchestration.phase0.unsupported')
+
+    expect(programSlot).toEqual(expect.objectContaining({
+      fieldPath: expect.stringContaining('rules[0].effects.programs[0]'),
+    }))
+    expect(programSlot?.fieldPath).not.toContain('orchestration.program')
   })
 
   it('treats an explicit sibling exit rule as satisfying position.dca_schedule dca_exit_rule', () => {

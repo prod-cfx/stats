@@ -226,7 +226,9 @@ export class SemanticContractReadinessService {
           slotsByOwnerKey.get(ownerKey('position', positionConstraintOwnerId(constraint))),
         ),
       ),
-      orchestration: orchestrationResult.state,
+      orchestration: orchestrationResult.state?.map(node =>
+        withTypedRuleOpenSlotPaths(node, state),
+      ),
     }
     // Phase 5 S2 (#1104): 多 scope 策略对 trigger/action/risk/positionConstraint 加 missing_binding fail-closed
     const { state: afterSymbolBinding, hasBlockingSlots: symbolBindingHasBlockingSlots } =
@@ -2632,7 +2634,7 @@ function readParamString(params: Record<string, unknown>, key: string): string |
 
 function withTypedRuleOpenSlotPaths<T extends {
   _provenance?: SemanticFlatAtomProvenance
-  openSlots?: SemanticSlotState[]
+  openSlots?: readonly SemanticSlotState[]
 }>(
   owner: T,
   state: SemanticState,
@@ -2644,11 +2646,9 @@ function withTypedRuleOpenSlotPaths<T extends {
 
   let changed = false
   const openSlots = owner.openSlots.map((slot) => {
-    if (!slot.paramSlotKey) {
-      return slot
-    }
-
-    const fieldPath = `${sourceRulePath}.params.${slot.paramSlotKey}`
+    const fieldPath = slot.paramSlotKey
+      ? `${sourceRulePath}.params.${slot.paramSlotKey}`
+      : sourceRulePath
     if (slot.fieldPath === fieldPath) {
       return slot
     }
@@ -2660,7 +2660,7 @@ function withTypedRuleOpenSlotPaths<T extends {
     }
   })
 
-  return changed ? { ...owner, openSlots } : owner
+  return changed ? { ...owner, openSlots } as T : owner
 }
 
 function buildSourceRulePath(
