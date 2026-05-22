@@ -7,9 +7,17 @@ import '../theme/theme_context.dart';
 /// Bottom tab bar matching the `MTabBar` design (`design/project/mobile/m-shell.jsx`).
 ///
 /// Visual contract:
-/// - 5 fixed items (AI 量化, 行情, 策略, 巨鲸, 我的) — each tagged with a stable
-///   `ValueKey('tab-<name>')` so widget tests can target items without
-///   depending on which Material icon ships with the build.
+/// - 5 fixed items in this canonical order (left → right), each tagged with a
+///   stable `ValueKey('tab-<name>')`:
+///     0. `tab-ai`       — AI 量化
+///     1. `tab-market`   — 行情
+///     2. `tab-strategy` — 策略
+///     3. `tab-whale`    — 巨鲸
+///     4. `tab-me`       — 我的
+///   This order is the single source of truth, mirrored by router branches in
+///   `lib/router/app_router.dart` and guarded by
+///   `test/widgets/qz_bottom_tab_bar_test.dart` (visual order) +
+///   `test/router/app_router_test.dart` (index → page mapping).
 /// - Active tab shows a 42x28 rounded pill behind the icon, filled with
 ///   `scheme.accentSoft`; inactive items have a transparent pill slot.
 /// - Active color = `scheme.accent`; inactive = `scheme.textDim`.

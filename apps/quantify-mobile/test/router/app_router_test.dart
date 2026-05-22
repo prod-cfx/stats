@@ -100,6 +100,39 @@ void main() {
     expect(find.byType(MeHomePage), findsOneWidget);
   });
 
+  testWidgets('bottom-bar index → page mapping is ai/market/strategy/whale/me',
+      (WidgetTester tester) async {
+    // Source-of-truth guard for issue #1637: lock the router branch order so
+    // reshuffling branches in `app_router.dart` (or tab order in
+    // `QzBottomTabBar`) trips this test, not just runtime UX.
+    await _pumpApp(tester, storage: _loggedInStorage());
+
+    const List<String> keys = <String>[
+      'tab-ai',
+      'tab-market',
+      'tab-strategy',
+      'tab-whale',
+      'tab-me',
+    ];
+    final List<Type> expectedPages = <Type>[
+      AiHomePage,
+      MarketHomePage,
+      StrategyHomePage,
+      WhaleHomePage,
+      MeHomePage,
+    ];
+
+    for (int i = 0; i < keys.length; i++) {
+      await tester.tap(_tab(keys[i].substring('tab-'.length)));
+      await tester.pumpAndSettle();
+      expect(
+        find.byType(expectedPages[i]),
+        findsOneWidget,
+        reason: 'tab index $i (key=${keys[i]}) must land on ${expectedPages[i]}',
+      );
+    }
+  });
+
   testWidgets('branch state is preserved across tab switch', (
     WidgetTester tester,
   ) async {

@@ -49,6 +49,67 @@ void main() {
     expect(find.text('AI'), findsNothing);
   });
 
+  testWidgets('tabs render in canonical order: ai → market → strategy → whale → me',
+      (tester) async {
+    // Source-of-truth guard for issue #1637: lock the visual left-to-right
+    // order of tabs so any future reshuffle in QzBottomTabBar trips this
+    // test (not just docs / golden).
+    await pumpQz(
+      tester,
+      SizedBox(
+        width: 360,
+        child: QzBottomTabBar(currentIndex: 0, onTap: (_) {}),
+      ),
+      surfaceSize: const Size(360, 80),
+    );
+
+    const List<String> expectedKeys = <String>[
+      'tab-ai',
+      'tab-market',
+      'tab-strategy',
+      'tab-whale',
+      'tab-me',
+    ];
+    const List<String> expectedLabels = <String>[
+      'AI 量化',
+      '行情',
+      '策略',
+      '巨鲸',
+      '我的',
+    ];
+
+    // Sort the 5 tab icons by their on-screen X position; the resulting key
+    // sequence must equal the canonical order.
+    final List<Element> iconElements = expectedKeys
+        .map((String k) =>
+            tester.element(find.byKey(ValueKey<String>(k))))
+        .toList();
+    iconElements.sort((Element a, Element b) {
+      final Offset aPos = (a.renderObject! as RenderBox).localToGlobal(Offset.zero);
+      final Offset bPos = (b.renderObject! as RenderBox).localToGlobal(Offset.zero);
+      return aPos.dx.compareTo(bPos.dx);
+    });
+    final List<String> orderedKeys = iconElements
+        .map((Element e) => (e.widget.key! as ValueKey<String>).value)
+        .toList();
+    expect(orderedKeys, equals(expectedKeys));
+
+    // And the labels appear in the same left-to-right order so designers
+    // catch label swaps even if keys stay stable.
+    final List<Element> labelElements = expectedLabels
+        .map((String label) => tester.element(find.text(label)))
+        .toList();
+    labelElements.sort((Element a, Element b) {
+      final Offset aPos = (a.renderObject! as RenderBox).localToGlobal(Offset.zero);
+      final Offset bPos = (b.renderObject! as RenderBox).localToGlobal(Offset.zero);
+      return aPos.dx.compareTo(bPos.dx);
+    });
+    final List<String> orderedLabels = labelElements
+        .map((Element e) => (e.widget as Text).data!)
+        .toList();
+    expect(orderedLabels, equals(expectedLabels));
+  });
+
   testWidgets('active tab paints accentSoft pill behind icon', (tester) async {
     await pumpQz(
       tester,

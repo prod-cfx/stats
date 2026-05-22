@@ -128,7 +128,23 @@ Scaffold(
 
 ### QzBottomTabBar — `lib/widgets/qz_bottom_tab_bar.dart`
 
-Fixed 5-tab bottom navigation (AI / 行情 / 巨鲸 / 策略 / 我的). `currentIndex` is asserted in `[0, 5)`.
+Fixed 5-tab bottom navigation. `currentIndex` is asserted in `[0, 5)`.
+
+Canonical tab order (left → right) — single source of truth for designs,
+router branches, and tests:
+
+| index | key | label | route |
+|---|---|---|---|
+| 0 | `tab-ai` | AI 量化 | `/ai` |
+| 1 | `tab-market` | 行情 | `/market` |
+| 2 | `tab-strategy` | 策略 | `/strategy` |
+| 3 | `tab-whale` | 巨鲸 | `/whale` |
+| 4 | `tab-me` | 我的 | `/me` |
+
+Guarded by `test/widgets/qz_bottom_tab_bar_test.dart` (visual order) and
+`test/router/app_router_test.dart` (index → page mapping). Update both when
+the order changes; the golden `goldens/qz_bottom_tab_bar.png` must be
+re-generated via `flutter test --update-goldens`.
 
 ```dart
 QzBottomTabBar(currentIndex: 0, onTap: shell.goBranch)
