@@ -171,20 +171,20 @@ export const STAGE1_TYPED_RULES_CORPUS: Stage1TypedRulesCorpusCase[] = [
   {
     id: 'stage1-028-drawdown-breaker',
     text: 'SOL 1d，EMA20 上穿 EMA60 开多，下穿平仓，最大回撤 15% 熔断',
-    expectedPhases: ['entry', 'exit', 'program'],
-    expectedEffectRoles: ['actions', 'risks', 'orchestration', 'programs'],
+    expectedPhases: ['entry', 'exit', 'gate'],
+    expectedEffectRoles: ['actions', 'orchestration'],
   },
   {
     id: 'stage1-029-pyramiding',
     text: 'BTC 1h 突破前高开多，盈利 3% 后加仓 50%，最多加 3 层',
-    expectedPhases: ['entry', 'program'],
-    expectedEffectRoles: ['actions', 'positions', 'orchestration', 'programs'],
+    expectedPhases: ['entry'],
+    expectedEffectRoles: ['actions', 'positions'],
   },
   {
     id: 'stage1-030-dca',
     text: 'ETH 现货每天定投 100 USDT，回撤 5% 加投 200 USDT',
-    expectedPhases: ['entry', 'program'],
-    expectedEffectRoles: ['actions', 'positions', 'programs'],
+    expectedPhases: ['entry'],
+    expectedEffectRoles: ['actions', 'positions'],
   },
   {
     id: 'stage1-031-adaptive-vol-grid',

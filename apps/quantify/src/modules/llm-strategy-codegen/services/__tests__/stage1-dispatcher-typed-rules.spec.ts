@@ -72,12 +72,12 @@ describe('stage1 typed rules corpus fixture', () => {
   it('scopes entry position sizing away from exit and program rules', () => {
     const patch = new GenericSeedDispatcher().dispatch('BTC 1小时突破 MA20 买入，单笔使用 10% 资金，跌破 MA20 卖出，启用最大回撤 15% 熔断')
     const exitRule = patch.rules?.find(rule => rule.phase === 'exit')
-    const programRule = patch.rules?.find(rule => rule.phase === 'program')
+    const gateRule = patch.rules?.find(rule => rule.phase === 'gate')
 
     expect(exitRule).toBeDefined()
-    expect(programRule).toBeDefined()
+    expect(gateRule).toBeDefined()
     expect(ruleEffectKeys(exitRule!)).not.toContain('position.sizing')
-    expect(ruleEffectKeys(programRule!)).not.toContain('position.sizing')
+    expect(ruleEffectKeys(gateRule!)).not.toContain('position.sizing')
   })
 
   it('does not fabricate default effects without explicit text evidence', () => {

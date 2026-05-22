@@ -2875,6 +2875,7 @@ export class CanonicalSpecV2IrCompilerService {
       )
       if (!opensRawPosition) continue
       if (block.metadata?.dcaSchedule) continue
+      if (block.metadata?.addPosition) continue
       const leafKinds = collectEntryRuleLeafKinds(block.when, context.predicateMap)
       if (leafKinds.length === 0) continue
       if (leafKindsContainEvent(leafKinds)) continue

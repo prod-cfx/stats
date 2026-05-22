@@ -1266,7 +1266,7 @@ export class GenericSeedDispatcher {
 
   private hasProgramStrategySignal(userMessage: string): boolean {
     // Only gates phase fallback for texts with program-shaped workflows; atom roles still come from registry.
-    return /网格|webhook|熔断|加仓|定投|自适应|最大回撤|grid|drawdown|dca|pyramid/iu.test(userMessage)
+    return /网格|webhook|自适应|grid/iu.test(userMessage)
   }
 
   private resolveRuleEffectRole(effect: AtomExpr): RuleEffectRole | null {
@@ -1497,8 +1497,9 @@ export class GenericSeedDispatcher {
     if (
       this.hasRiskIntent(userMessage)
       && !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'risks')
+      && this.hasPercentStopRiskIntent(userMessage)
     ) {
-      const evidence = this.findEvidenceText(userMessage, '(?:止损|止盈|风控|风险|回撤|熔断|stop\\s*loss|take\\s*profit|risk|drawdown)')
+      const evidence = this.findEvidenceText(userMessage, '(?:止损|止盈|stop\\s*loss|take\\s*profit)')
       pushAtom({
         key: ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key,
         phase: 'exit',
@@ -1531,28 +1532,19 @@ export class GenericSeedDispatcher {
       const hasGrid = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
       const hasAdaptive = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key)
       const hasEvent = (flatPatch.triggers ?? []).some(trigger => trigger.key === ATOM_CONTRACT_REGISTRY['external.signal'].key)
-      const hasProgramLikePosition = atoms.some(atom =>
-        atom.key === ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key
-        || atom.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key,
-      )
-      const hasPortfolioProgram = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key)
-      const explicitProgramEvidence = this.findEvidenceText(userMessage, '(?:定投|加仓|熔断|最大回撤|webhook)')
+      const explicitProgramEvidence = this.findEvidenceText(userMessage, '(?:webhook|外部事件|事件监听)')
       const programKey = hasAdaptive
         ? ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key
         : hasGrid
           ? ATOM_CONTRACT_REGISTRY['program.dynamic_grid'].key
-          : hasEvent || hasProgramLikePosition || hasPortfolioProgram || explicitProgramEvidence
+          : hasEvent || explicitProgramEvidence
             ? ATOM_CONTRACT_REGISTRY['program.event_listener'].key
             : null
       if (programKey) {
         const atomEvidence = atoms.find(atom =>
           (programKey === ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key && atom.key === ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key)
           || (programKey === ATOM_CONTRACT_REGISTRY['program.dynamic_grid'].key && atom.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
-          || (programKey === ATOM_CONTRACT_REGISTRY['program.event_listener'].key && (
-            atom.key === ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key
-            || atom.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
-            || atom.key === ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key
-          ))
+          || (programKey === ATOM_CONTRACT_REGISTRY['program.event_listener'].key && atom.key === ATOM_CONTRACT_REGISTRY['external.signal'].key)
         )?.evidence
         pushAtom({
           key: programKey,
@@ -1575,6 +1567,10 @@ export class GenericSeedDispatcher {
 
   private hasRiskIntent(userMessage: string): boolean {
     return /止损|止盈|风控|风险|回撤|熔断|stop\s*loss|take\s*profit|risk|drawdown/iu.test(userMessage)
+  }
+
+  private hasPercentStopRiskIntent(userMessage: string): boolean {
+    return /止损|止盈|stop\s*loss|take\s*profit/iu.test(userMessage)
   }
 
   private hasSizingIntent(userMessage: string): boolean {

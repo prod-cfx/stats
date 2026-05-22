@@ -1128,13 +1128,13 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       intent: {
         keywords: ['RSI', 'rsi', '超买'] as const,
         verbs: {
-          gte: ['≥', '>=', '高于或等于', '大于等于', '不低于', '高于', '大于', '超过', '上方', 'above', 'over', 'greater than or equal', 'greater than'] as const,
+          gte: ['≥', '>=', '高于或等于', '大于等于', '不低于', '高于', '大于', '超过', '回到', '上穿', '重新上穿', '上方', 'above', 'over', 'greater than or equal', 'greater than'] as const,
         },
       },
       paramSlots: {
         // Issue #1395 mute-spider：period/value 必为整数；value 严格 0-100。
         period: { kind: 'number', required: false, range: [1, 200], multipleOf: 1, default: 14, extractor: { kind: 'number-int', pattern: 'RSI\\s*\\(?\\s*(\\d+)', range: [1, 200] } },
-        value: { kind: 'number', required: true, range: [0, 100], multipleOf: 1, extractor: { kind: 'number-int', pattern: '(?:≥|>=|高于或等于|大于等于|不低于|高于|大于|超过|上方|above|over|greater than or equal|greater than)\\s*(\\d+)', range: [0, 100] } },
+        value: { kind: 'number', required: true, range: [0, 100], multipleOf: 1, extractor: { kind: 'number-int', pattern: '(?:≥|>=|高于或等于|大于等于|不低于|高于|大于|超过|回到|上穿|重新上穿|上方|above|over|greater than or equal|greater than)\\s*(\\d+)', range: [0, 100] } },
         thresholdRole: { kind: 'enum', required: false, enum: ['upper_threshold'], default: 'upper_threshold' },
       },
       phaseResolver: 'by-clause-verb',
@@ -1194,7 +1194,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         verbs: {
           // touch verb 兼收 "做空/开空"——"上轨开空"等价"触及上轨开空"
           //   action verb 自带方向；sideResolver:inherit + explicitActionSide 会派生正确 side
-          touch_upper: ['触及', '碰到', '到达', 'touch', 'reaches', '做空', '开空'] as const,
+          touch_upper: ['触及', '触碰', '碰到', '到达', 'touch', 'reaches', '做空', '开空', '卖出'] as const,
           breakout_up: ['突破', '上破', 'breakout'] as const,
         },
       },

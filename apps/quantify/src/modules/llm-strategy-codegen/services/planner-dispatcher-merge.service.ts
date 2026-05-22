@@ -656,21 +656,28 @@ export class PlannerDispatcherMergeService {
   ): ReadonlySet<FallbackPredicateAtom> {
     const covered = new Set<FallbackPredicateAtom>()
     const pullback = this.findPullbackReclaimPredicate(predicateAtoms)
-    if (!pullback) return covered
-    const trend = predicateAtoms.find(predicate =>
-      predicate !== pullback
-      && predicate.phase !== 'exit'
-      && predicate.key === pullback.key
-      && this.readNumericParam(predicate.params, 'reference.period') !== this.readNumericParam(pullback.params, 'reference.period'),
-    )
-    if (trend) covered.add(trend)
-    covered.add(pullback)
+    if (pullback) {
+      const trend = predicateAtoms.find(predicate =>
+        predicate !== pullback
+        && predicate.phase !== 'exit'
+        && predicate.key === pullback.key
+        && this.readNumericParam(predicate.params, 'reference.period') !== this.readNumericParam(pullback.params, 'reference.period'),
+      )
+      if (trend) covered.add(trend)
+      covered.add(pullback)
 
-    const pullbackEvidence = this.readEvidenceText(pullback)
-    const previousExtremaRetestKey = ATOM_CONTRACT_REGISTRY['price.previous_extrema_retest'].key
-    for (const predicate of predicateAtoms) {
-      if (predicate.key !== previousExtremaRetestKey) continue
-      if (this.readEvidenceText(predicate) === pullbackEvidence) covered.add(predicate)
+      const pullbackEvidence = this.readEvidenceText(pullback)
+      const previousExtremaRetestKey = ATOM_CONTRACT_REGISTRY['price.previous_extrema_retest'].key
+      for (const predicate of predicateAtoms) {
+        if (predicate.key !== previousExtremaRetestKey) continue
+        if (this.readEvidenceText(predicate) === pullbackEvidence) covered.add(predicate)
+      }
+    }
+    const rsiReclaim = this.findRsiReclaimPredicate(predicateAtoms)
+    if (rsiReclaim) {
+      const trend = this.findTrendPredicateForRsiReclaim(predicateAtoms, rsiReclaim)
+      if (trend) covered.add(trend)
+      covered.add(rsiReclaim)
     }
     return covered
   }
@@ -681,6 +688,55 @@ export class PlannerDispatcherMergeService {
     userMessage: string,
   ): SemanticRule[] {
     const rules: SemanticRule[] = []
+    const rsiReclaim = this.findRsiReclaimPredicate(predicateAtoms)
+    if (rsiReclaim) {
+      const rsiTrend = this.findTrendPredicateForRsiReclaim(predicateAtoms, rsiReclaim)
+      if (rsiTrend) {
+        const sideScope = rsiReclaim.sideScope ?? rsiTrend.sideScope ?? 'long'
+        const effects = this.resolveFallbackEffects({
+          phase: 'entry',
+          sideScope,
+          effectAtoms,
+          predicate: rsiReclaim,
+        })
+        if (effects.length > 0) {
+          const threshold = this.readNumericParam(rsiReclaim.params, 'value') ?? this.readNumericParam(rsiReclaim.params, 'threshold')
+          const period = this.readNumericParam(rsiReclaim.params, 'period') ?? 14
+          const evidence = this.resolveFallbackEvidence(rsiReclaim, userMessage)
+          rules.push({
+            id: 'deterministic-composite-rsi-reclaim',
+            phase: 'entry',
+            sideScope,
+            condition: {
+              kind: 'and',
+              children: [
+                {
+                  kind: 'atom',
+                  key: rsiTrend.key,
+                  params: rsiTrend.params ?? {},
+                  ...(rsiTrend.sideScope ? { sideScope: rsiTrend.sideScope } : {}),
+                  ...this.resolveFallbackEvidence(rsiTrend, userMessage),
+                },
+                {
+                  kind: 'atom',
+                  key: ATOM_CONTRACT_REGISTRY['condition.sequence'].key,
+                  params: {
+                    sequenceKind: 'rsi_reclaim',
+                    indicator: 'rsi',
+                    period,
+                    ...(threshold !== null ? { threshold, value: threshold } : {}),
+                  },
+                  ...(rsiReclaim.sideScope ? { sideScope: rsiReclaim.sideScope } : {}),
+                  ...evidence,
+                },
+              ],
+            },
+            effects: this.toTypedRuleEffects(effects),
+            ...evidence,
+          })
+        }
+      }
+    }
     const pullback = this.findPullbackReclaimPredicate(predicateAtoms)
     if (!pullback) return rules
 
@@ -752,6 +808,30 @@ export class PlannerDispatcherMergeService {
     }) ?? null
   }
 
+  private findRsiReclaimPredicate(
+    predicateAtoms: ReadonlyArray<FallbackPredicateAtom>,
+  ): FallbackPredicateAtom | null {
+    return predicateAtoms.find((predicate) => {
+      if (predicate.phase === 'exit') return false
+      if (predicate.key !== ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key) return false
+      const indicator = this.readStringParam(predicate.params, 'indicator')
+      if (indicator !== 'rsi') return false
+      const evidence = this.readEvidenceText(predicate)
+      return Boolean(evidence && /RSI/iu.test(evidence) && /跌破|低于|下方/iu.test(evidence) && /重新上穿|上穿|回到|重新站上/iu.test(evidence))
+    }) ?? null
+  }
+
+  private findTrendPredicateForRsiReclaim(
+    predicateAtoms: ReadonlyArray<FallbackPredicateAtom>,
+    rsiReclaim: FallbackPredicateAtom,
+  ): FallbackPredicateAtom | null {
+    return predicateAtoms.find(predicate =>
+      predicate !== rsiReclaim
+      && predicate.phase !== 'exit'
+      && predicate.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key,
+    ) ?? null
+  }
+
   private normalizeFallbackRuleSideScope(
     predicate: FallbackPredicateAtom,
     phase: SemanticRule['phase'],
@@ -759,7 +839,9 @@ export class PlannerDispatcherMergeService {
     userMessage: string,
   ): 'long' | 'short' | 'both' {
     const current = predicate.sideScope ?? 'both'
-    if (phase !== 'exit' || current !== 'short') return current
+    if (phase !== 'exit') return current
+    if (current === 'both' && !this.hasShortEntryIntent(dispatcher, userMessage)) return 'long'
+    if (current !== 'short') return current
     const evidence = this.readEvidenceText(predicate) ?? userMessage
     const explicitShortExit = /平空|空单|空仓|close\s+short/iu.test(evidence)
     if (explicitShortExit) return current
@@ -859,7 +941,32 @@ export class PlannerDispatcherMergeService {
         sourceActionKey: DCA_SCHEDULE_ATOM_KEY,
       })
     }
-    return this.dedupeFallbackAtoms(out)
+    return this.dedupeFallbackAtoms(this.dropRangePositionPredicatesCoveredByAddPosition(out, dispatcher))
+  }
+
+  private dropRangePositionPredicatesCoveredByAddPosition(
+    predicates: FallbackPredicateAtom[],
+    dispatcher: CodegenSemanticPatch,
+  ): FallbackPredicateAtom[] {
+    const addPositionEvidence = new Set(
+      [...(dispatcher.actions ?? []), ...(dispatcher.atoms ?? [])]
+        .filter(atom => atom.key === ADD_POSITION_ATOM_KEY)
+        .map(atom => this.readEvidenceText(atom))
+        .filter((text): text is string => Boolean(text)),
+    )
+    if (addPositionEvidence.size === 0) return predicates
+    return predicates.filter((predicate) => {
+      const evidence = this.readEvidenceText(predicate)
+      if (
+        predicate.key === ATOM_CONTRACT_REGISTRY['price.percent_change'].key
+        && predicate.sourceActionKey !== ADD_POSITION_ATOM_KEY
+      ) {
+        return Boolean(evidence && !addPositionEvidence.has(evidence))
+      }
+      if (predicate.key !== ATOM_CONTRACT_REGISTRY['price.range_position_gte'].key) return true
+      if (!evidence) return false
+      return !addPositionEvidence.has(evidence) && !/加仓|加投|补仓/iu.test(evidence)
+    })
   }
 
   private collectFallbackEffectAtoms(dispatcher: CodegenSemanticPatch): AtomExprAtom[] {
@@ -881,7 +988,7 @@ export class PlannerDispatcherMergeService {
     }
     for (const atom of dispatcher.atoms ?? []) {
       const bucket = this.readAtomBucket(atom.key)
-      if (bucket === 'action' || bucket === 'risk' || bucket === 'orchestration') {
+      if (bucket === 'action' || bucket === 'risk' || bucket === 'orchestration' || atom.key === DCA_SCHEDULE_ATOM_KEY) {
         if (bucket === 'orchestration' && atom.key.startsWith('scope.')) continue
         push(atom.key, atom.params ?? {}, atom.sideScope)
       }
@@ -916,8 +1023,9 @@ export class PlannerDispatcherMergeService {
       return this.dedupeFallbackEffects(phaseMatched.filter(atom => atom.key === ADD_POSITION_ATOM_KEY))
     }
     if (args.predicate.sourceActionKey === DCA_SCHEDULE_ATOM_KEY) {
+      const dcaEffects = args.effectAtoms.filter(atom => atom.key === DCA_SCHEDULE_ATOM_KEY)
       const defaults = this.defaultActionEffects(args.phase, args.sideScope)
-      return this.dedupeFallbackEffects([...phaseMatched, ...defaults])
+      return this.dedupeFallbackEffects([...dcaEffects, ...phaseMatched, ...defaults])
     }
     const defaults = this.defaultActionEffects(args.phase, args.sideScope)
     return this.dedupeFallbackEffects([...phaseMatched, ...defaults])
@@ -968,7 +1076,10 @@ export class PlannerDispatcherMergeService {
     if (atom.key !== ADD_POSITION_ATOM_KEY) return null
     const params = atom.params ?? {}
     const addMode = typeof params.addMode === 'string' ? params.addMode : null
-    const sideScope = atom.sideScope ?? 'long'
+    const paramSideScope = params.sideScope
+    const sideScope = paramSideScope === 'long' || paramSideScope === 'short' || paramSideScope === 'both'
+      ? paramSideScope
+      : atom.sideScope ?? 'long'
     if (addMode === 'profit_pct' && typeof params.profitThreshold === 'number') {
       return {
         key: 'price.percent_change',
@@ -1038,7 +1149,10 @@ export class PlannerDispatcherMergeService {
     const seen = new Map<string, number>()
     const out: T[] = []
     for (const item of items) {
-      const signature = `${item.key}|${String(item.phase ?? '')}|${String(item.sideScope ?? '')}|${JSON.stringify(item.params ?? {})}`
+      const params = item.params && typeof item.params === 'object'
+        ? this.omitParams(item.params as Record<string, unknown>, ['phase'])
+        : {}
+      const signature = `${item.key}|${String(item.phase ?? '')}|${String(item.sideScope ?? '')}|${JSON.stringify(params)}`
       const seenIndex = seen.get(signature)
       if (seenIndex !== undefined) {
         if (out[seenIndex]?.sourceActionKey === undefined && item.sourceActionKey !== undefined) {
@@ -1256,34 +1370,55 @@ export class PlannerDispatcherMergeService {
         ),
       }
     }
-    if (dispatcher.position) {
+    const dispatcherPosition = this.buildFallbackPositionFromDispatcherConstraints(dispatcher) ?? dispatcher.position
+    if (dispatcherPosition) {
       const constraints = this.unionDedupByKeyAndHash(
         planner.position?.constraints,
-        dispatcher.position.constraints,
+        dispatcherPosition.constraints,
         'right',
       )
       merged.position = {
-        ...dispatcher.position,
+        ...dispatcherPosition,
         ...(constraints ? { constraints } : {}),
       }
     }
-    try {
-      this.mergeDeterministicRulesIntoPlanner(merged, dispatcher, userMessage)
-    }
-    catch (err) {
-      this.logger.warn(`mergeDeterministicRulesIntoPlanner 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
-    }
-    try {
-      this.composeDispatcherRulesIntoMergedRules(merged, dispatcher)
-    }
-    catch (err) {
-      this.logger.warn(`composeDispatcherRulesIntoMergedRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
-    }
-    try {
-      this.repairPlannerRiskDriftFromDispatcherRules(merged, dispatcher, userMessage)
-    }
-    catch (err) {
-      this.logger.warn(`repairPlannerRiskDriftFromDispatcherRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
+    if (userMessage.trim().length > 0) {
+      try {
+        this.mergeDeterministicRulesIntoPlanner(merged, dispatcher, userMessage)
+      }
+      catch (err) {
+        this.logger.warn(`mergeDeterministicRulesIntoPlanner 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
+      }
+      try {
+        this.hydratePlannerMultiTimeframeRules(merged, userMessage)
+      }
+      catch (err) {
+        this.logger.warn(`hydratePlannerMultiTimeframeRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
+      }
+      try {
+        this.composeDispatcherRulesIntoMergedRules(merged, dispatcher)
+      }
+      catch (err) {
+        this.logger.warn(`composeDispatcherRulesIntoMergedRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
+      }
+      try {
+        this.repairPlannerRiskDriftFromDispatcherRules(merged, dispatcher, userMessage)
+      }
+      catch (err) {
+        this.logger.warn(`repairPlannerRiskDriftFromDispatcherRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
+      }
+      try {
+        this.bindDispatcherLifecycleEffectsIntoPlannerRules(merged, dispatcher)
+      }
+      catch (err) {
+        this.logger.warn(`bindDispatcherLifecycleEffectsIntoPlannerRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
+      }
+      try {
+        this.pruneInvalidDeterministicNoiseRules(merged, dispatcher, userMessage)
+      }
+      catch (err) {
+        this.logger.warn(`pruneInvalidDeterministicNoiseRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
+      }
     }
     return merged
   }
@@ -1324,6 +1459,152 @@ export class PlannerDispatcherMergeService {
       }
     })
     if (mutated) merged.rules = nextRules
+  }
+
+  private hydratePlannerMultiTimeframeRules(
+    merged: CodegenSemanticPatch,
+    userMessage: string,
+  ): void {
+    const rules = merged.rules
+    if (!rules?.length) return
+    const timeframes = this.extractTimeframeTokens(userMessage)
+    if (timeframes.length < 2) return
+    let mutated = false
+    const nextRules = rules.map((rule) => {
+      if (rule.condition.kind !== 'and') return rule
+      const children = rule.condition.children
+      if (children.length !== timeframes.length) return rule
+      const atomChildren = children.filter((child): child is AtomExprAtom => child.kind === 'atom')
+      if (atomChildren.length !== children.length) return rule
+      if (atomChildren.some(child => this.readStringParam(child.params, 'timeframe'))) return rule
+      const keys = new Set(atomChildren.map(child => child.key))
+      if (keys.size !== 1) return rule
+      const nextChildren = atomChildren.map((child, index) => ({
+        ...child,
+        params: {
+          ...(child.params ?? {}),
+          timeframe: timeframes[index],
+        },
+      }))
+      mutated = true
+      return {
+        ...rule,
+        condition: {
+          ...rule.condition,
+          children: nextChildren,
+        },
+      }
+    })
+    if (mutated) merged.rules = nextRules
+  }
+
+  private extractTimeframeTokens(text: string): string[] {
+    const out: string[] = []
+    const seen = new Set<string>()
+    const re = /(?<![A-Za-z0-9])(?:(1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w)|(\d{1,3})\s*(分钟|小时|天|周(?!期)|min(?:ute)?s?|hours?|days?|weeks?|m|h|d|w)|(日线|日K|daily))(?![A-Za-z0-9])/giu
+    for (const match of text.matchAll(re)) {
+      const value = match[1]
+        ? match[1].toLowerCase()
+        : match[4]
+          ? '1d'
+          : this.normalizeTimeframeToken(match[2], match[3])
+      if (!value || seen.has(value)) continue
+      seen.add(value)
+      out.push(value)
+    }
+    return out
+  }
+
+  private normalizeTimeframeToken(value: string | undefined, unit: string | undefined): string | null {
+    if (!value || !unit) return null
+    const normalizedUnit = unit.toLowerCase()
+    const suffix = normalizedUnit === '分钟' || normalizedUnit.startsWith('min') || normalizedUnit === 'm'
+      ? 'm'
+      : normalizedUnit === '小时' || normalizedUnit.startsWith('hour') || normalizedUnit === 'h'
+        ? 'h'
+        : normalizedUnit === '天' || normalizedUnit.startsWith('day') || normalizedUnit === 'd'
+          ? 'd'
+          : normalizedUnit.startsWith('周') || normalizedUnit.startsWith('week') || normalizedUnit === 'w'
+            ? 'w'
+            : null
+    return suffix ? `${Number(value)}${suffix}` : null
+  }
+
+  private pruneInvalidDeterministicNoiseRules(
+    merged: CodegenSemanticPatch,
+    dispatcher: CodegenSemanticPatch,
+    userMessage: string,
+  ): void {
+    const rules = merged.rules
+    if (!rules?.length) return
+    const hasDrawdownBlock = (dispatcher.atoms ?? []).some(atom => atom.key === ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key)
+      || rules.some(rule => JSON.stringify(rule).includes(ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key))
+    const hasExplicitStopLoss = /止损|stop\s*loss/iu.test(userMessage)
+    const allowShort = this.hasShortEntryIntent(dispatcher, userMessage)
+    const hasRsiComposite = rules.some(rule =>
+      rule.phase === 'entry'
+      && collectAtomLeaves(rule.condition).some(leaf =>
+        leaf.key === ATOM_CONTRACT_REGISTRY['condition.sequence'].key
+        && leaf.params?.sequenceKind === 'rsi_reclaim',
+      ),
+    )
+    const seen = new Set<string>()
+    const next: SemanticRule[] = []
+
+    for (const rule of rules) {
+      const conditionLeaves = collectAtomLeaves(rule.condition)
+      const effectLeaves = listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))
+      if (
+        hasRsiComposite
+        && rule.phase === 'entry'
+        && conditionLeaves.some(leaf =>
+          leaf.key === ATOM_CONTRACT_REGISTRY['oscillator.rsi_lte'].key
+          || leaf.key === ATOM_CONTRACT_REGISTRY['oscillator.rsi_gte'].key
+          || leaf.key === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key
+          || leaf.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key,
+        )
+        && !conditionLeaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['condition.sequence'].key)
+      ) {
+        continue
+      }
+      const hasEventListener = effectLeaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['program.event_listener'].key)
+      if (hasEventListener && !/webhook|外部事件|事件监听/iu.test(userMessage)) continue
+
+      const hasStopLossCondition = conditionLeaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key)
+      const hasStopLossEffect = effectLeaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key)
+      const hasStopLossValue = [...conditionLeaves, ...effectLeaves]
+        .filter(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key)
+        .some(leaf => this.readNumericParam(leaf.params, 'valuePct') !== null || this.readNumericParam(leaf.params, 'pct') !== null)
+      if (hasDrawdownBlock && !hasExplicitStopLoss && (hasStopLossCondition || hasStopLossEffect)) continue
+      if ((hasStopLossCondition || hasStopLossEffect) && !hasStopLossValue) continue
+
+      const normalizedEffects = allowShort
+        ? rule.effects
+        : mapRuleEffectsByRole(rule.effects, effect => this.removeShortCloseEffect(effect))
+      const signature = `${rule.phase}|${rule.sideScope}|${JSON.stringify(rule.condition)}|${JSON.stringify(listRuleEffects(normalizedEffects).map(effect => this.omitEffectPhaseForSignature(effect)))}`
+      if (seen.has(signature)) continue
+      seen.add(signature)
+      next.push(normalizedEffects === rule.effects ? rule : { ...rule, sideScope: rule.sideScope === 'both' ? 'long' : rule.sideScope, effects: normalizedEffects })
+    }
+    merged.rules = next
+  }
+
+  private removeShortCloseEffect(effect: AtomExpr): AtomExpr {
+    if (effect.kind === 'atom') {
+      return effect.key === ATOM_CONTRACT_REGISTRY['action.close_short'].key
+        ? { kind: 'atom', key: ATOM_CONTRACT_REGISTRY['action.close_long'].key, params: {} }
+        : effect
+    }
+    if (effect.kind === 'and') return { ...effect, children: effect.children.map(child => this.removeShortCloseEffect(child)) }
+    if (effect.kind === 'or') return { ...effect, children: effect.children.map(child => this.removeShortCloseEffect(child)) }
+    if (effect.kind === 'not') return { ...effect, child: this.removeShortCloseEffect(effect.child) }
+    if (effect.kind === 'sequence') return { ...effect, steps: effect.steps.map(step => this.removeShortCloseEffect(step)) }
+    return effect
+  }
+
+  private omitEffectPhaseForSignature(effect: AtomExpr): unknown {
+    if (effect.kind === 'atom') return { ...effect, params: this.omitParams(effect.params ?? {}, ['phase']) }
+    return effect
   }
 
   private findDispatcherTakeProfitReplacement(
@@ -1409,7 +1690,7 @@ export class PlannerDispatcherMergeService {
       if (this.isDeterministicRuleCovered(nextRules, deterministicRule)) continue
       nextRules.push(deterministicRule)
     }
-    merged.rules = nextRules
+    merged.rules = this.dropPlannerRulesReplacedByDeterministicLifecycle(nextRules)
   }
 
   private shouldAppendDeterministicCoreTradeRule(rule: SemanticRule): boolean {
@@ -1421,6 +1702,13 @@ export class PlannerDispatcherMergeService {
       ATOM_CONTRACT_REGISTRY['indicator.below'].key,
       ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key,
       ATOM_CONTRACT_REGISTRY['indicator.cross_under'].key,
+      ATOM_CONTRACT_REGISTRY['oscillator.rsi_lte'].key,
+      ATOM_CONTRACT_REGISTRY['oscillator.rsi_gte'].key,
+      ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key,
+      ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key,
+      ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key,
+      ATOM_CONTRACT_REGISTRY['price.percent_change'].key,
+      ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key,
     ])
     if (!conditionKey || !allowedConditionKeys.has(conditionKey)) return false
 
@@ -1429,10 +1717,26 @@ export class PlannerDispatcherMergeService {
       ATOM_CONTRACT_REGISTRY['action.open_short'].key,
       ATOM_CONTRACT_REGISTRY['action.close_long'].key,
       ATOM_CONTRACT_REGISTRY['action.close_short'].key,
+      ADD_POSITION_ATOM_KEY,
     ])
     return listRuleEffects(rule.effects).some(effect =>
       collectAtomLeaves(effect).some(leaf => allowedActionKeys.has(leaf.key)),
     )
+  }
+
+  private dropPlannerRulesReplacedByDeterministicLifecycle(
+    rules: readonly SemanticRule[],
+  ): SemanticRule[] {
+    const hasAddPositionLifecycle = rules.some(rule =>
+      listRuleEffects(rule.effects).some(effect =>
+        collectAtomLeaves(effect).some(leaf => leaf.key === ADD_POSITION_ATOM_KEY),
+      ),
+    )
+    if (!hasAddPositionLifecycle) return [...rules]
+    return rules.filter((rule) => {
+      if (listRuleEffects(rule.effects).length > 0) return true
+      return !collectAtomLeaves(rule.condition).some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['price.range_position_gte'].key)
+    })
   }
 
   private findMovingAverageBreakoutCorrection(
