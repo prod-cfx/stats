@@ -145,6 +145,48 @@ describe('codegenConversationResponseMapperHelper', () => {
     expect(JSON.stringify(result.specDesc)).not.toContain('triggerKeys')
   })
 
+  it('does not leak grid rule keys from published specDesc without display graph text', () => {
+    const result = helper.finalizeSessionResponse({
+      id: 's-grid',
+      status: 'PUBLISHED',
+      missingFields: [],
+      specDesc: {
+        rules: [{
+          id: 'semantic-entry-grid-range-rebalance-long',
+          phase: 'entry',
+          condition: {
+            key: 'grid.range_rebalance',
+            params: { rangeMin: 60000, rangeMax: 80000, stepPct: 0.5 },
+          },
+          actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.1 } }],
+        }],
+        semanticPredicateGraph: {
+          nodes: [{
+            id: 'semantic-entry-grid-range-rebalance-long',
+            left: { kind: 'atom', key: 'grid.range_rebalance' },
+          }],
+        },
+      },
+      clarificationState: null,
+    }, () => ({
+      blocked: false,
+      summary: null,
+      items: [],
+      pendingItems: [],
+    }))
+
+    expect(result.specDesc).toEqual({
+      rules: [{
+        id: 'semantic-entry-grid-range-rebalance-long',
+        phase: 'entry',
+        actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.1 } }],
+        condition: { text: '网格区间 60000-80000，间距 0.5%' },
+      }],
+    })
+    expect(JSON.stringify(result.specDesc)).not.toContain('grid.range_rebalance')
+    expect(JSON.stringify(result.specDesc)).not.toContain('semanticPredicateGraph')
+  })
+
   it('reads publication gate from nested compiler consistency report', () => {
     expect(helper.readPublicationGate({
       compilerConsistency: {
