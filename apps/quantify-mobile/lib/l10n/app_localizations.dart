@@ -341,7 +341,7 @@ abstract class AppLocalizations {
   /// No description provided for @backtestFillAvg.
   ///
   /// In zh, this message translates to:
-  /// **'平均价'**
+  /// **'逐笔成交价'**
   String get backtestFillAvg;
 
   /// No description provided for @backtestFieldPartialData.
@@ -485,13 +485,13 @@ abstract class AppLocalizations {
   /// No description provided for @deployExchangeEmptyHint.
   ///
   /// In zh, this message translates to:
-  /// **'尚未配置任何交易所 API，去「我的 / API」添加后再试。'**
+  /// **'尚未配置任何交易所 API，添加后再试。'**
   String get deployExchangeEmptyHint;
 
   /// No description provided for @deployGoConfigureButton.
   ///
   /// In zh, this message translates to:
-  /// **'去配置 API'**
+  /// **'添加 API'**
   String get deployGoConfigureButton;
 
   /// No description provided for @deployAuthorizePermissionTitle.

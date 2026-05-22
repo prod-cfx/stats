@@ -19,8 +19,8 @@ import '../../widgets/qz_button.dart';
 ///     展开 start / end 文本框。
 ///   - 初始资金（USDT）
 ///   - 滑点（bps，默认 5 ≈ 0.05%）
-///   - 手续费（bps，默认 4 ≈ 0.04%）
-///   - 成交价来源 select：开盘价 / 收盘价 / 平均价（默认 平均价 ≈ 原型「逐笔成交价」）
+///   - 手续费（bps，默认 2 ≈ 0.02%）
+///   - 成交价来源 select：开盘价 / 收盘价 / 逐笔成交价（默认 逐笔成交价）
 ///   - 允许部分覆盖数据 select：是 / 否（默认 是）
 ///   - 底部 shield 风格提示 banner（说明回测仅供参考、策略参数请回对话改）
 ///   - 底部双按钮：「收起」（次要）+「确认并开始回测」（主要）
@@ -53,7 +53,7 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
   final TextEditingController _capital =
       TextEditingController(text: '10000');
   final TextEditingController _slippage = TextEditingController(text: '5');
-  final TextEditingController _fee = TextEditingController(text: '4');
+  final TextEditingController _fee = TextEditingController(text: '2');
   String _fillSource = 'avg';
   bool _partialData = true;
 
@@ -192,65 +192,88 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
+    // 设计稿 m-screens-2.jsx ScreenAIConfig：sheet 固定 top:120，圆角 24，
+    // body 滚动，footer 贴底；scrim 占据 sheet 上方 120px 区域，点击关闭。
+    final double bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     return Scaffold(
       backgroundColor: c.scrim,
-      body: SafeArea(
-        top: false,
-        child: Column(
-          children: <Widget>[
-            Expanded(
-              child: GestureDetector(
-                key: const Key('backtest-sheet-scrim'),
-                behavior: HitTestBehavior.opaque,
-                onTap: _cancel,
-                child: const SizedBox.expand(),
-              ),
+      resizeToAvoidBottomInset: false,
+      body: Stack(
+        children: <Widget>[
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: 120,
+            child: GestureDetector(
+              key: const Key('backtest-sheet-scrim'),
+              behavior: HitTestBehavior.opaque,
+              onTap: _cancel,
+              child: const SizedBox.expand(),
             ),
-            Flexible(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: c.bgElev,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(16),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 120,
+            bottom: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                color: c.bgElev,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
+              ),
+              child: Column(
+                children: <Widget>[
+                  const SizedBox(height: QzSpacing.sm),
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: c.borderStrong,
+                        borderRadius: BorderRadius.circular(QzRadii.pill),
+                      ),
+                    ),
                   ),
-                ),
-                padding: EdgeInsets.fromLTRB(
-                  QzSpacing.lg,
-                  QzSpacing.md,
-                  QzSpacing.lg,
-                  QzSpacing.lg + MediaQuery.viewInsetsOf(context).bottom,
-                ),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: c.borderStrong,
-                            borderRadius:
-                                BorderRadius.circular(QzRadii.pill),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      QzSpacing.lg,
+                      QzSpacing.md,
+                      QzSpacing.lg,
+                      QzSpacing.xs,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          l10n.backtestSheetTitle,
+                          style: TextStyle(
+                            color: c.text,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                      ),
-                      const SizedBox(height: QzSpacing.md),
-                      Text(
-                        l10n.backtestSheetTitle,
-                        style: TextStyle(
-                          color: c.text,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                        const SizedBox(height: 2),
+                        Text(
+                          l10n.backtestSheetSubtitle,
+                          style: TextStyle(color: c.textMid, fontSize: 12),
                         ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(
+                        QzSpacing.lg,
+                        QzSpacing.sm,
+                        QzSpacing.lg,
+                        QzSpacing.lg,
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        l10n.backtestSheetSubtitle,
-                        style: TextStyle(color: c.textMid, fontSize: 12),
-                      ),
-                      const SizedBox(height: QzSpacing.lg),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
                       _FieldLabel(label: l10n.backtestFieldRange, scheme: c),
                       const SizedBox(height: QzSpacing.xs),
                       _RangeChips(
@@ -379,39 +402,54 @@ class _BacktestConfigSheetState extends ConsumerState<BacktestConfigSheet> {
                           ),
                         ),
                       ],
-                      const SizedBox(height: QzSpacing.lg),
-                      Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: QzButton(
-                              key: const Key('backtest-collapse'),
-                              label: l10n.backtestCollapseButton,
-                              variant: QzButtonVariant.ghost,
-                              onPressed: _submitting ? null : _cancel,
-                              expanded: true,
-                            ),
-                          ),
-                          const SizedBox(width: QzSpacing.md),
-                          Expanded(
-                            flex: 2,
-                            child: QzButton(
-                              key: const Key('backtest-submit'),
-                              label: l10n.backtestStartButton,
-                              variant: QzButtonVariant.accent,
-                              onPressed: _submitting ? null : _submit,
-                              loading: _submitting,
-                              expanded: true,
-                            ),
-                          ),
                         ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                  // Footer：贴底固定，键盘弹起时 padding 顶起避免被遮挡。
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border(
+                        top: BorderSide(color: c.border),
+                      ),
+                    ),
+                    padding: EdgeInsets.fromLTRB(
+                      QzSpacing.lg,
+                      QzSpacing.md,
+                      QzSpacing.lg,
+                      QzSpacing.lg + bottomInset,
+                    ),
+                    child: Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: QzButton(
+                            key: const Key('backtest-collapse'),
+                            label: l10n.backtestCollapseButton,
+                            variant: QzButtonVariant.ghost,
+                            onPressed: _submitting ? null : _cancel,
+                            expanded: true,
+                          ),
+                        ),
+                        const SizedBox(width: QzSpacing.md),
+                        Expanded(
+                          flex: 2,
+                          child: QzButton(
+                            key: const Key('backtest-submit'),
+                            label: l10n.backtestStartButton,
+                            variant: QzButtonVariant.accent,
+                            onPressed: _submitting ? null : _submit,
+                            loading: _submitting,
+                            expanded: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

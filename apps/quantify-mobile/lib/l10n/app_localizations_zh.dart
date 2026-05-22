@@ -129,7 +129,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backtestFillClose => '收盘价';
 
   @override
-  String get backtestFillAvg => '平均价';
+  String get backtestFillAvg => '逐笔成交价';
 
   @override
   String get backtestFieldPartialData => '允许部分覆盖数据继续回测';
@@ -774,8 +774,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get themeSettingsSyncSubtitle => '此设置会同步到 Web 和 App';
 
   @override
-  String get themeSettingsSyncFootnote =>
-      '主题在 Web 与 App 之间通过你的账号同步，下次登录会自动应用。';
+  String get themeSettingsSyncFootnote => '主题在 Web 与 App 之间通过你的账号同步，下次登录会自动应用。';
 
   @override
   String get themeBgSection => '背景主题';
