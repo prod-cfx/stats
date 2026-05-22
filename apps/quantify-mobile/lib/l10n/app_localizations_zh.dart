@@ -538,6 +538,84 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tradeOrderSheetSuccessToast => '下单成功';
 
   @override
+  String tradeOrderSheetHeaderTitleBuy(Object symbol) {
+    return '买入 / 做多 $symbol';
+  }
+
+  @override
+  String tradeOrderSheetHeaderTitleSell(Object symbol) {
+    return '卖出 / 做空 $symbol';
+  }
+
+  @override
+  String tradeOrderSheetHeaderSubtitle(Object pair, Object exchange) {
+    return '$pair · 永续 · $exchange';
+  }
+
+  @override
+  String get tradeOrderSheetCloseTooltip => '关闭';
+
+  @override
+  String get tradeOrderSheetLeverageGridTitle => '选择杠杆倍数';
+
+  @override
+  String get tradeOrderSheetReferenceLatest => '最新';
+
+  @override
+  String get tradeOrderSheetReferenceBid1 => '买一';
+
+  @override
+  String get tradeOrderSheetReferenceAsk1 => '卖一';
+
+  @override
+  String tradeOrderSheetAvailableLabel(Object amount) {
+    return '可用 $amount USDT';
+  }
+
+  @override
+  String get tradeOrderSheetMarketHintPrefix => '市价立即成交 · 参考价 ';
+
+  @override
+  String get tradeOrderSheetMarketHintSuffix => ' USDT';
+
+  @override
+  String get tradeOrderSheetTpsl => '止盈 / 止损';
+
+  @override
+  String get tradeOrderSheetStatMargin => '保证金';
+
+  @override
+  String get tradeOrderSheetStatNotional => '名义价值';
+
+  @override
+  String get tradeOrderSheetStatFee => '手续费 (taker)';
+
+  @override
+  String get tradeOrderSheetStatTpReturn => '止盈预计收益';
+
+  @override
+  String get tradeOrderSheetStatSlLoss => '止损预计损失';
+
+  @override
+  String get tradeOrderSheetRiskHint => '提交后由 AI 风控自动检查仓位与最大回撤';
+
+  @override
+  String get tradeOrderSheetSubmitEmpty => '请选择数量';
+
+  @override
+  String get tradeOrderSheetSubmitting => '提交中…';
+
+  @override
+  String tradeOrderSheetSubmitConfirmBuy(Object amount, Object base) {
+    return '确认买入 $amount $base';
+  }
+
+  @override
+  String tradeOrderSheetSubmitConfirmSell(Object amount, Object base) {
+    return '确认卖出 $amount $base';
+  }
+
+  @override
   String get orderbookLoadError => '盘口加载失败';
 
   @override

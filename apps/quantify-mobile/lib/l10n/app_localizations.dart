@@ -1142,6 +1142,138 @@ abstract class AppLocalizations {
   /// **'下单成功'**
   String get tradeOrderSheetSuccessToast;
 
+  /// No description provided for @tradeOrderSheetHeaderTitleBuy.
+  ///
+  /// In zh, this message translates to:
+  /// **'买入 / 做多 {symbol}'**
+  String tradeOrderSheetHeaderTitleBuy(Object symbol);
+
+  /// No description provided for @tradeOrderSheetHeaderTitleSell.
+  ///
+  /// In zh, this message translates to:
+  /// **'卖出 / 做空 {symbol}'**
+  String tradeOrderSheetHeaderTitleSell(Object symbol);
+
+  /// No description provided for @tradeOrderSheetHeaderSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'{pair} · 永续 · {exchange}'**
+  String tradeOrderSheetHeaderSubtitle(Object pair, Object exchange);
+
+  /// No description provided for @tradeOrderSheetCloseTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get tradeOrderSheetCloseTooltip;
+
+  /// No description provided for @tradeOrderSheetLeverageGridTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择杠杆倍数'**
+  String get tradeOrderSheetLeverageGridTitle;
+
+  /// No description provided for @tradeOrderSheetReferenceLatest.
+  ///
+  /// In zh, this message translates to:
+  /// **'最新'**
+  String get tradeOrderSheetReferenceLatest;
+
+  /// No description provided for @tradeOrderSheetReferenceBid1.
+  ///
+  /// In zh, this message translates to:
+  /// **'买一'**
+  String get tradeOrderSheetReferenceBid1;
+
+  /// No description provided for @tradeOrderSheetReferenceAsk1.
+  ///
+  /// In zh, this message translates to:
+  /// **'卖一'**
+  String get tradeOrderSheetReferenceAsk1;
+
+  /// No description provided for @tradeOrderSheetAvailableLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'可用 {amount} USDT'**
+  String tradeOrderSheetAvailableLabel(Object amount);
+
+  /// No description provided for @tradeOrderSheetMarketHintPrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'市价立即成交 · 参考价 '**
+  String get tradeOrderSheetMarketHintPrefix;
+
+  /// No description provided for @tradeOrderSheetMarketHintSuffix.
+  ///
+  /// In zh, this message translates to:
+  /// **' USDT'**
+  String get tradeOrderSheetMarketHintSuffix;
+
+  /// No description provided for @tradeOrderSheetTpsl.
+  ///
+  /// In zh, this message translates to:
+  /// **'止盈 / 止损'**
+  String get tradeOrderSheetTpsl;
+
+  /// No description provided for @tradeOrderSheetStatMargin.
+  ///
+  /// In zh, this message translates to:
+  /// **'保证金'**
+  String get tradeOrderSheetStatMargin;
+
+  /// No description provided for @tradeOrderSheetStatNotional.
+  ///
+  /// In zh, this message translates to:
+  /// **'名义价值'**
+  String get tradeOrderSheetStatNotional;
+
+  /// No description provided for @tradeOrderSheetStatFee.
+  ///
+  /// In zh, this message translates to:
+  /// **'手续费 (taker)'**
+  String get tradeOrderSheetStatFee;
+
+  /// No description provided for @tradeOrderSheetStatTpReturn.
+  ///
+  /// In zh, this message translates to:
+  /// **'止盈预计收益'**
+  String get tradeOrderSheetStatTpReturn;
+
+  /// No description provided for @tradeOrderSheetStatSlLoss.
+  ///
+  /// In zh, this message translates to:
+  /// **'止损预计损失'**
+  String get tradeOrderSheetStatSlLoss;
+
+  /// No description provided for @tradeOrderSheetRiskHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'提交后由 AI 风控自动检查仓位与最大回撤'**
+  String get tradeOrderSheetRiskHint;
+
+  /// No description provided for @tradeOrderSheetSubmitEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'请选择数量'**
+  String get tradeOrderSheetSubmitEmpty;
+
+  /// No description provided for @tradeOrderSheetSubmitting.
+  ///
+  /// In zh, this message translates to:
+  /// **'提交中…'**
+  String get tradeOrderSheetSubmitting;
+
+  /// No description provided for @tradeOrderSheetSubmitConfirmBuy.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认买入 {amount} {base}'**
+  String tradeOrderSheetSubmitConfirmBuy(Object amount, Object base);
+
+  /// No description provided for @tradeOrderSheetSubmitConfirmSell.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认卖出 {amount} {base}'**
+  String tradeOrderSheetSubmitConfirmSell(Object amount, Object base);
+
   /// No description provided for @orderbookLoadError.
   ///
   /// In zh, this message translates to:

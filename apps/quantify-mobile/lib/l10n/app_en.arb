@@ -189,6 +189,61 @@
   "tradeOrderSheetSubmitBuyPrefix": "Buy ",
   "tradeOrderSheetSubmitSellPrefix": "Sell ",
   "tradeOrderSheetSuccessToast": "Order placed",
+  "tradeOrderSheetHeaderTitleBuy": "Buy / Long {symbol}",
+  "@tradeOrderSheetHeaderTitleBuy": {
+    "placeholders": {
+      "symbol": {"type": "Object"}
+    }
+  },
+  "tradeOrderSheetHeaderTitleSell": "Sell / Short {symbol}",
+  "@tradeOrderSheetHeaderTitleSell": {
+    "placeholders": {
+      "symbol": {"type": "Object"}
+    }
+  },
+  "tradeOrderSheetHeaderSubtitle": "{pair} · Perp · {exchange}",
+  "@tradeOrderSheetHeaderSubtitle": {
+    "placeholders": {
+      "pair": {"type": "Object"},
+      "exchange": {"type": "Object"}
+    }
+  },
+  "tradeOrderSheetCloseTooltip": "Close",
+  "tradeOrderSheetLeverageGridTitle": "Select leverage",
+  "tradeOrderSheetReferenceLatest": "Last",
+  "tradeOrderSheetReferenceBid1": "Bid1",
+  "tradeOrderSheetReferenceAsk1": "Ask1",
+  "tradeOrderSheetAvailableLabel": "Available {amount} USDT",
+  "@tradeOrderSheetAvailableLabel": {
+    "placeholders": {
+      "amount": {"type": "Object"}
+    }
+  },
+  "tradeOrderSheetMarketHintPrefix": "Market fills instantly · ref ",
+  "tradeOrderSheetMarketHintSuffix": " USDT",
+  "tradeOrderSheetTpsl": "TP / SL",
+  "tradeOrderSheetStatMargin": "Margin",
+  "tradeOrderSheetStatNotional": "Notional",
+  "tradeOrderSheetStatFee": "Fee (taker)",
+  "tradeOrderSheetStatTpReturn": "Est. TP Return",
+  "tradeOrderSheetStatSlLoss": "Est. SL Loss",
+  "tradeOrderSheetRiskHint": "AI risk control will review your position and max drawdown",
+  "tradeOrderSheetSubmitEmpty": "Select amount",
+  "tradeOrderSheetSubmitting": "Submitting…",
+  "tradeOrderSheetSubmitConfirmBuy": "Confirm Buy {amount} {base}",
+  "@tradeOrderSheetSubmitConfirmBuy": {
+    "placeholders": {
+      "amount": {"type": "Object"},
+      "base": {"type": "Object"}
+    }
+  },
+  "tradeOrderSheetSubmitConfirmSell": "Confirm Sell {amount} {base}",
+  "@tradeOrderSheetSubmitConfirmSell": {
+    "placeholders": {
+      "amount": {"type": "Object"},
+      "base": {"type": "Object"}
+    }
+  },
   "orderbookLoadError": "Order book load failed",
   "meHomeLoadErrorPrefix": "Load failed: ",
   "meStatsActiveStrategies": "Active Strategies",

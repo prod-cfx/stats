@@ -192,6 +192,61 @@
   "tradeOrderSheetSubmitBuyPrefix": "买入 ",
   "tradeOrderSheetSubmitSellPrefix": "卖出 ",
   "tradeOrderSheetSuccessToast": "下单成功",
+  "tradeOrderSheetHeaderTitleBuy": "买入 / 做多 {symbol}",
+  "@tradeOrderSheetHeaderTitleBuy": {
+    "placeholders": {
+      "symbol": {"type": "Object"}
+    }
+  },
+  "tradeOrderSheetHeaderTitleSell": "卖出 / 做空 {symbol}",
+  "@tradeOrderSheetHeaderTitleSell": {
+    "placeholders": {
+      "symbol": {"type": "Object"}
+    }
+  },
+  "tradeOrderSheetHeaderSubtitle": "{pair} · 永续 · {exchange}",
+  "@tradeOrderSheetHeaderSubtitle": {
+    "placeholders": {
+      "pair": {"type": "Object"},
+      "exchange": {"type": "Object"}
+    }
+  },
+  "tradeOrderSheetCloseTooltip": "关闭",
+  "tradeOrderSheetLeverageGridTitle": "选择杠杆倍数",
+  "tradeOrderSheetReferenceLatest": "最新",
+  "tradeOrderSheetReferenceBid1": "买一",
+  "tradeOrderSheetReferenceAsk1": "卖一",
+  "tradeOrderSheetAvailableLabel": "可用 {amount} USDT",
+  "@tradeOrderSheetAvailableLabel": {
+    "placeholders": {
+      "amount": {"type": "Object"}
+    }
+  },
+  "tradeOrderSheetMarketHintPrefix": "市价立即成交 · 参考价 ",
+  "tradeOrderSheetMarketHintSuffix": " USDT",
+  "tradeOrderSheetTpsl": "止盈 / 止损",
+  "tradeOrderSheetStatMargin": "保证金",
+  "tradeOrderSheetStatNotional": "名义价值",
+  "tradeOrderSheetStatFee": "手续费 (taker)",
+  "tradeOrderSheetStatTpReturn": "止盈预计收益",
+  "tradeOrderSheetStatSlLoss": "止损预计损失",
+  "tradeOrderSheetRiskHint": "提交后由 AI 风控自动检查仓位与最大回撤",
+  "tradeOrderSheetSubmitEmpty": "请选择数量",
+  "tradeOrderSheetSubmitting": "提交中…",
+  "tradeOrderSheetSubmitConfirmBuy": "确认买入 {amount} {base}",
+  "@tradeOrderSheetSubmitConfirmBuy": {
+    "placeholders": {
+      "amount": {"type": "Object"},
+      "base": {"type": "Object"}
+    }
+  },
+  "tradeOrderSheetSubmitConfirmSell": "确认卖出 {amount} {base}",
+  "@tradeOrderSheetSubmitConfirmSell": {
+    "placeholders": {
+      "amount": {"type": "Object"},
+      "base": {"type": "Object"}
+    }
+  },
   "orderbookLoadError": "盘口加载失败",
   "meHomeLoadErrorPrefix": "加载失败：",
   "meStatsActiveStrategies": "活跃策略",

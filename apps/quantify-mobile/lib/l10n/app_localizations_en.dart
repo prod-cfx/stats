@@ -549,6 +549,85 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tradeOrderSheetSuccessToast => 'Order placed';
 
   @override
+  String tradeOrderSheetHeaderTitleBuy(Object symbol) {
+    return 'Buy / Long $symbol';
+  }
+
+  @override
+  String tradeOrderSheetHeaderTitleSell(Object symbol) {
+    return 'Sell / Short $symbol';
+  }
+
+  @override
+  String tradeOrderSheetHeaderSubtitle(Object pair, Object exchange) {
+    return '$pair · Perp · $exchange';
+  }
+
+  @override
+  String get tradeOrderSheetCloseTooltip => 'Close';
+
+  @override
+  String get tradeOrderSheetLeverageGridTitle => 'Select leverage';
+
+  @override
+  String get tradeOrderSheetReferenceLatest => 'Last';
+
+  @override
+  String get tradeOrderSheetReferenceBid1 => 'Bid1';
+
+  @override
+  String get tradeOrderSheetReferenceAsk1 => 'Ask1';
+
+  @override
+  String tradeOrderSheetAvailableLabel(Object amount) {
+    return 'Available $amount USDT';
+  }
+
+  @override
+  String get tradeOrderSheetMarketHintPrefix => 'Market fills instantly · ref ';
+
+  @override
+  String get tradeOrderSheetMarketHintSuffix => ' USDT';
+
+  @override
+  String get tradeOrderSheetTpsl => 'TP / SL';
+
+  @override
+  String get tradeOrderSheetStatMargin => 'Margin';
+
+  @override
+  String get tradeOrderSheetStatNotional => 'Notional';
+
+  @override
+  String get tradeOrderSheetStatFee => 'Fee (taker)';
+
+  @override
+  String get tradeOrderSheetStatTpReturn => 'Est. TP Return';
+
+  @override
+  String get tradeOrderSheetStatSlLoss => 'Est. SL Loss';
+
+  @override
+  String get tradeOrderSheetRiskHint =>
+      'AI risk control will review your position and max drawdown';
+
+  @override
+  String get tradeOrderSheetSubmitEmpty => 'Select amount';
+
+  @override
+  String get tradeOrderSheetSubmitting => 'Submitting…';
+
+  @override
+  String tradeOrderSheetSubmitConfirmBuy(Object amount, Object base) {
+    return 'Confirm Buy $amount $base';
+  }
+
+  @override
+  String tradeOrderSheetSubmitConfirmSell(Object amount, Object base) {
+    return 'Confirm Sell $amount $base';
+  }
+
+  @override
   String get orderbookLoadError => 'Order book load failed';
 
   @override
