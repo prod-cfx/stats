@@ -740,6 +740,15 @@ export class SemanticRuleProjectionService {
       ]
     }
 
+    if (leaf.key === 'gate.regime') {
+      // Rules-tree bare gate effects are predicate-level filters. The rule condition
+      // remains the executable source; projecting the empty effect creates a runtime
+      // gate node without target/activeWhen/effectWhenFalse.
+      if (!leaf.params.activeWhen && !leaf.params.target && !leaf.params.effectWhenFalse) {
+        return []
+      }
+    }
+
     return [base]
   }
 

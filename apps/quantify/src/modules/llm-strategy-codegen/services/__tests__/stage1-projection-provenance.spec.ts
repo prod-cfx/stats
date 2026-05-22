@@ -82,4 +82,34 @@ describe('Stage 1 typed rule projection provenance', () => {
       conditionPath: 'effects.programs[0].atom',
     })
   })
+
+  it('does not project bare gate.regime effects into orchestration nodes', () => {
+    const rule: SemanticRule = {
+      id: 'stage1-bare-gate-effect',
+      phase: 'gate',
+      sideScope: 'both',
+      condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+      effects: {
+        actions: [],
+        risks: [],
+        positions: [],
+        orchestration: [
+          { kind: 'atom', key: 'gate.regime', params: {} },
+        ],
+        programs: [],
+      },
+    }
+    const service = new SemanticRuleProjectionService()
+
+    const out = service.reprojectFromRules(createSemanticState({ rules: [rule] }))
+
+    expect(out.trigger[0]).toMatchObject({
+      key: 'execution.on_start',
+      _provenance: {
+        ruleId: 'stage1-bare-gate-effect',
+        conditionPath: 'condition.atom',
+      },
+    })
+    expect(out.orchestration).toHaveLength(0)
+  })
 })

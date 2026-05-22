@@ -279,7 +279,7 @@ describe('SemanticRuleProjectionService (Issue #1395)', () => {
       condition: { kind: 'atom', key: 'oscillator.rsi_lte', params: { threshold: 30 } },
       effects: [
         { kind: 'atom', key: 'program.dynamic_grid', params: {} },
-        { kind: 'atom', key: 'gate.regime', params: {} },
+        { kind: 'atom', key: 'gate.regime', params: { effectWhenFalse: 'block_new_entries' } },
       ],
     }]
     const out = svc.projectToFlat(rules)
