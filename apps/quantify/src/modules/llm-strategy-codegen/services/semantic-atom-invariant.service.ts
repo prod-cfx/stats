@@ -8,7 +8,7 @@ import { SemanticAtomContractService } from './semantic-atom-contract.service'
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
-import { collectAtomLeaves } from '../types/atom-expr'
+import { collectAtomLeaves, listRuleEffects } from '../types/atom-expr'
 
 type PriceChangeDirection = 'up' | 'down'
 type PositionAction = 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
@@ -668,7 +668,7 @@ export class SemanticAtomInvariantService {
     for (const rule of state.rules ?? []) {
       const leaves = [
         ...collectAtomLeaves(rule.condition),
-        ...rule.effects.flatMap(effect => collectAtomLeaves(effect)),
+        ...listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)),
       ]
       if (leaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && hasBothSideParams(leaf.params))) {
         return true

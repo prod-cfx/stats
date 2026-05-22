@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticOrchestrationNode, SemanticSlotState, SemanticState } from '../types/semantic-state'
 import type { AtomExpr, SemanticRule, SemanticRulePhase, SemanticRuleSideScope } from '../types/atom-expr'
-import { collectAtomLeaves } from '../types/atom-expr'
+import { collectAtomLeaves, listRuleEffects } from '../types/atom-expr'
 import { isEntryPredicateTriggerKey, isExitPredicateTriggerKey, isTimeframeGroupableTriggerKey } from '../atom-contracts/trigger-display-contract'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
@@ -365,7 +365,7 @@ export class SemanticStateProjectionService {
       // Issue #1443：渲染 rule.effects 作为 THEN action items（旧实现遗漏 → THEN 段空）
       const actionItems: SemanticDisplayActionItem[] = []
       let effectIndex = 0
-      for (const eff of rule.effects ?? []) {
+      for (const eff of listRuleEffects(rule.effects)) {
         const text = this.renderAtomExpr(eff)
         if (text && text.length > 0) {
           actionItems.push({
@@ -403,7 +403,7 @@ export class SemanticStateProjectionService {
     if (rule.condition.kind !== 'atom') return false
     if (!ALWAYS_ON_ATOM_KEYS.has(rule.condition.key)) return false
     type ContractShape = { bucket?: string }
-    for (const eff of rule.effects ?? []) {
+    for (const eff of listRuleEffects(rule.effects)) {
       const stack: AtomExpr[] = [eff]
       while (stack.length > 0) {
         const node = stack.pop()
@@ -3013,7 +3013,7 @@ export class SemanticStateProjectionService {
       for (const atom of collectAtomLeaves(rule.condition)) {
         keys.add(atom.key)
       }
-      for (const effect of rule.effects ?? []) {
+      for (const effect of listRuleEffects(rule.effects)) {
         for (const atom of collectAtomLeaves(effect)) {
           keys.add(atom.key)
         }
@@ -3556,7 +3556,7 @@ export class SemanticStateProjectionService {
   private renderRule(rule: SemanticRule): string {
     const phaseLabel = this.formatRulePhaseLabel(rule.phase)
     // effects 通常是 action / risk 副作用，渲染后用 "→" 衔接条件，保留可读性
-    const rawEffectParts = (rule.effects ?? [])
+    const rawEffectParts = listRuleEffects(rule.effects)
       .map(effect => this.renderAtomExpr(effect))
       .filter(s => s.length > 0)
 

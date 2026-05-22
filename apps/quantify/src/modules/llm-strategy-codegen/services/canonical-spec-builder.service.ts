@@ -50,7 +50,7 @@ import type { SizingAnchor, SizingAxis } from './per-trade-sizing-resolver.servi
 import type { CanonicalOrchestrationLegSizing, CanonicalOrchestrationLegSizingMode } from '../types/canonical-strategy-spec'
 import { normalizeLegacyPositionSizing, validateSemanticExpressionContract, validateSemanticPositionContract, validateSemanticRiskContract } from './strategy-semantic-contracts'
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
-import { collectAtomLeaves } from '../types/atom-expr'
+import { collectAtomLeaves, listRuleEffects } from '../types/atom-expr'
 
 // PR3b: 非 atom 字段路径的类型化引用（Issue #1279 AC-4）
 // 这些 key 不在 ATOM_CONTRACT_REGISTRY,但恰好匹配 lint 规则的 prefix regex,
@@ -1626,7 +1626,7 @@ export class CanonicalSpecBuilderService {
     for (const rule of state.rules ?? []) {
       const leaves = [
         ...collectAtomLeaves(rule.condition),
-        ...rule.effects.flatMap(effect => collectAtomLeaves(effect)),
+        ...listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)),
       ]
       if (leaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && hasBothSideParams(leaf.params))) {
         return true

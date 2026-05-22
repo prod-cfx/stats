@@ -8,6 +8,7 @@ import { PlannerDispatcherMergeService } from '../planner-dispatcher-merge.servi
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticRuleProjectionService } from '../semantic-rule-projection.service'
 import { SemanticStateProjectionService } from '../semantic-state-projection.service'
+import { listRuleEffects } from '../../types/atom-expr'
 
 function buildBaseState(overrides: Partial<SemanticState>): SemanticState {
   return {
@@ -180,7 +181,7 @@ describe('31-strategy rules tree main flow regressions', () => {
 
     const merged = new PlannerDispatcherMergeService().mergePlannerAndDispatcherPatches(plannerPatch, dispatcherPatch)
     const entryRule = merged?.rules?.find(rule =>
-      rule.effects.some(effect => effect.kind === 'atom' && effect.key === 'position.dca_schedule'),
+      listRuleEffects(rule.effects).some(effect => effect.kind === 'atom' && effect.key === 'position.dca_schedule'),
     )
 
     expect(entryRule?.effects).toEqual(expect.arrayContaining([
@@ -224,8 +225,8 @@ describe('31-strategy rules tree main flow regressions', () => {
     const openRule = fallback?.rules?.find(rule => rule.condition.kind === 'atom' && rule.condition.key === 'price.breakout_up')
     const addRule = fallback?.rules?.find(rule => rule.condition.kind === 'atom' && rule.condition.key === 'price.percent_change')
 
-    expect(openRule?.effects.filter(effect => effect.kind === 'atom' && effect.key === 'action.open_long')).toHaveLength(1)
-    expect(addRule?.effects.filter(effect => effect.kind === 'atom' && effect.key === 'action.add_position')).toHaveLength(1)
+    expect(listRuleEffects(openRule?.effects).filter(effect => effect.kind === 'atom' && effect.key === 'action.open_long')).toHaveLength(1)
+    expect(listRuleEffects(addRule?.effects).filter(effect => effect.kind === 'atom' && effect.key === 'action.add_position')).toHaveLength(1)
   })
 
   it('uses dispatcher long-only verb evidence to remove planner hallucinated short reversal rules', () => {
@@ -540,7 +541,7 @@ describe('31-strategy rules tree main flow regressions', () => {
       rule.phase === 'entry'
       && JSON.stringify(rule.condition).includes('condition.sequence')
       && JSON.stringify(rule.condition).includes('indicator.above')
-      && rule.effects.some(effect => JSON.stringify(effect).includes('action.open_long')),
+      && listRuleEffects(rule.effects).some(effect => JSON.stringify(effect).includes('action.open_long')),
     )
     const exitRule = spec.rules.find(rule => rule.phase === 'exit')
 

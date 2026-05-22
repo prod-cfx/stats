@@ -136,7 +136,7 @@ export const atomExprAtomSchema = atomSchema
 export type SemanticRulePhase = 'entry' | 'exit' | 'gate' | 'program'
 export type SemanticRuleSideScope = 'long' | 'short' | 'both'
 
-export interface RuleEffects {
+export interface RuleEffectsByRole {
   readonly actions: ReadonlyArray<AtomExpr>
   readonly risks: ReadonlyArray<AtomExpr>
   readonly positions: ReadonlyArray<AtomExpr>
@@ -144,13 +144,15 @@ export interface RuleEffects {
   readonly programs: ReadonlyArray<AtomExpr>
 }
 
+export type RuleEffects = RuleEffectsByRole | ReadonlyArray<AtomExpr>
+
 const RULE_EFFECT_ROLE_KEYS = [
   'actions',
   'risks',
   'positions',
   'orchestration',
   'programs',
-] as const satisfies ReadonlyArray<keyof RuleEffects>
+] as const satisfies ReadonlyArray<keyof RuleEffectsByRole>
 
 type RuleEffectRole = typeof RULE_EFFECT_ROLE_KEYS[number]
 
@@ -185,6 +187,54 @@ function emptyMutableRuleEffects(): Record<RuleEffectRole, AtomExpr[]> {
 
 function isRuleEffectRole(value: string): value is RuleEffectRole {
   return (RULE_EFFECT_ROLE_KEYS as readonly string[]).includes(value)
+}
+
+export function isRuleEffectsByRole(effects: RuleEffects | null | undefined): effects is RuleEffectsByRole {
+  return !!effects && typeof effects === 'object' && !Array.isArray(effects)
+}
+
+export function listRuleEffects(effects: RuleEffects | null | undefined): ReadonlyArray<AtomExpr> {
+  if (!effects) return []
+  if (Array.isArray(effects)) return effects
+  return RULE_EFFECT_ROLE_KEYS.flatMap(role => effects[role])
+}
+
+export function forEachRuleEffect(
+  effects: RuleEffects | null | undefined,
+  visit: (effect: AtomExpr, index: number, role?: RuleEffectRole, roleIndex?: number) => void,
+): void {
+  if (!effects) return
+  if (Array.isArray(effects)) {
+    effects.forEach((effect, index) => visit(effect, index))
+    return
+  }
+  let index = 0
+  for (const role of RULE_EFFECT_ROLE_KEYS) {
+    const roleEffects = effects[role]
+    for (let roleIndex = 0; roleIndex < roleEffects.length; roleIndex++) {
+      visit(roleEffects[roleIndex], index, role, roleIndex)
+      index++
+    }
+  }
+}
+
+export function mapRuleEffectsByRole(
+  effects: RuleEffects,
+  mapper: (effect: AtomExpr, index: number, role?: RuleEffectRole, roleIndex?: number) => AtomExpr,
+): RuleEffects {
+  if (Array.isArray(effects)) {
+    return effects.map((effect, index) => mapper(effect, index))
+  }
+  const next = emptyMutableRuleEffects()
+  let index = 0
+  for (const role of RULE_EFFECT_ROLE_KEYS) {
+    next[role] = effects[role].map((effect, roleIndex) => {
+      const mapped = mapper(effect, index, role, roleIndex)
+      index++
+      return mapped
+    })
+  }
+  return next
 }
 
 export const semanticRuleSchema = z.object({
@@ -841,8 +891,12 @@ function applyAtomMutator(
 function locateFlattenedEffect(
   effects: RuleEffects,
   targetIndex: number,
-): { role: RuleEffectRole, index: number, effect: AtomExpr } | null {
+): { role?: RuleEffectRole, index: number, effect: AtomExpr } | null {
   if (targetIndex < 0) return null
+  if (Array.isArray(effects)) {
+    const effect = effects[targetIndex]
+    return effect ? { index: targetIndex, effect } : null
+  }
   let offset = 0
   for (const role of RULE_EFFECT_ROLE_KEYS) {
     const roleEffects = effects[role]
@@ -857,10 +911,14 @@ function locateFlattenedEffect(
 
 function replaceEffectAtRoleIndex(
   effects: RuleEffects,
-  role: RuleEffectRole,
+  role: RuleEffectRole | undefined,
   index: number,
   effect: AtomExpr,
 ): RuleEffects {
+  if (Array.isArray(effects)) {
+    return effects.map((current, currentIndex) => (currentIndex === index ? effect : current))
+  }
+  if (!role) return effects
   return {
     ...effects,
     [role]: effects[role].map((current, currentIndex) => (currentIndex === index ? effect : current)),
@@ -873,6 +931,8 @@ function replaceEffectAtRoleIndex(
  * @param rules    rules 数组（不变）
  * @param ruleId   目标 rule.id
  * @param conditionPath 形如 `condition.and.children[2].atom` / `effects[0].atom`
+ *   `effects[N]` 兼容旧扁平路径：legacy array 按原数组顺序；typed effects 按
+ *   actions → risks → positions → orchestration → programs 展平。
  * @param mutator  接收当前 atom 返回新 atom（必须 kind:'atom'）
  * @returns 新 rules 数组；未命中 rule 保持原引用复用
  * @throws 路径不命中 / atom kind 不匹配 / index 越界 时抛 Error
@@ -922,6 +982,11 @@ export function updateRuleAtomParams(
       }
       const role = roleSeg.key
       const effIdx = roleSeg.index
+      if (Array.isArray(target.effects)) {
+        throw new Error(
+          `updateRuleAtomParams: path "${conditionPath}" not found in rule "${ruleId}" (legacy effects array has no typed role "${role}")`,
+        )
+      }
       const roleEffects = target.effects[role]
       if (effIdx < 0 || effIdx >= roleEffects.length) {
         throw new Error(

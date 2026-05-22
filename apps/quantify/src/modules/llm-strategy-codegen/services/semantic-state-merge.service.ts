@@ -14,7 +14,7 @@ import type {
   SemanticTriggerState,
 } from '../types/semantic-state'
 import { normalizeRiskSemantics } from './semantic-state-normalization'
-import { collectAtomLeaves, type SemanticRule } from '../types/atom-expr'
+import { collectAtomLeaves, listRuleEffects, type SemanticRule } from '../types/atom-expr'
 
 // #1383 Lane B：所有 atom bucket entry 必须实现的最小 identity shape，
 // 供 dedupeByAtomIdentity 用 (key, phase, stableParamsHash, openSlots signature) 折叠重复条目。
@@ -1236,7 +1236,7 @@ export class SemanticStateMergeService {
         if (!byId.has(rule.id)) idOrder.push(rule.id)
         // 审查 M2：同 id 折叠时 effects 若 derived 缺省/空数组 → 保留 persisted
         const existing = byId.get(rule.id)
-        const mergedEffects = (rule.effects && rule.effects.length > 0)
+        const mergedEffects = (listRuleEffects(rule.effects).length > 0)
           ? rule.effects
           : (existing?.effects ?? rule.effects)
         byId.set(rule.id, { ...rule, effects: mergedEffects })

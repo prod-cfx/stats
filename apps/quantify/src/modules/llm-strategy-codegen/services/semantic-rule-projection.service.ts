@@ -31,6 +31,10 @@ import type {
   AtomExprAtom,
   SemanticRule,
 } from '../types/atom-expr'
+import {
+  listRuleEffects,
+  mapRuleEffectsByRole,
+} from '../types/atom-expr'
 import type {
   SemanticActionState,
   SemanticFlatAtomProvenance,
@@ -164,7 +168,7 @@ export class SemanticRuleProjectionService {
     let changed = false
     const condition = this.sanitizeGridExpr(rule.condition)
     if (condition !== rule.condition) changed = true
-    const effects = rule.effects.map((effect) => {
+    const effects = mapRuleEffectsByRole(rule.effects, (effect) => {
       const next = this.sanitizeGridExpr(effect)
       if (next !== effect) changed = true
       return next
@@ -221,12 +225,13 @@ export class SemanticRuleProjectionService {
   }
 
   private gridRuleSignature(rule: SemanticRule): string | null {
+    const effectLeaves = listRuleEffects(rule.effects).flatMap(effect => this.collectExprLeaves(effect))
     const leaves = [
       ...this.collectExprLeaves(rule.condition),
-      ...rule.effects.flatMap(effect => this.collectExprLeaves(effect)),
+      ...effectLeaves,
     ].filter(leaf => leaf.key === GRID_RANGE_REBALANCE_ATOM_KEY)
     if (leaves.length === 0) return null
-    if (leaves.length !== this.collectExprLeaves(rule.condition).length + rule.effects.flatMap(effect => this.collectExprLeaves(effect)).length) {
+    if (leaves.length !== this.collectExprLeaves(rule.condition).length + effectLeaves.length) {
       return null
     }
     const first = leaves[0]
@@ -259,7 +264,8 @@ export class SemanticRuleProjectionService {
       }
 
       const effects: AtomExpr[] = []
-      for (const effect of rule.effects) {
+      const originalEffects = listRuleEffects(rule.effects)
+      for (const effect of originalEffects) {
         const pruned = this.pruneAtomKeyFromExpr(effect, POSITION_PYRAMIDING_LIMIT_ATOM_KEY)
         if (!pruned) {
           changed = true
@@ -278,7 +284,7 @@ export class SemanticRuleProjectionService {
         continue
       }
 
-      next.push(effects.length === rule.effects.length && effects.every((effect, index) => effect === rule.effects[index])
+      next.push(effects.length === originalEffects.length && effects.every((effect, index) => effect === originalEffects[index])
         ? rule
         : { ...rule, effects })
     }
@@ -289,7 +295,7 @@ export class SemanticRuleProjectionService {
   private rulesContainAtomKey(rules: ReadonlyArray<SemanticRule>, atomKey: string): boolean {
     return rules.some(rule =>
       this.exprContainsAtomKey(rule.condition, atomKey)
-      || rule.effects.some(effect => this.exprContainsAtomKey(effect, atomKey)),
+      || listRuleEffects(rule.effects).some(effect => this.exprContainsAtomKey(effect, atomKey)),
     )
   }
 
@@ -393,7 +399,7 @@ export class SemanticRuleProjectionService {
       this.projectCondition(rule, out)
 
       let effectIndex = 0
-      for (const eff of rule.effects) {
+      for (const eff of listRuleEffects(rule.effects)) {
         // effects[N] 顶层是 AtomExpr（可能是 atom 或 sequence/and/or/not），
         //   遍历叶子时拼接 `effects[N].<expr-path>` 作为 conditionPath。
         //
@@ -536,9 +542,9 @@ export class SemanticRuleProjectionService {
     return null
   }
 
-  /** rule.phase 'entry' | 'exit' | 'gate' → trigger phase 'entry' | 'exit' | 'risk' | 'gate' */
+  /** rule.phase 'entry' | 'exit' | 'gate' | 'program' → trigger phase；program 暂按 gate 兼容投影。 */
   private phaseToTriggerPhase(phase: SemanticRule['phase']): SemanticTriggerState['phase'] {
-    return phase
+    return phase === 'program' ? 'gate' : phase
   }
 
   private atomToTrigger(

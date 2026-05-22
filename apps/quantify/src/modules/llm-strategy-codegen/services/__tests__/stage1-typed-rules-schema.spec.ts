@@ -1,4 +1,4 @@
-import type { RuleEffects, SemanticRule } from '../../types/atom-expr'
+import type { RuleEffectsByRole, SemanticRule } from '../../types/atom-expr'
 import { gracefulParseSemanticRule, semanticRuleSchema, updateRuleAtomParams } from '../../types/atom-expr'
 
 const atom = (key: string, params: Record<string, unknown> = {}) => ({
@@ -7,7 +7,7 @@ const atom = (key: string, params: Record<string, unknown> = {}) => ({
   params,
 })
 
-const emptyEffects = (): RuleEffects => ({
+const emptyEffects = (): RuleEffectsByRole => ({
   actions: [],
   risks: [],
   positions: [],
@@ -90,12 +90,16 @@ describe('stage1 typed SemanticRule schema', () => {
       ...current,
       params: { valuePct: 7 },
     }))
-    expect(rolePathOut[0].effects.risks[0]).toEqual(atom('risk.stop_loss_pct', { valuePct: 7 }))
+    const rolePathEffects = rolePathOut[0].effects
+    if (Array.isArray(rolePathEffects)) throw new Error('expected typed effects')
+    expect((rolePathEffects as RuleEffectsByRole).risks[0]).toEqual(atom('risk.stop_loss_pct', { valuePct: 7 }))
 
     const legacyPathOut = updateRuleAtomParams(rolePathOut, 'program-grid-3', 'effects[1].atom', current => ({
       ...current,
       params: { levels: 12 },
     }))
-    expect(legacyPathOut[0].effects.programs[0]).toEqual(atom('program.grid', { levels: 12 }))
+    const legacyPathEffects = legacyPathOut[0].effects
+    if (Array.isArray(legacyPathEffects)) throw new Error('expected typed effects')
+    expect((legacyPathEffects as RuleEffectsByRole).programs[0]).toEqual(atom('program.grid', { levels: 12 }))
   })
 })

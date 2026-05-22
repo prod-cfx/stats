@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
-import { collectAtomLeaves, semanticRuleSchema, type AtomExpr, type AtomExprAtom, type SemanticRule } from '../types/atom-expr'
+import { collectAtomLeaves, listRuleEffects, mapRuleEffectsByRole, semanticRuleSchema, type AtomExpr, type AtomExprAtom, type SemanticRule } from '../types/atom-expr'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 
 /**
@@ -289,8 +289,9 @@ export class PlannerDispatcherMergeService {
     }
 
     // effects leaves
-    for (let ei = 0; ei < semRule.effects.length; ei++) {
-      const effLeaves = collectAtomLeaves(semRule.effects[ei])
+    const semRuleEffects = listRuleEffects(semRule.effects)
+    for (let ei = 0; ei < semRuleEffects.length; ei++) {
+      const effLeaves = collectAtomLeaves(semRuleEffects[ei])
       for (const leaf of effLeaves) {
         const bucket = getBucket(leaf.key)
         if (bucket !== undefined && !EFFECTS_ALLOWED_BUCKETS.has(bucket)) {
@@ -1093,7 +1094,7 @@ export class PlannerDispatcherMergeService {
     if (!rules || rules.length === 0) return
 
     const deterministicRules = this.buildFallbackRules(dispatcher, userMessage)
-      .filter(rule => rule.effects.length > 0)
+      .filter(rule => listRuleEffects(rule.effects).length > 0)
     if (deterministicRules.length === 0) return
 
     const corrected = rules.map((rule) => {
@@ -1133,7 +1134,7 @@ export class PlannerDispatcherMergeService {
       ATOM_CONTRACT_REGISTRY['action.close_long'].key,
       ATOM_CONTRACT_REGISTRY['action.close_short'].key,
     ])
-    return rule.effects.some(effect =>
+    return listRuleEffects(rule.effects).some(effect =>
       collectAtomLeaves(effect).some(leaf => allowedActionKeys.has(leaf.key)),
     )
   }
@@ -1172,7 +1173,7 @@ export class PlannerDispatcherMergeService {
     const evidenceText = [
       rule.evidence?.text,
       leaf.evidence?.text,
-      ...rule.effects.flatMap(effect => collectAtomLeaves(effect).map(effectLeaf => effectLeaf.evidence?.text)),
+      ...listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect).map(effectLeaf => effectLeaf.evidence?.text)),
     ].filter((text): text is string => typeof text === 'string')
       .join(' ')
     return /(?:EMA|SMA|MA)\s*\d{1,4}|\d{1,4}\s*(?:日|周期)?均线/iu.test(evidenceText)
@@ -1197,8 +1198,8 @@ export class PlannerDispatcherMergeService {
   }
 
   private ruleEffectsCover(existingRule: SemanticRule, candidateRule: SemanticRule): boolean {
-    const existingEffects = existingRule.effects.flatMap(effect => collectAtomLeaves(effect))
-    const candidateEffects = candidateRule.effects.flatMap(effect => collectAtomLeaves(effect))
+    const existingEffects = listRuleEffects(existingRule.effects).flatMap(effect => collectAtomLeaves(effect))
+    const candidateEffects = listRuleEffects(candidateRule.effects).flatMap(effect => collectAtomLeaves(effect))
     return candidateEffects.every(candidate =>
       existingEffects.some(existing => this.atomLeafMatches(existing, candidate)),
     )
@@ -1335,13 +1336,13 @@ export class PlannerDispatcherMergeService {
           return predicate.key === condition.key
             && this.paramsLooselyMatch(condition.params, predicate.params)
         })
-        if (matched && !rule.effects.some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === ADD_POSITION_ATOM_KEY))) {
+        if (matched && !listRuleEffects(rule.effects).some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === ADD_POSITION_ATOM_KEY))) {
           const matchedSideScope = (matched as { sideScope?: 'long' | 'short' | 'both' }).sideScope
           mutated = true
           return {
             ...rule,
             effects: [
-              ...this.removeLifecycleOpenScaffoldEffects(rule.effects, matchedSideScope ?? rule.sideScope)
+              ...this.removeLifecycleOpenScaffoldEffects(listRuleEffects(rule.effects), matchedSideScope ?? rule.sideScope)
                 .filter(effect => !collectAtomLeaves(effect).some(leaf => leaf.key === DCA_SCHEDULE_ATOM_KEY)),
               {
                 kind: 'atom' as const,
@@ -1361,7 +1362,7 @@ export class PlannerDispatcherMergeService {
         return {
           ...rule,
           effects: [
-            ...this.removeLifecycleOpenScaffoldEffects(rule.effects, rule.sideScope),
+            ...this.removeLifecycleOpenScaffoldEffects(listRuleEffects(rule.effects), rule.sideScope),
             {
               kind: 'atom' as const,
               key: DCA_SCHEDULE_ATOM_KEY,
@@ -1371,7 +1372,7 @@ export class PlannerDispatcherMergeService {
           ],
         }
       }
-      if (rule.effects.length > 0) return rule
+      if (listRuleEffects(rule.effects).length > 0) return rule
       if (rule.condition.kind !== 'atom') return rule
       const condition = rule.condition
       const matched = dispatcherActions.find((action) => {
@@ -1417,7 +1418,7 @@ export class PlannerDispatcherMergeService {
   private shouldAttachDcaSchedule(rule: SemanticRule): boolean {
     const leaves = [
       ...collectAtomLeaves(rule.condition),
-      ...rule.effects.flatMap(effect => collectAtomLeaves(effect)),
+      ...listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)),
     ]
     const hasDca = leaves.some(leaf => leaf.key === DCA_SCHEDULE_ATOM_KEY)
     if (hasDca) return false
@@ -1475,13 +1476,13 @@ export class PlannerDispatcherMergeService {
       return false
     }
     const hasActionEffect = (rule: SemanticRule): boolean => {
-      for (const eff of rule.effects) {
+      for (const eff of listRuleEffects(rule.effects)) {
         if (effectHasAction(eff)) return true
       }
       return false
     }
     const hasLifecycleEffect = (rule: SemanticRule): boolean =>
-      rule.effects.some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === DCA_SCHEDULE_ATOM_KEY))
+      listRuleEffects(rule.effects).some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === DCA_SCHEDULE_ATOM_KEY))
 
     let mutated = false
     const kept = rules.flatMap((rule) => {
@@ -1490,8 +1491,9 @@ export class PlannerDispatcherMergeService {
         mutated = true
         return []
       }
-      const effects = rule.effects.filter(effect => !effectHasAction(effect))
-      mutated = mutated || effects.length !== rule.effects.length
+      const ruleEffects = listRuleEffects(rule.effects)
+      const effects = ruleEffects.filter(effect => !effectHasAction(effect))
+      mutated = mutated || effects.length !== ruleEffects.length
       return effects.length > 0 ? [{ ...rule, effects }] : []
     })
     if (mutated) {
@@ -1534,14 +1536,15 @@ export class PlannerDispatcherMergeService {
       collectAtomLeaves(expr).some(leaf => shortActionKeys.has(leaf.key))
 
     const nextRules = rules.flatMap((rule) => {
-      const hasShortAction = rule.effects.some(isShortActionExpr)
+      const ruleEffects = listRuleEffects(rule.effects)
+      const hasShortAction = ruleEffects.some(isShortActionExpr)
       if (rule.sideScope === 'short' && hasShortAction) return []
-      const effects = rule.effects.filter(effect => !isShortActionExpr(effect))
-      if (hasShortAction && rule.effects.length > 0 && effects.length === 0) return []
+      const effects = ruleEffects.filter(effect => !isShortActionExpr(effect))
+      if (hasShortAction && ruleEffects.length > 0 && effects.length === 0) return []
       return [{ ...rule, effects }]
     })
 
-    if (nextRules.length !== rules.length || nextRules.some((rule, index) => rule.effects.length !== rules[index]?.effects.length)) {
+    if (nextRules.length !== rules.length || nextRules.some((rule, index) => listRuleEffects(rule.effects).length !== listRuleEffects(rules[index]?.effects).length)) {
       merged.rules = nextRules
     }
   }
@@ -1619,8 +1622,10 @@ export class PlannerDispatcherMergeService {
     let mutated = false
     const nextRules: SemanticRule[] = rules.map((rule) => {
       const newCondition = overrideExpr(rule.condition, rule.sideScope)
-      const newEffects = rule.effects.map(eff => overrideExpr(eff, rule.sideScope))
-      if (newCondition !== rule.condition || newEffects.some((e, i) => e !== rule.effects[i])) {
+      const oldEffects = listRuleEffects(rule.effects)
+      const newEffects = mapRuleEffectsByRole(rule.effects, eff => overrideExpr(eff, rule.sideScope))
+      const newFlatEffects = listRuleEffects(newEffects)
+      if (newCondition !== rule.condition || newFlatEffects.some((e, i) => e !== oldEffects[i])) {
         mutated = true
         return { ...rule, condition: newCondition, effects: newEffects }
       }
@@ -1685,7 +1690,7 @@ export class PlannerDispatcherMergeService {
       for (const leaf of collectAtomLeaves(rule.condition)) {
         existingKeys.add(leaf.key)
       }
-      for (const eff of rule.effects) {
+      for (const eff of listRuleEffects(rule.effects)) {
         for (const leaf of collectAtomLeaves(eff)) {
           existingKeys.add(leaf.key)
         }

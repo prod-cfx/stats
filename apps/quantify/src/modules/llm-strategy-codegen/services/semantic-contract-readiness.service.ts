@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 
 import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
 import type { AtomExpr, AtomExprAtom, SemanticRule, SemanticRuleSideScope } from '../types/atom-expr'
-import { collectAtomLeaves } from '../types/atom-expr'
+import { collectAtomLeaves, listRuleEffects } from '../types/atom-expr'
 import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gate.types'
 import type {
   SemanticAtomContract,
@@ -560,7 +560,7 @@ export class SemanticContractReadinessService {
 
     for (const rule of rules) {
       const condLeaves = collectAtomLeavesSafe(rule.condition)
-      const effectLeaves = rule.effects.flatMap(collectAtomLeavesSafe)
+      const effectLeaves = listRuleEffects(rule.effects).flatMap(collectAtomLeavesSafe)
       const allLeaves = [...condLeaves, ...effectLeaves]
 
       // eslint-disable-next-line atom-keys/no-atom-key-literal -- Issue #1395 rules-tree readiness 必须直接匹配 grid.range_rebalance 自洽闭环语义，registry bucket(=positionConstraint) 不足以区分。
@@ -658,7 +658,7 @@ function hasRulesTreeExplicitExitSemantics(
   if (dcaSideScopes.length === 0) return false
 
   for (const rule of rules) {
-    const effectLeaves = rule.effects.flatMap(collectAtomLeavesSafe)
+    const effectLeaves = listRuleEffects(rule.effects).flatMap(collectAtomLeavesSafe)
     if (
       rule.phase === 'exit'
       && dcaSideScopes.some(sideScope => isCompatibleDcaExitRule(rule, sideScope, effectLeaves))
@@ -684,7 +684,7 @@ function findDcaOwnerSideScopes(
   let matchedRuleCount = 0
   for (const rule of rules) {
     if (owner.sourceRuleId && rule.id !== owner.sourceRuleId) continue
-    const effectLeaves = rule.effects.flatMap(collectAtomLeavesSafe)
+    const effectLeaves = listRuleEffects(rule.effects).flatMap(collectAtomLeavesSafe)
     if (effectLeaves.some(leaf => leaf.key === owner.atomKey)) {
       matchedRuleCount += 1
       sideScopes.add(rule.sideScope)

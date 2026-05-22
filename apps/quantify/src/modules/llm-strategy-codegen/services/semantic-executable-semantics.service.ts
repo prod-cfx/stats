@@ -19,7 +19,7 @@ import {
   getAtomFulfillsStrategyPhase,
 } from '../atom-contracts/atom-contract-registry'
 import type { AtomContractKey } from '../atom-contracts/atom-contract-types'
-import { collectAtomLeaves, type SemanticRule } from '../types/atom-expr'
+import { collectAtomLeaves, listRuleEffects, type SemanticRule } from '../types/atom-expr'
 import type {
   SemanticCapability,
   SemanticPositionConstraintState,
@@ -228,7 +228,7 @@ export class SemanticExecutableSemanticsService {
     for (const rule of state.rules ?? []) {
       const leaves = [
         ...collectAtomLeaves(rule.condition),
-        ...rule.effects.flatMap(effect => collectAtomLeaves(effect)),
+        ...listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)),
       ]
       if (leaves.some(leaf => fulfills(leaf.key))) return true
     }
@@ -382,7 +382,7 @@ export class SemanticExecutableSemanticsService {
     if (!rules || rules.length === 0) return false
     return rules.some((rule) => {
       if (rule.phase === 'exit') return true
-      for (const effect of rule.effects) {
+      for (const effect of listRuleEffects(rule.effects)) {
         for (const leaf of collectAtomLeaves(effect)) {
           if (leaf.key.startsWith('risk.')) return true
           if (leaf.key.startsWith('action.close_')) return true

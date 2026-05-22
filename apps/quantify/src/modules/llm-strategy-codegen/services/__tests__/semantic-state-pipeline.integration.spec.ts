@@ -17,6 +17,7 @@
  * 路径都会在这里挂掉。
  */
 import type { AtomExpr, SemanticRule } from '../../types/atom-expr'
+import { listRuleEffects } from '../../types/atom-expr'
 import type { SemanticState } from '../../types/semantic-state'
 import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
 import { SemanticRuleProjectionService } from '../semantic-rule-projection.service'
@@ -142,7 +143,7 @@ describe('SemanticState pipeline integration — flat ≡ projectToFlat(rules)�
         sideScope: 'short',
         effects: [
           { kind: 'atom', key: 'action.close_short', params: {} } as AtomExpr,
-          ...rule.effects.slice(1),
+          ...listRuleEffects(rule.effects).slice(1),
         ],
       }
     })
@@ -231,7 +232,7 @@ describe('SemanticState pipeline integration — flat ≡ projectToFlat(rules)�
       ...state,
       rules: state.rules!.map((rule) => {
         if (rule.id !== 'rule-exit-rsi') return rule
-        const [closeEff, ...rest] = rule.effects
+        const [closeEff, ...rest] = listRuleEffects(rule.effects)
         const newRest = rest.map((eff) => {
           if (eff.kind !== 'atom' || eff.key !== 'risk.stop_loss_pct') return eff
           return { ...eff, params: { ...eff.params, valuePct: 8 } } as AtomExpr

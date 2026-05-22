@@ -42,7 +42,7 @@ import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { buildTriggerCombinationContract, isTriggerPredicateGroupContract, normalizeRiskSemantic } from './semantic-state-normalization'
 import { validateSemanticRiskContract } from './strategy-semantic-contracts'
 import type { AtomExprAtom, SemanticRule } from '../types/atom-expr'
-import { collectAtomLeaves } from '../types/atom-expr'
+import { collectAtomLeaves, listRuleEffects } from '../types/atom-expr'
 import { readFlatActions, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 // DEPRECATED Task 6: legacy aggregate shape; new SemanticState splits into orchestration + orchestrationContracts
@@ -216,7 +216,7 @@ export class SemanticSeedStateBuilderService {
         for (const leaf of condLeaves) {
           liftedAtoms.push(this.liftAtomLeafToPatchItem(leaf, rule, rule.phase === 'gate' ? 'gate' : (rule.phase === 'exit' ? 'exit' : 'entry')))
         }
-        for (const eff of rule.effects) {
+        for (const eff of listRuleEffects(rule.effects)) {
           for (const leaf of collectAtomLeaves(eff)) {
             // phase 透传 rule.phase；dispatchAtomsByContractBucket 内会按 contract.surface.phaseResolver
             // 'fixed-entry|exit|gate' 强制覆写到合约期望相位，无需此处精细推断。
