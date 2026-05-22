@@ -63,6 +63,15 @@ const EFFECTS_ALLOWED_BUCKETS: ReadonlySet<string> = new Set([
   'orchestration',     // orchestration-effect
 ])
 
+const RULE_EFFECT_ROLE_ALLOWED_BUCKETS = {
+  actions: 'action',
+  risks: 'risk',
+  positions: 'positionConstraint',
+  orchestration: 'orchestration',
+} as const
+
+type TypedRuleEffectRole = keyof typeof RULE_EFFECT_ROLE_ALLOWED_BUCKETS | 'programs'
+
 /**
  * Issue #1443：always-on runtime gate atom 集合（与 semantic-state-projection.service.ts
  *   同一份真相源；两处独立维护风险低，atom 数量稳定）。这类 atom 在 rule.condition
@@ -246,7 +255,7 @@ export class PlannerDispatcherMergeService {
       '- 禁止使用旧扁平字段（atoms/triggers/actions/risks/risk/position/positionConstraints/orchestration）',
       '- 每条 rule 必须含 id / phase / sideScope / condition (旧 triggers) / effects (typed RuleEffects)',
       '- effects 必须是对象：{ actions, risks, positions, orchestration, programs }',
-      '- program 型策略必须使用 phase=program，并把 grid/DCA/TWAP/webhook/event listener 放入 effects.programs',
+      '- program 型策略必须使用 phase=program；grid/TWAP/martingale/adaptive grid 等执行程序进入 effects.programs；DCA/webhook 若当前 atom contract 属于 position/orchestration，则按 contract role 放置并由 program rule 承载。',
       '- 每条 rule 必须有 evidence.text；叶子 atom 若带 evidence.text，也必须非空',
       '- condition 内叶子 atom 来自 trigger / risk(谓词) / orchestration-gate 桶；effects 内叶子来自 action / risk(副作用) / positionConstraint / orchestration-effect 桶',
       '本次具体违反：',
@@ -291,18 +300,7 @@ export class PlannerDispatcherMergeService {
       }
     }
 
-    // effects leaves
-    const semRuleEffects = listRuleEffects(semRule.effects)
-    for (let ei = 0; ei < semRuleEffects.length; ei++) {
-      const effLeaves = collectAtomLeaves(semRuleEffects[ei])
-      for (const leaf of effLeaves) {
-        const bucket = getBucket(leaf.key)
-        if (bucket !== undefined && !EFFECTS_ALLOWED_BUCKETS.has(bucket)) {
-          reasons.add('effects_leaf_bucket_invalid')
-          detailNotes.push(`rules[${ruleIndex}].effects[${ei}] 含非法叶子 atom key=${leaf.key} bucket=${bucket}（应来自 action/risk/positionConstraint/orchestration 桶）`)
-        }
-      }
-    }
+    this.collectEffectRoleViolations(ruleIndex, semRule, getBucket, reasons, detailNotes)
 
     // leaf evidence.text：planner 在 leaf atom 上若声明 evidence，则 text 必须非空；
     // 非 user message 子串只作为 warning，随后由 conversation 层归一化。
@@ -323,6 +321,63 @@ export class PlannerDispatcherMergeService {
         }
       }
     }
+  }
+
+  private collectEffectRoleViolations(
+    ruleIndex: number,
+    semRule: SemanticRule,
+    getBucket: (key: string) => string | undefined,
+    reasons: Set<PlannerSchemaRejectReason>,
+    detailNotes: string[],
+  ): void {
+    if (Array.isArray(semRule.effects)) {
+      for (let ei = 0; ei < semRule.effects.length; ei++) {
+        this.collectLegacyEffectBucketViolations(ruleIndex, ei, semRule.effects[ei], getBucket, reasons, detailNotes)
+      }
+      return
+    }
+
+    for (const role of ['actions', 'risks', 'positions', 'orchestration', 'programs'] as const satisfies ReadonlyArray<TypedRuleEffectRole>) {
+      const effects = semRule.effects[role]
+      for (let ei = 0; ei < effects.length; ei++) {
+        const leaves = collectAtomLeaves(effects[ei])
+        for (const leaf of leaves) {
+          const bucket = getBucket(leaf.key)
+          if (bucket === undefined) continue
+          const roleAllowed = role === 'programs'
+            ? this.isProgramEffectAtom(leaf.key)
+            : bucket === RULE_EFFECT_ROLE_ALLOWED_BUCKETS[role]
+          if (roleAllowed) continue
+          reasons.add('effects_leaf_bucket_invalid')
+          detailNotes.push(`rules[${ruleIndex}].effects.${role}[${ei}] 含非法叶子 atom key=${leaf.key} bucket=${bucket}（必须匹配 ${role} role）`)
+        }
+      }
+    }
+  }
+
+  private collectLegacyEffectBucketViolations(
+    ruleIndex: number,
+    effectIndex: number,
+    effect: AtomExpr,
+    getBucket: (key: string) => string | undefined,
+    reasons: Set<PlannerSchemaRejectReason>,
+    detailNotes: string[],
+  ): void {
+    const effLeaves = collectAtomLeaves(effect)
+    for (const leaf of effLeaves) {
+      const bucket = getBucket(leaf.key)
+      if (bucket !== undefined && !EFFECTS_ALLOWED_BUCKETS.has(bucket)) {
+        reasons.add('effects_leaf_bucket_invalid')
+        detailNotes.push(`rules[${ruleIndex}].effects[${effectIndex}] 含非法叶子 atom key=${leaf.key} bucket=${bucket}（应来自 action/risk/positionConstraint/orchestration 桶）`)
+      }
+    }
+  }
+
+  private isProgramEffectAtom(key: string): boolean {
+    // Registry currently models executable programs as orchestration bucket atoms
+    // named program.*; this keeps programs role validation contract-driven by
+    // registered atom identity instead of strategy-specific keywords.
+    return key.startsWith('program.')
   }
 
   /**

@@ -28,7 +28,7 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch stage1 sche
           condition: atom('execution.on_start'),
           effects: {
             ...emptyEffects(),
-            programs: [atom('program.grid', { symbol: 'BTCUSDT' })],
+            programs: [atom('program.dynamic_grid', { symbol: 'BTCUSDT' })],
           },
           evidence: { text: 'BTCUSDT 网格策略' },
         },
@@ -41,6 +41,83 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch stage1 sche
     expect(result.ok).toBe(false)
     if (result.ok === false) {
       expect(result.reasons).toContain('legacy_flat_field')
+    }
+  })
+
+  it('rejects top-level risk and position legacy fields when typed rules are present', () => {
+    const patch = {
+      rules: [
+        {
+          id: 'program-grid-1',
+          phase: 'program',
+          sideScope: 'both',
+          condition: atom('execution.on_start'),
+          effects: {
+            ...emptyEffects(),
+            programs: [atom('program.dynamic_grid', { symbol: 'BTCUSDT' })],
+          },
+          evidence: { text: 'BTCUSDT 网格策略' },
+        },
+      ],
+      risk: { stopLossPct: 5 },
+      position: { sizing: 'fixed' },
+    }
+
+    const result = svc.validatePlannerSemanticPatch(patch, userMessage)
+
+    expect(result.ok).toBe(false)
+    if (result.ok === false) {
+      expect(result.reasons).toContain('legacy_flat_field')
+    }
+  })
+
+  it('rejects action atoms inside effects.programs', () => {
+    const patch = {
+      rules: [
+        {
+          id: 'program-role-invalid',
+          phase: 'program',
+          sideScope: 'both',
+          condition: atom('execution.on_start'),
+          effects: {
+            ...emptyEffects(),
+            programs: [atom('action.open_long')],
+          },
+          evidence: { text: 'BTCUSDT 网格策略' },
+        },
+      ],
+    }
+
+    const result = svc.validatePlannerSemanticPatch(patch, userMessage)
+
+    expect(result.ok).toBe(false)
+    if (result.ok === false) {
+      expect(result.reasons).toContain('effects_leaf_bucket_invalid')
+    }
+  })
+
+  it('rejects risk atoms inside effects.actions', () => {
+    const patch = {
+      rules: [
+        {
+          id: 'action-role-invalid',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: atom('execution.on_start'),
+          effects: {
+            ...emptyEffects(),
+            actions: [atom('risk.stop_loss_pct')],
+          },
+          evidence: { text: '启动后运行' },
+        },
+      ],
+    }
+
+    const result = svc.validatePlannerSemanticPatch(patch, userMessage)
+
+    expect(result.ok).toBe(false)
+    if (result.ok === false) {
+      expect(result.reasons).toContain('effects_leaf_bucket_invalid')
     }
   })
 
