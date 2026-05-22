@@ -32,6 +32,7 @@ import type {
   SemanticRule,
 } from '../types/atom-expr'
 import {
+  forEachRuleEffect,
   listRuleEffects,
   mapRuleEffectsByRole,
 } from '../types/atom-expr'
@@ -398,17 +399,19 @@ export class SemanticRuleProjectionService {
     for (const rule of rules) {
       this.projectCondition(rule, out)
 
-      let effectIndex = 0
-      for (const eff of listRuleEffects(rule.effects)) {
-        // effects[N] 顶层是 AtomExpr（可能是 atom 或 sequence/and/or/not），
-        //   遍历叶子时拼接 `effects[N].<expr-path>` 作为 conditionPath。
+      forEachRuleEffect(rule.effects, (eff, effectIndex, role, roleIndex) => {
+        // legacy effects[N] 或 typed effects.<role>[N] 顶层是 AtomExpr
+        // （可能是 atom 或 sequence/and/or/not），遍历叶子时拼接
+        // `<base>.<expr-path>` 作为 conditionPath。
         //
         // 审查 Critical C1（#1447 闸 3 第 1 轮）：effectIndex 在 walk 回调里被闭包捕获，
         //   若 eff 是复合节点（sequence / and / or 含多叶子），所有叶子共享同一 effectIndex
         //   会产出相同 baseId `${rule.id}-eff-${effectIndex}` → action/risk 桶 id 重复。
         //   修复：在回调外维护 leafIndexWithinEffect，每个叶子 id 形如
         //   `${rule.id}-eff-${effectIndex}-${leafIdx}`（单叶子时 leafIdx=0，与旧行为兼容）。
-        const effBasePath = `effects[${effectIndex}]`
+        const effBasePath = role && roleIndex !== undefined
+          ? `effects.${role}[${roleIndex}]`
+          : `effects[${effectIndex}]`
         let leafIdxWithinEffect = 0
         this.walkLeavesWithPath(eff, effBasePath, (leaf, leafPath) => {
           const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string } | undefined>)[leaf.key]
@@ -425,8 +428,7 @@ export class SemanticRuleProjectionService {
             conditionPath: leafPath,
           })
         })
-        effectIndex += 1
-      }
+      })
     }
 
     // Issue #1447 闸 3：merge / projection 链路末端 invariant 校验。
@@ -736,15 +738,6 @@ export class SemanticRuleProjectionService {
           sizing: this.normalizeProgramSizing(leaf.params.sizing) ?? this.normalizeProgramSizing(leaf.params) ?? { mode: 'fixed_pct', value: 10 },
         },
       ]
-    }
-
-    if (leaf.key === 'gate.regime') {
-      // Rules-tree gate effects are predicate-level filters. The rule condition itself
-      // remains the executable source; projecting this bare effect into orchestration
-      // creates a phase0 runtime node without target/activeWhen and blocks codegen.
-      if (!leaf.params.activeWhen && !leaf.params.target && !leaf.params.effectWhenFalse) {
-        return []
-      }
     }
 
     return [base]
