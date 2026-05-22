@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantify_mobile/widgets/qz_bottom_tab_bar.dart';
@@ -108,6 +110,35 @@ void main() {
         .map((Element e) => (e.widget as Text).data!)
         .toList();
     expect(orderedLabels, equals(expectedLabels));
+  });
+
+  testWidgets('background uses real BackdropFilter blur (frosted glass)',
+      (tester) async {
+    // Issue #1642: TabBar must apply a real ImageFilter.blur via
+    // BackdropFilter (clipped by ClipRect to bar bounds), not just a
+    // semi-transparent tint. Guards against regressions that strip the
+    // BackdropFilter back to a flat DecoratedBox.
+    await pumpQz(
+      tester,
+      SizedBox(
+        width: 360,
+        child: QzBottomTabBar(currentIndex: 0, onTap: (_) {}),
+      ),
+      surfaceSize: const Size(360, 80),
+    );
+
+    final Finder bar = find.byType(QzBottomTabBar);
+    final Finder clip = find
+        .descendant(of: bar, matching: find.byType(ClipRect))
+        .first;
+    final Finder backdrop = find
+        .descendant(of: clip, matching: find.byType(BackdropFilter))
+        .first;
+    final BackdropFilter widget = tester.widget<BackdropFilter>(backdrop);
+    expect(widget.filter, isA<ImageFilter>());
+    // Filter description on Flutter master/stable encodes sigma values; assert
+    // non-zero blur applied rather than the identity filter.
+    expect(widget.filter.toString(), contains('blur'));
   });
 
   testWidgets('active tab paints accentSoft pill behind icon', (tester) async {

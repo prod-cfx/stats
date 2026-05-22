@@ -6,11 +6,11 @@ import '../widgets/qz_bottom_tab_bar.dart';
 /// Shell scaffold hosting the 5 bottom tabs via [StatefulNavigationShell].
 ///
 /// `extendBody: true` lets the body draw underneath the bottom bar so the
-/// `tabBlur` overlay color (semi-transparent solid — *not* yet a real
-/// [BackdropFilter] blur) reveals scroll content behind it. Real iOS-style
-/// blur is deferred to a follow-up PR; the structural hook is in place here.
-/// The bottom bar itself consumes the device's bottom safe-area inset (iOS
-/// home indicator handled by [BottomNavigationBar]).
+/// real [BackdropFilter] blur inside [QzBottomTabBar] can sample scroll
+/// content behind it (frosted-glass effect matching the design spec). The
+/// `tabBlur` token color acts as a tint overlay on top of the blurred
+/// sample. The bottom bar itself consumes the device's bottom safe-area
+/// inset (iOS home indicator handled by [BottomNavigationBar]).
 class MainShellScaffold extends StatelessWidget {
   const MainShellScaffold({super.key, required this.navigationShell});
 

@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
@@ -21,16 +23,24 @@ import '../theme/theme_context.dart';
 /// - Active tab shows a 42x28 rounded pill behind the icon, filled with
 ///   `scheme.accentSoft`; inactive items have a transparent pill slot.
 /// - Active color = `scheme.accent`; inactive = `scheme.textDim`.
-/// - Background = `scheme.tabBlur` (semi-transparent token color); a 1px top
-///   border uses `scheme.borderSoft`. Real iOS-style blur via [BackdropFilter]
-///   is intentionally deferred to a later PR; this PR only matches the token
-///   color so [Scaffold.extendBody] shows whatever sits behind through alpha.
+/// - Background = real frosted-glass effect: a [BackdropFilter] applies
+///   `ImageFilter.blur(sigmaX/Y: 18)` (≈ CSS `blur(16px)`) clipped to the bar
+///   bounds via [ClipRect], with `scheme.tabBlur` as the semi-transparent
+///   tint overlay; a 1px top border uses `scheme.borderSoft`. The blur samples
+///   whatever scroll content sits behind via [Scaffold.extendBody]. Note: CSS
+///   `saturate(180%)` has no direct Flutter equivalent without a custom
+///   `ColorFilter.matrix`; deferred to avoid a perf hit and visual drift —
+///   tint color already biases saturation appropriately per theme.
 /// - Preserves bottom safe-area inset for iOS home indicator.
 class QzBottomTabBar extends StatelessWidget {
   static const int _tabCount = 5;
   static const double _pillWidth = 42;
   static const double _pillHeight = 28;
   static const double _pillRadius = 14;
+  // Approximates CSS `blur(16px)`. Flutter's [ImageFilter.blur] sigma roughly
+  // maps to CSS pixel radius * 1.1; 18 lands close to the design-spec frosted
+  // look without becoming washed out at higher device pixel ratios.
+  static const double _blurSigma = 18;
 
   const QzBottomTabBar({
     super.key,
@@ -57,27 +67,32 @@ class QzBottomTabBar extends StatelessWidget {
     ];
     return Material(
       type: MaterialType.transparency,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: c.tabBlur,
-          border: Border(top: BorderSide(color: c.borderSoft, width: 1)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
-            child: Row(
-              children: <Widget>[
-                for (int i = 0; i < tabs.length; i++)
-                  Expanded(
-                    child: _TabItem(
-                      spec: tabs[i],
-                      active: i == currentIndex,
-                      onTap: () => onTap(i),
-                      scheme: c,
-                    ),
-                  ),
-              ],
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: _blurSigma, sigmaY: _blurSigma),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: c.tabBlur,
+              border: Border(top: BorderSide(color: c.borderSoft, width: 1)),
+            ),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+                child: Row(
+                  children: <Widget>[
+                    for (int i = 0; i < tabs.length; i++)
+                      Expanded(
+                        child: _TabItem(
+                          spec: tabs[i],
+                          active: i == currentIndex,
+                          onTap: () => onTap(i),
+                          scheme: c,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
