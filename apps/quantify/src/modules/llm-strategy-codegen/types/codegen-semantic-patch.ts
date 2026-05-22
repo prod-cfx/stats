@@ -90,6 +90,7 @@ export interface CodegenSemanticPatch {
   actions?: Array<CodegenSemanticNodeEnvelope & {
     key: string
     phase?: CodegenSemanticPatchPhase
+    sideScope?: 'long' | 'short' | 'both'
     params?: Record<string, unknown>
     contracts?: SemanticAtomContract[]
   }>
