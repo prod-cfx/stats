@@ -94,4 +94,10 @@ describe('conversationPlannerSystemPrompt', () => {
     expect(prompt).not.toMatch(/position\.dca_schedule[^。\n]*effects\.programs/)
     expect(prompt).not.toContain('program rule')
   })
+
+  it('documents grid.range_rebalance as condition exception', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+
+    expect(prompt).toContain('grid.range_rebalance 可作 program condition')
+  })
 })

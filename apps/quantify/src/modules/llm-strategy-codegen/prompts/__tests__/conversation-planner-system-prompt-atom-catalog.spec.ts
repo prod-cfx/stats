@@ -54,6 +54,18 @@ describe('conversationPlannerSystemPrompt — atom catalog injection (issue #134
       expect(prompt).not.toContain('grid.range_rebalance phase=entry')
     })
 
+    it('catalog labels use typed rules paths, not legacy flat paths', () => {
+      expect(prompt).toContain('rules[].condition')
+      expect(prompt).toContain('rules[].effects.actions')
+      expect(prompt).toContain('effects.risks')
+      expect(prompt).toContain('effects.positions')
+      expect(prompt).toContain('effects.orchestration')
+      expect(prompt).toContain('effects.programs')
+      expect(prompt).not.toContain('triggers[].key')
+      expect(prompt).not.toContain('actions[].key')
+      expect(prompt).not.toContain('risk[].key')
+    })
+
     it('保留 v1 原 25 行约束语句（零回退）', () => {
       expect(prompt).toContain('你是交易策略对话编排器')
       expect(prompt).toContain('只输出 JSON，不要 markdown')

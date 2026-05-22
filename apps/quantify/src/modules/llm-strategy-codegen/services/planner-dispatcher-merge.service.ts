@@ -88,7 +88,7 @@ const EXECUTION_ON_START_ATOM_KEY = ATOM_CONTRACT_REGISTRY['execution.on_start']
 
 type FallbackPredicateAtom = {
   key: string
-  phase?: 'entry' | 'exit' | 'risk' | 'gate'
+  phase?: 'entry' | 'exit' | 'risk' | 'gate' | 'program'
   sideScope?: 'long' | 'short' | 'both'
   params?: Record<string, unknown>
   evidence?: { text?: unknown }
@@ -140,7 +140,7 @@ export class PlannerDispatcherMergeService {
    *      （走 zod `semanticRuleSchema`，包含 AtomExpr 子树结构校验）
    *   4. 每条 rule 必有 `evidence.text`；不是 user message 子串时降级为 warning，
    *      由 conversation 层归一化为用户原文，不阻断脚本生成
-   *   5. condition 内叶子 atom 来自 trigger / risk / orchestration-gate 桶
+   *   5. condition 内叶子 atom 来自 trigger / risk / orchestration-gate 桶（grid.range_rebalance 例外）
    *      effects 内叶子来自 action / risk / positionConstraint / orchestration 桶
    *      （按 `ATOM_CONTRACT_REGISTRY[*].bucket` 派生；未注册 atom fail-open）
    *
@@ -257,7 +257,7 @@ export class PlannerDispatcherMergeService {
       '- effects 必须是对象：{ actions, risks, positions, orchestration, programs }',
       '- program.* 执行程序 atom（如 program.dynamic_grid / program.event_listener）必须用 phase=program 且只能进入 effects.programs；position.dca_schedule 按 catalog/role 放入 effects.positions，使用其 catalog phase。',
       '- 每条 rule 必须有 evidence.text；叶子 atom 若带 evidence.text，也必须非空',
-      '- condition 内叶子 atom 来自 trigger / risk(谓词) / orchestration-gate 桶；effects 内叶子来自 action / risk(副作用) / positionConstraint / orchestration-effect 桶',
+      '- condition 内叶子 atom 来自 trigger / risk(谓词) / orchestration-gate 桶；grid.range_rebalance 可作 program condition；effects 内叶子来自 action / risk(副作用) / positionConstraint / orchestration-effect 桶',
       '本次具体违反：',
       ...detailNotes.slice(0, 12).map(s => `  · ${s}`),
       '请重出合规 semanticPatch.rules[] 形态。',
@@ -449,7 +449,7 @@ export class PlannerDispatcherMergeService {
     for (const predicate of predicateAtoms) {
       if (compositeCoveredPredicates.has(predicate)) continue
       if (multiTimeframeCoveredPredicates.has(predicate)) continue
-      const phase = predicate.phase === 'exit' ? 'exit' : predicate.phase === 'gate' ? 'gate' : 'entry'
+      const phase = this.normalizeFallbackRulePhase(predicate.phase)
       const sideScope = this.normalizeFallbackRuleSideScope(predicate, phase, dispatcher, userMessage)
       const effects = this.resolveFallbackEffects({
         phase,
@@ -491,7 +491,7 @@ export class PlannerDispatcherMergeService {
     const covered = new Set<FallbackPredicateAtom>()
     const groups = new Map<string, FallbackPredicateAtom[]>()
     for (const predicate of predicateAtoms) {
-      if (predicate.phase === 'exit' || predicate.phase === 'gate' || predicate.phase === 'risk') continue
+      if (predicate.phase === 'exit' || predicate.phase === 'gate' || predicate.phase === 'risk' || predicate.phase === 'program') continue
       const timeframe = this.readStringParam(predicate.params, 'timeframe')
       if (!timeframe) continue
       const phase = 'entry'
@@ -647,7 +647,7 @@ export class PlannerDispatcherMergeService {
 
   private normalizeFallbackRuleSideScope(
     predicate: FallbackPredicateAtom,
-    phase: 'entry' | 'exit' | 'gate',
+    phase: SemanticRule['phase'],
     dispatcher: CodegenSemanticPatch,
     userMessage: string,
   ): 'long' | 'short' | 'both' {
@@ -798,10 +798,10 @@ export class PlannerDispatcherMergeService {
   }
 
   private resolveFallbackEffects(args: {
-    phase: 'entry' | 'exit' | 'gate'
+    phase: SemanticRule['phase']
     sideScope: 'long' | 'short' | 'both'
     effectAtoms: ReadonlyArray<AtomExprAtom>
-    predicate: { phase?: 'entry' | 'exit' | 'risk' | 'gate', sideScope?: 'long' | 'short' | 'both', sourceActionKey?: string }
+    predicate: { phase?: 'entry' | 'exit' | 'risk' | 'gate' | 'program', sideScope?: 'long' | 'short' | 'both', sourceActionKey?: string }
   }): AtomExprAtom[] {
     const phaseMatched = args.effectAtoms
       .filter(atom => this.effectMatchesRule(atom, args.phase, args.sideScope))
@@ -817,9 +817,15 @@ export class PlannerDispatcherMergeService {
     return this.dedupeFallbackEffects([...phaseMatched, ...defaults])
   }
 
+  private normalizeFallbackRulePhase(phase: FallbackPredicateAtom['phase']): SemanticRule['phase'] {
+    if (phase === 'entry' || phase === 'exit' || phase === 'gate' || phase === 'program') return phase
+    if (phase === 'risk') return 'exit'
+    return 'entry'
+  }
+
   private effectMatchesRule(
     atom: AtomExprAtom,
-    phase: 'entry' | 'exit' | 'gate',
+    phase: SemanticRule['phase'],
     sideScope: 'long' | 'short' | 'both',
   ): boolean {
     const key = atom.key
@@ -841,7 +847,7 @@ export class PlannerDispatcherMergeService {
 
   private buildAddPositionTriggerPredicate(atom: {
     key: string
-    phase?: 'entry' | 'exit' | 'risk' | 'gate'
+    phase?: 'entry' | 'exit' | 'risk' | 'gate' | 'program'
     sideScope?: 'long' | 'short' | 'both'
     params?: Record<string, unknown>
     evidence?: { text?: unknown }
@@ -888,8 +894,8 @@ export class PlannerDispatcherMergeService {
     return null
   }
 
-  private defaultActionEffects(phase: 'entry' | 'exit' | 'gate', sideScope: 'long' | 'short' | 'both'): AtomExprAtom[] {
-    if (phase === 'gate') return []
+  private defaultActionEffects(phase: SemanticRule['phase'], sideScope: 'long' | 'short' | 'both'): AtomExprAtom[] {
+    if (phase === 'gate' || phase === 'program') return []
     const keys = phase === 'entry'
       ? (sideScope === 'long'
           ? [ATOM_CONTRACT_REGISTRY['action.open_long'].key]
@@ -1766,15 +1772,15 @@ export class PlannerDispatcherMergeService {
 
     const lifted: SemanticRule[] = []
     let liftIndex = 0
-    const liftPhase = (phase: 'entry' | 'exit' | 'risk' | 'gate' | undefined): SemanticRule['phase'] => {
-      if (phase === 'entry' || phase === 'exit' || phase === 'gate') return phase
+    const liftPhase = (phase: 'entry' | 'exit' | 'risk' | 'gate' | 'program' | undefined): SemanticRule['phase'] => {
+      if (phase === 'entry' || phase === 'exit' || phase === 'gate' || phase === 'program') return phase
       // TODO(#1428 R-A follow-up)：'risk' 硬降级为 'exit' 是 rule.phase 枚举不允许
       //   'risk' 时的合理映射；若 #1395 后续扩展 phase 枚举支持 'risk'，需重审。
       if (phase === 'risk') return 'exit'
       return 'entry'
     }
     const collectBucket = (
-      source: ReadonlyArray<{ key: string, phase?: 'entry' | 'exit' | 'risk' | 'gate', sideScope?: 'long' | 'short' | 'both', params?: Record<string, unknown> }> | undefined,
+      source: ReadonlyArray<{ key: string, phase?: 'entry' | 'exit' | 'risk' | 'gate' | 'program', sideScope?: 'long' | 'short' | 'both', params?: Record<string, unknown> }> | undefined,
       defaultPhase: 'entry' | 'exit',
     ): void => {
       if (!source) return

@@ -163,7 +163,7 @@ export type PhaseResolverSpec =
   | 'fixed-program'
   | { readonly kind: 'fn'; readonly fn: PhaseResolverFn }
 
-export type PhaseResolverFn = (clause: string, ctx: ResolveCtx) => 'entry' | 'exit' | 'gate' | null
+export type PhaseResolverFn = (clause: string, ctx: ResolveCtx) => 'entry' | 'exit' | 'gate' | 'program' | null
 
 /**
  * SideResolver —— sideScope（long / short / both）推断策略

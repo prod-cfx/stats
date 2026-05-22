@@ -23,6 +23,35 @@ describe('PlannerDispatcherMergeService', () => {
     expect(svc.mergePlannerAndDispatcherPatches(null, dispatcher)).toBe(dispatcher)
   })
 
+  it('preserves dispatcher program phase when building rules fallback', () => {
+    const dispatcher = {
+      atoms: [
+        {
+          key: 'grid.range_rebalance',
+          phase: 'program',
+          sideScope: 'both',
+          params: { centerOffsetPct: 0.4, levels: 10, perGridSizing: 10, sideMode: 'both' },
+          evidence: { text: '上下各 0.4% 共 10 格，每格 10U' },
+        },
+        {
+          key: 'program.fixed_grid_gated',
+          phase: 'program',
+          sideScope: 'both',
+          params: { levelCount: 10, stepPct: 0.4 },
+          evidence: { text: '上下各 0.4% 共 10 格，每格 10U' },
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+
+    const fallback = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, '上下各 0.4% 共 10 格，每格 10U')
+    const gridRule = fallback?.rules?.find(rule => rule.condition.kind === 'atom' && rule.condition.key === 'grid.range_rebalance')
+
+    expect(gridRule?.phase).toBe('program')
+    expect(gridRule?.effects).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'program.fixed_grid_gated' }),
+    ]))
+  })
+
   it('dedupes atoms by (key, phase, stableParamsHash) — planner wins identity match', () => {
     const planner: CodegenSemanticPatch = {
       atoms: [{ key: 'trigger.candle_break_above', phase: 'entry', source: 'user_explicit' as never }],

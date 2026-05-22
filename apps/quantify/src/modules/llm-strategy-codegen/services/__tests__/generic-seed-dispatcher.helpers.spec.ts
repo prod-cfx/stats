@@ -102,6 +102,11 @@ describe('resolvePhaseFromClause', () => {
     expect(resolvePhaseFromClause('随便什么子句', 'fixed-exit')).toBe('exit')
   })
 
+  it('fixed-program spec 恒返回 program', () => {
+    expect(resolvePhaseFromClause('随便什么子句', 'fixed-program')).toBe('program')
+    expect(resolvePhaseFromClause('', 'fixed-program')).toBe('program')
+  })
+
   it('by-clause-verb 识别中文入场词', () => {
     expect(resolvePhaseFromClause('RSI 跌破 30 开多', 'by-clause-verb')).toBe('entry')
     expect(resolvePhaseFromClause('突破前高加仓', 'by-clause-verb')).toBe('entry')

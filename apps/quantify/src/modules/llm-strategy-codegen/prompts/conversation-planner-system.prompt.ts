@@ -97,7 +97,7 @@ const ATOM_EXPR_BNF: readonly string[] = [
   '    | { "kind": "sequence", "steps": [<AtomExpr>, <AtomExpr>, ...],',
   '                            "withinBars"?: number, "nextBarOnly"?: boolean }  // 顺序敏感',
   '',
-  'condition 内叶子 atom 必须从 trigger / risk(谓词形态) / orchestration-gate 桶取（roles 含 predicate）。',
+  'condition 内叶子 atom 必须从 trigger / risk(谓词形态) / orchestration-gate 桶取（roles 含 predicate）；例外：grid.range_rebalance 可作 program condition。',
   'effects.actions / effects.risks / effects.positions / effects.orchestration / effects.programs 内叶子 atom 必须按 registry bucket 与 roles(effect) 分桶。',
   '单 atom 条件 = 单叶子 { "kind": "atom", "key": "...", "params": {...} }，不需要 and/or 包装。',
 ]

@@ -123,18 +123,33 @@ describe('atom-catalog-projection (issue #1345 PR1.1)', () => {
       }
     })
 
+    it('catalog labels use typed rules paths instead of legacy flat paths', () => {
+      const formatted = formatAtomCatalogForPrompt('zh')
+
+      expect(formatted).toContain('rules[].condition')
+      expect(formatted).toContain('rules[].effects.actions')
+      expect(formatted).toContain('effects.risks')
+      expect(formatted).toContain('effects.positions')
+      expect(formatted).toContain('effects.orchestration')
+      expect(formatted).toContain('effects.programs')
+      expect(formatted).not.toContain('triggers[].key')
+      expect(formatted).not.toContain('actions[].key')
+      expect(formatted).not.toContain('risk[].key')
+      expect(formatted).not.toContain('positionConstraints')
+    })
+
     it('zh 与 en 至少在 bucket 标题层级有差异', () => {
       const zh = formatAtomCatalogForPrompt('zh')
       const en = formatAtomCatalogForPrompt('en')
       expect(zh).not.toBe(en)
-      expect(zh).toContain('触发原子')
-      expect(en).toContain('Trigger atoms')
+      expect(zh).toContain('条件原子')
+      expect(en).toContain('Condition atoms')
     })
 
     it('按 bucket 分组：trigger 段在 action 段之前', () => {
       const formatted = formatAtomCatalogForPrompt('zh')
-      const triggerIdx = formatted.indexOf('触发原子')
-      const actionIdx = formatted.indexOf('动作原子')
+      const triggerIdx = formatted.indexOf('条件原子')
+      const actionIdx = formatted.indexOf('动作副作用原子')
       expect(triggerIdx).toBeGreaterThanOrEqual(0)
       expect(actionIdx).toBeGreaterThan(triggerIdx)
     })
@@ -142,7 +157,7 @@ describe('atom-catalog-projection (issue #1345 PR1.1)', () => {
     it('每个 bucket 标题带 atom 数量', () => {
       const formatted = formatAtomCatalogForPrompt('zh')
       const triggerCount = getAtomKeysByBucket('trigger').length
-      expect(formatted).toMatch(new RegExp(`触发原子.*?${triggerCount}`))
+      expect(formatted).toMatch(new RegExp(`条件原子.*?${triggerCount}`))
     })
 
     it('memoize：连调 2 次返回同一字符串引用', () => {

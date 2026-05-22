@@ -115,11 +115,11 @@ export function buildAtomCatalogEntries(): readonly AtomCatalogEntry[] {
 const BUCKET_ORDER: readonly AtomContractBucket[] = ['trigger', 'action', 'risk', 'positionConstraint', 'orchestration']
 
 const BUCKET_LABEL: Record<AtomContractBucket, { zh: string, en: string }> = {
-  trigger: { zh: '触发原子（triggers[].key 候选）', en: 'Trigger atoms (triggers[].key)' },
-  action: { zh: '动作原子（actions[].key 候选）', en: 'Action atoms (actions[].key)' },
-  risk: { zh: '风险原子（risk[].key 候选）', en: 'Risk atoms (risk[].key)' },
-  positionConstraint: { zh: '仓位约束（position 桶 / positionConstraints）', en: 'Position constraint atoms' },
-  orchestration: { zh: '编排/守门原子（orchestration 桶；含 gate / portfolioRisk / scope / program）', en: 'Orchestration atoms (gate / portfolioRisk / scope / program)' },
+  trigger: { zh: '条件原子（rules[].condition 叶子）', en: 'Condition atoms (rules[].condition leaves)' },
+  action: { zh: '动作副作用原子（rules[].effects.actions 叶子）', en: 'Action effect atoms (rules[].effects.actions leaves)' },
+  risk: { zh: '风险原子（condition 谓词或 effects.risks 叶子）', en: 'Risk atoms (condition predicates or effects.risks leaves)' },
+  positionConstraint: { zh: '仓位副作用原子（rules[].effects.positions 叶子；grid.range_rebalance 可作 program condition）', en: 'Position effect atoms (rules[].effects.positions leaves; grid.range_rebalance may be program condition)' },
+  orchestration: { zh: '编排/程序原子（effects.orchestration / effects.programs；gate 可作 condition）', en: 'Orchestration/program atoms (effects.orchestration / effects.programs; gate may be condition)' },
 }
 
 function formatParamField(field: AtomCatalogParamField): string {
