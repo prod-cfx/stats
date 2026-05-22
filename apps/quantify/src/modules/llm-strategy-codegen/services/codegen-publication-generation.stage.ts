@@ -17,6 +17,8 @@ import type { SpecDescBuilderService } from './spec-desc-builder.service'
 import type { StrategyConsistencyService } from './strategy-consistency.service'
 import type { StrategySummaryBuilderService } from './strategy-summary-builder.service'
 import type { StrategySummaryObservationReport } from './strategy-summary-observation.service'
+import { createHash } from 'node:crypto'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { SemanticAtomInvariantService } from './semantic-atom-invariant.service'
 import { CodegenGraphSnapshotService as DefaultCodegenGraphSnapshotService } from './codegen-graph-snapshot.service'
 import { normalizeRiskSemantics } from './semantic-state-normalization'
@@ -185,6 +187,14 @@ export class CodegenPublicationGenerationStage {
       strategySummary,
       scriptSummary,
     })
+    const compiledScriptProjection = this.compiledScriptParser.parse(compiledScript)
+    const stage1ConsistencyEvidence = {
+      rulesHash: this.hashCanonicalJson(input.semanticState.rules ?? []),
+      canonicalSpecHash: this.hashCanonicalJson(canonicalSpec),
+      irHash: this.readCompiledIrHash(compiled) ?? this.hashCanonicalJson(compiled.ir),
+      astHash: this.readAstDigest(ast) ?? this.stripSha256Prefix(compiledScriptProjection.compiledManifest.astDigest),
+      scriptHash: this.hashText(compiledScript),
+    }
     const sessionSpecDesc = {
       ...semanticView,
       normalizedIntent,
@@ -195,6 +205,7 @@ export class CodegenPublicationGenerationStage {
       summaryObservation,
       lockedParams,
       consistencyReport: semanticConsistency,
+      stage1ConsistencyEvidence,
       semanticAtomInvariant,
       semanticPredicateGraph,
     } satisfies Record<string, unknown>
@@ -243,6 +254,28 @@ export class CodegenPublicationGenerationStage {
       checks,
       summary,
     }
+  }
+
+  private hashCanonicalJson(value: unknown): string {
+    return createHash('sha256').update(canonicalSerialize(value)).digest('hex')
+  }
+
+  private hashText(value: string): string {
+    return createHash('sha256').update(value, 'utf8').digest('hex')
+  }
+
+  private readCompiledIrHash(compiled: ReturnType<CanonicalSpecV2IrCompilerService['compile']>): string | null {
+    const maybeHash = (compiled as unknown as { irHash?: unknown }).irHash
+    return typeof maybeHash === 'string' ? this.stripSha256Prefix(maybeHash) : null
+  }
+
+  private readAstDigest(ast: ReturnType<CanonicalStrategyAstCompilerService['compile']>): string | null {
+    const maybeDigest = (ast.manifest as unknown as { astDigest?: unknown }).astDigest
+    return typeof maybeDigest === 'string' ? this.stripSha256Prefix(maybeDigest) : null
+  }
+
+  private stripSha256Prefix(value: string): string {
+    return value.startsWith('sha256:') ? value.slice('sha256:'.length) : value
   }
 
   validateCompiledScript(scriptCode: string): CompiledScriptValidationResult {
