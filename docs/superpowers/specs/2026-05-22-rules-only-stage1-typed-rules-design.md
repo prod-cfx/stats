@@ -44,7 +44,7 @@ Issue #1630 是 rules-only pipeline 的阶段 1。当前 AI Quant 主链路已�
 ```ts
 interface SemanticRule {
   id: string
-  phase: 'entry' | 'exit' | 'gate'
+  phase: 'entry' | 'exit' | 'gate' | 'program'
   sideScope: 'long' | 'short' | 'both'
   condition: AtomExpr
   effects: RuleEffects
@@ -73,6 +73,21 @@ effects.programs = grid / DCA / TWAP / martingale 等执行程序
 
 `condition` 就是旧 triggers 的 typed tree 迁移位置。旧 trigger 的 AND / OR / NOT / SEQUENCE 能力必须保持在 `condition` tree 里，不能退化成扁平列表。
 
+`phase` 保留旧 `entry / exit / gate`，并新增 `program`。网格、DCA、TWAP、自适应网格、martingale、webhook/event listener 这类程序型策略不能伪装成普通 entry/exit rule，必须使用 `phase: 'program'` 表达。
+
+program 型策略的结构：
+
+```text
+phase = program
+condition = 程序启动/激活 trigger，如 execution.on_start、webhook.event、regime gate
+effects.programs = 程序本体，如 grid / DCA / TWAP / adaptive grid
+effects.positions = 每格金额、预算、仓位约束
+effects.risks = 边界退出、止损止盈、熔断
+effects.orchestration = 交易所、标的、周期、数据源、scope binding
+```
+
+因此 rules tree 支持普通“入场/出场”策略，也支持不按入场/出场组织的程序型复杂策略。阶段 1 必须保证 31 条语料中的网格、DCA、webhook、最大回撤熔断、加仓、自适应网格都能以 typed rules 表达，并能继续生成一致脚本。
+
 ## Owner Path 迁移
 
 contract / slot 语义不重写，只迁 owner path：
@@ -91,6 +106,7 @@ contract / slot 语义不重写，只迁 owner path：
 ### 1. Schema 与类型
 
 - `SemanticRule.effects` 从 `AtomExpr[]` 改为 typed `RuleEffects`。
+- `SemanticRule.phase` 增加 `program`，所有 phase schema、DTO、prompt、merge、projection、readiness、strategy generation、script code generation 入口侧同步支持。
 - zod schema 校验 typed `RuleEffects` 五个 role 数组。
 - schema gate 拒绝旧 patch 字段：`atoms / triggers / actions / risk / position / orchestration`。
 - 禁止裸 `effects: AtomExpr[]` 回流。
@@ -98,6 +114,7 @@ contract / slot 语义不重写，只迁 owner path：
 ### 2. Atom Role
 
 - 每个旧 bucket atom 必须有明确 typed rule slot。
+- trigger atom 进入 `condition`。program 型策略没有传统入场 trigger 时，使用 `execution.on_start`、`program.activation`、`webhook.event` 等启动/激活 trigger。
 - action atom 进入 `effects.actions`。
 - risk atom 进入 `effects.risks`。
 - position constraint atom 进入 `effects.positions`。
@@ -137,6 +154,8 @@ contract / slot 语义不重写，只迁 owner path：
 
 - 策略生成入口消费 typed rules 派生语义。
 - 脚本代码生成入口消费 typed rules / canonical artifacts。
+- 所有主数据流中依赖 `rule.phase` 的入口侧逻辑必须同步识别 `program`，不能把 `program` 丢弃或降级为 entry。
+- grid / DCA / TWAP / adaptive grid / webhook/event listener 等程序型策略必须从 `effects.programs` 进入脚本生成。
 - 不能从旧 patch 字段补执行语义。
 - 输出脚本必须和 typed rules、canonical spec 一致。
 
@@ -183,8 +202,10 @@ contract / slot 语义不重写，只迁 owner path：
 - [ ] Planner 和 dispatcher 不再产旧五桶 patch 作为生产主路径。
 - [ ] schema gate 对旧 patch 字段 fail-closed，并返回明确错误。
 - [ ] `SemanticRule.effects` 已升级为 typed `RuleEffects`。
+- [ ] `SemanticRule.phase` 已支持 `program`，主数据流入口侧不丢弃 program rule。
 - [ ] 每个 old bucket atom 都有明确 rule slot 或 effect role。
 - [ ] `condition = 原 triggers`，旧 trigger 的 AND / OR / NOT / SEQUENCE 能力不退化。
+- [ ] 网格、DCA、TWAP、自适应网格、webhook/event listener 等程序型策略使用 `phase: 'program'` 与 `effects.programs` 表达，不伪装为普通 entry/exit。
 - [ ] 缺参数追问能定位到 typed rule path。
 - [ ] 补槽回答写回 typed rule path，不写 flat owner 作为生产主路径。
 - [ ] 31 条语料全部能从自然语言生成 typed rules。
@@ -220,16 +241,18 @@ scriptHash
 最低测试集合：
 
 - typed `RuleEffects` schema 单测。
+- `phase: 'program'` schema、merge、projection、strategy generation、script code generation 入口侧单测。
 - planner schema reject 单测：旧 patch 字段、裸 `effects: []`、缺 role 字段。
 - dispatcher typed rules 单测：覆盖 31 条语料。
 - merge / reducer / edit 单测：补槽 path 写入 `rules[].condition` 或 `rules[].effects.<role>[]`。
 - projection 单测：typed rules 投影到五桶且 provenance 指回 rule path。
-- 31 条 corpus staging/e2e：自然语言到 typed rules、strategy generation、script code generation、一致性 hash。
+- 31 条 corpus staging/e2e：自然语言到 typed rules、strategy generation、script code generation、一致性 hash；其中网格、DCA、webhook、最大回撤熔断、加仓、自适应网格必须覆盖 `phase: 'program'` 或对应 typed program effect。
 
 ## 禁止事项
 
 - 禁止新生产代码依赖旧五桶 patch 作为入口主路径。
 - 禁止把 typed `effects` 退回裸数组。
+- 禁止把 program 型策略硬塞成普通 entry/exit 以绕过 `phase: 'program'`。
 - 禁止为了通过语料新增 legacy 分支。
 - 禁止 unsupported 静默降级成默认策略。
 - 禁止 display summary、legacy specDesc、flat projection 反向补执行语义。
