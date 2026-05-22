@@ -1,5 +1,6 @@
 import type { AtomExprAtom, SemanticRule } from '../../types/atom-expr'
 import type { SemanticState } from '../../types/semantic-state'
+import type { Stage1TypedRulesCorpusCase } from './fixtures/stage1-typed-rules-corpus'
 import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
@@ -78,20 +79,48 @@ function createPublicationStage(): CodegenPublicationGenerationStage {
   )
 }
 
-function buildProjectedStateFromMainRulesFlow(text: string): SemanticState {
+function buildMainRulesFlow(text: string): {
+  semanticState: SemanticState
+  typedRules: SemanticRule[]
+} {
   const dispatcherPatch = new GenericSeedDispatcher().dispatch(text)
   const fallback = new PlannerDispatcherMergeService().buildRulesTreeFallbackFromDispatcher(dispatcherPatch, text)
   const state = new SemanticSeedStateBuilderService().build(fallback, text)
   const projected = state ? new SemanticRuleProjectionService().reprojectFromRules(state) : null
 
-  if (!projected) {
+  if (!projected || !dispatcherPatch.rules || dispatcherPatch.rules.length === 0) {
     throw new Error('stage1_main_rules_flow_projection_missing')
   }
 
-  return projected
+  return {
+    semanticState: projected,
+    typedRules: dispatcherPatch.rules,
+  }
 }
 
 const hash64Pattern = /^[a-f0-9]{64}$/u
+
+function assertExpectedTypedRules(
+  rules: SemanticRule[],
+  corpusCase: Stage1TypedRulesCorpusCase,
+): void {
+  expect(rules?.length ?? 0).toBeGreaterThan(0)
+
+  const phases = new Set(rules?.map(rule => rule.phase))
+  for (const phase of corpusCase.expectedPhases) {
+    expect(phases).toContain(phase)
+  }
+
+  for (const role of corpusCase.expectedEffectRoles) {
+    expect(rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        effects: expect.objectContaining({
+          [role]: expect.arrayContaining([expect.objectContaining({ kind: 'atom' })]),
+        }),
+      }),
+    ]))
+  }
+}
 
 function buildScriptArtifacts(semanticState: SemanticState): {
   canonicalSpec: ReturnType<CanonicalSpecBuilderService['buildFromSemanticState']>
@@ -117,11 +146,44 @@ function buildScriptArtifacts(semanticState: SemanticState): {
   const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
   const script = new CompiledScriptEmitterService().emit({
     ast,
-    executionEnvelope: new CompiledScriptExecutionEnvelopeService().build(canonicalSpec, 'long_short'),
+    executionEnvelope: new CompiledScriptExecutionEnvelopeService().build(canonicalSpec),
   })
   const astDigest = new CompiledScriptParserService().parse(script).compiledManifest.astDigest
 
   return { canonicalSpec, compiled, ast, script, astDigest }
+}
+
+function buildScriptConsistency(input: {
+  artifacts: ReturnType<typeof buildScriptArtifacts>
+  evidence: Record<'rulesHash' | 'canonicalSpecHash' | 'irHash' | 'astHash' | 'scriptHash', string>
+}): {
+  status: 'PASSED' | 'FAILED'
+  checks: Array<{ key: string, passed: boolean }>
+} {
+  const parsed = new CompiledScriptParserService().parse(input.artifacts.script)
+  const checks = [
+    {
+      key: 'manifest.irHash',
+      passed: stripSha256Prefix(parsed.compiledManifest.irHash) === input.evidence.irHash,
+    },
+    {
+      key: 'manifest.astDigest',
+      passed: stripSha256Prefix(parsed.compiledManifest.astDigest) === input.evidence.astHash,
+    },
+    {
+      key: 'ast.manifest.irHash',
+      passed: stripSha256Prefix(input.artifacts.ast.manifest.irHash) === input.evidence.irHash,
+    },
+    {
+      key: 'script.hash',
+      passed: textHash(input.artifacts.script) === input.evidence.scriptHash,
+    },
+  ]
+
+  return {
+    status: checks.every(check => check.passed) ? 'PASSED' : 'FAILED',
+    checks,
+  }
 }
 
 describe('stage1 corpus to script consistency', () => {
@@ -197,12 +259,9 @@ describe('stage1 corpus to script consistency', () => {
   })
 
   it.each(STAGE1_TYPED_RULES_CORPUS)('produces canonical-to-script consistency evidence for %s', (corpusCase) => {
-    const semanticState = buildProjectedStateFromMainRulesFlow(corpusCase.text)
+    const { semanticState, typedRules } = buildMainRulesFlow(corpusCase.text)
 
-    expect(semanticState.rules?.length ?? 0).toBeGreaterThan(0)
-    expect(semanticState.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({ phase: expect.any(String) }),
-    ]))
+    assertExpectedTypedRules(typedRules, corpusCase)
 
     const artifacts = buildScriptArtifacts(semanticState)
     const evidence = {
@@ -212,13 +271,10 @@ describe('stage1 corpus to script consistency', () => {
       astHash: stripSha256Prefix(artifacts.astDigest),
       scriptHash: textHash(artifacts.script),
     }
-    const semanticConsistency = new StrategyConsistencyService(new ScriptProfileExtractorService()).evaluate({
-      canonicalSpec: artifacts.canonicalSpec,
-      scriptCode: artifacts.script,
-    })
+    const scriptConsistency = buildScriptConsistency({ artifacts, evidence })
 
-    expect(semanticConsistency.status).toMatch(/^(PASSED|FAILED)$/u)
-    expect(semanticConsistency.checks).toEqual(expect.any(Array))
+    expect(scriptConsistency.status).toBe('PASSED')
+    expect(scriptConsistency.checks.every(check => check.passed)).toBe(true)
     expect(Object.keys(evidence)).toEqual([
       'rulesHash',
       'canonicalSpecHash',
@@ -235,7 +291,7 @@ describe('stage1 corpus to script consistency', () => {
     const corpusCase = STAGE1_TYPED_RULES_CORPUS.find(item => item.id === 'stage1-002-ema-stack-boll-dual-side')
     expect(corpusCase).toBeDefined()
 
-    const semanticState = buildProjectedStateFromMainRulesFlow(corpusCase!.text)
+    const { semanticState } = buildMainRulesFlow(corpusCase!.text)
     const artifacts = await createPublicationStage().generate({ semanticState })
     const expectedEvidence = {
       rulesHash: stableConsistencyHash(semanticState.rules ?? []),
