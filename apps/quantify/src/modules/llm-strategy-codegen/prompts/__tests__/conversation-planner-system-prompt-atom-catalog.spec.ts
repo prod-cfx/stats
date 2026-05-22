@@ -25,8 +25,8 @@ describe('conversationPlannerSystemPrompt — atom catalog injection (issue #134
       expect(prompt).toContain('禁止自由文本或自创 atom')
     })
 
-    it('显式列出 phase enum 为 entry / exit / gate', () => {
-      expect(prompt).toMatch(/phase\s*∈\s*\[entry,\s*exit,\s*gate\]/)
+    it('显式列出 phase enum 为 entry / exit / gate / program', () => {
+      expect(prompt).toMatch(/phase\s*∈\s*\[entry,\s*exit,\s*gate,\s*program\]/)
     })
 
     it('要求 contextSlots 是 { value, source } 形态', () => {

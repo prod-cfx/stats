@@ -7,7 +7,7 @@
  * 设计原则（#1279 第一性原则）：
  *   1) 所有数据从 ATOM_CONTRACT_REGISTRY 动态派生，禁止写死 atom 数量 / key 列表
  *   2) phase 仅暴露全局 enum ['entry','exit','gate','program']；by-clause-verb 类 atom 由 LLM
- *      根据用户意图填，fixed-* 类 atom 通过 fixedPhase 提示固定值
+ *      根据用户意图填，fixed-* 类 atom 与 program.* prompt 投影通过 fixedPhase 提示固定值
  *   3) paramSlots 字段名 + required + kind + enum 紧凑表达，省略 enum 全集以控 token
  *   4) 模块级 memoize：buildAtomCatalogEntries() / formatAtomCatalogForPrompt(locale)
  *      只在首次调用构建，后续返回同一引用
@@ -48,7 +48,7 @@ export interface AtomCatalogParamField {
 export interface AtomCatalogEntry {
   readonly key: AtomContractKey
   readonly bucket: AtomContractBucket
-  /** 仅 phaseResolver === 'fixed-*' 时暴露，提示 LLM 该 atom 的 phase 已固定 */
+  /** phaseResolver === 'fixed-*' 或 program.* prompt 投影时暴露，提示 LLM 该 atom 的 phase 已固定 */
   readonly fixedPhase?: PromptPhase
   readonly paramFields: readonly AtomCatalogParamField[]
   /** 取自 corpus.goldenUtterances[0]，可能为空 */

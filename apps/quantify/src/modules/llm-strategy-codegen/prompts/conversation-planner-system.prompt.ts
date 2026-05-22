@@ -84,7 +84,7 @@ const RULE_EFFECTS_CONTRACT: readonly string[] = [
   'RuleEffects: semanticPatch.rules[] 是唯一策略语义输出；禁 atoms/triggers/actions/risk/position/orchestration 顶层旧字段。',
   'condition = 原 triggers，保留 AND/OR/NOT/SEQUENCE；effects={actions,risks,positions,orchestration,programs}。',
   'actions/risk/positionConstraint/orchestration/program.* 分别入 effects.actions/risks/positions/orchestration/programs。',
-  '程序型策略（grid/DCA/TWAP/自适应网格/webhook/event listener）用 phase=program；program.* 必在 effects.programs。',
+  'program.* 执行程序 atom 用 phase=program 且进 effects.programs；DCA 若是 position.dca_schedule，按 catalog 入 effects.positions（phase=entry）。',
 ]
 
 const ATOM_EXPR_BNF: readonly string[] = [
@@ -103,7 +103,7 @@ const ATOM_EXPR_BNF: readonly string[] = [
 ]
 
 const NEW_IN_CONTEXT_EXAMPLES: readonly string[] = [
-  'In-context 示例（含正/反例；7 类 — 5 类组合形态 + 2 类易错纠正）：',
+  'In-context 示例（含正/反例；覆盖 grid/program + 单叶子/AND/OR/SEQUENCE/嵌套/S3/S4/去重）：',
   '',
   '【⚠️ 易错纠正 3：中心价网格】用户："OKX 现货 ETHUSDT、1m 网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT、限价单并相邻网格自动挂反向单；当价格突破上下边界时立即停止并撤销所有未成交订单"',
   '  正确（必须）：program.fixed_grid_gated / grid.range_rebalance 只能用合法数字 params：stepPct/centerOffsetPct 数字 0.4、levelCount/levels 数字 10、perGridSizing 数字 10、sideMode="both"、breakoutAction="stop"；不要输出中文枚举、百分号字符串或 centerOffsetPct=0。',
