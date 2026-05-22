@@ -1547,7 +1547,7 @@ export class GenericSeedDispatcher {
   private findSizingEvidence(userMessage: string): string | null {
     return this.findEvidenceText(
       userMessage,
-      '(?:(?:单笔|仓位|资金|每次|每格|使用|加投|定投)\\D{0,12}(?:百分\\s*)?\\d+(?:\\.\\d+)?\\s*(?:%|USDT|USDC|USD|U|刀)?|买一点|买入一点|开多一点|开空一点)',
+      '(?:(?:单笔|仓位|资金(?!费率)|每次|每格|使用|加投|定投)[^\\d费率]{0,12}(?:百分\\s*)?\\d+(?:\\.\\d+)?\\s*(?:%|USDT|USDC|USD|U|刀)?|买一点|买入一点|开多一点|开空一点)',
     )
   }
 

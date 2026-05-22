@@ -123,6 +123,13 @@ describe('stage1 typed rules corpus fixture', () => {
     expect(effects.map(effect => effect.key)).not.toContain('position.sizing')
   })
 
+  it('does not infer sizing from funding rate percentage', () => {
+    const patch = new GenericSeedDispatcher().dispatch('BTC 1h 资金费率大于 0.1% 时做多')
+    const effects = allEffectLeaves(patch)
+
+    expect(effects.map(effect => effect.key)).not.toContain('position.sizing')
+  })
+
   it('infers webhook sizing only from explicit amount evidence', () => {
     const text = STAGE1_TYPED_RULES_CORPUS.find(item => item.id === 'stage1-025-webhook-event')!.text
     const patch = new GenericSeedDispatcher().dispatch(text)
