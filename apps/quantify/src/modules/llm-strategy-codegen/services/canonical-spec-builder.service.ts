@@ -1053,6 +1053,26 @@ export class CanonicalSpecBuilderService {
 
     const gates: CanonicalOrchestrationGate[] = []
     for (const node of nodes) {
+      if (
+        node.kind === 'program'
+        && node.status === 'locked'
+        && node.key === 'program.fixed_grid_gated'
+        && (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '')
+      ) {
+        gates.push({
+          id: this.alwaysOnGateIdForProgram(node.id),
+          target: { phase: 'entry', sideScope: 'both' },
+          activeWhen: {
+            kind: 'expression',
+            op: 'EQ',
+            left: { kind: 'constant', value: 1 },
+            right: { kind: 'constant', value: 1 },
+          },
+          effectWhenFalse: 'block_new_entries',
+        })
+        continue
+      }
+
       // Phase 5 S10 (#1111): gate 节点支持多 phase（gate.regime 仍是 entry；新加 phase=subStrategy）
       if (node.kind !== 'gate' || node.status !== 'locked') {
         continue
@@ -1148,7 +1168,9 @@ export class CanonicalSpecBuilderService {
     if (node.programKind !== 'fixed_grid_gated') return null
     if (node.rebuildPolicy !== 'static') return null
     if (node.onDeactivate !== 'cancel' && node.onDeactivate !== 'keep' && node.onDeactivate !== 'close') return null
-    if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.length === 0) return null
+    const activeWhenRef = typeof node.activeWhenRef === 'string' && node.activeWhenRef.trim() !== ''
+      ? node.activeWhenRef.trim()
+      : this.alwaysOnGateIdForProgram(node.id)
 
     const grid = node.gridParams
     if (!grid) return null
@@ -1172,7 +1194,7 @@ export class CanonicalSpecBuilderService {
     return {
       id: node.id,
       programKind: 'fixed_grid_gated',
-      activeWhenRef: node.activeWhenRef,
+      activeWhenRef,
       onDeactivate: node.onDeactivate,
       rebuildPolicy: 'static',
       gridParams: {
@@ -1184,6 +1206,10 @@ export class CanonicalSpecBuilderService {
       },
       sizing: { mode: sizing.mode, value: sizing.value },
     }
+  }
+
+  private alwaysOnGateIdForProgram(programId: string): string {
+    return `${programId}-always-on-gate`
   }
 
   private buildDynamicGridProgram(node: SemanticOrchestrationNode): CanonicalOrchestrationProgram | null {

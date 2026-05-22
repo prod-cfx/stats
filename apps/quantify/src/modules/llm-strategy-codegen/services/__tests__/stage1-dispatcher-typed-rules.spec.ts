@@ -113,6 +113,7 @@ describe('stage1 typed rules corpus fixture', () => {
         }),
       ]),
     )
+    expect(effects.map(effect => effect.key)).not.toContain('action.open_short')
   })
 
   it('does not infer sizing from generic use wording in stage1 candle case', () => {

@@ -1257,7 +1257,7 @@ function isSupportedTimeframeScope(
  * 10) sizing.mode ∈ {'fixed_quote','fixed_base','fixed_pct'}
  * 11) sizing.value 是有限正数
  * 12) registry 已注册该 contract
- * 13) cross-node：activeWhenRef 必须引用 status:'locked' 且 readiness supported 的 gate.regime 节点
+ * 13) cross-node：activeWhenRef 缺失表示 always-on static grid；若提供则必须引用 status:'locked' 且 readiness supported 的 gate.regime 节点
  * 14) version-gate：strategyVersion 必须存在且 atom 对该策略可执行
  */
 function isSupportedFixedGridGated(
@@ -1335,22 +1335,21 @@ function isSupportedFixedGridGated(
     return false
   }
 
-  if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '') {
-    return false
-  }
-  const referenced = siblingNodes.find(n => n.id === node.activeWhenRef)
-  if (!referenced) {
-    return false
-  }
-  // eslint-disable-next-line atom-keys/no-atom-key-literal -- gate.regime node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
-  if (referenced.kind !== 'gate' || referenced.key !== 'gate.regime') {
-    return false
-  }
-  if (referenced.status !== 'locked') {
-    return false
-  }
-  if (!isSupportedRegimeGate(referenced, registry, strategyVersion, siblingNodes)) {
-    return false
+  if (typeof node.activeWhenRef === 'string' && node.activeWhenRef.trim() !== '') {
+    const referenced = siblingNodes.find(n => n.id === node.activeWhenRef)
+    if (!referenced) {
+      return false
+    }
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- gate.regime node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
+    if (referenced.kind !== 'gate' || referenced.key !== 'gate.regime') {
+      return false
+    }
+    if (referenced.status !== 'locked') {
+      return false
+    }
+    if (!isSupportedRegimeGate(referenced, registry, strategyVersion, siblingNodes)) {
+      return false
+    }
   }
 
   if (!strategyVersion) {

@@ -746,4 +746,62 @@ describe('31-strategy rules tree main flow regressions', () => {
       }),
     }))
   })
+
+  it('keeps deployment-centered grid from leaking implicit EMA gates or phase0 blockers', () => {
+    const text = 'OKX 现货 ETHUSDT、1m 网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT、限价单并相邻网格自动挂反向单、不用趋势信号开仓；当价格突破上下边界时执行“立即停止并撤销所有未成交订单”'
+    const plannerPatch: CodegenSemanticPatch = {
+      contextSlots: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        marketType: 'spot',
+        timeframe: '1m',
+      },
+      rules: [{
+        id: 'program-spot-centered-grid-1m',
+        phase: 'program',
+        sideScope: 'both',
+        condition: {
+          kind: 'atom',
+          key: 'grid.range_rebalance',
+          params: {
+            levels: 10,
+            recycle: 'true',
+            stepPct: 0.4,
+            sideMode: 'both',
+            perGridSizing: 10,
+            breakoutAction: 'stop',
+            centerOffsetPct: 0.4,
+          },
+        },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [{
+            kind: 'atom',
+            key: 'program.fixed_grid_gated',
+            params: {
+              stepPct: 0.4,
+              levelCount: 10,
+              lowerBound: 0,
+              upperBound: 0,
+              onDeactivate: 'cancel',
+            },
+          }],
+        },
+      }],
+    }
+
+    const state = new SemanticSeedStateBuilderService().build(plannerPatch, text)
+    const projected = state ? new SemanticRuleProjectionService().reprojectFromRules(state) : null
+    const view = new SemanticStateProjectionService().buildConversationView(projected!)
+    const openSlotKeys = JSON.stringify(projected?.orchestration?.flatMap(node => node.openSlots ?? []))
+
+    expect(view.summary).toContain('网格区间再平衡')
+    expect(view.summary).not.toContain('EMA')
+    expect(view.summary).not.toContain('允许做多')
+    expect(view.summary).not.toContain('允许做空')
+    expect(openSlotKeys).not.toContain('orchestration.phase0.unsupported')
+  })
 })

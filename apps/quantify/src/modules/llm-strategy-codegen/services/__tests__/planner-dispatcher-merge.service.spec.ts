@@ -289,6 +289,37 @@ describe('PlannerDispatcherMergeService', () => {
     ]))
   })
 
+  it('execution-slot merge restores dispatcher pullback reclaim when planner collapses stage1 case 17 to MA120 entry', () => {
+    const text = 'ETH 日线在 MA120 上方时，只做多；价格回踩 MA20 后重新站上 MA20 买入,ETH 日线在 MA120 下方时平仓'
+    const planner = {
+      rules: [
+        {
+          id: 'entry-long-ma120-up-ma20-reclaim',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'indicator.above', params: { indicator: 'ma', reference: { period: 120 } } },
+          effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+        },
+        {
+          id: 'exit-close-when-ma120-down',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'indicator.below', params: { indicator: 'ma', reference: { period: 120 } } },
+          effects: { actions: [{ kind: 'atom', key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const serializedRules = JSON.stringify(merged?.rules)
+
+    expect(serializedRules).toContain('condition.sequence')
+    expect(serializedRules).toContain('pullback_reclaim')
+    expect(serializedRules).toContain('indicator.above')
+    expect(serializedRules).toContain('indicator.below')
+  })
+
   it('execution-slot merge does not append single EMA entries already covered by planner AND rule', () => {
     const planner = {
       rules: [

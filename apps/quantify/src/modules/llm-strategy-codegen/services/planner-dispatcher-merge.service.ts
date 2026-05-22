@@ -1274,6 +1274,12 @@ export class PlannerDispatcherMergeService {
       this.logger.warn(`mergeDeterministicRulesIntoPlanner 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
     }
     try {
+      this.composeDispatcherRulesIntoMergedRules(merged, dispatcher)
+    }
+    catch (err) {
+      this.logger.warn(`composeDispatcherRulesIntoMergedRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
+    }
+    try {
       this.repairPlannerRiskDriftFromDispatcherRules(merged, dispatcher, userMessage)
     }
     catch (err) {

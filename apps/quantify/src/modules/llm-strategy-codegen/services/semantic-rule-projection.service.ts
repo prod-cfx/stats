@@ -702,13 +702,12 @@ export class SemanticRuleProjectionService {
     }
 
     if (leaf.key === 'program.fixed_grid_gated') {
-      const gateId = this.readString(leaf.params.activeWhenRef) ?? `${baseId}-implicit-gate`
+      const activeWhenRef = this.readString(leaf.params.activeWhenRef)
       return [
-        ...(leaf.params.activeWhenRef ? [] : [this.buildImplicitAlwaysOnGate(gateId, baseId, provenance)]),
         {
           ...base,
           programKind: 'fixed_grid_gated',
-          activeWhenRef: gateId,
+          ...(activeWhenRef ? { activeWhenRef } : {}),
           onDeactivate: this.readEnum(leaf.params.onDeactivate, ['cancel', 'keep', 'close'] as const) ?? 'cancel',
           rebuildPolicy: 'static',
           gridParams: this.normalizeFixedGridParams(leaf.params),
@@ -780,10 +779,14 @@ export class SemanticRuleProjectionService {
   }
 
   private normalizeFixedGridParams(params: Readonly<Record<string, unknown>>): SemanticOrchestrationNode['gridParams'] {
-    const lowerBound = this.readNumber(params.lowerBound) ?? this.readNumber(params.lower)
-    const upperBound = this.readNumber(params.upperBound) ?? this.readNumber(params.upper)
-    const anchorPrice = this.readNumber(params.anchorPrice)
-      ?? (lowerBound !== undefined && upperBound !== undefined ? (lowerBound + upperBound) / 2 : 1)
+    const rawLowerBound = this.readNumber(params.lowerBound) ?? this.readNumber(params.lower)
+    const rawUpperBound = this.readNumber(params.upperBound) ?? this.readNumber(params.upper)
+    const lowerBound = rawLowerBound !== undefined && rawLowerBound > 0 ? rawLowerBound : undefined
+    const upperBound = rawUpperBound !== undefined && rawUpperBound > 0 ? rawUpperBound : undefined
+    const explicitAnchorPrice = this.readNumber(params.anchorPrice)
+    const anchorPrice = explicitAnchorPrice !== undefined && explicitAnchorPrice > 0
+      ? explicitAnchorPrice
+      : (lowerBound !== undefined && upperBound !== undefined ? (lowerBound + upperBound) / 2 : 1)
     const levelCount = this.readNumber(params.levelCount) ?? this.readNumber(params.levels) ?? 10
     const stepPct = this.readNumber(params.stepPct) ?? 1
     return {
