@@ -1392,8 +1392,25 @@ export class PlannerDispatcherMergeService {
     const existingEffects = listRuleEffects(existingRule.effects).flatMap(effect => collectAtomLeaves(effect))
     const candidateEffects = listRuleEffects(candidateRule.effects).flatMap(effect => collectAtomLeaves(effect))
     return candidateEffects.every(candidate =>
-      existingEffects.some(existing => this.atomLeafMatches(existing, candidate)),
+      existingEffects.some(existing => this.effectLeafMatches(existing, candidate)),
     )
+  }
+
+  private effectLeafMatches(existing: AtomExprAtom, candidate: AtomExprAtom): boolean {
+    if (existing.key !== candidate.key) return false
+    if (this.readAtomBucket(existing.key) === 'action') {
+      return this.sideScopesCompatible(existing.sideScope, candidate.sideScope)
+    }
+    return this.atomLeafMatches(existing, candidate)
+  }
+
+  private sideScopesCompatible(
+    existing: AtomExprAtom['sideScope'] | undefined,
+    candidate: AtomExprAtom['sideScope'] | undefined,
+  ): boolean {
+    if (!existing || !candidate) return true
+    if (existing === 'both' || candidate === 'both') return true
+    return existing === candidate
   }
 
   private atomLeafMatches(existing: AtomExprAtom, candidate: AtomExprAtom): boolean {

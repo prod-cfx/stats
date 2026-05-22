@@ -47,7 +47,7 @@ describe('PlannerDispatcherMergeService', () => {
     const gridRule = fallback?.rules?.find(rule => rule.condition.kind === 'atom' && rule.condition.key === 'grid.range_rebalance')
 
     expect(gridRule?.phase).toBe('program')
-    expect(gridRule?.effects).toEqual(expect.arrayContaining([
+    expect((gridRule?.effects as { programs?: unknown[] } | undefined)?.programs).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'program.fixed_grid_gated' }),
     ]))
   })
@@ -202,8 +202,9 @@ describe('PlannerDispatcherMergeService', () => {
     //   planner-rule 仍保留作为第一条，验证"planner is authoritative for tree" 语义。
     expect(rules?.[0].id).toBe('planner-rule')
     expect(rules?.find(r => r.id === 'dispatcher-rule')).toBeUndefined()
-    expect(rules).toHaveLength(2)
+    expect(rules).toHaveLength(3)
     expect(rules?.[1].id).toMatch(/^dispatcher-lift-/u)
+    expect(rules?.[2].id).toMatch(/^dispatcher-lift-/u)
   })
 
   it('orchestration nodes dedupe by id when present', () => {
@@ -281,8 +282,8 @@ describe('PlannerDispatcherMergeService', () => {
         { key: 'indicator.above', phase: 'entry', sideScope: 'long', params: { indicator: 'ema', 'reference.period': 60 } },
         { key: 'indicator.above', phase: 'entry', sideScope: 'long', params: { indicator: 'ema', 'reference.period': 144 } },
         { key: 'indicator.below', phase: 'exit', sideScope: 'long', params: { indicator: 'ema', 'reference.period': 20 } },
-        { key: 'action.open_long', phase: 'entry', sideScope: 'long', params: {} },
-        { key: 'action.close_long', phase: 'exit', sideScope: 'long', params: {} },
+        { key: 'action.open_long', phase: 'entry', sideScope: 'long', params: { phase: 'entry' } },
+        { key: 'action.close_long', phase: 'exit', sideScope: 'long', params: { phase: 'exit' } },
       ],
     } as unknown as CodegenSemanticPatch
 
@@ -306,7 +307,9 @@ describe('PlannerDispatcherMergeService', () => {
     expect(entryRules[0]).toEqual(expect.objectContaining({
       phase: 'entry',
       sideScope: 'long',
-      effects: [expect.objectContaining({ key: 'action.open_long' })],
+      effects: expect.objectContaining({
+        actions: [expect.objectContaining({ key: 'action.open_long' })],
+      }),
       condition: expect.objectContaining({ kind: 'and' }),
     }))
     const children = (entryRules[0]?.condition as { children?: Array<{ params?: Record<string, unknown> }> }).children ?? []
