@@ -55,7 +55,10 @@ export interface AtomMatch {
   readonly sideScope: 'long' | 'short' | 'both' | null
 }
 
-export type DispatchResult = CodegenSemanticPatch
+export type DispatchResult = {
+  contextSlots?: CodegenSemanticPatch['contextSlots']
+  rules?: SemanticRule[]
+}
 
 /* ──────────────────────────────────────────────────────────────────────────
  * 共享 symbol 校验常量（被 Parser + contextSlots 两处共用，需在两者之前声明）
@@ -1163,6 +1166,7 @@ export class GenericSeedDispatcher {
     const effects = this.collectTypedRuleGlobalEffects(flatPatch, userMessage)
     if (predicates.length === 0 || effects.length === 0) return []
 
+    const hasProgramStrategySignal = this.hasProgramStrategySignal(userMessage)
     const phases = new Set<SemanticRule['phase']>()
     for (const predicate of predicates) phases.add(this.normalizeTypedRulePhase(predicate.phase))
     for (const effect of effects) {
@@ -1173,17 +1177,22 @@ export class GenericSeedDispatcher {
     }
     if (/平仓|平多|平空|卖出|止盈|止损|跌破|下穿|close|sell/iu.test(userMessage)) phases.add('exit')
     if (/只做|只在|已有持仓|如果已有|过滤|filter|gate|(?:上方|下方)\s*[，,]\s*(?!出场|平仓|平多|平空|卖出|跌破|下穿)/iu.test(userMessage)) phases.add('gate')
-    if (/网格|webhook|熔断|加仓|定投|自适应|最大回撤|grid|drawdown|dca|pyramid/iu.test(userMessage)) phases.add('program')
+    if (hasProgramStrategySignal) phases.add('program')
     if (phases.size === 0) phases.add('entry')
 
     const rules: SemanticRule[] = []
     for (const phase of phases) {
       const phasePredicates = predicates.filter(item => this.normalizeTypedRulePhase(item.phase) === phase)
-      const predicate = phasePredicates[0] ?? predicates[0]
+      const predicate = phasePredicates[0] ?? this.selectTypedRuleFallbackPredicate(
+        predicates,
+        phase,
+        hasProgramStrategySignal,
+      )
       if (!predicate) continue
       const sideScope = predicate.sideScope ?? 'both'
       const typedEffects = EMPTY_RULE_EFFECTS()
       for (const effect of effects) {
+        if (!this.typedEffectAppliesToPhase(effect, phase)) continue
         this.appendTypedEffect(typedEffects, effect)
       }
       const condition = phasePredicates.length > 1
@@ -1216,6 +1225,24 @@ export class GenericSeedDispatcher {
     return rules
   }
 
+  private selectTypedRuleFallbackPredicate(
+    predicates: PatchAtomNode[],
+    phase: SemanticRule['phase'],
+    hasProgramStrategySignal: boolean,
+  ): PatchAtomNode | null {
+    if (phase === 'program') return predicates[0] ?? null
+    const nonProgramPredicate = predicates.find(item => this.normalizeTypedRulePhase(item.phase) !== 'program')
+    if (nonProgramPredicate) return nonProgramPredicate
+    const fallback = predicates[0]
+    if (
+      !hasProgramStrategySignal
+      && fallback?.key === ATOM_CONTRACT_REGISTRY['execution.on_start'].key
+    ) {
+      return fallback
+    }
+    return null
+  }
+
   private appendTypedEffect(
     effects: Record<RuleEffectRole, AtomExpr[]>,
     effect: AtomExpr,
@@ -1225,6 +1252,25 @@ export class GenericSeedDispatcher {
     const signature = JSON.stringify(effect)
     if (effects[role].some(item => JSON.stringify(item) === signature)) return
     effects[role].push(effect)
+  }
+
+  private typedEffectAppliesToPhase(effect: AtomExpr, phase: SemanticRule['phase']): boolean {
+    if (effect.kind !== 'atom') return false
+    const role = this.resolveRuleEffectRole(effect)
+    if (!role) return false
+    const effectPhase = effect.params.phase
+    if (effectPhase === undefined || effectPhase === null) return true
+    if (effectPhase === phase) return true
+    if (role === 'actions') {
+      return phase === 'program' && effect.key !== ATOM_CONTRACT_REGISTRY['action.open_long'].key
+    }
+    if (role === 'programs') return phase === 'program'
+    return role === 'risks' || role === 'positions' || role === 'orchestration'
+  }
+
+  private hasProgramStrategySignal(userMessage: string): boolean {
+    // Only gates phase fallback for texts with program-shaped workflows; atom roles still come from registry.
+    return /网格|webhook|熔断|加仓|定投|自适应|最大回撤|grid|drawdown|dca|pyramid/iu.test(userMessage)
   }
 
   private resolveRuleEffectRole(effect: AtomExpr): RuleEffectRole | null {
@@ -1261,10 +1307,10 @@ export class GenericSeedDispatcher {
     const out: PatchAtomNode[] = []
     const push = (item: { key: string, phase?: unknown, sideScope?: 'long' | 'short' | 'both' | null, params?: Record<string, unknown>, evidence?: unknown }): void => {
       const contract = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract | undefined>)[item.key]
-      if (!contract?.roles.includes('predicate')) return
+      if (!contract?.roles.includes('predicate') && item.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) return
       out.push({
         key: item.key,
-        phase: this.normalizeTypedRulePhase(item.phase),
+        phase: this.resolveTypedRulePhaseForAtom(item.key, item.phase),
         sideScope: item.sideScope ?? 'both',
         params: item.params ?? {},
         evidence: item.evidence,
@@ -1291,6 +1337,22 @@ export class GenericSeedDispatcher {
       })
     }
     return mergeCompatiblePatchAtomNodes(out)
+  }
+
+  private resolveTypedRulePhaseForAtom(key: string, phase: unknown): SemanticRule['phase'] {
+    const phaseResolver = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract | undefined>)[key]?.surface?.phaseResolver
+    switch (phaseResolver) {
+      case 'fixed-entry':
+        return 'entry'
+      case 'fixed-exit':
+        return 'exit'
+      case 'fixed-gate':
+        return 'gate'
+      case 'fixed-program':
+        return 'program'
+      default:
+        return this.normalizeTypedRulePhase(phase)
+    }
   }
 
   private collectTypedRuleGlobalEffects(flatPatch: CodegenSemanticPatch, userMessage: string): AtomExpr[] {

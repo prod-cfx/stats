@@ -2,8 +2,8 @@
  * Issue #1383 follow-up：S1 "价格区间 + 双向网格 + 每格间距 X%" → grid.range_rebalance
  *
  * 锁定回归不变量：GenericSeedDispatcher 接收 S1 风格 utterance（中文/英文，任意
- * range / step 数值），必须在 patch.atoms 中产出 key='grid.range_rebalance' 的
- * positionConstraint 原子，并且 paramSlots 全部抽出。
+ * range / step 数值），必须在 typed rules program condition 中产出
+ * key='grid.range_rebalance'，并且 paramSlots 全部抽出。
  *
  * 与 dispatcher-self-baseline 不同：这里是「shape-only / number-agnostic」的语义
  * 不变量断言，不依赖具体 baseline.json，能在新增 atom / 调整 baseline 时独立守门。
@@ -14,11 +14,12 @@
  *
  * Refs: #1383
  */
+import { collectAtomLeaves } from '../../types/atom-expr'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 
 type PatchAtom = {
   key: string
-  phase: 'entry' | 'exit' | 'gate' | null
+  phase: 'entry' | 'exit' | 'gate' | 'program' | null
   params: Record<string, unknown>
   sideScope?: 'long' | 'short' | 'both' | null
 }
@@ -28,14 +29,16 @@ describe('GenericSeedDispatcher - grid.range_rebalance extraction (Issue #1383 S
 
   function findGridAtom(message: string): PatchAtom | undefined {
     const result = dispatcher.dispatch(message)
-    return (result.atoms as PatchAtom[] | undefined)?.find(a => a.key === 'grid.range_rebalance')
+    return (result.rules ?? [])
+      .flatMap(rule => collectAtomLeaves(rule.condition).map(leaf => ({ ...leaf, phase: rule.phase })))
+      .find(a => a.key === 'grid.range_rebalance')
   }
 
   it('emits grid.range_rebalance for S1 full utterance (60000-80000 / 0.5% / 双向)', () => {
     const s1 = '在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈'
     const atom = findGridAtom(s1)
     expect(atom).toBeDefined()
-    expect(atom!.phase).toBe('entry')
+    expect(atom!.phase).toBe('program')
     expect(atom!.params).toMatchObject({
       rangeLower: 60000,
       rangeUpper: 80000,

@@ -9,15 +9,22 @@
  * 通过 GenericSeedDispatcherService 公开的 dispatcher 接口走完整链路验证。
  */
 
+import { collectAtomLeaves } from '../../types/atom-expr'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 
 describe('Issue #1403 — ExtractorSpec.quantifier 通用上下文过滤', () => {
   const service = new GenericSeedDispatcher()
 
+  function findConditionLeaf(patch: ReturnType<GenericSeedDispatcher['dispatch']>, key: string) {
+    return (patch.rules ?? [])
+      .flatMap(rule => collectAtomLeaves(rule.condition))
+      .find(leaf => leaf.key === key)
+  }
+
   describe('candle_pattern.minBars 真用户场景', () => {
     it('「BTC 连续跌三根 15 分钟 K 线后，bearish consecutive_body 买入」→ minBars 不被错抽为 15', () => {
       const patch = service.dispatch('BTC 连续跌三根 15 分钟 K 线后，bearish consecutive_body 买入')
-      const candle = patch.triggers?.find(t => t.key === 'price.candle_pattern')
+      const candle = findConditionLeaf(patch, 'price.candle_pattern')
       // 「三」非数字 + 「15」后紧跟「分钟」（exclude 量词）→ minBars 不抽
       expect(candle?.params.minBars).toBeUndefined()
       // 仍能识别 pattern + direction
@@ -26,21 +33,21 @@ describe('Issue #1403 — ExtractorSpec.quantifier 通用上下文过滤', () =>
 
     it('「bullish consecutive body 连续 3 根后做多」→ minBars=3（include「根」命中）', () => {
       const patch = service.dispatch('OKX 合约 BTCUSDT 15m bullish consecutive body 连续 3 根后做多，5% 止损')
-      const candle = patch.triggers?.find(t => t.key === 'price.candle_pattern')
+      const candle = findConditionLeaf(patch, 'price.candle_pattern')
       expect(candle?.params.minBars).toBe(3)
     })
 
     it('utterance「检测到 连续 出现 50 进场」→ minBars 不抽（无 include 量词）', () => {
       // 50 后没有「根/条/个」量词，新机制下不抽（旧机制下会错抽为 50）
       const patch = service.dispatch('检测到 连续 出现 50 进场')
-      const candle = patch.triggers?.find(t => t.key === 'price.candle_pattern')
+      const candle = findConditionLeaf(patch, 'price.candle_pattern')
       expect(candle?.params.minBars).toBeUndefined()
     })
 
     it('utterance「连续 5 根 30 分钟」→ minBars=5（include「根」命中 + exclude「分钟」剥离）', () => {
       // 5 紧跟「根」（include），「根」后剥离再看「30 分钟」也不命中 exclude 直接位置
       const patch = service.dispatch('OKX 合约 BTCUSDT 30 分钟 K 线 bearish consecutive body 连续 5 根后做空')
-      const candle = patch.triggers?.find(t => t.key === 'price.candle_pattern')
+      const candle = findConditionLeaf(patch, 'price.candle_pattern')
       expect(candle?.params.minBars).toBe(5)
     })
   })
@@ -49,7 +56,7 @@ describe('Issue #1403 — ExtractorSpec.quantifier 通用上下文过滤', () =>
     it('「价格 N 分钟 K 线」timeframe 数字永不被当成 minBars/lookbackBars', () => {
       // 同时含「15 分钟」与「30 分钟」两条 timeframe 表达，无任何 N 根/N 条 量词
       const patch = service.dispatch('OKX BTCUSDT 15 分钟 K 线收盘 consecutive_body bearish')
-      const candle = patch.triggers?.find(t => t.key === 'price.candle_pattern')
+      const candle = findConditionLeaf(patch, 'price.candle_pattern')
       expect(candle?.params.minBars).toBeUndefined()
     })
   })
