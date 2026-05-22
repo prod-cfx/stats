@@ -50,7 +50,9 @@ import type { SizingAnchor, SizingAxis } from './per-trade-sizing-resolver.servi
 import type { CanonicalOrchestrationLegSizing, CanonicalOrchestrationLegSizingMode } from '../types/canonical-strategy-spec'
 import { normalizeLegacyPositionSizing, validateSemanticExpressionContract, validateSemanticPositionContract, validateSemanticRiskContract } from './strategy-semantic-contracts'
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
-import { collectAtomLeaves, listRuleEffects } from '../types/atom-expr'
+import type { RuleEffectsByRole } from '../types/atom-expr'
+import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
+import { SemanticRuleProjectionService } from './semantic-rule-projection.service'
 
 // PR3b: 非 atom 字段路径的类型化引用（Issue #1279 AC-4）
 // 这些 key 不在 ATOM_CONTRACT_REGISTRY,但恰好匹配 lint 规则的 prefix regex,
@@ -70,6 +72,7 @@ const FIELD_KEY = {
   RISK_REMEMBERED_LEVEL_STOP: 'risk.remembered_level_stop',
   RISK_STOP_LOSS_PCT: 'risk.stop_loss_pct',
   RISK_TAKE_PROFIT_PCT: 'risk.take_profit_pct',
+  POSITION_PER_ORDER_BUDGET: 'position.per_order_budget',
   VOLUME_RELATIVE_AVERAGE: 'volume.relative_average',
 } as const
 
@@ -109,6 +112,7 @@ interface ScopedSemanticGateCondition {
 export class CanonicalSpecBuilderService {
   // #1364 PR3: bucket 错位 warn-log 用
   private readonly bucketMismatchLogger = new Logger('CanonicalSpecBuilder.BucketMismatch')
+  private readonly semanticRuleProjection = new SemanticRuleProjectionService()
 
   constructor(
     private readonly strategyIrCanonicalAdapter: StrategyIrCanonicalAdapterService = new StrategyIrCanonicalAdapterService(),
@@ -589,7 +593,7 @@ export class CanonicalSpecBuilderService {
   }
 
   buildFromSemanticState(state: SemanticState, fallbackMarket?: unknown): CanonicalStrategySpecV2 {
-    const normalizedState = normalizeSemanticStateCombinationContracts(state)
+    const normalizedState = normalizeSemanticStateCombinationContracts(this.buildProgramRuleGenerationState(state))
     const market = this.resolveSemanticStateMarket(normalizedState, fallbackMarket)
     // #1186 PR2 (decision 7): 多腿场景 sizing 完全经 legScopes[*].legSizing 承载，spec.sizing===null；
     //                          单腿沿用 spec.sizing，向后兼容。
@@ -663,6 +667,69 @@ export class CanonicalSpecBuilderService {
           }
         : {}),
     }
+  }
+
+  private buildProgramRuleGenerationState(state: SemanticState): SemanticState {
+    if (!state.rules?.some(rule => rule.phase === 'program' && isRuleEffectsByRole(rule.effects) && rule.effects.programs.length > 0)) {
+      return state
+    }
+
+    const projected = this.semanticRuleProjection.reprojectFromRules(state)
+    const sizingByRuleId = new Map<string, NonNullable<SemanticOrchestrationNode['sizing']>>()
+    for (const rule of state.rules) {
+      if (rule.phase !== 'program' || !isRuleEffectsByRole(rule.effects) || rule.effects.programs.length === 0) {
+        continue
+      }
+      const sizing = this.resolveProgramSizingFromTypedRuleEffects(rule.effects)
+      if (sizing) sizingByRuleId.set(rule.id, sizing)
+    }
+    if (sizingByRuleId.size === 0) {
+      return projected
+    }
+
+    let changed = false
+    const orchestration = projected.orchestration.map((node) => {
+      if (node.kind !== 'program') return node
+      const ruleId = node._provenance?.ruleId
+      const sizing = ruleId ? sizingByRuleId.get(ruleId) : undefined
+      if (!sizing) return node
+      changed = true
+      return { ...node, sizing }
+    })
+
+    return changed ? { ...projected, orchestration } : projected
+  }
+
+  private resolveProgramSizingFromTypedRuleEffects(
+    effects: RuleEffectsByRole,
+  ): NonNullable<SemanticOrchestrationNode['sizing']> | null {
+    const positionLeaves = effects.positions.flatMap(effect => collectAtomLeaves(effect))
+    for (const leaf of positionLeaves) {
+      if (leaf.key !== FIELD_KEY.POSITION_PER_ORDER_BUDGET) {
+        continue
+      }
+      const value = this.readNumericParam(leaf.params.value)
+      if (value === null || value <= 0) {
+        continue
+      }
+      const asset = typeof leaf.params.asset === 'string' ? leaf.params.asset.trim().toUpperCase() : ''
+      if (asset === 'USDT' || asset === 'USDC' || asset === 'USD' || asset === '') {
+        return { mode: 'fixed_quote', value }
+      }
+      return { mode: 'fixed_base', value }
+    }
+    return null
+  }
+
+  private readNumericParam(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value
+    }
+    if (typeof value !== 'string') {
+      return null
+    }
+    const parsed = Number(value.trim().match(/^-?\d+(?:\.\d+)?/u)?.[0])
+    return Number.isFinite(parsed) ? parsed : null
   }
 
   // Phase 5 S11 (#1112): scope.leg substrate
