@@ -1260,6 +1260,7 @@ export class GenericSeedDispatcher {
     if (!role) return false
     const effectPhase = effect.params.phase
     if (effectPhase === undefined || effectPhase === null) return true
+    if (effectPhase === 'risk' && role === 'risks') return phase === 'exit' || phase === 'program'
     return effectPhase === phase
   }
 
@@ -1418,7 +1419,7 @@ export class GenericSeedDispatcher {
       !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'positions')
       && this.hasSizingIntent(userMessage)
     ) {
-      const evidence = this.findEvidenceText(userMessage, '(?:单笔|仓位|资金|每次|每格|一点|使用|用|USDT|USDC|USD|U|%|percent)')
+      const evidence = this.findSizingEvidence(userMessage)
       out.push({
         kind: 'atom',
         key: 'position.sizing',
@@ -1522,7 +1523,7 @@ export class GenericSeedDispatcher {
   }
 
   private hasSizingIntent(userMessage: string): boolean {
-    return /单笔|仓位|资金|每次|每格|一点|使用|用|USDT|USDC|USD|U|%|percent/iu.test(userMessage)
+    return this.findSizingEvidence(userMessage) !== null
   }
 
   private hasTimeframeIntent(userMessage: string): boolean {
@@ -1541,6 +1542,13 @@ export class GenericSeedDispatcher {
     const match = new RegExp(pattern, 'iu').exec(userMessage)
     if (!match) return null
     return match[0]
+  }
+
+  private findSizingEvidence(userMessage: string): string | null {
+    return this.findEvidenceText(
+      userMessage,
+      '(?:(?:单笔|仓位|资金|每次|每格|使用|加投|定投)\\D{0,12}(?:百分\\s*)?\\d+(?:\\.\\d+)?\\s*(?:%|USDT|USDC|USD|U|刀)?|买一点|买入一点|开多一点|开空一点)',
+    )
   }
 
   private escapeRegexText(value: unknown): string {

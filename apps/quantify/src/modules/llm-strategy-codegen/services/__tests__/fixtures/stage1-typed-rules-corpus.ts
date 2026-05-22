@@ -154,7 +154,7 @@ export const STAGE1_TYPED_RULES_CORPUS: Stage1TypedRulesCorpusCase[] = [
     id: 'stage1-025-webhook-event',
     text: 'OKX 合约 BTCUSDT 15m，收到 webhook 事件 signalId 为 whale_buy 且 secret 已配置时开多，每次 100',
     expectedPhases: ['program'],
-    expectedEffectRoles: ['programs'],
+    expectedEffectRoles: ['actions', 'positions', 'orchestration', 'programs'],
   },
   {
     id: 'stage1-026-rsi-band',
