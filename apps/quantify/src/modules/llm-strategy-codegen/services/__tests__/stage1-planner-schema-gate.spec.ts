@@ -121,6 +121,31 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch stage1 sche
     }
   })
 
+  it('rejects program atoms inside effects.orchestration', () => {
+    const patch = {
+      rules: [
+        {
+          id: 'orchestration-role-invalid',
+          phase: 'program',
+          sideScope: 'both',
+          condition: atom('execution.on_start'),
+          effects: {
+            ...emptyEffects(),
+            orchestration: [atom('program.dynamic_grid', { symbol: 'BTCUSDT' })],
+          },
+          evidence: { text: 'BTCUSDT 网格策略' },
+        },
+      ],
+    }
+
+    const result = svc.validatePlannerSemanticPatch(patch, userMessage)
+
+    expect(result.ok).toBe(false)
+    if (result.ok === false) {
+      expect(result.reasons).toContain('effects_leaf_bucket_invalid')
+    }
+  })
+
   it('rejects bare effects AtomExpr[]', () => {
     const patch = {
       rules: [

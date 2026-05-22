@@ -255,7 +255,7 @@ export class PlannerDispatcherMergeService {
       '- 禁止使用旧扁平字段（atoms/triggers/actions/risks/risk/position/positionConstraints/orchestration）',
       '- 每条 rule 必须含 id / phase / sideScope / condition (旧 triggers) / effects (typed RuleEffects)',
       '- effects 必须是对象：{ actions, risks, positions, orchestration, programs }',
-      '- program 型策略必须使用 phase=program；grid/TWAP/martingale/adaptive grid 等执行程序进入 effects.programs；DCA/webhook 若当前 atom contract 属于 position/orchestration，则按 contract role 放置并由 program rule 承载。',
+      '- program 型策略必须使用 phase=program；program.*（如 program.dynamic_grid / program.event_listener）只能进入 effects.programs；DCA 等非 program.* atom 按当前 atom contract role 放置并由 program rule 承载。',
       '- 每条 rule 必须有 evidence.text；叶子 atom 若带 evidence.text，也必须非空',
       '- condition 内叶子 atom 来自 trigger / risk(谓词) / orchestration-gate 桶；effects 内叶子来自 action / risk(副作用) / positionConstraint / orchestration-effect 桶',
       '本次具体违反：',
@@ -346,7 +346,7 @@ export class PlannerDispatcherMergeService {
           if (bucket === undefined) continue
           const roleAllowed = role === 'programs'
             ? this.isProgramEffectAtom(leaf.key)
-            : bucket === RULE_EFFECT_ROLE_ALLOWED_BUCKETS[role]
+            : !this.isProgramEffectAtom(leaf.key) && bucket === RULE_EFFECT_ROLE_ALLOWED_BUCKETS[role]
           if (roleAllowed) continue
           reasons.add('effects_leaf_bucket_invalid')
           detailNotes.push(`rules[${ruleIndex}].effects.${role}[${ei}] 含非法叶子 atom key=${leaf.key} bucket=${bucket}（必须匹配 ${role} role）`)
