@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticOrchestrationNode, SemanticSlotState, SemanticState } from '../types/semantic-state'
-import type { AtomExpr, SemanticRule, SemanticRulePhase, SemanticRuleSideScope } from '../types/atom-expr'
-import { collectAtomLeaves, listRuleEffects } from '../types/atom-expr'
+import type { AtomExpr, RuleEffects, RuleEffectsByRole, SemanticRule, SemanticRulePhase, SemanticRuleSideScope } from '../types/atom-expr'
+import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
 import { isEntryPredicateTriggerKey, isExitPredicateTriggerKey, isTimeframeGroupableTriggerKey } from '../atom-contracts/trigger-display-contract'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
@@ -282,7 +282,9 @@ export class SemanticStateProjectionService {
 
     // Issue #1395 — 优先消费 state.rules 表达式树渲染 summary，保留 sequence/AND/OR/NOT 语义；
     //   rules 为空时落回旧扁平桶渲染路径，不破坏既有 reader（向后兼容）。
-    const rulesSummary = state.rules && state.rules.length > 0 ? this.buildRulesSummary(state.rules) : ''
+    const rawRules = state.rules ?? []
+    const projectionRules = this.sanitizeProjectionRules(rawRules)
+    const rulesSummary = projectionRules.length > 0 ? this.buildRulesSummary(projectionRules) : ''
 
     // Issue #1403 子故障 D 真根因（补丁）—— rules-first summary 不能完全替代桶维度摘要。
     //   `grid.range_rebalance` 在 positionConstraint 桶、`program.*_grid` 在 orchestration 桶，
@@ -298,7 +300,9 @@ export class SemanticStateProjectionService {
     return {
       summary: rulesSummary.length > 0
         ? [rulesSummary, ...bucketOnlySummary].join('；')
-        : (summaryItems.length > 0 ? summaryItems.join('；') : '已识别部分条件，但仍未完整。'),
+        : (rawRules.length > 0
+            ? (bucketOnlySummary.length > 0 ? bucketOnlySummary.join('；') : '已识别部分条件，但仍未完整。')
+            : (summaryItems.length > 0 ? summaryItems.join('；') : '已识别部分条件，但仍未完整。')),
       triggerSummary,
       riskSummary,
       positionSummary,
@@ -321,10 +325,12 @@ export class SemanticStateProjectionService {
     //   导致 UI 显示「连续实体形态（≥15 根）时双向开仓」与用户描述背离。
     //   state.rules 表达式树是 planner 输出的真源（sequence/AND/OR 语义完整），
     //   优先从 rules 渲染条件文本，flat 路径只在 rules 为空时兜底（向后兼容）。
-    const rulesBlocks = this.buildDisplayRuleBlocksFromRules(state)
+    const rawRules = state.rules ?? []
+    const projectionRules = this.sanitizeProjectionRules(rawRules)
+    const rulesBlocks = this.buildDisplayRuleBlocksFromRules(projectionRules)
     const ruleBlocks: SemanticDisplayLogicGraphBlock[] = rulesBlocks.length > 0
       ? rulesBlocks
-      : this.buildDisplayRuleBlocksFromFlatTriggers(state)
+      : (rawRules.length > 0 ? [] : this.buildDisplayRuleBlocksFromFlatTriggers(state))
 
     const orchestrationBlock = this.buildDisplayOrchestrationBlock(state)
 
@@ -345,11 +351,9 @@ export class SemanticStateProjectionService {
   //   - UI 层 always-on + action effects 噪音 rule 兜底过滤（防 merge 阶段 filter
   //     未生效或下游路径写入 state.rules 绕过 merge）
   //   - rules 为空 / 无 entry|exit rules → 返回 []，调用方走旧 flat 路径兜底
-  private buildDisplayRuleBlocksFromRules(state: SemanticState): SemanticDisplayLogicGraphBlock[] {
-    const rules = state.rules ?? []
+  private buildDisplayRuleBlocksFromRules(rules: readonly SemanticRule[]): SemanticDisplayLogicGraphBlock[] {
     const eligible = rules
       .filter(r => r.phase === 'entry' || r.phase === 'exit')
-      .filter(r => !this.isAlwaysOnActionNoiseRule(r))
     if (eligible.length === 0) return []
 
     const blocks: SemanticDisplayLogicGraphBlock[] = []
@@ -400,31 +404,55 @@ export class SemanticStateProjectionService {
    *   与 PlannerDispatcherMergeService.filterAlwaysOnActionNoiseRules 同规则，
    *   防 merge 阶段 filter 未生效或下游写入绕过。
    */
-  private isAlwaysOnActionNoiseRule(rule: SemanticRule): boolean {
+  private sanitizeProjectionRules(rules: readonly SemanticRule[]): SemanticRule[] {
+    return rules.flatMap((rule) => {
+      if (!this.isAlwaysOnCondition(rule)) return [rule]
+      if (!listRuleEffects(rule.effects).some(effect => this.effectHasAction(effect))) return [rule]
+
+      const effects = this.removeActionEffects(rule.effects)
+      return listRuleEffects(effects).length > 0 ? [{ ...rule, effects }] : []
+    })
+  }
+
+  private isAlwaysOnCondition(rule: SemanticRule): boolean {
     if (rule.condition.kind !== 'atom') return false
-    if (!ALWAYS_ON_ATOM_KEYS.has(rule.condition.key)) return false
+    return ALWAYS_ON_ATOM_KEYS.has(rule.condition.key)
+  }
+
+  private effectHasAction(effect: AtomExpr): boolean {
     type ContractShape = { bucket?: string }
-    for (const eff of listRuleEffects(rule.effects)) {
-      const stack: AtomExpr[] = [eff]
-      while (stack.length > 0) {
-        const node = stack.pop()
-        if (!node) continue
-        if (node.kind === 'atom') {
-          const bucket = (ATOM_CONTRACT_REGISTRY as Record<string, ContractShape | undefined>)[node.key]?.bucket
-          if (bucket === 'action') return true
-        }
-        else if (node.kind === 'and' || node.kind === 'or') {
-          stack.push(...node.children)
-        }
-        else if (node.kind === 'not') {
-          stack.push(node.child)
-        }
-        else if (node.kind === 'sequence') {
-          stack.push(...node.steps)
-        }
+    const stack: AtomExpr[] = [effect]
+    while (stack.length > 0) {
+      const node = stack.pop()
+      if (!node) continue
+      if (node.kind === 'atom') {
+        const bucket = (ATOM_CONTRACT_REGISTRY as Record<string, ContractShape | undefined>)[node.key]?.bucket
+        if (bucket === 'action') return true
+      }
+      else if (node.kind === 'and' || node.kind === 'or') {
+        stack.push(...node.children)
+      }
+      else if (node.kind === 'not') {
+        stack.push(node.child)
+      }
+      else if (node.kind === 'sequence') {
+        stack.push(...node.steps)
       }
     }
     return false
+  }
+
+  private removeActionEffects(effects: RuleEffects): RuleEffects {
+    if (isRuleEffectsByRole(effects)) {
+      return {
+        actions: effects.actions.filter(effect => !this.effectHasAction(effect)),
+        risks: effects.risks.filter(effect => !this.effectHasAction(effect)),
+        positions: effects.positions.filter(effect => !this.effectHasAction(effect)),
+        orchestration: effects.orchestration.filter(effect => !this.effectHasAction(effect)),
+        programs: effects.programs.filter(effect => !this.effectHasAction(effect)),
+      } satisfies RuleEffectsByRole
+    }
+    return effects.filter(effect => !this.effectHasAction(effect))
   }
 
   // 审查 Minor 2 共享 side label：buildRuleActionSuffix（display graph）与
@@ -603,14 +631,18 @@ export class SemanticStateProjectionService {
     const summaryItems = [triggerSummary, riskSummary, positionSummary].filter(item => item.length > 0)
 
     // Issue #1395 — clarification 视图同样优先消费 rules 树
-    const rulesSummary = state.rules && state.rules.length > 0 ? this.buildRulesSummary(state.rules) : ''
+    const rawRules = state.rules ?? []
+    const projectionRules = this.sanitizeProjectionRules(rawRules)
+    const rulesSummary = projectionRules.length > 0 ? this.buildRulesSummary(projectionRules) : ''
 
     const nextSlot = this.findNextOpenSlot(state)
 
     return {
       summary: rulesSummary.length > 0
         ? rulesSummary
-        : (summaryItems.length > 0 ? summaryItems.join('；') : '已识别部分条件，但仍未完整。'),
+        : (rawRules.length > 0
+            ? (positionSummary.length > 0 ? positionSummary : '已识别部分条件，但仍未完整。')
+            : (summaryItems.length > 0 ? summaryItems.join('；') : '已识别部分条件，但仍未完整。')),
       nextQuestion: nextSlot?.questionHint ?? null,
     }
   }
