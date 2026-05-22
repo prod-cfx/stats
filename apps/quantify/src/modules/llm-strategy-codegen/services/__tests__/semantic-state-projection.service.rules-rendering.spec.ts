@@ -32,6 +32,36 @@ function baseState(overrides: Partial<SemanticState>): SemanticState {
 describe('semanticStateProjectionService — rules-first summary 渲染（#1395）', () => {
   const service = new SemanticStateProjectionService()
 
+  it('detects recommendation intent from namespaced action atom keys', () => {
+    const signals = (service as unknown as {
+      buildRecommendationSignals(input: {
+        actions: SemanticState['action']
+        triggers: SemanticState['trigger']
+        families: SemanticState['families']
+      }): {
+        hasLongIntent: boolean
+        hasShortIntent: boolean
+        hasBidirectionalIntent: boolean
+        hasGridIntent: boolean
+      }
+    }).buildRecommendationSignals({
+      actions: [
+        {
+          id: 'action-open-long',
+          key: 'action.open_long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        } as SemanticState['action'][number],
+      ],
+      triggers: [],
+      families: [],
+    })
+
+    expect(signals.hasLongIntent).toBe(true)
+    expect(signals.hasShortIntent).toBe(false)
+  })
+
   it('s2：sequence 步骤 + nextBarOnly=true 渲染 "先...然后...（下一根）"', () => {
     const rules: SemanticRule[] = [{
       id: 'rule-s2',

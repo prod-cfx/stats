@@ -3045,11 +3045,19 @@ export class SemanticStateProjectionService {
     const hasGridIntent = hasGridTrigger
       || (hasGridFamily && (input.actions.length > 0 || input.triggers.length > 0))
 
+    const longActionKeys = new Set([
+      ATOM_CONTRACT_REGISTRY['action.open_long'].key,
+      ATOM_CONTRACT_REGISTRY['action.close_long'].key,
+    ])
+    const shortActionKeys = new Set([
+      ATOM_CONTRACT_REGISTRY['action.open_short'].key,
+      ATOM_CONTRACT_REGISTRY['action.close_short'].key,
+    ])
     const hasLongIntentFromActions = input.actions
-      .some(action => action.key === 'open_long' || action.key === 'close_long' || action.key === 'reduce_long')
+      .some(action => longActionKeys.has(action.key))
 
     const hasShortIntentFromActions = input.actions
-      .some(action => action.key === 'open_short' || action.key === 'close_short' || action.key === 'reduce_short')
+      .some(action => shortActionKeys.has(action.key))
 
     const hasLongIntentFromTrigger = input.triggers
       .some(trigger => trigger.sideScope === 'long')
