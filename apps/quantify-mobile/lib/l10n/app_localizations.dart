@@ -1604,11 +1604,17 @@ abstract class AppLocalizations {
   /// **'界面主题'**
   String get themeSettingsTitle;
 
-  /// No description provided for @themeSettingsDeviceOnly.
+  /// No description provided for @themeSettingsSyncSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'仅本设备生效'**
-  String get themeSettingsDeviceOnly;
+  /// **'此设置会同步到 Web 和 App'**
+  String get themeSettingsSyncSubtitle;
+
+  /// No description provided for @themeSettingsSyncFootnote.
+  ///
+  /// In zh, this message translates to:
+  /// **'主题在 Web 与 App 之间通过你的账号同步，下次登录会自动应用。'**
+  String get themeSettingsSyncFootnote;
 
   /// No description provided for @themeBgSection.
   ///

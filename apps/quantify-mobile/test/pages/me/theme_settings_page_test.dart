@@ -43,6 +43,22 @@ void main() {
     expect(find.byType(Switch), findsNWidgets(2));
   });
 
+  testWidgets('顶部副标题对齐设计稿：账号同步而非仅本设备',
+      (WidgetTester tester) async {
+    await _pumpTheme(tester);
+    expect(find.text('此设置会同步到 Web 和 App'), findsOneWidget);
+    expect(find.text('仅本设备生效'), findsNothing);
+  });
+
+  testWidgets('底部展示账号同步提示卡片',
+      (WidgetTester tester) async {
+    await _pumpTheme(tester);
+    expect(
+      find.text('主题在 Web 与 App 之间通过你的账号同步，下次登录会自动应用。'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('点击「自动跟随系统」开关 → state.autoFollowSystem 翻转 + 持久化',
       (WidgetTester tester) async {
     final ProviderContainer container = await _pumpTheme(tester);

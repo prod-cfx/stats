@@ -51,7 +51,7 @@ class ThemeSettingsPage extends ConsumerWidget {
               ),
             ),
             Text(
-              l10n.themeSettingsDeviceOnly,
+              l10n.themeSettingsSyncSubtitle,
               style: TextStyle(color: c.textDim, fontSize: 11),
             ),
           ],
@@ -95,6 +95,43 @@ class ThemeSettingsPage extends ConsumerWidget {
                 ref.read(themeProvider.notifier).setAutoFollowSystem(v),
             onReduceMotion: (bool v) =>
                 ref.read(themeProvider.notifier).setReduceMotion(v),
+          ),
+          const SizedBox(height: 18),
+          _SyncFootnoteCard(scheme: c, text: l10n.themeSettingsSyncFootnote),
+        ],
+      ),
+    );
+  }
+}
+
+/// 底部账号同步提示卡片（原型 `m-screens-5.jsx:120-128`）。
+class _SyncFootnoteCard extends StatelessWidget {
+  const _SyncFootnoteCard({required this.scheme, required this.text});
+  final QzColorScheme scheme;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: scheme.accentSoft,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Icon(Icons.shield_outlined, color: scheme.accent, size: 16),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: scheme.accent,
+                fontSize: 12,
+                height: 1.55,
+              ),
+            ),
           ),
         ],
       ),

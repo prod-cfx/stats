@@ -795,7 +795,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get themeSettingsTitle => 'Interface Theme';
 
   @override
-  String get themeSettingsDeviceOnly => 'This device only';
+  String get themeSettingsSyncSubtitle => 'Syncs across Web and App';
+
+  @override
+  String get themeSettingsSyncFootnote =>
+      'Theme syncs between Web and App via your account; it will apply automatically next time you sign in.';
 
   @override
   String get themeBgSection => 'Background';
