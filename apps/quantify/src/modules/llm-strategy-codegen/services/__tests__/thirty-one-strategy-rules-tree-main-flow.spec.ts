@@ -222,7 +222,7 @@ describe('31-strategy rules tree main flow regressions', () => {
     ]))
 
     const addRule = fallback?.rules?.find(rule => JSON.stringify(rule.condition).includes('price.percent_change'))
-    expect(addRule?.effects).toEqual(expect.arrayContaining([
+    expect(listRuleEffects(addRule?.effects)).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'action.add_position' }),
     ]))
     expect(JSON.stringify(addRule?.effects)).not.toContain('action.open_long')
@@ -368,19 +368,23 @@ describe('31-strategy rules tree main flow regressions', () => {
     expect(fallback).not.toHaveProperty('risk')
     expect(fallback).not.toHaveProperty('orchestration')
     expect(fallback?.rules?.length).toBeGreaterThanOrEqual(2)
-    expect(fallback?.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'short',
-        condition: expect.objectContaining({ kind: 'atom', key: 'bollinger.touch_upper' }),
-        effects: expect.arrayContaining([expect.objectContaining({ key: 'action.open_short' })]),
-      }),
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'long',
-        condition: expect.objectContaining({ kind: 'atom', key: 'bollinger.touch_lower' }),
-        effects: expect.arrayContaining([expect.objectContaining({ key: 'action.open_long' })]),
-      }),
+    const shortEntry = fallback?.rules?.find(rule =>
+      rule.phase === 'entry'
+      && rule.sideScope === 'short'
+      && rule.condition.kind === 'atom'
+      && rule.condition.key === 'bollinger.touch_upper',
+    )
+    const longEntry = fallback?.rules?.find(rule =>
+      rule.phase === 'entry'
+      && rule.sideScope === 'long'
+      && rule.condition.kind === 'atom'
+      && rule.condition.key === 'bollinger.touch_lower',
+    )
+    expect(listRuleEffects(shortEntry?.effects)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'action.open_short' }),
+    ]))
+    expect(listRuleEffects(longEntry?.effects)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'action.open_long' }),
     ]))
   })
 

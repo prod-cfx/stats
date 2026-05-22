@@ -1,7 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common'
 
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
-import { collectAtomLeaves, listRuleEffects, mapRuleEffectsByRole, semanticRuleSchema, type AtomExpr, type AtomExprAtom, type SemanticRule } from '../types/atom-expr'
+import {
+  collectAtomLeaves,
+  isRuleEffectsByRole,
+  listRuleEffects,
+  mapRuleEffectsByRole,
+  semanticRuleSchema,
+  type AtomExpr,
+  type AtomExprAtom,
+  type RuleEffects,
+  type RuleEffectsByRole,
+  type SemanticRule,
+} from '../types/atom-expr'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 
 /**
@@ -569,7 +580,7 @@ export class PlannerDispatcherMergeService {
         phase,
         sideScope,
         condition,
-        effects,
+        effects: this.toTypedRuleEffects(effects),
         ...this.resolveFallbackEvidence(predicate, userMessage),
       })
     }
@@ -632,7 +643,7 @@ export class PlannerDispatcherMergeService {
             ...this.resolveFallbackEvidence(predicate, userMessage),
           })),
         },
-        effects,
+        effects: this.toTypedRuleEffects(effects),
         ...evidence,
       })
       group.forEach(predicate => covered.add(predicate))
@@ -724,7 +735,7 @@ export class PlannerDispatcherMergeService {
           },
         ],
       },
-      effects,
+      effects: this.toTypedRuleEffects(effects),
       ...evidence,
     })
     return rules
@@ -1519,18 +1530,19 @@ export class PlannerDispatcherMergeService {
         if (matched && !listRuleEffects(rule.effects).some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === ADD_POSITION_ATOM_KEY))) {
           const matchedSideScope = (matched as { sideScope?: 'long' | 'short' | 'both' }).sideScope
           mutated = true
+          const effects = this.appendTypedRuleEffects(
+            this.removeLifecycleOpenScaffoldEffects(listRuleEffects(rule.effects), matchedSideScope ?? rule.sideScope)
+              .filter(effect => !collectAtomLeaves(effect).some(leaf => leaf.key === DCA_SCHEDULE_ATOM_KEY)),
+            [{
+              kind: 'atom' as const,
+              key: ADD_POSITION_ATOM_KEY,
+              params: matched.params ?? {},
+              ...(matchedSideScope ? { sideScope: matchedSideScope } : {}),
+            }],
+          )
           return {
             ...rule,
-            effects: [
-              ...this.removeLifecycleOpenScaffoldEffects(listRuleEffects(rule.effects), matchedSideScope ?? rule.sideScope)
-                .filter(effect => !collectAtomLeaves(effect).some(leaf => leaf.key === DCA_SCHEDULE_ATOM_KEY)),
-              {
-                kind: 'atom' as const,
-                key: ADD_POSITION_ATOM_KEY,
-                params: matched.params ?? {},
-                ...(matchedSideScope ? { sideScope: matchedSideScope } : {}),
-              },
-            ],
+            effects,
           }
         }
       }
@@ -1539,17 +1551,18 @@ export class PlannerDispatcherMergeService {
           ? dispatcherDca.evidence.text.trim()
           : null
         mutated = true
+        const effects = this.appendTypedRuleEffects(
+          this.removeLifecycleOpenScaffoldEffects(listRuleEffects(rule.effects), rule.sideScope),
+          [{
+            kind: 'atom' as const,
+            key: DCA_SCHEDULE_ATOM_KEY,
+            params: dispatcherDca.params ?? {},
+            ...(evidenceText ? { evidence: { text: evidenceText } } : {}),
+          }],
+        )
         return {
           ...rule,
-          effects: [
-            ...this.removeLifecycleOpenScaffoldEffects(listRuleEffects(rule.effects), rule.sideScope),
-            {
-              kind: 'atom' as const,
-              key: DCA_SCHEDULE_ATOM_KEY,
-              params: dispatcherDca.params ?? {},
-              ...(evidenceText ? { evidence: { text: evidenceText } } : {}),
-            },
-          ],
+          effects,
         }
       }
       if (listRuleEffects(rule.effects).length > 0) return rule
@@ -1566,12 +1579,12 @@ export class PlannerDispatcherMergeService {
       mutated = true
       return {
         ...rule,
-        effects: [{
+        effects: this.toTypedRuleEffects([{
           kind: 'atom' as const,
           key: ADD_POSITION_ATOM_KEY,
           params: matched.params ?? {},
           ...(matchedSideScope ? { sideScope: matchedSideScope } : {}),
-        }],
+        }]),
       }
     })
     if (mutated) merged.rules = nextRules
@@ -1593,6 +1606,53 @@ export class PlannerDispatcherMergeService {
       openKeys.add(ATOM_CONTRACT_REGISTRY['action.open_long'].key)
     }
     return effects.filter(effect => !collectAtomLeaves(effect).some(leaf => openKeys.has(leaf.key)))
+  }
+
+  private emptyRuleEffects(): RuleEffectsByRole {
+    return {
+      actions: [],
+      risks: [],
+      positions: [],
+      orchestration: [],
+      programs: [],
+    }
+  }
+
+  private appendTypedRuleEffects(existing: RuleEffects, additions: readonly AtomExpr[]): RuleEffectsByRole {
+    const typed = isRuleEffectsByRole(existing)
+      ? {
+          actions: [...existing.actions],
+          risks: [...existing.risks],
+          positions: [...existing.positions],
+          orchestration: [...existing.orchestration],
+          programs: [...existing.programs],
+        }
+      : this.toTypedRuleEffects(existing)
+    const classifiedAdditions = this.toTypedRuleEffects(additions)
+    return {
+      actions: [...typed.actions, ...classifiedAdditions.actions],
+      risks: [...typed.risks, ...classifiedAdditions.risks],
+      positions: [...typed.positions, ...classifiedAdditions.positions],
+      orchestration: [...typed.orchestration, ...classifiedAdditions.orchestration],
+      programs: [...typed.programs, ...classifiedAdditions.programs],
+    }
+  }
+
+  private toTypedRuleEffects(effects: readonly AtomExpr[]): RuleEffectsByRole {
+    const typed = this.emptyRuleEffects()
+    for (const effect of effects) {
+      typed[this.resolveRuleEffectRole(effect)].push(effect)
+    }
+    return typed
+  }
+
+  private resolveRuleEffectRole(effect: AtomExpr): keyof RuleEffectsByRole {
+    const leaves = collectAtomLeaves(effect)
+    if (leaves.some(leaf => leaf.key.startsWith('program.'))) return 'programs'
+    if (leaves.some(leaf => ATOM_CONTRACT_REGISTRY[leaf.key]?.bucket === 'risk')) return 'risks'
+    if (leaves.some(leaf => ATOM_CONTRACT_REGISTRY[leaf.key]?.bucket === 'positionConstraint')) return 'positions'
+    if (leaves.some(leaf => ATOM_CONTRACT_REGISTRY[leaf.key]?.bucket === 'orchestration')) return 'orchestration'
+    return 'actions'
   }
 
   private shouldAttachDcaSchedule(rule: SemanticRule): boolean {
@@ -1912,7 +1972,7 @@ export class PlannerDispatcherMergeService {
             params: { ...params },
             sideScope,
           },
-          effects: [],
+          effects: this.emptyRuleEffects(),
         })
       }
     }
