@@ -64,7 +64,13 @@ const COMPLIANT_PLAN_JSON = JSON.stringify({
         phase: 'entry',
         sideScope: 'long',
         condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
-        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
         evidence: { text: 'BOLL 下轨开多' },
       },
     ],
@@ -95,7 +101,13 @@ const BAD_EVIDENCE_PLAN_JSON = JSON.stringify({
         phase: 'entry',
         sideScope: 'long',
         condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
-        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
         evidence: { text: 'LLM 改写过的非原文证据' },
       },
     ],
@@ -104,6 +116,35 @@ const BAD_EVIDENCE_PLAN_JSON = JSON.stringify({
 
 const USER_MESSAGE = '5min K 线里面 价格在 EMA20/60/144 上方时做多开仓 都位于下方只开空 入场是 BOLL 下轨开多 上轨开空 币安 BTCUSDT 永续 风控亏损 5% 止损'
 describe('#1445 CodegenConversation planner schema reject → retry → unsupportedFallback', () => {
+  it('production gate rejects legacy flat planner patch with triggers/actions and no rules[]', () => {
+    const patch = {
+      triggers: [
+        {
+          key: 'indicator.above',
+          phase: 'entry',
+          params: { indicator: 'EMA20' },
+        },
+      ],
+      actions: [
+        {
+          key: 'action.open_long',
+          phase: 'entry',
+          params: {},
+        },
+      ],
+    }
+
+    const result = new PlannerDispatcherMergeService().validatePlannerSemanticPatch(patch, 'EMA20 上方开多')
+
+    expect(result.ok).toBe(false)
+    if (result.ok === false) {
+      expect(result.reasons).toEqual(expect.arrayContaining([
+        'legacy_flat_field',
+        'rules_missing_or_empty',
+      ]))
+    }
+  })
+
   it('initial compliant rules[] → no retry, returns plan with semanticPatch', async () => {
     const { svc, shell } = makeService()
     shell.aiService.chat.mockResolvedValueOnce({ content: COMPLIANT_PLAN_JSON })

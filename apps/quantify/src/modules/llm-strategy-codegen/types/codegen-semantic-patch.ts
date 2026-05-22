@@ -53,9 +53,14 @@ export interface CodegenSemanticPatch {
    * 每条 rule 含 condition (AtomExpr 谓词树) + effects (副作用绑定)。
    * 单 atom case = 单叶子 rule.condition；AND/OR/NOT/SEQUENCE 嵌套见 ./atom-expr.ts。
    *
-   * 旧 atoms[] 字段保留作 degenerate 输入路径：内部 lift 为单叶子 rules[]，零行为差。
+   * 旧 atoms[] 字段仅为 fixture comparison/old test data 保留；production
+   * planner/dispatcher/schema gates reject these fields and use rules[] with typed RuleEffects.
    */
   rules?: import('./atom-expr').SemanticRule[]
+  /**
+   * @deprecated Retained only for fixture comparison/old test data; production
+   * planner/dispatcher/schema gates reject these fields and use rules[] with typed RuleEffects.
+   */
   atoms?: Array<CodegenSemanticNodeEnvelope & {
     key: string
     phase?: CodegenSemanticPatchPhase
@@ -63,6 +68,10 @@ export interface CodegenSemanticPatch {
     params?: Record<string, unknown>
     contracts?: SemanticAtomContract[]
   }>
+  /**
+   * @deprecated Retained only for fixture comparison/old test data; production
+   * planner/dispatcher/schema gates reject these fields and use rules[] with typed RuleEffects.
+   */
   triggers?: Array<CodegenSemanticNodeEnvelope & {
     key: string
     phase: CodegenSemanticPatchPhase
@@ -70,17 +79,29 @@ export interface CodegenSemanticPatch {
     params?: CodegenSemanticTriggerParams
     contracts?: SemanticAtomContract[]
   }>
+  /**
+   * @deprecated Retained only for fixture comparison/old test data; production
+   * planner/dispatcher/schema gates reject these fields and use rules[] with typed RuleEffects.
+   */
   actions?: Array<CodegenSemanticNodeEnvelope & {
     key: string
     phase?: CodegenSemanticPatchPhase
     params?: Record<string, unknown>
     contracts?: SemanticAtomContract[]
   }>
+  /**
+   * @deprecated Retained only for fixture comparison/old test data; production
+   * planner/dispatcher/schema gates reject these fields and use rules[] with typed RuleEffects.
+   */
   risk?: Array<CodegenSemanticNodeEnvelope & {
     key: string
     params: Record<string, unknown>
     contracts?: SemanticAtomContract[]
   }>
+  /**
+   * @deprecated Retained only for fixture comparison/old test data; production
+   * planner/dispatcher/schema gates reject these fields and use rules[] with typed RuleEffects.
+   */
   position?: (CodegenSemanticNodeEnvelope & {
     sizing?: SemanticPositionSizingContract | null
     mode: string
@@ -93,6 +114,10 @@ export interface CodegenSemanticPatch {
       contracts?: SemanticAtomContract[]
     }>
   }) | null
+  /**
+   * @deprecated Retained only for fixture comparison/old test data; production
+   * planner/dispatcher/schema gates reject these fields and use rules[] with typed RuleEffects.
+   */
   orchestration?: {
     nodes?: CodegenSemanticOrchestrationNodePatch[]
   }
