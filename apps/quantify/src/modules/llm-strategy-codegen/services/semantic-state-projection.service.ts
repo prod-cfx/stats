@@ -349,6 +349,7 @@ export class SemanticStateProjectionService {
     const rules = state.rules ?? []
     const eligible = rules
       .filter(r => r.phase === 'entry' || r.phase === 'exit')
+      .filter(r => !this.isAlwaysOnActionNoiseRule(r))
     if (eligible.length === 0) return []
 
     const blocks: SemanticDisplayLogicGraphBlock[] = []

@@ -540,6 +540,21 @@ describe('Issue #1443 — renderRule 通用 UI 简化', () => {
     // 不强断言「→」位置；只要 condition body 不渲染即可
   })
 
+  it('filters always-on action noise rules from display graph fallback path', () => {
+    const rules: SemanticRule[] = [{
+      id: 'r-on-start-open',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'execution.on_start', params: { timing: 'on_start', orderType: 'market', occurrence: 'once' } },
+      effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+    }]
+    const graph = service.buildDisplayLogicGraph(baseState({ rules }))
+    const serialized = JSON.stringify(graph)
+
+    expect(serialized).not.toContain('启动后执行')
+    expect(serialized).not.toContain('开多')
+  })
+
   it('(c) enrich 跳过值 === paramSlot.default 的 slot — execution.on_start 默认值不输出', () => {
     // execution.on_start 三个 param 全等 default（timing=on_start / orderType=market /
     //   occurrence=once）→ enrich 跳过全部 → summary 只剩 "启动后执行" 不附加（...）
