@@ -4,6 +4,7 @@ import type { SemanticPredicateStrategyGraph } from '../types/semantic-strategy-
 import type { StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyConsistencyCheck, StrategyConsistencyReport } from '../types/strategy-consistency-report'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
+import type { StrategySemanticProfile } from '../types/strategy-semantic-profile'
 import type { StrategySummary } from '../types/strategy-summary'
 import type { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
 import type { CompiledPublicationGateService } from './compiled-publication-gate.service'
@@ -164,10 +165,12 @@ export class CodegenPublicationGenerationStage {
     })
     const validation = this.validateCompiledScript(compiledScript)
     compiledScript = validation.scriptCode
-    const semanticConsistency = this.strategyConsistencyService.evaluate({
-      canonicalSpec,
-      scriptCode: compiledScript,
-    })
+    const semanticConsistency = validation.passed
+      ? this.strategyConsistencyService.evaluate({
+          canonicalSpec,
+          scriptCode: compiledScript,
+        })
+      : this.buildValidationFailedConsistencyReport(validation)
     const strategySummary = this.strategySummaryBuilder.buildSummaryFromProfile({
       profile: semanticConsistency.specProfile,
       market: {
@@ -257,6 +260,42 @@ export class CodegenPublicationGenerationStage {
       status: summary.criticalFailed > 0 ? 'FAILED' : 'PASSED',
       checks,
       summary,
+    }
+  }
+
+  private buildValidationFailedConsistencyReport(
+    validation: CompiledScriptValidationResult,
+  ): StrategyConsistencyReport {
+    const emptyProfile = this.buildEmptySemanticProfile()
+    return {
+      status: 'FAILED',
+      specProfile: emptyProfile,
+      scriptProfile: emptyProfile,
+      checks: [{
+        key: 'script.structural_validation',
+        level: 'critical',
+        status: 'failed',
+        expected: 'compiled script structural validation passed',
+        actual: validation.reason ?? 'compiled script structural validation failed',
+        message: validation.reason ?? '编译脚本结构校验失败',
+      }],
+      summary: {
+        criticalFailed: 1,
+        warningFailed: 0,
+        unprovable: 0,
+      },
+    }
+  }
+
+  private buildEmptySemanticProfile(): StrategySemanticProfile {
+    return {
+      indicators: [],
+      actions: [],
+      ruleMappings: [],
+      rules: [],
+      sizing: null,
+      requiredParams: [],
+      fallbackDetected: false,
     }
   }
 

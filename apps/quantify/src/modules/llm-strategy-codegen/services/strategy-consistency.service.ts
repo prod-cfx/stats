@@ -906,13 +906,21 @@ export class StrategyConsistencyService {
     const mismatched: string[] = []
 
     specProfile.rules.forEach((expectedRule) => {
-      const actualRule = scriptProfile.rules.find(item =>
+      const matchingScopeCandidates = scriptProfile.rules.filter(item =>
         item.key === expectedRule.key
         && item.phase === expectedRule.phase
         && item.sideScope === expectedRule.sideScope
-        && item.action === expectedRule.action,
       )
+      const actualRule = matchingScopeCandidates.find(item => item.action === expectedRule.action)
       if (!actualRule) {
+        if (matchingScopeCandidates.length > 0) {
+          const actualActions = Array.from(new Set(matchingScopeCandidates.map(item => item.action))).join(',')
+          mismatched.push(
+            `${expectedRule.key}:${expectedRule.phase}:${expectedRule.sideScope}: expected=${expectedRule.action}, actual=${actualActions}`,
+          )
+          return
+        }
+
         const driftCandidates = scriptProfile.rules.filter(item =>
           item.key === expectedRule.key
           && item.phase === expectedRule.phase
@@ -927,12 +935,6 @@ export class StrategyConsistencyService {
         }
         missing.push(`${expectedRule.key}:${expectedRule.phase}:${expectedRule.sideScope}`)
         return
-      }
-
-      if (actualRule.action !== expectedRule.action) {
-        mismatched.push(
-          `${expectedRule.key}:${expectedRule.phase}:${expectedRule.sideScope}: expected=${expectedRule.action}, actual=${actualRule.action}`,
-        )
       }
     })
 
