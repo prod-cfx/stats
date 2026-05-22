@@ -53,13 +53,15 @@ export interface CodegenSemanticPatch {
    * 每条 rule 含 condition (AtomExpr 谓词树) + effects (副作用绑定)。
    * 单 atom case = 单叶子 rule.condition；AND/OR/NOT/SEQUENCE 嵌套见 ./atom-expr.ts。
    *
-   * 旧 atoms[] 字段仅为 fixture comparison/old test data 保留；production
-   * planner/dispatcher/schema gates reject these fields and use rules[] with typed RuleEffects.
+   * 外部 production planner 原始输入必须使用 rules[] + typed RuleEffects；raw planner
+   * patch/schema gate 会拒绝 legacy flat fields。legacy flat fields 仅为 fixture
+   * comparison、old test data、internal dispatcher/projection compatibility 保留。
    */
   rules?: import('./atom-expr').SemanticRule[]
   /**
-   * @deprecated Retained only for fixture comparison/old test data; production
-   * planner/dispatcher/schema gates reject these fields and use rules[] with typed RuleEffects.
+   * @deprecated External production planner input must use rules[] with typed RuleEffects;
+   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
+   * comparison, old test data, and internal dispatcher/projection compatibility.
    */
   atoms?: Array<CodegenSemanticNodeEnvelope & {
     key: string
@@ -69,8 +71,9 @@ export interface CodegenSemanticPatch {
     contracts?: SemanticAtomContract[]
   }>
   /**
-   * @deprecated Retained only for fixture comparison/old test data; production
-   * planner/dispatcher/schema gates reject these fields and use rules[] with typed RuleEffects.
+   * @deprecated External production planner input must use rules[] with typed RuleEffects;
+   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
+   * comparison, old test data, and internal dispatcher/projection compatibility.
    */
   triggers?: Array<CodegenSemanticNodeEnvelope & {
     key: string
@@ -80,8 +83,9 @@ export interface CodegenSemanticPatch {
     contracts?: SemanticAtomContract[]
   }>
   /**
-   * @deprecated Retained only for fixture comparison/old test data; production
-   * planner/dispatcher/schema gates reject these fields and use rules[] with typed RuleEffects.
+   * @deprecated External production planner input must use rules[] with typed RuleEffects;
+   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
+   * comparison, old test data, and internal dispatcher/projection compatibility.
    */
   actions?: Array<CodegenSemanticNodeEnvelope & {
     key: string
@@ -90,8 +94,9 @@ export interface CodegenSemanticPatch {
     contracts?: SemanticAtomContract[]
   }>
   /**
-   * @deprecated Retained only for fixture comparison/old test data; production
-   * planner/dispatcher/schema gates reject these fields and use rules[] with typed RuleEffects.
+   * @deprecated External production planner input must use rules[] with typed RuleEffects;
+   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
+   * comparison, old test data, and internal dispatcher/projection compatibility.
    */
   risk?: Array<CodegenSemanticNodeEnvelope & {
     key: string
@@ -99,8 +104,9 @@ export interface CodegenSemanticPatch {
     contracts?: SemanticAtomContract[]
   }>
   /**
-   * @deprecated Retained only for fixture comparison/old test data; production
-   * planner/dispatcher/schema gates reject these fields and use rules[] with typed RuleEffects.
+   * @deprecated External production planner input must use rules[] with typed RuleEffects;
+   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
+   * comparison, old test data, and internal dispatcher/projection compatibility.
    */
   position?: (CodegenSemanticNodeEnvelope & {
     sizing?: SemanticPositionSizingContract | null
@@ -115,8 +121,9 @@ export interface CodegenSemanticPatch {
     }>
   }) | null
   /**
-   * @deprecated Retained only for fixture comparison/old test data; production
-   * planner/dispatcher/schema gates reject these fields and use rules[] with typed RuleEffects.
+   * @deprecated External production planner input must use rules[] with typed RuleEffects;
+   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
+   * comparison, old test data, and internal dispatcher/projection compatibility.
    */
   orchestration?: {
     nodes?: CodegenSemanticOrchestrationNodePatch[]
