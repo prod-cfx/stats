@@ -1234,6 +1234,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleNotificationCloseTooltip => 'Close';
 
   @override
+  String whaleNotificationUnreadBadge(int count) {
+    return '$count unread';
+  }
+
+  @override
+  String get whaleNotificationSubtitle => 'Whale alerts · Watch hits · Flows';
+
+  @override
+  String get whaleNotificationFooterHint => 'Showing last 24h only';
+
+  @override
+  String get whaleNotificationSettings => 'Notification settings';
+
+  @override
+  String get whaleNotifKindAlert => 'Whale alert';
+
+  @override
+  String get whaleNotifKindWatch => 'Watch hit';
+
+  @override
+  String get whaleNotifKindFlow => 'Flow';
+
+  @override
+  String get whaleNotifKindSystem => 'System';
+
+  @override
   String get klineLoadError => 'K-line load failed';
 
   @override

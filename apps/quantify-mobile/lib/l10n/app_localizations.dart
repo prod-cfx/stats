@@ -2450,6 +2450,54 @@ abstract class AppLocalizations {
   /// **'关闭'**
   String get whaleNotificationCloseTooltip;
 
+  /// No description provided for @whaleNotificationUnreadBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 条未读'**
+  String whaleNotificationUnreadBadge(int count);
+
+  /// No description provided for @whaleNotificationSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'巨鲸预警 · 监控触发 · 资金流向'**
+  String get whaleNotificationSubtitle;
+
+  /// No description provided for @whaleNotificationFooterHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅显示最近 24 小时通知'**
+  String get whaleNotificationFooterHint;
+
+  /// No description provided for @whaleNotificationSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知设置'**
+  String get whaleNotificationSettings;
+
+  /// No description provided for @whaleNotifKindAlert.
+  ///
+  /// In zh, this message translates to:
+  /// **'巨鲸预警'**
+  String get whaleNotifKindAlert;
+
+  /// No description provided for @whaleNotifKindWatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'监控触发'**
+  String get whaleNotifKindWatch;
+
+  /// No description provided for @whaleNotifKindFlow.
+  ///
+  /// In zh, this message translates to:
+  /// **'资金流向'**
+  String get whaleNotifKindFlow;
+
+  /// No description provided for @whaleNotifKindSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统消息'**
+  String get whaleNotifKindSystem;
+
   /// No description provided for @klineLoadError.
   ///
   /// In zh, this message translates to:

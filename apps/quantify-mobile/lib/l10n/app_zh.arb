@@ -480,6 +480,21 @@
   "whaleSearchTooltip": "搜索",
   "whaleNotificationTooltip": "通知",
   "whaleNotificationCloseTooltip": "关闭",
+  "whaleNotificationUnreadBadge": "{count} 条未读",
+  "@whaleNotificationUnreadBadge": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "whaleNotificationSubtitle": "巨鲸预警 · 监控触发 · 资金流向",
+  "whaleNotificationFooterHint": "仅显示最近 24 小时通知",
+  "whaleNotificationSettings": "通知设置",
+  "whaleNotifKindAlert": "巨鲸预警",
+  "whaleNotifKindWatch": "监控触发",
+  "whaleNotifKindFlow": "资金流向",
+  "whaleNotifKindSystem": "系统消息",
   "klineLoadError": "K 线加载失败",
   "tabMarket": "行情",
   "tabWhale": "巨鲸",

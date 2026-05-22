@@ -177,11 +177,14 @@ void main() {
 
     expect(find.byType(WhaleNotificationSheet), findsOneWidget);
     expect(find.text('通知中心'), findsOneWidget);
-    // sheet 内 4 个 tab 应可见。「全部」在通知 sheet 内也可能与 commonAll 冲突；
-    // 这里 sheet tab label 用 whaleNotificationTabAll，与 commonAll 同字。
-    expect(find.text('巨鲸预警'), findsOneWidget);
-    expect(find.text('监控触发'), findsOneWidget);
-    expect(find.text('系统'), findsOneWidget);
+    // sheet 内 4 个 tab 应可见。tab 文案与 row 内 kind 标签共字面量，本测试
+    // 仅断言「至少出现一次」；精确 tab 数（恰好 4 个 tab Container）由
+    // whale_notification_sheet_test.dart 中
+    // 「tabs 显示分类数量；切到「巨鲸预警」后只剩 alert kind」与
+    // 「sheet 渲染恰好 4 个 _NotifTab」用例守护。
+    expect(find.text('巨鲸预警'), findsAtLeastNWidgets(1));
+    expect(find.text('监控触发'), findsAtLeastNWidgets(1));
+    expect(find.text('系统'), findsAtLeastNWidgets(1));
     // 「全部已读」按钮存在
     expect(find.text('全部已读'), findsOneWidget);
   });

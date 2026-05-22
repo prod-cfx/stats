@@ -1218,6 +1218,32 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleNotificationCloseTooltip => '关闭';
 
   @override
+  String whaleNotificationUnreadBadge(int count) {
+    return '$count 条未读';
+  }
+
+  @override
+  String get whaleNotificationSubtitle => '巨鲸预警 · 监控触发 · 资金流向';
+
+  @override
+  String get whaleNotificationFooterHint => '仅显示最近 24 小时通知';
+
+  @override
+  String get whaleNotificationSettings => '通知设置';
+
+  @override
+  String get whaleNotifKindAlert => '巨鲸预警';
+
+  @override
+  String get whaleNotifKindWatch => '监控触发';
+
+  @override
+  String get whaleNotifKindFlow => '资金流向';
+
+  @override
+  String get whaleNotifKindSystem => '系统消息';
+
+  @override
   String get klineLoadError => 'K 线加载失败';
 
   @override

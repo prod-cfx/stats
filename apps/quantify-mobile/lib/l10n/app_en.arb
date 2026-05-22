@@ -477,6 +477,21 @@
   "whaleSearchTooltip": "Search",
   "whaleNotificationTooltip": "Notifications",
   "whaleNotificationCloseTooltip": "Close",
+  "whaleNotificationUnreadBadge": "{count} unread",
+  "@whaleNotificationUnreadBadge": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "whaleNotificationSubtitle": "Whale alerts · Watch hits · Flows",
+  "whaleNotificationFooterHint": "Showing last 24h only",
+  "whaleNotificationSettings": "Notification settings",
+  "whaleNotifKindAlert": "Whale alert",
+  "whaleNotifKindWatch": "Watch hit",
+  "whaleNotifKindFlow": "Flow",
+  "whaleNotifKindSystem": "System",
   "klineLoadError": "K-line load failed",
   "tabMarket": "Market",
   "tabWhale": "Whale",
