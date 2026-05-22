@@ -75,7 +75,6 @@ const JSON_SHAPE_BLOCK: readonly string[] = [
   '        "evidence": { "text": string }   // 必填：当前 user message 的连续原文子串（issue #1445 / #1550 硬校验）',
   '      }',
   '    ],',
-  '    "position"?: { "mode"?: string, "sizing"?: object }',
   '  }',
   '}',
   '',
@@ -494,7 +493,7 @@ function formatAtomCatalogSection(locale: 'zh' | 'en'): string[] {
     '- effects：必须是 RuleEffects 对象 { actions, risks, positions, orchestration, programs }，每个字段都是 AtomExpr[]；禁止回退为 effects 数组或旧顶层 actions/risk/position/orchestration 字段',
     '- 叶子 atom 的 params 按上表 paramFields 填，禁止造新字段；缺失服务端派生 openSlots 驱动澄清',
     '- contextSlots：symbol/timeframe/exchange/marketType 等必须是 { value, source }（source ∈ user_explicit/inferred）',
-    '- position：仅 { mode?, sizing? } 标量字段；position atom（dca_schedule/pyramiding_limit）走 rules[].effects.positions 的 AtomExpr 叶子',
+    '- 仓位类语义必须走 rules[].effects.positions 的 AtomExpr 叶子（例如 position.dca_schedule / position.pyramiding_limit），禁止输出 semanticPatch 的 position 顶层字段',
   ]
 }
 

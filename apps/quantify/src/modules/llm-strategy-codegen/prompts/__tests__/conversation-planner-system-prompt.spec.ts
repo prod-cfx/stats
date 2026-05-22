@@ -57,4 +57,12 @@ describe('conversationPlannerSystemPrompt', () => {
     expect(prompt).toContain('program')
     expect(prompt).toContain('condition = 原 triggers')
   })
+
+  it('does not advertise legacy top-level semanticPatch position shape', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+
+    expect(prompt).not.toContain('"position"?:')
+    expect(prompt).not.toContain('semanticPatch.position')
+    expect(prompt).toContain('effects.positions')
+  })
 })
