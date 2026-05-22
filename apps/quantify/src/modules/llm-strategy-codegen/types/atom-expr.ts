@@ -629,18 +629,28 @@ export function gracefulParseSemanticRule(input: unknown): GracefulParseSemantic
       : 'condition: pruned to empty'
     return { ok: false, errorPath }
   }
-  const rawEffects = obj.effects && typeof obj.effects === 'object' && !Array.isArray(obj.effects)
-    ? obj.effects as Partial<Record<RuleEffectRole, unknown>>
-    : {}
   const effects = emptyMutableRuleEffects()
-  for (const role of RULE_EFFECT_ROLE_KEYS) {
-    const rawRoleEffects = Array.isArray(rawEffects[role]) ? rawEffects[role] : []
-    const prunedRoleEffects: AtomExpr[] = []
-    for (let i = 0; i < rawRoleEffects.length; i++) {
-      const pruned = pruneAtomExprWithErrors(rawRoleEffects[i], `effects.${role}[${i}]`)
-      if (pruned.result) prunedRoleEffects.push(pruned.result)
+  if (Array.isArray(obj.effects)) {
+    // Stage 1 fail-open compatibility: legacy bare effects arrays are preserved under
+    // actions so existing valid effects are not silently dropped while typed roles roll out.
+    for (let i = 0; i < obj.effects.length; i++) {
+      const pruned = pruneAtomExprWithErrors(obj.effects[i], `effects[${i}]`)
+      if (pruned.result) effects.actions.push(pruned.result)
     }
-    effects[role] = prunedRoleEffects
+  }
+  else {
+    const rawEffects = obj.effects && typeof obj.effects === 'object'
+      ? obj.effects as Partial<Record<RuleEffectRole, unknown>>
+      : {}
+    for (const role of RULE_EFFECT_ROLE_KEYS) {
+      const rawRoleEffects = Array.isArray(rawEffects[role]) ? rawEffects[role] : []
+      const prunedRoleEffects: AtomExpr[] = []
+      for (let i = 0; i < rawRoleEffects.length; i++) {
+        const pruned = pruneAtomExprWithErrors(rawRoleEffects[i], `effects.${role}[${i}]`)
+        if (pruned.result) prunedRoleEffects.push(pruned.result)
+      }
+      effects[role] = prunedRoleEffects
+    }
   }
   return {
     ok: true,

@@ -95,6 +95,38 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
     }
   })
 
+  it('downgrades typed role effect leaf evidence mismatch to warning', () => {
+    const patch = {
+      rules: [
+        {
+          id: 'r1',
+          phase: 'entry',
+          sideScope: 'both',
+          condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
+          effects: {
+            actions: [{
+              kind: 'atom',
+              key: 'action.open_long',
+              params: {},
+              evidence: { text: '不在 user message 中的 action evidence' },
+            }],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+          evidence: { text: 'BTCUSDT' },
+        },
+      ],
+    }
+
+    const result = svc.validatePlannerSemanticPatch(patch, 'BTCUSDT 启动策略')
+    expect(result.ok).toBe(true)
+    if (result.ok === true) {
+      expect(result.warnings).toContain('evidence_text_not_substring')
+    }
+  })
+
   it('rejects when condition leaf comes from action bucket (condition_leaf_bucket_invalid)', () => {
     const patch = {
       rules: [

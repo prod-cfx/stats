@@ -73,6 +73,29 @@ describe('stage1 typed SemanticRule schema', () => {
     })
   })
 
+  it('gracefully preserves legacy effects arrays as actions compatibility role', () => {
+    const parsed = gracefulParseSemanticRule({
+      id: 'legacy-effects-preserved',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: atom('price.ema_above', { period: 20 }),
+      effects: [
+        atom('action.open_long'),
+        { kind: 'missing_key', params: {} },
+      ],
+    })
+
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.rule.effects).toEqual({
+      actions: [atom('action.open_long')],
+      risks: [],
+      positions: [],
+      orchestration: [],
+      programs: [],
+    })
+  })
+
   it('updates atoms in typed RuleEffects roles and keeps legacy flattened effects paths', () => {
     const rule: SemanticRule = {
       id: 'program-grid-3',

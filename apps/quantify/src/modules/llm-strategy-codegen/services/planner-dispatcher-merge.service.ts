@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
-import { collectAtomLeaves, listRuleEffects, mapRuleEffectsByRole, semanticRuleSchema, type AtomExpr, type AtomExprAtom, type SemanticRule } from '../types/atom-expr'
+import { collectAtomLeaves, gracefulParseSemanticRule, listRuleEffects, mapRuleEffectsByRole, type AtomExpr, type AtomExprAtom, type SemanticRule } from '../types/atom-expr'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 
 /**
@@ -181,15 +181,13 @@ export class PlannerDispatcherMergeService {
         continue
       }
 
-      const parsed = semanticRuleSchema.safeParse(rule)
-      if (!parsed.success) {
+      const parsed = gracefulParseSemanticRule(rule)
+      if (parsed.ok === false) {
         reasons.add('rule_shape_invalid')
-        const issuePath = parsed.error.issues[0]?.path?.join('.') ?? '<root>'
-        const code = parsed.error.issues[0]?.code ?? 'invalid'
-        detailNotes.push(`rules[${i}] 结构非法（${issuePath}: ${code}）；rule 必须含 id / phase / sideScope / condition / effects`)
+        detailNotes.push(`rules[${i}] 结构非法（${parsed.errorPath}）；rule 必须含 id / phase / sideScope / condition / effects`)
         continue
       }
-      const semRule = parsed.data as SemanticRule
+      const semRule = parsed.rule as SemanticRule
 
       // rule.evidence.text
       const ruleEvidence = (rule as { evidence?: { text?: unknown } }).evidence
@@ -243,7 +241,7 @@ export class PlannerDispatcherMergeService {
       '上一轮 planner 输出未通过 schema 硬校验，必须按 rules-first 表达式树形态重出：',
       '- semanticPatch.rules[] 必填且非空',
       '- 禁止使用旧扁平字段（atoms/triggers/actions/risks/positionConstraints/orchestration）',
-      '- 每条 rule 必须含 id / phase / sideScope / condition (AtomExpr) / effects (AtomExpr[])',
+      '- 每条 rule 必须含 id / phase / sideScope / condition (AtomExpr) / effects (RuleEffects typed roles: actions/risks/positions/orchestration/programs)',
       '- 每条 rule 必须有 evidence.text；叶子 atom 若带 evidence.text，也必须非空',
       '- condition 内叶子 atom 来自 trigger / risk(谓词) / orchestration-gate 桶；effects 内叶子来自 action / risk(副作用) / positionConstraint / orchestration-effect 桶',
       '本次具体违反：',
@@ -305,11 +303,20 @@ export class PlannerDispatcherMergeService {
     // 非 user message 子串只作为 warning，随后由 conversation 层归一化。
     const rawCondition = (ruleRaw as { condition?: unknown }).condition
     this.checkLeafEvidenceSubstring(rawCondition, message, `rules[${ruleIndex}].condition`, reasons, warnings, detailNotes)
-    const rawEffects = Array.isArray((ruleRaw as { effects?: unknown }).effects)
-      ? ((ruleRaw as { effects?: unknown[] }).effects ?? [])
-      : []
-    for (let ei = 0; ei < rawEffects.length; ei++) {
-      this.checkLeafEvidenceSubstring(rawEffects[ei], message, `rules[${ruleIndex}].effects[${ei}]`, reasons, warnings, detailNotes)
+    const rawEffects = (ruleRaw as { effects?: unknown }).effects
+    if (Array.isArray(rawEffects)) {
+      for (let ei = 0; ei < rawEffects.length; ei++) {
+        this.checkLeafEvidenceSubstring(rawEffects[ei], message, `rules[${ruleIndex}].effects[${ei}]`, reasons, warnings, detailNotes)
+      }
+    }
+    else if (rawEffects && typeof rawEffects === 'object') {
+      for (const role of ['actions', 'risks', 'positions', 'orchestration', 'programs'] as const) {
+        const roleEffects = (rawEffects as Partial<Record<typeof role, unknown>>)[role]
+        if (!Array.isArray(roleEffects)) continue
+        for (let ei = 0; ei < roleEffects.length; ei++) {
+          this.checkLeafEvidenceSubstring(roleEffects[ei], message, `rules[${ruleIndex}].effects.${role}[${ei}]`, reasons, warnings, detailNotes)
+        }
+      }
     }
   }
 
