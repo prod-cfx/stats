@@ -133,8 +133,16 @@ export const atomExprAtomSchema = atomSchema
 // SemanticRule —— state 主体
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type SemanticRulePhase = 'entry' | 'exit' | 'gate'
+export type SemanticRulePhase = 'entry' | 'exit' | 'gate' | 'program'
 export type SemanticRuleSideScope = 'long' | 'short' | 'both'
+
+export interface RuleEffects {
+  readonly actions: ReadonlyArray<AtomExpr>
+  readonly risks: ReadonlyArray<AtomExpr>
+  readonly positions: ReadonlyArray<AtomExpr>
+  readonly orchestration: ReadonlyArray<AtomExpr>
+  readonly programs: ReadonlyArray<AtomExpr>
+}
 
 export interface SemanticRule {
   readonly id: string
@@ -143,16 +151,24 @@ export interface SemanticRule {
   /** 谓词树；所有叶子 atom 的 roles 必须包含 'predicate' */
   readonly condition: AtomExpr
   /** 副作用绑定（开/平仓、风控、加仓约束等）；顶层不组合，每条独立 */
-  readonly effects: ReadonlyArray<AtomExpr>
+  readonly effects: RuleEffects
   readonly evidence?: AtomExprEvidence
 }
 
+export const ruleEffectsSchema = z.object({
+  actions: z.array(atomExprSchema),
+  risks: z.array(atomExprSchema),
+  positions: z.array(atomExprSchema),
+  orchestration: z.array(atomExprSchema),
+  programs: z.array(atomExprSchema),
+})
+
 export const semanticRuleSchema = z.object({
   id: z.string().min(1),
-  phase: z.enum(['entry', 'exit', 'gate']),
+  phase: z.enum(['entry', 'exit', 'gate', 'program']),
   sideScope: z.enum(['long', 'short', 'both']),
   condition: atomExprSchema,
-  effects: z.array(atomExprSchema),
+  effects: ruleEffectsSchema,
   evidence: z.object({ text: z.string().min(1) }).passthrough().optional(),
 })
 
