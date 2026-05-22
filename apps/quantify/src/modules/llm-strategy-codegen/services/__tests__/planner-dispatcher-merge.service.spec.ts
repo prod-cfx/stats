@@ -1,4 +1,5 @@
 import type { CodegenSemanticPatch } from '../../types/codegen-semantic-patch'
+import { collectAtomLeaves, listRuleEffects } from '../../types/atom-expr'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { PlannerDispatcherMergeService } from '../planner-dispatcher-merge.service'
 
@@ -248,6 +249,44 @@ describe('PlannerDispatcherMergeService', () => {
 
     expect(merged?.contextSlots).toEqual({ symbol: 'BTCUSDT', exchange: 'okx' })
     expect((merged as { rules?: unknown[] })?.rules).toEqual((planner as { rules: unknown[] }).rules)
+  })
+
+  it('execution-slot merge repairs planner ATR take-profit drift and keeps dispatcher sizing for stage1 case 7', () => {
+    const text = 'OKX 合约 BTCUSDT 1m，使用布林带 5,1。价格触及或突破上轨时做空，价格触及或突破下轨时做多；多单在价格回到中轨时平仓，空单在价格回到中轨时平仓；单笔仓位 10%，止损 1%，止盈 1.5%。'
+    const planner = {
+      rules: [{
+        id: 'entry-long-boll-5-1-touch-lower',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'bollinger.touch_lower', params: { band: 'lower', period: 5, stdDev: 1 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [
+            { kind: 'atom', key: 'risk.stop_loss_pct', params: { basis: 'entry_avg_price', valuePct: 1 } },
+            { kind: 'atom', key: 'risk.atr_take_profit', params: { period: 14, multiple: 1.5 } },
+          ],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const ruleEffects = ((merged?.rules ?? []) as Array<{ effects: unknown }>)
+      .flatMap(rule => listRuleEffects(rule.effects as never))
+      .flatMap(effect => collectAtomLeaves(effect))
+    const keys = ruleEffects.map(effect => effect.key)
+
+    expect(merged?.position?.sizing).toEqual({ kind: 'ratio', value: 0.1, unit: 'ratio' })
+    expect(keys).not.toContain('risk.atr_take_profit')
+    expect(ruleEffects).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.take_profit_pct',
+        params: expect.objectContaining({ valuePct: 1.5, basis: 'entry_avg_price' }),
+      }),
+    ]))
   })
 
   it('execution-slot merge does not append single EMA entries already covered by planner AND rule', () => {

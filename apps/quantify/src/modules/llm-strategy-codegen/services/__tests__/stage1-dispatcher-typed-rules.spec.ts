@@ -130,6 +130,44 @@ describe('stage1 typed rules corpus fixture', () => {
     expect(effects.map(effect => effect.key)).not.toContain('position.sizing')
   })
 
+  it('keeps explicit fixed-ratio sizing for on-start spot strategy 6', () => {
+    const text = STAGE1_TYPED_RULES_CORPUS.find(item => item.id === 'stage1-006-ordi-spot-on-start')!.text
+    const patch = new GenericSeedDispatcher().dispatch(text)
+    const effects = allEffectLeaves(patch)
+    const sizing = effects.find(effect => effect.key === 'position.sizing')
+    const entryRule = patch.rules?.find(rule => rule.phase === 'entry')
+
+    expect(entryRule).toBeDefined()
+    expect(ruleConditionKeys(entryRule!)).toContain('execution.on_start')
+    expect(ruleEffectKeys(entryRule!)).toContain('action.open_long')
+    expect(sizing).toEqual(expect.objectContaining({
+      key: 'position.sizing',
+      params: expect.objectContaining({
+        sizing: expect.objectContaining({ kind: 'ratio', value: 0.1, unit: 'ratio' }),
+      }),
+    }))
+  })
+
+  it('parses plain percent take-profit without ATR drift for boll scalp strategy 7', () => {
+    const text = STAGE1_TYPED_RULES_CORPUS.find(item => item.id === 'stage1-007-boll-scalp')!.text
+    const patch = new GenericSeedDispatcher().dispatch(text)
+    const effects = allEffectLeaves(patch)
+    const keys = effects.map(effect => effect.key)
+    const takeProfit = effects.find(effect => effect.key === 'risk.take_profit_pct')
+    const sizing = effects.find(effect => effect.key === 'position.sizing')
+
+    expect(keys).not.toContain('risk.atr_take_profit')
+    expect(takeProfit).toEqual(expect.objectContaining({
+      key: 'risk.take_profit_pct',
+      params: expect.objectContaining({ valuePct: 1.5, basis: 'entry_avg_price' }),
+    }))
+    expect(sizing).toEqual(expect.objectContaining({
+      params: expect.objectContaining({
+        sizing: expect.objectContaining({ kind: 'ratio', value: 0.1, unit: 'ratio' }),
+      }),
+    }))
+  })
+
   it('infers webhook sizing only from explicit amount evidence', () => {
     const text = STAGE1_TYPED_RULES_CORPUS.find(item => item.id === 'stage1-025-webhook-event')!.text
     const patch = new GenericSeedDispatcher().dispatch(text)

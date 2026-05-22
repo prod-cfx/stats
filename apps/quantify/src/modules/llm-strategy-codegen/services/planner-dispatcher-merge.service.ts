@@ -1273,7 +1273,106 @@ export class PlannerDispatcherMergeService {
     catch (err) {
       this.logger.warn(`mergeDeterministicRulesIntoPlanner 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
     }
+    try {
+      this.repairPlannerRiskDriftFromDispatcherRules(merged, dispatcher, userMessage)
+    }
+    catch (err) {
+      this.logger.warn(`repairPlannerRiskDriftFromDispatcherRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
+    }
     return merged
+  }
+
+  private repairPlannerRiskDriftFromDispatcherRules(
+    merged: CodegenSemanticPatch,
+    dispatcher: CodegenSemanticPatch,
+    userMessage: string,
+  ): void {
+    const rules = merged.rules
+    const dispatcherRules = dispatcher.rules
+    if (!rules?.length || !dispatcherRules?.length) return
+    if (/(?:^|[^a-z])ATR(?:[^a-z]|$)|平均真实波幅/iu.test(userMessage)) return
+    let mutated = false
+    const nextRules = rules.map((rule) => {
+      const existingEffects = listRuleEffects(rule.effects)
+      const hasAtrTakeProfit = existingEffects.some(effect =>
+        collectAtomLeaves(effect).some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['risk.atr_take_profit'].key),
+      )
+      if (!hasAtrTakeProfit) return rule
+
+      const dispatcherTakeProfit = this.findDispatcherTakeProfitReplacement(rule, dispatcherRules)
+      if (!dispatcherTakeProfit) return rule
+
+      const keptEffects = existingEffects.filter(effect =>
+        !collectAtomLeaves(effect).some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['risk.atr_take_profit'].key),
+      )
+      const alreadyHasPercentTakeProfit = keptEffects.some(effect =>
+        collectAtomLeaves(effect).some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key),
+      )
+      mutated = true
+      return {
+        ...rule,
+        effects: this.appendTypedRuleEffects(
+          keptEffects,
+          alreadyHasPercentTakeProfit ? [] : [dispatcherTakeProfit],
+        ),
+      }
+    })
+    if (mutated) merged.rules = nextRules
+  }
+
+  private findDispatcherTakeProfitReplacement(
+    rule: SemanticRule,
+    dispatcherRules: readonly SemanticRule[],
+  ): AtomExprAtom | null {
+    const candidates = [
+      ...dispatcherRules.filter(candidate => this.ruleConditionLooselyMatches(rule, candidate)),
+      ...dispatcherRules.filter(candidate =>
+        candidate.phase === rule.phase
+        && (candidate.sideScope === rule.sideScope || candidate.sideScope === 'both' || rule.sideScope === 'both'),
+      ),
+      ...dispatcherRules.filter(candidate =>
+        candidate.sideScope === rule.sideScope || candidate.sideScope === 'both' || rule.sideScope === 'both',
+      ),
+    ]
+    for (const candidate of candidates) {
+      const takeProfit = listRuleEffects(candidate.effects)
+        .flatMap(effect => collectAtomLeaves(effect))
+        .find(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key)
+      if (takeProfit) return takeProfit
+    }
+    return null
+  }
+
+  private ruleConditionLooselyMatches(left: SemanticRule, right: SemanticRule): boolean {
+    if (left.phase !== right.phase) return false
+    if (left.sideScope !== right.sideScope && left.sideScope !== 'both' && right.sideScope !== 'both') return false
+    const leftLeaves = collectAtomLeaves(left.condition)
+    const rightLeaves = collectAtomLeaves(right.condition)
+    if (leftLeaves.length !== rightLeaves.length) return false
+    return leftLeaves.every(leftLeaf =>
+      rightLeaves.some(rightLeaf =>
+        leftLeaf.key === rightLeaf.key
+        && this.atomParamsLooselyCompatible(leftLeaf.params, rightLeaf.params),
+      ),
+    )
+  }
+
+  private atomParamsLooselyCompatible(
+    left: Record<string, unknown> | undefined,
+    right: Record<string, unknown> | undefined,
+  ): boolean {
+    const leftParams = left ?? {}
+    const rightParams = right ?? {}
+    for (const [key, leftValue] of Object.entries(leftParams)) {
+      if (!(key in rightParams)) continue
+      const rightValue = rightParams[key]
+      if (typeof leftValue === 'number' || typeof rightValue === 'number') {
+        if (Math.abs(Number(leftValue) - Number(rightValue)) > 1e-9) return false
+        continue
+      }
+      if (String(leftValue) !== String(rightValue)) return false
+    }
+    return true
   }
 
   private mergeDeterministicRulesIntoPlanner(
