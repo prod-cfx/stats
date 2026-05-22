@@ -167,4 +167,36 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch stage1 sche
       expect(result.reasons).toContain('rule_shape_invalid')
     }
   })
+
+  it('retry reminder keeps DCA in typed position effects, not program rule wording', () => {
+    const patch = {
+      rules: [
+        {
+          id: 'dca-role-invalid',
+          phase: 'program',
+          sideScope: 'both',
+          condition: atom('execution.on_start'),
+          effects: {
+            ...emptyEffects(),
+            programs: [atom('position.dca_schedule')],
+          },
+          evidence: { text: 'DCA 定投' },
+        },
+      ],
+    }
+
+    const result = svc.validatePlannerSemanticPatch(patch, 'BTC DCA 定投')
+
+    expect(result.ok).toBe(false)
+    if (result.ok === false) {
+      expect(result.reminder).toContain('position.dca_schedule')
+      expect(result.reminder).toContain('effects.positions')
+      expect(result.reminder).toContain('effects.programs')
+      expect(result.reminder).not.toContain('DCA 等非 program.* atom')
+      expect(result.reminder).not.toContain('DCA 由 program rule 承载')
+      expect(result.reminder).not.toContain('program rule')
+      expect(result.reminder).not.toMatch(/DCA[^。\n]*effects\.programs/)
+      expect(result.reminder).not.toMatch(/position\.dca_schedule[^。\n]*effects\.programs/)
+    }
+  })
 })

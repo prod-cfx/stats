@@ -95,11 +95,12 @@ export function matchVerbDirection(
 /**
  * resolvePhaseFromClause
  *
- * 按 PhaseResolverSpec 推断 phase ('entry' | 'exit' | null)。
+ * 按 PhaseResolverSpec 推断 phase ('entry' | 'exit' | 'gate' | 'program' | null)。
  *
- * 三种 spec：
- *   'fixed-entry'         恒返回 'entry'（如 grid.range_rebalance）
+ * spec：
+ *   'fixed-entry'         恒返回 'entry'
  *   'fixed-exit'          恒返回 'exit'（如 risk.partial_take_profit）
+ *   'fixed-program'       恒返回 'program'（如 grid.range_rebalance）
  *   'by-clause-verb'      按子句动词的入场/出场词法判断
  *   { kind: 'fn', fn }    委托给自定义函数
  *
@@ -127,7 +128,7 @@ export function resolvePhaseFromClause(
   clause: string,
   spec: PhaseResolverSpec,
   ctx: ResolveCtx = { atomKey: '', params: {} },
-): 'entry' | 'exit' | 'gate' | null {
+): 'entry' | 'exit' | 'gate' | 'program' | null {
   if (spec === 'fixed-entry') {
     return 'entry'
   }
@@ -136,6 +137,9 @@ export function resolvePhaseFromClause(
   }
   if (spec === 'fixed-gate') {
     return 'gate'
+  }
+  if (spec === 'fixed-program') {
+    return 'program'
   }
   if (typeof spec === 'object' && spec !== null && spec.kind === 'fn') {
     return spec.fn(clause, ctx)

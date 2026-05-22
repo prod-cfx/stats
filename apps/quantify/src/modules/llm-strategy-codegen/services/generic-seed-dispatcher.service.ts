@@ -50,7 +50,7 @@ export interface AtomMatch {
   readonly clauseText: string
   readonly direction: Direction | null
   readonly params: Readonly<Record<string, unknown>>
-  readonly phase: 'entry' | 'exit' | 'gate' | null
+  readonly phase: 'entry' | 'exit' | 'gate' | 'program' | null
   readonly sideScope: 'long' | 'short' | 'both' | null
 }
 
@@ -938,7 +938,7 @@ const BUCKET_TO_PATCH_SLOT: Readonly<Record<AtomContractBucket, 'triggers' | 'ac
 
 type PatchAtomNode = Record<string, unknown> & {
   key: string
-  phase: 'entry' | 'exit' | 'gate' | null
+  phase: 'entry' | 'exit' | 'gate' | 'program' | null
   sideScope?: 'long' | 'short' | 'both' | null
   params: Record<string, unknown>
   evidence?: unknown
@@ -1227,9 +1227,9 @@ export class GenericSeedDispatcher {
         //   先派生本 clause 的 phase，再在 sibling 中选 phase 配对的最近一条（exit→entry，
         //   entry→exit，self→任意），剩余仍 fallback 到最后一条。
         const tentativePhase = resolvePhaseFromClause(clause, surface.phaseResolver, { atomKey, params: {} }) ?? 'entry'
-        const counterpartPhase: 'entry' | 'exit' | 'gate' = tentativePhase === 'exit' ? 'entry' : tentativePhase === 'entry' ? 'exit' : 'entry'
+        const counterpartPhase: 'entry' | 'exit' | 'gate' | 'program' = tentativePhase === 'exit' ? 'entry' : tentativePhase === 'entry' ? 'exit' : 'entry'
         const sibling = sourceSiblings.slice().reverse().find((n) => {
-          const np = (n as { phase?: 'entry' | 'exit' | 'gate' | null }).phase
+          const np = (n as { phase?: 'entry' | 'exit' | 'gate' | 'program' | null }).phase
           // self-mirror（sourceKey === atomKey）允许任何 phase；否则优先取对偶 phase 的 sibling
           if (sourceKey === atomKey) return true
           return np === counterpartPhase

@@ -84,4 +84,14 @@ describe('conversationPlannerSystemPrompt', () => {
     expect(gridExample).toContain('"phase": "program"')
     expect(gridExample).toContain('"programs": [{ "kind": "atom", "key": "program.')
   })
+
+  it('does not tell DCA schedule to use program effects', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+
+    expect(prompt).toContain('position.dca_schedule')
+    expect(prompt).toContain('effects.positions')
+    expect(prompt).not.toMatch(/DCA[^。\n]*effects\.programs/)
+    expect(prompt).not.toMatch(/position\.dca_schedule[^。\n]*effects\.programs/)
+    expect(prompt).not.toContain('program rule')
+  })
 })

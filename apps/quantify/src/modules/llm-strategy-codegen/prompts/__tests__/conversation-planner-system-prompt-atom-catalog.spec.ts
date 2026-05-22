@@ -49,6 +49,11 @@ describe('conversationPlannerSystemPrompt — atom catalog injection (issue #134
       expect(prompt).toContain(`${total} 个原子枚举`)
     })
 
+    it('grid.range_rebalance 不在 catalog 中宣告 phase=entry', () => {
+      expect(prompt).toContain('grid.range_rebalance phase=program')
+      expect(prompt).not.toContain('grid.range_rebalance phase=entry')
+    })
+
     it('保留 v1 原 25 行约束语句（零回退）', () => {
       expect(prompt).toContain('你是交易策略对话编排器')
       expect(prompt).toContain('只输出 JSON，不要 markdown')

@@ -219,7 +219,7 @@ export class SemanticSeedStateBuilderService {
         for (const eff of listRuleEffects(rule.effects)) {
           for (const leaf of collectAtomLeaves(eff)) {
             // phase 透传 rule.phase；dispatchAtomsByContractBucket 内会按 contract.surface.phaseResolver
-            // 'fixed-entry|exit|gate' 强制覆写到合约期望相位，无需此处精细推断。
+            // fixed-* 强制覆写到合约期望相位，无需此处精细推断。
             liftedAtoms.push(this.liftAtomLeafToPatchItem(leaf, rule, rule.phase === 'gate' ? 'gate' : (rule.phase === 'exit' ? 'exit' : 'entry')))
           }
         }
@@ -599,7 +599,7 @@ export class SemanticSeedStateBuilderService {
         this.logger.warn(`[#1364] atoms[] unknown key dropped: key=${key}`)
         continue
       }
-      // phase enforcement: fixed-entry / fixed-exit / fixed-gate -> server 覆写
+      // phase enforcement: fixed-entry / fixed-exit / fixed-gate / fixed-program -> server 覆写
       const resolver = contract.surface?.phaseResolver
       let normalized: Record<string, unknown> = atom
       if (typeof resolver === 'string' && resolver.startsWith('fixed-')) {

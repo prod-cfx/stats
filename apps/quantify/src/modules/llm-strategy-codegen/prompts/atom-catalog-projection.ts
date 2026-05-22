@@ -7,7 +7,7 @@
  * 设计原则（#1279 第一性原则）：
  *   1) 所有数据从 ATOM_CONTRACT_REGISTRY 动态派生，禁止写死 atom 数量 / key 列表
  *   2) phase 仅暴露全局 enum ['entry','exit','gate','program']；by-clause-verb 类 atom 由 LLM
- *      根据用户意图填，fixed-* 类 atom 与 program.* prompt 投影通过 fixedPhase 提示固定值
+ *      根据用户意图填，fixed-* 类 atom 通过 fixedPhase 提示固定值
  *   3) paramSlots 字段名 + required + kind + enum 紧凑表达，省略 enum 全集以控 token
  *   4) 模块级 memoize：buildAtomCatalogEntries() / formatAtomCatalogForPrompt(locale)
  *      只在首次调用构建，后续返回同一引用
@@ -22,7 +22,7 @@ export type PromptPhase = typeof PHASE_ENUM[number]
 /**
  * phaseResolver 字符串字面量 → prompt 暴露的固定 phase 映射。
  *
- * - `'fixed-entry' | 'fixed-exit' | 'fixed-gate'` → 对应 PromptPhase 值
+ * - `'fixed-entry' | 'fixed-exit' | 'fixed-gate' | 'fixed-program'` → 对应 PromptPhase 值
  * - `'by-clause-verb'` → 不在表内（LLM 自己根据用户意图填 phase）
  * - `{ kind: 'fn', fn }` 对象形态 → 不在表内（同上）
  *
@@ -35,6 +35,7 @@ const FIXED_PHASE_MAP: Readonly<Record<string, PromptPhase>> = {
   'fixed-entry': 'entry',
   'fixed-exit': 'exit',
   'fixed-gate': 'gate',
+  'fixed-program': 'program',
 }
 
 export interface AtomCatalogParamField {
@@ -48,7 +49,7 @@ export interface AtomCatalogParamField {
 export interface AtomCatalogEntry {
   readonly key: AtomContractKey
   readonly bucket: AtomContractBucket
-  /** phaseResolver === 'fixed-*' 或 program.* prompt 投影时暴露，提示 LLM 该 atom 的 phase 已固定 */
+  /** phaseResolver === 'fixed-*' 时暴露，提示 LLM 该 atom 的 phase 已固定 */
   readonly fixedPhase?: PromptPhase
   readonly paramFields: readonly AtomCatalogParamField[]
   /** 取自 corpus.goldenUtterances[0]，可能为空 */
@@ -81,9 +82,7 @@ export function buildAtomCatalogEntries(): readonly AtomCatalogEntry[] {
     const phaseResolver = surface.phaseResolver
     // M5 修复：查表 + 显式类型 narrowing；非字符串字面量（如 { kind: 'fn', fn }）落入
     // undefined 分支是有意行为（LLM 自由派生 phase）；非 fixed-* 字符串字面量同样如此。
-    const fixedPhase: PromptPhase | undefined = key.startsWith('program.')
-      ? 'program'
-      : typeof phaseResolver === 'string'
+    const fixedPhase: PromptPhase | undefined = typeof phaseResolver === 'string'
         ? FIXED_PHASE_MAP[phaseResolver]
         : undefined
 

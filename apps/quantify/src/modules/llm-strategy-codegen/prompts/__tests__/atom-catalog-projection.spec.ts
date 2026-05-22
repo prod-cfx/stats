@@ -63,10 +63,10 @@ describe('atom-catalog-projection (issue #1345 PR1.1)', () => {
       }
     })
 
-    it('fixedPhase 仅在固定 phase 或 program.* prompt 投影时出现', () => {
+    it('fixedPhase 仅在固定 phase 时出现', () => {
       for (const entry of buildAtomCatalogEntries()) {
         const phaseResolver = ATOM_CONTRACT_REGISTRY[entry.key].surface.phaseResolver
-        if (entry.key.startsWith('program.')) {
+        if (phaseResolver === 'fixed-program') {
           expect(entry.fixedPhase).toBe('program')
         } else if (phaseResolver === 'fixed-entry') {
           expect(entry.fixedPhase).toBe('entry')
@@ -90,6 +90,15 @@ describe('atom-catalog-projection (issue #1345 PR1.1)', () => {
           expect(entry.example).toBeUndefined()
         }
       }
+    })
+
+    it('grid.range_rebalance catalog phase 与 program hint 保持一致', () => {
+      const entry = buildAtomCatalogEntries().find(item => item.key === 'grid.range_rebalance')
+
+      expect(entry?.fixedPhase).toBe('program')
+      expect(ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].surface.phaseResolver).toBe('fixed-program')
+      expect(formatAtomCatalogForPrompt('zh')).toContain('grid.range_rebalance phase=program')
+      expect(formatAtomCatalogForPrompt('zh')).not.toContain('grid.range_rebalance phase=entry')
     })
 
     it('memoize：连调 2 次返回同一数组引用', () => {
