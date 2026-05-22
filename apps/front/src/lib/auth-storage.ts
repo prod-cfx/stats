@@ -95,7 +95,14 @@ export function clearStoredSession(): void {
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null
   const token = normalizeAccessToken(localStorage.getItem(TOKEN_KEY))
-  return token || null
+  if (token) return token
+
+  const sessionToken = loadStoredSession()?.accessToken ?? ''
+  const normalizedSessionToken = normalizeAccessToken(sessionToken)
+  if (normalizedSessionToken) {
+    localStorage.setItem(TOKEN_KEY, normalizedSessionToken)
+  }
+  return normalizedSessionToken || null
 }
 
 /**
