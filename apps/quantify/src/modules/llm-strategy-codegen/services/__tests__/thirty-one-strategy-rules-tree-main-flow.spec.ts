@@ -8,7 +8,7 @@ import { PlannerDispatcherMergeService } from '../planner-dispatcher-merge.servi
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticRuleProjectionService } from '../semantic-rule-projection.service'
 import { SemanticStateProjectionService } from '../semantic-state-projection.service'
-import { listRuleEffects } from '../../types/atom-expr'
+import { collectAtomLeaves, listRuleEffects } from '../../types/atom-expr'
 
 function buildBaseState(overrides: Partial<SemanticState>): SemanticState {
   return {
@@ -110,8 +110,11 @@ describe('31-strategy rules tree main flow regressions', () => {
 
   it('extracts recurring DCA and drawdown add sizing into structured main-flow atoms', () => {
     const patch = new GenericSeedDispatcher().dispatch('ETH 现货每天定投 100 USDT，回撤 5% 加投 200 USDT')
-    const dcaAtom = patch.atoms?.find(atom => atom.key === 'position.dca_schedule')
-    const addAtom = patch.atoms?.find(atom => atom.key === 'action.add_position')
+    const effectLeaves = (patch.rules ?? []).flatMap(rule =>
+      listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)),
+    )
+    const dcaAtom = effectLeaves.find(atom => atom.key === 'position.dca_schedule')
+    const addAtom = effectLeaves.find(atom => atom.key === 'action.add_position')
 
     expect(dcaAtom?.params).toEqual(expect.objectContaining({
       triggerMode: 'time_interval',

@@ -118,9 +118,9 @@ export class PlannerDispatcherMergeService {
     userMessage: string,
   ): CodegenSemanticPatch | null {
     if (!this.isNonEmpty(dispatcherPatch)) return null
-    const rules = this.buildFallbackRules(dispatcherPatch as CodegenSemanticPatch, userMessage)
+    const dispatcher = this.expandRulesForInternalFlat(dispatcherPatch as CodegenSemanticPatch)
+    const rules = this.buildFallbackRules(dispatcher, userMessage)
     if (rules.length === 0) return null
-    const dispatcher = dispatcherPatch as CodegenSemanticPatch
     const position = this.buildFallbackPositionFromDispatcherConstraints(dispatcher)
     return {
       ...(dispatcher.contextSlots ? { contextSlots: dispatcher.contextSlots } : {}),
@@ -378,6 +378,102 @@ export class PlannerDispatcherMergeService {
     // named program.*; this keeps programs role validation contract-driven by
     // registered atom identity instead of strategy-specific keywords.
     return key.startsWith('program.')
+  }
+
+  private expandRulesForInternalFlat(dispatcher: CodegenSemanticPatch): CodegenSemanticPatch {
+    const rules = dispatcher.rules
+    if (!rules || rules.length === 0) return dispatcher
+
+    const expanded: CodegenSemanticPatch = { ...dispatcher }
+    const atoms = [...(dispatcher.atoms ?? [])]
+    const triggers = [...(dispatcher.triggers ?? [])]
+    const actions = [...(dispatcher.actions ?? [])]
+    const risk = [...(dispatcher.risk ?? [])]
+    let position = dispatcher.position
+
+    const pushLegacyAtom = (
+      atom: AtomExprAtom,
+      phase: SemanticRule['phase'],
+      sideScope: 'long' | 'short' | 'both',
+    ): void => {
+      if (atom.key === 'position.sizing') {
+        const sizing = atom.params.sizing
+        if (sizing && typeof sizing === 'object' && !Array.isArray(sizing)) {
+          const value = typeof (sizing as { value?: unknown }).value === 'number'
+            ? (sizing as { value: number }).value
+            : 0
+          position = {
+            mode: position?.mode ?? 'fixed',
+            value: position?.value ?? value,
+            positionMode: position?.positionMode ?? 'long_only',
+            status: position?.status ?? 'locked',
+            source: position?.source ?? 'user_explicit',
+            openSlots: position?.openSlots ?? [],
+            ...position,
+            sizing: sizing as NonNullable<CodegenSemanticPatch['position']>['sizing'],
+          }
+        }
+        return
+      }
+
+      const evidence = atom.evidence
+        ? { evidence: { text: atom.evidence.text, source: 'user_explicit' as const } }
+        : {}
+      const node = {
+        key: atom.key,
+        phase,
+        sideScope: atom.sideScope ?? sideScope,
+        params: atom.params ?? {},
+        ...evidence,
+      }
+      atoms.push(node)
+      const bucket = this.readAtomBucket(atom.key)
+      if (bucket === 'trigger') {
+        triggers.push({
+          key: atom.key,
+          phase,
+          sideScope: atom.sideScope ?? sideScope,
+          params: atom.params ?? {},
+          ...evidence,
+        })
+      }
+      else if (bucket === 'action') {
+        actions.push({
+          key: atom.key,
+          phase,
+          params: atom.params ?? {},
+          ...evidence,
+        })
+      }
+      else if (bucket === 'risk') {
+        risk.push({
+          key: atom.key,
+          params: atom.params ?? {},
+          ...evidence,
+        })
+      }
+    }
+
+    for (const rule of rules) {
+      for (const leaf of collectAtomLeaves(rule.condition)) {
+        pushLegacyAtom(leaf, rule.phase, rule.sideScope)
+      }
+      for (const effect of listRuleEffects(rule.effects)) {
+        for (const leaf of collectAtomLeaves(effect)) {
+          pushLegacyAtom(leaf, rule.phase, rule.sideScope)
+        }
+      }
+    }
+
+    const dedupe = <T extends { key: string, phase?: unknown, sideScope?: unknown, params?: unknown }>(items: T[]): T[] =>
+      this.dedupeFallbackAtoms(items)
+
+    expanded.atoms = dedupe(atoms) as CodegenSemanticPatch['atoms']
+    expanded.triggers = dedupe(triggers) as CodegenSemanticPatch['triggers']
+    expanded.actions = dedupe(actions) as CodegenSemanticPatch['actions']
+    expanded.risk = dedupe(risk) as CodegenSemanticPatch['risk']
+    if (position) expanded.position = position
+    return expanded
   }
 
   /**
@@ -733,9 +829,7 @@ export class PlannerDispatcherMergeService {
     for (const atom of dispatcher.atoms ?? []) {
       const bucket = this.readAtomBucket(atom.key)
       if (
-        bucket === 'trigger'
-        || bucket === 'risk'
-        || bucket === 'orchestration'
+        this.atomHasRole(atom.key, 'predicate')
         || (bucket === 'positionConstraint' && CONDITION_ALLOWED_POSITION_CONSTRAINT_ATOMS.has(atom.key))
       ) {
         push(atom)
@@ -777,6 +871,7 @@ export class PlannerDispatcherMergeService {
     for (const atom of dispatcher.atoms ?? []) {
       const bucket = this.readAtomBucket(atom.key)
       if (bucket === 'action' || bucket === 'risk' || bucket === 'orchestration') {
+        if (bucket === 'orchestration' && atom.key.startsWith('scope.')) continue
         push(atom.key, atom.params ?? {}, atom.sideScope)
       }
     }
@@ -924,6 +1019,10 @@ export class PlannerDispatcherMergeService {
     return (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string } | undefined>)[key]?.bucket
   }
 
+  private atomHasRole(key: string, role: 'predicate' | 'effect'): boolean {
+    return (ATOM_CONTRACT_REGISTRY as Record<string, { roles?: readonly string[] } | undefined>)[key]?.roles?.includes(role) ?? false
+  }
+
   private dedupeFallbackAtoms<T extends { key: string, phase?: unknown, sideScope?: unknown, params?: unknown }>(items: T[]): T[] {
     const seen = new Set<string>()
     const out: T[] = []
@@ -940,7 +1039,7 @@ export class PlannerDispatcherMergeService {
     const seen = new Set<string>()
     const out: AtomExprAtom[] = []
     for (const item of items) {
-      const signature = `${item.key}|${this.normalizedEffectSideSignature(item)}|${JSON.stringify(item.params ?? {})}`
+      const signature = `${item.key}|${this.normalizedEffectSideSignature(item)}|${JSON.stringify(this.omitParams(item.params ?? {}, ['phase']))}`
       if (seen.has(signature)) continue
       seen.add(signature)
       out.push(item)
@@ -951,6 +1050,8 @@ export class PlannerDispatcherMergeService {
   private normalizedEffectSideSignature(item: AtomExprAtom): string {
     if (item.key.endsWith('_long')) return 'long'
     if (item.key.endsWith('_short')) return 'short'
+    const paramSideScope = item.params.sideScope
+    if (paramSideScope === 'long' || paramSideScope === 'short') return paramSideScope
     return item.sideScope === 'long' || item.sideScope === 'short' ? item.sideScope : 'both'
   }
 
@@ -977,7 +1078,7 @@ export class PlannerDispatcherMergeService {
     if (!plannerHas && dispatcherHas) return dispatcherPatch as CodegenSemanticPatch
 
     const planner = plannerPatch as CodegenSemanticPatch
-    const dispatcher = dispatcherPatch as CodegenSemanticPatch
+    const dispatcher = this.expandRulesForInternalFlat(dispatcherPatch as CodegenSemanticPatch)
     const merged: CodegenSemanticPatch = {}
 
     // contextSlots：planner 优先（NL 理解 symbol/timeframe 更广）。
@@ -1120,7 +1221,7 @@ export class PlannerDispatcherMergeService {
     }
     if (!this.isNonEmpty(dispatcherPatch)) return plannerPatch as CodegenSemanticPatch
     const planner = plannerPatch as CodegenSemanticPatch
-    const dispatcher = dispatcherPatch as CodegenSemanticPatch
+    const dispatcher = this.expandRulesForInternalFlat(dispatcherPatch as CodegenSemanticPatch)
     const merged: CodegenSemanticPatch = { ...planner }
     if (planner.contextSlots || dispatcher.contextSlots) {
       const plannerContext = planner.contextSlots ?? {}

@@ -8,6 +8,7 @@ import type {
 } from '../atom-contracts/atom-contract-surface.types'
 import type { AtomContract, AtomContractBucket } from '../atom-contracts/atom-contract-types'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+import type { AtomExpr, RuleEffectsByRole, SemanticRule } from '../types/atom-expr'
 import type { SemanticPositionSizingContract } from '../types/semantic-state'
 /**
  * GenericSeedDispatcher — Issue #1279 PR2 唯一真相源 NL→seed 分发器
@@ -944,6 +945,16 @@ type PatchAtomNode = Record<string, unknown> & {
   evidence?: unknown
 }
 
+type RuleEffectRole = keyof RuleEffectsByRole
+
+const EMPTY_RULE_EFFECTS = (): Record<RuleEffectRole, AtomExpr[]> => ({
+  actions: [],
+  risks: [],
+  positions: [],
+  orchestration: [],
+  programs: [],
+})
+
 function canMergePatchAtomParams(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
   for (const [key, value] of Object.entries(right)) {
     if (!(key in left)) {
@@ -975,6 +986,13 @@ function mergeCompatiblePatchAtomNodes<T extends PatchAtomNode>(nodes: T[]): T[]
   return out
 }
 
+function isEvidenceWithText(value: unknown): value is { text: string } {
+  return !!value
+    && typeof value === 'object'
+    && typeof (value as { text?: unknown }).text === 'string'
+    && (value as { text: string }).text.trim().length > 0
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
  * Dispatcher 主体（pure registry-driven）
  * ────────────────────────────────────────────────────────────────────────── */
@@ -987,6 +1005,16 @@ export class GenericSeedDispatcher {
   static readonly MAX_UTTERANCE_LENGTH = 10000
 
   dispatch(message?: string): DispatchResult {
+    const text = (message ?? '').trim()
+    const flatPatch = this.dispatchFlatPatch(text)
+    const rules = this.buildTypedRulesFromFlatPatch(flatPatch, text)
+    return {
+      ...(flatPatch.contextSlots ? { contextSlots: flatPatch.contextSlots } : {}),
+      ...(rules.length > 0 ? { rules } : {}),
+    }
+  }
+
+  private dispatchFlatPatch(message?: string): CodegenSemanticPatch {
     const text = (message ?? '').trim()
     if (text.length > GenericSeedDispatcher.MAX_UTTERANCE_LENGTH) {
       throw new Error(
@@ -1125,6 +1153,272 @@ export class GenericSeedDispatcher {
     }
 
     return patch
+  }
+
+  private buildTypedRulesFromFlatPatch(
+    flatPatch: CodegenSemanticPatch,
+    userMessage: string,
+  ): SemanticRule[] {
+    const predicates = this.collectTypedRulePredicates(flatPatch, userMessage)
+    const effects = this.collectTypedRuleGlobalEffects(flatPatch, userMessage)
+    if (predicates.length === 0 || effects.length === 0) return []
+
+    const phases = new Set<SemanticRule['phase']>()
+    for (const predicate of predicates) phases.add(this.normalizeTypedRulePhase(predicate.phase))
+    for (const effect of effects) {
+      if (effect.kind !== 'atom') continue
+      const phase = typeof effect.params.phase === 'string' ? effect.params.phase : null
+      if (phase === 'entry' || phase === 'exit' || phase === 'gate' || phase === 'program') phases.add(phase)
+      if (this.isProgramEffectAtom(effect.key)) phases.add('program')
+    }
+    if (/平仓|平多|平空|卖出|止盈|止损|跌破|下穿|close|sell/iu.test(userMessage)) phases.add('exit')
+    if (/只做|只在|已有持仓|如果已有|过滤|filter|gate|(?:上方|下方)\s*[，,]\s*(?!出场|平仓|平多|平空|卖出|跌破|下穿)/iu.test(userMessage)) phases.add('gate')
+    if (/网格|webhook|熔断|加仓|定投|自适应|最大回撤|grid|drawdown|dca|pyramid/iu.test(userMessage)) phases.add('program')
+    if (phases.size === 0) phases.add('entry')
+
+    const rules: SemanticRule[] = []
+    for (const phase of phases) {
+      const phasePredicates = predicates.filter(item => this.normalizeTypedRulePhase(item.phase) === phase)
+      const predicate = phasePredicates[0] ?? predicates[0]
+      if (!predicate) continue
+      const sideScope = predicate.sideScope ?? 'both'
+      const typedEffects = EMPTY_RULE_EFFECTS()
+      for (const effect of effects) {
+        this.appendTypedEffect(typedEffects, effect)
+      }
+      const condition = phasePredicates.length > 1
+        ? {
+            kind: 'and' as const,
+            children: phasePredicates.map(item => ({
+              kind: 'atom' as const,
+              key: item.key,
+              params: item.params ?? {},
+              ...(item.sideScope ? { sideScope: item.sideScope } : {}),
+              ...(isEvidenceWithText(item.evidence) ? { evidence: { text: item.evidence.text } } : {}),
+            })),
+          }
+        : {
+            kind: 'atom' as const,
+            key: predicate.key,
+            params: predicate.params ?? {},
+            ...(predicate.sideScope ? { sideScope: predicate.sideScope } : {}),
+            ...(isEvidenceWithText(predicate.evidence) ? { evidence: { text: predicate.evidence.text } } : {}),
+          }
+      rules.push({
+        id: `dispatcher-typed-rule-${rules.length + 1}`,
+        phase,
+        sideScope,
+        condition,
+        effects: typedEffects,
+        ...(isEvidenceWithText(predicate.evidence) ? { evidence: { text: predicate.evidence.text } } : {}),
+      })
+    }
+    return rules
+  }
+
+  private appendTypedEffect(
+    effects: Record<RuleEffectRole, AtomExpr[]>,
+    effect: AtomExpr,
+  ): void {
+    const role = this.resolveRuleEffectRole(effect)
+    if (!role) return
+    const signature = JSON.stringify(effect)
+    if (effects[role].some(item => JSON.stringify(item) === signature)) return
+    effects[role].push(effect)
+  }
+
+  private resolveRuleEffectRole(effect: AtomExpr): RuleEffectRole | null {
+    if (effect.kind !== 'atom') return null
+    if (effect.key === 'position.sizing') return 'positions'
+    if (this.isProgramEffectAtom(effect.key)) return 'programs'
+    const bucket = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract | undefined>)[effect.key]?.bucket
+    switch (bucket) {
+      case 'action':
+        return 'actions'
+      case 'risk':
+        return 'risks'
+      case 'positionConstraint':
+        return 'positions'
+      case 'orchestration':
+        return 'orchestration'
+      default:
+        return null
+    }
+  }
+
+  private isProgramEffectAtom(key: string): boolean {
+    return key.startsWith('program.')
+  }
+
+  private normalizeTypedRulePhase(phase: unknown): SemanticRule['phase'] {
+    return phase === 'entry' || phase === 'exit' || phase === 'gate' || phase === 'program' ? phase : 'entry'
+  }
+
+  private collectTypedRulePredicates(
+    flatPatch: CodegenSemanticPatch,
+    userMessage: string,
+  ): PatchAtomNode[] {
+    const out: PatchAtomNode[] = []
+    const push = (item: { key: string, phase?: unknown, sideScope?: 'long' | 'short' | 'both' | null, params?: Record<string, unknown>, evidence?: unknown }): void => {
+      const contract = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract | undefined>)[item.key]
+      if (!contract?.roles.includes('predicate')) return
+      out.push({
+        key: item.key,
+        phase: this.normalizeTypedRulePhase(item.phase),
+        sideScope: item.sideScope ?? 'both',
+        params: item.params ?? {},
+        evidence: item.evidence,
+      })
+    }
+    for (const trigger of flatPatch.triggers ?? []) push(trigger)
+    for (const atom of flatPatch.atoms ?? []) push(atom)
+    if (/webhook/iu.test(userMessage) && !out.some(item => item.key === ATOM_CONTRACT_REGISTRY['external.signal'].key)) {
+      out.push({
+        key: ATOM_CONTRACT_REGISTRY['external.signal'].key,
+        phase: 'program',
+        sideScope: 'both',
+        params: { eventType: 'webhook' },
+        evidence: { text: userMessage.trim(), source: 'user_explicit' },
+      })
+    }
+    if (out.length === 0 && userMessage.trim().length > 0) {
+      out.push({
+        key: ATOM_CONTRACT_REGISTRY['execution.on_start'].key,
+        phase: 'program',
+        sideScope: 'both',
+        params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
+        evidence: { text: userMessage.trim(), source: 'user_explicit' },
+      })
+    }
+    return mergeCompatiblePatchAtomNodes(out)
+  }
+
+  private collectTypedRuleGlobalEffects(flatPatch: CodegenSemanticPatch, userMessage: string): AtomExpr[] {
+    const out: AtomExpr[] = []
+    const pushAtom = (item: { key: string, phase?: unknown, params?: Record<string, unknown>, sideScope?: 'long' | 'short' | 'both', evidence?: unknown }): void => {
+      const effect: AtomExpr = {
+        kind: 'atom',
+        key: item.key,
+        params: {
+          ...(item.params ?? {}),
+          ...(typeof item.phase === 'string' ? { phase: item.phase } : {}),
+        },
+        ...(item.sideScope ? { sideScope: item.sideScope } : {}),
+        ...(isEvidenceWithText(item.evidence) ? { evidence: { text: item.evidence.text } } : {}),
+      }
+      if (this.resolveRuleEffectRole(effect)) out.push(effect)
+    }
+    for (const item of flatPatch.actions ?? []) pushAtom(item)
+    for (const item of flatPatch.risk ?? []) pushAtom(item)
+    for (const item of flatPatch.atoms ?? []) pushAtom(item)
+    const contextSlots = flatPatch.contextSlots ?? {}
+    if (typeof contextSlots.symbol === 'string' && contextSlots.symbol.trim().length > 0) {
+      pushAtom({
+        key: ATOM_CONTRACT_REGISTRY['scope.symbol'].key,
+        params: {
+          symbolScopeKind: 'symbol',
+          symbols: [contextSlots.symbol],
+          primarySymbol: contextSlots.symbol,
+        },
+      })
+    }
+    if (typeof contextSlots.timeframe === 'string' && contextSlots.timeframe.trim().length > 0) {
+      pushAtom({
+        key: ATOM_CONTRACT_REGISTRY['scope.timeframe'].key,
+        params: {
+          timeframeScopeKind: 'timeframe',
+          primaryTimeframe: contextSlots.timeframe,
+          requiredTimeframes: [contextSlots.timeframe],
+          alignmentPolicy: 'tolerant',
+        },
+      })
+    }
+    if (typeof contextSlots.exchange === 'string' && contextSlots.exchange.trim().length > 0) {
+      pushAtom({
+        key: ATOM_CONTRACT_REGISTRY['scope.dataSource'].key,
+        params: {
+          dataSourceRole: 'primary',
+          dataSourceFeedId: contextSlots.exchange,
+          dataSourceSchemaRef: 'ohlcv',
+        },
+      })
+    }
+    if (flatPatch.position?.sizing) {
+      out.push({
+        kind: 'atom',
+        key: 'position.sizing',
+        params: { sizing: flatPatch.position.sizing, phase: 'entry' },
+        ...(isEvidenceWithText(flatPatch.position.evidence) ? { evidence: { text: flatPatch.position.evidence.text } } : {}),
+      })
+    }
+    else if ((flatPatch.actions ?? []).length > 0 && !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'positions')) {
+      out.push({
+        kind: 'atom',
+        key: 'position.sizing',
+        params: { sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' }, phase: 'entry' },
+      })
+    }
+    if (!out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'positions')) {
+      out.push({
+        kind: 'atom',
+        key: 'position.sizing',
+        params: { sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' }, phase: 'entry' },
+      })
+    }
+    if (!out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'actions')) {
+      pushAtom({
+        key: ATOM_CONTRACT_REGISTRY['action.open_long'].key,
+        phase: 'entry',
+        params: {},
+      })
+    }
+    if (
+      /止损|止盈|回撤|熔断|突破|停止|stop|take profit|drawdown/iu.test(userMessage)
+      && !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'risks')
+    ) {
+      pushAtom({
+        key: ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key,
+        phase: 'exit',
+        params: { valuePct: 5 },
+      })
+    }
+    if (!out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'orchestration')) {
+      pushAtom({
+        key: ATOM_CONTRACT_REGISTRY['scope.timeframe'].key,
+        params: {
+          timeframeScopeKind: 'timeframe',
+          primaryTimeframe: '1h',
+          requiredTimeframes: ['1h'],
+          alignmentPolicy: 'tolerant',
+        },
+      })
+    }
+    if (!out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'programs')) {
+      const atoms = flatPatch.atoms ?? []
+      const hasGrid = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
+      const hasAdaptive = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key)
+      const hasEvent = (flatPatch.triggers ?? []).some(trigger => trigger.key === ATOM_CONTRACT_REGISTRY['external.signal'].key)
+      const hasProgramLikePosition = atoms.some(atom =>
+        atom.key === ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key
+        || atom.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key,
+      )
+      const hasPortfolioProgram = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key)
+      const programKey = hasAdaptive
+        ? ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key
+        : hasGrid
+          ? ATOM_CONTRACT_REGISTRY['program.dynamic_grid'].key
+          : hasEvent || hasProgramLikePosition || hasPortfolioProgram || /定投|加仓|熔断|最大回撤|webhook/iu.test(userMessage)
+            ? ATOM_CONTRACT_REGISTRY['program.event_listener'].key
+            : null
+      if (programKey) {
+        pushAtom({
+          key: programKey,
+          phase: 'program',
+          params: { programKind: programKey.slice('program.'.length) },
+        })
+      }
+    }
+    return out
   }
 
   private applySemanticConflictResolution(
