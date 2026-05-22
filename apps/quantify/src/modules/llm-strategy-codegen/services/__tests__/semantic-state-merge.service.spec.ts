@@ -4,6 +4,70 @@ import { SemanticStateMergeService } from '../semantic-state-merge.service'
 describe('SemanticStateMergeService', () => {
   const service = new SemanticStateMergeService()
 
+  it('preserves program phase and typed effects when a derived rule adds risk effects', () => {
+    const condition = { kind: 'atom' as const, key: 'context.always', params: {} }
+    const program = { kind: 'atom' as const, key: 'program.dynamic_grid', params: { levelCount: 5 } }
+    const risk = { kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { valuePct: 5 } }
+
+    const persisted: SemanticState = {
+      version: 1,
+      families: ['grid.range_rebalance'],
+      trigger: [],
+      action: [],
+      risk: [],
+      position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-05-22T10:00:00.000Z',
+      rules: [{
+        id: 'rule-program-grid',
+        phase: 'program',
+        sideScope: 'both',
+        condition,
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [program],
+        },
+      }],
+    }
+    const derived: SemanticState = {
+      ...persisted,
+      updatedAt: '2026-05-22T10:01:00.000Z',
+      rules: [{
+        id: 'rule-program-grid',
+        phase: 'program',
+        sideScope: 'both',
+        condition,
+        effects: {
+          actions: [],
+          risks: [risk],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    }
+
+    const merged = service.merge({ persisted, derived })
+    const [mergedRule] = merged.rules ?? []
+
+    expect(merged.rules).toHaveLength(1)
+    expect(mergedRule).toEqual(expect.objectContaining({ phase: 'program' }))
+    expect(mergedRule?.effects).toEqual({
+      actions: [],
+      risks: [risk],
+      positions: [],
+      orchestration: [],
+      programs: [program],
+    })
+  })
+
   it('merges action open slots when the same action is derived again', () => {
     const merged = service.merge({
       persisted: {

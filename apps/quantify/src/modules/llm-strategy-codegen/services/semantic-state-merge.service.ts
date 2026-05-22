@@ -14,7 +14,15 @@ import type {
   SemanticTriggerState,
 } from '../types/semantic-state'
 import { normalizeRiskSemantics } from './semantic-state-normalization'
-import { collectAtomLeaves, listRuleEffects, type SemanticRule } from '../types/atom-expr'
+import {
+  collectAtomLeaves,
+  isRuleEffectsByRole,
+  listRuleEffects,
+  type AtomExpr,
+  type RuleEffects,
+  type RuleEffectsByRole,
+  type SemanticRule,
+} from '../types/atom-expr'
 
 // #1383 Lane B：所有 atom bucket entry 必须实现的最小 identity shape，
 // 供 dedupeByAtomIdentity 用 (key, phase, stableParamsHash, openSlots signature) 折叠重复条目。
@@ -1234,11 +1242,10 @@ export class SemanticStateMergeService {
     const ingest = (rule: SemanticRule): void => {
       if (rule.id && rule.id.length > 0) {
         if (!byId.has(rule.id)) idOrder.push(rule.id)
-        // 审查 M2：同 id 折叠时 effects 若 derived 缺省/空数组 → 保留 persisted
+        // 审查 M2 + Task 6：同 id 折叠时 effects 若 derived 缺省/空数组 → 保留 persisted；
+        // typed RuleEffects 逐 role 合并，避免 risks patch 清空 programs。
         const existing = byId.get(rule.id)
-        const mergedEffects = (listRuleEffects(rule.effects).length > 0)
-          ? rule.effects
-          : (existing?.effects ?? rule.effects)
+        const mergedEffects = this.mergeRuleEffects(existing?.effects, rule.effects)
         byId.set(rule.id, { ...rule, effects: mergedEffects })
       }
       else {
@@ -1307,6 +1314,62 @@ export class SemanticStateMergeService {
     // 后归一化风控」——既往 Pass 2 输出顺序也不保证严格稳定。
     if (riskOrder.length === 0) return afterShapePass
     return [...nonRiskRules, ...riskOrder.map(s => byRiskSig.get(s)!)]
+  }
+
+  private mergeRuleEffects(
+    persisted: RuleEffects | undefined,
+    derived: RuleEffects,
+  ): RuleEffects {
+    if (!persisted) return this.cloneRuleEffects(derived)
+    if (listRuleEffects(derived).length === 0) return this.cloneRuleEffects(persisted)
+    if (listRuleEffects(persisted).length === 0) return this.cloneRuleEffects(derived)
+
+    if (isRuleEffectsByRole(persisted) && isRuleEffectsByRole(derived)) {
+      return {
+        actions: this.mergeRuleEffectRole(persisted.actions, derived.actions),
+        risks: this.mergeRuleEffectRole(persisted.risks, derived.risks),
+        positions: this.mergeRuleEffectRole(persisted.positions, derived.positions),
+        orchestration: this.mergeRuleEffectRole(persisted.orchestration, derived.orchestration),
+        programs: this.mergeRuleEffectRole(persisted.programs, derived.programs),
+      } satisfies RuleEffectsByRole
+    }
+
+    return this.cloneRuleEffects(derived)
+  }
+
+  private mergeRuleEffectRole(
+    persisted: ReadonlyArray<AtomExpr>,
+    derived: ReadonlyArray<AtomExpr>,
+  ): AtomExpr[] {
+    if (derived.length === 0) return persisted.map(effect => this.cloneAtomExpr(effect))
+    if (persisted.length === 0) return derived.map(effect => this.cloneAtomExpr(effect))
+
+    const byShape = new Map<string, AtomExpr>()
+    const order: string[] = []
+    for (const effect of [...persisted, ...derived]) {
+      const shape = this.stableParamsHash(effect as unknown as Record<string, unknown>)
+      if (!byShape.has(shape)) order.push(shape)
+      byShape.set(shape, effect)
+    }
+    return order.map(shape => this.cloneAtomExpr(byShape.get(shape)!))
+  }
+
+  private cloneRuleEffects(effects: RuleEffects): RuleEffects {
+    if (Array.isArray(effects)) {
+      return effects.map(effect => this.cloneAtomExpr(effect))
+    }
+    const typedEffects = effects as RuleEffectsByRole
+    return {
+      actions: typedEffects.actions.map(effect => this.cloneAtomExpr(effect)),
+      risks: typedEffects.risks.map(effect => this.cloneAtomExpr(effect)),
+      positions: typedEffects.positions.map(effect => this.cloneAtomExpr(effect)),
+      orchestration: typedEffects.orchestration.map(effect => this.cloneAtomExpr(effect)),
+      programs: typedEffects.programs.map(effect => this.cloneAtomExpr(effect)),
+    } satisfies RuleEffectsByRole
+  }
+
+  private cloneAtomExpr(effect: AtomExpr): AtomExpr {
+    return structuredClone(effect) as AtomExpr
   }
 
   private computeAtomIdentityKey(entry: AtomLikeEntry): string {
