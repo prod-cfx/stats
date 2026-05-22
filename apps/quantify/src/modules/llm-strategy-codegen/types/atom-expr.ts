@@ -144,6 +144,16 @@ export interface RuleEffects {
   readonly programs: ReadonlyArray<AtomExpr>
 }
 
+const RULE_EFFECT_ROLE_KEYS = [
+  'actions',
+  'risks',
+  'positions',
+  'orchestration',
+  'programs',
+] as const satisfies ReadonlyArray<keyof RuleEffects>
+
+type RuleEffectRole = typeof RULE_EFFECT_ROLE_KEYS[number]
+
 export interface SemanticRule {
   readonly id: string
   readonly phase: SemanticRulePhase
@@ -162,6 +172,20 @@ export const ruleEffectsSchema = z.object({
   orchestration: z.array(atomExprSchema),
   programs: z.array(atomExprSchema),
 })
+
+function emptyMutableRuleEffects(): Record<RuleEffectRole, AtomExpr[]> {
+  return {
+    actions: [],
+    risks: [],
+    positions: [],
+    orchestration: [],
+    programs: [],
+  }
+}
+
+function isRuleEffectRole(value: string): value is RuleEffectRole {
+  return (RULE_EFFECT_ROLE_KEYS as readonly string[]).includes(value)
+}
 
 export const semanticRuleSchema = z.object({
   id: z.string().min(1),
@@ -532,7 +556,7 @@ export function gracefulParseSemanticRule(input: unknown): GracefulParseSemantic
   const obj = input as Record<string, unknown>
   const headerSchema = z.object({
     id: z.string().min(1),
-    phase: z.enum(['entry', 'exit', 'gate']),
+    phase: z.enum(['entry', 'exit', 'gate', 'program']),
     sideScope: z.enum(['long', 'short', 'both']),
   })
   const headerParsed = headerSchema.safeParse({ id: obj.id, phase: obj.phase, sideScope: obj.sideScope })
@@ -555,11 +579,18 @@ export function gracefulParseSemanticRule(input: unknown): GracefulParseSemantic
       : 'condition: pruned to empty'
     return { ok: false, errorPath }
   }
-  const rawEffects = Array.isArray(obj.effects) ? obj.effects : []
-  const effects: AtomExpr[] = []
-  for (let i = 0; i < rawEffects.length; i++) {
-    const pruned = pruneAtomExprWithErrors(rawEffects[i], `effects[${i}]`)
-    if (pruned.result) effects.push(pruned.result)
+  const rawEffects = obj.effects && typeof obj.effects === 'object' && !Array.isArray(obj.effects)
+    ? obj.effects as Partial<Record<RuleEffectRole, unknown>>
+    : {}
+  const effects = emptyMutableRuleEffects()
+  for (const role of RULE_EFFECT_ROLE_KEYS) {
+    const rawRoleEffects = Array.isArray(rawEffects[role]) ? rawEffects[role] : []
+    const prunedRoleEffects: AtomExpr[] = []
+    for (let i = 0; i < rawRoleEffects.length; i++) {
+      const pruned = pruneAtomExprWithErrors(rawRoleEffects[i], `effects.${role}[${i}]`)
+      if (pruned.result) prunedRoleEffects.push(pruned.result)
+    }
+    effects[role] = prunedRoleEffects
   }
   return {
     ok: true,
@@ -807,6 +838,35 @@ function applyAtomMutator(
   }
 }
 
+function locateFlattenedEffect(
+  effects: RuleEffects,
+  targetIndex: number,
+): { role: RuleEffectRole, index: number, effect: AtomExpr } | null {
+  if (targetIndex < 0) return null
+  let offset = 0
+  for (const role of RULE_EFFECT_ROLE_KEYS) {
+    const roleEffects = effects[role]
+    if (targetIndex < offset + roleEffects.length) {
+      const index = targetIndex - offset
+      return { role, index, effect: roleEffects[index] }
+    }
+    offset += roleEffects.length
+  }
+  return null
+}
+
+function replaceEffectAtRoleIndex(
+  effects: RuleEffects,
+  role: RuleEffectRole,
+  index: number,
+  effect: AtomExpr,
+): RuleEffects {
+  return {
+    ...effects,
+    [role]: effects[role].map((current, currentIndex) => (currentIndex === index ? effect : current)),
+  }
+}
+
 /**
  * Issue #1493：定位 rule[ruleId] 对应的 atom 叶子，应用 mutator，不可变重建子树。
  *
@@ -838,20 +898,46 @@ export function updateRuleAtomParams(
     const newCondition = applyAtomMutator(target.condition, segments.slice(1), mutator, ruleId, conditionPath)
     newRule = { ...target, condition: newCondition }
   }
-  else if (head.key === 'effects' && head.index !== undefined) {
-    const effIdx = head.index
-    if (effIdx < 0 || effIdx >= target.effects.length) {
-      throw new Error(
-        `updateRuleAtomParams: path "${conditionPath}" effects index ${effIdx} out of range in rule "${ruleId}"`,
-      )
+  else if (head.key === 'effects') {
+    if (head.index !== undefined) {
+      const effIdx = head.index
+      const located = locateFlattenedEffect(target.effects, effIdx)
+      if (!located) {
+        throw new Error(
+          `updateRuleAtomParams: path "${conditionPath}" effects index ${effIdx} out of range in rule "${ruleId}"`,
+        )
+      }
+      const newEffect = applyAtomMutator(located.effect, segments.slice(1), mutator, ruleId, conditionPath)
+      newRule = {
+        ...target,
+        effects: replaceEffectAtRoleIndex(target.effects, located.role, located.index, newEffect),
+      }
     }
-    const newEffect = applyAtomMutator(target.effects[effIdx], segments.slice(1), mutator, ruleId, conditionPath)
-    const newEffects = target.effects.map((e, i) => (i === effIdx ? newEffect : e))
-    newRule = { ...target, effects: newEffects }
+    else {
+      const [roleSeg, ...afterRole] = segments.slice(1)
+      if (!roleSeg || !isRuleEffectRole(roleSeg.key) || roleSeg.index === undefined) {
+        throw new Error(
+          `updateRuleAtomParams: path "${conditionPath}" not found in rule "${ruleId}" (expected to start with "condition", "effects[N]", or "effects.<role>[N]")`,
+        )
+      }
+      const role = roleSeg.key
+      const effIdx = roleSeg.index
+      const roleEffects = target.effects[role]
+      if (effIdx < 0 || effIdx >= roleEffects.length) {
+        throw new Error(
+          `updateRuleAtomParams: path "${conditionPath}" effects.${role} index ${effIdx} out of range in rule "${ruleId}"`,
+        )
+      }
+      const newEffect = applyAtomMutator(roleEffects[effIdx], afterRole, mutator, ruleId, conditionPath)
+      newRule = {
+        ...target,
+        effects: replaceEffectAtRoleIndex(target.effects, role, effIdx, newEffect),
+      }
+    }
   }
   else {
     throw new Error(
-      `updateRuleAtomParams: path "${conditionPath}" not found in rule "${ruleId}" (expected to start with "condition" or "effects[N]")`,
+      `updateRuleAtomParams: path "${conditionPath}" not found in rule "${ruleId}" (expected to start with "condition", "effects[N]", or "effects.<role>[N]")`,
     )
   }
   // 其它 rule 保持原引用，仅替换命中 rule
