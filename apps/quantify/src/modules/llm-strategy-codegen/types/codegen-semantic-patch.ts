@@ -1,4 +1,5 @@
 import type { CodegenContextSlotPatchValue } from './market-instrument-symbol'
+import type { SemanticRulePhase } from './atom-expr'
 import type { SemanticAtomSupportMetadata } from './semantic-atom-support'
 import type {
   SemanticAtomContract,
@@ -34,6 +35,8 @@ export type CodegenSemanticTriggerParams = Record<string, unknown> & {
   expression?: SemanticExpression
 }
 
+export type CodegenSemanticPatchPhase = SemanticRulePhase | 'risk'
+
 export interface CodegenSemanticNodeEnvelope {
   id?: string
   status?: SemanticNodeStatus
@@ -55,21 +58,21 @@ export interface CodegenSemanticPatch {
   rules?: import('./atom-expr').SemanticRule[]
   atoms?: Array<CodegenSemanticNodeEnvelope & {
     key: string
-    phase?: 'entry' | 'exit' | 'risk' | 'gate'
+    phase?: CodegenSemanticPatchPhase
     sideScope?: 'long' | 'short' | 'both'
     params?: Record<string, unknown>
     contracts?: SemanticAtomContract[]
   }>
   triggers?: Array<CodegenSemanticNodeEnvelope & {
     key: string
-    phase: 'entry' | 'exit' | 'risk' | 'gate'
+    phase: CodegenSemanticPatchPhase
     sideScope?: 'long' | 'short' | 'both'
     params?: CodegenSemanticTriggerParams
     contracts?: SemanticAtomContract[]
   }>
   actions?: Array<CodegenSemanticNodeEnvelope & {
     key: string
-    phase?: 'entry' | 'exit' | 'risk' | 'gate'
+    phase?: CodegenSemanticPatchPhase
     params?: Record<string, unknown>
     contracts?: SemanticAtomContract[]
   }>

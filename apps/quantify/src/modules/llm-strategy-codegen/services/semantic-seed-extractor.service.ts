@@ -13,6 +13,7 @@ import type {
   SemanticRiskBasis,
   SemanticRiskBasisSource,
   SemanticSlotState,
+  SemanticTriggerState,
 } from '../types/semantic-state'
 import type { MarketInstrumentSymbolResolution } from '../types/market-instrument-symbol'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
@@ -24,6 +25,7 @@ import { SemanticFrameNormalizerService } from './semantic-frame-normalizer.serv
 import { buildTriggerCombinationContract } from './semantic-state-normalization'
 
 type SeedTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
+type SeedCombinationTrigger = SeedTrigger & { phase: SemanticTriggerState['phase'] }
 type SeedAction = NonNullable<CodegenSemanticPatch['actions']>[number]
 type SeedRisk = NonNullable<CodegenSemanticPatch['risk']>[number]
 type SeedContextSlots = NonNullable<CodegenSemanticPatch['contextSlots']>
@@ -757,12 +759,17 @@ export class SemanticSeedExtractorService {
     trigger: SeedTrigger,
     input: TriggerCombinationContractInput,
   ): SeedTrigger {
+    if (!this.isTriggerCombinationTrigger(trigger)) {
+      return trigger
+    }
+    const combinationTrigger: SeedCombinationTrigger = trigger
+
     if (trigger.contracts?.some(contract => this.isTriggerCombinationLikeContract(contract))) {
       return {
         ...trigger,
         contracts: trigger.contracts.map(contract =>
           this.isTriggerCombinationLikeContract(contract)
-            ? this.upgradeTriggerCombinationContract(trigger, contract, input)
+            ? this.upgradeTriggerCombinationContract(combinationTrigger, contract, input)
             : contract,
         ),
       }
@@ -782,7 +789,7 @@ export class SemanticSeedExtractorService {
   }
 
   private upgradeTriggerCombinationContract(
-    trigger: SeedTrigger,
+    trigger: SeedCombinationTrigger,
     contract: SemanticAtomContract,
     input: TriggerCombinationContractInput,
   ): SemanticAtomContract {
@@ -825,6 +832,10 @@ export class SemanticSeedExtractorService {
     )
 
     return hasMa100Breakdown && hasMacdDeathCross
+  }
+
+  private isTriggerCombinationTrigger(trigger: SeedTrigger): trigger is SeedCombinationTrigger {
+    return trigger.phase === 'entry' || trigger.phase === 'exit' || trigger.phase === 'risk' || trigger.phase === 'gate'
   }
 
   private readTriggerCombinationJoin(params: Record<string, unknown>): 'AND' | 'OR' | null {

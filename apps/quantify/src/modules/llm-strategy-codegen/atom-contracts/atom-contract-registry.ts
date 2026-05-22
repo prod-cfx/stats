@@ -3602,7 +3602,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       phraseHints: {
         triggers: [{
           keywords: ['网格', 'grid 区间', '双向网格', '上下边界', '停止', '撤销'],
-          mustOutput: '单叶子 rule（phase=program）condition=grid.range_rebalance + sideMode + breakoutAction="stop|pause|continue"；不需要额外的 entry trigger，也不需要 protective_exit；grid 自身即是连续入场源 + 出场覆盖。',
+          mustOutput: '单叶子 rule（phase=program）condition=grid.range_rebalance + sideMode + breakoutAction="stop|continue"；不需要额外的 entry trigger，也不需要 protective_exit；grid 自身即是连续入场源 + 出场覆盖。',
         }],
       },
       // Issue #1409 — open slot 澄清答复 golden 集

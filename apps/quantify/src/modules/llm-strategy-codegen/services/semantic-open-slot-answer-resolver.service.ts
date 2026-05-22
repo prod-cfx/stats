@@ -573,7 +573,7 @@ function mergeFragmentPatch(
 function shouldMergeFragmentTrigger(
   trigger: FragmentTrigger,
   fulfilledPhases: ReadonlySet<FulfilledTriggerPhase>,
-): boolean {
+): trigger is FragmentTrigger & { phase: SemanticTriggerState['phase'] } {
   if (isFulfilledTriggerPhase(trigger.phase)) {
     return fulfilledPhases.has(trigger.phase)
   }
