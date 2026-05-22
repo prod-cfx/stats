@@ -8,7 +8,7 @@ const { useState, useEffect, useMemo, useCallback } = React;
 const TAB_SCREENS = [
   { k: 'ai',     label: 'AI 量化',  tab: 'ai',     render: () => <ScreenAIChat/> },
   { k: 'market', label: '行情',     tab: 'market', render: () => <ScreenTickers/> },
-  { k: 'strat',  label: '策略',     tab: 'strat',  render: () => <ScreenMarket/> },
+  { k: 'strategy', label: '策略',   tab: 'strategy', render: () => <ScreenStrategy/> },
   { k: 'whale',  label: '巨鲸',     tab: 'whale',  render: () => <ScreenWhale/> },
   { k: 'me',     label: '我的',     tab: 'me',     render: ({ theme, accent }) => <ScreenAccount/> },
 ];
@@ -26,7 +26,7 @@ window.MTabBar = function NavTabBar({ active = 'ai' }) {
   const tabs = [
     {k:'ai',     label:'AI 量化', icon:ICONS.ai},
     {k:'market', label:'行情',    icon:ICONS.market},
-    {k:'strat',  label:'策略',    icon:ICONS.strat},
+    {k:'strategy', label:'策略',  icon:ICONS.strategy},
     {k:'whale',  label:'巨鲸',    icon:ICONS.whale},
     {k:'me',     label:'我的',    icon:ICONS.me},
   ];
