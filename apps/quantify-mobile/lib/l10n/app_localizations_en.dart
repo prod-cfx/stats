@@ -718,16 +718,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get meApiFormPermissionSection => 'Authorized Permissions';
 
   @override
-  String get meApiFormPermSpotRead => 'Spot Read';
+  String get meApiFormPermAccountRead => 'Read account & positions';
 
   @override
-  String get meApiFormPermSpotTrade => 'Spot Trade';
+  String get meApiFormPermSpotOrder => 'Spot Order';
 
   @override
-  String get meApiFormPermFuturesRead => 'Futures Read';
-
-  @override
-  String get meApiFormPermFuturesTrade => 'Futures Trade';
+  String get meApiFormPermFuturesOrder => 'Futures Order';
 
   @override
   String get meApiFormPermRequired => 'Required';
@@ -754,15 +751,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get meApiFormSaveButton => 'Verify & Save';
-
-  @override
-  String get meApiFormTestButton => 'Test Connection';
-
-  @override
-  String get meApiFormConnectionOk => 'Connection successful';
-
-  @override
-  String get meApiFormConnectionFailed => 'Connection failed';
 
   @override
   String get meApiFormDefaultLabel => 'Default';

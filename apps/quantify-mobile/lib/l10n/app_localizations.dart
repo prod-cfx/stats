@@ -1454,29 +1454,23 @@ abstract class AppLocalizations {
   /// **'授权权限'**
   String get meApiFormPermissionSection;
 
-  /// No description provided for @meApiFormPermSpotRead.
+  /// No description provided for @meApiFormPermAccountRead.
   ///
   /// In zh, this message translates to:
-  /// **'现货读'**
-  String get meApiFormPermSpotRead;
+  /// **'读取账户与持仓'**
+  String get meApiFormPermAccountRead;
 
-  /// No description provided for @meApiFormPermSpotTrade.
+  /// No description provided for @meApiFormPermSpotOrder.
   ///
   /// In zh, this message translates to:
-  /// **'现货交易'**
-  String get meApiFormPermSpotTrade;
+  /// **'现货下单'**
+  String get meApiFormPermSpotOrder;
 
-  /// No description provided for @meApiFormPermFuturesRead.
+  /// No description provided for @meApiFormPermFuturesOrder.
   ///
   /// In zh, this message translates to:
-  /// **'合约读'**
-  String get meApiFormPermFuturesRead;
-
-  /// No description provided for @meApiFormPermFuturesTrade.
-  ///
-  /// In zh, this message translates to:
-  /// **'合约交易'**
-  String get meApiFormPermFuturesTrade;
+  /// **'合约下单'**
+  String get meApiFormPermFuturesOrder;
 
   /// No description provided for @meApiFormPermRequired.
   ///
@@ -1525,24 +1519,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'验证并保存'**
   String get meApiFormSaveButton;
-
-  /// No description provided for @meApiFormTestButton.
-  ///
-  /// In zh, this message translates to:
-  /// **'测试连接'**
-  String get meApiFormTestButton;
-
-  /// No description provided for @meApiFormConnectionOk.
-  ///
-  /// In zh, this message translates to:
-  /// **'连接成功'**
-  String get meApiFormConnectionOk;
-
-  /// No description provided for @meApiFormConnectionFailed.
-  ///
-  /// In zh, this message translates to:
-  /// **'连接失败'**
-  String get meApiFormConnectionFailed;
 
   /// No description provided for @meApiFormDefaultLabel.
   ///

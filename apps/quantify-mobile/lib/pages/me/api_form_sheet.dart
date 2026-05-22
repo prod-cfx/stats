@@ -43,7 +43,6 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
   final TextEditingController _label = TextEditingController();
 
   bool _showSecret = false;
-  bool _testing = false;
   bool _saving = false;
 
   @override
@@ -65,22 +64,6 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
     if (v == null || v.isEmpty) return null; // 可选
     if (v.length > 30) return AppLocalizations.of(context).meApiFormNoteTooLong;
     return null;
-  }
-
-  Future<void> _testConnection() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-    setState(() => _testing = true);
-    try {
-      final ApiConnectionTester tester =
-          ref.read(apiConnectionTesterProvider);
-      final bool ok = await tester();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ok ? AppLocalizations.of(context).meApiFormConnectionOk : AppLocalizations.of(context).meApiFormConnectionFailed)),
-      );
-    } finally {
-      if (mounted) setState(() => _testing = false);
-    }
   }
 
   Future<void> _save() async {
@@ -233,28 +216,6 @@ class _ApiFormSheetState extends ConsumerState<ApiFormSheet> {
                       _Label(text: l10n.meApiFormPermissionSection),
                       const SizedBox(height: 8),
                       _PermissionList(l10n: l10n),
-                      const SizedBox(height: 18),
-                      OutlinedButton(
-                        onPressed: _testing ? null : _testConnection,
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(44),
-                          side: BorderSide(color: c.border),
-                          shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(QzRadii.input),
-                          ),
-                          foregroundColor: c.text,
-                        ),
-                        child: _testing
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : Text(l10n.meApiFormTestButton),
-                      ),
                     ],
                   ),
                 ),
@@ -389,8 +350,8 @@ class _ExchangeBadge extends StatelessWidget {
 }
 
 /// 「授权权限」区块（原型 `m-screens-4.jsx:1146-1152`）。
-/// 4 行权限说明（现货读/现货交易/合约读/合约交易）+ 1 行红色禁止行
-/// （提币 必须关闭）。所有值为静态文案，不接 API。
+/// 3 行允许权限（读取账户与持仓/现货下单/合约下单）+ 1 行红色禁止行
+/// （提币 必须关闭），合计 4 行。所有值为静态文案，不接 API。
 class _PermissionList extends StatelessWidget {
   const _PermissionList({required this.l10n});
   final AppLocalizations l10n;
@@ -400,25 +361,19 @@ class _PermissionList extends StatelessWidget {
     return Column(
       children: <Widget>[
         _PermissionRow(
-          label: l10n.meApiFormPermSpotRead,
+          label: l10n.meApiFormPermAccountRead,
           value: l10n.meApiFormPermRequired,
           tone: _PermTone.ok,
         ),
         const SizedBox(height: 8),
         _PermissionRow(
-          label: l10n.meApiFormPermSpotTrade,
+          label: l10n.meApiFormPermSpotOrder,
           value: l10n.meApiFormPermRequired,
           tone: _PermTone.ok,
         ),
         const SizedBox(height: 8),
         _PermissionRow(
-          label: l10n.meApiFormPermFuturesRead,
-          value: l10n.meApiFormPermOptional,
-          tone: _PermTone.ok,
-        ),
-        const SizedBox(height: 8),
-        _PermissionRow(
-          label: l10n.meApiFormPermFuturesTrade,
+          label: l10n.meApiFormPermFuturesOrder,
           value: l10n.meApiFormPermOptional,
           tone: _PermTone.ok,
         ),

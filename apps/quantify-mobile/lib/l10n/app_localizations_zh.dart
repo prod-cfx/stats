@@ -706,16 +706,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get meApiFormPermissionSection => '授权权限';
 
   @override
-  String get meApiFormPermSpotRead => '现货读';
+  String get meApiFormPermAccountRead => '读取账户与持仓';
 
   @override
-  String get meApiFormPermSpotTrade => '现货交易';
+  String get meApiFormPermSpotOrder => '现货下单';
 
   @override
-  String get meApiFormPermFuturesRead => '合约读';
-
-  @override
-  String get meApiFormPermFuturesTrade => '合约交易';
+  String get meApiFormPermFuturesOrder => '合约下单';
 
   @override
   String get meApiFormPermRequired => '必需';
@@ -742,15 +739,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get meApiFormSaveButton => '验证并保存';
-
-  @override
-  String get meApiFormTestButton => '测试连接';
-
-  @override
-  String get meApiFormConnectionOk => '连接成功';
-
-  @override
-  String get meApiFormConnectionFailed => '连接失败';
 
   @override
   String get meApiFormDefaultLabel => '默认';

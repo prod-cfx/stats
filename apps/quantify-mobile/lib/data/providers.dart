@@ -1,7 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'dart:math';
-
 import '../theme/theme_notifier.dart' show sharedPreferencesProvider;
 import 'models/account_models.dart';
 import 'models/api_key_models.dart';
@@ -125,23 +123,6 @@ final FutureProvider<AccountInfo> accountInfoProvider =
 final FutureProvider<List<ExchangeApiKey>> apiKeysProvider =
     FutureProvider<List<ExchangeApiKey>>((Ref ref) async {
   return ref.watch(apiKeyRepositoryProvider).listKeys();
-});
-
-/// API 配置表单的「测试连接」回调签名。
-typedef ApiConnectionTester = Future<bool> Function();
-
-/// 默认实现：1s loading 后随机成功/失败。
-///
-/// Random 在 provider 创建时实例化，复用同一个种子；widget test 可通过
-/// `apiConnectionTesterProvider.overrideWithValue(() async => true)` 注入
-/// 固定结果以避免 fake clock 与 Future.delayed 的同步问题。
-final Provider<ApiConnectionTester> apiConnectionTesterProvider =
-    Provider<ApiConnectionTester>((Ref ref) {
-  final Random r = Random();
-  return () async {
-    await Future<void>.delayed(const Duration(seconds: 1));
-    return r.nextBool();
-  };
 });
 
 final Provider<StrategySubscriptionPersistence>
