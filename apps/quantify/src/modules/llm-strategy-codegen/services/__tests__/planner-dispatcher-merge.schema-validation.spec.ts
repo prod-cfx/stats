@@ -55,6 +55,67 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
     }
   })
 
+  it('rejects rules[] missing effects (rule_shape_invalid)', () => {
+    const patch = {
+      rules: [
+        {
+          id: 'r1',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
+          evidence: { text: 'BOLL 下轨开多' },
+        },
+      ],
+    }
+    const result = svc.validatePlannerSemanticPatch(patch, userMessage)
+    expect(result.ok).toBe(false)
+    if (result.ok === false) {
+      expect(result.reasons).toContain('rule_shape_invalid')
+    }
+  })
+
+  it('rejects typed effects object missing a required role (rule_shape_invalid)', () => {
+    const patch = {
+      rules: [
+        {
+          id: 'r1',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+            risks: [],
+            positions: [],
+            orchestration: [],
+          },
+          evidence: { text: 'BOLL 下轨开多' },
+        },
+      ],
+    }
+    const result = svc.validatePlannerSemanticPatch(patch, userMessage)
+    expect(result.ok).toBe(false)
+    if (result.ok === false) {
+      expect(result.reasons).toContain('rule_shape_invalid')
+    }
+  })
+
+  it('accepts legacy array effects only through explicit compatibility conversion', () => {
+    const patch = {
+      rules: [
+        {
+          id: 'r1',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          evidence: { text: 'BOLL 下轨开多' },
+        },
+      ],
+    }
+    const result = svc.validatePlannerSemanticPatch(patch, userMessage)
+    expect(result.ok).toBe(true)
+  })
+
   it('rejects rules[] with rule missing evidence.text (evidence_text_missing)', () => {
     const patch = {
       rules: [

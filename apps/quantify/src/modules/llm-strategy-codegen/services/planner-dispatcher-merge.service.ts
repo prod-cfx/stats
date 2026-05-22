@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
-import { collectAtomLeaves, gracefulParseSemanticRule, listRuleEffects, mapRuleEffectsByRole, type AtomExpr, type AtomExprAtom, type SemanticRule } from '../types/atom-expr'
+import { collectAtomLeaves, listRuleEffects, mapRuleEffectsByRole, semanticRuleSchema, type AtomExpr, type AtomExprAtom, type SemanticRule } from '../types/atom-expr'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 
 /**
@@ -181,13 +181,16 @@ export class PlannerDispatcherMergeService {
         continue
       }
 
-      const parsed = gracefulParseSemanticRule(rule)
-      if (parsed.ok === false) {
+      const ruleForHardParse = this.normalizeLegacyArrayEffectsForPlannerValidation(rule)
+      const parsed = semanticRuleSchema.safeParse(ruleForHardParse)
+      if (!parsed.success) {
         reasons.add('rule_shape_invalid')
-        detailNotes.push(`rules[${i}] 结构非法（${parsed.errorPath}）；rule 必须含 id / phase / sideScope / condition / effects`)
+        const issuePath = parsed.error.issues[0]?.path?.join('.') ?? '<root>'
+        const code = parsed.error.issues[0]?.code ?? 'invalid'
+        detailNotes.push(`rules[${i}] 结构非法（${issuePath}: ${code}）；rule 必须含 id / phase / sideScope / condition / effects`)
         continue
       }
-      const semRule = parsed.rule as SemanticRule
+      const semRule = parsed.data as SemanticRule
 
       // rule.evidence.text
       const ruleEvidence = (rule as { evidence?: { text?: unknown } }).evidence
@@ -228,6 +231,22 @@ export class PlannerDispatcherMergeService {
    */
   emitPlannerSchemaRejectMetric(stage: PlannerSchemaRejectStage, value = 1): void {
     this.logger.warn(`metric=planner_schema_reject_total stage=${stage} value=${value}`)
+  }
+
+  private normalizeLegacyArrayEffectsForPlannerValidation(rule: Record<string, unknown>): Record<string, unknown> {
+    if (!Array.isArray(rule.effects)) return rule
+    return {
+      ...rule,
+      effects: {
+        // Stage 1 compatibility only: legacy planner effects arrays are made explicit
+        // as actions before hard schema parse. Missing/partial typed effects still fail.
+        actions: rule.effects,
+        risks: [],
+        positions: [],
+        orchestration: [],
+        programs: [],
+      },
+    }
   }
 
   private buildRejectResult(
