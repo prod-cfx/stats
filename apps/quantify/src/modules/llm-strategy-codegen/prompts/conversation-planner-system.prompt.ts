@@ -11,8 +11,7 @@ import { readFlatTriggers } from '../types/semantic-state-flat-readers'
  *
  *   semanticPatch.rules[] = [{ id, phase, sideScope, condition: <AtomExpr>, effects: <RuleEffects> }]
  *
- * 五桶原子（trigger / action / risk / positionConstraint / orchestration / program）作为
- * AtomExpr 叶子参与任意组合（AtomExpr 定义见 types/atom-expr.ts）。
+ * registry 原子作为 AtomExpr 叶子参与 condition / typed RuleEffects。
  *
  * 同步保留：
  *   - ATOM_CONTRACT_REGISTRY 投影成 LLM 词典（catalog）—— LLM 仍需从词典中挑 atom key
@@ -35,7 +34,7 @@ const ADVISORY_CONSTRAINTS: readonly string[] = [
   '不得泛化已锁定规则，不得把精确规则回退为模板化摘要。',
   '已有 active semantic state 时，默认按增量修改处理；只有用户明确要求替换整个策略时才允许 replacement，否则不得重置已有语义。',
   '输出必须是 semanticPatch，而不是 checklist patch。',
-  '输出表达式树 patch（rules[]），按 condition + effects 表达每条策略规则；五桶原子（trigger / action / risk / 仓位 / context）作为 AtomExpr 叶子参与任意 AND/OR/NOT/SEQUENCE 嵌套，不要输出 checklist。',
+  '输出表达式树 patch（rules[]）；legacy 来源 trigger / action / risk / 仓位 / context 只能映射到 condition + typed effects，不要输出 checklist。',
   'semanticPatch 只表达当前消息涉及的增量语义，不要臆造、补写或弱化任何规则。',
   'semanticPatch.rules[].effects 内的 action atom 必须携带 contracts/capabilities；不得输出缺少执行合约的裸 action。',
   '网格执行 action（如 place_limit_grid、action.grid_ladder、grid_ladder）必须表达 order_program/maintain/limit_ladder 合约，而不是让用户补充内部执行合约。',
@@ -82,13 +81,10 @@ const JSON_SHAPE_BLOCK: readonly string[] = [
 ]
 
 const RULE_EFFECTS_CONTRACT: readonly string[] = [
-  'Typed RuleEffects 合约（必须遵守）：',
-  'semanticPatch.rules[] 是唯一策略语义输出；禁止输出 atoms/triggers/actions/risk/position/orchestration 旧字段。',
-  'rules[].condition = 原 triggers，必须保留 AND / OR / NOT / SEQUENCE 结构。',
-  'rules[].effects 必须是对象：{ actions: [], risks: [], positions: [], orchestration: [], programs: [] }。',
-  'effects.actions = 原 action；effects.risks = 原 risk；effects.positions = 原 positionConstraint；effects.orchestration = 原 orchestration；effects.programs = grid / DCA / TWAP / martingale / webhook/event listener 等执行程序。',
-  'program.* 执行程序 atom 必须放入 effects.programs；DCA/webhook 等若 registry bucket 不是 program.*，仍按 typed role gate 放入对应 effects.actions / effects.risks / effects.positions / effects.orchestration，但整条规则可继续使用 phase=program。',
-  'phase 可为 entry / exit / gate / program。网格、DCA、TWAP、自适应网格、webhook/event listener 这类程序型策略必须使用 phase=program。',
+  'RuleEffects: semanticPatch.rules[] 是唯一策略语义输出；禁 atoms/triggers/actions/risk/position/orchestration 顶层旧字段。',
+  'condition = 原 triggers，保留 AND/OR/NOT/SEQUENCE；effects={actions,risks,positions,orchestration,programs}。',
+  'actions/risk/positionConstraint/orchestration/program.* 分别入 effects.actions/risks/positions/orchestration/programs。',
+  '程序型策略（grid/DCA/TWAP/自适应网格/webhook/event listener）用 phase=program；program.* 必在 effects.programs。',
 ]
 
 const ATOM_EXPR_BNF: readonly string[] = [
@@ -109,58 +105,6 @@ const ATOM_EXPR_BNF: readonly string[] = [
 const NEW_IN_CONTEXT_EXAMPLES: readonly string[] = [
   'In-context 示例（含正/反例；7 类 — 5 类组合形态 + 2 类易错纠正）：',
   '',
-  '【⚠️ 易错纠正 1：连续 N 根 + 下一根放量反弹】用户："BTC 连续跌三根 15 分钟 K 线后，下一根开始放量反弹就买一点"',
-  '  正确（必须）：condition.sequence + nextBarOnly：',
-  '    rules: [{',
-  '      "id": "entry-seq-vol", "phase": "entry", "sideScope": "long",',
-  '      "condition": { "kind": "sequence", "nextBarOnly": true, "steps": [',
-  '        { "kind": "atom", "key": "condition.sequence", "params": { "sequenceKind": "consecutive_body", "count": 3, "direction": "down" } },',
-  '        { "kind": "atom", "key": "volume.threshold", "params": { "mode": "relative_to_sma", "multiplier": 1.5, "refWindow": 20 } }',
-  '      ]},',
-  '      "effects": {',
-  '        "actions": [{ "kind": "atom", "key": "action.open_long", "params": {} }],',
-  '        "risks": [],',
-  '        "positions": [],',
-  '        "orchestration": [],',
-  '        "programs": []',
-  '      },',
-  '      "evidence": { "text": "连续跌三根 15 分钟 K 线后，下一根开始放量反弹就买一点" }',
-  '    }]',
-  '  错误（不要这样）：price.candle_pattern + pattern="consecutive_body" 默认 ≥15 根；丢失"下一根/放量"语义。',
-  '',
-  '【⚠️ 易错纠正 2：布林下轨 AND 成交量 1.5×均量】用户："ETH 15分钟触碰布林带下轨，并且成交量高于过去 20 根均量的 1.5 倍时买入，上轨卖出"',
-  '  正确（必须）：bollinger.touch_lower + volume.threshold(relative_to_sma) AND 组合：',
-  '    rules: [',
-  '      {',
-  '        "id": "entry-boll-vol", "phase": "entry", "sideScope": "long",',
-  '        "condition": { "kind": "and", "children": [',
-  '          { "kind": "atom", "key": "bollinger.touch_lower", "params": { "period": 20, "stdDev": 2, "timeframe": "15m" } },',
-  '          { "kind": "atom", "key": "volume.threshold", "params": { "mode": "relative_to_sma", "multiplier": 1.5, "refWindow": 20 } }',
-  '        ]},',
-  '        "effects": {',
-  '          "actions": [{ "kind": "atom", "key": "action.open_long", "params": {} }],',
-  '          "risks": [],',
-  '          "positions": [],',
-  '          "orchestration": [],',
-  '          "programs": []',
-  '        },',
-  '        "evidence": { "text": "ETH 15分钟触碰布林带下轨，并且成交量高于过去 20 根均量的 1.5 倍时买入" }',
-  '      },',
-  '      {',
-  '        "id": "exit-boll-upper", "phase": "exit", "sideScope": "long",',
-  '        "condition": { "kind": "atom", "key": "bollinger.touch_upper", "params": { "period": 20, "stdDev": 2, "timeframe": "15m" } },',
-  '        "effects": {',
-  '          "actions": [{ "kind": "atom", "key": "action.close_long", "params": {} }],',
-  '          "risks": [],',
-  '          "positions": [],',
-  '          "orchestration": [],',
-  '          "programs": []',
-  '        },',
-  '        "evidence": { "text": "上轨卖出" }',
-  '      }',
-  '    ]',
-  '  错误（不要这样）：输出 placeholder 占位 atom 或空 rules[]；语义已经清晰，必须输出 rules[]，禁止 fallback。',
-  '',
   '【⚠️ 易错纠正 3：中心价网格】用户："OKX 现货 ETHUSDT、1m 网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT、限价单并相邻网格自动挂反向单；当价格突破上下边界时立即停止并撤销所有未成交订单"',
   '  正确（必须）：program.fixed_grid_gated / grid.range_rebalance 只能用合法数字 params：stepPct/centerOffsetPct 数字 0.4、levelCount/levels 数字 10、perGridSizing 数字 10、sideMode="both"、breakoutAction="stop"；不要输出中文枚举、百分号字符串或 centerOffsetPct=0。',
   '    rules: [{',
@@ -176,24 +120,6 @@ const NEW_IN_CONTEXT_EXAMPLES: readonly string[] = [
   '      "evidence": { "text": "网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT" }',
   '    }]',
   '  错误（不要这样）：condition.params.centerOffsetPct = "上下各0.4%"、breakoutAction="立即停止"、sideMode="双向"、或 rules=[]；这些会触发 params_strict/schema reject。',
-  '',
-  '【⚠️ 易错纠正 4：盈利后加仓】用户："BTC 1h 突破前高开多，盈利 3% 后加仓 50%，最多加 3 层"',
-  '  正确（必须）：加仓动作必须在 effects；condition 不能使用 action.add_position（action bucket 禁止放 condition）。',
-  '    rules: [',
-  '      {',
-  '        "id": "entry-breakout", "phase": "entry", "sideScope": "long",',
-  '        "condition": { "kind": "atom", "key": "breakout.channel_high_break", "params": { "period": 1, "timeframe": "1h" } },',
-  '        "effects": { "actions": [{ "kind": "atom", "key": "action.open_long", "params": {} }], "risks": [], "positions": [], "orchestration": [], "programs": [] },',
-  '        "evidence": { "text": "BTC 1h 突破前高开多" }',
-  '      },',
-  '      {',
-  '        "id": "add-profit", "phase": "entry", "sideScope": "long",',
-  '        "condition": { "kind": "atom", "key": "price.percent_change", "params": { "basis": "entry_avg_price", "direction": "up", "valuePct": 3 } },',
-  '        "effects": { "actions": [{ "kind": "atom", "key": "action.add_position", "params": { "addMode": "profit_pct", "profitThreshold": 3, "sizing": { "kind": "ratio", "value": 0.5, "unit": "ratio" }, "maxLayers": 3 } }], "risks": [], "positions": [], "orchestration": [], "programs": [] },',
-  '        "evidence": { "text": "盈利 3% 后加仓 50%，最多加 3 层" }',
-  '      }',
-  '    ]',
-  '  错误（不要这样）：condition={key:"action.add_position"}；这会触发 condition_leaf_bucket_invalid，然后退到 fallback。',
   '',
   '【单叶子】用户："RSI > 65 卖出"',
   '  rules: [{',
@@ -491,7 +417,7 @@ function buildRegistryDerivedHintSections(): {
     if (!hints) continue
     for (const t of hints.triggers ?? []) {
       triggers.push(`【${t.keywords.join(' / ')}】`)
-      triggers.push(`  → ${normalizeProgramPhaseHint(t.mustOutput)}`)
+      triggers.push(`  → ${t.mustOutput}`)
       triggers.push('')
     }
     for (const ap of hints.antiPatterns ?? []) {
@@ -504,11 +430,6 @@ function buildRegistryDerivedHintSections(): {
     }
   }
   return { triggers, antiPatterns, paramDefaults }
-}
-
-function normalizeProgramPhaseHint(text: string): string {
-  if (!text.includes('grid.range_rebalance') && !text.includes('program.')) return text
-  return text.replaceAll('phase=entry', 'phase=program')
 }
 
 function buildTriggerPhraseHintsSection(): readonly string[] {
@@ -570,14 +491,12 @@ const TERMINAL_RULES: readonly string[] = [
 /** 从 ATOM_CONTRACT_REGISTRY 派生的 atom 词典段（issue #1345 PR1.2 注入，#1395 适配 rules 形态） */
 function formatAtomCatalogSection(locale: 'zh' | 'en'): string[] {
   const registeredKeys = getRegisteredAtomKeys()
-  const phaseEnum = Array.from(new Set([...getPhaseEnum(), 'program']))
-  const atomCatalog = formatAtomCatalogForPrompt(locale)
-    .replace(/(program\.[^\s]+ phase=)entry/g, '$1program')
+  const phaseEnum = getPhaseEnum()
   return [
     `semanticPatch 严格 schema（issue #1395）：rules[] 元素必填 { id, phase, sideScope, condition, effects }；phase ∈ [${phaseEnum.join(', ')}]。`,
     `condition / effects 内的叶子 atom key 必须从下列 ${registeredKeys.length} 个原子枚举中选（禁止自由文本或自创 atom）：`,
     '',
-    atomCatalog,
+    formatAtomCatalogForPrompt(locale),
     '',
     'semanticPatch 字段规范：',
     '- rules[]：每条 { id, phase, sideScope, condition, effects, evidence（{ text: string }，必填，user message 连续原文子串）}',

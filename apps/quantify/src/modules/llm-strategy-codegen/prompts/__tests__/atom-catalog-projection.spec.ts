@@ -63,10 +63,12 @@ describe('atom-catalog-projection (issue #1345 PR1.1)', () => {
       }
     })
 
-    it('fixedPhase 仅在 phaseResolver === fixed-entry/exit/gate 时出现', () => {
+    it('fixedPhase 仅在固定 phase 或 program.* prompt 投影时出现', () => {
       for (const entry of buildAtomCatalogEntries()) {
         const phaseResolver = ATOM_CONTRACT_REGISTRY[entry.key].surface.phaseResolver
-        if (phaseResolver === 'fixed-entry') {
+        if (entry.key.startsWith('program.')) {
+          expect(entry.fixedPhase).toBe('program')
+        } else if (phaseResolver === 'fixed-entry') {
           expect(entry.fixedPhase).toBe('entry')
         } else if (phaseResolver === 'fixed-exit') {
           expect(entry.fixedPhase).toBe('exit')
@@ -169,8 +171,8 @@ describe('atom-catalog-projection (issue #1345 PR1.1)', () => {
       expect([...getRegisteredAtomKeys()].sort()).toEqual([...getAllRegisteredAtomKeys()].sort())
     })
 
-    it('phase enum 是 entry / exit / gate（无 risk — phase 不含 risk，risk 是 bucket）', () => {
-      expect([...getPhaseEnum()]).toEqual(['entry', 'exit', 'gate'])
+    it('phase enum 是 entry / exit / gate / program（无 risk — risk 是 bucket）', () => {
+      expect([...getPhaseEnum()]).toEqual(['entry', 'exit', 'gate', 'program'])
     })
   })
 })

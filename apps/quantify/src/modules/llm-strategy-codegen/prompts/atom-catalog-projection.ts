@@ -6,7 +6,7 @@
  *
  * 设计原则（#1279 第一性原则）：
  *   1) 所有数据从 ATOM_CONTRACT_REGISTRY 动态派生，禁止写死 atom 数量 / key 列表
- *   2) phase 仅暴露全局 enum ['entry','exit','gate']；by-clause-verb 类 atom 由 LLM
+ *   2) phase 仅暴露全局 enum ['entry','exit','gate','program']；by-clause-verb 类 atom 由 LLM
  *      根据用户意图填，fixed-* 类 atom 通过 fixedPhase 提示固定值
  *   3) paramSlots 字段名 + required + kind + enum 紧凑表达，省略 enum 全集以控 token
  *   4) 模块级 memoize：buildAtomCatalogEntries() / formatAtomCatalogForPrompt(locale)
@@ -16,7 +16,7 @@
 import type { AtomContractKey, AtomContractBucket } from '../atom-contracts/atom-contract-types'
 import { ATOM_CONTRACT_REGISTRY, getAllRegisteredAtomKeys } from '../atom-contracts/atom-contract-registry'
 
-const PHASE_ENUM = ['entry', 'exit', 'gate'] as const
+const PHASE_ENUM = ['entry', 'exit', 'gate', 'program'] as const
 export type PromptPhase = typeof PHASE_ENUM[number]
 
 /**
@@ -81,9 +81,11 @@ export function buildAtomCatalogEntries(): readonly AtomCatalogEntry[] {
     const phaseResolver = surface.phaseResolver
     // M5 修复：查表 + 显式类型 narrowing；非字符串字面量（如 { kind: 'fn', fn }）落入
     // undefined 分支是有意行为（LLM 自由派生 phase）；非 fixed-* 字符串字面量同样如此。
-    const fixedPhase: PromptPhase | undefined = typeof phaseResolver === 'string'
-      ? FIXED_PHASE_MAP[phaseResolver]
-      : undefined
+    const fixedPhase: PromptPhase | undefined = key.startsWith('program.')
+      ? 'program'
+      : typeof phaseResolver === 'string'
+        ? FIXED_PHASE_MAP[phaseResolver]
+        : undefined
 
     const paramFields: AtomCatalogParamField[] = Object.entries(surface.paramSlots).map(([name, slot]) => {
       const field: AtomCatalogParamField = {

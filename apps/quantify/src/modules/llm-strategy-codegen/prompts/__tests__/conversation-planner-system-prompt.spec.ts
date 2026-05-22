@@ -77,12 +77,9 @@ describe('conversationPlannerSystemPrompt', () => {
 
   it('does not describe grid program example as entry phase', () => {
     const prompt = buildConversationPlannerSystemPrompt('zh')
-    const gridExampleStart = prompt.indexOf('entry-centered-grid')
-    const gridExampleEnd = prompt.indexOf('错误（不要这样）：condition.params.centerOffsetPct')
-    const gridExample = prompt.slice(gridExampleStart, gridExampleEnd)
+    const gridExample = prompt.match(/entry-centered-grid[\s\S]*?condition\.params\.centerOffsetPct/)?.[0] ?? ''
 
-    expect(gridExampleStart).toBeGreaterThanOrEqual(0)
-    expect(gridExampleEnd).toBeGreaterThan(gridExampleStart)
+    expect(gridExample).not.toBe('')
     expect(gridExample).not.toContain('"phase": "entry"')
     expect(gridExample).toContain('"phase": "program"')
     expect(gridExample).toContain('"programs": [{ "kind": "atom", "key": "program.')
