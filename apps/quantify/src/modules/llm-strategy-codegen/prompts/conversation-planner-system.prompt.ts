@@ -9,14 +9,14 @@ import { readFlatTriggers } from '../types/semantic-state-flat-readers'
  * 旧形态（atoms[]）只能表达「一堆并列叶子」，无法表达 AND / OR / NOT / SEQUENCE，
  * 也无法把 condition 与 effects 显式绑定到同一条 rule 上。新形态：
  *
- *   semanticPatch.rules[] = [{ id, phase, sideScope, condition: <AtomExpr>, effects: <AtomExpr>[] }]
+ *   semanticPatch.rules[] = [{ id, phase, sideScope, condition: <AtomExpr>, effects: <RuleEffects> }]
  *
- * 五桶原子（trigger / action / risk / positionConstraint / orchestration）作为
+ * 五桶原子（trigger / action / risk / positionConstraint / orchestration / program）作为
  * AtomExpr 叶子参与任意组合（AtomExpr 定义见 types/atom-expr.ts）。
  *
  * 同步保留：
  *   - ATOM_CONTRACT_REGISTRY 投影成 LLM 词典（catalog）—— LLM 仍需从词典中挑 atom key
- *   - phase enum 全局 ['entry','exit','gate']
+ *   - phase enum 全局 ['entry','exit','gate','program']
  *
  * 与之前 #1345 PR1.2 / #1364 AC-2 的差异：
  *   - 旧 JSON_SHAPE_BLOCK 里的 atoms[] → 新 rules[]（每条 rule 含 condition + effects）
@@ -62,10 +62,16 @@ const JSON_SHAPE_BLOCK: readonly string[] = [
   '    "rules"?: [',
   '      {',
   '        "id": string,',
-  '        "phase": "entry" | "exit" | "gate",',
+  '        "phase": "entry" | "exit" | "gate" | "program",',
   '        "sideScope": "long" | "short" | "both",',
   '        "condition": <AtomExpr>,',
-  '        "effects": [<AtomExpr>, ...],',
+  '        "effects": {',
+  '          "actions": [<AtomExpr>, ...],',
+  '          "risks": [<AtomExpr>, ...],',
+  '          "positions": [<AtomExpr>, ...],',
+  '          "orchestration": [<AtomExpr>, ...],',
+  '          "programs": [<AtomExpr>, ...]',
+  '        },',
   '        "evidence": { "text": string }   // 必填：当前 user message 的连续原文子串（issue #1445 / #1550 硬校验）',
   '      }',
   '    ],',
@@ -76,8 +82,19 @@ const JSON_SHAPE_BLOCK: readonly string[] = [
   '⛔ rules[].evidence.text 硬校验字段（issue #1445 / #1550）：每条 rule 必须提供 evidence.text，必须是当前 user message 的**连续原文子串**（substring）；缺失或非子串 → schema reject 触发单轮 retry。',
 ]
 
+const RULE_EFFECTS_CONTRACT: readonly string[] = [
+  'Typed RuleEffects 合约（必须遵守）：',
+  'semanticPatch.rules[] 是唯一策略语义输出；禁止输出 atoms/triggers/actions/risk/position/orchestration 旧字段。',
+  'rules[].condition = 原 triggers，必须保留 AND / OR / NOT / SEQUENCE 结构。',
+  'rules[].effects 必须是对象：{ actions: [], risks: [], positions: [], orchestration: [], programs: [] }。',
+  'effects.actions = 原 action；effects.risks = 原 risk；effects.positions = 原 positionConstraint；effects.orchestration = 原 orchestration；effects.programs = grid / DCA / TWAP / martingale / webhook/event listener 等执行程序。',
+  'program.* 执行程序 atom 必须放入 effects.programs；DCA/webhook 等若 registry bucket 不是 program.*，仍按 typed role gate 放入对应 effects.actions / effects.risks / effects.positions / effects.orchestration，但整条规则可继续使用 phase=program。',
+  'phase 可为 entry / exit / gate / program。网格、DCA、TWAP、自适应网格、webhook/event listener 这类程序型策略必须使用 phase=program。',
+  '下方历史示例若出现 effects 数组，只作语义结构参考；最终输出必须改写为 RuleEffects 对象。',
+]
+
 const ATOM_EXPR_BNF: readonly string[] = [
-  'AtomExpr 递归类型（用于 condition 和 effects 内的每个元素）：',
+  'AtomExpr 递归类型（用于 condition 和 rules[].effects 各桶内的每个元素）：',
   '  <AtomExpr> ::=',
   '    | { "kind": "atom",     "key": <atomKey>, "params": <object>, "sideScope"?: "long"|"short"|"both" }',
   '    | { "kind": "and",      "children": [<AtomExpr>, <AtomExpr>, ...] }    // ≥2 子节点，全部满足',
@@ -87,7 +104,7 @@ const ATOM_EXPR_BNF: readonly string[] = [
   '                            "withinBars"?: number, "nextBarOnly"?: boolean }  // 顺序敏感',
   '',
   'condition 内叶子 atom 必须从 trigger / risk(谓词形态) / orchestration-gate 桶取（roles 含 predicate）。',
-  'effects 内叶子 atom 必须从 action / risk(副作用) / positionConstraint / orchestration-effect 桶取（roles 含 effect）。',
+  'effects.actions / effects.risks / effects.positions / effects.orchestration / effects.programs 内叶子 atom 必须按 registry bucket 与 roles(effect) 分桶。',
   '单 atom 条件 = 单叶子 { "kind": "atom", "key": "...", "params": {...} }，不需要 and/or 包装。',
 ]
 
@@ -465,7 +482,7 @@ const TERMINAL_RULES: readonly string[] = [
 /** 从 ATOM_CONTRACT_REGISTRY 派生的 atom 词典段（issue #1345 PR1.2 注入，#1395 适配 rules 形态） */
 function formatAtomCatalogSection(locale: 'zh' | 'en'): string[] {
   const registeredKeys = getRegisteredAtomKeys()
-  const phaseEnum = getPhaseEnum()
+  const phaseEnum = Array.from(new Set([...getPhaseEnum(), 'program']))
   return [
     `semanticPatch 严格 schema（issue #1395）：rules[] 元素必填 { id, phase, sideScope, condition, effects }；phase ∈ [${phaseEnum.join(', ')}]。`,
     `condition / effects 内的叶子 atom key 必须从下列 ${registeredKeys.length} 个原子枚举中选（禁止自由文本或自创 atom）：`,
@@ -474,9 +491,10 @@ function formatAtomCatalogSection(locale: 'zh' | 'en'): string[] {
     '',
     'semanticPatch 字段规范：',
     '- rules[]：每条 { id, phase, sideScope, condition, effects, evidence（{ text: string }，必填，user message 连续原文子串）}',
+    '- effects：必须是 RuleEffects 对象 { actions, risks, positions, orchestration, programs }，每个字段都是 AtomExpr[]；禁止回退为 effects 数组或旧顶层 actions/risk/position/orchestration 字段',
     '- 叶子 atom 的 params 按上表 paramFields 填，禁止造新字段；缺失服务端派生 openSlots 驱动澄清',
     '- contextSlots：symbol/timeframe/exchange/marketType 等必须是 { value, source }（source ∈ user_explicit/inferred）',
-    '- position：仅 { mode?, sizing? } 标量字段；position atom（dca_schedule/pyramiding_limit）走 rules[].effects 的 AtomExpr 叶子',
+    '- position：仅 { mode?, sizing? } 标量字段；position atom（dca_schedule/pyramiding_limit）走 rules[].effects.positions 的 AtomExpr 叶子',
   ]
 }
 
@@ -487,6 +505,8 @@ export function buildConversationPlannerSystemPrompt(locale: 'zh' | 'en' = 'zh')
   //   ATOM_CONTRACT_REGISTRY[*].surface.phraseHints 自动派生；加新策略只需扩 atom 元数据。
   const lines: string[] = [
     '⚠️ 高优先级规则（优先读完再处理用户消息）：',
+    ...RULE_EFFECTS_CONTRACT,
+    '',
     ...buildTriggerPhraseHintsSection(),
     '',
     ...buildPlannerCorrectionRulesSection(),
@@ -499,6 +519,8 @@ export function buildConversationPlannerSystemPrompt(locale: 'zh' | 'en' = 'zh')
     '',
     ...ADVISORY_CONSTRAINTS,
     ...JSON_SHAPE_BLOCK,
+    '',
+    ...RULE_EFFECTS_CONTRACT,
     '',
     ...ATOM_EXPR_BNF,
     '',

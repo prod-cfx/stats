@@ -44,4 +44,17 @@ describe('conversationPlannerSystemPrompt', () => {
     expect(prompt).toContain('place_limit_grid')
     expect(prompt).toContain('order_program/maintain/limit_ladder')
   })
+
+  it('requires typed RuleEffects and program phase for program strategies', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+
+    expect(prompt).toContain('effects.actions')
+    expect(prompt).toContain('effects.risks')
+    expect(prompt).toContain('effects.positions')
+    expect(prompt).toContain('effects.orchestration')
+    expect(prompt).toContain('effects.programs')
+    expect(prompt).toContain('phase')
+    expect(prompt).toContain('program')
+    expect(prompt).toContain('condition = 原 triggers')
+  })
 })
