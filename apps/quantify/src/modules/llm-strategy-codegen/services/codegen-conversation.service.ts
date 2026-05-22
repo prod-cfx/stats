@@ -4479,13 +4479,25 @@ export class CodegenConversationService {
           ...(sessionSpecDesc.publishedSnapshotId !== undefined ? { publishedSnapshotId: sessionSpecDesc.publishedSnapshotId } : {}),
         }
       : {}
-    const effectiveSpecDesc = snapshotSpecDesc
+    const sessionDisplayGraph = sessionSpecDesc?.displayLogicGraph
+    const hasSessionDisplayGraph = Boolean(
+      sessionDisplayGraph
+      && typeof sessionDisplayGraph === 'object'
+      && !Array.isArray(sessionDisplayGraph)
+      && Array.isArray((sessionDisplayGraph as { blocks?: unknown }).blocks),
+    )
+    const effectiveSpecDesc = hasSessionDisplayGraph && sessionSpecDesc
       ? {
-          ...snapshotSpecDesc,
-          ...sessionSpecMetadata,
+          ...sessionSpecDesc,
           ...(snapshotLockedParams ? { lockedParams: snapshotLockedParams } : {}),
         }
-      : sessionSpecDesc
+      : snapshotSpecDesc
+        ? {
+            ...snapshotSpecDesc,
+            ...sessionSpecMetadata,
+            ...(snapshotLockedParams ? { lockedParams: snapshotLockedParams } : {}),
+          }
+        : sessionSpecDesc
     const sessionConsistencyReport = sessionSpecDesc?.consistencyReport
     const sessionPublishedSnapshotId = typeof sessionSpecDesc?.publishedSnapshotId === 'string'
       ? sessionSpecDesc.publishedSnapshotId
@@ -8985,7 +8997,6 @@ export class CodegenConversationService {
     text: string,
     locale: CodegenConversationLocale,
   ): ConversationPlan | null {
-    if (!reasons.includes('rules_missing_or_empty')) return null
     try {
       const dispatcherPatch = this.genericSeedDispatcher.dispatch(text) as CodegenSemanticPatch
       const semanticPatch = this.plannerDispatcherMerge.buildRulesTreeFallbackFromDispatcher(
@@ -8993,12 +9004,12 @@ export class CodegenConversationService {
         text,
       )
       if (!semanticPatch) {
-        this.logPlannerFallback('schema_reject_rules_tree_fallback_empty', {
+        this.logPlannerFallback('schema_reject_rules_tree_recovery_empty', {
           reasons: reasons.join(','),
         })
         return null
       }
-      this.logPlannerFallback('schema_reject_rules_tree_fallback', {
+      this.logPlannerFallback('schema_reject_rules_tree_recovered', {
         reasons: reasons.join(','),
       })
       return {
@@ -9014,13 +9025,13 @@ export class CodegenConversationService {
           gate: 'RulesTreeEntryGate',
           entry: {
             rejectReasons: [...reasons],
-            result: 'fallback',
+            result: 'recovered',
           },
         },
       }
     }
     catch (error) {
-      this.logPlannerFallback('schema_reject_rules_tree_fallback_dispatch_error', {
+      this.logPlannerFallback('schema_reject_rules_tree_recovery_dispatch_error', {
         reasons: reasons.join(','),
         error: this.summarizePlannerError(error),
       })
@@ -9294,17 +9305,20 @@ export class CodegenConversationService {
       | 'transport_failure_retry_exhausted'
       | 'deterministic_rules_tree_recovered'
       | 'schema_reject_unsupported'
-      | 'schema_reject_rules_tree_fallback_dispatch_error'
-      | 'schema_reject_rules_tree_fallback_empty'
-      | 'schema_reject_rules_tree_fallback',
+      | 'schema_reject_rules_tree_recovery_dispatch_error'
+      | 'schema_reject_rules_tree_recovery_empty'
+      | 'schema_reject_rules_tree_recovered',
     context: Record<string, string | number | boolean | undefined> = {},
   ): void {
     const contextSuffix = Object.entries(context)
       .filter(([, value]) => value !== undefined && value !== '')
       .map(([key, value]) => `${key}=${String(value)}`)
       .join(' ')
+    const event = reason.includes('rules_tree_recover')
+      ? 'codegen_conversation_planner_rules_tree_recovery'
+      : 'codegen_conversation_planner_fallback'
     this.logger.warn(
-      `event=codegen_conversation_planner_fallback reason=${reason}${contextSuffix ? ` ${contextSuffix}` : ''}`,
+      `event=${event} reason=${reason}${contextSuffix ? ` ${contextSuffix}` : ''}`,
     )
   }
 
