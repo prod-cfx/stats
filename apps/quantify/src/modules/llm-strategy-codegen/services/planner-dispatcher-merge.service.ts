@@ -22,7 +22,7 @@ export type PlannerPatchValidation =
  */
 export type PlannerSchemaRejectReason =
   | 'rules_missing_or_empty'        // 无 rules[] 或为空数组
-  | 'legacy_flat_field'             // 出现旧 atoms/triggers/actions/risks/positionConstraints/orchestration 顶层字段
+  | 'legacy_flat_field'             // 出现旧 atoms/triggers/actions/risks/risk/position/positionConstraints/orchestration 顶层字段
   | 'rule_shape_invalid'            // rule 缺 id/phase/sideScope/condition/effects 或 zod 不通过
   | 'evidence_text_missing'         // rule 或叶子 atom 缺 evidence.text
   | 'evidence_text_not_substring'   // evidence.text 不是 user message 子串（warning-only）
@@ -41,6 +41,7 @@ const LEGACY_FLAT_FIELDS: ReadonlyArray<string> = [
   'actions',
   'risks',
   'risk',
+  'position',
   'positionConstraints',
   'orchestration',
 ] as const
@@ -124,7 +125,7 @@ export class PlannerDispatcherMergeService {
    *
    * 校验内容（按 Issue 验收标准）：
    *   1. `semanticPatch.rules` 必填且为非空数组
-   *   2. 禁旧字段：`atoms / triggers / actions / risks / positionConstraints / orchestration`
+   *   2. 禁旧字段：`atoms / triggers / actions / risks / risk / position / positionConstraints / orchestration`
    *      出现在 `semanticPatch` 顶层一律 reject
    *   3. 每条 rule 必有 `id / phase / sideScope / condition / effects`
    *      （走 zod `semanticRuleSchema`，包含 AtomExpr 子树结构校验）
@@ -181,8 +182,7 @@ export class PlannerDispatcherMergeService {
         continue
       }
 
-      const ruleForHardParse = this.normalizeLegacyArrayEffectsForPlannerValidation(rule)
-      const parsed = semanticRuleSchema.safeParse(ruleForHardParse)
+      const parsed = semanticRuleSchema.safeParse(rule)
       if (!parsed.success) {
         reasons.add('rule_shape_invalid')
         const issuePath = parsed.error.issues[0]?.path?.join('.') ?? '<root>'
@@ -233,22 +233,6 @@ export class PlannerDispatcherMergeService {
     this.logger.warn(`metric=planner_schema_reject_total stage=${stage} value=${value}`)
   }
 
-  private normalizeLegacyArrayEffectsForPlannerValidation(rule: Record<string, unknown>): Record<string, unknown> {
-    if (!Array.isArray(rule.effects)) return rule
-    return {
-      ...rule,
-      effects: {
-        // Stage 1 compatibility only: legacy planner effects arrays are made explicit
-        // as actions before hard schema parse. Missing/partial typed effects still fail.
-        actions: rule.effects,
-        risks: [],
-        positions: [],
-        orchestration: [],
-        programs: [],
-      },
-    }
-  }
-
   private buildRejectResult(
     reasons: Set<PlannerSchemaRejectReason>,
     detailNotes: ReadonlyArray<string>,
@@ -259,8 +243,10 @@ export class PlannerDispatcherMergeService {
     const reminder = [
       '上一轮 planner 输出未通过 schema 硬校验，必须按 rules-first 表达式树形态重出：',
       '- semanticPatch.rules[] 必填且非空',
-      '- 禁止使用旧扁平字段（atoms/triggers/actions/risks/positionConstraints/orchestration）',
-      '- 每条 rule 必须含 id / phase / sideScope / condition (AtomExpr) / effects (RuleEffects typed roles: actions/risks/positions/orchestration/programs)',
+      '- 禁止使用旧扁平字段（atoms/triggers/actions/risks/risk/position/positionConstraints/orchestration）',
+      '- 每条 rule 必须含 id / phase / sideScope / condition (旧 triggers) / effects (typed RuleEffects)',
+      '- effects 必须是对象：{ actions, risks, positions, orchestration, programs }',
+      '- program 型策略必须使用 phase=program，并把 grid/DCA/TWAP/webhook/event listener 放入 effects.programs',
       '- 每条 rule 必须有 evidence.text；叶子 atom 若带 evidence.text，也必须非空',
       '- condition 内叶子 atom 来自 trigger / risk(谓词) / orchestration-gate 桶；effects 内叶子来自 action / risk(副作用) / positionConstraint / orchestration-effect 桶',
       '本次具体违反：',
