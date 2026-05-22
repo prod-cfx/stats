@@ -62,6 +62,44 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
     expect(signals.hasShortIntent).toBe(false)
   })
 
+  it('keeps recommendation intent compatibility for legacy bare and reduce action keys', () => {
+    const signals = (service as unknown as {
+      buildRecommendationSignals(input: {
+        actions: SemanticState['action']
+        triggers: SemanticState['trigger']
+        families: SemanticState['families']
+      }): {
+        hasLongIntent: boolean
+        hasShortIntent: boolean
+        hasBidirectionalIntent: boolean
+        hasGridIntent: boolean
+      }
+    }).buildRecommendationSignals({
+      actions: [
+        {
+          id: 'action-open-long',
+          key: 'open_long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        } as SemanticState['action'][number],
+        {
+          id: 'action-reduce-short',
+          key: 'reduce_short',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        } as SemanticState['action'][number],
+      ],
+      triggers: [],
+      families: [],
+    })
+
+    expect(signals.hasLongIntent).toBe(true)
+    expect(signals.hasShortIntent).toBe(true)
+    expect(signals.hasBidirectionalIntent).toBe(true)
+  })
+
   it('s2：sequence 步骤 + nextBarOnly=true 渲染 "先...然后...（下一根）"', () => {
     const rules: SemanticRule[] = [{
       id: 'rule-s2',

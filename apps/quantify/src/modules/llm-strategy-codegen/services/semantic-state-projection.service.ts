@@ -3048,10 +3048,16 @@ export class SemanticStateProjectionService {
     const longActionKeys: ReadonlySet<string> = new Set([
       ATOM_CONTRACT_REGISTRY['action.open_long'].key,
       ATOM_CONTRACT_REGISTRY['action.close_long'].key,
+      'open_long',
+      'close_long',
+      'reduce_long',
     ])
     const shortActionKeys: ReadonlySet<string> = new Set([
       ATOM_CONTRACT_REGISTRY['action.open_short'].key,
       ATOM_CONTRACT_REGISTRY['action.close_short'].key,
+      'open_short',
+      'close_short',
+      'reduce_short',
     ])
     const hasLongIntentFromActions = input.actions
       .some(action => longActionKeys.has(action.key))
