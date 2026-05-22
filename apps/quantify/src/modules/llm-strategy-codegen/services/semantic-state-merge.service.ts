@@ -1383,7 +1383,13 @@ export class SemanticStateMergeService {
       } satisfies RuleEffectsByRole
     }
 
-    const typed = this.emptyRuleEffects()
+    const typed: Record<keyof RuleEffectsByRole, AtomExpr[]> = {
+      actions: [],
+      risks: [],
+      positions: [],
+      orchestration: [],
+      programs: [],
+    }
     for (const effect of effects) {
       typed[this.resolveLegacyRuleEffectRole(effect)].push(this.cloneAtomExpr(effect))
     }

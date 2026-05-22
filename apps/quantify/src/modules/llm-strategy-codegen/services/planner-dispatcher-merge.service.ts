@@ -1639,7 +1639,13 @@ export class PlannerDispatcherMergeService {
   }
 
   private toTypedRuleEffects(effects: readonly AtomExpr[]): RuleEffectsByRole {
-    const typed = this.emptyRuleEffects()
+    const typed: Record<keyof RuleEffectsByRole, AtomExpr[]> = {
+      actions: [],
+      risks: [],
+      positions: [],
+      orchestration: [],
+      programs: [],
+    }
     for (const effect of effects) {
       typed[this.resolveRuleEffectRole(effect)].push(effect)
     }

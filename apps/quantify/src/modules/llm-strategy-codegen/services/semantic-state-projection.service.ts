@@ -3045,11 +3045,11 @@ export class SemanticStateProjectionService {
     const hasGridIntent = hasGridTrigger
       || (hasGridFamily && (input.actions.length > 0 || input.triggers.length > 0))
 
-    const longActionKeys = new Set([
+    const longActionKeys: ReadonlySet<string> = new Set([
       ATOM_CONTRACT_REGISTRY['action.open_long'].key,
       ATOM_CONTRACT_REGISTRY['action.close_long'].key,
     ])
-    const shortActionKeys = new Set([
+    const shortActionKeys: ReadonlySet<string> = new Set([
       ATOM_CONTRACT_REGISTRY['action.open_short'].key,
       ATOM_CONTRACT_REGISTRY['action.close_short'].key,
     ])
