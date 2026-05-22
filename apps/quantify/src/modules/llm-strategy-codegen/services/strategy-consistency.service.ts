@@ -909,7 +909,8 @@ export class StrategyConsistencyService {
       const actualRule = scriptProfile.rules.find(item =>
         item.key === expectedRule.key
         && item.phase === expectedRule.phase
-        && item.sideScope === expectedRule.sideScope,
+        && item.sideScope === expectedRule.sideScope
+        && item.action === expectedRule.action,
       )
       if (!actualRule) {
         const driftCandidates = scriptProfile.rules.filter(item =>

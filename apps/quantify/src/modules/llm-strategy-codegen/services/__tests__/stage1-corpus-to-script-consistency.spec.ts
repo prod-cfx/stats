@@ -130,17 +130,20 @@ function buildScriptArtifacts(semanticState: SemanticState): {
   astDigest: string
 } {
   const canonicalSpec = new CanonicalSpecBuilderService().buildFromSemanticState(semanticState)
-  const fallbackTimeframe = canonicalSpec.dataRequirements.requiredTimeframes[0]
-    ?? canonicalSpec.market.defaultTimeframe
+  const fallbackTimeframe = canonicalSpec.market.defaultTimeframe
     ?? canonicalSpec.market.timeframe
+    ?? canonicalSpec.dataRequirements.requiredTimeframes[0]
     ?? '15m'
+  const positionPct = canonicalSpec.sizing?.mode === 'RATIO'
+    ? Number((canonicalSpec.sizing.value * 100).toFixed(4))
+    : 10
   const compiled = new CanonicalSpecV2IrCompilerService().compile({
     canonicalSpec,
     fallback: {
-      exchange: canonicalSpec.market.exchange ?? 'binance',
+      exchange: canonicalSpec.market.exchange,
       symbol: canonicalSpec.market.symbol ?? 'BTCUSDT',
       baseTimeframe: fallbackTimeframe,
-      positionPct: 10,
+      positionPct,
     },
   })
   const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
@@ -272,9 +275,14 @@ describe('stage1 corpus to script consistency', () => {
       scriptHash: textHash(artifacts.script),
     }
     const scriptConsistency = buildScriptConsistency({ artifacts, evidence })
+    const semanticConsistency = new StrategyConsistencyService(new ScriptProfileExtractorService()).evaluate({
+      canonicalSpec: artifacts.canonicalSpec,
+      scriptCode: artifacts.script,
+    })
 
     expect(scriptConsistency.status).toBe('PASSED')
     expect(scriptConsistency.checks.every(check => check.passed)).toBe(true)
+    expect(semanticConsistency.status).toBe('PASSED')
     expect(Object.keys(evidence)).toEqual([
       'rulesHash',
       'canonicalSpecHash',

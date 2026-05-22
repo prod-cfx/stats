@@ -187,14 +187,18 @@ export class CodegenPublicationGenerationStage {
       strategySummary,
       scriptSummary,
     })
-    const compiledScriptProjection = this.compiledScriptParser.parse(compiledScript)
-    const stage1ConsistencyEvidence = {
-      rulesHash: this.hashCanonicalJson(input.semanticState.rules ?? []),
-      canonicalSpecHash: this.hashCanonicalJson(canonicalSpec),
-      irHash: this.readCompiledIrHash(compiled) ?? this.hashCanonicalJson(compiled.ir),
-      astHash: this.readAstDigest(ast) ?? this.stripSha256Prefix(compiledScriptProjection.compiledManifest.astDigest),
-      scriptHash: this.hashText(compiledScript),
-    }
+    const compiledScriptProjection = validation.passed
+      ? this.compiledScriptParser.parse(compiledScript)
+      : null
+    const stage1ConsistencyEvidence = validation.passed
+      ? {
+          rulesHash: this.hashCanonicalJson(input.semanticState.rules ?? []),
+          canonicalSpecHash: this.hashCanonicalJson(canonicalSpec),
+          irHash: this.readCompiledIrHash(compiled) ?? this.hashCanonicalJson(compiled.ir),
+          astHash: this.readAstDigest(ast) ?? this.readParsedAstDigest(compiledScriptProjection),
+          scriptHash: this.hashText(compiledScript),
+        }
+      : undefined
     const sessionSpecDesc = {
       ...semanticView,
       normalizedIntent,
@@ -205,7 +209,7 @@ export class CodegenPublicationGenerationStage {
       summaryObservation,
       lockedParams,
       consistencyReport: semanticConsistency,
-      stage1ConsistencyEvidence,
+      ...(stage1ConsistencyEvidence ? { stage1ConsistencyEvidence } : {}),
       semanticAtomInvariant,
       semanticPredicateGraph,
     } satisfies Record<string, unknown>
@@ -270,7 +274,13 @@ export class CodegenPublicationGenerationStage {
   }
 
   private readAstDigest(ast: ReturnType<CanonicalStrategyAstCompilerService['compile']>): string | null {
-    const maybeDigest = (ast.manifest as unknown as { astDigest?: unknown }).astDigest
+    const maybeDigest = (ast as unknown as { manifest?: { astDigest?: unknown } }).manifest?.astDigest
+    return typeof maybeDigest === 'string' ? this.stripSha256Prefix(maybeDigest) : null
+  }
+
+  private readParsedAstDigest(parsed: ReturnType<CompiledScriptParserService['parse']> | null): string | null {
+    const maybeDigest = (parsed as unknown as { compiledManifest?: { astDigest?: unknown } } | null)
+      ?.compiledManifest?.astDigest
     return typeof maybeDigest === 'string' ? this.stripSha256Prefix(maybeDigest) : null
   }
 
