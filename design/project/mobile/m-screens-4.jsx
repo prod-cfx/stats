@@ -1191,4 +1191,4 @@ function PermRow({ label, v, on, blocked }) {
   );
 }
 
-Object.assign(window, { ScreenWhale, ScreenAccount, ScreenApiConfig });
+Object.assign(window, { ScreenWhale, ScreenAccount, ScreenApiConfig, WhaleNotifPanel, WHALE_NOTIFS });

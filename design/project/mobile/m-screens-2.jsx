@@ -761,14 +761,76 @@ const TICKERS = [
   { sym:'AVAX',name:'Avalanche',px:'42.18',     ch:'-2.04%', up:false, vol:'$394M',  tone:'#E84142'},
 ];
 
+const TICKER_TABS = [
+  { k:'fav',    label:'自选' },
+  { k:'spot',   label:'现货' },
+  { k:'perp',   label:'合约' },
+  { k:'gain',   label:'涨幅榜' },
+  { k:'lose',   label:'跌幅榜' },
+];
+
+function getTickersFor(tab) {
+  switch (tab) {
+    case 'spot':
+      return TICKERS;
+    case 'perp':
+      // permanent-contracts: show with a small "永续" tag via name override
+      return TICKERS.map(t => ({...t, name: t.name + ' · 永续'}));
+    case 'gain':
+      return [...TICKERS].filter(t=>t.up).sort((a,b)=>parseFloat(b.ch)-parseFloat(a.ch));
+    case 'lose':
+      return [...TICKERS].filter(t=>!t.up).sort((a,b)=>parseFloat(a.ch)-parseFloat(b.ch));
+    case 'fav':
+    default:
+      return TICKERS.filter(t => ['BTC','ETH','SOL','DOGE'].includes(t.sym));
+  }
+}
+
 function ScreenTickers() {
   const [searchOpen, setSearchOpen] = React.useState(false);
+  const [tab, setTab] = React.useState('fav');
+  const [notif, setNotif] = React.useState(false);
+  const [notifTab, setNotifTab] = React.useState('全部');
+  const [notifData, setNotifData] = React.useState(() => window.WHALE_NOTIFS || []);
+  const unread = notifData.filter(n => n.unread).length;
+  const markAllRead = () => setNotifData(notifData.map(n => ({...n, unread:false})));
+  const rows = getTickersFor(tab);
+  const headerRight = tab === 'gain' ? '24H 涨幅' : tab === 'lose' ? '24H 跌幅' : '24H 涨跌';
   return (
     <div style={{height:'100%', position:'relative', background:M.bg, display:'flex', flexDirection:'column'}}>
       <MStatus/>
       <MTopBar title="行情" right={
-        <button style={{width:36, height:36, borderRadius:18, background:M.elev, border:`1px solid ${M.border}`, color:M.mid, display:'flex', alignItems:'center', justifyContent:'center'}}><Ico d={ICONS.bell} w={18}/></button>
+        <button
+          onClick={()=>setNotif(true)}
+          style={{
+            position:'relative', width:36, height:36, borderRadius:18, background:M.elev,
+            border:`1px solid ${M.border}`, color:M.mid, cursor:'pointer', padding:0,
+            display:'flex', alignItems:'center', justifyContent:'center',
+          }}
+        >
+          <Ico d={ICONS.bell} w={18}/>
+          {unread > 0 && (
+            <span style={{
+              position:'absolute', top:5, right:5,
+              minWidth:14, height:14, padding:'0 3px', borderRadius:7,
+              background:M.danger, color:'#fff', fontSize:9, fontWeight:700,
+              fontFamily:M.mono, display:'flex', alignItems:'center', justifyContent:'center',
+              border:`1.5px solid ${M.elev}`, letterSpacing:0,
+            }}>{unread}</span>
+          )}
+        </button>
       }/>
+
+      {notif && window.WhaleNotifPanel && (
+        <window.WhaleNotifPanel
+          items={notifData}
+          tab={notifTab}
+          setTab={setNotifTab}
+          unread={unread}
+          onMarkAll={markAllRead}
+          onClose={()=>setNotif(false)}
+        />
+      )}
 
       <div style={{padding:'8px 16px 0'}}>
         {searchOpen && (
@@ -786,11 +848,22 @@ function ScreenTickers() {
           </div>
         )}
         <div style={{display:'flex', alignItems:'center', gap:18, fontSize:13, fontWeight:500, color:M.dim}}>
-          <span style={{color:M.text, fontWeight:600, borderBottom:`2px solid ${M.text}`, paddingBottom:6}}>自选</span>
-          <span style={{paddingBottom:6}}>现货</span>
-          <span style={{paddingBottom:6}}>合约</span>
-          <span style={{paddingBottom:6}}>涨幅榜</span>
-          <span style={{paddingBottom:6}}>跌幅榜</span>
+          {TICKER_TABS.map(tt => {
+            const active = tt.k === tab;
+            return (
+              <button
+                key={tt.k}
+                onClick={()=>setTab(tt.k)}
+                style={{
+                  background:'transparent', border:0, padding:'0 0 6px', cursor:'pointer',
+                  fontSize:13, fontWeight: active ? 600 : 500,
+                  color: active ? M.text : M.dim,
+                  borderBottom: active ? `2px solid ${M.text}` : '2px solid transparent',
+                  fontFamily:'inherit',
+                }}
+              >{tt.label}</button>
+            );
+          })}
           <div style={{flex:1}}/>
           <button
             aria-label="搜索"
@@ -813,9 +886,11 @@ function ScreenTickers() {
         }}>
           <span>名称 / 24H量</span>
           <span style={{textAlign:'right'}}>最新价</span>
-          <span style={{textAlign:'right'}}>24H 涨跌</span>
+          <span style={{textAlign:'right'}}>{headerRight}</span>
         </div>
-        {TICKERS.map(t => <TickerRow key={t.sym} t={t}/>)}
+        {rows.length === 0 ? (
+          <div style={{padding:'48px 16px', textAlign:'center', color:M.dim, fontSize:13}}>暂无数据</div>
+        ) : rows.map(t => <TickerRow key={t.sym} t={t}/>)}
       </div>
       <MTabBar active="market"/>
     </div>
