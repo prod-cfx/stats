@@ -1125,6 +1125,7 @@ export class CanonicalSpecV2IrCompilerService {
       if (program.programKind === 'fixed_grid_gated') {
         result.push({
           id: program.id,
+          ...(program.sourcePath ? { sourcePath: program.sourcePath } : {}),
           programKind: 'fixed_grid_gated',
           activeWhenExprId: exprId,
           onDeactivate: program.onDeactivate,
@@ -1138,6 +1139,7 @@ export class CanonicalSpecV2IrCompilerService {
       if (program.programKind === 'dynamic_grid') {
         result.push({
           id: program.id,
+          ...(program.sourcePath ? { sourcePath: program.sourcePath } : {}),
           programKind: 'dynamic_grid',
           activeWhenExprId: exprId,
           onDeactivate: program.onDeactivate,
@@ -1154,6 +1156,7 @@ export class CanonicalSpecV2IrCompilerService {
       if (program.programKind === 'adaptive_volatility_grid') {
         result.push({
           id: program.id,
+          ...(program.sourcePath ? { sourcePath: program.sourcePath } : {}),
           programKind: 'adaptive_volatility_grid',
           activeWhenExprId: exprId,
           onDeactivate: program.onDeactivate,
@@ -1176,6 +1179,7 @@ export class CanonicalSpecV2IrCompilerService {
         if (typeof dataSourceScope.feedId !== 'string' || dataSourceScope.feedId.length === 0) continue
         result.push({
           id: program.id,
+          ...(program.sourcePath ? { sourcePath: program.sourcePath } : {}),
           programKind: 'event_listener',
           activeWhenExprId: exprId,
           onDeactivate: program.onDeactivate,
@@ -4167,6 +4171,7 @@ export class CanonicalSpecV2IrCompilerService {
       && subRef.trim() !== ''
       && (!supportedSubStrategyScopeIds || supportedSubStrategyScopeIds.has(subRef.trim()))
     return {
+      ...(typeof metadata.sourcePath === 'string' && metadata.sourcePath.trim() !== '' ? { sourcePath: metadata.sourcePath.trim() } : {}),
       ...(metadata.partialTakeProfit ? { partialTakeProfit: { ...metadata.partialTakeProfit } } : {}),
       ...(metadata.reversePosition ? { reversePosition: { ...metadata.reversePosition } } : {}),
       ...(metadata.addPosition ? { addPosition: { ...metadata.addPosition } } : {}),

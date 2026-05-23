@@ -457,6 +457,22 @@ export class CodegenSessionPublicationPipelineService {
       }
     }
 
+    if (
+      typeof record.passed === 'boolean'
+      && typeof record.blocked === 'boolean'
+      && typeof record.reason === 'string'
+      && this.readRecord(record.hashes)
+      && Array.isArray(record.checks)
+    ) {
+      return {
+        passed: record.passed,
+        blocked: record.blocked,
+        reason: record.reason,
+        hashes: record.hashes,
+        checks: record.checks,
+      }
+    }
+
     if (typeof record.status !== 'string' || !Array.isArray(record.checks)) {
       return null
     }

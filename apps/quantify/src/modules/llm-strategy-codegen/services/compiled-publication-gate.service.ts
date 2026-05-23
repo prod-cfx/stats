@@ -64,7 +64,7 @@ export interface RulesOnlyHashChainCheck {
 export interface RulesOnlyHashChainResult {
   passed: boolean
   blocked: boolean
-  reason?: 'rules_only_trace_missing'
+  reason?: 'rules_only_trace_missing' | 'rules_only_hash_mismatch'
   hashes: {
     rulesHash: string
     canonicalSpecHash: string
@@ -233,49 +233,61 @@ export class CompiledPublicationGateService {
   }
 
   validateRulesOnlyHashChain(input: RulesOnlyHashChainInput): RulesOnlyHashChainResult {
-    const trace = this.buildRulesOnlyTraceIndex(input.canonicalSpec)
-    const executableIrRefs = this.collectExecutableIrRefs(input.ir)
-    const executableAstRefs = this.collectExecutableAstRefs(input.ast)
-    const scriptRefs = this.collectScriptRefs(input.script)
+    const hashes = {
+      rulesHash: this.hashCanonicalJsonHex(input.rules),
+      canonicalSpecHash: this.hashCanonicalJsonHex(input.canonicalSpec),
+      irHash: this.hashCanonicalJsonHex(input.ir),
+      astHash: this.hashAstProjection(input.ast),
+      scriptHash: this.hashTextHex(input.script),
+    }
+    const canonicalTrace = this.collectCanonicalExecutableTrace(input.canonicalSpec)
+    const irTrace = this.collectIrExecutableTrace(input.ir)
+    const astTrace = this.collectAstExecutableTrace(input.ast)
+    const scriptManifest = this.readScriptManifest(input.script)
+    const hashChecks = this.buildRulesOnlyHashChecks(input, hashes, scriptManifest)
+    const scriptHashLinked = hashChecks
+      .filter(check => check.key.startsWith('hash.script.'))
+      .length > 0
+      && hashChecks
+        .filter(check => check.key.startsWith('hash.script.'))
+        .every(check => check.passed)
     const checks: RulesOnlyHashChainCheck[] = [
+      ...hashChecks,
       {
         key: 'trace.canonical',
-        passed: trace.sourcePaths.length > 0,
-        expected: 'rules[] sourcePath in canonicalSpec',
-        actual: trace.sourcePaths,
+        passed: canonicalTrace.sourcePaths.length > 0 && canonicalTrace.missing.length === 0,
+        expected: 'canonical executable nodes carry rules[] sourcePath',
+        actual: canonicalTrace,
       },
       {
         key: 'trace.ir',
-        passed: this.hasRulesOnlyTrace(executableIrRefs, trace),
-        expected: trace.sourcePaths,
-        actual: executableIrRefs,
+        passed: irTrace.sourcePaths.length > 0 && irTrace.missing.length === 0,
+        expected: canonicalTrace.sourcePaths,
+        actual: irTrace,
       },
       {
         key: 'trace.ast',
-        passed: this.hasRulesOnlyTrace(executableAstRefs, trace),
-        expected: trace.sourcePaths,
-        actual: executableAstRefs,
+        passed: astTrace.sourcePaths.length > 0 && astTrace.missing.length === 0,
+        expected: canonicalTrace.sourcePaths,
+        actual: astTrace,
       },
       {
         key: 'trace.script',
-        passed: this.hasRulesOnlyTrace(scriptRefs, trace),
-        expected: trace.sourcePaths,
-        actual: scriptRefs,
+        passed: scriptHashLinked,
+        expected: 'script manifest links to computed IR/spec/AST hashes',
+        actual: scriptManifest ?? null,
       },
     ]
     const blocked = checks.some(check => !check.passed)
+    const hashMismatch = hashChecks.some(check => !check.passed)
 
     return {
       passed: !blocked,
       blocked,
-      ...(blocked ? { reason: 'rules_only_trace_missing' as const } : {}),
-      hashes: {
-        rulesHash: this.hashCanonicalJsonHex(input.rules),
-        canonicalSpecHash: this.hashCanonicalJsonHex(input.canonicalSpec),
-        irHash: this.hashCanonicalJsonHex(input.ir),
-        astHash: this.hashCanonicalJsonHex(input.ast),
-        scriptHash: this.hashTextHex(input.script),
-      },
+      ...(blocked
+        ? { reason: hashMismatch ? 'rules_only_hash_mismatch' as const : 'rules_only_trace_missing' as const }
+        : {}),
+      hashes,
       checks,
     }
   }
@@ -421,98 +433,198 @@ export class CompiledPublicationGateService {
     return createHash('sha256').update(value, 'utf8').digest('hex')
   }
 
-  private buildRulesOnlyTraceIndex(canonicalSpec: Record<string, unknown>): {
+  private hashAstProjection(ast: StrategyAstV1): string {
+    const astProjection = {
+      astVersion: ast.astVersion,
+      executionModel: ast.executionModel,
+      dataRequirements: ast.dataRequirements,
+      runtimeRequirements: ast.runtimeRequirements,
+      exprPool: this.projectByOrder(ast.exprPool, ast.topology.exprOrder),
+      guards: this.projectByOrder(ast.guards, ast.topology.guardOrder),
+      riskPredicates: this.projectOptionalByOrder(ast.riskPredicates, ast.topology.riskPredicateOrder),
+      decisionPrograms: this.projectByOrder(ast.decisionPrograms, ast.topology.decisionOrder),
+      orderPrograms: this.projectByOrder(ast.orderPrograms, ast.topology.orderProgramOrder),
+      ...(ast.orchestrationPortfolioRisks ? { orchestrationPortfolioRisks: ast.orchestrationPortfolioRisks } : {}),
+      ...(ast.orchestrationPrograms ? { orchestrationPrograms: ast.orchestrationPrograms } : {}),
+      topology: ast.topology,
+    }
+    return this.hashCanonicalJsonHex(astProjection)
+  }
+
+  private projectByOrder<T extends { id: string }>(items: T[], order: string[]): T[] {
+    const itemIndex = new Map(items.map(item => [item.id, item]))
+    return order
+      .map(id => itemIndex.get(id))
+      .filter((item): item is T => item !== undefined)
+  }
+
+  private projectOptionalByOrder<T extends { id: string }>(
+    items: T[] | undefined,
+    order: string[] | undefined,
+  ): T[] | undefined {
+    if (!items || !order) return undefined
+    return this.projectByOrder(items, order)
+  }
+
+  private buildRulesOnlyHashChecks(
+    input: RulesOnlyHashChainInput,
+    hashes: RulesOnlyHashChainResult['hashes'],
+    scriptManifest: Record<string, string> | null,
+  ): RulesOnlyHashChainCheck[] {
+    const canonicalRulesHashes = this.collectHashFields(input.canonicalSpec, 'rulesHash')
+    const source = this.readRecord(input.ir.source) ?? {}
+    const astManifest = input.ast.manifest as unknown as Record<string, unknown>
+    return [
+      ...canonicalRulesHashes.map((actual, index) => this.buildHashCheck(
+        `hash.canonical.rulesHash${canonicalRulesHashes.length > 1 ? `.${index}` : ''}`,
+        hashes.rulesHash,
+        actual,
+      )),
+      ...(typeof source.specHash === 'string'
+        ? [this.buildHashCheck('hash.ir.specHash', hashes.canonicalSpecHash, source.specHash)]
+        : []),
+      ...(typeof source.canonicalSpecHash === 'string'
+        ? [this.buildHashCheck('hash.ir.canonicalSpecHash', hashes.canonicalSpecHash, source.canonicalSpecHash)]
+        : []),
+      ...(typeof astManifest.irHash === 'string'
+        ? [this.buildHashCheck('hash.ast.irHash', hashes.irHash, astManifest.irHash)]
+        : []),
+      ...(typeof astManifest.specHash === 'string'
+        ? [this.buildHashCheck('hash.ast.specHash', hashes.canonicalSpecHash, astManifest.specHash)]
+        : []),
+      ...(typeof astManifest.astDigest === 'string'
+        ? [this.buildHashCheck('hash.ast.astDigest', hashes.astHash, astManifest.astDigest)]
+        : []),
+      ...(scriptManifest?.irHash
+        ? [this.buildHashCheck('hash.script.irHash', hashes.irHash, scriptManifest.irHash)]
+        : []),
+      ...(scriptManifest?.specHash
+        ? [this.buildHashCheck('hash.script.specHash', hashes.canonicalSpecHash, scriptManifest.specHash)]
+        : []),
+      ...(scriptManifest?.astDigest
+        ? [this.buildHashCheck('hash.script.astDigest', hashes.astHash, scriptManifest.astDigest)]
+        : []),
+    ]
+  }
+
+  private buildHashCheck(key: string, expectedHash: string, actualHash: string): RulesOnlyHashChainCheck {
+    const actual = this.normalizeHash(actualHash)
+    return {
+      key,
+      passed: actual === expectedHash,
+      expected: expectedHash,
+      actual,
+    }
+  }
+
+  private collectHashFields(value: unknown, key: string): string[] {
+    const hashes = new Set<string>()
+    this.visitRecords(value, (record) => {
+      const maybeHash = record[key]
+      if (typeof maybeHash === 'string' && maybeHash.trim().length > 0) {
+        hashes.add(maybeHash.trim())
+      }
+    })
+    return Array.from(hashes).sort()
+  }
+
+  private normalizeHash(value: string): string {
+    return value.startsWith('sha256:') ? value.slice('sha256:'.length) : value
+  }
+
+  private readScriptManifest(script: string): Record<string, string> | null {
+    try {
+      const parsed = this.scriptParser.parse(script)
+      return {
+        irHash: parsed.compiledManifest.irHash,
+        specHash: parsed.compiledManifest.specHash,
+        astDigest: parsed.compiledManifest.astDigest,
+        structuralDigest: parsed.compiledManifest.structuralDigest,
+      }
+    } catch {
+      const match = /^\/\* @generated by compiler\.v1 \*\/\n\/\* irHash: (?<irHash>sha256:[a-f0-9]+) \*\/\n\/\* specHash: (?<specHash>sha256:[a-f0-9]+) \*\/\n\/\* astDigest: (?<astDigest>sha256:[a-f0-9]+) \*\/\n\/\* structuralDigest: (?<structuralDigest>sha256:[a-f0-9]+) \*\//u.exec(script)
+      return match?.groups ?? null
+    }
+  }
+
+  private collectCanonicalExecutableTrace(canonicalSpec: Record<string, unknown>): {
     sourcePaths: string[]
-    ids: string[]
+    missing: string[]
   } {
     const sourcePaths = new Set<string>()
-    const ids = new Set<string>()
-    this.visitRecords(canonicalSpec, (record) => {
-      const sourcePath = this.readRulesSourcePath(record.sourcePath)
-        ?? this.readRulesSourcePath(this.readRecord(record.metadata)?.sourcePath)
-      if (!sourcePath) return
-
-      sourcePaths.add(sourcePath)
-      if (typeof record.id === 'string' && record.id.trim().length > 0) {
-        ids.add(record.id.trim())
-      }
+    const missing: string[] = []
+    const specRules = Array.isArray(canonicalSpec.rules) ? canonicalSpec.rules : []
+    specRules.forEach((item, index) => {
+      this.collectExecutableSourcePath(item, `rules[${index}]`, sourcePaths, missing)
+      const record = this.readRecord(item)
+      const ruleSourcePath = this.readRulesSourcePath(record?.metadata ? this.readRecord(record.metadata)?.sourcePath : undefined)
+      const actions = Array.isArray(record?.actions) ? record.actions : []
+      actions.forEach((action, actionIndex) => {
+        this.collectExecutableSourcePath(action, `rules[${index}].actions[${actionIndex}]`, sourcePaths, missing, ruleSourcePath)
+      })
     })
 
-    return {
-      sourcePaths: Array.from(sourcePaths).sort(),
-      ids: Array.from(ids).sort(),
-    }
-  }
-
-  private collectExecutableIrRefs(ir: CanonicalStrategyIrV1): string[] {
-    const refs = new Set<string>()
-    for (const item of [
-      ...ir.ruleBlocks,
-      ...ir.orderPrograms,
-      ...(ir.orchestrationGates ?? []),
-      ...(ir.orchestrationPortfolioRisks ?? []),
-      ...(ir.orchestrationPrograms ?? []),
-    ]) {
-      this.collectRecordTraceRefs(item as unknown as Record<string, unknown>, refs)
-    }
-    return Array.from(refs).sort()
-  }
-
-  private collectExecutableAstRefs(ast: StrategyAstV1): string[] {
-    const refs = new Set<string>()
-    for (const item of [
-      ...ast.decisionPrograms,
-      ...ast.orderPrograms,
-      ...ast.guards,
-      ...(ast.riskPredicates ?? []),
-      ...(ast.orchestrationPortfolioRisks ?? []),
-      ...(ast.orchestrationPrograms ?? []),
-    ]) {
-      this.collectRecordTraceRefs(item as unknown as Record<string, unknown>, refs)
-    }
-    return Array.from(refs).sort()
-  }
-
-  private collectScriptRefs(script: string): string[] {
-    const refs = new Set<string>()
-    const patterns = [
-      /"sourceRef":"([^"]+)"/gu,
-      /"id":"([^"]+)"/gu,
-      /"sourcePath":"(rules\[\d+\][^"]*)"/gu,
-      /\brules\[\d+\][\w.[\]]*/gu,
-    ]
-    for (const pattern of patterns) {
-      for (const match of script.matchAll(pattern)) {
-        const value = match[1] ?? match[0]
-        if (value) refs.add(value)
-      }
-    }
-    return Array.from(refs).sort()
-  }
-
-  private collectRecordTraceRefs(record: Record<string, unknown>, refs: Set<string>): void {
-    this.visitRecords(record, (item) => {
-      for (const key of ['id', 'sourceRef', 'activeWhen', 'levelSetRef']) {
-        const value = item[key]
-        if (typeof value === 'string' && value.trim().length > 0) {
-          refs.add(value.trim())
-        }
-      }
-      const sourcePath = this.readRulesSourcePath(item.sourcePath)
-        ?? this.readRulesSourcePath(this.readRecord(item.metadata)?.sourcePath)
-      if (sourcePath) refs.add(sourcePath)
+    const orchestration = this.readRecord(canonicalSpec.orchestration)
+    const programs = Array.isArray(orchestration?.programs) ? orchestration.programs : []
+    programs.forEach((program, index) => {
+      this.collectExecutableSourcePath(program, `orchestration.programs[${index}]`, sourcePaths, missing)
     })
+    return { sourcePaths: Array.from(sourcePaths).sort(), missing }
   }
 
-  private hasRulesOnlyTrace(
-    refs: readonly string[],
-    trace: { sourcePaths: readonly string[], ids: readonly string[] },
-  ): boolean {
-    if (trace.sourcePaths.length === 0) return false
-    return refs.some(ref =>
-      trace.sourcePaths.includes(ref)
-      || trace.ids.some(id => ref === id || ref.includes(id)),
-    )
+  private collectIrExecutableTrace(ir: CanonicalStrategyIrV1): {
+    sourcePaths: string[]
+    missing: string[]
+  } {
+    const sourcePaths = new Set<string>()
+    const missing: string[] = []
+    ;[
+      ...ir.ruleBlocks.map((item, index) => [item, `ir.ruleBlocks[${index}]`] as const),
+      ...ir.orderPrograms.map((item, index) => [item, `ir.orderPrograms[${index}]`] as const),
+      ...(ir.orchestrationGates ?? []).map((item, index) => [item, `ir.orchestrationGates[${index}]`] as const),
+      ...(ir.orchestrationPrograms ?? []).map((item, index) => [item, `ir.orchestrationPrograms[${index}]`] as const),
+    ].forEach(([item, label]) => {
+      this.collectExecutableSourcePath(item, label, sourcePaths, missing)
+    })
+    return { sourcePaths: Array.from(sourcePaths).sort(), missing }
+  }
+
+  private collectAstExecutableTrace(ast: StrategyAstV1): {
+    sourcePaths: string[]
+    missing: string[]
+  } {
+    const sourcePaths = new Set<string>()
+    const missing: string[] = []
+    ;[
+      ...ast.decisionPrograms.map((item, index) => [item, `ast.decisionPrograms[${index}]`] as const),
+      ...ast.orderPrograms.map((item, index) => [item, `ast.orderPrograms[${index}]`] as const),
+      ...(ast.orchestrationPrograms ?? []).map((item, index) => [item, `ast.orchestrationPrograms[${index}]`] as const),
+    ].forEach(([item, label]) => {
+      this.collectExecutableSourcePath(item, label, sourcePaths, missing)
+    })
+    return { sourcePaths: Array.from(sourcePaths).sort(), missing }
+  }
+
+  private collectExecutableSourcePath(
+    value: unknown,
+    label: string,
+    sourcePaths: Set<string>,
+    missing: string[],
+    fallbackSourcePath?: string | null,
+  ): void {
+    const record = this.readRecord(value)
+    if (!record) {
+      missing.push(label)
+      return
+    }
+    const sourcePath = this.readRulesSourcePath(record.sourcePath)
+      ?? this.readRulesSourcePath(this.readRecord(record.metadata)?.sourcePath)
+      ?? fallbackSourcePath
+    if (!sourcePath) {
+      missing.push(label)
+      return
+    }
+    sourcePaths.add(sourcePath)
   }
 
   private readRulesSourcePath(value: unknown): string | null {

@@ -24,6 +24,7 @@ import { SemanticAtomInvariantService } from './semantic-atom-invariant.service'
 import { CodegenGraphSnapshotService as DefaultCodegenGraphSnapshotService } from './codegen-graph-snapshot.service'
 import { normalizeRiskSemantics } from './semantic-state-normalization'
 import { StrategySummaryObservationService } from './strategy-summary-observation.service'
+import { isRuleEffectsByRole } from '../types/atom-expr'
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 export interface CompiledScriptValidationResult {
@@ -166,7 +167,7 @@ export class CodegenPublicationGenerationStage {
     })
     const validation = this.validateCompiledScript(compiledScript)
     compiledScript = validation.scriptCode
-    const hasRulesOnlyInput = Array.isArray(input.semanticState.rules) && input.semanticState.rules.length > 0
+    const hasRulesOnlyInput = this.hasTypedRulesOnlyInput(input.semanticState.rules)
     const rulesOnlyHashChain = validation.passed
       && hasRulesOnlyInput
       && typeof this.publicationGate?.validateRulesOnlyHashChain === 'function'
@@ -351,6 +352,15 @@ export class CodegenPublicationGenerationStage {
 
   private stripSha256Prefix(value: string): string {
     return value.startsWith('sha256:') ? value.slice('sha256:'.length) : value
+  }
+
+  private hasTypedRulesOnlyInput(rules: unknown): boolean {
+    return Array.isArray(rules)
+      && rules.length > 0
+      && rules.every((rule) => {
+        if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return false
+        return isRuleEffectsByRole((rule as { effects?: unknown }).effects as never)
+      })
   }
 
   validateCompiledScript(scriptCode: string): CompiledScriptValidationResult {

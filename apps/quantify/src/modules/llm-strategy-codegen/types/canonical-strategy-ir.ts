@@ -211,6 +211,7 @@ export interface RuleBlock {
   guardRefs?: string[]
   actions: ActionDef[]
   metadata?: {
+    sourcePath?: string
     partialTakeProfit?: PartialTakeProfitProgramMetadata
     // Phase 5 S2 (#1104): 多 scope 策略中显式声明该 rule 归属哪个 scope.symbol id
     symbolScopeRef?: string
@@ -359,6 +360,7 @@ export interface IrOrchestrationProgramAdaptiveGridParams {
 
 export interface IrFixedGridGatedProgram {
   id: string
+  sourcePath?: string
   programKind: 'fixed_grid_gated'
   activeWhenExprId: string
   onDeactivate: 'cancel' | 'keep' | 'close'
@@ -369,6 +371,7 @@ export interface IrFixedGridGatedProgram {
 
 export interface IrDynamicGridProgram {
   id: string
+  sourcePath?: string
   programKind: 'dynamic_grid'
   activeWhenExprId: string
   onDeactivate: 'cancel' | 'keep' | 'close'
@@ -379,6 +382,7 @@ export interface IrDynamicGridProgram {
 
 export interface IrAdaptiveVolatilityGridProgram {
   id: string
+  sourcePath?: string
   programKind: 'adaptive_volatility_grid'
   activeWhenExprId: string
   onDeactivate: 'cancel' | 'keep' | 'close'
@@ -392,6 +396,7 @@ export interface IrAdaptiveVolatilityGridProgram {
 //   不带 sizing — 不发限价单
 export interface IrEventListenerProgram {
   id: string
+  sourcePath?: string
   programKind: 'event_listener'
   activeWhenExprId: string
   onDeactivate: 'cancel' | 'keep'

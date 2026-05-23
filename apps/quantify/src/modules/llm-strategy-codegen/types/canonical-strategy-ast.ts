@@ -75,6 +75,7 @@ export interface DecisionProgramNode {
   cooldownBars?: number
   actions: ActionDef[]
   metadata?: PositionLifecycleActionMetadata & {
+    sourcePath?: string
     // Phase 5 S2 (#1104): 多 scope 策略中的 symbolScopeRef 透传
     symbolScopeRef?: string
     // Phase 5 S11 (#1112): 多 leg 策略中的 legScopeRef 透传
