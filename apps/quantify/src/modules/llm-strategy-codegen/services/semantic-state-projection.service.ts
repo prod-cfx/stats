@@ -6,6 +6,7 @@ import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../type
 import { isEntryPredicateTriggerKey, isExitPredicateTriggerKey, isTimeframeGroupableTriggerKey } from '../atom-contracts/trigger-display-contract'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
+import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { SemanticExecutableSemanticsService } from './semantic-executable-semantics.service'
 import {
@@ -174,6 +175,8 @@ export type SemanticDisplayBlockType = 'IF' | 'AND_AT_THEN' | 'OR_THEN' | 'EXECU
 export interface SemanticDisplayGraphBaseItem {
   id: string
   text: string
+  sourcePath?: string
+  params?: Record<string, unknown>
 }
 
 export interface SemanticDisplayConditionItem extends SemanticDisplayGraphBaseItem {
@@ -214,12 +217,15 @@ export type SemanticDisplayLogicGraphItem =
   | SemanticDisplayProgramItem
 
 export interface SemanticDisplayLogicGraphBlock {
+  id?: string
   type: SemanticDisplayBlockType
+  sourcePath?: string
   items: SemanticDisplayLogicGraphItem[]
 }
 
 export interface SemanticDisplayLogicGraph {
   blocks: SemanticDisplayLogicGraphBlock[]
+  diagnostics?: Array<{ code: string, message: string }>
 }
 
 type SemanticDisplaySideScope = 'long' | 'short' | 'both'
@@ -235,6 +241,7 @@ export class SemanticStateProjectionService {
     //   anyAtomFulfillsPhase(state, 'sizing') 替代旧 GRID_DOMAIN_ATOM_KEYS 字面量集合，
     //   与 codegen-conversation 服务共用同一判定。
     private readonly executableSemantics: SemanticExecutableSemanticsService = new SemanticExecutableSemanticsService(),
+    private readonly rulesMainflowReader: RulesMainflowReaderService = new RulesMainflowReaderService(),
   ) {}
 
   buildConversationView(state: SemanticState): SemanticConversationView {
@@ -340,6 +347,68 @@ export class SemanticStateProjectionService {
         ...ruleBlocks,
         this.buildDisplayExecuteBlock(state),
       ],
+    }
+  }
+
+  buildDisplayLogicGraphFromSemanticState(state: SemanticState): SemanticDisplayLogicGraph {
+    const read = this.rulesMainflowReader.readMainflowRules(state.rules)
+    if (read.ok === false) {
+      return {
+        blocks: [],
+        diagnostics: [{
+          code: read.reason,
+          message: read.diagnostics.join('; '),
+        }],
+      }
+    }
+
+    return {
+      blocks: read.view.rules.map((rule, ruleIndex): SemanticDisplayLogicGraphBlock => {
+        const sourcePath = `rules[${ruleIndex}]`
+        const conditionText = this.renderAtomExpr(rule.condition)
+        const actionSuffix = this.buildRuleActionSuffix(rule.phase, rule.sideScope)
+        const conditionItem: SemanticDisplayConditionItem[] = conditionText.length > 0
+          ? [{
+              kind: 'condition',
+              id: `${sourcePath}.condition`,
+              text: actionSuffix.length > 0 ? `${conditionText}${actionSuffix}` : conditionText,
+              sourcePath: `${sourcePath}.condition`,
+              params: {},
+            }]
+          : []
+        const effectItems = read.leaves
+          .filter(leaf => leaf.ruleId === rule.id && leaf.role !== 'condition')
+          .map((leaf): SemanticDisplayLogicGraphItem => {
+            const text = this.renderAtomExpr({ kind: 'atom', key: leaf.key, params: leaf.params })
+            if (leaf.role === 'program') {
+              return {
+                kind: 'execute',
+                id: leaf.path,
+                key: leaf.key,
+                text,
+                sourcePath: leaf.path,
+                params: leaf.params,
+              }
+            }
+            return {
+              kind: 'action',
+              id: leaf.path,
+              text,
+              sourcePath: leaf.path,
+              params: leaf.params,
+            }
+          })
+
+        return {
+          id: rule.id,
+          type: rule.phase === 'program' ? 'EXECUTE' : 'IF',
+          sourcePath,
+          items: [
+            ...conditionItem,
+            ...effectItems,
+          ],
+        }
+      }),
     }
   }
 

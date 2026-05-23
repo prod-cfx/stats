@@ -226,4 +226,41 @@ describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () =>
     const ifBlocks = graph.blocks.filter(b => b.type === 'IF')
     expect(ifBlocks).toHaveLength(2)
   })
+
+  it('does not render flat-only action when rules omit it', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      trigger: [],
+      action: [{
+        id: 'flat-action',
+        key: 'action.open_long',
+        params: {},
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+      }],
+      risk: [],
+      positionConstraint: [],
+      orchestration: [],
+      position: null,
+      orchestrationContracts: [],
+      normalizationNotes: [],
+      updatedAt: new Date(0).toISOString(),
+      rules: [{
+        id: 'r1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.breakout_up', params: {} },
+        effects: { actions: [], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    }
+
+    const graph = service.buildDisplayLogicGraphFromSemanticState(state)
+
+    expect(JSON.stringify(graph)).toContain('rules[0].condition')
+    expect(JSON.stringify(graph)).not.toContain('flat-action')
+    expect(JSON.stringify(graph)).not.toContain('action.open_long')
+  })
 })
