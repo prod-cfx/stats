@@ -701,14 +701,25 @@ export class SemanticContractReadinessService {
       }
     }
 
-    const hasEntry = read.leaves.some(leaf =>
-      leaf.role === 'condition' && (leaf.phase === 'entry' || leaf.phase === 'gate' || leaf.phase === 'program'),
+    const entryRuleIndexes = new Set(
+      read.leaves
+        .filter(leaf =>
+          leaf.role === 'condition'
+          && (leaf.phase === 'entry' || leaf.phase === 'gate' || leaf.phase === 'program'),
+        )
+        .map(leaf => leaf.ruleIndex),
     )
-    const hasExecutableEffect = read.leaves.some(leaf => leaf.role === 'action' || leaf.role === 'program')
+    const hasEntry = read.leaves.some(leaf =>
+      entryRuleIndexes.has(leaf.ruleIndex)
+      && (
+        (leaf.role === 'action' && leaf.key.startsWith('action.open_'))
+        || leaf.role === 'program'
+      ),
+    )
     const hasExit = read.leaves.some(leaf => leaf.phase === 'exit' || (leaf.role === 'risk' && leaf.key.includes('stop')))
 
     const blockingReasons = [
-      ...(!hasEntry || !hasExecutableEffect ? ['missing_entry_rules'] : []),
+      ...(!hasEntry ? ['missing_entry_rules'] : []),
       ...(!hasExit ? ['missing_exit_rules'] : []),
       ...(openSlots.length > 0 ? ['missing_required_rule_params'] : []),
     ]

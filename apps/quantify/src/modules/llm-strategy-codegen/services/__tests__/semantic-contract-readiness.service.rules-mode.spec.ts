@@ -325,6 +325,61 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     ]))
   })
 
+  it('mainflow does not combine entry condition with exit close action as entry executable', () => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'r-entry',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [atom('position.sizing', { value: 10, unit: 'USDT' })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+      rule({
+        id: 'r-exit',
+        phase: 'exit',
+        condition: atom('price.breakout_down', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.close_long')],
+          risks: [atom('risk.stop_loss_pct', { valuePct: 5 })],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }),
+    ]
+
+    const r = svc.evaluateMainflowRulesReadiness(rules)
+
+    expect(r.ready).toBe(false)
+    expect(r.blockingReasons).toContain('missing_entry_rules')
+  })
+
+  it('mainflow accepts entry rule with open action as entry executable', () => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'r-entry',
+        phase: 'gate',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.stop_loss_pct', { valuePct: 5 })],
+          positions: [atom('position.sizing', { value: 10, unit: 'USDT' })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ]
+
+    const r = svc.evaluateMainflowRulesReadiness(rules)
+
+    expect(r.blockingReasons).not.toContain('missing_entry_rules')
+  })
+
   it.each([
     ['NaN', Number.NaN],
     ['zero', 0],
