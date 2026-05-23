@@ -690,8 +690,13 @@ export class CanonicalSpecBuilderService {
     const orderPrograms: CanonicalOrderProgramIntent[] = []
     const rules = this.buildCanonicalRulesFromSemanticRulesMainflow(mainflow, sizing)
     const orchestrationPrograms = this.buildOrchestrationProgramsFromSemanticRulesMainflow(mainflow)
+    const orchestrationGates = this.buildProgramGatesFromSemanticRulesMainflow(mainflow)
+    const orchestrationScopes = this.buildProgramScopesFromSemanticRulesMainflow(orchestrationPrograms)
     const baseRequiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
     const requiredTimeframes = this.mergeTimeframeScopeIntoDataRequirements(baseRequiredTimeframes, [])
+    const hasOrchestration = orchestrationGates.length > 0
+      || orchestrationPrograms.length > 0
+      || orchestrationScopes.length > 0
 
     return {
       version: 2,
@@ -707,8 +712,14 @@ export class CanonicalSpecBuilderService {
       },
       orderPrograms,
       rules,
-      ...(orchestrationPrograms.length > 0
-        ? { orchestration: { programs: orchestrationPrograms } }
+      ...(hasOrchestration
+        ? {
+            orchestration: {
+              ...(orchestrationGates.length > 0 ? { gates: orchestrationGates } : {}),
+              ...(orchestrationPrograms.length > 0 ? { programs: orchestrationPrograms } : {}),
+              ...(orchestrationScopes.length > 0 ? { scopes: orchestrationScopes } : {}),
+            },
+          }
         : {}),
       metadata: {
         rulesMainflow: {
@@ -784,13 +795,17 @@ export class CanonicalSpecBuilderService {
         const condition = this.buildConditionFromSemanticRuleExpr(rule.condition, phase, rule.sideScope, defaultTimeframe)
         const actions = mainflow.byRole.action
           .filter(leaf => leaf.ruleId === rule.id)
-          .flatMap(leaf =>
-            this.buildCanonicalActionsFromRuleEffectLeaf(this.atomLeafFromMainflowLeaf(leaf), phase, sizing)
-              .map(action => ({
-                ...action,
-                sourcePath: leaf.path,
-              })),
-          )
+          .flatMap((leaf) => {
+            const actionLeaf = this.atomLeafFromMainflowLeaf(leaf)
+            const builtActions = this.buildCanonicalActionsFromRuleEffectLeaf(actionLeaf, phase, sizing)
+            if (builtActions.length === 0) {
+              throw new Error(`UnsupportedSemanticRuleActionEffect: key=${leaf.key} sourcePath=${leaf.path}`)
+            }
+            return builtActions.map(action => ({
+              ...action,
+              sourcePath: leaf.path,
+            }))
+          })
 
         if (condition && actions.length > 0) {
           canonicalRules.push({
@@ -820,7 +835,9 @@ export class CanonicalSpecBuilderService {
           sourcePath: leaf.path,
           priority: riskPriority,
         })
-        if (!riskRule) continue
+        if (!riskRule) {
+          throw new Error(`UnsupportedSemanticRuleRiskEffect: key=${leaf.key} sourcePath=${leaf.path}`)
+        }
         canonicalRules.push(riskRule)
         riskPriority -= 1
       }
@@ -874,6 +891,7 @@ export class CanonicalSpecBuilderService {
         this.atomLeafFromMainflowLeaf(leaf),
         `semantic-program-${rule.id}-${effectIndex}-${leafIndex}`,
         leaf.path,
+        this.programGateIdForRuleEffectLeaf(leaf),
       )
       if (program) {
         programs.push(program)
@@ -882,12 +900,70 @@ export class CanonicalSpecBuilderService {
     return programs
   }
 
+  private buildProgramGatesFromSemanticRulesMainflow(
+    mainflow: RulesMainflowView,
+  ): CanonicalOrchestrationGate[] {
+    const gates: CanonicalOrchestrationGate[] = []
+    const seen = new Set<string>()
+    for (const leaf of mainflow.byRole.program) {
+      const rule = mainflow.rules[leaf.ruleIndex]
+      if (!rule) continue
+      const gateId = this.programGateIdForRuleEffectLeaf(leaf)
+      if (seen.has(gateId)) continue
+      seen.add(gateId)
+      gates.push({
+        id: gateId,
+        target: { phase: 'strategy' },
+        activeWhen: this.buildProgramGateConditionFromRule(rule),
+        effectWhenFalse: 'block_new_entries',
+      })
+    }
+    return gates
+  }
+
+  private buildProgramScopesFromSemanticRulesMainflow(
+    programs: readonly CanonicalOrchestrationProgram[],
+  ): CanonicalOrchestrationScope[] {
+    return programs
+      .filter((program): program is Extract<CanonicalOrchestrationProgram, { programKind: 'event_listener' }> =>
+        program.programKind === 'event_listener',
+      )
+      .map(program => ({
+        id: program.sourceRef,
+        scopeKind: 'dataSource',
+        role: 'event',
+        feedId: program.sourceRef,
+        schemaRef: program.eventSchemaRef,
+      }))
+  }
+
+  private buildProgramGateConditionFromRule(rule: SemanticRule): CanonicalConditionNode {
+    if (rule.phase === 'entry' || rule.phase === 'exit') {
+      const condition = this.buildConditionFromSemanticRuleExpr(rule.condition, rule.phase, rule.sideScope, null)
+      if (condition) return condition
+    }
+    return {
+      kind: 'atom',
+      key: 'execution.on_start',
+      semanticScope: 'market',
+    }
+  }
+
+  private programGateIdForRuleEffectLeaf(leaf: RulesMainflowLeaf): string {
+    return `${leaf.ruleId}-${this.stableRulesPathId(leaf.path)}-active-gate`
+  }
+
+  private stableRulesPathId(path: string): string {
+    return path.replace(/[^a-zA-Z0-9]+/gu, '-').replace(/^-|-$/gu, '')
+  }
+
   private buildCanonicalProgramFromRuleEffectLeaf(
     leaf: AtomExprAtom,
     id: string,
     sourcePath: string,
+    activeWhenRef: string,
   ): CanonicalOrchestrationProgram | null {
-    const program = this.buildCanonicalProgramFromSupportedRuleEffectLeaf(leaf, id, sourcePath)
+    const program = this.buildCanonicalProgramFromSupportedRuleEffectLeaf(leaf, id, sourcePath, activeWhenRef)
     if (!program) {
       throw new Error(`InvalidSemanticRuleProgramEffect: key=${leaf.key} sourcePath=${sourcePath}`)
     }
@@ -898,17 +974,18 @@ export class CanonicalSpecBuilderService {
     leaf: AtomExprAtom,
     id: string,
     sourcePath: string,
+    activeWhenRef: string,
   ): CanonicalOrchestrationProgram | null {
     switch (leaf.key) {
       case 'program.fixed_grid':
       case 'program.fixed_grid_gated':
-        return this.buildCanonicalFixedGridProgramFromRuleEffectLeaf(leaf, id, sourcePath)
+        return this.buildCanonicalFixedGridProgramFromRuleEffectLeaf(leaf, id, sourcePath, activeWhenRef)
       case 'program.dynamic_grid':
-        return this.buildCanonicalDynamicGridProgramFromRuleEffectLeaf(leaf, id, sourcePath)
+        return this.buildCanonicalDynamicGridProgramFromRuleEffectLeaf(leaf, id, sourcePath, activeWhenRef)
       case 'program.adaptive_volatility_grid':
-        return this.buildCanonicalAdaptiveVolatilityGridProgramFromRuleEffectLeaf(leaf, id, sourcePath)
+        return this.buildCanonicalAdaptiveVolatilityGridProgramFromRuleEffectLeaf(leaf, id, sourcePath, activeWhenRef)
       case 'program.event_listener':
-        return this.buildCanonicalEventListenerProgramFromRuleEffectLeaf(leaf, id, sourcePath)
+        return this.buildCanonicalEventListenerProgramFromRuleEffectLeaf(leaf, id, sourcePath, activeWhenRef)
       default:
         throw new Error(`UnsupportedSemanticRuleProgramEffect: key=${leaf.key} sourcePath=${sourcePath}`)
     }
@@ -918,6 +995,7 @@ export class CanonicalSpecBuilderService {
     leaf: AtomExprAtom,
     id: string,
     sourcePath: string,
+    activeWhenRef: string,
   ): CanonicalOrchestrationProgram | null {
     const lowerBound = this.readFiniteNumber(leaf.params.lowerBound) ?? this.readFiniteNumber(leaf.params.rangeLower)
     const upperBound = this.readFiniteNumber(leaf.params.upperBound) ?? this.readFiniteNumber(leaf.params.rangeUpper)
@@ -939,7 +1017,7 @@ export class CanonicalSpecBuilderService {
       openSlots: [],
       contracts: [],
       programKind: 'fixed_grid_gated',
-      activeWhenRef: typeof leaf.params.activeWhenRef === 'string' ? leaf.params.activeWhenRef : undefined,
+      activeWhenRef,
       onDeactivate: leaf.params.onDeactivate === 'keep' || leaf.params.onDeactivate === 'close' ? leaf.params.onDeactivate : 'cancel',
       rebuildPolicy: 'static',
       gridParams: {
@@ -959,6 +1037,7 @@ export class CanonicalSpecBuilderService {
     leaf: AtomExprAtom,
     id: string,
     sourcePath: string,
+    activeWhenRef: string,
   ): CanonicalOrchestrationProgram | null {
     const step = this.readDynamicGridStepParam(leaf.params.dynamicGridStep)
     const node: SemanticOrchestrationNode = {
@@ -971,7 +1050,7 @@ export class CanonicalSpecBuilderService {
       openSlots: [],
       contracts: [],
       programKind: 'dynamic_grid',
-      activeWhenRef: typeof leaf.params.activeWhenRef === 'string' ? leaf.params.activeWhenRef : undefined,
+      activeWhenRef,
       onDeactivate: leaf.params.onDeactivate === 'keep' || leaf.params.onDeactivate === 'close' ? leaf.params.onDeactivate : 'cancel',
       rebuildPolicy: 'anchor_on_state_change',
       anchorLookbackBars: this.readFiniteNumber(leaf.params.anchorLookbackBars) ?? undefined,
@@ -992,6 +1071,7 @@ export class CanonicalSpecBuilderService {
     leaf: AtomExprAtom,
     id: string,
     sourcePath: string,
+    activeWhenRef: string,
   ): CanonicalOrchestrationProgram | null {
     const node: SemanticOrchestrationNode = {
       id,
@@ -1003,7 +1083,7 @@ export class CanonicalSpecBuilderService {
       openSlots: [],
       contracts: [],
       programKind: 'adaptive_volatility_grid',
-      activeWhenRef: typeof leaf.params.activeWhenRef === 'string' ? leaf.params.activeWhenRef : undefined,
+      activeWhenRef,
       onDeactivate: leaf.params.onDeactivate === 'keep' || leaf.params.onDeactivate === 'close' ? leaf.params.onDeactivate : 'cancel',
       rebuildPolicy: 'atr_window',
       atrPeriod: this.readFiniteNumber(leaf.params.atrPeriod) ?? undefined,
@@ -1024,6 +1104,7 @@ export class CanonicalSpecBuilderService {
     leaf: AtomExprAtom,
     id: string,
     sourcePath: string,
+    activeWhenRef: string,
   ): CanonicalOrchestrationProgram | null {
     const node: SemanticOrchestrationNode = {
       id,
@@ -1035,7 +1116,7 @@ export class CanonicalSpecBuilderService {
       openSlots: [],
       contracts: [],
       programKind: 'event_listener',
-      activeWhenRef: typeof leaf.params.activeWhenRef === 'string' ? leaf.params.activeWhenRef : undefined,
+      activeWhenRef,
       onDeactivate: leaf.params.onDeactivate === 'keep' ? 'keep' : 'cancel',
       rebuildPolicy: leaf.params.rebuildPolicy === 'on_schema_version_bump' ? 'on_schema_version_bump' : 'static',
       eventSchemaRef: leaf.params.eventSchemaRef === 'webhook_event' ? 'webhook_event' : undefined,
@@ -1098,20 +1179,28 @@ export class CanonicalSpecBuilderService {
   private resolveSizingFromSemanticRulePositionLeaves(
     positionLeaves: readonly RulesMainflowLeaf[],
   ): CanonicalStrategySpecV2['sizing'] {
+    if (positionLeaves.length === 0) {
+      return null
+    }
+    let resolved: CanonicalStrategySpecV2['sizing'] = null
     for (const leaf of positionLeaves) {
-      if (leaf.key !== FIELD_KEY.POSITION_PER_ORDER_BUDGET) continue
+      if (leaf.key !== FIELD_KEY.POSITION_PER_ORDER_BUDGET) {
+        throw new Error(`UnsupportedSemanticRulePositionEffect: key=${leaf.key} sourcePath=${leaf.path}`)
+      }
       const value = this.readNumericParam(leaf.params.value)
-      if (value === null || value <= 0) continue
+      if (value === null || value <= 0) {
+        throw new Error(`InvalidSemanticRulePositionEffect: key=${leaf.key} sourcePath=${leaf.path}`)
+      }
       const asset = typeof leaf.params.asset === 'string' && leaf.params.asset.trim() !== ''
         ? leaf.params.asset.trim().toUpperCase()
         : undefined
-      return {
+      resolved ??= {
         mode: 'QUOTE',
         value,
         ...(asset ? { asset } : {}),
       }
     }
-    return null
+    return resolved
   }
 
   private atomLeafFromMainflowLeaf(leaf: RulesMainflowLeaf): AtomExprAtom {

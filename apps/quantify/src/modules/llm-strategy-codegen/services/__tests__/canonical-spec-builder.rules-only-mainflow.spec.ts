@@ -1,6 +1,7 @@
 import type { SemanticState } from '../../types/semantic-state'
 import type { AtomExprAtom, SemanticRule } from '../../types/atom-expr'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
+import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 
 function baseState(overrides: Partial<SemanticState> = {}): SemanticState {
   return {
@@ -46,6 +47,13 @@ function programRule(program: AtomExprAtom): SemanticRule {
 }
 
 describe('CanonicalSpecBuilderService rules-only mainflow', () => {
+  const compileFallback = {
+    exchange: 'binance' as const,
+    symbol: 'BTCUSDT',
+    baseTimeframe: '1m',
+    positionPct: 10,
+  }
+
   it('builds execution semantics from rule effects and ignores conflicting flat-only buckets', () => {
     const state = baseState({
       trigger: [{
@@ -257,6 +265,59 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     expect(json).toContain('rules[0].effects.programs[0]')
   })
 
+  it.each([
+    ['program.fixed_grid_gated', 'fixed_grid_gated', {
+      anchorPrice: 55000,
+      levelCount: 10,
+      stepPct: 1,
+      sizing: { mode: 'fixed_quote', value: 25 },
+    }],
+    ['program.dynamic_grid', 'dynamic_grid', {
+      anchorLookbackBars: 20,
+      anchorSide: 'mid',
+      anchorDriftPct: 10,
+      rebuildMinIntervalSec: 60,
+      dynamicGridStep: { mode: 'pct', value: 0.5 },
+      levelCount: 8,
+      sizing: { mode: 'fixed_quote', value: 50 },
+    }],
+    ['program.adaptive_volatility_grid', 'adaptive_volatility_grid', {
+      atrPeriod: 14,
+      atrMultiplier: 1.5,
+      rangeMultiplier: 3,
+      atrDriftPct: 20,
+      rebuildCooldownSec: 300,
+      minStepPct: 0.2,
+      maxStepPct: 2,
+      levelCount: 6,
+      sizing: { mode: 'fixed_pct', value: 10 },
+    }],
+    ['program.event_listener', 'event_listener', {
+      eventSchemaRef: 'webhook_event',
+      sourceRef: 'event-feed-scope',
+      permissionScope: 'webhook:tradingview',
+      idempotencyKey: { fieldPath: 'event_id' },
+      dedupWindowMs: 1000,
+      expirationTtlMs: 5000,
+      expirationPolicy: 'drop',
+    }],
+  ])('keeps %s program effects through IR compilation', (key, programKind, params) => {
+    const state = baseState({
+      rules: [programRule({
+        kind: 'atom',
+        key,
+        params,
+      })],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+    const { ir } = new CanonicalSpecV2IrCompilerService().compile({ canonicalSpec: spec, fallback: compileFallback })
+
+    expect(ir.orchestrationPrograms).toEqual([
+      expect.objectContaining({ programKind }),
+    ])
+  })
+
   it('throws fail-closed for unsupported rules program effects', () => {
     const state = baseState({
       rules: [programRule({
@@ -268,6 +329,69 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
 
     expect(() => new CanonicalSpecBuilderService().buildFromSemanticState(state))
       .toThrow('UnsupportedSemanticRuleProgramEffect')
+  })
+
+  it('throws fail-closed for unsupported rules action effects with source path', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-unsupported-action',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.unsupported', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    expect(() => new CanonicalSpecBuilderService().buildFromSemanticState(state))
+      .toThrow('UnsupportedSemanticRuleActionEffect: key=action.unsupported sourcePath=rules[0].effects.actions[0]')
+  })
+
+  it('throws fail-closed for unsupported rules risk effects with source path', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-unsupported-risk',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [],
+          risks: [{ kind: 'atom', key: 'risk.unsupported', params: {} }],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    expect(() => new CanonicalSpecBuilderService().buildFromSemanticState(state))
+      .toThrow('UnsupportedSemanticRuleRiskEffect: key=risk.unsupported sourcePath=rules[0].effects.risks[0]')
+  })
+
+  it('throws fail-closed for invalid rules position sizing with source path', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-invalid-position',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [{ kind: 'atom', key: 'position.per_order_budget', params: { value: 0, asset: 'USDT' } }],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    expect(() => new CanonicalSpecBuilderService().buildFromSemanticState(state))
+      .toThrow('InvalidSemanticRulePositionEffect: key=position.per_order_budget sourcePath=rules[0].effects.positions[0]')
   })
 
   it('keeps distinct source paths for nested action risk position and program effect leaves', () => {
