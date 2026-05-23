@@ -14,7 +14,7 @@ import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gat
 import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant-conversations.repository'
 import type { EditablePublishedStrategySnapshotRecord } from '../repositories/published-strategy-snapshots.repository'
 import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
-import { collectAtomLeaves, gracefulParseSemanticRule, type SemanticRule } from '../types/atom-expr'
+import { collectAtomLeaves, gracefulParseSemanticRule, isRuleEffectsByRole, type AtomExpr, type RuleEffectsByRole, type SemanticRule } from '../types/atom-expr'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { SemanticEditDecision } from '../types/semantic-edit'
@@ -2967,7 +2967,14 @@ export class CodegenConversationService {
 
     let nextState = currentState
     for (const item of clarificationState?.items ?? []) {
-      const rawAnswer = answers[item.key]
+      const rawAnswer = this.readClarificationAnswerForItem(answers, item)
+      if (typeof rawAnswer === 'string' && rawAnswer.trim()) {
+        const rulePathAppliedState = this.applyRulePathClarificationAnswer(nextState, item, rawAnswer.trim())
+        if (rulePathAppliedState !== nextState) {
+          nextState = rulePathAppliedState
+          continue
+        }
+      }
       const isLegacyPositionSizingAnswer = item.key === 'sizing.positionPct' || item.field === 'riskRules.positionPct'
       if (
         typeof rawAnswer !== 'string'
@@ -3002,6 +3009,127 @@ export class CodegenConversationService {
     }
 
     return nextState
+  }
+
+  private applyRulePathClarificationAnswer(
+    currentState: SemanticState,
+    item: StrategyClarificationItem,
+    answer: string,
+  ): SemanticState {
+    const path = this.readRuleParamClarificationPath(item)
+    if (!path) return currentState
+
+    const value = this.parseRulePathClarificationValue(path.paramKey, item.slotKey, answer)
+    if (value === null) return currentState
+    const nextRules = this.withRuleParamValue(currentState.rules, path, value)
+    if (nextRules === currentState.rules) return currentState
+
+    return {
+      ...currentState,
+      rules: nextRules,
+    }
+  }
+
+  private readRuleParamClarificationPath(item: StrategyClarificationItem): {
+    ruleIndex: number
+    effectRole?: keyof RuleEffectsByRole
+    effectIndex?: number
+    paramKey: string
+  } | null {
+    const candidates = [item.fieldPath, item.field, item.key]
+    for (const candidate of candidates) {
+      if (typeof candidate !== 'string') continue
+      const effectMatch = candidate.match(/^rules\[(\d+)\]\.effects\.(actions|risks|positions|orchestration|programs)\[(\d+)\]\.params\.([A-Za-z_$][\w$]*)$/u)
+      if (effectMatch?.[1] && effectMatch[2] && effectMatch[3] && effectMatch[4]) {
+        return {
+          ruleIndex: Number.parseInt(effectMatch[1], 10),
+          effectRole: effectMatch[2] as keyof RuleEffectsByRole,
+          effectIndex: Number.parseInt(effectMatch[3], 10),
+          paramKey: effectMatch[4],
+        }
+      }
+      const conditionMatch = candidate.match(/^rules\[(\d+)\]\.condition\.params\.([A-Za-z_$][\w$]*)$/u)
+      if (conditionMatch?.[1] && conditionMatch[2]) {
+        return {
+          ruleIndex: Number.parseInt(conditionMatch[1], 10),
+          paramKey: conditionMatch[2],
+        }
+      }
+    }
+
+    return null
+  }
+
+  private parseRulePathClarificationValue(
+    paramKey: string,
+    slotKey: string | undefined,
+    answer: string,
+  ): number | string | null {
+    if (paramKey === 'valuePct' || slotKey === 'risk.stop_loss_pct.valuePct') {
+      return this.normalizePositionPctClarificationAnswer(answer)
+    }
+    if (paramKey === 'value' || slotKey === 'position.sizing.value') {
+      const match = answer.replace(/,/gu, '').match(/(\d+(?:\.\d+)?)/u)
+      if (!match?.[1]) return null
+      const value = Number(match[1])
+      return Number.isFinite(value) && value > 0 ? value : null
+    }
+
+    return answer.trim() || null
+  }
+
+  private withRuleParamValue(
+    rules: SemanticState['rules'],
+    path: {
+      ruleIndex: number
+      effectRole?: keyof RuleEffectsByRole
+      effectIndex?: number
+      paramKey: string
+    },
+    value: number | string,
+  ): SemanticState['rules'] {
+    if (!rules?.[path.ruleIndex]) return rules
+
+    const nextRules = [...rules]
+    const rule = nextRules[path.ruleIndex]
+    if (!rule) return rules
+
+    if (!path.effectRole) {
+      if (rule.condition.kind !== 'atom') return rules
+      nextRules[path.ruleIndex] = {
+        ...rule,
+        condition: this.withAtomParamValue(rule.condition, path.paramKey, value),
+      }
+      return nextRules
+    }
+
+    if (!isRuleEffectsByRole(rule.effects) || typeof path.effectIndex !== 'number') return rules
+    const effectsForRole = rule.effects[path.effectRole]
+    const effect = effectsForRole[path.effectIndex]
+    if (!effect || effect.kind !== 'atom') return rules
+
+    nextRules[path.ruleIndex] = {
+      ...rule,
+      effects: {
+        ...rule.effects,
+        [path.effectRole]: effectsForRole.map((candidate, index) =>
+          index === path.effectIndex
+            ? this.withAtomParamValue(effect, path.paramKey, value)
+            : candidate,
+        ),
+      },
+    }
+    return nextRules
+  }
+
+  private withAtomParamValue(atom: Extract<AtomExpr, { kind: 'atom' }>, paramKey: string, value: number | string): AtomExpr {
+    return {
+      ...atom,
+      params: {
+        ...atom.params,
+        [paramKey]: value,
+      },
+    }
   }
 
   private resolveStructuredSemanticOpenSlotAnswers(
@@ -4009,8 +4137,25 @@ export class CodegenConversationService {
 
   private buildRulePathClarificationState(
     openSlots: SemanticSlotState[],
-    _blockingReasons: string[],
+    blockingReasons: string[],
   ): StrategyClarificationState {
+    if (openSlots.length === 0) {
+      const reason = blockingReasons[0] ?? 'rules_mainflow_blocked'
+      return {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          key: `rulesMainflow.${reason}`,
+          field: `rulesMainflow.${reason}`,
+          fieldPath: `rulesMainflow.${reason}`,
+          status: 'pending',
+          reason: 'missing_semantic_contract_requirement',
+          question: this.renderRulePathBlockerQuestion(reason),
+          priority: 100,
+          blocking: true,
+        }],
+      }
+    }
+
     return {
       status: 'NEEDS_CLARIFICATION',
       items: openSlots.map(slot => ({
@@ -4024,6 +4169,22 @@ export class CodegenConversationService {
         priority: this.rulePathClarificationPriority(slot.priority),
         blocking: true,
       })),
+    }
+  }
+
+  private renderRulePathBlockerQuestion(reason: string): string {
+    switch (reason) {
+      case 'rules_missing_or_empty':
+        return '当前还没有形成可执行规则。请补充入场条件、出场条件、风控和仓位。'
+      case 'missing_entry_rules':
+        return '请补充入场规则，例如什么价格或指标条件触发开仓。'
+      case 'missing_exit_rules':
+        return '请补充出场规则，例如什么价格或指标条件触发平仓。'
+      case 'legacy_effects_array':
+      case 'invalid_expr':
+        return '当前规则结构不完整，请补充为可执行的规则参数后再生成脚本。'
+      default:
+        return '请先补充缺失的规则参数，我再生成脚本。'
     }
   }
 
@@ -6058,6 +6219,7 @@ export class CodegenConversationService {
       || field === 'risk'
       || field.startsWith('position.')
       || field.startsWith('rules[')
+      || field.startsWith('rulesMainflow.')
       || field.startsWith('triggers[')
       || field.startsWith('actions[')
       || field.startsWith('risk[')

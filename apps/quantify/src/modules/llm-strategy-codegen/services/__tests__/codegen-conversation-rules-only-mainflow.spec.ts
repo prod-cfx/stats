@@ -1,5 +1,27 @@
+import type { AtomExpr, SemanticRule } from '../../types/atom-expr'
 import type { SemanticSlotState, SemanticState } from '../../types/semantic-state'
 import { CodegenConversationService } from '../codegen-conversation.service'
+import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
+
+function atom(key: string, params: Record<string, unknown> = {}): AtomExpr {
+  return { kind: 'atom', key, params }
+}
+
+function rule(partial: Partial<SemanticRule> & { id: string, condition: AtomExpr }): SemanticRule {
+  return {
+    id: partial.id,
+    phase: partial.phase ?? 'entry',
+    sideScope: partial.sideScope ?? 'both',
+    condition: partial.condition,
+    effects: partial.effects ?? {
+      actions: [],
+      risks: [],
+      positions: [],
+      orchestration: [],
+      programs: [],
+    },
+  }
+}
 
 function semanticState(rules: SemanticState['rules'] = []): SemanticState {
   return {
@@ -75,6 +97,124 @@ describe('CodegenConversationService rules-only mainflow helpers', () => {
       status: 'pending',
       reason: 'missing_semantic_risk',
     })
+  })
+
+  it('applies rule path clarification answer to rules params', () => {
+    const service = Object.create(CodegenConversationService.prototype) as {
+      buildRulePathClarificationState: (slots: SemanticSlotState[], reasons: string[]) => {
+        items: Array<{ key: string }>
+      }
+      applySemanticClarificationAnswers: (
+        currentState: SemanticState,
+        clarificationState: { items: Array<{ key: string }> },
+        answers: Record<string, string>,
+      ) => SemanticState
+    }
+    const readiness = new SemanticContractReadinessService()
+    const state = semanticState([
+      rule({
+        id: 'r-entry',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.stop_loss_pct', {})],
+          positions: [atom('position.sizing', { value: 10, unit: 'USDT' })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ])
+    const before = readiness.evaluateMainflowRulesReadiness(state.rules)
+    const clarificationState = service.buildRulePathClarificationState(before.openSlots, before.blockingReasons)
+
+    const nextState = service.applySemanticClarificationAnswers(state, clarificationState, {
+      [clarificationState.items[0].key]: '5%',
+    })
+
+    expect(nextState.rules?.[0].effects).toMatchObject({
+      risks: [expect.objectContaining({
+        params: expect.objectContaining({ valuePct: 5 }),
+      })],
+    })
+    expect(readiness.evaluateMainflowRulesReadiness(nextState.rules).openSlots).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ slotKey: 'risk.stop_loss_pct.valuePct' }),
+    ]))
+  })
+
+  it('applies position sizing rule path clarification answer to rules params', () => {
+    const service = Object.create(CodegenConversationService.prototype) as {
+      buildRulePathClarificationState: (slots: SemanticSlotState[], reasons: string[]) => {
+        items: Array<{ key: string }>
+      }
+      applySemanticClarificationAnswers: (
+        currentState: SemanticState,
+        clarificationState: { items: Array<{ key: string }> },
+        answers: Record<string, string>,
+      ) => SemanticState
+    }
+    const readiness = new SemanticContractReadinessService()
+    const state = semanticState([
+      rule({
+        id: 'r-entry',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.stop_loss_pct', { valuePct: 5 })],
+          positions: [atom('position.sizing', { unit: 'USDT' })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ])
+    const before = readiness.evaluateMainflowRulesReadiness(state.rules)
+    const clarificationState = service.buildRulePathClarificationState(before.openSlots, before.blockingReasons)
+
+    const nextState = service.applySemanticClarificationAnswers(state, clarificationState, {
+      [clarificationState.items[0].key]: '100 USDT',
+    })
+
+    expect(nextState.rules?.[0].effects).toMatchObject({
+      positions: [expect.objectContaining({
+        params: expect.objectContaining({ value: 100 }),
+      })],
+    })
+    expect(readiness.evaluateMainflowRulesReadiness(nextState.rules).openSlots).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ slotKey: 'position.sizing.value' }),
+    ]))
+  })
+
+  it('builds readback-safe synthetic blocker when rule readiness has no open slots', () => {
+    const service = Object.create(CodegenConversationService.prototype) as {
+      buildRulePathClarificationState: (slots: SemanticSlotState[], reasons: string[]) => unknown
+      readClarificationState: (payload: unknown) => {
+        items: Array<{
+          key: string
+          fieldPath?: string
+          status: string
+          reason: string
+          blocking: true
+          question: string
+        }>
+      } | null
+      renderRulePathClarificationPrompt: (state: { items: Array<{ status: string, question?: string }> }, locale: 'zh' | 'en') => string
+      localizedText: (locale: 'zh' | 'en', en: string, zh: string) => string
+    }
+    service.localizedText = (_locale, _en, zh) => zh
+
+    const state = service.buildRulePathClarificationState([], ['rules_missing_or_empty'])
+    const readBack = service.readClarificationState(state)
+
+    expect(readBack?.items[0]).toMatchObject({
+      key: 'rulesMainflow.rules_missing_or_empty',
+      fieldPath: 'rulesMainflow.rules_missing_or_empty',
+      status: 'pending',
+      reason: 'missing_semantic_contract_requirement',
+      blocking: true,
+    })
+    expect(readBack?.items[0].question).toContain('规则')
+    expect(service.renderRulePathClarificationPrompt(readBack!, 'zh')).toBe(readBack?.items[0].question)
   })
 
   it('checks rules mainflow before confirmation artifacts without pending clarification', async () => {
