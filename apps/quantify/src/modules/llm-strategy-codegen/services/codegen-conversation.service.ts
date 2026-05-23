@@ -2579,7 +2579,7 @@ export class CodegenConversationService {
     }
     const activeClarificationState = this.hasPendingBlockingClarification(baseClarificationState)
       ? baseClarificationState
-      : this.resolveSemanticClarificationArtifacts(persistedSemanticState, responseLocale).clarificationState
+      : { status: 'CLEAR', items: [] } satisfies StrategyClarificationState
     const inferredSemanticClarificationAnswers = this.inferFreeformSemanticClarificationAnswers(
       activeClarificationState,
       dto.message,

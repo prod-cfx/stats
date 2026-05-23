@@ -45,7 +45,7 @@ describe('CodegenConversationService rules-only mainflow helpers', () => {
     })
   })
 
-  it('checks rules mainflow before confirmation artifacts', async () => {
+  it('checks rules mainflow before confirmation artifacts without pending clarification', async () => {
     type Harness = {
       continueConfirmedSession: (
         session: {
@@ -89,25 +89,15 @@ describe('CodegenConversationService rules-only mainflow helpers', () => {
     }
 
     const baseState = semanticState()
-    const pendingClarification = {
-      status: 'NEEDS_CLARIFICATION',
-      items: [{
-        key: 'existing',
-        field: 'entryRules',
-        reason: 'missing_entry_rules',
-        blocking: true,
-        question: '已有问题',
-        status: 'pending',
-      }],
-    }
+    const persistedClarification = { status: 'CLEAR', items: [] }
     const service = Object.create(CodegenConversationService.prototype) as Harness
-    service.readClarificationState = jest.fn(() => pendingClarification)
+    service.readClarificationState = jest.fn(() => persistedClarification)
     service.reconcileSemanticMissingPlaceholders = jest.fn((state: SemanticState) => state)
     service.readSemanticState = jest.fn(() => baseState)
     service.readConstraintPack = jest.fn(() => ({ locale: 'zh', conversationHistory: [] }))
     service.resolveResponseLocale = jest.fn(() => 'zh')
     service.shouldRejectChecklistOnlySession = jest.fn(() => false)
-    service.hasPendingBlockingClarification = jest.fn(() => true)
+    service.hasPendingBlockingClarification = jest.fn(() => false)
     service.resolveSemanticClarificationArtifacts = jest.fn(() => {
       throw new Error('flat-derived artifacts should not run before rules guard')
     })
@@ -146,7 +136,7 @@ describe('CodegenConversationService rules-only mainflow helpers', () => {
       userId: 'user-1',
       status: 'CONFIRM_GATE',
       semanticState: baseState,
-      clarificationState: pendingClarification,
+      clarificationState: persistedClarification,
       constraintPack: {},
     }, {
       message: 'generate',
