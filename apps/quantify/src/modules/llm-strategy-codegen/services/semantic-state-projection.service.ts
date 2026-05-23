@@ -353,7 +353,7 @@ export class SemanticStateProjectionService {
   //   - rules 为空 / 无 entry|exit rules → 返回 []，调用方走旧 flat 路径兜底
   private buildDisplayRuleBlocksFromRules(rules: readonly SemanticRule[]): SemanticDisplayLogicGraphBlock[] {
     const eligible = rules
-      .filter(r => r.phase === 'entry' || r.phase === 'exit')
+      .filter(r => r.phase === 'entry' || r.phase === 'exit' || this.isGridProgramRule(r))
     if (eligible.length === 0) return []
 
     const blocks: SemanticDisplayLogicGraphBlock[] = []
@@ -381,6 +381,13 @@ export class SemanticStateProjectionService {
           effectIndex += 1
         }
       }
+      if (actionItems.length === 0 && this.isGridProgramRule(rule)) {
+        actionItems.push({
+          kind: 'action',
+          id: `action-rule-${rule.id}-grid`,
+          text: '网格执行',
+        })
+      }
 
       blocks.push({
         // Issue #1443：每条 rule 独立 IF block；不再用 AND_AT_THEN 连接独立 rule
@@ -407,11 +414,29 @@ export class SemanticStateProjectionService {
   private sanitizeProjectionRules(rules: readonly SemanticRule[]): SemanticRule[] {
     return rules.flatMap((rule) => {
       if (!this.isAlwaysOnCondition(rule)) return [rule]
+      if (this.isExplicitOnStartEntryRule(rule)) return [rule]
       if (!listRuleEffects(rule.effects).some(effect => this.effectHasAction(effect))) return [rule]
 
       const effects = this.removeActionEffects(rule.effects)
       return listRuleEffects(effects).length > 0 ? [{ ...rule, effects }] : []
     })
+  }
+
+  private isExplicitOnStartEntryRule(rule: SemanticRule): boolean {
+    if (rule.phase !== 'entry') return false
+    if (rule.condition.kind !== 'atom') return false
+    if (rule.condition.key !== 'execution.on_start') return false
+    const timing = typeof rule.condition.params.timing === 'string' ? rule.condition.params.timing.toLowerCase() : ''
+    const occurrence = typeof rule.condition.params.occurrence === 'string' ? rule.condition.params.occurrence.toLowerCase() : ''
+    const orderType = typeof rule.condition.params.orderType === 'string' ? rule.condition.params.orderType.toLowerCase() : ''
+    return timing === 'on_start' || occurrence === 'once' || orderType === 'market'
+  }
+
+  private isGridProgramRule(rule: SemanticRule): boolean {
+    return [
+      ...collectAtomLeaves(rule.condition),
+      ...listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)),
+    ].some(leaf => leaf.key === 'grid.range_rebalance')
   }
 
   private isAlwaysOnCondition(rule: SemanticRule): boolean {

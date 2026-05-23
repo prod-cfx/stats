@@ -50,7 +50,7 @@ import type { SizingAnchor, SizingAxis } from './per-trade-sizing-resolver.servi
 import type { CanonicalOrchestrationLegSizing, CanonicalOrchestrationLegSizingMode } from '../types/canonical-strategy-spec'
 import { normalizeLegacyPositionSizing, validateSemanticExpressionContract, validateSemanticPositionContract, validateSemanticRiskContract } from './strategy-semantic-contracts'
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
-import type { RuleEffectsByRole } from '../types/atom-expr'
+import type { AtomExpr, AtomExprAtom, RuleEffectsByRole, SemanticRule } from '../types/atom-expr'
 import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
 import { SemanticRuleProjectionService } from './semantic-rule-projection.service'
 
@@ -1846,6 +1846,7 @@ export class CanonicalSpecBuilderService {
     }
     const rules: CanonicalRuleV2[] = []
     const defaultTimeframe = this.readLockedContextSlotString(state.contextSlots.timeframe)
+    const directSemanticRuleIds = new Set<string>()
     const gateConditions = readFlatTriggers(state)
       .filter(trigger => trigger.status === 'locked' && trigger.phase === 'gate')
       .map((trigger): ScopedSemanticGateCondition | null => {
@@ -1882,9 +1883,19 @@ export class CanonicalSpecBuilderService {
       }))
     }
 
+    for (const rule of state.rules ?? []) {
+      const directRules = this.buildDirectCanonicalRulesFromSemanticRule(rule, sizing, defaultTimeframe)
+      if (directRules.length === 0) continue
+      directSemanticRuleIds.add(rule.id)
+      rules.push(...directRules)
+    }
+
     for (const triggerGroup of this.groupSemanticMultiTimeframeTriggers([...readFlatTriggers(state)])) {
       const trigger = triggerGroup[0]
       if (!trigger) {
+        continue
+      }
+      if (trigger._provenance?.ruleId && directSemanticRuleIds.has(trigger._provenance.ruleId)) {
         continue
       }
       if (trigger.status !== 'locked') {
@@ -1930,6 +1941,8 @@ export class CanonicalSpecBuilderService {
         trigger.status === 'locked'
         && (trigger.phase === 'entry' || trigger.phase === 'exit')
         && trigger.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key,
+      ).filter(trigger =>
+        !trigger._provenance?.ruleId || !directSemanticRuleIds.has(trigger._provenance.ruleId),
       )),
     )
 
@@ -2018,14 +2031,18 @@ export class CanonicalSpecBuilderService {
       }
     }
 
-    rules.push(...this.buildRiskRulesFromSemanticState([...readFlatRisks(state)], state.position, [...readFlatActions(state)]))
+    rules.push(...this.buildRiskRulesFromSemanticState([...readFlatRisks(state)], state.position, [...readFlatActions(state)], state.rules ?? []))
 
     return rules
   }
 
   private isPositionPresenceGateTrigger(trigger: SemanticTriggerState): boolean {
-    return trigger.key === ATOM_CONTRACT_REGISTRY['position.has_position'].key
-      || trigger.key === ATOM_CONTRACT_REGISTRY['position.no_position'].key
+    return this.isPositionPresenceAtomKey(trigger.key)
+  }
+
+  private isPositionPresenceAtomKey(key: string): boolean {
+    return key === ATOM_CONTRACT_REGISTRY['position.has_position'].key
+      || key === ATOM_CONTRACT_REGISTRY['position.no_position'].key
   }
 
   private isSemanticTriggerGroupActionAllowed(
@@ -2611,6 +2628,151 @@ export class CanonicalSpecBuilderService {
     }
   }
 
+  private buildDirectCanonicalRulesFromSemanticRule(
+    rule: SemanticRule,
+    sizing: CanonicalStrategySpecV2['sizing'],
+    defaultTimeframe: string | null,
+  ): CanonicalRuleV2[] {
+    if (rule.phase !== 'entry' && rule.phase !== 'exit') return []
+    if (rule.condition.kind === 'atom') return []
+    const split = rule.phase === 'entry'
+      ? this.splitPositionPresenceGatesFromSemanticRuleCondition(rule.condition)
+      : { condition: rule.condition, gateAtoms: [] as AtomExprAtom[] }
+    if (!split.condition) return []
+    const phase = rule.phase
+    const condition = this.buildConditionFromSemanticRuleExpr(split.condition, phase, rule.sideScope, defaultTimeframe)
+    if (!condition) return []
+    const actions = listRuleEffects(rule.effects)
+      .flatMap(effect => collectAtomLeaves(effect))
+      .flatMap(leaf => this.buildCanonicalActionsFromRuleEffectLeaf(leaf, phase, sizing))
+    if (actions.length === 0) return []
+    const gateRules = split.gateAtoms
+      .map((atom, index): CanonicalRuleV2 | null => {
+        const gateCondition = this.buildConditionFromSemanticRuleAtom(atom, 'gate', rule.sideScope, defaultTimeframe)
+        if (!gateCondition || !this.isNoPositionGateCondition(gateCondition)) return null
+        return {
+          id: `semantic-gate-${rule.id}-${index + 1}`,
+          phase: 'gate',
+          sideScope: rule.sideScope,
+          priority: this.resolveSemanticRulePriority('gate', index + 1),
+          condition: gateCondition,
+          actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+        }
+      })
+      .filter((gateRule): gateRule is CanonicalRuleV2 => gateRule !== null)
+
+    return [...gateRules, {
+      id: `semantic-${phase}-${rule.id}`,
+      phase,
+      sideScope: rule.sideScope,
+      priority: this.resolveSemanticRulePriority(phase, 1),
+      condition,
+      actions,
+      metadata: {
+        normalized: {
+          source: 'normalized-intent',
+          triggerKeys: collectAtomLeaves(rule.condition).map(leaf => leaf.key),
+          actionKeys: actions.map(action => action.type),
+          family: 'single-leg',
+        },
+      },
+    }]
+  }
+
+  private splitPositionPresenceGatesFromSemanticRuleCondition(
+    expr: AtomExpr,
+  ): { condition: AtomExpr | null, gateAtoms: AtomExprAtom[] } {
+    if (expr.kind !== 'and') {
+      return { condition: expr, gateAtoms: [] }
+    }
+
+    const gateAtoms: AtomExprAtom[] = []
+    const children = expr.children.filter((child) => {
+      const isPositionPresence = child.kind === 'atom' && this.isPositionPresenceAtomKey(child.key)
+      if (isPositionPresence) gateAtoms.push(child)
+      return !isPositionPresence
+    })
+    if (children.length === expr.children.length) {
+      return { condition: expr, gateAtoms: [] }
+    }
+    if (children.length === 0) {
+      return { condition: null, gateAtoms }
+    }
+    return {
+      condition: children.length === 1 ? children[0]! : { kind: 'and', children },
+      gateAtoms,
+    }
+  }
+
+  private buildCanonicalActionsFromRuleEffectLeaf(
+    leaf: AtomExprAtom,
+    phase: 'entry' | 'exit',
+    sizing: CanonicalStrategySpecV2['sizing'],
+  ): CanonicalRuleV2['actions'] {
+    switch (leaf.key) {
+      case ATOM_CONTRACT_REGISTRY['action.open_long'].key:
+        return phase === 'entry' ? [this.buildOpenAction('OPEN_LONG', sizing, leaf.key)] : []
+      case ATOM_CONTRACT_REGISTRY['action.open_short'].key:
+        return phase === 'entry' ? [this.buildOpenAction('OPEN_SHORT', sizing, leaf.key)] : []
+      case ATOM_CONTRACT_REGISTRY['action.close_long'].key:
+        return phase === 'exit' ? [{ type: 'CLOSE_LONG', atomKey: leaf.key }] : []
+      case ATOM_CONTRACT_REGISTRY['action.close_short'].key:
+        return phase === 'exit' ? [{ type: 'CLOSE_SHORT', atomKey: leaf.key }] : []
+      default:
+        return []
+    }
+  }
+
+  private buildConditionFromSemanticRuleExpr(
+    expr: AtomExpr,
+    phase: 'entry' | 'exit',
+    sideScope: SemanticRule['sideScope'],
+    defaultTimeframe: string | null,
+  ): CanonicalConditionNode | null {
+    if (expr.kind === 'atom') {
+      return this.buildConditionFromSemanticRuleAtom(expr, phase, sideScope, defaultTimeframe)
+    }
+    if (expr.kind === 'and' || expr.kind === 'or') {
+      const children = expr.children
+        .map(child => this.buildConditionFromSemanticRuleExpr(child, phase, sideScope, defaultTimeframe))
+        .filter((condition): condition is CanonicalConditionNode => condition !== null)
+      if (children.length === 0) return null
+      if (children.length === 1) return children[0]
+      return { kind: expr.kind === 'and' ? 'AND' : 'OR', children }
+    }
+    if (expr.kind === 'not') {
+      const child = this.buildConditionFromSemanticRuleExpr(expr.child, phase, sideScope, defaultTimeframe)
+      return child ? { kind: 'NOT', children: [child] } : null
+    }
+    if (expr.kind === 'sequence') {
+      const children = expr.steps
+        .map(step => this.buildConditionFromSemanticRuleExpr(step, phase, sideScope, defaultTimeframe))
+        .filter((condition): condition is CanonicalConditionNode => condition !== null)
+      if (children.length === 0) return null
+      if (children.length === 1) return children[0]
+      return { kind: 'AND', predicateForm: 'generic', children }
+    }
+    return null
+  }
+
+  private buildConditionFromSemanticRuleAtom(
+    atom: AtomExprAtom,
+    phase: 'entry' | 'exit' | 'gate',
+    sideScope: SemanticRule['sideScope'],
+    defaultTimeframe: string | null,
+  ): CanonicalConditionNode | null {
+    return this.buildConditionFromSemanticTriggerContract({
+      id: `rules-tree-${atom.key}`,
+      key: atom.key,
+      phase,
+      sideScope,
+      params: atom.params ?? {},
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    } as SemanticTriggerState, defaultTimeframe)
+  }
+
   private attachSemanticGateConditions(
     condition: CanonicalConditionNode,
     gateConditions: ScopedSemanticGateCondition[],
@@ -2792,6 +2954,9 @@ export class CanonicalSpecBuilderService {
     trigger: SemanticTriggerState,
     defaultTimeframe: string | null,
   ): CanonicalConditionNode | null {
+    if (trigger.key === 'price.previous_extrema_retest') {
+      return this.buildPreviousExtremaRetestCondition(trigger, defaultTimeframe)
+    }
     return this.buildConditionFromNormalizedTrigger({
       key: trigger.key as NormalizedTriggerAtom['key'],
       phase: trigger.phase,
@@ -2800,6 +2965,36 @@ export class CanonicalSpecBuilderService {
       closureStatus: 'closed',
       unresolvedSlots: [],
     }, defaultTimeframe)
+  }
+
+  private buildPreviousExtremaRetestCondition(
+    trigger: SemanticTriggerState,
+    defaultTimeframe: string | null,
+  ): CanonicalConditionNode {
+    const retestKind = this.readStringParam(trigger.params.retestKind)
+    const extremaType = this.readStringParam(trigger.params.extremaType) ?? 'high'
+    return {
+      kind: 'atom',
+      key: 'price.previous_extrema_retest',
+      semanticScope: 'market',
+      predicateForm: 'generic',
+      op: retestKind === 'break_through'
+        ? (extremaType === 'low' ? 'LT' : 'GT')
+        : (extremaType === 'low' ? 'GTE' : 'LTE'),
+      params: {
+        lookbackBars: typeof trigger.params.lookbackBars === 'number'
+          ? trigger.params.lookbackBars
+          : typeof trigger.params.period === 'number'
+            ? trigger.params.period
+            : 24,
+        ...(typeof trigger.params.maxBars === 'number' ? { maxBars: trigger.params.maxBars } : {}),
+        ...(typeof trigger.params.tolerancePct === 'number' ? { tolerancePct: trigger.params.tolerancePct } : {}),
+        ...(typeof trigger.params.memoryKey === 'string' ? { memoryKey: trigger.params.memoryKey } : {}),
+        ...(retestKind ? { retestKind } : {}),
+        ...(extremaType ? { extremaType } : {}),
+        ...(defaultTimeframe ? { timeframe: defaultTimeframe } : {}),
+      },
+    }
   }
 
   private buildConditionFromSemanticExpression(expression: SemanticExpression): CanonicalConditionNode | null {
@@ -2960,9 +3155,10 @@ export class CanonicalSpecBuilderService {
     risks: SemanticRiskState[],
     position: SemanticPositionState | null,
     actions: SemanticActionState[] = [],
+    semanticRules: readonly SemanticRule[] = [],
   ): CanonicalRuleV2[] {
     const normalizedRisks = normalizeRiskSemantics(risks)
-    const sideScope = this.resolveSemanticRiskSideScope(position)
+    const defaultSideScope = this.resolveSemanticRiskSideScope(position)
     const reduceAction = actions.find(action => action.status === 'locked' && action.key === FIELD_KEY.ACTION_REDUCE_POSITION) ?? null
     const rules: CanonicalRuleV2[] = []
     let priority = 120
@@ -2971,6 +3167,7 @@ export class CanonicalSpecBuilderService {
       if (risk.status !== 'locked') {
         continue
       }
+      const sideScope = this.resolveSemanticRiskRuleSideScope(risk, semanticRules, defaultSideScope)
       if (
         risk.key === FIELD_KEY.RISK_ATR_MULTIPLE_STOP
         || risk.key === FIELD_KEY.RISK_ATR_MULTIPLE_TAKE_PROFIT
@@ -3034,7 +3231,7 @@ export class CanonicalSpecBuilderService {
         continue
       }
       if (risk.key === ATOM_CONTRACT_REGISTRY['risk.partial_take_profit'].key) {
-        const ptpRules = this.buildPartialTakeProfitRules(risk, sideScope, priority)
+        const ptpRules = this.buildPartialTakeProfitRules(risk, sideScope === 'flat' ? 'both' : sideScope, priority)
         if (ptpRules.length > 0) {
           rules.push(...ptpRules)
           priority -= ptpRules.length
@@ -3099,6 +3296,17 @@ export class CanonicalSpecBuilderService {
     }
 
     return rules
+  }
+
+  private resolveSemanticRiskRuleSideScope(
+    risk: SemanticRiskState,
+    semanticRules: readonly SemanticRule[],
+    fallback: CanonicalRuleV2['sideScope'],
+  ): CanonicalRuleV2['sideScope'] {
+    const ruleId = (risk as { _provenance?: { ruleId?: unknown } })._provenance?.ruleId
+    if (typeof ruleId !== 'string') return fallback
+    const sourceRule = semanticRules.find(rule => rule.id === ruleId)
+    return sourceRule?.sideScope ?? fallback
   }
 
   private buildAtomicContractRiskRule(

@@ -1206,6 +1206,12 @@ export class PlannerDispatcherMergeService {
       catch (err) {
         this.logger.warn(`filterAlwaysOnActionNoiseRules (planner-only path) 抛出异常，已 fail-open：${err instanceof Error ? err.message : String(err)}`)
       }
+      try {
+        this.pruneIntrinsicRuleNoise(cloned)
+      }
+      catch (err) {
+        this.logger.warn(`pruneIntrinsicRuleNoise (planner-only path) 抛出异常，已 fail-open：${err instanceof Error ? err.message : String(err)}`)
+      }
       return cloned
     }
     if (!plannerHas && dispatcherHas) return dispatcherPatch as CodegenSemanticPatch
@@ -1391,6 +1397,26 @@ export class PlannerDispatcherMergeService {
         ...(constraints ? { constraints } : {}),
       }
     }
+    const explicitSizing = this.extractExplicitPositionSizingFromText(userMessage)
+    if (explicitSizing) {
+      merged.position = {
+        ...(merged.position ?? {
+          mode: explicitSizing.sizing.kind === 'ratio' ? 'fixed_ratio' : explicitSizing.sizing.kind === 'quote' ? 'fixed_quote' : 'fixed_qty',
+          value: explicitSizing.sizing.value,
+          positionMode: this.hasShortEntryIntent(dispatcher, userMessage) ? 'long_short' : 'long_only',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        }),
+        mode: explicitSizing.sizing.kind === 'ratio' ? 'fixed_ratio' : explicitSizing.sizing.kind === 'quote' ? 'fixed_quote' : 'fixed_qty',
+        value: explicitSizing.sizing.value,
+        sizing: explicitSizing.sizing,
+        status: 'locked',
+        source: 'user_explicit',
+        evidence: { text: explicitSizing.evidenceText, source: 'user_explicit' },
+        openSlots: [],
+      }
+    }
     if (userMessage.trim().length > 0) {
       try {
         this.mergeDeterministicRulesIntoPlanner(merged, dispatcher, userMessage)
@@ -1551,6 +1577,7 @@ export class PlannerDispatcherMergeService {
     const hasDrawdownBlock = (dispatcher.atoms ?? []).some(atom => atom.key === ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key)
       || rules.some(rule => JSON.stringify(rule).includes(ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key))
     const hasExplicitStopLoss = /止损|stop\s*loss/iu.test(userMessage)
+    const hasAtrIntent = /(?:^|[^a-z])ATR(?:[^a-z]|$)|平均真实波幅/iu.test(userMessage)
     const allowShort = this.hasShortEntryIntent(dispatcher, userMessage)
     const hasRsiComposite = rules.some(rule =>
       rule.phase === 'entry'
@@ -1563,8 +1590,29 @@ export class PlannerDispatcherMergeService {
     const next: SemanticRule[] = []
 
     for (const rule of rules) {
-      const conditionLeaves = collectAtomLeaves(rule.condition)
-      const effectLeaves = listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))
+      const normalizedConditionInitial = this.normalizeRuleConditionNoise(rule.condition, userMessage)
+      const normalizedEffectInput = this.normalizeRuleEffectsNoise(
+        rule.effects,
+        normalizedConditionInitial,
+      )
+      const normalizedCondition = this.repairConditionFromEffects(
+        normalizedConditionInitial,
+        normalizedEffectInput,
+      )
+      const conditionLeaves = collectAtomLeaves(normalizedCondition)
+      const normalizedRule = { ...rule, condition: normalizedCondition }
+      const dedupedEffects = this.dedupeRuleEffects(normalizedEffectInput)
+      const withoutUnsupportedNoise = this.removeUnsupportedEffectNoise(
+        dedupedEffects,
+        conditionLeaves,
+        hasAtrIntent,
+      )
+      const sideScopedEffects = this.removeContradictorySideActionEffects(
+        withoutUnsupportedNoise,
+        rule.phase,
+        rule.sideScope,
+      )
+      const effectLeaves = listRuleEffects(sideScopedEffects).flatMap(effect => collectAtomLeaves(effect))
       if (
         hasRsiComposite
         && rule.phase === 'entry'
@@ -1591,27 +1639,448 @@ export class PlannerDispatcherMergeService {
       if ((hasStopLossCondition || hasStopLossEffect) && !hasStopLossValue) continue
 
       const normalizedEffects = allowShort
-        ? rule.effects
-        : mapRuleEffectsByRole(rule.effects, effect => this.removeShortCloseEffect(effect))
-      const signature = `${rule.phase}|${rule.sideScope}|${JSON.stringify(this.normalizeAtomExprForSignature(rule.condition))}|${JSON.stringify(listRuleEffects(normalizedEffects).map(effect => this.normalizeAtomExprForSignature(effect)))}`
+        ? sideScopedEffects
+        : mapRuleEffectsByRole(sideScopedEffects, effect => this.removeShortActionEffect(effect))
+      const signature = `${rule.phase}|${rule.sideScope}|${JSON.stringify(this.normalizeAtomExprForSignature(normalizedCondition))}|${JSON.stringify(listRuleEffects(normalizedEffects).map(effect => this.normalizeAtomExprForSignature(effect)))}`
       if (seen.has(signature)) continue
       seen.add(signature)
-      next.push(normalizedEffects === rule.effects ? rule : { ...rule, sideScope: rule.sideScope === 'both' ? 'long' : rule.sideScope, effects: normalizedEffects })
+      next.push(
+        normalizedEffects === rule.effects && normalizedCondition === rule.condition
+          ? rule
+          : {
+              ...rule,
+              sideScope: !allowShort && rule.sideScope === 'both' ? 'long' : rule.sideScope,
+              condition: normalizedCondition,
+              effects: normalizedEffects,
+            },
+      )
     }
-    merged.rules = this.dropRulesCoveredByStrongerComposite(next)
+    merged.rules = this.dropDuplicateLifecycleRules(
+      this.dropDuplicateGridProgramRules(
+        this.dropRulesCoveredByStrongerComposite(next),
+      ),
+    )
   }
 
-  private removeShortCloseEffect(effect: AtomExpr): AtomExpr {
-    if (effect.kind === 'atom') {
-      return effect.key === ATOM_CONTRACT_REGISTRY['action.close_short'].key
-        ? { kind: 'atom', key: ATOM_CONTRACT_REGISTRY['action.close_long'].key, params: {} }
-        : effect
+  private pruneIntrinsicRuleNoise(merged: CodegenSemanticPatch): void {
+    const rules = merged.rules
+    if (!rules?.length) return
+    const next = rules.map((rule) => {
+      const conditionInitial = this.normalizeRuleConditionNoise(rule.condition, '')
+      const effectsInitial = this.normalizeRuleEffectsNoise(rule.effects, conditionInitial)
+      const condition = this.repairConditionFromEffects(conditionInitial, effectsInitial)
+      return {
+        ...rule,
+        condition,
+        effects: this.removeContradictorySideActionEffects(
+          this.dedupeRuleEffects(effectsInitial),
+          rule.phase,
+          rule.sideScope,
+        ),
+      }
+    })
+    merged.rules = this.dropDuplicateLifecycleRules(
+      this.dropDuplicateGridProgramRules(
+        this.dropRulesCoveredByStrongerComposite(next),
+      ),
+    )
+  }
+
+  private dedupeRuleEffects(effects: RuleEffects): RuleEffects {
+    if (isRuleEffectsByRole(effects)) {
+      const dedupeRole = (role: keyof RuleEffectsByRole): AtomExprAtom[] => {
+        return this.dedupeFallbackEffects(this.asEffectAtoms(effects[role] ?? []))
+      }
+      return {
+        actions: dedupeRole('actions'),
+        risks: dedupeRole('risks'),
+        positions: dedupeRole('positions'),
+        orchestration: dedupeRole('orchestration'),
+        programs: dedupeRole('programs'),
+      }
     }
-    if (effect.kind === 'and') return { ...effect, children: effect.children.map(child => this.removeShortCloseEffect(child)) }
-    if (effect.kind === 'or') return { ...effect, children: effect.children.map(child => this.removeShortCloseEffect(child)) }
-    if (effect.kind === 'not') return { ...effect, child: this.removeShortCloseEffect(effect.child) }
-    if (effect.kind === 'sequence') return { ...effect, steps: effect.steps.map(step => this.removeShortCloseEffect(step)) }
+    return this.dedupeFallbackEffects(this.asEffectAtoms(effects))
+  }
+
+  private asEffectAtoms(effects: ReadonlyArray<AtomExpr>): AtomExprAtom[] {
+    return effects.filter((effect): effect is AtomExprAtom => effect.kind === 'atom')
+  }
+
+  private normalizeRuleConditionNoise(
+    condition: AtomExpr,
+    userMessage: string,
+  ): AtomExpr {
+    return this.mapAtomExpr(condition, (atom) => {
+      atom = this.normalizeAtomNoise(atom)
+      if (atom.key === ATOM_CONTRACT_REGISTRY['price.percent_change'].key) {
+        const basis = this.readStringParam(atom.params, 'basis')
+        const valuePct = this.readNumericParam(atom.params, 'valuePct')
+        const direction = this.readStringParam(atom.params, 'direction')
+        if (basis === 'current_price' && valuePct === 0 && (direction === 'up' || direction === 'down')) {
+          return {
+            ...atom,
+            key: ATOM_CONTRACT_REGISTRY['price.candle_pattern'].key,
+            params: {
+              pattern: direction === 'up' ? 'single_bull_bar' : 'single_bear_bar',
+              direction: direction === 'up' ? 'bullish' : 'bearish',
+              ...(this.readStringParam(atom.params, 'window') ? { timeframe: this.readStringParam(atom.params, 'window') } : {}),
+            },
+          }
+        }
+      }
+      if (atom.key === ATOM_CONTRACT_REGISTRY['price.candle_pattern'].key) {
+        const pattern = this.readStringParam(atom.params, 'pattern')
+        const evidence = `${this.readEvidenceText(atom) ?? ''} ${userMessage}`
+        if (pattern === 'consecutive_body') {
+          const direction = this.readStringParam(atom.params, 'direction')
+          const minBars = this.readNumericParam(atom.params, 'minBars')
+          return {
+            ...atom,
+            params: {
+              ...atom.params,
+              ...(direction ? {} : { direction: /跌|阴|bear/iu.test(evidence) ? 'bearish' : 'bullish' }),
+              ...(minBars !== null ? {} : { minBars: this.extractConsecutiveBars(evidence) ?? 3 }),
+            },
+          }
+        }
+      }
+      return atom
+    })
+  }
+
+  private normalizeRuleEffectsNoise(
+    effects: RuleEffects,
+    condition: AtomExpr,
+  ): RuleEffects {
+    const conditionLeaves = collectAtomLeaves(condition)
+    const normalize = (effect: AtomExpr): AtomExpr => this.mapAtomExpr(effect, atom => this.normalizeAtomNoise(atom))
+    const normalized = isRuleEffectsByRole(effects)
+      ? {
+          actions: (effects.actions ?? []).map(normalize),
+          risks: (effects.risks ?? []).map(normalize),
+          positions: (effects.positions ?? []).map(normalize),
+          orchestration: (effects.orchestration ?? []).map(normalize),
+          programs: (effects.programs ?? []).map(normalize),
+        }
+      : effects.map(normalize)
+
+    return normalized
+  }
+
+  private repairConditionFromEffects(
+    condition: AtomExpr,
+    effects: RuleEffects,
+  ): AtomExpr {
+    const conditionLeaves = collectAtomLeaves(condition)
+    if (!conditionLeaves.some(leaf => leaf.key === 'volatility.atr_threshold')) return condition
+    const atrTakeProfit = listRuleEffects(effects)
+      .flatMap(effect => collectAtomLeaves(effect))
+      .find(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['risk.atr_take_profit'].key)
+    if (!atrTakeProfit) return condition
+    return {
+      kind: 'atom',
+      key: ATOM_CONTRACT_REGISTRY['risk.atr_take_profit'].key,
+      params: atrTakeProfit.params ?? {},
+      ...(atrTakeProfit.evidence ? { evidence: atrTakeProfit.evidence } : {}),
+    }
+  }
+
+  private normalizeAtomNoise(atom: AtomExprAtom): AtomExprAtom {
+    const params = { ...(atom.params ?? {}) }
+    delete params.phase
+    delete params.timeframeOverride
+    if (atom.key === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key || atom.key === ATOM_CONTRACT_REGISTRY['indicator.cross_under'].key) {
+      if (params.indicator === 'macd') {
+        if (params.value === 0) delete params.value
+        if (params.period === 0) delete params.period
+      }
+    }
+    return { ...atom, params }
+  }
+
+  private extractExplicitPositionSizingFromText(text: string): {
+    sizing:
+      | { kind: 'ratio', unit: 'ratio', value: number }
+      | { kind: 'quote', asset: 'USDT' | 'USDC' | 'USD', value: number }
+      | { kind: 'base', asset: string, value: number }
+    evidenceText: string
+  } | null {
+    const normalized = text.trim().replace(/\s+/gu, ' ').replace(/％/gu, '%')
+    if (!normalized) return null
+    type Candidate = {
+      sizing:
+        | { kind: 'ratio', unit: 'ratio', value: number }
+        | { kind: 'quote', asset: 'USDT' | 'USDC' | 'USD', value: number }
+        | { kind: 'base', asset: string, value: number }
+      evidenceText: string
+      score: number
+      index: number
+    }
+    const riskNoise = /止损|止盈|亏损|盈利|收益|ATR|atr|回撤|熔断/u
+    const candidates: Candidate[] = []
+    const pushCandidate = (candidate: Candidate): void => {
+      if (!Number.isFinite(candidate.sizing.value) || candidate.sizing.value <= 0) return
+      const evidence = candidate.evidenceText
+      const numberOffset = evidence.search(/\d/u)
+      const beforeNumber = numberOffset >= 0 ? evidence.slice(0, numberOffset) : evidence
+      if (riskNoise.test(beforeNumber)) return
+      candidates.push(candidate)
+    }
+    const percentPatterns = [
+      { re: /(?:单笔|每次|每笔|每单)\s*(?:使用|用|投入)?\s*(?:账户权益|账户资金|资金|仓位)?(?:的)?\s*(?:(?:百分之?|百分)\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*%)(?:\s*资金)?/giu, score: 120 },
+      { re: /(?:单笔|每次|每笔|每单)?\s*(?:仓位|固定仓位|资金|账户权益|账户资金)(?:的)?\s*(?:为|是|=|:|：)?\s*(?:(?:百分之?|百分)\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*%)(?:\s*资金)?/giu, score: 110 },
+      { re: /(?:使用|用|投入)\s*(?:账户权益|账户资金|资金)(?:的)?\s*(?:(?:百分之?|百分)\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*%)(?:\s*资金)?/giu, score: 90 },
+    ]
+    for (const { re, score } of percentPatterns) {
+      for (const match of normalized.matchAll(re)) {
+        const value = Number(match[1] ?? match[2])
+        if (!Number.isFinite(value) || value <= 0 || value > 100) continue
+        pushCandidate({
+          sizing: { kind: 'ratio', unit: 'ratio', value: value / 100 },
+          evidenceText: match[0].trim(),
+          score,
+          index: match.index ?? normalized.length,
+        })
+      }
+    }
+    const quotePatterns = [
+      { re: /(?:单笔|每次|每笔|每单|每格)\s*(?:使用|用|投入)?\s*(?:资金|仓位)?(?:为|是|=|:|：)?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U|刀|美元)/giu, score: 120 },
+      { re: /(?:仓位|资金|固定仓位)(?:为|是|=|:|：)?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U|刀|美元)/giu, score: 100 },
+    ]
+    for (const { re, score } of quotePatterns) {
+      for (const match of normalized.matchAll(re)) {
+        const value = Number(match[1])
+        if (!Number.isFinite(value) || value <= 0) continue
+        const rawAsset = match[2].toUpperCase()
+        const asset = rawAsset === 'USDC' ? 'USDC' : rawAsset === 'USD' ? 'USD' : 'USDT'
+        pushCandidate({
+          sizing: { kind: 'quote', asset, value },
+          evidenceText: match[0].trim(),
+          score,
+          index: match.index ?? normalized.length,
+        })
+      }
+    }
+    candidates.sort((a, b) => b.score - a.score || a.index - b.index)
+    if (candidates[0]) {
+      const { score: _score, index: _index, ...result } = candidates[0]
+      return result
+    }
+    return null
+  }
+
+  private removeUnsupportedEffectNoise(
+    effects: RuleEffects,
+    conditionLeaves: ReadonlyArray<AtomExprAtom>,
+    hasAtrIntent: boolean,
+  ): RuleEffects {
+    const allEffectLeaves = listRuleEffects(effects).flatMap(effect => collectAtomLeaves(effect))
+    const hasFixedGridProgramEffect = allEffectLeaves.some(leaf =>
+      leaf.key === ATOM_CONTRACT_REGISTRY['program.fixed_grid_gated'].key,
+    )
+    const hasFixedRangeGridCondition = conditionLeaves.some(leaf =>
+      leaf.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key
+      && (
+        (this.readNumericParam(leaf.params, 'rangeLower') !== null && this.readNumericParam(leaf.params, 'rangeUpper') !== null)
+        || this.readNumericParam(leaf.params, 'centerOffsetPct') !== null
+      ),
+    )
+    const shouldRemove = (leaf: AtomExprAtom): boolean => {
+      if (!hasAtrIntent && leaf.key === ATOM_CONTRACT_REGISTRY['risk.atr_take_profit'].key) return true
+      if ((hasFixedRangeGridCondition || hasFixedGridProgramEffect) && leaf.key === ATOM_CONTRACT_REGISTRY['program.dynamic_grid'].key) return true
+      return false
+    }
+    const filterExpr = (effect: AtomExpr): AtomExpr | null => this.filterAtomExpr(effect, shouldRemove)
+    if (isRuleEffectsByRole(effects)) {
+      const filterRole = (role: keyof RuleEffectsByRole): AtomExpr[] => {
+        return (effects[role] ?? []).map(filterExpr).filter((effect): effect is AtomExpr => effect !== null)
+      }
+      return {
+        actions: filterRole('actions'),
+        risks: filterRole('risks'),
+        positions: filterRole('positions'),
+        orchestration: filterRole('orchestration'),
+        programs: filterRole('programs'),
+      }
+    }
+    return effects.map(filterExpr).filter((effect): effect is AtomExpr => effect !== null)
+  }
+
+  private removeContradictorySideActionEffects(
+    effects: RuleEffects,
+    phase: SemanticRule['phase'],
+    sideScope: SemanticRule['sideScope'],
+  ): RuleEffects {
+    if (sideScope === 'both' || phase === 'gate' || phase === 'program') return effects
+    const banned = new Set<string>()
+    if (sideScope === 'long') {
+      banned.add(ATOM_CONTRACT_REGISTRY['action.open_short'].key)
+      banned.add(ATOM_CONTRACT_REGISTRY['action.close_short'].key)
+    }
+    else {
+      banned.add(ATOM_CONTRACT_REGISTRY['action.open_long'].key)
+      banned.add(ATOM_CONTRACT_REGISTRY['action.close_long'].key)
+    }
+    const filterExpr = (effect: AtomExpr): AtomExpr | null => this.filterAtomExpr(effect, leaf =>
+      this.readAtomBucket(leaf.key) === 'action' && banned.has(leaf.key),
+    )
+    if (isRuleEffectsByRole(effects)) {
+      const filterRole = (role: keyof RuleEffectsByRole): AtomExpr[] => {
+        return (effects[role] ?? []).map(filterExpr).filter((effect): effect is AtomExpr => effect !== null)
+      }
+      return {
+        actions: filterRole('actions'),
+        risks: filterRole('risks'),
+        positions: filterRole('positions'),
+        orchestration: filterRole('orchestration'),
+        programs: filterRole('programs'),
+      }
+    }
+    return effects.map(filterExpr).filter((effect): effect is AtomExpr => effect !== null)
+  }
+
+  private dropDuplicateGridProgramRules(rules: readonly SemanticRule[]): SemanticRule[] {
+    const bestByGridSignature = new Map<string, SemanticRule>()
+    const passthrough: SemanticRule[] = []
+    for (const rule of rules) {
+      const conditionLeaves = collectAtomLeaves(rule.condition)
+      if (
+        rule.phase !== 'program'
+        || !conditionLeaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
+      ) {
+        passthrough.push(rule)
+        continue
+      }
+      const signature = conditionLeaves
+        .filter(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
+        .map(leaf => this.gridRangeSignature(leaf))
+        .sort()
+        .join('|')
+      const existing = bestByGridSignature.get(signature)
+      if (!existing || this.ruleCompletenessScore(rule) > this.ruleCompletenessScore(existing)) {
+        bestByGridSignature.set(signature, rule)
+      }
+    }
+    return [...passthrough, ...bestByGridSignature.values()]
+  }
+
+  private gridRangeSignature(leaf: AtomExprAtom): string {
+    const lower = this.readNumericParam(leaf.params, 'rangeLower') ?? this.readNumericParam(leaf.params, 'lowerBound')
+    const upper = this.readNumericParam(leaf.params, 'rangeUpper') ?? this.readNumericParam(leaf.params, 'upperBound')
+    const sideMode = this.readStringParam(leaf.params, 'sideMode') ?? 'both'
+    return `${lower ?? ''}|${upper ?? ''}|${sideMode}`
+  }
+
+  private ruleCompletenessScore(rule: SemanticRule): number {
+    const leaves = [
+      ...collectAtomLeaves(rule.condition),
+      ...listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)),
+    ]
+    return leaves.reduce((score, leaf) => score + Object.keys(leaf.params ?? {}).length, 0)
+      + listRuleEffects(rule.effects).length * 10
+  }
+
+  private dropDuplicateLifecycleRules(rules: readonly SemanticRule[]): SemanticRule[] {
+    const out: SemanticRule[] = []
+    for (const rule of rules) {
+      const conditionLeaves = collectAtomLeaves(rule.condition)
+      const closeActions = this.closeActionSet(rule)
+      if (conditionLeaves.length > 0 && closeActions.size > 0) {
+        const existingIndex = out.findIndex(existing =>
+          existing.phase === rule.phase
+          && this.sideScopesCompatible(existing.sideScope, rule.sideScope)
+          && this.closeActionSet(existing).size > 0
+          && this.conditionsRepresentSameLifecycle(existing, rule),
+        )
+        if (existingIndex >= 0) {
+          const existing = out[existingIndex]
+          if (this.closeActionSet(existing).size < closeActions.size) out[existingIndex] = rule
+          continue
+        }
+      }
+      out.push(rule)
+    }
+    return out
+  }
+
+  private closeActionSet(rule: SemanticRule): Set<string> {
+    return new Set(listRuleEffects(rule.effects)
+      .flatMap(effect => collectAtomLeaves(effect))
+      .map(leaf => leaf.key)
+      .filter(key =>
+        key === ATOM_CONTRACT_REGISTRY['action.close_long'].key
+        || key === ATOM_CONTRACT_REGISTRY['action.close_short'].key,
+      ))
+  }
+
+  private conditionsRepresentSameLifecycle(left: SemanticRule, right: SemanticRule): boolean {
+    const leftLeaves = collectAtomLeaves(left.condition)
+    const rightLeaves = collectAtomLeaves(right.condition)
+    if (leftLeaves.length === 0 || rightLeaves.length === 0) return false
+    return leftLeaves.every(leftLeaf => rightLeaves.some(rightLeaf => this.conditionLeafRepresents(leftLeaf, rightLeaf)))
+      && rightLeaves.every(rightLeaf => leftLeaves.some(leftLeaf => this.conditionLeafRepresents(leftLeaf, rightLeaf)))
+  }
+
+  private removeShortActionEffect(effect: AtomExpr): AtomExpr {
+    if (effect.kind === 'atom') {
+      if (effect.key === ATOM_CONTRACT_REGISTRY['action.close_short'].key) {
+        return { kind: 'atom', key: ATOM_CONTRACT_REGISTRY['action.close_long'].key, params: {} }
+      }
+      if (effect.key === ATOM_CONTRACT_REGISTRY['action.open_short'].key) {
+        return { kind: 'atom', key: ATOM_CONTRACT_REGISTRY['action.open_long'].key, params: {} }
+      }
+      return effect
+    }
+    if (effect.kind === 'and') return { ...effect, children: effect.children.map(child => this.removeShortActionEffect(child)) }
+    if (effect.kind === 'or') return { ...effect, children: effect.children.map(child => this.removeShortActionEffect(child)) }
+    if (effect.kind === 'not') return { ...effect, child: this.removeShortActionEffect(effect.child) }
+    if (effect.kind === 'sequence') return { ...effect, steps: effect.steps.map(step => this.removeShortActionEffect(step)) }
     return effect
+  }
+
+  private mapAtomExpr(expr: AtomExpr, mapAtom: (atom: AtomExprAtom) => AtomExprAtom): AtomExpr {
+    if (expr.kind === 'atom') return mapAtom(expr)
+    if (expr.kind === 'and') return { ...expr, children: expr.children.map(child => this.mapAtomExpr(child, mapAtom)) }
+    if (expr.kind === 'or') return { ...expr, children: expr.children.map(child => this.mapAtomExpr(child, mapAtom)) }
+    if (expr.kind === 'not') return { ...expr, child: this.mapAtomExpr(expr.child, mapAtom) }
+    if (expr.kind === 'sequence') return { ...expr, steps: expr.steps.map(step => this.mapAtomExpr(step, mapAtom)) }
+    return expr
+  }
+
+  private filterAtomExpr(
+    expr: AtomExpr,
+    shouldRemove: (atom: AtomExprAtom) => boolean,
+  ): AtomExpr | null {
+    if (expr.kind === 'atom') return shouldRemove(expr) ? null : expr
+    if (expr.kind === 'and' || expr.kind === 'or') {
+      const children = expr.children
+        .map(child => this.filterAtomExpr(child, shouldRemove))
+        .filter((child): child is AtomExpr => child !== null)
+      if (children.length === 0) return null
+      if (children.length === 1) return children[0]
+      return { ...expr, children }
+    }
+    if (expr.kind === 'not') {
+      const child = this.filterAtomExpr(expr.child, shouldRemove)
+      return child ? { ...expr, child } : null
+    }
+    if (expr.kind === 'sequence') {
+      const steps = expr.steps
+        .map(step => this.filterAtomExpr(step, shouldRemove))
+        .filter((step): step is AtomExpr => step !== null)
+      if (steps.length === 0) return null
+      if (steps.length === 1) return steps[0]
+      return { ...expr, steps }
+    }
+    return expr
+  }
+
+  private extractConsecutiveBars(text: string): number | null {
+    if (/三|3/u.test(text)) return 3
+    if (/两|二|2/u.test(text)) return 2
+    if (/四|4/u.test(text)) return 4
+    if (/五|5/u.test(text)) return 5
+    return null
   }
 
   private omitEffectPhaseForSignature(effect: AtomExpr): unknown {
@@ -1771,9 +2240,21 @@ export class PlannerDispatcherMergeService {
       return false
     }
     if (
+      conditionKey === ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key
+      && /下轨|lower/iu.test(evidence)
+    ) {
+      return false
+    }
+    if (
       conditionKey === ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key
       && effectKeys.includes(ATOM_CONTRACT_REGISTRY['action.open_short'].key)
       && /买入|开多|buy|long/iu.test(evidence)
+    ) {
+      return false
+    }
+    if (
+      conditionKey === ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key
+      && /上轨|upper/iu.test(evidence)
     ) {
       return false
     }
@@ -1900,6 +2381,9 @@ export class PlannerDispatcherMergeService {
 
   private conditionLeafRepresents(existing: AtomExprAtom, candidate: AtomExprAtom): boolean {
     if (this.atomLeafMatches(existing, candidate)) return true
+    if (this.percentChangeLeafMatches(existing, candidate)) return true
+    if (this.riskPercentChangeRepresentsRisk(existing, candidate)) return true
+    if (this.riskPercentChangeRepresentsRisk(candidate, existing)) return true
     if (
       existing.key === candidate.key
       && existing.key.startsWith('bollinger.')
@@ -1908,6 +2392,62 @@ export class PlannerDispatcherMergeService {
     }
     if (this.bollingerMiddleRepresentsNoisyBollingerMidlineEvidence(existing, candidate)) return true
     return this.bollingerMiddleRepresentsMovingAverageMidline(existing, candidate)
+  }
+
+  private riskPercentChangeRepresentsRisk(percentLeaf: AtomExprAtom, riskLeaf: AtomExprAtom): boolean {
+    if (percentLeaf.key !== ATOM_CONTRACT_REGISTRY['price.percent_change'].key) return false
+    if (
+      riskLeaf.key !== ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key
+      && riskLeaf.key !== ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key
+    ) return false
+    const basis = this.readStringParam(percentLeaf.params, 'basis')
+    if (basis !== 'entry_avg_price' && basis !== 'position_pnl') return false
+    const direction = this.readStringParam(percentLeaf.params, 'direction')
+    const percentValue = Math.abs(
+      this.readNumericParam(percentLeaf.params, 'valuePct')
+      ?? this.readNumericParam(percentLeaf.params, 'pct')
+      ?? this.readNumericParam(percentLeaf.params, 'thresholdPct')
+      ?? Number.NaN,
+    )
+    const riskValue = Math.abs(
+      this.readNumericParam(riskLeaf.params, 'valuePct')
+      ?? this.readNumericParam(riskLeaf.params, 'pct')
+      ?? Number.NaN,
+    )
+    if (!Number.isFinite(percentValue) || !Number.isFinite(riskValue)) return false
+    if (Math.abs(percentValue - riskValue) > 1e-9) return false
+    if (riskLeaf.key === ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key) {
+      return direction === 'down' || direction === 'decrease' || direction === 'loss'
+    }
+    return direction === 'up' || direction === 'increase' || direction === 'profit'
+  }
+
+  private percentChangeLeafMatches(existing: AtomExprAtom, candidate: AtomExprAtom): boolean {
+    if (
+      existing.key !== ATOM_CONTRACT_REGISTRY['price.percent_change'].key
+      || candidate.key !== ATOM_CONTRACT_REGISTRY['price.percent_change'].key
+    ) return false
+    const existingBasis = this.readStringParam(existing.params, 'basis') ?? ''
+    const candidateBasis = this.readStringParam(candidate.params, 'basis') ?? ''
+    if (existingBasis !== candidateBasis) return false
+    const existingDirection = this.readStringParam(existing.params, 'direction') ?? ''
+    const candidateDirection = this.readStringParam(candidate.params, 'direction') ?? ''
+    if (existingDirection !== candidateDirection) return false
+    const existingValue = Math.abs(
+      this.readNumericParam(existing.params, 'valuePct')
+      ?? this.readNumericParam(existing.params, 'pct')
+      ?? this.readNumericParam(existing.params, 'thresholdPct')
+      ?? Number.NaN,
+    )
+    const candidateValue = Math.abs(
+      this.readNumericParam(candidate.params, 'valuePct')
+      ?? this.readNumericParam(candidate.params, 'pct')
+      ?? this.readNumericParam(candidate.params, 'thresholdPct')
+      ?? Number.NaN,
+    )
+    return Number.isFinite(existingValue)
+      && Number.isFinite(candidateValue)
+      && Math.abs(existingValue - candidateValue) <= 1e-9
   }
 
   private ruleEffectsCover(existingRule: SemanticRule, candidateRule: SemanticRule): boolean {

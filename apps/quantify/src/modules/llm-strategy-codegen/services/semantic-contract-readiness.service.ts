@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 
 import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
 import type { AtomExpr, AtomExprAtom, SemanticRule, SemanticRuleSideScope } from '../types/atom-expr'
-import { collectAtomLeaves, listRuleEffects } from '../types/atom-expr'
+import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
 import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gate.types'
 import type {
   SemanticAtomContract,
@@ -126,6 +126,7 @@ export class SemanticContractReadinessService {
     //   不参与最终判定（见下方 `rulesReady !== null` 分支），但 flat 仍用于
     //   provider-contract / orchestration / missingRequirements 等读路径。
     if (state.rules && state.rules.length > 0) {
+      state = { ...state, rules: dedupeSemanticRulesForReadiness(state.rules) }
       state = this.ruleProjection.reprojectFromRules(state)
     }
     else {
@@ -274,7 +275,6 @@ export class SemanticContractReadinessService {
       ? (
           unsupportedOrUnknownOwnerKeys.size === 0
           && missingRequirements.length === 0
-          && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey)
           && !orchestrationResult.hasBlockingSlots
           && !executableContextGate.hasBlockingSlots
           && rulesReady.hasEntry
@@ -580,6 +580,7 @@ export class SemanticContractReadinessService {
 
     let sawGridRangeRebalance = false
     let sawGridStopBreakout = false
+    let sawGridProgram = false
 
     for (const rule of rules) {
       const condLeaves = collectAtomLeavesSafe(rule.condition)
@@ -594,6 +595,9 @@ export class SemanticContractReadinessService {
         if (breakoutAction === 'stop' || breakoutAction === 'pause') {
           sawGridStopBreakout = true
         }
+      }
+      if (effectLeaves.some(leaf => leaf.key.startsWith('program.') && leaf.key.includes('grid'))) {
+        sawGridProgram = true
       }
 
       const effectKeys = new Set(effectLeaves.map(l => l.key))
@@ -625,7 +629,7 @@ export class SemanticContractReadinessService {
       for (const key of effectKeys) {
         if (key.startsWith('risk.')) summary.hasRisk = true
         // eslint-disable-next-line atom-keys/no-atom-key-literal -- Issue #1395 rules-tree readiness 直接匹配 grid.range_rebalance（自洽闭环 position 信号），见上方同类豁免。
-        if (key === 'grid.range_rebalance' || key.startsWith('position.') || key.startsWith('sizing.')) {
+        if (key === 'grid.range_rebalance' || key.startsWith('position.') || key.startsWith('sizing.') || (key.startsWith('program.') && key.includes('grid'))) {
           summary.hasPosition = true
         }
       }
@@ -640,6 +644,10 @@ export class SemanticContractReadinessService {
     }
     // 显式 grid stop/pause：再强化 exit 信号（用于未来扩展）
     if (sawGridStopBreakout) summary.hasExit = true
+    if (sawGridProgram) {
+      summary.hasEntry = true
+      summary.hasPosition = true
+    }
 
     if (!summary.hasEntry) summary.missing.push('missing_entry')
     if (!summary.hasExit) summary.missing.push('missing_exit')
@@ -664,6 +672,90 @@ function collectAtomLeavesSafe(expr: AtomExpr | undefined): AtomExprAtom[] {
   catch {
     return []
   }
+}
+
+function dedupeSemanticRulesForReadiness(rules: readonly SemanticRule[]): SemanticRule[] {
+  const seen = new Set<string>()
+  const out: SemanticRule[] = []
+  for (const rule of rules) {
+    const normalizedRule = stripLifecycleOpenScaffoldRule(rule)
+    const signature = JSON.stringify({
+      phase: normalizedRule.phase,
+      sideScope: normalizedRule.sideScope,
+      condition: normalizeExprForRuleSignature(normalizedRule.condition),
+      effects: listRuleEffects(normalizedRule.effects).map(normalizeExprForRuleSignature),
+    })
+    if (seen.has(signature)) continue
+    seen.add(signature)
+    out.push(normalizedRule)
+  }
+  return out
+}
+
+function stripLifecycleOpenScaffoldRule(rule: SemanticRule): SemanticRule {
+  const effectLeaves = listRuleEffects(rule.effects).flatMap(collectAtomLeavesSafe)
+  const hasAddPosition = effectLeaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key)
+  if (!hasAddPosition) return rule
+  const shouldRemove = (expr: AtomExpr): boolean =>
+    collectAtomLeavesSafe(expr).some(leaf =>
+      leaf.key === ATOM_CONTRACT_REGISTRY['action.open_long'].key
+      || leaf.key === ATOM_CONTRACT_REGISTRY['action.open_short'].key,
+    )
+  if (isRuleEffectsByRole(rule.effects)) {
+    const actions = (rule.effects.actions ?? []).filter(effect => !shouldRemove(effect))
+    return {
+      ...rule,
+      effects: {
+        ...rule.effects,
+        actions,
+      },
+    }
+  }
+  return {
+    ...rule,
+    effects: rule.effects.filter(effect => !shouldRemove(effect)),
+  }
+}
+
+function normalizeExprForRuleSignature(expr: AtomExpr): unknown {
+  if (expr.kind === 'atom') {
+    return {
+      kind: 'atom',
+      key: expr.key,
+      sideScope: expr.sideScope,
+      params: sortObjectForRuleSignature(expr.params ?? {}),
+    }
+  }
+  if (expr.kind === 'and' || expr.kind === 'or') {
+    return {
+      kind: expr.kind,
+      children: expr.children.map(normalizeExprForRuleSignature).sort(compareRuleSignatureValues),
+    }
+  }
+  if (expr.kind === 'not') {
+    return { kind: 'not', child: normalizeExprForRuleSignature(expr.child) }
+  }
+  if (expr.kind === 'sequence') {
+    return { kind: 'sequence', steps: expr.steps.map(normalizeExprForRuleSignature) }
+  }
+  return expr
+}
+
+function sortObjectForRuleSignature(value: Record<string, unknown>): Record<string, unknown> {
+  return Object.keys(value)
+    .filter(key => key !== 'phase' && key !== 'timeframeOverride')
+    .sort()
+    .reduce<Record<string, unknown>>((acc, key) => {
+      const item = value[key]
+      acc[key] = item && typeof item === 'object' && !Array.isArray(item)
+        ? sortObjectForRuleSignature(item as Record<string, unknown>)
+        : item
+      return acc
+    }, {})
+}
+
+function compareRuleSignatureValues(left: unknown, right: unknown): number {
+  return JSON.stringify(left).localeCompare(JSON.stringify(right))
 }
 
 function isDcaExitRuleRequirement(requirement: SemanticRequirement): boolean {
@@ -2605,7 +2697,7 @@ function isExecutableIndicatorReferenceAlias(owner: SemanticContractOwnerRef): b
 
   const indicator = readParamString(owner.params, 'indicator')?.toLowerCase() ?? ''
   const referenceRole = readParamString(owner.params, 'referenceRole') ?? ''
-  const referencePeriod = owner.params['reference.period']
+  const referencePeriod = readNestedParam(owner.params, 'reference.period')
   const period = owner.params.period
   const hasReferencePeriod = (
     typeof referencePeriod === 'number'
@@ -2629,6 +2721,14 @@ function isExecutableIndicatorReferenceAlias(owner: SemanticContractOwnerRef): b
 function readParamString(params: Record<string, unknown>, key: string): string | null {
   const value = params[key]
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function readNestedParam(params: Record<string, unknown>, key: string): unknown {
+  if (Object.prototype.hasOwnProperty.call(params, key)) return params[key]
+  return key.split('.').reduce<unknown>((current, part) => {
+    if (!current || typeof current !== 'object') return undefined
+    return (current as Record<string, unknown>)[part]
+  }, params)
 }
 
 function withTypedRuleOpenSlotPaths<T extends {

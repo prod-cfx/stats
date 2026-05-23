@@ -120,6 +120,39 @@ describe('staging31 hard gate report contract', () => {
     })).toBe(false)
   })
 
+  it('treats typed effects.risks as close-side semantics', () => {
+    expect(hasUiAstScriptMismatch({
+      rulesTree: [{
+        sideScope: 'long',
+        condition: { key: 'price.breakout_up' },
+        effects: {
+          actions: [{ key: 'action.open_long' }],
+          risks: [{ key: 'risk.stop_loss_pct' }],
+        },
+      }],
+      uiSummaryOrGraph: {
+        graph: {
+          blocks: [{
+            items: [
+              { kind: 'action', text: '开多' },
+              { kind: 'action', text: '止损：价格相对入场均价下跌5% 强制平仓' },
+            ],
+          }],
+        },
+      },
+      ast: {
+        decisionPrograms: [{ actions: [{ kind: 'OPEN_LONG' }] }],
+        guards: [{ payload: { appliesTo: 'long', onBreach: 'FORCE_EXIT' } }],
+      },
+      scriptOrError: {
+        script: [
+          'const DECISION_PROGRAMS = [{"actions":[{"kind":"OPEN_LONG"}]}] as const',
+          'const GUARD_PROGRAMS = [{"payload":{"appliesTo":"long","onBreach":"FORCE_EXIT"}}] as const',
+        ].join('\n'),
+      },
+    })).toBe(false)
+  })
+
   it('does not infer long add action from 最多 in short-side UI text', () => {
     expect(hasUiAstScriptMismatch({
       rulesTree: [{

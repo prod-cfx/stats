@@ -209,6 +209,8 @@ interface Args {
   env: string
   out: string
   source: 'entry' | 'db'
+  indices: number[] | null
+  preserveExistingEnv: boolean
 }
 
 interface SessionRow {
@@ -264,11 +266,13 @@ export function listStaging31Cases(): typeof STAGING31_CASES {
 }
 
 export function parseArgs(argv: string[]): Args {
-  const args: Args = { env: 'staging', out: 'tmp/staging31-hard-gate-report.json', source: 'entry' }
+  const args: Args = { env: 'staging', out: 'tmp/staging31-hard-gate-report.json', source: 'entry', indices: null, preserveExistingEnv: false }
   for (let i = 0; i < argv.length; i += 1) {
     const item = argv[i]
     if (item === '--env') args.env = argv[++i] ?? args.env
     else if (item === '--out') args.out = argv[++i] ?? args.out
+    else if (item === '--indices') args.indices = parseCaseIndices(argv[++i] ?? '')
+    else if (item === '--preserve-existing-env') args.preserveExistingEnv = true
     else if (item === '--source') {
       const source = argv[++i]
       if (source === 'entry' || source === 'db') args.source = source
@@ -284,12 +288,21 @@ export function parseArgs(argv: string[]): Args {
   return args
 }
 
-function loadEnv(env: string): void {
+function parseCaseIndices(value: string): number[] {
+  const indices = value
+    .split(',')
+    .map(item => Number(item.trim()))
+    .filter(item => Number.isInteger(item) && item > 0)
+  if (indices.length === 0) throw new Error(`invalid_indices:${value}`)
+  return [...new Set(indices)]
+}
+
+function loadEnv(env: string, options: { preserveExistingEnv: boolean } = { preserveExistingEnv: false }): void {
   const root = findEnvRoot(env)
   const base = resolve(root, `.env.${env}`)
   const local = resolve(root, `.env.${env}.local`)
   loadDotenv({ path: base, override: false })
-  loadDotenv({ path: local, override: true })
+  loadDotenv({ path: local, override: !options.preserveExistingEnv })
   process.env.APP_ENV = env
   process.env.NODE_ENV = env
   applyQuantifyEnvOverrides(process.env)
@@ -642,8 +655,12 @@ function collectRulesTreeSemanticActions(rulesTree: unknown): string[] {
 }
 
 function collectActionKeys(effects: unknown, sideScope?: unknown): string[] {
-  if (!Array.isArray(effects)) return []
-  return effects.flatMap((effect) => {
+  const effectList = Array.isArray(effects)
+    ? effects
+    : effects && typeof effects === 'object'
+      ? Object.values(effects as Record<string, unknown>).flatMap(value => Array.isArray(value) ? value : [])
+      : []
+  return effectList.flatMap((effect) => {
     const key = (effect as { key?: unknown }).key
     if (
       key === 'program.fixed_grid_gated'
@@ -682,18 +699,18 @@ function collectRiskSemanticActions(condition: unknown, effects: unknown, sideSc
   return ['CLOSE_LONG', 'CLOSE_SHORT']
 }
 
-function collectAtomKeys(value: unknown): string[] {
-  if (Array.isArray(value)) return value.flatMap(collectAtomKeys)
+function collectAtomKeys(value: unknown, seen = new WeakSet<object>()): string[] {
+  if (Array.isArray(value)) return value.flatMap(item => collectAtomKeys(item, seen))
   if (!value || typeof value !== 'object') return []
-  const node = value as { key?: unknown, children?: unknown, child?: unknown, steps?: unknown, effects?: unknown, condition?: unknown }
+  if (seen.has(value)) return []
+  seen.add(value)
+  const node = value as Record<string, unknown> & { key?: unknown }
   const keys = typeof node.key === 'string' ? [node.key] : []
   return [
     ...keys,
-    ...collectAtomKeys(node.children),
-    ...collectAtomKeys(node.child),
-    ...collectAtomKeys(node.steps),
-    ...collectAtomKeys(node.effects),
-    ...collectAtomKeys(node.condition),
+    ...Object.entries(node)
+      .filter(([key]) => key !== 'key' && key !== 'params' && key !== 'evidence')
+      .flatMap(([, child]) => collectAtomKeys(child, seen)),
   ]
 }
 
@@ -1025,7 +1042,7 @@ function hasDispatcherFallbackRules(rulesTree: unknown): boolean {
 
 function extractExpectedSizing(text: string): { mode: 'RATIO' | 'QUOTE', value: number, asset?: string } | null {
   const normalized = text.replace(/\s+/gu, ' ').replace(/％/gu, '%')
-  const sizingClause = normalized.match(/(?:单笔|仓位|固定仓位|每次|每笔|每格|使用|用|投入|加投|加仓)[^。；;\n,，]{0,24}?(百分之?\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*%|\d+(?:\.\d+)?\s*(?:USDT|USDC|USD|U|刀|美元))/iu)?.[0]
+  const sizingClause = normalized.match(/(?:单笔|仓位|固定仓位|每次|每笔|每格|使用|用|投入)[^。；;\n,，]{0,24}?(百分之?\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*%|\d+(?:\.\d+)?\s*(?:USDT|USDC|USD|U|刀|美元))/iu)?.[0]
   if (!sizingClause) return null
   if (/每格/u.test(sizingClause) && /(?:间距|步长|spacing)/iu.test(sizingClause) && !/(?:USDT|USDC|USD|U|刀|美元)/iu.test(sizingClause)) {
     return null
@@ -1259,17 +1276,21 @@ export function isStaging31HardGatePassing(summary: Staging31HardGateSummary): b
 
 async function run(): Promise<void> {
   const args = parseArgs(process.argv.slice(2))
-  loadEnv(args.env)
+    loadEnv(args.env, { preserveExistingEnv: args.preserveExistingEnv })
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL })
   const client = await pool.connect()
   let app: INestApplicationContext | null = null
   try {
+    const selectedCases = args.indices
+      ? STAGING31_CASES.filter(item => args.indices?.includes(item.index))
+      : STAGING31_CASES
+    if (selectedCases.length === 0) throw new Error(`selected_cases_empty:${args.indices?.join(',') ?? ''}`)
     if (args.source === 'entry') {
       process.stderr.write('[staging31] creating Nest application context\n')
       app = await createApp()
       const codegen = app.get(CodegenConversationService)
-      for (const item of STAGING31_CASES) {
+      for (const item of selectedCases) {
         process.stderr.write(`[staging31] entry case ${item.index}\n`)
         const outcome = await runEntryCase({
           codegen,
@@ -1293,7 +1314,7 @@ async function run(): Promise<void> {
       publication: createPublicationStage(),
     }
     const cases: Staging31CaseReport[] = []
-    for (const item of STAGING31_CASES) {
+    for (const item of selectedCases) {
       const row = await fetchSession(client, item.sessionId)
       const report = await buildCaseReport({
         row,

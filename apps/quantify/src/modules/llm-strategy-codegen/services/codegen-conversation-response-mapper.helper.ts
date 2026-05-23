@@ -339,12 +339,18 @@ function omitInternalSpecDescFields(specDesc: Record<string, unknown>): Record<s
     canonicalSpec,
     riskRules: _riskRules,
     normalizedIntent: _normalizedIntent,
+    scriptSummary: _scriptSummary,
+    strategySummary: _strategySummary,
+    userIntentSummary: _userIntentSummary,
+    summaryObservation: _summaryObservation,
     stateHints: _stateHints,
     canonicalSnapshot: _canonicalSnapshot,
     specSnapshot: _specSnapshot,
     semanticState: _semanticState,
+    semanticAtomInvariant: _semanticAtomInvariant,
     semanticPredicateGraph: _semanticPredicateGraph,
     consistencyReport: _consistencyReport,
+    stage1ConsistencyEvidence: _stage1ConsistencyEvidence,
     ...publicSpecDesc
   } = specDesc
   const conditionTextByRuleId = readDisplayConditionTextByRuleId(publicSpecDesc.displayLogicGraph)

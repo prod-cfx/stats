@@ -151,6 +151,36 @@ describe('codegenConversationResponseMapperHelper', () => {
       status: 'PUBLISHED',
       missingFields: [],
       specDesc: {
+        scriptSummary: {
+          entryRule: 'grid.range_rebalance',
+          exitRule: 'grid.range_rebalance',
+          indicators: [],
+        },
+        strategySummary: {
+          entryRule: 'grid.range_rebalance',
+          exitRule: 'grid.range_rebalance',
+        },
+        userIntentSummary: {
+          entryRule: 'grid.range_rebalance',
+          exitRule: 'grid.range_rebalance',
+        },
+        summaryObservation: {
+          details: {
+            scriptSummary: {
+              entryRule: 'grid.range_rebalance',
+            },
+          },
+        },
+        semanticAtomInvariant: {
+          atomKeys: ['grid.range_rebalance'],
+        },
+        stage1ConsistencyEvidence: {
+          canonicalSpec: {
+            rules: [{
+              condition: { key: 'grid.range_rebalance' },
+            }],
+          },
+        },
         rules: [{
           id: 'semantic-entry-grid-range-rebalance-long',
           phase: 'entry',
@@ -184,6 +214,12 @@ describe('codegenConversationResponseMapperHelper', () => {
       }],
     })
     expect(JSON.stringify(result.specDesc)).not.toContain('grid.range_rebalance')
+    expect(JSON.stringify(result.specDesc)).not.toContain('scriptSummary')
+    expect(JSON.stringify(result.specDesc)).not.toContain('strategySummary')
+    expect(JSON.stringify(result.specDesc)).not.toContain('userIntentSummary')
+    expect(JSON.stringify(result.specDesc)).not.toContain('summaryObservation')
+    expect(JSON.stringify(result.specDesc)).not.toContain('semanticAtomInvariant')
+    expect(JSON.stringify(result.specDesc)).not.toContain('stage1ConsistencyEvidence')
     expect(JSON.stringify(result.specDesc)).not.toContain('semanticPredicateGraph')
   })
 
