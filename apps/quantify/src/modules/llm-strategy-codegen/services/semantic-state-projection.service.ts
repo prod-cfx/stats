@@ -6,7 +6,6 @@ import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../type
 import { isEntryPredicateTriggerKey, isExitPredicateTriggerKey, isTimeframeGroupableTriggerKey } from '../atom-contracts/trigger-display-contract'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
-import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { SemanticExecutableSemanticsService } from './semantic-executable-semantics.service'
 import {
@@ -241,7 +240,6 @@ export class SemanticStateProjectionService {
     //   anyAtomFulfillsPhase(state, 'sizing') 替代旧 GRID_DOMAIN_ATOM_KEYS 字面量集合，
     //   与 codegen-conversation 服务共用同一判定。
     private readonly executableSemantics: SemanticExecutableSemanticsService = new SemanticExecutableSemanticsService(),
-    private readonly rulesMainflowReader: RulesMainflowReaderService = new RulesMainflowReaderService(),
   ) {}
 
   buildConversationView(state: SemanticState): SemanticConversationView {
@@ -326,10 +324,6 @@ export class SemanticStateProjectionService {
   }
 
   buildDisplayLogicGraph(state: SemanticState): SemanticDisplayLogicGraph {
-    return this.buildDisplayLogicGraphFromSemanticState(state)
-  }
-
-  private buildLegacyDisplayLogicGraph(state: SemanticState): SemanticDisplayLogicGraph {
     // Issue #1403 子故障 B — rules-first display graph 渲染。
     //   旧路径只读 state.trigger flat-lift（lift 出来的扁平桶可能含 LLM 幻觉参数，
     //   如 S2 输入「连续跌三根」却被 lift 成 `price.candle_pattern.minBars=15`），
@@ -338,7 +332,7 @@ export class SemanticStateProjectionService {
     //   优先从 rules 渲染条件文本，flat 路径只在 rules 为空时兜底（向后兼容）。
     const rawRules = state.rules ?? []
     const projectionRules = this.sanitizeProjectionRules(rawRules)
-    const rulesBlocks = this.buildDisplayRuleBlocksFromRules(projectionRules)
+    const rulesBlocks = this.buildDisplayRuleBlocksFromRules(projectionRules, rawRules)
     const ruleBlocks: SemanticDisplayLogicGraphBlock[] = rulesBlocks.length > 0
       ? rulesBlocks
       : (rawRules.length > 0 ? [] : this.buildDisplayRuleBlocksFromFlatTriggers(state))
@@ -355,65 +349,7 @@ export class SemanticStateProjectionService {
   }
 
   buildDisplayLogicGraphFromSemanticState(state: SemanticState): SemanticDisplayLogicGraph {
-    const read = this.rulesMainflowReader.readMainflowRules(state.rules)
-    if (read.ok === false) {
-      return {
-        blocks: [],
-        diagnostics: [{
-          code: read.reason,
-          message: read.diagnostics.join('; '),
-        }],
-      }
-    }
-
-    return {
-      blocks: read.view.rules.map((rule, ruleIndex): SemanticDisplayLogicGraphBlock => {
-        const sourcePath = `rules[${ruleIndex}]`
-        const conditionText = this.renderAtomExpr(rule.condition)
-        const actionSuffix = this.buildRuleActionSuffix(rule.phase, rule.sideScope)
-        const conditionItem: SemanticDisplayConditionItem[] = conditionText.length > 0
-          ? [{
-              kind: 'condition',
-              id: `${sourcePath}.condition`,
-              text: actionSuffix.length > 0 ? `${conditionText}${actionSuffix}` : conditionText,
-              sourcePath: `${sourcePath}.condition`,
-              params: {},
-            }]
-          : []
-        const effectItems = read.leaves
-          .filter(leaf => leaf.ruleId === rule.id && leaf.role !== 'condition')
-          .map((leaf): SemanticDisplayLogicGraphItem => {
-            const text = this.renderAtomExpr({ kind: 'atom', key: leaf.key, params: leaf.params })
-            if (leaf.role === 'program') {
-              return {
-                kind: 'execute',
-                id: leaf.path,
-                key: leaf.key,
-                text,
-                sourcePath: leaf.path,
-                params: leaf.params,
-              }
-            }
-            return {
-              kind: 'action',
-              id: leaf.path,
-              text,
-              sourcePath: leaf.path,
-              params: leaf.params,
-            }
-          })
-
-        return {
-          id: rule.id,
-          type: rule.phase === 'program' ? 'EXECUTE' : 'IF',
-          sourcePath,
-          items: [
-            ...conditionItem,
-            ...effectItems,
-          ],
-        }
-      }),
-    }
+    return this.buildDisplayLogicGraph(state)
   }
 
   // Issue #1403 子故障 B + Issue #1443 升级：rules-first display graph。
@@ -424,13 +360,18 @@ export class SemanticStateProjectionService {
   //   - UI 层 always-on + action effects 噪音 rule 兜底过滤（防 merge 阶段 filter
   //     未生效或下游路径写入 state.rules 绕过 merge）
   //   - rules 为空 / 无 entry|exit rules → 返回 []，调用方走旧 flat 路径兜底
-  private buildDisplayRuleBlocksFromRules(rules: readonly SemanticRule[]): SemanticDisplayLogicGraphBlock[] {
+  private buildDisplayRuleBlocksFromRules(
+    rules: readonly SemanticRule[],
+    sourceRules: readonly SemanticRule[] = rules,
+  ): SemanticDisplayLogicGraphBlock[] {
     const eligible = rules
       .filter(r => r.phase === 'entry' || r.phase === 'exit' || this.isGridProgramRule(r))
     if (eligible.length === 0) return []
 
     const blocks: SemanticDisplayLogicGraphBlock[] = []
-    for (const rule of eligible) {
+    for (const [ruleIndex, rule] of eligible.entries()) {
+      const sourceRuleIndex = sourceRules.findIndex(sourceRule => sourceRule.id === rule.id)
+      const sourcePath = `rules[${sourceRuleIndex >= 0 ? sourceRuleIndex : ruleIndex}]`
       const conditionBody = this.renderAtomExpr(rule.condition)
       if (!conditionBody || conditionBody.length === 0) {
         console.warn(`[semantic-state-projection] skipped rule ${rule.id}: empty condition render`)
@@ -450,6 +391,7 @@ export class SemanticStateProjectionService {
             kind: 'action',
             id: `action-rule-${rule.id}-${effectIndex}`,
             text,
+            sourcePath: `${sourcePath}.effects[${effectIndex}]`,
           })
           effectIndex += 1
         }
@@ -459,18 +401,22 @@ export class SemanticStateProjectionService {
           kind: 'action',
           id: `action-rule-${rule.id}-grid`,
           text: '网格执行',
+          sourcePath: `${sourcePath}.effects`,
         })
       }
 
       blocks.push({
         // Issue #1443：每条 rule 独立 IF block；不再用 AND_AT_THEN 连接独立 rule
         //   （UI 层多条 rule 之间是"任一满足都触发"的 OR 语义，不是 AND）
+        id: rule.id,
         type: 'IF',
+        sourcePath,
         items: [
           {
             kind: 'condition',
             id: `condition-rule-${rule.id}`,
             text: conditionText,
+            sourcePath: `${sourcePath}.condition`,
           },
           ...actionItems,
         ],
