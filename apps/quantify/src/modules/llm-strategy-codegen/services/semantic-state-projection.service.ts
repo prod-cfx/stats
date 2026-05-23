@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticOrchestrationNode, SemanticSlotState, SemanticState } from '../types/semantic-state'
 import type { AtomExpr, RuleEffects, RuleEffectsByRole, SemanticRule, SemanticRulePhase, SemanticRuleSideScope } from '../types/atom-expr'
-import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
+import { collectAtomLeaves, forEachRuleEffect, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
 import { isEntryPredicateTriggerKey, isExitPredicateTriggerKey, isTimeframeGroupableTriggerKey } from '../atom-contracts/trigger-display-contract'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
@@ -343,7 +343,7 @@ export class SemanticStateProjectionService {
       blocks: [
         ...(orchestrationBlock ? [orchestrationBlock] : []),
         ...ruleBlocks,
-        this.buildDisplayExecuteBlock(state),
+        ...(rawRules.length === 0 ? [this.buildDisplayExecuteBlock(state)] : []),
       ],
     }
   }
@@ -383,19 +383,19 @@ export class SemanticStateProjectionService {
 
       // Issue #1443：渲染 rule.effects 作为 THEN action items（旧实现遗漏 → THEN 段空）
       const actionItems: SemanticDisplayActionItem[] = []
-      let effectIndex = 0
-      for (const eff of listRuleEffects(rule.effects)) {
+      forEachRuleEffect(rule.effects, (eff, effectIndex, role, roleIndex) => {
         const text = this.renderAtomExpr(eff)
         if (text && text.length > 0) {
           actionItems.push({
             kind: 'action',
             id: `action-rule-${rule.id}-${effectIndex}`,
             text,
-            sourcePath: `${sourcePath}.effects[${effectIndex}]`,
+            sourcePath: role && roleIndex !== undefined
+              ? `${sourcePath}.effects.${role}[${roleIndex}]`
+              : `${sourcePath}.effects[${effectIndex}]`,
           })
-          effectIndex += 1
         }
-      }
+      })
       if (actionItems.length === 0 && this.isGridProgramRule(rule)) {
         actionItems.push({
           kind: 'action',

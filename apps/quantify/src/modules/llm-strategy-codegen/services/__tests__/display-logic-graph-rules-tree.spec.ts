@@ -263,4 +263,78 @@ describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () =>
     expect(JSON.stringify(graph)).not.toContain('flat-action')
     expect(JSON.stringify(graph)).not.toContain('action.open_long')
   })
+
+  it('does not render flat-only risk or position when rules omit them', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      trigger: [],
+      action: [],
+      risk: [{
+        id: 'flat-risk',
+        key: 'risk.stop_loss_pct',
+        params: { valuePct: 99, basis: 'entry_avg_price' },
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+      }],
+      positionConstraint: [],
+      orchestration: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 99,
+        sizing: null,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+      },
+      orchestrationContracts: [],
+      normalizationNotes: [],
+      updatedAt: new Date(0).toISOString(),
+      rules: [{
+        id: 'r1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.breakout_up', params: {} },
+        effects: { actions: [], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    }
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const serialized = JSON.stringify(graph)
+
+    expect(serialized).toContain('rules[0].condition')
+    expect(serialized).not.toContain('flat-risk')
+    expect(serialized).not.toContain('execute-risk')
+    expect(serialized).not.toContain('止损')
+    expect(serialized).not.toContain('仓位:')
+  })
+
+  it('uses typed rule effect source paths for actions and risks', () => {
+    const state: SemanticState = baseState({
+      rules: [{
+        id: 'typed-effects',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.breakout_up', params: {} },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [{ kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } }],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const serialized = JSON.stringify(graph)
+
+    expect(serialized).toContain('rules[0].effects.actions[0]')
+    expect(serialized).toContain('rules[0].effects.risks[0]')
+    expect(serialized).not.toContain('rules[0].effects[0]')
+    expect(serialized).not.toContain('rules[0].effects[1]')
+  })
 })
