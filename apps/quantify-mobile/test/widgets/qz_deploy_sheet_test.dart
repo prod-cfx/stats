@@ -77,8 +77,8 @@ Future<DeploymentResult?> _pumpSheet(
 }
 
 void main() {
-  testWidgets('QzDeploySheet: pickExchange → authorize → deploying → done '
-      '步骤切换可见', (WidgetTester tester) async {
+  testWidgets('QzDeploySheet: 已配置交易所 pickExchange → authorize → '
+      'deploying → done 步骤切换可见', (WidgetTester tester) async {
     final _FakeApiKeyRepo repo = _FakeApiKeyRepo(<ExchangeApiKey>[
       ExchangeApiKey(
         id: 'k1',
@@ -90,13 +90,22 @@ void main() {
     ]);
     await _pumpSheet(tester, repo: repo);
 
-    // Step 1: 选择交易所
+    // Step 1: 选择交易所 — 风控 banner、安全 footer、目录内 4 个交易所均可见
     expect(find.text('选择交易所'), findsOneWidget);
+    expect(find.byKey(const Key('deploy-risk-banner')), findsOneWidget);
     expect(find.text('BINANCE'), findsOneWidget);
+    expect(find.text('OKX'), findsOneWidget);
+    expect(find.text('BYBIT'), findsOneWidget);
+    expect(find.text('HYPERLIQUID'), findsOneWidget);
+    // 已配置 / 未配置 状态徽章并存
     expect(find.text('已配置'), findsOneWidget);
+    expect(find.text('未配置'), findsNWidgets(3));
+    // 标签：推荐 / 链上
+    expect(find.text('推荐'), findsOneWidget);
+    expect(find.text('链上'), findsOneWidget);
 
-    // 点 binance → 进入授权步
-    await tester.tap(find.byKey(const Key('deploy-exchange-k1')));
+    // 点 binance（已授权）→ 进入授权步（权限授权变体）
+    await tester.tap(find.byKey(const Key('deploy-exchange-binance')));
     await tester.pumpAndSettle();
     expect(find.text('授权部署'), findsOneWidget);
     expect(find.text('现货下单'), findsOneWidget);
@@ -122,27 +131,89 @@ void main() {
     await _pumpSheet(tester, repo: _FakeApiKeyRepo.empty());
 
     expect(find.text('选择交易所'), findsOneWidget);
-    expect(
-      find.text('尚未配置任何交易所 API，添加后再试。'),
-      findsOneWidget,
-    );
+    // 全部交易所未配置 → 兜底引导按钮可见
     expect(find.byKey(const Key('deploy-go-configure')), findsOneWidget);
   });
 
   testWidgets('QzDeploySheet: 点击「添加 API」直接打开 API 表单 sheet（issue #1648）',
       (WidgetTester tester) async {
-    // 入口统一为底部表单：未配置时点击引导按钮应先关闭 deploy sheet，
-    // 再打开 Binance API 表单 bottom sheet，不再跳转独立列表页。
     await _pumpSheet(tester, repo: _FakeApiKeyRepo.empty());
 
     await tester.tap(find.byKey(const Key('deploy-go-configure')));
     await tester.pumpAndSettle();
 
-    // deploy sheet 已关闭：标题不再可见
     expect(find.text('选择交易所'), findsNothing);
-    // API 表单 sheet 弹出：标题 / 字段可见
     expect(find.text('Binance API'), findsOneWidget);
     expect(find.text('API Key'), findsOneWidget);
     expect(find.text('Secret'), findsOneWidget);
+  });
+
+  testWidgets('QzDeploySheet: 选未授权交易所 → 展示 3 步授权引导、提币警告、'
+      'consent checkbox（issue #1653）', (WidgetTester tester) async {
+    // 只配置 binance，让 okx 走未授权流程。
+    final _FakeApiKeyRepo repo = _FakeApiKeyRepo(<ExchangeApiKey>[
+      ExchangeApiKey(
+        id: 'k1',
+        exchange: 'binance',
+        label: '主账户',
+        maskedKey: 'AKIA****1234',
+        createdAt: DateTime.utc(2026),
+      ),
+    ]);
+    await _pumpSheet(tester, repo: repo);
+
+    await tester.tap(find.byKey(const Key('deploy-exchange-okx')));
+    await tester.pumpAndSettle();
+
+    // 3 步引导可见
+    expect(find.text('授权步骤'), findsOneWidget);
+    expect(find.text('在交易所创建 API Key'), findsOneWidget);
+    expect(find.text('仅勾选「读取 + 现货/合约下单」'), findsOneWidget);
+    expect(find.text('把 API Key / Secret 粘到 Quantify'), findsOneWidget);
+
+    // 提币权限警告
+    expect(find.byKey(const Key('deploy-withdraw-warning')), findsOneWidget);
+
+    // consent + 主按钮 + 取消
+    expect(find.byKey(const Key('deploy-consent')), findsOneWidget);
+    expect(find.byKey(const Key('deploy-open-api-form')), findsOneWidget);
+    expect(find.byKey(const Key('deploy-unauth-cancel')), findsOneWidget);
+  });
+
+  testWidgets('QzDeploySheet: 未授权流程 consent 未勾选时主按钮 disabled，'
+      '勾选后点击打开 API 表单（验收 3、4）', (WidgetTester tester) async {
+    final _FakeApiKeyRepo repo = _FakeApiKeyRepo(<ExchangeApiKey>[
+      ExchangeApiKey(
+        id: 'k1',
+        exchange: 'binance',
+        label: '主账户',
+        maskedKey: 'AKIA****1234',
+        createdAt: DateTime.utc(2026),
+      ),
+    ]);
+    await _pumpSheet(tester, repo: repo);
+
+    // 选 okx
+    await tester.tap(find.byKey(const Key('deploy-exchange-okx')));
+    await tester.pumpAndSettle();
+
+    // 未勾 consent：点主按钮不应跳转 / 关闭弹层
+    await tester.tap(find.byKey(const Key('deploy-open-api-form')));
+    await tester.pumpAndSettle();
+    expect(find.text('授权步骤'), findsOneWidget,
+        reason: 'consent 未勾选时主按钮 disabled，弹层应保留在 authorize 步');
+
+    // 勾选 consent
+    await tester.tap(find.byKey(const Key('deploy-consent')));
+    await tester.pumpAndSettle();
+
+    // 再次点击主按钮 → deploy sheet 关闭 + API 表单弹起
+    await tester.tap(find.byKey(const Key('deploy-open-api-form')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('授权步骤'), findsNothing);
+    // _openApiForm 用 catalog.name（首字母大写），传入 ApiFormSheet 后渲染
+    // 「{exchange} API」标题；OKX 经 ApiFormSheet 还原即 'OKX API'。
+    expect(find.text('OKX API'), findsOneWidget);
   });
 }

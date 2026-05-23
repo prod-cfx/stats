@@ -232,6 +232,67 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deployAuthorizeConfirmButton => 'Agree & deploy';
 
   @override
+  String get deployRiskBannerOk => 'Risk check passed · executes per plan';
+
+  @override
+  String get deployFooterSafety =>
+      'We never hold your keys; signing happens only on your device';
+
+  @override
+  String get deployExchangeTagOnchain => 'On-chain';
+
+  @override
+  String get deployExchangeTagRecommended => 'Recommended';
+
+  @override
+  String get deployUnauthorizedTitle => 'Authorization steps';
+
+  @override
+  String get deployUnauthorizedSubtitle => '3 steps, end-to-end encrypted';
+
+  @override
+  String get deployUnauthorizedIdentityWarning =>
+      'Not authorized · cannot accept orders';
+
+  @override
+  String get deployUnauthorizedStep1Title =>
+      'Create an API key on the exchange';
+
+  @override
+  String get deployUnauthorizedStep1Sub =>
+      'Sign in → API management → create new key';
+
+  @override
+  String get deployUnauthorizedStep2Title =>
+      'Only enable Read + Spot/Futures trading';
+
+  @override
+  String get deployUnauthorizedStep2Sub =>
+      'Always disable Withdraw; the server will double-check';
+
+  @override
+  String get deployUnauthorizedStep3Title =>
+      'Paste API Key / Secret into Quantify';
+
+  @override
+  String get deployUnauthorizedStep3Sub =>
+      'Stored encrypted on your device, never uploaded';
+
+  @override
+  String get deployUnauthorizedWithdrawWarning =>
+      'Withdraw permission MUST be disabled. We re-check and reject keys with withdraw enabled.';
+
+  @override
+  String get deployUnauthorizedConsent =>
+      'I understand: the API key will only be used to execute trades per this plan, and can be revoked at My → API Management at any time.';
+
+  @override
+  String get deployUnauthorizedOpenFormButton => 'Open API form';
+
+  @override
+  String get deployUnauthorizedCancelButton => 'Cancel';
+
+  @override
   String get deployDoneToast => 'Strategy deployed';
 
   @override

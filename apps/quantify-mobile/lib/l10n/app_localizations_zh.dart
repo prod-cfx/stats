@@ -223,6 +223,59 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deployAuthorizeConfirmButton => '同意并部署';
 
   @override
+  String get deployRiskBannerOk => '风控通过 · 严格按方案执行';
+
+  @override
+  String get deployFooterSafety => '我们绝不持有你的密钥，签名仅在你的设备完成';
+
+  @override
+  String get deployExchangeTagOnchain => '链上';
+
+  @override
+  String get deployExchangeTagRecommended => '推荐';
+
+  @override
+  String get deployUnauthorizedTitle => '授权步骤';
+
+  @override
+  String get deployUnauthorizedSubtitle => '3 步完成，全程加密';
+
+  @override
+  String get deployUnauthorizedIdentityWarning => '未授权 · 无法接收订单';
+
+  @override
+  String get deployUnauthorizedStep1Title => '在交易所创建 API Key';
+
+  @override
+  String get deployUnauthorizedStep1Sub => '登录交易所 → API 管理 → 创建新密钥';
+
+  @override
+  String get deployUnauthorizedStep2Title => '仅勾选「读取 + 现货/合约下单」';
+
+  @override
+  String get deployUnauthorizedStep2Sub => '务必关闭「提币」权限，服务端会二次校验';
+
+  @override
+  String get deployUnauthorizedStep3Title => '把 API Key / Secret 粘到 Quantify';
+
+  @override
+  String get deployUnauthorizedStep3Sub => '加密存储在你的设备本地，不会上传';
+
+  @override
+  String get deployUnauthorizedWithdrawWarning =>
+      '必须关闭提币权限。我们会再校验一次，发现允许提币的密钥会立即拒绝部署。';
+
+  @override
+  String get deployUnauthorizedConsent =>
+      '我已了解：API 密钥将仅用于按本方案执行交易，可以随时在「我的 → API 管理」撤销。';
+
+  @override
+  String get deployUnauthorizedOpenFormButton => '打开 API 配置';
+
+  @override
+  String get deployUnauthorizedCancelButton => '取消';
+
+  @override
   String get deployDoneToast => '策略已部署';
 
   @override
