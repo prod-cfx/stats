@@ -45,7 +45,7 @@ describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () =>
           { kind: 'atom', key: 'volume.threshold', params: { mode: 'relative_to_sma', multiplier: 1.5, refWindow: 20 } },
         ],
       },
-      effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
     }]
     const graph = service.buildDisplayLogicGraph(baseState({ rules }))
     const ifBlocks = graph.blocks.filter(b => b.type === 'IF')
@@ -68,7 +68,7 @@ describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () =>
           { kind: 'atom', key: 'bollinger.touch_upper', params: { period: 20, stdDev: 2, confirmationMode: 'touch' } },
         ],
       },
-      effects: [{ kind: 'atom', key: 'action.open_short', params: {} }],
+      effects: { actions: [{ kind: 'atom', key: 'action.open_short', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
     }]
     const graph = service.buildDisplayLogicGraph(baseState({ rules }))
     const ifBlocks = graph.blocks.filter(b => b.type === 'IF')
@@ -92,7 +92,7 @@ describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () =>
           { kind: 'atom', key: 'volume.threshold', params: { mode: 'relative_to_sma', multiplier: 1.5, refWindow: 20 } },
         ],
       },
-      effects: [],
+      effects: { actions: [], risks: [], positions: [], orchestration: [], programs: [] },
     }]
     const graph = service.buildDisplayLogicGraph(baseState({ rules }))
     const ifBlocks = graph.blocks.filter(b => b.type === 'IF')
@@ -113,7 +113,7 @@ describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () =>
         key: 'indicator.above',
         params: { indicator: 'ema', reference: { period: 20 }, timeframe: '15m' },
       },
-      effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
     }]
     const graph = service.buildDisplayLogicGraph(baseState({ rules }))
     const allText = graph.blocks.flatMap(block => block.items).map(item => item.text).join('\n')
@@ -134,7 +134,7 @@ describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () =>
           { kind: 'atom', key: 'price.breakout_down', params: { period: 24, reference: 'channel_low' } },
         ],
       },
-      effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
     }]
     const graph = service.buildDisplayLogicGraph(baseState({ rules }))
     const allText = graph.blocks.flatMap(block => block.items).map(item => item.text).join('\n')
@@ -164,7 +164,7 @@ describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () =>
           { kind: 'atom', key: 'volume.threshold', params: { mode: 'relative_to_sma', multiplier: 1.5, refWindow: 20 } },
         ],
       },
-      effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
     }]
     const graph = service.buildDisplayLogicGraph(baseState({ rules }))
     const ifBlocks = graph.blocks.filter(b => b.type === 'IF')
@@ -190,7 +190,7 @@ describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () =>
         phase: 'entry',
         sideScope: 'long',
         condition: { kind: 'atom', key: targetAtomKey, params: { period: 14, value: 30 } },
-        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
       }]
       const graph = service.buildDisplayLogicGraph(baseState({ rules }))
       const ifBlocks = graph.blocks.filter(b => b.type === 'IF')
@@ -212,14 +212,14 @@ describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () =>
         phase: 'entry',
         sideScope: 'long',
         condition: { kind: 'atom', key: 'oscillator.rsi_lte', params: { period: 14, value: 30 } },
-        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
       },
       {
         id: 'rule-2',
         phase: 'exit',
         sideScope: 'long',
         condition: { kind: 'atom', key: 'oscillator.rsi_gte', params: { period: 14, value: 70 } },
-        effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        effects: { actions: [{ kind: 'atom', key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
       },
     ]
     const graph = service.buildDisplayLogicGraph(baseState({ rules }))
@@ -257,7 +257,7 @@ describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () =>
       }],
     }
 
-    const graph = service.buildDisplayLogicGraphFromSemanticState(state)
+    const graph = service.buildDisplayLogicGraph(state)
 
     expect(JSON.stringify(graph)).toContain('rules[0].condition')
     expect(JSON.stringify(graph)).not.toContain('flat-action')

@@ -326,6 +326,10 @@ export class SemanticStateProjectionService {
   }
 
   buildDisplayLogicGraph(state: SemanticState): SemanticDisplayLogicGraph {
+    return this.buildDisplayLogicGraphFromSemanticState(state)
+  }
+
+  private buildLegacyDisplayLogicGraph(state: SemanticState): SemanticDisplayLogicGraph {
     // Issue #1403 子故障 B — rules-first display graph 渲染。
     //   旧路径只读 state.trigger flat-lift（lift 出来的扁平桶可能含 LLM 幻觉参数，
     //   如 S2 输入「连续跌三根」却被 lift 成 `price.candle_pattern.minBars=15`），
