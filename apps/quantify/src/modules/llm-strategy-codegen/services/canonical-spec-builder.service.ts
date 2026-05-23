@@ -596,7 +596,8 @@ export class CanonicalSpecBuilderService {
   }
 
   buildFromSemanticState(state: SemanticState, fallbackMarket?: unknown): CanonicalStrategySpecV2 {
-    if (this.shouldUseSemanticRulesMainflow(state)) {
+    const rulesMainflowRoute = this.resolveSemanticRulesMainflowRoute(state)
+    if (rulesMainflowRoute === 'typed') {
       return this.buildFromSemanticRulesMainflow(state, fallbackMarket)
     }
 
@@ -676,9 +677,26 @@ export class CanonicalSpecBuilderService {
     }
   }
 
-  private shouldUseSemanticRulesMainflow(state: SemanticState): boolean {
+  private resolveSemanticRulesMainflowRoute(state: SemanticState): 'empty_or_legacy' | 'typed' {
     const rules = state.rules ?? []
-    return rules.length > 0 && rules.every(rule => isRuleEffectsByRole(rule.effects))
+    if (rules.length === 0) {
+      return 'empty_or_legacy'
+    }
+
+    const legacyRuleEntries = rules
+      .map((rule, index) => ({ rule, index }))
+      .filter(entry => !isRuleEffectsByRole(entry.rule.effects))
+    if (legacyRuleEntries.length === 0) {
+      return 'typed'
+    }
+    if (legacyRuleEntries.length === rules.length) {
+      return 'empty_or_legacy'
+    }
+
+    const firstLegacy = legacyRuleEntries[0]
+    throw new Error(
+      `MixedSemanticRuleEffectsShape: legacy_effects_array ruleId=${firstLegacy.rule.id} ruleIndex=${firstLegacy.index}`,
+    )
   }
 
   private buildFromSemanticRulesMainflow(state: SemanticState, fallbackMarket?: unknown): CanonicalStrategySpecV2 {

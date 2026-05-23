@@ -530,4 +530,68 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     expect(spec.rules.flatMap(rule => rule.actions).map(action => action.type)).toContain('OPEN_LONG')
     expect(ir.ruleBlocks.flatMap(block => block.actions).map(action => action.kind)).toContain('OPEN_LONG')
   })
+
+  it('throws fail-closed for mixed typed and legacy rules instead of falling back to flat buckets', () => {
+    const state = baseState({
+      trigger: [{
+        id: 'flat-trigger',
+        key: 'execution.on_start',
+        phase: 'entry',
+        sideScope: 'short',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      action: [{
+        id: 'flat-open-short',
+        key: 'action.open_short',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      rules: [
+        {
+          id: 'typed-entry',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: {
+            kind: 'atom',
+            key: 'execution.on_start',
+            params: {},
+          },
+          effects: {
+            actions: [{
+              kind: 'atom',
+              key: 'action.open_long',
+              params: {},
+            }],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        },
+        {
+          id: 'legacy-array-entry',
+          phase: 'entry',
+          sideScope: 'short',
+          condition: {
+            kind: 'atom',
+            key: 'execution.on_start',
+            params: {},
+          },
+          effects: [{
+            kind: 'atom',
+            key: 'action.open_short',
+            params: {},
+          }],
+        },
+      ],
+    })
+
+    expect(() => new CanonicalSpecBuilderService().buildFromSemanticState(state))
+      .toThrow('MixedSemanticRuleEffectsShape: legacy_effects_array ruleId=legacy-array-entry ruleIndex=1')
+  })
 })
