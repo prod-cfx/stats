@@ -25,8 +25,9 @@ import type {
   NormalizedTriggerAtomKey,
   StrategyNormalizedIntent,
 } from '../types/strategy-normalized-intent'
+import { createHash } from 'node:crypto'
 import { Injectable, Logger } from '@nestjs/common'
-import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
+import { canonicalSerialize, parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { extractAtrStopParams } from './atr-stop-params'
 import type { AtomContractKey } from '../atom-contracts/atom-contract-types'
@@ -751,11 +752,16 @@ export class CanonicalSpecBuilderService {
           }
         : {}),
       metadata: {
+        rulesHash: this.hashRulesMainflow(state.rules),
         rulesMainflow: {
           positionSourcePaths: mainflow.byRole.position.map(leaf => leaf.path),
         },
       },
     }
+  }
+
+  private hashRulesMainflow(rules: SemanticState['rules']): string {
+    return createHash('sha256').update(canonicalSerialize(rules ?? [])).digest('hex')
   }
 
   private buildProgramRuleGenerationState(state: SemanticState): SemanticState {

@@ -388,6 +388,7 @@ export interface CanonicalStrategySpecV2 {
   }
   metadata?: {
     normalized?: CanonicalStrategySpecNormalizedMetadata
+    rulesHash?: string
     rulesMainflow?: {
       positionSourcePaths?: string[]
     }

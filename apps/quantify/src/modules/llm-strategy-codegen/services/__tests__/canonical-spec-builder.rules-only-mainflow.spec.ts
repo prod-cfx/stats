@@ -1,7 +1,13 @@
 import type { SemanticState } from '../../types/semantic-state'
 import type { AtomExprAtom, SemanticRule } from '../../types/atom-expr'
+import { createHash } from 'node:crypto'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
+
+function hashCanonical(value: unknown): string {
+  return createHash('sha256').update(canonicalSerialize(value)).digest('hex')
+}
 
 function baseState(overrides: Partial<SemanticState> = {}): SemanticState {
   return {
@@ -192,6 +198,7 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     expect(json).not.toContain('"value":0.9')
     expect(json).not.toContain('"value":999')
     expect(json).not.toContain('"valuePct":12')
+    expect(spec.metadata?.rulesHash).toBe(hashCanonical(state.rules))
   })
 
   it.each([

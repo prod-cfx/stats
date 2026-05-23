@@ -5,6 +5,7 @@ import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-c
 import { CanonicalSpecV2DigestService } from '../canonical-spec-v2-digest.service'
 import { CodegenPublicationGenerationStage } from '../codegen-publication-generation.stage'
 import { CodegenGraphSnapshotService } from '../codegen-graph-snapshot.service'
+import { CompiledPublicationGateService } from '../compiled-publication-gate.service'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 import { CompiledScriptExecutionEnvelopeService } from '../compiled-script-execution-envelope.service'
 import { CompiledScriptParserService } from '../compiled-script-parser.service'
@@ -29,6 +30,39 @@ describe('codegenPublicationGenerationStage', () => {
     takeProfitBasis: 'entry_avg_price',
     ...riskRules,
   })
+
+  const buildTypedRulesSemanticState = (): SemanticState => ({
+    ...buildLockedBollingerSemanticState(),
+    trigger: [],
+    action: [],
+    risk: [],
+    position: null,
+    rules: [{
+      id: 'rule-entry-long',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: {
+        kind: 'atom',
+        key: 'execution.on_start',
+        params: {},
+      },
+      effects: {
+        actions: [{
+          kind: 'atom',
+          key: 'action.open_long',
+          params: {},
+        }],
+        risks: [],
+        positions: [{
+          kind: 'atom',
+          key: 'position.per_order_budget',
+          params: { value: 25, asset: 'USDT' },
+        }],
+        orchestration: [],
+        programs: [],
+      },
+    }],
+  } as SemanticState)
 
   const buildLockedMaSemanticState = (): SemanticState => ({
     version: 1,
@@ -748,6 +782,48 @@ describe('codegenPublicationGenerationStage', () => {
     expect(artifacts.rulesOnlyHashChain).toBe(hashChain)
     expect(artifacts.sessionSpecDesc.rulesOnlyHashChain).toBe(hashChain)
     expect(artifacts.sessionSpecDesc.stage1ConsistencyEvidence).toEqual(hashChain.hashes)
+  })
+
+  it('passes rules-only hash gate with canonicalSpec produced by real semantic builder', async () => {
+    const semanticState = buildTypedRulesSemanticState()
+    const stage = new CodegenPublicationGenerationStage(
+      new CanonicalSpecBuilderService(),
+      { buildFromCanonicalSpec: jest.fn().mockReturnValue({}) } as any,
+      new StrategySummaryBuilderService(new ScriptProfileExtractorService()) as any,
+      {
+        evaluate: jest.fn().mockReturnValue({
+          status: 'PASSED',
+          specProfile: { indicators: [], actions: [], ruleMappings: [], rules: [], sizing: null, requiredParams: [], fallbackDetected: false },
+          scriptProfile: { indicators: [], actions: [], ruleMappings: [], rules: [], sizing: null, requiredParams: [], fallbackDetected: false },
+          checks: [],
+          summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+        }),
+      } as any,
+      new CanonicalSpecV2IrCompilerService(),
+      new CanonicalStrategyAstCompilerService(),
+      new CompiledScriptEmitterService(),
+      new CompiledScriptExecutionEnvelopeService(),
+      new CompiledScriptParserService(),
+      undefined,
+      passingSemanticAtomInvariant() as any,
+      undefined,
+      new CompiledPublicationGateService(
+        { create: jest.fn() } as never,
+        { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
+      ),
+    )
+
+    const artifacts = await stage.generate({ semanticState })
+
+    expect(artifacts.rulesOnlyHashChain).toEqual(expect.objectContaining({
+      passed: true,
+      blocked: false,
+    }))
+    expect(artifacts.sessionSpecDesc.rulesOnlyHashChain).toEqual(expect.objectContaining({
+      checks: expect.arrayContaining([
+        expect.objectContaining({ key: 'hash.canonical.rulesHash', passed: true }),
+      ]),
+    }))
   })
 
   it('blocks publication generation when rules-only semanticState has empty rules', async () => {
