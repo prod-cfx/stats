@@ -596,11 +596,17 @@ describe('31-strategy rules tree main flow regressions', () => {
             params: { indicator: 'ma', 'reference.period': 120 },
             evidence: { text: 'ETH 日线在 MA120 上方时' },
           },
-          effects: [{
-            kind: 'atom',
-            key: 'portfolioRisk.substrategy_exposure_cap',
-            params: { mode: 'enforce', notionalCapPct: 100, effectWhenTriggered: 'block_new_entries' },
-          }],
+          effects: {
+            actions: [],
+            risks: [{
+              kind: 'atom',
+              key: 'portfolioRisk.substrategy_exposure_cap',
+              params: { mode: 'enforce', notionalCapPct: 100, effectWhenTriggered: 'block_new_entries' },
+            }],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
           evidence: { text: 'ETH 日线在 MA120 上方时' },
         },
         {
@@ -613,7 +619,13 @@ describe('31-strategy rules tree main flow regressions', () => {
             params: { indicator: 'ma', 'reference.period': 120 },
             evidence: { text: 'ETH 日线在 MA120 下方时平仓' },
           },
-          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
           evidence: { text: 'ETH 日线在 MA120 下方时平仓' },
         },
       ],

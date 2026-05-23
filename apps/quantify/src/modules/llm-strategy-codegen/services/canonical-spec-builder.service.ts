@@ -864,9 +864,100 @@ export class CanonicalSpecBuilderService {
         canonicalRules.push(riskRule)
         riskPriority -= 1
       }
+
+      for (const leaf of mainflow.byRole.position.filter(leaf => leaf.ruleId === rule.id && leaf.key === 'position.dca_schedule')) {
+        canonicalRules.push(this.buildCanonicalDcaRuleFromRuleEffectLeaf({
+          leaf: this.atomLeafFromMainflowLeaf(leaf),
+          rule,
+          sourcePath: leaf.path,
+          priority: this.resolveSemanticRulePriority('entry', ruleIndex + 1),
+        }))
+      }
     }
 
     return canonicalRules
+  }
+
+  private buildCanonicalDcaRuleFromRuleEffectLeaf(input: {
+    leaf: AtomExprAtom
+    rule: SemanticRule
+    sourcePath: string
+    priority: number
+  }): CanonicalRuleV2 {
+    if (input.rule.phase !== 'entry') {
+      throw new Error(`InvalidSemanticRulePositionEffect: key=${input.leaf.key} sourcePath=${input.sourcePath}`)
+    }
+
+    const condition = this.buildConditionFromSemanticRuleExpr(input.rule.condition, 'entry', input.rule.sideScope, null)
+    const sizing = this.resolveDcaScheduleSizing(input.leaf)
+    const metadata = this.buildDcaScheduleMetadataFromRuleEffectLeaf(input.leaf, input.sourcePath)
+    if (!condition || !sizing || !metadata) {
+      throw new Error(`InvalidSemanticRulePositionEffect: key=${input.leaf.key} sourcePath=${input.sourcePath}`)
+    }
+
+    return {
+      id: `semantic-dca-${input.rule.id}`,
+      phase: 'entry',
+      sideScope: input.rule.sideScope,
+      priority: input.priority,
+      condition,
+      actions: [{
+        type: input.rule.sideScope === 'short' ? 'ADD_SHORT' : 'ADD_LONG',
+        sizing,
+        atomKey: 'position.dca_schedule',
+        sourcePath: input.sourcePath,
+      }],
+      metadata: {
+        dcaSchedule: metadata,
+        sourcePath: input.sourcePath,
+        semanticKey: input.leaf.key,
+      },
+    }
+  }
+
+  private resolveDcaScheduleSizing(leaf: AtomExprAtom): CanonicalStrategySpecV2['sizing'] {
+    const perOrderSizing = this.resolveSemanticActionSizing(leaf.params.perOrderSizing)
+    if (perOrderSizing) {
+      return perOrderSizing
+    }
+    const value = this.readFiniteNumber(leaf.params.perOrderBudget)
+    if (value !== null && value > 0) {
+      return { mode: 'QUOTE', value }
+    }
+    return null
+  }
+
+  private buildDcaScheduleMetadataFromRuleEffectLeaf(
+    leaf: AtomExprAtom,
+    sourcePath: string,
+  ): NonNullable<NonNullable<CanonicalRuleV2['metadata']>['dcaSchedule']> | null {
+    const configuredMaxCount = this.readFiniteNumber(leaf.params.maxCount)
+      ?? this.readFiniteNumber(leaf.params.maxOrders)
+    const perOrderBudget = this.readFiniteNumber(leaf.params.perOrderBudget)
+      ?? this.readFiniteNumber((leaf.params.perOrderSizing as { value?: unknown } | undefined)?.value)
+    const maxCount = configuredMaxCount ?? (perOrderBudget !== null ? 1 : null)
+    const capitalCap = this.readDcaCapitalCapValue(leaf.params.capitalCap)
+      ?? this.readDcaCapitalCapValue(leaf.params.maxTotalQuote)
+      ?? (maxCount !== null && perOrderBudget !== null ? maxCount * perOrderBudget : null)
+    if (maxCount === null || capitalCap === null) {
+      return null
+    }
+
+    const triggerMode = typeof leaf.params.triggerMode === 'string' ? leaf.params.triggerMode : undefined
+    const exitRule = leaf.params.exitRule && typeof leaf.params.exitRule === 'object' && !Array.isArray(leaf.params.exitRule)
+      ? leaf.params.exitRule as Record<string, string>
+      : undefined
+    return {
+      maxCount,
+      capitalCap,
+      stateKey: `dca_fired_count_${this.stableRulesPathId(sourcePath)}`,
+      ...(triggerMode !== undefined ? { triggerMode } : {}),
+      ...this.optionalNumberField('priceIntervalPct', this.readFiniteNumber(leaf.params.priceIntervalPct)),
+      ...this.optionalNumberField('priceIntervalQuote', this.readFiniteNumber(leaf.params.priceIntervalQuote)),
+      ...this.optionalNumberField('timeIntervalBars', this.readFiniteNumber(leaf.params.timeIntervalBars)),
+      ...this.optionalNumberField('timeIntervalMs', this.readFiniteNumber(leaf.params.timeIntervalMs)),
+      exitRule: exitRule ?? { type: 'cap_only' },
+    }
   }
 
   private buildCanonicalRiskRuleFromRuleEffectLeaf(input: {
@@ -1207,6 +1298,9 @@ export class CanonicalSpecBuilderService {
     }
     let resolved: CanonicalStrategySpecV2['sizing'] = null
     for (const leaf of positionLeaves) {
+      if (leaf.key === 'position.dca_schedule') {
+        continue
+      }
       if (leaf.key !== FIELD_KEY.POSITION_PER_ORDER_BUDGET) {
         throw new Error(`UnsupportedSemanticRulePositionEffect: key=${leaf.key} sourcePath=${leaf.path}`)
       }
@@ -3244,6 +3338,14 @@ export class CanonicalSpecBuilderService {
         return phase === 'exit' ? [{ type: 'CLOSE_LONG', atomKey: leaf.key }] : []
       case ATOM_CONTRACT_REGISTRY['action.close_short'].key:
         return phase === 'exit' ? [{ type: 'CLOSE_SHORT', atomKey: leaf.key }] : []
+      case ATOM_CONTRACT_REGISTRY['action.add_position'].key:
+        return phase === 'entry'
+          ? [{
+              type: (leaf.sideScope ?? 'long') === 'short' ? 'ADD_SHORT' : 'ADD_LONG',
+              sizing: this.resolveSemanticActionSizing(leaf.params.sizing) ?? sizing ?? undefined,
+              atomKey: leaf.key,
+            }]
+          : []
       default:
         return []
     }
