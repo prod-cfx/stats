@@ -572,7 +572,7 @@ export class PlannerDispatcherMergeService {
         ...(sideScope ? { sideScope } : {}),
         ...this.resolveFallbackEvidence(predicate, userMessage),
       }
-      const signature = `${phase}|${sideScope}|${condition.key}|${JSON.stringify(condition.params)}|${effects.map(e => e.key).join(',')}`
+      const signature = `${phase}|${sideScope}|${JSON.stringify(this.normalizeAtomExprForSignature(condition))}|${JSON.stringify(effects.map(effect => this.normalizeAtomExprForSignature(effect)))}`
       if (seen.has(signature)) continue
       seen.add(signature)
       rules.push({
@@ -1581,7 +1581,7 @@ export class PlannerDispatcherMergeService {
       const normalizedEffects = allowShort
         ? rule.effects
         : mapRuleEffectsByRole(rule.effects, effect => this.removeShortCloseEffect(effect))
-      const signature = `${rule.phase}|${rule.sideScope}|${JSON.stringify(rule.condition)}|${JSON.stringify(listRuleEffects(normalizedEffects).map(effect => this.omitEffectPhaseForSignature(effect)))}`
+      const signature = `${rule.phase}|${rule.sideScope}|${JSON.stringify(this.normalizeAtomExprForSignature(rule.condition))}|${JSON.stringify(listRuleEffects(normalizedEffects).map(effect => this.normalizeAtomExprForSignature(effect)))}`
       if (seen.has(signature)) continue
       seen.add(signature)
       next.push(normalizedEffects === rule.effects ? rule : { ...rule, sideScope: rule.sideScope === 'both' ? 'long' : rule.sideScope, effects: normalizedEffects })
@@ -1605,6 +1605,22 @@ export class PlannerDispatcherMergeService {
   private omitEffectPhaseForSignature(effect: AtomExpr): unknown {
     if (effect.kind === 'atom') return { ...effect, params: this.omitParams(effect.params ?? {}, ['phase']) }
     return effect
+  }
+
+  private normalizeAtomExprForSignature(expr: AtomExpr): unknown {
+    if (expr.kind === 'atom') {
+      return {
+        ...expr,
+        evidence: undefined,
+        params: this.omitParams(expr.params ?? {}, ['phase']),
+      }
+    }
+    if (expr.kind === 'and' || expr.kind === 'or') {
+      return { ...expr, children: expr.children.map(child => this.normalizeAtomExprForSignature(child)) }
+    }
+    if (expr.kind === 'not') return { ...expr, child: this.normalizeAtomExprForSignature(expr.child) }
+    if (expr.kind === 'sequence') return { ...expr, steps: expr.steps.map(step => this.normalizeAtomExprForSignature(step)) }
+    return expr
   }
 
   private findDispatcherTakeProfitReplacement(
@@ -1687,6 +1703,7 @@ export class PlannerDispatcherMergeService {
     const nextRules = [...corrected]
     for (const deterministicRule of deterministicRules) {
       if (!this.shouldAppendDeterministicCoreTradeRule(deterministicRule)) continue
+      if (this.isDeterministicConditionAlreadyRepresented(nextRules, deterministicRule)) continue
       if (this.isDeterministicRuleCovered(nextRules, deterministicRule)) continue
       nextRules.push(deterministicRule)
     }
@@ -1797,6 +1814,26 @@ export class PlannerDispatcherMergeService {
     })
   }
 
+  private isDeterministicConditionAlreadyRepresented(
+    rules: readonly SemanticRule[],
+    deterministicRule: SemanticRule,
+  ): boolean {
+    const deterministicLeaves = collectAtomLeaves(deterministicRule.condition)
+    if (deterministicLeaves.length !== 1) return false
+    const deterministicLeaf = deterministicLeaves[0]
+    if (!deterministicLeaf) return false
+    return rules.some((rule) => {
+      if (rule.phase !== deterministicRule.phase) return false
+      return collectAtomLeaves(rule.condition).some(existing => this.conditionLeafRepresents(existing, deterministicLeaf))
+    })
+  }
+
+  private conditionLeafRepresents(existing: AtomExprAtom, candidate: AtomExprAtom): boolean {
+    if (this.atomLeafMatches(existing, candidate)) return true
+    if (this.bollingerMiddleRepresentsNoisyBollingerMidlineEvidence(existing, candidate)) return true
+    return this.bollingerMiddleRepresentsMovingAverageMidline(existing, candidate)
+  }
+
   private ruleEffectsCover(existingRule: SemanticRule, candidateRule: SemanticRule): boolean {
     const existingEffects = listRuleEffects(existingRule.effects).flatMap(effect => collectAtomLeaves(effect))
     const candidateEffects = listRuleEffects(candidateRule.effects).flatMap(effect => collectAtomLeaves(effect))
@@ -1829,7 +1866,49 @@ export class PlannerDispatcherMergeService {
     return this.paramsSubsetMatch(existing.params, candidate.params)
   }
 
+  private bollingerMiddleRepresentsMovingAverageMidline(existing: AtomExprAtom, candidate: AtomExprAtom): boolean {
+    if (existing.key !== ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key) return false
+    if (
+      candidate.key !== ATOM_CONTRACT_REGISTRY['indicator.above'].key
+      && candidate.key !== ATOM_CONTRACT_REGISTRY['indicator.below'].key
+    ) return false
+    const candidateIndicator = this.readStringParam(candidate.params, 'indicator')
+    if (candidateIndicator && !this.indicatorAliasesMatch(candidateIndicator, 'ma')) return false
+    const existingPeriod = this.readNumericParam(existing.params, 'period')
+    const candidatePeriod = this.readNumericParam(candidate.params, 'reference.period')
+    return existingPeriod !== null && candidatePeriod !== null && Math.abs(existingPeriod - candidatePeriod) <= 1e-9
+  }
+
+  private bollingerMiddleRepresentsNoisyBollingerMidlineEvidence(existing: AtomExprAtom, candidate: AtomExprAtom): boolean {
+    if (existing.key !== ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key) return false
+    if (
+      candidate.key !== ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key
+      && candidate.key !== ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key
+    ) return false
+    const evidence = this.readEvidenceText(candidate)
+    if (!evidence || !/中轨|middle|MA\s*20/iu.test(evidence)) return false
+    const existingPeriod = this.readNumericParam(existing.params, 'period')
+    const candidatePeriod = this.readNumericParam(candidate.params, 'period')
+    return existingPeriod === null || candidatePeriod === null || Math.abs(existingPeriod - candidatePeriod) <= 1e-9
+  }
+
   private semanticAtomLeafMatches(existing: AtomExprAtom, candidate: AtomExprAtom): boolean {
+    if (
+      existing.key.startsWith('bollinger.')
+      && candidate.key.startsWith('bollinger.')
+      && existing.key === candidate.key
+    ) {
+      const existingBand = this.readStringParam(existing.params, 'band')
+      const candidateBand = this.readStringParam(candidate.params, 'band')
+      const existingPeriod = this.readNumericParam(existing.params, 'period')
+      const candidatePeriod = this.readNumericParam(candidate.params, 'period')
+      const existingStdDev = this.readNumericParam(existing.params, 'stdDev')
+      const candidateStdDev = this.readNumericParam(candidate.params, 'stdDev')
+      return Boolean(existingBand && candidateBand && existingBand === candidateBand)
+        && (existingPeriod === null || candidatePeriod === null || Math.abs(existingPeriod - candidatePeriod) <= 1e-9)
+        && (existingStdDev === null || candidateStdDev === null || Math.abs(existingStdDev - candidateStdDev) <= 1e-9)
+    }
+
     const existingIndicator = this.readStringParam(existing.params, 'indicator')
     const candidateIndicator = this.readStringParam(candidate.params, 'indicator')
     if (existingIndicator && candidateIndicator && !this.indicatorAliasesMatch(existingIndicator, candidateIndicator)) return false

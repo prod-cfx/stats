@@ -462,6 +462,59 @@ describe('PlannerDispatcherMergeService', () => {
     ]))
   })
 
+  it('does not append ambiguous dispatcher fallback rules when planner already covers BOLL long-short flow', () => {
+    const text = 'OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%。'
+    const planner = {
+      rules: [
+        {
+          id: 'entry-long-boll-lower',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'bollinger.touch_lower', params: { band: 'lower', period: 20, stdDev: 2, confirmationMode: 'touch' } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'entry-short-boll-upper',
+          phase: 'entry',
+          sideScope: 'short',
+          condition: { kind: 'atom', key: 'bollinger.touch_upper', params: { band: 'upper', period: 20, stdDev: 2, confirmationMode: 'touch' } },
+          effects: [{ kind: 'atom', key: 'action.open_short', params: {} }],
+        },
+        {
+          id: 'exit-long-boll-middle',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'bollinger.touch_middle', params: { band: 'middle', period: 20, stdDev: 2, confirmationMode: 'breakout' } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+        {
+          id: 'exit-short-boll-middle',
+          phase: 'exit',
+          sideScope: 'short',
+          condition: { kind: 'atom', key: 'bollinger.touch_middle', params: { band: 'middle', period: 20, stdDev: 2, confirmationMode: 'breakout' } },
+          effects: [{ kind: 'atom', key: 'action.close_short', params: {} }],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const serialized = JSON.stringify(merged?.rules)
+
+    expect(merged?.rules).toHaveLength(4)
+    expect(serialized).not.toContain('deterministic-rule')
+    expect(serialized).not.toContain('action.open_short","kind":"atom","params":{"phase":"entry"}},{"key":"action.open_long')
+  })
+
+  it('dedupes stop-loss rules whose params differ only by legacy phase field', () => {
+    const text = '入场：15m k线里面 价格在ema20 ema60 ema144上方时做多开仓；出场：15m k线里面 价格低于ema20时平多；止损：5%；仓位：10usdt'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+    const fallback = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
+    const stopLossRules = fallback?.rules?.filter(rule => JSON.stringify(rule.condition).includes('risk.stop_loss_pct')) ?? []
+
+    expect(stopLossRules).toHaveLength(1)
+  })
+
   it('hydrates planner multi-timeframe EMA children for staging case 24', () => {
     const text = '15min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约'
     const planner = {
