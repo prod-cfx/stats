@@ -140,6 +140,15 @@ void main() {
     // 搜索 icon 渲染（设计稿 iconBtn 风格）。
     expect(find.byIcon(Icons.search), findsOneWidget);
 
+    // issue #1651：搜索能力尚未落地，按钮应为禁用态（onPressed=null），
+    // 避免出现空 onTap 的误导点击。
+    final Finder searchIcon = find.byIcon(Icons.search);
+    final IconButton searchButton = tester.widget<IconButton>(
+      find.ancestor(of: searchIcon, matching: find.byType(IconButton)).first,
+    );
+    expect(searchButton.onPressed, isNull,
+        reason: '搜索按钮未实现前应禁用，避免空点击');
+
     // 铃铛使用 36x36 SizedBox（QzNotificationBell circular=true 路径）。
     final Finder bellIcon = find.byIcon(Icons.notifications_outlined);
     expect(bellIcon, findsOneWidget);

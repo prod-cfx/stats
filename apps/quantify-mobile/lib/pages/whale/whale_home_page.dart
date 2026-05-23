@@ -70,7 +70,9 @@ class _WhaleHomePageState extends ConsumerState<WhaleHomePage> {
           _CircularIconAction(
             icon: Icons.search,
             tooltip: l10n.whaleSearchTooltip,
-            onTap: () {},
+            // 搜索能力尚未落地（issue #1651）：禁用按钮避免空点击误导用户，
+            // 待产品确认搜索范围后再补齐 onTap。
+            onTap: null,
           ),
           const SizedBox(width: QzSpacing.xs),
           QzNotificationBell(
@@ -132,7 +134,7 @@ class _CircularIconAction extends StatelessWidget {
 
   final IconData icon;
   final String tooltip;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
