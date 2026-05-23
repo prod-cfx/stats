@@ -1013,4 +1013,4 @@ function Stat({ label, v, tone }) {
   );
 }
 
-Object.assign(window, { ScreenLogin, ScreenAIChat, MiniChart, Candles, Bubble, Stat, Field });
+Object.assign(window, { ScreenLogin, ScreenAIChat, DeployModal, MiniChart, Candles, Bubble, Stat, Field });

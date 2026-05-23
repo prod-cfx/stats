@@ -1102,7 +1102,20 @@ function ApiRow({ ex, set, on, last }) {
 /* ========================================================================
    SCREEN 10 — API Config (modal bottom sheet)
    ======================================================================== */
-function ScreenApiConfig() {
+// 命名统一：历史「API 验证」全部更名为「API 配置」，对齐 Flutter `ApiFormSheet`
+// 与 docs/decisions.md「API 配置入口命名」基线（issue #1664）。
+// 由 exchange 参数驱动徽章 + 标题，不再硬编码 Binance；默认仍取 Binance 以保
+// 留单屏预览体验。
+const API_CONFIG_BADGE = {
+  binance: { color: '#F0B90B', fg: '#000', glyph: 'B' },
+  okx:     { color: '#1E1E1E', fg: '#fff', glyph: 'O' },
+  bybit:   { color: '#F7A600', fg: '#fff', glyph: 'B' },
+  hyperliquid: { color: '#13ABA1', fg: '#fff', glyph: 'H' },
+};
+
+function ScreenApiConfig({ exchange = 'Binance' } = {}) {
+  const key = (exchange || 'Binance').toLowerCase();
+  const badge = API_CONFIG_BADGE[key] || { color: '#7C5CFF', fg: '#fff', glyph: (exchange || '?').slice(0, 1).toUpperCase() };
   return (
     <div className="m-sheet-scrim" style={{height:'100%', position:'relative', background:'rgba(15,22,35,0.55)', overflow:'hidden'}}>
       <MStatus dark/>
@@ -1118,12 +1131,12 @@ function ScreenApiConfig() {
 
         <div style={{padding:'14px 20px 8px', display:'flex', alignItems:'center', gap:12}}>
           <div style={{
-            width:42, height:42, borderRadius:11, background:'#F0B90B',
-            color:'#000', display:'flex', alignItems:'center', justifyContent:'center',
+            width:42, height:42, borderRadius:11, background:badge.color,
+            color:badge.fg, display:'flex', alignItems:'center', justifyContent:'center',
             fontWeight:800, fontSize:18,
-          }}>B</div>
+          }}>{badge.glyph}</div>
           <div>
-            <div style={{fontSize:17, fontWeight:700}}>Binance API</div>
+            <div style={{fontSize:17, fontWeight:700}}>{exchange} API 配置</div>
             <div style={{fontSize:12, color:M.mid, marginTop:2}}>仅保留读取 + 下单权限</div>
           </div>
         </div>
@@ -1135,7 +1148,7 @@ function ScreenApiConfig() {
           }}>
             <Ico d={ICONS.shield} w={16} fill={M.warn} sw={0}/>
             <div style={{fontSize:12, color:M.warn, lineHeight:1.55}}>
-              <strong>必须</strong>在 Binance 后台关闭「提币」权限。我们的服务端会再校验一次，发现允许提币的密钥会立即拒绝。
+              <strong>必须</strong>在 {exchange} 后台关闭「提币」权限。我们的服务端会再校验一次，发现允许提币的密钥会立即拒绝。
             </div>
           </div>
 
