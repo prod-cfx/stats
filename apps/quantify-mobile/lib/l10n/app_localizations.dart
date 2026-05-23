@@ -920,6 +920,12 @@ abstract class AppLocalizations {
   /// **'多空比'**
   String get marketLongShortTitle;
 
+  /// No description provided for @marketLongShortSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'全市场永续合约 · 4H'**
+  String get marketLongShortSubtitle;
+
   /// No description provided for @marketLongShortLoadError.
   ///
   /// In zh, this message translates to:
@@ -1022,11 +1028,23 @@ abstract class AppLocalizations {
   /// **'买入 / 做多'**
   String get marketDetailBuyButton;
 
+  /// No description provided for @marketDetailBuySubLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'开多 · 10x'**
+  String get marketDetailBuySubLabel;
+
   /// No description provided for @marketDetailSellButton.
   ///
   /// In zh, this message translates to:
   /// **'卖出 / 做空'**
   String get marketDetailSellButton;
+
+  /// No description provided for @marketDetailSellSubLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'开空 · 10x'**
+  String get marketDetailSellSubLabel;
 
   /// No description provided for @marketDetailSubtitlePerpBinance.
   ///

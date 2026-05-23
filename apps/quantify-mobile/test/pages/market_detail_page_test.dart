@@ -344,4 +344,16 @@ void main() {
       }
     }
   });
+
+  // 验证底部 buy/sell 按钮渲染主文案 + 副文案两行（issue #1667）。
+  testWidgets('MarketDetailPage 底部按钮渲染主+副文案', (WidgetTester tester) async {
+    await _pump(tester, _FakeOrderbookRepository());
+
+    expect(find.byKey(const Key('market-detail-buy')), findsOneWidget);
+    expect(find.byKey(const Key('market-detail-sell')), findsOneWidget);
+    expect(find.text('买入 / 做多'), findsOneWidget);
+    expect(find.text('卖出 / 做空'), findsOneWidget);
+    expect(find.text('开多 · 10x'), findsOneWidget);
+    expect(find.text('开空 · 10x'), findsOneWidget);
+  });
 }

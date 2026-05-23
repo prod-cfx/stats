@@ -462,6 +462,7 @@ class _OrderActionBar extends StatelessWidget {
               child: _ActionButton(
                 key: const Key('market-detail-buy'),
                 label: l10n.marketDetailBuyButton,
+                subLabel: l10n.marketDetailBuySubLabel,
                 color: c.marketUp,
                 onPressed: onBuy,
               ),
@@ -471,6 +472,7 @@ class _OrderActionBar extends StatelessWidget {
               child: _ActionButton(
                 key: const Key('market-detail-sell'),
                 label: l10n.marketDetailSellButton,
+                subLabel: l10n.marketDetailSellSubLabel,
                 color: c.marketDown,
                 onPressed: onSell,
               ),
@@ -486,35 +488,56 @@ class _ActionButton extends StatelessWidget {
   const _ActionButton({
     super.key,
     required this.label,
+    required this.subLabel,
     required this.color,
     required this.onPressed,
   });
 
   final String label;
+  final String subLabel;
   final Color color;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
+    // 两行布局对齐设计稿 m-screens-3 sticky buy/sell：主文案 + 副文案
+    // （「开多 · 10x」/「开空 · 10x」）。高度从 44 提到 46 对齐设计稿
+    // height:46，避免 14+10 双行字号挤压。
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onPressed,
         borderRadius: BorderRadius.circular(QzRadii.input),
         child: Container(
-          height: 44,
+          height: 46,
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(QzRadii.input),
           ),
           alignment: Alignment.center,
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  height: 1.1,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subLabel,
+                style: const TextStyle(
+                  color: Color(0xD9FFFFFF),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  height: 1.1,
+                ),
+              ),
+            ],
           ),
         ),
       ),

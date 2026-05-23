@@ -441,6 +441,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketLongShortTitle => 'Long/Short';
 
   @override
+  String get marketLongShortSubtitle => 'Market perps · 4H';
+
+  @override
   String get marketLongShortLoadError => 'Long/short data load failed';
 
   @override
@@ -498,7 +501,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketDetailBuyButton => 'Buy / Long';
 
   @override
+  String get marketDetailBuySubLabel => 'Open long · 10x';
+
+  @override
   String get marketDetailSellButton => 'Sell / Short';
+
+  @override
+  String get marketDetailSellSubLabel => 'Open short · 10x';
 
   @override
   String get marketDetailSubtitlePerpBinance => 'Perp · Binance';

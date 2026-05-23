@@ -52,7 +52,8 @@ void main() {
 
     expect(find.byType(LongShortPage), findsOneWidget);
     expect(find.byType(LongShortBar), findsWidgets);
-    expect(find.text('历史'), findsOneWidget);
+    // 顶栏 subtitle 对齐设计稿（issue #1667）。
+    expect(find.text('全市场永续合约 · 4H'), findsOneWidget);
   });
 
   testWidgets('LongShortPage 9 主题循环 pump 不抛异常', (WidgetTester tester) async {

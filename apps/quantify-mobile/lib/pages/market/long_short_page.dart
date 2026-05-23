@@ -76,6 +76,7 @@ class _LongShortPageState extends ConsumerState<LongShortPage> {
     return Scaffold(
       appBar: QzTopBar(
         title: l10n.marketLongShortTitle,
+        subtitle: l10n.marketLongShortSubtitle,
         actions: <Widget>[
           IconButton(
             icon: const Icon(Icons.refresh, size: 20),

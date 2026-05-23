@@ -423,6 +423,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketLongShortTitle => '多空比';
 
   @override
+  String get marketLongShortSubtitle => '全市场永续合约 · 4H';
+
+  @override
   String get marketLongShortLoadError => '多空比加载失败';
 
   @override
@@ -480,7 +483,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketDetailBuyButton => '买入 / 做多';
 
   @override
+  String get marketDetailBuySubLabel => '开多 · 10x';
+
+  @override
   String get marketDetailSellButton => '卖出 / 做空';
+
+  @override
+  String get marketDetailSellSubLabel => '开空 · 10x';
 
   @override
   String get marketDetailSubtitlePerpBinance => '永续 · Binance';
