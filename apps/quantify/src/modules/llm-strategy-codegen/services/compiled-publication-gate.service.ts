@@ -46,6 +46,35 @@ interface PublishCompiledSnapshotInput {
   lockedParams: Record<string, unknown>
 }
 
+export interface RulesOnlyHashChainInput {
+  rules: unknown
+  canonicalSpec: Record<string, unknown>
+  ir: CanonicalStrategyIrV1
+  ast: StrategyAstV1
+  script: string
+}
+
+export interface RulesOnlyHashChainCheck {
+  key: string
+  passed: boolean
+  expected?: unknown
+  actual?: unknown
+}
+
+export interface RulesOnlyHashChainResult {
+  passed: boolean
+  blocked: boolean
+  reason?: 'rules_only_trace_missing'
+  hashes: {
+    rulesHash: string
+    canonicalSpecHash: string
+    irHash: string
+    astHash: string
+    scriptHash: string
+  }
+  checks: RulesOnlyHashChainCheck[]
+}
+
 interface FormalStrategyConfig {
   exchange: string
   symbol: string
@@ -203,6 +232,54 @@ export class CompiledPublicationGateService {
     }
   }
 
+  validateRulesOnlyHashChain(input: RulesOnlyHashChainInput): RulesOnlyHashChainResult {
+    const trace = this.buildRulesOnlyTraceIndex(input.canonicalSpec)
+    const executableIrRefs = this.collectExecutableIrRefs(input.ir)
+    const executableAstRefs = this.collectExecutableAstRefs(input.ast)
+    const scriptRefs = this.collectScriptRefs(input.script)
+    const checks: RulesOnlyHashChainCheck[] = [
+      {
+        key: 'trace.canonical',
+        passed: trace.sourcePaths.length > 0,
+        expected: 'rules[] sourcePath in canonicalSpec',
+        actual: trace.sourcePaths,
+      },
+      {
+        key: 'trace.ir',
+        passed: this.hasRulesOnlyTrace(executableIrRefs, trace),
+        expected: trace.sourcePaths,
+        actual: executableIrRefs,
+      },
+      {
+        key: 'trace.ast',
+        passed: this.hasRulesOnlyTrace(executableAstRefs, trace),
+        expected: trace.sourcePaths,
+        actual: executableAstRefs,
+      },
+      {
+        key: 'trace.script',
+        passed: this.hasRulesOnlyTrace(scriptRefs, trace),
+        expected: trace.sourcePaths,
+        actual: scriptRefs,
+      },
+    ]
+    const blocked = checks.some(check => !check.passed)
+
+    return {
+      passed: !blocked,
+      blocked,
+      ...(blocked ? { reason: 'rules_only_trace_missing' as const } : {}),
+      hashes: {
+        rulesHash: this.hashCanonicalJsonHex(input.rules),
+        canonicalSpecHash: this.hashCanonicalJsonHex(input.canonicalSpec),
+        irHash: this.hashCanonicalJsonHex(input.ir),
+        astHash: this.hashCanonicalJsonHex(input.ast),
+        scriptHash: this.hashTextHex(input.script),
+      },
+      checks,
+    }
+  }
+
   async publish(input: PublishCompiledSnapshotInput): Promise<{
     snapshotId: string
     snapshotHash: string
@@ -334,6 +411,130 @@ export class CompiledPublicationGateService {
 
   private hashCanonicalJson(value: unknown): `sha256:${string}` {
     return `sha256:${createHash('sha256').update(canonicalSerialize(value)).digest('hex')}`
+  }
+
+  private hashCanonicalJsonHex(value: unknown): string {
+    return createHash('sha256').update(canonicalSerialize(value)).digest('hex')
+  }
+
+  private hashTextHex(value: string): string {
+    return createHash('sha256').update(value, 'utf8').digest('hex')
+  }
+
+  private buildRulesOnlyTraceIndex(canonicalSpec: Record<string, unknown>): {
+    sourcePaths: string[]
+    ids: string[]
+  } {
+    const sourcePaths = new Set<string>()
+    const ids = new Set<string>()
+    this.visitRecords(canonicalSpec, (record) => {
+      const sourcePath = this.readRulesSourcePath(record.sourcePath)
+        ?? this.readRulesSourcePath(this.readRecord(record.metadata)?.sourcePath)
+      if (!sourcePath) return
+
+      sourcePaths.add(sourcePath)
+      if (typeof record.id === 'string' && record.id.trim().length > 0) {
+        ids.add(record.id.trim())
+      }
+    })
+
+    return {
+      sourcePaths: Array.from(sourcePaths).sort(),
+      ids: Array.from(ids).sort(),
+    }
+  }
+
+  private collectExecutableIrRefs(ir: CanonicalStrategyIrV1): string[] {
+    const refs = new Set<string>()
+    for (const item of [
+      ...ir.ruleBlocks,
+      ...ir.orderPrograms,
+      ...(ir.orchestrationGates ?? []),
+      ...(ir.orchestrationPortfolioRisks ?? []),
+      ...(ir.orchestrationPrograms ?? []),
+    ]) {
+      this.collectRecordTraceRefs(item as unknown as Record<string, unknown>, refs)
+    }
+    return Array.from(refs).sort()
+  }
+
+  private collectExecutableAstRefs(ast: StrategyAstV1): string[] {
+    const refs = new Set<string>()
+    for (const item of [
+      ...ast.decisionPrograms,
+      ...ast.orderPrograms,
+      ...ast.guards,
+      ...(ast.riskPredicates ?? []),
+      ...(ast.orchestrationPortfolioRisks ?? []),
+      ...(ast.orchestrationPrograms ?? []),
+    ]) {
+      this.collectRecordTraceRefs(item as unknown as Record<string, unknown>, refs)
+    }
+    return Array.from(refs).sort()
+  }
+
+  private collectScriptRefs(script: string): string[] {
+    const refs = new Set<string>()
+    const patterns = [
+      /"sourceRef":"([^"]+)"/gu,
+      /"id":"([^"]+)"/gu,
+      /"sourcePath":"(rules\[\d+\][^"]*)"/gu,
+      /\brules\[\d+\][\w.[\]]*/gu,
+    ]
+    for (const pattern of patterns) {
+      for (const match of script.matchAll(pattern)) {
+        const value = match[1] ?? match[0]
+        if (value) refs.add(value)
+      }
+    }
+    return Array.from(refs).sort()
+  }
+
+  private collectRecordTraceRefs(record: Record<string, unknown>, refs: Set<string>): void {
+    this.visitRecords(record, (item) => {
+      for (const key of ['id', 'sourceRef', 'activeWhen', 'levelSetRef']) {
+        const value = item[key]
+        if (typeof value === 'string' && value.trim().length > 0) {
+          refs.add(value.trim())
+        }
+      }
+      const sourcePath = this.readRulesSourcePath(item.sourcePath)
+        ?? this.readRulesSourcePath(this.readRecord(item.metadata)?.sourcePath)
+      if (sourcePath) refs.add(sourcePath)
+    })
+  }
+
+  private hasRulesOnlyTrace(
+    refs: readonly string[],
+    trace: { sourcePaths: readonly string[], ids: readonly string[] },
+  ): boolean {
+    if (trace.sourcePaths.length === 0) return false
+    return refs.some(ref =>
+      trace.sourcePaths.includes(ref)
+      || trace.ids.some(id => ref === id || ref.includes(id)),
+    )
+  }
+
+  private readRulesSourcePath(value: unknown): string | null {
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    return /^rules\[\d+\]/u.test(trimmed) ? trimmed : null
+  }
+
+  private visitRecords(value: unknown, visitor: (record: Record<string, unknown>) => void): void {
+    if (!value || typeof value !== 'object') return
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        this.visitRecords(item, visitor)
+      }
+      return
+    }
+
+    const record = value as Record<string, unknown>
+    visitor(record)
+    for (const item of Object.values(record)) {
+      this.visitRecords(item, visitor)
+    }
   }
 
   private buildPublicationAstSnapshot(ast: StrategyAstV1): PublishedStrategyAstSnapshot {

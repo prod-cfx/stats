@@ -67,6 +67,7 @@ export interface CodegenPublicationArtifacts {
   semanticPredicateGraph: SemanticPredicateStrategyGraph
   normalizedIntent: StrategyNormalizedIntent
   lockedParams: Record<string, unknown>
+  rulesOnlyHashChain?: ReturnType<CompiledPublicationGateService['validateRulesOnlyHashChain']>
   publishParams: {
     symbol: string
     timeframe: string
@@ -165,6 +166,29 @@ export class CodegenPublicationGenerationStage {
     })
     const validation = this.validateCompiledScript(compiledScript)
     compiledScript = validation.scriptCode
+    const hasRulesOnlyInput = Array.isArray(input.semanticState.rules) && input.semanticState.rules.length > 0
+    const rulesOnlyHashChain = validation.passed
+      && hasRulesOnlyInput
+      && typeof this.publicationGate?.validateRulesOnlyHashChain === 'function'
+      ? this.publicationGate.validateRulesOnlyHashChain({
+          rules: input.semanticState.rules ?? [],
+          canonicalSpec: canonicalSpec as unknown as Record<string, unknown>,
+          ir: compiled.ir,
+          ast,
+          script: compiledScript,
+        })
+      : undefined
+
+    if (rulesOnlyHashChain?.blocked) {
+      const error = new Error(`publication gate blocked: ${rulesOnlyHashChain.reason}`) as Error & {
+        publicationGate?: typeof rulesOnlyHashChain
+        rulesOnlyHashChain?: typeof rulesOnlyHashChain
+      }
+      error.publicationGate = rulesOnlyHashChain
+      error.rulesOnlyHashChain = rulesOnlyHashChain
+      throw error
+    }
+
     const semanticConsistency = validation.passed
       ? this.strategyConsistencyService.evaluate({
           canonicalSpec,
@@ -195,11 +219,11 @@ export class CodegenPublicationGenerationStage {
       : null
     const stage1ConsistencyEvidence = validation.passed
       ? {
-          rulesHash: this.hashCanonicalJson(input.semanticState.rules ?? []),
-          canonicalSpecHash: this.hashCanonicalJson(canonicalSpec),
-          irHash: this.readCompiledIrHash(compiled) ?? this.hashCanonicalJson(compiled.ir),
-          astHash: this.readAstDigest(ast) ?? this.readParsedAstDigest(compiledScriptProjection),
-          scriptHash: this.hashText(compiledScript),
+          rulesHash: rulesOnlyHashChain?.hashes.rulesHash ?? this.hashCanonicalJson(input.semanticState.rules ?? []),
+          canonicalSpecHash: rulesOnlyHashChain?.hashes.canonicalSpecHash ?? this.hashCanonicalJson(canonicalSpec),
+          irHash: rulesOnlyHashChain?.hashes.irHash ?? this.readCompiledIrHash(compiled) ?? this.hashCanonicalJson(compiled.ir),
+          astHash: rulesOnlyHashChain?.hashes.astHash ?? this.readAstDigest(ast) ?? this.readParsedAstDigest(compiledScriptProjection),
+          scriptHash: rulesOnlyHashChain?.hashes.scriptHash ?? this.hashText(compiledScript),
         }
       : undefined
     const sessionSpecDesc = {
@@ -212,6 +236,7 @@ export class CodegenPublicationGenerationStage {
       summaryObservation,
       lockedParams,
       consistencyReport: semanticConsistency,
+      ...(rulesOnlyHashChain ? { rulesOnlyHashChain } : {}),
       ...(stage1ConsistencyEvidence ? { stage1ConsistencyEvidence } : {}),
       semanticAtomInvariant,
       semanticPredicateGraph,
@@ -235,6 +260,7 @@ export class CodegenPublicationGenerationStage {
       semanticPredicateGraph,
       normalizedIntent,
       lockedParams,
+      ...(rulesOnlyHashChain ? { rulesOnlyHashChain } : {}),
       publishParams,
     }
   }

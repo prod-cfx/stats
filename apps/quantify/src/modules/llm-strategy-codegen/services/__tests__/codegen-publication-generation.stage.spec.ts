@@ -629,6 +629,117 @@ describe('codegenPublicationGenerationStage', () => {
     expect(artifacts.sessionSpecDesc).not.toHaveProperty('stage1ConsistencyEvidence')
   })
 
+  it('throws with gate result when rules-only hash chain blocks after script generation', async () => {
+    const blockedGate = {
+      assertClarificationResolvedForIrBuild: jest.fn(),
+      validateRulesOnlyHashChain: jest.fn().mockReturnValue({
+        passed: false,
+        blocked: true,
+        reason: 'rules_only_trace_missing',
+        hashes: {
+          rulesHash: 'r',
+          canonicalSpecHash: 'c',
+          irHash: 'i',
+          astHash: 'a',
+          scriptHash: 's',
+        },
+        checks: [{ key: 'trace.ir', passed: false }],
+      }),
+    }
+    const stage = new CodegenPublicationGenerationStage(
+      new CanonicalSpecBuilderService(),
+      { buildFromCanonicalSpec: jest.fn().mockReturnValue({}) } as any,
+      new StrategySummaryBuilderService(new ScriptProfileExtractorService()) as any,
+      { evaluate: jest.fn() } as any,
+      { compile: jest.fn().mockReturnValue({ ir: { id: 'compiled-ir' } }) } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
+      undefined,
+      blockedGate as any,
+    )
+    const semanticState = buildLockedBollingerSemanticState()
+    const canonicalSpecOverride = new CanonicalSpecBuilderService().buildFromSemanticState(semanticState)
+
+    let caught: unknown = null
+    try {
+      await stage.generate({
+        semanticState: {
+          ...semanticState,
+          rules: [{ id: 'rule-entry', phase: 'entry', condition: { kind: 'atom', key: 'price.above' }, effects: { actions: [] } }],
+        } as any,
+        canonicalSpecOverride,
+      })
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(Error)
+    expect((caught as Error).message).toContain('rules_only_trace_missing')
+    expect((caught as { publicationGate?: unknown }).publicationGate).toEqual(
+      expect.objectContaining({ reason: 'rules_only_trace_missing' }),
+    )
+    expect(blockedGate.validateRulesOnlyHashChain).toHaveBeenCalledTimes(1)
+  })
+
+  it('persists rules-only hash chain in sessionSpecDesc when gate passes', async () => {
+    const hashChain = {
+      passed: true,
+      blocked: false,
+      hashes: {
+        rulesHash: 'rules-hash',
+        canonicalSpecHash: 'canonical-hash',
+        irHash: 'ir-hash',
+        astHash: 'ast-hash',
+        scriptHash: 'script-hash',
+      },
+      checks: [{ key: 'trace.ir', passed: true }],
+    }
+    const stage = new CodegenPublicationGenerationStage(
+      new CanonicalSpecBuilderService(),
+      { buildFromCanonicalSpec: jest.fn().mockReturnValue({}) } as any,
+      new StrategySummaryBuilderService(new ScriptProfileExtractorService()) as any,
+      {
+        evaluate: jest.fn().mockReturnValue({
+          status: 'PASSED',
+          specProfile: { indicators: [], actions: [], ruleMappings: [], rules: [], sizing: null, requiredParams: [], fallbackDetected: false },
+          scriptProfile: { indicators: [], actions: [], ruleMappings: [], rules: [], sizing: null, requiredParams: [], fallbackDetected: false },
+          checks: [],
+          summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+        }),
+      } as any,
+      { compile: jest.fn().mockReturnValue({ ir: { id: 'compiled-ir' } }) } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
+      undefined,
+      {
+        assertClarificationResolvedForIrBuild: jest.fn(),
+        validateRulesOnlyHashChain: jest.fn().mockReturnValue(hashChain),
+      } as any,
+    )
+    const semanticState = buildLockedBollingerSemanticState()
+    const canonicalSpecOverride = new CanonicalSpecBuilderService().buildFromSemanticState(semanticState)
+
+    const artifacts = await stage.generate({
+      semanticState: {
+        ...semanticState,
+        rules: [{ id: 'rule-entry', phase: 'entry', condition: { kind: 'atom', key: 'price.above' }, effects: { actions: [] } }],
+      } as any,
+      canonicalSpecOverride,
+    })
+
+    expect(artifacts.rulesOnlyHashChain).toBe(hashChain)
+    expect(artifacts.sessionSpecDesc.rulesOnlyHashChain).toBe(hashChain)
+    expect(artifacts.sessionSpecDesc.stage1ConsistencyEvidence).toEqual(hashChain.hashes)
+  })
+
   it('routes semantic-state publication through semantic canonical compilation', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
