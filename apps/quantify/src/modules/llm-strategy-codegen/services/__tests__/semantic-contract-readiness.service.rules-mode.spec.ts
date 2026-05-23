@@ -294,8 +294,33 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     expect(r.ready).toBe(false)
     expect(r.openSlots).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        fieldPath: 'rules[0].effects.risks[0].params.pct',
-        slotKey: 'risk.stop_loss_pct.pct',
+        fieldPath: 'rules[0].effects.risks[0].params.valuePct',
+        slotKey: 'risk.stop_loss_pct.valuePct',
+      }),
+    ]))
+  })
+
+  it('mainflow accepts stop loss valuePct without opening stop loss slot', () => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'r-entry',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.stop_loss_pct', { valuePct: 5 })],
+          positions: [atom('position.sizing', { value: 10, unit: 'USDT' })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ]
+
+    const r = svc.evaluateMainflowRulesReadiness(rules)
+
+    expect(r.openSlots).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'risk.stop_loss_pct.valuePct',
       }),
     ]))
   })

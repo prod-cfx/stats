@@ -31,8 +31,8 @@ describe('CodegenConversationService rules-only mainflow helpers', () => {
     }
 
     const state = service.buildRulePathClarificationState([{
-      slotKey: 'risk.stop_loss_pct.pct',
-      fieldPath: 'rules[0].effects.risks[0].params.pct',
+      slotKey: 'risk.stop_loss_pct.valuePct',
+      fieldPath: 'rules[0].effects.risks[0].params.valuePct',
       status: 'open',
       priority: 'risk',
       questionHint: '请确认止损百分比。',
@@ -40,8 +40,40 @@ describe('CodegenConversationService rules-only mainflow helpers', () => {
     }], ['missing_required_rule_params'])
 
     expect(state.items[0]).toMatchObject({
-      key: 'rules[0].effects.risks[0].params.pct',
-      field: 'rules[0].effects.risks[0].params.pct',
+      key: 'rules[0].effects.risks[0].params.valuePct',
+      field: 'rules[0].effects.risks[0].params.valuePct',
+    })
+  })
+
+  it('persists rule path clarification state that can be read back', () => {
+    const service = Object.create(CodegenConversationService.prototype) as {
+      buildRulePathClarificationState: (slots: SemanticSlotState[], reasons: string[]) => unknown
+      readClarificationState: (payload: unknown) => {
+        items: Array<{
+          key: string
+          fieldPath?: string
+          status: string
+          reason: string
+        }>
+      } | null
+    }
+
+    const state = service.buildRulePathClarificationState([{
+      slotKey: 'risk.stop_loss_pct.valuePct',
+      fieldPath: 'rules[0].effects.risks[0].params.valuePct',
+      status: 'open',
+      priority: 'risk',
+      questionHint: '请确认止损百分比。',
+      affectsExecution: true,
+    }], ['missing_required_rule_params'])
+
+    const readBack = service.readClarificationState(state)
+
+    expect(readBack?.items[0]).toMatchObject({
+      key: 'rules[0].effects.risks[0].params.valuePct',
+      fieldPath: 'rules[0].effects.risks[0].params.valuePct',
+      status: 'pending',
+      reason: 'missing_semantic_risk',
     })
   })
 
@@ -115,8 +147,8 @@ describe('CodegenConversationService rules-only mainflow helpers', () => {
         ready: false,
         blockingReasons: ['missing_required_rule_params'],
         openSlots: [{
-          slotKey: 'risk.stop_loss_pct.pct',
-          fieldPath: 'rules[0].effects.risks[0].params.pct',
+          slotKey: 'risk.stop_loss_pct.valuePct',
+          fieldPath: 'rules[0].effects.risks[0].params.valuePct',
           status: 'open',
           priority: 'risk',
           questionHint: '请确认止损百分比。',

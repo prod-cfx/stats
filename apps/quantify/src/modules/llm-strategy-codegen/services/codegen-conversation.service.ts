@@ -4009,7 +4009,7 @@ export class CodegenConversationService {
 
   private buildRulePathClarificationState(
     openSlots: SemanticSlotState[],
-    blockingReasons: string[],
+    _blockingReasons: string[],
   ): StrategyClarificationState {
     return {
       status: 'NEEDS_CLARIFICATION',
@@ -4019,7 +4019,7 @@ export class CodegenConversationService {
         fieldPath: slot.fieldPath,
         slotKey: slot.slotKey,
         status: 'pending',
-        reason: blockingReasons[0] ?? 'missing_required_rule_params',
+        reason: this.rulePathClarificationReason(slot),
         question: slot.questionHint,
         priority: this.rulePathClarificationPriority(slot.priority),
         blocking: true,
@@ -4053,6 +4053,16 @@ export class CodegenConversationService {
       default:
         return 60
     }
+  }
+
+  private rulePathClarificationReason(slot: SemanticSlotState): StrategyClarificationItem['reason'] {
+    if (slot.slotKey.startsWith('position.sizing')) {
+      return 'missing_semantic_position_sizing'
+    }
+    if (slot.priority === 'risk' || slot.slotKey.startsWith('risk.')) {
+      return 'missing_semantic_risk'
+    }
+    return 'missing_semantic_contract_requirement'
   }
 
   private buildClarificationFromSemanticState(
@@ -6047,6 +6057,7 @@ export class CodegenConversationService {
       || field === 'actions'
       || field === 'risk'
       || field.startsWith('position.')
+      || field.startsWith('rules[')
       || field.startsWith('triggers[')
       || field.startsWith('actions[')
       || field.startsWith('risk[')

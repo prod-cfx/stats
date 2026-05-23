@@ -675,16 +675,16 @@ export class SemanticContractReadinessService {
 
     const openSlots: SemanticSlotState[] = []
     for (const leaf of read.leaves) {
-      if (leaf.role === 'risk' && leaf.key === 'risk.stop_loss_pct' && typeof leaf.params.pct !== 'number') {
+      if (leaf.role === 'risk' && leaf.key === 'risk.stop_loss_pct' && typeof leaf.params.valuePct !== 'number') {
         openSlots.push({
-          slotKey: 'risk.stop_loss_pct.pct',
-          fieldPath: `${leaf.path}.params.pct`,
+          slotKey: 'risk.stop_loss_pct.valuePct',
+          fieldPath: `${leaf.path}.params.valuePct`,
           status: 'open',
           priority: 'risk',
           questionHint: '请确认止损百分比。',
           affectsExecution: true,
           atomKey: leaf.key,
-          paramSlotKey: 'pct',
+          paramSlotKey: 'valuePct',
         })
       }
       if (leaf.role === 'position' && leaf.key === 'position.sizing' && typeof leaf.params.value !== 'number') {
