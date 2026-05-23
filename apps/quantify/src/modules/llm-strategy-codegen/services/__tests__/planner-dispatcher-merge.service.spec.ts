@@ -515,6 +515,21 @@ describe('PlannerDispatcherMergeService', () => {
     expect(stopLossRules).toHaveLength(1)
   })
 
+  it('does not turn grid stop loss into an entry open rule', () => {
+    const text = '在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+    const fallback = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
+    const serialized = JSON.stringify(fallback?.rules)
+    const riskEntryRules = fallback?.rules?.filter(rule =>
+      rule.phase === 'entry'
+      && JSON.stringify(rule.condition).includes('risk.stop_loss_pct')
+      && JSON.stringify(rule.effects).includes('action.open_'),
+    ) ?? []
+
+    expect(serialized).toContain('grid.range_rebalance')
+    expect(riskEntryRules).toHaveLength(0)
+  })
+
   it('hydrates planner multi-timeframe EMA children for staging case 24', () => {
     const text = '15min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约'
     const planner = {

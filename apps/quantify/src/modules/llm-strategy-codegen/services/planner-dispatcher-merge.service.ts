@@ -133,11 +133,13 @@ export class PlannerDispatcherMergeService {
     const rules = this.buildFallbackRules(dispatcher, userMessage)
     if (rules.length === 0) return null
     const position = this.buildFallbackPositionFromDispatcherConstraints(dispatcher)
-    return {
+    const patch: CodegenSemanticPatch = {
       ...(dispatcher.contextSlots ? { contextSlots: dispatcher.contextSlots } : {}),
       ...(position ? { position } : dispatcher.position ? { position: dispatcher.position } : {}),
       rules,
     }
+    this.pruneInvalidDeterministicNoiseRules(patch, dispatcher, userMessage)
+    return patch
   }
 
   /**
@@ -1575,6 +1577,7 @@ export class PlannerDispatcherMergeService {
       const hasStopLossValue = [...conditionLeaves, ...effectLeaves]
         .filter(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key)
         .some(leaf => this.readNumericParam(leaf.params, 'valuePct') !== null || this.readNumericParam(leaf.params, 'pct') !== null)
+      if (hasStopLossCondition && rule.phase !== 'exit') continue
       if (hasDrawdownBlock && !hasExplicitStopLoss && (hasStopLossCondition || hasStopLossEffect)) continue
       if ((hasStopLossCondition || hasStopLossEffect) && !hasStopLossValue) continue
 
@@ -1728,6 +1731,7 @@ export class PlannerDispatcherMergeService {
       ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key,
     ])
     if (!conditionKey || !allowedConditionKeys.has(conditionKey)) return false
+    if (conditionKey === ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key && rule.phase !== 'exit') return false
 
     const allowedActionKeys = new Set<string>([
       ATOM_CONTRACT_REGISTRY['action.open_long'].key,
