@@ -35,9 +35,11 @@ UI / 交互设计稿位于仓库根 `design/project/mobile/Quantify Mobile App.h
 - `m-screens-*.jsx`（5 个屏幕组）
 - `m-shell.jsx`（外壳布局）
 - `ios-frame.jsx`（iOS 外框）
-- `tokens.css`（设计 token）
+- `proto.jsx`（screen graph 与交互连线）
 
-后续 PR 将基于上述设计稿落地 token / 组件 / 路由。
+设计 token 真源位于上一层目录 `design/project/tokens.css`（被 `Quantify Mobile App.html` 通过 `../tokens.css` 引用），不在 `design/project/mobile/` 内重复一份。落地时统一引用该路径，避免拷贝漂移。
+
+移动端对齐基线（screen graph、登录态策略、bottom sheet 边界、API 配置入口命名、设计 token 路径）见 `docs/decisions.md` 中「移动端设计对齐基线」一节。后续 PR 基于该基线落地 token / 组件 / 路由。
 
 ## 与仓库其他 app 的关系
 
