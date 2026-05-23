@@ -224,7 +224,6 @@ export interface SemanticDisplayLogicGraphBlock {
 
 export interface SemanticDisplayLogicGraph {
   blocks: SemanticDisplayLogicGraphBlock[]
-  diagnostics?: Array<{ code: string, message: string }>
 }
 
 type SemanticDisplaySideScope = 'long' | 'short' | 'both'
@@ -348,10 +347,6 @@ export class SemanticStateProjectionService {
           : this.buildDisplayContextExecuteBlock(state),
       ],
     }
-  }
-
-  buildDisplayLogicGraphFromSemanticState(state: SemanticState): SemanticDisplayLogicGraph {
-    return this.buildDisplayLogicGraph(state)
   }
 
   // Issue #1403 子故障 B + Issue #1443 升级：rules-first display graph。
