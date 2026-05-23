@@ -545,7 +545,7 @@ export class PlannerDispatcherMergeService {
     if (predicateAtoms.length === 0) return []
     const effectAtoms = this.collectFallbackEffectAtoms(dispatcher)
     const rules: SemanticRule[] = this.buildCompositeFallbackRules(predicateAtoms, effectAtoms, userMessage)
-    const compositeCoveredPredicates = this.collectCompositeCoveredPredicates(predicateAtoms)
+    const compositeCoveredPredicates = this.collectCompositeCoveredPredicates(predicateAtoms, userMessage)
     const multiTimeframeCoveredPredicates = this.appendMultiTimeframeEntryRules(
       rules,
       predicateAtoms,
@@ -655,6 +655,7 @@ export class PlannerDispatcherMergeService {
 
   private collectCompositeCoveredPredicates(
     predicateAtoms: ReadonlyArray<FallbackPredicateAtom>,
+    userMessage: string,
   ): ReadonlySet<FallbackPredicateAtom> {
     const covered = new Set<FallbackPredicateAtom>()
     const pullback = this.findPullbackReclaimPredicate(predicateAtoms)
@@ -678,8 +679,16 @@ export class PlannerDispatcherMergeService {
     const rsiReclaim = this.findRsiReclaimPredicate(predicateAtoms)
     if (rsiReclaim) {
       const trend = this.findTrendPredicateForRsiReclaim(predicateAtoms, rsiReclaim)
-      if (trend) covered.add(trend)
+      if (trend) {
+        const originalTrend = this.findOriginalTrendPredicateForSynthetic(predicateAtoms, trend) ?? trend
+        covered.add(originalTrend)
+      }
       covered.add(rsiReclaim)
+    }
+    const volumeRebound = this.findVolumeReboundSequencePredicate(predicateAtoms, userMessage)
+    if (volumeRebound) {
+      const original = this.findOriginalTrendPredicateForSynthetic(predicateAtoms, volumeRebound) ?? volumeRebound
+      covered.add(original)
     }
     return covered
   }
@@ -690,6 +699,33 @@ export class PlannerDispatcherMergeService {
     userMessage: string,
   ): SemanticRule[] {
     const rules: SemanticRule[] = []
+    const volumeRebound = this.findVolumeReboundSequencePredicate(predicateAtoms, userMessage)
+    if (volumeRebound) {
+      const phase = 'entry'
+      const sideScope = volumeRebound.sideScope ?? 'long'
+      const effects = this.resolveFallbackEffects({
+        phase,
+        sideScope,
+        effectAtoms,
+        predicate: volumeRebound,
+      })
+      if (effects.length > 0) {
+        rules.push({
+          id: 'deterministic-composite-volume-rebound',
+          phase,
+          sideScope,
+          condition: {
+            kind: 'atom',
+            key: ATOM_CONTRACT_REGISTRY['condition.sequence'].key,
+            params: volumeRebound.params ?? {},
+            ...(volumeRebound.sideScope ? { sideScope: volumeRebound.sideScope } : {}),
+            ...this.resolveFallbackEvidence(volumeRebound, userMessage),
+          },
+          effects: this.toTypedRuleEffects(effects),
+          ...this.resolveFallbackEvidence(volumeRebound, userMessage),
+        })
+      }
+    }
     const rsiReclaim = this.findRsiReclaimPredicate(predicateAtoms)
     if (rsiReclaim) {
       const rsiTrend = this.findTrendPredicateForRsiReclaim(predicateAtoms, rsiReclaim)
@@ -703,7 +739,10 @@ export class PlannerDispatcherMergeService {
         })
         if (effects.length > 0) {
           const threshold = this.readNumericParam(rsiReclaim.params, 'value') ?? this.readNumericParam(rsiReclaim.params, 'threshold')
-          const period = this.readNumericParam(rsiReclaim.params, 'period') ?? 14
+          const rawPeriod = this.readNumericParam(rsiReclaim.params, 'period')
+          const period = rawPeriod !== null && threshold !== null && Math.abs(rawPeriod - threshold) <= 1e-9
+            ? 14
+            : rawPeriod ?? 14
           const evidence = this.resolveFallbackEvidence(rsiReclaim, userMessage)
           rules.push({
             id: 'deterministic-composite-rsi-reclaim',
@@ -827,11 +866,106 @@ export class PlannerDispatcherMergeService {
     predicateAtoms: ReadonlyArray<FallbackPredicateAtom>,
     rsiReclaim: FallbackPredicateAtom,
   ): FallbackPredicateAtom | null {
+    const maPair = predicateAtoms
+      .filter(predicate =>
+        predicate !== rsiReclaim
+        && predicate.phase !== 'exit'
+        && predicate.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key,
+      )
+      .map(predicate => ({ predicate, pair: this.extractMovingAveragePair(this.readEvidenceText(predicate) ?? '') }))
+      .find(item => item.pair !== null)
+    if (maPair?.pair) {
+      const indicator = maPair.pair.indicator
+      return {
+        ...maPair.predicate,
+        params: {
+          ...(maPair.predicate.params ?? {}),
+          indicator,
+          period: maPair.pair.leftPeriod,
+          'reference.period': maPair.pair.rightPeriod,
+        },
+      }
+    }
+
     return predicateAtoms.find(predicate =>
       predicate !== rsiReclaim
       && predicate.phase !== 'exit'
       && predicate.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key,
     ) ?? null
+  }
+
+  private findVolumeReboundSequencePredicate(
+    predicateAtoms: ReadonlyArray<FallbackPredicateAtom>,
+    userMessage: string,
+  ): FallbackPredicateAtom | null {
+    const candle = predicateAtoms.find((predicate) => {
+      if (predicate.phase === 'exit') return false
+      if (predicate.key !== ATOM_CONTRACT_REGISTRY['price.candle_pattern'].key) return false
+      const pattern = this.readStringParam(predicate.params, 'pattern')
+      if (pattern !== 'consecutive_body') return false
+      const evidence = `${this.readEvidenceText(predicate) ?? ''} ${userMessage}`
+      return /放量|成交量放大|量能放大|volume\s*spike/iu.test(evidence)
+        && /反弹|回升|rebound|bounce/iu.test(evidence)
+    })
+    if (!candle) return null
+
+    const evidence = `${this.readEvidenceText(candle) ?? ''} ${userMessage}`
+    const rawDirection = this.readStringParam(candle.params, 'direction')
+    const direction = rawDirection === 'bearish' || rawDirection === 'down' || /连续\s*(?:跌|阴)|连跌|收跌|bear/iu.test(evidence)
+      ? 'down'
+      : 'up'
+    const count = this.readNumericParam(candle.params, 'minBars')
+      ?? this.readNumericParam(candle.params, 'count')
+      ?? this.extractConsecutiveBars(evidence)
+      ?? 3
+    const timeframe = this.readStringParam(candle.params, 'timeframe') ?? this.extractTimeframeTokens(evidence)[0]
+    const params: Record<string, unknown> = {
+      sequenceKind: 'pattern_then_volume_spike',
+      direction,
+      count,
+      reboundDirection: direction === 'down' ? 'up' : 'down',
+      lookbackBars: 20,
+      ...(timeframe ? { timeframe } : {}),
+      ...(/下一根|next\s*bar/iu.test(evidence) ? { nextBarOnly: 'true' } : {}),
+    }
+    return {
+      ...candle,
+      key: ATOM_CONTRACT_REGISTRY['condition.sequence'].key,
+      params,
+      sideScope: candle.sideScope === 'short' ? 'short' : 'long',
+      evidence: candle.evidence ?? { text: userMessage },
+    }
+  }
+
+  private findOriginalTrendPredicateForSynthetic(
+    predicateAtoms: ReadonlyArray<FallbackPredicateAtom>,
+    synthetic: FallbackPredicateAtom,
+  ): FallbackPredicateAtom | null {
+    const evidence = this.readEvidenceText(synthetic)
+    return predicateAtoms.find(predicate =>
+      predicate === synthetic
+      || (
+        evidence !== null
+        && this.readEvidenceText(predicate) === evidence
+        && (
+          predicate.key === synthetic.key
+          || predicate.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key
+          || predicate.key === ATOM_CONTRACT_REGISTRY['price.candle_pattern'].key
+        )
+      ),
+    ) ?? null
+  }
+
+  private extractMovingAveragePair(text: string): { indicator: string, leftPeriod: number, rightPeriod: number } | null {
+    const match = /(EMA|MA|SMA)\s*(\d{1,4})\s*(?:在|高于|大于|>)\s*(EMA|MA|SMA)\s*(\d{1,4})\s*(?:上方|之上)?/iu.exec(text)
+    if (!match?.[1] || !match[2] || !match[3] || !match[4]) return null
+    const leftPeriod = Number(match[2])
+    const rightPeriod = Number(match[4])
+    if (!Number.isFinite(leftPeriod) || !Number.isFinite(rightPeriod)) return null
+    const leftIndicator = match[1].toLowerCase()
+    const rightIndicator = match[3].toLowerCase()
+    const indicator = leftIndicator === 'ema' || rightIndicator === 'ema' ? 'ema' : 'ma'
+    return { indicator, leftPeriod, rightPeriod }
   }
 
   private normalizeFallbackRuleSideScope(
@@ -1590,7 +1724,11 @@ export class PlannerDispatcherMergeService {
     const next: SemanticRule[] = []
 
     for (const rule of rules) {
-      const normalizedConditionInitial = this.normalizeRuleConditionNoise(rule.condition, userMessage)
+      const normalizedConditionInitial = this.repairMissingRsiReclaimSequence(
+        this.normalizeRuleConditionNoise(rule.condition, userMessage),
+        userMessage,
+        rule,
+      )
       const normalizedEffectInput = this.normalizeRuleEffectsNoise(
         rule.effects,
         normalizedConditionInitial,
@@ -1620,9 +1758,11 @@ export class PlannerDispatcherMergeService {
           leaf.key === ATOM_CONTRACT_REGISTRY['oscillator.rsi_lte'].key
           || leaf.key === ATOM_CONTRACT_REGISTRY['oscillator.rsi_gte'].key
           || leaf.key === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key
-          || leaf.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key,
+          || (
+            leaf.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key
+            && !conditionLeaves.some(other => other.key === ATOM_CONTRACT_REGISTRY['condition.sequence'].key)
+          ),
         )
-        && !conditionLeaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['condition.sequence'].key)
       ) {
         continue
       }
@@ -1684,6 +1824,55 @@ export class PlannerDispatcherMergeService {
         this.dropRulesCoveredByStrongerComposite(next),
       ),
     )
+  }
+
+  private repairMissingRsiReclaimSequence(
+    condition: AtomExpr,
+    userMessage: string,
+    rule: SemanticRule,
+  ): AtomExpr {
+    if (rule.phase !== 'entry') return condition
+    const leaves = collectAtomLeaves(condition)
+    if (leaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['condition.sequence'].key)) return condition
+    if (!/RSI/iu.test(userMessage)) return condition
+    if (!/跌破|低于|下方/iu.test(userMessage)) return condition
+    if (!/重新上穿|上穿|回到|重新站上/iu.test(userMessage)) return condition
+    const threshold = this.extractRsiReclaimThreshold(userMessage)
+    if (threshold === null) return condition
+    const period = this.extractRsiPeriod(userMessage) ?? 14
+    const sequence: AtomExprAtom = {
+      kind: 'atom',
+      key: ATOM_CONTRACT_REGISTRY['condition.sequence'].key,
+      params: {
+        sequenceKind: 'rsi_reclaim',
+        indicator: 'rsi',
+        period,
+        threshold,
+        value: threshold,
+      },
+      sideScope: rule.sideScope,
+      evidence: { text: userMessage },
+    }
+    return {
+      kind: 'and',
+      children: [condition, sequence],
+    }
+  }
+
+  private extractRsiReclaimThreshold(text: string): number | null {
+    const match = /RSI\s*(?:\d{1,3})?.{0,20}?(?:跌破|低于|下方)\s*(\d+(?:\.\d+)?).{0,30}?(?:重新上穿|上穿|回到|重新站上)\s*(\d+(?:\.\d+)?)/iu.exec(text)
+    const first = match?.[1] ? Number(match[1]) : Number.NaN
+    const second = match?.[2] ? Number(match[2]) : Number.NaN
+    if (Number.isFinite(first) && Number.isFinite(second) && Math.abs(first - second) <= 1e-9) return first
+    if (Number.isFinite(first) && !Number.isFinite(second)) return first
+    return null
+  }
+
+  private extractRsiPeriod(text: string): number | null {
+    const match = /RSI\s*(\d{1,3})/iu.exec(text)
+    if (!match?.[1]) return null
+    const value = Number(match[1])
+    return Number.isFinite(value) ? value : null
   }
 
   private dedupeRuleEffects(effects: RuleEffects): RuleEffects {
@@ -1761,10 +1950,35 @@ export class PlannerDispatcherMergeService {
           positions: (effects.positions ?? []).map(normalize),
           orchestration: (effects.orchestration ?? []).map(normalize),
           programs: (effects.programs ?? []).map(normalize),
-        }
+      }
       : effects.map(normalize)
 
-    return normalized
+    return this.removeRiskEffectsCoveredByExitCondition(normalized, condition)
+  }
+
+  private removeRiskEffectsCoveredByExitCondition(
+    effects: RuleEffects,
+    condition: AtomExpr,
+  ): RuleEffects {
+    const conditionLeaves = collectAtomLeaves(condition)
+    const isRedundantRisk = (effect: AtomExpr): boolean => {
+      const leaves = collectAtomLeaves(effect)
+      return leaves.some(effectLeaf =>
+        conditionLeaves.some(conditionLeaf =>
+          this.riskPercentChangeRepresentsRisk(conditionLeaf, effectLeaf),
+        ),
+      )
+    }
+    if (isRuleEffectsByRole(effects)) {
+      return {
+        actions: effects.actions,
+        risks: effects.risks.filter(effect => !isRedundantRisk(effect)),
+        positions: effects.positions,
+        orchestration: effects.orchestration,
+        programs: effects.programs,
+      }
+    }
+    return effects.filter(effect => !isRedundantRisk(effect))
   }
 
   private repairConditionFromEffects(
@@ -2427,8 +2641,8 @@ export class PlannerDispatcherMergeService {
       existing.key !== ATOM_CONTRACT_REGISTRY['price.percent_change'].key
       || candidate.key !== ATOM_CONTRACT_REGISTRY['price.percent_change'].key
     ) return false
-    const existingBasis = this.readStringParam(existing.params, 'basis') ?? ''
-    const candidateBasis = this.readStringParam(candidate.params, 'basis') ?? ''
+    const existingBasis = this.normalizePercentChangeBasis(this.readStringParam(existing.params, 'basis'))
+    const candidateBasis = this.normalizePercentChangeBasis(this.readStringParam(candidate.params, 'basis'))
     if (existingBasis !== candidateBasis) return false
     const existingDirection = this.readStringParam(existing.params, 'direction') ?? ''
     const candidateDirection = this.readStringParam(candidate.params, 'direction') ?? ''
@@ -2448,6 +2662,13 @@ export class PlannerDispatcherMergeService {
     return Number.isFinite(existingValue)
       && Number.isFinite(candidateValue)
       && Math.abs(existingValue - candidateValue) <= 1e-9
+  }
+
+  private normalizePercentChangeBasis(basis: string | null): string {
+    if (!basis || basis === 'current_price' || basis === 'previous_close' || basis === 'prev_close' || basis === 'entry_avg_price') {
+      return 'price_window'
+    }
+    return basis
   }
 
   private ruleEffectsCover(existingRule: SemanticRule, candidateRule: SemanticRule): boolean {
@@ -2606,7 +2827,8 @@ export class PlannerDispatcherMergeService {
         if (other.phase !== rule.phase) return false
         if (other.sideScope !== rule.sideScope && other.sideScope !== 'both' && rule.sideScope !== 'both') return false
         const otherLeaves = collectAtomLeaves(other.condition)
-        if (otherLeaves.length <= leaves.length) return false
+        if (otherLeaves.length < leaves.length) return false
+        if (otherLeaves.length === leaves.length && otherIndex > index) return false
         if (!this.ruleEffectsCover(other, rule)) return false
         if (effects.length === 0) return false
         return leaves.every(leaf =>
@@ -2881,6 +3103,10 @@ export class PlannerDispatcherMergeService {
 
     let mutated = false
     const kept = rules.flatMap((rule) => {
+      if (isAlwaysOnCondition(rule) && listRuleEffects(rule.effects).length === 0) {
+        mutated = true
+        return []
+      }
       if (!isAlwaysOnCondition(rule) || !hasActionEffect(rule)) return [rule]
       if (!hasLifecycleEffect(rule)) {
         mutated = true
@@ -3207,7 +3433,7 @@ export class PlannerDispatcherMergeService {
     )
     if (hasEquivalentComposite) return
 
-    const covered = this.collectCompositeCoveredPredicates(predicates)
+    const covered = this.collectCompositeCoveredPredicates(predicates, '')
     const kept = rules.filter(rule => !this.isRuleCoveredByComposite(rule, covered))
     merged.rules = [...compositeRules, ...kept]
   }

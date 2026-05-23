@@ -4768,6 +4768,21 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
               : null
           return `回踩 ${indicator.toUpperCase()}${period === null ? '' : period} 后重新站上`
         }
+        if (params.sequenceKind === 'rsi_reclaim') {
+          const threshold = typeof params.threshold === 'number'
+            ? params.threshold
+            : typeof params.value === 'number'
+              ? params.value
+              : null
+          return `RSI 跌破${threshold === null ? '阈值' : ` ${threshold}`} 后重新上穿${threshold === null ? '阈值' : ` ${threshold}`}`
+        }
+        if (params.sequenceKind === 'pattern_then_volume_spike') {
+          const count = typeof params.count === 'number' ? params.count : 1
+          const dir = params.direction === 'down' ? '阴线' : params.direction === 'up' ? '阳线' : 'K 线'
+          const next = params.nextBarOnly === true || params.nextBarOnly === 'true' ? '下一根' : '随后'
+          const rebound = params.reboundDirection === 'up' ? '反弹' : params.reboundDirection === 'down' ? '回落' : '确认'
+          return `连续 ${count} 根${dir}后${next}放量${rebound}`
+        }
         const count = typeof params.count === 'number' ? `连续 ${params.count} 根` : '条件序列'
         const dir = params.direction === 'down' ? '阴线' : params.direction === 'up' ? '阳线' : ''
         const nb = params.nextBarOnly === 'true' ? '（下一根触发）' : ''

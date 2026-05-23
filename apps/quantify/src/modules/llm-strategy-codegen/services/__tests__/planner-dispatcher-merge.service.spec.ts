@@ -431,7 +431,65 @@ describe('PlannerDispatcherMergeService', () => {
     expect(serialized).toContain('condition.sequence')
     expect(serialized).toContain('rsi_reclaim')
     expect(serialized).toContain('indicator.above')
+    expect(serialized).toContain('"period":50')
+    expect(serialized).toContain('"reference.period":200')
     expect(JSON.stringify(merged?.rules)).toContain('oscillator.rsi_gte')
+  })
+
+  it('dedupes weaker dispatcher percent-change entry when planner rule already carries same entry with risks', () => {
+    const text = '在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%'
+    const planner = {
+      rules: [
+        {
+          id: 'entry-btc-drop-1-in-3m',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.percent_change', params: { basis: 'entry_avg_price', window: '3m', valuePct: 1, direction: 'down' } },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+            risks: [
+              { kind: 'atom', key: 'risk.stop_loss_pct', params: { basis: 'entry_avg_price', valuePct: 5 } },
+              { kind: 'atom', key: 'risk.take_profit_pct', params: { basis: 'entry_avg_price', valuePct: 10 } },
+            ],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        },
+        {
+          id: 'exit-btc-rise-2-in-15m',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.percent_change', params: { basis: 'current_price', window: '15m', valuePct: 2, direction: 'up' } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const entryRules = merged?.rules?.filter(rule => rule.phase === 'entry') ?? []
+    const serialized = JSON.stringify(merged?.rules)
+
+    expect(entryRules).toHaveLength(1)
+    expect(serialized).not.toContain('deterministic-rule')
+  })
+
+  it('keeps the volume rebound part for consecutive bearish candles in staging case 18', () => {
+    const text = 'BTC 连续跌三根 15 分钟 K 线后，如果下一根开始放量反弹就买一点。'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const patch = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
+    const entry = patch?.rules?.find(rule => rule.phase === 'entry')
+    const serialized = JSON.stringify(entry)
+
+    expect(entry).toBeDefined()
+    expect(serialized).toContain('condition.sequence')
+    expect(serialized).toContain('pattern_then_volume_spike')
+    expect(serialized).toContain('"count":3')
+    expect(serialized).toContain('"direction":"down"')
+    expect(serialized).toContain('"reboundDirection":"up"')
+    expect(serialized).toContain('"nextBarOnly":"true"')
   })
 
   it('restores missing BOLL upper-band exit for staging case 20', () => {

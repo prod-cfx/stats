@@ -426,6 +426,12 @@ export class SemanticStateProjectionService {
     if (rule.phase !== 'entry') return false
     if (rule.condition.kind !== 'atom') return false
     if (rule.condition.key !== 'execution.on_start') return false
+    const evidenceText = typeof rule.evidence?.text === 'string'
+      ? rule.evidence.text
+      : typeof rule.condition.evidence?.text === 'string'
+        ? rule.condition.evidence.text
+        : ''
+    if (evidenceText.length === 0) return false
     const timing = typeof rule.condition.params.timing === 'string' ? rule.condition.params.timing.toLowerCase() : ''
     const occurrence = typeof rule.condition.params.occurrence === 'string' ? rule.condition.params.occurrence.toLowerCase() : ''
     const orderType = typeof rule.condition.params.orderType === 'string' ? rule.condition.params.orderType.toLowerCase() : ''
@@ -984,7 +990,16 @@ export class SemanticStateProjectionService {
     }
     if (sequenceKind === 'rsi_reclaim') {
       const threshold = this.readFiniteNumber(trigger.params.threshold)
-      return `RSI 回落后重新站上${threshold === null ? '阈值' : ` ${this.formatNumber(threshold)}`}${windowText}${memoryText}`
+      return `RSI 跌破${threshold === null ? '阈值' : ` ${this.formatNumber(threshold)}`} 后重新上穿${threshold === null ? '阈值' : ` ${this.formatNumber(threshold)}`}${windowText}${memoryText}`
+    }
+    if (sequenceKind === 'pattern_then_volume_spike') {
+      const count = this.readFiniteNumber(trigger.params.count) ?? 1
+      const direction = this.readString(trigger.params.direction)
+      const dirText = direction === 'down' ? '阴线' : direction === 'up' ? '阳线' : 'K 线'
+      const next = trigger.params.nextBarOnly === true || trigger.params.nextBarOnly === 'true' ? '下一根' : '随后'
+      const reboundDirection = this.readString(trigger.params.reboundDirection)
+      const reboundText = reboundDirection === 'up' ? '反弹' : reboundDirection === 'down' ? '回落' : '确认'
+      return `连续 ${this.formatNumber(count)} 根${dirText}后${next}放量${reboundText}${windowText}${memoryText}`
     }
     if (sequenceKind === 'consecutive_candles') {
       const count = this.readFiniteNumber(trigger.params.count)
@@ -3581,6 +3596,12 @@ export class SemanticStateProjectionService {
       if (period !== null && fastPeriod === null && slowPeriod === null) {
         const indicator = this.readString(params.indicator)?.toUpperCase() ?? 'MA'
         const direction = atomKey === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key ? '上穿' : '下穿'
+        const value = this.readFiniteNumber(params.value)
+        if (indicator === 'RSI') {
+          return value === null
+            ? `RSI${this.formatNumber(period)} ${direction}阈值`
+            : `RSI${this.formatNumber(period)} ${direction} ${this.formatNumber(value)}`
+        }
         return `价格${direction} ${indicator}${this.formatNumber(period)}`
       }
     }
