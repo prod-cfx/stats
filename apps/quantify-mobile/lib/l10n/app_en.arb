@@ -320,7 +320,7 @@
   "meApiFormMinLenInfix": " must be at least ",
   "themeSettingsTitle": "Interface Theme",
   "themeSettingsSyncSubtitle": "Syncs across Web and App",
-  "themeSettingsSyncFootnote": "Theme syncs between Web and App via your account; it will apply automatically next time you sign in.",
+  "themeSettingsSyncFootnote": "Theme is currently stored on this device only. Once account sync is enabled, it will follow you between Web and App on sign-in.",
   "themeBgSection": "Background",
   "themeAccentSection": "Accent Color",
   "themeBgDark": "Dark",

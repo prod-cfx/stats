@@ -833,7 +833,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get themeSettingsSyncSubtitle => '此设置会同步到 Web 和 App';
 
   @override
-  String get themeSettingsSyncFootnote => '主题在 Web 与 App 之间通过你的账号同步，下次登录会自动应用。';
+  String get themeSettingsSyncFootnote =>
+      '当前主题仅保存在本设备；接入账号同步后，将在 Web 与 App 之间随登录自动应用。';
 
   @override
   String get themeBgSection => '背景主题';

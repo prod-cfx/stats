@@ -854,7 +854,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get themeSettingsSyncFootnote =>
-      'Theme syncs between Web and App via your account; it will apply automatically next time you sign in.';
+      'Theme is currently stored on this device only. Once account sync is enabled, it will follow you between Web and App on sign-in.';
 
   @override
   String get themeBgSection => 'Background';

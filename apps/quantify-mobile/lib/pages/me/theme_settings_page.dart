@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../../theme/theme_data.dart';
 import '../../theme/theme_notifier.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/qz_top_bar.dart';
 
 /// Theme picker (3 backgrounds × 3 accents). Mirrors the web prototype
 /// `design/project/mobile/m-screens-5.jsx`.
@@ -35,27 +37,16 @@ class ThemeSettingsPage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: c.bg,
-      appBar: AppBar(
-        backgroundColor: c.bgElev,
-        foregroundColor: c.text,
-        elevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              l10n.themeSettingsTitle,
-              style: TextStyle(
-                color: c.text,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            Text(
-              l10n.themeSettingsSyncSubtitle,
-              style: TextStyle(color: c.textDim, fontSize: 11),
-            ),
-          ],
-        ),
+      appBar: QzTopBar(
+        title: l10n.themeSettingsTitle,
+        subtitle: l10n.themeSettingsSyncSubtitle,
+        onBack: () => context.pop(),
+        actions: <Widget>[
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: _PaletteBadge(scheme: c),
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(
@@ -100,6 +91,27 @@ class ThemeSettingsPage extends ConsumerWidget {
           _SyncFootnoteCard(scheme: c, text: l10n.themeSettingsSyncFootnote),
         ],
       ),
+    );
+  }
+}
+
+/// 顶栏右侧 palette 圆形徽章（原型 `m-screens-5.jsx:23-26`）。
+class _PaletteBadge extends StatelessWidget {
+  const _PaletteBadge({required this.scheme});
+  final QzColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey<String>('themeTopBarPaletteBadge'),
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: scheme.accentSoft,
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Icon(Icons.palette_outlined, color: scheme.accent, size: 18),
     );
   }
 }
