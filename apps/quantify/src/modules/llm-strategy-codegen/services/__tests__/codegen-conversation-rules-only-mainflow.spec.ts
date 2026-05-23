@@ -1,10 +1,18 @@
-import type { AtomExpr, SemanticRule } from '../../types/atom-expr'
+import { isRuleEffectsByRole, type AtomExpr, type SemanticRule } from '../../types/atom-expr'
 import type { SemanticSlotState, SemanticState } from '../../types/semantic-state'
 import { CodegenConversationService } from '../codegen-conversation.service'
 import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
 
 function atom(key: string, params: Record<string, unknown> = {}): AtomExpr {
   return { kind: 'atom', key, params }
+}
+
+function andExpr(...children: AtomExpr[]): AtomExpr {
+  return { kind: 'and', children }
+}
+
+function sequence(...steps: AtomExpr[]): AtomExpr {
+  return { kind: 'sequence', steps }
 }
 
 function rule(partial: Partial<SemanticRule> & { id: string, condition: AtomExpr }): SemanticRule {
@@ -185,6 +193,59 @@ describe('CodegenConversationService rules-only mainflow helpers', () => {
     ]))
   })
 
+  it('applies nested rule path risk answer to nested atom params', () => {
+    const service = Object.create(CodegenConversationService.prototype) as {
+      buildRulePathClarificationState: (slots: SemanticSlotState[], reasons: string[]) => {
+        items: Array<{ key: string }>
+      }
+      applySemanticClarificationAnswers: (
+        currentState: SemanticState,
+        clarificationState: { items: Array<{ key: string }> },
+        answers: Record<string, string>,
+      ) => SemanticState
+    }
+    const readiness = new SemanticContractReadinessService()
+    const state = semanticState([
+      rule({
+        id: 'r-entry',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [andExpr(
+            atom('risk.stop_loss_pct', {}),
+            atom('risk.trailing_stop', { valuePct: 3 }),
+          )],
+          positions: [atom('position.sizing', { value: 10, unit: 'USDT' })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ])
+    const before = readiness.evaluateMainflowRulesReadiness(state.rules)
+    const clarificationState = service.buildRulePathClarificationState(before.openSlots, before.blockingReasons)
+
+    expect(clarificationState.items[0].key).toBe('rules[0].effects.risks[0].and.children[0].params.valuePct')
+
+    const nextState = service.applySemanticClarificationAnswers(state, clarificationState, {
+      [clarificationState.items[0].key]: '5%',
+    })
+
+    const nestedRisk = nextState.rules?.[0].effects
+    expect(nestedRisk).toMatchObject({
+      risks: [expect.objectContaining({ kind: 'and' })],
+    })
+    if (!isRuleEffectsByRole(nestedRisk) || nestedRisk.risks[0]?.kind !== 'and') {
+      throw new Error('expected nested risk and expression')
+    }
+    expect(nestedRisk.risks[0].children[0]).toMatchObject({
+      params: expect.objectContaining({ valuePct: 5 }),
+    })
+    expect(readiness.evaluateMainflowRulesReadiness(nextState.rules).openSlots).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ slotKey: 'risk.stop_loss_pct.valuePct' }),
+    ]))
+  })
+
   it('applies position sizing rule path clarification answer to rules params', () => {
     const service = Object.create(CodegenConversationService.prototype) as {
       buildRulePathClarificationState: (slots: SemanticSlotState[], reasons: string[]) => {
@@ -267,6 +328,59 @@ describe('CodegenConversationService rules-only mainflow helpers', () => {
       })],
     })
     expect(readiness.evaluateMainflowRulesReadiness(nextState.rules).openSlots).toEqual(expect.arrayContaining([
+      expect.objectContaining({ slotKey: 'position.sizing.value' }),
+    ]))
+  })
+
+  it('applies nested rule path position answer to nested atom params', () => {
+    const service = Object.create(CodegenConversationService.prototype) as {
+      buildRulePathClarificationState: (slots: SemanticSlotState[], reasons: string[]) => {
+        items: Array<{ key: string }>
+      }
+      applySemanticClarificationAnswers: (
+        currentState: SemanticState,
+        clarificationState: { items: Array<{ key: string }> },
+        answers: Record<string, string>,
+      ) => SemanticState
+    }
+    const readiness = new SemanticContractReadinessService()
+    const state = semanticState([
+      rule({
+        id: 'r-entry',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.stop_loss_pct', { valuePct: 5 })],
+          positions: [sequence(
+            atom('position.max_notional', { value: 1000 }),
+            atom('position.sizing', { unit: 'USDT' }),
+          )],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ])
+    const before = readiness.evaluateMainflowRulesReadiness(state.rules)
+    const clarificationState = service.buildRulePathClarificationState(before.openSlots, before.blockingReasons)
+
+    expect(clarificationState.items[0].key).toBe('rules[0].effects.positions[0].sequence.steps[1].params.value')
+
+    const nextState = service.applySemanticClarificationAnswers(state, clarificationState, {
+      [clarificationState.items[0].key]: '100 USDT',
+    })
+
+    expect(nextState.rules?.[0].effects).toMatchObject({
+      positions: [expect.objectContaining({
+        steps: [
+          expect.any(Object),
+          expect.objectContaining({
+            params: expect.objectContaining({ value: 100 }),
+          }),
+        ],
+      })],
+    })
+    expect(readiness.evaluateMainflowRulesReadiness(nextState.rules).openSlots).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ slotKey: 'position.sizing.value' }),
     ]))
   })

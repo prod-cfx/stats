@@ -204,6 +204,11 @@ interface StructuredClarificationContinuationArgs {
   userId: string
 }
 
+type RuleExprPathSegment =
+  | { kind: 'children', exprKind: 'and' | 'or', index: number }
+  | { kind: 'steps', index: number }
+  | { kind: 'not' }
+
 const ALLOWED_HELPER_CATEGORIES = ['finance', 'array', 'ta', 'signal'] as const
 const MAX_HELPER_SIGNATURE_LINES = 24
 const DEFAULT_PROVIDER_CODE = 'strategy-codegen'
@@ -3034,30 +3039,73 @@ export class CodegenConversationService {
     ruleIndex: number
     effectRole?: keyof RuleEffectsByRole
     effectIndex?: number
+    exprPath: RuleExprPathSegment[]
     paramKey: string
   } | null {
     const candidates = [item.fieldPath, item.field, item.key]
     for (const candidate of candidates) {
       if (typeof candidate !== 'string') continue
-      const effectMatch = candidate.match(/^rules\[(\d+)\]\.effects\.(actions|risks|positions|orchestration|programs)\[(\d+)\]\.params\.([A-Za-z_$][\w$]*)$/u)
-      if (effectMatch?.[1] && effectMatch[2] && effectMatch[3] && effectMatch[4]) {
+      const effectMatch = candidate.match(/^rules\[(\d+)\]\.effects\.(actions|risks|positions|orchestration|programs)\[(\d+)\]((?:\.(?:and\.children\[\d+\]|or\.children\[\d+\]|not\.child|sequence\.steps\[\d+\]))*)\.params\.([A-Za-z_$][\w$]*)$/u)
+      if (effectMatch?.[1] && effectMatch[2] && effectMatch[3] && effectMatch[5]) {
+        const exprPath = this.parseRuleExprPathSegments(effectMatch[4] ?? '')
+        if (!exprPath) continue
         return {
           ruleIndex: Number.parseInt(effectMatch[1], 10),
           effectRole: effectMatch[2] as keyof RuleEffectsByRole,
           effectIndex: Number.parseInt(effectMatch[3], 10),
-          paramKey: effectMatch[4],
+          exprPath,
+          paramKey: effectMatch[5],
         }
       }
       const conditionMatch = candidate.match(/^rules\[(\d+)\]\.condition\.params\.([A-Za-z_$][\w$]*)$/u)
       if (conditionMatch?.[1] && conditionMatch[2]) {
         return {
           ruleIndex: Number.parseInt(conditionMatch[1], 10),
+          exprPath: [],
           paramKey: conditionMatch[2],
         }
       }
     }
 
     return null
+  }
+
+  private parseRuleExprPathSegments(path: string): RuleExprPathSegment[] | null {
+    if (!path) return []
+    const segments: RuleExprPathSegment[] = []
+    let rest = path
+    while (rest.length > 0) {
+      const childrenMatch = rest.match(/^\.(and|or)\.children\[(\d+)\]/u)
+      if (childrenMatch?.[1] && childrenMatch[2]) {
+        segments.push({
+          kind: 'children',
+          exprKind: childrenMatch[1] as 'and' | 'or',
+          index: Number.parseInt(childrenMatch[2], 10),
+        })
+        rest = rest.slice(childrenMatch[0].length)
+        continue
+      }
+
+      const sequenceMatch = rest.match(/^\.sequence\.steps\[(\d+)\]/u)
+      if (sequenceMatch?.[1]) {
+        segments.push({
+          kind: 'steps',
+          index: Number.parseInt(sequenceMatch[1], 10),
+        })
+        rest = rest.slice(sequenceMatch[0].length)
+        continue
+      }
+
+      if (rest.startsWith('.not.child')) {
+        segments.push({ kind: 'not' })
+        rest = rest.slice('.not.child'.length)
+        continue
+      }
+
+      return null
+    }
+
+    return segments
   }
 
   private parseRulePathClarificationValue(
@@ -3091,6 +3139,7 @@ export class CodegenConversationService {
       ruleIndex: number
       effectRole?: keyof RuleEffectsByRole
       effectIndex?: number
+      exprPath: RuleExprPathSegment[]
       paramKey: string
     },
     value: number | string,
@@ -3102,10 +3151,11 @@ export class CodegenConversationService {
     if (!rule) return rules
 
     if (!path.effectRole) {
-      if (rule.condition.kind !== 'atom') return rules
+      const nextCondition = this.withExprParamValue(rule.condition, path.exprPath, path.paramKey, value)
+      if (!nextCondition) return rules
       nextRules[path.ruleIndex] = {
         ...rule,
-        condition: this.withAtomParamValue(rule.condition, path.paramKey, value),
+        condition: nextCondition,
       }
       return nextRules
     }
@@ -3113,7 +3163,9 @@ export class CodegenConversationService {
     if (!isRuleEffectsByRole(rule.effects) || typeof path.effectIndex !== 'number') return rules
     const effectsForRole = rule.effects[path.effectRole]
     const effect = effectsForRole[path.effectIndex]
-    if (!effect || effect.kind !== 'atom') return rules
+    if (!effect) return rules
+    const nextEffect = this.withExprParamValue(effect, path.exprPath, path.paramKey, value)
+    if (!nextEffect) return rules
 
     nextRules[path.ruleIndex] = {
       ...rule,
@@ -3121,12 +3173,62 @@ export class CodegenConversationService {
         ...rule.effects,
         [path.effectRole]: effectsForRole.map((candidate, index) =>
           index === path.effectIndex
-            ? this.withAtomParamValue(effect, path.paramKey, value)
+            ? nextEffect
             : candidate,
         ),
       },
     }
     return nextRules
+  }
+
+  private withExprParamValue(
+    expr: AtomExpr,
+    path: readonly RuleExprPathSegment[],
+    paramKey: string,
+    value: number | string,
+  ): AtomExpr | null {
+    const [segment, ...rest] = path
+    if (!segment) {
+      return expr.kind === 'atom'
+        ? this.withAtomParamValue(expr, paramKey, value)
+        : null
+    }
+
+    if (segment.kind === 'children') {
+      if (expr.kind !== segment.exprKind) return null
+      const child = expr.children[segment.index]
+      if (!child) return null
+      const nextChild = this.withExprParamValue(child, rest, paramKey, value)
+      if (!nextChild) return null
+      return {
+        ...expr,
+        children: expr.children.map((candidate, index) =>
+          index === segment.index ? nextChild : candidate,
+        ),
+      }
+    }
+
+    if (segment.kind === 'steps') {
+      if (expr.kind !== 'sequence') return null
+      const step = expr.steps[segment.index]
+      if (!step) return null
+      const nextStep = this.withExprParamValue(step, rest, paramKey, value)
+      if (!nextStep) return null
+      return {
+        ...expr,
+        steps: expr.steps.map((candidate, index) =>
+          index === segment.index ? nextStep : candidate,
+        ),
+      }
+    }
+
+    if (expr.kind !== 'not') return null
+    const nextChild = this.withExprParamValue(expr.child, rest, paramKey, value)
+    if (!nextChild) return null
+    return {
+      ...expr,
+      child: nextChild,
+    }
   }
 
   private withAtomParamValue(atom: Extract<AtomExpr, { kind: 'atom' }>, paramKey: string, value: number | string): AtomExpr {
