@@ -887,10 +887,6 @@ export class SemanticOrchestrationRegistryService {
       pushSlot('sizing.value', '请确认仓位数值（>0 有限数）')
     }
 
-    if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '') {
-      pushSlot('active_when_ref', '请确认 active_when_ref 引用的 gate 节点 id')
-    }
-
     return { ok: missingSlots.length === 0, missingSlots }
   }
 
@@ -985,10 +981,6 @@ export class SemanticOrchestrationRegistryService {
     }
     if (!sizing || !isPositiveFinite(sizing.value)) {
       pushSlot('sizing.value', '请确认仓位数值（>0 有限数）')
-    }
-
-    if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '') {
-      pushSlot('active_when_ref', '请确认 active_when_ref 引用的 gate 节点 id')
     }
 
     return { ok: missingSlots.length === 0, missingSlots }
@@ -1098,10 +1090,6 @@ export class SemanticOrchestrationRegistryService {
       pushSlot('sizing', '请确认仓位模式（fixed_quote/fixed_base/fixed_pct）')
     } else if (!isPositiveFinite(sizing.value)) {
       pushSlot('sizing', '请确认仓位数值（>0 有限数）')
-    }
-
-    if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '') {
-      pushSlot('active_when_ref', '请确认 active_when_ref 引用的 gate 节点 id')
     }
 
     return { ok: missingSlots.length === 0, missingSlots }

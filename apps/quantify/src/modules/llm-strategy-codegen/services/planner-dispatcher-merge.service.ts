@@ -1294,6 +1294,13 @@ export class PlannerDispatcherMergeService {
       this.logger.warn(`overrideRulesLeafParamsFromDispatcher 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
     }
 
+    try {
+      this.repairPlannerRiskDriftFromDispatcherRules(merged, dispatcher, '')
+    }
+    catch (err) {
+      this.logger.warn(`repairPlannerRiskDriftFromDispatcherRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
+    }
+
     // Issue #1428 R-B：rules 非空时把 dispatcher 桶里 rules 不含的 atom 提升为
     //   single-leaf SemanticRule 追加到 merged.rules，让 cross-clause inheritance
     //   (#1383) 派生的 sibling/mirror 在 rules-tree 上也可见。
@@ -1443,6 +1450,8 @@ export class PlannerDispatcherMergeService {
       if (!hasAtrTakeProfit) return rule
 
       const dispatcherTakeProfit = this.findDispatcherTakeProfitReplacement(rule, dispatcherRules)
+        ?? this.findDispatcherTakeProfitEffect(dispatcher)
+        ?? this.derivePercentTakeProfitFromRuleCondition(rule)
       if (!dispatcherTakeProfit) return rule
 
       const keptEffects = existingEffects.filter(effect =>
@@ -1589,7 +1598,7 @@ export class PlannerDispatcherMergeService {
       seen.add(signature)
       next.push(normalizedEffects === rule.effects ? rule : { ...rule, sideScope: rule.sideScope === 'both' ? 'long' : rule.sideScope, effects: normalizedEffects })
     }
-    merged.rules = next
+    merged.rules = this.dropRulesCoveredByStrongerComposite(next)
   }
 
   private removeShortCloseEffect(effect: AtomExpr): AtomExpr {
@@ -1647,6 +1656,40 @@ export class PlannerDispatcherMergeService {
       if (takeProfit) return takeProfit
     }
     return null
+  }
+
+  private findDispatcherTakeProfitEffect(dispatcher: CodegenSemanticPatch): AtomExprAtom | null {
+    return this.collectFallbackEffectAtoms(dispatcher)
+      .find(effect => effect.key === ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key) ?? null
+  }
+
+  private derivePercentTakeProfitFromRuleCondition(rule: SemanticRule): AtomExprAtom | null {
+    const leaves = collectAtomLeaves(rule.condition)
+    const percentLeaf = leaves.find(leaf =>
+      leaf.key === ATOM_CONTRACT_REGISTRY['price.percent_change'].key
+      && (
+        this.readStringParam(leaf.params, 'basis') === 'entry_avg_price'
+        || this.readStringParam(leaf.params, 'basis') === 'position_pnl'
+      )
+      && (
+        this.readStringParam(leaf.params, 'direction') === 'up'
+        || this.readStringParam(leaf.params, 'direction') === 'increase'
+        || this.readStringParam(leaf.params, 'direction') === 'profit'
+      ),
+    )
+    if (!percentLeaf) return null
+    const valuePct = this.readNumericParam(percentLeaf.params, 'valuePct')
+      ?? this.readNumericParam(percentLeaf.params, 'pct')
+      ?? this.readNumericParam(percentLeaf.params, 'thresholdPct')
+    if (valuePct === null) return null
+    return {
+      kind: 'atom',
+      key: ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key,
+      params: {
+        valuePct,
+        basis: this.readStringParam(percentLeaf.params, 'basis') ?? 'entry_avg_price',
+      },
+    }
   }
 
   private ruleConditionLooselyMatches(left: SemanticRule, right: SemanticRule): boolean {
@@ -1717,6 +1760,23 @@ export class PlannerDispatcherMergeService {
     const leaves = collectAtomLeaves(rule.condition)
     if (leaves.length !== 1) return false
     const conditionKey = leaves[0]?.key
+    const evidence = this.readEvidenceText(rule) ?? this.readEvidenceText(leaves[0] ?? {}) ?? ''
+    const effectKeys = listRuleEffects(rule.effects)
+      .flatMap(effect => collectAtomLeaves(effect).map(leaf => leaf.key))
+    if (
+      conditionKey === ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key
+      && effectKeys.includes(ATOM_CONTRACT_REGISTRY['action.open_long'].key)
+      && /卖出|平多|止盈|sell|close/iu.test(evidence)
+    ) {
+      return false
+    }
+    if (
+      conditionKey === ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key
+      && effectKeys.includes(ATOM_CONTRACT_REGISTRY['action.open_short'].key)
+      && /买入|开多|buy|long/iu.test(evidence)
+    ) {
+      return false
+    }
     const allowedConditionKeys = new Set<string>([
       ATOM_CONTRACT_REGISTRY['indicator.above'].key,
       ATOM_CONTRACT_REGISTRY['indicator.below'].key,
@@ -1826,6 +1886,12 @@ export class PlannerDispatcherMergeService {
     if (deterministicLeaves.length !== 1) return false
     const deterministicLeaf = deterministicLeaves[0]
     if (!deterministicLeaf) return false
+    if (this.readAtomBucket(deterministicLeaf.key) === 'risk') {
+      return rules.some(rule => [
+        ...collectAtomLeaves(rule.condition),
+        ...listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)),
+      ].some(existing => this.conditionLeafRepresents(existing, deterministicLeaf)))
+    }
     return rules.some((rule) => {
       if (rule.phase !== deterministicRule.phase) return false
       return collectAtomLeaves(rule.condition).some(existing => this.conditionLeafRepresents(existing, deterministicLeaf))
@@ -1834,6 +1900,12 @@ export class PlannerDispatcherMergeService {
 
   private conditionLeafRepresents(existing: AtomExprAtom, candidate: AtomExprAtom): boolean {
     if (this.atomLeafMatches(existing, candidate)) return true
+    if (
+      existing.key === candidate.key
+      && existing.key.startsWith('bollinger.')
+    ) {
+      return true
+    }
     if (this.bollingerMiddleRepresentsNoisyBollingerMidlineEvidence(existing, candidate)) return true
     return this.bollingerMiddleRepresentsMovingAverageMidline(existing, candidate)
   }
@@ -1921,8 +1993,8 @@ export class PlannerDispatcherMergeService {
       existing.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key
       || existing.key === ATOM_CONTRACT_REGISTRY['indicator.below'].key
     ) {
-      const existingPeriod = this.readNumericParam(existing.params, 'reference.period')
-      const candidatePeriod = this.readNumericParam(candidate.params, 'reference.period')
+      const existingPeriod = this.readIndicatorPeriodParam(existing.params)
+      const candidatePeriod = this.readIndicatorPeriodParam(candidate.params)
       if (existingPeriod !== null || candidatePeriod !== null) return existingPeriod === candidatePeriod
       return Boolean(existingIndicator && candidateIndicator)
     }
@@ -1974,6 +2046,34 @@ export class PlannerDispatcherMergeService {
       if (!this.paramValuesMatch(existingValue, candidateValue)) return false
     }
     return true
+  }
+
+  private readIndicatorPeriodParam(params: Record<string, unknown> | undefined): number | null {
+    return this.readNumericParam(params, 'reference.period')
+      ?? this.readNumericParam(params, 'period')
+      ?? this.readNumericParam(params, 'value')
+  }
+
+  private dropRulesCoveredByStrongerComposite(
+    rules: readonly SemanticRule[],
+  ): SemanticRule[] {
+    return rules.filter((rule, index) => {
+      const leaves = collectAtomLeaves(rule.condition)
+      if (leaves.length === 0) return true
+      const effects = listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))
+      return !rules.some((other, otherIndex) => {
+        if (otherIndex === index) return false
+        if (other.phase !== rule.phase) return false
+        if (other.sideScope !== rule.sideScope && other.sideScope !== 'both' && rule.sideScope !== 'both') return false
+        const otherLeaves = collectAtomLeaves(other.condition)
+        if (otherLeaves.length <= leaves.length) return false
+        if (!this.ruleEffectsCover(other, rule)) return false
+        if (effects.length === 0) return false
+        return leaves.every(leaf =>
+          otherLeaves.some(otherLeaf => this.conditionLeafRepresents(otherLeaf, leaf)),
+        )
+      })
+    })
   }
 
   private readParamByPath(params: Record<string, unknown>, key: string): unknown {
@@ -2448,9 +2548,15 @@ export class PlannerDispatcherMergeService {
       for (const eff of listRuleEffects(rule.effects)) {
         for (const leaf of collectAtomLeaves(eff)) {
           existingKeys.add(leaf.key)
+          if (leaf.key === ATOM_CONTRACT_REGISTRY['risk.atr_take_profit'].key) {
+            existingKeys.add(ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key)
+          }
         }
       }
     }
+    const existingConditionKeys = new Set(
+      rules.flatMap(rule => collectAtomLeaves(rule.condition).map(leaf => leaf.key)),
+    )
 
     const lifted: SemanticRule[] = []
     let liftIndex = 0
@@ -2467,6 +2573,16 @@ export class PlannerDispatcherMergeService {
     ): void => {
       if (!source) return
       for (const entry of source) {
+        if (
+          entry.key === ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key
+          && (
+            existingConditionKeys.has(ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key)
+            || existingConditionKeys.has(ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key)
+            || existingConditionKeys.has(ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key)
+          )
+        ) {
+          continue
+        }
         // Issue #1443：dedup 用 key only（见 existingKeys 注释），不再用严格四元签名
         if (existingKeys.has(entry.key)) continue
         existingKeys.add(entry.key)

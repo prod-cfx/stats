@@ -804,4 +804,273 @@ describe('31-strategy rules tree main flow regressions', () => {
     expect(view.summary).not.toContain('允许做空')
     expect(openSlotKeys).not.toContain('orchestration.phase0.unsupported')
   })
+
+  it('does not append dispatcher BOLL fallback rules when planner already covers BOLL long-short lifecycle', () => {
+    const text = 'OKX 合约 BTCUSDT 1m，使用布林带 5,1。价格触及或突破上轨时做空，价格触及或突破下轨时做多；多单在价格回到中轨时平仓，空单在价格回到中轨时平仓；单笔仓位 10%，止损 1%，止盈 1.5%。'
+    const plannerPatch: CodegenSemanticPatch = {
+      rules: [
+        {
+          id: 'entry-long-boll-lower',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'bollinger.touch_lower', params: { period: 5, stdDev: 1 } },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+            risks: [
+              { kind: 'atom', key: 'risk.stop_loss_pct', params: { basis: 'entry_avg_price', valuePct: 1 } },
+              { kind: 'atom', key: 'risk.atr_take_profit', params: { multiple: 1.5 } },
+            ],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        },
+        {
+          id: 'entry-short-boll-upper',
+          phase: 'entry',
+          sideScope: 'short',
+          condition: { kind: 'atom', key: 'bollinger.touch_upper', params: { period: 5, stdDev: 1 } },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.open_short', params: {} }],
+            risks: [
+              { kind: 'atom', key: 'risk.stop_loss_pct', params: { basis: 'entry_avg_price', valuePct: 1 } },
+              { kind: 'atom', key: 'risk.atr_take_profit', params: { multiple: 1.5 } },
+            ],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        },
+        {
+          id: 'exit-long-boll-middle',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'bollinger.touch_middle', params: { period: 5, stdDev: 1 } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+        {
+          id: 'exit-short-boll-middle',
+          phase: 'exit',
+          sideScope: 'short',
+          condition: { kind: 'atom', key: 'bollinger.touch_middle', params: { period: 5, stdDev: 1 } },
+          effects: [{ kind: 'atom', key: 'action.close_short', params: {} }],
+        },
+      ],
+    }
+    const dispatcherPatch = new GenericSeedDispatcher().dispatch(text)
+
+    const merged = new PlannerDispatcherMergeService().mergePlannerAndDispatcherPatches(plannerPatch, dispatcherPatch)
+    const serialized = JSON.stringify(merged?.rules)
+    const allEffects = merged?.rules?.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))) ?? []
+
+    expect(merged?.rules).toHaveLength(4)
+    expect(serialized).not.toContain('deterministic-rule')
+    expect(serialized).not.toContain('"period":20')
+    expect(allEffects.map(effect => effect.key)).not.toContain('risk.atr_take_profit')
+    expect(allEffects).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.take_profit_pct', params: expect.objectContaining({ valuePct: 1.5 }) }),
+    ]))
+  })
+
+  it('keeps EMA stack owner-path rules from receiving deterministic split duplicates', () => {
+    const text = '入场：15m k线里面 价格在ema20 ema60 ema144上方时做多开仓；出场：15m k线里面 价格低于ema20时平多；止损：5%；仓位：10usdt'
+    const plannerPatch: CodegenSemanticPatch = {
+      rules: [
+        {
+          id: 'entry-ema-stack-above',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: {
+            kind: 'and',
+            children: [
+              { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', period: 20, timeframe: '15m' } },
+              { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', period: 60, timeframe: '15m' } },
+              { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', period: 144, timeframe: '15m' } },
+            ],
+          },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+            risks: [{ kind: 'atom', key: 'risk.stop_loss_pct', params: { basis: 'entry_avg_price', valuePct: 5 } }],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        },
+        {
+          id: 'exit-below-ema20',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'indicator.below', params: { indicator: 'ema', period: 20, timeframe: '15m' } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+      ],
+    }
+    const dispatcherPatch = new GenericSeedDispatcher().dispatch(text)
+
+    const merged = new PlannerDispatcherMergeService().mergeDeterministicExecutionSlots(plannerPatch, dispatcherPatch, text)
+    const projected = new SemanticSeedStateBuilderService().build(merged!, text)
+    const view = new SemanticStateProjectionService().buildConversationView(projected!)
+    const serialized = JSON.stringify(merged?.rules)
+
+    expect(merged?.rules).toHaveLength(2)
+    expect(serialized).not.toContain('deterministic-rule')
+    expect(view.summary.match(/入场：/g)).toHaveLength(1)
+    expect(view.summary.match(/出场：/g)).toHaveLength(1)
+    expect(view.summary.match(/止损：/g)).toHaveLength(1)
+  })
+
+  it('does not append dispatcher BOLL sell fallback when planner already covers long-only upper-band exit', () => {
+    const text = 'ETH 15分钟触碰布林带下轨，并且成交量高于过去 20 根均量的 1.5 倍时买入，上轨卖出。'
+    const plannerPatch: CodegenSemanticPatch = {
+      rules: [
+        {
+          id: 'entry-boll-lower-vol-spike-15m',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: {
+            kind: 'and',
+            children: [
+              { kind: 'atom', key: 'bollinger.touch_lower', params: { period: 20, stdDev: 2 } },
+              { kind: 'atom', key: 'volume.threshold', params: { mode: 'relative_to_sma', refWindow: 20, multiplier: 1.5 } },
+            ],
+          },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'exit-boll-upper-touch-15m',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'bollinger.touch_upper', params: { period: 20, stdDev: 2 } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+      ],
+    }
+    const dispatcherPatch = new GenericSeedDispatcher().dispatch(text)
+
+    const merged = new PlannerDispatcherMergeService().mergePlannerAndDispatcherPatches(plannerPatch, dispatcherPatch)
+    const entryRules = merged?.rules?.filter(rule => rule.phase === 'entry') ?? []
+    const serialized = JSON.stringify(merged?.rules)
+
+    expect(entryRules).toHaveLength(1)
+    expect(serialized).not.toContain('deterministic-rule')
+    expect(serialized).not.toContain('action.open_short')
+  })
+
+  it('does not turn long-only BOLL upper-band sell into a second entry in deterministic slot merge', () => {
+    const text = '15min 布林带下轨买入 上轨卖出'
+    const plannerPatch: CodegenSemanticPatch = {
+      rules: [
+        {
+          id: 'entry-boll-lower-buy',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'bollinger.touch_lower', params: { period: 20, stdDev: 2, timeframe: '15m' } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'exit-boll-upper-sell',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'bollinger.touch_upper', params: { period: 20, stdDev: 2, timeframe: '15m' } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+      ],
+    }
+    const dispatcherPatch = new GenericSeedDispatcher().dispatch(text)
+
+    const merged = new PlannerDispatcherMergeService().mergeDeterministicExecutionSlots(plannerPatch, dispatcherPatch, text)
+    const entryRules = merged?.rules?.filter(rule => rule.phase === 'entry') ?? []
+    const exitRules = merged?.rules?.filter(rule => rule.phase === 'exit') ?? []
+    const serialized = JSON.stringify(merged?.rules)
+
+    expect(entryRules).toHaveLength(1)
+    expect(exitRules).toHaveLength(1)
+    expect(serialized).not.toContain('deterministic-rule')
+    expect(serialized).not.toContain('action.open_short')
+  })
+
+  it('keeps percent take-profit on immediate long strategy out of ATR and does not duplicate risk exits', () => {
+    const text = '在 OKX 现货 ORDI/USDT 上，主周期 1h，使用 10% 固定仓位只做多；入场动作为立即开始时市价买入；出场规则为价格相对前收盘上涨 1% 时卖出，另有相对入场均价下跌 5% 止损卖出、相对入场均价上涨 10% 止盈卖出。'
+    const plannerPatch: CodegenSemanticPatch = {
+      rules: [
+        {
+          id: 'entry-start-market-long',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'execution.on_start', params: { timeframe: '1h' } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'exit-up-1pct-prev-close',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'up', valuePct: 1, basis: 'prev_close', timeframe: '1h' } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+        {
+          id: 'exit-stop-5pct-entry-avg',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'down', valuePct: 5, basis: 'entry_avg_price', timeframe: '1h' } },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+            risks: [{ kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } }],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        },
+        {
+          id: 'exit-take-10pct-entry-avg',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.percent_change', params: { direction: 'up', valuePct: 10, basis: 'entry_avg_price', timeframe: '1h' } },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+            risks: [{ kind: 'atom', key: 'risk.atr_take_profit', params: { multiple: 10 } }],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        },
+      ],
+    }
+    const dispatcherPatch = new GenericSeedDispatcher().dispatch(text)
+
+    const merged = new PlannerDispatcherMergeService().mergePlannerAndDispatcherPatches(plannerPatch, dispatcherPatch)
+    const serialized = JSON.stringify(merged?.rules)
+    const effects = merged?.rules?.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))) ?? []
+    const stopLossRules = merged?.rules?.filter(rule => JSON.stringify(rule).includes('risk.stop_loss_pct')) ?? []
+
+    expect(merged?.position?.sizing).toEqual({ kind: 'ratio', value: 0.1, unit: 'ratio' })
+    expect(serialized).not.toContain('deterministic-rule')
+    expect(effects.map(effect => effect.key)).not.toContain('risk.atr_take_profit')
+    expect(effects).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.take_profit_pct', params: expect.objectContaining({ valuePct: 10, basis: 'entry_avg_price' }) }),
+    ]))
+    expect(stopLossRules).toHaveLength(1)
+  })
+
+  it('removes hallucinated open_short from long-only candle rebound planner rule', () => {
+    const text = 'BTC 连续跌三根 15 分钟 K 线后，如果下一根开始放量反弹就买一点。'
+    const plannerPatch: CodegenSemanticPatch = {
+      rules: [{
+        id: 'candle-rebound-long',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.candle_pattern', params: { pattern: 'three_consecutive_down_then_volume_rebound', timeframe: '15m' } },
+        effects: [
+          { kind: 'atom', key: 'action.open_long', params: {} },
+          { kind: 'atom', key: 'action.open_short', params: {} },
+        ],
+      }],
+    }
+    const dispatcherPatch = new GenericSeedDispatcher().dispatch(text)
+
+    const merged = new PlannerDispatcherMergeService().mergePlannerAndDispatcherPatches(plannerPatch, dispatcherPatch)
+    const effectKeys = merged?.rules?.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect).map(leaf => leaf.key))) ?? []
+
+    expect(effectKeys).toContain('action.open_long')
+    expect(effectKeys).not.toContain('action.open_short')
+  })
 })
