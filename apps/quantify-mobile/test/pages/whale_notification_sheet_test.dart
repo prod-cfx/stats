@@ -119,6 +119,27 @@ void main() {
     }
   });
 
+  testWidgets(
+      'tab 顺序固定为「全部 / 巨鲸预警 / 监控触发 / 系统」（issue #1663）',
+      (WidgetTester tester) async {
+    // 设计稿 m-screens-4 NOTIF_TABS = ['全部','巨鲸预警','监控触发','系统']，
+    // 顺序变更会破坏视觉对齐与 mock kind 映射；用 dx 坐标守护排列序。
+    await _pumpHost(tester, notifications: mockWhaleNotifications);
+    final Finder tabsScroll = find.byType(SingleChildScrollView);
+    double dxOf(String label) => tester
+        .getTopLeft(
+          find.descendant(of: tabsScroll, matching: find.text(label)),
+        )
+        .dx;
+    final double dxAll = dxOf('全部');
+    final double dxAlert = dxOf('巨鲸预警');
+    final double dxWatch = dxOf('监控触发');
+    final double dxSystem = dxOf('系统');
+    expect(dxAll, lessThan(dxAlert), reason: '全部 应排第 1');
+    expect(dxAlert, lessThan(dxWatch), reason: '巨鲸预警 应排第 2');
+    expect(dxWatch, lessThan(dxSystem), reason: '监控触发 应排第 3');
+  });
+
   testWidgets('footer 显示 24h 提示和通知设置入口',
       (WidgetTester tester) async {
     await _pumpHost(tester, notifications: mockWhaleNotifications);

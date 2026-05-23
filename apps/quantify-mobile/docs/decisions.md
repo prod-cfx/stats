@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-05-23 · 巨鲸首页搜索、通知中心、默认 Tab 与监控入口对齐（Issue #1663）
+
+**背景**：依据 #1662 已建立的"未实现入口的设计表达规范"基线，对 `WhaleHomePage` / `WhaleNotificationSheet` / `WhaleWatchTab` 做逐项对齐核对。
+
+**判定**：仅对齐，不引入新能力。
+
+| 项 | 设计稿（`m-screens-4.jsx`） | Flutter 处理 | 决策 |
+|----|------------------------|------------|------|
+| 顶部搜索 icon 按钮 | `iconBtn` 无 onClick | `_CircularIconAction(onTap: null)` + 注释 | 保持禁用态；搜索范围待 #1651 收口 |
+| 顶部通知铃铛 + unread badge | 显示 badge、点击展开 panel | `QzNotificationBell(circular:true)` + `_openNotifications` | 已对齐 |
+| 通知中心 4 个 tab | `['全部','巨鲸预警','监控触发','系统']` | `_Tabs` 同顺序 + 单次遍历计数 | 已对齐；新增 dx 坐标顺序守护测试 |
+| 「全部已读」按钮 | `markAllRead` | `_markAllRead` + 未读为 0 时禁用 | 已对齐 |
+| 通知设置入口 | `<Ico ICONS.tune/>通知设置`（设计稿亦无 onClick） | snackbar 提示「通知设置」 | **已知例外**：保留 snackbar 提示比纯禁用更友好，待设置页落地后替换为路由 push |
+| 默认 tab | `useState('实时')` | `_tabIndex = 1` | 已对齐；新增测试守护文案高亮 |
+| 监控 tab「添加地址监控」按钮 | `<button>` 无 onClick | 原 `onPressed: () {}` (空 lambda → ripple) | **改为 `onPressed: null`**；对齐设计稿无 onClick 语义；测试守护 |
+| 监控 tab「规则 ›」 | `<span>` 无 onClick | 纯 `Text` | 已对齐 |
+
+**落地范围**：
+
+- `apps/quantify-mobile/lib/pages/whale/tabs/whale_watch_tab.dart`：添加地址监控按钮 `onPressed: null`。
+- `apps/quantify-mobile/test/pages/whale_home_page_test.dart`：新增「默认实时 tab 高亮」+「添加地址监控按钮禁用」守护用例。
+- `apps/quantify-mobile/test/pages/whale_notification_sheet_test.dart`：新增「tab 顺序固定」用例。
+
+**通知设置入口例外说明**：通知设置在设计稿中是纯展示，未挂 onClick，但其语义是"待落地的设置入口"而非"完全不可达"。Flutter 用 snackbar 给出文案提示比禁用更接近设计意图。后续 issue 收口设置页时，将 snackbar 替换为路由 push 即可，不影响当前对齐基线。
+
+---
+
 ## 2026-05-23 · 移动端设计对齐基线（Issue #1662）
 
 **背景**：`design/project/mobile/` 是 quantify-mobile 设计真源，但设计稿（`proto.jsx`）与 Flutter 工程（`lib/router/app_router.dart`）在入口态、登录保护、次级页面呈现形态、API 入口命名、token 路径上存在基线差异。后续页面对齐 PR 需要先固定这些约定，避免每个页面重新解释。

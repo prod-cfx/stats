@@ -64,8 +64,13 @@ class WhaleWatchTab extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 height: 44,
+                // 添加地址监控能力尚未落地（issue #1663）：按钮置为禁用态
+                // (onPressed=null) 避免空 lambda 的 ripple 暗示可点。对齐设
+                // 计稿 `WhaleWatch` 添加按钮无 onClick，详见
+                // `apps/quantify-mobile/docs/decisions.md` "未实现入口的设
+                // 计表达规范" 基线（#1662）。
                 child: OutlinedButton.icon(
-                  onPressed: () {},
+                  onPressed: null,
                   icon: Icon(Icons.add, size: 18, color: c.textMid),
                   label: Text(
                     l10n.whaleAddWatchAddress,

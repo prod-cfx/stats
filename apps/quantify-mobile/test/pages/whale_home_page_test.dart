@@ -119,6 +119,40 @@ void main() {
     expect(find.text('最近告警'), findsOneWidget);
   });
 
+  testWidgets(
+      '监控 tab「添加地址监控」按钮禁用 (onPressed=null)，对齐设计稿无 onClick',
+      (WidgetTester tester) async {
+    // issue #1663：能力未落地前按钮应明示禁用，避免空 lambda 的 ripple
+    // 暗示可点。
+    await _pump(tester);
+    await tester.tap(find.text('监控'));
+    await tester.pumpAndSettle();
+    final Finder ctaText = find.text('添加地址监控');
+    expect(ctaText, findsOneWidget);
+    final OutlinedButton cta = tester.widget<OutlinedButton>(
+      find.ancestor(of: ctaText, matching: find.byType(OutlinedButton)).first,
+    );
+    expect(cta.onPressed, isNull,
+        reason: '添加地址监控能力未实现前按钮应禁用');
+  });
+
+  testWidgets('默认进入「实时」tab：tab 高亮 + 实时内容可见',
+      (WidgetTester tester) async {
+    // issue #1663 守护：设计稿 ScreenWhale 默认 tab='实时'，Flutter
+    // _tabIndex=1，必须有测试断言避免后续回归。
+    await _pump(tester);
+    // 「实时」tab Text 颜色应为高亮（fontWeight=w700）。tab 实现：
+    // _SubTab 选中态 fontWeight w700，未选中 w500。
+    final Finder liveTabText = find.text('实时');
+    expect(liveTabText, findsOneWidget);
+    final Text liveText = tester.widget<Text>(liveTabText);
+    expect(liveText.style?.fontWeight, FontWeight.w700,
+        reason: '默认 tab 应为「实时」，文案应高亮 w700');
+    // 「发现」未选中应为 w500
+    final Text discoverText = tester.widget<Text>(find.text('发现'));
+    expect(discoverText.style?.fontWeight, FontWeight.w500);
+  });
+
   testWidgets('右上铃铛存在且显示初始未读数 badge',
       (WidgetTester tester) async {
     await _pump(tester);
