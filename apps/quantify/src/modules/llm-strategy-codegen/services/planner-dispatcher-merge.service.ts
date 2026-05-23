@@ -133,11 +133,28 @@ export class PlannerDispatcherMergeService {
     const rules = this.buildFallbackRules(dispatcher, userMessage)
     if (rules.length === 0) return null
     const position = this.buildFallbackPositionFromDispatcherConstraints(dispatcher)
+    const explicitSizing = this.extractExplicitPositionSizingFromText(userMessage)
     const patch: CodegenSemanticPatch = {
       ...(dispatcher.contextSlots ? { contextSlots: dispatcher.contextSlots } : {}),
       ...(position ? { position } : dispatcher.position ? { position: dispatcher.position } : {}),
       rules,
     }
+    if (explicitSizing) {
+      patch.position = {
+        ...(patch.position ?? {
+          positionMode: this.hasShortEntryIntent(dispatcher, userMessage) ? 'long_short' : 'long_only',
+          openSlots: [],
+        }),
+        mode: explicitSizing.sizing.kind === 'ratio' ? 'fixed_ratio' : explicitSizing.sizing.kind === 'quote' ? 'fixed_quote' : 'fixed_qty',
+        value: explicitSizing.sizing.value,
+        sizing: explicitSizing.sizing,
+        status: 'locked',
+        source: 'user_explicit',
+        evidence: { text: explicitSizing.evidenceText, source: 'user_explicit' },
+        openSlots: [],
+      }
+    }
+    this.hydrateExplicitPercentRisksFromText(patch, userMessage)
     this.pruneInvalidDeterministicNoiseRules(patch, dispatcher, userMessage)
     return patch
   }
@@ -1316,6 +1333,7 @@ export class PlannerDispatcherMergeService {
   }
 
   private normalizedEffectSideSignature(item: AtomExprAtom): string {
+    if (this.readAtomBucket(item.key) === 'risk') return 'risk'
     if (item.key.endsWith('_long')) return 'long'
     if (item.key.endsWith('_short')) return 'short'
     const paramSideScope = item.params.sideScope
@@ -1952,6 +1970,7 @@ export class PlannerDispatcherMergeService {
     const rules = merged.rules
     if (!rules?.length) return
     const additions = this.extractExplicitPercentRiskEffects(userMessage)
+    if (!additions.some(addition => addition.key === ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key)) return
     if (additions.length === 0) return
     let mutated = false
     const entryRiskKeys = new Set<string>()
@@ -1973,6 +1992,11 @@ export class PlannerDispatcherMergeService {
     })
     if (!mutated) return
     merged.rules = nextRules.filter((rule) => {
+      if (rule.phase === 'gate') {
+        const effects = listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))
+        const hasOnlyRiskEffects = effects.length > 0 && effects.every(leaf => entryRiskKeys.has(leaf.key))
+        if (hasOnlyRiskEffects) return false
+      }
       if (rule.phase !== 'exit') return true
       const conditionLeaves = collectAtomLeaves(rule.condition)
       if (!conditionLeaves.some(leaf => entryRiskKeys.has(leaf.key))) return true

@@ -523,6 +523,38 @@ describe('PlannerDispatcherMergeService', () => {
     expect(merged?.position?.sizing).toEqual({ kind: 'ratio', unit: 'ratio', value: 0.35 })
   })
 
+  it('builds plaza MACD dispatcher fallback without duplicate risk rules or open sizing slot', () => {
+    const text = '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 MACD 16/34/12 金叉做多、死叉平多策略。入场规则：MACD DIF 上穿 DEA 时做多开仓；出场规则：MACD DIF 下穿 DEA 时平多；本策略只做多，不做空；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.5%。'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const fallback = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
+    const rules = fallback?.rules ?? []
+    const entryRule = rules.find(rule => rule.phase === 'entry')
+    const flatRiskLeaves = rules.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)))
+      .filter(leaf => leaf.key === 'risk.stop_loss_pct' || leaf.key === 'risk.take_profit_pct')
+    const stopLossConditionRules = rules.filter(rule =>
+      collectAtomLeaves(rule.condition).some(leaf => leaf.key === 'risk.stop_loss_pct'),
+    )
+    const gateRiskRules = rules.filter(rule =>
+      rule.phase === 'gate'
+      && listRuleEffects(rule.effects).some(effect =>
+        collectAtomLeaves(effect).some(leaf => leaf.key === 'risk.stop_loss_pct' || leaf.key === 'risk.take_profit_pct'),
+      ),
+    )
+
+    expect(entryRule).toBeDefined()
+    expect(listRuleEffects(entryRule?.effects ?? []).flatMap(effect => collectAtomLeaves(effect)).map(leaf => leaf.key).sort()).toEqual([
+      'action.open_long',
+      'risk.stop_loss_pct',
+      'risk.take_profit_pct',
+    ])
+    expect(flatRiskLeaves.map(leaf => leaf.key).sort()).toEqual(['risk.stop_loss_pct', 'risk.take_profit_pct'])
+    expect(stopLossConditionRules).toHaveLength(0)
+    expect(gateRiskRules).toHaveLength(0)
+    expect(fallback?.position?.sizing).toEqual({ kind: 'ratio', unit: 'ratio', value: 0.35 })
+    expect(fallback?.position?.openSlots).toEqual([])
+  })
+
   it('dedupes weaker dispatcher percent-change entry when planner rule already carries same entry with risks', () => {
     const text = '在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%'
     const planner = {
