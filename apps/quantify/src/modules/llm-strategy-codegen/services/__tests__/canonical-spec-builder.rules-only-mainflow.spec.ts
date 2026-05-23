@@ -478,4 +478,56 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
       'rules[0].effects.programs[0].and.children[1]',
     ])
   })
+
+  it('keeps legacy rules array effects on the compatibility builder path', () => {
+    const state = baseState({
+      trigger: [{
+        id: 'legacy-flat-trigger',
+        key: 'execution.on_start',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      action: [{
+        id: 'legacy-flat-action',
+        key: 'action.open_long',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      position: {
+        mode: 'fixed_quote',
+        value: 100,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      rules: [{
+        id: 'legacy-array-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'atom',
+          key: 'execution.on_start',
+          params: {},
+        },
+        effects: [{
+          kind: 'atom',
+          key: 'action.open_long',
+          params: {},
+        }],
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+    const { ir } = new CanonicalSpecV2IrCompilerService().compile({ canonicalSpec: spec, fallback: compileFallback })
+
+    expect(spec.rules.flatMap(rule => rule.actions).map(action => action.type)).toContain('OPEN_LONG')
+    expect(ir.ruleBlocks.flatMap(block => block.actions).map(action => action.kind)).toContain('OPEN_LONG')
+  })
 })

@@ -596,7 +596,7 @@ export class CanonicalSpecBuilderService {
   }
 
   buildFromSemanticState(state: SemanticState, fallbackMarket?: unknown): CanonicalStrategySpecV2 {
-    if ((state.rules?.length ?? 0) > 0) {
+    if (this.shouldUseSemanticRulesMainflow(state)) {
       return this.buildFromSemanticRulesMainflow(state, fallbackMarket)
     }
 
@@ -674,6 +674,11 @@ export class CanonicalSpecBuilderService {
           }
         : {}),
     }
+  }
+
+  private shouldUseSemanticRulesMainflow(state: SemanticState): boolean {
+    const rules = state.rules ?? []
+    return rules.length > 0 && rules.every(rule => isRuleEffectsByRole(rule.effects))
   }
 
   private buildFromSemanticRulesMainflow(state: SemanticState, fallbackMarket?: unknown): CanonicalStrategySpecV2 {
