@@ -879,7 +879,7 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(text).not.toContain('不支持的条件，待补充')
   })
 
-  it('prefers server-provided displayLogicGraph over legacy condition-key parsing', () => {
+  it('prefers typed rules over stale server-provided displayLogicGraph', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {
         displayLogicGraph: {
@@ -887,8 +887,9 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
             {
               type: 'IF',
               items: [
-                { kind: 'condition', id: 'condition-entry', text: '收盘价高于前 1 根最高价，且持有多仓等于false' },
-                { kind: 'action', id: 'action-entry', text: '开多 3%' },
+                { kind: 'condition', id: 'condition-stale', text: '启动后执行' },
+                { kind: 'action', id: 'action-stale', text: '等待策略规则补充' },
+                { kind: 'action', id: 'action-duplicate', text: '平多 平多' },
               ],
             },
             {
@@ -901,10 +902,63 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
         },
         rules: [
           {
-            id: 'legacy-unsupported',
+            id: 'entry-ema-stack',
             phase: 'entry',
-            condition: { key: 'condition.expression' },
-            actions: [{ type: 'OPEN_LONG' }],
+            condition: {
+              kind: 'AND',
+              children: [20, 60, 144].map(period => ({
+                kind: 'atom',
+                key: 'indicator.above',
+                params: {
+                  indicator: 'ema',
+                  'reference.period': period,
+                  timeframe: '15m',
+                },
+              })),
+            },
+            effects: {
+              actions: [
+                {
+                  key: 'action.open_long',
+                  kind: 'atom',
+                  params: {
+                    sizing: { mode: 'QUOTE', value: 10, asset: 'USDT' },
+                  },
+                },
+              ],
+            },
+          },
+          {
+            id: 'exit-ema20',
+            phase: 'exit',
+            condition: {
+              kind: 'atom',
+              key: 'indicator.below',
+              params: {
+                indicator: 'ema',
+                'reference.period': 20,
+                timeframe: '15m',
+              },
+            },
+            effects: {
+              actions: [{ key: 'action.close_long', kind: 'atom' }],
+            },
+          },
+          {
+            id: 'risk-stop-loss',
+            phase: 'exit',
+            condition: {
+              kind: 'atom',
+              key: 'risk.stop_loss_pct',
+              params: {
+                valuePct: 5,
+                basis: 'entry_avg_price',
+              },
+            },
+            effects: {
+              risks: [{ key: 'risk.stop_loss_pct', kind: 'atom', params: { valuePct: 5 } }],
+              actions: [{ key: 'action.close_long', kind: 'atom' }],
+            },
           },
         ],
       },
@@ -912,13 +966,18 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
 
     const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
 
-    expect(graph.blocks).toHaveLength(2)
-    expect(text).toContain('收盘价高于前 1 根最高价')
-    expect(text).toContain('开多 3%')
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'AND_AT_THEN', 'EXECUTE'])
+    expect(text).toContain('15m 价格在 EMA20 上方，且15m 价格在 EMA60 上方，且15m 价格在 EMA144 上方')
+    expect(text).toContain('开多 10 USDT')
+    expect(text).toContain('15m 价格低于 EMA20')
+    expect(text).toContain('平多')
+    expect(text).toContain('风控: 止损：价格相对开仓均价下跌5% -> 平多')
+    expect(text).not.toContain('等待策略规则补充')
+    expect(text).not.toContain('平多 平多')
     expect(text).not.toContain('不支持的条件，待补充')
   })
 
-  it('renders server-provided atomic contract display graph without legacy key guessing', () => {
+  it('renders server-provided atomic contract display graph when typed rules are missing', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {
         displayLogicGraph: {
@@ -939,14 +998,6 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
             },
           ],
         },
-        rules: [
-          {
-            id: 'legacy-atomic-key',
-            phase: 'entry',
-            condition: { key: 'price.detect.indicator_boundary' },
-            actions: [{ type: 'OPEN_LONG' }],
-          },
-        ],
       },
     })
 

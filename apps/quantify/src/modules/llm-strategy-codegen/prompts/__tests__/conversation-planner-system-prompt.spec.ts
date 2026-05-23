@@ -44,4 +44,60 @@ describe('conversationPlannerSystemPrompt', () => {
     expect(prompt).toContain('place_limit_grid')
     expect(prompt).toContain('order_program/maintain/limit_ladder')
   })
+
+  it('requires typed RuleEffects and program phase for program strategies', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+
+    expect(prompt).toContain('effects.actions')
+    expect(prompt).toContain('effects.risks')
+    expect(prompt).toContain('effects.positions')
+    expect(prompt).toContain('effects.orchestration')
+    expect(prompt).toContain('effects.programs')
+    expect(prompt).toContain('phase')
+    expect(prompt).toContain('program')
+    expect(prompt).toContain('condition = 原 triggers')
+  })
+
+  it('does not advertise legacy top-level semanticPatch position shape', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+
+    expect(prompt).not.toContain('"position"?:')
+    expect(prompt).not.toContain('semanticPatch.position')
+    expect(prompt).toContain('effects.positions')
+  })
+
+  it('keeps correct examples aligned with typed RuleEffects', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+
+    expect(prompt).not.toContain('"effects": [')
+    expect(prompt).toContain('"effects": {')
+    expect(prompt).toContain('"actions": [')
+    expect(prompt).toContain('"programs": [')
+  })
+
+  it('does not describe grid program example as entry phase', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+    const gridExample = prompt.match(/entry-centered-grid[\s\S]*?condition\.params\.centerOffsetPct/)?.[0] ?? ''
+
+    expect(gridExample).not.toBe('')
+    expect(gridExample).not.toContain('"phase": "entry"')
+    expect(gridExample).toContain('"phase": "program"')
+    expect(gridExample).toContain('"programs": [{ "kind": "atom", "key": "program.')
+  })
+
+  it('does not tell DCA schedule to use program effects', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+
+    expect(prompt).toContain('position.dca_schedule')
+    expect(prompt).toContain('effects.positions')
+    expect(prompt).not.toMatch(/DCA[^。\n]*effects\.programs/)
+    expect(prompt).not.toMatch(/position\.dca_schedule[^。\n]*effects\.programs/)
+    expect(prompt).not.toContain('program rule')
+  })
+
+  it('documents grid.range_rebalance as condition exception', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+
+    expect(prompt).toContain('grid.range_rebalance 可作 program condition')
+  })
 })

@@ -133,8 +133,28 @@ export const atomExprAtomSchema = atomSchema
 // SemanticRule —— state 主体
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type SemanticRulePhase = 'entry' | 'exit' | 'gate'
+export type SemanticRulePhase = 'entry' | 'exit' | 'gate' | 'program'
 export type SemanticRuleSideScope = 'long' | 'short' | 'both'
+
+export interface RuleEffectsByRole {
+  readonly actions: ReadonlyArray<AtomExpr>
+  readonly risks: ReadonlyArray<AtomExpr>
+  readonly positions: ReadonlyArray<AtomExpr>
+  readonly orchestration: ReadonlyArray<AtomExpr>
+  readonly programs: ReadonlyArray<AtomExpr>
+}
+
+export type RuleEffects = RuleEffectsByRole | ReadonlyArray<AtomExpr>
+
+const RULE_EFFECT_ROLE_KEYS = [
+  'actions',
+  'risks',
+  'positions',
+  'orchestration',
+  'programs',
+] as const satisfies ReadonlyArray<keyof RuleEffectsByRole>
+
+type RuleEffectRole = typeof RULE_EFFECT_ROLE_KEYS[number]
 
 export interface SemanticRule {
   readonly id: string
@@ -143,16 +163,86 @@ export interface SemanticRule {
   /** 谓词树；所有叶子 atom 的 roles 必须包含 'predicate' */
   readonly condition: AtomExpr
   /** 副作用绑定（开/平仓、风控、加仓约束等）；顶层不组合，每条独立 */
-  readonly effects: ReadonlyArray<AtomExpr>
+  readonly effects: RuleEffects
   readonly evidence?: AtomExprEvidence
+}
+
+export const ruleEffectsSchema = z.object({
+  actions: z.array(atomExprSchema),
+  risks: z.array(atomExprSchema),
+  positions: z.array(atomExprSchema),
+  orchestration: z.array(atomExprSchema),
+  programs: z.array(atomExprSchema),
+})
+
+function emptyMutableRuleEffects(): Record<RuleEffectRole, AtomExpr[]> {
+  return {
+    actions: [],
+    risks: [],
+    positions: [],
+    orchestration: [],
+    programs: [],
+  }
+}
+
+function isRuleEffectRole(value: string): value is RuleEffectRole {
+  return (RULE_EFFECT_ROLE_KEYS as readonly string[]).includes(value)
+}
+
+export function isRuleEffectsByRole(effects: RuleEffects | null | undefined): effects is RuleEffectsByRole {
+  return !!effects && typeof effects === 'object' && !Array.isArray(effects)
+}
+
+export function listRuleEffects(effects: RuleEffects | null | undefined): ReadonlyArray<AtomExpr> {
+  if (!effects) return []
+  if (Array.isArray(effects)) return effects
+  return RULE_EFFECT_ROLE_KEYS.flatMap(role => effects[role])
+}
+
+export function forEachRuleEffect(
+  effects: RuleEffects | null | undefined,
+  visit: (effect: AtomExpr, index: number, role?: RuleEffectRole, roleIndex?: number) => void,
+): void {
+  if (!effects) return
+  if (Array.isArray(effects)) {
+    effects.forEach((effect, index) => visit(effect, index))
+    return
+  }
+  let index = 0
+  for (const role of RULE_EFFECT_ROLE_KEYS) {
+    const roleEffects = effects[role]
+    for (let roleIndex = 0; roleIndex < roleEffects.length; roleIndex++) {
+      visit(roleEffects[roleIndex], index, role, roleIndex)
+      index++
+    }
+  }
+}
+
+export function mapRuleEffectsByRole(
+  effects: RuleEffects,
+  mapper: (effect: AtomExpr, index: number, role?: RuleEffectRole, roleIndex?: number) => AtomExpr,
+): RuleEffects {
+  if (Array.isArray(effects)) {
+    return effects.map((effect, index) => mapper(effect, index))
+  }
+  const next = emptyMutableRuleEffects()
+  let index = 0
+  for (const role of RULE_EFFECT_ROLE_KEYS) {
+    next[role] = effects[role].map((effect, roleIndex) => {
+      const mapped = mapper(effect, index, role, roleIndex)
+      index++
+      return mapped
+    })
+  }
+  return next
 }
 
 export const semanticRuleSchema = z.object({
   id: z.string().min(1),
-  phase: z.enum(['entry', 'exit', 'gate']),
+  phase: z.enum(['entry', 'exit', 'gate', 'program']),
   sideScope: z.enum(['long', 'short', 'both']),
   condition: atomExprSchema,
-  effects: z.array(atomExprSchema),
+  effects: ruleEffectsSchema,
   evidence: z.object({ text: z.string().min(1) }).passthrough().optional(),
 })
 
@@ -516,7 +606,7 @@ export function gracefulParseSemanticRule(input: unknown): GracefulParseSemantic
   const obj = input as Record<string, unknown>
   const headerSchema = z.object({
     id: z.string().min(1),
-    phase: z.enum(['entry', 'exit', 'gate']),
+    phase: z.enum(['entry', 'exit', 'gate', 'program']),
     sideScope: z.enum(['long', 'short', 'both']),
   })
   const headerParsed = headerSchema.safeParse({ id: obj.id, phase: obj.phase, sideScope: obj.sideScope })
@@ -539,11 +629,28 @@ export function gracefulParseSemanticRule(input: unknown): GracefulParseSemantic
       : 'condition: pruned to empty'
     return { ok: false, errorPath }
   }
-  const rawEffects = Array.isArray(obj.effects) ? obj.effects : []
-  const effects: AtomExpr[] = []
-  for (let i = 0; i < rawEffects.length; i++) {
-    const pruned = pruneAtomExprWithErrors(rawEffects[i], `effects[${i}]`)
-    if (pruned.result) effects.push(pruned.result)
+  const effects = emptyMutableRuleEffects()
+  if (Array.isArray(obj.effects)) {
+    // Stage 1 fail-open compatibility: legacy bare effects arrays are preserved under
+    // actions so existing valid effects are not silently dropped while typed roles roll out.
+    for (let i = 0; i < obj.effects.length; i++) {
+      const pruned = pruneAtomExprWithErrors(obj.effects[i], `effects[${i}]`)
+      if (pruned.result) effects.actions.push(pruned.result)
+    }
+  }
+  else {
+    const rawEffects = obj.effects && typeof obj.effects === 'object'
+      ? obj.effects as Partial<Record<RuleEffectRole, unknown>>
+      : {}
+    for (const role of RULE_EFFECT_ROLE_KEYS) {
+      const rawRoleEffects = Array.isArray(rawEffects[role]) ? rawEffects[role] : []
+      const prunedRoleEffects: AtomExpr[] = []
+      for (let i = 0; i < rawRoleEffects.length; i++) {
+        const pruned = pruneAtomExprWithErrors(rawRoleEffects[i], `effects.${role}[${i}]`)
+        if (pruned.result) prunedRoleEffects.push(pruned.result)
+      }
+      effects[role] = prunedRoleEffects
+    }
   }
   return {
     ok: true,
@@ -791,12 +898,51 @@ function applyAtomMutator(
   }
 }
 
+function locateFlattenedEffect(
+  effects: RuleEffects,
+  targetIndex: number,
+): { role?: RuleEffectRole, index: number, effect: AtomExpr } | null {
+  if (targetIndex < 0) return null
+  if (Array.isArray(effects)) {
+    const effect = effects[targetIndex]
+    return effect ? { index: targetIndex, effect } : null
+  }
+  let offset = 0
+  for (const role of RULE_EFFECT_ROLE_KEYS) {
+    const roleEffects = effects[role]
+    if (targetIndex < offset + roleEffects.length) {
+      const index = targetIndex - offset
+      return { role, index, effect: roleEffects[index] }
+    }
+    offset += roleEffects.length
+  }
+  return null
+}
+
+function replaceEffectAtRoleIndex(
+  effects: RuleEffects,
+  role: RuleEffectRole | undefined,
+  index: number,
+  effect: AtomExpr,
+): RuleEffects {
+  if (Array.isArray(effects)) {
+    return effects.map((current, currentIndex) => (currentIndex === index ? effect : current))
+  }
+  if (!role) return effects
+  return {
+    ...effects,
+    [role]: effects[role].map((current, currentIndex) => (currentIndex === index ? effect : current)),
+  }
+}
+
 /**
  * Issue #1493：定位 rule[ruleId] 对应的 atom 叶子，应用 mutator，不可变重建子树。
  *
  * @param rules    rules 数组（不变）
  * @param ruleId   目标 rule.id
  * @param conditionPath 形如 `condition.and.children[2].atom` / `effects[0].atom`
+ *   `effects[N]` 兼容旧扁平路径：legacy array 按原数组顺序；typed effects 按
+ *   actions → risks → positions → orchestration → programs 展平。
  * @param mutator  接收当前 atom 返回新 atom（必须 kind:'atom'）
  * @returns 新 rules 数组；未命中 rule 保持原引用复用
  * @throws 路径不命中 / atom kind 不匹配 / index 越界 时抛 Error
@@ -822,20 +968,51 @@ export function updateRuleAtomParams(
     const newCondition = applyAtomMutator(target.condition, segments.slice(1), mutator, ruleId, conditionPath)
     newRule = { ...target, condition: newCondition }
   }
-  else if (head.key === 'effects' && head.index !== undefined) {
-    const effIdx = head.index
-    if (effIdx < 0 || effIdx >= target.effects.length) {
-      throw new Error(
-        `updateRuleAtomParams: path "${conditionPath}" effects index ${effIdx} out of range in rule "${ruleId}"`,
-      )
+  else if (head.key === 'effects') {
+    if (head.index !== undefined) {
+      const effIdx = head.index
+      const located = locateFlattenedEffect(target.effects, effIdx)
+      if (!located) {
+        throw new Error(
+          `updateRuleAtomParams: path "${conditionPath}" effects index ${effIdx} out of range in rule "${ruleId}"`,
+        )
+      }
+      const newEffect = applyAtomMutator(located.effect, segments.slice(1), mutator, ruleId, conditionPath)
+      newRule = {
+        ...target,
+        effects: replaceEffectAtRoleIndex(target.effects, located.role, located.index, newEffect),
+      }
     }
-    const newEffect = applyAtomMutator(target.effects[effIdx], segments.slice(1), mutator, ruleId, conditionPath)
-    const newEffects = target.effects.map((e, i) => (i === effIdx ? newEffect : e))
-    newRule = { ...target, effects: newEffects }
+    else {
+      const [roleSeg, ...afterRole] = segments.slice(1)
+      if (!roleSeg || !isRuleEffectRole(roleSeg.key) || roleSeg.index === undefined) {
+        throw new Error(
+          `updateRuleAtomParams: path "${conditionPath}" not found in rule "${ruleId}" (expected to start with "condition", "effects[N]", or "effects.<role>[N]")`,
+        )
+      }
+      const role = roleSeg.key
+      const effIdx = roleSeg.index
+      if (Array.isArray(target.effects)) {
+        throw new Error(
+          `updateRuleAtomParams: path "${conditionPath}" not found in rule "${ruleId}" (legacy effects array has no typed role "${role}")`,
+        )
+      }
+      const roleEffects = target.effects[role]
+      if (effIdx < 0 || effIdx >= roleEffects.length) {
+        throw new Error(
+          `updateRuleAtomParams: path "${conditionPath}" effects.${role} index ${effIdx} out of range in rule "${ruleId}"`,
+        )
+      }
+      const newEffect = applyAtomMutator(roleEffects[effIdx], afterRole, mutator, ruleId, conditionPath)
+      newRule = {
+        ...target,
+        effects: replaceEffectAtRoleIndex(target.effects, role, effIdx, newEffect),
+      }
+    }
   }
   else {
     throw new Error(
-      `updateRuleAtomParams: path "${conditionPath}" not found in rule "${ruleId}" (expected to start with "condition" or "effects[N]")`,
+      `updateRuleAtomParams: path "${conditionPath}" not found in rule "${ruleId}" (expected to start with "condition", "effects[N]", or "effects.<role>[N]")`,
     )
   }
   // 其它 rule 保持原引用，仅替换命中 rule

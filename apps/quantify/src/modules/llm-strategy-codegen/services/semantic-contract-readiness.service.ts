@@ -2,12 +2,13 @@ import { Injectable, Logger } from '@nestjs/common'
 
 import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
 import type { AtomExpr, AtomExprAtom, SemanticRule, SemanticRuleSideScope } from '../types/atom-expr'
-import { collectAtomLeaves } from '../types/atom-expr'
+import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
 import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gate.types'
 import type {
   SemanticAtomContract,
   SemanticCapability,
   SemanticCapabilityDomain,
+  SemanticFlatAtomProvenance,
   SemanticNodeStatus,
   SemanticOrderRequirement,
   SemanticPositionConstraintState,
@@ -67,6 +68,8 @@ export type MissingSemanticContractRequirementKind = 'capability_missing' | 'tim
 export interface MissingSemanticContractRequirement extends SemanticRequirement {
   ownerKind: SemanticContractOwnerKind
   ownerId: string
+  sourceRuleId?: string
+  sourceRulePath?: string
   contractId: string
   kind?: MissingSemanticContractRequirementKind
   errorCode?: string
@@ -85,6 +88,7 @@ interface SemanticContractOwnerRef {
   ownerId: string
   atomKey: string
   sourceRuleId?: string
+  sourceRulePath?: string
   params: Record<string, unknown>
   support?: SemanticAtomSupportMetadata
   status: SemanticNodeStatus
@@ -122,6 +126,7 @@ export class SemanticContractReadinessService {
     //   不参与最终判定（见下方 `rulesReady !== null` 分支），但 flat 仍用于
     //   provider-contract / orchestration / missingRequirements 等读路径。
     if (state.rules && state.rules.length > 0) {
+      state = { ...state, rules: dedupeSemanticRulesForReadiness(state.rules) }
       state = this.ruleProjection.reprojectFromRules(state)
     }
     else {
@@ -198,16 +203,33 @@ export class SemanticContractReadinessService {
     const baseNextState: SemanticState = {
       ...state,
       trigger: readFlatTriggers(state).map(trigger =>
-        mergeOwnerOpenSlots(trigger, slotsByOwnerKey.get(ownerKey('trigger', trigger.id))),
+        mergeOwnerOpenSlots(
+          withTypedRuleOpenSlotPaths(trigger, state),
+          slotsByOwnerKey.get(ownerKey('trigger', trigger.id)),
+        ),
       ),
       action: readFlatActions(state).map(action =>
-        mergeOwnerOpenSlots(action, slotsByOwnerKey.get(ownerKey('action', action.id))),
+        mergeOwnerOpenSlots(
+          withTypedRuleOpenSlotPaths(action, state),
+          slotsByOwnerKey.get(ownerKey('action', action.id)),
+        ),
       ),
       risk: readFlatRisks(state).map(risk =>
-        mergeOwnerOpenSlots(risk, slotsByOwnerKey.get(ownerKey('risk', risk.id))),
+        mergeOwnerOpenSlots(
+          withTypedRuleOpenSlotPaths(risk, state),
+          slotsByOwnerKey.get(ownerKey('risk', risk.id)),
+        ),
       ),
       position: mergePositionOpenSlots(state.position, slotsByOwnerKey),
-      orchestration: orchestrationResult.state,
+      positionConstraint: state.positionConstraint?.map(constraint =>
+        mergeOwnerOpenSlots(
+          withTypedRuleOpenSlotPaths(constraint, state),
+          slotsByOwnerKey.get(ownerKey('position', positionConstraintOwnerId(constraint))),
+        ),
+      ),
+      orchestration: orchestrationResult.state?.map(node =>
+        withTypedRuleOpenSlotPaths(node, state),
+      ),
     }
     // Phase 5 S2 (#1104): 多 scope 策略对 trigger/action/risk/positionConstraint 加 missing_binding fail-closed
     const { state: afterSymbolBinding, hasBlockingSlots: symbolBindingHasBlockingSlots } =
@@ -253,7 +275,6 @@ export class SemanticContractReadinessService {
       ? (
           unsupportedOrUnknownOwnerKeys.size === 0
           && missingRequirements.length === 0
-          && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey)
           && !orchestrationResult.hasBlockingSlots
           && !executableContextGate.hasBlockingSlots
           && rulesReady.hasEntry
@@ -367,6 +388,8 @@ export class SemanticContractReadinessService {
           .map(requirement => ({
             ownerKind: owner.ownerKind,
             ownerId: owner.ownerId,
+            ...(owner.sourceRuleId ? { sourceRuleId: owner.sourceRuleId } : {}),
+            ...(owner.sourceRulePath ? { sourceRulePath: owner.sourceRulePath } : {}),
             contractId: contract.id,
             domain: requirement.domain,
             verb: requirement.verb,
@@ -557,10 +580,11 @@ export class SemanticContractReadinessService {
 
     let sawGridRangeRebalance = false
     let sawGridStopBreakout = false
+    let sawGridProgram = false
 
     for (const rule of rules) {
       const condLeaves = collectAtomLeavesSafe(rule.condition)
-      const effectLeaves = rule.effects.flatMap(collectAtomLeavesSafe)
+      const effectLeaves = listRuleEffects(rule.effects).flatMap(collectAtomLeavesSafe)
       const allLeaves = [...condLeaves, ...effectLeaves]
 
       // eslint-disable-next-line atom-keys/no-atom-key-literal -- Issue #1395 rules-tree readiness 必须直接匹配 grid.range_rebalance 自洽闭环语义，registry bucket(=positionConstraint) 不足以区分。
@@ -571,6 +595,9 @@ export class SemanticContractReadinessService {
         if (breakoutAction === 'stop' || breakoutAction === 'pause') {
           sawGridStopBreakout = true
         }
+      }
+      if (effectLeaves.some(leaf => leaf.key.startsWith('program.') && leaf.key.includes('grid'))) {
+        sawGridProgram = true
       }
 
       const effectKeys = new Set(effectLeaves.map(l => l.key))
@@ -602,7 +629,7 @@ export class SemanticContractReadinessService {
       for (const key of effectKeys) {
         if (key.startsWith('risk.')) summary.hasRisk = true
         // eslint-disable-next-line atom-keys/no-atom-key-literal -- Issue #1395 rules-tree readiness 直接匹配 grid.range_rebalance（自洽闭环 position 信号），见上方同类豁免。
-        if (key === 'grid.range_rebalance' || key.startsWith('position.') || key.startsWith('sizing.')) {
+        if (key === 'grid.range_rebalance' || key.startsWith('position.') || key.startsWith('sizing.') || (key.startsWith('program.') && key.includes('grid'))) {
           summary.hasPosition = true
         }
       }
@@ -617,6 +644,10 @@ export class SemanticContractReadinessService {
     }
     // 显式 grid stop/pause：再强化 exit 信号（用于未来扩展）
     if (sawGridStopBreakout) summary.hasExit = true
+    if (sawGridProgram) {
+      summary.hasEntry = true
+      summary.hasPosition = true
+    }
 
     if (!summary.hasEntry) summary.missing.push('missing_entry')
     if (!summary.hasExit) summary.missing.push('missing_exit')
@@ -643,6 +674,90 @@ function collectAtomLeavesSafe(expr: AtomExpr | undefined): AtomExprAtom[] {
   }
 }
 
+function dedupeSemanticRulesForReadiness(rules: readonly SemanticRule[]): SemanticRule[] {
+  const seen = new Set<string>()
+  const out: SemanticRule[] = []
+  for (const rule of rules) {
+    const normalizedRule = stripLifecycleOpenScaffoldRule(rule)
+    const signature = JSON.stringify({
+      phase: normalizedRule.phase,
+      sideScope: normalizedRule.sideScope,
+      condition: normalizeExprForRuleSignature(normalizedRule.condition),
+      effects: listRuleEffects(normalizedRule.effects).map(normalizeExprForRuleSignature),
+    })
+    if (seen.has(signature)) continue
+    seen.add(signature)
+    out.push(normalizedRule)
+  }
+  return out
+}
+
+function stripLifecycleOpenScaffoldRule(rule: SemanticRule): SemanticRule {
+  const effectLeaves = listRuleEffects(rule.effects).flatMap(collectAtomLeavesSafe)
+  const hasAddPosition = effectLeaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key)
+  if (!hasAddPosition) return rule
+  const shouldRemove = (expr: AtomExpr): boolean =>
+    collectAtomLeavesSafe(expr).some(leaf =>
+      leaf.key === ATOM_CONTRACT_REGISTRY['action.open_long'].key
+      || leaf.key === ATOM_CONTRACT_REGISTRY['action.open_short'].key,
+    )
+  if (isRuleEffectsByRole(rule.effects)) {
+    const actions = (rule.effects.actions ?? []).filter(effect => !shouldRemove(effect))
+    return {
+      ...rule,
+      effects: {
+        ...rule.effects,
+        actions,
+      },
+    }
+  }
+  return {
+    ...rule,
+    effects: rule.effects.filter(effect => !shouldRemove(effect)),
+  }
+}
+
+function normalizeExprForRuleSignature(expr: AtomExpr): unknown {
+  if (expr.kind === 'atom') {
+    return {
+      kind: 'atom',
+      key: expr.key,
+      sideScope: expr.sideScope,
+      params: sortObjectForRuleSignature(expr.params ?? {}),
+    }
+  }
+  if (expr.kind === 'and' || expr.kind === 'or') {
+    return {
+      kind: expr.kind,
+      children: expr.children.map(normalizeExprForRuleSignature).sort(compareRuleSignatureValues),
+    }
+  }
+  if (expr.kind === 'not') {
+    return { kind: 'not', child: normalizeExprForRuleSignature(expr.child) }
+  }
+  if (expr.kind === 'sequence') {
+    return { kind: 'sequence', steps: expr.steps.map(normalizeExprForRuleSignature) }
+  }
+  return expr
+}
+
+function sortObjectForRuleSignature(value: Record<string, unknown>): Record<string, unknown> {
+  return Object.keys(value)
+    .filter(key => key !== 'phase' && key !== 'timeframeOverride')
+    .sort()
+    .reduce<Record<string, unknown>>((acc, key) => {
+      const item = value[key]
+      acc[key] = item && typeof item === 'object' && !Array.isArray(item)
+        ? sortObjectForRuleSignature(item as Record<string, unknown>)
+        : item
+      return acc
+    }, {})
+}
+
+function compareRuleSignatureValues(left: unknown, right: unknown): number {
+  return JSON.stringify(left).localeCompare(JSON.stringify(right))
+}
+
 function isDcaExitRuleRequirement(requirement: SemanticRequirement): boolean {
   return requirement.domain === 'guard'
     && requirement.verb === 'define'
@@ -658,7 +773,7 @@ function hasRulesTreeExplicitExitSemantics(
   if (dcaSideScopes.length === 0) return false
 
   for (const rule of rules) {
-    const effectLeaves = rule.effects.flatMap(collectAtomLeavesSafe)
+    const effectLeaves = listRuleEffects(rule.effects).flatMap(collectAtomLeavesSafe)
     if (
       rule.phase === 'exit'
       && dcaSideScopes.some(sideScope => isCompatibleDcaExitRule(rule, sideScope, effectLeaves))
@@ -684,7 +799,7 @@ function findDcaOwnerSideScopes(
   let matchedRuleCount = 0
   for (const rule of rules) {
     if (owner.sourceRuleId && rule.id !== owner.sourceRuleId) continue
-    const effectLeaves = rule.effects.flatMap(collectAtomLeavesSafe)
+    const effectLeaves = listRuleEffects(rule.effects).flatMap(collectAtomLeavesSafe)
     if (effectLeaves.some(leaf => leaf.key === owner.atomKey)) {
       matchedRuleCount += 1
       sideScopes.add(rule.sideScope)
@@ -1234,7 +1349,7 @@ function isSupportedTimeframeScope(
  * 10) sizing.mode ∈ {'fixed_quote','fixed_base','fixed_pct'}
  * 11) sizing.value 是有限正数
  * 12) registry 已注册该 contract
- * 13) cross-node：activeWhenRef 必须引用 status:'locked' 且 readiness supported 的 gate.regime 节点
+ * 13) cross-node：activeWhenRef 缺失表示 always-on static grid；若提供则必须引用 status:'locked' 且 readiness supported 的 gate.regime 节点
  * 14) version-gate：strategyVersion 必须存在且 atom 对该策略可执行
  */
 function isSupportedFixedGridGated(
@@ -1312,22 +1427,21 @@ function isSupportedFixedGridGated(
     return false
   }
 
-  if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '') {
-    return false
-  }
-  const referenced = siblingNodes.find(n => n.id === node.activeWhenRef)
-  if (!referenced) {
-    return false
-  }
-  // eslint-disable-next-line atom-keys/no-atom-key-literal -- gate.regime node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
-  if (referenced.kind !== 'gate' || referenced.key !== 'gate.regime') {
-    return false
-  }
-  if (referenced.status !== 'locked') {
-    return false
-  }
-  if (!isSupportedRegimeGate(referenced, registry, strategyVersion, siblingNodes)) {
-    return false
+  if (typeof node.activeWhenRef === 'string' && node.activeWhenRef.trim() !== '') {
+    const referenced = siblingNodes.find(n => n.id === node.activeWhenRef)
+    if (!referenced) {
+      return false
+    }
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- gate.regime node-type routing, not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
+    if (referenced.kind !== 'gate' || referenced.key !== 'gate.regime') {
+      return false
+    }
+    if (referenced.status !== 'locked') {
+      return false
+    }
+    if (!isSupportedRegimeGate(referenced, registry, strategyVersion, siblingNodes)) {
+      return false
+    }
   }
 
   if (!strategyVersion) {
@@ -2462,11 +2576,13 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
 
   for (const trigger of readFlatTriggers(state)) {
     if (trigger.status !== 'superseded' && trigger.contracts?.length) {
+      const sourceRulePath = buildSourceRulePath(state, trigger._provenance)
       owners.push({
         ownerKind: 'trigger',
         ownerId: trigger.id,
         atomKey: trigger.key,
         sourceRuleId: trigger._provenance?.ruleId,
+        sourceRulePath,
         params: trigger.params,
         support: trigger.support,
         status: trigger.status,
@@ -2478,10 +2594,13 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
 
   for (const action of readFlatActions(state)) {
     if (action.status !== 'superseded' && action.contracts?.length) {
+      const sourceRulePath = buildSourceRulePath(state, action._provenance)
       owners.push({
         ownerKind: 'action',
         ownerId: action.id,
         atomKey: action.key,
+        sourceRuleId: action._provenance?.ruleId,
+        sourceRulePath,
         params: {},
         support: action.support,
         status: action.status,
@@ -2493,10 +2612,13 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
 
   for (const risk of readFlatRisks(state)) {
     if (risk.status !== 'superseded' && risk.contracts?.length) {
+      const sourceRulePath = buildSourceRulePath(state, risk._provenance)
       owners.push({
         ownerKind: 'risk',
         ownerId: risk.id,
         atomKey: risk.key,
+        sourceRuleId: risk._provenance?.ruleId,
+        sourceRulePath,
         params: risk.params,
         support: risk.support,
         status: risk.status,
@@ -2531,11 +2653,13 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
 
   for (const constraint of state.position?.constraints ?? []) {
     if (constraint.status !== 'superseded' && constraint.contracts?.length) {
+      const sourceRulePath = buildSourceRulePath(state, constraint._provenance)
       owners.push({
         ownerKind: 'position',
         ownerId: positionConstraintOwnerId(constraint),
         atomKey: constraint.key,
         sourceRuleId: constraint._provenance?.ruleId,
+        sourceRulePath,
         params: constraint.params,
         support: constraint.support,
         status: constraint.status,
@@ -2547,11 +2671,13 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
 
   for (const constraint of state.positionConstraint ?? []) {
     if (constraint.status !== 'superseded' && constraint.contracts?.length) {
+      const sourceRulePath = buildSourceRulePath(state, constraint._provenance)
       owners.push({
         ownerKind: 'position',
         ownerId: positionConstraintOwnerId(constraint),
         atomKey: constraint.key,
         sourceRuleId: constraint._provenance?.ruleId,
+        sourceRulePath,
         params: constraint.params,
         support: constraint.support,
         status: constraint.status,
@@ -2571,7 +2697,7 @@ function isExecutableIndicatorReferenceAlias(owner: SemanticContractOwnerRef): b
 
   const indicator = readParamString(owner.params, 'indicator')?.toLowerCase() ?? ''
   const referenceRole = readParamString(owner.params, 'referenceRole') ?? ''
-  const referencePeriod = owner.params['reference.period']
+  const referencePeriod = readNestedParam(owner.params, 'reference.period')
   const period = owner.params.period
   const hasReferencePeriod = (
     typeof referencePeriod === 'number'
@@ -2595,6 +2721,65 @@ function isExecutableIndicatorReferenceAlias(owner: SemanticContractOwnerRef): b
 function readParamString(params: Record<string, unknown>, key: string): string | null {
   const value = params[key]
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function readNestedParam(params: Record<string, unknown>, key: string): unknown {
+  if (Object.prototype.hasOwnProperty.call(params, key)) return params[key]
+  return key.split('.').reduce<unknown>((current, part) => {
+    if (!current || typeof current !== 'object') return undefined
+    return (current as Record<string, unknown>)[part]
+  }, params)
+}
+
+function withTypedRuleOpenSlotPaths<T extends {
+  _provenance?: SemanticFlatAtomProvenance
+  openSlots?: readonly SemanticSlotState[]
+}>(
+  owner: T,
+  state: SemanticState,
+): T {
+  const sourceRulePath = buildSourceRulePath(state, owner._provenance)
+  if (!sourceRulePath || !owner.openSlots?.length) {
+    return owner
+  }
+
+  let changed = false
+  const openSlots = owner.openSlots.map((slot) => {
+    const fieldPath = slot.paramSlotKey
+      ? `${sourceRulePath}.params.${slot.paramSlotKey}`
+      : sourceRulePath
+    if (slot.fieldPath === fieldPath) {
+      return slot
+    }
+
+    changed = true
+    return {
+      ...slot,
+      fieldPath,
+    }
+  })
+
+  return changed ? { ...owner, openSlots } as T : owner
+}
+
+function buildSourceRulePath(
+  state: SemanticState,
+  provenance: SemanticFlatAtomProvenance | undefined,
+): string | undefined {
+  if (!provenance) {
+    return undefined
+  }
+
+  const ruleIndex = state.rules?.findIndex(rule => rule.id === provenance.ruleId) ?? -1
+  if (ruleIndex < 0) {
+    return undefined
+  }
+
+  return `rules[${ruleIndex}].${stripAtomLeafSuffix(provenance.conditionPath)}`
+}
+
+function stripAtomLeafSuffix(path: string): string {
+  return path.endsWith('.atom') ? path.slice(0, -'.atom'.length) : path
 }
 
 function buildMissingRequirementSlots(
@@ -3056,6 +3241,10 @@ function isTimeframeOverride(params: Record<string, unknown>): boolean {
 }
 
 function buildTimeframeMismatchFieldPath(requirement: MissingSemanticContractRequirement): string {
+  if (requirement.sourceRulePath) {
+    return `${requirement.sourceRulePath}.params.timeframe`
+  }
+
   if (requirement.ownerKind === 'position') {
     return isPositionConstraintOwnerId(requirement.ownerId)
       ? `position.constraints[${positionConstraintIdFromOwnerId(requirement.ownerId)}].params.timeframe`
@@ -3069,6 +3258,10 @@ function buildRequirementFieldPath(
   requirement: MissingSemanticContractRequirement,
   capabilityKey: string,
 ): string {
+  if (requirement.sourceRulePath) {
+    return `${requirement.sourceRulePath}.contracts[${requirement.contractId}].requires.${capabilityKey}`
+  }
+
   if (requirement.ownerKind === 'position' && isPositionConstraintOwnerId(requirement.ownerId)) {
     return `position.constraints[${positionConstraintIdFromOwnerId(requirement.ownerId)}].contracts[${requirement.contractId}].requires.${capabilityKey}`
   }
@@ -3087,6 +3280,10 @@ function buildCapabilityShapeFieldPath(
 ): string {
   const capabilityKey = `${capability.domain}.${capability.verb}.${capability.object}`
 
+  if (owner.sourceRulePath) {
+    return `${owner.sourceRulePath}.contracts[${contract.id}].capabilities[${capabilityKey}].shape`
+  }
+
   if (owner.ownerKind === 'position' && isPositionConstraintOwnerId(owner.ownerId)) {
     return `position.constraints[${positionConstraintIdFromOwnerId(owner.ownerId)}].contracts[${contract.id}].capabilities[${capabilityKey}].shape`
   }
@@ -3102,6 +3299,10 @@ function buildContractFieldPath(
   owner: SemanticContractOwnerRef,
   contractId: string,
 ): string {
+  if (owner.sourceRulePath) {
+    return `${owner.sourceRulePath}.contracts[${contractId}]`
+  }
+
   if (owner.ownerKind === 'position' && isPositionConstraintOwnerId(owner.ownerId)) {
     return `position.constraints[${positionConstraintIdFromOwnerId(owner.ownerId)}].contracts[${contractId}]`
   }

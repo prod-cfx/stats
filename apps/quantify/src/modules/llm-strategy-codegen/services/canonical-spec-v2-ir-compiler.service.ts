@@ -2113,14 +2113,32 @@ export class CanonicalSpecV2IrCompilerService {
 
         if (sequenceKind === 'pattern_then_volume_spike') {
           const lookback = this.readNumber([atom.params?.lookbackBars], 20)
+          const count = this.readNumber([atom.params?.count], 1)
           const volumeRef = this.ensureVolumeSeries(context, context.timeframe)
           const smaVolRef = this.ensureSmaVolumeSeries(context, lookback, 1, context.timeframe)
-          const patternStep = this.upsertPredicate(
-            context.predicateMap,
-            `${seed}_seq_pattern_${direction}`,
-            direction === 'down' ? 'LT' : 'GT',
-            [closeRef, openRef],
-          )
+          if (!Number.isInteger(count) || count <= 0) {
+            throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:count`)
+          }
+          const steps: string[] = []
+          for (let i = 0; i < count; i += 1) {
+            steps.push(this.upsertPredicate(
+              context.predicateMap,
+              `${seed}_seq_pattern_${direction}_${i}`,
+              direction === 'down' ? 'LT' : 'GT',
+              [closeRef, openRef],
+            ))
+          }
+          const reboundDirection = typeof atom.params?.reboundDirection === 'string'
+            ? atom.params.reboundDirection
+            : null
+          if (reboundDirection === 'up' || reboundDirection === 'down') {
+            steps.push(this.upsertPredicate(
+              context.predicateMap,
+              `${seed}_seq_rebound_${reboundDirection}`,
+              reboundDirection === 'down' ? 'LT' : 'GT',
+              [closeRef, openRef],
+            ))
+          }
           const volumeStep = this.upsertPredicate(
             context.predicateMap,
             `${seed}_seq_volume_spike_${lookback}`,
@@ -2128,12 +2146,14 @@ export class CanonicalSpecV2IrCompilerService {
             [volumeRef, smaVolRef],
             { op: 'GTE' },
           )
+          steps.push(volumeStep)
           seqParamsNew.lookbackBars = lookback
+          seqParamsNew.count = count
           return this.upsertPredicate(
             context.predicateMap,
             `${seed}_${atom.key.replace(/\./g, '_')}_${sequenceKind}_${direction}`,
             'sequence',
-            [patternStep, volumeStep],
+            steps,
             seqParamsNew,
           )
         }
@@ -2875,6 +2895,7 @@ export class CanonicalSpecV2IrCompilerService {
       )
       if (!opensRawPosition) continue
       if (block.metadata?.dcaSchedule) continue
+      if (block.metadata?.addPosition) continue
       const leafKinds = collectEntryRuleLeafKinds(block.when, context.predicateMap)
       if (leafKinds.length === 0) continue
       if (leafKindsContainEvent(leafKinds)) continue

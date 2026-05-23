@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticOrchestrationNode, SemanticSlotState, SemanticState } from '../types/semantic-state'
-import type { AtomExpr, SemanticRule, SemanticRulePhase, SemanticRuleSideScope } from '../types/atom-expr'
-import { collectAtomLeaves } from '../types/atom-expr'
+import type { AtomExpr, RuleEffects, RuleEffectsByRole, SemanticRule, SemanticRulePhase, SemanticRuleSideScope } from '../types/atom-expr'
+import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
 import { isEntryPredicateTriggerKey, isExitPredicateTriggerKey, isTimeframeGroupableTriggerKey } from '../atom-contracts/trigger-display-contract'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
@@ -282,7 +282,9 @@ export class SemanticStateProjectionService {
 
     // Issue #1395 — 优先消费 state.rules 表达式树渲染 summary，保留 sequence/AND/OR/NOT 语义；
     //   rules 为空时落回旧扁平桶渲染路径，不破坏既有 reader（向后兼容）。
-    const rulesSummary = state.rules && state.rules.length > 0 ? this.buildRulesSummary(state.rules) : ''
+    const rawRules = state.rules ?? []
+    const projectionRules = this.sanitizeProjectionRules(rawRules)
+    const rulesSummary = projectionRules.length > 0 ? this.buildRulesSummary(projectionRules) : ''
 
     // Issue #1403 子故障 D 真根因（补丁）—— rules-first summary 不能完全替代桶维度摘要。
     //   `grid.range_rebalance` 在 positionConstraint 桶、`program.*_grid` 在 orchestration 桶，
@@ -298,7 +300,9 @@ export class SemanticStateProjectionService {
     return {
       summary: rulesSummary.length > 0
         ? [rulesSummary, ...bucketOnlySummary].join('；')
-        : (summaryItems.length > 0 ? summaryItems.join('；') : '已识别部分条件，但仍未完整。'),
+        : (rawRules.length > 0
+            ? (bucketOnlySummary.length > 0 ? bucketOnlySummary.join('；') : '已识别部分条件，但仍未完整。')
+            : (summaryItems.length > 0 ? summaryItems.join('；') : '已识别部分条件，但仍未完整。')),
       triggerSummary,
       riskSummary,
       positionSummary,
@@ -321,10 +325,12 @@ export class SemanticStateProjectionService {
     //   导致 UI 显示「连续实体形态（≥15 根）时双向开仓」与用户描述背离。
     //   state.rules 表达式树是 planner 输出的真源（sequence/AND/OR 语义完整），
     //   优先从 rules 渲染条件文本，flat 路径只在 rules 为空时兜底（向后兼容）。
-    const rulesBlocks = this.buildDisplayRuleBlocksFromRules(state)
+    const rawRules = state.rules ?? []
+    const projectionRules = this.sanitizeProjectionRules(rawRules)
+    const rulesBlocks = this.buildDisplayRuleBlocksFromRules(projectionRules)
     const ruleBlocks: SemanticDisplayLogicGraphBlock[] = rulesBlocks.length > 0
       ? rulesBlocks
-      : this.buildDisplayRuleBlocksFromFlatTriggers(state)
+      : (rawRules.length > 0 ? [] : this.buildDisplayRuleBlocksFromFlatTriggers(state))
 
     const orchestrationBlock = this.buildDisplayOrchestrationBlock(state)
 
@@ -345,10 +351,9 @@ export class SemanticStateProjectionService {
   //   - UI 层 always-on + action effects 噪音 rule 兜底过滤（防 merge 阶段 filter
   //     未生效或下游路径写入 state.rules 绕过 merge）
   //   - rules 为空 / 无 entry|exit rules → 返回 []，调用方走旧 flat 路径兜底
-  private buildDisplayRuleBlocksFromRules(state: SemanticState): SemanticDisplayLogicGraphBlock[] {
-    const rules = state.rules ?? []
+  private buildDisplayRuleBlocksFromRules(rules: readonly SemanticRule[]): SemanticDisplayLogicGraphBlock[] {
     const eligible = rules
-      .filter(r => r.phase === 'entry' || r.phase === 'exit')
+      .filter(r => r.phase === 'entry' || r.phase === 'exit' || this.isGridProgramRule(r))
     if (eligible.length === 0) return []
 
     const blocks: SemanticDisplayLogicGraphBlock[] = []
@@ -365,7 +370,7 @@ export class SemanticStateProjectionService {
       // Issue #1443：渲染 rule.effects 作为 THEN action items（旧实现遗漏 → THEN 段空）
       const actionItems: SemanticDisplayActionItem[] = []
       let effectIndex = 0
-      for (const eff of rule.effects ?? []) {
+      for (const eff of listRuleEffects(rule.effects)) {
         const text = this.renderAtomExpr(eff)
         if (text && text.length > 0) {
           actionItems.push({
@@ -375,6 +380,13 @@ export class SemanticStateProjectionService {
           })
           effectIndex += 1
         }
+      }
+      if (actionItems.length === 0 && this.isGridProgramRule(rule)) {
+        actionItems.push({
+          kind: 'action',
+          id: `action-rule-${rule.id}-grid`,
+          text: '网格执行',
+        })
       }
 
       blocks.push({
@@ -399,31 +411,79 @@ export class SemanticStateProjectionService {
    *   与 PlannerDispatcherMergeService.filterAlwaysOnActionNoiseRules 同规则，
    *   防 merge 阶段 filter 未生效或下游写入绕过。
    */
-  private isAlwaysOnActionNoiseRule(rule: SemanticRule): boolean {
+  private sanitizeProjectionRules(rules: readonly SemanticRule[]): SemanticRule[] {
+    return rules.flatMap((rule) => {
+      if (!this.isAlwaysOnCondition(rule)) return [rule]
+      if (this.isExplicitOnStartEntryRule(rule)) return [rule]
+      if (!listRuleEffects(rule.effects).some(effect => this.effectHasAction(effect))) return [rule]
+
+      const effects = this.removeActionEffects(rule.effects)
+      return listRuleEffects(effects).length > 0 ? [{ ...rule, effects }] : []
+    })
+  }
+
+  private isExplicitOnStartEntryRule(rule: SemanticRule): boolean {
+    if (rule.phase !== 'entry') return false
     if (rule.condition.kind !== 'atom') return false
-    if (!ALWAYS_ON_ATOM_KEYS.has(rule.condition.key)) return false
+    if (rule.condition.key !== 'execution.on_start') return false
+    const evidenceText = typeof rule.evidence?.text === 'string'
+      ? rule.evidence.text
+      : typeof rule.condition.evidence?.text === 'string'
+        ? rule.condition.evidence.text
+        : ''
+    if (evidenceText.length === 0) return false
+    const timing = typeof rule.condition.params.timing === 'string' ? rule.condition.params.timing.toLowerCase() : ''
+    const occurrence = typeof rule.condition.params.occurrence === 'string' ? rule.condition.params.occurrence.toLowerCase() : ''
+    const orderType = typeof rule.condition.params.orderType === 'string' ? rule.condition.params.orderType.toLowerCase() : ''
+    return timing === 'on_start' || occurrence === 'once' || orderType === 'market'
+  }
+
+  private isGridProgramRule(rule: SemanticRule): boolean {
+    return [
+      ...collectAtomLeaves(rule.condition),
+      ...listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)),
+    ].some(leaf => leaf.key === 'grid.range_rebalance')
+  }
+
+  private isAlwaysOnCondition(rule: SemanticRule): boolean {
+    if (rule.condition.kind !== 'atom') return false
+    return ALWAYS_ON_ATOM_KEYS.has(rule.condition.key)
+  }
+
+  private effectHasAction(effect: AtomExpr): boolean {
     type ContractShape = { bucket?: string }
-    for (const eff of rule.effects ?? []) {
-      const stack: AtomExpr[] = [eff]
-      while (stack.length > 0) {
-        const node = stack.pop()
-        if (!node) continue
-        if (node.kind === 'atom') {
-          const bucket = (ATOM_CONTRACT_REGISTRY as Record<string, ContractShape | undefined>)[node.key]?.bucket
-          if (bucket === 'action') return true
-        }
-        else if (node.kind === 'and' || node.kind === 'or') {
-          stack.push(...node.children)
-        }
-        else if (node.kind === 'not') {
-          stack.push(node.child)
-        }
-        else if (node.kind === 'sequence') {
-          stack.push(...node.steps)
-        }
+    const stack: AtomExpr[] = [effect]
+    while (stack.length > 0) {
+      const node = stack.pop()
+      if (!node) continue
+      if (node.kind === 'atom') {
+        const bucket = (ATOM_CONTRACT_REGISTRY as Record<string, ContractShape | undefined>)[node.key]?.bucket
+        if (bucket === 'action') return true
+      }
+      else if (node.kind === 'and' || node.kind === 'or') {
+        stack.push(...node.children)
+      }
+      else if (node.kind === 'not') {
+        stack.push(node.child)
+      }
+      else if (node.kind === 'sequence') {
+        stack.push(...node.steps)
       }
     }
     return false
+  }
+
+  private removeActionEffects(effects: RuleEffects): RuleEffects {
+    if (isRuleEffectsByRole(effects)) {
+      return {
+        actions: effects.actions.filter(effect => !this.effectHasAction(effect)),
+        risks: effects.risks.filter(effect => !this.effectHasAction(effect)),
+        positions: effects.positions.filter(effect => !this.effectHasAction(effect)),
+        orchestration: effects.orchestration.filter(effect => !this.effectHasAction(effect)),
+        programs: effects.programs.filter(effect => !this.effectHasAction(effect)),
+      } satisfies RuleEffectsByRole
+    }
+    return effects.filter(effect => !this.effectHasAction(effect))
   }
 
   // 审查 Minor 2 共享 side label：buildRuleActionSuffix（display graph）与
@@ -602,14 +662,18 @@ export class SemanticStateProjectionService {
     const summaryItems = [triggerSummary, riskSummary, positionSummary].filter(item => item.length > 0)
 
     // Issue #1395 — clarification 视图同样优先消费 rules 树
-    const rulesSummary = state.rules && state.rules.length > 0 ? this.buildRulesSummary(state.rules) : ''
+    const rawRules = state.rules ?? []
+    const projectionRules = this.sanitizeProjectionRules(rawRules)
+    const rulesSummary = projectionRules.length > 0 ? this.buildRulesSummary(projectionRules) : ''
 
     const nextSlot = this.findNextOpenSlot(state)
 
     return {
       summary: rulesSummary.length > 0
         ? rulesSummary
-        : (summaryItems.length > 0 ? summaryItems.join('；') : '已识别部分条件，但仍未完整。'),
+        : (rawRules.length > 0
+            ? (positionSummary.length > 0 ? positionSummary : '已识别部分条件，但仍未完整。')
+            : (summaryItems.length > 0 ? summaryItems.join('；') : '已识别部分条件，但仍未完整。')),
       nextQuestion: nextSlot?.questionHint ?? null,
     }
   }
@@ -926,7 +990,16 @@ export class SemanticStateProjectionService {
     }
     if (sequenceKind === 'rsi_reclaim') {
       const threshold = this.readFiniteNumber(trigger.params.threshold)
-      return `RSI 回落后重新站上${threshold === null ? '阈值' : ` ${this.formatNumber(threshold)}`}${windowText}${memoryText}`
+      return `RSI 跌破${threshold === null ? '阈值' : ` ${this.formatNumber(threshold)}`} 后重新上穿${threshold === null ? '阈值' : ` ${this.formatNumber(threshold)}`}${windowText}${memoryText}`
+    }
+    if (sequenceKind === 'pattern_then_volume_spike') {
+      const count = this.readFiniteNumber(trigger.params.count) ?? 1
+      const direction = this.readString(trigger.params.direction)
+      const dirText = direction === 'down' ? '阴线' : direction === 'up' ? '阳线' : 'K 线'
+      const next = trigger.params.nextBarOnly === true || trigger.params.nextBarOnly === 'true' ? '下一根' : '随后'
+      const reboundDirection = this.readString(trigger.params.reboundDirection)
+      const reboundText = reboundDirection === 'up' ? '反弹' : reboundDirection === 'down' ? '回落' : '确认'
+      return `连续 ${this.formatNumber(count)} 根${dirText}后${next}放量${reboundText}${windowText}${memoryText}`
     }
     if (sequenceKind === 'consecutive_candles') {
       const count = this.readFiniteNumber(trigger.params.count)
@@ -3013,7 +3086,7 @@ export class SemanticStateProjectionService {
       for (const atom of collectAtomLeaves(rule.condition)) {
         keys.add(atom.key)
       }
-      for (const effect of rule.effects ?? []) {
+      for (const effect of listRuleEffects(rule.effects)) {
         for (const atom of collectAtomLeaves(effect)) {
           keys.add(atom.key)
         }
@@ -3045,11 +3118,25 @@ export class SemanticStateProjectionService {
     const hasGridIntent = hasGridTrigger
       || (hasGridFamily && (input.actions.length > 0 || input.triggers.length > 0))
 
+    const longActionKeys: ReadonlySet<string> = new Set([
+      ATOM_CONTRACT_REGISTRY['action.open_long'].key,
+      ATOM_CONTRACT_REGISTRY['action.close_long'].key,
+      'open_long',
+      'close_long',
+      'reduce_long',
+    ])
+    const shortActionKeys: ReadonlySet<string> = new Set([
+      ATOM_CONTRACT_REGISTRY['action.open_short'].key,
+      ATOM_CONTRACT_REGISTRY['action.close_short'].key,
+      'open_short',
+      'close_short',
+      'reduce_short',
+    ])
     const hasLongIntentFromActions = input.actions
-      .some(action => action.key === 'open_long' || action.key === 'close_long' || action.key === 'reduce_long')
+      .some(action => longActionKeys.has(action.key))
 
     const hasShortIntentFromActions = input.actions
-      .some(action => action.key === 'open_short' || action.key === 'close_short' || action.key === 'reduce_short')
+      .some(action => shortActionKeys.has(action.key))
 
     const hasLongIntentFromTrigger = input.triggers
       .some(trigger => trigger.sideScope === 'long')
@@ -3509,6 +3596,12 @@ export class SemanticStateProjectionService {
       if (period !== null && fastPeriod === null && slowPeriod === null) {
         const indicator = this.readString(params.indicator)?.toUpperCase() ?? 'MA'
         const direction = atomKey === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key ? '上穿' : '下穿'
+        const value = this.readFiniteNumber(params.value)
+        if (indicator === 'RSI') {
+          return value === null
+            ? `RSI${this.formatNumber(period)} ${direction}阈值`
+            : `RSI${this.formatNumber(period)} ${direction} ${this.formatNumber(value)}`
+        }
         return `价格${direction} ${indicator}${this.formatNumber(period)}`
       }
     }
@@ -3556,7 +3649,7 @@ export class SemanticStateProjectionService {
   private renderRule(rule: SemanticRule): string {
     const phaseLabel = this.formatRulePhaseLabel(rule.phase)
     // effects 通常是 action / risk 副作用，渲染后用 "→" 衔接条件，保留可读性
-    const rawEffectParts = (rule.effects ?? [])
+    const rawEffectParts = listRuleEffects(rule.effects)
       .map(effect => this.renderAtomExpr(effect))
       .filter(s => s.length > 0)
 

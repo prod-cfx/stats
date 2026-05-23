@@ -14,7 +14,15 @@ import type {
   SemanticTriggerState,
 } from '../types/semantic-state'
 import { normalizeRiskSemantics } from './semantic-state-normalization'
-import { collectAtomLeaves, type SemanticRule } from '../types/atom-expr'
+import {
+  collectAtomLeaves,
+  isRuleEffectsByRole,
+  listRuleEffects,
+  type AtomExpr,
+  type RuleEffects,
+  type RuleEffectsByRole,
+  type SemanticRule,
+} from '../types/atom-expr'
 
 // #1383 Lane B：所有 atom bucket entry 必须实现的最小 identity shape，
 // 供 dedupeByAtomIdentity 用 (key, phase, stableParamsHash, openSlots signature) 折叠重复条目。
@@ -1227,19 +1235,20 @@ export class SemanticStateMergeService {
       return `shape:${rule.phase}|${rule.sideScope}|${condHash}|effects:${effectsHash}`
     }
 
-    // ── Pass 1：按 id 折叠 ──
+    // ── Pass 1：按 id+phase 折叠 ──
+    // phase 是生命周期身份，不能把 program rule 与 exit rule 因同 id 合成一条。
     const byId = new Map<string, SemanticRule>()
     const idOrder: string[] = []
     const noIdRules: SemanticRule[] = []
     const ingest = (rule: SemanticRule): void => {
       if (rule.id && rule.id.length > 0) {
-        if (!byId.has(rule.id)) idOrder.push(rule.id)
-        // 审查 M2：同 id 折叠时 effects 若 derived 缺省/空数组 → 保留 persisted
-        const existing = byId.get(rule.id)
-        const mergedEffects = (rule.effects && rule.effects.length > 0)
-          ? rule.effects
-          : (existing?.effects ?? rule.effects)
-        byId.set(rule.id, { ...rule, effects: mergedEffects })
+        const idKey = `${rule.id}|${rule.phase}`
+        if (!byId.has(idKey)) idOrder.push(idKey)
+        // 审查 M2 + Task 6：同 id 折叠时 effects 若 derived 缺省/空数组 → 保留 persisted；
+        // typed RuleEffects 逐 role 合并，避免 risks patch 清空 programs。
+        const existing = byId.get(idKey)
+        const mergedEffects = this.mergeRuleEffects(existing?.effects, rule.effects)
+        byId.set(idKey, { ...rule, effects: mergedEffects })
       }
       else {
         noIdRules.push(rule)
@@ -1307,6 +1316,111 @@ export class SemanticStateMergeService {
     // 后归一化风控」——既往 Pass 2 输出顺序也不保证严格稳定。
     if (riskOrder.length === 0) return afterShapePass
     return [...nonRiskRules, ...riskOrder.map(s => byRiskSig.get(s)!)]
+  }
+
+  private mergeRuleEffects(
+    persisted: RuleEffects | undefined,
+    derived: RuleEffects,
+  ): RuleEffects {
+    if (!persisted) return this.cloneRuleEffectsAsTyped(derived)
+    if (listRuleEffects(derived).length === 0) return this.cloneRuleEffects(persisted)
+    if (listRuleEffects(persisted).length === 0) return this.cloneRuleEffectsAsTyped(derived)
+
+    const persistedTyped = this.normalizeRuleEffectsToTyped(persisted)
+    const derivedTyped = this.normalizeRuleEffectsToTyped(derived)
+    return {
+      actions: this.mergeRuleEffectRole(persistedTyped.actions, derivedTyped.actions),
+      risks: this.mergeRuleEffectRole(persistedTyped.risks, derivedTyped.risks),
+      positions: this.mergeRuleEffectRole(persistedTyped.positions, derivedTyped.positions),
+      orchestration: this.mergeRuleEffectRole(persistedTyped.orchestration, derivedTyped.orchestration),
+      programs: this.mergeRuleEffectRole(persistedTyped.programs, derivedTyped.programs),
+    } satisfies RuleEffectsByRole
+  }
+
+  private mergeRuleEffectRole(
+    persisted: ReadonlyArray<AtomExpr>,
+    derived: ReadonlyArray<AtomExpr>,
+  ): AtomExpr[] {
+    if (derived.length === 0) return persisted.map(effect => this.cloneAtomExpr(effect))
+    if (persisted.length === 0) return derived.map(effect => this.cloneAtomExpr(effect))
+
+    const byShape = new Map<string, AtomExpr>()
+    const order: string[] = []
+    for (const effect of [...persisted, ...derived]) {
+      const shape = this.stableParamsHash(effect as unknown as Record<string, unknown>)
+      if (!byShape.has(shape)) order.push(shape)
+      byShape.set(shape, effect)
+    }
+    return order.map(shape => this.cloneAtomExpr(byShape.get(shape)!))
+  }
+
+  private cloneRuleEffects(effects: RuleEffects): RuleEffects {
+    if (Array.isArray(effects)) {
+      return effects.map(effect => this.cloneAtomExpr(effect))
+    }
+    const typedEffects = effects as RuleEffectsByRole
+    return {
+      actions: typedEffects.actions.map(effect => this.cloneAtomExpr(effect)),
+      risks: typedEffects.risks.map(effect => this.cloneAtomExpr(effect)),
+      positions: typedEffects.positions.map(effect => this.cloneAtomExpr(effect)),
+      orchestration: typedEffects.orchestration.map(effect => this.cloneAtomExpr(effect)),
+      programs: typedEffects.programs.map(effect => this.cloneAtomExpr(effect)),
+    } satisfies RuleEffectsByRole
+  }
+
+  private cloneRuleEffectsAsTyped(effects: RuleEffects): RuleEffectsByRole {
+    return this.normalizeRuleEffectsToTyped(effects)
+  }
+
+  private normalizeRuleEffectsToTyped(effects: RuleEffects): RuleEffectsByRole {
+    if (isRuleEffectsByRole(effects)) {
+      return {
+        actions: effects.actions.map(effect => this.cloneAtomExpr(effect)),
+        risks: effects.risks.map(effect => this.cloneAtomExpr(effect)),
+        positions: effects.positions.map(effect => this.cloneAtomExpr(effect)),
+        orchestration: effects.orchestration.map(effect => this.cloneAtomExpr(effect)),
+        programs: effects.programs.map(effect => this.cloneAtomExpr(effect)),
+      } satisfies RuleEffectsByRole
+    }
+
+    const typed: Record<keyof RuleEffectsByRole, AtomExpr[]> = {
+      actions: [],
+      risks: [],
+      positions: [],
+      orchestration: [],
+      programs: [],
+    }
+    for (const effect of effects) {
+      typed[this.resolveLegacyRuleEffectRole(effect)].push(this.cloneAtomExpr(effect))
+    }
+    return typed
+  }
+
+  private emptyRuleEffects(): RuleEffectsByRole {
+    return {
+      actions: [],
+      risks: [],
+      positions: [],
+      orchestration: [],
+      programs: [],
+    } satisfies RuleEffectsByRole
+  }
+
+  private resolveLegacyRuleEffectRole(effect: AtomExpr): keyof RuleEffectsByRole {
+    const leaves = collectAtomLeaves(effect)
+    if (leaves.some(leaf => leaf.key.startsWith('program.'))) return 'programs'
+    if (leaves.some(leaf => this.resolveAtomBucket(leaf.key) === 'risk' || leaf.key.startsWith('risk.'))) return 'risks'
+    if (leaves.some(leaf => this.resolveAtomBucket(leaf.key) === 'positionConstraint' || leaf.key.startsWith('position.'))) return 'positions'
+    if (leaves.some(leaf => this.resolveAtomBucket(leaf.key) === 'orchestration' || leaf.key.startsWith('orchestration.'))) return 'orchestration'
+    return 'actions'
+  }
+
+  private resolveAtomBucket(key: string): string | undefined {
+    return (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string } | undefined>)[key]?.bucket
+  }
+
+  private cloneAtomExpr(effect: AtomExpr): AtomExpr {
+    return structuredClone(effect) as AtomExpr
   }
 
   private computeAtomIdentityKey(entry: AtomLikeEntry): string {

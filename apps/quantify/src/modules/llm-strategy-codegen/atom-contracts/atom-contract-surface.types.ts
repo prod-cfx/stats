@@ -142,12 +142,13 @@ export interface ResolveCtx {
 }
 
 /**
- * PhaseResolver —— phase（entry / exit / gate）推断策略
+ * PhaseResolver —— phase（entry / exit / gate / program）推断策略
  *
  *   by-clause-verb       从子句动词（开多/平多/止盈/止损）派生 phase
- *   fixed-entry          固定 entry（如 grid.range_rebalance）
+ *   fixed-entry          固定 entry
  *   fixed-exit           固定 exit（如 risk.partial_take_profit）
  *   fixed-gate           固定 gate（如 portfolioRisk.drawdown_block，PR2a Issue #1279）
+ *   fixed-program        固定 program（如 grid.range_rebalance）
  *   { kind: 'fn', fn }   自定义函数（少数复杂 atom）
  *
  * PR2a 起新增 'gate' 出场：portfolioRisk.drawdown_block / position.has_position /
@@ -159,9 +160,10 @@ export type PhaseResolverSpec =
   | 'fixed-entry'
   | 'fixed-exit'
   | 'fixed-gate'
+  | 'fixed-program'
   | { readonly kind: 'fn'; readonly fn: PhaseResolverFn }
 
-export type PhaseResolverFn = (clause: string, ctx: ResolveCtx) => 'entry' | 'exit' | 'gate' | null
+export type PhaseResolverFn = (clause: string, ctx: ResolveCtx) => 'entry' | 'exit' | 'gate' | 'program' | null
 
 /**
  * SideResolver —— sideScope（long / short / both）推断策略

@@ -1128,13 +1128,13 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       intent: {
         keywords: ['RSI', 'rsi', '超买'] as const,
         verbs: {
-          gte: ['≥', '>=', '高于或等于', '大于等于', '不低于', '高于', '大于', '超过', '上方', 'above', 'over', 'greater than or equal', 'greater than'] as const,
+          gte: ['≥', '>=', '高于或等于', '大于等于', '不低于', '高于', '大于', '超过', '回到', '上穿', '重新上穿', '上方', 'above', 'over', 'greater than or equal', 'greater than'] as const,
         },
       },
       paramSlots: {
         // Issue #1395 mute-spider：period/value 必为整数；value 严格 0-100。
         period: { kind: 'number', required: false, range: [1, 200], multipleOf: 1, default: 14, extractor: { kind: 'number-int', pattern: 'RSI\\s*\\(?\\s*(\\d+)', range: [1, 200] } },
-        value: { kind: 'number', required: true, range: [0, 100], multipleOf: 1, extractor: { kind: 'number-int', pattern: '(?:≥|>=|高于或等于|大于等于|不低于|高于|大于|超过|上方|above|over|greater than or equal|greater than)\\s*(\\d+)', range: [0, 100] } },
+        value: { kind: 'number', required: true, range: [0, 100], multipleOf: 1, extractor: { kind: 'number-int', pattern: '(?:≥|>=|高于或等于|大于等于|不低于|高于|大于|超过|回到|上穿|重新上穿|上方|above|over|greater than or equal|greater than)\\s*(\\d+)', range: [0, 100] } },
         thresholdRole: { kind: 'enum', required: false, enum: ['upper_threshold'], default: 'upper_threshold' },
       },
       phaseResolver: 'by-clause-verb',
@@ -1194,7 +1194,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         verbs: {
           // touch verb 兼收 "做空/开空"——"上轨开空"等价"触及上轨开空"
           //   action verb 自带方向；sideResolver:inherit + explicitActionSide 会派生正确 side
-          touch_upper: ['触及', '碰到', '到达', 'touch', 'reaches', '做空', '开空'] as const,
+          touch_upper: ['触及', '触碰', '碰到', '到达', 'touch', 'reaches', '做空', '开空', '卖出'] as const,
           breakout_up: ['突破', '上破', 'breakout'] as const,
         },
       },
@@ -3597,12 +3597,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         stepPct: { kind: 'number', required: false, range: [0, 100], extractor: { kind: 'number-decimal', pattern: '(?:每格间距|网格间距|间距|步长)\\s*(\\d+(?:\\.\\d+)?)\\s*%' } },
         perGridSizing: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:每格|per grid|each grid)\\s*(?:使用|用)?\\s*(\\d+(?:\\.\\d+)?)\\s*(?:USDT|USDC|USD|U|刀)' } },
       },
-      phaseResolver: 'fixed-entry',
+      phaseResolver: 'fixed-program',
       sideResolver: 'both',
       phraseHints: {
         triggers: [{
           keywords: ['网格', 'grid 区间', '双向网格', '上下边界', '停止', '撤销'],
-          mustOutput: '单叶子 rule（phase=entry）condition=grid.range_rebalance + sideMode + breakoutAction="stop|pause|continue"；不需要额外的 entry trigger，也不需要 protective_exit；grid 自身即是连续入场源 + 出场覆盖。',
+          mustOutput: '单叶子 rule（phase=program）condition=grid.range_rebalance + sideMode + breakoutAction="stop|continue"；不需要额外的 entry trigger，也不需要 protective_exit；grid 自身即是连续入场源 + 出场覆盖。',
         }],
       },
       // Issue #1409 — open slot 澄清答复 golden 集
@@ -3957,7 +3957,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         levelCount: { kind: 'number', required: false, range: [2, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [2, 100] } },
         onDeactivate: { kind: 'enum', required: false, enum: ['cancel', 'keep', 'close'], default: 'cancel', extractor: { kind: 'enum-zh-map', enumMap: { '撤单': 'cancel', '保留挂单': 'keep', '保留': 'keep', '平仓': 'close' } } },
       },
-      phaseResolver: 'fixed-entry',
+      phaseResolver: 'fixed-program',
       sideResolver: 'inherit',
     },
   },
@@ -4049,7 +4049,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         stepPct: { kind: 'percent', required: false, range: [0, 100], extractor: { kind: 'percent', pattern: '\\d+(\\.\\d+)?%', range: [0, 100] } },
         onDeactivate: { kind: 'enum', required: false, enum: ['cancel', 'keep', 'close'], default: 'cancel', extractor: { kind: 'enum-zh-map', enumMap: { '撤单': 'cancel', '保留挂单': 'keep', '保留': 'keep', '平仓': 'close' } } },
       },
-      phaseResolver: 'fixed-entry',
+      phaseResolver: 'fixed-program',
       sideResolver: 'inherit',
     },
   },
@@ -4138,7 +4138,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         levelCount: { kind: 'number', required: false, range: [2, 100], extractor: { kind: 'number-int', pattern: '\\d+', range: [2, 100] } },
         onDeactivate: { kind: 'enum', required: false, enum: ['cancel', 'keep', 'close'], default: 'cancel', extractor: { kind: 'enum-zh-map', enumMap: { '撤单': 'cancel', '保留挂单': 'keep', '保留': 'keep', '平仓': 'close' } } },
       },
-      phaseResolver: 'fixed-entry',
+      phaseResolver: 'fixed-program',
       sideResolver: 'inherit',
     },
   },
@@ -4240,7 +4240,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         dedupWindowMs: { kind: 'number', required: false, range: [100, 3600000], extractor: { kind: 'number-int', pattern: '\\d+', range: [100, 3600000] } },
         expirationTtlMs: { kind: 'number', required: false, range: [100, 86400000], extractor: { kind: 'number-int', pattern: '\\d+', range: [100, 86400000] } },
       },
-      phaseResolver: 'fixed-entry',
+      phaseResolver: 'fixed-program',
       sideResolver: 'inherit',
     },
   },
@@ -4767,6 +4767,21 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
               ? reference.period
               : null
           return `回踩 ${indicator.toUpperCase()}${period === null ? '' : period} 后重新站上`
+        }
+        if (params.sequenceKind === 'rsi_reclaim') {
+          const threshold = typeof params.threshold === 'number'
+            ? params.threshold
+            : typeof params.value === 'number'
+              ? params.value
+              : null
+          return `RSI 跌破${threshold === null ? '阈值' : ` ${threshold}`} 后重新上穿${threshold === null ? '阈值' : ` ${threshold}`}`
+        }
+        if (params.sequenceKind === 'pattern_then_volume_spike') {
+          const count = typeof params.count === 'number' ? params.count : 1
+          const dir = params.direction === 'down' ? '阴线' : params.direction === 'up' ? '阳线' : 'K 线'
+          const next = params.nextBarOnly === true || params.nextBarOnly === 'true' ? '下一根' : '随后'
+          const rebound = params.reboundDirection === 'up' ? '反弹' : params.reboundDirection === 'down' ? '回落' : '确认'
+          return `连续 ${count} 根${dir}后${next}放量${rebound}`
         }
         const count = typeof params.count === 'number' ? `连续 ${params.count} 根` : '条件序列'
         const dir = params.direction === 'down' ? '阴线' : params.direction === 'up' ? '阳线' : ''

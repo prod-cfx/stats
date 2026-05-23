@@ -32,6 +32,74 @@ function baseState(overrides: Partial<SemanticState>): SemanticState {
 describe('semanticStateProjectionService — rules-first summary 渲染（#1395）', () => {
   const service = new SemanticStateProjectionService()
 
+  it('detects recommendation intent from namespaced action atom keys', () => {
+    const signals = (service as unknown as {
+      buildRecommendationSignals(input: {
+        actions: SemanticState['action']
+        triggers: SemanticState['trigger']
+        families: SemanticState['families']
+      }): {
+        hasLongIntent: boolean
+        hasShortIntent: boolean
+        hasBidirectionalIntent: boolean
+        hasGridIntent: boolean
+      }
+    }).buildRecommendationSignals({
+      actions: [
+        {
+          id: 'action-open-long',
+          key: 'action.open_long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        } as SemanticState['action'][number],
+      ],
+      triggers: [],
+      families: [],
+    })
+
+    expect(signals.hasLongIntent).toBe(true)
+    expect(signals.hasShortIntent).toBe(false)
+  })
+
+  it('keeps recommendation intent compatibility for legacy bare and reduce action keys', () => {
+    const signals = (service as unknown as {
+      buildRecommendationSignals(input: {
+        actions: SemanticState['action']
+        triggers: SemanticState['trigger']
+        families: SemanticState['families']
+      }): {
+        hasLongIntent: boolean
+        hasShortIntent: boolean
+        hasBidirectionalIntent: boolean
+        hasGridIntent: boolean
+      }
+    }).buildRecommendationSignals({
+      actions: [
+        {
+          id: 'action-open-long',
+          key: 'open_long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        } as SemanticState['action'][number],
+        {
+          id: 'action-reduce-short',
+          key: 'reduce_short',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        } as SemanticState['action'][number],
+      ],
+      triggers: [],
+      families: [],
+    })
+
+    expect(signals.hasLongIntent).toBe(true)
+    expect(signals.hasShortIntent).toBe(true)
+    expect(signals.hasBidirectionalIntent).toBe(true)
+  })
+
   it('s2：sequence 步骤 + nextBarOnly=true 渲染 "先...然后...（下一根）"', () => {
     const rules: SemanticRule[] = [{
       id: 'rule-s2',
@@ -470,6 +538,67 @@ describe('Issue #1443 — renderRule 通用 UI 简化', () => {
     expect(view.summary).toContain('5')
     // 不应有「→」（because condition 跳过，直接是 effects）
     // 不强断言「→」位置；只要 condition body 不渲染即可
+  })
+
+  it('filters always-on action noise rules from display graph fallback path', () => {
+    const rules: SemanticRule[] = [{
+      id: 'r-on-start-open',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'execution.on_start', params: { timing: 'on_start', orderType: 'market', occurrence: 'once' } },
+      effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+    }]
+    const state = baseState({
+      rules,
+      trigger: [{
+        id: 'trigger-on-start',
+        key: 'execution.on_start',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [],
+      } as SemanticState['trigger'][number]],
+      action: [{
+        id: 'action-open-long',
+        key: 'open_long',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      } as SemanticState['action'][number],
+      ],
+    })
+    const graph = service.buildDisplayLogicGraph(state)
+    const view = service.buildConversationView(state)
+    const serialized = JSON.stringify(graph)
+
+    expect(serialized).not.toContain('启动后执行')
+    expect(serialized).not.toContain('开多')
+    expect(view.summary).not.toContain('启动后执行')
+    expect(view.summary).not.toContain('开多')
+  })
+
+  it('keeps non-action effects when sanitizing always-on action noise rules', () => {
+    const rules: SemanticRule[] = [{
+      id: 'r-on-start-open-with-risk',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'execution.on_start', params: { timing: 'on_start', orderType: 'market', occurrence: 'once' } },
+      effects: {
+        actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        risks: [{ kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } }],
+        positions: [],
+        orchestration: [],
+        programs: [],
+      },
+    }]
+    const view = service.buildConversationView(baseState({ rules }))
+
+    expect(view.summary).not.toContain('开多')
+    expect(view.summary).toMatch(/止损/u)
+    expect(view.summary).toContain('5')
   })
 
   it('(c) enrich 跳过值 === paramSlot.default 的 slot — execution.on_start 默认值不输出', () => {

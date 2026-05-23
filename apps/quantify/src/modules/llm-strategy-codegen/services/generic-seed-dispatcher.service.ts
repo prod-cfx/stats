@@ -8,6 +8,7 @@ import type {
 } from '../atom-contracts/atom-contract-surface.types'
 import type { AtomContract, AtomContractBucket } from '../atom-contracts/atom-contract-types'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+import type { AtomExpr, RuleEffectsByRole, SemanticRule } from '../types/atom-expr'
 import type { SemanticPositionSizingContract } from '../types/semantic-state'
 /**
  * GenericSeedDispatcher — Issue #1279 PR2 唯一真相源 NL→seed 分发器
@@ -50,11 +51,14 @@ export interface AtomMatch {
   readonly clauseText: string
   readonly direction: Direction | null
   readonly params: Readonly<Record<string, unknown>>
-  readonly phase: 'entry' | 'exit' | 'gate' | null
+  readonly phase: 'entry' | 'exit' | 'gate' | 'program' | null
   readonly sideScope: 'long' | 'short' | 'both' | null
 }
 
-export type DispatchResult = CodegenSemanticPatch
+export type DispatchResult = {
+  contextSlots?: CodegenSemanticPatch['contextSlots']
+  rules?: SemanticRule[]
+}
 
 /* ──────────────────────────────────────────────────────────────────────────
  * 共享 symbol 校验常量（被 Parser + contextSlots 两处共用，需在两者之前声明）
@@ -938,11 +942,21 @@ const BUCKET_TO_PATCH_SLOT: Readonly<Record<AtomContractBucket, 'triggers' | 'ac
 
 type PatchAtomNode = Record<string, unknown> & {
   key: string
-  phase: 'entry' | 'exit' | 'gate' | null
+  phase: 'entry' | 'exit' | 'gate' | 'program' | null
   sideScope?: 'long' | 'short' | 'both' | null
   params: Record<string, unknown>
   evidence?: unknown
 }
+
+type RuleEffectRole = keyof RuleEffectsByRole
+
+const EMPTY_RULE_EFFECTS = (): Record<RuleEffectRole, AtomExpr[]> => ({
+  actions: [],
+  risks: [],
+  positions: [],
+  orchestration: [],
+  programs: [],
+})
 
 function canMergePatchAtomParams(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
   for (const [key, value] of Object.entries(right)) {
@@ -975,6 +989,13 @@ function mergeCompatiblePatchAtomNodes<T extends PatchAtomNode>(nodes: T[]): T[]
   return out
 }
 
+function isEvidenceWithText(value: unknown): value is { text: string } {
+  return !!value
+    && typeof value === 'object'
+    && typeof (value as { text?: unknown }).text === 'string'
+    && (value as { text: string }).text.trim().length > 0
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
  * Dispatcher 主体（pure registry-driven）
  * ────────────────────────────────────────────────────────────────────────── */
@@ -987,6 +1008,16 @@ export class GenericSeedDispatcher {
   static readonly MAX_UTTERANCE_LENGTH = 10000
 
   dispatch(message?: string): DispatchResult {
+    const text = (message ?? '').trim()
+    const flatPatch = this.dispatchFlatPatch(text)
+    const rules = this.buildTypedRulesFromFlatPatch(flatPatch, text)
+    return {
+      ...(flatPatch.contextSlots ? { contextSlots: flatPatch.contextSlots } : {}),
+      ...(rules.length > 0 ? { rules } : {}),
+    }
+  }
+
+  private dispatchFlatPatch(message?: string): CodegenSemanticPatch {
     const text = (message ?? '').trim()
     if (text.length > GenericSeedDispatcher.MAX_UTTERANCE_LENGTH) {
       throw new Error(
@@ -1127,6 +1158,454 @@ export class GenericSeedDispatcher {
     return patch
   }
 
+  private buildTypedRulesFromFlatPatch(
+    flatPatch: CodegenSemanticPatch,
+    userMessage: string,
+  ): SemanticRule[] {
+    const predicates = this.collectTypedRulePredicates(flatPatch, userMessage)
+    const effects = this.collectTypedRuleGlobalEffects(flatPatch, userMessage)
+    if (predicates.length === 0 || effects.length === 0) return []
+
+    const hasProgramStrategySignal = this.hasProgramStrategySignal(userMessage)
+    const phases = new Set<SemanticRule['phase']>()
+    for (const predicate of predicates) phases.add(this.normalizeTypedRulePhase(predicate.phase))
+    for (const effect of effects) {
+      if (effect.kind !== 'atom') continue
+      const phase = typeof effect.params.phase === 'string' ? effect.params.phase : null
+      if (phase === 'entry' || phase === 'exit' || phase === 'gate' || phase === 'program') phases.add(phase)
+      if (this.isProgramEffectAtom(effect.key)) phases.add('program')
+    }
+    if (/平仓|平多|平空|卖出|止盈|止损|跌破|下穿|close|sell/iu.test(userMessage)) phases.add('exit')
+    if (/只做|只在|已有持仓|如果已有|过滤|filter|gate|(?:上方|下方)\s*[，,]\s*(?!出场|平仓|平多|平空|卖出|跌破|下穿)/iu.test(userMessage)) phases.add('gate')
+    if (hasProgramStrategySignal) phases.add('program')
+    if (phases.size === 0) phases.add('entry')
+
+    const rules: SemanticRule[] = []
+    for (const phase of phases) {
+      const phasePredicates = predicates.filter(item => this.normalizeTypedRulePhase(item.phase) === phase)
+      const predicate = phasePredicates[0] ?? this.selectTypedRuleFallbackPredicate(
+        predicates,
+        phase,
+        hasProgramStrategySignal,
+      )
+      if (!predicate) continue
+      const sideScope = predicate.sideScope ?? 'both'
+      const typedEffects = EMPTY_RULE_EFFECTS()
+      for (const effect of effects) {
+        if (!this.typedEffectAppliesToPhase(effect, phase)) continue
+        this.appendTypedEffect(typedEffects, effect)
+      }
+      const condition = phasePredicates.length > 1
+        ? {
+            kind: 'and' as const,
+            children: phasePredicates.map(item => ({
+              kind: 'atom' as const,
+              key: item.key,
+              params: item.params ?? {},
+              ...(item.sideScope ? { sideScope: item.sideScope } : {}),
+              ...(isEvidenceWithText(item.evidence) ? { evidence: { text: item.evidence.text } } : {}),
+            })),
+          }
+        : {
+            kind: 'atom' as const,
+            key: predicate.key,
+            params: predicate.params ?? {},
+            ...(predicate.sideScope ? { sideScope: predicate.sideScope } : {}),
+            ...(isEvidenceWithText(predicate.evidence) ? { evidence: { text: predicate.evidence.text } } : {}),
+          }
+      rules.push({
+        id: `dispatcher-typed-rule-${rules.length + 1}`,
+        phase,
+        sideScope,
+        condition,
+        effects: typedEffects,
+        ...(isEvidenceWithText(predicate.evidence) ? { evidence: { text: predicate.evidence.text } } : {}),
+      })
+    }
+    return rules
+  }
+
+  private selectTypedRuleFallbackPredicate(
+    predicates: PatchAtomNode[],
+    phase: SemanticRule['phase'],
+    hasProgramStrategySignal: boolean,
+  ): PatchAtomNode | null {
+    if (phase === 'program') return predicates[0] ?? null
+    const nonProgramPredicate = predicates.find(item => this.normalizeTypedRulePhase(item.phase) !== 'program')
+    if (nonProgramPredicate) return nonProgramPredicate
+    const fallback = predicates[0]
+    if (
+      !hasProgramStrategySignal
+      && fallback?.key === ATOM_CONTRACT_REGISTRY['execution.on_start'].key
+    ) {
+      return fallback
+    }
+    return null
+  }
+
+  private appendTypedEffect(
+    effects: Record<RuleEffectRole, AtomExpr[]>,
+    effect: AtomExpr,
+  ): void {
+    const role = this.resolveRuleEffectRole(effect)
+    if (!role) return
+    const signature = JSON.stringify(effect)
+    if (effects[role].some(item => JSON.stringify(item) === signature)) return
+    effects[role].push(effect)
+  }
+
+  private typedEffectAppliesToPhase(effect: AtomExpr, phase: SemanticRule['phase']): boolean {
+    if (effect.kind !== 'atom') return false
+    const role = this.resolveRuleEffectRole(effect)
+    if (!role) return false
+    const effectPhase = effect.params.phase
+    if (effectPhase === undefined || effectPhase === null) return true
+    if (effectPhase === 'risk' && role === 'risks') return phase === 'exit' || phase === 'program'
+    return effectPhase === phase
+  }
+
+  private hasProgramStrategySignal(userMessage: string): boolean {
+    // Only gates phase fallback for texts with program-shaped workflows; atom roles still come from registry.
+    return /网格|webhook|自适应|grid/iu.test(userMessage)
+  }
+
+  private resolveRuleEffectRole(effect: AtomExpr): RuleEffectRole | null {
+    if (effect.kind !== 'atom') return null
+    if (effect.key === 'position.sizing') return 'positions'
+    if (this.isProgramEffectAtom(effect.key)) return 'programs'
+    const bucket = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract | undefined>)[effect.key]?.bucket
+    switch (bucket) {
+      case 'action':
+        return 'actions'
+      case 'risk':
+        return 'risks'
+      case 'positionConstraint':
+        return 'positions'
+      case 'orchestration':
+        return 'orchestration'
+      default:
+        return null
+    }
+  }
+
+  private isProgramEffectAtom(key: string): boolean {
+    return key.startsWith('program.')
+  }
+
+  private normalizeTypedRulePhase(phase: unknown): SemanticRule['phase'] {
+    return phase === 'entry' || phase === 'exit' || phase === 'gate' || phase === 'program' ? phase : 'entry'
+  }
+
+  private collectTypedRulePredicates(
+    flatPatch: CodegenSemanticPatch,
+    userMessage: string,
+  ): PatchAtomNode[] {
+    const out: PatchAtomNode[] = []
+    const push = (item: { key: string, phase?: unknown, sideScope?: 'long' | 'short' | 'both' | null, params?: Record<string, unknown>, evidence?: unknown }): void => {
+      const contract = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract | undefined>)[item.key]
+      if (!contract?.roles.includes('predicate') && item.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) return
+      out.push({
+        key: item.key,
+        phase: this.resolveTypedRulePhaseForAtom(item.key, item.phase),
+        sideScope: item.sideScope ?? 'both',
+        params: item.params ?? {},
+        evidence: item.evidence,
+      })
+    }
+    for (const trigger of flatPatch.triggers ?? []) push(trigger)
+    for (const atom of flatPatch.atoms ?? []) push(atom)
+    this.pushTypedLifecyclePredicates(out, flatPatch)
+    if (/webhook/iu.test(userMessage) && !out.some(item => item.key === ATOM_CONTRACT_REGISTRY['external.signal'].key)) {
+      out.push({
+        key: ATOM_CONTRACT_REGISTRY['external.signal'].key,
+        phase: 'program',
+        sideScope: 'both',
+        params: { eventType: 'webhook' },
+        evidence: { text: userMessage.trim(), source: 'user_explicit' },
+      })
+    }
+    if (out.length === 0 && userMessage.trim().length > 0) {
+      out.push({
+        key: ATOM_CONTRACT_REGISTRY['execution.on_start'].key,
+        phase: 'program',
+        sideScope: 'both',
+        params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
+        evidence: { text: userMessage.trim(), source: 'user_explicit' },
+      })
+    }
+    return mergeCompatiblePatchAtomNodes(out)
+  }
+
+  private pushTypedLifecyclePredicates(out: PatchAtomNode[], flatPatch: CodegenSemanticPatch): void {
+    const dcaKey = ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key
+    const addPositionKey = ATOM_CONTRACT_REGISTRY['action.add_position'].key
+    const onStartKey = ATOM_CONTRACT_REGISTRY['execution.on_start'].key
+    const percentChangeKey = ATOM_CONTRACT_REGISTRY['price.percent_change'].key
+
+    const dcaAtom = (flatPatch.atoms ?? []).find(atom => atom.key === dcaKey)
+    if (dcaAtom) {
+      out.push({
+        key: onStartKey,
+        phase: 'entry',
+        sideScope: dcaAtom.sideScope ?? 'long',
+        params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
+        evidence: dcaAtom.evidence,
+      })
+    }
+
+    const addAtoms = [
+      ...(flatPatch.actions ?? []).filter(atom => atom.key === addPositionKey),
+      ...(flatPatch.atoms ?? []).filter(atom => atom.key === addPositionKey),
+    ]
+    for (const atom of addAtoms) {
+      const params = atom.params ?? {}
+      const addMode = typeof params.addMode === 'string' ? params.addMode : null
+      const sideScope = atom.sideScope ?? 'long'
+      if (addMode === 'profit_pct' && typeof params.profitThreshold === 'number') {
+        out.push({
+          key: percentChangeKey,
+          phase: 'entry',
+          sideScope,
+          params: {
+            basis: 'entry_avg_price',
+            direction: 'up',
+            valuePct: Math.abs(params.profitThreshold),
+          },
+          evidence: atom.evidence,
+        })
+      }
+      if (addMode === 'drawdown_pct' && typeof params.drawdownThreshold === 'number') {
+        out.push({
+          key: percentChangeKey,
+          phase: 'entry',
+          sideScope,
+          params: {
+            basis: 'entry_avg_price',
+            direction: 'down',
+            valuePct: Math.abs(params.drawdownThreshold),
+          },
+          evidence: atom.evidence,
+        })
+      }
+    }
+  }
+
+  private resolveTypedRulePhaseForAtom(key: string, phase: unknown): SemanticRule['phase'] {
+    const phaseResolver = (ATOM_CONTRACT_REGISTRY as Record<string, AtomContract | undefined>)[key]?.surface?.phaseResolver
+    switch (phaseResolver) {
+      case 'fixed-entry':
+        return 'entry'
+      case 'fixed-exit':
+        return 'exit'
+      case 'fixed-gate':
+        return 'gate'
+      case 'fixed-program':
+        return 'program'
+      default:
+        return this.normalizeTypedRulePhase(phase)
+    }
+  }
+
+  private collectTypedRuleGlobalEffects(flatPatch: CodegenSemanticPatch, userMessage: string): AtomExpr[] {
+    const out: AtomExpr[] = []
+    const pushAtom = (item: { key: string, phase?: unknown, params?: Record<string, unknown>, sideScope?: 'long' | 'short' | 'both', evidence?: unknown }): void => {
+      const effect: AtomExpr = {
+        kind: 'atom',
+        key: item.key,
+        params: {
+          ...(item.params ?? {}),
+          ...(typeof item.phase === 'string' ? { phase: item.phase } : {}),
+        },
+        ...(item.sideScope ? { sideScope: item.sideScope } : {}),
+        ...(isEvidenceWithText(item.evidence) ? { evidence: { text: item.evidence.text } } : {}),
+      }
+      if (this.resolveRuleEffectRole(effect)) out.push(effect)
+    }
+    for (const item of flatPatch.actions ?? []) pushAtom(item)
+    for (const item of flatPatch.risk ?? []) pushAtom(item)
+    for (const item of flatPatch.atoms ?? []) pushAtom(item)
+    const contextSlots = flatPatch.contextSlots ?? {}
+    const symbolEvidence = this.findEvidenceText(userMessage, this.escapeRegexText(contextSlots.symbol))
+    if (typeof contextSlots.symbol === 'string' && contextSlots.symbol.trim().length > 0) {
+      pushAtom({
+        key: ATOM_CONTRACT_REGISTRY['scope.symbol'].key,
+        params: {
+          symbolScopeKind: 'symbol',
+          symbols: [contextSlots.symbol],
+          primarySymbol: contextSlots.symbol,
+        },
+        ...(symbolEvidence ? { evidence: { text: symbolEvidence } } : {}),
+      })
+    }
+    const timeframeEvidence = this.findTimeframeEvidence(userMessage, contextSlots.timeframe)
+    if (typeof contextSlots.timeframe === 'string' && contextSlots.timeframe.trim().length > 0) {
+      pushAtom({
+        key: ATOM_CONTRACT_REGISTRY['scope.timeframe'].key,
+        params: {
+          timeframeScopeKind: 'timeframe',
+          primaryTimeframe: contextSlots.timeframe,
+          requiredTimeframes: [contextSlots.timeframe],
+          alignmentPolicy: 'tolerant',
+        },
+        ...(timeframeEvidence ? { evidence: { text: timeframeEvidence } } : {}),
+      })
+    }
+    const exchangeEvidence = this.findEvidenceText(userMessage, this.escapeRegexText(contextSlots.exchange))
+    if (typeof contextSlots.exchange === 'string' && contextSlots.exchange.trim().length > 0) {
+      pushAtom({
+        key: ATOM_CONTRACT_REGISTRY['scope.dataSource'].key,
+        params: {
+          dataSourceRole: 'primary',
+          dataSourceFeedId: contextSlots.exchange,
+          dataSourceSchemaRef: 'ohlcv',
+        },
+        ...(exchangeEvidence ? { evidence: { text: exchangeEvidence } } : {}),
+      })
+    }
+    if (flatPatch.position?.sizing) {
+      out.push({
+        kind: 'atom',
+        key: 'position.sizing',
+        params: { sizing: flatPatch.position.sizing, phase: 'entry' },
+        ...(isEvidenceWithText(flatPatch.position.evidence) ? { evidence: { text: flatPatch.position.evidence.text } } : {}),
+      })
+    }
+    else if (
+      !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'positions')
+      && this.hasSizingIntent(userMessage)
+    ) {
+      const evidence = this.findSizingEvidence(userMessage)
+      out.push({
+        kind: 'atom',
+        key: 'position.sizing',
+        params: { phase: 'entry' },
+        ...(evidence ? { evidence: { text: evidence } } : {}),
+      })
+    }
+    if (
+      !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'actions')
+      && this.hasOpenActionIntent(userMessage)
+    ) {
+      const evidence = this.findEvidenceText(userMessage, '(?:买入|买|开多|开空|开仓|做多|做空|进场|open|buy|long|short|enter)')
+      pushAtom({
+        key: ATOM_CONTRACT_REGISTRY['action.open_long'].key,
+        phase: 'entry',
+        params: {},
+        ...(evidence ? { evidence: { text: evidence } } : {}),
+      })
+    }
+    if (
+      this.hasRiskIntent(userMessage)
+      && !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'risks')
+      && this.hasPercentStopRiskIntent(userMessage)
+    ) {
+      const evidence = this.findEvidenceText(userMessage, '(?:止损|止盈|stop\\s*loss|take\\s*profit)')
+      pushAtom({
+        key: ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key,
+        phase: 'exit',
+        params: {},
+        ...(evidence ? { evidence: { text: evidence } } : {}),
+      })
+    }
+    if (
+      !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'orchestration')
+      && this.hasTimeframeIntent(userMessage)
+    ) {
+      const evidence = this.findTimeframeEvidence(userMessage)
+      pushAtom({
+        key: ATOM_CONTRACT_REGISTRY['scope.timeframe'].key,
+        params: {
+          timeframeScopeKind: 'timeframe',
+          ...(typeof contextSlots.timeframe === 'string' && contextSlots.timeframe.trim().length > 0
+            ? {
+                primaryTimeframe: contextSlots.timeframe,
+                requiredTimeframes: [contextSlots.timeframe],
+              }
+            : {}),
+          alignmentPolicy: 'tolerant',
+        },
+        ...(evidence ? { evidence: { text: evidence } } : {}),
+      })
+    }
+    if (!out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'programs')) {
+      const atoms = flatPatch.atoms ?? []
+      const hasGrid = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
+      const hasAdaptive = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key)
+      const hasEvent = (flatPatch.triggers ?? []).some(trigger => trigger.key === ATOM_CONTRACT_REGISTRY['external.signal'].key)
+      const explicitProgramEvidence = this.findEvidenceText(userMessage, '(?:webhook|外部事件|事件监听)')
+      const programKey = hasAdaptive
+        ? ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key
+        : hasGrid
+          ? ATOM_CONTRACT_REGISTRY['program.dynamic_grid'].key
+          : hasEvent || explicitProgramEvidence
+            ? ATOM_CONTRACT_REGISTRY['program.event_listener'].key
+            : null
+      if (programKey) {
+        const atomEvidence = atoms.find(atom =>
+          (programKey === ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key && atom.key === ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key)
+          || (programKey === ATOM_CONTRACT_REGISTRY['program.dynamic_grid'].key && atom.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
+          || (programKey === ATOM_CONTRACT_REGISTRY['program.event_listener'].key && atom.key === ATOM_CONTRACT_REGISTRY['external.signal'].key)
+        )?.evidence
+        pushAtom({
+          key: programKey,
+          phase: 'program',
+          params: { programKind: programKey.slice('program.'.length) },
+          ...(isEvidenceWithText(atomEvidence)
+            ? { evidence: { text: atomEvidence.text } }
+            : explicitProgramEvidence
+              ? { evidence: { text: explicitProgramEvidence } }
+              : {}),
+        })
+      }
+    }
+    return out
+  }
+
+  private hasOpenActionIntent(userMessage: string): boolean {
+    return /买入|买|开多|开空|开仓|做多|做空|进场|open|buy|long|short|enter/iu.test(userMessage)
+  }
+
+  private hasRiskIntent(userMessage: string): boolean {
+    return /止损|止盈|风控|风险|回撤|熔断|stop\s*loss|take\s*profit|risk|drawdown/iu.test(userMessage)
+  }
+
+  private hasPercentStopRiskIntent(userMessage: string): boolean {
+    return /止损|止盈|stop\s*loss|take\s*profit/iu.test(userMessage)
+  }
+
+  private hasSizingIntent(userMessage: string): boolean {
+    return this.findSizingEvidence(userMessage) !== null
+  }
+
+  private hasTimeframeIntent(userMessage: string): boolean {
+    return /(?:\d+\s*(?:m|min|分钟|小时|h|d|天|日线|周线)|K\s*线|周期|timeframe)/iu.test(userMessage)
+  }
+
+  private findTimeframeEvidence(userMessage: string, timeframe?: unknown): string | null {
+    if (typeof timeframe === 'string' && timeframe.trim().length > 0) {
+      const exact = this.findEvidenceText(userMessage, this.escapeRegexText(timeframe))
+      if (exact) return exact
+    }
+    return this.findEvidenceText(userMessage, '(?:\\d+\\s*(?:m|min|分钟|小时|h|d|天)|日线|周线|K\\s*线|周期|timeframe)')
+  }
+
+  private findEvidenceText(userMessage: string, pattern: string): string | null {
+    const match = new RegExp(pattern, 'iu').exec(userMessage)
+    if (!match) return null
+    return match[0]
+  }
+
+  private findSizingEvidence(userMessage: string): string | null {
+    return this.findEvidenceText(
+      userMessage,
+      '(?:(?:单笔|仓位|资金(?!费率)|每次|每格|使用|加投|定投)[^\\d费率]{0,12}(?:百分\\s*)?\\d+(?:\\.\\d+)?\\s*(?:%|USDT|USDC|USD|U|刀)?|买一点|买入一点|开多一点|开空一点)',
+    )
+  }
+
+  private escapeRegexText(value: unknown): string {
+    return typeof value === 'string' ? value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : ''
+  }
+
   private applySemanticConflictResolution(
     atomItems: PatchAtomNode[],
     slotItems: Record<'triggers' | 'actions' | 'risk', PatchAtomNode[]>,
@@ -1227,9 +1706,9 @@ export class GenericSeedDispatcher {
         //   先派生本 clause 的 phase，再在 sibling 中选 phase 配对的最近一条（exit→entry，
         //   entry→exit，self→任意），剩余仍 fallback 到最后一条。
         const tentativePhase = resolvePhaseFromClause(clause, surface.phaseResolver, { atomKey, params: {} }) ?? 'entry'
-        const counterpartPhase: 'entry' | 'exit' | 'gate' = tentativePhase === 'exit' ? 'entry' : tentativePhase === 'entry' ? 'exit' : 'entry'
+        const counterpartPhase: 'entry' | 'exit' | 'gate' | 'program' = tentativePhase === 'exit' ? 'entry' : tentativePhase === 'entry' ? 'exit' : 'entry'
         const sibling = sourceSiblings.slice().reverse().find((n) => {
-          const np = (n as { phase?: 'entry' | 'exit' | 'gate' | null }).phase
+          const np = (n as { phase?: 'entry' | 'exit' | 'gate' | 'program' | null }).phase
           // self-mirror（sourceKey === atomKey）允许任何 phase；否则优先取对偶 phase 的 sibling
           if (sourceKey === atomKey) return true
           return np === counterpartPhase

@@ -4,6 +4,7 @@ import type { SemanticPredicateStrategyGraph } from '../types/semantic-strategy-
 import type { StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyConsistencyCheck, StrategyConsistencyReport } from '../types/strategy-consistency-report'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
+import type { StrategySemanticProfile } from '../types/strategy-semantic-profile'
 import type { StrategySummary } from '../types/strategy-summary'
 import type { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
 import type { CompiledPublicationGateService } from './compiled-publication-gate.service'
@@ -17,6 +18,8 @@ import type { SpecDescBuilderService } from './spec-desc-builder.service'
 import type { StrategyConsistencyService } from './strategy-consistency.service'
 import type { StrategySummaryBuilderService } from './strategy-summary-builder.service'
 import type { StrategySummaryObservationReport } from './strategy-summary-observation.service'
+import { createHash } from 'node:crypto'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { SemanticAtomInvariantService } from './semantic-atom-invariant.service'
 import { CodegenGraphSnapshotService as DefaultCodegenGraphSnapshotService } from './codegen-graph-snapshot.service'
 import { normalizeRiskSemantics } from './semantic-state-normalization'
@@ -162,10 +165,12 @@ export class CodegenPublicationGenerationStage {
     })
     const validation = this.validateCompiledScript(compiledScript)
     compiledScript = validation.scriptCode
-    const semanticConsistency = this.strategyConsistencyService.evaluate({
-      canonicalSpec,
-      scriptCode: compiledScript,
-    })
+    const semanticConsistency = validation.passed
+      ? this.strategyConsistencyService.evaluate({
+          canonicalSpec,
+          scriptCode: compiledScript,
+        })
+      : this.buildValidationFailedConsistencyReport(validation)
     const strategySummary = this.strategySummaryBuilder.buildSummaryFromProfile({
       profile: semanticConsistency.specProfile,
       market: {
@@ -185,6 +190,18 @@ export class CodegenPublicationGenerationStage {
       strategySummary,
       scriptSummary,
     })
+    const compiledScriptProjection = validation.passed
+      ? this.compiledScriptParser.parse(compiledScript)
+      : null
+    const stage1ConsistencyEvidence = validation.passed
+      ? {
+          rulesHash: this.hashCanonicalJson(input.semanticState.rules ?? []),
+          canonicalSpecHash: this.hashCanonicalJson(canonicalSpec),
+          irHash: this.readCompiledIrHash(compiled) ?? this.hashCanonicalJson(compiled.ir),
+          astHash: this.readAstDigest(ast) ?? this.readParsedAstDigest(compiledScriptProjection),
+          scriptHash: this.hashText(compiledScript),
+        }
+      : undefined
     const sessionSpecDesc = {
       ...semanticView,
       normalizedIntent,
@@ -195,6 +212,7 @@ export class CodegenPublicationGenerationStage {
       summaryObservation,
       lockedParams,
       consistencyReport: semanticConsistency,
+      ...(stage1ConsistencyEvidence ? { stage1ConsistencyEvidence } : {}),
       semanticAtomInvariant,
       semanticPredicateGraph,
     } satisfies Record<string, unknown>
@@ -243,6 +261,70 @@ export class CodegenPublicationGenerationStage {
       checks,
       summary,
     }
+  }
+
+  private buildValidationFailedConsistencyReport(
+    validation: CompiledScriptValidationResult,
+  ): StrategyConsistencyReport {
+    const emptyProfile = this.buildEmptySemanticProfile()
+    return {
+      status: 'FAILED',
+      specProfile: emptyProfile,
+      scriptProfile: emptyProfile,
+      checks: [{
+        key: 'script.structural_validation',
+        level: 'critical',
+        status: 'failed',
+        expected: 'compiled script structural validation passed',
+        actual: validation.reason ?? 'compiled script structural validation failed',
+        message: validation.reason ?? '编译脚本结构校验失败',
+      }],
+      summary: {
+        criticalFailed: 1,
+        warningFailed: 0,
+        unprovable: 0,
+      },
+    }
+  }
+
+  private buildEmptySemanticProfile(): StrategySemanticProfile {
+    return {
+      indicators: [],
+      actions: [],
+      ruleMappings: [],
+      rules: [],
+      sizing: null,
+      requiredParams: [],
+      fallbackDetected: false,
+    }
+  }
+
+  private hashCanonicalJson(value: unknown): string {
+    return createHash('sha256').update(canonicalSerialize(value)).digest('hex')
+  }
+
+  private hashText(value: string): string {
+    return createHash('sha256').update(value, 'utf8').digest('hex')
+  }
+
+  private readCompiledIrHash(compiled: ReturnType<CanonicalSpecV2IrCompilerService['compile']>): string | null {
+    const maybeHash = (compiled as unknown as { irHash?: unknown }).irHash
+    return typeof maybeHash === 'string' ? this.stripSha256Prefix(maybeHash) : null
+  }
+
+  private readAstDigest(ast: ReturnType<CanonicalStrategyAstCompilerService['compile']>): string | null {
+    const maybeDigest = (ast as unknown as { manifest?: { astDigest?: unknown } }).manifest?.astDigest
+    return typeof maybeDigest === 'string' ? this.stripSha256Prefix(maybeDigest) : null
+  }
+
+  private readParsedAstDigest(parsed: ReturnType<CompiledScriptParserService['parse']> | null): string | null {
+    const maybeDigest = (parsed as unknown as { compiledManifest?: { astDigest?: unknown } } | null)
+      ?.compiledManifest?.astDigest
+    return typeof maybeDigest === 'string' ? this.stripSha256Prefix(maybeDigest) : null
+  }
+
+  private stripSha256Prefix(value: string): string {
+    return value.startsWith('sha256:') ? value.slice('sha256:'.length) : value
   }
 
   validateCompiledScript(scriptCode: string): CompiledScriptValidationResult {

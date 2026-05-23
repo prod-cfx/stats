@@ -242,16 +242,9 @@ describe('SemanticRuleProjectionService (Issue #1395)', () => {
     const drawdown = out.orchestration.find(node => node.key === 'portfolioRisk.drawdown_block')
     const implicitGate = out.orchestration.find(node => node.id === 'r-orchestration-shape-eff-0-implicit-gate')
 
-    expect(implicitGate).toMatchObject({
-      kind: 'gate',
-      key: 'gate.regime',
-      status: 'locked',
-      target: { phase: 'entry', sideScope: 'both' },
-      effectWhenFalse: 'block_new_entries',
-    })
+    expect(implicitGate).toBeUndefined()
     expect(program).toMatchObject({
       programKind: 'fixed_grid_gated',
-      activeWhenRef: 'r-orchestration-shape-eff-0-implicit-gate',
       onDeactivate: 'cancel',
       rebuildPolicy: 'static',
       gridParams: {
@@ -263,6 +256,7 @@ describe('SemanticRuleProjectionService (Issue #1395)', () => {
       },
       sizing: { mode: 'fixed_pct', value: 10 },
     })
+    expect(program?.activeWhenRef).toBeUndefined()
     expect(drawdown).toMatchObject({
       kind: 'portfolioRisk',
       scope: 'portfolio',
@@ -279,7 +273,7 @@ describe('SemanticRuleProjectionService (Issue #1395)', () => {
       condition: { kind: 'atom', key: 'oscillator.rsi_lte', params: { threshold: 30 } },
       effects: [
         { kind: 'atom', key: 'program.dynamic_grid', params: {} },
-        { kind: 'atom', key: 'gate.regime', params: {} },
+        { kind: 'atom', key: 'gate.regime', params: { effectWhenFalse: 'block_new_entries' } },
       ],
     }]
     const out = svc.projectToFlat(rules)

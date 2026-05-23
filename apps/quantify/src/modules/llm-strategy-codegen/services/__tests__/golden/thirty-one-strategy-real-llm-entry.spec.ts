@@ -38,7 +38,7 @@ import type { ChatMessage } from '../../../../ai/providers/llm-provider-adapter.
 import { ATOM_CONTRACT_REGISTRY } from '../../../atom-contracts/atom-contract-registry'
 import { PlannerDispatcherMergeService } from '../../planner-dispatcher-merge.service'
 import { buildConversationPlannerSystemPrompt } from '../../../prompts/conversation-planner-system.prompt'
-import { collectAtomLeaves, type SemanticRule } from '../../../types/atom-expr'
+import { collectAtomLeaves, listRuleEffects, type SemanticRule } from '../../../types/atom-expr'
 import { THIRTY_ONE_STRATEGIES, type ThirtyOneStrategyFixture } from '../fixtures/thirty-one-strategies'
 
 /**
@@ -337,7 +337,7 @@ function collectAllConditionLeaves(rules: SemanticRule[]): Array<{ key: string, 
 function collectAllEffectLeaves(rules: SemanticRule[]): Array<{ key: string, phase: string, sideScope: string, params: Record<string, unknown> }> {
   const out: Array<{ key: string, phase: string, sideScope: string, params: Record<string, unknown> }> = []
   for (const rule of rules) {
-    for (const eff of rule.effects) {
+    for (const eff of listRuleEffects(rule.effects)) {
       for (const leaf of collectAtomLeaves(eff)) {
         out.push({
           key: leaf.key,

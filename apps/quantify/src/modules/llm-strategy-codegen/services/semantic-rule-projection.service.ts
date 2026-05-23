@@ -31,6 +31,11 @@ import type {
   AtomExprAtom,
   SemanticRule,
 } from '../types/atom-expr'
+import {
+  forEachRuleEffect,
+  listRuleEffects,
+  mapRuleEffectsByRole,
+} from '../types/atom-expr'
 import type {
   SemanticActionState,
   SemanticFlatAtomProvenance,
@@ -164,7 +169,7 @@ export class SemanticRuleProjectionService {
     let changed = false
     const condition = this.sanitizeGridExpr(rule.condition)
     if (condition !== rule.condition) changed = true
-    const effects = rule.effects.map((effect) => {
+    const effects = mapRuleEffectsByRole(rule.effects, (effect) => {
       const next = this.sanitizeGridExpr(effect)
       if (next !== effect) changed = true
       return next
@@ -221,12 +226,13 @@ export class SemanticRuleProjectionService {
   }
 
   private gridRuleSignature(rule: SemanticRule): string | null {
+    const effectLeaves = listRuleEffects(rule.effects).flatMap(effect => this.collectExprLeaves(effect))
     const leaves = [
       ...this.collectExprLeaves(rule.condition),
-      ...rule.effects.flatMap(effect => this.collectExprLeaves(effect)),
+      ...effectLeaves,
     ].filter(leaf => leaf.key === GRID_RANGE_REBALANCE_ATOM_KEY)
     if (leaves.length === 0) return null
-    if (leaves.length !== this.collectExprLeaves(rule.condition).length + rule.effects.flatMap(effect => this.collectExprLeaves(effect)).length) {
+    if (leaves.length !== this.collectExprLeaves(rule.condition).length + effectLeaves.length) {
       return null
     }
     const first = leaves[0]
@@ -259,7 +265,8 @@ export class SemanticRuleProjectionService {
       }
 
       const effects: AtomExpr[] = []
-      for (const effect of rule.effects) {
+      const originalEffects = listRuleEffects(rule.effects)
+      for (const effect of originalEffects) {
         const pruned = this.pruneAtomKeyFromExpr(effect, POSITION_PYRAMIDING_LIMIT_ATOM_KEY)
         if (!pruned) {
           changed = true
@@ -278,7 +285,7 @@ export class SemanticRuleProjectionService {
         continue
       }
 
-      next.push(effects.length === rule.effects.length && effects.every((effect, index) => effect === rule.effects[index])
+      next.push(effects.length === originalEffects.length && effects.every((effect, index) => effect === originalEffects[index])
         ? rule
         : { ...rule, effects })
     }
@@ -289,7 +296,7 @@ export class SemanticRuleProjectionService {
   private rulesContainAtomKey(rules: ReadonlyArray<SemanticRule>, atomKey: string): boolean {
     return rules.some(rule =>
       this.exprContainsAtomKey(rule.condition, atomKey)
-      || rule.effects.some(effect => this.exprContainsAtomKey(effect, atomKey)),
+      || listRuleEffects(rule.effects).some(effect => this.exprContainsAtomKey(effect, atomKey)),
     )
   }
 
@@ -392,17 +399,19 @@ export class SemanticRuleProjectionService {
     for (const rule of rules) {
       this.projectCondition(rule, out)
 
-      let effectIndex = 0
-      for (const eff of rule.effects) {
-        // effects[N] 顶层是 AtomExpr（可能是 atom 或 sequence/and/or/not），
-        //   遍历叶子时拼接 `effects[N].<expr-path>` 作为 conditionPath。
+      forEachRuleEffect(rule.effects, (eff, effectIndex, role, roleIndex) => {
+        // legacy effects[N] 或 typed effects.<role>[N] 顶层是 AtomExpr
+        // （可能是 atom 或 sequence/and/or/not），遍历叶子时拼接
+        // `<base>.<expr-path>` 作为 conditionPath。
         //
         // 审查 Critical C1（#1447 闸 3 第 1 轮）：effectIndex 在 walk 回调里被闭包捕获，
         //   若 eff 是复合节点（sequence / and / or 含多叶子），所有叶子共享同一 effectIndex
         //   会产出相同 baseId `${rule.id}-eff-${effectIndex}` → action/risk 桶 id 重复。
         //   修复：在回调外维护 leafIndexWithinEffect，每个叶子 id 形如
         //   `${rule.id}-eff-${effectIndex}-${leafIdx}`（单叶子时 leafIdx=0，与旧行为兼容）。
-        const effBasePath = `effects[${effectIndex}]`
+        const effBasePath = role && roleIndex !== undefined
+          ? `effects.${role}[${roleIndex}]`
+          : `effects[${effectIndex}]`
         let leafIdxWithinEffect = 0
         this.walkLeavesWithPath(eff, effBasePath, (leaf, leafPath) => {
           const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string } | undefined>)[leaf.key]
@@ -419,8 +428,7 @@ export class SemanticRuleProjectionService {
             conditionPath: leafPath,
           })
         })
-        effectIndex += 1
-      }
+      })
     }
 
     // Issue #1447 闸 3：merge / projection 链路末端 invariant 校验。
@@ -536,9 +544,9 @@ export class SemanticRuleProjectionService {
     return null
   }
 
-  /** rule.phase 'entry' | 'exit' | 'gate' → trigger phase 'entry' | 'exit' | 'risk' | 'gate' */
+  /** rule.phase 'entry' | 'exit' | 'gate' | 'program' → trigger phase；program 暂按 gate 兼容投影。 */
   private phaseToTriggerPhase(phase: SemanticRule['phase']): SemanticTriggerState['phase'] {
-    return phase
+    return phase === 'program' ? 'gate' : phase
   }
 
   private atomToTrigger(
@@ -694,13 +702,12 @@ export class SemanticRuleProjectionService {
     }
 
     if (leaf.key === 'program.fixed_grid_gated') {
-      const gateId = this.readString(leaf.params.activeWhenRef) ?? `${baseId}-implicit-gate`
+      const activeWhenRef = this.readString(leaf.params.activeWhenRef)
       return [
-        ...(leaf.params.activeWhenRef ? [] : [this.buildImplicitAlwaysOnGate(gateId, baseId, provenance)]),
         {
           ...base,
           programKind: 'fixed_grid_gated',
-          activeWhenRef: gateId,
+          ...(activeWhenRef ? { activeWhenRef } : {}),
           onDeactivate: this.readEnum(leaf.params.onDeactivate, ['cancel', 'keep', 'close'] as const) ?? 'cancel',
           rebuildPolicy: 'static',
           gridParams: this.normalizeFixedGridParams(leaf.params),
@@ -733,9 +740,9 @@ export class SemanticRuleProjectionService {
     }
 
     if (leaf.key === 'gate.regime') {
-      // Rules-tree gate effects are predicate-level filters. The rule condition itself
-      // remains the executable source; projecting this bare effect into orchestration
-      // creates a phase0 runtime node without target/activeWhen and blocks codegen.
+      // Rules-tree bare gate effects are predicate-level filters. The rule condition
+      // remains the executable source; projecting the empty effect creates a runtime
+      // gate node without target/activeWhen/effectWhenFalse.
       if (!leaf.params.activeWhen && !leaf.params.target && !leaf.params.effectWhenFalse) {
         return []
       }
@@ -772,10 +779,14 @@ export class SemanticRuleProjectionService {
   }
 
   private normalizeFixedGridParams(params: Readonly<Record<string, unknown>>): SemanticOrchestrationNode['gridParams'] {
-    const lowerBound = this.readNumber(params.lowerBound) ?? this.readNumber(params.lower)
-    const upperBound = this.readNumber(params.upperBound) ?? this.readNumber(params.upper)
-    const anchorPrice = this.readNumber(params.anchorPrice)
-      ?? (lowerBound !== undefined && upperBound !== undefined ? (lowerBound + upperBound) / 2 : 1)
+    const rawLowerBound = this.readNumber(params.lowerBound) ?? this.readNumber(params.lower)
+    const rawUpperBound = this.readNumber(params.upperBound) ?? this.readNumber(params.upper)
+    const lowerBound = rawLowerBound !== undefined && rawLowerBound > 0 ? rawLowerBound : undefined
+    const upperBound = rawUpperBound !== undefined && rawUpperBound > 0 ? rawUpperBound : undefined
+    const explicitAnchorPrice = this.readNumber(params.anchorPrice)
+    const anchorPrice = explicitAnchorPrice !== undefined && explicitAnchorPrice > 0
+      ? explicitAnchorPrice
+      : (lowerBound !== undefined && upperBound !== undefined ? (lowerBound + upperBound) / 2 : 1)
     const levelCount = this.readNumber(params.levelCount) ?? this.readNumber(params.levels) ?? 10
     const stepPct = this.readNumber(params.stepPct) ?? 1
     return {

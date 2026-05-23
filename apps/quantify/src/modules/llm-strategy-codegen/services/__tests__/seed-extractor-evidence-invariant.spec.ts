@@ -1,3 +1,4 @@
+import { collectAtomLeaves } from '../../types/atom-expr'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { AC7_USER_PROMPTS, AC12_WEBHOOK_PROMPTS } from './fixtures/ac-prompts'
 
@@ -31,17 +32,13 @@ import { AC7_USER_PROMPTS, AC12_WEBHOOK_PROMPTS } from './fixtures/ac-prompts'
 describe('issue #1223 / #1279 PR2c6b — dispatcher evidence invariant', () => {
   const dispatcher = new GenericSeedDispatcher()
 
-  interface EvidenceBearing { evidence?: { text?: string, source?: string } }
+  interface EvidenceBearing { key?: string, evidence?: { text?: string } }
 
   function collectAllNodes(patch: ReturnType<GenericSeedDispatcher['dispatch']>): EvidenceBearing[] {
-    return [
-      ...(patch.triggers ?? []),
-      ...(patch.actions ?? []),
-      ...(patch.risk ?? []),
-    ] as EvidenceBearing[]
+    return (patch.rules ?? []).flatMap(rule => collectAtomLeaves(rule.condition))
   }
 
-  describe('i1：dispatcher 产出的每条节点必带 evidence.text 与 evidence.source', () => {
+  describe('i1：dispatcher typed condition 节点必带 evidence.text', () => {
     it('所有节点 evidence 字段完整（AC-7-style utterance）', () => {
       const message = 'BTCUSDT 1m 收盘价高于开盘价开多，亏损 5% 止损'
       const patch = dispatcher.dispatch(message)
@@ -52,7 +49,6 @@ describe('issue #1223 / #1279 PR2c6b — dispatcher evidence invariant', () => {
         expect(typeof node.evidence?.text).toBe('string')
         // review m3：从 `length > 0` 收紧到 `trim().length > 0`，防 whitespace-only text
         expect((node.evidence?.text ?? '').trim().length).toBeGreaterThan(0)
-        expect(typeof node.evidence?.source).toBe('string')
       }
     })
   })
@@ -67,33 +63,29 @@ describe('issue #1223 / #1279 PR2c6b — dispatcher evidence invariant', () => {
     })
   })
 
-  describe('i3：evidence.source 按 utterance 类型区分（PR2c5 升级）', () => {
-    describe('ac-12 webhook prompt：external.signal 节点 source 必须是 webhook', () => {
+  describe('i3：typed rules 保留 webhook / user prompt 的 evidence text', () => {
+    describe('ac-12 webhook prompt：external.signal 节点必须带 evidence.text', () => {
       it.each(AC12_WEBHOOK_PROMPTS)(
-        '$id：external.signal 节点 evidence.source === "webhook"',
+        '$id：external.signal 节点 evidence.text 存在',
         ({ utterance }) => {
           const patch = dispatcher.dispatch(utterance)
-          const triggers = patch.triggers ?? []
-          const externalSignalNodes = (triggers as EvidenceBearing[]).filter(
-            t => (t as { key?: string }).key === 'external.signal',
-          )
+          const externalSignalNodes = collectAllNodes(patch).filter(t => t.key === 'external.signal')
           expect(externalSignalNodes.length).toBeGreaterThanOrEqual(1)
           for (const node of externalSignalNodes) {
-            expect(node.evidence?.source).toBe('webhook')
+            expect(node.evidence?.text).toBeTruthy()
           }
         },
       )
     })
 
-    describe('ac-7 user prompt：所有节点 source 必须是 user_explicit', () => {
+    describe('ac-7 user prompt：所有节点 evidence.text 必须存在', () => {
       it.each(AC7_USER_PROMPTS)(
-        '$id：所有节点 evidence.source === "user_explicit"',
+        '$id：所有节点 evidence.text 存在',
         ({ utterance }) => {
           const patch = dispatcher.dispatch(utterance)
           const nodes = collectAllNodes(patch)
-          // AC-7 prompt 不含 webhook/external.signal 语义，所有节点应为 user_explicit
-          const wrongSource = nodes.filter(n => n.evidence?.source !== 'user_explicit')
-          expect(wrongSource).toEqual([])
+          expect(nodes.length).toBeGreaterThan(0)
+          expect(nodes.filter(n => !n.evidence?.text)).toEqual([])
         },
       )
     })
@@ -104,8 +96,9 @@ describe('issue #1223 / #1279 PR2c6b — dispatcher evidence invariant', () => {
 
     it('dispatcher 输出不含无 evidence 的 condition.expression phase=gate', () => {
       const patch = dispatcher.dispatch(case2Message)
-      const phantomGateAtoms = (patch.triggers ?? []).filter((t) => {
-        const trigger = t as { key?: string, phase?: string, evidence?: { text?: string } }
+      const phantomGateAtoms = (patch.rules ?? []).flatMap(rule =>
+        collectAtomLeaves(rule.condition).map(leaf => ({ ...leaf, phase: rule.phase })),
+      ).filter((trigger) => {
         return trigger.key === 'condition.expression'
           && trigger.phase === 'gate'
           && (!trigger.evidence?.text || !case2Message.includes(trigger.evidence.text))
@@ -117,24 +110,18 @@ describe('issue #1223 / #1279 PR2c6b — dispatcher evidence invariant', () => {
   describe('i5：dispatcher 接受空 / 未提供 message，不抛且产空 patch', () => {
     it('未提供 message 不抛且不产 trigger / action / risk', () => {
       const patch = dispatcher.dispatch()
-      expect(patch.triggers ?? []).toEqual([])
-      expect(patch.actions ?? []).toEqual([])
-      expect(patch.risk ?? []).toEqual([])
+      expect(patch.rules ?? []).toEqual([])
     })
 
     it('空字符串 message 不抛且不产 trigger / action / risk', () => {
       const patch = dispatcher.dispatch('')
-      expect(patch.triggers ?? []).toEqual([])
-      expect(patch.actions ?? []).toEqual([])
-      expect(patch.risk ?? []).toEqual([])
+      expect(patch.rules ?? []).toEqual([])
     })
 
     it('whitespace-only message 不抛且不产 trigger / action / risk（review m1）', () => {
       // 包含空格 / 制表符 / 换行：dispatcher 内部 `(message ?? '').trim()` 后应等价于空 message
       const patch = dispatcher.dispatch('   \n\t  ')
-      expect(patch.triggers ?? []).toEqual([])
-      expect(patch.actions ?? []).toEqual([])
-      expect(patch.risk ?? []).toEqual([])
+      expect(patch.rules ?? []).toEqual([])
     })
   })
 })

@@ -339,11 +339,18 @@ function omitInternalSpecDescFields(specDesc: Record<string, unknown>): Record<s
     canonicalSpec,
     riskRules: _riskRules,
     normalizedIntent: _normalizedIntent,
+    scriptSummary: _scriptSummary,
+    strategySummary: _strategySummary,
+    userIntentSummary: _userIntentSummary,
+    summaryObservation: _summaryObservation,
     stateHints: _stateHints,
     canonicalSnapshot: _canonicalSnapshot,
     specSnapshot: _specSnapshot,
     semanticState: _semanticState,
+    semanticAtomInvariant: _semanticAtomInvariant,
+    semanticPredicateGraph: _semanticPredicateGraph,
     consistencyReport: _consistencyReport,
+    stage1ConsistencyEvidence: _stage1ConsistencyEvidence,
     ...publicSpecDesc
   } = specDesc
   const conditionTextByRuleId = readDisplayConditionTextByRuleId(publicSpecDesc.displayLogicGraph)
@@ -378,12 +385,9 @@ function toPublicRule(
     publicRule.condition = { text: conditionText }
   } else {
     const condition = isRecord(rule.condition) ? rule.condition : null
-    if (condition && typeof condition.key === 'string') {
-      const publicCondition: Record<string, unknown> = { key: condition.key }
-      if (isRecord(condition.params)) {
-        publicCondition.params = condition.params
-      }
-      publicRule.condition = publicCondition
+    const fallbackConditionText = toPublicConditionText(condition)
+    if (fallbackConditionText) {
+      publicRule.condition = { text: fallbackConditionText }
     }
   }
 
@@ -399,6 +403,43 @@ function toPublicRule(
   }
 
   return publicRule
+}
+
+function toPublicConditionText(condition: Record<string, unknown> | null): string | null {
+  if (!condition || typeof condition.key !== 'string') {
+    return null
+  }
+
+  if (condition.key === 'grid.range_rebalance') {
+    const params = isRecord(condition.params) ? condition.params : {}
+    const rangeMin = readNumericParam(params, 'rangeMin') ?? readNumericParam(params, 'rangeLower')
+    const rangeMax = readNumericParam(params, 'rangeMax') ?? readNumericParam(params, 'rangeUpper')
+    const stepPct = readNumericParam(params, 'stepPct') ?? readNumericParam(params, 'gridStepPct')
+    const parts: string[] = []
+    if (rangeMin !== null && rangeMax !== null) {
+      parts.push(`网格区间 ${formatNumber(rangeMin)}-${formatNumber(rangeMax)}`)
+    }
+    if (stepPct !== null) {
+      parts.push(`间距 ${formatNumber(stepPct)}%`)
+    }
+    return parts.length > 0 ? parts.join('，') : '网格运行条件'
+  }
+
+  return '策略条件'
+}
+
+function readNumericParam(params: Record<string, unknown>, key: string): number | null {
+  const value = params[key]
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const numeric = Number(value)
+    return Number.isFinite(numeric) ? numeric : null
+  }
+  return null
+}
+
+function formatNumber(value: number): string {
+  return Number(value.toFixed(8)).toString()
 }
 
 function readRuleConditionText(

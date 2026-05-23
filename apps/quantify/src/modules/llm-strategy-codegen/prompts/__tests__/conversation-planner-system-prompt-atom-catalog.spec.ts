@@ -25,8 +25,8 @@ describe('conversationPlannerSystemPrompt — atom catalog injection (issue #134
       expect(prompt).toContain('禁止自由文本或自创 atom')
     })
 
-    it('显式列出 phase enum 为 entry / exit / gate', () => {
-      expect(prompt).toMatch(/phase\s*∈\s*\[entry,\s*exit,\s*gate\]/)
+    it('显式列出 phase enum 为 entry / exit / gate / program', () => {
+      expect(prompt).toMatch(/phase\s*∈\s*\[entry,\s*exit,\s*gate,\s*program\]/)
     })
 
     it('要求 contextSlots 是 { value, source } 形态', () => {
@@ -47,6 +47,23 @@ describe('conversationPlannerSystemPrompt — atom catalog injection (issue #134
     it('包含动态 atom 总数（绝不写死，断言数值与注册表长度一致）', () => {
       const total = getAllRegisteredAtomKeys().length
       expect(prompt).toContain(`${total} 个原子枚举`)
+    })
+
+    it('grid.range_rebalance 不在 catalog 中宣告 phase=entry', () => {
+      expect(prompt).toContain('grid.range_rebalance phase=program')
+      expect(prompt).not.toContain('grid.range_rebalance phase=entry')
+    })
+
+    it('catalog labels use typed rules paths, not legacy flat paths', () => {
+      expect(prompt).toContain('rules[].condition')
+      expect(prompt).toContain('rules[].effects.actions')
+      expect(prompt).toContain('effects.risks')
+      expect(prompt).toContain('effects.positions')
+      expect(prompt).toContain('effects.orchestration')
+      expect(prompt).toContain('effects.programs')
+      expect(prompt).not.toContain('triggers[].key')
+      expect(prompt).not.toContain('actions[].key')
+      expect(prompt).not.toContain('risk[].key')
     })
 
     it('保留 v1 原 25 行约束语句（零回退）', () => {

@@ -54,11 +54,22 @@ type DisplayExpressionOperand =
 
 interface DisplayLogicGraphAction {
   type?: string
+  key?: string
+  kind?: string
+  params?: Record<string, unknown>
   sizing?: {
     mode?: string
     value?: unknown
     asset?: unknown
   }
+}
+
+interface DisplayLogicGraphEffectsByRole {
+  actions?: unknown[]
+  risks?: unknown[]
+  positions?: unknown[]
+  orchestration?: unknown[]
+  programs?: unknown[]
 }
 
 interface DisplayLogicGraphRule {
@@ -67,6 +78,7 @@ interface DisplayLogicGraphRule {
   join?: 'AND' | 'OR'
   condition?: DisplayLogicGraphCondition
   actions?: DisplayLogicGraphAction[]
+  effects?: unknown
 }
 
 interface DisplayLogicGraphMarket {
@@ -265,6 +277,22 @@ function formatTakeProfitCondition(condition: DisplayLogicGraphCondition): strin
   return `盈利达到 ${percent}%`
 }
 
+function formatStopLossCondition(condition: DisplayLogicGraphCondition): string {
+  const rawValue = typeof condition.value === 'number' && Number.isFinite(condition.value)
+    ? condition.value
+    : condition.params?.valuePct
+  const percent = formatPercent(rawValue)
+  if (!percent) return '止损条件'
+  const basis = pickString(condition.params?.basis)
+  if (basis === 'entry_avg_price') {
+    return `止损：价格相对开仓均价下跌${percent}%`
+  }
+  if (basis === 'position_pnl') {
+    return `止损：持仓收益下跌${percent}%`
+  }
+  return `止损：价格下跌${percent}%`
+}
+
 function formatPositionLossCondition(condition: DisplayLogicGraphCondition): string {
   const rawValue = typeof condition.value === 'number' && Number.isFinite(condition.value)
     ? condition.value
@@ -422,6 +450,8 @@ function formatCanonicalAtomCondition(condition: DisplayLogicGraphCondition): st
       const multiple = formatNumber(condition.params?.multiple)
       return multiple ? `${multiple} 倍 ATR 止盈` : 'ATR 止盈'
     }
+    case 'risk.stop_loss_pct':
+      return formatStopLossCondition(condition)
     case 'risk.remembered_level_stop': {
       const levelKey = pickString(condition.params?.levelKey)
       return levelKey ? `跌破记录位 ${levelKey} 止损` : '记录位止损'
@@ -477,6 +507,8 @@ function formatConditionText(condition: DisplayLogicGraphCondition | undefined):
     case 'risk.take_profit_pct':
     case 'position_profit_pct':
       return formatTakeProfitCondition(condition)
+    case 'risk.stop_loss_pct':
+      return formatStopLossCondition(condition)
     case 'position_loss_pct':
       return formatPositionLossCondition(condition)
     case 'bollinger.upper_break':
@@ -561,6 +593,23 @@ function formatExpressionOperator(op: string): string {
 }
 
 function formatActionVerb(action: DisplayLogicGraphAction): string {
+  switch (action.key) {
+    case 'action.open_long':
+      return '开多'
+    case 'action.open_short':
+      return '开空'
+    case 'action.close_long':
+      return '平多'
+    case 'action.close_short':
+      return '平空'
+    case 'action.add_position':
+      return '加仓'
+    case 'action.reduce_position':
+      return '减仓'
+    default:
+      break
+  }
+
   switch (action.type) {
     case 'OPEN_LONG':
       return '开多'
@@ -616,12 +665,96 @@ function asDisplayGraphSizing(value: unknown): DisplayLogicGraphAction['sizing']
     : null
 }
 
+function normalizeActionFromAtomEffect(effect: unknown): DisplayLogicGraphAction | null {
+  if (!isRecord(effect)) return null
+  const key = asString(effect.key)
+  const params = isRecord(effect.params) ? effect.params : {}
+  const sizing = asDisplayGraphSizing(params.sizing)
+    ?? (typeof params.sizePct === 'number' ? { mode: 'RATIO', value: params.sizePct } : null)
+    ?? (typeof params.quoteAmount === 'number' ? { mode: 'QUOTE', value: params.quoteAmount, asset: params.quoteAsset } : null)
+
+  switch (key) {
+    case 'action.open_long':
+      return { key, type: 'OPEN_LONG', params, ...(sizing ? { sizing } : {}) }
+    case 'action.open_short':
+      return { key, type: 'OPEN_SHORT', params, ...(sizing ? { sizing } : {}) }
+    case 'action.close_long':
+      return { key, type: 'CLOSE_LONG', params, ...(sizing ? { sizing } : {}) }
+    case 'action.close_short':
+      return { key, type: 'CLOSE_SHORT', params, ...(sizing ? { sizing } : {}) }
+    case 'action.add_position':
+      return { key, type: 'OPEN_LONG', params, ...(sizing ? { sizing } : {}) }
+    case 'action.reduce_position':
+      return { key, type: 'REDUCE_LONG', params, ...(sizing ? { sizing } : {}) }
+    default:
+      return null
+  }
+}
+
+function normalizeDisplayAction(value: unknown): DisplayLogicGraphAction | null {
+  if (!isRecord(value)) return null
+  const action = value as DisplayLogicGraphAction
+  if (asString(action.type)) return action
+  return normalizeActionFromAtomEffect(action)
+}
+
+function isEffectsByRole(value: unknown): value is DisplayLogicGraphEffectsByRole {
+  return isRecord(value) && (
+    Array.isArray(value.actions)
+    || Array.isArray(value.risks)
+    || Array.isArray(value.positions)
+    || Array.isArray(value.orchestration)
+    || Array.isArray(value.programs)
+  )
+}
+
+function extractDisplayActions(rule: DisplayLogicGraphRule): DisplayLogicGraphAction[] {
+  const legacyActions = Array.isArray(rule.actions)
+    ? rule.actions.map(normalizeDisplayAction).filter((action): action is DisplayLogicGraphAction => Boolean(action))
+    : []
+  if (legacyActions.length > 0) return legacyActions
+
+  if (isEffectsByRole(rule.effects)) {
+    return (rule.effects.actions ?? [])
+      .map(normalizeDisplayAction)
+      .filter((action): action is DisplayLogicGraphAction => Boolean(action))
+  }
+
+  if (Array.isArray(rule.effects)) {
+    return rule.effects
+      .map(normalizeDisplayAction)
+      .filter((action): action is DisplayLogicGraphAction => Boolean(action))
+  }
+
+  return []
+}
+
+function hasTypedRiskEffects(rule: DisplayLogicGraphRule): boolean {
+  if (isEffectsByRole(rule.effects)) {
+    return (rule.effects.risks ?? [])
+      .some(effect => isRecord(effect) && asString(effect.key)?.startsWith('risk.'))
+  }
+
+  if (Array.isArray(rule.effects)) {
+    return rule.effects
+      .some(effect => isRecord(effect) && asString(effect.key)?.startsWith('risk.'))
+  }
+
+  return false
+}
+
+function isRiskDisplayRule(rule: DisplayLogicGraphRule): boolean {
+  return rule.phase === 'risk'
+    || Boolean(rule.condition?.key?.startsWith('risk.'))
+    || hasTypedRiskEffects(rule)
+}
+
 function extractPositionSizing(specDesc: DisplayLogicGraphSpecDesc | null, fallbackPositionPct: unknown): string | null {
   const canonicalSizing = formatSizingAmount(asDisplayGraphSizing(specDesc?.canonicalSpec?.sizing))
   if (canonicalSizing) return canonicalSizing
 
   const actionSizing = extractRules(specDesc)
-    .flatMap(rule => rule.actions ?? [])
+    .flatMap(rule => extractDisplayActions(rule))
     .map(action => formatSizingAmount(action.sizing))
     .find((item): item is string => Boolean(item))
   if (actionSizing) return actionSizing
@@ -635,7 +768,7 @@ function extractRules(specDesc: DisplayLogicGraphSpecDesc | null): DisplayLogicG
 
 function buildRiskSummaryText(rule: DisplayLogicGraphRule, fallbackSymbol?: string): string | null {
   const conditionText = formatConditionText(rule.condition)
-  const actionText = (rule.actions ?? [])
+  const actionText = extractDisplayActions(rule)
     .map(action => formatActionText(action, fallbackSymbol))
     .filter(Boolean)
     .join(' / ')
@@ -710,7 +843,7 @@ function extractExecuteMeta(specDesc: DisplayLogicGraphSpecDesc | null, fallback
   const sizingInput = specDesc?.canonicalSpec?.sizing
     ?? lockedParams.sizing
     ?? extractRules(specDesc)
-      .flatMap(rule => rule.actions ?? [])
+      .flatMap(rule => extractDisplayActions(rule))
       .map(action => action.sizing)
       .find(sizing => sizing && typeof sizing === 'object')
     ?? fallbackMeta?.sizing
@@ -755,7 +888,7 @@ function buildConditionBlock(rule: DisplayLogicGraphRule, index: number, fallbac
     text: formatConditionText(rule.condition),
   }
 
-  const actionItems: DisplayActionItem[] = (rule.actions ?? [])
+  const actionItems: DisplayActionItem[] = extractDisplayActions(rule)
     .map((action, actionIndex) => {
       const text = formatActionText(action, fallbackSymbol)
       return {
@@ -852,10 +985,12 @@ function buildExecuteBlock(meta: ReturnType<typeof extractExecuteMeta>): Display
 export function buildDisplayLogicGraphFromCodegenSpec(input: BuildDisplayLogicGraphInput | null | undefined): DisplayLogicGraph {
   const nextInput = input ?? {}
   const specDesc = isRecord(nextInput.specDesc) ? nextInput.specDesc as DisplayLogicGraphSpecDesc : null
-  const serverDisplayGraph = normalizeServerDisplayLogicGraph(specDesc?.displayLogicGraph)
-  if (serverDisplayGraph) return serverDisplayGraph
   const rules = extractRules(specDesc)
-  const nonRiskRules = rules.filter(rule => rule.phase !== 'risk')
+  if (rules.length === 0) {
+    const serverDisplayGraph = normalizeServerDisplayLogicGraph(specDesc?.displayLogicGraph)
+    if (serverDisplayGraph) return serverDisplayGraph
+  }
+  const nonRiskRules = rules.filter(rule => !isRiskDisplayRule(rule))
   const executeMeta = extractExecuteMeta(specDesc, nextInput.fallbackMeta)
   const executeBlock = buildExecuteBlock(executeMeta)
   const fallbackSymbol = executeMeta.symbol ?? nextInput.fallbackMeta?.symbol
@@ -864,7 +999,7 @@ export function buildDisplayLogicGraphFromCodegenSpec(input: BuildDisplayLogicGr
     : buildLegacyRuleBlocks(specDesc)
   const riskSummaries = [
     ...rules
-      .filter(rule => rule.phase === 'risk')
+      .filter(rule => isRiskDisplayRule(rule))
       .map(rule => ({
         key: rule.condition?.key ?? 'risk',
         text: buildRiskSummaryText(rule, fallbackSymbol ?? undefined),
@@ -923,6 +1058,8 @@ function localizeDisplayText(text: string): string {
     .replace(/风控:/gu, 'Risk:')
     .replace(/开多/gu, 'Open long')
     .replace(/开空/gu, 'Open short')
+    .replace(/平多/gu, 'Close long')
+    .replace(/平空/gu, 'Close short')
     .replace(/平仓/gu, 'Close position')
     .replace(/减仓/gu, 'Reduce position')
 

@@ -1,4 +1,5 @@
 import type { CodegenSemanticPatch } from '../../types/codegen-semantic-patch'
+import { collectAtomLeaves, listRuleEffects } from '../../types/atom-expr'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { PlannerDispatcherMergeService } from '../planner-dispatcher-merge.service'
 
@@ -21,6 +22,35 @@ describe('PlannerDispatcherMergeService', () => {
   it('returns dispatcher unchanged when only dispatcher present', () => {
     const dispatcher: CodegenSemanticPatch = { atoms: [{ key: 'grid.range_rebalance' }] }
     expect(svc.mergePlannerAndDispatcherPatches(null, dispatcher)).toBe(dispatcher)
+  })
+
+  it('preserves dispatcher program phase when building rules fallback', () => {
+    const dispatcher = {
+      atoms: [
+        {
+          key: 'grid.range_rebalance',
+          phase: 'program',
+          sideScope: 'both',
+          params: { centerOffsetPct: 0.4, levels: 10, perGridSizing: 10, sideMode: 'both' },
+          evidence: { text: '上下各 0.4% 共 10 格，每格 10U' },
+        },
+        {
+          key: 'program.fixed_grid_gated',
+          phase: 'program',
+          sideScope: 'both',
+          params: { levelCount: 10, stepPct: 0.4 },
+          evidence: { text: '上下各 0.4% 共 10 格，每格 10U' },
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+
+    const fallback = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, '上下各 0.4% 共 10 格，每格 10U')
+    const gridRule = fallback?.rules?.find(rule => rule.condition.kind === 'atom' && rule.condition.key === 'grid.range_rebalance')
+
+    expect(gridRule?.phase).toBe('program')
+    expect((gridRule?.effects as { programs?: unknown[] } | undefined)?.programs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'program.fixed_grid_gated' }),
+    ]))
   })
 
   it('dedupes atoms by (key, phase, stableParamsHash) — planner wins identity match', () => {
@@ -173,8 +203,9 @@ describe('PlannerDispatcherMergeService', () => {
     //   planner-rule 仍保留作为第一条，验证"planner is authoritative for tree" 语义。
     expect(rules?.[0].id).toBe('planner-rule')
     expect(rules?.find(r => r.id === 'dispatcher-rule')).toBeUndefined()
-    expect(rules).toHaveLength(2)
+    expect(rules).toHaveLength(3)
     expect(rules?.[1].id).toMatch(/^dispatcher-lift-/u)
+    expect(rules?.[2].id).toMatch(/^dispatcher-lift-/u)
   })
 
   it('orchestration nodes dedupe by id when present', () => {
@@ -220,6 +251,75 @@ describe('PlannerDispatcherMergeService', () => {
     expect((merged as { rules?: unknown[] })?.rules).toEqual((planner as { rules: unknown[] }).rules)
   })
 
+  it('execution-slot merge repairs planner ATR take-profit drift and keeps dispatcher sizing for stage1 case 7', () => {
+    const text = 'OKX 合约 BTCUSDT 1m，使用布林带 5,1。价格触及或突破上轨时做空，价格触及或突破下轨时做多；多单在价格回到中轨时平仓，空单在价格回到中轨时平仓；单笔仓位 10%，止损 1%，止盈 1.5%。'
+    const planner = {
+      rules: [{
+        id: 'entry-long-boll-5-1-touch-lower',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'bollinger.touch_lower', params: { band: 'lower', period: 5, stdDev: 1 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [
+            { kind: 'atom', key: 'risk.stop_loss_pct', params: { basis: 'entry_avg_price', valuePct: 1 } },
+            { kind: 'atom', key: 'risk.atr_take_profit', params: { period: 14, multiple: 1.5 } },
+          ],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const ruleEffects = ((merged?.rules ?? []) as Array<{ effects: unknown }>)
+      .flatMap(rule => listRuleEffects(rule.effects as never))
+      .flatMap(effect => collectAtomLeaves(effect))
+    const keys = ruleEffects.map(effect => effect.key)
+
+    expect(merged?.position?.sizing).toEqual({ kind: 'ratio', value: 0.1, unit: 'ratio' })
+    expect(keys).not.toContain('risk.atr_take_profit')
+    expect(ruleEffects).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.take_profit_pct',
+        params: expect.objectContaining({ valuePct: 1.5, basis: 'entry_avg_price' }),
+      }),
+    ]))
+  })
+
+  it('execution-slot merge restores dispatcher pullback reclaim when planner collapses stage1 case 17 to MA120 entry', () => {
+    const text = 'ETH 日线在 MA120 上方时，只做多；价格回踩 MA20 后重新站上 MA20 买入,ETH 日线在 MA120 下方时平仓'
+    const planner = {
+      rules: [
+        {
+          id: 'entry-long-ma120-up-ma20-reclaim',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'indicator.above', params: { indicator: 'ma', reference: { period: 120 } } },
+          effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+        },
+        {
+          id: 'exit-close-when-ma120-down',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'indicator.below', params: { indicator: 'ma', reference: { period: 120 } } },
+          effects: { actions: [{ kind: 'atom', key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const serializedRules = JSON.stringify(merged?.rules)
+
+    expect(serializedRules).toContain('condition.sequence')
+    expect(serializedRules).toContain('pullback_reclaim')
+    expect(serializedRules).toContain('indicator.above')
+    expect(serializedRules).toContain('indicator.below')
+  })
+
   it('execution-slot merge does not append single EMA entries already covered by planner AND rule', () => {
     const planner = {
       rules: [
@@ -252,8 +352,8 @@ describe('PlannerDispatcherMergeService', () => {
         { key: 'indicator.above', phase: 'entry', sideScope: 'long', params: { indicator: 'ema', 'reference.period': 60 } },
         { key: 'indicator.above', phase: 'entry', sideScope: 'long', params: { indicator: 'ema', 'reference.period': 144 } },
         { key: 'indicator.below', phase: 'exit', sideScope: 'long', params: { indicator: 'ema', 'reference.period': 20 } },
-        { key: 'action.open_long', phase: 'entry', sideScope: 'long', params: {} },
-        { key: 'action.close_long', phase: 'exit', sideScope: 'long', params: {} },
+        { key: 'action.open_long', phase: 'entry', sideScope: 'long', params: { phase: 'entry' } },
+        { key: 'action.close_long', phase: 'exit', sideScope: 'long', params: { phase: 'exit' } },
       ],
     } as unknown as CodegenSemanticPatch
 
@@ -277,12 +377,442 @@ describe('PlannerDispatcherMergeService', () => {
     expect(entryRules[0]).toEqual(expect.objectContaining({
       phase: 'entry',
       sideScope: 'long',
-      effects: [expect.objectContaining({ key: 'action.open_long' })],
+      effects: expect.objectContaining({
+        actions: [expect.objectContaining({ key: 'action.open_long' })],
+      }),
       condition: expect.objectContaining({ kind: 'and' }),
     }))
     const children = (entryRules[0]?.condition as { children?: Array<{ params?: Record<string, unknown> }> }).children ?? []
     expect(children.map(child => child.params?.timeframe).sort()).toEqual(['15m', '1h', '4h'])
     expect(exitRules).toHaveLength(1)
+  })
+
+  it('repairs staging case 19 into one MA trend plus RSI reclaim entry rule', () => {
+    const text = 'BTC 1小时 MA50 在 MA200 上方时，只在 RSI 跌破 35 后重新上穿 35 买入，RSI 超过 65 卖出。'
+    const planner = {
+      rules: [
+        {
+          id: 'entry-ma50-above-ma200-rsi-breakdown-recover',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'indicator.above', params: { indicator: 'ma', reference: { period: 200 }, period: 50 } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'exit-rsi-over-65',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'oscillator.rsi_gte', params: { period: 14, value: 65 } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+        {
+          id: 'deterministic-rule-1',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'indicator.above', params: { indicator: 'ma', 'reference.period': 50 } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'deterministic-rule-4',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'rsi', period: 35, value: 35 } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const entryRules = merged?.rules?.filter(rule => rule.phase === 'entry') ?? []
+    const serialized = JSON.stringify(entryRules)
+
+    expect(entryRules).toHaveLength(1)
+    expect(serialized).toContain('condition.sequence')
+    expect(serialized).toContain('rsi_reclaim')
+    expect(serialized).toContain('indicator.above')
+    expect(serialized).toContain('"period":50')
+    expect(serialized).toContain('"reference.period":200')
+    expect(JSON.stringify(merged?.rules)).toContain('oscillator.rsi_gte')
+  })
+
+  it('repairs plaza RSI reversal into one reclaim entry with explicit threshold and risk sizing', () => {
+    const text = '基于 OKX 模拟盘 ETH-USDT 现货 15m，创建 RSI 反转策略。入场规则：RSI14 从 38 下方向上穿回 38 时买入；出场规则：RSI14 高于 64 时卖出平仓；风控：仓位 25%，不使用杠杆，止损 5%，止盈 0.5%。'
+    const planner = {
+      rules: [
+        {
+          id: 'entry-rsi-lte-noisy',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'oscillator.rsi_lte', params: {} },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'entry-rsi-gte-noisy',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'oscillator.rsi_gte', params: {} },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'exit-rsi64',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'oscillator.rsi_gte', params: { period: 14, value: 64 } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const entryRules = merged?.rules?.filter(rule => rule.phase === 'entry') ?? []
+    const serialized = JSON.stringify(merged)
+
+    expect(entryRules).toHaveLength(1)
+    expect(serialized).toContain('condition.sequence')
+    expect(serialized).toContain('rsi_reclaim')
+    expect(serialized).toContain('"threshold":38')
+    expect(serialized).toContain('oscillator.rsi_gte')
+    expect(serialized).toContain('"value":64')
+    expect(serialized).toContain('risk.stop_loss_pct')
+    expect(serialized).toContain('risk.take_profit_pct')
+    expect(merged?.position?.sizing).toEqual({ kind: 'ratio', unit: 'ratio', value: 0.25 })
+  })
+
+  it('repairs plaza MACD exit tuple and keeps explicit position/risk controls', () => {
+    const text = '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 MACD 16/34/12 金叉做多、死叉平多策略。入场规则：MACD DIF 上穿 DEA 时做多开仓；出场规则：MACD DIF 下穿 DEA 时平多；本策略只做多，不做空；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.5%。'
+    const planner = {
+      rules: [
+        {
+          id: 'entry-macd-16-34-12',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'macd', fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'exit-macd-default-noisy',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'indicator.cross_under', params: { indicator: 'macd', fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+        {
+          id: 'risk-stop-loss',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'risk.stop_loss_pct', params: { basis: 'entry_avg_price', valuePct: 2 } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const exitMacd = merged?.rules
+      ?.filter(rule => rule.phase === 'exit')
+      .flatMap(rule => collectAtomLeaves(rule.condition))
+      .find(leaf => leaf.key === 'indicator.cross_under' && leaf.params?.indicator === 'macd')
+    const serialized = JSON.stringify(merged)
+
+    expect(exitMacd?.params).toEqual(expect.objectContaining({ indicator: 'macd', fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 }))
+    expect(serialized).not.toContain('"fastPeriod":12,"slowPeriod":26,"signalPeriod":9')
+    expect(serialized).toContain('risk.stop_loss_pct')
+    expect(serialized).toContain('risk.take_profit_pct')
+    expect(merged?.position?.sizing).toEqual({ kind: 'ratio', unit: 'ratio', value: 0.35 })
+  })
+
+  it('builds plaza MACD dispatcher fallback without duplicate risk rules or open sizing slot', () => {
+    const text = '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 MACD 16/34/12 金叉做多、死叉平多策略。入场规则：MACD DIF 上穿 DEA 时做多开仓；出场规则：MACD DIF 下穿 DEA 时平多；本策略只做多，不做空；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.5%。'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const fallback = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
+    const rules = fallback?.rules ?? []
+    const entryRule = rules.find(rule => rule.phase === 'entry')
+    const flatRiskLeaves = rules.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)))
+      .filter(leaf => leaf.key === 'risk.stop_loss_pct' || leaf.key === 'risk.take_profit_pct')
+    const stopLossConditionRules = rules.filter(rule =>
+      collectAtomLeaves(rule.condition).some(leaf => leaf.key === 'risk.stop_loss_pct'),
+    )
+    const gateRiskRules = rules.filter(rule =>
+      rule.phase === 'gate'
+      && listRuleEffects(rule.effects).some(effect =>
+        collectAtomLeaves(effect).some(leaf => leaf.key === 'risk.stop_loss_pct' || leaf.key === 'risk.take_profit_pct'),
+      ),
+    )
+
+    expect(entryRule).toBeDefined()
+    expect(listRuleEffects(entryRule?.effects ?? []).flatMap(effect => collectAtomLeaves(effect)).map(leaf => leaf.key).sort()).toEqual([
+      'action.open_long',
+      'risk.stop_loss_pct',
+      'risk.take_profit_pct',
+    ])
+    expect(flatRiskLeaves.map(leaf => leaf.key).sort()).toEqual(['risk.stop_loss_pct', 'risk.take_profit_pct'])
+    expect(stopLossConditionRules).toHaveLength(0)
+    expect(gateRiskRules).toHaveLength(0)
+    expect(fallback?.position?.sizing).toEqual({ kind: 'ratio', unit: 'ratio', value: 0.35 })
+    expect(fallback?.position?.openSlots).toEqual([])
+  })
+
+  it('dedupes weaker dispatcher percent-change entry when planner rule already carries same entry with risks', () => {
+    const text = '在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%'
+    const planner = {
+      rules: [
+        {
+          id: 'entry-btc-drop-1-in-3m',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.percent_change', params: { basis: 'entry_avg_price', window: '3m', valuePct: 1, direction: 'down' } },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+            risks: [
+              { kind: 'atom', key: 'risk.stop_loss_pct', params: { basis: 'entry_avg_price', valuePct: 5 } },
+              { kind: 'atom', key: 'risk.take_profit_pct', params: { basis: 'entry_avg_price', valuePct: 10 } },
+            ],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        },
+        {
+          id: 'exit-btc-rise-2-in-15m',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.percent_change', params: { basis: 'current_price', window: '15m', valuePct: 2, direction: 'up' } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const entryRules = merged?.rules?.filter(rule => rule.phase === 'entry') ?? []
+    const serialized = JSON.stringify(merged?.rules)
+
+    expect(entryRules).toHaveLength(1)
+    expect(serialized).not.toContain('deterministic-rule')
+  })
+
+  it('keeps the volume rebound part for consecutive bearish candles in staging case 18', () => {
+    const text = 'BTC 连续跌三根 15 分钟 K 线后，如果下一根开始放量反弹就买一点。'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const patch = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
+    const entry = patch?.rules?.find(rule => rule.phase === 'entry')
+    const serialized = JSON.stringify(entry)
+
+    expect(entry).toBeDefined()
+    expect(serialized).toContain('condition.sequence')
+    expect(serialized).toContain('pattern_then_volume_spike')
+    expect(serialized).toContain('"count":3')
+    expect(serialized).toContain('"direction":"down"')
+    expect(serialized).toContain('"reboundDirection":"up"')
+    expect(serialized).toContain('"nextBarOnly":"true"')
+  })
+
+  it('restores missing BOLL upper-band exit for staging case 20', () => {
+    const text = 'ETH 15分钟触碰布林带下轨，并且成交量高于过去 20 根均量的 1.5 倍时买入，上轨卖出。'
+    const planner = {
+      rules: [{
+        id: 'entry-boll-lower-vol-1p5',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'and',
+          children: [
+            { kind: 'atom', key: 'bollinger.touch_lower', params: { period: 20, stdDev: 2 } },
+            { kind: 'atom', key: 'volume.threshold', params: { mode: 'relative_to_sma', refWindow: 20, multiplier: 1.5 } },
+          ],
+        },
+        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const exitRule = merged?.rules?.find(rule => rule.phase === 'exit' && JSON.stringify(rule.condition).includes('bollinger.touch_upper'))
+
+    expect(exitRule).toBeDefined()
+    expect(listRuleEffects(exitRule?.effects)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'action.close_long' }),
+    ]))
+  })
+
+  it('does not append ambiguous dispatcher fallback rules when planner already covers BOLL long-short flow', () => {
+    const text = 'OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%。'
+    const planner = {
+      rules: [
+        {
+          id: 'entry-long-boll-lower',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'bollinger.touch_lower', params: { band: 'lower', period: 20, stdDev: 2, confirmationMode: 'touch' } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'entry-short-boll-upper',
+          phase: 'entry',
+          sideScope: 'short',
+          condition: { kind: 'atom', key: 'bollinger.touch_upper', params: { band: 'upper', period: 20, stdDev: 2, confirmationMode: 'touch' } },
+          effects: [{ kind: 'atom', key: 'action.open_short', params: {} }],
+        },
+        {
+          id: 'exit-long-boll-middle',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'bollinger.touch_middle', params: { band: 'middle', period: 20, stdDev: 2, confirmationMode: 'breakout' } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+        {
+          id: 'exit-short-boll-middle',
+          phase: 'exit',
+          sideScope: 'short',
+          condition: { kind: 'atom', key: 'bollinger.touch_middle', params: { band: 'middle', period: 20, stdDev: 2, confirmationMode: 'breakout' } },
+          effects: [{ kind: 'atom', key: 'action.close_short', params: {} }],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const serialized = JSON.stringify(merged?.rules)
+
+    expect(merged?.rules).toHaveLength(4)
+    expect(serialized).not.toContain('deterministic-rule')
+    expect(serialized).not.toContain('action.open_short","kind":"atom","params":{"phase":"entry"}},{"key":"action.open_long')
+  })
+
+  it('dedupes stop-loss rules whose params differ only by legacy phase field', () => {
+    const text = '入场：15m k线里面 价格在ema20 ema60 ema144上方时做多开仓；出场：15m k线里面 价格低于ema20时平多；止损：5%；仓位：10usdt'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+    const fallback = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
+    const stopLossRules = fallback?.rules?.filter(rule => JSON.stringify(rule.condition).includes('risk.stop_loss_pct')) ?? []
+
+    expect(stopLossRules).toHaveLength(1)
+  })
+
+  it('does not turn grid stop loss into an entry open rule', () => {
+    const text = '在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+    const fallback = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
+    const serialized = JSON.stringify(fallback?.rules)
+    const riskEntryRules = fallback?.rules?.filter(rule =>
+      rule.phase === 'entry'
+      && JSON.stringify(rule.condition).includes('risk.stop_loss_pct')
+      && JSON.stringify(rule.effects).includes('action.open_'),
+    ) ?? []
+
+    expect(serialized).toContain('grid.range_rebalance')
+    expect(riskEntryRules).toHaveLength(0)
+  })
+
+  it('hydrates planner multi-timeframe EMA children for staging case 24', () => {
+    const text = '15min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约'
+    const planner = {
+      rules: [{
+        id: 'entry-mtf-ema20-above',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'and',
+          children: [
+            { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', reference: { period: 20 } } },
+            { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', reference: { period: 20 } } },
+            { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', reference: { period: 20 } } },
+          ],
+        },
+        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const entry = merged?.rules?.find(rule => rule.id === 'entry-mtf-ema20-above')
+    const children = (entry?.condition as { children?: Array<{ params?: Record<string, unknown> }> } | undefined)?.children ?? []
+
+    expect(children.map(child => child.params?.timeframe).sort()).toEqual(['15m', '1h', '4h'])
+  })
+
+  it('restores RSI 70 exit and dedupes long-only stop loss for staging case 26', () => {
+    const text = 'BTC/USDT 4h，RSI 跌破 30 开多，RSI 回到 70 平仓，止损 2%'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+    const fallback = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
+    const serialized = JSON.stringify(fallback?.rules)
+    const stopLossRules = fallback?.rules?.filter(rule => JSON.stringify(rule.condition).includes('risk.stop_loss_pct')) ?? []
+
+    expect(serialized).toContain('oscillator.rsi_gte')
+    expect(serialized).toContain('70')
+    expect(stopLossRules).toHaveLength(1)
+    expect(JSON.stringify(stopLossRules[0])).toContain('action.close_long')
+    expect(JSON.stringify(stopLossRules[0])).not.toContain('action.close_short')
+  })
+
+  it('keeps drawdown circuit breaker without event-listener or empty stop-loss noise for staging case 28', () => {
+    const text = 'SOL 1d，EMA20 上穿 EMA60 开多，下穿平仓，最大回撤 15% 熔断'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+    const fallback = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
+    const serialized = JSON.stringify(fallback?.rules)
+
+    expect(serialized).toContain('portfolioRisk.drawdown_block')
+    expect(serialized).toContain('15')
+    expect(serialized).not.toContain('program.event_listener')
+    expect(serialized).not.toContain('risk.stop_loss_pct')
+  })
+
+  it('replaces planner range-position add rule with profit add-position lifecycle for staging case 29', () => {
+    const text = 'BTC 1h 突破前高开多，盈利 3% 后加仓 50%，最多加 3 层'
+    const planner = {
+      rules: [
+        {
+          id: 'entry-breakout-prev-high-long',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.breakout_up', params: { period: 1, reference: 'channel_high' } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'add-long-after-profit-3pct-50x3',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.range_position_gte', params: { lookbackBars: 20, thresholdPct: 3 } },
+          effects: [],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const serialized = JSON.stringify(merged?.rules)
+    const addRule = merged?.rules?.find(rule => JSON.stringify(rule.condition).includes('price.percent_change'))
+
+    expect(serialized).not.toContain('price.range_position_gte')
+    expect(addRule).toBeDefined()
+    expect(listRuleEffects(addRule?.effects)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'action.add_position' }),
+    ]))
+    expect(JSON.stringify(merged?.position)).toContain('position.pyramiding_limit')
+  })
+
+  it('keeps DCA daily buy and drawdown add amount for staging case 30', () => {
+    const text = 'ETH 现货每天定投 100 USDT，回撤 5% 加投 200 USDT'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+    const fallback = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
+    const effects = (fallback?.rules ?? []).flatMap(rule => listRuleEffects(rule.effects))
+    const dca = effects.find((effect): effect is Extract<typeof effect, { kind: 'atom' }> =>
+      effect.kind === 'atom' && effect.key === 'position.dca_schedule')
+    const add = effects.find((effect): effect is Extract<typeof effect, { kind: 'atom' }> =>
+      effect.kind === 'atom' && effect.key === 'action.add_position' && JSON.stringify(effect).includes('drawdown_pct'))
+
+    expect(dca?.params).toEqual(expect.objectContaining({
+      triggerMode: 'time_interval',
+      perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+    }))
+    expect(add?.params).toEqual(expect.objectContaining({
+      addMode: 'drawdown_pct',
+      drawdownThreshold: 5,
+      sizing: { kind: 'quote', value: 200, asset: 'USDT' },
+    }))
   })
 
   it('execution-slot merge does not append EMA cross rules when planner params are richer', () => {

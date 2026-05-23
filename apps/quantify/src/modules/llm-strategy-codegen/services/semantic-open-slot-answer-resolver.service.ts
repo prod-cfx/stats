@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+import type { AtomExprAtom, SemanticRule } from '../types/atom-expr'
 import type { MarketInstrumentQuote, MarketInstrumentSymbolResolution } from '../types/market-instrument-symbol'
 import type {
   SemanticActionState,
@@ -14,6 +15,8 @@ import type {
 } from '../types/semantic-state'
 import { buildSemanticSlotId } from '../types/semantic-state'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+import { collectAtomLeaves, listRuleEffects } from '../types/atom-expr'
 import { GenericSeedDispatcher } from './generic-seed-dispatcher.service'
 import { pickPendingClarificationTarget } from './strategy-clarification-question.service'
 import { SemanticStateReducerService } from './semantic-state-reducer.service'
@@ -87,6 +90,10 @@ export class SemanticOpenSlotAnswerResolverService {
     const symbolAnswer = this.resolveSymbolAnswer(input.currentState, input.message, input.clarificationState)
     if (symbolAnswer) {
       return symbolAnswer
+    }
+
+    if (!canConsumeSemanticFragment(input.currentState, input.clarificationState)) {
+      return { consumed: false, nextState: input.currentState }
     }
 
     return fulfillSemanticFragment(input.currentState, this.seedExtractor.dispatch(input.message), this.symbolResolver)
@@ -461,12 +468,24 @@ function canConsumeSymbolAnswer(symbolSlot: SemanticSlotState, clarificationStat
   return activeItem.slotKey === symbolSlot.slotKey && activeItem.fieldPath === symbolSlot.fieldPath
 }
 
+function canConsumeSemanticFragment(state: SemanticState, clarificationState: unknown): boolean {
+  const activeTarget = pickPendingClarificationTarget(readPendingClarificationItems(clarificationState))
+  if (!activeTarget) {
+    return true
+  }
+
+  const slotRef = findActiveOpenSlotRef(state, activeTarget)
+  return slotRef?.ownerKind === 'trigger'
+    && (slotRef.slot.slotKey === ENTRY_TRIGGER_SLOT_KEY || slotRef.slot.slotKey === EXIT_TRIGGER_SLOT_KEY)
+}
+
 function fulfillSemanticFragment(
   state: SemanticState,
   patch: CodegenSemanticPatch,
   symbolResolver: MarketInstrumentSymbolResolverService,
 ): SemanticOpenSlotAnswerResolverResult {
-  const patchTriggers = patch.triggers ?? []
+  const fragmentPatch = projectTypedRulesToFragmentPatch(patch)
+  const patchTriggers = fragmentPatch.triggers ?? []
   const entryTriggers = patchTriggers.filter(trigger => trigger.phase === 'entry')
   const exitTriggers = patchTriggers.filter(trigger => trigger.phase === 'exit')
   const fulfilledPhases: FulfilledTriggerPhase[] = []
@@ -485,7 +504,7 @@ function fulfillSemanticFragment(
 
   return {
     consumed: true,
-    nextState: mergeFragmentPatch(state, patch, fulfilledPhases, symbolResolver),
+    nextState: mergeFragmentPatch(state, fragmentPatch, fulfilledPhases, symbolResolver),
     answer: {},
     closedSlotKeys: fulfilledPhases.map(triggerPhaseSlotKey),
     closedSlots: fulfilledPhases.map(phase => ({
@@ -493,6 +512,68 @@ function fulfillSemanticFragment(
       fieldPath: triggerPhaseFieldPath(phase),
     })),
   }
+}
+
+function projectTypedRulesToFragmentPatch(patch: CodegenSemanticPatch): CodegenSemanticPatch {
+  const rules = patch.rules
+  if (!rules || rules.length === 0) return patch
+
+  const projected: CodegenSemanticPatch = { ...patch }
+  const triggers = [...(patch.triggers ?? [])]
+  const actions = [...(patch.actions ?? [])]
+  for (const rule of rules) {
+    for (const leaf of collectAtomLeaves(rule.condition)) {
+      if (readAtomBucket(leaf.key) !== 'trigger') continue
+      triggers.push({
+        key: leaf.key,
+        phase: rule.phase,
+        sideScope: leaf.sideScope ?? rule.sideScope,
+        params: leaf.params ?? {},
+        ...ruleLeafEvidence(leaf),
+      })
+    }
+    for (const effect of listRuleEffects(rule.effects)) {
+      for (const leaf of collectAtomLeaves(effect)) {
+        if (readAtomBucket(leaf.key) !== 'action') continue
+        actions.push({
+          key: leaf.key,
+          phase: readLeafPhase(leaf) ?? rule.phase,
+          params: leaf.params ?? {},
+          ...ruleLeafEvidence(leaf),
+        })
+      }
+    }
+  }
+  projected.triggers = dedupeFragmentNodes(triggers)
+  projected.actions = dedupeFragmentNodes(actions)
+  return projected
+}
+
+function readAtomBucket(key: string): string | undefined {
+  return (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string } | undefined>)[key]?.bucket
+}
+
+function readLeafPhase(leaf: AtomExprAtom): SemanticRule['phase'] | null {
+  const phase = leaf.params.phase
+  return phase === 'entry' || phase === 'exit' || phase === 'gate' || phase === 'program' ? phase : null
+}
+
+function ruleLeafEvidence(leaf: AtomExprAtom): { evidence?: SemanticEvidence } {
+  return leaf.evidence?.text
+    ? { evidence: { text: leaf.evidence.text, source: 'user_explicit' } }
+    : {}
+}
+
+function dedupeFragmentNodes<T extends { key: string, phase?: unknown, sideScope?: unknown, params?: unknown }>(nodes: T[]): T[] {
+  const seen = new Set<string>()
+  const out: T[] = []
+  for (const node of nodes) {
+    const signature = `${node.key}|${String(node.phase ?? '')}|${String(node.sideScope ?? '')}|${JSON.stringify(node.params ?? {})}`
+    if (seen.has(signature)) continue
+    seen.add(signature)
+    out.push(node)
+  }
+  return out
 }
 
 function hasOpenSlot(state: SemanticState, slotKey: string): boolean {
@@ -573,7 +654,7 @@ function mergeFragmentPatch(
 function shouldMergeFragmentTrigger(
   trigger: FragmentTrigger,
   fulfilledPhases: ReadonlySet<FulfilledTriggerPhase>,
-): boolean {
+): trigger is FragmentTrigger & { phase: SemanticTriggerState['phase'] } {
   if (isFulfilledTriggerPhase(trigger.phase)) {
     return fulfilledPhases.has(trigger.phase)
   }

@@ -4,6 +4,313 @@ import { SemanticStateMergeService } from '../semantic-state-merge.service'
 describe('SemanticStateMergeService', () => {
   const service = new SemanticStateMergeService()
 
+  it('preserves program phase and typed effects when a derived rule adds risk effects', () => {
+    const condition = { kind: 'atom' as const, key: 'context.always', params: {} }
+    const program = { kind: 'atom' as const, key: 'program.dynamic_grid', params: { levelCount: 5 } }
+    const risk = { kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { valuePct: 5 } }
+
+    const persisted: SemanticState = {
+      version: 1,
+      families: ['grid.range_rebalance'],
+      trigger: [],
+      action: [],
+      risk: [],
+      position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-05-22T10:00:00.000Z',
+      rules: [{
+        id: 'rule-program-grid',
+        phase: 'program',
+        sideScope: 'both',
+        condition,
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [program],
+        },
+      }],
+    }
+    const derived: SemanticState = {
+      ...persisted,
+      updatedAt: '2026-05-22T10:01:00.000Z',
+      rules: [{
+        id: 'rule-program-grid',
+        phase: 'program',
+        sideScope: 'both',
+        condition,
+        effects: {
+          actions: [],
+          risks: [risk],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    }
+
+    const merged = service.merge({ persisted, derived })
+    const [mergedRule] = merged.rules ?? []
+
+    expect(merged.rules).toHaveLength(1)
+    expect(mergedRule).toEqual(expect.objectContaining({ phase: 'program' }))
+    expect(mergedRule?.effects).toEqual({
+      actions: [],
+      risks: [risk],
+      positions: [],
+      orchestration: [],
+      programs: [program],
+    })
+  })
+
+  it('keeps same-id rules separate when lifecycle phase differs', () => {
+    const condition = { kind: 'atom' as const, key: 'context.always', params: {} }
+    const program = { kind: 'atom' as const, key: 'program.dynamic_grid', params: { levelCount: 5 } }
+    const risk = { kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { valuePct: 5 } }
+
+    const persisted: SemanticState = {
+      version: 1,
+      families: ['grid.range_rebalance'],
+      trigger: [],
+      action: [],
+      risk: [],
+      position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-05-22T10:00:00.000Z',
+      rules: [{
+        id: 'rule-grid',
+        phase: 'program',
+        sideScope: 'both',
+        condition,
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [program],
+        },
+      }],
+    }
+    const derived: SemanticState = {
+      ...persisted,
+      updatedAt: '2026-05-22T10:01:00.000Z',
+      rules: [{
+        id: 'rule-grid',
+        phase: 'exit',
+        sideScope: 'both',
+        condition,
+        effects: {
+          actions: [],
+          risks: [risk],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    }
+
+    const merged = service.merge({ persisted, derived })
+    const programRule = merged.rules?.find(rule => rule.phase === 'program')
+    const exitRule = merged.rules?.find(rule => rule.phase === 'exit')
+
+    expect(merged.rules).toHaveLength(2)
+    expect(programRule?.effects).toEqual({
+      actions: [],
+      risks: [],
+      positions: [],
+      orchestration: [],
+      programs: [program],
+    })
+    expect(exitRule?.effects).toEqual({
+      actions: [],
+      risks: [risk],
+      positions: [],
+      orchestration: [],
+      programs: [],
+    })
+  })
+
+  it('merges legacy array effects into typed action effects when derived adds typed risk effects', () => {
+    const condition = { kind: 'atom' as const, key: 'price.above', params: { value: 100 } }
+    const action = { kind: 'atom' as const, key: 'action.open_long', params: { sizePct: 10 } }
+    const risk = { kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { valuePct: 5 } }
+
+    const persisted: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      trigger: [],
+      action: [],
+      risk: [],
+      position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-05-22T10:00:00.000Z',
+      rules: [{
+        id: 'rule-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition,
+        effects: [action],
+      }],
+    }
+    const derived: SemanticState = {
+      ...persisted,
+      updatedAt: '2026-05-22T10:01:00.000Z',
+      rules: [{
+        id: 'rule-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition,
+        effects: {
+          actions: [],
+          risks: [risk],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    }
+
+    const merged = service.merge({ persisted, derived })
+    const [mergedRule] = merged.rules ?? []
+
+    expect(merged.rules).toHaveLength(1)
+    expect(mergedRule?.effects).toEqual({
+      actions: [action],
+      risks: [risk],
+      positions: [],
+      orchestration: [],
+      programs: [],
+    })
+  })
+
+  it('classifies legacy array effects by atom bucket before merging typed roles', () => {
+    const condition = { kind: 'atom' as const, key: 'context.always', params: {} }
+    const risk = { kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { valuePct: 5 } }
+    const position = { kind: 'atom' as const, key: 'position.pyramiding_limit', params: { maxLayers: 3 } }
+    const program = { kind: 'atom' as const, key: 'program.dynamic_grid', params: { levelCount: 5 } }
+    const action = { kind: 'atom' as const, key: 'action.open_long', params: {} }
+
+    const persisted: SemanticState = {
+      version: 1,
+      families: ['grid.range_rebalance'],
+      trigger: [],
+      action: [],
+      risk: [],
+      position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-05-22T10:00:00.000Z',
+      rules: [{
+        id: 'rule-program',
+        phase: 'program',
+        sideScope: 'both',
+        condition,
+        effects: [risk, position, program],
+      }],
+    }
+    const derived: SemanticState = {
+      ...persisted,
+      updatedAt: '2026-05-22T10:01:00.000Z',
+      rules: [{
+        id: 'rule-program',
+        phase: 'program',
+        sideScope: 'both',
+        condition,
+        effects: {
+          actions: [action],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    }
+
+    const merged = service.merge({ persisted, derived })
+    const [mergedRule] = merged.rules ?? []
+
+    expect(mergedRule?.effects).toEqual({
+      actions: [action],
+      risks: [risk],
+      positions: [position],
+      orchestration: [],
+      programs: [program],
+    })
+  })
+
+  it('does not mutate typed rule inputs while merging effects', () => {
+    const condition = { kind: 'atom' as const, key: 'context.always', params: {} }
+    const program = { kind: 'atom' as const, key: 'program.dynamic_grid', params: { levelCount: 5 } }
+    const risk = { kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { valuePct: 5 } }
+    const persisted: SemanticState = {
+      version: 1,
+      families: ['grid.range_rebalance'],
+      trigger: [],
+      action: [],
+      risk: [],
+      position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-05-22T10:00:00.000Z',
+      rules: [{
+        id: 'rule-program-grid',
+        phase: 'program',
+        sideScope: 'both',
+        condition,
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [program],
+        },
+      }],
+    }
+    const derived: SemanticState = {
+      ...persisted,
+      updatedAt: '2026-05-22T10:01:00.000Z',
+      rules: [{
+        id: 'rule-program-grid',
+        phase: 'program',
+        sideScope: 'both',
+        condition,
+        effects: {
+          actions: [],
+          risks: [risk],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    }
+    const persistedBefore = structuredClone(persisted)
+    const derivedBefore = structuredClone(derived)
+
+    service.merge({ persisted, derived })
+
+    expect(persisted).toEqual(persistedBefore)
+    expect(derived).toEqual(derivedBefore)
+  })
+
   it('merges action open slots when the same action is derived again', () => {
     const merged = service.merge({
       persisted: {
@@ -1566,15 +1873,19 @@ describe('SemanticStateMergeService', () => {
       const merged = service.merge({ persisted, derived })
       const rules = merged.rules ?? []
       expect(rules).toHaveLength(1)
-      // condition 取 derived（新 fastPeriod），effects 保留 persisted（避免 open_long 被抹）
+      // condition 取 derived（新 fastPeriod），effects 保留 persisted 并归一到 typed roles（避免 open_long 被抹）
       const cond = rules[0]!.condition
       expect(cond.kind).toBe('atom')
       if (cond.kind === 'atom') {
         expect(cond.params).toEqual({ fastPeriod: 12 })
       }
-      expect(rules[0]!.effects).toEqual([
-        expect.objectContaining({ key: 'action.open_long' }),
-      ])
+      expect(rules[0]!.effects).toEqual({
+        actions: [expect.objectContaining({ key: 'action.open_long' })],
+        risks: [],
+        positions: [],
+        orchestration: [],
+        programs: [],
+      })
     })
 
     it('Issue #1443: 不同 id 但同 condition+effects shape → 多轮累加去重（content-shape SoT）', () => {

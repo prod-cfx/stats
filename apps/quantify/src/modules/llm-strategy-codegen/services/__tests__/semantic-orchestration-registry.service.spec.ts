@@ -390,26 +390,18 @@ describe('SemanticOrchestrationRegistryService', () => {
       ).toBe(true)
     })
 
-    it('validate flags missing activeWhenRef', () => {
+    it('validate treats missing activeWhenRef as always-active grid program', () => {
       const node = buildProgramNode({ activeWhenRef: undefined })
       const result = service.validate(node)
-      expect(result.ok).toBe(false)
-      expect(
-        result.missingSlots.some(
-          (s) => s.slotKey === 'orchestration.program.fixed_grid_gated.active_when_ref',
-        ),
-      ).toBe(true)
+      expect(result.ok).toBe(true)
+      expect(result.missingSlots).toEqual([])
     })
 
-    it('validate flags empty-string activeWhenRef', () => {
+    it('validate treats empty-string activeWhenRef as always-active grid program', () => {
       const node = buildProgramNode({ activeWhenRef: '   ' })
       const result = service.validate(node)
-      expect(result.ok).toBe(false)
-      expect(
-        result.missingSlots.some(
-          (s) => s.slotKey === 'orchestration.program.fixed_grid_gated.active_when_ref',
-        ),
-      ).toBe(true)
+      expect(result.ok).toBe(true)
+      expect(result.missingSlots).toEqual([])
     })
 
     it('isExecutableForStrategy returns false without semantic version (fail-closed)', () => {
@@ -572,9 +564,9 @@ describe('SemanticOrchestrationRegistryService', () => {
       expect(service.validate(buildAdaptiveNode({ sizing: { mode: 'fixed_quote', value: 0 } })).ok).toBe(false)
     })
 
-    it('validate 拒绝 activeWhenRef 缺失或空字符串', () => {
-      expect(service.validate(buildAdaptiveNode({ activeWhenRef: undefined })).ok).toBe(false)
-      expect(service.validate(buildAdaptiveNode({ activeWhenRef: '   ' })).ok).toBe(false)
+    it('validate 接受 activeWhenRef 缺失或空字符串作为 always-active grid program', () => {
+      expect(service.validate(buildAdaptiveNode({ activeWhenRef: undefined })).ok).toBe(true)
+      expect(service.validate(buildAdaptiveNode({ activeWhenRef: '   ' })).ok).toBe(true)
     })
 
     it('isExecutableForStrategy 在 CURRENT_SEMANTIC_VERSION 返回 true', () => {

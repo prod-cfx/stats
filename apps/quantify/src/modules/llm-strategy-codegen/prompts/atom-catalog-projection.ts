@@ -6,7 +6,7 @@
  *
  * 设计原则（#1279 第一性原则）：
  *   1) 所有数据从 ATOM_CONTRACT_REGISTRY 动态派生，禁止写死 atom 数量 / key 列表
- *   2) phase 仅暴露全局 enum ['entry','exit','gate']；by-clause-verb 类 atom 由 LLM
+ *   2) phase 仅暴露全局 enum ['entry','exit','gate','program']；by-clause-verb 类 atom 由 LLM
  *      根据用户意图填，fixed-* 类 atom 通过 fixedPhase 提示固定值
  *   3) paramSlots 字段名 + required + kind + enum 紧凑表达，省略 enum 全集以控 token
  *   4) 模块级 memoize：buildAtomCatalogEntries() / formatAtomCatalogForPrompt(locale)
@@ -16,13 +16,13 @@
 import type { AtomContractKey, AtomContractBucket } from '../atom-contracts/atom-contract-types'
 import { ATOM_CONTRACT_REGISTRY, getAllRegisteredAtomKeys } from '../atom-contracts/atom-contract-registry'
 
-const PHASE_ENUM = ['entry', 'exit', 'gate'] as const
+const PHASE_ENUM = ['entry', 'exit', 'gate', 'program'] as const
 export type PromptPhase = typeof PHASE_ENUM[number]
 
 /**
  * phaseResolver 字符串字面量 → prompt 暴露的固定 phase 映射。
  *
- * - `'fixed-entry' | 'fixed-exit' | 'fixed-gate'` → 对应 PromptPhase 值
+ * - `'fixed-entry' | 'fixed-exit' | 'fixed-gate' | 'fixed-program'` → 对应 PromptPhase 值
  * - `'by-clause-verb'` → 不在表内（LLM 自己根据用户意图填 phase）
  * - `{ kind: 'fn', fn }` 对象形态 → 不在表内（同上）
  *
@@ -35,6 +35,7 @@ const FIXED_PHASE_MAP: Readonly<Record<string, PromptPhase>> = {
   'fixed-entry': 'entry',
   'fixed-exit': 'exit',
   'fixed-gate': 'gate',
+  'fixed-program': 'program',
 }
 
 export interface AtomCatalogParamField {
@@ -48,7 +49,7 @@ export interface AtomCatalogParamField {
 export interface AtomCatalogEntry {
   readonly key: AtomContractKey
   readonly bucket: AtomContractBucket
-  /** 仅 phaseResolver === 'fixed-*' 时暴露，提示 LLM 该 atom 的 phase 已固定 */
+  /** phaseResolver === 'fixed-*' 时暴露，提示 LLM 该 atom 的 phase 已固定 */
   readonly fixedPhase?: PromptPhase
   readonly paramFields: readonly AtomCatalogParamField[]
   /** 取自 corpus.goldenUtterances[0]，可能为空 */
@@ -82,8 +83,8 @@ export function buildAtomCatalogEntries(): readonly AtomCatalogEntry[] {
     // M5 修复：查表 + 显式类型 narrowing；非字符串字面量（如 { kind: 'fn', fn }）落入
     // undefined 分支是有意行为（LLM 自由派生 phase）；非 fixed-* 字符串字面量同样如此。
     const fixedPhase: PromptPhase | undefined = typeof phaseResolver === 'string'
-      ? FIXED_PHASE_MAP[phaseResolver]
-      : undefined
+        ? FIXED_PHASE_MAP[phaseResolver]
+        : undefined
 
     const paramFields: AtomCatalogParamField[] = Object.entries(surface.paramSlots).map(([name, slot]) => {
       const field: AtomCatalogParamField = {
@@ -114,11 +115,11 @@ export function buildAtomCatalogEntries(): readonly AtomCatalogEntry[] {
 const BUCKET_ORDER: readonly AtomContractBucket[] = ['trigger', 'action', 'risk', 'positionConstraint', 'orchestration']
 
 const BUCKET_LABEL: Record<AtomContractBucket, { zh: string, en: string }> = {
-  trigger: { zh: '触发原子（triggers[].key 候选）', en: 'Trigger atoms (triggers[].key)' },
-  action: { zh: '动作原子（actions[].key 候选）', en: 'Action atoms (actions[].key)' },
-  risk: { zh: '风险原子（risk[].key 候选）', en: 'Risk atoms (risk[].key)' },
-  positionConstraint: { zh: '仓位约束（position 桶 / positionConstraints）', en: 'Position constraint atoms' },
-  orchestration: { zh: '编排/守门原子（orchestration 桶；含 gate / portfolioRisk / scope / program）', en: 'Orchestration atoms (gate / portfolioRisk / scope / program)' },
+  trigger: { zh: '条件原子（rules[].condition 叶子）', en: 'Condition atoms (rules[].condition leaves)' },
+  action: { zh: '动作副作用原子（rules[].effects.actions 叶子）', en: 'Action effect atoms (rules[].effects.actions leaves)' },
+  risk: { zh: '风险原子（condition 谓词或 effects.risks 叶子）', en: 'Risk atoms (condition predicates or effects.risks leaves)' },
+  positionConstraint: { zh: '仓位副作用原子（rules[].effects.positions 叶子；grid.range_rebalance 可作 program condition）', en: 'Position effect atoms (rules[].effects.positions leaves; grid.range_rebalance may be program condition)' },
+  orchestration: { zh: '编排/程序原子（effects.orchestration / effects.programs；gate 可作 condition）', en: 'Orchestration/program atoms (effects.orchestration / effects.programs; gate may be condition)' },
 }
 
 function formatParamField(field: AtomCatalogParamField): string {

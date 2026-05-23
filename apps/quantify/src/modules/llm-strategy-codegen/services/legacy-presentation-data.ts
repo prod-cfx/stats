@@ -1504,7 +1504,14 @@ function renderSequenceCondition(params: Record<string, unknown>): string {
     const threshold = typeof params.threshold === 'number' && Number.isFinite(params.threshold)
       ? params.threshold
       : null
-    return `RSI 回落后重新站上${threshold === null ? '阈值' : ` ${threshold}`}${lookbackWindow}${memoryKey}`
+    return `RSI 跌破${threshold === null ? '阈值' : ` ${threshold}`} 后重新上穿${threshold === null ? '阈值' : ` ${threshold}`}${lookbackWindow}${memoryKey}`
+  }
+  if (sequenceKind === 'pattern_then_volume_spike') {
+    const count = typeof params.count === 'number' && Number.isFinite(params.count) ? params.count : 1
+    const dir = params.direction === 'down' ? '阴线' : params.direction === 'up' ? '阳线' : 'K 线'
+    const next = params.nextBarOnly === true || params.nextBarOnly === 'true' ? '下一根' : '随后'
+    const rebound = params.reboundDirection === 'up' ? '反弹' : params.reboundDirection === 'down' ? '回落' : '确认'
+    return `连续 ${count} 根${dir}后${next}放量${rebound}${lookbackWindow}${memoryKey}`
   }
   if (sequenceKind === 'consecutive_candles') {
     const count = typeof params.count === 'number' && Number.isFinite(params.count) ? params.count : null

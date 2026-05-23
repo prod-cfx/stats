@@ -12,17 +12,25 @@
  *
  * Refs: #1338
  */
+import { collectAtomLeaves } from '../../types/atom-expr'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 
 describe('issue #1338 — dispatcher cross_over double-period + 多原子并行命中互斥', () => {
   const dispatcher = new GenericSeedDispatcher()
   const utterance = 'BTC 永续，1 小时级别。EMA20 上穿 EMA50 时市价开多；EMA20 下穿 EMA50 时市价平多。'
+  type TypedLeaf = ReturnType<typeof collectRuleConditionLeaves>[number]
+
+  function collectRuleConditionLeaves(patch: ReturnType<GenericSeedDispatcher['dispatch']>) {
+    return (patch.rules ?? []).flatMap(rule =>
+      collectAtomLeaves(rule.condition).map(leaf => ({ ...leaf, phase: rule.phase, sideScope: leaf.sideScope ?? rule.sideScope })),
+    )
+  }
 
   it('cross_over paramSlots：fastPeriod=20, slowPeriod=50（按位置而非同 pattern 重复）', () => {
     const patch = dispatcher.dispatch(utterance)
-    const crossOverTrigger = (patch.triggers ?? []).find(
-      (t): t is typeof t & { key: string } => (t as { key?: string }).key === 'indicator.cross_over',
-    ) as { params?: Record<string, unknown> } | undefined
+    const crossOverTrigger = collectRuleConditionLeaves(patch).find(
+      (t): t is TypedLeaf => t.key === 'indicator.cross_over',
+    )
     expect(crossOverTrigger).toBeDefined()
     expect(crossOverTrigger!.params).toMatchObject({
       indicator: 'ema',
@@ -33,9 +41,7 @@ describe('issue #1338 — dispatcher cross_over double-period + 多原子并行�
 
   it('cross_under paramSlots：fastPeriod=20, slowPeriod=50（与 cross_over 对称）', () => {
     const patch = dispatcher.dispatch(utterance)
-    const crossUnderTrigger = (patch.triggers ?? []).find(
-      t => (t as { key?: string }).key === 'indicator.cross_under',
-    ) as { params?: Record<string, unknown> } | undefined
+    const crossUnderTrigger = collectRuleConditionLeaves(patch).find(t => t.key === 'indicator.cross_under')
     expect(crossUnderTrigger).toBeDefined()
     expect(crossUnderTrigger!.params).toMatchObject({
       indicator: 'ema',
@@ -46,21 +52,21 @@ describe('issue #1338 — dispatcher cross_over double-period + 多原子并行�
 
   it('spec 不再含 indicator.above / indicator.below（同从句 cross_over 命中时 above/below 被抑制）', () => {
     const patch = dispatcher.dispatch(utterance)
-    const triggerKeys = (patch.triggers ?? []).map(t => (t as { key?: string }).key)
+    const triggerKeys = collectRuleConditionLeaves(patch).map(t => t.key)
     expect(triggerKeys).not.toContain('indicator.above')
     expect(triggerKeys).not.toContain('indicator.below')
   })
 
   it('spec 不再含 position.no_position（旧 verb 时 单边匹配已修复）', () => {
     const patch = dispatcher.dispatch(utterance)
-    const triggerKeys = (patch.triggers ?? []).map(t => (t as { key?: string }).key)
+    const triggerKeys = collectRuleConditionLeaves(patch).map(t => t.key)
     expect(triggerKeys).not.toContain('position.no_position')
     expect(triggerKeys).not.toContain('position.has_position')
   })
 
   it('triggers 恰 2 条：cross_over@entry@long + cross_under@exit@long（issue #1338 AC sideScope=long 单边）', () => {
     const patch = dispatcher.dispatch(utterance)
-    const triggers = (patch.triggers ?? []) as Array<{ key: string, phase: string, sideScope: string }>
+    const triggers = collectRuleConditionLeaves(patch)
     expect(triggers.length).toBe(2)
 
     const co = triggers.find(t => t.key === 'indicator.cross_over')!
@@ -76,7 +82,7 @@ describe('issue #1338 — dispatcher cross_over double-period + 多原子并行�
     // 'EMA20 高于 EMA50'：EMA kw 在 cross_over.keywords 中，但 '上穿/金叉' verbs 全部不命中。
     // 旧逻辑 kw||direction 会误触；新逻辑 kw && direction 必须双命中。
     const patch = dispatcher.dispatch('EMA20 高于 EMA50 时开多')
-    const triggerKeys = (patch.triggers ?? []).map(t => (t as { key?: string }).key)
+    const triggerKeys = collectRuleConditionLeaves(patch).map(t => t.key)
     expect(triggerKeys).not.toContain('indicator.cross_over')
     expect(triggerKeys).not.toContain('indicator.cross_under')
   })
@@ -84,15 +90,13 @@ describe('issue #1338 — dispatcher cross_over double-period + 多原子并行�
   it('反例：仅 verb 命中（无 kw 主语）不应触发 cross_over', () => {
     // '上穿' 是 cross_over verb，但 'EMA/MA/RSI' 等 kw 全部缺席（用 BTC 替代避免 kw 命中）。
     const patch = dispatcher.dispatch('上穿 时开多')
-    const triggerKeys = (patch.triggers ?? []).map(t => (t as { key?: string }).key)
+    const triggerKeys = collectRuleConditionLeaves(patch).map(t => t.key)
     expect(triggerKeys).not.toContain('indicator.cross_over')
   })
 
   it('cross_over RSI 形态：period=14, value=70（与 fast/slow 位置语义对齐）', () => {
     const patch = dispatcher.dispatch('RSI14 上穿 70 时开多')
-    const crossOverTrigger = (patch.triggers ?? []).find(
-      t => (t as { key?: string }).key === 'indicator.cross_over',
-    ) as { params?: Record<string, unknown> } | undefined
+    const crossOverTrigger = collectRuleConditionLeaves(patch).find(t => t.key === 'indicator.cross_over')
     expect(crossOverTrigger).toBeDefined()
     expect(crossOverTrigger!.params).toMatchObject({
       indicator: 'rsi',

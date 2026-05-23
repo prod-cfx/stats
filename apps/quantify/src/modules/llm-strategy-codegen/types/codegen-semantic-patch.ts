@@ -1,4 +1,5 @@
 import type { CodegenContextSlotPatchValue } from './market-instrument-symbol'
+import type { SemanticRulePhase } from './atom-expr'
 import type { SemanticAtomSupportMetadata } from './semantic-atom-support'
 import type {
   SemanticAtomContract,
@@ -34,6 +35,8 @@ export type CodegenSemanticTriggerParams = Record<string, unknown> & {
   expression?: SemanticExpression
 }
 
+export type CodegenSemanticPatchPhase = SemanticRulePhase | 'risk'
+
 export interface CodegenSemanticNodeEnvelope {
   id?: string
   status?: SemanticNodeStatus
@@ -50,34 +53,62 @@ export interface CodegenSemanticPatch {
    * 每条 rule 含 condition (AtomExpr 谓词树) + effects (副作用绑定)。
    * 单 atom case = 单叶子 rule.condition；AND/OR/NOT/SEQUENCE 嵌套见 ./atom-expr.ts。
    *
-   * 旧 atoms[] 字段保留作 degenerate 输入路径：内部 lift 为单叶子 rules[]，零行为差。
+   * 外部 production planner 原始输入必须使用 rules[] + typed RuleEffects；raw planner
+   * patch/schema gate 会拒绝 legacy flat fields。legacy flat fields 仅为 fixture
+   * comparison、old test data、internal dispatcher/projection compatibility 保留。
    */
   rules?: import('./atom-expr').SemanticRule[]
+  /**
+   * @deprecated External production planner input must use rules[] with typed RuleEffects;
+   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
+   * comparison, old test data, and internal dispatcher/projection compatibility.
+   */
   atoms?: Array<CodegenSemanticNodeEnvelope & {
     key: string
-    phase?: 'entry' | 'exit' | 'risk' | 'gate'
+    phase?: CodegenSemanticPatchPhase
     sideScope?: 'long' | 'short' | 'both'
     params?: Record<string, unknown>
     contracts?: SemanticAtomContract[]
   }>
+  /**
+   * @deprecated External production planner input must use rules[] with typed RuleEffects;
+   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
+   * comparison, old test data, and internal dispatcher/projection compatibility.
+   */
   triggers?: Array<CodegenSemanticNodeEnvelope & {
     key: string
-    phase: 'entry' | 'exit' | 'risk' | 'gate'
+    phase: CodegenSemanticPatchPhase
     sideScope?: 'long' | 'short' | 'both'
     params?: CodegenSemanticTriggerParams
     contracts?: SemanticAtomContract[]
   }>
+  /**
+   * @deprecated External production planner input must use rules[] with typed RuleEffects;
+   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
+   * comparison, old test data, and internal dispatcher/projection compatibility.
+   */
   actions?: Array<CodegenSemanticNodeEnvelope & {
     key: string
-    phase?: 'entry' | 'exit' | 'risk' | 'gate'
+    phase?: CodegenSemanticPatchPhase
+    sideScope?: 'long' | 'short' | 'both'
     params?: Record<string, unknown>
     contracts?: SemanticAtomContract[]
   }>
+  /**
+   * @deprecated External production planner input must use rules[] with typed RuleEffects;
+   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
+   * comparison, old test data, and internal dispatcher/projection compatibility.
+   */
   risk?: Array<CodegenSemanticNodeEnvelope & {
     key: string
     params: Record<string, unknown>
     contracts?: SemanticAtomContract[]
   }>
+  /**
+   * @deprecated External production planner input must use rules[] with typed RuleEffects;
+   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
+   * comparison, old test data, and internal dispatcher/projection compatibility.
+   */
   position?: (CodegenSemanticNodeEnvelope & {
     sizing?: SemanticPositionSizingContract | null
     mode: string
@@ -90,6 +121,11 @@ export interface CodegenSemanticPatch {
       contracts?: SemanticAtomContract[]
     }>
   }) | null
+  /**
+   * @deprecated External production planner input must use rules[] with typed RuleEffects;
+   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
+   * comparison, old test data, and internal dispatcher/projection compatibility.
+   */
   orchestration?: {
     nodes?: CodegenSemanticOrchestrationNodePatch[]
   }

@@ -587,6 +587,48 @@ describe('codegenPublicationGenerationStage', () => {
     }))
   })
 
+  it('skips semantic consistency evaluation when compiled script structural validation fails', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const consistencyEvaluate = jest.fn().mockImplementation(() => {
+      throw new Error('semantic parser should not run')
+    })
+
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      { buildFromCanonicalSpec: jest.fn().mockReturnValue({}) } as any,
+      strategySummaryBuilder as any,
+      { evaluate: consistencyEvaluate } as any,
+      { compile: jest.fn().mockReturnValue({ ir: { id: 'compiled-ir' } }) } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('invalid compiled script') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockImplementation(() => { throw new Error('invalid compiled manifest') }) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
+    )
+
+    const artifacts = await stage.generate({
+      semanticState: buildLockedBollingerSemanticState(),
+    })
+
+    expect(artifacts.validation.passed).toBe(false)
+    expect(consistencyEvaluate).not.toHaveBeenCalled()
+    expect(artifacts.semanticConsistency).toEqual(expect.objectContaining({
+      status: 'FAILED',
+      specProfile: expect.any(Object),
+      scriptProfile: expect.any(Object),
+      checks: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'script.structural_validation',
+          status: 'failed',
+        }),
+      ]),
+      summary: expect.objectContaining({ criticalFailed: 1 }),
+    }))
+    expect(artifacts.sessionSpecDesc).not.toHaveProperty('stage1ConsistencyEvidence')
+  })
+
   it('routes semantic-state publication through semantic canonical compilation', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())

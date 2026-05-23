@@ -55,6 +55,80 @@ strategy
     expect(report.summary.criticalFailed).toBe(0)
   })
 
+  it('reports action mismatch when rule key, phase and side scope match', () => {
+    const profile = {
+      indicators: [],
+      actions: [],
+      ruleMappings: [],
+      sizing: null,
+      requiredParams: [],
+      fallbackDetected: false,
+    }
+
+    const check = (consistency as any).checkRuleProfiles(
+      {
+        ...profile,
+        rules: [{
+          key: 'ma.golden_cross',
+          phase: 'entry',
+          sideScope: 'long',
+          action: 'OPEN_LONG',
+        }],
+      },
+      {
+        ...profile,
+        rules: [{
+          key: 'ma.golden_cross',
+          phase: 'entry',
+          sideScope: 'long',
+          action: 'ADD_LONG',
+        }],
+      },
+    )
+
+    expect(check.status).toBe('failed')
+    expect(check.message).toContain('脚本规则动作不匹配')
+    expect(check.message).toContain('ma.golden_cross:entry:long: expected=OPEN_LONG, actual=ADD_LONG')
+    expect(check.message).not.toContain('脚本缺少关键规则映射')
+  })
+
+  it('reports missing only when no rule candidate matches key, phase and side scope', () => {
+    const profile = {
+      indicators: [],
+      actions: [],
+      ruleMappings: [],
+      sizing: null,
+      requiredParams: [],
+      fallbackDetected: false,
+    }
+
+    const check = (consistency as any).checkRuleProfiles(
+      {
+        ...profile,
+        rules: [{
+          key: 'ma.golden_cross',
+          phase: 'entry',
+          sideScope: 'long',
+          action: 'OPEN_LONG',
+        }],
+      },
+      {
+        ...profile,
+        rules: [{
+          key: 'ma.golden_cross',
+          phase: 'entry',
+          sideScope: 'short',
+          action: 'OPEN_LONG',
+        }],
+      },
+    )
+
+    expect(check.status).toBe('failed')
+    expect(check.message).toContain('脚本缺少关键规则映射: ma.golden_cross:entry:long')
+    expect(check.message).toContain('sideScope 漂移')
+    expect(check.message).not.toContain('脚本规则动作不匹配')
+  })
+
   it('passes when semantic graph, ir and compiled script stay aligned', () => {
     const semanticGraph = createBollingerSemanticGraph()
     const ir = new SemanticGraphCompilerService().compile(semanticGraph)

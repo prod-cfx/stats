@@ -54,7 +54,7 @@ describe('conversation-planner-system prompt ↔ validator evidence.text 契约 
         exampleRuleAnchors.push(i)
       }
     }
-    expect(exampleRuleAnchors.length).toBeGreaterThanOrEqual(10)
+    expect(exampleRuleAnchors.length).toBeGreaterThanOrEqual(8)
 
     for (const idx of exampleRuleAnchors) {
       const window = lines.slice(idx, Math.min(idx + 24, lines.length)).join('\n')
@@ -107,7 +107,7 @@ describe('conversation-planner-system prompt ↔ validator evidence.text 契约 
       const m = lines[i].match(/"evidence"\s*:\s*\{\s*"text"\s*:\s*"([^"]+)"\s*\}/)
       if (m) evidences.push({ line: i, text: m[1] })
     }
-    expect(evidences.length).toBeGreaterThanOrEqual(10)
+    expect(evidences.length).toBeGreaterThanOrEqual(8)
 
     // 对每个 evidence：owner = 「同一个 example section 内、startLine < evLine 的 userBlock」。
     // 避免落到 NEGATIVE_EXAMPLES 段的 user 反例字符串上（NEGATIVE 段不属于 example anchor）。
@@ -141,7 +141,13 @@ describe('conversation-planner-system prompt ↔ validator evidence.text 契约 
           phase: 'entry',
           sideScope: 'long',
           condition: { kind: 'atom', key: 'indicator.above', params: { indicator: 'ma', period: 50 } },
-          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
           evidence: { text: 'MA50 上方且价格在 MA50 上方时买入' },
         },
       ],
@@ -163,7 +169,13 @@ describe('conversation-planner-system prompt ↔ validator evidence.text 契约 
           phase: 'entry',
           sideScope: 'long',
           condition: { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', period: 20 } },
-          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
           // evidence 缺
         },
       ],

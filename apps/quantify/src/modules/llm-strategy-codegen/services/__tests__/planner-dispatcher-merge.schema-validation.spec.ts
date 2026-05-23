@@ -18,6 +18,15 @@ import { PlannerDispatcherMergeService } from '../planner-dispatcher-merge.servi
 describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', () => {
   const svc = new PlannerDispatcherMergeService()
   const userMessage = '5min K 线里面 价格在 EMA20/60/144 上方时做多开仓 都位于下方只开空 入场是 BOLL 下轨开多 上轨开空 币安 BTCUSDT 永续 风控亏损 5% 止损'
+  const typedEffects = (
+    roles: Partial<Record<'actions' | 'risks' | 'positions' | 'orchestration' | 'programs', ReadonlyArray<Record<string, unknown>>>> = {},
+  ) => ({
+    actions: roles.actions ?? [],
+    risks: roles.risks ?? [],
+    positions: roles.positions ?? [],
+    orchestration: roles.orchestration ?? [],
+    programs: roles.programs ?? [],
+  })
 
   it('rejects legacy flat atoms[] form (no rules[])', () => {
     const patch = {
@@ -55,7 +64,51 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
     }
   })
 
-  it('rejects rules[] with rule missing evidence.text (evidence_text_missing)', () => {
+  it('rejects rules[] missing effects (rule_shape_invalid)', () => {
+    const patch = {
+      rules: [
+        {
+          id: 'r1',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
+          evidence: { text: 'BOLL 下轨开多' },
+        },
+      ],
+    }
+    const result = svc.validatePlannerSemanticPatch(patch, userMessage)
+    expect(result.ok).toBe(false)
+    if (result.ok === false) {
+      expect(result.reasons).toContain('rule_shape_invalid')
+    }
+  })
+
+  it('rejects typed effects object missing a required role (rule_shape_invalid)', () => {
+    const patch = {
+      rules: [
+        {
+          id: 'r1',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+            risks: [],
+            positions: [],
+            orchestration: [],
+          },
+          evidence: { text: 'BOLL 下轨开多' },
+        },
+      ],
+    }
+    const result = svc.validatePlannerSemanticPatch(patch, userMessage)
+    expect(result.ok).toBe(false)
+    if (result.ok === false) {
+      expect(result.reasons).toContain('rule_shape_invalid')
+    }
+  })
+
+  it('rejects bare effects arrays (rule_shape_invalid)', () => {
     const patch = {
       rules: [
         {
@@ -64,6 +117,26 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
           sideScope: 'long',
           condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
           effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          evidence: { text: 'BOLL 下轨开多' },
+        },
+      ],
+    }
+    const result = svc.validatePlannerSemanticPatch(patch, userMessage)
+    expect(result.ok).toBe(false)
+    if (result.ok === false) {
+      expect(result.reasons).toContain('rule_shape_invalid')
+    }
+  })
+
+  it('rejects rules[] with rule missing evidence.text (evidence_text_missing)', () => {
+    const patch = {
+      rules: [
+        {
+          id: 'r1',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
+          effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: {} }] }),
           // evidence missing
         },
       ],
@@ -83,12 +156,44 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
           phase: 'entry',
           sideScope: 'long',
           condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
-          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: {} }] }),
           evidence: { text: '不在 user message 中的内容 zzz' },
         },
       ],
     }
     const result = svc.validatePlannerSemanticPatch(patch, userMessage)
+    expect(result.ok).toBe(true)
+    if (result.ok === true) {
+      expect(result.warnings).toContain('evidence_text_not_substring')
+    }
+  })
+
+  it('downgrades typed role effect leaf evidence mismatch to warning', () => {
+    const patch = {
+      rules: [
+        {
+          id: 'r1',
+          phase: 'entry',
+          sideScope: 'both',
+          condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
+          effects: {
+            actions: [{
+              kind: 'atom',
+              key: 'action.open_long',
+              params: {},
+              evidence: { text: '不在 user message 中的 action evidence' },
+            }],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+          evidence: { text: 'BTCUSDT' },
+        },
+      ],
+    }
+
+    const result = svc.validatePlannerSemanticPatch(patch, 'BTCUSDT 启动策略')
     expect(result.ok).toBe(true)
     if (result.ok === true) {
       expect(result.warnings).toContain('evidence_text_not_substring')
@@ -103,7 +208,7 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
           phase: 'entry',
           sideScope: 'long',
           condition: { kind: 'atom', key: 'action.open_long', params: {} }, // action 不能做 condition
-          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: {} }] }),
           evidence: { text: '5min K 线' },
         },
       ],
@@ -123,7 +228,7 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
           phase: 'entry',
           sideScope: 'long',
           condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
-          effects: [{ kind: 'atom', key: 'bollinger.touch_lower', params: {} }], // trigger 不能做 effect
+          effects: typedEffects({ actions: [{ kind: 'atom', key: 'bollinger.touch_lower', params: {} }] }), // trigger 不能做 effect
           evidence: { text: '5min K 线' },
         },
       ],
@@ -147,7 +252,7 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
             key: 'grid.range_rebalance',
             params: { rangeLower: 60000, rangeUpper: 80000, stepPct: 0.5, sideMode: 'both' },
           },
-          effects: [{ kind: 'atom', key: 'grid.range_rebalance', params: { rangeLower: 60000, rangeUpper: 80000, stepPct: 0.5, sideMode: 'both' } }],
+          effects: typedEffects({ positions: [{ kind: 'atom', key: 'grid.range_rebalance', params: { rangeLower: 60000, rangeUpper: 80000, stepPct: 0.5, sideMode: 'both' } }] }),
           evidence: { text: '价格区间 60000-80000，采用双向网格，每格间距 0.5%' },
         },
       ],
@@ -169,7 +274,7 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
           phase: 'entry',
           sideScope: 'long',
           condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
-          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: {} }] }),
           evidence: { text: 'BOLL 下轨开多' },
         },
         {
@@ -177,7 +282,7 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
           phase: 'exit',
           sideScope: 'both',
           condition: { kind: 'atom', key: 'risk.atr_stop', params: {} },
-          effects: [{ kind: 'atom', key: 'risk.atr_stop', params: {} }],
+          effects: typedEffects({ risks: [{ kind: 'atom', key: 'risk.atr_stop', params: {} }] }),
           evidence: { text: '5% 止损' },
         },
       ],
