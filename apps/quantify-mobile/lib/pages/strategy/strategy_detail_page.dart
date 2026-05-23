@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +16,7 @@ import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_panel.dart';
 import '../../widgets/qz_spinner.dart';
 import 'widgets/equity_curve_view.dart';
+import 'widgets/load_conversation_toast.dart';
 import 'widgets/strategy_metric_card.dart';
 import 'widgets/strategy_signal_tile.dart';
 
@@ -60,6 +63,41 @@ class StrategyDetailPage extends ConsumerStatefulWidget {
 class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
   EquityTimeframe _tf = EquityTimeframe.d30;
 
+  /// 「载入对话」toast 与跳转 timer（#1666 对齐 strategy_home_page #1596）。
+  /// 显示 toast 后约 700ms 跳 `/ai?loadStrategy=$id`；
+  /// dispose / 重复点击需安全取消，避免页面销毁后仍调 router。
+  String? _toast;
+  Timer? _toastTimer;
+  Timer? _navTimer;
+  static const Duration _kLoadConversationDelay = Duration(milliseconds: 700);
+  static const Duration _kToastDuration = Duration(milliseconds: 2400);
+
+  @override
+  void dispose() {
+    _toastTimer?.cancel();
+    _navTimer?.cancel();
+    super.dispose();
+  }
+
+  /// 点击「载入对话」：toast → 700ms → `context.go('/ai?loadStrategy=$id')`。
+  /// 与 [_StrategyHomePageState._onLoadConversation] 行为对齐。
+  void _onLoadConversation(StrategyDetail d) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final String id = d.card.id;
+    final String msg = l10n.strategyHomeLoadedToast(d.card.name);
+    _toastTimer?.cancel();
+    _navTimer?.cancel();
+    setState(() => _toast = msg);
+    _toastTimer = Timer(_kToastDuration, () {
+      if (!mounted) return;
+      setState(() => _toast = null);
+    });
+    _navTimer = Timer(_kLoadConversationDelay, () {
+      if (!mounted) return;
+      context.go('/ai?loadStrategy=$id');
+    });
+  }
+
   String _fmtPct(double v, {bool sign = true}) =>
       '${sign && v > 0 ? '+' : ''}${v.toStringAsFixed(2)}%';
 
@@ -99,7 +137,9 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
     return Scaffold(
       backgroundColor: c.bg,
       appBar: AppBar(title: Text(l10n.strategyDetailTitle)),
-      body: detailAsync.when(
+      body: Stack(
+        children: <Widget>[
+          detailAsync.when(
         loading: () => const Center(child: QzSpinner()),
         error: (Object err, _) => Center(
           child: QzEmptyState(title: l10n.commonLoadError, subtitle: err.toString()),
@@ -213,6 +253,20 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
           ),
         ),
       ),
+          if (_toast != null)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 24,
+              child: Center(
+                child: LoadConversationToast(
+                  key: const Key('strategy-load-conversation-toast'),
+                  text: _toast!,
+                ),
+              ),
+            ),
+        ],
+      ),
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(
@@ -231,13 +285,20 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                 onPressed: () => _share(context, id),
               ),
               const SizedBox(width: QzSpacing.sm),
+              // 「载入到对话」对齐设计稿 m-screens-2 StratDetail 底栏主操作（#1666）：
+              // accent 渐变 + toast + 700ms 跳 ai。detail 未加载完时按钮 disabled，
+              // 避免在没有名字的情况下显示空 toast。
               Expanded(
                 child: QzButton(
                   key: const Key('strategy-detail-load-chat-btn'),
                   label: l10n.strategyDetailLoadConversation,
-                  variant: QzButtonVariant.ghost,
+                  variant: QzButtonVariant.accent,
                   expanded: true,
-                  onPressed: () => context.go('/ai?loadStrategy=$id'),
+                  onPressed: detailAsync.maybeWhen(
+                    data: (StrategyDetail d) =>
+                        () => _onLoadConversation(d),
+                    orElse: () => null,
+                  ),
                 ),
               ),
               const SizedBox(width: QzSpacing.sm),
@@ -247,9 +308,7 @@ class _StrategyDetailPageState extends ConsumerState<StrategyDetailPage> {
                   label: subscribed
                       ? l10n.strategyDetailSubscribed
                       : l10n.strategyDetailSubscribe,
-                  variant: subscribed
-                      ? QzButtonVariant.ghost
-                      : QzButtonVariant.accent,
+                  variant: QzButtonVariant.ghost,
                   expanded: true,
                   onPressed: () => ref
                       .read(strategySubscriptionsProvider.notifier)

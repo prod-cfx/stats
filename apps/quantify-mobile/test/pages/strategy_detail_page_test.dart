@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/storage/strategy_subscription_persistence.dart';
 import 'package:quantify_mobile/pages/strategy/strategy_detail_page.dart';
 import 'package:quantify_mobile/pages/strategy/widgets/equity_curve_view.dart';
+import 'package:quantify_mobile/pages/strategy/widgets/load_conversation_toast.dart';
 import 'package:quantify_mobile/pages/strategy/widgets/strategy_metric_card.dart';
 import 'package:quantify_mobile/pages/strategy/widgets/strategy_signal_tile.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
@@ -15,7 +17,39 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 const String _kId = 'st-grid-btc';
 
-Future<ProviderContainer> _pumpDetail(
+/// 测试用 GoRouter：把 `/strategy/:id` 作为 detail 页落点，
+/// 同时注册 `/ai`，使「载入对话」按钮的 `context.go('/ai?...')` 可被
+/// 路由观察（而不是抛 GoRouter 未配置异常）。
+GoRouter _buildTestRouter() {
+  return GoRouter(
+    initialLocation: '/strategy/$_kId',
+    routes: <RouteBase>[
+      GoRoute(
+        path: '/strategy/:id',
+        builder: (BuildContext _, GoRouterState state) =>
+            StrategyDetailPage(id: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/ai',
+        builder: (BuildContext _, GoRouterState state) => const _AiStub(),
+      ),
+    ],
+  );
+}
+
+class _AiStub extends StatelessWidget {
+  const _AiStub();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      key: Key('ai-stub'),
+      body: Center(child: Text('ai stub')),
+    );
+  }
+}
+
+Future<({ProviderContainer container, GoRouter router})> _pumpDetail(
   WidgetTester tester, {
   QzTheme? theme,
   Map<String, Object> initialPrefs = const <String, Object>{},
@@ -28,17 +62,18 @@ Future<ProviderContainer> _pumpDetail(
       sharedPreferencesProvider.overrideWithValue(prefs),
     ],
   );
+  final GoRouter router = _buildTestRouter();
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: MaterialApp(
+      child: MaterialApp.router(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         theme: buildQzThemeData(
           theme ?? const QzTheme(bg: QzBg.light, accent: QzAccent.violet),
         ),
-        home: const StrategyDetailPage(id: _kId),
+        routerConfig: router,
       ),
     ),
   );
@@ -49,7 +84,7 @@ Future<ProviderContainer> _pumpDetail(
   // equity 由 detail data 渲染完之后再 watch，所以要再多 pump 一次
   await tester.pump(const Duration(milliseconds: 200));
   await tester.pump();
-  return container;
+  return (container: container, router: router);
 }
 
 void main() {
@@ -82,7 +117,7 @@ void main() {
 
   testWidgets('订阅按钮：未订阅 → 点击 → 已订阅 → 再次点击 → 取消',
       (WidgetTester tester) async {
-    final ProviderContainer c = await _pumpDetail(tester);
+    final ProviderContainer c = (await _pumpDetail(tester)).container;
     expect(find.text('订阅策略'), findsOneWidget);
     expect(c.read(strategySubscriptionsProvider).contains(_kId), isFalse);
 
@@ -103,7 +138,7 @@ void main() {
   testWidgets('订阅持久化：toggle 后写入 SharedPreferences，第二次启动读到状态',
       (WidgetTester tester) async {
     // 第一次进入：订阅
-    final ProviderContainer c1 = await _pumpDetail(tester);
+    final ProviderContainer c1 = (await _pumpDetail(tester)).container;
     await tester.tap(
         find.byKey(const Key('strategy-detail-subscribe-btn')));
     await tester.pump();
@@ -131,7 +166,8 @@ void main() {
     for (final QzBg bg in QzBg.values) {
       for (final QzAccent accent in QzAccent.values) {
         final ProviderContainer c =
-            await _pumpDetail(tester, theme: QzTheme(bg: bg, accent: accent));
+            (await _pumpDetail(tester, theme: QzTheme(bg: bg, accent: accent)))
+                .container;
         expect(tester.takeException(), isNull,
             reason: 'theme bg=$bg accent=$accent should pump without exception');
         expect(find.byType(StrategyMetricCard), findsNWidgets(6),
@@ -139,5 +175,64 @@ void main() {
         c.dispose();
       }
     }
+  });
+
+  testWidgets('载入对话：点击 → 显示 toast → 700ms 后跳 /ai?loadStrategy=<id>（#1666）',
+      (WidgetTester tester) async {
+    final ({ProviderContainer container, GoRouter router}) ctx =
+        await _pumpDetail(tester);
+
+    // 点击「载入对话」主操作
+    await tester.tap(find.byKey(const Key('strategy-detail-load-chat-btn')));
+    await tester.pump();
+
+    // toast 立即出现
+    expect(find.byKey(const Key('strategy-load-conversation-toast')),
+        findsOneWidget);
+    expect(find.byType(LoadConversationToast), findsOneWidget);
+
+    // 还未到 700ms：跳转 timer 尚未触发，仍在 detail 路由
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(ctx.router.routerDelegate.currentConfiguration.uri.toString(),
+        contains('/strategy/'));
+
+    // 到 700ms：触发跳转
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump();
+    final String loc =
+        ctx.router.routerDelegate.currentConfiguration.uri.toString();
+    expect(loc, contains('/ai'));
+    expect(loc, contains('loadStrategy=$_kId'));
+
+    // 让 toast 自然消失（2400ms - 已经过去 ~750ms）
+    await tester.pump(const Duration(milliseconds: 2000));
+  });
+
+  testWidgets('载入对话：重复点击只触发一次跳转，timer 取消上一次（#1666）',
+      (WidgetTester tester) async {
+    final ({ProviderContainer container, GoRouter router}) ctx =
+        await _pumpDetail(tester);
+
+    final Finder loadBtn = find.byKey(const Key('strategy-detail-load-chat-btn'));
+    await tester.tap(loadBtn);
+    await tester.pump(const Duration(milliseconds: 300));
+    // 第二次点击在第一次跳转 timer 之前
+    await tester.tap(loadBtn);
+    await tester.pump();
+
+    // 还在 detail 路由
+    expect(ctx.router.routerDelegate.currentConfiguration.uri.toString(),
+        contains('/strategy/'));
+
+    // 走完第二次的 700ms：只跳一次
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pump();
+    expect(ctx.router.routerDelegate.currentConfiguration.uri.toString(),
+        contains('loadStrategy=$_kId'));
+
+    // 没有未捕获异常（验证 timer 取消路径无副作用）
+    expect(tester.takeException(), isNull);
+    // 等 toast 自然消失，避免 pending timer
+    await tester.pump(const Duration(milliseconds: 2500));
   });
 }

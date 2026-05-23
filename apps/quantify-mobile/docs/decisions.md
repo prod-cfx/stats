@@ -112,6 +112,18 @@ Bottom sheet（无独立 route，由调用方 `showXxxSheet(context, ...)` 打�
 
 **落地范围**：本决策仅落文档（本节 + `README.md` 设计真源段）。后续页面对齐 issue 引用本节作为基线，不在每个 PR 里重新解释。
 
+### 6. 策略详情形态与「载入到对话」主操作（Issue #1666）
+
+**背景**：设计稿 `m-screens-2.jsx` 中 `StratDetail` 以 bottom sheet 形式呈现，主操作为底部「载入到对话」（紫色渐变按钮 + toast + 跳 `/ai`）；Flutter 一直把 `/strategy/:id` 实现为 `StrategyDetailPage`。
+
+**判定**：
+
+- **形态保持 full-screen route**——`/strategy/:id` 命中本节 #3 的硬条件（需要深链 / 浏览器返回栈语义、内容超过半屏、列表卡片 push 进入需保留返回路径），不迁移到 bottom sheet。
+- **底部主操作 = 「载入到对话」**——对齐设计稿语义。按钮顺序为「分享（ghost）→ 载入到对话（accent，主操作）→ 订阅」。
+- **载入对话流程统一**——复用 `strategy_home_page._onLoadConversation` 的 toast helper：显示 `_LoadConversationToast`，~700ms 后跳 `/ai?loadStrategy=<id>`；timer 在 dispose / 重复点击时安全取消。toast key 与列表页保持一致 `strategy-load-conversation-toast`。
+
+**不变项**：设计稿 `StratDetail` 中已有的「收益曲线 + 统计网格 + 策略参数 + 策略说明 + 用户反馈」内容已在 Flutter 详情页覆盖（#1565），本次不扩展也不删减。
+
 ---
 
 ## 2026-05-18 · K 线图表组件库选型（Issue #1513）

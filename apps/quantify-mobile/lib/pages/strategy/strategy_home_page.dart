@@ -18,6 +18,7 @@ import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
 import 'widgets/category_chip_bar.dart';
 import 'widgets/featured_hero_card.dart';
+import 'widgets/load_conversation_toast.dart';
 import 'widgets/strategy_card_tile.dart';
 import 'widgets/strategy_sort_sheet.dart';
 
@@ -354,7 +355,7 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
               right: 0,
               bottom: 24,
               child: Center(
-                child: _LoadConversationToast(
+                child: LoadConversationToast(
                   key: const Key('strategy-load-conversation-toast'),
                   text: _toast!,
                 ),
@@ -363,56 +364,6 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
         ],
       ),
       backgroundColor: c.bg,
-    );
-  }
-}
-
-/// 「策略载入对话」toast（#1596）：深色半透明胶囊 + 绿色 check + 文案。
-class _LoadConversationToast extends StatelessWidget {
-  const _LoadConversationToast({super.key, required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 320),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: const Color(0xEB0F0B22),
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: const <BoxShadow>[
-            BoxShadow(
-              color: Color(0x520F0B22),
-              blurRadius: 24,
-              offset: Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            const Icon(
-              Icons.check_circle,
-              color: Color(0xFF16C783),
-              size: 16,
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                text,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
