@@ -229,6 +229,57 @@ describe('publication gate rules-only hash chain', () => {
     ]))
   })
 
+  it('blocks when IR and AST source paths are outside canonical trace set', () => {
+    const input = fixture()
+    input.ir.ruleBlocks[0].metadata = { sourcePath: 'rules[999]' }
+    input.ast.decisionPrograms[0].metadata = { sourcePath: 'rules[999]' }
+    const linked = linkFixtureHashes(input)
+    input.script = scriptForHashes(linked)
+
+    const result = newGate().validateRulesOnlyHashChain(input)
+
+    expect(result.passed).toBe(false)
+    expect(result.blocked).toBe(true)
+    expect(result.reason).toBe('rules_only_trace_missing')
+    expect(result.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'trace.ir', passed: false }),
+      expect.objectContaining({ key: 'trace.ast', passed: false }),
+    ]))
+  })
+
+  it('blocks when canonical rulesHash is missing', () => {
+    const input = fixture()
+    delete input.canonicalSpec.metadata
+    const canonicalSpecHash = hashCanonical(input.canonicalSpec)
+    input.ir.source.graphDigest = `sha256:${canonicalSpecHash}`
+    input.ir.source.specHash = `sha256:${canonicalSpecHash}`
+    const irHash = hashCanonical(input.ir)
+    input.ast.manifest.irHash = `sha256:${irHash}`
+    input.ast.manifest.specHash = `sha256:${canonicalSpecHash}`
+    const astHash = hashCanonical({
+      astVersion: input.ast.astVersion,
+      executionModel: input.ast.executionModel,
+      dataRequirements: input.ast.dataRequirements,
+      runtimeRequirements: input.ast.runtimeRequirements,
+      exprPool: input.ast.exprPool,
+      guards: input.ast.guards,
+      riskPredicates: input.ast.riskPredicates,
+      decisionPrograms: input.ast.decisionPrograms,
+      orderPrograms: input.ast.orderPrograms,
+      topology: input.ast.topology,
+    })
+    input.script = scriptForHashes({ canonicalSpecHash, irHash, astHash })
+
+    const result = newGate().validateRulesOnlyHashChain(input)
+
+    expect(result.passed).toBe(false)
+    expect(result.blocked).toBe(true)
+    expect(result.reason).toBe('rules_only_hash_mismatch')
+    expect(result.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'hash.canonical.rulesHash', passed: false }),
+    ]))
+  })
+
   it('blocks when IR hash linkage mismatches AST manifest', () => {
     const input = fixture()
     input.ast.manifest.irHash = `sha256:${'1'.repeat(64)}`

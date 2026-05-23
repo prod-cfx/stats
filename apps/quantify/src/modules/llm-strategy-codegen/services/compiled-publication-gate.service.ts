@@ -243,6 +243,8 @@ export class CompiledPublicationGateService {
     const canonicalTrace = this.collectCanonicalExecutableTrace(input.canonicalSpec)
     const irTrace = this.collectIrExecutableTrace(input.ir)
     const astTrace = this.collectAstExecutableTrace(input.ast)
+    const irUnknownSourcePaths = this.findUnknownRulesSourcePaths(irTrace.sourcePaths, canonicalTrace.sourcePaths)
+    const astUnknownSourcePaths = this.findUnknownRulesSourcePaths(astTrace.sourcePaths, canonicalTrace.sourcePaths)
     const scriptManifest = this.readScriptManifest(input.script)
     const hashChecks = this.buildRulesOnlyHashChecks(input, hashes, scriptManifest)
     const scriptHashLinked = hashChecks
@@ -261,15 +263,19 @@ export class CompiledPublicationGateService {
       },
       {
         key: 'trace.ir',
-        passed: irTrace.sourcePaths.length > 0 && irTrace.missing.length === 0,
+        passed: irTrace.sourcePaths.length > 0
+          && irTrace.missing.length === 0
+          && irUnknownSourcePaths.length === 0,
         expected: canonicalTrace.sourcePaths,
-        actual: irTrace,
+        actual: { ...irTrace, unknown: irUnknownSourcePaths },
       },
       {
         key: 'trace.ast',
-        passed: astTrace.sourcePaths.length > 0 && astTrace.missing.length === 0,
+        passed: astTrace.sourcePaths.length > 0
+          && astTrace.missing.length === 0
+          && astUnknownSourcePaths.length === 0,
         expected: canonicalTrace.sourcePaths,
-        actual: astTrace,
+        actual: { ...astTrace, unknown: astUnknownSourcePaths },
       },
       {
         key: 'trace.script',
@@ -474,12 +480,20 @@ export class CompiledPublicationGateService {
     const canonicalRulesHashes = this.collectHashFields(input.canonicalSpec, 'rulesHash')
     const source = this.readRecord(input.ir.source) ?? {}
     const astManifest = input.ast.manifest as unknown as Record<string, unknown>
+    const canonicalRulesHashChecks = canonicalRulesHashes.length > 0
+      ? canonicalRulesHashes.map((actual, index) => this.buildHashCheck(
+          `hash.canonical.rulesHash${canonicalRulesHashes.length > 1 ? `.${index}` : ''}`,
+          hashes.rulesHash,
+          actual,
+        ))
+      : [{
+          key: 'hash.canonical.rulesHash',
+          passed: false,
+          expected: hashes.rulesHash,
+          actual: null,
+        }]
     return [
-      ...canonicalRulesHashes.map((actual, index) => this.buildHashCheck(
-        `hash.canonical.rulesHash${canonicalRulesHashes.length > 1 ? `.${index}` : ''}`,
-        hashes.rulesHash,
-        actual,
-      )),
+      ...canonicalRulesHashChecks,
       ...(typeof source.specHash === 'string'
         ? [this.buildHashCheck('hash.ir.specHash', hashes.canonicalSpecHash, source.specHash)]
         : []),
@@ -625,6 +639,21 @@ export class CompiledPublicationGateService {
       return
     }
     sourcePaths.add(sourcePath)
+  }
+
+  private findUnknownRulesSourcePaths(
+    actualSourcePaths: readonly string[],
+    canonicalSourcePaths: readonly string[],
+  ): string[] {
+    return actualSourcePaths
+      .filter(actual => !canonicalSourcePaths.some(canonical => this.isKnownRulesSourcePath(actual, canonical)))
+      .sort()
+  }
+
+  private isKnownRulesSourcePath(actual: string, canonical: string): boolean {
+    return actual === canonical
+      || actual.startsWith(`${canonical}.`)
+      || actual.startsWith(`${canonical}[`)
   }
 
   private readRulesSourcePath(value: unknown): string | null {
