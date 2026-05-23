@@ -505,6 +505,26 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
               key: 'portfolioRisk.drawdown_block',
               params: { mode: 'enforce', thresholdPct: 12 },
             },
+            {
+              kind: 'atom',
+              key: 'portfolioRisk.symbol_exposure_cap',
+              params: {
+                mode: 'enforce',
+                notionalCapPct: 30,
+                effectWhenTriggered: 'reduce_exposure',
+                boundSymbolScopeRef: 'rule-orchestration-rules-0-effects-orchestration-0',
+              },
+            },
+            {
+              kind: 'atom',
+              key: 'portfolioRisk.substrategy_exposure_cap',
+              params: {
+                mode: 'enforce',
+                notionalCapPct: 50,
+                effectWhenTriggered: 'pause_substrategy',
+                boundSubStrategyScopeRef: 'sub-strategy-a',
+              },
+            },
           ],
           programs: [],
         },
@@ -527,6 +547,20 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
         scope: 'portfolio',
         thresholdPct: 12,
         sourcePath: 'rules[0].effects.orchestration[1]',
+      }),
+      expect.objectContaining({
+        scope: 'symbol',
+        notionalCapPct: 30,
+        symbolScopeRef: 'rule-orchestration-rules-0-effects-orchestration-0',
+        effectWhenTriggered: 'reduce_exposure',
+        sourcePath: 'rules[0].effects.orchestration[2]',
+      }),
+      expect.objectContaining({
+        scope: 'subStrategy',
+        notionalCapPct: 50,
+        subStrategyScopeRef: 'sub-strategy-a',
+        effectWhenTriggered: 'pause_substrategy',
+        sourcePath: 'rules[0].effects.orchestration[3]',
       }),
     ])
   })

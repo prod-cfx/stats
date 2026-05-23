@@ -1189,6 +1189,58 @@ export class CanonicalSpecBuilderService {
         })
         continue
       }
+      if (leaf.key === FIELD_KEY.PORTFOLIO_RISK_SYMBOL_EXPOSURE_CAP) {
+        const notionalCapPct = this.readFiniteNumber(leaf.params.notionalCapPct)
+        const symbolScopeRef = typeof leaf.params.boundSymbolScopeRef === 'string'
+          ? leaf.params.boundSymbolScopeRef.trim()
+          : ''
+        const effectWhenTriggered = leaf.params.effectWhenTriggered
+        if (
+          notionalCapPct === null
+          || notionalCapPct <= 0
+          || notionalCapPct > 100
+          || symbolScopeRef === ''
+          || (effectWhenTriggered !== 'block_new_entries' && effectWhenTriggered !== 'reduce_exposure')
+        ) {
+          throw new Error(`InvalidSemanticRuleOrchestrationEffect: key=${leaf.key} sourcePath=${leaf.path}`)
+        }
+        risks.push({
+          id: `${leaf.ruleId}-${this.stableRulesPathId(leaf.path)}`,
+          scope: 'symbol',
+          mode: leaf.params.mode === 'observe' ? 'observe' : 'enforce',
+          notionalCapPct,
+          symbolScopeRef,
+          effectWhenTriggered,
+          sourcePath: leaf.path,
+        })
+        continue
+      }
+      if (leaf.key === FIELD_KEY.PORTFOLIO_RISK_SUBSTRATEGY_EXPOSURE_CAP) {
+        const notionalCapPct = this.readFiniteNumber(leaf.params.notionalCapPct)
+        const subStrategyScopeRef = typeof leaf.params.boundSubStrategyScopeRef === 'string'
+          ? leaf.params.boundSubStrategyScopeRef.trim()
+          : ''
+        const effectWhenTriggered = leaf.params.effectWhenTriggered
+        if (
+          notionalCapPct === null
+          || notionalCapPct <= 0
+          || notionalCapPct > 100
+          || subStrategyScopeRef === ''
+          || (effectWhenTriggered !== 'block_new_entries' && effectWhenTriggered !== 'pause_substrategy')
+        ) {
+          throw new Error(`InvalidSemanticRuleOrchestrationEffect: key=${leaf.key} sourcePath=${leaf.path}`)
+        }
+        risks.push({
+          id: `${leaf.ruleId}-${this.stableRulesPathId(leaf.path)}`,
+          scope: 'subStrategy',
+          mode: leaf.params.mode === 'observe' ? 'observe' : 'enforce',
+          notionalCapPct,
+          subStrategyScopeRef,
+          effectWhenTriggered,
+          sourcePath: leaf.path,
+        })
+        continue
+      }
       if (leaf.key.startsWith('portfolioRisk.')) {
         throw new Error(`UnsupportedSemanticRuleOrchestrationEffect: key=${leaf.key} sourcePath=${leaf.path}`)
       }
