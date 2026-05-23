@@ -2,7 +2,6 @@ import type { StrategyAdapterV1, StrategyDecisionV1 } from '@ai/shared'
 import type { ProgramLifecycleState, SubStrategySwitchInput } from '@ai/shared/script-engine/compiled-runtime'
 import type { BacktestRunInput } from '../types/backtesting.types'
 import { ErrorCode } from '@ai/shared'
-import { createScriptEngine } from '@ai/shared/node'
 import {
   buildCompiledManifest,
   evaluateExprPool,
@@ -18,8 +17,6 @@ import { buildTimeframeBarStatus } from '@ai/shared/script-engine/helpers/build-
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/services/compiled-script-parser.service'
-import { isStrategyAdapterV1 } from '@/modules/strategy-runtime/strategy-protocol.util'
-import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 
 export interface BacktestProtocolScriptInput {
   id: string
@@ -49,13 +46,7 @@ export class BacktestStrategyAdapterService {
       })
     }
 
-    const adapter = await this.resolveAdapter(rawScript)
-    if (!isStrategyAdapterV1(adapter)) {
-      throw new DomainException('backtest.strategy_adapter_invalid', {
-        code: ErrorCode.BAD_REQUEST,
-        status: HttpStatus.BAD_REQUEST,
-      })
-    }
+    const adapter = this.resolveAdapter(rawScript)
 
     return {
       id: input.id,
@@ -64,22 +55,13 @@ export class BacktestStrategyAdapterService {
     }
   }
 
-  private async resolveAdapter(scriptCode: string): Promise<unknown> {
+  private resolveAdapter(scriptCode: string): StrategyAdapterV1 {
     const compiledAdapter = this.buildCompiledAdapter(scriptCode)
     if (compiledAdapter) {
       return compiledAdapter
     }
 
-    const compiled = compileStrategyScriptForVm(scriptCode)
-    if (!compiled.ok) {
-      throw new DomainException('backtest.strategy_compile_failed', {
-        code: ErrorCode.BAD_REQUEST,
-        status: HttpStatus.BAD_REQUEST,
-        args: { error: compiled.error ?? 'unknown compile error' },
-      })
-    }
-
-    return this.executeAdapter(compiled.executableCode)
+    this.raiseCompiledStrategyInvalid(new Error('compiled manifest required'))
   }
 
   private buildCompiledAdapter(scriptCode: string): StrategyAdapterV1 | null {
@@ -301,33 +283,6 @@ export class BacktestStrategyAdapterService {
     })
   }
 
-  private async executeAdapter(scriptCode: string): Promise<unknown> {
-    const engine = createScriptEngine()
-    let result = await engine.execute(scriptCode, {
-      context: {},
-      timeout: 5000,
-      allowAsync: false,
-    })
-
-    const errorMessage = result.error?.message ?? ''
-    if (!result.success && errorMessage.includes('Illegal return statement')) {
-      result = await engine.execute(`(() => { ${scriptCode} })()`, {
-        context: {},
-        timeout: 5000,
-        allowAsync: true,
-      })
-    }
-
-    if (!result.success) {
-      throw new DomainException('backtest.strategy_execute_failed', {
-        code: ErrorCode.BAD_REQUEST,
-        status: HttpStatus.BAD_REQUEST,
-        args: { error: result.error?.message ?? 'script execute failed' },
-      })
-    }
-
-    return result.value
-  }
 }
 
 function readContextPositionQty(ctx: unknown): number {

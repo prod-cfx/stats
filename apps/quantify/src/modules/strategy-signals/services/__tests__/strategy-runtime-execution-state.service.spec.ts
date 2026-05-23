@@ -341,6 +341,38 @@ describe('strategyRuntimeExecutionStateService', () => {
     ])
   })
 
+  it('reads runtime semantic keys from compiled IR snapshot semantics', async () => {
+    const { service } = createService()
+
+    expect(service.buildExecutionSemanticKeysFromSnapshot({
+      specSnapshot: {
+        runtimeExecutionSemantics: [{ semanticKey: 'on_start.entry.display_flat' }],
+      },
+      irSnapshot: {
+        runtimeExecutionSemantics: [{
+          semanticKey: 'on_start.entry.ir_primary',
+          sourcePath: 'rules[0]',
+        }],
+      },
+    })).toEqual(['on_start.entry.ir_primary'])
+  })
+
+  it('reads runtime semantic keys from execution envelope semantics without flat specDesc fallback', async () => {
+    const { service } = createService()
+
+    expect(service.buildExecutionSemanticKeysFromSnapshot({
+      specSnapshot: {
+        runtimeExecutionSemantics: [{ semanticKey: 'on_start.entry.display_forbidden' }],
+      },
+      executionEnvelope: {
+        runtimeExecutionSemantics: [{
+          semanticKey: 'on_start.exit.envelope_primary',
+          rulesSourcePath: 'rules[1]',
+        }],
+      },
+    })).toEqual(['on_start.exit.envelope_primary'])
+  })
+
   it('loads ready and eligible retryable states but excludes running terminal and consumed states', async () => {
     const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(new Date('2026-04-20T08:10:00.000Z').getTime())
     const { service, repository } = createService()
