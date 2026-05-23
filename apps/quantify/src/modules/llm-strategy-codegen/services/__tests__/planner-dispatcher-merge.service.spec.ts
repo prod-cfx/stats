@@ -436,6 +436,93 @@ describe('PlannerDispatcherMergeService', () => {
     expect(JSON.stringify(merged?.rules)).toContain('oscillator.rsi_gte')
   })
 
+  it('repairs plaza RSI reversal into one reclaim entry with explicit threshold and risk sizing', () => {
+    const text = '基于 OKX 模拟盘 ETH-USDT 现货 15m，创建 RSI 反转策略。入场规则：RSI14 从 38 下方向上穿回 38 时买入；出场规则：RSI14 高于 64 时卖出平仓；风控：仓位 25%，不使用杠杆，止损 5%，止盈 0.5%。'
+    const planner = {
+      rules: [
+        {
+          id: 'entry-rsi-lte-noisy',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'oscillator.rsi_lte', params: {} },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'entry-rsi-gte-noisy',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'oscillator.rsi_gte', params: {} },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'exit-rsi64',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'oscillator.rsi_gte', params: { period: 14, value: 64 } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const entryRules = merged?.rules?.filter(rule => rule.phase === 'entry') ?? []
+    const serialized = JSON.stringify(merged)
+
+    expect(entryRules).toHaveLength(1)
+    expect(serialized).toContain('condition.sequence')
+    expect(serialized).toContain('rsi_reclaim')
+    expect(serialized).toContain('"threshold":38')
+    expect(serialized).toContain('oscillator.rsi_gte')
+    expect(serialized).toContain('"value":64')
+    expect(serialized).toContain('risk.stop_loss_pct')
+    expect(serialized).toContain('risk.take_profit_pct')
+    expect(merged?.position?.sizing).toEqual({ kind: 'ratio', unit: 'ratio', value: 0.25 })
+  })
+
+  it('repairs plaza MACD exit tuple and keeps explicit position/risk controls', () => {
+    const text = '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 MACD 16/34/12 金叉做多、死叉平多策略。入场规则：MACD DIF 上穿 DEA 时做多开仓；出场规则：MACD DIF 下穿 DEA 时平多；本策略只做多，不做空；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.5%。'
+    const planner = {
+      rules: [
+        {
+          id: 'entry-macd-16-34-12',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'macd', fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'exit-macd-default-noisy',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'indicator.cross_under', params: { indicator: 'macd', fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+        {
+          id: 'risk-stop-loss',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'risk.stop_loss_pct', params: { basis: 'entry_avg_price', valuePct: 2 } },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const exitMacd = merged?.rules
+      ?.filter(rule => rule.phase === 'exit')
+      .flatMap(rule => collectAtomLeaves(rule.condition))
+      .find(leaf => leaf.key === 'indicator.cross_under' && leaf.params?.indicator === 'macd')
+    const serialized = JSON.stringify(merged)
+
+    expect(exitMacd?.params).toEqual(expect.objectContaining({ indicator: 'macd', fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 }))
+    expect(serialized).not.toContain('"fastPeriod":12,"slowPeriod":26,"signalPeriod":9')
+    expect(serialized).toContain('risk.stop_loss_pct')
+    expect(serialized).toContain('risk.take_profit_pct')
+    expect(merged?.position?.sizing).toEqual({ kind: 'ratio', unit: 'ratio', value: 0.35 })
+  })
+
   it('dedupes weaker dispatcher percent-change entry when planner rule already carries same entry with risks', () => {
     const text = '在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%'
     const planner = {

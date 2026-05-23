@@ -729,26 +729,38 @@ export class PlannerDispatcherMergeService {
     const rsiReclaim = this.findRsiReclaimPredicate(predicateAtoms)
     if (rsiReclaim) {
       const rsiTrend = this.findTrendPredicateForRsiReclaim(predicateAtoms, rsiReclaim)
-      if (rsiTrend) {
-        const sideScope = rsiReclaim.sideScope ?? rsiTrend.sideScope ?? 'long'
-        const effects = this.resolveFallbackEffects({
+      const sideScope = rsiReclaim.sideScope ?? rsiTrend?.sideScope ?? 'long'
+      const effects = this.resolveFallbackEffects({
+        phase: 'entry',
+        sideScope,
+        effectAtoms,
+        predicate: rsiReclaim,
+      })
+      if (effects.length > 0) {
+        const threshold = this.readNumericParam(rsiReclaim.params, 'value') ?? this.readNumericParam(rsiReclaim.params, 'threshold')
+        const rawPeriod = this.readNumericParam(rsiReclaim.params, 'period')
+        const period = rawPeriod !== null && threshold !== null && Math.abs(rawPeriod - threshold) <= 1e-9
+          ? 14
+          : rawPeriod ?? 14
+        const evidence = this.resolveFallbackEvidence(rsiReclaim, userMessage)
+        const sequenceCondition: AtomExprAtom = {
+          kind: 'atom',
+          key: ATOM_CONTRACT_REGISTRY['condition.sequence'].key,
+          params: {
+            sequenceKind: 'rsi_reclaim',
+            indicator: 'rsi',
+            period,
+            ...(threshold !== null ? { threshold, value: threshold } : {}),
+          },
+          ...(rsiReclaim.sideScope ? { sideScope: rsiReclaim.sideScope } : {}),
+          ...evidence,
+        }
+        rules.push({
+          id: 'deterministic-composite-rsi-reclaim',
           phase: 'entry',
           sideScope,
-          effectAtoms,
-          predicate: rsiReclaim,
-        })
-        if (effects.length > 0) {
-          const threshold = this.readNumericParam(rsiReclaim.params, 'value') ?? this.readNumericParam(rsiReclaim.params, 'threshold')
-          const rawPeriod = this.readNumericParam(rsiReclaim.params, 'period')
-          const period = rawPeriod !== null && threshold !== null && Math.abs(rawPeriod - threshold) <= 1e-9
-            ? 14
-            : rawPeriod ?? 14
-          const evidence = this.resolveFallbackEvidence(rsiReclaim, userMessage)
-          rules.push({
-            id: 'deterministic-composite-rsi-reclaim',
-            phase: 'entry',
-            sideScope,
-            condition: {
+          condition: rsiTrend
+            ? {
               kind: 'and',
               children: [
                 {
@@ -758,24 +770,13 @@ export class PlannerDispatcherMergeService {
                   ...(rsiTrend.sideScope ? { sideScope: rsiTrend.sideScope } : {}),
                   ...this.resolveFallbackEvidence(rsiTrend, userMessage),
                 },
-                {
-                  kind: 'atom',
-                  key: ATOM_CONTRACT_REGISTRY['condition.sequence'].key,
-                  params: {
-                    sequenceKind: 'rsi_reclaim',
-                    indicator: 'rsi',
-                    period,
-                    ...(threshold !== null ? { threshold, value: threshold } : {}),
-                  },
-                  ...(rsiReclaim.sideScope ? { sideScope: rsiReclaim.sideScope } : {}),
-                  ...evidence,
-                },
+                sequenceCondition,
               ],
-            },
-            effects: this.toTypedRuleEffects(effects),
-            ...evidence,
-          })
-        }
+            }
+            : sequenceCondition,
+          effects: this.toTypedRuleEffects(effects),
+          ...evidence,
+        })
       }
     }
     const pullback = this.findPullbackReclaimPredicate(predicateAtoms)
@@ -1571,6 +1572,18 @@ export class PlannerDispatcherMergeService {
         this.logger.warn(`composeDispatcherRulesIntoMergedRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
       }
       try {
+        this.hydrateExplicitMacdTupleFromText(merged, userMessage)
+      }
+      catch (err) {
+        this.logger.warn(`hydrateExplicitMacdTupleFromText 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
+      }
+      try {
+        this.hydrateExplicitPercentRisksFromText(merged, userMessage)
+      }
+      catch (err) {
+        this.logger.warn(`hydrateExplicitPercentRisksFromText 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
+      }
+      try {
         this.repairPlannerRiskDriftFromDispatcherRules(merged, dispatcher, userMessage)
       }
       catch (err) {
@@ -1853,6 +1866,7 @@ export class PlannerDispatcherMergeService {
       sideScope: rule.sideScope,
       evidence: { text: userMessage },
     }
+    if (this.isStandaloneRsiReclaimNoiseCondition(condition)) return sequence
     return {
       kind: 'and',
       children: [condition, sequence],
@@ -1860,12 +1874,150 @@ export class PlannerDispatcherMergeService {
   }
 
   private extractRsiReclaimThreshold(text: string): number | null {
-    const match = /RSI\s*(?:\d{1,3})?.{0,20}?(?:跌破|低于|下方)\s*(\d+(?:\.\d+)?).{0,30}?(?:重新上穿|上穿|回到|重新站上)\s*(\d+(?:\.\d+)?)/iu.exec(text)
+    const match = /RSI\s*(?:\d{1,3})?.{0,20}?(?:跌破|低于|下方)\s*(\d+(?:\.\d+)?).{0,30}?(?:重新上穿|上穿回|上穿|回到|重新站上)\s*(\d+(?:\.\d+)?)/iu.exec(text)
+      ?? /RSI\s*(?:\d{1,3})?.{0,20}?(\d+(?:\.\d+)?)\s*(?:下方|以下|之下).{0,30}?(?:重新上穿|上穿回|上穿|回到|重新站上)\s*(\d+(?:\.\d+)?)/iu.exec(text)
     const first = match?.[1] ? Number(match[1]) : Number.NaN
     const second = match?.[2] ? Number(match[2]) : Number.NaN
     if (Number.isFinite(first) && Number.isFinite(second) && Math.abs(first - second) <= 1e-9) return first
     if (Number.isFinite(first) && !Number.isFinite(second)) return first
     return null
+  }
+
+  private isStandaloneRsiReclaimNoiseCondition(condition: AtomExpr): boolean {
+    if (condition.kind !== 'atom') return false
+    if (
+      condition.key === ATOM_CONTRACT_REGISTRY['oscillator.rsi_lte'].key
+      || condition.key === ATOM_CONTRACT_REGISTRY['oscillator.rsi_gte'].key
+    ) {
+      return true
+    }
+    if (condition.key !== ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key) return false
+    return this.readStringParam(condition.params, 'indicator') === 'rsi'
+  }
+
+  private hydrateExplicitMacdTupleFromText(
+    merged: CodegenSemanticPatch,
+    userMessage: string,
+  ): void {
+    const tuple = this.extractExplicitMacdTuple(userMessage)
+    const rules = merged.rules
+    if (!tuple || !rules?.length) return
+    let mutated = false
+    merged.rules = rules.map((rule) => {
+      const condition = this.mapAtomExpr(rule.condition, (atom) => {
+        if (
+          atom.key !== ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key
+          && atom.key !== ATOM_CONTRACT_REGISTRY['indicator.cross_under'].key
+        ) return atom
+        if (this.readStringParam(atom.params, 'indicator') !== 'macd') return atom
+        const fastPeriod = this.readNumericParam(atom.params, 'fastPeriod')
+        const slowPeriod = this.readNumericParam(atom.params, 'slowPeriod')
+        const signalPeriod = this.readNumericParam(atom.params, 'signalPeriod')
+        const hasExplicitTuple = fastPeriod !== null && slowPeriod !== null && signalPeriod !== null
+        const alreadyMatches = fastPeriod === tuple.fastPeriod && slowPeriod === tuple.slowPeriod && signalPeriod === tuple.signalPeriod
+        if (alreadyMatches) return atom
+        const isDefaultTuple = fastPeriod === 12 && slowPeriod === 26 && signalPeriod === 9
+        if (hasExplicitTuple && !isDefaultTuple) return atom
+        mutated = true
+        return {
+          ...atom,
+          params: {
+            ...(atom.params ?? {}),
+            indicator: 'macd',
+            fastPeriod: tuple.fastPeriod,
+            slowPeriod: tuple.slowPeriod,
+            signalPeriod: tuple.signalPeriod,
+          },
+        }
+      })
+      return condition === rule.condition ? rule : { ...rule, condition }
+    })
+    if (!mutated) return
+  }
+
+  private extractExplicitMacdTuple(text: string): { fastPeriod: number, slowPeriod: number, signalPeriod: number } | null {
+    const match = /MACD\s*(\d{1,3})\s*[\/／]\s*(\d{1,3})\s*[\/／]\s*(\d{1,3})/iu.exec(text)
+    if (!match) return null
+    const fastPeriod = Number(match[1])
+    const slowPeriod = Number(match[2])
+    const signalPeriod = Number(match[3])
+    if (!Number.isFinite(fastPeriod) || !Number.isFinite(slowPeriod) || !Number.isFinite(signalPeriod)) return null
+    return { fastPeriod, slowPeriod, signalPeriod }
+  }
+
+  private hydrateExplicitPercentRisksFromText(
+    merged: CodegenSemanticPatch,
+    userMessage: string,
+  ): void {
+    const rules = merged.rules
+    if (!rules?.length) return
+    const additions = this.extractExplicitPercentRiskEffects(userMessage)
+    if (additions.length === 0) return
+    let mutated = false
+    const entryRiskKeys = new Set<string>()
+    const nextRules = rules.map((rule) => {
+      if (rule.phase !== 'entry' || !this.ruleHasOpenAction(rule)) return rule
+      const existingKeys = new Set(
+        listRuleEffects(rule.effects)
+          .flatMap(effect => collectAtomLeaves(effect))
+          .map(leaf => leaf.key),
+      )
+      const missing = additions.filter(addition => !existingKeys.has(addition.key))
+      if (missing.length === 0) return rule
+      for (const addition of missing) entryRiskKeys.add(addition.key)
+      mutated = true
+      return {
+        ...rule,
+        effects: this.appendTypedRuleEffects(rule.effects, missing),
+      }
+    })
+    if (!mutated) return
+    merged.rules = nextRules.filter((rule) => {
+      if (rule.phase !== 'exit') return true
+      const conditionLeaves = collectAtomLeaves(rule.condition)
+      if (!conditionLeaves.some(leaf => entryRiskKeys.has(leaf.key))) return true
+      const closeActions = this.closeActionSet(rule)
+      return closeActions.size === 0
+    })
+  }
+
+  private ruleHasOpenAction(rule: SemanticRule): boolean {
+    return listRuleEffects(rule.effects)
+      .flatMap(effect => collectAtomLeaves(effect))
+      .some(leaf =>
+        leaf.key === ATOM_CONTRACT_REGISTRY['action.open_long'].key
+        || leaf.key === ATOM_CONTRACT_REGISTRY['action.open_short'].key
+        || leaf.key === ADD_POSITION_ATOM_KEY,
+      )
+  }
+
+  private extractExplicitPercentRiskEffects(userMessage: string): AtomExprAtom[] {
+    const out: AtomExprAtom[] = []
+    const stopLoss = /(?:止损|stop\s*loss)\D{0,12}(\d+(?:\.\d+)?)\s*%/iu.exec(userMessage)
+    const takeProfit = /(?:止盈|take\s*profit)\D{0,12}(\d+(?:\.\d+)?)\s*%/iu.exec(userMessage)
+    if (stopLoss?.[1]) {
+      const valuePct = Number(stopLoss[1])
+      if (Number.isFinite(valuePct) && valuePct > 0) {
+        out.push({
+          kind: 'atom',
+          key: ATOM_CONTRACT_REGISTRY['risk.stop_loss_pct'].key,
+          params: { basis: 'entry_avg_price', valuePct },
+          evidence: { text: stopLoss[0].trim() },
+        })
+      }
+    }
+    if (takeProfit?.[1]) {
+      const valuePct = Number(takeProfit[1])
+      if (Number.isFinite(valuePct) && valuePct > 0) {
+        out.push({
+          kind: 'atom',
+          key: ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key,
+          params: { basis: 'entry_avg_price', valuePct },
+          evidence: { text: takeProfit[0].trim() },
+        })
+      }
+    }
+    return out
   }
 
   private extractRsiPeriod(text: string): number | null {
