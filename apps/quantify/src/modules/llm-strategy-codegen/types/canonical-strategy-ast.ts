@@ -6,6 +6,7 @@ export interface StrategyAstV1 {
     irVersion: 'csi.v1'
     irHash: `sha256:${string}`
     specHash: `sha256:${string}`
+    astDigest?: `sha256:${string}`
     compileVersion: 'compiler.v1'
     structuralDigest: `sha256:${string}`
   }

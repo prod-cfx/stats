@@ -32,11 +32,13 @@ export class CanonicalStrategyAstCompilerService {
     const riskPredicates = this.compileRiskPredicates(ir)
     const decisionPrograms = this.compileDecisionPrograms(ir)
     const orderPrograms = this.compileOrderPrograms(ir)
+    const orchestrationPortfolioRisks = ir.orchestrationPortfolioRisks ?? []
+    const orchestrationPrograms = ir.orchestrationPrograms ?? []
     const topology = this.buildTopology({ exprPool, guards, riskPredicates, decisionPrograms, orderPrograms })
 
     return {
       astVersion: 'csa.v1',
-      manifest: this.buildManifest(ir, { exprPool, guards, riskPredicates, decisionPrograms, orderPrograms, topology }),
+      manifest: this.buildManifest(ir, { exprPool, guards, riskPredicates, decisionPrograms, orderPrograms, orchestrationPortfolioRisks, orchestrationPrograms, topology }),
       executionModel: this.buildExecutionModel(ir),
       dataRequirements: ir.dataRequirements,
       ...(ir.runtimeRequirements ? { runtimeRequirements: ir.runtimeRequirements } : {}),
@@ -45,8 +47,8 @@ export class CanonicalStrategyAstCompilerService {
       ...(riskPredicates.length > 0 ? { riskPredicates } : {}),
       decisionPrograms,
       orderPrograms,
-      ...((ir.orchestrationPortfolioRisks ?? []).length > 0 ? { orchestrationPortfolioRisks: ir.orchestrationPortfolioRisks } : {}),
-      ...((ir.orchestrationPrograms ?? []).length > 0 ? { orchestrationPrograms: ir.orchestrationPrograms } : {}),
+      ...(orchestrationPortfolioRisks.length > 0 ? { orchestrationPortfolioRisks } : {}),
+      ...(orchestrationPrograms.length > 0 ? { orchestrationPrograms } : {}),
       // Phase 5 S2 (#1104): scope.symbol substrate
       ...((ir.orchestrationScopes ?? []).length > 0 ? { orchestrationScopes: ir.orchestrationScopes } : {}),
       // Phase 5 S11 (#1112): scope.leg substrate
@@ -209,9 +211,25 @@ export class CanonicalStrategyAstCompilerService {
       riskPredicates: RiskPredicateProgramNode[]
       decisionPrograms: DecisionProgramNode[]
       orderPrograms: OrderProgramNode[]
+      orchestrationPortfolioRisks: NonNullable<StrategyAstV1['orchestrationPortfolioRisks']>
+      orchestrationPrograms: NonNullable<StrategyAstV1['orchestrationPrograms']>
       topology: StrategyAstV1['topology']
     },
   ): StrategyAstV1['manifest'] {
+    const astProjection = {
+      astVersion: 'csa.v1' as const,
+      executionModel: this.buildExecutionModel(ir),
+      dataRequirements: ir.dataRequirements,
+      runtimeRequirements: ir.runtimeRequirements,
+      exprPool: projection.exprPool,
+      guards: projection.guards,
+      riskPredicates: projection.riskPredicates,
+      decisionPrograms: projection.decisionPrograms,
+      orderPrograms: projection.orderPrograms,
+      ...(projection.orchestrationPortfolioRisks.length > 0 ? { orchestrationPortfolioRisks: projection.orchestrationPortfolioRisks } : {}),
+      ...(projection.orchestrationPrograms.length > 0 ? { orchestrationPrograms: projection.orchestrationPrograms } : {}),
+      topology: projection.topology,
+    }
     const structuralProjection = {
       exprPool: projection.exprPool,
       guards: projection.guards,
@@ -228,6 +246,7 @@ export class CanonicalStrategyAstCompilerService {
       irVersion: ir.irVersion,
       irHash: hashCanonicalJson(ir),
       specHash: ir.source.specHash,
+      astDigest: hashCanonicalJson(astProjection),
       compileVersion: 'compiler.v1',
       structuralDigest: hashCanonicalJson(structuralProjection),
     }

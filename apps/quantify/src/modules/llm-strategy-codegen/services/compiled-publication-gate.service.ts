@@ -245,7 +245,7 @@ export class CompiledPublicationGateService {
     const astTrace = this.collectAstExecutableTrace(input.ast)
     const irUnknownSourcePaths = this.findUnknownRulesSourcePaths(irTrace.sourcePaths, canonicalTrace.sourcePaths)
     const astUnknownSourcePaths = this.findUnknownRulesSourcePaths(astTrace.sourcePaths, canonicalTrace.sourcePaths)
-    const scriptManifest = this.readScriptManifest(input.script)
+    const scriptManifest = this.readCompiledScriptManifest(input.script)
     const hashChecks = this.buildRulesOnlyHashChecks(input, hashes, scriptManifest)
     const scriptHashLinked = hashChecks
       .filter(check => check.key.startsWith('hash.script.'))
@@ -475,7 +475,7 @@ export class CompiledPublicationGateService {
   private buildRulesOnlyHashChecks(
     input: RulesOnlyHashChainInput,
     hashes: RulesOnlyHashChainResult['hashes'],
-    scriptManifest: Record<string, string> | null,
+    scriptManifest: Record<string, unknown> | null,
   ): RulesOnlyHashChainCheck[] {
     const canonicalRulesHashes = this.collectHashFields(input.canonicalSpec, 'rulesHash')
     const source = this.readRecord(input.ir.source) ?? {}
@@ -494,31 +494,61 @@ export class CompiledPublicationGateService {
         }]
     return [
       ...canonicalRulesHashChecks,
+      ...this.buildIrSpecHashChecks(source, hashes.canonicalSpecHash),
+      this.buildRequiredHashCheck('hash.ast.irHash', hashes.irHash, astManifest.irHash),
+      this.buildRequiredHashCheck('hash.ast.specHash', hashes.canonicalSpecHash, astManifest.specHash),
+      this.buildRequiredHashCheck('hash.ast.astDigest', hashes.astHash, astManifest.astDigest),
+      ...(scriptManifest
+        ? [
+            this.buildRequiredHashCheck('hash.script.irHash', hashes.irHash, scriptManifest.irHash),
+            this.buildRequiredHashCheck('hash.script.specHash', hashes.canonicalSpecHash, scriptManifest.specHash),
+            this.buildRequiredHashCheck('hash.script.astDigest', hashes.astHash, scriptManifest.astDigest),
+          ]
+        : [{
+            key: 'hash.script.manifest',
+            passed: false,
+            expected: 'parseable COMPILED_MANIFEST',
+            actual: null,
+          }]),
+    ]
+  }
+
+  private buildIrSpecHashChecks(
+    source: Record<string, unknown>,
+    canonicalSpecHash: string,
+  ): RulesOnlyHashChainCheck[] {
+    const checks = [
       ...(typeof source.specHash === 'string'
-        ? [this.buildHashCheck('hash.ir.specHash', hashes.canonicalSpecHash, source.specHash)]
+        ? [this.buildHashCheck('hash.ir.specHash', canonicalSpecHash, source.specHash)]
         : []),
       ...(typeof source.canonicalSpecHash === 'string'
-        ? [this.buildHashCheck('hash.ir.canonicalSpecHash', hashes.canonicalSpecHash, source.canonicalSpecHash)]
-        : []),
-      ...(typeof astManifest.irHash === 'string'
-        ? [this.buildHashCheck('hash.ast.irHash', hashes.irHash, astManifest.irHash)]
-        : []),
-      ...(typeof astManifest.specHash === 'string'
-        ? [this.buildHashCheck('hash.ast.specHash', hashes.canonicalSpecHash, astManifest.specHash)]
-        : []),
-      ...(typeof astManifest.astDigest === 'string'
-        ? [this.buildHashCheck('hash.ast.astDigest', hashes.astHash, astManifest.astDigest)]
-        : []),
-      ...(scriptManifest?.irHash
-        ? [this.buildHashCheck('hash.script.irHash', hashes.irHash, scriptManifest.irHash)]
-        : []),
-      ...(scriptManifest?.specHash
-        ? [this.buildHashCheck('hash.script.specHash', hashes.canonicalSpecHash, scriptManifest.specHash)]
-        : []),
-      ...(scriptManifest?.astDigest
-        ? [this.buildHashCheck('hash.script.astDigest', hashes.astHash, scriptManifest.astDigest)]
+        ? [this.buildHashCheck('hash.ir.canonicalSpecHash', canonicalSpecHash, source.canonicalSpecHash)]
         : []),
     ]
+
+    return checks.length > 0
+      ? checks
+      : [{
+          key: 'hash.ir.specHash',
+          passed: false,
+          expected: canonicalSpecHash,
+          actual: null,
+        }]
+  }
+
+  private buildRequiredHashCheck(
+    key: string,
+    expectedHash: string,
+    actualHash: unknown,
+  ): RulesOnlyHashChainCheck {
+    return typeof actualHash === 'string'
+      ? this.buildHashCheck(key, expectedHash, actualHash)
+      : {
+          key,
+          passed: false,
+          expected: expectedHash,
+          actual: null,
+        }
   }
 
   private buildHashCheck(key: string, expectedHash: string, actualHash: string): RulesOnlyHashChainCheck {
@@ -546,7 +576,7 @@ export class CompiledPublicationGateService {
     return value.startsWith('sha256:') ? value.slice('sha256:'.length) : value
   }
 
-  private readScriptManifest(script: string): Record<string, string> | null {
+  private readCompiledScriptManifest(script: string): Record<string, unknown> | null {
     try {
       const parsed = this.scriptParser.parse(script)
       return {
@@ -556,8 +586,18 @@ export class CompiledPublicationGateService {
         structuralDigest: parsed.compiledManifest.structuralDigest,
       }
     } catch {
-      const match = /^\/\* @generated by compiler\.v1 \*\/\n\/\* irHash: (?<irHash>sha256:[a-f0-9]+) \*\/\n\/\* specHash: (?<specHash>sha256:[a-f0-9]+) \*\/\n\/\* astDigest: (?<astDigest>sha256:[a-f0-9]+) \*\/\n\/\* structuralDigest: (?<structuralDigest>sha256:[a-f0-9]+) \*\//u.exec(script)
-      return match?.groups ?? null
+      return this.readCompiledManifestConst(script)
+    }
+  }
+
+  private readCompiledManifestConst(script: string): Record<string, unknown> | null {
+    const match = /^const COMPILED_MANIFEST = (?<payload>.+) as const$/mu.exec(script)
+    if (!match?.groups?.payload) return null
+
+    try {
+      return this.readRecord(JSON.parse(match.groups.payload))
+    } catch {
+      return null
     }
   }
 
