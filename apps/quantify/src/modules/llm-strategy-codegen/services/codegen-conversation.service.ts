@@ -2611,18 +2611,6 @@ export class CodegenConversationService {
       this.reconcileSemanticMissingPlaceholders(supportGateResponse.semanticState),
       supportGateResponse.strategyVersion,
     )
-    const confirmationViewArtifacts = this.resolveSemanticClarificationArtifacts(semanticStateAfterAnswers, responseLocale)
-    const confirmationViewNormalization = confirmationViewArtifacts.normalization
-    const confirmationViewSpecDesc = this.specDescBuilder.buildFromCanonicalSpec(
-      this.buildCanonicalSpecForConversation(semanticStateAfterAnswers, confirmationViewNormalization),
-      '',
-      {
-        normalizedIntent: confirmationViewNormalization.normalizedIntent,
-        executionContext: confirmationViewArtifacts.executionContext.context,
-        semanticState: semanticStateAfterAnswers,
-      },
-    )
-    const confirmationViewDigest = this.readCanonicalDigest(confirmationViewSpecDesc)
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
       this.withRequiredSemanticOpenSlots(
         this.reconcileSemanticMissingPlaceholders(semanticStateAfterAnswers),
@@ -2661,6 +2649,18 @@ export class CodegenConversationService {
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
+    const confirmationViewArtifacts = this.resolveSemanticClarificationArtifacts(semanticStateAfterAnswers, responseLocale)
+    const confirmationViewNormalization = confirmationViewArtifacts.normalization
+    const confirmationViewSpecDesc = this.specDescBuilder.buildFromCanonicalSpec(
+      this.buildCanonicalSpecForConversation(semanticStateAfterAnswers, confirmationViewNormalization),
+      '',
+      {
+        normalizedIntent: confirmationViewNormalization.normalizedIntent,
+        executionContext: confirmationViewArtifacts.executionContext.context,
+        semanticState: semanticStateAfterAnswers,
+      },
+    )
+    const confirmationViewDigest = this.readCanonicalDigest(confirmationViewSpecDesc)
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const clarificationState = this.mergePersistedBlockingClarificationItems(
       semanticArtifacts.clarificationState,
