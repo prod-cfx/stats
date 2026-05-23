@@ -21,6 +21,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { normalizeRuntimeRequirements } from '@/modules/strategy-runtime/semantic-runtime-state.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
+import { buildStrategyAstDigestProjection } from './canonical-strategy-ast-compiler.service'
 import { CompiledScriptParserService } from './compiled-script-parser.service'
 
 type ExprNode = StrategyAstV1['exprPool'][number]
@@ -440,36 +441,7 @@ export class CompiledPublicationGateService {
   }
 
   private hashAstProjection(ast: StrategyAstV1): string {
-    const astProjection = {
-      astVersion: ast.astVersion,
-      executionModel: ast.executionModel,
-      dataRequirements: ast.dataRequirements,
-      runtimeRequirements: ast.runtimeRequirements,
-      exprPool: this.projectByOrder(ast.exprPool, ast.topology.exprOrder),
-      guards: this.projectByOrder(ast.guards, ast.topology.guardOrder),
-      riskPredicates: this.projectOptionalByOrder(ast.riskPredicates, ast.topology.riskPredicateOrder),
-      decisionPrograms: this.projectByOrder(ast.decisionPrograms, ast.topology.decisionOrder),
-      orderPrograms: this.projectByOrder(ast.orderPrograms, ast.topology.orderProgramOrder),
-      ...(ast.orchestrationPortfolioRisks ? { orchestrationPortfolioRisks: ast.orchestrationPortfolioRisks } : {}),
-      ...(ast.orchestrationPrograms ? { orchestrationPrograms: ast.orchestrationPrograms } : {}),
-      topology: ast.topology,
-    }
-    return this.hashCanonicalJsonHex(astProjection)
-  }
-
-  private projectByOrder<T extends { id: string }>(items: T[], order: string[]): T[] {
-    const itemIndex = new Map(items.map(item => [item.id, item]))
-    return order
-      .map(id => itemIndex.get(id))
-      .filter((item): item is T => item !== undefined)
-  }
-
-  private projectOptionalByOrder<T extends { id: string }>(
-    items: T[] | undefined,
-    order: string[] | undefined,
-  ): T[] | undefined {
-    if (!items || !order) return undefined
-    return this.projectByOrder(items, order)
+    return this.hashCanonicalJsonHex(buildStrategyAstDigestProjection(ast))
   }
 
   private buildRulesOnlyHashChecks(

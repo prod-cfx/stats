@@ -167,17 +167,24 @@ export class CodegenPublicationGenerationStage {
     })
     const validation = this.validateCompiledScript(compiledScript)
     compiledScript = validation.scriptCode
-    const hasRulesOnlyInput = this.hasTypedRulesOnlyInput(input.semanticState.rules)
-    const rulesOnlyHashChain = validation.passed
-      && hasRulesOnlyInput
+    const canValidateRulesOnlyHashChain = validation.passed
       && typeof this.publicationGate?.validateRulesOnlyHashChain === 'function'
-      ? this.publicationGate.validateRulesOnlyHashChain({
-          rules: input.semanticState.rules ?? [],
-          canonicalSpec: canonicalSpec as unknown as Record<string, unknown>,
-          ir: compiled.ir,
-          ast,
-          script: compiledScript,
-        })
+    const rulesOnlyHashChain = canValidateRulesOnlyHashChain
+      ? this.hasTypedRulesOnlyInput(input.semanticState.rules)
+        ? this.publicationGate?.validateRulesOnlyHashChain({
+            rules: input.semanticState.rules ?? [],
+            canonicalSpec: canonicalSpec as unknown as Record<string, unknown>,
+            ir: compiled.ir,
+            ast,
+            script: compiledScript,
+          })
+        : this.buildUnsupportedRulesOnlyInputGate({
+            rules: input.semanticState.rules,
+            canonicalSpec,
+            ir: compiled.ir,
+            ast,
+            script: compiledScript,
+          })
       : undefined
 
     if (rulesOnlyHashChain?.blocked) {
@@ -359,8 +366,41 @@ export class CodegenPublicationGenerationStage {
       && rules.length > 0
       && rules.every((rule) => {
         if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return false
-        return isRuleEffectsByRole((rule as { effects?: unknown }).effects as never)
+        const effects = (rule as { effects?: unknown }).effects
+        if (!isRuleEffectsByRole(effects as never)) return false
+        const effectRecord = effects as Record<string, unknown>
+        return ['actions', 'risks', 'positions', 'orchestration', 'programs']
+          .every(key => Array.isArray(effectRecord[key]))
       })
+  }
+
+  private buildUnsupportedRulesOnlyInputGate(args: {
+    rules: unknown
+    canonicalSpec: CanonicalStrategySpecV2
+    ir: ReturnType<CanonicalSpecV2IrCompilerService['compile']>['ir']
+    ast: ReturnType<CanonicalStrategyAstCompilerService['compile']>
+    script: string
+  }): ReturnType<CompiledPublicationGateService['validateRulesOnlyHashChain']> {
+    return {
+      passed: false,
+      blocked: true,
+      reason: 'rules_only_trace_missing',
+      hashes: {
+        rulesHash: this.hashCanonicalJson(args.rules ?? []),
+        canonicalSpecHash: this.hashCanonicalJson(args.canonicalSpec),
+        irHash: this.hashCanonicalJson(args.ir),
+        astHash: this.readAstDigest(args.ast) ?? this.hashCanonicalJson(args.ast),
+        scriptHash: this.hashText(args.script),
+      },
+      checks: [{
+        key: 'trace.rules_only_input',
+        passed: false,
+        expected: 'non-empty typed rules-only input with role-partitioned effects',
+        actual: Array.isArray(args.rules)
+          ? { rulesCount: args.rules.length, typed: false }
+          : { rulesType: typeof args.rules },
+      }],
+    }
   }
 
   validateCompiledScript(scriptCode: string): CompiledScriptValidationResult {

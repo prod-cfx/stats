@@ -669,7 +669,12 @@ describe('codegenPublicationGenerationStage', () => {
       await stage.generate({
         semanticState: {
           ...semanticState,
-          rules: [{ id: 'rule-entry', phase: 'entry', condition: { kind: 'atom', key: 'price.above' }, effects: { actions: [] } }],
+          rules: [{
+            id: 'rule-entry',
+            phase: 'entry',
+            condition: { kind: 'atom', key: 'price.above' },
+            effects: { actions: [], risks: [], positions: [], orchestration: [], programs: [] },
+          }],
         } as any,
         canonicalSpecOverride,
       })
@@ -730,7 +735,12 @@ describe('codegenPublicationGenerationStage', () => {
     const artifacts = await stage.generate({
       semanticState: {
         ...semanticState,
-        rules: [{ id: 'rule-entry', phase: 'entry', condition: { kind: 'atom', key: 'price.above' }, effects: { actions: [] } }],
+        rules: [{
+          id: 'rule-entry',
+          phase: 'entry',
+          condition: { kind: 'atom', key: 'price.above' },
+          effects: { actions: [], risks: [], positions: [], orchestration: [], programs: [] },
+        }],
       } as any,
       canonicalSpecOverride,
     })
@@ -738,6 +748,77 @@ describe('codegenPublicationGenerationStage', () => {
     expect(artifacts.rulesOnlyHashChain).toBe(hashChain)
     expect(artifacts.sessionSpecDesc.rulesOnlyHashChain).toBe(hashChain)
     expect(artifacts.sessionSpecDesc.stage1ConsistencyEvidence).toEqual(hashChain.hashes)
+  })
+
+  it('blocks publication generation when rules-only semanticState has empty rules', async () => {
+    const gate = {
+      assertClarificationResolvedForIrBuild: jest.fn(),
+      validateRulesOnlyHashChain: jest.fn(),
+    }
+    const stage = new CodegenPublicationGenerationStage(
+      new CanonicalSpecBuilderService(),
+      { buildFromCanonicalSpec: jest.fn().mockReturnValue({}) } as any,
+      new StrategySummaryBuilderService(new ScriptProfileExtractorService()) as any,
+      { evaluate: jest.fn() } as any,
+      { compile: jest.fn().mockReturnValue({ ir: { id: 'compiled-ir' } }) } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
+      undefined,
+      gate as any,
+    )
+    const semanticState = buildLockedBollingerSemanticState()
+
+    await expect(stage.generate({
+      semanticState: { ...semanticState, rules: [] } as any,
+      canonicalSpecOverride: new CanonicalSpecBuilderService().buildFromSemanticState(semanticState),
+    })).rejects.toMatchObject({
+      publicationGate: expect.objectContaining({
+        blocked: true,
+        reason: 'rules_only_trace_missing',
+      }),
+    })
+    expect(gate.validateRulesOnlyHashChain).not.toHaveBeenCalled()
+  })
+
+  it('blocks publication generation when rules-only semanticState uses legacy effects array', async () => {
+    const gate = {
+      assertClarificationResolvedForIrBuild: jest.fn(),
+      validateRulesOnlyHashChain: jest.fn(),
+    }
+    const stage = new CodegenPublicationGenerationStage(
+      new CanonicalSpecBuilderService(),
+      { buildFromCanonicalSpec: jest.fn().mockReturnValue({}) } as any,
+      new StrategySummaryBuilderService(new ScriptProfileExtractorService()) as any,
+      { evaluate: jest.fn() } as any,
+      { compile: jest.fn().mockReturnValue({ ir: { id: 'compiled-ir' } }) } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
+      undefined,
+      gate as any,
+    )
+    const semanticState = buildLockedBollingerSemanticState()
+
+    await expect(stage.generate({
+      semanticState: {
+        ...semanticState,
+        rules: [{ id: 'rule-entry', phase: 'entry', condition: { kind: 'atom', key: 'price.above' }, effects: [] }],
+      } as any,
+      canonicalSpecOverride: new CanonicalSpecBuilderService().buildFromSemanticState(semanticState),
+    })).rejects.toMatchObject({
+      publicationGate: expect.objectContaining({
+        blocked: true,
+        reason: 'rules_only_trace_missing',
+      }),
+    })
+    expect(gate.validateRulesOnlyHashChain).not.toHaveBeenCalled()
   })
 
   it('routes semantic-state publication through semantic canonical compilation', async () => {

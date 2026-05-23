@@ -2,6 +2,7 @@ import type { CanonicalStrategyIrV1 } from '../../types/canonical-strategy-ir'
 import type { StrategyAstV1 } from '../../types/canonical-strategy-ast'
 import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
+import { buildStrategyAstDigestProjection, CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 import { CompiledPublicationGateService } from '../compiled-publication-gate.service'
 
@@ -34,18 +35,7 @@ function linkFixtureHashes(input: {
   const irHash = hashCanonical(input.ir)
   input.ast.manifest.irHash = `sha256:${irHash}`
   input.ast.manifest.specHash = `sha256:${canonicalSpecHash}`
-  const astHash = hashCanonical({
-    astVersion: input.ast.astVersion,
-    executionModel: input.ast.executionModel,
-    dataRequirements: input.ast.dataRequirements,
-    runtimeRequirements: input.ast.runtimeRequirements,
-    exprPool: input.ast.exprPool,
-    guards: input.ast.guards,
-    riskPredicates: input.ast.riskPredicates,
-    decisionPrograms: input.ast.decisionPrograms,
-    orderPrograms: input.ast.orderPrograms,
-    topology: input.ast.topology,
-  })
+  const astHash = hashCanonical(buildStrategyAstDigestProjection(input.ast))
   input.ast.manifest.astDigest = `sha256:${astHash}`
   input.ast.manifest.structuralDigest = `sha256:${astHash}`
   return { canonicalSpecHash, irHash, astHash }
@@ -215,6 +205,22 @@ describe('publication gate rules-only hash chain', () => {
       expect.objectContaining({ key: 'trace.ir', passed: true }),
       expect.objectContaining({ key: 'trace.ast', passed: true }),
       expect.objectContaining({ key: 'trace.script', passed: true }),
+    ]))
+  })
+
+  it('passes when compiler omits empty riskPredicates from AST entity', () => {
+    const input = fixture()
+    const ast = new CanonicalStrategyAstCompilerService().compile(input.ir)
+    expect(ast.riskPredicates).toBeUndefined()
+    input.ast = ast
+    input.script = emitScript(input.ast)
+
+    const result = newGate().validateRulesOnlyHashChain(input)
+
+    expect(result.passed).toBe(true)
+    expect(result.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'hash.ast.astDigest', passed: true }),
+      expect.objectContaining({ key: 'hash.script.astDigest', passed: true }),
     ]))
   })
 

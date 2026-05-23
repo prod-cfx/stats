@@ -1,6 +1,7 @@
 import type { DecisionProgramNode, ExprNode, GuardProgramNode, OrderProgramNode, RiskPredicateProgramNode, StrategyAstV1 } from '../types/canonical-strategy-ast'
 import type { CanonicalStrategyIrV1, PredicateDef, RiskPredicateDef, SeriesDef } from '../types/canonical-strategy-ir'
 import { createHash } from 'node:crypto'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
 
 function stableJsonStringify(value: unknown): string {
@@ -20,8 +21,37 @@ function stableJsonStringify(value: unknown): string {
 }
 
 function hashCanonicalJson(value: unknown): `sha256:${string}` {
-  const digest = createHash('sha256').update(stableJsonStringify(value)).digest('hex')
+  const digest = createHash('sha256').update(canonicalSerialize(value)).digest('hex')
   return `sha256:${digest}`
+}
+
+function projectByTopologyOrder<T extends { id: string }>(items: readonly T[], order: readonly string[] | undefined): T[] {
+  if (!order || order.length === 0) return [...items]
+  const itemIndex = new Map(items.map(item => [item.id, item]))
+  return order
+    .map(id => itemIndex.get(id))
+    .filter((item): item is T => item !== undefined)
+}
+
+export function buildStrategyAstDigestProjection(
+  ast: Omit<StrategyAstV1, 'manifest'>,
+): Record<string, unknown> {
+  const riskPredicates = projectByTopologyOrder(ast.riskPredicates ?? [], ast.topology.riskPredicateOrder)
+
+  return {
+    astVersion: ast.astVersion,
+    executionModel: ast.executionModel,
+    dataRequirements: ast.dataRequirements,
+    runtimeRequirements: ast.runtimeRequirements,
+    exprPool: projectByTopologyOrder(ast.exprPool, ast.topology.exprOrder),
+    guards: projectByTopologyOrder(ast.guards, ast.topology.guardOrder),
+    riskPredicates,
+    decisionPrograms: projectByTopologyOrder(ast.decisionPrograms, ast.topology.decisionOrder),
+    orderPrograms: projectByTopologyOrder(ast.orderPrograms, ast.topology.orderProgramOrder),
+    ...((ast.orchestrationPortfolioRisks ?? []).length > 0 ? { orchestrationPortfolioRisks: ast.orchestrationPortfolioRisks } : {}),
+    ...((ast.orchestrationPrograms ?? []).length > 0 ? { orchestrationPrograms: ast.orchestrationPrograms } : {}),
+    topology: ast.topology,
+  }
 }
 
 @Injectable()
@@ -36,9 +66,8 @@ export class CanonicalStrategyAstCompilerService {
     const orchestrationPrograms = ir.orchestrationPrograms ?? []
     const topology = this.buildTopology({ exprPool, guards, riskPredicates, decisionPrograms, orderPrograms })
 
-    return {
+    const astBody: Omit<StrategyAstV1, 'manifest'> = {
       astVersion: 'csa.v1',
-      manifest: this.buildManifest(ir, { exprPool, guards, riskPredicates, decisionPrograms, orderPrograms, orchestrationPortfolioRisks, orchestrationPrograms, topology }),
       executionModel: this.buildExecutionModel(ir),
       dataRequirements: ir.dataRequirements,
       ...(ir.runtimeRequirements ? { runtimeRequirements: ir.runtimeRequirements } : {}),
@@ -54,6 +83,24 @@ export class CanonicalStrategyAstCompilerService {
       // Phase 5 S11 (#1112): scope.leg substrate
       ...((ir.orchestrationLegScopes ?? []).length > 0 ? { orchestrationLegScopes: ir.orchestrationLegScopes } : {}),
       topology,
+    }
+
+    return {
+      astVersion: astBody.astVersion,
+      manifest: this.buildManifest(ir, astBody),
+      executionModel: astBody.executionModel,
+      dataRequirements: astBody.dataRequirements,
+      ...(astBody.runtimeRequirements ? { runtimeRequirements: astBody.runtimeRequirements } : {}),
+      exprPool: astBody.exprPool,
+      guards: astBody.guards,
+      ...(astBody.riskPredicates ? { riskPredicates: astBody.riskPredicates } : {}),
+      decisionPrograms: astBody.decisionPrograms,
+      orderPrograms: astBody.orderPrograms,
+      ...(astBody.orchestrationPortfolioRisks ? { orchestrationPortfolioRisks: astBody.orchestrationPortfolioRisks } : {}),
+      ...(astBody.orchestrationPrograms ? { orchestrationPrograms: astBody.orchestrationPrograms } : {}),
+      ...(astBody.orchestrationScopes ? { orchestrationScopes: astBody.orchestrationScopes } : {}),
+      ...(astBody.orchestrationLegScopes ? { orchestrationLegScopes: astBody.orchestrationLegScopes } : {}),
+      topology: astBody.topology,
     }
   }
 
@@ -205,41 +252,19 @@ export class CanonicalStrategyAstCompilerService {
 
   private buildManifest(
     ir: CanonicalStrategyIrV1,
-    projection: {
-      exprPool: ExprNode[]
-      guards: GuardProgramNode[]
-      riskPredicates: RiskPredicateProgramNode[]
-      decisionPrograms: DecisionProgramNode[]
-      orderPrograms: OrderProgramNode[]
-      orchestrationPortfolioRisks: NonNullable<StrategyAstV1['orchestrationPortfolioRisks']>
-      orchestrationPrograms: NonNullable<StrategyAstV1['orchestrationPrograms']>
-      topology: StrategyAstV1['topology']
-    },
+    astBody: Omit<StrategyAstV1, 'manifest'>,
   ): StrategyAstV1['manifest'] {
-    const astProjection = {
-      astVersion: 'csa.v1' as const,
-      executionModel: this.buildExecutionModel(ir),
-      dataRequirements: ir.dataRequirements,
-      runtimeRequirements: ir.runtimeRequirements,
-      exprPool: projection.exprPool,
-      guards: projection.guards,
-      riskPredicates: projection.riskPredicates,
-      decisionPrograms: projection.decisionPrograms,
-      orderPrograms: projection.orderPrograms,
-      ...(projection.orchestrationPortfolioRisks.length > 0 ? { orchestrationPortfolioRisks: projection.orchestrationPortfolioRisks } : {}),
-      ...(projection.orchestrationPrograms.length > 0 ? { orchestrationPrograms: projection.orchestrationPrograms } : {}),
-      topology: projection.topology,
-    }
+    const astProjection = buildStrategyAstDigestProjection(astBody)
     const structuralProjection = {
-      exprPool: projection.exprPool,
-      guards: projection.guards,
-      riskPredicates: projection.riskPredicates,
-      decisionPrograms: projection.decisionPrograms,
-      orderPrograms: projection.orderPrograms,
-      topology: projection.topology,
-      executionModel: this.buildExecutionModel(ir),
-      dataRequirements: ir.dataRequirements,
-      runtimeRequirements: ir.runtimeRequirements,
+      exprPool: astBody.exprPool,
+      guards: astBody.guards,
+      riskPredicates: astBody.riskPredicates ?? [],
+      decisionPrograms: astBody.decisionPrograms,
+      orderPrograms: astBody.orderPrograms,
+      topology: astBody.topology,
+      executionModel: astBody.executionModel,
+      dataRequirements: astBody.dataRequirements,
+      runtimeRequirements: astBody.runtimeRequirements,
     }
 
     return {
