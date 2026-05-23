@@ -658,7 +658,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get meSettingsTelegramUnbound => '未绑定';
 
   @override
+  String get meSettingsTelegramHandle => '@victor_qf';
+
+  @override
   String get meSettingsSecurity => '安全设置';
+
+  @override
+  String get meSettingsSecurityValue => '双重认证 · 已开启';
 
   @override
   String get meSettingsNotConfigured => '未配置';

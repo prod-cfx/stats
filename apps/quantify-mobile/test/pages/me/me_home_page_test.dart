@@ -157,6 +157,16 @@ void main() {
     expect(find.text('Telegram 已绑定'), findsOneWidget);
   });
 
+  testWidgets('账户分组 Telegram 行显示 handle、安全行显示双重认证状态',
+      (WidgetTester tester) async {
+    await _pumpMe(tester, initialSession: kSession);
+    // 对齐设计稿 m-screens-4.jsx:1009-1010
+    expect(find.text('@victor_qf'), findsOneWidget);
+    expect(find.text('双重认证 · 已开启'), findsOneWidget);
+    // 「查看」仅推送通知行残留一处，安全行不再退化（共 1 次）
+    expect(find.text('查看'), findsOneWidget);
+  });
+
   testWidgets('UID 复制按钮点击 → Clipboard.setData(uid) + SnackBar',
       (WidgetTester tester) async {
     // Clipboard mock：记录调用

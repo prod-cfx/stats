@@ -110,15 +110,18 @@ class _Content extends ConsumerWidget {
                   QzSettingsRow(label: 'UID', value: info.uid, mono: true),
                   QzSettingsRow(
                     label: l10n.meSettingsTelegram,
-                    // mobile 端 `AccountInfo` 未携带 telegram handle，本迭代
-                    // 显示占位；后续 Issue 引入 `AccountInfo.bindings` 后切换。
-                    value: l10n.meSettingsTelegramUnbound,
-                    tone: QzSettingsRowTone.warn,
+                    // mock 阶段对齐设计稿 `m-screens-4.jsx:1009`：直接显示
+                    // handle + ok tone（与上方 `telegramBound=true` 同源）。
+                    // 接通 `AccountInfo.bindings` 后改为按真实状态分支。
+                    value: l10n.meSettingsTelegramHandle,
+                    tone: QzSettingsRowTone.ok,
                     trailing: const QzSettingsCaret(),
                   ),
                   QzSettingsRow(
                     label: l10n.meSettingsSecurity,
-                    value: l10n.commonView,
+                    // 对齐设计稿 `m-screens-4.jsx:1010` 「双重认证 · 已开启」；
+                    // 真实安全状态接通后改读 `AccountInfo.security`。
+                    value: l10n.meSettingsSecurityValue,
                     trailing: const QzSettingsCaret(),
                     last: true,
                   ),

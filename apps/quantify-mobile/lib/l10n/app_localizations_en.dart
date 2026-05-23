@@ -670,7 +670,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get meSettingsTelegramUnbound => 'Not bound';
 
   @override
+  String get meSettingsTelegramHandle => '@victor_qf';
+
+  @override
   String get meSettingsSecurity => 'Security';
+
+  @override
+  String get meSettingsSecurityValue => '2FA · Enabled';
 
   @override
   String get meSettingsNotConfigured => 'Not configured';

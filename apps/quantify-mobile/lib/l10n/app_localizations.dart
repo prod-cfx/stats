@@ -1358,11 +1358,23 @@ abstract class AppLocalizations {
   /// **'未绑定'**
   String get meSettingsTelegramUnbound;
 
+  /// No description provided for @meSettingsTelegramHandle.
+  ///
+  /// In zh, this message translates to:
+  /// **'@victor_qf'**
+  String get meSettingsTelegramHandle;
+
   /// No description provided for @meSettingsSecurity.
   ///
   /// In zh, this message translates to:
   /// **'安全设置'**
   String get meSettingsSecurity;
+
+  /// No description provided for @meSettingsSecurityValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'双重认证 · 已开启'**
+  String get meSettingsSecurityValue;
 
   /// No description provided for @meSettingsNotConfigured.
   ///
