@@ -878,10 +878,38 @@ export class CanonicalSpecBuilderService {
     id: string,
     sourcePath: string,
   ): CanonicalOrchestrationProgram | null {
-    if (leaf.key !== 'program.fixed_grid_gated') {
-      return null
+    const program = this.buildCanonicalProgramFromSupportedRuleEffectLeaf(leaf, id, sourcePath)
+    if (!program) {
+      throw new Error(`InvalidSemanticRuleProgramEffect: key=${leaf.key} sourcePath=${sourcePath}`)
     }
+    return program
+  }
 
+  private buildCanonicalProgramFromSupportedRuleEffectLeaf(
+    leaf: AtomExprAtom,
+    id: string,
+    sourcePath: string,
+  ): CanonicalOrchestrationProgram | null {
+    switch (leaf.key) {
+      case 'program.fixed_grid':
+      case 'program.fixed_grid_gated':
+        return this.buildCanonicalFixedGridProgramFromRuleEffectLeaf(leaf, id, sourcePath)
+      case 'program.dynamic_grid':
+        return this.buildCanonicalDynamicGridProgramFromRuleEffectLeaf(leaf, id, sourcePath)
+      case 'program.adaptive_volatility_grid':
+        return this.buildCanonicalAdaptiveVolatilityGridProgramFromRuleEffectLeaf(leaf, id, sourcePath)
+      case 'program.event_listener':
+        return this.buildCanonicalEventListenerProgramFromRuleEffectLeaf(leaf, id, sourcePath)
+      default:
+        throw new Error(`UnsupportedSemanticRuleProgramEffect: key=${leaf.key} sourcePath=${sourcePath}`)
+    }
+  }
+
+  private buildCanonicalFixedGridProgramFromRuleEffectLeaf(
+    leaf: AtomExprAtom,
+    id: string,
+    sourcePath: string,
+  ): CanonicalOrchestrationProgram | null {
     const lowerBound = this.readFiniteNumber(leaf.params.lowerBound) ?? this.readFiniteNumber(leaf.params.rangeLower)
     const upperBound = this.readFiniteNumber(leaf.params.upperBound) ?? this.readFiniteNumber(leaf.params.rangeUpper)
     const anchorPrice = this.readFiniteNumber(leaf.params.anchorPrice)
@@ -915,7 +943,124 @@ export class CanonicalSpecBuilderService {
       sizing: this.resolveProgramSizingFromRuleProgramLeaf(leaf),
     }
     const program = this.buildFixedGridGatedProgram(node)
-    return program ? { ...program, sourcePath } : null
+    return program ? { ...program, sourcePath, sourceAtomKey: leaf.key } : null
+  }
+
+  private buildCanonicalDynamicGridProgramFromRuleEffectLeaf(
+    leaf: AtomExprAtom,
+    id: string,
+    sourcePath: string,
+  ): CanonicalOrchestrationProgram | null {
+    const step = this.readDynamicGridStepParam(leaf.params.dynamicGridStep)
+    const node: SemanticOrchestrationNode = {
+      id,
+      kind: 'program',
+      key: 'program.dynamic_grid',
+      params: leaf.params,
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+      contracts: [],
+      programKind: 'dynamic_grid',
+      activeWhenRef: typeof leaf.params.activeWhenRef === 'string' ? leaf.params.activeWhenRef : undefined,
+      onDeactivate: leaf.params.onDeactivate === 'keep' || leaf.params.onDeactivate === 'close' ? leaf.params.onDeactivate : 'cancel',
+      rebuildPolicy: 'anchor_on_state_change',
+      anchorLookbackBars: this.readFiniteNumber(leaf.params.anchorLookbackBars) ?? undefined,
+      anchorSide: leaf.params.anchorSide === 'high' || leaf.params.anchorSide === 'low' || leaf.params.anchorSide === 'mid'
+        ? leaf.params.anchorSide
+        : undefined,
+      anchorDriftPct: this.readFiniteNumber(leaf.params.anchorDriftPct) ?? undefined,
+      rebuildMinIntervalSec: this.readFiniteNumber(leaf.params.rebuildMinIntervalSec) ?? undefined,
+      dynamicGridStep: step ?? undefined,
+      levelCount: this.readFiniteNumber(leaf.params.levelCount) ?? undefined,
+      sizing: this.resolveProgramSizingFromRuleProgramLeaf(leaf),
+    }
+    const program = this.buildDynamicGridProgram(node)
+    return program ? { ...program, sourcePath, sourceAtomKey: leaf.key } : null
+  }
+
+  private buildCanonicalAdaptiveVolatilityGridProgramFromRuleEffectLeaf(
+    leaf: AtomExprAtom,
+    id: string,
+    sourcePath: string,
+  ): CanonicalOrchestrationProgram | null {
+    const node: SemanticOrchestrationNode = {
+      id,
+      kind: 'program',
+      key: 'program.adaptive_volatility_grid',
+      params: leaf.params,
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+      contracts: [],
+      programKind: 'adaptive_volatility_grid',
+      activeWhenRef: typeof leaf.params.activeWhenRef === 'string' ? leaf.params.activeWhenRef : undefined,
+      onDeactivate: leaf.params.onDeactivate === 'keep' || leaf.params.onDeactivate === 'close' ? leaf.params.onDeactivate : 'cancel',
+      rebuildPolicy: 'atr_window',
+      atrPeriod: this.readFiniteNumber(leaf.params.atrPeriod) ?? undefined,
+      atrMultiplier: this.readFiniteNumber(leaf.params.atrMultiplier) ?? undefined,
+      rangeMultiplier: this.readFiniteNumber(leaf.params.rangeMultiplier) ?? undefined,
+      atrDriftPct: this.readFiniteNumber(leaf.params.atrDriftPct) ?? undefined,
+      rebuildCooldownSec: this.readFiniteNumber(leaf.params.rebuildCooldownSec) ?? undefined,
+      minStepPct: this.readFiniteNumber(leaf.params.minStepPct) ?? undefined,
+      maxStepPct: this.readFiniteNumber(leaf.params.maxStepPct) ?? undefined,
+      levelCount: this.readFiniteNumber(leaf.params.levelCount) ?? undefined,
+      sizing: this.resolveProgramSizingFromRuleProgramLeaf(leaf),
+    }
+    const program = this.buildAdaptiveVolatilityGridProgram(node)
+    return program ? { ...program, sourcePath, sourceAtomKey: leaf.key } : null
+  }
+
+  private buildCanonicalEventListenerProgramFromRuleEffectLeaf(
+    leaf: AtomExprAtom,
+    id: string,
+    sourcePath: string,
+  ): CanonicalOrchestrationProgram | null {
+    const node: SemanticOrchestrationNode = {
+      id,
+      kind: 'program',
+      key: 'program.event_listener',
+      params: leaf.params,
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+      contracts: [],
+      programKind: 'event_listener',
+      activeWhenRef: typeof leaf.params.activeWhenRef === 'string' ? leaf.params.activeWhenRef : undefined,
+      onDeactivate: leaf.params.onDeactivate === 'keep' ? 'keep' : 'cancel',
+      rebuildPolicy: leaf.params.rebuildPolicy === 'on_schema_version_bump' ? 'on_schema_version_bump' : 'static',
+      eventSchemaRef: leaf.params.eventSchemaRef === 'webhook_event' ? 'webhook_event' : undefined,
+      sourceRef: typeof leaf.params.sourceRef === 'string' ? leaf.params.sourceRef : undefined,
+      permissionScope: typeof leaf.params.permissionScope === 'string' ? leaf.params.permissionScope : undefined,
+      idempotencyKey: this.readEventListenerIdempotencyKeyParam(leaf.params.idempotencyKey) ?? undefined,
+      dedupWindowMs: this.readFiniteNumber(leaf.params.dedupWindowMs) ?? undefined,
+      expirationTtlMs: this.readFiniteNumber(leaf.params.expirationTtlMs) ?? undefined,
+      expirationPolicy: leaf.params.expirationPolicy === 'escalate' ? 'escalate' : 'drop',
+    }
+    const program = this.buildEventListenerProgram(node)
+    return program ? { ...program, sourcePath, sourceAtomKey: leaf.key } : null
+  }
+
+  private readDynamicGridStepParam(value: unknown): SemanticOrchestrationNode['dynamicGridStep'] | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null
+    }
+    const mode = (value as { mode?: unknown }).mode
+    const stepValue = this.readFiniteNumber((value as { value?: unknown }).value)
+    if ((mode === 'pct' || mode === 'absolute') && stepValue !== null) {
+      return { mode, value: stepValue }
+    }
+    return null
+  }
+
+  private readEventListenerIdempotencyKeyParam(value: unknown): SemanticOrchestrationNode['idempotencyKey'] | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null
+    }
+    const fieldPath = (value as { fieldPath?: unknown }).fieldPath
+    return typeof fieldPath === 'string' && fieldPath.trim() !== ''
+      ? { fieldPath: fieldPath.trim() }
+      : null
   }
 
   private resolveProgramSizingFromRuleProgramLeaf(

@@ -1,4 +1,5 @@
 import type { SemanticState } from '../../types/semantic-state'
+import type { AtomExprAtom, SemanticRule } from '../../types/atom-expr'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 
 function baseState(overrides: Partial<SemanticState> = {}): SemanticState {
@@ -21,6 +22,26 @@ function baseState(overrides: Partial<SemanticState> = {}): SemanticState {
     normalizationNotes: [],
     updatedAt: '2026-05-23T00:00:00.000Z',
     ...overrides,
+  }
+}
+
+function programRule(program: AtomExprAtom): SemanticRule {
+  return {
+    id: `rule-${program.key.replace(/\./gu, '-')}`,
+    phase: 'entry',
+    sideScope: 'long',
+    condition: {
+      kind: 'atom',
+      key: 'execution.on_start',
+      params: {},
+    },
+    effects: {
+      actions: [],
+      risks: [],
+      positions: [],
+      orchestration: [],
+      programs: [program],
+    },
   }
 }
 
@@ -163,5 +184,89 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     expect(json).not.toContain('"value":0.9')
     expect(json).not.toContain('"value":999')
     expect(json).not.toContain('"valuePct":12')
+  })
+
+  it.each([
+    [
+      'program.dynamic_grid',
+      'dynamic_grid',
+      {
+        activeWhenRef: 'gate-dynamic',
+        anchorLookbackBars: 20,
+        anchorSide: 'mid',
+        anchorDriftPct: 10,
+        rebuildMinIntervalSec: 60,
+        dynamicGridStep: { mode: 'pct', value: 0.5 },
+        levelCount: 8,
+        onDeactivate: 'cancel',
+        sizing: { mode: 'fixed_quote', value: 50 },
+      },
+    ],
+    [
+      'program.adaptive_volatility_grid',
+      'adaptive_volatility_grid',
+      {
+        activeWhenRef: 'gate-adaptive',
+        atrPeriod: 14,
+        atrMultiplier: 1.5,
+        rangeMultiplier: 3,
+        atrDriftPct: 20,
+        rebuildCooldownSec: 300,
+        minStepPct: 0.2,
+        maxStepPct: 2,
+        levelCount: 6,
+        onDeactivate: 'keep',
+        sizing: { mode: 'fixed_pct', value: 10 },
+      },
+    ],
+    [
+      'program.event_listener',
+      'event_listener',
+      {
+        activeWhenRef: 'gate-event',
+        eventSchemaRef: 'webhook_event',
+        sourceRef: 'scope-data-event',
+        permissionScope: 'webhook:tradingview',
+        idempotencyKey: { fieldPath: 'event_id' },
+        dedupWindowMs: 1000,
+        expirationTtlMs: 5000,
+        expirationPolicy: 'drop',
+        onDeactivate: 'cancel',
+        rebuildPolicy: 'static',
+      },
+    ],
+  ])('builds %s program effects from rules with source path', (key, programKind, params) => {
+    const state = baseState({
+      rules: [programRule({
+        kind: 'atom',
+        key,
+        params,
+      })],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+    const json = JSON.stringify(spec)
+
+    expect(spec.orchestration?.programs).toEqual([
+      expect.objectContaining({
+        programKind,
+        sourcePath: 'rules[0].effects.programs[0]',
+      }),
+    ])
+    expect(json).toContain(key)
+    expect(json).toContain('rules[0].effects.programs[0]')
+  })
+
+  it('throws fail-closed for unsupported rules program effects', () => {
+    const state = baseState({
+      rules: [programRule({
+        kind: 'atom',
+        key: 'program.unknown_grid',
+        params: {},
+      })],
+    })
+
+    expect(() => new CanonicalSpecBuilderService().buildFromSemanticState(state))
+      .toThrow('UnsupportedSemanticRuleProgramEffect')
   })
 })

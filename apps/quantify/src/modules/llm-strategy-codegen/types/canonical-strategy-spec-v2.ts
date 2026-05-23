@@ -217,6 +217,7 @@ export interface CanonicalOrchestrationProgramAdaptiveGridParams {
 export interface CanonicalFixedGridGatedProgram {
   id: string
   sourcePath?: string
+  sourceAtomKey?: string
   programKind: 'fixed_grid_gated'
   activeWhenRef: string
   onDeactivate: 'cancel' | 'keep' | 'close'
@@ -228,6 +229,7 @@ export interface CanonicalFixedGridGatedProgram {
 export interface CanonicalDynamicGridProgram {
   id: string
   sourcePath?: string
+  sourceAtomKey?: string
   programKind: 'dynamic_grid'
   activeWhenRef: string
   onDeactivate: 'cancel' | 'keep' | 'close'
@@ -239,6 +241,7 @@ export interface CanonicalDynamicGridProgram {
 export interface CanonicalAdaptiveVolatilityGridProgram {
   id: string
   sourcePath?: string
+  sourceAtomKey?: string
   programKind: 'adaptive_volatility_grid'
   activeWhenRef: string
   onDeactivate: 'cancel' | 'keep' | 'close'
@@ -253,6 +256,7 @@ export interface CanonicalAdaptiveVolatilityGridProgram {
 export interface CanonicalEventListenerProgram {
   id: string
   sourcePath?: string
+  sourceAtomKey?: string
   programKind: 'event_listener'
   activeWhenRef: string
   onDeactivate: 'cancel' | 'keep'
