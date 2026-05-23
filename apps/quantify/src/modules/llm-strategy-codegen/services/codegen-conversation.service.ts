@@ -1679,16 +1679,36 @@ export class CodegenConversationService {
       }),
       supportGateResponse.strategyVersion,
     )
-    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
-    const clarificationState = semanticArtifacts.clarificationState
-    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
-    const clarificationPrompt = semanticArtifacts.clarificationPrompt
     const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
       dto.message,
       reducedSemanticState,
       constraintPack.recommendationStyle,
     )
     const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
+    const rulesReadiness = this.semanticContractReadiness.evaluateMainflowRulesReadiness(reducedSemanticState.rules)
+    if (!rulesReadiness.ready) {
+      const clarificationState = this.buildRulePathClarificationState(rulesReadiness.openSlots, rulesReadiness.blockingReasons)
+      const assistantPrompt = this.renderRulePathClarificationPrompt(clarificationState, responseLocale)
+      await this.sessionsRepo.updateSession(session.id, {
+        ...this.stateMachine.buildConversationUpdate({
+          status: 'DRAFTING',
+          semanticState: reducedSemanticState,
+          clarificationState,
+          constraintPack: nextConstraintPack,
+        }),
+      } as Prisma.LlmStrategyCodegenSessionUpdateInput)
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, this.finalizeSessionResponse({
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt,
+        clarificationState,
+      }))
+    }
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
+    const clarificationState = semanticArtifacts.clarificationState
+    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const clarificationPrompt = semanticArtifacts.clarificationPrompt
     const normalization = semanticArtifacts.normalization
     const canonicalSpec = this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
@@ -2613,6 +2633,34 @@ export class CodegenConversationService {
       ),
       supportGateResponse.strategyVersion,
     )
+    const rulesReadiness = this.semanticContractReadiness.evaluateMainflowRulesReadiness(reducedSemanticState.rules)
+    if (!rulesReadiness.ready) {
+      const clarificationState = this.buildRulePathClarificationState(rulesReadiness.openSlots, rulesReadiness.blockingReasons)
+      const assistantPrompt = this.renderRulePathClarificationPrompt(clarificationState, responseLocale)
+      const historyAfterRulePathClarification = this.appendConversationHistory(
+        constraintPack.conversationHistory ?? [],
+        dto.message,
+        assistantPrompt,
+      )
+      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        semanticState: reducedSemanticState,
+        clarificationState,
+        constraintPack: {
+          ...constraintPack,
+          conversationHistory: historyAfterRulePathClarification,
+        },
+      }))
+
+      const response = this.finalizeSessionResponse({
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt,
+        clarificationState,
+      })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+    }
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const clarificationState = this.mergePersistedBlockingClarificationItems(
       semanticArtifacts.clarificationState,
@@ -3957,6 +4005,54 @@ export class CodegenConversationService {
       ...openOrchestrationSlots,
       ...openContextSlots,
     ]
+  }
+
+  private buildRulePathClarificationState(
+    openSlots: SemanticSlotState[],
+    blockingReasons: string[],
+  ): StrategyClarificationState {
+    return {
+      status: 'NEEDS_CLARIFICATION',
+      items: openSlots.map(slot => ({
+        key: slot.fieldPath,
+        field: slot.fieldPath,
+        fieldPath: slot.fieldPath,
+        slotKey: slot.slotKey,
+        status: 'pending',
+        reason: blockingReasons[0] ?? 'missing_required_rule_params',
+        question: slot.questionHint,
+        priority: this.rulePathClarificationPriority(slot.priority),
+        blocking: true,
+      })),
+    }
+  }
+
+  private renderRulePathClarificationPrompt(
+    clarificationState: StrategyClarificationState,
+    locale: CodegenConversationLocale,
+  ): string {
+    const first = clarificationState.items.find(item => item.status === 'pending')
+    if (first?.question) return first.question
+    return this.localizedText(
+      locale,
+      'Please clarify the missing rule parameter before I generate the script.',
+      '请先补充缺失的规则参数，我再生成脚本。',
+    )
+  }
+
+  private rulePathClarificationPriority(priority: SemanticSlotState['priority']): number {
+    switch (priority) {
+      case 'core':
+        return 100
+      case 'risk':
+        return 90
+      case 'behavior':
+        return 80
+      case 'context':
+        return 70
+      default:
+        return 60
+    }
   }
 
   private buildClarificationFromSemanticState(

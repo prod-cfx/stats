@@ -34,6 +34,7 @@ import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
 import { validateSemanticExpressionContract } from './strategy-semantic-contracts'
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 import { SemanticRuleProjectionService } from './semantic-rule-projection.service'
+import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
 
 type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position'
 type ExecutableContextField = keyof SemanticState['contextSlots']
@@ -83,6 +84,12 @@ export interface SemanticContractReadinessNormalizationResult {
   missingRequirements: MissingSemanticContractRequirement[]
 }
 
+export interface MainflowRulesReadinessResult {
+  ready: boolean
+  blockingReasons: string[]
+  openSlots: SemanticSlotState[]
+}
+
 interface SemanticContractOwnerRef {
   ownerKind: SemanticContractOwnerKind
   ownerId: string
@@ -114,6 +121,7 @@ export class SemanticContractReadinessService {
     private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
     // #1493 块 D：normalize() 入口跑一次 reproject，把 `flat = pure function of rules` 落成硬不变量。
     private readonly ruleProjection: SemanticRuleProjectionService = new SemanticRuleProjectionService(),
+    private readonly rulesMainflowReader: RulesMainflowReaderService = new RulesMainflowReaderService(),
   ) {}
 
   normalize(
@@ -653,6 +661,63 @@ export class SemanticContractReadinessService {
     if (!summary.hasExit) summary.missing.push('missing_exit')
 
     return summary
+  }
+
+  evaluateMainflowRulesReadiness(rules: readonly SemanticRule[] | null | undefined): MainflowRulesReadinessResult {
+    const read = this.rulesMainflowReader.readMainflowRules(rules)
+    if (read.ok === false) {
+      return {
+        ready: false,
+        blockingReasons: [read.reason],
+        openSlots: [],
+      }
+    }
+
+    const openSlots: SemanticSlotState[] = []
+    for (const leaf of read.leaves) {
+      if (leaf.role === 'risk' && leaf.key === 'risk.stop_loss_pct' && typeof leaf.params.pct !== 'number') {
+        openSlots.push({
+          slotKey: 'risk.stop_loss_pct.pct',
+          fieldPath: `${leaf.path}.params.pct`,
+          status: 'open',
+          priority: 'risk',
+          questionHint: '请确认止损百分比。',
+          affectsExecution: true,
+          atomKey: leaf.key,
+          paramSlotKey: 'pct',
+        })
+      }
+      if (leaf.role === 'position' && leaf.key === 'position.sizing' && typeof leaf.params.value !== 'number') {
+        openSlots.push({
+          slotKey: 'position.sizing.value',
+          fieldPath: `${leaf.path}.params.value`,
+          status: 'open',
+          priority: 'risk',
+          questionHint: '请确认单笔仓位大小。',
+          affectsExecution: true,
+          atomKey: leaf.key,
+          paramSlotKey: 'value',
+        })
+      }
+    }
+
+    const hasEntry = read.leaves.some(leaf =>
+      leaf.role === 'condition' && (leaf.phase === 'entry' || leaf.phase === 'gate' || leaf.phase === 'program'),
+    )
+    const hasExecutableEffect = read.leaves.some(leaf => leaf.role === 'action' || leaf.role === 'program')
+    const hasExit = read.leaves.some(leaf => leaf.phase === 'exit' || (leaf.role === 'risk' && leaf.key.includes('stop')))
+
+    const blockingReasons = [
+      ...(!hasEntry || !hasExecutableEffect ? ['missing_entry_rules'] : []),
+      ...(!hasExit ? ['missing_exit_rules'] : []),
+      ...(openSlots.length > 0 ? ['missing_required_rule_params'] : []),
+    ]
+
+    return {
+      ready: blockingReasons.length === 0,
+      blockingReasons,
+      openSlots,
+    }
   }
 }
 

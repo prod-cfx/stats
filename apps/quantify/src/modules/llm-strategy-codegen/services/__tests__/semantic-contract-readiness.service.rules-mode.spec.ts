@@ -263,6 +263,42 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     expect(r.hasExit).toBe(true)
     expect(r.missing).toEqual([])
   })
+
+  it('mainflow rejects empty rules instead of falling back to flat buckets', () => {
+    const r = svc.evaluateMainflowRulesReadiness([])
+
+    expect(r.ready).toBe(false)
+    expect(r.blockingReasons).toContain('rules_missing_or_empty')
+    expect(JSON.stringify(r.openSlots)).not.toContain('trigger[')
+    expect(JSON.stringify(r.openSlots)).not.toContain('risk[')
+  })
+
+  it('mainflow missing stop loss slot points to typed rules path', () => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'r-entry',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.stop_loss_pct', {})],
+          positions: [atom('position.sizing', { value: 10, unit: 'USDT' })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ]
+
+    const r = svc.evaluateMainflowRulesReadiness(rules)
+
+    expect(r.ready).toBe(false)
+    expect(r.openSlots).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        fieldPath: 'rules[0].effects.risks[0].params.pct',
+        slotKey: 'risk.stop_loss_pct.pct',
+      }),
+    ]))
+  })
 })
 
 describe('semanticContractReadinessService.normalize DCA exit contract in rules tree', () => {
