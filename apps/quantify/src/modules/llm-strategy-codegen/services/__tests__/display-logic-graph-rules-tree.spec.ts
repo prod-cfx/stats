@@ -30,6 +30,18 @@ function baseState(overrides: Partial<SemanticState>): SemanticState {
   }
 }
 
+function lockedContextSlot(field: 'symbol' | 'timeframe', value: string): SemanticState['contextSlots']['symbol'] {
+  return {
+    slotKey: `context.${field}`,
+    fieldPath: `contextSlots.${field}`,
+    value,
+    status: 'locked',
+    priority: 'context',
+    questionHint: '',
+    affectsExecution: true,
+  }
+}
+
 describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () => {
   const service = new SemanticStateProjectionService()
 
@@ -336,5 +348,60 @@ describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () =>
     expect(serialized).toContain('rules[0].effects.risks[0]')
     expect(serialized).not.toContain('rules[0].effects[0]')
     expect(serialized).not.toContain('rules[0].effects[1]')
+  })
+
+  it('keeps context execute items in rules mode without flat-only risk or position', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      contextSlots: {
+        exchange: null,
+        symbol: lockedContextSlot('symbol', 'BTCUSDT'),
+        marketType: null,
+        timeframe: lockedContextSlot('timeframe', '15m'),
+      },
+      trigger: [],
+      action: [],
+      risk: [{
+        id: 'flat-risk',
+        key: 'risk.stop_loss_pct',
+        params: { valuePct: 99, basis: 'entry_avg_price' },
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+      }],
+      positionConstraint: [],
+      orchestration: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 99,
+        sizing: null,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+      },
+      orchestrationContracts: [],
+      normalizationNotes: [],
+      updatedAt: new Date(0).toISOString(),
+      rules: [{
+        id: 'r1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.breakout_up', params: {} },
+        effects: { actions: [], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    }
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const serialized = JSON.stringify(graph)
+
+    expect(serialized).toContain('execute-symbol')
+    expect(serialized).toContain('BTCUSDT')
+    expect(serialized).toContain('execute-timeframe')
+    expect(serialized).toContain('15m')
+    expect(serialized).not.toContain('execute-risk')
+    expect(serialized).not.toContain('止损')
+    expect(serialized).not.toContain('仓位:')
   })
 })

@@ -343,7 +343,9 @@ export class SemanticStateProjectionService {
       blocks: [
         ...(orchestrationBlock ? [orchestrationBlock] : []),
         ...ruleBlocks,
-        ...(rawRules.length === 0 ? [this.buildDisplayExecuteBlock(state)] : []),
+        rawRules.length === 0
+          ? this.buildDisplayExecuteBlock(state)
+          : this.buildDisplayContextExecuteBlock(state),
       ],
     }
   }
@@ -1406,6 +1408,57 @@ export class SemanticStateProjectionService {
         text,
       })
     })
+
+    return {
+      type: 'EXECUTE',
+      items,
+    }
+  }
+
+  private buildDisplayContextExecuteBlock(state: SemanticState): SemanticDisplayLogicGraphBlock {
+    const executionContext = this.buildExecutionContext(state.contextSlots)
+    const marketType = this.formatDisplayMarketType(executionContext.marketType)
+    const items: SemanticDisplayExecuteItem[] = []
+
+    if (executionContext.exchange) {
+      items.push({
+        kind: 'execute',
+        id: 'execute-exchange',
+        key: 'exchange',
+        value: executionContext.exchange,
+        text: `交易所: ${executionContext.exchange.toUpperCase()}`,
+      })
+    }
+
+    if (executionContext.symbol) {
+      items.push({
+        kind: 'execute',
+        id: 'execute-symbol',
+        key: 'symbol',
+        value: executionContext.symbol,
+        text: `标的: ${executionContext.symbol}`,
+      })
+    }
+
+    if (executionContext.timeframe) {
+      items.push({
+        kind: 'execute',
+        id: 'execute-timeframe',
+        key: 'timeframe',
+        value: executionContext.timeframe,
+        text: `周期: ${executionContext.timeframe}`,
+      })
+    }
+
+    if (marketType) {
+      items.push({
+        kind: 'execute',
+        id: 'execute-market-type',
+        key: 'marketType',
+        value: marketType,
+        text: `市场: ${marketType}`,
+      })
+    }
 
     return {
       type: 'EXECUTE',
