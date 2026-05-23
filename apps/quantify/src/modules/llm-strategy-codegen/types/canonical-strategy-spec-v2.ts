@@ -79,6 +79,7 @@ export interface CanonicalRuleAction {
     asset?: string
   }
   params?: Record<string, number | string | boolean>
+  readonly sourcePath?: string
   /**
    * Issue #1313 PR5b — 透传触发该 action 的语义 atom key（如 `action.open_long`）。
    * 仅在 builder 从 semantic action atom 派生 action 时挂载；启发式 / risk / fallback
@@ -215,6 +216,7 @@ export interface CanonicalOrchestrationProgramAdaptiveGridParams {
 
 export interface CanonicalFixedGridGatedProgram {
   id: string
+  sourcePath?: string
   programKind: 'fixed_grid_gated'
   activeWhenRef: string
   onDeactivate: 'cancel' | 'keep' | 'close'
@@ -225,6 +227,7 @@ export interface CanonicalFixedGridGatedProgram {
 
 export interface CanonicalDynamicGridProgram {
   id: string
+  sourcePath?: string
   programKind: 'dynamic_grid'
   activeWhenRef: string
   onDeactivate: 'cancel' | 'keep' | 'close'
@@ -235,6 +238,7 @@ export interface CanonicalDynamicGridProgram {
 
 export interface CanonicalAdaptiveVolatilityGridProgram {
   id: string
+  sourcePath?: string
   programKind: 'adaptive_volatility_grid'
   activeWhenRef: string
   onDeactivate: 'cancel' | 'keep' | 'close'
@@ -248,6 +252,7 @@ export interface CanonicalAdaptiveVolatilityGridProgram {
 //   onDeactivate ∈ {'cancel','keep'}（readiness fail-closed 拒收 'close'）
 export interface CanonicalEventListenerProgram {
   id: string
+  sourcePath?: string
   programKind: 'event_listener'
   activeWhenRef: string
   onDeactivate: 'cancel' | 'keep'
@@ -371,5 +376,8 @@ export interface CanonicalStrategySpecV2 {
   }
   metadata?: {
     normalized?: CanonicalStrategySpecNormalizedMetadata
+    rulesMainflow?: {
+      positionSourcePaths?: string[]
+    }
   }
 }
