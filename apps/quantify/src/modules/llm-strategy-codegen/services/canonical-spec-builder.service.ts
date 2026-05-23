@@ -53,6 +53,8 @@ import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/seman
 import type { AtomExpr, AtomExprAtom, RuleEffectsByRole, SemanticRule } from '../types/atom-expr'
 import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
 import { SemanticRuleProjectionService } from './semantic-rule-projection.service'
+import type { RulesMainflowLeaf, RulesMainflowView } from './rules-mainflow-reader.service'
+import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
 
 // PR3b: 非 atom 字段路径的类型化引用（Issue #1279 AC-4）
 // 这些 key 不在 ATOM_CONTRACT_REGISTRY,但恰好匹配 lint 规则的 prefix regex,
@@ -121,6 +123,7 @@ export class CanonicalSpecBuilderService {
     private readonly triggerCombinationContracts: SemanticTriggerCombinationContractService = new SemanticTriggerCombinationContractService(),
     // #1186 PR2: 多锚 sizing 反填到 legScopes[*].legSizing 时使用
     private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
+    private readonly rulesMainflowReader: RulesMainflowReaderService = new RulesMainflowReaderService(),
   ) {}
 
   /**
@@ -674,14 +677,19 @@ export class CanonicalSpecBuilderService {
   }
 
   private buildFromSemanticRulesMainflow(state: SemanticState, fallbackMarket?: unknown): CanonicalStrategySpecV2 {
+    const readResult = this.rulesMainflowReader.readMainflowRules(state.rules)
+    if (readResult.ok !== true) {
+      throw new Error(`InvalidSemanticRulesMainflow: reason=${readResult.reason} diagnostics=${readResult.diagnostics.join('; ')}`)
+    }
+    const mainflow = readResult.view
     const market = this.resolveSemanticStateMarket(state, fallbackMarket)
     const isMultiLeg = state.isMultiLeg === true
     const sizing: CanonicalStrategySpecV2['sizing'] = isMultiLeg
       ? null
-      : (this.resolveSizingFromSemanticRuleEffects(state.rules ?? []) ?? { mode: 'RATIO' as const, value: 0.1 })
+      : (this.resolveSizingFromSemanticRulePositionLeaves(mainflow.byRole.position) ?? { mode: 'RATIO' as const, value: 0.1 })
     const orderPrograms: CanonicalOrderProgramIntent[] = []
-    const rules = this.buildCanonicalRulesFromSemanticRulesMainflow(state.rules ?? [], sizing)
-    const orchestrationPrograms = this.buildOrchestrationProgramsFromSemanticRulesMainflow(state.rules ?? [])
+    const rules = this.buildCanonicalRulesFromSemanticRulesMainflow(mainflow, sizing)
+    const orchestrationPrograms = this.buildOrchestrationProgramsFromSemanticRulesMainflow(mainflow)
     const baseRequiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
     const requiredTimeframes = this.mergeTimeframeScopeIntoDataRequirements(baseRequiredTimeframes, [])
 
@@ -704,7 +712,7 @@ export class CanonicalSpecBuilderService {
         : {}),
       metadata: {
         rulesMainflow: {
-          positionSourcePaths: this.collectRuleEffectSourcePaths(state.rules ?? [], 'positions'),
+          positionSourcePaths: mainflow.byRole.position.map(leaf => leaf.path),
         },
       },
     }
@@ -763,26 +771,25 @@ export class CanonicalSpecBuilderService {
   }
 
   private buildCanonicalRulesFromSemanticRulesMainflow(
-    semanticRules: readonly SemanticRule[],
+    mainflow: RulesMainflowView,
     sizing: CanonicalStrategySpecV2['sizing'],
   ): CanonicalRuleV2[] {
     const canonicalRules: CanonicalRuleV2[] = []
     let riskPriority = 120
     const defaultTimeframe = null
 
-    for (const [ruleIndex, rule] of semanticRules.entries()) {
+    for (const [ruleIndex, rule] of mainflow.rules.entries()) {
       if (rule.phase === 'entry' || rule.phase === 'exit') {
         const phase = rule.phase
         const condition = this.buildConditionFromSemanticRuleExpr(rule.condition, phase, rule.sideScope, defaultTimeframe)
-        const actions = this.getRuleEffectsForRole(rule.effects, 'actions')
-          .flatMap(({ effect, roleIndex }) =>
-            collectAtomLeaves(effect).flatMap(leaf =>
-              this.buildCanonicalActionsFromRuleEffectLeaf(leaf, phase, sizing)
-                .map(action => ({
-                  ...action,
-                  sourcePath: this.ruleEffectSourcePath(ruleIndex, 'actions', roleIndex),
-                })),
-            ),
+        const actions = mainflow.byRole.action
+          .filter(leaf => leaf.ruleId === rule.id)
+          .flatMap(leaf =>
+            this.buildCanonicalActionsFromRuleEffectLeaf(this.atomLeafFromMainflowLeaf(leaf), phase, sizing)
+              .map(action => ({
+                ...action,
+                sourcePath: leaf.path,
+              })),
           )
 
         if (condition && actions.length > 0) {
@@ -806,18 +813,16 @@ export class CanonicalSpecBuilderService {
         }
       }
 
-      for (const { effect, roleIndex } of this.getRuleEffectsForRole(rule.effects, 'risks')) {
-        for (const leaf of collectAtomLeaves(effect)) {
-          const riskRule = this.buildCanonicalRiskRuleFromRuleEffectLeaf({
-            leaf,
-            rule,
-            sourcePath: this.ruleEffectSourcePath(ruleIndex, 'risks', roleIndex),
-            priority: riskPriority,
-          })
-          if (!riskRule) continue
-          canonicalRules.push(riskRule)
-          riskPriority -= 1
-        }
+      for (const leaf of mainflow.byRole.risk.filter(leaf => leaf.ruleId === rule.id)) {
+        const riskRule = this.buildCanonicalRiskRuleFromRuleEffectLeaf({
+          leaf: this.atomLeafFromMainflowLeaf(leaf),
+          rule,
+          sourcePath: leaf.path,
+          priority: riskPriority,
+        })
+        if (!riskRule) continue
+        canonicalRules.push(riskRule)
+        riskPriority -= 1
       }
     }
 
@@ -854,20 +859,24 @@ export class CanonicalSpecBuilderService {
   }
 
   private buildOrchestrationProgramsFromSemanticRulesMainflow(
-    semanticRules: readonly SemanticRule[],
+    mainflow: RulesMainflowView,
   ): CanonicalOrchestrationProgram[] {
     const programs: CanonicalOrchestrationProgram[] = []
-    for (const [ruleIndex, rule] of semanticRules.entries()) {
-      for (const { effect, roleIndex } of this.getRuleEffectsForRole(rule.effects, 'programs')) {
-        for (const [leafIndex, leaf] of collectAtomLeaves(effect).entries()) {
-          const sourcePath = this.ruleEffectSourcePath(ruleIndex, 'programs', roleIndex)
-          const program = this.buildCanonicalProgramFromRuleEffectLeaf(
-            leaf,
-            `semantic-program-${rule.id}-${roleIndex}-${leafIndex}`,
-            sourcePath,
-          )
-          if (program) programs.push(program)
-        }
+    const leafCountByEffectPath = new Map<string, number>()
+    for (const leaf of mainflow.byRole.program) {
+      const rule = mainflow.rules[leaf.ruleIndex]
+      if (!rule) continue
+      const effectIndex = this.readRoleEffectIndexFromPath(leaf.path, 'programs') ?? 0
+      const effectPath = `rules[${leaf.ruleIndex}].effects.programs[${effectIndex}]`
+      const leafIndex = leafCountByEffectPath.get(effectPath) ?? 0
+      leafCountByEffectPath.set(effectPath, leafIndex + 1)
+      const program = this.buildCanonicalProgramFromRuleEffectLeaf(
+        this.atomLeafFromMainflowLeaf(leaf),
+        `semantic-program-${rule.id}-${effectIndex}-${leafIndex}`,
+        leaf.path,
+      )
+      if (program) {
+        programs.push(program)
       }
     }
     return programs
@@ -1086,55 +1095,44 @@ export class CanonicalSpecBuilderService {
     return { mode: 'fixed_pct', value: 10 }
   }
 
-  private resolveSizingFromSemanticRuleEffects(
-    semanticRules: readonly SemanticRule[],
+  private resolveSizingFromSemanticRulePositionLeaves(
+    positionLeaves: readonly RulesMainflowLeaf[],
   ): CanonicalStrategySpecV2['sizing'] {
-    for (const rule of semanticRules) {
-      for (const { effect } of this.getRuleEffectsForRole(rule.effects, 'positions')) {
-        for (const leaf of collectAtomLeaves(effect)) {
-          if (leaf.key !== FIELD_KEY.POSITION_PER_ORDER_BUDGET) continue
-          const value = this.readNumericParam(leaf.params.value)
-          if (value === null || value <= 0) continue
-          const asset = typeof leaf.params.asset === 'string' && leaf.params.asset.trim() !== ''
-            ? leaf.params.asset.trim().toUpperCase()
-            : undefined
-          return {
-            mode: 'QUOTE',
-            value,
-            ...(asset ? { asset } : {}),
-          }
-        }
+    for (const leaf of positionLeaves) {
+      if (leaf.key !== FIELD_KEY.POSITION_PER_ORDER_BUDGET) continue
+      const value = this.readNumericParam(leaf.params.value)
+      if (value === null || value <= 0) continue
+      const asset = typeof leaf.params.asset === 'string' && leaf.params.asset.trim() !== ''
+        ? leaf.params.asset.trim().toUpperCase()
+        : undefined
+      return {
+        mode: 'QUOTE',
+        value,
+        ...(asset ? { asset } : {}),
       }
     }
     return null
   }
 
-  private collectRuleEffectSourcePaths(
-    semanticRules: readonly SemanticRule[],
-    role: keyof RuleEffectsByRole,
-  ): string[] {
-    return semanticRules.flatMap((rule, ruleIndex) =>
-      this.getRuleEffectsForRole(rule.effects, role)
-        .map(({ roleIndex }) => this.ruleEffectSourcePath(ruleIndex, role, roleIndex)),
-    )
-  }
-
-  private getRuleEffectsForRole(
-    effects: SemanticRule['effects'],
-    role: keyof RuleEffectsByRole,
-  ): Array<{ effect: AtomExpr, roleIndex: number }> {
-    if (isRuleEffectsByRole(effects)) {
-      return effects[role].map((effect, roleIndex) => ({ effect, roleIndex }))
+  private atomLeafFromMainflowLeaf(leaf: RulesMainflowLeaf): AtomExprAtom {
+    return {
+      kind: 'atom',
+      key: leaf.key,
+      params: leaf.params,
+      sideScope: leaf.sideScope,
+      ...(leaf.evidenceText ? { evidence: { text: leaf.evidenceText } } : {}),
     }
-    return []
   }
 
-  private ruleEffectSourcePath(
-    ruleIndex: number,
+  private readRoleEffectIndexFromPath(
+    path: string,
     role: keyof RuleEffectsByRole,
-    roleIndex: number,
-  ): string {
-    return `rules[${ruleIndex}].effects.${role}[${roleIndex}]`
+  ): number | null {
+    const escapedRole = role.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+    const match = path.match(new RegExp(`\\.effects\\.${escapedRole}\\[(\\d+)\\]`, 'u'))
+    if (!match?.[1]) return null
+    const index = Number(match[1])
+    return Number.isInteger(index) && index >= 0 ? index : null
   }
 
   private readNumericParam(value: unknown): number | null {

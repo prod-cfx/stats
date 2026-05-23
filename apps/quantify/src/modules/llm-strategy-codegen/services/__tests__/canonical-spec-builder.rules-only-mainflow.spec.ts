@@ -269,4 +269,89 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     expect(() => new CanonicalSpecBuilderService().buildFromSemanticState(state))
       .toThrow('UnsupportedSemanticRuleProgramEffect')
   })
+
+  it('keeps distinct source paths for nested action risk position and program effect leaves', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-nested-effects',
+        phase: 'entry',
+        sideScope: 'both',
+        condition: {
+          kind: 'atom',
+          key: 'execution.on_start',
+          params: {},
+        },
+        effects: {
+          actions: [{
+            kind: 'and',
+            children: [
+              { kind: 'atom', key: 'action.open_long', params: {} },
+              { kind: 'atom', key: 'action.open_short', params: {} },
+            ],
+          }],
+          risks: [{
+            kind: 'and',
+            children: [
+              { kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
+              { kind: 'atom', key: 'risk.take_profit_pct', params: { valuePct: 9, basis: 'entry_avg_price' } },
+            ],
+          }],
+          positions: [{
+            kind: 'not',
+            child: { kind: 'atom', key: 'position.per_order_budget', params: { value: 40, asset: 'USDT' } },
+          }],
+          orchestration: [],
+          programs: [{
+            kind: 'and',
+            children: [
+              {
+                kind: 'atom',
+                key: 'program.fixed_grid_gated',
+                params: {
+                  anchorPrice: 55000,
+                  levelCount: 10,
+                  stepPct: 1,
+                  sizing: { mode: 'fixed_quote', value: 25 },
+                },
+              },
+              {
+                kind: 'atom',
+                key: 'program.dynamic_grid',
+                params: {
+                  activeWhenRef: 'gate-dynamic',
+                  anchorLookbackBars: 20,
+                  anchorSide: 'mid',
+                  anchorDriftPct: 10,
+                  rebuildMinIntervalSec: 60,
+                  dynamicGridStep: { mode: 'pct', value: 0.5 },
+                  levelCount: 8,
+                  sizing: { mode: 'fixed_quote', value: 50 },
+                },
+              },
+            ],
+          }],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.rules.find(rule => rule.id === 'semantic-entry-rule-nested-effects')?.actions)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: 'OPEN_LONG', sourcePath: 'rules[0].effects.actions[0].and.children[0]' }),
+        expect.objectContaining({ type: 'OPEN_SHORT', sourcePath: 'rules[0].effects.actions[0].and.children[1]' }),
+      ]))
+    expect(spec.rules.filter(rule => rule.phase === 'risk').map(rule => rule.metadata?.sourcePath))
+      .toEqual([
+        'rules[0].effects.risks[0].and.children[0]',
+        'rules[0].effects.risks[0].and.children[1]',
+      ])
+    expect(spec.metadata?.rulesMainflow?.positionSourcePaths).toEqual([
+      'rules[0].effects.positions[0].not.child',
+    ])
+    expect(spec.orchestration?.programs?.map(program => program.sourcePath)).toEqual([
+      'rules[0].effects.programs[0].and.children[0]',
+      'rules[0].effects.programs[0].and.children[1]',
+    ])
+  })
 })
