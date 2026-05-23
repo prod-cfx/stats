@@ -714,12 +714,17 @@ export class CanonicalSpecBuilderService {
     const rules = this.buildCanonicalRulesFromSemanticRulesMainflow(mainflow, sizing)
     const orchestrationPrograms = this.buildOrchestrationProgramsFromSemanticRulesMainflow(mainflow)
     const orchestrationGates = this.buildProgramGatesFromSemanticRulesMainflow(mainflow)
-    const orchestrationScopes = this.buildProgramScopesFromSemanticRulesMainflow(orchestrationPrograms)
+    const orchestrationScopes = [
+      ...this.buildProgramScopesFromSemanticRulesMainflow(orchestrationPrograms),
+      ...this.buildOrchestrationScopesFromSemanticRulesMainflow(mainflow),
+    ]
+    const orchestrationPortfolioRisks = this.buildOrchestrationPortfolioRisksFromSemanticRulesMainflow(mainflow)
     const baseRequiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
-    const requiredTimeframes = this.mergeTimeframeScopeIntoDataRequirements(baseRequiredTimeframes, [])
+    const requiredTimeframes = this.mergeTimeframeScopeIntoDataRequirements(baseRequiredTimeframes, orchestrationScopes)
     const hasOrchestration = orchestrationGates.length > 0
       || orchestrationPrograms.length > 0
       || orchestrationScopes.length > 0
+      || orchestrationPortfolioRisks.length > 0
 
     return {
       version: 2,
@@ -739,6 +744,7 @@ export class CanonicalSpecBuilderService {
         ? {
             orchestration: {
               ...(orchestrationGates.length > 0 ? { gates: orchestrationGates } : {}),
+              ...(orchestrationPortfolioRisks.length > 0 ? { portfolioRisks: orchestrationPortfolioRisks } : {}),
               ...(orchestrationPrograms.length > 0 ? { programs: orchestrationPrograms } : {}),
               ...(orchestrationScopes.length > 0 ? { scopes: orchestrationScopes } : {}),
             },
@@ -820,7 +826,7 @@ export class CanonicalSpecBuilderService {
           .filter(leaf => leaf.ruleId === rule.id)
           .flatMap((leaf) => {
             const actionLeaf = this.atomLeafFromMainflowLeaf(leaf)
-            const builtActions = this.buildCanonicalActionsFromRuleEffectLeaf(actionLeaf, phase, sizing)
+            const builtActions = this.buildCanonicalActionsFromRuleEffectLeaf(actionLeaf, phase, sizing, leaf.path)
             if (builtActions.length === 0) {
               throw new Error(`UnsupportedSemanticRuleActionEffect: key=${leaf.key} sourcePath=${leaf.path}`)
             }
@@ -1049,6 +1055,148 @@ export class CanonicalSpecBuilderService {
         feedId: program.sourceRef,
         schemaRef: program.eventSchemaRef,
       }))
+  }
+
+  private buildOrchestrationScopesFromSemanticRulesMainflow(
+    mainflow: RulesMainflowView,
+  ): CanonicalOrchestrationScope[] {
+    const scopes: CanonicalOrchestrationScope[] = []
+    for (const leaf of mainflow.byRole.orchestration) {
+      const scope = this.buildCanonicalScopeFromRuleOrchestrationLeaf(leaf)
+      if (scope) {
+        scopes.push(scope)
+        continue
+      }
+      if (leaf.key.startsWith('scope.')) {
+        const knownScopeKeys = new Set(['scope.symbol', 'scope.leg', 'scope.timeframe', 'scope.dataSource', 'scope.subStrategy'])
+        throw new Error(`${knownScopeKeys.has(leaf.key) ? 'Invalid' : 'Unsupported'}SemanticRuleOrchestrationEffect: key=${leaf.key} sourcePath=${leaf.path}`)
+      }
+    }
+    return scopes.sort((a, b) => a.id.localeCompare(b.id))
+  }
+
+  private buildCanonicalScopeFromRuleOrchestrationLeaf(
+    leaf: RulesMainflowLeaf,
+  ): CanonicalOrchestrationScope | null {
+    const id = `${leaf.ruleId}-${this.stableRulesPathId(leaf.path)}`
+    switch (leaf.key) {
+      case 'scope.symbol': {
+        const symbols = Array.isArray(leaf.params.symbols)
+          ? leaf.params.symbols.filter((symbol): symbol is string => typeof symbol === 'string' && symbol.trim() !== '').map(symbol => symbol.trim()).sort()
+          : []
+        if (symbols.length === 0) return null
+        const primarySymbol = typeof leaf.params.primarySymbol === 'string' && leaf.params.primarySymbol.trim() !== ''
+          ? leaf.params.primarySymbol.trim()
+          : undefined
+        return {
+          id,
+          scopeKind: 'symbol',
+          symbols,
+          ...(primarySymbol ? { primarySymbol } : {}),
+          sourcePath: leaf.path,
+        }
+      }
+      case 'scope.leg': {
+        const legId = typeof leaf.params.legId === 'string' ? leaf.params.legId.trim() : ''
+        const direction = leaf.params.direction
+        const instrumentRef = typeof leaf.params.instrumentRef === 'string' ? leaf.params.instrumentRef.trim() : ''
+        if (legId === '' || (direction !== 'long' && direction !== 'short') || instrumentRef === '') return null
+        return {
+          id,
+          scopeKind: 'leg',
+          legId,
+          direction,
+          instrumentRef,
+          sourcePath: leaf.path,
+        }
+      }
+      case 'scope.timeframe': {
+        const primary = typeof leaf.params.primaryTimeframe === 'string' ? leaf.params.primaryTimeframe.trim() : ''
+        const required = Array.isArray(leaf.params.requiredTimeframes)
+          ? leaf.params.requiredTimeframes.filter((tf): tf is string => typeof tf === 'string' && tf.trim() !== '').map(tf => tf.trim())
+          : []
+        if (primary === '' || required.length === 0) return null
+        return {
+          id,
+          scopeKind: 'timeframe',
+          primaryTimeframe: primary,
+          requiredTimeframes: [...required].sort((a, b) => (parseTimeframeMs(a) ?? 0) - (parseTimeframeMs(b) ?? 0)),
+          alignmentPolicy: leaf.params.alignmentPolicy === 'tolerant' ? 'tolerant' : 'strict',
+          sourcePath: leaf.path,
+        }
+      }
+      case 'scope.dataSource': {
+        const role = leaf.params.dataSourceRole ?? leaf.params.role
+        const feedIdRaw = leaf.params.dataSourceFeedId ?? leaf.params.feedId
+        const schemaRef = leaf.params.dataSourceSchemaRef ?? leaf.params.schemaRef
+        if (
+          (role !== 'primary' && role !== 'confirmation' && role !== 'event')
+          || typeof feedIdRaw !== 'string'
+          || feedIdRaw.trim() === ''
+          || (schemaRef !== 'ohlcv' && schemaRef !== 'orderbook' && schemaRef !== 'liquidation' && schemaRef !== 'webhook_event')
+        ) {
+          return null
+        }
+        return {
+          id,
+          scopeKind: 'dataSource',
+          role,
+          feedId: feedIdRaw.trim(),
+          schemaRef,
+          sourcePath: leaf.path,
+        }
+      }
+      case 'scope.subStrategy': {
+        const subStrategyId = typeof leaf.params.subStrategyId === 'string' ? leaf.params.subStrategyId.trim() : ''
+        if (subStrategyId === '') return null
+        const positionHandling = leaf.params.positionHandlingOnDeactivate === 'close' ? 'close' : 'keep'
+        const orderHandling = leaf.params.orderHandlingOnDeactivate === 'keep' ? 'keep' : 'cancel'
+        const label = typeof leaf.params.subStrategyLabel === 'string' && leaf.params.subStrategyLabel.trim() !== ''
+          ? leaf.params.subStrategyLabel.trim()
+          : undefined
+        return {
+          id,
+          scopeKind: 'subStrategy',
+          subStrategyId,
+          ...(label ? { subStrategyLabel: label } : {}),
+          positionHandlingOnDeactivate: positionHandling,
+          orderHandlingOnDeactivate: orderHandling,
+          sourcePath: leaf.path,
+        }
+      }
+      default:
+        return null
+    }
+  }
+
+  private buildOrchestrationPortfolioRisksFromSemanticRulesMainflow(
+    mainflow: RulesMainflowView,
+  ): CanonicalOrchestrationPortfolioRisk[] {
+    const risks: CanonicalOrchestrationPortfolioRisk[] = []
+    for (const leaf of mainflow.byRole.orchestration) {
+      if (leaf.key === 'portfolioRisk.drawdown_block') {
+        const thresholdPct = this.readFiniteNumber(leaf.params.thresholdPct)
+        if (thresholdPct === null || thresholdPct <= 0 || thresholdPct > 100) {
+          throw new Error(`InvalidSemanticRuleOrchestrationEffect: key=${leaf.key} sourcePath=${leaf.path}`)
+        }
+        risks.push({
+          id: `${leaf.ruleId}-${this.stableRulesPathId(leaf.path)}`,
+          scope: 'portfolio',
+          mode: leaf.params.mode === 'observe' ? 'observe' : 'enforce',
+          thresholdPct,
+          effectWhenTriggered: 'block_new_entries',
+          sourcePath: leaf.path,
+        })
+        continue
+      }
+      if (leaf.key.startsWith('portfolioRisk.')) {
+        throw new Error(`UnsupportedSemanticRuleOrchestrationEffect: key=${leaf.key} sourcePath=${leaf.path}`)
+      }
+      if (!leaf.key.startsWith('scope.')) {
+        throw new Error(`UnsupportedSemanticRuleOrchestrationEffect: key=${leaf.key} sourcePath=${leaf.path}`)
+      }
+    }
+    return risks.sort((a, b) => a.id.localeCompare(b.id))
   }
 
   private buildProgramGateConditionFromRule(rule: SemanticRule): CanonicalConditionNode {
@@ -3328,6 +3476,7 @@ export class CanonicalSpecBuilderService {
     leaf: AtomExprAtom,
     phase: 'entry' | 'exit',
     sizing: CanonicalStrategySpecV2['sizing'],
+    sourcePath?: string,
   ): CanonicalRuleV2['actions'] {
     switch (leaf.key) {
       case ATOM_CONTRACT_REGISTRY['action.open_long'].key:
@@ -3339,9 +3488,13 @@ export class CanonicalSpecBuilderService {
       case ATOM_CONTRACT_REGISTRY['action.close_short'].key:
         return phase === 'exit' ? [{ type: 'CLOSE_SHORT', atomKey: leaf.key }] : []
       case ATOM_CONTRACT_REGISTRY['action.add_position'].key:
+        const addPositionSideScope = leaf.sideScope ?? (sourcePath ? undefined : 'long')
+        if (addPositionSideScope !== 'long' && addPositionSideScope !== 'short') {
+          throw new Error(`InvalidSemanticRuleActionEffect: key=${leaf.key} sourcePath=${sourcePath ?? 'unknown'} sideScope=${leaf.sideScope ?? 'unknown'}`)
+        }
         return phase === 'entry'
           ? [{
-              type: (leaf.sideScope ?? 'long') === 'short' ? 'ADD_SHORT' : 'ADD_LONG',
+              type: addPositionSideScope === 'short' ? 'ADD_SHORT' : 'ADD_LONG',
               sizing: this.resolveSemanticActionSizing(leaf.params.sizing) ?? sizing ?? undefined,
               atomKey: leaf.key,
             }]

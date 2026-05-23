@@ -168,6 +168,9 @@ export class RulesMainflowReaderService {
           kind: 'atom',
           key: expr.key,
           params,
+          sideScope: expr.sideScope === 'long' || expr.sideScope === 'short' || expr.sideScope === 'both'
+            ? expr.sideScope
+            : undefined,
           evidence: isRecord(expr.evidence) && typeof expr.evidence.text === 'string'
             ? { text: expr.evidence.text }
             : undefined,
@@ -235,7 +238,7 @@ export class RulesMainflowReaderService {
       ruleId: rule.id,
       ruleIndex,
       phase: rule.phase,
-      sideScope: rule.sideScope,
+      sideScope: atom.sideScope ?? rule.sideScope,
       role,
       key: atom.key,
       params: atom.params ?? {},

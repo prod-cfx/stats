@@ -479,6 +479,133 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     ])
   })
 
+  it('builds supported orchestration effects from rules with source paths', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-orchestration',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [
+            {
+              kind: 'atom',
+              key: 'scope.timeframe',
+              params: {
+                primaryTimeframe: '5m',
+                requiredTimeframes: ['1h'],
+                alignmentPolicy: 'strict',
+              },
+            },
+            {
+              kind: 'atom',
+              key: 'portfolioRisk.drawdown_block',
+              params: { mode: 'enforce', thresholdPct: 12 },
+            },
+          ],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.dataRequirements.requiredTimeframes).toEqual(expect.arrayContaining(['5m', '1h']))
+    expect(spec.orchestration?.scopes).toEqual([
+      expect.objectContaining({
+        scopeKind: 'timeframe',
+        primaryTimeframe: '5m',
+        requiredTimeframes: ['1h'],
+        sourcePath: 'rules[0].effects.orchestration[0]',
+      }),
+    ])
+    expect(spec.orchestration?.portfolioRisks).toEqual([
+      expect.objectContaining({
+        scope: 'portfolio',
+        thresholdPct: 12,
+        sourcePath: 'rules[0].effects.orchestration[1]',
+      }),
+    ])
+  })
+
+  it('throws fail-closed for unsupported rules orchestration effects with source path', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-unsupported-orchestration',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [{ kind: 'atom', key: 'scope.unsupported', params: {} }],
+          programs: [],
+        },
+      }],
+    })
+
+    expect(() => new CanonicalSpecBuilderService().buildFromSemanticState(state))
+      .toThrow('UnsupportedSemanticRuleOrchestrationEffect: key=scope.unsupported sourcePath=rules[0].effects.orchestration[0]')
+  })
+
+  it('throws fail-closed for both-side add_position effects', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-add-both',
+        phase: 'entry',
+        sideScope: 'both',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.add_position', params: { sizing: { kind: 'quote', value: 25, asset: 'USDT' } } }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    expect(() => new CanonicalSpecBuilderService().buildFromSemanticState(state))
+      .toThrow('InvalidSemanticRuleActionEffect: key=action.add_position sourcePath=rules[0].effects.actions[0] sideScope=both')
+  })
+
+  it('uses atom sideScope for add_position effects before rule sideScope', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-add-short',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [{
+            kind: 'atom',
+            key: 'action.add_position',
+            sideScope: 'short',
+            params: { sizing: { kind: 'quote', value: 25, asset: 'USDT' } },
+          }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.rules.find(rule => rule.id === 'semantic-entry-rule-add-short')?.actions).toEqual([
+      expect.objectContaining({
+        type: 'ADD_SHORT',
+        atomKey: 'action.add_position',
+        sourcePath: 'rules[0].effects.actions[0]',
+      }),
+    ])
+  })
+
   it('keeps legacy rules array effects on the compatibility builder path', () => {
     const state = baseState({
       trigger: [{

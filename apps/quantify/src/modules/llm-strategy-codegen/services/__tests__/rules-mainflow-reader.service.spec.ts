@@ -38,6 +38,31 @@ describe('RulesMainflowReaderService', () => {
     ])
   })
 
+  it('resolves effect leaf side scope from atom override before rule scope', () => {
+    const rules: SemanticRule[] = [{
+      id: 'side-override',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: atom('execution.on_start'),
+      effects: {
+        actions: [{ kind: 'atom', key: 'action.add_position', params: {}, sideScope: 'short' }],
+        risks: [],
+        positions: [],
+        orchestration: [],
+        programs: [],
+      },
+    }]
+
+    const view = reader.readMainflowRules(rules)
+
+    expect(view.ok).toBe(true)
+    if (!view.ok) return
+    expect(view.view.byRole.action[0]).toEqual(expect.objectContaining({
+      key: 'action.add_position',
+      sideScope: 'short',
+    }))
+  })
+
   it('rejects empty rules for production mainflow', () => {
     expect(reader.readMainflowRules([])).toEqual({
       ok: false,

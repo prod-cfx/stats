@@ -149,6 +149,7 @@ export interface CanonicalPortfolioDrawdownRisk {
   mode: 'observe' | 'enforce'
   thresholdPct: number
   effectWhenTriggered: 'block_new_entries'
+  sourcePath?: string
 }
 
 // Phase 5 S8 (#1119): symbol exposure cap portfolioRisk —— scope='symbol'
@@ -160,6 +161,7 @@ export interface CanonicalPortfolioSymbolExposureCapRisk {
   notionalCapPct: number
   symbolScopeRef: string
   effectWhenTriggered: 'block_new_entries' | 'reduce_exposure'
+  sourcePath?: string
 }
 
 // Phase 5 S8 (#1119): subStrategy exposure cap portfolioRisk —— scope='subStrategy'
@@ -170,6 +172,7 @@ export interface CanonicalPortfolioSubStrategyExposureCapRisk {
   notionalCapPct: number
   subStrategyScopeRef: string
   effectWhenTriggered: 'block_new_entries' | 'pause_substrategy'
+  sourcePath?: string
 }
 
 // Phase 5 S8 (#1119): union with discriminator `scope`
@@ -282,6 +285,7 @@ export interface CanonicalSymbolScope {
   scopeKind: 'symbol'
   symbols: readonly string[]
   primarySymbol?: string
+  sourcePath?: string
 }
 
 // Phase 5 S11 (#1112): scope.leg substrate
@@ -304,6 +308,7 @@ export interface CanonicalOrchestrationLegScope {
   instrumentRef: string
   legSizing?: CanonicalOrchestrationLegSizing
   syncTriggerRequired?: boolean
+  sourcePath?: string
 }
 
 // Phase 5 S3 (#1109): scope.timeframe substrate
@@ -313,6 +318,7 @@ export interface CanonicalOrchestrationTimeframeScope {
   primaryTimeframe: string
   requiredTimeframes: readonly string[]
   alignmentPolicy: 'strict' | 'tolerant'
+  sourcePath?: string
 }
 
 // Phase 5 S9 (#1110): scope.dataSource substrate
@@ -322,6 +328,7 @@ export interface CanonicalOrchestrationDataSourceScope {
   role: SemanticOrchestrationDataSourceRole
   feedId: string
   schemaRef: SemanticOrchestrationDataSourceSchema
+  sourcePath?: string
 }
 
 // Phase 5 S10 (#1111): scope.subStrategy substrate
@@ -332,6 +339,7 @@ export interface CanonicalSubStrategyScope {
   subStrategyLabel?: string
   positionHandlingOnDeactivate: 'close' | 'keep'
   orderHandlingOnDeactivate: 'cancel' | 'keep'
+  sourcePath?: string
 }
 
 // Phase 5 S10 (#1111): scope union — discriminator scopeKind
