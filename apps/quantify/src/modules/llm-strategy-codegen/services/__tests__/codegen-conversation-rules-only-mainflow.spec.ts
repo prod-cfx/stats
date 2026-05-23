@@ -142,6 +142,49 @@ describe('CodegenConversationService rules-only mainflow helpers', () => {
     ]))
   })
 
+  it('rejects negative rule path stop loss answer', () => {
+    const service = Object.create(CodegenConversationService.prototype) as {
+      buildRulePathClarificationState: (slots: SemanticSlotState[], reasons: string[]) => {
+        items: Array<{ key: string }>
+      }
+      applySemanticClarificationAnswers: (
+        currentState: SemanticState,
+        clarificationState: { items: Array<{ key: string }> },
+        answers: Record<string, string>,
+      ) => SemanticState
+    }
+    const readiness = new SemanticContractReadinessService()
+    const state = semanticState([
+      rule({
+        id: 'r-entry',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.stop_loss_pct', {})],
+          positions: [atom('position.sizing', { value: 10, unit: 'USDT' })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ])
+    const before = readiness.evaluateMainflowRulesReadiness(state.rules)
+    const clarificationState = service.buildRulePathClarificationState(before.openSlots, before.blockingReasons)
+
+    const nextState = service.applySemanticClarificationAnswers(state, clarificationState, {
+      [clarificationState.items[0].key]: '-5%',
+    })
+
+    expect(nextState.rules?.[0].effects).toMatchObject({
+      risks: [expect.objectContaining({
+        params: expect.not.objectContaining({ valuePct: expect.any(Number) }),
+      })],
+    })
+    expect(readiness.evaluateMainflowRulesReadiness(nextState.rules).openSlots).toEqual(expect.arrayContaining([
+      expect.objectContaining({ slotKey: 'risk.stop_loss_pct.valuePct' }),
+    ]))
+  })
+
   it('applies position sizing rule path clarification answer to rules params', () => {
     const service = Object.create(CodegenConversationService.prototype) as {
       buildRulePathClarificationState: (slots: SemanticSlotState[], reasons: string[]) => {
@@ -181,6 +224,49 @@ describe('CodegenConversationService rules-only mainflow helpers', () => {
       })],
     })
     expect(readiness.evaluateMainflowRulesReadiness(nextState.rules).openSlots).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ slotKey: 'position.sizing.value' }),
+    ]))
+  })
+
+  it('rejects negative rule path position sizing answer', () => {
+    const service = Object.create(CodegenConversationService.prototype) as {
+      buildRulePathClarificationState: (slots: SemanticSlotState[], reasons: string[]) => {
+        items: Array<{ key: string }>
+      }
+      applySemanticClarificationAnswers: (
+        currentState: SemanticState,
+        clarificationState: { items: Array<{ key: string }> },
+        answers: Record<string, string>,
+      ) => SemanticState
+    }
+    const readiness = new SemanticContractReadinessService()
+    const state = semanticState([
+      rule({
+        id: 'r-entry',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.stop_loss_pct', { valuePct: 5 })],
+          positions: [atom('position.sizing', { unit: 'USDT' })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ])
+    const before = readiness.evaluateMainflowRulesReadiness(state.rules)
+    const clarificationState = service.buildRulePathClarificationState(before.openSlots, before.blockingReasons)
+
+    const nextState = service.applySemanticClarificationAnswers(state, clarificationState, {
+      [clarificationState.items[0].key]: '-100 USDT',
+    })
+
+    expect(nextState.rules?.[0].effects).toMatchObject({
+      positions: [expect.objectContaining({
+        params: expect.not.objectContaining({ value: expect.any(Number) }),
+      })],
+    })
+    expect(readiness.evaluateMainflowRulesReadiness(nextState.rules).openSlots).toEqual(expect.arrayContaining([
       expect.objectContaining({ slotKey: 'position.sizing.value' }),
     ]))
   })

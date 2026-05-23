@@ -675,7 +675,7 @@ export class SemanticContractReadinessService {
 
     const openSlots: SemanticSlotState[] = []
     for (const leaf of read.leaves) {
-      if (leaf.role === 'risk' && leaf.key === 'risk.stop_loss_pct' && typeof leaf.params.valuePct !== 'number') {
+      if (leaf.role === 'risk' && leaf.key === 'risk.stop_loss_pct' && !isPositiveFiniteNumber(leaf.params.valuePct)) {
         openSlots.push({
           slotKey: 'risk.stop_loss_pct.valuePct',
           fieldPath: `${leaf.path}.params.valuePct`,
@@ -687,7 +687,7 @@ export class SemanticContractReadinessService {
           paramSlotKey: 'valuePct',
         })
       }
-      if (leaf.role === 'position' && leaf.key === 'position.sizing' && typeof leaf.params.value !== 'number') {
+      if (leaf.role === 'position' && leaf.key === 'position.sizing' && !isPositiveFiniteNumber(leaf.params.value)) {
         openSlots.push({
           slotKey: 'position.sizing.value',
           fieldPath: `${leaf.path}.params.value`,
@@ -737,6 +737,10 @@ function collectAtomLeavesSafe(expr: AtomExpr | undefined): AtomExprAtom[] {
   catch {
     return []
   }
+}
+
+function isPositiveFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
 }
 
 function dedupeSemanticRulesForReadiness(rules: readonly SemanticRule[]): SemanticRule[] {

@@ -3065,6 +3065,9 @@ export class CodegenConversationService {
     slotKey: string | undefined,
     answer: string,
   ): number | string | null {
+    if (this.containsNegativeNumericSign(answer)) {
+      return null
+    }
     if (paramKey === 'valuePct' || slotKey === 'risk.stop_loss_pct.valuePct') {
       return this.normalizePositionPctClarificationAnswer(answer)
     }
@@ -3076,6 +3079,10 @@ export class CodegenConversationService {
     }
 
     return answer.trim() || null
+  }
+
+  private containsNegativeNumericSign(answer: string): boolean {
+    return /[-−﹣－]\s*\d/u.test(answer)
   }
 
   private withRuleParamValue(

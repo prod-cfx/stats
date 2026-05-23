@@ -324,6 +324,64 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
       }),
     ]))
   })
+
+  it.each([
+    ['NaN', Number.NaN],
+    ['zero', 0],
+    ['negative', -5],
+  ])('mainflow rejects invalid stop loss valuePct: %s', (_label, valuePct) => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'r-entry',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.stop_loss_pct', { valuePct })],
+          positions: [atom('position.sizing', { value: 10, unit: 'USDT' })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ]
+
+    const r = svc.evaluateMainflowRulesReadiness(rules)
+
+    expect(r.openSlots).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'risk.stop_loss_pct.valuePct',
+      }),
+    ]))
+  })
+
+  it.each([
+    ['NaN', Number.NaN],
+    ['zero', 0],
+    ['negative', -100],
+  ])('mainflow rejects invalid position sizing value: %s', (_label, value) => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'r-entry',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.stop_loss_pct', { valuePct: 5 })],
+          positions: [atom('position.sizing', { value, unit: 'USDT' })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ]
+
+    const r = svc.evaluateMainflowRulesReadiness(rules)
+
+    expect(r.openSlots).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'position.sizing.value',
+      }),
+    ]))
+  })
 })
 
 describe('semanticContractReadinessService.normalize DCA exit contract in rules tree', () => {
