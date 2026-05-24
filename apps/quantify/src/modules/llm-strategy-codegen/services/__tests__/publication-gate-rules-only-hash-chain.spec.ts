@@ -224,6 +224,26 @@ describe('publication gate rules-only hash chain', () => {
     ]))
   })
 
+  it('changes AST digest projection when orchestration scopes change', () => {
+    const input = fixture()
+    input.ast.orchestrationScopes = [
+      { id: 'scope-btc', scopeKind: 'symbol', symbols: ['BTCUSDT'], primarySymbol: 'BTCUSDT' },
+    ]
+    input.ast.orchestrationLegScopes = [
+      { id: 'leg-long-btc', scopeKind: 'leg', legId: 'leg.long.btc', direction: 'long', instrumentRef: 'scope-btc' },
+    ]
+    const before = hashCanonical(buildStrategyAstDigestProjection(input.ast))
+
+    input.ast.orchestrationScopes = [
+      { id: 'scope-eth', scopeKind: 'symbol', symbols: ['ETHUSDT'], primarySymbol: 'ETHUSDT' },
+    ]
+    input.ast.orchestrationLegScopes = [
+      { id: 'leg-short-eth', scopeKind: 'leg', legId: 'leg.short.eth', direction: 'short', instrumentRef: 'scope-eth' },
+    ]
+
+    expect(hashCanonical(buildStrategyAstDigestProjection(input.ast))).not.toBe(before)
+  })
+
   it('blocks when IR omits source path trace', () => {
     const input = fixture()
     delete input.ir.ruleBlocks[0].metadata

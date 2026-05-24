@@ -50,6 +50,8 @@ export function buildStrategyAstDigestProjection(
     orderPrograms: projectByTopologyOrder(ast.orderPrograms, ast.topology.orderProgramOrder),
     ...((ast.orchestrationPortfolioRisks ?? []).length > 0 ? { orchestrationPortfolioRisks: ast.orchestrationPortfolioRisks } : {}),
     ...((ast.orchestrationPrograms ?? []).length > 0 ? { orchestrationPrograms: ast.orchestrationPrograms } : {}),
+    ...((ast.orchestrationScopes ?? []).length > 0 ? { orchestrationScopes: ast.orchestrationScopes } : {}),
+    ...((ast.orchestrationLegScopes ?? []).length > 0 ? { orchestrationLegScopes: ast.orchestrationLegScopes } : {}),
     topology: ast.topology,
   }
 }

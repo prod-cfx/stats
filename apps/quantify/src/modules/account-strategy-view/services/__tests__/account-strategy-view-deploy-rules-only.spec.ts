@@ -1,4 +1,6 @@
 import type { CanonicalStrategyIrV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ir'
+import { createHash } from 'node:crypto'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { CanonicalStrategyAstCompilerService } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
 import { CompiledScriptEmitterService } from '@/modules/llm-strategy-codegen/services/compiled-script-emitter.service'
 import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/services/compiled-script-parser.service'
@@ -21,13 +23,28 @@ function createRuntimeExecutionSemantics() {
   }]
 }
 
+function hashCanonical(value: unknown): `sha256:${string}` {
+  return `sha256:${createHash('sha256').update(canonicalSerialize(value)).digest('hex')}`
+}
+
+function hashText(value: string): `sha256:${string}` {
+  return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`
+}
+
 function createCompiledTruthFixture() {
+  const rulesHash = hashCanonical([{ id: 'entry_on_start', sourcePath: 'rules[0]' }])
+  const canonicalSnapshot = {
+    metadata: { rulesHash },
+    market: { exchange: 'okx', symbol: 'ETHUSDT', marketType: 'perp', timeframe: '15m' },
+    rules: [{ id: 'entry_on_start', sourcePath: 'rules[0]' }],
+  }
+  const canonicalSpecHash = hashCanonical(canonicalSnapshot)
   const ir: CanonicalStrategyIrV1 = {
     irVersion: 'csi.v1',
     source: {
       graphVersion: 18,
-      graphDigest: `sha256:${'1'.repeat(64)}`,
-      specHash: `sha256:${'2'.repeat(64)}`,
+      graphDigest: canonicalSpecHash,
+      specHash: canonicalSpecHash,
     },
     market: {
       venue: 'okx',
@@ -72,6 +89,12 @@ function createCompiledTruthFixture() {
       ],
     }],
     orderPrograms: [],
+    orchestrationScopes: [
+      { id: 'scope-eth', scopeKind: 'symbol', symbols: ['ETHUSDT'], primarySymbol: 'ETHUSDT' },
+    ],
+    orchestrationLegScopes: [
+      { id: 'leg-long-eth', scopeKind: 'leg', legId: 'leg.long.eth', direction: 'long', instrumentRef: 'scope-eth' },
+    ],
     riskPolicy: {
       guards: [],
       riskPredicates: [],
@@ -102,10 +125,6 @@ function createCompiledTruthFixture() {
     },
   })
   const compiledManifest = new CompiledScriptParserService().parse(scriptSnapshot).compiledManifest
-  const canonicalSnapshot = {
-    market: { exchange: 'okx', symbol: 'ETHUSDT', marketType: 'perp', timeframe: '15m' },
-    rules: [{ id: 'entry_on_start', sourcePath: 'rules[0]' }],
-  }
 
   return {
     canonicalSnapshot,
@@ -117,11 +136,11 @@ function createCompiledTruthFixture() {
     rulesOnlyHashChain: {
       passed: true,
       hashes: {
-        rulesHash: `sha256:${'3'.repeat(64)}`,
-        canonicalSpecHash: compiledManifest.specHash,
+        rulesHash,
+        canonicalSpecHash,
         irHash: compiledManifest.irHash,
         astHash: compiledManifest.astDigest,
-        scriptHash: `sha256:${'4'.repeat(64)}`,
+        scriptHash: hashText(scriptSnapshot),
       },
     },
   }
@@ -236,5 +255,76 @@ describe('accountStrategyViewService deploy rules-only snapshot truth', () => {
       snapshotHash: 'sha256:snap-rules-only-1',
       snapshot,
     })
+  })
+
+  it('requires republish when ast orchestration scope content no longer matches hash chain', async () => {
+    const truth = createCompiledTruthFixture()
+    const snapshot = createDeploySnapshot({
+      ...truth,
+      astSnapshot: {
+        ...truth.astSnapshot,
+        orchestrationScopes: [
+          { id: 'scope-btc', scopeKind: 'symbol', symbols: ['BTCUSDT'], primarySymbol: 'BTCUSDT' },
+        ],
+      },
+    })
+    const { service, repo } = createService(snapshot)
+
+    await expect(service.deployStrategy({
+      userId: 'user-1',
+      name: 'rules only strategy',
+      publishedSnapshotId: 'snap-rules-only-1',
+      deployRequestId: 'deploy-req-3',
+      exchangeAccountId: 'exchange-account-1',
+      mode: 'TESTNET',
+    } as any)).rejects.toBeInstanceOf(DeploySnapshotRequiresRepublishException)
+
+    expect(repo.createDeployRequestProcessing).not.toHaveBeenCalled()
+    expect(repo.deployStrategyForUser).not.toHaveBeenCalled()
+  })
+
+  it('requires republish when ir snapshot content no longer matches manifest hash', async () => {
+    const truth = createCompiledTruthFixture()
+    const snapshot = createDeploySnapshot({
+      ...truth,
+      irSnapshot: {
+        ...truth.irSnapshot,
+        market: { ...((truth.irSnapshot as unknown as CanonicalStrategyIrV1).market), symbol: 'BTCUSDT' },
+      },
+    })
+    const { service, repo } = createService(snapshot)
+
+    await expect(service.deployStrategy({
+      userId: 'user-1',
+      name: 'rules only strategy',
+      publishedSnapshotId: 'snap-rules-only-1',
+      deployRequestId: 'deploy-req-4',
+      exchangeAccountId: 'exchange-account-1',
+      mode: 'TESTNET',
+    } as any)).rejects.toBeInstanceOf(DeploySnapshotRequiresRepublishException)
+
+    expect(repo.createDeployRequestProcessing).not.toHaveBeenCalled()
+    expect(repo.deployStrategyForUser).not.toHaveBeenCalled()
+  })
+
+  it('requires republish when script snapshot content no longer matches script hash', async () => {
+    const truth = createCompiledTruthFixture()
+    const snapshot = createDeploySnapshot({
+      ...truth,
+      scriptSnapshot: `${truth.scriptSnapshot}\n// tampered`,
+    })
+    const { service, repo } = createService(snapshot)
+
+    await expect(service.deployStrategy({
+      userId: 'user-1',
+      name: 'rules only strategy',
+      publishedSnapshotId: 'snap-rules-only-1',
+      deployRequestId: 'deploy-req-5',
+      exchangeAccountId: 'exchange-account-1',
+      mode: 'TESTNET',
+    } as any)).rejects.toBeInstanceOf(DeploySnapshotRequiresRepublishException)
+
+    expect(repo.createDeployRequestProcessing).not.toHaveBeenCalled()
+    expect(repo.deployStrategyForUser).not.toHaveBeenCalled()
   })
 })

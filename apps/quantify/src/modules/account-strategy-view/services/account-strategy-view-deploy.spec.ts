@@ -1,4 +1,6 @@
 import type { CanonicalStrategyIrV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ir'
+import { createHash } from 'node:crypto'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { CanonicalStrategyAstCompilerService } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
 import { CompiledScriptEmitterService } from '@/modules/llm-strategy-codegen/services/compiled-script-emitter.service'
 import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/services/compiled-script-parser.service'
@@ -25,6 +27,28 @@ function createStructuredRuntimeExecutionSemantics() {
     },
     sourceRefs: ['entry-primary'],
   }]
+}
+
+function hashCanonical(value: unknown): `sha256:${string}` {
+  return `sha256:${createHash('sha256').update(canonicalSerialize(value)).digest('hex')}`
+}
+
+function hashText(value: string): `sha256:${string}` {
+  return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`
+}
+
+function cleanForCanonical<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.filter(item => item !== undefined).map(item => cleanForCanonical(item)) as T
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => [key, cleanForCanonical(item)]),
+    ) as T
+  }
+  return value
 }
 
 function createGridOrderProgramAstSnapshot() {
@@ -80,6 +104,15 @@ let deployableTruthCache: Record<string, unknown> | null = null
 function createDeployableTruthFields(): Record<string, unknown> {
   if (deployableTruthCache) return deployableTruthCache
   const irSnapshot = createDeployCombinationIrFixture()
+  const rulesHash = hashCanonical([{ id: 'entry_long', sourcePath: 'rules[0]' }])
+  const canonicalSnapshot = {
+    metadata: { rulesHash },
+    market: { exchange: 'okx', symbol: 'ETHUSDT', marketType: 'perp', timeframe: '15m' },
+    rules: [{ id: 'entry_long', sourcePath: 'rules[0]' }],
+  }
+  const canonicalSpecHash = hashCanonical(canonicalSnapshot)
+  irSnapshot.source.graphDigest = canonicalSpecHash
+  irSnapshot.source.specHash = canonicalSpecHash
   const astSnapshot = new CanonicalStrategyAstCompilerService().compile(irSnapshot)
   const scriptSnapshot = new CompiledScriptEmitterService().emit({
     ast: astSnapshot,
@@ -93,10 +126,6 @@ function createDeployableTruthFields(): Record<string, unknown> {
     },
   })
   const compiledManifest = new CompiledScriptParserService().parse(scriptSnapshot).compiledManifest
-  const canonicalSnapshot = {
-    market: { exchange: 'okx', symbol: 'ETHUSDT', marketType: 'perp', timeframe: '15m' },
-    rules: [{ id: 'entry_long', sourcePath: 'rules[0]' }],
-  }
   deployableTruthCache = {
     canonicalSnapshot,
     specSnapshot: canonicalSnapshot,
@@ -107,22 +136,75 @@ function createDeployableTruthFields(): Record<string, unknown> {
     rulesOnlyHashChain: {
       passed: true,
       hashes: {
-        rulesHash: `sha256:${'1'.repeat(64)}`,
-        canonicalSpecHash: compiledManifest.specHash,
+        rulesHash,
+        canonicalSpecHash,
         irHash: compiledManifest.irHash,
         astHash: compiledManifest.astDigest,
-        scriptHash: `sha256:${'2'.repeat(64)}`,
+        scriptHash: hashText(scriptSnapshot),
       },
     },
   }
   return deployableTruthCache
 }
 
+function rebuildTruthForAst(truth: Record<string, unknown>, astOverride: Record<string, unknown>): Record<string, unknown> {
+  const baseAst = truth.astSnapshot as Record<string, unknown>
+  const decisionPrograms = (astOverride.decisionPrograms as Array<{ id: string }> | undefined)
+    ?? (astOverride.orderPrograms ? [] : baseAst.decisionPrograms as Array<{ id: string }>)
+  const orderPrograms = (astOverride.orderPrograms as Array<{ id: string }> | undefined)
+    ?? (astOverride.decisionPrograms ? [] : baseAst.orderPrograms as Array<{ id: string }>)
+  const astSnapshot = cleanForCanonical({
+    ...baseAst,
+    ...astOverride,
+    decisionPrograms,
+    orderPrograms,
+    manifest: baseAst.manifest,
+    topology: {
+      ...(baseAst.topology as Record<string, unknown>),
+      ...(astOverride.topology as Record<string, unknown> | undefined),
+      exprOrder: ((astOverride.exprPool as Array<{ id: string }> | undefined) ?? (baseAst.exprPool as Array<{ id: string }>)).map(item => item.id),
+      guardOrder: ((astOverride.guards as Array<{ id: string }> | undefined) ?? (baseAst.guards as Array<{ id: string }>)).map(item => item.id),
+      decisionOrder: decisionPrograms.map(item => item.id),
+      orderProgramOrder: orderPrograms.map(item => item.id),
+    },
+  })
+  const scriptSnapshot = new CompiledScriptEmitterService().emit({
+    ast: astSnapshot as never,
+    executionEnvelope: {
+      positionMode: 'long_only',
+      marginMode: 'isolated',
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 4,
+      fillAssumption: 'strict',
+    },
+  })
+  const compiledManifest = new CompiledScriptParserService().parse(scriptSnapshot).compiledManifest
+  const hashes = (truth.rulesOnlyHashChain as { hashes: Record<string, unknown> }).hashes
+  return {
+    ...truth,
+    astSnapshot,
+    scriptSnapshot,
+    compiledManifest,
+    rulesOnlyHashChain: {
+      passed: true,
+      hashes: {
+        rulesHash: hashes.rulesHash,
+        canonicalSpecHash: compiledManifest.specHash,
+        irHash: compiledManifest.irHash,
+        astHash: compiledManifest.astDigest,
+        scriptHash: hashText(scriptSnapshot),
+      },
+    },
+  }
+}
+
 function withDeployableSnapshotTruth<T extends Record<string, unknown>>(snapshot: T): T {
-  const truth = createDeployableTruthFields()
+  const baseTruth = createDeployableTruthFields()
   const astSnapshot = snapshot.astSnapshot && typeof snapshot.astSnapshot === 'object' && !Array.isArray(snapshot.astSnapshot)
     ? snapshot.astSnapshot as Record<string, unknown>
     : null
+  const truth = astSnapshot ? rebuildTruthForAst(baseTruth, { astVersion: 'csa.v1', ...astSnapshot }) : baseTruth
 
   return {
     ...truth,
@@ -133,9 +215,7 @@ function withDeployableSnapshotTruth<T extends Record<string, unknown>>(snapshot
     scriptSnapshot: snapshot.scriptSnapshot ?? truth.scriptSnapshot,
     compiledManifest: snapshot.compiledManifest ?? truth.compiledManifest,
     rulesOnlyHashChain: snapshot.rulesOnlyHashChain ?? truth.rulesOnlyHashChain,
-    astSnapshot: astSnapshot
-      ? { astVersion: 'csa.v1', ...astSnapshot }
-      : truth.astSnapshot,
+    astSnapshot: truth.astSnapshot,
   }
 }
 

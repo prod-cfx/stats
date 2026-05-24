@@ -14,8 +14,10 @@ import type { StrategySignalsRuntimeConfig } from '@/modules/strategy-signals/ty
 import type { StrategyFundingSnapshot } from '@/modules/trading/core/strategy-buying-power.resolver'
 import type { ExchangeId, MarketType, UnifiedBalance, UnifiedOrder } from '@/modules/trading/core/types'
 import type { PrismaClient } from '@/prisma/prisma.types'
+import type { StrategyAstV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ast'
 import { createHash } from 'node:crypto'
 import { ErrorCode } from '@ai/shared'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common'
@@ -29,6 +31,7 @@ import { GridRuntimeService } from '@/modules/grid-runtime/services/grid-runtime
 import { ScopeTimeframeLiveUnsupportedException } from '@/modules/llm-strategy-codegen/exceptions/scope-timeframe-live-unsupported.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
+import { buildStrategyAstDigestProjection } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
 import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/services/compiled-script-parser.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
@@ -2732,7 +2735,8 @@ export class AccountStrategyViewService {
     if (!this.hasValidCompiledManifest(compiledManifest)) return false
     if (this.readString(irSnapshot, ['irVersion']) !== 'csi.v1') return false
     if (this.readString(astSnapshot, ['astVersion']) !== 'csa.v1') return false
-    if (!this.hasRulesOnlyHashChainEvidence(record)) return false
+    const hashChain = this.resolveRulesOnlyHashChainEvidence(record)
+    if (!hashChain) return false
 
     try {
       const parsed = this.compiledScriptParser.parse(scriptSnapshot)
@@ -2740,6 +2744,14 @@ export class AccountStrategyViewService {
         parsed.compiledManifest as unknown as Record<string, unknown>,
         compiledManifest,
       )
+        && this.snapshotTruthHashesMatch({
+          canonicalSnapshot,
+          irSnapshot,
+          astSnapshot,
+          compiledManifest,
+          scriptSnapshot,
+          hashChain,
+        })
     } catch {
       return false
     }
@@ -2768,7 +2780,7 @@ export class AccountStrategyViewService {
       && this.readString(parsed, ['structuralDigest']) === this.readString(expected, ['structuralDigest'])
   }
 
-  private hasRulesOnlyHashChainEvidence(snapshot: Record<string, unknown>): boolean {
+  private resolveRulesOnlyHashChainEvidence(snapshot: Record<string, unknown>): Record<string, unknown> | null {
     const candidates = [
       this.readRecord(snapshot.rulesOnlyHashChain),
       this.readRecord(snapshot.stage1ConsistencyEvidence),
@@ -2776,7 +2788,7 @@ export class AccountStrategyViewService {
       this.readRecord(this.readRecord(snapshot.specSnapshot)?.stage1ConsistencyEvidence),
     ]
 
-    return candidates.some(evidence => this.isDeployableHashChainEvidence(evidence))
+    return candidates.find(evidence => this.isDeployableHashChainEvidence(evidence)) ?? null
   }
 
   private isDeployableHashChainEvidence(evidence: Record<string, unknown> | null): boolean {
@@ -2784,18 +2796,82 @@ export class AccountStrategyViewService {
     if (evidence.passed === false || evidence.blocked === true) return false
     const hashes = this.readRecord(evidence.hashes) ?? evidence
 
-    return (this.isSha256String(this.readString(hashes, ['rulesHash']))
-      || this.isSha256String(this.readString(hashes, ['canonicalRulesHash'])))
-      && (this.isSha256String(this.readString(hashes, ['canonicalSpecHash']))
-        || this.isSha256String(this.readString(hashes, ['specHash'])))
-      && this.isSha256String(this.readString(hashes, ['irHash']))
-      && (this.isSha256String(this.readString(hashes, ['astHash']))
-        || this.isSha256String(this.readString(hashes, ['astDigest'])))
-      && this.isSha256String(this.readString(hashes, ['scriptHash']))
+    return (this.isSha256LikeString(this.readString(hashes, ['rulesHash']))
+      || this.isSha256LikeString(this.readString(hashes, ['canonicalRulesHash'])))
+      && (this.isSha256LikeString(this.readString(hashes, ['canonicalSpecHash']))
+        || this.isSha256LikeString(this.readString(hashes, ['specHash'])))
+      && this.isSha256LikeString(this.readString(hashes, ['irHash']))
+      && (this.isSha256LikeString(this.readString(hashes, ['astHash']))
+        || this.isSha256LikeString(this.readString(hashes, ['astDigest'])))
+      && this.isSha256LikeString(this.readString(hashes, ['scriptHash']))
+  }
+
+  private snapshotTruthHashesMatch(input: {
+    canonicalSnapshot: Record<string, unknown>
+    irSnapshot: Record<string, unknown>
+    astSnapshot: Record<string, unknown>
+    compiledManifest: Record<string, unknown>
+    scriptSnapshot: string
+    hashChain: Record<string, unknown>
+  }): boolean {
+    const hashes = this.readRecord(input.hashChain.hashes) ?? input.hashChain
+    const canonicalSpecHash = this.hashCanonicalJson(this.canonicalSnapshotForHash(input.canonicalSnapshot))
+    const irHash = this.hashCanonicalJson(input.irSnapshot)
+    const astHash = this.hashCanonicalJson(buildStrategyAstDigestProjection(input.astSnapshot as Omit<StrategyAstV1, 'manifest'>))
+    const scriptHash = this.hashText(input.scriptSnapshot)
+
+    if (!this.hashEquals(canonicalSpecHash, this.readString(input.compiledManifest, ['specHash']))) return false
+    if (!this.hashEquals(canonicalSpecHash, this.readString(hashes, ['canonicalSpecHash']))
+      && !this.hashEquals(canonicalSpecHash, this.readString(hashes, ['specHash']))) return false
+    if (!this.hashEquals(irHash, this.readString(input.compiledManifest, ['irHash']))) return false
+    if (!this.hashEquals(irHash, this.readString(hashes, ['irHash']))) return false
+    if (!this.hashEquals(astHash, this.readString(input.compiledManifest, ['astDigest']))) return false
+    if (!this.hashEquals(astHash, this.readString(hashes, ['astHash']))
+      && !this.hashEquals(astHash, this.readString(hashes, ['astDigest']))) return false
+    if (!this.hashEquals(scriptHash, this.readString(hashes, ['scriptHash']))) return false
+
+    const canonicalRulesHash = this.readString(this.readRecord(input.canonicalSnapshot.metadata), ['rulesHash'])
+      ?? this.readString(input.canonicalSnapshot, ['rulesHash'])
+    if (canonicalRulesHash) {
+      return this.hashEquals(canonicalRulesHash, this.readString(hashes, ['rulesHash']))
+        || this.hashEquals(canonicalRulesHash, this.readString(hashes, ['canonicalRulesHash']))
+    }
+
+    return true
+  }
+
+  private canonicalSnapshotForHash(snapshot: Record<string, unknown>): Record<string, unknown> {
+    const { rulesOnlyHashChain: _rulesOnlyHashChain, stage1ConsistencyEvidence: _stage1ConsistencyEvidence, ...canonical } = snapshot
+    return canonical
+  }
+
+  private hashCanonicalJson(value: unknown): `sha256:${string}` {
+    return `sha256:${createHash('sha256').update(canonicalSerialize(value)).digest('hex')}`
+  }
+
+  private hashText(value: string): `sha256:${string}` {
+    return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`
+  }
+
+  private hashEquals(actual: string, expected: string | null): boolean {
+    const normalized = this.normalizeSha256String(expected)
+    return normalized !== null && actual.toLowerCase() === normalized
   }
 
   private isSha256String(value: string | null): boolean {
     return typeof value === 'string' && /^sha256:[a-f0-9]{64}$/iu.test(value.trim())
+  }
+
+  private isSha256LikeString(value: string | null): boolean {
+    return this.normalizeSha256String(value) !== null
+  }
+
+  private normalizeSha256String(value: string | null): `sha256:${string}` | null {
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim().toLowerCase()
+    if (/^sha256:[a-f0-9]{64}$/u.test(trimmed)) return trimmed as `sha256:${string}`
+    if (/^[a-f0-9]{64}$/u.test(trimmed)) return `sha256:${trimmed}`
+    return null
   }
 
   /**
