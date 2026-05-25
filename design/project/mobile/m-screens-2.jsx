@@ -193,9 +193,7 @@ function Sparkline({ data, up=true, w=120, h=36 }) {
   );
 }
 
-// 策略广场页面（设计稿历史命名为 ScreenMarket，已统一改为 ScreenStrategy；
-// 旧名作为 alias 在 window 上保留，避免外部脚本/原型 HTML 引用断裂）。
-function ScreenStrategy() {
+function ScreenMarket() {
   const [tag, setTag]       = React.useState('全部');
   const [sort, setSort]     = React.useState('hot');
   const [query, setQuery]   = React.useState('');
@@ -443,7 +441,7 @@ function ScreenStrategy() {
         />
       )}
 
-      <MTabBar active="strategy"/>
+      <MTabBar active="strat"/>
       <style>{`@keyframes qfToast { from{opacity:0; transform:translate(-50%, 6px)} to{opacity:1; transform:translate(-50%, 0)} }`}</style>
       <style>{`@keyframes qfSheetUp { from{transform:translateY(100%)} to{transform:translateY(0)} }`}</style>
     </div>
@@ -926,5 +924,4 @@ function TickerRow({ t }) {
   );
 }
 
-// ScreenMarket 是 ScreenStrategy 的历史别名，保留以兼容外部直接引用的脚本。
-Object.assign(window, { ScreenAIConfig, ScreenStrategy, ScreenMarket: ScreenStrategy, ScreenTickers, StratCard, TickerRow });
+Object.assign(window, { ScreenAIConfig, ScreenMarket, ScreenTickers, StratCard, TickerRow });

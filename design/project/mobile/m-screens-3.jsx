@@ -303,6 +303,11 @@ function OrderRow({ o, ask }) {
    SCREEN 7 — Long / Short Ratio
    ======================================================================== */
 function ScreenLS() {
+  const [asset, setAsset] = React.useState('BTC');
+  const [tf, setTf] = React.useState('4H');
+  const [openMenu, setOpenMenu] = React.useState(null); // 'asset' | 'tf' | null
+  const ASSETS = ['BTC','ETH','SOL','BNB','XRP','DOGE'];
+  const TFS = ['15m','1H','4H','1D','1W'];
   const long = 64.2, short = 35.8;
   const exchanges = [
     { ex:'Binance',   color:'#F0B90B', longA:'$1.82B', shortA:'$1.04B', l:63.6, s:36.4},
@@ -315,22 +320,72 @@ function ScreenLS() {
   return (
     <div style={{height:'100%', position:'relative', background:M.bg, display:'flex', flexDirection:'column'}}>
       <MStatus/>
-      <MTopBar title="多空比" sub="全市场永续合约 · 4H" right={
+      <MTopBar title="多空比" sub={`全市场永续合约 · ${tf}`} right={
         <button style={iconBtn}><Ico d={ICONS.refresh} w={18}/></button>
       }/>
 
       <div style={{flex:1, overflow:'auto', padding:'14px 16px 100px'}}>
         {/* selector chips */}
-        <div style={{display:'flex', gap:8, marginBottom:14}}>
-          <span style={{
-            height:32, padding:'0 14px', borderRadius:999, background:M.violetGrad, color:'#fff',
-            fontSize:13, fontWeight:600, display:'inline-flex', alignItems:'center', gap:6,
-          }}>BTC <Ico d={ICONS.caret} w={12} sw={2.4}/></span>
-          <span style={{
-            height:32, padding:'0 14px', borderRadius:999, background:M.elev, color:M.mid,
-            border:`1px solid ${M.border}`, fontSize:13, fontWeight:500,
-            display:'inline-flex', alignItems:'center', gap:6,
-          }}>4H <Ico d={ICONS.caret} w={12} sw={2.4}/></span>
+        <div style={{display:'flex', gap:8, marginBottom:14, position:'relative'}}>
+          <button
+            onClick={()=>setOpenMenu(openMenu==='asset' ? null : 'asset')}
+            style={{
+              height:32, padding:'0 14px', borderRadius:999, background:M.violetGrad, color:'#fff',
+              fontSize:13, fontWeight:600, display:'inline-flex', alignItems:'center', gap:6,
+              border:0, cursor:'pointer',
+            }}
+          >{asset} <Ico d={ICONS.caret} w={12} sw={2.4}/></button>
+          <button
+            onClick={()=>setOpenMenu(openMenu==='tf' ? null : 'tf')}
+            style={{
+              height:32, padding:'0 14px', borderRadius:999, background:M.elev, color:M.mid,
+              border:`1px solid ${M.border}`, fontSize:13, fontWeight:500,
+              display:'inline-flex', alignItems:'center', gap:6, cursor:'pointer',
+            }}
+          >{tf} <Ico d={ICONS.caret} w={12} sw={2.4}/></button>
+
+          {openMenu && (
+            <React.Fragment>
+              <div
+                onClick={()=>setOpenMenu(null)}
+                style={{position:'fixed', inset:0, zIndex:40}}
+              />
+              <div style={{
+                position:'absolute', top:38,
+                left: openMenu==='asset' ? 0 : 'auto',
+                right: openMenu==='tf' ? 0 : 'auto',
+                minWidth:120, zIndex:41,
+                background:M.elev, border:`1px solid ${M.border}`, borderRadius:12,
+                boxShadow:'0 12px 28px -8px rgba(15,22,35,0.18)',
+                padding:6, display:'flex', flexDirection:'column',
+              }}>
+                {(openMenu==='asset' ? ASSETS : TFS).map(v => {
+                  const cur = openMenu==='asset' ? asset : tf;
+                  const on = v === cur;
+                  return (
+                    <button
+                      key={v}
+                      onClick={() => {
+                        if (openMenu==='asset') setAsset(v); else setTf(v);
+                        setOpenMenu(null);
+                      }}
+                      style={{
+                        height:32, padding:'0 12px', borderRadius:8, border:0,
+                        background: on ? 'var(--accent-soft)' : 'transparent',
+                        color: on ? M.violet : M.text,
+                        fontSize:13, fontWeight: on ? 600 : 500, cursor:'pointer',
+                        display:'flex', alignItems:'center', justifyContent:'space-between',
+                        textAlign:'left', fontFamily:'inherit',
+                      }}
+                    >
+                      <span>{v}</span>
+                      {on && <Ico d={ICONS.check} w={12} sw={2.4}/>}
+                    </button>
+                  );
+                })}
+              </div>
+            </React.Fragment>
+          )}
         </div>
 
         {/* hero banner */}
@@ -338,8 +393,8 @@ function ScreenLS() {
           <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:14}}>
             <Av sym="₿" bg="linear-gradient(135deg, #F7931A 0%, #C16100 100%)" size={48}/>
             <div style={{flex:1}}>
-              <div style={{fontSize:18, fontWeight:700, color:M.text}}>BTC 全市场</div>
-              <div style={{fontSize:12, color:M.mid, marginTop:2}}>$8.6B 总持仓 · 4H 数据</div>
+              <div style={{fontSize:18, fontWeight:700, color:M.text}}>{asset} 全市场</div>
+              <div style={{fontSize:12, color:M.mid, marginTop:2}}>$8.6B 总持仓 · {tf} 数据</div>
             </div>
             <Chip tone="ok">LIVE</Chip>
           </div>

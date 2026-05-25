@@ -8,7 +8,7 @@ const { useState, useEffect, useMemo, useCallback } = React;
 const TAB_SCREENS = [
   { k: 'ai',     label: 'AI 量化',  tab: 'ai',     render: () => <ScreenAIChat/> },
   { k: 'market', label: '行情',     tab: 'market', render: () => <ScreenTickers/> },
-  { k: 'strategy', label: '策略',   tab: 'strategy', render: () => <ScreenStrategy/> },
+  { k: 'strat',  label: '策略',     tab: 'strat',  render: () => <ScreenMarket/> },
   { k: 'whale',  label: '巨鲸',     tab: 'whale',  render: () => <ScreenWhale/> },
   { k: 'me',     label: '我的',     tab: 'me',     render: ({ theme, accent }) => <ScreenAccount/> },
 ];
@@ -26,7 +26,7 @@ window.MTabBar = function NavTabBar({ active = 'ai' }) {
   const tabs = [
     {k:'ai',     label:'AI 量化', icon:ICONS.ai},
     {k:'market', label:'行情',    icon:ICONS.market},
-    {k:'strategy', label:'策略',  icon:ICONS.strategy},
+    {k:'strat',  label:'策略',    icon:ICONS.strat},
     {k:'whale',  label:'巨鲸',    icon:ICONS.whale},
     {k:'me',     label:'我的',    icon:ICONS.me},
   ];
@@ -70,13 +70,7 @@ function App() {
   const [screen, setScreen]  = useState('ai');
   const [theme, setTheme]    = useState('light');
   const [accent, setAccent]  = useState('violet');
-  // 弹层种类：
-  //   'config'     回测参数
-  //   'api'        API 配置（历史命名「API 验证」已统一，issue #1664）
-  //   'deploy'     一键部署目标选择（已授权直接部署）
-  //   （预留 'deploy-auth' 用于未授权引导，当前由 'deploy' → 'api' sheet 切换承担，未单独实现）
-  //   'buy'/'sell' 下单
-  const [sheet, setSheet]    = useState(null);
+  const [sheet, setSheet]    = useState(null); // 'config' | 'api' | null
 
   // expose nav to overridden MTabBar + delegated clicks
   useEffect(() => {
@@ -153,13 +147,6 @@ function App() {
               <div style={{ position:'absolute', inset:0, zIndex:80 }}>
                 {sheet === 'config' && <ScreenAIConfig/>}
                 {sheet === 'api'    && <ScreenApiConfig/>}
-                {sheet === 'deploy' && (
-                  <DeployModal
-                    info={{pair:'BTC/USDT', cagr:'+31.6%', sharpe:'1.78', mdd:'-12.4%'}}
-                    onClose={()=>setSheet(null)}
-                    onDeployed={()=>setSheet(null)}
-                  />
-                )}
                 {sheet === 'buy'    && <ScreenOrderEntry side="buy"/>}
                 {sheet === 'sell'   && <ScreenOrderEntry side="sell"/>}
               </div>
@@ -180,7 +167,7 @@ function Legend({ screen, setScreen, theme, setTheme, accent, setAccent, sheet, 
   return (
     <div className="legend">
       <h1>Quantify Mobile<br/>可交互原型</h1>
-      <p>底部 Tab 直接点击切换。在「AI 量化」里可以打开「一键部署」弹层；在「我的」里可以打开 API 配置、主题设置；在「行情」里点击币种可进入交易详情。</p>
+      <p>底部 Tab 直接点击切换。在「我的」里可以打开 API 配置、主题设置；在「行情」里点击币种可进入交易详情。</p>
 
       <div style={{margin:'18px 0 12px'}}>
         <span className="badge"><span className="dot"/>当前 · {screen}</span>
@@ -202,8 +189,7 @@ function Legend({ screen, setScreen, theme, setTheme, accent, setAccent, sheet, 
           </PillBtn>
         ))}
         <PillBtn on={sheet==='config'} onClick={()=>setSheet(sheet==='config' ? null : 'config')}>回测参数 (弹层)</PillBtn>
-        <PillBtn on={sheet==='deploy'} onClick={()=>{setScreen('ai'); setSheet(sheet==='deploy' ? null : 'deploy');}}>一键部署 (弹层)</PillBtn>
-        <PillBtn on={sheet==='api'} onClick={()=>setSheet(sheet==='api' ? null : 'api')}>API 配置 (弹层)</PillBtn>
+        <PillBtn on={sheet==='api'} onClick={()=>setSheet(sheet==='api' ? null : 'api')}>API 验证 (弹层)</PillBtn>
         <PillBtn on={sheet==='buy'} onClick={()=>{setScreen('trade'); setSheet(sheet==='buy' ? null : 'buy');}}>买入下单 (弹层)</PillBtn>
         <PillBtn on={sheet==='sell'} onClick={()=>{setScreen('trade'); setSheet(sheet==='sell' ? null : 'sell');}}>卖出下单 (弹层)</PillBtn>
       </LegendGroup>
