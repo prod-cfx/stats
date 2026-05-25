@@ -52,6 +52,52 @@ describe('codegenSessionPublicationPipeline', () => {
       { id: 'action-open-short', key: 'open_short', status: 'locked', source: 'user_explicit' },
       { id: 'action-close-short', key: 'close_short', status: 'locked', source: 'user_explicit' },
     ],
+    rules: [
+      {
+        id: 'entry-bollinger-upper',
+        phase: 'entry',
+        sideScope: 'short',
+        condition: {
+          kind: 'atom',
+          key: 'bollinger.touch_upper',
+          params: {
+            indicator: 'bollinger',
+            period: 30,
+            stdDev: 2.5,
+            confirmationMode: 'close_confirm',
+          },
+        },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_short', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      },
+      {
+        id: 'exit-bollinger-middle',
+        phase: 'exit',
+        sideScope: 'short',
+        condition: {
+          kind: 'atom',
+          key: 'bollinger.touch_middle',
+          params: {
+            indicator: 'bollinger',
+            period: 30,
+            stdDev: 2.5,
+            confirmationMode: 'close_confirm',
+          },
+        },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.close_short', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      },
+    ],
     risk: [],
     position: {
       mode: 'fixed_ratio',

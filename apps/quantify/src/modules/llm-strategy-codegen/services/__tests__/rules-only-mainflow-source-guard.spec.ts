@@ -26,4 +26,24 @@ describe('rules-only mainflow source guard', () => {
     expect(guardedBlocks).not.toContain('state.positionConstraint')
     expect(guardedBlocks).not.toContain('state.orchestration')
   })
+
+  it('semantic-state-projection guards every flat reader behind rules-only disablement', () => {
+    const file = 'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-projection.service.ts'
+    const source = readFileSync(resolve(process.cwd(), '../..', file), 'utf8')
+    const flatReaderLines = source
+      .split('\n')
+      .map((line, index) => ({ line: line.trim(), lineNumber: index + 1 }))
+      .filter(({ line }) =>
+        line.includes('readFlatTriggers(')
+        || line.includes('readFlatActions(')
+        || line.includes('readFlatRisks('))
+
+    const unguarded = flatReaderLines.filter(({ line }) =>
+      !line.includes('hasRulesOnlyMainflow ? [] :')
+      && !line.includes("hasRulesOnlyMainflow ? '' :")
+      && !line.includes("(hasRulesOnlyMainflow ? '' :"),
+    ).filter(({ lineNumber }) => lineNumber < 526 || lineNumber > 560)
+
+    expect(unguarded).toEqual([])
+  })
 })

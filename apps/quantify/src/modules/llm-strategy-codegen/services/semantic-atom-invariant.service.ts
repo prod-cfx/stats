@@ -1,5 +1,5 @@
 import type { ExprNode, StrategyAstV1 } from '../types/canonical-strategy-ast'
-import type { CanonicalStrategyIrV1, OrderProgram, PredicateDef, SeriesDef } from '../types/canonical-strategy-ir'
+import type { ActionDef, CanonicalStrategyIrV1, OrderProgram, PredicateDef, SeriesDef } from '../types/canonical-strategy-ir'
 import type { CanonicalConditionAtom, CanonicalConditionNode, CanonicalExpressionCondition, CanonicalOrderProgramIntent, CanonicalStrategySpec } from '../types/canonical-strategy-spec'
 import type { SemanticAtomContract, SemanticCapability, SemanticCapabilityShape, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticPositionSizingContract, SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import type { StrategyConsistencyCheck } from '../types/strategy-consistency-report'
@@ -8,7 +8,7 @@ import { SemanticAtomContractService } from './semantic-atom-contract.service'
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
-import { collectAtomLeaves, listRuleEffects } from '../types/atom-expr'
+import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
 
 type PriceChangeDirection = 'up' | 'down'
 type PositionAction = 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
@@ -174,6 +174,11 @@ export class SemanticAtomInvariantService {
   }
 
   private expectedOrderProgramContracts(semanticState: SemanticState): ExpectedOrderProgramContract[] {
+    const rulesExpected = this.expectedOrderProgramContractsFromRules(semanticState)
+    if (rulesExpected.length > 0) {
+      return rulesExpected
+    }
+
     const contracts = this.collectContracts(semanticState)
     const resolution = this.contracts.resolve(contracts)
     const expected = resolution.canCompileOrderProgram
@@ -181,6 +186,197 @@ export class SemanticAtomInvariantService {
       : null
 
     return expected ? [expected] : []
+  }
+
+  private expectedOrderProgramContractsFromRules(semanticState: SemanticState): ExpectedOrderProgramContract[] {
+    const expected: ExpectedOrderProgramContract[] = []
+    for (const [ruleIndex, rule] of (semanticState.rules ?? []).entries()) {
+      if (!isRuleEffectsByRole(rule.effects)) {
+        continue
+      }
+      for (const conditionLeaf of collectAtomLeaves(rule.condition)) {
+        if (conditionLeaf.key !== 'grid.range_rebalance') {
+          continue
+        }
+        const projected = this.toExpectedOrderProgramContractFromRuleLeaf({
+          programLeaf: conditionLeaf,
+          positionLeaves: rule.effects.positions.flatMap(effect => collectAtomLeaves(effect)),
+          semanticState,
+          ruleId: rule.id,
+          path: `rules[${ruleIndex}].condition`,
+        })
+        if (projected) {
+          expected.push(projected)
+        }
+      }
+      for (const [programIndex, programExpr] of rule.effects.programs.entries()) {
+        for (const programLeaf of collectAtomLeaves(programExpr)) {
+          if (programLeaf.key !== 'program.fixed_grid' && programLeaf.key !== 'program.fixed_grid_gated') {
+            continue
+          }
+          const path = `rules[${ruleIndex}].effects.programs[${programIndex}]`
+          const positionLeaves = rule.effects.positions.flatMap(effect => collectAtomLeaves(effect))
+          const projected = this.toExpectedOrderProgramContractFromRuleLeaf({
+            programLeaf,
+            positionLeaves,
+            semanticState,
+            ruleId: rule.id,
+            path,
+          })
+          if (projected) {
+            expected.push(projected)
+          }
+        }
+      }
+    }
+
+    return expected
+  }
+
+  private toExpectedOrderProgramContractFromRuleLeaf(input: {
+    programLeaf: ReturnType<typeof collectAtomLeaves>[number]
+    positionLeaves: ReturnType<typeof collectAtomLeaves>
+    semanticState: SemanticState
+    ruleId: string
+    path: string
+  }): ExpectedOrderProgramContract | null {
+    const { programLeaf, positionLeaves, semanticState, ruleId, path } = input
+    const levelSetMode = this.readParamString(programLeaf.params, 'mode') === 'centered_percent_range'
+      ? 'centered_percent_range'
+      : 'static_range'
+    const lower = this.readParamNumber(programLeaf.params, 'lower') ?? this.readParamNumber(programLeaf.params, 'lowerBound') ?? this.readParamNumber(programLeaf.params, 'rangeLower') ?? undefined
+    const upper = this.readParamNumber(programLeaf.params, 'upper') ?? this.readParamNumber(programLeaf.params, 'upperBound') ?? this.readParamNumber(programLeaf.params, 'rangeUpper') ?? undefined
+    const halfRangePct = this.readParamNumber(programLeaf.params, 'halfRangePct') ?? undefined
+    const budget = this.projectExpectedOrderProgramBudgetFromRuleLeaves(positionLeaves)
+      ?? this.projectExpectedOrderProgramBudgetFromSemanticPosition(semanticState.position)
+      ?? this.projectExpectedOrderProgramBudgetFromGridLeaf(programLeaf)
+    if (
+      (levelSetMode === 'static_range' && (lower === undefined || upper === undefined || upper <= lower))
+      || (levelSetMode === 'centered_percent_range' && (halfRangePct === undefined || halfRangePct <= 0))
+      || !budget
+    ) {
+      return null
+    }
+
+    const gridIntervals = this.readParamNumber(programLeaf.params, 'gridIntervals') ?? undefined
+    const gridCount = this.readParamNumber(programLeaf.params, 'gridCount')
+      ?? this.readParamNumber(programLeaf.params, 'levelCount')
+      ?? this.readParamNumber(programLeaf.params, 'levels')
+      ?? undefined
+    const absoluteSpacing = this.readParamNumber(programLeaf.params, 'absoluteSpacing') ?? undefined
+    const spacingPct = this.readParamNumber(programLeaf.params, 'spacingPct') ?? this.readParamNumber(programLeaf.params, 'stepPct') ?? undefined
+    const maxWorkingOrders = this.resolveExpectedOrderProgramLevelCount({
+      levelSetMode,
+      lower,
+      upper,
+      halfRangePct,
+      gridCount,
+      absoluteSpacing,
+      spacingPct,
+    })
+    const budgetPerOrder = budget.budgetMode === 'total_quote'
+      ? Number((budget.budgetValue / maxWorkingOrders).toFixed(8))
+      : budget.budgetValue
+    const id = `semantic-order-program-${ruleId}-${this.stablePathId(path)}`
+    const irId = this.toIrSafeId(id)
+    const activeSuffix = levelSetMode === 'centered_percent_range' ? 'active_level_set' : 'active_range'
+    const mode = this.resolveContractOrderProgramMode(null, semanticState)
+
+    return {
+      id,
+      kind: 'contract_order_program',
+      mode,
+      levelSetMode,
+      ...(lower !== undefined ? { lower } : {}),
+      ...(upper !== undefined ? { upper } : {}),
+      ...(levelSetMode === 'centered_percent_range'
+        ? {
+            centerTiming: this.readParamString(programLeaf.params, 'centerTiming') === 'runtime' ? 'runtime' : 'deployment',
+            centerSource: this.readParamString(programLeaf.params, 'centerSource') ?? 'last_price',
+          }
+        : {}),
+      ...(halfRangePct !== undefined ? { halfRangePct } : {}),
+      ...(gridIntervals !== undefined ? { gridIntervals } : {}),
+      ...(gridCount !== undefined ? { gridCount } : {}),
+      ...(absoluteSpacing !== undefined ? { absoluteSpacing } : {}),
+      ...(spacingPct !== undefined ? { spacingPct } : {}),
+      spacingMode: this.readParamString(programLeaf.params, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
+      budgetMode: budget.budgetMode,
+      budgetValue: budget.budgetValue,
+      ...(budget.budgetAsset ? { budgetAsset: budget.budgetAsset } : {}),
+      orderType: 'limit',
+      timeInForce: 'gtc',
+      recycleOnFill: programLeaf.params.recycleOnFill !== false,
+      cancelOnStop: programLeaf.params.cancelOnStop !== false,
+      irId,
+      activeWhen: `${irId}_${activeSuffix}`,
+      side: 'buy',
+      sidePolicy: mode === 'spot' ? 'spot_grid' : mode,
+      quantity: budget.budgetMode === 'per_order_pct_equity'
+        ? { mode: 'pct_equity', value: budgetPerOrder }
+        : {
+            mode: 'fixed_quote',
+            value: budgetPerOrder,
+            ...(budget.budgetAsset ? { asset: budget.budgetAsset } : {}),
+          },
+      maxWorkingOrders,
+    }
+  }
+
+  private projectExpectedOrderProgramBudgetFromRuleLeaves(
+    leaves: readonly ReturnType<typeof collectAtomLeaves>[number][],
+  ): Pick<ExpectedOrderProgramContract, 'budgetMode' | 'budgetValue' | 'budgetAsset'> | null {
+    for (const leaf of leaves) {
+      if (leaf.key !== 'position.per_order_budget') {
+        continue
+      }
+      const value = this.readParamNumber(leaf.params, 'value')
+      if (value === null || value <= 0) {
+        continue
+      }
+      const asset = this.readParamString(leaf.params, 'asset')?.toUpperCase() ?? 'USDT'
+      return {
+        budgetMode: 'per_order_quote',
+        budgetValue: value,
+        budgetAsset: asset,
+      }
+    }
+
+    return null
+  }
+
+  private projectExpectedOrderProgramBudgetFromSemanticPosition(
+    position: SemanticState['position'],
+  ): Pick<ExpectedOrderProgramContract, 'budgetMode' | 'budgetValue' | 'budgetAsset'> | null {
+    if (!position || position.status !== 'locked') return null
+    const sizing = normalizeLegacyPositionSizing(position)
+    if (!sizing) return null
+    if (sizing.kind === 'ratio') {
+      return {
+        budgetMode: 'per_order_pct_equity',
+        budgetValue: sizing.value <= 1 ? Number((sizing.value * 100).toFixed(8)) : sizing.value,
+      }
+    }
+    if (sizing.kind === 'quote') {
+      return {
+        budgetMode: 'per_order_quote',
+        budgetValue: sizing.value,
+        budgetAsset: sizing.asset,
+      }
+    }
+    return null
+  }
+
+  private projectExpectedOrderProgramBudgetFromGridLeaf(
+    leaf: ReturnType<typeof collectAtomLeaves>[number],
+  ): Pick<ExpectedOrderProgramContract, 'budgetMode' | 'budgetValue' | 'budgetAsset'> | null {
+    const value = this.readParamNumber(leaf.params, 'perGridSizing')
+    if (value === null || value <= 0) return null
+    return {
+      budgetMode: 'per_order_quote',
+      budgetValue: value,
+      budgetAsset: 'USDT',
+    }
   }
 
   private collectContracts(state: SemanticState): SemanticAtomContract[] {
@@ -683,6 +879,10 @@ export class SemanticAtomInvariantService {
     ir: CanonicalStrategyIrV1
     ast: StrategyAstV1
   }): StrategyConsistencyCheck[] {
+    if (this.hasLifecycleOnlyRulesPositionSizing(input.semanticState)) {
+      return []
+    }
+
     const position = input.semanticState.position
     if (!position || position.status !== 'locked' || !validateSemanticPositionContract(position).ok) {
       return []
@@ -726,6 +926,23 @@ export class SemanticAtomInvariantService {
     }]
   }
 
+  private hasLifecycleOnlyRulesPositionSizing(state: SemanticState): boolean {
+    const rules = state.rules ?? []
+    if (rules.length === 0) return false
+    const effectLeaves = rules.flatMap(rule =>
+      listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)),
+    )
+    const hasOpenAction = effectLeaves.some(leaf =>
+      leaf.key === ATOM_CONTRACT_REGISTRY['action.open_long'].key
+      || leaf.key === ATOM_CONTRACT_REGISTRY['action.open_short'].key,
+    )
+    const hasLifecycleSizingCarrier = effectLeaves.some(leaf =>
+      leaf.key === ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key
+      || leaf.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key,
+    )
+    return hasLifecycleSizingCarrier && !hasOpenAction
+  }
+
   private toCanonicalPositionSizingSnapshot(sizing: SemanticPositionSizingContract): PositionSizingSnapshot {
     if (sizing.kind === 'ratio') {
       return { mode: 'RATIO', value: sizing.value }
@@ -766,23 +983,27 @@ export class SemanticAtomInvariantService {
   }
 
   private readAstOpenActionPositionSizings(ast: StrategyAstV1): PositionSizingSnapshot[] {
-    const openActionSizings = ast.decisionPrograms.flatMap(program =>
-      program.actions
-        // #1238 follow-up：DCA 策略入场动作由 ADD_LONG / ADD_SHORT 表达，原过滤
-        //   只收 OPEN_*，导致 astCandidates=[] → drift critical reject。与
-        //   evaluateCanonicalCompileability 同口径，纳入 ADD_LONG / ADD_SHORT。
-        .filter(action =>
-          action.kind === 'OPEN_LONG'
-          || action.kind === 'OPEN_SHORT'
-          || action.kind === 'ADD_LONG'
-          || action.kind === 'ADD_SHORT',
-        )
-        .map(action => action.quantity),
-    )
+    const decisionActions = ast.decisionPrograms.flatMap(program => program.actions)
+    const openActionSizings = decisionActions
+      .filter(action => action.kind === 'OPEN_LONG' || action.kind === 'OPEN_SHORT')
+      .map(action => action.quantity)
+    const addActionSizings = decisionActions
+      // DCA-only 策略没有 OPEN_* 主仓动作，此时 ADD_* 是入场 sizing 载体。
+      // 若 OPEN_* 存在，ADD_* 表示加仓 sizing，不能要求等于主仓 position.sizing。
+      .filter(action =>
+        (action.kind === 'ADD_LONG' || action.kind === 'ADD_SHORT')
+        && this.isDcaScheduleAstAddAction(action),
+      )
+      .map(action => action.quantity)
     return [
-      ...openActionSizings,
+      ...(openActionSizings.length > 0 ? openActionSizings : addActionSizings),
       ...ast.orderPrograms.map(program => program.payload.quantity),
     ]
+  }
+
+  private isDcaScheduleAstAddAction(action: ActionDef): boolean {
+    if (action.kind !== 'ADD_LONG' && action.kind !== 'ADD_SHORT') return false
+    return this.readString((action as unknown as Record<string, unknown>).atomKey) === 'position.dca_schedule'
   }
 
   private matchesPositionSizingSnapshot(
@@ -792,7 +1013,7 @@ export class SemanticAtomInvariantService {
     if (!actual) return false
     if (actual.mode !== expected.mode) return false
     if (Math.abs(actual.value - expected.value) > 0.000001) return false
-    if (expected.asset !== undefined && actual.asset !== undefined && actual.asset !== expected.asset) return false
+    if (expected.asset !== undefined && actual.asset !== expected.asset) return false
     return true
   }
 
@@ -1709,6 +1930,24 @@ export class SemanticAtomInvariantService {
   private readShapeString(shape: SemanticCapabilityShape, key: string): string | null {
     const value = shape[key]
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+  }
+
+  private readParamNumber(params: Record<string, unknown>, key: string): number | null {
+    const value = params[key]
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
+  private readParamString(params: Record<string, unknown>, key: string): string | null {
+    const value = params[key]
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+  }
+
+  private stablePathId(path: string): string {
+    return path.replace(/[^a-zA-Z0-9]+/gu, '-').replace(/^-|-$/gu, '')
+  }
+
+  private toIrSafeId(id: string): string {
+    return id.replace(/[^a-zA-Z0-9]+/gu, '_').replace(/^_+|_+$/gu, '')
   }
 
   private readShapeBoolean(shape: SemanticCapabilityShape, key: string): boolean | null {

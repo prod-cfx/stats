@@ -75,6 +75,40 @@ describe('CodegenConversationService rules-only mainflow helpers', () => {
     })
   })
 
+  it('treats grid.range_rebalance program condition as closed-loop entry and exit', () => {
+    const readiness = new SemanticContractReadinessService()
+    const state = semanticState([
+      rule({
+        id: 'program-bidirectional-grid',
+        phase: 'program',
+        condition: atom('grid.range_rebalance', {
+          rangeLower: 60000,
+          rangeUpper: 80000,
+          stepPct: 0.5,
+          sideMode: 'both',
+          perGridSizing: 10,
+          breakoutAction: 'continue',
+        }),
+        effects: {
+          actions: [],
+          risks: [
+            atom('risk.stop_loss_pct', { basis: 'entry_avg_price', valuePct: 5 }),
+            atom('risk.take_profit_pct', { basis: 'entry_avg_price', valuePct: 10 }),
+          ],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }),
+    ])
+
+    const result = readiness.evaluateMainflowRulesReadiness(state.rules)
+
+    expect(result.ready).toBe(true)
+    expect(result.blockingReasons).not.toContain('missing_entry_rules')
+    expect(result.blockingReasons).not.toContain('missing_exit_rules')
+  })
+
   it('persists rule path clarification state that can be read back', () => {
     const service = Object.create(CodegenConversationService.prototype) as {
       buildRulePathClarificationState: (slots: SemanticSlotState[], reasons: string[]) => unknown

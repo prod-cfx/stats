@@ -242,9 +242,10 @@ export class SemanticStateProjectionService {
   ) {}
 
   buildConversationView(state: SemanticState): SemanticConversationView {
-    const deterministicTriggers = this.filterDeterministicTriggers(readFlatTriggers(state))
-    const deterministicRisk = this.filterDeterministicRisk(readFlatRisks(state))
-    const deterministicActions = this.filterDeterministicActions(readFlatActions(state))
+    const hasRulesOnlyMainflow = Array.isArray(state.rules)
+    const deterministicTriggers = hasRulesOnlyMainflow ? [] : this.filterDeterministicTriggers(readFlatTriggers(state))
+    const deterministicRisk = hasRulesOnlyMainflow ? [] : this.filterDeterministicRisk(readFlatRisks(state))
+    const deterministicActions = hasRulesOnlyMainflow ? [] : this.filterDeterministicActions(readFlatActions(state))
     const deterministicSignals = this.buildRecommendationSignals({
       actions: deterministicActions,
       triggers: deterministicTriggers,
@@ -254,7 +255,7 @@ export class SemanticStateProjectionService {
     const actionSummary = this.buildActionSummary(deterministicActions, state)
     const riskSummary = this.buildRiskSummary(deterministicRisk)
     const ruleAtomKeys = this.collectRuleAtomKeys(state.rules ?? [])
-    const positionSummary = this.buildPositionSummary(state.position, state.positionConstraint, ruleAtomKeys)
+    const positionSummary = hasRulesOnlyMainflow ? '' : this.buildPositionSummary(state.position, state.positionConstraint, ruleAtomKeys)
     const executionContext = this.buildExecutionContext(state.contextSlots)
     const inferredDefaults = this.buildInferredDefaults(deterministicRisk)
     // #1152 contract parity：orchestration locked 节点必须计入 deterministic 判定与 summary，
@@ -272,7 +273,7 @@ export class SemanticStateProjectionService {
           && node.openSlots.length > 0
           && node.openSlots.every(slot => slot.slotKey === 'orchestration.phase0.unsupported')),
       )
-    const orchestrationSummary = this.buildOrchestrationSummary(recognizedOrchestrationNodes)
+    const orchestrationSummary = hasRulesOnlyMainflow ? '' : this.buildOrchestrationSummary(recognizedOrchestrationNodes)
     const hasDeterministicSemantics = this.hasDeterministicSemantics({
       triggers: deterministicTriggers,
       actions: deterministicActions,
@@ -290,22 +291,11 @@ export class SemanticStateProjectionService {
     const projectionRules = this.sanitizeProjectionRules(rawRules)
     const rulesSummary = projectionRules.length > 0 ? this.buildRulesSummary(projectionRules) : ''
 
-    // Issue #1403 子故障 D 真根因（补丁）—— rules-first summary 不能完全替代桶维度摘要。
-    //   `grid.range_rebalance` 在 positionConstraint 桶、`program.*_grid` 在 orchestration 桶，
-    //   不会出现在 state.rules 表达式树（rules 仅承载条件 + effects，不承载 program 节点
-    //   或 positionConstraint atom）。若 state.rules 非空（如止损 rule 被加入 rules），
-    //   原实现整段抛弃 positionSummary + orchestrationSummary，导致 grid 信号从摘要里消失。
-    //   通用解：rules 非空时仍**附加** positionSummary + orchestrationSummary 这两段桶专属内容，
-    //   保证只能由桶状态承载的 atom（grid program / DCA schedule / pyramiding 等）不丢失。
-    //   triggerSummary / actionSummary / riskSummary 与 rules.condition/effects 高度重叠，
-    //   仍让位给 rulesSummary 避免双重渲染。
-    const bucketOnlySummary = [positionSummary, orchestrationSummary].filter(item => item.length > 0)
-
     return {
       summary: rulesSummary.length > 0
-        ? [rulesSummary, ...bucketOnlySummary].join('；')
+        ? rulesSummary
         : (rawRules.length > 0
-            ? (bucketOnlySummary.length > 0 ? bucketOnlySummary.join('；') : '已识别部分条件，但仍未完整。')
+            ? '已识别部分条件，但仍未完整。'
             : (summaryItems.length > 0 ? summaryItems.join('；') : '已识别部分条件，但仍未完整。')),
       triggerSummary,
       riskSummary,
@@ -334,17 +324,15 @@ export class SemanticStateProjectionService {
     const rulesBlocks = this.buildDisplayRuleBlocksFromRules(projectionRules, rawRules)
     const ruleBlocks: SemanticDisplayLogicGraphBlock[] = rulesBlocks.length > 0
       ? rulesBlocks
-      : (rawRules.length > 0 ? [] : this.buildDisplayRuleBlocksFromFlatTriggers(state))
+      : []
 
-    const orchestrationBlock = this.buildDisplayOrchestrationBlock(state)
+    const orchestrationBlock = Array.isArray(state.rules) ? null : this.buildDisplayOrchestrationBlock(state)
 
     return {
       blocks: [
         ...(orchestrationBlock ? [orchestrationBlock] : []),
         ...ruleBlocks,
-        rawRules.length === 0
-          ? this.buildDisplayExecuteBlock(state)
-          : this.buildDisplayContextExecuteBlock(state),
+        this.buildDisplayContextExecuteBlock(state),
       ],
     }
   }
@@ -660,8 +648,9 @@ export class SemanticStateProjectionService {
     summary: string
     nextQuestion: string | null
   } {
-    const triggerSummary = this.buildTriggerSummary(readFlatTriggers(state), true)
-    const riskSummary = this.buildRiskSummary(readFlatRisks(state))
+    const hasRulesOnlyMainflow = Array.isArray(state.rules)
+    const triggerSummary = hasRulesOnlyMainflow ? '' : this.buildTriggerSummary(readFlatTriggers(state), true)
+    const riskSummary = hasRulesOnlyMainflow ? '' : this.buildRiskSummary(readFlatRisks(state))
     // #1238：clarification 路径下"我当前理解的策略是"这条提示长期只渲染
     // trigger + risk，遗漏 position 段（含 sizing、dca_schedule / pyramiding_limit
     // 等 constraint 显示），导致用户给出 DCA / 加仓配置时即使 state.position.constraints
@@ -674,7 +663,7 @@ export class SemanticStateProjectionService {
     //   - position locked 时 nextQuestion 仍可能追问已被 summary 覆盖的 position open slot
     //     → #1244（dedupe nextQuestion vs summary）
     //   - buildPositionSummary 内 presentationRegistry try/catch 吞错变沉默失败 → #1245
-    const positionSummary = this.buildPositionSummary(state.position, state.positionConstraint)
+    const positionSummary = hasRulesOnlyMainflow ? '' : this.buildPositionSummary(state.position, state.positionConstraint)
     const summaryItems = [triggerSummary, riskSummary, positionSummary].filter(item => item.length > 0)
 
     // Issue #1395 — clarification 视图同样优先消费 rules 树
@@ -688,7 +677,7 @@ export class SemanticStateProjectionService {
       summary: rulesSummary.length > 0
         ? rulesSummary
         : (rawRules.length > 0
-            ? (positionSummary.length > 0 ? positionSummary : '已识别部分条件，但仍未完整。')
+            ? '已识别部分条件，但仍未完整。'
             : (summaryItems.length > 0 ? summaryItems.join('；') : '已识别部分条件，但仍未完整。')),
       nextQuestion: nextSlot?.questionHint ?? null,
     }
@@ -1335,10 +1324,11 @@ export class SemanticStateProjectionService {
   }
 
   private buildDisplayExecuteBlock(state: SemanticState): SemanticDisplayLogicGraphBlock {
+    const hasRulesOnlyMainflow = Array.isArray(state.rules)
     const executionContext = this.buildExecutionContext(state.contextSlots)
     const positionSizing = this.buildDisplayPositionSizingValue(state.position)
     const marketType = this.formatDisplayMarketType(executionContext.marketType)
-    const riskTexts = this.buildRiskSummary(this.filterDeterministicRisk(readFlatRisks(state)))
+    const riskTexts = (hasRulesOnlyMainflow ? '' : this.buildRiskSummary(this.filterDeterministicRisk(readFlatRisks(state))))
       .split('；')
       .filter(text => text.length > 0)
     const items: SemanticDisplayExecuteItem[] = []
@@ -3409,9 +3399,10 @@ export class SemanticStateProjectionService {
   }
 
   private findNextOpenSlot(state: SemanticState): SemanticSlotState | null {
+    const hasRulesOnlyMainflow = Array.isArray(state.rules)
     const triggerPhaseOrder: Array<'entry' | 'exit' | 'risk' | 'gate'> = ['entry', 'exit', 'risk', 'gate']
     const openTriggerSlots = triggerPhaseOrder.flatMap(phase =>
-      readFlatTriggers(state)
+      (hasRulesOnlyMainflow ? [] : readFlatTriggers(state))
         .filter(trigger => trigger.phase === phase && trigger.status !== 'superseded')
         .flatMap(trigger => trigger.openSlots)
         .filter(slot => slot.status === 'open'),
@@ -3434,21 +3425,21 @@ export class SemanticStateProjectionService {
     //   跳过 state.position.openSlots，与 codegen-conversation 服务共用 registry
     //   单一真相源 ATOM_FULFILLS_STRATEGY_PHASE。
     const hasContinuousSizing = this.executableSemantics.anyAtomFulfillsPhase(state, 'sizing')
-    const positionSlot = hasContinuousSizing
+    const positionSlot = hasRulesOnlyMainflow || hasContinuousSizing
       ? null
       : (state.position?.openSlots?.find(slot => slot.status === 'open') ?? null)
     if (positionSlot) {
       return positionSlot
     }
 
-    const actionSlot = readFlatActions(state)
+    const actionSlot = (hasRulesOnlyMainflow ? [] : readFlatActions(state))
       .flatMap(action => action.openSlots ?? [])
       .find(slot => slot.status === 'open')
     if (actionSlot) {
       return actionSlot
     }
 
-    const riskSlot = readFlatRisks(state)
+    const riskSlot = (hasRulesOnlyMainflow ? [] : readFlatRisks(state))
       .flatMap(risk => risk.openSlots)
       .find(slot => slot.status === 'open')
     if (riskSlot) {

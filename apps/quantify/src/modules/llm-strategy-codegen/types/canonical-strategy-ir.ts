@@ -244,6 +244,7 @@ export interface ActionDef {
 interface OrderProgramBaseDef {
   id: string
   kind: 'LIMIT_LADDER'
+  sourcePath?: string
   activeWhen?: string
   side: 'buy' | 'sell'
   sidePolicy: 'spot_grid' | 'perp_long' | 'perp_short' | 'perp_neutral'
@@ -280,6 +281,7 @@ export type OrderProgram = OrderProgramDef
 
 export interface IrOrchestrationGate {
   id: string
+  sourcePath?: string
   exprId: string
   // Phase 5 S10 (#1111): target 升级为 union（entry / strategy / subStrategy）
   target: SemanticOrchestrationGateTarget

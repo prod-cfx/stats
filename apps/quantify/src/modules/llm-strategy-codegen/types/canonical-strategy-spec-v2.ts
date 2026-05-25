@@ -135,6 +135,7 @@ export interface CanonicalRuleV2 {
 
 export interface CanonicalOrchestrationGate {
   id: string
+  sourcePath?: string
   // Phase 5 S10 (#1111): target 升级为 union（entry / strategy / subStrategy）
   target: SemanticOrchestrationGateTarget
   activeWhen: CanonicalConditionNode

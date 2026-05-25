@@ -224,6 +224,54 @@ describe('publication gate rules-only hash chain', () => {
     ]))
   })
 
+  it('passes rules-only trace for top-level order programs', () => {
+    const input = fixture()
+    input.rules = [{
+      id: 'program-grid',
+      phase: 'program',
+      condition: { kind: 'atom', key: 'grid.range_rebalance' },
+      effects: { programs: [{ kind: 'atom', key: 'program.fixed_grid_gated' }] },
+    }]
+    input.canonicalSpec.rules = []
+    input.canonicalSpec.orderPrograms = [{
+      id: 'semantic-order-program-program-grid-rules-0-condition',
+      kind: 'contract_order_program',
+      sourcePath: 'rules[0].condition',
+    }]
+    input.ir.ruleBlocks = []
+    input.ir.orderPrograms = [{
+      id: 'semantic_order_program_program_grid_rules_0_condition',
+      kind: 'LIMIT_LADDER',
+      sourcePath: 'rules[0].condition',
+      activeWhen: 'semantic_order_program_program_grid_rules_0_condition_active_range',
+      side: 'buy',
+      sidePolicy: 'perp_neutral',
+      tickPolicy: 'round',
+      priceSource: 'level_set',
+      levelSetRef: 'grid_levels',
+      quantity: { mode: 'pct_equity', value: 10 },
+      orderType: 'limit',
+      timeInForce: 'gtc',
+      recycleOnFill: true,
+      pairingPolicy: 'adjacent_level',
+      cancelScope: 'program_orders',
+      maxWorkingOrders: 10,
+      group: 'semantic-order-program-program-grid-rules-0-condition',
+    }]
+    input.ast = new CanonicalStrategyAstCompilerService().compile(input.ir)
+    linkFixtureHashes(input)
+    input.script = emitScript(input.ast)
+
+    const result = newGate().validateRulesOnlyHashChain(input)
+
+    expect(result.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'trace.canonical', passed: true }),
+      expect.objectContaining({ key: 'trace.ir', passed: true }),
+      expect.objectContaining({ key: 'trace.ast', passed: true }),
+    ]))
+    expect(result.passed).toBe(true)
+  })
+
   it('changes AST digest projection when orchestration scopes change', () => {
     const input = fixture()
     input.ast.orchestrationScopes = [

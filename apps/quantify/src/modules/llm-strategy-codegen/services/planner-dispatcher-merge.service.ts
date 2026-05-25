@@ -1518,8 +1518,19 @@ export class PlannerDispatcherMergeService {
     if (!this.isNonEmpty(plannerPatch)) {
       return this.buildRulesTreeFallbackFromDispatcher(dispatcherPatch, userMessage) ?? plannerPatch ?? null
     }
-    if (!this.isNonEmpty(dispatcherPatch)) return plannerPatch as CodegenSemanticPatch
     const planner = plannerPatch as CodegenSemanticPatch
+    if (!this.isNonEmpty(dispatcherPatch)) {
+      const merged: CodegenSemanticPatch = { ...planner }
+      if (userMessage.trim().length > 0) {
+        try {
+          this.pruneInvalidDeterministicNoiseRules(merged, {}, userMessage)
+        }
+        catch (err) {
+          this.logger.warn(`pruneInvalidDeterministicNoiseRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
+      return merged
+    }
     const dispatcher = this.expandRulesForInternalFlat(dispatcherPatch as CodegenSemanticPatch)
     const merged: CodegenSemanticPatch = { ...planner }
     if (planner.contextSlots || dispatcher.contextSlots) {
@@ -1764,16 +1775,14 @@ export class PlannerDispatcherMergeService {
         rule.effects,
         normalizedConditionInitial,
       )
-      const normalizedCondition = this.repairConditionFromEffects(
+      let normalizedCondition = this.repairConditionFromEffects(
         normalizedConditionInitial,
         normalizedEffectInput,
       )
-      const conditionLeaves = collectAtomLeaves(normalizedCondition)
-      const normalizedRule = { ...rule, condition: normalizedCondition }
       const dedupedEffects = this.dedupeRuleEffects(normalizedEffectInput)
       const withoutUnsupportedNoise = this.removeUnsupportedEffectNoise(
         dedupedEffects,
-        conditionLeaves,
+        collectAtomLeaves(normalizedCondition),
         hasAtrIntent,
       )
       const sideScopedEffects = this.removeContradictorySideActionEffects(
@@ -1782,6 +1791,16 @@ export class PlannerDispatcherMergeService {
         rule.sideScope,
       )
       const effectLeaves = listRuleEffects(sideScopedEffects).flatMap(effect => collectAtomLeaves(effect))
+      normalizedCondition = this.repairLifecycleConditionNoise(normalizedCondition, effectLeaves)
+      const conditionLeaves = collectAtomLeaves(normalizedCondition)
+      const hasInvalidConditionBucket = conditionLeaves.some((leaf) => {
+        const bucket = this.readAtomBucket(leaf.key)
+        return bucket !== undefined
+          && !CONDITION_ALLOWED_BUCKETS.has(bucket)
+          && !(bucket === 'positionConstraint' && CONDITION_ALLOWED_POSITION_CONSTRAINT_ATOMS.has(leaf.key))
+      })
+      if (hasInvalidConditionBucket && effectLeaves.length === 0) continue
+      if (this.isEmptyPositionPresenceGateRule(rule, conditionLeaves, effectLeaves)) continue
       if (
         hasRsiComposite
         && rule.phase === 'entry'
@@ -1831,6 +1850,26 @@ export class PlannerDispatcherMergeService {
         this.dropRulesCoveredByStrongerComposite(next),
       ),
     )
+    this.clearLifecycleOnlyTopLevelPositionSizing(merged)
+  }
+
+  private clearLifecycleOnlyTopLevelPositionSizing(merged: CodegenSemanticPatch): void {
+    if (!merged.position || !merged.rules?.length) return
+    const leaves = merged.rules.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)))
+    const hasOpenAction = leaves.some(leaf =>
+      leaf.key === ATOM_CONTRACT_REGISTRY['action.open_long'].key
+      || leaf.key === ATOM_CONTRACT_REGISTRY['action.open_short'].key,
+    )
+    const hasLifecycleSizingCarrier = leaves.some(leaf =>
+      leaf.key === DCA_SCHEDULE_ATOM_KEY || leaf.key === ADD_POSITION_ATOM_KEY,
+    )
+    if (hasOpenAction || !hasLifecycleSizingCarrier) return
+    const { mode: _mode, value: _value, sizing: _sizing, evidence: _evidence, ...position } = merged.position
+    merged.position = {
+      ...position,
+      mode: 'constraint_only',
+      value: 0,
+    } as CodegenSemanticPatch['position']
   }
 
   private pruneIntrinsicRuleNoise(merged: CodegenSemanticPatch): void {
@@ -2175,6 +2214,39 @@ export class PlannerDispatcherMergeService {
     }
   }
 
+  private repairLifecycleConditionNoise(
+    condition: AtomExpr,
+    effectLeaves: readonly AtomExprAtom[],
+  ): AtomExpr {
+    const hasDcaSchedule = effectLeaves.some(leaf => leaf.key === DCA_SCHEDULE_ATOM_KEY)
+    if (!hasDcaSchedule || condition.kind !== 'atom') return condition
+    if (
+      condition.key !== ATOM_CONTRACT_REGISTRY['position.has_position'].key
+      && condition.key !== ATOM_CONTRACT_REGISTRY['position.no_position'].key
+    ) {
+      return condition
+    }
+    return {
+      kind: 'atom',
+      key: EXECUTION_ON_START_ATOM_KEY,
+      params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
+      ...(condition.evidence ? { evidence: condition.evidence } : {}),
+    }
+  }
+
+  private isEmptyPositionPresenceGateRule(
+    rule: SemanticRule,
+    conditionLeaves: readonly AtomExprAtom[],
+    effectLeaves: readonly AtomExprAtom[],
+  ): boolean {
+    if (rule.phase !== 'gate' || effectLeaves.length > 0) return false
+    return conditionLeaves.some(leaf =>
+      leaf.key === ATOM_CONTRACT_REGISTRY['position.has_position'].key
+      || leaf.key === ATOM_CONTRACT_REGISTRY['position.no_position'].key
+      || leaf.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key,
+    )
+  }
+
   private normalizeAtomNoise(atom: AtomExprAtom): AtomExprAtom {
     const params = { ...(atom.params ?? {}) }
     delete params.phase
@@ -2207,6 +2279,9 @@ export class PlannerDispatcherMergeService {
       index: number
     }
     const riskNoise = /止损|止盈|亏损|盈利|收益|ATR|atr|回撤|熔断/u
+    const lifecycleSizingNoise = /(?:DCA|dca|定投|加投|加仓|补仓|回撤)/u
+    const exitPriceChangeNoise = /(?:上涨|下跌|涨|跌|突破|跌破|回落|回到|低于|高于|触及|相对入场均价).{0,12}(?:卖出|平仓|平多|平空|退出|止损|止盈)/u
+    if (lifecycleSizingNoise.test(normalized) || exitPriceChangeNoise.test(normalized)) return null
     const candidates: Candidate[] = []
     const pushCandidate = (candidate: Candidate): void => {
       if (!Number.isFinite(candidate.sizing.value) || candidate.sizing.value <= 0) return

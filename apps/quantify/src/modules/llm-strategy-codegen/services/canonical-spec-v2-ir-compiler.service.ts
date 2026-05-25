@@ -451,6 +451,7 @@ export class CanonicalSpecV2IrCompilerService {
       return {
         id: compiledId,
         kind: 'LIMIT_LADDER',
+        ...(intent.sourcePath ? { sourcePath: intent.sourcePath } : {}),
         activeWhen: levelSetRefs.activeWhen,
         side: this.resolveOrderProgramSide(intent.mode),
         sidePolicy: this.resolveOrderProgramSidePolicy(intent.mode),
@@ -584,9 +585,9 @@ export class CanonicalSpecV2IrCompilerService {
   ): string {
     const closeRef = this.ensurePriceSeries(context, 'close')
     const seed = intent.id.replace(/\W+/g, '_')
-    const aboveLower = this.upsertPredicate(context.predicateMap, `${seed}_active_lower`, 'GTE', [closeRef, lowerRef])
-    const belowUpper = this.upsertPredicate(context.predicateMap, `${seed}_active_upper`, 'LTE', [closeRef, upperRef])
-    return this.upsertPredicate(context.predicateMap, `${seed}_active_range`, 'AND', [aboveLower, belowUpper])
+    const aboveLower = this.insertPredicate(context.predicateMap, `${seed}_active_lower`, 'GTE', [closeRef, lowerRef])
+    const belowUpper = this.insertPredicate(context.predicateMap, `${seed}_active_upper`, 'LTE', [closeRef, upperRef])
+    return this.insertPredicate(context.predicateMap, `${seed}_active_range`, 'AND', [aboveLower, belowUpper])
   }
 
   private ensureOrderProgramActiveLevelSetPredicate(
@@ -596,7 +597,7 @@ export class CanonicalSpecV2IrCompilerService {
   ): string {
     const closeRef = this.ensurePriceSeries(context, 'close')
     const seed = intent.id.replace(/\W+/g, '_')
-    return this.upsertPredicate(context.predicateMap, `${seed}_active_level_set`, 'WITHIN_LEVEL_SET', [closeRef, levelSetRef])
+    return this.insertPredicate(context.predicateMap, `${seed}_active_level_set`, 'WITHIN_LEVEL_SET', [closeRef, levelSetRef])
   }
 
   private resolveOrderProgramSpacing(
@@ -1068,6 +1069,7 @@ export class CanonicalSpecV2IrCompilerService {
       )
       return {
         id: gate.id,
+        ...(gate.sourcePath ? { sourcePath: gate.sourcePath } : {}),
         exprId,
         target: gate.target,
         effectWhenFalse: gate.effectWhenFalse,
@@ -2900,11 +2902,28 @@ export class CanonicalSpecV2IrCompilerService {
       if (!opensRawPosition) continue
       if (block.metadata?.dcaSchedule) continue
       if (block.metadata?.addPosition) continue
+      if (this.predicateTreeContainsExecutionOnStart(block.when, context.predicateMap)) continue
       const leafKinds = collectEntryRuleLeafKinds(block.when, context.predicateMap)
       if (leafKinds.length === 0) continue
       if (leafKindsContainEvent(leafKinds)) continue
       throw new EntryRuleRequiresEventLeafException({ ruleId: block.id, leafKinds })
     }
+  }
+
+  private predicateTreeContainsExecutionOnStart(
+    rootPredicateId: string,
+    predicateById: ReadonlyMap<string, PredicateDef>,
+  ): boolean {
+    const visited = new Set<string>()
+    const visit = (predicateId: string): boolean => {
+      if (visited.has(predicateId)) return false
+      visited.add(predicateId)
+      if (predicateId.includes('execution_on_start')) return true
+      const predicate = predicateById.get(predicateId)
+      if (!predicate) return false
+      return predicate.args.some(arg => visit(arg))
+    }
+    return visit(rootPredicateId)
   }
 
   private upsertPredicate(
@@ -2923,6 +2942,24 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     const id = this.resolveCollisionFreePredicateId(predicateMap, baseId, signature)
+    predicateMap.set(id, {
+      id,
+      kind,
+      args,
+      ...(params ? { params } : {}),
+    })
+    return id
+  }
+
+  private insertPredicate(
+    predicateMap: Map<string, PredicateDef>,
+    baseId: string,
+    kind: PredicateDef['kind'],
+    args: string[],
+    params?: PredicateDef['params'],
+  ): string {
+    const signature = this.buildPredicateSignature(kind, args, params)
+    const id = this.resolveCollisionFreePredicateId(predicateMap, baseId, `${baseId}:${signature}`)
     predicateMap.set(id, {
       id,
       kind,

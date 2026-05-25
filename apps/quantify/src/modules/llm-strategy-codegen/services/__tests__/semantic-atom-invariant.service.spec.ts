@@ -1,6 +1,7 @@
 import type { ExprNode, StrategyAstV1 } from '../../types/canonical-strategy-ast'
 import type { ActionDef, CanonicalStrategyIrV1, PredicateDef, SeriesDef } from '../../types/canonical-strategy-ir'
 import type { CanonicalStrategySpec } from '../../types/canonical-strategy-spec'
+import type { AtomExprAtom, SemanticRule } from '../../types/atom-expr'
 import type { SemanticAtomContract, SemanticState, SemanticTriggerState } from '../../types/semantic-state'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
@@ -10,6 +11,62 @@ import { buildNormalizedIntentFromSemanticState } from '../semantic-state-normal
 
 describe('SemanticAtomInvariantService', () => {
   const service = new SemanticAtomInvariantService()
+
+  const atom = (key: string, params: Record<string, unknown> = {}): AtomExprAtom => ({
+    kind: 'atom',
+    key,
+    params,
+  })
+
+  const rule = (input: {
+    id: string
+    phase: SemanticRule['phase']
+    sideScope: SemanticRule['sideScope']
+    condition: SemanticRule['condition']
+    actions?: AtomExprAtom[]
+    positions?: AtomExprAtom[]
+    programs?: AtomExprAtom[]
+  }): SemanticRule => ({
+    id: input.id,
+    phase: input.phase,
+    sideScope: input.sideScope,
+    condition: input.condition,
+    effects: {
+      actions: input.actions ?? [],
+      risks: [],
+      positions: input.positions ?? [],
+      orchestration: [],
+      programs: input.programs ?? [],
+    },
+  })
+
+  const replaceGridProgramRuleParams = (state: SemanticState, params: Record<string, unknown>): void => {
+    state.rules = state.rules?.map(existingRule =>
+      existingRule.id === 'grid-program'
+        ? {
+            ...existingRule,
+            effects: {
+              ...existingRule.effects,
+              programs: [atom('program.fixed_grid_gated', params)],
+            },
+          }
+        : existingRule,
+    )
+  }
+
+  const replaceGridProgramBudgetRuleParams = (state: SemanticState, params: Record<string, unknown>): void => {
+    state.rules = state.rules?.map(existingRule =>
+      existingRule.id === 'grid-program'
+        ? {
+            ...existingRule,
+            effects: {
+              ...existingRule.effects,
+              positions: [atom('position.per_order_budget', params)],
+            },
+          }
+        : existingRule,
+    )
+  }
 
   function buildSemanticState(): SemanticState {
     return {
@@ -41,6 +98,22 @@ describe('SemanticAtomInvariantService', () => {
       action: [
         { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
         { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+      ],
+      rules: [
+        rule({
+          id: 'entry-on-start',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: atom('execution.on_start', { timing: 'on_start', orderType: 'market', occurrence: 'once' }),
+          actions: [atom('action.open_long')],
+        }),
+        rule({
+          id: 'exit-rise-prev-close',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: atom('price.percent_change', { direction: 'up', valuePct: 1, basis: 'prev_close', window: '1h' }),
+          actions: [atom('action.close_long')],
+        }),
       ],
       risk: [],
       position: {
@@ -81,6 +154,16 @@ describe('SemanticAtomInvariantService', () => {
     return {
       ...state,
       trigger: [...state.trigger, secondTrigger],
+      rules: [
+        ...(state.rules ?? []),
+        rule({
+          id: 'exit-rise-prev-close-2',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: atom('price.percent_change', { direction: 'up', valuePct: 2, basis: 'prev_close', window: '1h' }),
+          actions: [atom('action.close_long')],
+        }),
+      ],
     }
   }
 
@@ -100,6 +183,11 @@ describe('SemanticAtomInvariantService', () => {
             }
           : trigger,
       ),
+      rules: state.rules?.map(rule =>
+        rule.id === 'exit-rise-prev-close'
+          ? { ...rule, condition: atom('price.percent_change', { direction: 'up', valuePct: 1, basis: 'prev_close' }) }
+          : rule,
+      ),
     }
   }
 
@@ -118,6 +206,22 @@ describe('SemanticAtomInvariantService', () => {
         { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
         { id: 'close-short', key: 'close_short', status: 'locked', source: 'user_explicit' },
       ],
+      rules: [
+        rule({
+          id: 'entry-on-start',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: atom('execution.on_start', { timing: 'on_start', orderType: 'market', occurrence: 'once' }),
+          actions: [atom('action.open_long')],
+        }),
+        rule({
+          id: 'exit-rise-prev-close',
+          phase: 'exit',
+          sideScope: 'both',
+          condition: atom('price.percent_change', { direction: 'up', valuePct: 1, basis: 'prev_close', window: '1h' }),
+          actions: [atom('action.close_long'), atom('action.close_short')],
+        }),
+      ],
       position: {
         ...state.position!,
         positionMode: 'long_short',
@@ -126,6 +230,18 @@ describe('SemanticAtomInvariantService', () => {
   }
 
   function buildCloseOpenExpressionSemanticState(): SemanticState {
+    const entryExpression = {
+      kind: 'predicate',
+      op: 'GT',
+      left: { kind: 'series', source: 'bar', field: 'close' },
+      right: { kind: 'series', source: 'bar', field: 'open' },
+    }
+    const exitExpression = {
+      kind: 'predicate',
+      op: 'LT',
+      left: { kind: 'series', source: 'bar', field: 'close' },
+      right: { kind: 'series', source: 'bar', field: 'open' },
+    }
     return {
       version: 1,
       families: ['single-leg'],
@@ -136,12 +252,7 @@ describe('SemanticAtomInvariantService', () => {
           phase: 'entry',
           sideScope: 'long',
           params: {
-            expression: {
-              kind: 'predicate',
-              op: 'GT',
-              left: { kind: 'series', source: 'bar', field: 'close' },
-              right: { kind: 'series', source: 'bar', field: 'open' },
-            },
+            expression: entryExpression,
           },
           status: 'locked',
           source: 'user_explicit',
@@ -153,12 +264,7 @@ describe('SemanticAtomInvariantService', () => {
           phase: 'exit',
           sideScope: 'long',
           params: {
-            expression: {
-              kind: 'predicate',
-              op: 'LT',
-              left: { kind: 'series', source: 'bar', field: 'close' },
-              right: { kind: 'series', source: 'bar', field: 'open' },
-            },
+            expression: exitExpression,
           },
           status: 'locked',
           source: 'user_explicit',
@@ -168,6 +274,24 @@ describe('SemanticAtomInvariantService', () => {
       action: [
         { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
         { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+      ],
+      rules: [
+        rule({
+          id: 'entry-close-gt-open',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: atom('condition.expression', { expression: entryExpression }),
+          actions: [atom('action.open_long')],
+          positions: [atom('position.per_order_budget', { value: 10, asset: 'USDT' })],
+        }),
+        rule({
+          id: 'exit-close-lt-open',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: atom('condition.expression', { expression: exitExpression }),
+          actions: [atom('action.close_long')],
+          positions: [atom('position.per_order_budget', { value: 10, asset: 'USDT' })],
+        }),
       ],
       risk: [],
       position: {
@@ -193,6 +317,23 @@ describe('SemanticAtomInvariantService', () => {
 
   function buildLogicalExpressionSemanticState(): SemanticState {
     const state = buildCloseOpenExpressionSemanticState()
+    const expression = {
+      kind: 'AND',
+      children: [
+        {
+          kind: 'predicate',
+          op: 'GT',
+          left: { kind: 'series', source: 'bar', field: 'close' },
+          right: { kind: 'series', source: 'bar', field: 'open' },
+        },
+        {
+          kind: 'predicate',
+          op: 'LT',
+          left: { kind: 'series', source: 'bar', field: 'close' },
+          right: { kind: 'series', source: 'bar', field: 'high' },
+        },
+      ],
+    }
     return {
       ...state,
       trigger: state.trigger.map(trigger =>
@@ -200,32 +341,43 @@ describe('SemanticAtomInvariantService', () => {
           ? {
               ...trigger,
               params: {
-                expression: {
-                  kind: 'AND',
-                  children: [
-                    {
-                      kind: 'predicate',
-                      op: 'GT',
-                      left: { kind: 'series', source: 'bar', field: 'close' },
-                      right: { kind: 'series', source: 'bar', field: 'open' },
-                    },
-                    {
-                      kind: 'predicate',
-                      op: 'LT',
-                      left: { kind: 'series', source: 'bar', field: 'close' },
-                      right: { kind: 'series', source: 'bar', field: 'high' },
-                    },
-                  ],
-                },
+                expression,
               },
             }
           : trigger,
+      ),
+      rules: state.rules?.map(rule =>
+        rule.id === 'entry-close-gt-open'
+          ? { ...rule, condition: atom('condition.expression', { expression }) }
+          : rule,
       ),
     }
   }
 
   function buildOrNotExpressionSemanticState(): SemanticState {
     const state = buildCloseOpenExpressionSemanticState()
+    const expression = {
+      kind: 'OR',
+      children: [
+        {
+          kind: 'predicate',
+          op: 'GT',
+          left: { kind: 'series', source: 'bar', field: 'close' },
+          right: { kind: 'series', source: 'bar', field: 'open' },
+        },
+        {
+          kind: 'NOT',
+          children: [
+            {
+              kind: 'predicate',
+              op: 'LT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'low' },
+            },
+          ],
+        },
+      ],
+    }
     return {
       ...state,
       trigger: state.trigger.map(trigger =>
@@ -233,31 +385,15 @@ describe('SemanticAtomInvariantService', () => {
           ? {
               ...trigger,
               params: {
-                expression: {
-                  kind: 'OR',
-                  children: [
-                    {
-                      kind: 'predicate',
-                      op: 'GT',
-                      left: { kind: 'series', source: 'bar', field: 'close' },
-                      right: { kind: 'series', source: 'bar', field: 'open' },
-                    },
-                    {
-                      kind: 'NOT',
-                      children: [
-                        {
-                          kind: 'predicate',
-                          op: 'LT',
-                          left: { kind: 'series', source: 'bar', field: 'close' },
-                          right: { kind: 'series', source: 'bar', field: 'low' },
-                        },
-                      ],
-                    },
-                  ],
-                },
+                expression,
               },
             }
           : trigger,
+      ),
+      rules: state.rules?.map(rule =>
+        rule.id === 'entry-close-gt-open'
+          ? { ...rule, condition: atom('condition.expression', { expression }) }
+          : rule,
       ),
     }
   }
@@ -351,6 +487,25 @@ describe('SemanticAtomInvariantService', () => {
           source: 'user_explicit',
           contracts: [orderProgramContract],
         },
+      ],
+      rules: [
+        rule({
+          id: 'grid-program',
+          phase: 'program',
+          sideScope: 'both',
+          condition: atom('execution.on_start', { timing: 'on_start', orderType: 'market', occurrence: 'once' }),
+          positions: [atom('position.per_order_budget', { value: 20, asset: 'USDT' })],
+          programs: [atom('program.fixed_grid_gated', {
+            lower: 60000,
+            upper: 80000,
+            gridIntervals: 10,
+            gridCount: 11,
+            absoluteSpacing: 2000,
+            spacingMode: 'arithmetic',
+            recycleOnFill: true,
+            cancelOnStop: true,
+          })],
+        }),
       ],
       risk: [],
       position: {
@@ -1006,6 +1161,7 @@ describe('SemanticAtomInvariantService', () => {
         spacingPct: 0.1,
         spacingMode: 'arithmetic',
       }
+      replaceGridProgramRuleParams(state, levelSet.shape)
     }
     if (state.action[0]?.contracts?.[0]) {
       state.action[0].contracts[0].requires = []
@@ -1037,6 +1193,67 @@ describe('SemanticAtomInvariantService', () => {
     expect(checks).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'semantic_contract.order_program',
+        status: 'passed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('passes condition grid.range_rebalance as rules-only order program with ratio sizing', () => {
+    const base = buildSemanticState()
+    const state: SemanticState = {
+      ...base,
+      trigger: [],
+      action: [],
+      risk: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_short',
+        status: 'locked',
+        source: 'user_explicit',
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+      },
+      contextSlots: {
+        exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请选择交易所', affectsExecution: true },
+        symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '请选择交易标的', affectsExecution: true },
+        marketType: { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'perp', status: 'locked', priority: 'context', questionHint: '请选择市场类型', affectsExecution: true },
+        timeframe: { slotKey: 'timeframe', fieldPath: 'contextSlots.timeframe', value: '15m', status: 'locked', priority: 'context', questionHint: '请选择周期', affectsExecution: true },
+      },
+      rules: [
+        rule({
+          id: 'program-bidirectional-grid-range',
+          phase: 'entry',
+          sideScope: 'both',
+          condition: atom('grid.range_rebalance', {
+            rangeLower: 60000,
+            rangeUpper: 80000,
+            stepPct: 0.5,
+            sideMode: 'both',
+            perGridSizing: 10,
+            breakoutAction: 'continue',
+          }),
+        }),
+      ],
+    }
+
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    expect(canonicalSpec.version === 2 ? canonicalSpec.orderPrograms : []).toHaveLength(1)
+    expect(ir.orderPrograms).toEqual([
+      expect.objectContaining({
+        quantity: { mode: 'pct_equity', value: 10 },
+      }),
+    ])
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.order_program',
+        status: 'passed',
+        level: 'critical',
+      }),
+      expect.objectContaining({
+        key: 'semantic_contract.position_sizing',
         status: 'passed',
         level: 'critical',
       }),
@@ -1084,6 +1301,7 @@ describe('SemanticAtomInvariantService', () => {
         gridCount: 11,
         spacingMode: 'arithmetic',
       }
+      replaceGridProgramRuleParams(state, levelSet.shape)
     }
     if (state.position?.contracts?.[0]?.capabilities[0]) {
       state.position.contracts[0].capabilities[0].shape = { value: 10, asset: 'USDT' }
@@ -1092,6 +1310,7 @@ describe('SemanticAtomInvariantService', () => {
         value: 10,
         sizing: { kind: 'quote', value: 10, asset: 'USDT' },
       }
+      replaceGridProgramBudgetRuleParams(state, { value: 10, asset: 'USDT' })
     }
     state.contextSlots.symbol = { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'ETHUSDT', status: 'locked', priority: 'context', questionHint: '请选择交易标的', affectsExecution: true }
     state.contextSlots.marketType = { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'spot', status: 'locked', priority: 'context', questionHint: '请选择市场类型', affectsExecution: true }
@@ -1165,7 +1384,7 @@ describe('SemanticAtomInvariantService', () => {
     ]))
   })
 
-  it('does not collapse conflicting level_set contracts that only differ by absolute spacing', () => {
+  it('ignores flat conflicting level_set contracts when rules-only order program is authoritative', () => {
     let state = buildContractOrderProgramSemanticState()
     const canonicalState = buildContractOrderProgramSemanticState()
     const triggerContract = state.trigger[0]?.contracts?.[0]
@@ -1200,7 +1419,7 @@ describe('SemanticAtomInvariantService', () => {
     const { canonicalSpec, ir, ast } = compileFromSemanticState(canonicalState)
     const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
 
-    expect(checks).not.toEqual(expect.arrayContaining([
+    expect(checks).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'semantic_contract.order_program',
         status: 'passed',
@@ -1365,7 +1584,7 @@ describe('SemanticAtomInvariantService', () => {
 
   it('detects position sizing contract asset drift across canonical, IR and AST', () => {
     const state = {
-      ...buildCloseOpenExpressionSemanticState(),
+      ...buildSemanticState(),
       position: {
         mode: 'fixed_quote',
         value: 10,
@@ -1374,6 +1593,19 @@ describe('SemanticAtomInvariantService', () => {
         status: 'locked' as const,
         source: 'user_explicit' as const,
       },
+      rules: [{
+        id: 'entry-usdc-budget',
+        phase: 'entry' as const,
+        sideScope: 'long' as const,
+        condition: { kind: 'atom' as const, key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [{ kind: 'atom' as const, key: 'position.per_order_budget', params: { value: 10, asset: 'USDC' } }],
+          orchestration: [],
+          programs: [],
+        },
+      }],
     }
     const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
 
@@ -1443,6 +1675,100 @@ describe('SemanticAtomInvariantService', () => {
     ]))
   })
 
+  it('ignores ordinary add-position sizing when checking main position sizing contract', () => {
+    const state: SemanticState = {
+      ...buildSemanticState(),
+      rules: [
+        rule({
+          id: 'entry-open-long',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: atom('price.breakout_up', { period: 1 }),
+          actions: [atom('action.open_long')],
+        }),
+        rule({
+          id: 'entry-profit-add',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: atom('price.percent_change', { direction: 'up', valuePct: 3, basis: 'entry_avg_price' }),
+          actions: [atom('action.add_position', {
+            addMode: 'profit_pct',
+            profitThreshold: 3,
+            sizing: { kind: 'ratio', value: 0.5, unit: 'ratio' },
+          })],
+          positions: [atom('position.pyramiding_limit', { maxLayers: 3 })],
+        }),
+        rule({
+          id: 'exit-close-long',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: atom('price.percent_change', { direction: 'down', valuePct: 5, basis: 'entry_avg_price' }),
+          actions: [atom('action.close_long')],
+        }),
+      ],
+    }
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.position_sizing',
+        status: 'passed',
+      }),
+    ]))
+  })
+
+  it('ignores stale top-level position sizing for lifecycle-only DCA rules', () => {
+    const state: SemanticState = {
+      ...buildSemanticState(),
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.05,
+        sizing: { kind: 'ratio', value: 0.05, unit: 'ratio' },
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+      rules: [
+        rule({
+          id: 'program-dca',
+          phase: 'program',
+          sideScope: 'long',
+          condition: atom('execution.on_start', { timing: 'on_start' }),
+          positions: [atom('position.dca_schedule', {
+            interval: '1d',
+            perOrderBudget: 100,
+            maxOrders: 2,
+          })],
+        }),
+        rule({
+          id: 'entry-drawdown-add',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: atom('price.percent_change', { direction: 'down', valuePct: 5, basis: 'entry_avg_price' }),
+          actions: [atom('action.add_position', {
+            addMode: 'drawdown_pct',
+            drawdownThreshold: 5,
+            sizing: { kind: 'quote', value: 200, asset: 'USDT' },
+          })],
+        }),
+        rule({
+          id: 'exit-drop',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: atom('price.percent_change', { direction: 'down', valuePct: 5, basis: 'entry_avg_price' }),
+          actions: [atom('action.close_long')],
+        }),
+      ],
+    }
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    expect(checks.some(check => check.key === 'semantic_contract.position_sizing')).toBe(false)
+  })
+
   it('keeps position sizing for rules-tree projected EMA cross flat actions', () => {
     const baseState = buildSemanticState()
     const state: SemanticState = {
@@ -1472,6 +1798,22 @@ describe('SemanticAtomInvariantService', () => {
       action: [
         { id: 'entry-ema-cross-eff-0', key: 'action.open_long', params: {}, status: 'locked', source: 'user_explicit', openSlots: [] },
         { id: 'exit-ema-cross-eff-0', key: 'action.close_long', params: {}, status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      rules: [
+        rule({
+          id: 'entry-ema-cross',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: atom('indicator.cross_over', { indicator: 'ema', fastPeriod: 7, slowPeriod: 21 }),
+          actions: [atom('action.open_long')],
+        }),
+        rule({
+          id: 'exit-ema-cross',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: atom('indicator.cross_under', { indicator: 'ema', fastPeriod: 7, slowPeriod: 21 }),
+          actions: [atom('action.close_long')],
+        }),
       ],
       risk: [],
     }
@@ -1517,6 +1859,22 @@ describe('SemanticAtomInvariantService', () => {
       action: [
         { id: 'open-long', key: 'action.open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
         { id: 'close-long', key: 'action.close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      rules: [
+        rule({
+          id: 'entry-price-drop-cond-0',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: atom('price.percent_change', { direction: 'down', valuePct: 1, basis: 'prev_close', window: '3m' }),
+          actions: [atom('action.open_long')],
+        }),
+        rule({
+          id: 'exit-take-profit-pct-cond-0',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: atom('price.percent_change', { direction: 'up', valuePct: 2, basis: 'entry_avg_price', window: '15m' }),
+          actions: [atom('action.close_long')],
+        }),
       ],
     }
     const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
@@ -1860,6 +2218,19 @@ describe('SemanticAtomInvariantService', () => {
         source: 'derived',
         openSlots: [],
       },
+      rules: [{
+        id: 'entry-derived-budget',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [{ kind: 'atom', key: 'position.per_order_budget', params: { value: 100, asset: 'USDT' } }],
+          orchestration: [],
+          programs: [],
+        },
+      }],
     }
 
     const { canonicalSpec, ir, ast } = compileFromSemanticState(state)

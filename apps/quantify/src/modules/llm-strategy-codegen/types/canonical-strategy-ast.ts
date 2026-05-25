@@ -93,5 +93,6 @@ export interface DecisionProgramNode {
 export interface OrderProgramNode {
   id: string
   sourceRef: string
+  sourcePath?: string
   payload: OrderProgram
 }

@@ -2,6 +2,8 @@ import { STAGING30_RULES_ONLY_CASES } from '../staging30-rules-only-mainflow-cas
 import {
   buildStaging30EvidenceSummary,
   extractStaging30HashesFromResponse,
+  inferStaging30ClarificationAnswer,
+  readStaging30ConfirmationDigest,
 } from '../staging30-rules-only-mainflow-report'
 
 describe('staging30 rules-only mainflow report', () => {
@@ -46,6 +48,64 @@ describe('staging30 rules-only mainflow report', () => {
     expect(summary.passed).toBe(false)
     expect(summary.failedCaseIds).toEqual(['s01'])
     expect(summary.failures[0]).toContain('hashes incomplete')
+  })
+
+  it('requires real dialogue clarification evidence when pending slots were observed', () => {
+    const summary = buildStaging30EvidenceSummary([{
+      caseId: 's01',
+      status: 'passed',
+      hashes: {
+        rulesHash: 'sha256:a',
+        canonicalSpecHash: 'sha256:b',
+        irHash: 'sha256:c',
+        astHash: 'sha256:d',
+        scriptHash: 'sha256:e',
+        runtimeEvaluatorVersion: 'compiler.v1',
+      },
+      usedFlatFallback: false,
+      steps: ['session', 'confirmGenerate', 'publish'],
+      turns: [{
+        step: 'session',
+        status: 'DRAFTING',
+        pendingItemKeys: ['executionContext.exchange'],
+        rulesCount: 1,
+        readinessReady: null,
+        failures: [],
+      }],
+      failureReason: null,
+    }])
+
+    expect(summary.passed).toBe(false)
+    expect(summary.failures[0]).toContain('dialogue clarification loop missing')
+    expect(summary.rootCauseGroups.clarification_not_resolved_to_script).toEqual(['s01'])
+  })
+
+  it('groups mainflow failures by root cause', () => {
+    const summary = buildStaging30EvidenceSummary([
+      {
+        caseId: 's01',
+        status: 'failed',
+        hashes: null,
+        usedFlatFallback: false,
+        steps: ['session', 'clarification'],
+        failureReason: 'rules_tree_empty, hash_chain_missing',
+        rootCause: 'rules_tree_empty',
+      },
+      {
+        caseId: 's02',
+        status: 'failed',
+        hashes: null,
+        usedFlatFallback: true,
+        steps: ['session', 'clarification'],
+        failureReason: 'dispatcher_fallback_used',
+        rootCause: 'dispatcher_fallback_used',
+      },
+    ])
+
+    expect(summary.rootCauseGroups).toEqual({
+      rules_tree_empty: ['s01'],
+      dispatcher_fallback_used: ['s02'],
+    })
   })
 
   it('does not accept astDigest as staging astHash evidence', () => {
@@ -93,6 +153,16 @@ describe('staging30 rules-only mainflow report', () => {
     })
   })
 
+  it('reads confirmation digest from public specDesc when top-level canonicalDigest is absent', () => {
+    expect(readStaging30ConfirmationDigest({
+      canonicalDigest: null,
+      specDesc: {
+        confirmation: { digest: 'sha256:confirm' },
+        canonicalDigest: 'sha256:canonical',
+      },
+    })).toBe('sha256:confirm')
+  })
+
   it('does not invent runtime version when script header is absent', () => {
     expect(extractStaging30HashesFromResponse({
       specDesc: {
@@ -107,5 +177,44 @@ describe('staging30 rules-only mainflow report', () => {
         },
       },
     })).toBeNull()
+  })
+
+  it('answers a concrete DCA exit rule instead of leaving exit empty', () => {
+    const answer = inferStaging30ClarificationAnswer(
+      'ETH 现货每天定投 100 USDT，回撤 5% 加投 200 USDT。',
+      {
+        key: 'rulesTree.exit',
+        field: 'rulesTree.exit',
+        fieldPath: 'rulesTree.exit',
+        slotKey: 'rulesTree.exit',
+        reason: 'missing_exit_rules',
+        question: '请补充退出规则。',
+        blocking: true,
+        status: 'pending',
+      },
+    )
+
+    expect(answer).toContain('下跌 5%')
+    expect(answer).toContain('卖出退出')
+    expect(answer).not.toContain('不设置固定退出规则')
+  })
+
+  it('answers DCA add-position constraint with a parseable max add count', () => {
+    const answer = inferStaging30ClarificationAnswer(
+      'ETH 现货每天定投 100 USDT，回撤 5% 加投 200 USDT。',
+      {
+        key: 'semantic.action.add_position.constraint',
+        field: 'semantic.action.add_position.constraint',
+        fieldPath: 'actions[action.add_position].params.constraint',
+        slotKey: 'action.add_position.constraint',
+        reason: 'missing_add_position_constraint',
+        question: '请确认加仓的约束。',
+        blocking: true,
+        status: 'pending',
+      },
+    )
+
+    expect(answer).toContain('最多加投 1 次')
+    expect(answer).toContain('回撤 5%')
   })
 })

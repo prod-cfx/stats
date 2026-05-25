@@ -1712,7 +1712,7 @@ export class CodegenConversationService {
     }
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const clarificationState = semanticArtifacts.clarificationState
-    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const semanticReadyForGenerate = this.isSemanticReadyForGenerate(clarificationState)
     const clarificationPrompt = semanticArtifacts.clarificationPrompt
     const normalization = semanticArtifacts.normalization
     const canonicalSpec = this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
@@ -1988,7 +1988,7 @@ export class CodegenConversationService {
     )
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const clarificationState = semanticArtifacts.clarificationState
-    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const semanticReadyForGenerate = this.isSemanticReadyForGenerate(clarificationState)
     const normalization = semanticArtifacts.normalization
     const canonicalSpec = this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
@@ -2275,7 +2275,7 @@ export class CodegenConversationService {
       )
       const semanticArtifacts = this.resolveSemanticClarificationArtifacts(replacementState, responseLocale)
       const clarificationState = semanticArtifacts.clarificationState
-      const semanticReadyForGenerate = this.findNextOpenSemanticSlot(replacementState) === null
+      const semanticReadyForGenerate = this.isSemanticReadyForGenerate(clarificationState)
       const normalization = semanticArtifacts.normalization
       const canonicalSpec = this.buildCanonicalSpecForConversation(replacementState, normalization)
       const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
@@ -2449,7 +2449,7 @@ export class CodegenConversationService {
     )
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const clarificationState = semanticArtifacts.clarificationState
-    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const semanticReadyForGenerate = this.isSemanticReadyForGenerate(clarificationState)
     const normalization = semanticArtifacts.normalization
     const canonicalSpec = this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
@@ -2672,7 +2672,7 @@ export class CodegenConversationService {
       baseClarificationState,
       reducedSemanticState,
     )
-    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const semanticReadyForGenerate = this.isSemanticReadyForGenerate(clarificationState)
     const rawConfirmedCanonicalDigest = dto.confirmedCanonicalDigest?.trim() ?? ''
     const confirmedCanonicalDigest = rawConfirmedCanonicalDigest
       || (options.allowServerSideConfirmationDigest ? confirmationViewDigest : '')
@@ -7686,7 +7686,7 @@ export class CodegenConversationService {
     )
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const clarificationState = semanticArtifacts.clarificationState
-    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const semanticReadyForGenerate = this.isSemanticReadyForGenerate(clarificationState)
     const normalization = semanticArtifacts.normalization
     const canonicalSpec = this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
@@ -7989,6 +7989,12 @@ export class CodegenConversationService {
       && clarificationState.items.some(item => item.blocking && item.status === 'pending')
   }
 
+  private isSemanticReadyForGenerate(
+    clarificationState: Pick<StrategyClarificationState, 'status' | 'items'>,
+  ): boolean {
+    return !this.hasPendingBlockingClarification(clarificationState)
+  }
+
   private estimateBlockingReasonPriority(
     reason: StrategyClarificationItem['reason'],
   ): number {
@@ -8146,8 +8152,18 @@ export class CodegenConversationService {
     blockingReasons: StrategyBlockingReason[]
     clarificationPrompt: string | null
   } {
-    const clarificationState = this.buildClarificationFromSemanticState(semanticState)
+    let clarificationState = this.buildClarificationFromSemanticState(semanticState)
     const normalization = this.buildNormalizationFromSemanticState(semanticState, locale)
+    if (clarificationState.status === 'CLEAR' && normalization.blocked) {
+      const nextOpenSlot = this.findNextOpenSemanticSlot(semanticState)
+      if (nextOpenSlot) {
+        clarificationState = {
+          status: 'NEEDS_CLARIFICATION',
+          items: [this.buildSemanticClarificationItem(nextOpenSlot, locale)],
+          summary: this.buildSemanticClarificationSummary(semanticState),
+        }
+      }
+    }
     const executionContext = this.executionContext.resolveFromSemanticState(semanticState)
     const blockingReasons = this.buildEffectiveBlockingReasonsFromClarificationState(clarificationState)
     const clarificationPrompt = this.buildSemanticClarificationPrompt(semanticState, locale)

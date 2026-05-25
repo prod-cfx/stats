@@ -22,10 +22,8 @@ import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { SemanticAtomInvariantService } from './semantic-atom-invariant.service'
 import { CodegenGraphSnapshotService as DefaultCodegenGraphSnapshotService } from './codegen-graph-snapshot.service'
-import { normalizeRiskSemantics } from './semantic-state-normalization'
 import { StrategySummaryObservationService } from './strategy-summary-observation.service'
-import { isRuleEffectsByRole } from '../types/atom-expr'
-import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
+import { collectAtomLeaves, isRuleEffectsByRole } from '../types/atom-expr'
 
 export interface CompiledScriptValidationResult {
   passed: boolean
@@ -118,10 +116,15 @@ export class CodegenPublicationGenerationStage {
       this.publicationGate.assertClarificationResolvedForIrBuild(input.clarificationState)
     }
 
-    const canonicalSpec = input.canonicalSpecOverride
-      ?? this.canonicalSpecBuilder.buildFromSemanticState(input.semanticState)
+    const hasTypedRulesOnlyInput = this.hasTypedRulesOnlyInput(input.semanticState.rules)
+    const canonicalSpec = hasTypedRulesOnlyInput
+      ? this.canonicalSpecBuilder.buildFromSemanticState(input.semanticState)
+      : input.canonicalSpecOverride ?? this.canonicalSpecBuilder.buildFromSemanticState(input.semanticState)
     const semanticPredicateGraph = this.graphSnapshotService.buildFromSemanticArtifacts({ canonicalSpec })
-    const normalizedIntent = this.buildLegacyNormalizedIntentSnapshot(input.semanticState)
+    const normalizedIntent = this.buildRulesOnlyNormalizedIntentSnapshot({
+      semanticState: input.semanticState,
+      canonicalSpec,
+    })
     const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent,
       semanticState: input.semanticState,
@@ -170,7 +173,7 @@ export class CodegenPublicationGenerationStage {
     const canValidateRulesOnlyHashChain = validation.passed
       && typeof this.publicationGate?.validateRulesOnlyHashChain === 'function'
     const rulesOnlyHashChain = canValidateRulesOnlyHashChain
-      ? this.hasTypedRulesOnlyInput(input.semanticState.rules)
+      ? hasTypedRulesOnlyInput
         ? this.publicationGate?.validateRulesOnlyHashChain({
             rules: input.semanticState.rules ?? [],
             canonicalSpec: canonicalSpec as unknown as Record<string, unknown>,
@@ -481,7 +484,10 @@ export class CodegenPublicationGenerationStage {
     }
 
     const position = args.semanticState.position
-    if (
+    const rulesPositionPct = this.readRulesOnlyPositionPct(args.semanticState)
+    if (rulesPositionPct !== null) {
+      locked.positionPct = rulesPositionPct
+    } else if (
       position?.status === 'locked'
       && position.mode === 'fixed_ratio'
       && Number.isFinite(position.value)
@@ -489,31 +495,32 @@ export class CodegenPublicationGenerationStage {
       locked.positionPct = position.value <= 1 ? position.value * 100 : position.value
     }
 
-    for (const risk of normalizeRiskSemantics([...readFlatRisks(args.semanticState)])) {
-      if (risk.status !== 'locked') {
-        continue
+    for (const riskLeaf of this.collectRulesOnlyEffectAtoms(args.semanticState, 'risks')) {
+      const valuePct = this.readRuleRiskValuePct(riskLeaf.params)
+      if (riskLeaf.key === 'risk.stop_loss_pct' && valuePct !== null) {
+        locked.stopLossPct = valuePct
+        const basis = this.readRuleRiskBasis(riskLeaf.params)
+        if (basis) locked.stopLossBasis = basis
       }
-      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
-      if (risk.key === 'risk.stop_loss_pct' && typeof risk.params.valuePct === 'number') {
-        locked.stopLossPct = risk.params.valuePct
+      if (riskLeaf.key === 'risk.take_profit_pct' && valuePct !== null) {
+        locked.takeProfitPct = valuePct
+        const basis = this.readRuleRiskBasis(riskLeaf.params)
+        if (basis) locked.takeProfitBasis = basis
       }
-      // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
-      if (risk.key === 'risk.take_profit_pct' && typeof risk.params.valuePct === 'number') {
-        locked.takeProfitPct = risk.params.valuePct
+    }
+
+    for (const rule of args.canonicalSpec.rules) {
+      const semanticKey = this.readCanonicalRuleSemanticKey(rule.metadata)
+      const valuePct = this.readCanonicalRiskValuePct(rule)
+      if (semanticKey === 'risk.stop_loss_pct' && valuePct !== null) {
+        locked.stopLossPct = valuePct
       }
-      if (
-        // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
-        (risk.key === 'risk.stop_loss_pct' || risk.key === 'risk.take_profit_pct')
-        && typeof risk.params.basis === 'string'
-      ) {
-        // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
-        if (risk.key === 'risk.stop_loss_pct') {
-          locked.stopLossBasis = risk.params.basis
-        }
-        // eslint-disable-next-line atom-keys/no-atom-key-literal -- risk keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
-        if (risk.key === 'risk.take_profit_pct') {
-          locked.takeProfitBasis = risk.params.basis
-        }
+      if (semanticKey === 'risk.take_profit_pct' && valuePct !== null) {
+        locked.takeProfitPct = valuePct
+      }
+      if ((semanticKey === 'risk.stop_loss_pct' || semanticKey === 'risk.take_profit_pct') && typeof rule.metadata?.basis === 'string') {
+        if (semanticKey === 'risk.stop_loss_pct') locked.stopLossBasis = rule.metadata.basis
+        if (semanticKey === 'risk.take_profit_pct') locked.takeProfitBasis = rule.metadata.basis
       }
     }
 
@@ -549,75 +556,109 @@ export class CodegenPublicationGenerationStage {
     }
   }
 
-  private buildLegacyNormalizedIntentSnapshot(semanticState: SemanticState): StrategyNormalizedIntent {
-    const families = new Set(semanticState.families)
-    if (readFlatTriggers(semanticState).some(trigger => trigger.phase === 'gate')) {
+  private buildRulesOnlyNormalizedIntentSnapshot(args: {
+    semanticState: SemanticState
+    canonicalSpec: CanonicalStrategySpecV2
+  }): StrategyNormalizedIntent {
+    const families = new Set(args.semanticState.families)
+    if (args.canonicalSpec.rules.some(rule => rule.phase === 'gate')) {
       families.add('state-gated')
     }
-    const gridTrigger = readFlatTriggers(semanticState).find(trigger =>
-      trigger.key === 'grid.range_rebalance'
-      && trigger.status !== 'superseded'
-      && typeof trigger.params.rangeLower === 'number'
-      && typeof trigger.params.rangeUpper === 'number'
-      && typeof trigger.params.stepPct === 'number',
-    )
-
     return {
       families: Array.from(families) as StrategyNormalizedIntent['families'],
-      triggers: readFlatTriggers(semanticState)
-        .filter(trigger => trigger.status !== 'superseded')
-        .map(trigger => ({
-          key: trigger.key as StrategyNormalizedIntent['triggers'][number]['key'],
-          phase: trigger.phase,
-          ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
-          params: { ...trigger.params } as StrategyNormalizedIntent['triggers'][number]['params'],
-          closureStatus: trigger.status === 'locked' && trigger.openSlots.length === 0 ? 'closed' : 'open',
-          unresolvedSlots: trigger.openSlots.map(slot => ({
-            slotKey: slot.slotKey,
-            fieldPath: slot.fieldPath,
-            reason: 'missing_definition' as const,
-            questionHint: slot.questionHint,
-            priority: slot.priority,
-            affectsExecution: slot.affectsExecution,
-            ...(slot.evidence?.text ? { evidenceText: slot.evidence.text } : {}),
-          })),
-          ...(trigger.evidence?.text ? { evidenceText: trigger.evidence.text } : {}),
+      triggers: args.canonicalSpec.rules
+        .filter(rule => rule.phase === 'entry' || rule.phase === 'exit' || rule.phase === 'gate')
+        .map(rule => ({
+          key: (rule.metadata?.semanticKey ?? rule.condition.kind) as StrategyNormalizedIntent['triggers'][number]['key'],
+          phase: rule.phase as StrategyNormalizedIntent['triggers'][number]['phase'],
+          sideScope: rule.sideScope as StrategyNormalizedIntent['triggers'][number]['sideScope'],
+          params: {},
+          closureStatus: 'closed',
+          unresolvedSlots: [],
         })),
-      actions: readFlatActions(semanticState).map(action => ({
+      actions: this.collectRulesOnlyEffectAtoms(args.semanticState, 'actions').map(action => ({
         key: action.key,
-        ...(action.params ? { params: { ...action.params } } : {}),
+        params: action.params,
       })),
-      risk: normalizeRiskSemantics([...readFlatRisks(semanticState)]).map(risk => ({
+      risk: this.collectRulesOnlyEffectAtoms(args.semanticState, 'risks').map(risk => ({
         key: risk.key,
-        params: { ...risk.params },
+        params: risk.params,
       })),
-      position: semanticState.position
-        ? {
-            mode: semanticState.position.mode as StrategyNormalizedIntent['position']['mode'],
-            value: semanticState.position.value,
-            positionMode: semanticState.position.positionMode as StrategyNormalizedIntent['position']['positionMode'],
-          }
-        : null,
-      ...(gridTrigger
-        ? {
-            grid: {
-              family: 'grid.range_rebalance',
-              range: {
-                lower: gridTrigger.params.rangeLower as number,
-                upper: gridTrigger.params.rangeUpper as number,
-              },
-              stepPct: gridTrigger.params.stepPct as number,
-              sideMode: (gridTrigger.params.sideMode as StrategyNormalizedIntent['grid']['sideMode']) ?? 'bidirectional',
-              recycle: gridTrigger.params.recycle !== false,
-              ...(gridTrigger.params.breakoutAction === 'pause' || gridTrigger.params.breakoutAction === 'continue'
-                ? { breakoutAction: gridTrigger.params.breakoutAction }
-                : {}),
-            },
-          }
-        : {}),
+      position: this.buildRulesOnlyNormalizedPosition(args.semanticState),
       unresolved: [],
-      normalizationNotes: [...semanticState.normalizationNotes],
+      normalizationNotes: [...args.semanticState.normalizationNotes],
     }
+  }
+
+  private collectRulesOnlyEffectAtoms(
+    semanticState: SemanticState,
+    role: 'actions' | 'risks' | 'positions' | 'orchestration' | 'programs',
+  ) {
+    const rules = semanticState.rules ?? []
+    if (!this.hasTypedRulesOnlyInput(rules)) return []
+    return rules.flatMap(rule =>
+      isRuleEffectsByRole(rule.effects)
+        ? rule.effects[role].flatMap(effect => collectAtomLeaves(effect))
+        : [],
+    )
+  }
+
+  private buildRulesOnlyNormalizedPosition(semanticState: SemanticState): StrategyNormalizedIntent['position'] {
+    const positionPct = this.readRulesOnlyPositionPct(semanticState)
+    if (positionPct === null) {
+      return null as unknown as StrategyNormalizedIntent['position']
+    }
+    return {
+      mode: 'fixed_ratio',
+      value: positionPct <= 1 ? positionPct : positionPct / 100,
+      positionMode: this.readRulesOnlyPositionMode(semanticState),
+    }
+  }
+
+  private readRulesOnlyPositionPct(semanticState: SemanticState): number | null {
+    for (const leaf of this.collectRulesOnlyEffectAtoms(semanticState, 'positions')) {
+      if (leaf.key !== 'position.per_order_budget' && leaf.key !== 'position.sizing') continue
+      const value = leaf.params.value
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+        return value <= 1 ? Number((value * 100).toFixed(8)) : value
+      }
+    }
+    return null
+  }
+
+  private readRulesOnlyPositionMode(semanticState: SemanticState): StrategyNormalizedIntent['position']['positionMode'] {
+    const actions = this.collectRulesOnlyEffectAtoms(semanticState, 'actions').map(action => action.key)
+    const hasLong = actions.includes('action.open_long') || actions.includes('action.close_long')
+    const hasShort = actions.includes('action.open_short') || actions.includes('action.close_short')
+    if (hasLong && hasShort) return 'long_short'
+    if (hasShort) return 'short_only'
+    return 'long_only'
+  }
+
+  private readRuleRiskValuePct(params: Record<string, unknown>): number | null {
+    const value = params.valuePct
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+      return value
+    }
+    return null
+  }
+
+  private readRuleRiskBasis(params: Record<string, unknown>): string | null {
+    return typeof params.basis === 'string' ? params.basis : null
+  }
+
+  private readCanonicalRuleSemanticKey(metadata: CanonicalStrategySpecV2['rules'][number]['metadata']): string | null {
+    return typeof metadata?.semanticKey === 'string' ? metadata.semanticKey : null
+  }
+
+  private readCanonicalRiskValuePct(rule: CanonicalStrategySpecV2['rules'][number]): number | null {
+    if (rule.condition.kind === 'atom' && typeof rule.condition.value === 'number') {
+      return Number((rule.condition.value * 100).toFixed(8))
+    }
+    if (rule.condition.kind === 'expression' && rule.condition.right.kind === 'constant' && typeof rule.condition.right.value === 'number') {
+      return Math.abs(rule.condition.right.value)
+    }
+    return null
   }
 
   private resolveSemanticPositionMode(
@@ -636,6 +677,20 @@ export class CodegenPublicationGenerationStage {
     if (hasLong && hasShort) return 'long_short'
     if (hasShort) return 'short_only'
     if (hasLong) return 'long_only'
+
+    const hasGridProgram = (canonicalSpec.orchestration?.programs ?? []).some(program =>
+      program.programKind === 'fixed_grid_gated'
+      || program.programKind === 'dynamic_grid'
+      || program.programKind === 'adaptive_volatility_grid',
+    )
+    const canonicalSpecWithOrderPrograms = canonicalSpec as unknown as { orderPrograms?: unknown }
+    const orderPrograms = Array.isArray(canonicalSpecWithOrderPrograms.orderPrograms)
+      ? canonicalSpecWithOrderPrograms.orderPrograms as Array<{ programKind?: unknown, mode?: unknown }>
+      : []
+    if (orderPrograms.some(program => program.mode === 'perp_neutral')) return 'long_short'
+    if (orderPrograms.some(program => program.mode === 'perp_short')) return 'short_only'
+    if (orderPrograms.some(program => program.programKind === 'fixed_grid_gated')) return 'long_only'
+    if (hasGridProgram) return canonicalSpec.market.marketType === 'perp' ? 'long_short' : 'long_only'
 
     const semanticMode = semanticState.position?.positionMode
     if (semanticMode === 'long_only' || semanticMode === 'short_only' || semanticMode === 'long_short') {

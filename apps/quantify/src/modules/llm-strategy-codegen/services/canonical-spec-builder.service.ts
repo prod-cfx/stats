@@ -62,6 +62,7 @@ import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
 // 用 `as const` 标识符避开 Literal AST 检测。
 const FIELD_KEY = {
   ACTION_REDUCE_POSITION: 'action.reduce_position',
+  CONDITION_EXPRESSION: 'condition.expression',
   PORTFOLIO_RISK_SUBSTRATEGY_EXPOSURE_CAP: 'portfolioRisk.substrategy_exposure_cap',
   PORTFOLIO_RISK_SYMBOL_EXPOSURE_CAP: 'portfolioRisk.symbol_exposure_cap',
   PRICE_ROLLING_EXTREMA_BREAKOUT: 'price.rolling_extrema_breakout',
@@ -681,7 +682,7 @@ export class CanonicalSpecBuilderService {
   private resolveSemanticRulesMainflowRoute(state: SemanticState): 'empty_or_legacy' | 'typed' {
     const rules = state.rules ?? []
     if (rules.length === 0) {
-      return 'empty_or_legacy'
+      throw new Error('InvalidSemanticRulesMainflow: reason=rules_missing_or_empty')
     }
 
     const legacyRuleEntries = rules
@@ -691,7 +692,7 @@ export class CanonicalSpecBuilderService {
       return 'typed'
     }
     if (legacyRuleEntries.length === rules.length) {
-      return 'empty_or_legacy'
+      throw new Error('InvalidSemanticRulesMainflow: reason=legacy_effects_array')
     }
 
     const firstLegacy = legacyRuleEntries[0]
@@ -710,11 +711,22 @@ export class CanonicalSpecBuilderService {
     const isMultiLeg = state.isMultiLeg === true
     const sizing: CanonicalStrategySpecV2['sizing'] = isMultiLeg
       ? null
-      : (this.resolveSizingFromSemanticRulePositionLeaves(mainflow.byRole.position) ?? { mode: 'RATIO' as const, value: 0.1 })
-    const orderPrograms: CanonicalOrderProgramIntent[] = []
+      : (
+          this.resolveSizingFromSemanticRulePositionLeaves(mainflow.byRole.position)
+          ?? (
+            this.hasRulesMainflowOpenPositionAction(mainflow)
+              || mainflow.byRole.program.length > 0
+              || mainflow.byRole.condition.some(leaf => leaf.key === 'grid.range_rebalance')
+              ? this.resolveSizingFromSemanticState(state.position)
+              : null
+          )
+          ?? { mode: 'RATIO' as const, value: 0.1 }
+        )
+    const orderPrograms = this.buildOrderProgramsFromSemanticRulesMainflow(mainflow, state)
     const rules = this.buildCanonicalRulesFromSemanticRulesMainflow(mainflow, sizing)
-    const orchestrationPrograms = this.buildOrchestrationProgramsFromSemanticRulesMainflow(mainflow)
+    const orchestrationPrograms = this.buildOrchestrationProgramsFromSemanticRulesMainflow(mainflow, state)
     const orchestrationGates = this.buildProgramGatesFromSemanticRulesMainflow(mainflow)
+      .filter(gate => orchestrationPrograms.some(program => program.activeWhenRef === gate.id))
     const orchestrationScopes = [
       ...this.buildProgramScopesFromSemanticRulesMainflow(orchestrationPrograms),
       ...this.buildOrchestrationScopesFromSemanticRulesMainflow(mainflow),
@@ -827,20 +839,63 @@ export class CanonicalSpecBuilderService {
     for (const [ruleIndex, rule] of mainflow.rules.entries()) {
       if (rule.phase === 'entry' || rule.phase === 'exit') {
         const phase = rule.phase
-        const condition = this.buildConditionFromSemanticRuleExpr(rule.condition, phase, rule.sideScope, defaultTimeframe)
-        const actions = mainflow.byRole.action
-          .filter(leaf => leaf.ruleId === rule.id)
-          .flatMap((leaf) => {
-            const actionLeaf = this.atomLeafFromMainflowLeaf(leaf)
-            const builtActions = this.buildCanonicalActionsFromRuleEffectLeaf(actionLeaf, phase, sizing, leaf.path)
-            if (builtActions.length === 0) {
-              throw new Error(`UnsupportedSemanticRuleActionEffect: key=${leaf.key} sourcePath=${leaf.path}`)
-            }
-            return builtActions.map(action => ({
-              ...action,
-              sourcePath: leaf.path,
-            }))
+        if (phase === 'exit' && rule.condition.kind === 'atom' && this.isRulesMainflowExitRiskConditionAtom(rule.condition.key)) {
+          const riskRule = this.buildCanonicalRiskRuleFromRuleEffectLeaf({
+            leaf: rule.condition,
+            rule,
+            sourcePath: `rules[${ruleIndex}].condition`,
+            priority: riskPriority,
           })
+          if (!riskRule) {
+            throw new Error(`UnsupportedSemanticRuleRiskCondition: key=${rule.condition.key} sourcePath=rules[${ruleIndex}].condition`)
+          }
+          canonicalRules.push(riskRule)
+          riskPriority -= 1
+          continue
+        }
+        const split = this.splitPositionPresenceGatesFromSemanticRuleCondition(rule.condition)
+        if (phase === 'entry') {
+          for (const [gateIndex, gateAtom] of split.gateAtoms.entries()) {
+            const gateCondition = this.buildConditionFromSemanticRuleAtom(gateAtom, 'gate', rule.sideScope, defaultTimeframe)
+            if (!gateCondition || !this.isNoPositionGateCondition(gateCondition)) continue
+            canonicalRules.push({
+              id: `semantic-gate-${rule.id}-${gateIndex + 1}`,
+              phase: 'gate',
+              sideScope: rule.sideScope,
+              priority: this.resolveSemanticRulePriority('gate', gateIndex + 1),
+              condition: gateCondition,
+              actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+              metadata: {
+                normalized: {
+                  source: 'normalized-intent',
+                  triggerKeys: [gateAtom.key],
+                  actionKeys: ['BLOCK_NEW_ENTRY'],
+                  family: 'state-gated',
+                },
+                sourcePath: `rules[${ruleIndex}].condition`,
+              },
+            })
+          }
+        }
+        if (!split.condition && phase === 'entry') continue
+        const condition = split.condition
+          ? this.buildConditionFromSemanticRuleExpr(split.condition, phase, rule.sideScope, defaultTimeframe)
+          : null
+        const actions = condition
+          ? mainflow.byRole.action
+              .filter(leaf => leaf.ruleId === rule.id)
+              .flatMap((leaf) => {
+                const actionLeaf = this.atomLeafFromMainflowLeaf(leaf)
+                const builtActions = this.buildCanonicalActionsFromRuleEffectLeaf(actionLeaf, phase, sizing, leaf.path)
+                if (builtActions.length === 0) {
+                  throw new Error(`UnsupportedSemanticRuleActionEffect: key=${leaf.key} sourcePath=${leaf.path}`)
+                }
+                return builtActions.map(action => ({
+                  ...action,
+                  sourcePath: leaf.path,
+                }))
+              })
+          : []
 
         if (condition && actions.length > 0) {
           canonicalRules.push({
@@ -890,13 +945,30 @@ export class CanonicalSpecBuilderService {
     return canonicalRules
   }
 
+  private isRulesMainflowExitRiskConditionAtom(key: string): boolean {
+    return key === FIELD_KEY.RISK_STOP_LOSS_PCT
+      || key === FIELD_KEY.RISK_TAKE_PROFIT_PCT
+      || key === FIELD_KEY.RISK_ATR_STOP
+      || key === FIELD_KEY.RISK_ATR_TAKE_PROFIT
+      || key === FIELD_KEY.RISK_ATR_MULTIPLE_STOP
+      || key === FIELD_KEY.RISK_ATR_MULTIPLE_TAKE_PROFIT
+      || key === FIELD_KEY.RISK_REMEMBERED_LEVEL_STOP
+  }
+
+  private hasRulesMainflowOpenPositionAction(mainflow: RulesMainflowView): boolean {
+    return mainflow.byRole.action.some(leaf =>
+      leaf.key === ATOM_CONTRACT_REGISTRY['action.open_long'].key
+      || leaf.key === ATOM_CONTRACT_REGISTRY['action.open_short'].key,
+    )
+  }
+
   private buildCanonicalDcaRuleFromRuleEffectLeaf(input: {
     leaf: AtomExprAtom
     rule: SemanticRule
     sourcePath: string
     priority: number
   }): CanonicalRuleV2 {
-    if (input.rule.phase !== 'entry') {
+    if (input.rule.phase !== 'entry' && input.rule.phase !== 'program') {
       throw new Error(`InvalidSemanticRulePositionEffect: key=${input.leaf.key} sourcePath=${input.sourcePath}`)
     }
 
@@ -978,6 +1050,78 @@ export class CanonicalSpecBuilderService {
     sourcePath: string
     priority: number
   }): CanonicalRuleV2 | null {
+    if (input.leaf.key === FIELD_KEY.RISK_ATR_STOP) {
+      const atrParams = extractAtrStopParams(input.leaf.params)
+      if (atrParams === null) return null
+      return {
+        id: `semantic-risk-${input.rule.id}-${input.priority}`,
+        phase: 'risk',
+        sideScope: input.rule.sideScope,
+        priority: input.priority,
+        condition: {
+          kind: 'atom',
+          key: FIELD_KEY.RISK_ATR_STOP,
+          semanticScope: 'position',
+          params: atrParams,
+        },
+        actions: [{ type: 'FORCE_EXIT' }],
+        metadata: {
+          semanticKey: input.leaf.key,
+          sourcePath: input.sourcePath,
+        },
+      }
+    }
+    if (input.leaf.key === FIELD_KEY.RISK_ATR_TAKE_PROFIT) {
+      const multiple = typeof input.leaf.params.multiple === 'number' && Number.isFinite(input.leaf.params.multiple)
+        ? input.leaf.params.multiple
+        : typeof input.leaf.params.multiplier === 'number' && Number.isFinite(input.leaf.params.multiplier)
+          ? input.leaf.params.multiplier
+          : null
+      if (multiple === null || multiple <= 0) return null
+      const period = typeof input.leaf.params.period === 'number' && Number.isInteger(input.leaf.params.period) && input.leaf.params.period > 0
+        ? input.leaf.params.period
+        : 14
+      return {
+        id: `semantic-risk-${input.rule.id}-${input.priority}`,
+        phase: 'risk',
+        sideScope: input.rule.sideScope,
+        priority: input.priority,
+        condition: {
+          kind: 'atom',
+          key: FIELD_KEY.RISK_ATR_TAKE_PROFIT,
+          semanticScope: 'position',
+          params: { period, multiple },
+        },
+        actions: this.buildAtrTakeProfitActions(input.rule.sideScope),
+        metadata: {
+          semanticKey: input.leaf.key,
+          sourcePath: input.sourcePath,
+        },
+      }
+    }
+    if (
+      input.leaf.key === FIELD_KEY.RISK_ATR_MULTIPLE_STOP
+      || input.leaf.key === FIELD_KEY.RISK_ATR_MULTIPLE_TAKE_PROFIT
+      || input.leaf.key === FIELD_KEY.RISK_REMEMBERED_LEVEL_STOP
+    ) {
+      const riskRule = this.buildAtomicContractRiskRule({
+        id: `${input.rule.id}-${input.priority}`,
+        key: input.leaf.key,
+        params: input.leaf.params,
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }, input.rule.sideScope, input.priority)
+      return riskRule
+        ? {
+            ...riskRule,
+            metadata: {
+              ...riskRule.metadata,
+              sourcePath: input.sourcePath,
+            },
+          }
+        : null
+    }
     if (input.leaf.key !== FIELD_KEY.RISK_STOP_LOSS_PCT && input.leaf.key !== FIELD_KEY.RISK_TAKE_PROFIT_PCT) {
       return null
     }
@@ -1003,6 +1147,7 @@ export class CanonicalSpecBuilderService {
 
   private buildOrchestrationProgramsFromSemanticRulesMainflow(
     mainflow: RulesMainflowView,
+    state: SemanticState,
   ): CanonicalOrchestrationProgram[] {
     const programs: CanonicalOrchestrationProgram[] = []
     const leafCountByEffectPath = new Map<string, number>()
@@ -1013,8 +1158,21 @@ export class CanonicalSpecBuilderService {
       const effectPath = `rules[${leaf.ruleIndex}].effects.programs[${effectIndex}]`
       const leafIndex = leafCountByEffectPath.get(effectPath) ?? 0
       leafCountByEffectPath.set(effectPath, leafIndex + 1)
+      const enrichedLeaf = this.enrichProgramLeafFromRuleContext(this.atomLeafFromMainflowLeaf(leaf), rule)
+      if (
+        (leaf.key === 'program.fixed_grid' || leaf.key === 'program.fixed_grid_gated')
+        && this.rulesMainflowGridOrderProgramOwnsRule(mainflow, leaf, state)
+        && this.buildCanonicalFixedGridProgramFromRuleEffectLeaf(
+          enrichedLeaf,
+          `semantic-program-${rule.id}-${effectIndex}-${leafIndex}`,
+          leaf.path,
+          this.programGateIdForRuleEffectLeaf(leaf),
+        ) === null
+      ) {
+        continue
+      }
       const program = this.buildCanonicalProgramFromRuleEffectLeaf(
-        this.atomLeafFromMainflowLeaf(leaf),
+        enrichedLeaf,
         `semantic-program-${rule.id}-${effectIndex}-${leafIndex}`,
         leaf.path,
         this.programGateIdForRuleEffectLeaf(leaf),
@@ -1024,6 +1182,173 @@ export class CanonicalSpecBuilderService {
       }
     }
     return programs
+  }
+
+  private rulesMainflowGridOrderProgramOwnsRule(
+    mainflow: RulesMainflowView,
+    leaf: RulesMainflowLeaf,
+    state: SemanticState,
+  ): boolean {
+    const positionLeaves = mainflow.byRole.position.filter(positionLeaf => positionLeaf.ruleId === leaf.ruleId)
+    const effectBudget = this.projectCanonicalOrderProgramBudgetFromRulePositionLeaves(positionLeaves)
+      ?? this.projectCanonicalOrderProgramBudgetFromGridLeaf(leaf, state)
+    if (this.projectCanonicalOrderProgramLevelSetFromRuleProgramLeaf(leaf) && effectBudget) {
+      return true
+    }
+
+    return mainflow.byRole.condition
+      .filter(conditionLeaf => conditionLeaf.ruleId === leaf.ruleId && conditionLeaf.key === 'grid.range_rebalance')
+      .some((conditionLeaf) => {
+        const levelSet = this.projectCanonicalOrderProgramLevelSetFromRuleProgramLeaf(conditionLeaf)
+        const budget = this.projectCanonicalOrderProgramBudgetFromRulePositionLeaves(positionLeaves)
+          ?? this.projectCanonicalOrderProgramBudgetFromGridLeaf(conditionLeaf, state)
+        return Boolean(levelSet && budget)
+      })
+  }
+
+  private buildOrderProgramsFromSemanticRulesMainflow(
+    mainflow: RulesMainflowView,
+    state: SemanticState,
+  ): CanonicalOrderProgramIntent[] {
+    const orderPrograms: CanonicalOrderProgramIntent[] = []
+    const candidates = [
+      ...mainflow.byRole.program.filter(leaf => leaf.key === 'program.fixed_grid' || leaf.key === 'program.fixed_grid_gated'),
+      ...mainflow.byRole.condition.filter(leaf => leaf.key === 'grid.range_rebalance'),
+    ]
+    const seen = new Set<string>()
+    for (const leaf of candidates) {
+      const seenKey = `${leaf.ruleId}:${leaf.key}:${this.stableRulesPathId(leaf.path)}`
+      if (seen.has(seenKey)) continue
+      seen.add(seenKey)
+
+      const levelSet = this.projectCanonicalOrderProgramLevelSetFromRuleProgramLeaf(leaf)
+      const budget = this.projectCanonicalOrderProgramBudgetFromRulePositionLeaves(
+        mainflow.byRole.position.filter(positionLeaf => positionLeaf.ruleId === leaf.ruleId),
+      ) ?? this.projectCanonicalOrderProgramBudgetFromGridLeaf(leaf, state)
+      if (!levelSet || !budget) {
+        continue
+      }
+
+      orderPrograms.push({
+        id: `semantic-order-program-${leaf.ruleId}-${this.stableRulesPathId(leaf.path)}`,
+        kind: 'contract_order_program',
+        sourcePath: leaf.path,
+        programKind: 'fixed_grid_gated',
+        mode: this.resolveContractOrderProgramMode(null, state),
+        levelSet,
+        budget,
+        orderType: 'limit',
+        timeInForce: 'gtc',
+        recycleOnFill: leaf.params.recycleOnFill !== false,
+        cancelOnStop: leaf.params.cancelOnStop !== false,
+      })
+    }
+
+    return orderPrograms
+  }
+
+  private projectCanonicalOrderProgramBudgetFromGridLeaf(
+    leaf: RulesMainflowLeaf,
+    state: SemanticState,
+  ): CanonicalOrderProgramIntent['budget'] | null {
+    const semanticSizing = this.resolveSizingFromSemanticState(state.position)
+    if (semanticSizing?.mode === 'RATIO' && semanticSizing.value > 0) {
+      return {
+        mode: 'per_order_pct_equity',
+        value: semanticSizing.value <= 1 ? Number((semanticSizing.value * 100).toFixed(8)) : semanticSizing.value,
+      }
+    }
+    if (semanticSizing?.mode === 'QUOTE' && semanticSizing.value > 0) {
+      return {
+        mode: 'per_order_quote',
+        value: semanticSizing.value,
+        asset: semanticSizing.asset ?? 'USDT',
+      }
+    }
+
+    const perGridSizing = this.readFiniteNumber(leaf.params.perGridSizing)
+    if (perGridSizing === null || perGridSizing <= 0) return null
+    return {
+      mode: 'per_order_quote',
+      value: perGridSizing,
+      asset: 'USDT',
+    }
+  }
+
+  private projectCanonicalOrderProgramLevelSetFromRuleProgramLeaf(
+    leaf: RulesMainflowLeaf,
+  ): CanonicalOrderProgramIntent['levelSet'] | null {
+    const mode = typeof leaf.params.mode === 'string' ? leaf.params.mode : null
+    const spacingMode = leaf.params.spacingMode === 'geometric' ? 'geometric' : 'arithmetic'
+    const gridIntervals = this.readFiniteNumber(leaf.params.gridIntervals)
+    const gridCount = this.readFiniteNumber(leaf.params.gridCount)
+      ?? this.readFiniteNumber(leaf.params.levelCount)
+      ?? this.readFiniteNumber(leaf.params.levels)
+    const absoluteSpacing = this.readFiniteNumber(leaf.params.absoluteSpacing)
+    const spacingPct = this.readFiniteNumber(leaf.params.spacingPct)
+      ?? this.readFiniteNumber(leaf.params.stepPct)
+    const centerOffsetPct = this.readFiniteNumber(leaf.params.centerOffsetPct)
+    const lower = this.readFiniteNumber(leaf.params.lower)
+      ?? this.readFiniteNumber(leaf.params.lowerBound)
+      ?? this.readFiniteNumber(leaf.params.rangeLower)
+    const upper = this.readFiniteNumber(leaf.params.upper)
+      ?? this.readFiniteNumber(leaf.params.upperBound)
+      ?? this.readFiniteNumber(leaf.params.rangeUpper)
+
+    if (mode === 'centered_percent_range' || (centerOffsetPct !== null && centerOffsetPct > 0 && (lower === null || upper === null))) {
+      const halfRangePct = this.readFiniteNumber(leaf.params.halfRangePct) ?? centerOffsetPct
+      if (halfRangePct === null || halfRangePct <= 0) return null
+
+      return {
+        mode: 'centered_percent_range',
+        centerTiming: leaf.params.centerTiming === 'runtime' ? 'runtime' : 'deployment',
+        centerSource: typeof leaf.params.centerSource === 'string' && leaf.params.centerSource.trim() !== ''
+          ? leaf.params.centerSource.trim()
+          : 'last_price',
+        halfRangePct,
+        ...(gridIntervals !== null ? { gridIntervals } : {}),
+        ...(gridCount !== null ? { gridCount } : {}),
+        ...(absoluteSpacing !== null ? { absoluteSpacing } : {}),
+        ...(spacingPct !== null ? { spacingPct } : {}),
+        spacingMode,
+      }
+    }
+
+    if (lower === null || upper === null || upper <= lower) return null
+
+    return {
+      lower,
+      upper,
+      ...(gridIntervals !== null ? { gridIntervals } : {}),
+      ...(gridCount !== null ? { gridCount } : {}),
+      ...(absoluteSpacing !== null ? { absoluteSpacing } : {}),
+      ...(spacingPct !== null ? { spacingPct } : {}),
+      spacingMode,
+    }
+  }
+
+  private projectCanonicalOrderProgramBudgetFromRulePositionLeaves(
+    leaves: readonly RulesMainflowLeaf[],
+  ): CanonicalOrderProgramIntent['budget'] | null {
+    for (const leaf of leaves) {
+      if (leaf.key !== FIELD_KEY.POSITION_PER_ORDER_BUDGET) {
+        continue
+      }
+      const value = this.readFiniteNumber(leaf.params.value)
+      if (value === null || value <= 0) {
+        continue
+      }
+      const asset = typeof leaf.params.asset === 'string' && leaf.params.asset.trim() !== ''
+        ? leaf.params.asset.trim().toUpperCase()
+        : 'USDT'
+      return {
+        mode: 'per_order_quote',
+        value,
+        asset,
+      }
+    }
+
+    return null
   }
 
   private buildProgramGatesFromSemanticRulesMainflow(
@@ -1039,6 +1364,7 @@ export class CanonicalSpecBuilderService {
       seen.add(gateId)
       gates.push({
         id: gateId,
+        sourcePath: leaf.path,
         target: { phase: 'strategy' },
         activeWhen: this.buildProgramGateConditionFromRule(rule),
         effectWhenFalse: 'block_new_entries',
@@ -1284,10 +1610,111 @@ export class CanonicalSpecBuilderService {
     activeWhenRef: string,
   ): CanonicalOrchestrationProgram | null {
     const program = this.buildCanonicalProgramFromSupportedRuleEffectLeaf(leaf, id, sourcePath, activeWhenRef)
+    if (!program && (leaf.key === 'program.fixed_grid' || leaf.key === 'program.fixed_grid_gated')) {
+      return null
+    }
     if (!program) {
       throw new Error(`InvalidSemanticRuleProgramEffect: key=${leaf.key} sourcePath=${sourcePath}`)
     }
     return program
+  }
+
+  private enrichProgramLeafFromRuleContext(
+    leaf: AtomExprAtom,
+    rule: SemanticRule,
+  ): AtomExprAtom {
+    if (!isRuleEffectsByRole(rule.effects)) {
+      return leaf
+    }
+
+    const sizing = this.resolveProgramSizingFromTypedRuleEffects(rule.effects)
+      ?? this.resolveProgramSizingFromRuleProgramLeaf(leaf)
+    const params = {
+      ...this.defaultProgramParamsFromRuleContext(leaf, rule),
+      ...leaf.params,
+      ...(leaf.params.sizing ? {} : { sizing }),
+    }
+
+    return { ...leaf, params }
+  }
+
+  private defaultProgramParamsFromRuleContext(
+    leaf: AtomExprAtom,
+    rule: SemanticRule,
+  ): Record<string, unknown> {
+    switch (leaf.key) {
+      case 'program.dynamic_grid':
+        return {
+          anchorLookbackBars: this.readFiniteNumber(leaf.params.anchorLookbackBars)
+            ?? this.readFiniteNumber(leaf.params.lookbackBars)
+            ?? this.readFirstConditionNumericParam(rule.condition, ['lookbackBars', 'windowBars'])
+            ?? 20,
+          anchorSide: leaf.params.anchorSide === 'high' || leaf.params.anchorSide === 'low' || leaf.params.anchorSide === 'mid'
+            ? leaf.params.anchorSide
+            : 'mid',
+          anchorDriftPct: this.readFiniteNumber(leaf.params.anchorDriftPct) ?? 10,
+          rebuildMinIntervalSec: this.readFiniteNumber(leaf.params.rebuildMinIntervalSec) ?? 60,
+          dynamicGridStep: this.readDynamicGridStepParam(leaf.params.dynamicGridStep)
+            ?? { mode: 'pct', value: this.readFiniteNumber(leaf.params.stepPct) ?? 0.5 },
+          levelCount: this.readFiniteNumber(leaf.params.levelCount) ?? this.readFiniteNumber(leaf.params.levels) ?? 10,
+          onDeactivate: leaf.params.onDeactivate === 'keep' || leaf.params.onDeactivate === 'close' ? leaf.params.onDeactivate : 'cancel',
+        }
+      case 'program.adaptive_volatility_grid':
+        return {
+          atrPeriod: this.readFiniteNumber(leaf.params.atrPeriod) ?? 14,
+          atrMultiplier: this.readFiniteNumber(leaf.params.atrMultiplier) ?? 1.5,
+          rangeMultiplier: this.readFiniteNumber(leaf.params.rangeMultiplier) ?? 3,
+          atrDriftPct: this.readFiniteNumber(leaf.params.atrDriftPct) ?? 20,
+          rebuildCooldownSec: this.readFiniteNumber(leaf.params.rebuildCooldownSec) ?? 300,
+          minStepPct: this.readFiniteNumber(leaf.params.minStepPct) ?? 0.2,
+          maxStepPct: this.readFiniteNumber(leaf.params.maxStepPct) ?? 2,
+          levelCount: this.readFiniteNumber(leaf.params.levelCount) ?? 6,
+          onDeactivate: leaf.params.onDeactivate === 'keep' || leaf.params.onDeactivate === 'close' ? leaf.params.onDeactivate : 'cancel',
+        }
+      case 'program.event_listener': {
+        const signal = this.findConditionAtom(rule.condition, 'external.signal')
+        const provider = typeof signal?.params.provider === 'string' && signal.params.provider.trim() !== ''
+          ? signal.params.provider.trim()
+          : 'webhook'
+        return {
+          eventSchemaRef: 'webhook_event',
+          sourceRef: typeof leaf.params.sourceRef === 'string' && leaf.params.sourceRef.trim() !== ''
+            ? leaf.params.sourceRef
+            : `${provider}:default`,
+          permissionScope: typeof leaf.params.permissionScope === 'string' && leaf.params.permissionScope.trim() !== ''
+            ? leaf.params.permissionScope
+            : `${provider}:default`,
+          idempotencyKey: this.readEventListenerIdempotencyKeyParam(leaf.params.idempotencyKey) ?? { fieldPath: 'signalId' },
+          dedupWindowMs: this.readFiniteNumber(leaf.params.dedupWindowMs) ?? 1000,
+          expirationTtlMs: this.readFiniteNumber(leaf.params.expirationTtlMs) ?? 60000,
+          expirationPolicy: leaf.params.expirationPolicy === 'escalate' ? 'escalate' : 'drop',
+          rebuildPolicy: leaf.params.rebuildPolicy === 'on_schema_version_bump' ? 'on_schema_version_bump' : 'static',
+          onDeactivate: leaf.params.onDeactivate === 'keep' ? 'keep' : 'cancel',
+        }
+      }
+      default:
+        return {}
+    }
+  }
+
+  private readFirstConditionNumericParam(
+    expr: AtomExpr,
+    keys: readonly string[],
+  ): number | null {
+    for (const atom of collectAtomLeaves(expr)) {
+      for (const key of keys) {
+        const value = this.readFiniteNumber(atom.params[key])
+        if (value !== null) return value
+      }
+    }
+    return null
+  }
+
+  private findConditionAtom(
+    expr: AtomExpr,
+    key: string,
+  ): AtomExprAtom | null {
+    return collectAtomLeaves(expr).find(atom => atom.key === key) ?? null
   }
 
   private buildCanonicalProgramFromSupportedRuleEffectLeaf(
@@ -1317,12 +1744,23 @@ export class CanonicalSpecBuilderService {
     sourcePath: string,
     activeWhenRef: string,
   ): CanonicalOrchestrationProgram | null {
-    const lowerBound = this.readFiniteNumber(leaf.params.lowerBound) ?? this.readFiniteNumber(leaf.params.rangeLower)
-    const upperBound = this.readFiniteNumber(leaf.params.upperBound) ?? this.readFiniteNumber(leaf.params.rangeUpper)
+    const lowerBound = this.readFiniteNumber(leaf.params.lowerBound)
+      ?? this.readFiniteNumber(leaf.params.rangeLower)
+      ?? this.readFiniteNumber(leaf.params.lower)
+    const upperBound = this.readFiniteNumber(leaf.params.upperBound)
+      ?? this.readFiniteNumber(leaf.params.rangeUpper)
+      ?? this.readFiniteNumber(leaf.params.upper)
     const anchorPrice = this.readFiniteNumber(leaf.params.anchorPrice)
       ?? (lowerBound !== null && upperBound !== null ? Number(((lowerBound + upperBound) / 2).toFixed(8)) : null)
-    const levelCount = this.readFiniteNumber(leaf.params.levelCount) ?? this.readFiniteNumber(leaf.params.levels)
+    const levelCount = this.readFiniteNumber(leaf.params.levelCount)
+      ?? this.readFiniteNumber(leaf.params.levels)
+      ?? this.readFiniteNumber(leaf.params.gridCount)
+    const absoluteSpacing = this.readFiniteNumber(leaf.params.absoluteSpacing)
     const stepPct = this.readFiniteNumber(leaf.params.stepPct)
+      ?? this.readFiniteNumber(leaf.params.spacingPct)
+      ?? (absoluteSpacing !== null && anchorPrice !== null
+        ? Number(((absoluteSpacing / anchorPrice) * 100).toFixed(8))
+        : null)
     if (anchorPrice === null || levelCount === null || stepPct === null) {
       return null
     }
@@ -1504,7 +1942,11 @@ export class CanonicalSpecBuilderService {
     }
     let resolved: CanonicalStrategySpecV2['sizing'] = null
     for (const leaf of positionLeaves) {
-      if (leaf.key === 'position.dca_schedule') {
+      if (
+        leaf.key === 'position.dca_schedule'
+        || leaf.key === 'position.pyramiding_limit'
+        || leaf.key === 'position.max_exposure_pct'
+      ) {
         continue
       }
       if (leaf.key !== FIELD_KEY.POSITION_PER_ORDER_BUDGET) {
@@ -3508,6 +3950,9 @@ export class CanonicalSpecBuilderService {
   private splitPositionPresenceGatesFromSemanticRuleCondition(
     expr: AtomExpr,
   ): { condition: AtomExpr | null, gateAtoms: AtomExprAtom[] } {
+    if (expr.kind === 'atom' && this.isPositionPresenceAtomKey(expr.key)) {
+      return { condition: null, gateAtoms: [expr] }
+    }
     if (expr.kind !== 'and') {
       return { condition: expr, gateAtoms: [] }
     }
@@ -3569,6 +4014,9 @@ export class CanonicalSpecBuilderService {
     defaultTimeframe: string | null,
   ): CanonicalConditionNode | null {
     if (expr.kind === 'atom') {
+      if (expr.key === FIELD_KEY.CONDITION_EXPRESSION && this.isValidSemanticExpression(expr.params.expression)) {
+        return this.buildConditionFromSemanticExpression(expr.params.expression)
+      }
       return this.buildConditionFromSemanticRuleAtom(expr, phase, sideScope, defaultTimeframe)
     }
     if (expr.kind === 'and' || expr.kind === 'or') {

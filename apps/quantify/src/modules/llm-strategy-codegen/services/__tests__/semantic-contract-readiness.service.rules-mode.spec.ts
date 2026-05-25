@@ -5,7 +5,7 @@
  *  - S1 grid: 单 rule + grid.range_rebalance condition → 闭环
  *  - S2 sequence root + action.open_long effects → entry ok
  *  - S4 AND(predicate1, predicate2) entry + action.open_long effect → entry ok
- *  - rules 空：missing rules_empty（调用方 fallback 旧扁平桶）
+ *  - rules 空：missing rules_empty（主链路 fail-closed）
  *  - rules 全空 effects：missing_entry / missing_exit / missing_risk
  *  - grid 越界 breakoutAction=stop：exit 强化
  */
@@ -121,7 +121,7 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     expect(r.hasRisk).toBe(true)
   })
 
-  it('rules 为空 → 返回 rules_empty，调用方据此走旧扁平桶 fallback', () => {
+  it('rules 为空 → 返回 rules_empty，主链路据此 fail-closed', () => {
     const r = svc.evaluateRulesReadiness([])
     expect(r.missing).toEqual(['rules_empty'])
     expect(r.hasEntry).toBe(false)
@@ -370,6 +370,70 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
           risks: [atom('risk.stop_loss_pct', { valuePct: 5 })],
           positions: [atom('position.sizing', { value: 10, unit: 'USDT' })],
           orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ]
+
+    const r = svc.evaluateMainflowRulesReadiness(rules)
+
+    expect(r.blockingReasons).not.toContain('missing_entry_rules')
+  })
+
+  it('mainflow accepts DCA schedule and add-position rules as entry executable', () => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'r-daily-dca',
+        phase: 'entry',
+        condition: atom('execution.on_start', { timing: 'on_start' }),
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [
+            atom('position.dca_schedule', {
+              triggerMode: 'time_interval',
+              timeIntervalBars: 1,
+              perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+            }),
+          ],
+          orchestration: [],
+          programs: [],
+        },
+      }),
+      rule({
+        id: 'r-drawdown-add',
+        phase: 'entry',
+        condition: atom('price.percent_change', {
+          direction: 'down',
+          valuePct: 5,
+          basis: 'entry_avg_price',
+        }),
+        effects: {
+          actions: [
+            atom('action.add_position', {
+              sizing: { kind: 'quote', value: 200, asset: 'USDT' },
+              addMode: 'drawdown_pct',
+            }),
+          ],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }),
+      rule({
+        id: 'r-exit',
+        phase: 'exit',
+        condition: atom('price.percent_change', {
+          direction: 'down',
+          valuePct: 5,
+          basis: 'entry_avg_price',
+        }),
+        effects: {
+          actions: [atom('action.close_long')],
+          risks: [],
+          positions: [],
+          orchestration: [],
           programs: [],
         },
       }),

@@ -208,6 +208,7 @@ export class CanonicalStrategyAstCompilerService {
       return {
         id: `order_${String(index + 1).padStart(2, '0')}_${program.id}`,
         sourceRef: program.id,
+        ...(program.sourcePath ? { sourcePath: program.sourcePath } : {}),
         payload: program.priceSource === 'level_set'
           ? {
               ...program,

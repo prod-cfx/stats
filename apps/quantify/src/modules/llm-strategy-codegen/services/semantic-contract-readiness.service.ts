@@ -141,11 +141,11 @@ export class SemanticContractReadinessService {
       // Issue #1493 C2：normalize() 入口同样观测 rules 空 + flat 非空 legacy 路径。
       //   生产规约见 types/semantic-state.ts 顶部 docstring。
       const flatNonEmptyCount
-        = state.trigger.length
-        + state.action.length
-        + state.risk.length
+        = (state.trigger?.length ?? 0)
+        + (state.action?.length ?? 0)
+        + (state.risk?.length ?? 0)
         + (state.positionConstraint?.length ?? 0)
-        + state.orchestration.length
+        + (state.orchestration?.length ?? 0)
       if (flatNonEmptyCount > 0) {
         this.logger.warn(
           `[#1493] normalize_rules_missing flatNonEmptyCount=${flatNonEmptyCount}`
@@ -709,14 +709,30 @@ export class SemanticContractReadinessService {
         )
         .map(leaf => leaf.ruleIndex),
     )
+    const gridRuleIndexes = new Set(
+      read.leaves
+        .filter(leaf =>
+          leaf.role === 'condition'
+          // eslint-disable-next-line atom-keys/no-atom-key-literal -- rules-only mainflow: grid.range_rebalance condition is the executable grid program contract.
+          && leaf.key === 'grid.range_rebalance',
+        )
+        .map(leaf => leaf.ruleIndex),
+    )
     const hasEntry = read.leaves.some(leaf =>
       entryRuleIndexes.has(leaf.ruleIndex)
       && (
         (leaf.role === 'action' && leaf.key.startsWith('action.open_'))
+        || (leaf.role === 'action' && leaf.key === 'action.add_position')
+        || (leaf.role === 'position' && leaf.key === 'position.dca_schedule')
         || leaf.role === 'program'
+        || gridRuleIndexes.has(leaf.ruleIndex)
       ),
     )
-    const hasExit = read.leaves.some(leaf => leaf.phase === 'exit' || (leaf.role === 'risk' && leaf.key.includes('stop')))
+    const hasExit = read.leaves.some(leaf =>
+      leaf.phase === 'exit'
+      || (leaf.role === 'risk' && leaf.key.includes('stop'))
+      || gridRuleIndexes.has(leaf.ruleIndex),
+    )
 
     const blockingReasons = [
       ...(!hasEntry ? ['missing_entry_rules'] : []),

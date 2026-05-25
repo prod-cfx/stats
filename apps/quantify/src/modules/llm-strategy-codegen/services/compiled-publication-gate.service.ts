@@ -590,6 +590,11 @@ export class CompiledPublicationGateService {
       })
     })
 
+    const orderPrograms = Array.isArray(canonicalSpec.orderPrograms) ? canonicalSpec.orderPrograms : []
+    orderPrograms.forEach((program, index) => {
+      this.collectExecutableSourcePath(program, `orderPrograms[${index}]`, sourcePaths, missing)
+    })
+
     const orchestration = this.readRecord(canonicalSpec.orchestration)
     const programs = Array.isArray(orchestration?.programs) ? orchestration.programs : []
     programs.forEach((program, index) => {

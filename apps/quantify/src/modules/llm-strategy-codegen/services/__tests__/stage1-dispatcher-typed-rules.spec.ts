@@ -193,4 +193,26 @@ describe('stage1 typed rules corpus fixture', () => {
     expect(riskLeaves.length).toBeGreaterThan(0)
     expect(riskLeaves.some(effect => effect.rulePhase === 'exit')).toBe(true)
   })
+
+  it('does not treat exit price-change percentage as position sizing', () => {
+    const patch = new GenericSeedDispatcher().dispatch('价格相对入场均价下跌 5% 时平仓。')
+    const sizingLeaves = allEffectLeaves(patch).filter(effect => effect.key === 'position.sizing')
+
+    expect(sizingLeaves).toEqual([])
+  })
+
+  it('does not promote DCA drawdown percentage to top-level position sizing', () => {
+    const patch = new GenericSeedDispatcher().dispatch('ETH 现货每天定投 100 USDT，回撤 5% 加投 200 USDT。')
+    const positionSizingLeaves = allEffectLeaves(patch).filter(effect => effect.key === 'position.sizing')
+    const addPositionLeaves = allEffectLeaves(patch).filter(effect => effect.key === 'action.add_position')
+
+    expect(positionSizingLeaves).toEqual([])
+    expect(addPositionLeaves).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        params: expect.objectContaining({
+          sizing: expect.objectContaining({ kind: 'quote', value: 200, asset: 'USDT' }),
+        }),
+      }),
+    ]))
+  })
 })

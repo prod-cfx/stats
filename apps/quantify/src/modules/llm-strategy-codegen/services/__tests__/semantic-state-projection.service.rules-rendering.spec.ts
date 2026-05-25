@@ -3,7 +3,7 @@
  *
  * 验证 SemanticStateProjectionService 在 state.rules 非空时，从 AtomExpr 树
  * 递归渲染自然中文，保留 sequence / AND / OR / NOT 语义，不被 lift 出来的扁平桶
- * 打散。空 rules 时回落旧扁平桶路径（向后兼容）。
+ * 打散。空 rules 不回落旧扁平桶主流程。
  */
 
 import type { SemanticRule } from '../../types/atom-expr'
@@ -251,8 +251,8 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
     expect(view.summary).not.toContain('下一根')
   })
 
-  it('rules 为空 → fallback 走旧扁平桶路径，summary 仍可用', () => {
-    // 仅 trigger 非空，rules 字段缺省（undefined）
+  it('rules 为空 → 不走旧扁平桶主流程 fallback', () => {
+    // 仅 trigger 非空，rules 显式为空
     const trigger = {
       id: 'trig-1',
       key: 'volume.threshold',
@@ -264,11 +264,11 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
       openSlots: [],
       contracts: [],
     } as unknown as SemanticState['trigger'][number]
-    const state = baseState({ trigger: [trigger] })
+    const state = baseState({ rules: [], trigger: [trigger] })
     const view = service.buildConversationView(state)
-    // 旧路径仍输出可用 summary，且不是默认空兜底
-    expect(view.summary.length).toBeGreaterThan(0)
-    expect(view.summary).not.toBe('已识别部分条件，但仍未完整。')
+    expect(view.summary).toBe('已识别部分条件，但仍未完整。')
+    expect(view.summary).not.toContain('1.5')
+    expect(view.summary).not.toContain('均量')
   })
 
   it('风控段：rule.phase=gate + risk.stop_loss_pct atom，前置段被渲染', () => {
@@ -342,7 +342,7 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
       expect(allText).toContain('时做多开仓')
     })
 
-    it('rules 为空 → fall back 到 flat trigger 路径（向后兼容）', () => {
+    it('rules 为空 → displayLogicGraph 不走 flat trigger 主流程 fallback', () => {
       const flatTrigger = {
         id: 'trig-flat',
         key: 'macd.golden_cross',
@@ -363,8 +363,9 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
       } as unknown as SemanticState['action'][number]
       const graph = service.buildDisplayLogicGraph(baseState({ trigger: [flatTrigger], action: [action] }))
       const conditionBlocks = graph.blocks.filter(b => b.type === 'IF' || b.type === 'AND_AT_THEN')
-      // flat 路径仍能产出条件块（不要求精确文本，只验证降级链路存活）
-      expect(conditionBlocks.length).toBeGreaterThanOrEqual(0)
+      expect(conditionBlocks).toHaveLength(0)
+      expect(JSON.stringify(graph)).not.toContain('macd.golden_cross')
+      expect(JSON.stringify(graph)).not.toContain('open_long')
     })
   })
 
@@ -668,7 +669,7 @@ describe('rules projection — pyramiding lifecycle guard noise', () => {
     expect(summary).not.toContain('金字塔')
     expect(summary).not.toContain('最多1次加仓')
     expect(summary).not.toContain('无任意方向仓位')
-    expect(summary).toContain('仓位：1%')
+    expect(summary).not.toContain('仓位：1%')
   })
 
   it('keeps pyramiding_limit when add_position action exists', () => {
