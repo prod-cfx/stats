@@ -87,7 +87,7 @@ const ICONS = {
   back:   'M15 18l-6-6 6-6',
   ai:     'M12 2l2.4 5.6L20 10l-5.6 2.4L12 18l-2.4-5.6L4 10l5.6-2.4L12 2z',
   market: 'M4 19h16M6 16V9M10 16V5M14 16v-6M18 16v-9',
-  strategy: 'M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z',
+  strat:  'M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z',
   whale:  'M3 12c4 0 4-4 8-4s4 4 8 4M3 17c4 0 4-4 8-4s4 4 8 4M16 7a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4z',
   me:     'M5 20a7 7 0 0 1 14 0M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   spark:  'M12 3l1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8L12 3z',
@@ -173,7 +173,7 @@ function MTabBar({ active = 'ai' }) {
   const tabs = [
     {k:'ai',     label:'AI 量化', icon:ICONS.ai},
     {k:'market', label:'行情',    icon:ICONS.market},
-    {k:'strategy', label:'策略',  icon:ICONS.strategy},
+    {k:'strat',  label:'策略',    icon:ICONS.strat},
     {k:'whale',  label:'巨鲸',    icon:ICONS.whale},
     {k:'me',     label:'我的',    icon:ICONS.me},
   ];

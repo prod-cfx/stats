@@ -150,46 +150,44 @@ function WhaleNotifPanel({ items, tab, setTab, unread, onMarkAll, onClose }) {
           boxShadow:'0 24px 48px -12px rgba(0,0,0,0.28)',
           display:'flex', flexDirection:'column',
           maxHeight:'78%',
+          paddingTop:54,
         }}
       >
         {/* header */}
-        <div style={{padding:'14px 16px 10px', display:'flex', alignItems:'center', gap:10}}>
-          <div style={{flex:1, minWidth:0}}>
-            <div style={{fontSize:16, fontWeight:700, color:M.text, letterSpacing:-0.2, display:'flex', alignItems:'center', gap:8}}>
+        <div style={{padding:'10px 12px 8px', display:'flex', alignItems:'center', gap:8}}>
+          <div style={{flex:1, minWidth:0, display:'flex', alignItems:'center', gap:8}}>
+            <div style={{fontSize:15, fontWeight:700, color:M.text, letterSpacing:-0.2}}>
               通知中心
-              {unread > 0 && (
-                <span style={{
-                  height:18, padding:'0 7px', borderRadius:9,
-                  background:'var(--danger-soft)', color:'var(--danger)',
-                  fontSize:11, fontWeight:600, fontFamily:M.mono,
-                  display:'inline-flex', alignItems:'center',
-                }}>{unread} 条未读</span>
-              )}
             </div>
-            <div style={{fontSize:11, color:M.dim, marginTop:2}}>
-              巨鲸预警 · 监控触发 · 资金流向
-            </div>
+            {unread > 0 && (
+              <span style={{
+                height:18, padding:'0 7px', borderRadius:9,
+                background:'var(--danger-soft)', color:'var(--danger)',
+                fontSize:11, fontWeight:600, fontFamily:M.mono,
+                display:'inline-flex', alignItems:'center',
+              }}>{unread} 条未读</span>
+            )}
           </div>
           <button
             onClick={onMarkAll}
             disabled={unread===0}
             style={{
-              height:28, padding:'0 10px', borderRadius:14,
+              height:26, padding:'0 9px', borderRadius:13,
               background:'transparent', border:`1px solid ${M.border}`,
               color: unread>0 ? M.mid : M.faint,
-              fontSize:12, fontWeight:500, cursor: unread>0 ? 'pointer':'default',
+              fontSize:11, fontWeight:500, cursor: unread>0 ? 'pointer':'default',
               display:'inline-flex', alignItems:'center', gap:4,
             }}>
-            <Ico d={ICONS.check} w={12}/> 全部已读
+            <Ico d={ICONS.check} w={11}/> 全部已读
           </button>
           <button
             onClick={onClose}
             style={{
-              width:28, height:28, borderRadius:14,
+              width:26, height:26, borderRadius:13,
               background:M.soft, border:0, color:M.mid,
-              display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer',
+              display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', padding:0,
             }}>
-            <Ico d={ICONS.close} w={14}/>
+            <Ico d={ICONS.close} w={13}/>
           </button>
         </div>
 
@@ -1102,20 +1100,7 @@ function ApiRow({ ex, set, on, last }) {
 /* ========================================================================
    SCREEN 10 — API Config (modal bottom sheet)
    ======================================================================== */
-// 命名统一：历史「API 验证」全部更名为「API 配置」，对齐 Flutter `ApiFormSheet`
-// 与 docs/decisions.md「API 配置入口命名」基线（issue #1664）。
-// 由 exchange 参数驱动徽章 + 标题，不再硬编码 Binance；默认仍取 Binance 以保
-// 留单屏预览体验。
-const API_CONFIG_BADGE = {
-  binance: { color: '#F0B90B', fg: '#000', glyph: 'B' },
-  okx:     { color: '#1E1E1E', fg: '#fff', glyph: 'O' },
-  bybit:   { color: '#F7A600', fg: '#fff', glyph: 'B' },
-  hyperliquid: { color: '#13ABA1', fg: '#fff', glyph: 'H' },
-};
-
-function ScreenApiConfig({ exchange = 'Binance' } = {}) {
-  const key = (exchange || 'Binance').toLowerCase();
-  const badge = API_CONFIG_BADGE[key] || { color: '#7C5CFF', fg: '#fff', glyph: (exchange || '?').slice(0, 1).toUpperCase() };
+function ScreenApiConfig() {
   return (
     <div className="m-sheet-scrim" style={{height:'100%', position:'relative', background:'rgba(15,22,35,0.55)', overflow:'hidden'}}>
       <MStatus dark/>
@@ -1131,12 +1116,12 @@ function ScreenApiConfig({ exchange = 'Binance' } = {}) {
 
         <div style={{padding:'14px 20px 8px', display:'flex', alignItems:'center', gap:12}}>
           <div style={{
-            width:42, height:42, borderRadius:11, background:badge.color,
-            color:badge.fg, display:'flex', alignItems:'center', justifyContent:'center',
+            width:42, height:42, borderRadius:11, background:'#F0B90B',
+            color:'#000', display:'flex', alignItems:'center', justifyContent:'center',
             fontWeight:800, fontSize:18,
-          }}>{badge.glyph}</div>
+          }}>B</div>
           <div>
-            <div style={{fontSize:17, fontWeight:700}}>{exchange} API 配置</div>
+            <div style={{fontSize:17, fontWeight:700}}>Binance API</div>
             <div style={{fontSize:12, color:M.mid, marginTop:2}}>仅保留读取 + 下单权限</div>
           </div>
         </div>
@@ -1148,7 +1133,7 @@ function ScreenApiConfig({ exchange = 'Binance' } = {}) {
           }}>
             <Ico d={ICONS.shield} w={16} fill={M.warn} sw={0}/>
             <div style={{fontSize:12, color:M.warn, lineHeight:1.55}}>
-              <strong>必须</strong>在 {exchange} 后台关闭「提币」权限。我们的服务端会再校验一次，发现允许提币的密钥会立即拒绝。
+              <strong>必须</strong>在 Binance 后台关闭「提币」权限。我们的服务端会再校验一次，发现允许提币的密钥会立即拒绝。
             </div>
           </div>
 
