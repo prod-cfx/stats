@@ -2786,9 +2786,51 @@ export class AccountStrategyViewService {
       this.readRecord(snapshot.stage1ConsistencyEvidence),
       this.readRecord(this.readRecord(snapshot.specSnapshot)?.rulesOnlyHashChain),
       this.readRecord(this.readRecord(snapshot.specSnapshot)?.stage1ConsistencyEvidence),
+      this.buildRulesOnlyHashChainEvidenceFromPersistedSnapshot(snapshot),
     ]
 
     return candidates.find(evidence => this.isDeployableHashChainEvidence(evidence)) ?? null
+  }
+
+  private buildRulesOnlyHashChainEvidenceFromPersistedSnapshot(
+    snapshot: Record<string, unknown>,
+  ): Record<string, unknown> | null {
+    const compiledManifest = this.readRecord(snapshot.compiledManifest)
+    const consistencyReport = this.readRecord(snapshot.consistencyReport)
+    const compilerConsistency = this.readRecord(consistencyReport?.compilerConsistency)
+    const manifestSelfCheck = this.readRecord(compilerConsistency?.manifestSelfCheck)
+    const graphVsIr = this.readRecord(compilerConsistency?.graphVsIr)
+    const irVsScript = this.readRecord(compilerConsistency?.irVsScript)
+    const specSnapshot = this.readRecord(snapshot.specSnapshot)
+    const specMetadata = this.readRecord(specSnapshot?.metadata)
+
+    const rulesHash = this.readString(specMetadata ?? {}, ['rulesHash', 'canonicalRulesHash'])
+    const canonicalSpecHash = this.readString(compiledManifest ?? {}, ['specHash'])
+      ?? this.readString(snapshot, ['specHash'])
+      ?? this.readString(manifestSelfCheck ?? {}, ['specHash'])
+      ?? this.readString(graphVsIr ?? {}, ['specHash'])
+    const irHash = this.readString(compiledManifest ?? {}, ['irHash'])
+      ?? this.readString(snapshot, ['irHash'])
+      ?? this.readString(manifestSelfCheck ?? {}, ['irHash'])
+      ?? this.readString(irVsScript ?? {}, ['irHash'])
+    const astHash = this.readString(compiledManifest ?? {}, ['astDigest'])
+      ?? this.readString(snapshot, ['astDigest'])
+      ?? this.readString(manifestSelfCheck ?? {}, ['astDigest'])
+      ?? this.readString(irVsScript ?? {}, ['astDigest'])
+    const scriptHash = this.readString(snapshot, ['scriptHash'])
+
+    const evidence = {
+      passed: consistencyReport?.status === 'PASSED' && compilerConsistency?.status === 'PASSED',
+      hashes: {
+        rulesHash,
+        canonicalSpecHash,
+        irHash,
+        astHash,
+        scriptHash,
+      },
+    }
+
+    return this.isDeployableHashChainEvidence(evidence) ? evidence : null
   }
 
   private isDeployableHashChainEvidence(evidence: Record<string, unknown> | null): boolean {

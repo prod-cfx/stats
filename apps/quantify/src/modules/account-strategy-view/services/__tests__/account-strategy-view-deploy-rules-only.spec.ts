@@ -257,6 +257,54 @@ describe('accountStrategyViewService deploy rules-only snapshot truth', () => {
     })
   })
 
+  it('continues deploy when rules-only hash evidence is persisted in snapshot columns and consistency report', async () => {
+    const truth = createCompiledTruthFixture()
+    const hashes = truth.rulesOnlyHashChain.hashes
+    const { rulesOnlyHashChain: _rulesOnlyHashChain, ...persistedTruth } = truth
+    const snapshot = createDeploySnapshot({
+      ...persistedTruth,
+      specHash: hashes.canonicalSpecHash,
+      scriptHash: hashes.scriptHash.replace(/^sha256:/u, ''),
+      consistencyReport: {
+        status: 'PASSED',
+        compilerConsistency: {
+          status: 'PASSED',
+          graphVsIr: {
+            passed: true,
+            specHash: hashes.canonicalSpecHash,
+          },
+          irVsScript: {
+            passed: true,
+            irHash: hashes.irHash,
+            astDigest: hashes.astHash,
+          },
+          manifestSelfCheck: {
+            passed: true,
+            specHash: hashes.canonicalSpecHash,
+            irHash: hashes.irHash,
+            astDigest: hashes.astHash,
+          },
+        },
+      },
+    })
+    const { service, repo } = createService(snapshot)
+
+    await service.deployStrategy({
+      userId: 'user-1',
+      name: 'rules only strategy',
+      publishedSnapshotId: 'snap-rules-only-1',
+      deployRequestId: 'deploy-req-persisted-truth',
+      exchangeAccountId: 'exchange-account-1',
+      mode: 'TESTNET',
+    } as any)
+
+    expect(repo.deployStrategyForUser).toHaveBeenCalledWith(expect.objectContaining({
+      publishedSnapshotBinding: expect.objectContaining({
+        publishedSnapshotId: 'snap-rules-only-1',
+      }),
+    }))
+  })
+
   it('requires republish when ast orchestration scope content no longer matches hash chain', async () => {
     const truth = createCompiledTruthFixture()
     const snapshot = createDeploySnapshot({
