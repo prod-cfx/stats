@@ -413,6 +413,113 @@ describe('publication gate rules-only hash chain', () => {
     ]))
   })
 
+  it('passes when canonical risk rules are traced through IR and AST risk predicates', () => {
+    const input = fixture()
+    const canonicalRules = input.canonicalSpec.rules as Array<Record<string, unknown>>
+    canonicalRules.push({
+      id: 'semantic-risk-stop-loss',
+      phase: 'risk',
+      priority: 120,
+      condition: {
+        kind: 'atom',
+        key: 'risk.stop_loss_pct',
+        params: { valuePct: 5, basis: 'entry_avg_price' },
+      },
+      actions: [{ type: 'FORCE_EXIT' }],
+      metadata: { sourcePath: 'rules[1].effects.risks[0]' },
+    })
+    input.rules.push({
+      id: 'rule-risk',
+      phase: 'entry',
+      condition: { kind: 'atom', key: 'price.above' },
+      effects: {
+        actions: [],
+        risks: [{ kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } }],
+      },
+    })
+    input.ir.riskPolicy.riskPredicates = [{
+      id: 'semantic-risk-stop-loss',
+      kind: 'atrTrailingStop',
+      params: { valuePct: 5 },
+      actions: [{ kind: 'FORCE_EXIT' }],
+      sourcePath: 'rules[1].effects.risks[0]',
+    }]
+    input.ast = new CanonicalStrategyAstCompilerService().compile(input.ir)
+    linkFixtureHashes(input)
+    input.script = emitScript(input.ast)
+
+    const result = newGate().validateRulesOnlyHashChain(input)
+
+    expect(result.passed).toBe(true)
+    expect(result.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'trace.ir',
+        passed: true,
+        actual: expect.objectContaining({
+          sourcePaths: expect.arrayContaining(['rules[1].effects.risks[0]']),
+        }),
+      }),
+      expect.objectContaining({
+        key: 'trace.ast',
+        passed: true,
+        actual: expect.objectContaining({
+          sourcePaths: expect.arrayContaining(['rules[1].effects.risks[0]']),
+        }),
+      }),
+    ]))
+  })
+
+  it('passes when canonical guard rules are traced through IR and AST guards', () => {
+    const input = fixture()
+    const canonicalRules = input.canonicalSpec.rules as Array<Record<string, unknown>>
+    canonicalRules.push({
+      id: 'semantic-gate-no-position',
+      phase: 'gate',
+      priority: 99,
+      condition: { kind: 'atom', key: 'position.no_position', params: { sideScope: 'long' } },
+      actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+      metadata: { sourcePath: 'rules[1].condition' },
+    })
+    input.rules.push({
+      id: 'rule-gate',
+      phase: 'entry',
+      condition: { kind: 'atom', key: 'position.no_position', params: { sideScope: 'long' } },
+      effects: { actions: [] },
+    })
+    input.ir.riskPolicy.guards = [{
+      id: 'guard_semantic-gate-no-position',
+      kind: 'EXPRESSION_GUARD',
+      scope: 'strategy',
+      appliesTo: 'long',
+      predicateRef: 'semantic-gate-no-position_predicate',
+      onBreach: 'BLOCK_NEW_ENTRY',
+      sourcePath: 'rules[1].condition',
+    }]
+    input.ast = new CanonicalStrategyAstCompilerService().compile(input.ir)
+    linkFixtureHashes(input)
+    input.script = emitScript(input.ast)
+
+    const result = newGate().validateRulesOnlyHashChain(input)
+
+    expect(result.passed).toBe(true)
+    expect(result.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'trace.ir',
+        passed: true,
+        actual: expect.objectContaining({
+          sourcePaths: expect.arrayContaining(['rules[1].condition']),
+        }),
+      }),
+      expect.objectContaining({
+        key: 'trace.ast',
+        passed: true,
+        actual: expect.objectContaining({
+          sourcePaths: expect.arrayContaining(['rules[1].condition']),
+        }),
+      }),
+    ]))
+  })
+
   it('blocks when canonical rulesHash is missing', () => {
     const input = fixture()
     delete input.canonicalSpec.metadata

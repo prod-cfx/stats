@@ -245,7 +245,7 @@ export class CanonicalSpecV2IrCompilerService {
     for (const rule of input.canonicalSpec.rules) {
       const riskPredicate = this.tryCompileRiskPredicate(rule, context)
       if (riskPredicate) {
-        riskPredicates.push(riskPredicate)
+        riskPredicates.push(this.withRuleSourcePath(riskPredicate, rule))
         continue
       }
 
@@ -285,7 +285,7 @@ export class CanonicalSpecV2IrCompilerService {
 
       const compiledGuards = this.tryCompileRiskGuards(rule, context)
       if (compiledGuards.length > 0) {
-        guards.push(...compiledGuards)
+        guards.push(...compiledGuards.map(guard => this.withRuleSourcePath(guard, rule)))
         continue
       }
 
@@ -4144,6 +4144,14 @@ export class CanonicalSpecV2IrCompilerService {
       helpers: this.irHelpers,
       seed,
     }
+  }
+
+  private withRuleSourcePath<T extends { sourcePath?: string }>(item: T, rule: CanonicalRuleV2): T {
+    const sourcePath = typeof rule.metadata?.sourcePath === 'string'
+      ? rule.metadata.sourcePath.trim()
+      : ''
+    if (!sourcePath) return item
+    return { ...item, sourcePath }
   }
 
   private collectPositionLifecycleRuntimeRequirements(

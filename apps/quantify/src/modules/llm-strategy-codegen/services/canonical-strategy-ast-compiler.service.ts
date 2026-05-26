@@ -156,6 +156,7 @@ export class CanonicalStrategyAstCompilerService {
       payload: guard.predicateRef
         ? { ...guard, predicateRef: this.exprIdFor(guard.predicateRef, exprIdIndex) }
         : guard,
+      ...(guard.sourcePath ? { sourcePath: guard.sourcePath } : {}),
     }))
   }
 
@@ -164,6 +165,7 @@ export class CanonicalStrategyAstCompilerService {
       id: `risk_predicate_${String(index + 1).padStart(2, '0')}_${riskPredicate.id}`,
       sourceRef: riskPredicate.id,
       payload: riskPredicate,
+      ...(riskPredicate.sourcePath ? { sourcePath: riskPredicate.sourcePath } : {}),
     }))
   }
 

@@ -59,12 +59,14 @@ export interface GuardProgramNode {
   id: string
   sourceRef: string
   payload: RiskGuard
+  sourcePath?: string
 }
 
 export interface RiskPredicateProgramNode {
   id: string
   sourceRef: string
   payload: RiskPredicateDef
+  sourcePath?: string
 }
 
 export interface DecisionProgramNode {

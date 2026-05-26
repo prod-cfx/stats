@@ -196,6 +196,7 @@ export interface RiskPredicateDef {
   kind: 'atrMultipleStop' | 'atrMultipleTakeProfit' | 'atrTrailingStop' | 'rememberedLevelStop' | 'timeStopBars' | 'cooldownBars'
   params: Record<string, number | string | boolean>
   actions?: RiskPredicateActionDef[]
+  sourcePath?: string
 }
 
 export interface RiskPredicateActionDef {
@@ -496,6 +497,7 @@ export interface RiskGuard {
   referenceRef?: string
   predicateRef?: string
   onBreach: 'BLOCK_NEW_ENTRY' | 'FORCE_EXIT' | 'HALT_STRATEGY' | 'CANCEL_ORDER_PROGRAMS'
+  sourcePath?: string
 }
 
 // P4-4 critic round 1 A3 修复：reclaimBars 默认值集中定义，避免 builder 与 IR compiler
