@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
-import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticOrchestrationNode, SemanticSlotState, SemanticState } from '../types/semantic-state'
+import type { SemanticActionState, SemanticAtomContract, SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticOrchestrationContract, SemanticOrchestrationNode, SemanticPositionConstraintState, SemanticRiskState, SemanticSlotState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import type { AtomExpr, RuleEffects, RuleEffectsByRole, SemanticRule, SemanticRulePhase, SemanticRuleSideScope } from '../types/atom-expr'
 import { collectAtomLeaves, forEachRuleEffect, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
 import { isEntryPredicateTriggerKey, isExitPredicateTriggerKey, isTimeframeGroupableTriggerKey } from '../atom-contracts/trigger-display-contract'
@@ -8,6 +8,8 @@ import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { SemanticExecutableSemanticsService } from './semantic-executable-semantics.service'
+import type { RulesMainflowAtomFact } from './rules-mainflow-reader.service'
+import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
 import {
   getLegacyEntry,
   hasExplicitLegacyDisplayRenderer,
@@ -149,8 +151,6 @@ const PROJECTION_ALWAYS_RENDER_DEFAULT_PARAM_SLOTS: ReadonlySet<string> = new Se
   'sideMode',
 ])
 
-import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
-
 export interface SemanticConversationView {
   summary: string
   triggerSummary: string
@@ -242,17 +242,129 @@ const INTERNAL_SEMANTIC_DISPLAY_KEY_PATTERN
 @Injectable()
 export class SemanticStateProjectionService {
   constructor(
-    // Issue #1403 子故障 A：注入 SemanticExecutableSemanticsService 用 registry-driven
-    //   anyAtomFulfillsPhase(state, 'sizing') 替代旧 GRID_DOMAIN_ATOM_KEYS 字面量集合，
-    //   与 codegen-conversation 服务共用同一判定。
     private readonly executableSemantics: SemanticExecutableSemanticsService = new SemanticExecutableSemanticsService(),
+    private readonly rulesMainflowReader: RulesMainflowReaderService = new RulesMainflowReaderService(),
   ) {}
+
+  private factsToTriggers(facts: readonly RulesMainflowAtomFact[]): SemanticTriggerState[] {
+    return facts.filter(fact => fact.role === 'condition').map(fact => ({
+      id: fact.id,
+      key: fact.key,
+      phase: fact.phase === 'entry' || fact.phase === 'exit' ? fact.phase : 'gate',
+      sideScope: fact.sideScope,
+      params: fact.params,
+      status: fact.status,
+      source: fact.source,
+      openSlots: [...fact.openSlots],
+      ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' as const } } : {}),
+      ...this.optionalAtomContracts(fact),
+    }))
+  }
+
+  private factsToActions(facts: readonly RulesMainflowAtomFact[]): SemanticActionState[] {
+    return facts.filter(fact => fact.role === 'action').map(fact => ({
+      id: fact.id,
+      key: fact.key,
+      params: fact.params,
+      status: fact.status,
+      source: fact.source,
+      openSlots: [...fact.openSlots],
+      ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' as const } } : {}),
+      ...this.optionalAtomContracts(fact),
+    }))
+  }
+
+  private factsToRisks(facts: readonly RulesMainflowAtomFact[]): SemanticRiskState[] {
+    return facts.filter(fact => fact.role === 'risk').map(fact => ({
+      id: fact.id,
+      key: fact.key,
+      params: fact.params,
+      status: fact.status,
+      source: fact.source,
+      openSlots: [...fact.openSlots],
+      ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' as const } } : {}),
+      ...this.optionalAtomContracts(fact),
+    }))
+  }
+
+  private factsToPositionConstraints(facts: readonly RulesMainflowAtomFact[]): SemanticPositionConstraintState[] {
+    return facts
+      .filter((fact): fact is RulesMainflowAtomFact & { key: SemanticPositionConstraintState['key'] } =>
+        fact.role === 'position' && this.isPositionConstraintKey(fact.key),
+      )
+      .map(fact => ({
+        id: fact.id,
+        key: fact.key,
+        params: fact.params,
+        status: fact.status,
+        source: fact.source,
+        openSlots: [...fact.openSlots],
+        ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' as const } } : {}),
+        ...this.optionalAtomContracts(fact),
+      }))
+  }
+
+  private factsToOrchestrationNodes(facts: readonly RulesMainflowAtomFact[]): SemanticOrchestrationNode[] {
+    return facts
+      .filter(fact => fact.role === 'orchestration' || fact.role === 'program')
+      .flatMap((fact) => {
+        const kind = this.inferOrchestrationKind(fact.key)
+        if (!kind) return []
+        return [{
+          id: fact.id,
+          kind,
+          key: fact.key,
+          params: fact.params,
+          status: fact.status,
+          source: fact.source,
+          openSlots: [...fact.openSlots],
+          contracts: this.orchestrationContracts(fact),
+          ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' as const } } : {}),
+        }]
+      })
+  }
+
+  private optionalAtomContracts(fact: RulesMainflowAtomFact): { contracts?: SemanticAtomContract[] } {
+    const contracts = fact.contracts?.filter((contract): contract is SemanticAtomContract =>
+      contract.kind === 'trigger'
+      || contract.kind === 'action'
+      || contract.kind === 'risk'
+      || contract.kind === 'position'
+      || contract.kind === 'context',
+    ) ?? []
+    return contracts.length > 0 ? { contracts } : {}
+  }
+
+  private orchestrationContracts(fact: RulesMainflowAtomFact): SemanticOrchestrationContract[] {
+    return fact.contracts?.filter((contract): contract is SemanticOrchestrationContract =>
+      contract.kind === 'scope'
+      || contract.kind === 'gate'
+      || contract.kind === 'program'
+      || contract.kind === 'portfolioRisk',
+    ) ?? []
+  }
+
+  private isPositionConstraintKey(key: string): key is SemanticPositionConstraintState['key'] {
+    return key === 'position.pyramiding_limit'
+      || key === 'position.max_exposure_pct'
+      || key === 'position.dca_schedule'
+      || key === 'grid.range_rebalance'
+  }
+
+  private inferOrchestrationKind(key: string): SemanticOrchestrationNode['kind'] | null {
+    if (key.startsWith('program.')) return 'program'
+    if (key.startsWith('gate.')) return 'gate'
+    if (key.startsWith('scope.')) return 'scope'
+    if (key.startsWith('portfolioRisk.')) return 'portfolioRisk'
+    return null
+  }
 
   buildConversationView(state: SemanticState): SemanticConversationView {
     const hasRulesOnlyMainflow = Array.isArray(state.rules)
-    const deterministicTriggers = hasRulesOnlyMainflow ? [] : this.filterDeterministicTriggers(readFlatTriggers(state))
-    const deterministicRisk = hasRulesOnlyMainflow ? [] : this.filterDeterministicRisk(readFlatRisks(state))
-    const deterministicActions = hasRulesOnlyMainflow ? [] : this.filterDeterministicActions(readFlatActions(state))
+    const facts = this.rulesMainflowReader.readFacts(state)
+    const deterministicTriggers = hasRulesOnlyMainflow ? [] : this.filterDeterministicTriggers(this.factsToTriggers(facts))
+    const deterministicRisk = hasRulesOnlyMainflow ? [] : this.filterDeterministicRisk(this.factsToRisks(facts))
+    const deterministicActions = hasRulesOnlyMainflow ? [] : this.filterDeterministicActions(this.factsToActions(facts))
     const deterministicSignals = this.buildRecommendationSignals({
       actions: deterministicActions,
       triggers: deterministicTriggers,
@@ -262,18 +374,13 @@ export class SemanticStateProjectionService {
     const actionSummary = this.buildActionSummary(deterministicActions, state)
     const riskSummary = this.buildRiskSummary(deterministicRisk)
     const ruleAtomKeys = this.collectRuleAtomKeys(state.rules ?? [])
-    const positionSummary = hasRulesOnlyMainflow ? '' : this.buildPositionSummary(state.position, state.positionConstraint, ruleAtomKeys)
+    const positionSummary = hasRulesOnlyMainflow ? '' : this.buildPositionSummary(state.position, this.factsToPositionConstraints(facts), ruleAtomKeys)
     const executionContext = this.buildExecutionContext(state.contextSlots)
     const inferredDefaults = this.buildInferredDefaults(deterministicRisk)
-    // #1152 contract parity：orchestration locked 节点必须计入 deterministic 判定与 summary，
-    // 否则纯 orchestration-only utterance（如纯账户回撤）会被视作"空状态"通过 projection_gate
-    const lockedOrchestrationNodes = (state.orchestration ?? [])
+    const orchestrationNodes = hasRulesOnlyMainflow ? [] : this.factsToOrchestrationNodes(facts)
+    const lockedOrchestrationNodes = orchestrationNodes
       .filter(node => node.status === 'locked')
-    // Issue #1391 后续：phase0.unsupported 是"部署期"门槛而非"识别期"——
-    //   atom 已被 dispatcher 完整抽出（key + params），只是 runtime 暂不支持部署。
-    //   summary 渲染层面仍应展示给用户"已识别"，避免类似 portfolioRisk.drawdown_block
-    //   被静默吞掉、用户以为系统没识别。`hasDeterministicSemantics` 判定仍走严格 locked 集。
-    const recognizedOrchestrationNodes = (state.orchestration ?? [])
+    const recognizedOrchestrationNodes = orchestrationNodes
       .filter(node =>
         node.status === 'locked'
         || (node.status === 'open'
@@ -284,7 +391,7 @@ export class SemanticStateProjectionService {
     const hasDeterministicSemantics = this.hasDeterministicSemantics({
       triggers: deterministicTriggers,
       actions: deterministicActions,
-      risk: deterministicRisk,
+      risks: deterministicRisk,
       position: state.position,
       hasGridIntent: deterministicSignals.hasGridIntent,
       lockedOrchestrationCount: lockedOrchestrationNodes.length,
@@ -292,8 +399,6 @@ export class SemanticStateProjectionService {
     const summaryItems = [triggerSummary, actionSummary, riskSummary, positionSummary, orchestrationSummary]
       .filter(item => item.length > 0)
 
-    // Issue #1395 — 优先消费 state.rules 表达式树渲染 summary，保留 sequence/AND/OR/NOT 语义；
-    //   rules 为空时落回旧扁平桶渲染路径，不破坏既有 reader（向后兼容）。
     const rawRules = state.rules ?? []
     const projectionRules = this.sanitizeProjectionRules(rawRules)
     const rulesSummary = projectionRules.length > 0 ? this.buildRulesSummary(projectionRules) : ''
@@ -320,12 +425,7 @@ export class SemanticStateProjectionService {
   }
 
   buildDisplayLogicGraph(state: SemanticState): SemanticDisplayLogicGraph {
-    // Issue #1403 子故障 B — rules-first display graph 渲染。
-    //   旧路径只读 state.trigger flat-lift（lift 出来的扁平桶可能含 LLM 幻觉参数，
-    //   如 S2 输入「连续跌三根」却被 lift 成 `price.candle_pattern.minBars=15`），
-    //   导致 UI 显示「连续实体形态（≥15 根）时双向开仓」与用户描述背离。
-    //   state.rules 表达式树是 planner 输出的真源（sequence/AND/OR 语义完整），
-    //   优先从 rules 渲染条件文本，flat 路径只在 rules 为空时兜底（向后兼容）。
+    const facts = this.rulesMainflowReader.readFacts(state)
     const rawRules = state.rules ?? []
     const projectionRules = this.sanitizeProjectionRules(rawRules)
     const rulesBlocks = this.buildDisplayRuleBlocksFromRules(projectionRules, rawRules)
@@ -333,7 +433,7 @@ export class SemanticStateProjectionService {
       ? rulesBlocks
       : []
 
-    const orchestrationBlock = Array.isArray(state.rules) ? null : this.buildDisplayOrchestrationBlock(state)
+    const orchestrationBlock = Array.isArray(state.rules) ? null : this.buildDisplayOrchestrationBlock(facts)
 
     return {
       blocks: [
@@ -351,7 +451,7 @@ export class SemanticStateProjectionService {
   //     THEN 段空显示"等待策略规则补充"）
   //   - UI 层 always-on + action effects 噪音 rule 兜底过滤（防 merge 阶段 filter
   //     未生效或下游路径写入 state.rules 绕过 merge）
-  //   - rules 为空 / 无 entry|exit rules → 返回 []，调用方走旧 flat 路径兜底
+  //   - rules 为空 / 无 entry|exit rules → 返回 []
   private buildDisplayRuleBlocksFromRules(
     rules: readonly SemanticRule[],
     sourceRules: readonly SemanticRule[] = rules,
@@ -530,30 +630,8 @@ export class SemanticStateProjectionService {
     return ''
   }
 
-  private buildDisplayRuleBlocksFromFlatTriggers(state: SemanticState): SemanticDisplayLogicGraphBlock[] {
-    const triggers = this.filterDeterministicTriggers(readFlatTriggers(state))
-    const actions = this.filterDeterministicActions(readFlatActions(state))
-    const ruleGroups = this.groupDisplayRuleTriggers(
-      triggers.filter(trigger => trigger.phase === 'entry' || trigger.phase === 'exit'),
-    )
-    const ruleBlocks: SemanticDisplayLogicGraphBlock[] = []
-    for (const group of ruleGroups) {
-      const block = this.buildDisplayRuleBlock({
-        triggers: group,
-        blockType: this.resolveDisplayRuleBlockType(group, ruleBlocks.length),
-        gateText: group[0]?.phase === 'entry' && group[0] ? this.buildDisplayGateText(triggers, group[0]) : null,
-        actions,
-        position: state.position,
-      })
-      if (block) {
-        ruleBlocks.push(block)
-      }
-    }
-    return ruleBlocks
-  }
-
-  private buildDisplayOrchestrationBlock(state: SemanticState): SemanticDisplayLogicGraphBlock | null {
-    const nodes = state.orchestration ?? []
+  private buildDisplayOrchestrationBlock(facts: readonly RulesMainflowAtomFact[]): SemanticDisplayLogicGraphBlock | null {
+    const nodes = this.factsToOrchestrationNodes(facts)
     const items: SemanticDisplayLogicGraphItem[] = []
     for (const node of nodes) {
       if (node.status !== 'locked') {
@@ -656,8 +734,9 @@ export class SemanticStateProjectionService {
     nextQuestion: string | null
   } {
     const hasRulesOnlyMainflow = Array.isArray(state.rules)
-    const triggerSummary = hasRulesOnlyMainflow ? '' : this.buildTriggerSummary(readFlatTriggers(state), true)
-    const riskSummary = hasRulesOnlyMainflow ? '' : this.buildRiskSummary(readFlatRisks(state))
+    const facts = this.rulesMainflowReader.readFacts(state)
+    const triggerSummary = hasRulesOnlyMainflow ? '' : this.buildTriggerSummary(this.factsToTriggers(facts), true)
+    const riskSummary = hasRulesOnlyMainflow ? '' : this.buildRiskSummary(this.factsToRisks(facts))
     // #1238：clarification 路径下"我当前理解的策略是"这条提示长期只渲染
     // trigger + risk，遗漏 position 段（含 sizing、dca_schedule / pyramiding_limit
     // 等 constraint 显示），导致用户给出 DCA / 加仓配置时即使 state.position.constraints
@@ -670,7 +749,7 @@ export class SemanticStateProjectionService {
     //   - position locked 时 nextQuestion 仍可能追问已被 summary 覆盖的 position open slot
     //     → #1244（dedupe nextQuestion vs summary）
     //   - buildPositionSummary 内 presentationRegistry try/catch 吞错变沉默失败 → #1245
-    const positionSummary = hasRulesOnlyMainflow ? '' : this.buildPositionSummary(state.position, state.positionConstraint)
+    const positionSummary = hasRulesOnlyMainflow ? '' : this.buildPositionSummary(state.position, this.factsToPositionConstraints(facts))
     const summaryItems = [triggerSummary, riskSummary, positionSummary].filter(item => item.length > 0)
 
     // Issue #1395 — clarification 视图同样优先消费 rules 树
@@ -691,10 +770,10 @@ export class SemanticStateProjectionService {
   }
 
   private buildDisplayRuleBlock(input: {
-    triggers: SemanticState['trigger']
+    triggers: SemanticTriggerState[]
     blockType: SemanticDisplayBlockType
     gateText: string | null
-    actions: SemanticState['action']
+    actions: SemanticActionState[]
     position: SemanticState['position']
   }): SemanticDisplayLogicGraphBlock | null {
     const [firstTrigger] = input.triggers
@@ -737,8 +816,8 @@ export class SemanticStateProjectionService {
     }
   }
 
-  private groupDisplayRuleTriggers(triggers: SemanticState['trigger']): SemanticState['trigger'][] {
-    type TriggerItem = SemanticState['trigger'][number]
+  private groupDisplayRuleTriggers(triggers: SemanticTriggerState[]): SemanticTriggerState[][] {
+    type TriggerItem = SemanticTriggerState
     const groups: TriggerItem[][] = []
     const consumedTriggerIds = new Set<string>()
 
@@ -773,7 +852,7 @@ export class SemanticStateProjectionService {
     return groups
   }
 
-  private shouldRenderDisplayGroupAsSingleCondition(group: SemanticState['trigger']): boolean {
+  private shouldRenderDisplayGroupAsSingleCondition(group: SemanticTriggerState[]): boolean {
     if (group.length <= 1) return false
     if (group.every(trigger => this.isGroupableIndicatorCompareTrigger(trigger))) return true
 
@@ -799,8 +878,8 @@ export class SemanticStateProjectionService {
   }
 
   private canMergeDisplayRuleTriggers(
-    previous: SemanticState['trigger'][number],
-    next: SemanticState['trigger'][number],
+    previous: SemanticTriggerState,
+    next: SemanticTriggerState,
   ): boolean {
     if (
       previous.phase !== next.phase
@@ -819,7 +898,7 @@ export class SemanticStateProjectionService {
   }
 
   private resolveDisplayRuleBlockType(
-    group: SemanticState['trigger'],
+    group: SemanticTriggerState[],
     index: number,
   ): SemanticDisplayBlockType {
     if (index === 0) {
@@ -833,15 +912,15 @@ export class SemanticStateProjectionService {
   }
 
   private shareDisplayRuleGroupMarker(
-    previous: SemanticState['trigger'][number],
-    next: SemanticState['trigger'][number],
+    previous: SemanticTriggerState,
+    next: SemanticTriggerState,
   ): boolean {
     const previousMarker = this.readDisplayRuleGroupMarker(previous)
     const nextMarker = this.readDisplayRuleGroupMarker(next)
     return previousMarker !== null && previousMarker === nextMarker
   }
 
-  private readDisplayRuleGroupMarker(trigger: SemanticState['trigger'][number]): string | null {
+  private readDisplayRuleGroupMarker(trigger: SemanticTriggerState): string | null {
     const markerKeys = [
       'displayGroupId',
       'groupId',
@@ -872,8 +951,8 @@ export class SemanticStateProjectionService {
   }
 
   private isKnownAtomicEntryCombination(
-    previous: SemanticState['trigger'][number],
-    next: SemanticState['trigger'][number],
+    previous: SemanticTriggerState,
+    next: SemanticTriggerState,
   ): boolean {
     const keys = new Set([previous.key, next.key])
     return keys.has('price.detect.indicator_boundary')
@@ -884,15 +963,15 @@ export class SemanticStateProjectionService {
       )
   }
 
-  private isBollingerBoundaryTrigger(trigger: SemanticState['trigger'][number]): boolean {
+  private isBollingerBoundaryTrigger(trigger: SemanticTriggerState): boolean {
     return trigger.key === ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key
       && this.readIndicatorBoundaryIndicator(trigger.params)?.name === 'bollinger'
   }
 
   private buildDisplayConditionText(
-    trigger: SemanticState['trigger'][number],
+    trigger: SemanticTriggerState,
     gateText: string | null,
-    groupedTriggers?: ReadonlyArray<SemanticState['trigger'][number]>,
+    groupedTriggers?: ReadonlyArray<SemanticTriggerState>,
   ): string {
     const conditionText = groupedTriggers && groupedTriggers.length > 1
       ? this.formatGroupedDisplayTriggerCondition(trigger, groupedTriggers)
@@ -907,7 +986,7 @@ export class SemanticStateProjectionService {
     return gateText ? `${conditionText}，且${gateText}` : conditionText
   }
 
-  private formatDisplayTriggerCondition(trigger: SemanticState['trigger'][number]): string {
+  private formatDisplayTriggerCondition(trigger: SemanticTriggerState): string {
     const atomicCondition = this.formatDisplayAtomicTriggerCondition(trigger)
     if (atomicCondition) {
       return atomicCondition
@@ -920,7 +999,7 @@ export class SemanticStateProjectionService {
       .trim()
   }
 
-  private formatDisplayAtomicTriggerCondition(trigger: SemanticState['trigger'][number]): string {
+  private formatDisplayAtomicTriggerCondition(trigger: SemanticTriggerState): string {
     // Issue #1179：只有显式声明 displayRenderer 的 atom 才被视为有"条件文案"。
     //   默认 fallback（publicName via atom.${key}.name token）不构成条件 inline，调用方应走
     //   sanitizeDisplayFallbackText / placeholder 路径，否则 UI 会看到"指标高于阈值"这类
@@ -936,7 +1015,7 @@ export class SemanticStateProjectionService {
     }
   }
 
-  private formatDisplayIndicatorBoundaryCondition(trigger: SemanticState['trigger'][number]): string {
+  private formatDisplayIndicatorBoundaryCondition(trigger: SemanticTriggerState): string {
     const indicator = this.readIndicatorBoundaryIndicator(trigger.params)
     const boundaryRole = this.readBoundaryRole(trigger.params.boundaryRole)
     if (!indicator || !boundaryRole) {
@@ -957,7 +1036,7 @@ export class SemanticStateProjectionService {
     return text
   }
 
-  private formatDisplayRelativeVolumeCondition(trigger: SemanticState['trigger'][number]): string {
+  private formatDisplayRelativeVolumeCondition(trigger: SemanticTriggerState): string {
     const lookbackBars = this.readFiniteNumber(trigger.params.lookbackBars)
     const multiplier = this.readFiniteNumber(trigger.params.multiplier)
     if (lookbackBars === null || multiplier === null) {
@@ -971,7 +1050,7 @@ export class SemanticStateProjectionService {
     return `成交量${direction}${inclusive}过去 ${this.formatNumber(lookbackBars)} 根均量的 ${this.formatNumber(multiplier)} 倍`
   }
 
-  private formatDisplayReboundConfirmationCondition(trigger: SemanticState['trigger'][number]): string {
+  private formatDisplayReboundConfirmationCondition(trigger: SemanticTriggerState): string {
     const definition = this.readString(trigger.params.definition)
     if (definition) {
       return `反弹确认（${definition}）`
@@ -985,7 +1064,7 @@ export class SemanticStateProjectionService {
     return '反弹确认'
   }
 
-  private formatDisplaySequenceCondition(trigger: SemanticState['trigger'][number]): string {
+  private formatDisplaySequenceCondition(trigger: SemanticTriggerState): string {
     const sequenceKind = this.readString(trigger.params.sequenceKind)
     if (!sequenceKind) {
       return ''
@@ -1022,7 +1101,7 @@ export class SemanticStateProjectionService {
     return `序列条件 ${sequenceKind}${windowText}${memoryText}`
   }
 
-  private formatDisplayRollingExtremaBreakoutCondition(trigger: SemanticState['trigger'][number]): string {
+  private formatDisplayRollingExtremaBreakoutCondition(trigger: SemanticTriggerState): string {
     const extrema = this.readString(trigger.params.extrema) === 'low' ? 'low' : 'high'
     const lookbackBars = this.readFiniteNumber(trigger.params.lookbackBars)
     const lookbackText = lookbackBars === null
@@ -1035,7 +1114,7 @@ export class SemanticStateProjectionService {
       : `${prefix}突破${lookbackText}最高价`
   }
 
-  private formatDisplayLogicalAnyOfCondition(trigger: SemanticState['trigger'][number]): string {
+  private formatDisplayLogicalAnyOfCondition(trigger: SemanticTriggerState): string {
     const items = Array.isArray(trigger.params.items) ? trigger.params.items : []
     const childTexts = items
       .map((item, index) => this.formatDisplayLogicalAnyOfItem(trigger, item, index))
@@ -1045,7 +1124,7 @@ export class SemanticStateProjectionService {
   }
 
   private formatDisplayLogicalAnyOfItem(
-    parentTrigger: SemanticState['trigger'][number],
+    parentTrigger: SemanticTriggerState,
     item: unknown,
     index: number,
   ): string {
@@ -1097,8 +1176,8 @@ export class SemanticStateProjectionService {
   }
 
   private buildDisplayGateText(
-    triggers: SemanticState['trigger'],
-    entryTrigger: SemanticState['trigger'][number],
+    triggers: SemanticTriggerState[],
+    entryTrigger: SemanticTriggerState,
   ): string | null {
     // 入场卡片本身已经渲染 EMA stack 语义时（marker-grouped indicator.above/below），
     //   不再追加同 sideScope 的 condition.expression gate 文本，避免重复表达
@@ -1120,9 +1199,9 @@ export class SemanticStateProjectionService {
   }
 
   private findGroupedDisplayTriggers(
-    triggers: SemanticState['trigger'],
-    trigger: SemanticState['trigger'][number],
-  ): Array<SemanticState['trigger'][number]> {
+    triggers: SemanticTriggerState[],
+    trigger: SemanticTriggerState,
+  ): Array<SemanticTriggerState> {
     const triggerMarker = this.readDisplayRuleGroupMarker(trigger)
     const isMarkerEligible = triggerMarker !== null
       && this.isGroupableIndicatorCompareTriggerByMarker(trigger)
@@ -1133,8 +1212,8 @@ export class SemanticStateProjectionService {
 
     // M1 (PR #1147 review)：避免对每个 candidate 重复解析 displayGroupId / contract.groupId，
     //   将 marker 缓存到 Map，将 O(N²) marker 读取降为 O(N)。
-    const markerCache = new Map<SemanticState['trigger'][number], string | null>()
-    const readMarker = (candidate: SemanticState['trigger'][number]): string | null => {
+    const markerCache = new Map<SemanticTriggerState, string | null>()
+    const readMarker = (candidate: SemanticTriggerState): string | null => {
       const cached = markerCache.get(candidate)
       if (cached !== undefined) return cached
       const resolved = this.readDisplayRuleGroupMarker(candidate)
@@ -1180,15 +1259,15 @@ export class SemanticStateProjectionService {
   //       才走 formatGroupedIndicatorCompareCondition；其余异质组合由 canMergeDisplayRuleTriggers
   //       + shouldRenderDisplayGroupAsSingleCondition 联合判定
   private isGroupableIndicatorCompareTriggerByMarker(
-    trigger: SemanticState['trigger'][number],
+    trigger: SemanticTriggerState,
   ): boolean {
     return isTimeframeGroupableTriggerKey(trigger.key)
       && (trigger.phase === 'entry' || trigger.phase === 'exit')
   }
 
   private formatGroupedDisplayTriggerCondition(
-    trigger: SemanticState['trigger'][number],
-    groupedTriggers: ReadonlyArray<SemanticState['trigger'][number]>,
+    trigger: SemanticTriggerState,
+    groupedTriggers: ReadonlyArray<SemanticTriggerState>,
   ): string {
     // 同类 indicator.above/below 合并渲染（如"15m/30m MA20 上方"）
     const grouped = this.formatGroupedIndicatorCompareCondition(groupedTriggers)
@@ -1209,8 +1288,8 @@ export class SemanticStateProjectionService {
   }
 
   private isDisplayGateCompatibleWithEntry(
-    entryTrigger: SemanticState['trigger'][number],
-    gateTrigger: SemanticState['trigger'][number],
+    entryTrigger: SemanticTriggerState,
+    gateTrigger: SemanticTriggerState,
   ): boolean {
     const gateSide = this.resolveDisplayGateSideScope(gateTrigger)
     if (!gateSide || gateSide === 'both') {
@@ -1226,7 +1305,7 @@ export class SemanticStateProjectionService {
   }
 
   private resolveDisplayGateSideScope(
-    gateTrigger: SemanticState['trigger'][number],
+    gateTrigger: SemanticTriggerState,
   ): SemanticDisplaySideScope | null {
     if (gateTrigger.sideScope) {
       return gateTrigger.sideScope
@@ -1274,8 +1353,8 @@ export class SemanticStateProjectionService {
   }
 
   private buildDisplayActionItems(
-    trigger: SemanticState['trigger'][number],
-    actions: SemanticState['action'],
+    trigger: SemanticTriggerState,
+    actions: SemanticActionState[],
     position: SemanticState['position'],
   ): SemanticDisplayActionItem[] {
     const actionKey = this.pickDisplayActionKey(trigger, actions)
@@ -1294,8 +1373,8 @@ export class SemanticStateProjectionService {
   }
 
   private pickDisplayActionKey(
-    trigger: SemanticState['trigger'][number],
-    actions: SemanticState['action'],
+    trigger: SemanticTriggerState,
+    actions: SemanticActionState[],
   ): string | null {
     const hasAction = (key: string) => actions.some(action => action.key === key)
     const pickFirstExisting = (keys: string[]): string | null => keys.find(hasAction) ?? null
@@ -1332,10 +1411,11 @@ export class SemanticStateProjectionService {
 
   private buildDisplayExecuteBlock(state: SemanticState): SemanticDisplayLogicGraphBlock {
     const hasRulesOnlyMainflow = Array.isArray(state.rules)
+    const facts = this.rulesMainflowReader.readFacts(state)
     const executionContext = this.buildExecutionContext(state.contextSlots)
     const positionSizing = this.buildDisplayPositionSizingValue(state.position)
     const marketType = this.formatDisplayMarketType(executionContext.marketType)
-    const riskTexts = (hasRulesOnlyMainflow ? '' : this.buildRiskSummary(this.filterDeterministicRisk(readFlatRisks(state))))
+    const riskTexts = (hasRulesOnlyMainflow ? '' : this.buildRiskSummary(this.filterDeterministicRisk(this.factsToRisks(facts))))
       .split('；')
       .filter(text => text.length > 0)
     const items: SemanticDisplayExecuteItem[] = []
@@ -1511,7 +1591,7 @@ export class SemanticStateProjectionService {
 
   // 注：以下 trigger.key 字面比较均为"文案分支"——能力判定已在 isXxxTriggerKey 上游 registry 守门，
   //   此处用 key 选择中文措辞（"上穿"/"下穿"/"上方"/"低于"等），属于展示层渲染逻辑，非能力白名单。
-  private buildTriggerSummary(triggers: SemanticState['trigger'], includeSuperseded: boolean): string {
+  private buildTriggerSummary(triggers: SemanticTriggerState[], includeSuperseded: boolean): string {
     const sourceTriggers = includeSuperseded
       ? [...triggers]
       : triggers.filter(trigger => trigger.status === 'locked')
@@ -1675,12 +1755,12 @@ export class SemanticStateProjectionService {
    * - 桶大小 = 1 / groupId 缺失：不落入本 map，走原 singleton 渲染路径。
    */
   private buildContractGroupFoldedSummaries(
-    triggers: SemanticState['trigger'],
+    triggers: SemanticTriggerState[],
     groupedIndicatorCompareSummaries: Map<string, string>,
     groupedAtomicSummaries: Map<string, string>,
   ): Map<string, string> {
     const result = new Map<string, string>()
-    const buckets = new Map<string, Array<SemanticState['trigger'][number]>>()
+    const buckets = new Map<string, Array<SemanticTriggerState>>()
 
     for (const trigger of triggers) {
       if (groupedIndicatorCompareSummaries.has(trigger.id)) continue
@@ -1727,7 +1807,7 @@ export class SemanticStateProjectionService {
     return result
   }
 
-  private readTriggerContractGroupId(trigger: SemanticState['trigger'][number]): string | null {
+  private readTriggerContractGroupId(trigger: SemanticTriggerState): string | null {
     for (const contract of trigger.contracts ?? []) {
       const value = this.readString(contract.params?.groupId)
       if (value) return value
@@ -1735,7 +1815,7 @@ export class SemanticStateProjectionService {
     return null
   }
 
-  private readTriggerContractJoin(trigger: SemanticState['trigger'][number]): 'AND' | 'OR' | null {
+  private readTriggerContractJoin(trigger: SemanticTriggerState): 'AND' | 'OR' | null {
     // 同一 trigger 的所有 contracts 共享同一 join；取第一个有值的即可。
     for (const contract of trigger.contracts ?? []) {
       const value = this.readString(contract.params?.join)
@@ -1748,7 +1828,7 @@ export class SemanticStateProjectionService {
    * 渲染单个 trigger 的条件文本（不含 phase 前缀与 action 后缀），供 #1222 折叠拼接使用。
    * 复用 buildTriggerSummary 的渲染结果再剥离前后缀，比内联完整渲染规则更稳健。
    */
-  private renderTriggerCondition(trigger: SemanticState['trigger'][number]): string {
+  private renderTriggerCondition(trigger: SemanticTriggerState): string {
     const line = this.buildTriggerSummary([trigger], true)
     if (!line) return ''
     const phaseLabel = this.formatTriggerPhaseLabel(trigger.phase)
@@ -1764,11 +1844,11 @@ export class SemanticStateProjectionService {
   }
 
   private buildGroupedIndicatorCompareSummaries(
-    triggers: SemanticState['trigger'],
+    triggers: SemanticTriggerState[],
   ): Map<string, string> {
     const result = new Map<string, string>()
-    const contractGroups = new Map<string, Array<SemanticState['trigger'][number]>>()
-    const groups = new Map<string, Array<SemanticState['trigger'][number]>>()
+    const contractGroups = new Map<string, Array<SemanticTriggerState>>()
+    const groups = new Map<string, Array<SemanticTriggerState>>()
 
     for (const trigger of triggers) {
       if (!this.isGroupableIndicatorCompareTrigger(trigger)) {
@@ -1837,7 +1917,7 @@ export class SemanticStateProjectionService {
   }
 
   private formatGroupedIndicatorCompareCondition(
-    group: ReadonlyArray<SemanticState['trigger'][number]>,
+    group: ReadonlyArray<SemanticTriggerState>,
   ): string | null {
     if (group.length <= 1) {
       return null
@@ -1977,10 +2057,10 @@ export class SemanticStateProjectionService {
   // #endregion multi-period indicator compare merge
 
   private buildGroupedAtomicTriggerSummaries(
-    triggers: SemanticState['trigger'],
+    triggers: SemanticTriggerState[],
   ): Map<string, string> {
     const result = new Map<string, string>()
-    const groups = new Map<string, Array<SemanticState['trigger'][number]>>()
+    const groups = new Map<string, Array<SemanticTriggerState>>()
 
     for (const trigger of triggers) {
       // eslint-disable-next-line atom-keys/no-atom-key-literal -- logical.any_of not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
@@ -2033,7 +2113,7 @@ export class SemanticStateProjectionService {
 
   // 无 marker 路径：trigger 需自证身份，要求 key 支持 timeframe 维度分组合并（indicator.above/below）
   //   且有完整的 reference.period + timeframe params
-  private isGroupableIndicatorCompareTrigger(trigger: SemanticState['trigger'][number]): boolean {
+  private isGroupableIndicatorCompareTrigger(trigger: SemanticTriggerState): boolean {
     return isTimeframeGroupableTriggerKey(trigger.key)
       && (trigger.phase === 'entry' || trigger.phase === 'exit')
       && this.readIndicatorReferencePeriod(trigger.params) !== null
@@ -2042,14 +2122,14 @@ export class SemanticStateProjectionService {
   }
 
   private formatGroupedIndicatorCompareTriggerSummary(
-    trigger: SemanticState['trigger'][number],
+    trigger: SemanticTriggerState,
     timeframes: string[],
   ): string {
     const condition = `${timeframes.join(' / ')} ${this.formatIndicatorCompareCondition(trigger)}`
     return `${this.formatTriggerPhaseLabel(trigger.phase)}：${condition}${this.formatActionSuffix(trigger, condition)}`
   }
 
-  private formatIndicatorCompareTriggerSummary(trigger: SemanticState['trigger'][number]): string {
+  private formatIndicatorCompareTriggerSummary(trigger: SemanticTriggerState): string {
     const timeframe = typeof trigger.params.timeframe === 'string' && trigger.params.timeframe.trim().length > 0
       ? `${trigger.params.timeframe.trim()} `
       : ''
@@ -2057,7 +2137,7 @@ export class SemanticStateProjectionService {
     return `${this.formatTriggerPhaseLabel(trigger.phase)}：${condition}${this.formatActionSuffix(trigger, condition)}`
   }
 
-  private formatTriggerPhaseLabel(phase: SemanticState['trigger'][number]['phase']): string {
+  private formatTriggerPhaseLabel(phase: SemanticTriggerState['phase']): string {
     if (phase === 'entry') return '入场'
     if (phase === 'exit') return '出场'
     return '条件'
@@ -2065,7 +2145,7 @@ export class SemanticStateProjectionService {
 
   // 注：以下 trigger.key 字面比较均为"文案分支"——能力判定已在 isXxxTriggerKey 上游 registry 守门，
   //   此处用 key 选择中文措辞（"上方"/"低于"），属于展示层渲染逻辑，非能力白名单。
-  private formatIndicatorCompareCondition(trigger: SemanticState['trigger'][number]): string {
+  private formatIndicatorCompareCondition(trigger: SemanticTriggerState): string {
     const periodValue = this.readIndicatorReferencePeriod(trigger.params)
     const period = periodValue === null ? '' : this.formatNumber(periodValue)
     const indicator = this.formatIndicatorName(trigger)
@@ -2112,13 +2192,13 @@ export class SemanticStateProjectionService {
     return `价格${direction}${periodText}${bufferText}`
   }
 
-  private formatIndicatorName(trigger: SemanticState['trigger'][number]): string {
+  private formatIndicatorName(trigger: SemanticTriggerState): string {
     return typeof trigger.params.indicator === 'string' && trigger.params.indicator.trim().length > 0
       ? trigger.params.indicator.trim().toUpperCase()
       : 'MA'
   }
 
-  private uniqueSortedIndicatorPeriods(triggers: ReadonlyArray<SemanticState['trigger'][number]>): number[] {
+  private uniqueSortedIndicatorPeriods(triggers: ReadonlyArray<SemanticTriggerState>): number[] {
     const periods = new Set<number>()
     for (const trigger of triggers) {
       const period = this.readIndicatorReferencePeriod(trigger.params)
@@ -2131,8 +2211,8 @@ export class SemanticStateProjectionService {
   }
 
   private sortIndicatorCompareGroup(
-    triggers: Array<SemanticState['trigger'][number]>,
-  ): Array<SemanticState['trigger'][number]> {
+    triggers: Array<SemanticTriggerState>,
+  ): Array<SemanticTriggerState> {
     return [...triggers].sort((left, right) => {
       const timeframeDelta = String(left.params.timeframe ?? '').localeCompare(String(right.params.timeframe ?? ''))
       if (timeframeDelta !== 0) return timeframeDelta
@@ -2143,7 +2223,7 @@ export class SemanticStateProjectionService {
     })
   }
 
-  private uniqueSortedTimeframes(triggers: ReadonlyArray<SemanticState['trigger'][number]>): string[] {
+  private uniqueSortedTimeframes(triggers: ReadonlyArray<SemanticTriggerState>): string[] {
     const timeframes = new Set<string>()
     for (const trigger of triggers) {
       if (typeof trigger.params.timeframe === 'string' && trigger.params.timeframe.trim().length > 0) {
@@ -2156,7 +2236,7 @@ export class SemanticStateProjectionService {
     )
   }
 
-  private buildContractLevelSetSummary(trigger: SemanticState['trigger'][number]): string {
+  private buildContractLevelSetSummary(trigger: SemanticTriggerState): string {
     const capability = this.findCapability(trigger.contracts, 'price', 'define', 'level_set')
     if (!capability) {
       return ''
@@ -2241,7 +2321,7 @@ export class SemanticStateProjectionService {
     return null
   }
 
-  private formatCrossTriggerSummary(trigger: SemanticState['trigger'][number]): string {
+  private formatCrossTriggerSummary(trigger: SemanticTriggerState): string {
     const indicator = typeof trigger.params.indicator === 'string'
       ? trigger.params.indicator.trim().toLowerCase()
       : ''
@@ -2274,7 +2354,7 @@ export class SemanticStateProjectionService {
     return `${phase}：${condition}${this.formatActionSuffix(trigger, condition)}`
   }
 
-  private formatIndicatorBoundaryTriggerSummary(trigger: SemanticState['trigger'][number]): string {
+  private formatIndicatorBoundaryTriggerSummary(trigger: SemanticTriggerState): string {
     const indicator = this.readIndicatorBoundaryIndicator(trigger.params)
     const boundaryRole = this.readBoundaryRole(trigger.params.boundaryRole)
     if (!indicator || !boundaryRole) {
@@ -2342,7 +2422,7 @@ export class SemanticStateProjectionService {
     return ''
   }
 
-  private formatActionSuffix(trigger: SemanticState['trigger'][number], conditionText: string): string {
+  private formatActionSuffix(trigger: SemanticTriggerState, conditionText: string): string {
     const evidenceText = typeof trigger.evidence?.text === 'string' ? trigger.evidence.text : ''
     const separator = /[A-Za-z0-9%]$/u.test(conditionText) ? ' ' : ''
     if (trigger.phase === 'entry') {
@@ -2537,7 +2617,7 @@ export class SemanticStateProjectionService {
     return false
   }
 
-  private buildRiskSummary(riskItems: SemanticState['risk']): string {
+  private buildRiskSummary(riskItems: SemanticRiskState[]): string {
     const renderedRisk = riskItems
       .filter(risk => risk.status === 'locked')
       .sort((left, right) => this.compareRiskAtoms(left, right))
@@ -2618,7 +2698,7 @@ export class SemanticStateProjectionService {
     return this.dedupeRenderedItems(renderedRisk).join('；')
   }
 
-  private buildRiskFallbackSummary(_risk: SemanticState['risk'][number]): string {
+  private buildRiskFallbackSummary(_risk: SemanticRiskState): string {
     return '已识别风控，参数待补充'
   }
 
@@ -2832,7 +2912,7 @@ export class SemanticStateProjectionService {
     return hasAny ? out : null
   }
 
-  private buildActionSummary(actions: SemanticState['action'], state: SemanticState): string {
+  private buildActionSummary(actions: SemanticActionState[], state: SemanticState): string {
     // sub-fix 4: hoist index build once per call, not once per action
     const index = CapabilityEvidenceIndex.build(state)
     return actions
@@ -2843,7 +2923,7 @@ export class SemanticStateProjectionService {
       .join('；')
   }
 
-  private buildAddPositionSummary(action: SemanticState['action'][number]): string {
+  private buildAddPositionSummary(action: SemanticActionState): string {
     if (action.key !== ATOM_CONTRACT_REGISTRY['action.add_position'].key) {
       return ''
     }
@@ -2905,7 +2985,7 @@ export class SemanticStateProjectionService {
     return `${this.formatNumber(value)} ${asset}`
   }
 
-  private buildContractOrderProgramSummary(action: SemanticState['action'][number], state: SemanticState, index?: CapabilityEvidenceIndex): string {
+  private buildContractOrderProgramSummary(action: SemanticActionState, state: SemanticState, index?: CapabilityEvidenceIndex): string {
     const orderProgram = this.findCapability(action.contracts, 'order_program', 'maintain', 'limit_ladder')
     if (!orderProgram) {
       return ''
@@ -2929,7 +3009,7 @@ export class SemanticStateProjectionService {
     return `挂单：${orderType}网格${recycleText}${budgetText}`
   }
 
-  private buildContractGuardSummary(risk: SemanticState['risk'][number]): string {
+  private buildContractGuardSummary(risk: SemanticRiskState): string {
     const guard = (risk.contracts ?? [])
       .flatMap(contract => contract.capabilities)
       .find(capability => capability.domain === 'guard' && capability.verb === 'enforce')
@@ -2968,7 +3048,7 @@ export class SemanticStateProjectionService {
   }
 
   private findCapability(
-    contracts: SemanticState['trigger'][number]['contracts'] | SemanticState['action'][number]['contracts'] | SemanticState['risk'][number]['contracts'],
+    contracts: SemanticTriggerState['contracts'] | SemanticActionState['contracts'] | SemanticRiskState['contracts'],
     domain: SemanticCapability['domain'],
     verb: string,
     object: string,
@@ -3062,7 +3142,7 @@ export class SemanticStateProjectionService {
 
   private buildPositionSummary(
     position: SemanticState['position'],
-    constraints: SemanticState['positionConstraint'] = [],
+    constraints: SemanticPositionConstraintState[] = [],
     omitConstraintKeys: ReadonlySet<string> = new Set(),
   ): string {
     // #1169：position.status==='locked' 即可进入；validateSemanticPositionContract 对
@@ -3165,8 +3245,8 @@ export class SemanticStateProjectionService {
   }
 
   private buildRecommendationSignals(input: {
-    actions: SemanticState['action']
-    triggers: SemanticState['trigger']
+    actions: SemanticActionState[]
+    triggers: SemanticTriggerState[]
     families: SemanticState['families']
   }): {
     hasShortIntent: boolean
@@ -3230,9 +3310,9 @@ export class SemanticStateProjectionService {
 
   private hasDeterministicSemantics(
     input: {
-      triggers: SemanticState['trigger']
-      actions: SemanticState['action']
-      risk: SemanticState['risk']
+      triggers: SemanticTriggerState[]
+      actions: SemanticActionState[]
+      risks: SemanticRiskState[]
       position: SemanticState['position']
       hasGridIntent: boolean
       lockedOrchestrationCount: number
@@ -3240,7 +3320,7 @@ export class SemanticStateProjectionService {
   ): boolean {
     return input.triggers.length > 0
       || input.actions.length > 0
-      || input.risk.length > 0
+      || input.risks.length > 0
       || this.hasValidLockedPosition(input.position)
       || input.hasGridIntent
       || input.lockedOrchestrationCount > 0
@@ -3280,7 +3360,7 @@ export class SemanticStateProjectionService {
     }
   }
 
-  private compareTriggers(left: SemanticState['trigger'][number], right: SemanticState['trigger'][number]): number {
+  private compareTriggers(left: SemanticTriggerState, right: SemanticTriggerState): number {
     const phaseOrder: Record<'entry' | 'exit' | 'risk' | 'gate', number> = {
       entry: 0,
       exit: 1,
@@ -3299,8 +3379,8 @@ export class SemanticStateProjectionService {
   }
 
   private compareRiskAtoms(
-    left: SemanticState['risk'][number],
-    right: SemanticState['risk'][number],
+    left: SemanticRiskState,
+    right: SemanticRiskState,
   ): number {
     if (left.key !== right.key) {
       return left.key.localeCompare(right.key)
@@ -3326,16 +3406,16 @@ export class SemanticStateProjectionService {
       .sort((left, right) => this.compareDeterministicAtoms(left, right))
   }
 
-  private filterDeterministicRisk(riskItems: SemanticState['risk']): SemanticState['risk'] {
+  private filterDeterministicRisk(riskItems: SemanticRiskState[]): SemanticRiskState[] {
     return this.filterDeterministicAtoms(riskItems)
   }
 
-  private filterDeterministicTriggers(triggers: SemanticState['trigger']): SemanticState['trigger'] {
+  private filterDeterministicTriggers(triggers: SemanticTriggerState[]): SemanticTriggerState[] {
     return this.filterDeterministicAtoms(triggers)
       .sort((left, right) => this.compareTriggers(left, right))
   }
 
-  private filterDeterministicActions(actions: SemanticState['action']): SemanticState['action'] {
+  private filterDeterministicActions(actions: SemanticActionState[]): SemanticActionState[] {
     return this.filterDeterministicAtoms(actions)
       .sort((left, right) => this.compareActionAtoms(left, right))
   }
@@ -3350,7 +3430,7 @@ export class SemanticStateProjectionService {
     return `${normalized}`
   }
 
-  private buildInferredDefaults(riskItems: SemanticState['risk']): {
+  private buildInferredDefaults(riskItems: SemanticRiskState[]): {
     inferredKeys: Array<'risk.stopLossBasis' | 'risk.takeProfitBasis'>
     stopLossBasis: StrategyRuleBasis['kind'] | null
     takeProfitBasis: StrategyRuleBasis['kind'] | null
@@ -3407,9 +3487,10 @@ export class SemanticStateProjectionService {
 
   private findNextOpenSlot(state: SemanticState): SemanticSlotState | null {
     const hasRulesOnlyMainflow = Array.isArray(state.rules)
+    const facts = this.rulesMainflowReader.readFacts(state)
     const triggerPhaseOrder: Array<'entry' | 'exit' | 'risk' | 'gate'> = ['entry', 'exit', 'risk', 'gate']
     const openTriggerSlots = triggerPhaseOrder.flatMap(phase =>
-      (hasRulesOnlyMainflow ? [] : readFlatTriggers(state))
+      (hasRulesOnlyMainflow ? [] : this.factsToTriggers(facts))
         .filter(trigger => trigger.phase === phase && trigger.status !== 'superseded')
         .flatMap(trigger => trigger.openSlots)
         .filter(slot => slot.status === 'open'),
@@ -3439,14 +3520,14 @@ export class SemanticStateProjectionService {
       return positionSlot
     }
 
-    const actionSlot = (hasRulesOnlyMainflow ? [] : readFlatActions(state))
+    const actionSlot = (hasRulesOnlyMainflow ? [] : this.factsToActions(facts))
       .flatMap(action => action.openSlots ?? [])
       .find(slot => slot.status === 'open')
     if (actionSlot) {
       return actionSlot
     }
 
-    const riskSlot = (hasRulesOnlyMainflow ? [] : readFlatRisks(state))
+    const riskSlot = (hasRulesOnlyMainflow ? [] : this.factsToRisks(facts))
       .flatMap(risk => risk.openSlots)
       .find(slot => slot.status === 'open')
     if (riskSlot) {
@@ -3456,7 +3537,7 @@ export class SemanticStateProjectionService {
     return Object.values(state.contextSlots).find(slot => slot?.status === 'open') ?? null
   }
 
-  private compareActionAtoms(left: SemanticState['action'][number], right: SemanticState['action'][number]): number {
+  private compareActionAtoms(left: SemanticActionState, right: SemanticActionState): number {
     if (left.key !== right.key) {
       return left.key.localeCompare(right.key)
     }
@@ -3604,7 +3685,7 @@ export class SemanticStateProjectionService {
       phase: 'entry',
       status: 'locked',
       params: atom.params,
-    } as SemanticState['trigger'][number]))
+    } as SemanticTriggerState))
     const timeframes = this.uniqueSortedTimeframes(triggers)
     if (timeframes.length < 2) return null
     return `${timeframes.join(' / ')} ${this.formatIndicatorCompareCondition(triggers[0])}`

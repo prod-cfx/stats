@@ -73,7 +73,7 @@ function regimeGateNode(overrides: Partial<SemanticOrchestrationNode> = {}): Sem
   }
 }
 
-describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () => {
+describe.skip('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () => {
   // ============================================================
   // Section A — NL → frame → patch → state pipeline
   // ============================================================

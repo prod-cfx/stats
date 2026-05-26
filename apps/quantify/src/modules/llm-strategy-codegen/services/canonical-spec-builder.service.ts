@@ -8,6 +8,7 @@ import type {
   SemanticCapabilityShape,
   SemanticExpression,
   SemanticExpressionOperand,
+  SemanticOrchestrationContract,
   SemanticOrchestrationNode,
   SemanticPositionConstraintState,
   SemanticPositionState,
@@ -26,7 +27,7 @@ import type {
   StrategyNormalizedIntent,
 } from '../types/strategy-normalized-intent'
 import { createHash } from 'node:crypto'
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable } from '@nestjs/common'
 import { canonicalSerialize, parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { extractAtrStopParams } from './atr-stop-params'
@@ -50,11 +51,9 @@ import { PerTradeSizingResolver, scopeKey as sizingScopeKey } from './per-trade-
 import type { SizingAnchor, SizingAxis } from './per-trade-sizing-resolver.service'
 import type { CanonicalOrchestrationLegSizing, CanonicalOrchestrationLegSizingMode } from '../types/canonical-strategy-spec'
 import { normalizeLegacyPositionSizing, validateSemanticExpressionContract, validateSemanticPositionContract, validateSemanticRiskContract } from './strategy-semantic-contracts'
-import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 import type { AtomExpr, AtomExprAtom, RuleEffectsByRole, SemanticRule } from '../types/atom-expr'
 import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
-import { SemanticRuleProjectionService } from './semantic-rule-projection.service'
-import type { RulesMainflowLeaf, RulesMainflowView } from './rules-mainflow-reader.service'
+import type { RulesMainflowAtomFact, RulesMainflowLeaf, RulesMainflowView } from './rules-mainflow-reader.service'
 import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
 
 // PR3b: 非 atom 字段路径的类型化引用（Issue #1279 AC-4）
@@ -114,10 +113,6 @@ interface ScopedSemanticGateCondition {
 
 @Injectable()
 export class CanonicalSpecBuilderService {
-  // #1364 PR3: bucket 错位 warn-log 用
-  private readonly bucketMismatchLogger = new Logger('CanonicalSpecBuilder.BucketMismatch')
-  private readonly semanticRuleProjection = new SemanticRuleProjectionService()
-
   constructor(
     private readonly strategyIrCanonicalAdapter: StrategyIrCanonicalAdapterService = new StrategyIrCanonicalAdapterService(),
     private readonly contracts: SemanticAtomContractService = new SemanticAtomContractService(),
@@ -127,34 +122,6 @@ export class CanonicalSpecBuilderService {
     private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
     private readonly rulesMainflowReader: RulesMainflowReaderService = new RulesMainflowReaderService(),
   ) {}
-
-  /**
-   * #1364：扫 SemanticState 检测桶错位（trigger atom 出现在 actions[]，
-   * 或 orchestration atom 出现在 triggers[]/actions[] 等），按 contract.bucket
-   * 单一真相源校验，不一致时 warn-log。
-   *
-   * AC-4 后：服务端归桶器已强制把 orchestration atom 路由到 state.orchestration[]，
-   * 兜底 promotion hack（PR #1356/#1359/#1360）已物理删除；此处仅保留
-   * warn-only 监控，捕获任何残留错位（理论上不应再出现）。
-   */
-  private warnBucketMismatchInState(state: SemanticState): void {
-    const checkBucket = (
-      atomKey: string | undefined,
-      observedBucket: 'trigger' | 'action' | 'risk',
-      sourceLabel: string,
-    ): void => {
-      if (typeof atomKey !== 'string' || !(atomKey in ATOM_CONTRACT_REGISTRY)) return
-      const expected = ATOM_CONTRACT_REGISTRY[atomKey as AtomContractKey].bucket
-      if (expected !== observedBucket) {
-        this.bucketMismatchLogger.warn(
-          `event=bucket_mismatch atom=${atomKey} observed=${observedBucket} expected=${expected} source=${sourceLabel} note=#1364 hack 兜底中，待 AC-2/AC-3 完整实施后由服务端归桶单点修正`,
-        )
-      }
-    }
-    for (const t of readFlatTriggers(state)) checkBucket(t.key, 'trigger', 'state.triggers')
-    for (const a of readFlatActions(state)) checkBucket(a.key, 'action', 'state.actions')
-    for (const r of readFlatRisks(state)) checkBucket(r.key, 'risk', 'state.risk')
-  }
 
   buildFromLegacyChecklistForTestsOnly(legacySnapshot: StrategyLogicSnapshotInput): CanonicalStrategySpecV2 {
     if (this.isSemanticState(legacySnapshot.semanticState)) {
@@ -603,80 +570,7 @@ export class CanonicalSpecBuilderService {
       return this.buildFromSemanticRulesMainflow(state, fallbackMarket)
     }
 
-    const normalizedState = normalizeSemanticStateCombinationContracts(this.buildProgramRuleGenerationState(state))
-    const market = this.resolveSemanticStateMarket(normalizedState, fallbackMarket)
-    // #1186 PR2 (decision 7): 多腿场景 sizing 完全经 legScopes[*].legSizing 承载，spec.sizing===null；
-    //                          单腿沿用 spec.sizing，向后兼容。
-    const isMultiLeg = normalizedState.isMultiLeg === true
-    const sizing: CanonicalStrategySpecV2['sizing'] = isMultiLeg
-      ? null
-      : (this.resolveSizingFromSemanticState(normalizedState.position) ?? { mode: 'RATIO' as const, value: 0.1 })
-
-    const orderPrograms = this.buildContractOrderPrograms(normalizedState)
-    // #1186 PR2 (decision 8): isMultiLeg + grid orderProgram 共存互斥 — grid 路径独占 orderPrograms 编排，
-    //                          多腿限价独占 legScopes 派单；共存会导致 PR4 派单链路同时存在 grid worker 与 multi-leg fan-out。
-    if (isMultiLeg && orderPrograms.some(p => p.programKind === 'fixed_grid_gated' || p.programKind === 'dynamic_grid' || p.programKind === 'adaptive_volatility_grid')) {
-      throw new Error('MultiLegMutuallyExclusiveWithOrderProgram: state.isMultiLeg===true 与 grid orderPrograms 不可共存')
-    }
-    const rules = this.filterOrderProgramShadowRules(
-      [
-        ...this.buildRulesFromSemanticState(normalizedState, sizing),
-        ...this.buildBoundaryGuardRulesFromSemanticState(normalizedState, orderPrograms),
-      ],
-      orderPrograms,
-    )
-    const baseRequiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
-    // #1364 AC-4 — bucket 决策真相源已收敛到 ATOM_CONTRACT_REGISTRY[key].bucket
-    // 服务端归桶后，orchestration atom 一律落在 state.orchestration[]，
-    // 下游兜底 hack（#1357/#1358 / PR #1359/#1360）已物理删除。
-    // 这里保留 warn-log 暴露任何残留错位形态。
-    this.warnBucketMismatchInState(normalizedState)
-    const orchestrationGates = this.buildOrchestrationGates(normalizedState)
-    const orchestrationPortfolioRisks = this.buildOrchestrationPortfolioRisks(normalizedState)
-    const orchestrationPrograms = this.buildOrchestrationPrograms(normalizedState)
-    const orchestrationScopes = this.buildOrchestrationScopes(normalizedState)
-    const orchestrationLegScopes = this.buildOrchestrationLegScopes(normalizedState)
-    // Phase 5 S3 (#1109): 把 scope.timeframe 声明的 tf 合并到 dataRequirements
-    const requiredTimeframes = this.mergeTimeframeScopeIntoDataRequirements(
-      baseRequiredTimeframes,
-      orchestrationScopes,
-    )
-    const hasOrchestration = orchestrationGates.length > 0
-      || orchestrationPortfolioRisks.length > 0
-      || orchestrationPrograms.length > 0
-      || orchestrationScopes.length > 0
-      || orchestrationLegScopes.length > 0
-
-    return {
-      version: 2,
-      market: this.withRequiredMarketTimeframes(
-        market,
-        requiredTimeframes,
-        readFlatTriggers(normalizedState).some(trigger => this.readTriggerParamTimeframe(trigger.params)),
-      ),
-      indicators: this.resolveIndicatorsFromSemanticTriggers([...readFlatTriggers(normalizedState)]),
-      sizing,
-      executionPolicy: {
-        signalTiming: 'BAR_CLOSE',
-        fillTiming: 'NEXT_BAR_OPEN',
-      },
-      dataRequirements: {
-        requiredTimeframes,
-      },
-      orderPrograms,
-      rules,
-      ...(hasOrchestration
-        ? {
-            orchestration: {
-              ...(orchestrationGates.length > 0 ? { gates: orchestrationGates } : {}),
-              ...(orchestrationPortfolioRisks.length > 0 ? { portfolioRisks: orchestrationPortfolioRisks } : {}),
-              ...(orchestrationPrograms.length > 0 ? { programs: orchestrationPrograms } : {}),
-              ...(orchestrationScopes.length > 0 ? { scopes: orchestrationScopes } : {}),
-              ...(orchestrationLegScopes.length > 0 ? { legScopes: orchestrationLegScopes } : {}),
-            },
-          }
-        : {}),
-    }
+    throw new Error(`InvalidSemanticRulesMainflow: reason=${rulesMainflowRoute}`)
   }
 
   private resolveSemanticRulesMainflowRoute(state: SemanticState): 'empty_or_legacy' | 'typed' {
@@ -776,35 +670,131 @@ export class CanonicalSpecBuilderService {
     return createHash('sha256').update(canonicalSerialize(rules ?? [])).digest('hex')
   }
 
-  private buildProgramRuleGenerationState(state: SemanticState): SemanticState {
-    if (!state.rules?.some(rule => rule.phase === 'program' && isRuleEffectsByRole(rule.effects) && rule.effects.programs.length > 0)) {
-      return state
-    }
+  private readSemanticTriggerFacts(state: SemanticState): SemanticTriggerState[] {
+    return this.rulesMainflowReader.readFactsByRole(state, 'condition').map(fact => ({
+      id: fact.id,
+      key: fact.key,
+      phase: fact.phase === 'entry' || fact.phase === 'exit' ? fact.phase : 'gate',
+      sideScope: fact.sideScope,
+      params: fact.params,
+      status: fact.status,
+      source: fact.source,
+      openSlots: [...fact.openSlots],
+      ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' as const } } : {}),
+      ...this.optionalAtomContracts(fact),
+    }))
+  }
 
-    const projected = this.semanticRuleProjection.reprojectFromRules(state)
-    const sizingByRuleId = new Map<string, NonNullable<SemanticOrchestrationNode['sizing']>>()
-    for (const rule of state.rules) {
-      if (rule.phase !== 'program' || !isRuleEffectsByRole(rule.effects) || rule.effects.programs.length === 0) {
-        continue
-      }
-      const sizing = this.resolveProgramSizingFromTypedRuleEffects(rule.effects)
-      if (sizing) sizingByRuleId.set(rule.id, sizing)
-    }
-    if (sizingByRuleId.size === 0) {
-      return projected
-    }
+  private readSemanticActionFacts(state: SemanticState): SemanticActionState[] {
+    return this.rulesMainflowReader.readFactsByRole(state, 'action').map(fact => ({
+      id: fact.id,
+      key: fact.key,
+      params: fact.params,
+      status: fact.status,
+      source: fact.source,
+      openSlots: [...fact.openSlots],
+      ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' as const } } : {}),
+      ...this.optionalAtomContracts(fact),
+    }))
+  }
 
-    let changed = false
-    const orchestration = projected.orchestration.map((node) => {
-      if (node.kind !== 'program') return node
-      const ruleId = node._provenance?.ruleId
-      const sizing = ruleId ? sizingByRuleId.get(ruleId) : undefined
-      if (!sizing) return node
-      changed = true
-      return { ...node, sizing }
-    })
+  private readSemanticRiskFacts(state: SemanticState): SemanticRiskState[] {
+    return this.rulesMainflowReader.readFactsByRole(state, 'risk').map(fact => ({
+      id: fact.id,
+      key: fact.key,
+      params: fact.params,
+      status: fact.status,
+      source: fact.source,
+      openSlots: [...fact.openSlots],
+      ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' as const } } : {}),
+      ...this.optionalAtomContracts(fact),
+    }))
+  }
 
-    return changed ? { ...projected, orchestration } : projected
+  private readSemanticPositionConstraintFacts(state: SemanticState): SemanticPositionConstraintState[] {
+    return this.rulesMainflowReader.readFactsByRole(state, 'position')
+      .filter((fact): fact is RulesMainflowAtomFact & { key: SemanticPositionConstraintState['key'] } =>
+        this.isSemanticPositionConstraintKey(fact.key),
+      )
+      .map(fact => ({
+        id: fact.id,
+        key: fact.key,
+        params: fact.params,
+        status: fact.status,
+        source: fact.source,
+        openSlots: [...fact.openSlots],
+        ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' as const } } : {}),
+        ...this.optionalAtomContracts(fact),
+      }))
+  }
+
+  private readSemanticOrchestrationFacts(state: SemanticState): SemanticOrchestrationNode[] {
+    return this.rulesMainflowReader.readFactsByRole(state, 'orchestration').map(fact => ({
+      id: fact.id,
+      kind: this.resolveOrchestrationKind(fact.key),
+      key: fact.key,
+      params: fact.params,
+      status: fact.status,
+      source: fact.source,
+      openSlots: [...fact.openSlots],
+      contracts: this.orchestrationContracts(fact),
+      ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' as const } } : {}),
+      ...this.orchestrationFieldsFromParams(fact.params),
+    }))
+  }
+
+  private optionalAtomContracts(fact: RulesMainflowAtomFact): { contracts?: SemanticAtomContract[] } {
+    const contracts = fact.contracts?.filter((contract): contract is SemanticAtomContract =>
+      contract.kind === 'trigger'
+      || contract.kind === 'action'
+      || contract.kind === 'risk'
+      || contract.kind === 'position'
+      || contract.kind === 'context',
+    ) ?? []
+    return contracts.length > 0 ? { contracts } : {}
+  }
+
+  private orchestrationContracts(fact: RulesMainflowAtomFact): SemanticOrchestrationContract[] {
+    return fact.contracts?.filter((contract): contract is SemanticOrchestrationContract =>
+      contract.kind === 'scope'
+      || contract.kind === 'gate'
+      || contract.kind === 'program'
+      || contract.kind === 'portfolioRisk',
+    ) ?? []
+  }
+
+  private isSemanticPositionConstraintKey(key: string): key is SemanticPositionConstraintState['key'] {
+    return key === 'position.pyramiding_limit'
+      || key === 'position.max_exposure_pct'
+      || key === 'position.dca_schedule'
+      || key === 'grid.range_rebalance'
+  }
+
+  private resolveOrchestrationKind(key: string): SemanticOrchestrationNode['kind'] {
+    if (key.startsWith('scope.')) return 'scope'
+    if (key.startsWith('gate.')) return 'gate'
+    if (key.startsWith('portfolioRisk.')) return 'portfolioRisk'
+    return 'program'
+  }
+
+  private orchestrationFieldsFromParams(params: Record<string, unknown>): Partial<SemanticOrchestrationNode> {
+    const fields: Partial<SemanticOrchestrationNode> = {}
+    if (params.programKind === 'fixed_grid_gated' || params.programKind === 'dynamic_grid' || params.programKind === 'adaptive_volatility_grid' || params.programKind === 'event_listener') {
+      fields.programKind = params.programKind
+    }
+    if (params.onDeactivate === 'cancel' || params.onDeactivate === 'keep' || params.onDeactivate === 'close') {
+      fields.onDeactivate = params.onDeactivate
+    }
+    if (params.rebuildPolicy === 'static' || params.rebuildPolicy === 'anchor_on_state_change' || params.rebuildPolicy === 'atr_window' || params.rebuildPolicy === 'on_schema_version_bump') {
+      fields.rebuildPolicy = params.rebuildPolicy
+    }
+    if (typeof params.activeWhenRef === 'string') {
+      fields.activeWhenRef = params.activeWhenRef
+    }
+    if (this.isValidSemanticExpression(params.activeWhen)) {
+      fields.activeWhen = params.activeWhen
+    }
+    return fields
   }
 
   private resolveProgramSizingFromTypedRuleEffects(
@@ -2004,7 +1994,7 @@ export class CanonicalSpecBuilderService {
   // #1186 PR2: 多锚（state.isMultiLeg===true）路径用 PerTradeSizingResolver anchor 反填 legSizing；
   // 单腿/旧路径走 LLM 直供 legSizing fallback，零行为变更。
   private buildOrchestrationLegScopes(state: SemanticState): CanonicalOrchestrationLegScope[] {
-    const nodes = state.orchestration
+    const nodes = this.readSemanticOrchestrationFacts(state)
     if (!nodes || nodes.length === 0) return []
     const isMultiLeg = state.isMultiLeg === true
     const anchorMap = isMultiLeg ? this.sizingResolver.resolve(state) : undefined
@@ -2068,7 +2058,7 @@ export class CanonicalSpecBuilderService {
     if (anchorMap.has(sizingScopeKey({ kind: 'action', id: legId }))) {
       candidateActionIds.push(legId)
     }
-    for (const action of readFlatActions(state)) {
+    for (const action of this.readSemanticActionFacts(state)) {
       if (action.id === legId) continue
       if (action.id.endsWith(legId) || action.key.endsWith(legId)) {
         candidateActionIds.push(action.id)
@@ -2125,7 +2115,7 @@ export class CanonicalSpecBuilderService {
   // Phase 5 S2 (#1104) + S3 (#1109) + S9 (#1110) + S10 (#1111): scope union substrate（symbol + timeframe + dataSource + subStrategy）
   // 输出 status='locked' scope；按 node.id 字典序，保证 byte-equal（含旧 v1 单/多 symbol scope 字节兼容）
   private buildOrchestrationScopes(state: SemanticState): CanonicalOrchestrationScope[] {
-    const nodes = state.orchestration
+    const nodes = this.readSemanticOrchestrationFacts(state)
     if (!nodes || nodes.length === 0) {
       return []
     }
@@ -2243,7 +2233,7 @@ export class CanonicalSpecBuilderService {
   }
 
   private buildOrchestrationPortfolioRisks(state: SemanticState): CanonicalOrchestrationPortfolioRisk[] {
-    const nodes = state.orchestration
+    const nodes = this.readSemanticOrchestrationFacts(state)
     if (!nodes || nodes.length === 0) {
       return []
     }
@@ -2314,7 +2304,7 @@ export class CanonicalSpecBuilderService {
   }
 
   private buildOrchestrationGates(state: SemanticState): CanonicalOrchestrationGate[] {
-    const nodes = state.orchestration
+    const nodes = this.readSemanticOrchestrationFacts(state)
     if (!nodes || nodes.length === 0) {
       return []
     }
@@ -2392,7 +2382,7 @@ export class CanonicalSpecBuilderService {
   }
 
   private buildOrchestrationPrograms(state: SemanticState): CanonicalOrchestrationProgram[] {
-    const nodes = state.orchestration
+    const nodes = this.readSemanticOrchestrationFacts(state)
     if (!nodes || nodes.length === 0) {
       return []
     }
@@ -2643,7 +2633,7 @@ export class CanonicalSpecBuilderService {
       return []
     }
 
-    const hasBoundaryCancel = readFlatRisks(state).some(risk =>
+    const hasBoundaryCancel = this.readSemanticRiskFacts(state).some(risk =>
       risk.status === 'locked'
       && risk.contracts?.some(contract =>
         contract.capabilities.some(capability =>
@@ -2705,9 +2695,9 @@ export class CanonicalSpecBuilderService {
 
   private collectContracts(state: SemanticState): SemanticAtomContract[] {
     return [
-      ...readFlatTriggers(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
-      ...readFlatActions(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
-      ...readFlatRisks(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...this.readSemanticTriggerFacts(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...this.readSemanticActionFacts(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...this.readSemanticRiskFacts(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
       ...(state.position?.status === 'locked' ? state.position.contracts ?? [] : []),
       ...(state.position?.constraints ?? []).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
     ]
@@ -2979,7 +2969,7 @@ export class CanonicalSpecBuilderService {
   private hasBothSideGridIntent(state: SemanticState): boolean {
     const hasBothSideParams = (params: Record<string, unknown> | undefined): boolean =>
       params?.sideMode === 'both'
-    for (const constraint of state.positionConstraint ?? []) {
+    for (const constraint of this.readSemanticPositionConstraintFacts(state)) {
       if (constraint.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && hasBothSideParams(constraint.params)) {
         return true
       }
@@ -3104,7 +3094,11 @@ export class CanonicalSpecBuilderService {
     state: SemanticState,
     sizing: CanonicalStrategySpecV2['sizing'],
   ): CanonicalRuleV2[] {
-    const actionKeys = new Set(readFlatActions(state)
+    const semanticActions = this.readSemanticActionFacts(state)
+    const semanticTriggers = this.readSemanticTriggerFacts(state)
+    const semanticRisks = this.readSemanticRiskFacts(state)
+    const semanticPositionConstraints = this.readSemanticPositionConstraintFacts(state)
+    const actionKeys = new Set(semanticActions
       .filter(action => action.status === 'locked')
       .map(action => this.normalizeSemanticActionKey(action.key)))
     const counters: Record<'entry' | 'exit' | 'gate', number> = {
@@ -3115,7 +3109,7 @@ export class CanonicalSpecBuilderService {
     const rules: CanonicalRuleV2[] = []
     const defaultTimeframe = this.readLockedContextSlotString(state.contextSlots.timeframe)
     const directSemanticRuleIds = new Set<string>()
-    const gateConditions = readFlatTriggers(state)
+    const gateConditions = semanticTriggers
       .filter(trigger => trigger.status === 'locked' && trigger.phase === 'gate')
       .map((trigger): ScopedSemanticGateCondition | null => {
         const condition = trigger.key === 'condition.expression'
@@ -3134,13 +3128,13 @@ export class CanonicalSpecBuilderService {
 
     // Issue #1383 真根因（通用 bug）：grid.range_rebalance 在 ATOM_CONTRACT_REGISTRY 是
     //   positionConstraint 桶（atom-contract-registry.ts:190），不是 trigger 桶。
-    //   原实现仅在 state.trigger 里找 grid（下方 line "trigger.key === grid.range_rebalance"），
+    //   原实现仅在 condition facts 里找 grid，
     //   永远找不到，导致 dispatcher / builder 完美识别的 grid 参数（rangeLower/Upper/stepPct/sideMode）
     //   在 spec-builder 被丢弃，rebalance 规则数永远 0。
-    //   通用解：先扫 state.positionConstraint 桶把 grid atom 转 rebalance 规则；
-    //   buildGridRulesFromSemanticTrigger 只读 key/params/sideScope，positionConstraint state
+    //   通用解：先扫 position facts 把 grid atom 转 rebalance 规则；
+    //   buildGridRulesFromSemanticTrigger 只读 key/params/sideScope，position fact
     //   全部具备，可直接复用。
-    for (const constraint of state.positionConstraint ?? []) {
+    for (const constraint of semanticPositionConstraints) {
       if (constraint.status !== 'locked') continue
       if (constraint.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) continue
       rules.push(...this.buildGridRulesFromSemanticTrigger({
@@ -3158,7 +3152,7 @@ export class CanonicalSpecBuilderService {
       rules.push(...directRules)
     }
 
-    for (const triggerGroup of this.groupSemanticMultiTimeframeTriggers([...readFlatTriggers(state)])) {
+    for (const triggerGroup of this.groupSemanticMultiTimeframeTriggers([...semanticTriggers])) {
       const trigger = triggerGroup[0]
       if (!trigger) {
         continue
@@ -3205,7 +3199,7 @@ export class CanonicalSpecBuilderService {
     }
 
     const executableGroups = this.mergeImplicitMultiTimeframeGroups(
-      this.triggerCombinationContracts.resolveExecutableGroups(readFlatTriggers(state).filter(trigger =>
+      this.triggerCombinationContracts.resolveExecutableGroups(semanticTriggers.filter(trigger =>
         trigger.status === 'locked'
         && (trigger.phase === 'entry' || trigger.phase === 'exit')
         && trigger.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key,
@@ -3249,7 +3243,7 @@ export class CanonicalSpecBuilderService {
 
       const lifecycleAction = this.resolveLifecycleActionForTriggerGroup(
         group,
-        [...readFlatActions(state)],
+        [...semanticActions],
         state.position,
         dcaScheduleHasEvidenceTriggers,
       )
@@ -3299,7 +3293,7 @@ export class CanonicalSpecBuilderService {
       }
     }
 
-    rules.push(...this.buildRiskRulesFromSemanticState([...readFlatRisks(state)], state.position, [...readFlatActions(state)], state.rules ?? []))
+    rules.push(...this.buildRiskRulesFromSemanticState([...semanticRisks], state.position, [...semanticActions], state.rules ?? []))
 
     return rules
   }

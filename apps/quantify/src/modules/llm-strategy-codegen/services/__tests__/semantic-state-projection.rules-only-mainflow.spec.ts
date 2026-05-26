@@ -1,5 +1,14 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { SemanticState } from '../../types/semantic-state'
 import { SemanticStateProjectionService } from '../semantic-state-projection.service'
+
+const repoRoot = join(__dirname, '../../../../../../..')
+const guardedFiles = [
+  'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-projection.service.ts',
+  'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-normalization.ts',
+  'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-open-slot-answer-resolver.service.ts',
+] as const
 
 const poisonSlot = {
   slotKey: 'poison.slot',
@@ -100,6 +109,13 @@ function rulesOnlyStateWithPoisonFlat(): SemanticState {
 
 describe('SemanticStateProjectionService rules-only mainflow', () => {
   const service = new SemanticStateProjectionService()
+
+  it.each(guardedFiles)('%s reads rules mainflow through facts, not flat buckets', (file) => {
+    const source = readFileSync(join(repoRoot, file), 'utf8')
+
+    expect(source).not.toContain('semantic-state-flat-readers')
+    expect(source).not.toMatch(/\bstate\.(?:trigger|action|risk|positionConstraint|orchestration)\b/u)
+  })
 
   it('does not read poison flat buckets for summaries, display graph, or next question', () => {
     const state = rulesOnlyStateWithPoisonFlat()

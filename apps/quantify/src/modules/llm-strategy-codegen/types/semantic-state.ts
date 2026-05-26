@@ -1,27 +1,11 @@
 /**
- * Issue #1493 — Semantic State `rules[]` Single Source of Truth
+ * Issue #1633 Stage3 — Semantic State rules-only source of truth.
  *
- * flat 五桶字段（trigger / action / risk / positionConstraint / orchestration）
- * 是 `rules[]` 的派生投影（projectToFlat 输出）。下游**禁止** in-place mutation；
- * 任何 rules 树变更后必须通过 `SemanticRuleProjectionService.reprojectFromRules`
- * 回写新 state。
- *
- * 这五个字段在 SemanticStateBuckets 中标 readonly 以编译期阻断 in-place push/splice
- * 等写操作；带外修改 flat（如临时合并 dispatcher atoms）后必须显式调用
- * `SemanticRuleProjectionService.enforceProvenanceInvariantInPlace` 做 orphan drop。
- *
- * **`rules` 字段契约（Issue #1493 C2）**：
- *   - **生产规约**：planner / dispatcher / reducer / edit 等正式路径产出的 SemanticState
- *     `rules` 永远非空——它是 single source of truth，flat 五桶仅作派生缓存。
- *   - **legacy 退化路径**：`rules === undefined` 或 `rules.length === 0` 仅出现在
- *     旧 fixture / pure-flat seed / 单元测试空 state 等场景；此时 flat 五桶被视为
- *     独立真源（向后兼容），但 `reprojectFromRules` 与 `normalize()` 入口会输出
- *     `semantic_state_rules_missing_total` 结构化 warn 帮助线上排查。
- *   - 新增写路径必须保证 mutation 后 rules 与 flat 通过 `reprojectFromRules` 同步，
- *     不要新增依赖 rules-空 + flat-非空 的代码分支。
+ * Persisted SemanticState no longer carries derived flat buckets
+ * (trigger / action / risk / positionConstraint / orchestration). Consumers must
+ * read executable semantics from `rules[]` and typed contracts.
  */
 import { TIMEFRAME_MS } from '@ai/shared/script-engine/compiled-runtime'
-import type { AtomContractBucket } from '../atom-contracts/atom-contract-types'
 import type { SemanticAtomSupportMetadata, UnsupportedFallbackState } from './semantic-atom-support'
 
 // Phase 5 S3 (#1109): timeframe vocab 单一 source-of-truth — 派生于 packages/shared TIMEFRAME_MS
@@ -55,27 +39,7 @@ export type SemanticCapabilityDomain =
   | 'data'
 export type SemanticOrchestrationContractKind = 'scope' | 'gate' | 'program' | 'portfolioRisk'
 
-/**
- * Issue #1447 闸 3：flat 桶 atom 拓扑反查标记。
- *
- * `projectToFlat` 把 `rules[]` 表达式树投影成扁平五桶后，每个 atom 必须能反查到
- * 来源 rule（`ruleId`）以及在 rule 表达式树内的 JSON-Pointer 式路径（`conditionPath`）。
- * merge / projection 链路末端 invariant 校验：找不到所属 rule 的 atom（含 dispatcher
- * noisy lift 漏网 atom）一律 drop + 计数 `flat_atom_orphan_drop_total{bucket, source}`。
- *
- * 字段保持可选是为了向后兼容现存填充链路（dispatcher 桶 / planner 桶直接 push 到
- * 扁平桶时无来源 rule），但所有经 `projectToFlat` 的 atom 都会被填充该字段。
- *
- * 审查 Major M-1（#1447 闸 3 第 1 轮）：类型层 `_provenance?` 可选 vs 运行时
- *   `enforceProvenanceInvariant` drop 缺 provenance 节点，看似语义矛盾，但这是
- *   有意的两层契约：
- *     - 类型层兼容旧 push 路径（避免一次性大改造）
- *     - 运行时通过 invariant 强制等价于 "缺 provenance == orphan == drop"
- *   后续 follow-up（与本 PR 不绑）应：
- *     1. 拆分 ProjectedXxxState 子类型，把 `_provenance` 升级为必填
- *     2. 把 `enforceProvenanceInvariant` 提升为 public 静态纯函数，让调用方在每次
- *        变异 flat 桶后能显式再跑一次（解决 invariant 仅 projectToFlat 内部生效问题）
- */
+/** Rule leaf provenance for derived, non-persisted semantic atom views. */
 export interface SemanticFlatAtomProvenance {
   /** 来源 rule.id（必须存在于当前 semanticState.rules[]） */
   ruleId: string
@@ -267,7 +231,7 @@ export interface SemanticTriggerState {
   dataSourceScopeRef?: string
   // Phase 5 S10 (#1111): 多 subStrategy 策略中显式声明该 trigger 归属哪个 scope.subStrategy 节点
   subStrategyScopeRef?: string
-  // Issue #1447 闸 3：来源 rule 拓扑反查（projectToFlat 填充）
+  // Rule leaf provenance.
   _provenance?: SemanticFlatAtomProvenance
 }
 
@@ -292,7 +256,7 @@ export interface SemanticActionState {
   dataSourceScopeRef?: string
   // Phase 5 S10 (#1111): 多 subStrategy 策略中显式声明该 action 归属哪个 scope.subStrategy 节点
   subStrategyScopeRef?: string
-  // Issue #1447 闸 3：来源 rule 拓扑反查（projectToFlat 填充）
+  // Rule leaf provenance.
   _provenance?: SemanticFlatAtomProvenance
 }
 
@@ -358,7 +322,7 @@ export interface SemanticRiskState {
   dataSourceScopeRef?: string
   // Phase 5 S10 (#1111): 多 subStrategy 策略中显式声明该 risk 归属哪个 scope.subStrategy 节点
   subStrategyScopeRef?: string
-  // Issue #1447 闸 3：来源 rule 拓扑反查（projectToFlat 填充）
+  // Rule leaf provenance.
   _provenance?: SemanticFlatAtomProvenance
 }
 
@@ -394,7 +358,7 @@ export interface SemanticPositionConstraintState {
   dataSourceScopeRef?: string
   // Phase 5 S10 (#1111): 多 subStrategy 策略中显式声明该 position constraint 归属哪个 scope.subStrategy 节点
   subStrategyScopeRef?: string
-  // Issue #1447 闸 3：来源 rule 拓扑反查（projectToFlat 填充）
+  // Rule leaf provenance.
   _provenance?: SemanticFlatAtomProvenance
 }
 
@@ -545,7 +509,7 @@ export interface SemanticOrchestrationNode {
   effectWhenFalse?: SemanticOrchestrationGateEffect
   // program 节点专属（其它 kind 不读）— Phase 5 S4 (#984)
   programKind?: SemanticOrchestrationProgramKind
-  activeWhenRef?: string  // 引用同 state.orchestration.nodes 中 supported gate 节点 id
+  activeWhenRef?: string  // 引用同 rules-derived supported gate 节点 id
   onDeactivate?: SemanticOrchestrationProgramOnDeactivate
   rebuildPolicy?: SemanticOrchestrationProgramRebuildPolicy
   gridParams?: SemanticOrchestrationProgramGridParams
@@ -610,7 +574,7 @@ export interface SemanticOrchestrationNode {
   legScopeKind?: 'leg'
   legId?: string
   direction?: 'long' | 'short'
-  // 必须引用同 state.orchestration.nodes[] 中 status:'locked' 的 scope.symbol 节点 id
+  // 必须引用同 rules-derived locked scope.symbol 节点 id
   instrumentRef?: string
   legSizing?: SemanticOrchestrationLegSizing
   // S11 仅声明透传，不在运行时强制；follow-up 落地 cross-program 同步触发聚合
@@ -634,7 +598,7 @@ export interface SemanticOrchestrationNode {
   positionHandlingOnDeactivate?: 'close' | 'keep'
   orderHandlingOnDeactivate?: 'cancel' | 'keep'
   support?: SemanticAtomSupportMetadata
-  // Issue #1447 闸 3：来源 rule 拓扑反查（projectToFlat 填充）
+  // Rule leaf provenance.
   _provenance?: SemanticFlatAtomProvenance
 }
 
@@ -648,34 +612,7 @@ export interface SemanticOrchestrationLegSizing {
   pairedLegId?: string
 }
 
-type SemanticAtomStateByBucket<B extends AtomContractBucket> =
-    B extends 'trigger' ? SemanticTriggerState
-  : B extends 'action' ? SemanticActionState
-  : B extends 'risk' ? SemanticRiskState
-  : B extends 'orchestration' ? SemanticOrchestrationNode
-  : B extends 'positionConstraint' ? SemanticPositionConstraintState
-  : never
-
-// mapped type 派生 — 关键：用 `[B in AtomContractBucket]` 而非 Record<B, T>，
-// 后者会丢失 per-key 判别（Record 的 value 类型对 union key 是 distributed=false → 退化为 union）。
-//
-// Issue #1493：五桶字段标 readonly，编译期阻断 in-place mutation。
-// 任何写入必须经由 SemanticRuleProjectionService.reprojectFromRules 重新投影。
-export type SemanticStateBuckets = {
-  readonly [B in AtomContractBucket]: ReadonlyArray<SemanticAtomStateByBucket<B>>
-}
-
-/**
- * Issue #1493：flat 派生投影类型分级。
- *
- * 调用方需要"只读 flat 五桶"语义时优先使用该类型而非 SemanticState 全量，
- * 显式表达"我只消费派生字段，不写"的依赖契约。
- */
-export type ProjectedFlatState = Readonly<
-  Pick<SemanticState, 'trigger' | 'action' | 'risk' | 'positionConstraint' | 'orchestration'>
->
-
-export interface SemanticState extends SemanticStateBuckets {
+export interface SemanticState {
   version: 1
   families: string[]
   contextSlots: SemanticContextSlotState
@@ -685,13 +622,7 @@ export interface SemanticState extends SemanticStateBuckets {
   updatedAt: string
   updatedTurnId?: string
   unsupportedFallback?: UnsupportedFallbackState | null
-  /**
-   * Issue #1395 — 表达式树主体；扁平桶（trigger/action/risk/positionConstraint/orchestration）
-   * 由 projectRulesToFlat(rules) 派生，下游既有 reader 零迁移。
-   *
-   * 单 atom case = 单叶子 Rule（rule.condition.kind === 'atom'），零特殊代码。
-   * AND/OR/NOT/SEQUENCE 组合见 ./atom-expr.ts。
-   */
+  /** Rules tree is the only executable semantic source. */
   rules?: readonly import('./atom-expr').SemanticRule[]
   /**
    * 由 PerTradeSizingResolver 派生投影阶段标记。

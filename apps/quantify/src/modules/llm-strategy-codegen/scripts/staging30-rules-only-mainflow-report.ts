@@ -31,7 +31,7 @@ export interface Staging30CaseEvidence {
   caseId: string
   status: 'passed' | 'failed'
   hashes: Staging30EvidenceHashes | null
-  usedFlatFallback: boolean
+  usedFlatFallback?: boolean
   steps: string[]
   failureReason: string | null
   sessionId?: string
@@ -48,6 +48,29 @@ export interface Staging30EvidenceSummary {
   failures: string[]
   rootCauseGroups: Record<string, string[]>
 }
+
+const REQUIRED_EVIDENCE_KEYS = [
+  'caseId',
+  'status',
+  'sessionId',
+  'steps',
+  'turns',
+  'turns.step',
+  'turns.status',
+  'turns.pendingItemKeys',
+  'turns.rulesCount',
+  'turns.readinessReady',
+  'turns.failures',
+  'hashes.rulesHash',
+  'hashes.canonicalSpecHash',
+  'hashes.irHash',
+  'hashes.astHash',
+  'hashes.scriptHash',
+  'hashes.runtimeEvaluatorVersion',
+  'failureReason',
+  'rootCause',
+  'answers',
+] as const
 
 interface CodegenResponse {
   id: string
@@ -106,9 +129,14 @@ function hasCompleteHashes(hashes: Staging30EvidenceHashes | null): hashes is St
   ].every(value => typeof value === 'string' && value.trim().length > 0)
 }
 
+function hasNonEmptyRulesEvidence(item: Staging30CaseEvidence): boolean {
+  return item.turns?.some(turn => typeof turn.rulesCount === 'number' && turn.rulesCount > 0) ?? false
+}
+
 function failureForEvidence(item: Staging30CaseEvidence): string | null {
   if (item.status !== 'passed') return item.failureReason ?? item.rootCause ?? 'case failed'
   if (item.usedFlatFallback) return item.failureReason ?? 'flat fallback observed'
+  if (!hasNonEmptyRulesEvidence(item)) return item.failureReason ?? 'rules_tree_empty'
   if (!hasCompleteHashes(item.hashes)) return item.failureReason ?? 'hashes incomplete'
   if (!item.steps.includes('confirmGenerate')) return 'confirmGenerate missing'
   if (item.turns?.some(turn => turn.pendingItemKeys.length > 0) && !item.steps.includes('clarification')) {
@@ -119,13 +147,17 @@ function failureForEvidence(item: Staging30CaseEvidence): string | null {
 
 function rootCauseForEvidence(item: Staging30CaseEvidence, reason: string): string {
   if (item.rootCause) return item.rootCause
-  if (reason.includes('rules_tree_empty')) return 'rules_tree_empty'
+  if (reason.includes('rules_tree')) return 'rules_tree_empty'
   if (reason.includes('dispatcher_fallback_used') || item.usedFlatFallback) return 'dispatcher_fallback_used'
   if (reason.includes('readiness_not_ready')) return 'readiness_not_ready'
   if (reason.includes('clarification')) return 'clarification_not_resolved_to_script'
   if (reason.includes('strategy_script_mismatch')) return 'strategy_script_mismatch'
   if (reason.includes('hash')) return 'hash_chain_missing'
   return 'unknown'
+}
+
+export function requiredEvidenceKeys(): string[] {
+  return [...REQUIRED_EVIDENCE_KEYS]
 }
 
 export function buildStaging30EvidenceSummary(

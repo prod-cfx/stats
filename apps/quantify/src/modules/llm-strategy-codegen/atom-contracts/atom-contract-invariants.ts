@@ -450,13 +450,8 @@ export type _OrchestrationPortfolioRiskEmitAllReal = AssertTrue<AtomContractInva
 export type _ActionEmitAllReal = AssertTrue<AtomContractInvariantReport['actionEmitAllReal']>
 
 // =========================================================
-// #1364 AC-8：SemanticState 覆盖 AtomContractBucket 全集（type-level 守门）
+// #1633 Stage 3: SemanticState must not expose flat five-bucket fields.
 // =========================================================
-// SemanticState 用 `[B in AtomContractBucket]` mapped type 派生 bucket 字段，
-// 此处显式 forward invariant：AtomContractBucket 任一字面量必须是 SemanticState
-// 的 key。故意删 bucket / SemanticState mapped type 漂移 → tsc 编译挂。
-// 反向（SemanticState bucket 字段 ⊆ AtomContractBucket）由 mapped type 定义本身
-// 保证，无需重复声明。
-type _SemanticStateCoverAllBuckets = AtomContractBucket extends keyof SemanticState ? true : never
-const _semanticStateCoversBuckets: _SemanticStateCoverAllBuckets = true
-void _semanticStateCoversBuckets
+type _SemanticStateHasNoFlatBuckets = Extract<AtomContractBucket, keyof SemanticState> extends never ? true : never
+const _semanticStateHasNoFlatBuckets: _SemanticStateHasNoFlatBuckets = true
+void _semanticStateHasNoFlatBuckets

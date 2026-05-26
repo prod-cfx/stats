@@ -1,6 +1,14 @@
 import { Injectable } from '@nestjs/common'
 import type { AtomExpr, AtomExprAtom, RuleEffectsByRole, SemanticRule } from '../types/atom-expr'
 import { isRuleEffectsByRole } from '../types/atom-expr'
+import type {
+  SemanticAtomContract,
+  SemanticNodeStatus,
+  SemanticOrchestrationContract,
+  SemanticSlotState,
+  SemanticSource,
+  SemanticState,
+} from '../types/semantic-state'
 
 export type MainflowLeafRole = 'condition' | 'action' | 'risk' | 'position' | 'orchestration' | 'program'
 
@@ -21,6 +29,20 @@ export interface RulesMainflowView {
   leaves: readonly RulesMainflowLeaf[]
   byRole: Record<MainflowLeafRole, readonly RulesMainflowLeaf[]>
 }
+
+export interface RulesMainflowAtomFact extends RulesMainflowLeaf {
+  id: string
+  status: SemanticNodeStatus
+  source: SemanticSource
+  openSlots: readonly SemanticSlotState[]
+  contracts?: readonly (SemanticAtomContract | SemanticOrchestrationContract)[]
+  _provenance?: {
+    ruleId: string
+    conditionPath: string
+  }
+}
+
+type RulesMainflowFactState = Pick<SemanticState, 'rules'>
 
 export type RulesMainflowReadResult =
   | { ok: true, view: RulesMainflowView, leaves: readonly RulesMainflowLeaf[] }
@@ -52,6 +74,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 @Injectable()
 export class RulesMainflowReaderService {
+  readFacts(state: RulesMainflowFactState): readonly RulesMainflowAtomFact[] {
+    const rules = state.rules
+    if (rules?.length) {
+      const read = this.readMainflowRules(rules)
+      if (read.ok) {
+        return read.leaves.map(leaf => this.factFromLeaf(leaf))
+      }
+    }
+    return []
+  }
+
+  readFactsByRole(state: RulesMainflowFactState, role: MainflowLeafRole): readonly RulesMainflowAtomFact[] {
+    return this.readFacts(state).filter(fact => fact.role === role)
+  }
+
   readMainflowRules(rules: readonly SemanticRule[] | null | undefined): RulesMainflowReadResult {
     if (!rules?.length) {
       return {
@@ -262,5 +299,23 @@ export class RulesMainflowReaderService {
     }
 
     return byRole
+  }
+
+  private factFromLeaf(leaf: RulesMainflowLeaf): RulesMainflowAtomFact {
+    return {
+      ...leaf,
+      id: leaf.role === 'condition' ? leaf.ruleId : `${leaf.ruleId}:${this.stablePathId(leaf.path)}`,
+      status: 'locked',
+      source: 'derived',
+      openSlots: [],
+      _provenance: {
+        ruleId: leaf.ruleId,
+        conditionPath: leaf.path.replace(/^rules\[\d+\]\./u, ''),
+      },
+    }
+  }
+
+  private stablePathId(path: string): string {
+    return path.replace(/[^a-zA-Z0-9]+/gu, '-').replace(/^-|-$/gu, '')
   }
 }

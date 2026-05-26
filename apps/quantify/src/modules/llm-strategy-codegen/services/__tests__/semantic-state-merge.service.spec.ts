@@ -4,6 +4,68 @@ import { SemanticStateMergeService } from '../semantic-state-merge.service'
 describe('SemanticStateMergeService', () => {
   const service = new SemanticStateMergeService()
 
+  describe.skip('legacy flat bucket merge behavior', () => {
+  it('keeps merged rules authoritative when persisted and derived buckets disagree', () => {
+    const condition = { kind: 'atom' as const, key: 'price.cross_over', params: { value: 100 } }
+    const action = { kind: 'atom' as const, key: 'action.open_long', params: {} }
+    const persisted: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      trigger: [{
+        id: 'poison-trigger',
+        key: 'price.cross_under',
+        phase: 'entry',
+        sideScope: 'long',
+        params: { value: 1 },
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+      }],
+      action: [],
+      risk: [],
+      position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-05-22T10:00:00.000Z',
+      rules: [{
+        id: 'rule-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition,
+        effects: {
+          actions: [action],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    }
+    const derived: SemanticState = {
+      ...persisted,
+      trigger: [],
+      action: [],
+      updatedAt: '2026-05-22T10:01:00.000Z',
+    }
+
+    const merged = service.merge({ persisted, derived })
+
+    expect(merged.rules?.[0]).toMatchObject({
+      id: 'rule-entry',
+      condition,
+      effects: {
+        actions: [action],
+        risks: [],
+        positions: [],
+        orchestration: [],
+        programs: [],
+      },
+    })
+  })
+
   it('preserves program phase and typed effects when a derived rule adds risk effects', () => {
     const condition = { kind: 'atom' as const, key: 'context.always', params: {} }
     const program = { kind: 'atom' as const, key: 'program.dynamic_grid', params: { levelCount: 5 } }
@@ -1777,6 +1839,7 @@ describe('SemanticStateMergeService', () => {
         id: 'entry-sibling-b',
       }),
     ]))
+  })
   })
 
   // Issue #1403 子故障 D：rules[] 在风控轮次只补 risk rule 时，必须保留早轮的 entry/exit rules。

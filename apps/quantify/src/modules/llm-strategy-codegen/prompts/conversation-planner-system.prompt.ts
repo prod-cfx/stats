@@ -1,10 +1,9 @@
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import type { AtomContractSurface } from '../atom-contracts/atom-contract-surface.types'
 import { formatAtomCatalogForPrompt, getPhaseEnum, getRegisteredAtomKeys } from './atom-catalog-projection'
-import { readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 /**
- * Issue #1395 — 把 semanticPatch.atoms[] 切到 semanticPatch.rules[] 表达式树形态。
+ * Issue #1395 — 语义补丁使用 rules[] 表达式树形态。
  *
  * 旧形态（atoms[]）只能表达「一堆并列叶子」，无法表达 AND / OR / NOT / SEQUENCE，
  * 也无法把 condition 与 effects 显式绑定到同一条 rule 上。新形态：
@@ -382,8 +381,8 @@ const COMPOSITIONAL_PATTERN_HINTS: readonly string[] = [
 const PLANNER_CORRECTION_META_RULES: readonly string[] = [
   '【通用纠错（Issue #1403）：拒绝 dispatcher noisy lift 退化】',
   '',
-  '  Dispatcher 在 LLM 调用前已对用户原话做轻量启发式抽取，会在 readFlatTriggers(state) /',
-  '  state.positionConstraint 桶里落下「孤立」atom（可能缺关键参数）。这些 atom',
+  '  Dispatcher 在 LLM 调用前已对用户原话做轻量启发式抽取，会在 rules[] facts 中',
+  '  落下「孤立」atom（可能缺关键参数）。这些 atom',
   '  对 planner 仅是参考，**不是约束**。',
   '',
   '  通用原则：dispatcher 已抽出的 atom 即使形态不完整，**planner 必须根据用户原话',

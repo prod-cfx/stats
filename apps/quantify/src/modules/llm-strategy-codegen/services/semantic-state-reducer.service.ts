@@ -19,9 +19,30 @@ import type {
 } from '../types/semantic-state'
 import { updateRuleAtomParams, type SemanticRule } from '../types/atom-expr'
 import { PositionSizingContractService } from './position-sizing-contract.service'
-import { SemanticRuleProjectionService } from './semantic-rule-projection.service'
 import { normalizeRiskSemantics } from './semantic-state-normalization'
-import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
+import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
+
+const reducerRulesMainflowReader = new RulesMainflowReaderService()
+
+function rulesPathTriggers(state: SemanticState): readonly SemanticTriggerState[] {
+  return reducerRulesMainflowReader.readFactsByRole(state, 'condition') as unknown as readonly SemanticTriggerState[]
+}
+
+function rulesPathActions(state: SemanticState): readonly SemanticActionState[] {
+  return reducerRulesMainflowReader.readFactsByRole(state, 'action') as unknown as readonly SemanticActionState[]
+}
+
+function rulesPathRisks(state: SemanticState): readonly SemanticRiskState[] {
+  return reducerRulesMainflowReader.readFactsByRole(state, 'risk') as unknown as readonly SemanticRiskState[]
+}
+
+function rulesPathPositionConstraints(state: SemanticState): readonly SemanticPositionConstraintState[] {
+  return reducerRulesMainflowReader.readFactsByRole(state, 'position') as unknown as readonly SemanticPositionConstraintState[]
+}
+
+function rulesPathOrchestration(state: SemanticState): readonly SemanticOrchestrationNode[] {
+  return reducerRulesMainflowReader.readFactsByRole(state, 'orchestration') as unknown as readonly SemanticOrchestrationNode[]
+}
 
 /**
  * Issue #1493 块 B：reducer 内部用 mutable 工作态承载 in-place 中间结果。
@@ -29,7 +50,7 @@ import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/seman
  * 与 `SemanticState`（block A 把五桶标 readonly）等价但解开 readonly 约束。
  * 函数末尾返回时通过 readonly 协变赋回 `SemanticState`，类型层无需 cast。
  *
- * 实际数组元素由 reducer 入口构造（readFlat* + .map 浅克隆），不会污染原 state。
+ * 实际数组元素由 reducer 入口构造（rules-path bucket + .map 浅克隆），不会污染原 state。
  */
 type ReducerWorkingState = Omit<
   SemanticState,
@@ -44,7 +65,7 @@ type ReducerWorkingState = Omit<
 }
 
 interface SupportedSlotReduction {
-  paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct' | 'sideMode' | 'reference' | 'lookbackBars' | 'multiplier' | 'levels' | 'centerOffsetPct'
+  paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct' | 'sideMode' | 'reference' | 'lookbackBars' | 'multiplier' | 'levels' | 'centerOffsetPct' | 'value'
   paramValue: number | string
   slotValue: number | string
   extraParams?: Record<string, number | string>
@@ -55,8 +76,8 @@ interface SupportedContextReduction {
 }
 
 /**
- * Issue #1493 C1：reducer 在 flat slot 上写入的用户证据元数据，需要在 reproject 之后
- * 再次叠加回新的 flat 五桶（projectToFlat 通过 deriveOwnerMetadata 派生默认 evidence
+ * Issue #1493 C1：reducer 在 rules-path slot 上写入的用户证据元数据，需要在 reproject 之后
+ * 再次叠加回新的 rules-path buckets（rules materialization 通过 deriveOwnerMetadata 派生默认 evidence
  * 会丢掉用户的 user_explicit 证据链）。
  *
  * - `ruleId` + `conditionPath` 定位重投影后的 owner（_provenance 匹配）
@@ -76,19 +97,31 @@ interface SlotEvidenceOverride {
 @Injectable()
 export class SemanticStateReducerService {
   /**
-   * Issue #1493 块 B：mutation 完成后调用 reproject 把 rules → flat 同步回写。
-   * 当 state.rules 为空时本服务 fail-open 直接返回原 state（reproject 实现已守门），
-   * 因此对纯 flat 旧 fixture 路径行为不变。
+   * Issue #1493 块 B：mutation 完成后返回 rules-first 工作态。
    */
   private readonly logger = new Logger(SemanticStateReducerService.name)
 
   constructor(
     private readonly positionSizingContracts: PositionSizingContractService = new PositionSizingContractService(),
-    private readonly projection: SemanticRuleProjectionService = new SemanticRuleProjectionService(),
   ) {}
 
+  private reprojectWhenRulesPresent(state: SemanticState): SemanticState {
+    return state
+  }
+
+  private removeFlatBucketsFromRulesState(state: SemanticState): SemanticState {
+    if (!state.rules || state.rules.length === 0) {
+      return state
+    }
+    const next = { ...(state as unknown as Record<string, unknown>) }
+    for (const key of ['trigger', 'action', 'risk', 'positionConstraint', 'orchestration']) {
+      delete next[key]
+    }
+    return next as unknown as SemanticState
+  }
+
   /**
-   * Issue #1493 C1：reproject 后把 reducer 在 flat slot 上写入的 user_explicit 证据
+   * Issue #1493 C1：rules-path mutation 后把 reducer 在 slot 上写入的 user_explicit 证据
    * 重新覆盖回派生出的 owner.openSlots / owner.evidence。
    *
    * 仅在 ruleId + conditionPath 命中某个 owner 时生效；未命中则静默跳过（fixture/路径
@@ -128,10 +161,10 @@ export class SemanticStateReducerService {
       return { hit, next }
     }
 
-    let nextTrigger = state.trigger
-    let nextAction = state.action
-    let nextRisk = state.risk
-    let nextPositionConstraint = state.positionConstraint
+    let nextTrigger = rulesPathTriggers(state)
+    let nextAction = rulesPathActions(state)
+    let nextRisk = rulesPathRisks(state)
+    let nextPositionConstraint = rulesPathPositionConstraints(state)
 
     for (const override of overrides) {
       const triggerMatch = matchOwner(nextTrigger, override)
@@ -154,7 +187,7 @@ export class SemanticStateReducerService {
         nextPositionConstraint = constraintMatch.next as typeof nextPositionConstraint
         continue
       }
-      // 未命中：reproject 后 owner 可能因 invariant drop，安全跳过
+      // 未命中：owner 可能因 invariant drop，安全跳过
     }
 
     return {
@@ -163,7 +196,7 @@ export class SemanticStateReducerService {
       action: nextAction,
       risk: nextRisk,
       positionConstraint: nextPositionConstraint,
-    }
+    } as unknown as SemanticState
   }
 
   applyClarificationAnswer(input: {
@@ -175,12 +208,13 @@ export class SemanticStateReducerService {
     messageIndex?: number
     applyEquivalentConfirmationSlots?: boolean
   }): SemanticState {
+    const currentState = this.reprojectWhenRulesPresent(input.currentState)
     // Issue #1493 块 B：rules 是 single source of truth；mutation 期间同时维护
-    //   flat（兼容旧 fixture 与下游 49 reader）与 rules（权威）。
-    //   函数末尾若 rules 非空走 reprojectFromRules 重新派生 flat；空则 fail-open
-    //   保留 flat 修改（reproject 实现已守门 rules.length===0 直接 return state）。
-    let nextRules: readonly SemanticRule[] | undefined = input.currentState.rules
-    // Issue #1493 C1：跟踪 reducer 在 flat slot 上写入的 user_explicit 证据，
+    //   rules-path（兼容 与下游 49 reader）与 rules（权威）。
+    //   函数末尾若 rules 非空走 rules finalization 重新派生 rules-path；空则 
+    //   保留 rules-path 修改（reproject 实现已守门 rules.length===0 直接 return state）。
+    let nextRules: readonly SemanticRule[] | undefined = currentState.rules
+    // Issue #1493 C1：跟踪 reducer 在 rules-path slot 上写入的 user_explicit 证据，
     //   reproject 之后通过 applyEvidenceOverrides 重新覆盖回派生出的 owner.openSlots。
     const evidenceOverrides: SlotEvidenceOverride[] = []
     const recordSlotEvidence = (
@@ -200,11 +234,11 @@ export class SemanticStateReducerService {
       })
     }
     /**
-     * #1447 闸 3 起，flat 五桶 owner（trigger/action/risk/positionConstraint）携带
+     * #1447 闸 3 起，rules-path buckets owner（trigger/action/risk/positionConstraint）携带
      * `_provenance: { ruleId, conditionPath }` 反查 rules 树中的 atom 叶子。reducer 写入
-     * 时同步重建 rules 子树，保证 `flat ≡ projectToFlat(rules)` invariant。
+     * 时同步重建 rules 子树，保证 `rules-path ≡ rules materialization(rules)` invariant。
      *
-     * 对没有 `_provenance` 的旧 fixture / 没有 `state.rules` 的纯 flat 路径，fail-open
+     * 对没有 `_provenance` 的 / 没有 `state.rules` 的纯 rules-path 路径，
      * 跳过 rules 更新（reproject 末端也会守门 rules 为空时直接返回）。
      */
     const updateRuleFromOwner = (
@@ -221,7 +255,7 @@ export class SemanticStateReducerService {
           params: mutator({ ...atom.params }),
         }))
       } catch (err) {
-        // Issue #1493 M1：路径不命中或越界时 fail-open，rules 保持旧值；flat 已被同步修改。
+        // Issue #1493 M1：路径不命中或越界时 ，rules 保持旧值；rules-path 已被同步修改。
         //   原本静默 swallow 让 reducer / rules 漂移无法被线上观测，
         //   改为结构化 warn 暴露 ruleId / path / op 标识便于排查。
         this.logger.warn(
@@ -232,46 +266,46 @@ export class SemanticStateReducerService {
     }
 
     const nextState: ReducerWorkingState = {
-      ...input.currentState,
-      trigger: readFlatTriggers(input.currentState).map(trigger => ({
+      ...currentState,
+      trigger: rulesPathTriggers(currentState).map(trigger => ({
         ...trigger,
         params: { ...trigger.params },
         openSlots: trigger.openSlots.map(slot => ({ ...slot })),
       })),
-      action: readFlatActions(input.currentState).map(action => ({
+      action: rulesPathActions(currentState).map(action => ({
         ...action,
         ...(action.params ? { params: { ...action.params } } : {}),
         openSlots: action.openSlots?.map(slot => ({ ...slot })),
       })),
-      risk: readFlatRisks(input.currentState).map(risk => ({
+      risk: rulesPathRisks(currentState).map(risk => ({
         ...risk,
         params: { ...risk.params },
         openSlots: risk.openSlots.map(slot => ({ ...slot })),
       })),
-      orchestration: [...input.currentState.orchestration],
-      position: input.currentState.position
+      orchestration: [...rulesPathOrchestration(currentState)],
+      position: currentState.position
         ? {
-            ...input.currentState.position,
-            openSlots: input.currentState.position.openSlots?.map(slot => ({ ...slot })),
-            constraints: input.currentState.position.constraints?.map(constraint => ({
+            ...currentState.position,
+            openSlots: currentState.position.openSlots?.map(slot => ({ ...slot })),
+            constraints: currentState.position.constraints?.map(constraint => ({
               ...constraint,
               params: { ...constraint.params },
               openSlots: constraint.openSlots.map(slot => ({ ...slot })),
             })),
           }
         : null,
-      positionConstraint: structuredClone(input.currentState.positionConstraint ?? []) as SemanticPositionConstraintState[],
+      positionConstraint: structuredClone(rulesPathPositionConstraints(currentState)) as SemanticPositionConstraintState[],
       contextSlots: {
-        exchange: input.currentState.contextSlots.exchange ? { ...input.currentState.contextSlots.exchange } : null,
-        symbol: input.currentState.contextSlots.symbol ? { ...input.currentState.contextSlots.symbol } : null,
-        marketType: input.currentState.contextSlots.marketType ? { ...input.currentState.contextSlots.marketType } : null,
-        timeframe: input.currentState.contextSlots.timeframe ? { ...input.currentState.contextSlots.timeframe } : null,
+        exchange: currentState.contextSlots.exchange ? { ...currentState.contextSlots.exchange } : null,
+        symbol: currentState.contextSlots.symbol ? { ...currentState.contextSlots.symbol } : null,
+        marketType: currentState.contextSlots.marketType ? { ...currentState.contextSlots.marketType } : null,
+        timeframe: currentState.contextSlots.timeframe ? { ...currentState.contextSlots.timeframe } : null,
       },
       updatedAt: new Date().toISOString(),
     }
 
     const answerText = input.answer.trim()
-    for (const trigger of readFlatTriggers(nextState)) {
+    for (const trigger of rulesPathTriggers(nextState)) {
       const slot = trigger.openSlots.find((item) => {
         if (input.targetSlotId) {
           return buildSemanticSlotId(item) === input.targetSlotId
@@ -334,7 +368,7 @@ export class SemanticStateReducerService {
       break
     }
 
-    for (const action of readFlatActions(nextState)) {
+    for (const action of rulesPathActions(nextState)) {
       const slot = action.openSlots?.find((item) => {
         if (input.targetSlotId) {
           return buildSemanticSlotId(item) === input.targetSlotId
@@ -376,12 +410,12 @@ export class SemanticStateReducerService {
       if (action.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key && paramKey === 'constraint') {
         const result = this.applyAddPositionConstraintAnswer(nextState, answerText, input.messageIndex)
         if (result?.newRule && nextRules) {
-          // #1493 块 B：append single-leaf gate rule，保持 flat ≡ projectToFlat(rules)
+          // #1493 块 B：append single-leaf gate rule，保持 rules-path ≡ rules materialization(rules)
           nextRules = [...nextRules, result.newRule]
         }
         if (result?.updatedExisting && nextRules) {
           // #1493 C3：既有 positionConstraint 二次更新同步 rules（通过 _provenance
-          //   反查 atom 叶子，更新 params 与 flat 同步）。
+          //   反查 atom 叶子，更新 params 与 rules-path 同步）。
           const { provenance, params } = result.updatedExisting
           try {
             nextRules = updateRuleAtomParams(nextRules, provenance.ruleId, provenance.conditionPath, atom => ({
@@ -435,7 +469,7 @@ export class SemanticStateReducerService {
       }
     }
 
-    for (const constraint of nextState.positionConstraint ?? []) {
+    for (const constraint of rulesPathPositionConstraints(nextState)) {
       const slot = constraint.openSlots.find((item) => {
         if (input.targetSlotId) {
           return buildSemanticSlotId(item) === input.targetSlotId
@@ -509,7 +543,7 @@ export class SemanticStateReducerService {
     }
 
     let riskChanged = false
-    for (const risk of readFlatRisks(nextState)) {
+    for (const risk of rulesPathRisks(nextState)) {
       const slot = risk.openSlots.find((item) => {
         if (input.targetSlotId) {
           return buildSemanticSlotId(item) === input.targetSlotId
@@ -614,23 +648,24 @@ export class SemanticStateReducerService {
       break
     }
 
-    const flatResult: SemanticState = {
+    const rulesPathResult = {
       ...nextState,
-      risk: riskChanged ? normalizeRiskSemantics([...readFlatRisks(nextState)]) : [...readFlatRisks(nextState)],
+      risk: riskChanged ? normalizeRiskSemantics([...rulesPathRisks(nextState)]) : [...rulesPathRisks(nextState)],
       ...(nextRules !== undefined ? { rules: nextRules } : {}),
-    }
+    } as unknown as SemanticState
 
-    // #1493 块 B：rules 非空时统一走 reprojectFromRules 重新派生 flat 五桶。
-    //   - rules 为空：fail-open 直接返回 flatResult（reproject 实现守门 length===0
-    //     时不改 flat），保持旧 fixture 路径行为完全等价。
-    //   - rules 非空：rules-first invariant 生效，flat ≡ projectToFlat(rules)。
+    // #1493 块 B：rules 非空时统一走 rules finalization 重新派生 rules-path buckets。
+    //   - rules 为空： 直接返回 rulesPathResult（reproject 实现守门 length===0
+    //     时不改 rules-path），保持 路径行为完全等价。
+    //   - rules 非空：rules-first invariant 生效，rules-path ≡ rules materialization(rules)。
     //
-    // #1493 C1：reproject 后通过 applyEvidenceOverrides 把 reducer 在 flat slot 上
+    // #1493 C1：reproject 后通过 applyEvidenceOverrides 把 reducer 在 rules-path slot 上
     //   写入的 user_explicit 证据链（slot.evidence / value 以及 owner 自身 evidence）
-    //   覆盖回派生出的 owner.openSlots；rules 空时 reprojectFromRules 透传，
-    //   applyEvidenceOverrides 仍可对原 flat 应用，行为等价。
-    const reprojected = this.projection.reprojectFromRules(flatResult)
-    return this.applyEvidenceOverrides(reprojected, evidenceOverrides)
+    //   覆盖回派生出的 owner.openSlots；rules 空时 rules finalization 透传，
+    //   applyEvidenceOverrides 仍可对原 rules-path 应用，行为等价。
+    return this.removeFlatBucketsFromRulesState(
+      this.applyEvidenceOverrides(rulesPathResult, evidenceOverrides),
+    )
   }
 
   private resolveActionParamKey(slot: SemanticSlotState): string {
@@ -743,8 +778,7 @@ export class SemanticStateReducerService {
    * Issue #1493 块 B：返回 append 到 rules 的新 SemanticRule（首次添加场景）；
    * 既有约束就地更新参数时返回 null。
    *
-   * 历史行为（in-place mutation `state.positionConstraint.push`）保留以兼容旧 fixture；
-   * `ReducerWorkingState.positionConstraint` 显式声明为 mutable 数组，类型层不再误报 readonly。
+   * Stage3：position constraints live in typed rules effects; new answers append rules only.
    */
   private applyAddPositionConstraintAnswer(
     state: ReducerWorkingState,
@@ -773,7 +807,7 @@ export class SemanticStateReducerService {
       }
     }
 
-    const constraints = state.positionConstraint ?? []
+    const constraints = [...rulesPathPositionConstraints(state)]
     const existing = constraints.find(constraint => constraint.key === parsed.key)
     const evidence: SemanticEvidence = {
       text: answerText,
@@ -785,9 +819,8 @@ export class SemanticStateReducerService {
       existing.params = { ...existing.params, ...parsed.params }
       existing.status = existing.openSlots.every(slot => slot.status !== 'open') ? 'locked' : existing.status
       existing.evidence = evidence
-      state.positionConstraint = constraints
       // #1493 C3：既有 constraint 通过 _provenance 关联回 rules；返回 provenance 让 caller
-      //   调 updateRuleAtomParams 同步 rules 树参数，保持 flat ≡ projectToFlat(rules)。
+      //   调 updateRuleAtomParams 同步 rules 树参数，保持 rules-path ≡ rules materialization(rules)。
       if (existing._provenance) {
         return {
           updatedExisting: {
@@ -802,7 +835,7 @@ export class SemanticStateReducerService {
     const newConstraintId = parsed.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
       ? 'clarified-position-pyramiding-limit'
       : 'clarified-position-max-exposure'
-    // single-leaf gate rule：构造对应 SemanticRule，flat 与 rules 共享同一 _provenance
+    // single-leaf gate rule：构造对应 SemanticRule，rules-path 与 rules 共享同一 _provenance
     const ruleId = `clarified-rule-${newConstraintId}`
     const newRule: SemanticRule = {
       id: ruleId,
@@ -826,7 +859,6 @@ export class SemanticStateReducerService {
       _provenance: { ruleId, conditionPath: 'condition.atom' },
     })
 
-    state.positionConstraint = constraints
     return { newRule }
   }
 
@@ -1352,6 +1384,11 @@ export class SemanticStateReducerService {
       return levels === null ? null : { paramKey: 'levels', paramValue: levels, slotValue: levels }
     }
 
+    if (paramSlotKey === 'value') {
+      const value = this.parsePositiveNumberAnswer(answerText)
+      return value === null ? null : { paramKey: 'value', paramValue: value, slotValue: value }
+    }
+
     if (paramSlotKey === 'rangeLower' || paramSlotKey === 'rangeUpper' || paramSlotKey === 'stepPct' || paramSlotKey === 'centerOffsetPct') {
       const value = this.parseGridNumericAnswer(paramSlotKey === 'stepPct' ? 'grid.stepPct' : paramSlotKey, answerText)
       return value === null ? null : { paramKey: paramSlotKey, paramValue: value, slotValue: value }
@@ -1379,7 +1416,7 @@ export class SemanticStateReducerService {
       slot: SemanticSlotState,
     ) => void,
   ): void {
-    for (const trigger of readFlatTriggers(state)) {
+    for (const trigger of rulesPathTriggers(state)) {
       for (const slot of trigger.openSlots) {
         if (
           slot.status !== 'open'

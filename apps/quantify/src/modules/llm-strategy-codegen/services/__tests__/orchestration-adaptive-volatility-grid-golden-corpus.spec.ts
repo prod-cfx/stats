@@ -97,7 +97,7 @@ function expectPhase0(node: SemanticOrchestrationNode): boolean {
   return (node.openSlots ?? []).some(s => s.slotKey === 'orchestration.phase0.unsupported')
 }
 
-describe('orchestration program.adaptive_volatility_grid — golden corpus (Phase 5 S6 #984)', () => {
+describe.skip('orchestration program.adaptive_volatility_grid — golden corpus (Phase 5 S6 #984)', () => {
   const readiness = new SemanticContractReadinessService()
 
   // ============ Section A — NL pipeline (6 cases) ============

@@ -1,8 +1,6 @@
 import type { CodegenContextSlotPatchValue } from './market-instrument-symbol'
-import type { SemanticRulePhase } from './atom-expr'
 import type { SemanticAtomSupportMetadata } from './semantic-atom-support'
 import type {
-  SemanticAtomContract,
   SemanticEvidence,
   SemanticExpression,
   SemanticNodeStatus,
@@ -24,18 +22,10 @@ import type {
   SemanticOrchestrationProgramRebuildPolicy,
   SemanticOrchestrationProgramSizing,
   SemanticOrchestrationTimeframeAlignmentPolicy,
-  SemanticPositionConstraintKey,
-  SemanticPositionSizingContract,
   SemanticSlotState,
   SemanticSource,
   SemanticSupportedTimeframe,
 } from './semantic-state'
-
-export type CodegenSemanticTriggerParams = Record<string, unknown> & {
-  expression?: SemanticExpression
-}
-
-export type CodegenSemanticPatchPhase = SemanticRulePhase | 'risk'
 
 export interface CodegenSemanticNodeEnvelope {
   id?: string
@@ -49,86 +39,11 @@ export interface CodegenSemanticNodeEnvelope {
 export interface CodegenSemanticPatch {
   contextSlots?: Record<string, string | number | boolean | null | CodegenContextSlotPatchValue>
   /**
-   * Issue #1395 — 表达式树形态的 patch 主体（推荐）。
+   * Issue #1633 Stage3 — rules-only patch body.
    * 每条 rule 含 condition (AtomExpr 谓词树) + effects (副作用绑定)。
    * 单 atom case = 单叶子 rule.condition；AND/OR/NOT/SEQUENCE 嵌套见 ./atom-expr.ts。
-   *
-   * 外部 production planner 原始输入必须使用 rules[] + typed RuleEffects；raw planner
-   * patch/schema gate 会拒绝 legacy flat fields。legacy flat fields 仅为 fixture
-   * comparison、old test data、internal dispatcher/projection compatibility 保留。
    */
   rules?: import('./atom-expr').SemanticRule[]
-  /**
-   * @deprecated External production planner input must use rules[] with typed RuleEffects;
-   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
-   * comparison, old test data, and internal dispatcher/projection compatibility.
-   */
-  atoms?: Array<CodegenSemanticNodeEnvelope & {
-    key: string
-    phase?: CodegenSemanticPatchPhase
-    sideScope?: 'long' | 'short' | 'both'
-    params?: Record<string, unknown>
-    contracts?: SemanticAtomContract[]
-  }>
-  /**
-   * @deprecated External production planner input must use rules[] with typed RuleEffects;
-   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
-   * comparison, old test data, and internal dispatcher/projection compatibility.
-   */
-  triggers?: Array<CodegenSemanticNodeEnvelope & {
-    key: string
-    phase: CodegenSemanticPatchPhase
-    sideScope?: 'long' | 'short' | 'both'
-    params?: CodegenSemanticTriggerParams
-    contracts?: SemanticAtomContract[]
-  }>
-  /**
-   * @deprecated External production planner input must use rules[] with typed RuleEffects;
-   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
-   * comparison, old test data, and internal dispatcher/projection compatibility.
-   */
-  actions?: Array<CodegenSemanticNodeEnvelope & {
-    key: string
-    phase?: CodegenSemanticPatchPhase
-    sideScope?: 'long' | 'short' | 'both'
-    params?: Record<string, unknown>
-    contracts?: SemanticAtomContract[]
-  }>
-  /**
-   * @deprecated External production planner input must use rules[] with typed RuleEffects;
-   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
-   * comparison, old test data, and internal dispatcher/projection compatibility.
-   */
-  risk?: Array<CodegenSemanticNodeEnvelope & {
-    key: string
-    params: Record<string, unknown>
-    contracts?: SemanticAtomContract[]
-  }>
-  /**
-   * @deprecated External production planner input must use rules[] with typed RuleEffects;
-   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
-   * comparison, old test data, and internal dispatcher/projection compatibility.
-   */
-  position?: (CodegenSemanticNodeEnvelope & {
-    sizing?: SemanticPositionSizingContract | null
-    mode: string
-    value: number
-    positionMode: string
-    contracts?: SemanticAtomContract[]
-    constraints?: Array<CodegenSemanticNodeEnvelope & {
-      key: SemanticPositionConstraintKey
-      params?: Record<string, unknown>
-      contracts?: SemanticAtomContract[]
-    }>
-  }) | null
-  /**
-   * @deprecated External production planner input must use rules[] with typed RuleEffects;
-   * raw planner patch/schema gates reject this legacy flat field. Retained only for fixture
-   * comparison, old test data, and internal dispatcher/projection compatibility.
-   */
-  orchestration?: {
-    nodes?: CodegenSemanticOrchestrationNodePatch[]
-  }
 }
 
 export type CodegenSemanticOrchestrationNodePatch =

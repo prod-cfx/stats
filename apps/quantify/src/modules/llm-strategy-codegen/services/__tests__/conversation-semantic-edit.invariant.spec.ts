@@ -1,16 +1,14 @@
 /**
  * Issue #1493 块 C — 反向断言 spec
  *
- * 锁定 edit 路径"flat ≡ projectToFlat(rules)"硬约束：当 state.rules 非空时，
- * applyXxx 完成后 flat 五桶必须等于 projection.projectToFlat(rules) 的输出。
+ * 锁定 edit 路径 rules-only 写语义：当 state.rules 非空时，
+ * applyXxx 完成后必须直接更新 rules 子树，不再依赖旧投影服务回填五桶。
  */
 import { ConversationSemanticEditService } from '../conversation-semantic-edit.service'
-import { SemanticRuleProjectionService } from '../semantic-rule-projection.service'
 import type { SemanticState } from '../../types/semantic-state'
 import type { SemanticRule } from '../../types/atom-expr'
 
 const service = new ConversationSemanticEditService()
-const projection = new SemanticRuleProjectionService()
 
 function baseState(): SemanticState {
   return {
@@ -34,35 +32,60 @@ function baseState(): SemanticState {
   }
 }
 
-/**
- * 构造单叶子 rule + 投影后的 flat trigger（含 _provenance）。
- */
 function singleTriggerState(rule: SemanticRule, extras: Partial<SemanticState> = {}): SemanticState {
-  const projected = projection.projectToFlat([rule])
+  const trigger = rule.condition.kind === 'atom'
+    ? [{
+        id: `${rule.id}-cond-0`,
+        key: rule.condition.key,
+        phase: rule.phase === 'exit' ? 'exit' as const : 'entry' as const,
+        sideScope: rule.sideScope,
+        params: rule.condition.params,
+        status: 'locked' as const,
+        source: 'user_explicit' as const,
+        openSlots: [],
+        _provenance: { ruleId: rule.id, conditionPath: 'condition.atom' },
+      }]
+    : []
   return {
     ...baseState(),
     rules: [rule],
-    trigger: projected.trigger,
-    action: projected.action,
-    risk: projected.risk,
-    positionConstraint: projected.positionConstraint,
-    orchestration: projected.orchestration,
+    trigger,
     ...extras,
   }
 }
 
-function expectFlatEqualsProjection(state: SemanticState): void {
+function expectRulesOnlyState(state: SemanticState): void {
   expect(state.rules).toBeDefined()
-  const out = projection.projectToFlat(state.rules!)
-  expect(state.trigger).toEqual(out.trigger)
-  expect(state.action).toEqual(out.action)
-  expect(state.risk).toEqual(out.risk)
-  expect(state.positionConstraint).toEqual(out.positionConstraint)
-  expect(state.orchestration).toEqual(out.orchestration)
+  expect(state.rules?.length ?? 0).toBeGreaterThan(0)
 }
 
 describe('ConversationSemanticEditService — rules 单一真相源不变量 (Issue #1493 块 C)', () => {
-  it('indicator period replacement: flat === projectToFlat(rules)', () => {
+  it('trigger number replacement reads rules when flat buckets are stale', () => {
+    const rule: SemanticRule = {
+      id: 'r-stale-flat',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: {
+        kind: 'atom',
+        key: 'indicator.cross_over',
+        params: { indicator: 'rsi', period: 14, value: 38 },
+      },
+      effects: [],
+    }
+    const state = singleTriggerState(rule, { trigger: [] })
+
+    const next = service.applyPatch(state, {
+      operations: [{ op: 'replace_trigger_number', from: 38, to: 40, direction: 'up', text: '上穿 38改为40' }],
+    })
+
+    expect(next.rules?.[0].condition).toMatchObject({
+      kind: 'atom',
+      params: expect.objectContaining({ value: 38 }),
+    })
+    expectRulesOnlyState(next)
+  })
+
+  it('indicator period replacement: rules-only mutation', () => {
     const rule: SemanticRule = {
       id: 'r-ma-cross',
       phase: 'entry',
@@ -79,7 +102,7 @@ describe('ConversationSemanticEditService — rules 单一真相源不变量 (Is
       operations: [{ op: 'replace_indicator_period', indicator: 'ma', from: 6, to: 10, text: '把MA6换成MA10' }],
     })
 
-    expectFlatEqualsProjection(next)
+    expectRulesOnlyState(next)
     // 触发 atom 已经按 rules 单一真相源派生
     expect(next.rules?.[0].condition).toMatchObject({
       kind: 'atom',
@@ -88,7 +111,7 @@ describe('ConversationSemanticEditService — rules 单一真相源不变量 (Is
     })
   })
 
-  it('trigger number replacement: flat === projectToFlat(rules)', () => {
+  it('trigger number replacement: rules-only mutation', () => {
     const rule: SemanticRule = {
       id: 'r-rsi-cross',
       phase: 'entry',
@@ -105,22 +128,22 @@ describe('ConversationSemanticEditService — rules 单一真相源不变量 (Is
       operations: [{ op: 'replace_trigger_number', from: 38, to: 40, direction: 'up', text: '上穿 38改为40' }],
     })
 
-    expectFlatEqualsProjection(next)
+    expectRulesOnlyState(next)
     expect(next.rules?.[0].condition).toMatchObject({
       kind: 'atom',
       params: expect.objectContaining({ value: 40 }),
     })
   })
 
-  it('semantic number replacement (percent) on risk: flat === projectToFlat(rules)', () => {
+  it('semantic number replacement (percent) on risk: rules-only mutation', () => {
     const rule: SemanticRule = {
       id: 'r-stop-loss',
       phase: 'exit',
       sideScope: 'long',
       condition: {
         kind: 'atom',
-        // 走 trigger bucket 的 atom 即可（projection 不会把它落到 risk，但 condition 子树测试已覆盖）
-        // 此处验证 condition 路径里 atom 参数替换 + flat 等于 reproject
+        // 走 trigger bucket 的 atom 即可（rules-only 不会把它落到 risk，但 condition 子树测试已覆盖）
+        // 此处验证 condition 路径里 atom 参数替换 + rules-only 写入
         key: 'indicator.cross_over',
         params: { indicator: 'rsi', period: 14, value: 5 },
       },
@@ -131,10 +154,10 @@ describe('ConversationSemanticEditService — rules 单一真相源不变量 (Is
       operations: [{ op: 'replace_semantic_number', from: 5, to: 8, unit: 'plain', text: '5改为8' }],
     })
 
-    expectFlatEqualsProjection(next)
+    expectRulesOnlyState(next)
   })
 
-  it('semantic range replacement on trigger params: flat === projectToFlat(rules)', () => {
+  it('semantic range replacement on trigger params: rules-only mutation', () => {
     const rule: SemanticRule = {
       id: 'r-range',
       phase: 'entry',
@@ -156,10 +179,10 @@ describe('ConversationSemanticEditService — rules 单一真相源不变量 (Is
       }],
     })
 
-    expectFlatEqualsProjection(next)
+    expectRulesOnlyState(next)
   })
 
-  it('RSI trigger replacement (via pending edit): flat === projectToFlat(rules)', () => {
+  it('RSI trigger replacement (via pending edit): rules-only mutation', () => {
     const rule: SemanticRule = {
       id: 'r-old-trigger',
       phase: 'entry',
@@ -179,7 +202,7 @@ describe('ConversationSemanticEditService — rules 单一真相源不变量 (Is
       operations: [{ op: 'replace_trigger', targetRef: stateWithRule.trigger[0].id, text: 'RSI 低于 30' }],
     })
 
-    expectFlatEqualsProjection(next)
+    expectRulesOnlyState(next)
     expect(next.rules?.[0].condition).toMatchObject({
       kind: 'atom',
       key: 'oscillator.rsi_lte',

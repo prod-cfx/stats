@@ -4,6 +4,7 @@ import {
   extractStaging30HashesFromResponse,
   inferStaging30ClarificationAnswer,
   readStaging30ConfirmationDigest,
+  requiredEvidenceKeys,
 } from '../staging30-rules-only-mainflow-report'
 
 describe('staging30 rules-only mainflow report', () => {
@@ -11,48 +12,41 @@ describe('staging30 rules-only mainflow report', () => {
     expect(STAGING30_RULES_ONLY_CASES).toHaveLength(30)
     expect(new Set(STAGING30_RULES_ONLY_CASES.map(item => item.id)).size).toBe(30)
     expect(STAGING30_RULES_ONLY_CASES.every(item => item.prompt.trim().length > 0)).toBe(true)
+    expect(STAGING30_RULES_ONLY_CASES.map(item => item.id)).toEqual(
+      Array.from({ length: 30 }, (_, index) => `s${String(index + 1).padStart(2, '0')}`),
+    )
   })
 
-  it('fails a case when flat fallback is observed', () => {
-    const summary = buildStaging30EvidenceSummary([{
-      caseId: 's01',
-      status: 'failed',
-      hashes: null,
-      usedFlatFallback: true,
-      steps: [],
-      failureReason: 'flat fallback observed',
-    }])
-
-    expect(summary.passed).toBe(false)
-    expect(summary.failedCaseIds).toEqual(['s01'])
-    expect(summary.failures[0]).toContain('flat fallback observed')
+  it('documents rules-only evidence fields without flat fallback evidence', () => {
+    expect(requiredEvidenceKeys()).toEqual([
+      'caseId',
+      'status',
+      'sessionId',
+      'steps',
+      'turns',
+      'turns.step',
+      'turns.status',
+      'turns.pendingItemKeys',
+      'turns.rulesCount',
+      'turns.readinessReady',
+      'turns.failures',
+      'hashes.rulesHash',
+      'hashes.canonicalSpecHash',
+      'hashes.irHash',
+      'hashes.astHash',
+      'hashes.scriptHash',
+      'hashes.runtimeEvaluatorVersion',
+      'failureReason',
+      'rootCause',
+      'answers',
+    ])
+    expect(requiredEvidenceKeys()).not.toContain('usedFlatFallback')
   })
 
-  it('requires all hash-chain fields for a passing case', () => {
+  it('passes only when rules tree evidence and hash chain are complete', () => {
     const summary = buildStaging30EvidenceSummary([{
       caseId: 's01',
-      status: 'passed',
-      hashes: {
-        rulesHash: 'sha256:a',
-        canonicalSpecHash: 'sha256:b',
-        irHash: 'sha256:c',
-        astHash: 'sha256:d',
-        scriptHash: 'sha256:e',
-        runtimeEvaluatorVersion: '',
-      },
-      usedFlatFallback: false,
-      steps: ['session', 'confirmGenerate', 'publish'],
-      failureReason: null,
-    }])
-
-    expect(summary.passed).toBe(false)
-    expect(summary.failedCaseIds).toEqual(['s01'])
-    expect(summary.failures[0]).toContain('hashes incomplete')
-  })
-
-  it('requires real dialogue clarification evidence when pending slots were observed', () => {
-    const summary = buildStaging30EvidenceSummary([{
-      caseId: 's01',
+      sessionId: 'session-1',
       status: 'passed',
       hashes: {
         rulesHash: 'sha256:a',
@@ -62,7 +56,108 @@ describe('staging30 rules-only mainflow report', () => {
         scriptHash: 'sha256:e',
         runtimeEvaluatorVersion: 'compiler.v1',
       },
-      usedFlatFallback: false,
+      steps: ['session', 'confirmGenerate', 'poll'],
+      turns: [{
+        step: 'poll',
+        status: 'PUBLISHED',
+        pendingItemKeys: [],
+        rulesCount: 2,
+        readinessReady: true,
+        failures: [],
+      }],
+      answers: {},
+      failureReason: null,
+      rootCause: null,
+    }], 1)
+
+    expect(summary).toEqual({
+      passed: true,
+      total: 1,
+      passedCount: 1,
+      failedCaseIds: [],
+      failures: [],
+      rootCauseGroups: {},
+    })
+  })
+
+  it('requires non-empty rules tree evidence for a passing case', () => {
+    const summary = buildStaging30EvidenceSummary([{
+      caseId: 's01',
+      sessionId: 'session-1',
+      status: 'passed',
+      hashes: {
+        rulesHash: 'sha256:a',
+        canonicalSpecHash: 'sha256:b',
+        irHash: 'sha256:c',
+        astHash: 'sha256:d',
+        scriptHash: 'sha256:e',
+        runtimeEvaluatorVersion: 'compiler.v1',
+      },
+      steps: ['session', 'confirmGenerate', 'poll'],
+      turns: [{
+        step: 'poll',
+        status: 'PUBLISHED',
+        pendingItemKeys: [],
+        rulesCount: 0,
+        readinessReady: true,
+        failures: [],
+      }],
+      answers: {},
+      failureReason: null,
+      rootCause: null,
+    }], 1)
+
+    expect(summary.passed).toBe(false)
+    expect(summary.failedCaseIds).toEqual(['s01'])
+    expect(summary.failures[0]).toContain('rules_tree_empty')
+    expect(summary.rootCauseGroups.rules_tree_empty).toEqual(['s01'])
+  })
+
+  it('requires all hash-chain fields for a passing case', () => {
+    const summary = buildStaging30EvidenceSummary([{
+      caseId: 's01',
+      sessionId: 'session-1',
+      status: 'passed',
+      hashes: {
+        rulesHash: 'sha256:a',
+        canonicalSpecHash: 'sha256:b',
+        irHash: 'sha256:c',
+        astHash: 'sha256:d',
+        scriptHash: 'sha256:e',
+        runtimeEvaluatorVersion: '',
+      },
+      steps: ['session', 'confirmGenerate', 'poll'],
+      turns: [{
+        step: 'poll',
+        status: 'PUBLISHED',
+        pendingItemKeys: [],
+        rulesCount: 1,
+        readinessReady: true,
+        failures: [],
+      }],
+      answers: {},
+      failureReason: null,
+      rootCause: null,
+    }], 1)
+
+    expect(summary.passed).toBe(false)
+    expect(summary.failedCaseIds).toEqual(['s01'])
+    expect(summary.failures[0]).toContain('hashes incomplete')
+  })
+
+  it('requires real dialogue clarification evidence when pending slots were observed', () => {
+    const summary = buildStaging30EvidenceSummary([{
+      caseId: 's01',
+      sessionId: 'session-1',
+      status: 'passed',
+      hashes: {
+        rulesHash: 'sha256:a',
+        canonicalSpecHash: 'sha256:b',
+        irHash: 'sha256:c',
+        astHash: 'sha256:d',
+        scriptHash: 'sha256:e',
+        runtimeEvaluatorVersion: 'compiler.v1',
+      },
       steps: ['session', 'confirmGenerate', 'publish'],
       turns: [{
         step: 'session',
@@ -72,8 +167,10 @@ describe('staging30 rules-only mainflow report', () => {
         readinessReady: null,
         failures: [],
       }],
+      answers: {},
       failureReason: null,
-    }])
+      rootCause: null,
+    }], 1)
 
     expect(summary.passed).toBe(false)
     expect(summary.failures[0]).toContain('dialogue clarification loop missing')
@@ -86,7 +183,6 @@ describe('staging30 rules-only mainflow report', () => {
         caseId: 's01',
         status: 'failed',
         hashes: null,
-        usedFlatFallback: false,
         steps: ['session', 'clarification'],
         failureReason: 'rules_tree_empty, hash_chain_missing',
         rootCause: 'rules_tree_empty',
@@ -95,7 +191,6 @@ describe('staging30 rules-only mainflow report', () => {
         caseId: 's02',
         status: 'failed',
         hashes: null,
-        usedFlatFallback: true,
         steps: ['session', 'clarification'],
         failureReason: 'dispatcher_fallback_used',
         rootCause: 'dispatcher_fallback_used',
@@ -111,6 +206,7 @@ describe('staging30 rules-only mainflow report', () => {
   it('does not accept astDigest as staging astHash evidence', () => {
     const summary = buildStaging30EvidenceSummary([{
       caseId: 's01',
+      sessionId: 'session-1',
       status: 'passed',
       hashes: {
         rulesHash: 'sha256:a',
@@ -120,10 +216,19 @@ describe('staging30 rules-only mainflow report', () => {
         scriptHash: 'sha256:e',
         runtimeEvaluatorVersion: 'compiler.v1',
       },
-      usedFlatFallback: false,
       steps: ['session', 'confirmGenerate', 'publish'],
+      turns: [{
+        step: 'poll',
+        status: 'PUBLISHED',
+        pendingItemKeys: [],
+        rulesCount: 1,
+        readinessReady: true,
+        failures: [],
+      }],
+      answers: {},
       failureReason: null,
-    }])
+      rootCause: null,
+    }], 1)
 
     expect(summary.passed).toBe(false)
     expect(summary.failures[0]).toContain('hashes incomplete')

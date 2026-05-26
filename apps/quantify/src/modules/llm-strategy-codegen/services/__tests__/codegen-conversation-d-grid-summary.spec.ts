@@ -46,6 +46,32 @@ describe('Issue #1403 子故障 D — grid + 止损 summary/compileability 不�
   describe('A. buildConversationView 在 state.rules 非空时仍保留桶维度 grid 摘要', () => {
     const projection = new SemanticStateProjectionService()
 
+    function gridRule(params: Record<string, unknown> = {}): NonNullable<SemanticState['rules']>[number] {
+      return {
+        id: 'r-grid',
+        phase: 'entry',
+        sideScope: 'both',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [{
+            kind: 'atom',
+            key: 'grid.range_rebalance',
+            params: {
+              rangeLower: 79200,
+              rangeUpper: 80200,
+              stepPct: 0.5,
+              sideMode: 'bidirectional',
+              ...params,
+            },
+          }],
+          orchestration: [],
+          programs: [],
+        },
+      }
+    }
+
     function gridState(): SemanticState {
       return {
         ...emptyState(),
@@ -59,28 +85,29 @@ describe('Issue #1403 子故障 D — grid + 止损 summary/compileability 不�
           source: 'user_explicit',
           openSlots: [],
         } as unknown as SemanticState['position'],
-        positionConstraint: [{
-          id: 'pc1',
-          key: 'grid.range_rebalance',
-          status: 'locked' as const,
-          source: 'user_explicit' as const,
-          openSlots: [],
-          params: { rangeLower: 79200, rangeUpper: 80200, stepPct: 0.5, sideMode: 'bidirectional' },
-          contracts: [],
-        }] as unknown as SemanticState['positionConstraint'],
+        rules: [gridRule()],
       } as unknown as SemanticState
     }
 
-    it('positionConstraint 含 grid.range_rebalance + state.rules 含止损 exit rule → summary 同时含 grid 与止损', () => {
+    it('rules 含 grid.range_rebalance + 止损 exit rule → summary 同时含 grid 与止损', () => {
       const state = {
         ...gridState(),
-        rules: [{
-          id: 'r-stop-loss',
-          phase: 'exit' as const,
-          sideScope: 'both' as const,
-          condition: { kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { valuePct: 0.03 } },
-          effects: [{ kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { valuePct: 0.03 } }],
-        }],
+        rules: [
+          gridRule(),
+          {
+            id: 'r-stop-loss',
+            phase: 'exit' as const,
+            sideScope: 'both' as const,
+            condition: { kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { valuePct: 0.03 } },
+            effects: {
+              actions: [],
+              risks: [{ kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { valuePct: 0.03 } }],
+              positions: [],
+              orchestration: [],
+              programs: [],
+            },
+          },
+        ],
       } as unknown as SemanticState
 
       const view = projection.buildConversationView(state)
@@ -89,11 +116,6 @@ describe('Issue #1403 子故障 D — grid + 止损 summary/compileability 不�
       expect(view.summary).toMatch(/网格区间再平衡/)
       // 止损 rule 渲染部分仍在
       expect(view.summary).toMatch(/止损|出场|exit/i)
-    })
-
-    it('state.rules 为空 + positionConstraint 含 grid → summary 仍含 grid（向后兼容）', () => {
-      const view = projection.buildConversationView(gridState())
-      expect(view.summary).toMatch(/网格区间再平衡/)
     })
 
     it('rules tree 中 grid condition/effect 同时存在时摘要不泄漏内部参数且不重复渲染', () => {
@@ -116,19 +138,25 @@ describe('Issue #1403 子故障 D — grid + 止损 summary/compileability 不�
               sideMode: 'both',
             },
           },
-          effects: [{
-            kind: 'atom' as const,
-            key: 'grid.range_rebalance',
-            params: {
-              rangeLower: 79200,
-              rangeUpper: 80200,
-              centerOffsetPct: 0,
-              levels: 0,
-              stepPct: 0.1,
-              perGridSizing: 10,
-              sideMode: 'both',
-            },
-          }],
+          effects: {
+            actions: [],
+            risks: [],
+            positions: [{
+              kind: 'atom' as const,
+              key: 'grid.range_rebalance',
+              params: {
+                rangeLower: 79200,
+                rangeUpper: 80200,
+                centerOffsetPct: 0,
+                levels: 0,
+                stepPct: 0.1,
+                perGridSizing: 10,
+                sideMode: 'both',
+              },
+            }],
+            orchestration: [],
+            programs: [],
+          },
         }],
       } as unknown as SemanticState
 
@@ -142,7 +170,7 @@ describe('Issue #1403 子故障 D — grid + 止损 summary/compileability 不�
       expect(view.summary).not.toContain('→ 网格区间再平衡')
     })
 
-    it('rules tree 已承载 grid 时，bucket 补偿摘要只保留仓位，不重复渲染同一约束 atom', () => {
+    it('rules tree 已承载 grid 时不重复渲染同一约束 atom', () => {
       const state = {
         ...gridState(),
         position: {
@@ -169,17 +197,23 @@ describe('Issue #1403 子故障 D — grid + 止损 summary/compileability 不�
               sideMode: 'both',
             },
           },
-          effects: [{
-            kind: 'atom' as const,
-            key: 'grid.range_rebalance',
-            params: {
-              rangeLower: 60000,
-              rangeUpper: 80000,
-              stepPct: 0.5,
-              perGridSizing: 10,
-              sideMode: 'both',
-            },
-          }],
+          effects: {
+            actions: [],
+            risks: [],
+            positions: [{
+              kind: 'atom' as const,
+              key: 'grid.range_rebalance',
+              params: {
+                rangeLower: 60000,
+                rangeUpper: 80000,
+                stepPct: 0.5,
+                perGridSizing: 10,
+                sideMode: 'both',
+              },
+            }],
+            orchestration: [],
+            programs: [],
+          },
         }],
       } as unknown as SemanticState
 
@@ -187,7 +221,6 @@ describe('Issue #1403 子故障 D — grid + 止损 summary/compileability 不�
       const gridMentions = view.summary.match(/网格区间再平衡/g) ?? []
 
       expect(gridMentions).toHaveLength(1)
-      expect(view.summary).toContain('仓位：10%')
       expect(view.summary).toContain('区间 60000-80000')
       expect(view.summary).toContain('每格 0.5%')
     })
@@ -207,7 +240,13 @@ describe('Issue #1403 子故障 D — grid + 止损 summary/compileability 不�
                 { kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
               ],
             },
-            effects: [{ kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } }],
+            effects: {
+              actions: [],
+              risks: [{ kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } }],
+              positions: [],
+              orchestration: [],
+              programs: [],
+            },
           },
           {
             id: 'r-take-profit',
@@ -220,7 +259,13 @@ describe('Issue #1403 子故障 D — grid + 止损 summary/compileability 不�
                 { kind: 'atom' as const, key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } },
               ],
             },
-            effects: [{ kind: 'atom' as const, key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } }],
+            effects: {
+              actions: [],
+              risks: [{ kind: 'atom' as const, key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } }],
+              positions: [],
+              orchestration: [],
+              programs: [],
+            },
           },
         ],
       } as unknown as SemanticState

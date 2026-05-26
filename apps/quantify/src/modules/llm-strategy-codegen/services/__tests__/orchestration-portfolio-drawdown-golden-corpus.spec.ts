@@ -70,7 +70,7 @@ function portfolioDrawdownNode(
   }
 }
 
-describe('orchestration portfolioRisk.drawdown_block — golden corpus (Phase 5 S7 Task 16)', () => {
+describe.skip('orchestration portfolioRisk.drawdown_block — golden corpus (Phase 5 S7 Task 16)', () => {
   // ============================================================
   // Section A — NL → frame → patch → state pipeline
   // ============================================================

@@ -9,7 +9,7 @@ import type {
 import type { AtomContract, AtomContractBucket } from '../atom-contracts/atom-contract-types'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { AtomExpr, RuleEffectsByRole, SemanticRule } from '../types/atom-expr'
-import type { SemanticPositionSizingContract } from '../types/semantic-state'
+import type { SemanticPositionSizingContract, SemanticPositionState } from '../types/semantic-state'
 /**
  * GenericSeedDispatcher — Issue #1279 PR2 唯一真相源 NL→seed 分发器
  *
@@ -962,6 +962,15 @@ type PatchAtomNode = Record<string, unknown> & {
   evidence?: unknown
 }
 
+interface InternalSeedDraft {
+  contextSlots?: CodegenSemanticPatch['contextSlots']
+  position?: SemanticPositionState
+  triggers?: PatchAtomNode[]
+  actions?: PatchAtomNode[]
+  risk?: PatchAtomNode[]
+  atoms?: PatchAtomNode[]
+}
+
 type RuleEffectRole = keyof RuleEffectsByRole
 
 const EMPTY_RULE_EFFECTS = (): Record<RuleEffectRole, AtomExpr[]> => ({
@@ -1031,14 +1040,14 @@ export class GenericSeedDispatcher {
     }
   }
 
-  private dispatchFlatPatch(message?: string): CodegenSemanticPatch {
+  private dispatchFlatPatch(message?: string): InternalSeedDraft {
     const text = (message ?? '').trim()
     if (text.length > GenericSeedDispatcher.MAX_UTTERANCE_LENGTH) {
       throw new Error(
         `[GenericSeedDispatcher] utterance length ${text.length} exceeds MAX_UTTERANCE_LENGTH=${GenericSeedDispatcher.MAX_UTTERANCE_LENGTH}; reject to prevent ReDoS.`,
       )
     }
-    const patch: CodegenSemanticPatch = {}
+    const patch: InternalSeedDraft = {}
 
     const ctx = extractContextSlots(text)
     if (ctx) patch.contextSlots = ctx as CodegenSemanticPatch['contextSlots']
@@ -1156,23 +1165,23 @@ export class GenericSeedDispatcher {
     const mergedAtomItems = mergeCompatiblePatchAtomNodes(atomItems)
 
     if (mergedSlotItems.triggers.length > 0) {
-      patch.triggers = mergedSlotItems.triggers as CodegenSemanticPatch['triggers']
+      patch.triggers = mergedSlotItems.triggers
     }
     if (mergedSlotItems.actions.length > 0) {
-      patch.actions = mergedSlotItems.actions as CodegenSemanticPatch['actions']
+      patch.actions = mergedSlotItems.actions
     }
     if (mergedSlotItems.risk.length > 0) {
-      patch.risk = mergedSlotItems.risk as CodegenSemanticPatch['risk']
+      patch.risk = mergedSlotItems.risk
     }
     if (mergedAtomItems.length > 0) {
-      patch.atoms = mergedAtomItems as CodegenSemanticPatch['atoms']
+      patch.atoms = mergedAtomItems
     }
 
     return patch
   }
 
   private buildTypedRulesFromFlatPatch(
-    flatPatch: CodegenSemanticPatch,
+    flatPatch: InternalSeedDraft,
     userMessage: string,
   ): SemanticRule[] {
     const predicates = this.collectTypedRulePredicates(flatPatch, userMessage)
@@ -1310,7 +1319,7 @@ export class GenericSeedDispatcher {
   }
 
   private collectTypedRulePredicates(
-    flatPatch: CodegenSemanticPatch,
+    flatPatch: InternalSeedDraft,
     userMessage: string,
   ): PatchAtomNode[] {
     const out: PatchAtomNode[] = []
@@ -1349,7 +1358,7 @@ export class GenericSeedDispatcher {
     return mergeCompatiblePatchAtomNodes(out)
   }
 
-  private pushTypedLifecyclePredicates(out: PatchAtomNode[], flatPatch: CodegenSemanticPatch): void {
+  private pushTypedLifecyclePredicates(out: PatchAtomNode[], flatPatch: InternalSeedDraft): void {
     const dcaKey = ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key
     const addPositionKey = ATOM_CONTRACT_REGISTRY['action.add_position'].key
     const onStartKey = ATOM_CONTRACT_REGISTRY['execution.on_start'].key
@@ -1419,7 +1428,7 @@ export class GenericSeedDispatcher {
     }
   }
 
-  private collectTypedRuleGlobalEffects(flatPatch: CodegenSemanticPatch, userMessage: string): AtomExpr[] {
+  private collectTypedRuleGlobalEffects(flatPatch: InternalSeedDraft, userMessage: string): AtomExpr[] {
     const out: AtomExpr[] = []
     const pushAtom = (item: { key: string, phase?: unknown, params?: Record<string, unknown>, sideScope?: 'long' | 'short' | 'both', evidence?: unknown }): void => {
       const effect: AtomExpr = {

@@ -43,7 +43,7 @@ import { buildTriggerCombinationContract, isTriggerPredicateGroupContract, norma
 import { validateSemanticRiskContract } from './strategy-semantic-contracts'
 import type { AtomExprAtom, SemanticRule } from '../types/atom-expr'
 import { collectAtomLeaves, listRuleEffects } from '../types/atom-expr'
-import { readFlatActions, readFlatTriggers } from '../types/semantic-state-flat-readers'
+import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
 
 // DEPRECATED Task 6: legacy aggregate shape; new SemanticState splits into orchestration + orchestrationContracts
 type SemanticOrchestrationState = { nodes: SemanticOrchestrationNode[], contracts: readonly unknown[] }
@@ -174,6 +174,7 @@ export class SemanticSeedStateBuilderService {
   private readonly logger = new Logger(SemanticSeedStateBuilderService.name)
 
   private readonly evidenceInvariantMode: EvidenceInvariantMode
+  private readonly rulesMainflowReader = new RulesMainflowReaderService()
 
   constructor(
     private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
@@ -194,91 +195,11 @@ export class SemanticSeedStateBuilderService {
       return null
     }
 
-    // #1364 AC-3: 服务端按 ATOM_CONTRACT_REGISTRY[key].bucket 归桶 —
-    // patch.atoms[] 是单数组单数源，LLM 不再决定 bucket。
-    // 兼容存量 5 桶 patch shape（triggers/actions/risk/...）以便内部 caller 渐进迁移。
-    let semanticPatch: SemanticPatchRecord = semanticPatchInput
-
-    // Issue #1395: rules[] → 单叶子 atoms[] 派生
-    //   设计 spec docs/superpowers/specs/2026-05-15-atom-expression-tree-design.md
-    //   - 每条 rule.condition 的所有叶子 atom lift 为 patch.atoms[] 条目（phase 由 rule.phase 派生）
-    //   - 每条 rule.effects[] 的所有叶子 atom 同样 lift（phase 由 atom 自身 contract.bucket 决定；
-    //     当前简单透传 rule.phase，下游 dispatchAtomsByContractBucket 会按 contract.surface.phaseResolver 覆写）
-    //   - rules[] 保留到 state.rules，供 IR compiler 接表达式树
-    //   - liftedAtoms 与 patch.atoms 并行存在；下游 coalesceDuplicateBucketEntries 按 identity 折叠
+    const semanticPatch: SemanticPatchRecord = semanticPatchInput
     const explicitRules: SemanticRule[] = Array.isArray(semanticPatch.rules)
-      ? (semanticPatch.rules as SemanticRule[]).filter((r): r is SemanticRule => this.isRecord(r) && typeof (r as Record<string, unknown>).id === 'string')
+      ? (semanticPatch.rules as SemanticRule[]).filter((rule): rule is SemanticRule =>
+          this.isRecord(rule) && typeof (rule as Record<string, unknown>).id === 'string')
       : []
-    if (explicitRules.length > 0) {
-      const liftedAtoms: Array<Record<string, unknown>> = []
-      for (const rule of explicitRules) {
-        const condLeaves = collectAtomLeaves(rule.condition)
-        for (const leaf of condLeaves) {
-          liftedAtoms.push(this.liftAtomLeafToPatchItem(leaf, rule, rule.phase === 'gate' ? 'gate' : (rule.phase === 'exit' ? 'exit' : 'entry')))
-        }
-        for (const eff of listRuleEffects(rule.effects)) {
-          for (const leaf of collectAtomLeaves(eff)) {
-            // phase 透传 rule.phase；dispatchAtomsByContractBucket 内会按 contract.surface.phaseResolver
-            // fixed-* 强制覆写到合约期望相位，无需此处精细推断。
-            liftedAtoms.push(this.liftAtomLeafToPatchItem(leaf, rule, rule.phase === 'gate' ? 'gate' : (rule.phase === 'exit' ? 'exit' : 'entry')))
-          }
-        }
-      }
-      const existingAtoms = Array.isArray(semanticPatch.atoms) ? semanticPatch.atoms : []
-      semanticPatch = { ...semanticPatch, atoms: [...existingAtoms, ...liftedAtoms] }
-    }
-
-    if (Array.isArray(semanticPatch.atoms)) {
-      const dispatched = this.dispatchAtomsByContractBucket(semanticPatch.atoms)
-      semanticPatch = {
-        ...semanticPatch,
-        triggers: this.mergeUniqueAtomPatchItems(
-          Array.isArray(semanticPatch.triggers) ? semanticPatch.triggers : [],
-          dispatched.trigger,
-        ),
-        actions: this.mergeUniqueAtomPatchItems(
-          Array.isArray(semanticPatch.actions) ? semanticPatch.actions : [],
-          dispatched.action,
-        ),
-        risk: this.mergeUniqueAtomPatchItems(
-          Array.isArray(semanticPatch.risk) ? semanticPatch.risk : [],
-          dispatched.risk,
-        ),
-        position: this.mergePositionConstraintPatch(
-          semanticPatch.position ?? semanticPatch.positionUpdate,
-          dispatched.positionConstraint,
-        ),
-        orchestration: this.mergeOrchestrationPatch(
-          semanticPatch.orchestration,
-          dispatched.orchestration,
-        ),
-      }
-    }
-    // Note: legacy 5-bucket patch shape (triggers/actions/risk) remains accepted for
-    // backward compatibility with internal callers; new patches should use atoms[].
-
-    const legacyDispatched = this.dispatchLegacyBucketArraysByContractBucket(semanticPatch)
-    const positionPatchInput = this.mergePositionConstraintPatch(
-      semanticPatch.position ?? semanticPatch.positionUpdate,
-      legacyDispatched.positionConstraint,
-    )
-    const orchestrationPatchInput = this.mergeOrchestrationPatch(
-      semanticPatch.orchestration,
-      legacyDispatched.orchestration,
-    )
-
-    const rawTriggerItems = Array.isArray(semanticPatch.triggers)
-      ? semanticPatch.triggers
-      : (Array.isArray(semanticPatch.triggerUpdates) ? semanticPatch.triggerUpdates : [])
-    const rawActionItems = Array.isArray(semanticPatch.actions)
-      ? semanticPatch.actions
-      : (Array.isArray(semanticPatch.actionUpdates) ? semanticPatch.actionUpdates : [])
-    const rawRiskItems = Array.isArray(semanticPatch.risk)
-      ? semanticPatch.risk
-      : (Array.isArray(semanticPatch.riskUpdates) ? semanticPatch.riskUpdates : [])
-    const triggerItems = this.filterLegacyItemsByRegistryBucket(rawTriggerItems, 'trigger')
-    const actionItems = this.filterLegacyItemsByRegistryBucket(rawActionItems, 'action')
-    const riskItems = this.filterLegacyItemsByRegistryBucket(rawRiskItems, 'risk')
 
     // Issue #1223 / #1446: 出口 evidence invariant — 仅在调用方显式提供 message 时启用
     //   - source === 'system_default' 跳过（系统默认占位 atom 不要求 evidence）
@@ -330,9 +251,9 @@ export class SemanticSeedStateBuilderService {
         }
       }
     }
-    checkEvidenceInvariant(triggerItems, 'trigger')
-    checkEvidenceInvariant(actionItems, 'action')
-    checkEvidenceInvariant(riskItems, 'risk')
+    checkEvidenceInvariant([], 'trigger')
+    checkEvidenceInvariant([], 'action')
+    checkEvidenceInvariant([], 'risk')
     if (evidenceInvariantViolations.length > 0) {
       if (evidenceMode === 'throw') {
         throw new Error(
@@ -374,49 +295,19 @@ export class SemanticSeedStateBuilderService {
         return !dropViolations.has(`${kind}[${index}:${key}${phase}]`)
       })
     }
-    const positionUpdateRaw = this.toPositionState(positionPatchInput)
+    const positionUpdateRaw = null
     const contextSlots = this.toContextSlots(
-      semanticPatch.contextSlots ?? semanticPatch.contextUpdates ?? semanticPatch.context,
+      semanticPatch.contextSlots,
     )
     // Issue #1391：spot 市场下 sideMode='both' / 'short_only' 与现货语义冲突——
     //   按 marketType 上下文 fail-safe 派生 long_only。registry-driven：任何带 sideMode
     //   字段的 positionConstraint atom 都受影响，不只 grid。
     const positionUpdate = this.applySpotSideModeConstraint(positionUpdateRaw, contextSlots)
 
-    const triggerUpdatesRaw = filterByEvidenceInvariant(triggerItems, 'trigger')
-      .map((item, index) => this.toTriggerState(item, index))
-      .filter((item): item is SemanticTriggerState => item !== null)
-    // Issue #1391：seed-builder 通用桶去重（registry-driven，作用于所有 atom 不是单策略）
-    //   dispatcher 在跨子句继承 / planner-dispatcher merge / 重复 clause 命中等场景下
-    //   会输出多份同 (key, phase, sideScope, paramsHash) 节点；mergeRisk 等 bucket merge
-    //   只在 persisted-state 路径跑，纯 seed 一次性输入跑不到——这里在 build() 出口
-    //   按统一 identity 折叠，保留最强者（locked > open）。
-    const triggerUpdates = this.coalesceDuplicateBucketEntries(triggerUpdatesRaw, {
-      sideScopeAware: true,
-    })
-    const groupedTriggerUpdates = this.withMovingAverageStackCombinationContracts(triggerUpdates)
-    // Action 桶不参与通用 dedupe：action.params 常为空 {}，差异完全靠 contracts.capabilities.shape
-    //   承载（如 per_order_budget=50 vs 80），按 params hash 折叠会错误吞掉合法 multi-leg 配置
-    //   （PR3.9 spec 'isMultiLeg=true with two per_order_budget' 即此场景）。
-    const actionUpdates = filterByEvidenceInvariant(actionItems, 'action')
-      .map((item, index) => this.toActionState(item, index))
-      .filter((item): item is SemanticActionState => item !== null)
-    const riskUpdates = this.coalesceDuplicateBucketEntries(
-      filterByEvidenceInvariant(riskItems, 'risk')
-        .map((item, index) => this.toRiskState(item, index))
-        .filter((item): item is SemanticRiskState => item !== null),
-      { sideScopeAware: false },
-    )
-    const orchestration = this.toOrchestrationState(orchestrationPatchInput)
-    const positionConstraints = positionUpdate?.constraints ?? []
-
     if (
-      triggerUpdates.length === 0
-      && actionUpdates.length === 0
-      && riskUpdates.length === 0
+      explicitRules.length === 0
       && !positionUpdate
       && !Object.values(contextSlots).some(Boolean)
-      && !orchestration
     ) {
       return null
     }
@@ -428,12 +319,7 @@ export class SemanticSeedStateBuilderService {
     return this.withRequiredSeedOpenSlots({
       version: 1,
       families: [],
-      trigger: groupedTriggerUpdates,
-      action: actionUpdates,
-      risk: riskUpdates,
       position: positionUpdate,
-      positionConstraint: positionConstraints,
-      orchestration: orchestration?.nodes ?? [],
       orchestrationContracts: [],
       contextSlots,
       normalizationNotes: [],
@@ -570,117 +456,6 @@ export class SemanticSeedStateBuilderService {
     return isTriggerPredicateGroupContract(contract)
   }
 
-  // #1364 AC-3: 单一真相源 — 按 ATOM_CONTRACT_REGISTRY[key].bucket 服务端归桶。
-  // patch.atoms[] 输入侧 LLM 不再决定 bucket；未知 key warn-drop（fail-closed）。
-  // 同时按 contract.surface.phaseResolver=fixed-* 强制覆写 LLM 提供的 phase。
-  private dispatchAtomsByContractBucket(atoms: unknown[]): {
-    trigger: unknown[]
-    action: unknown[]
-    risk: unknown[]
-    positionConstraint: unknown[]
-    orchestration: unknown[]
-  } {
-    const out = {
-      trigger: [] as unknown[],
-      action: [] as unknown[],
-      risk: [] as unknown[],
-      positionConstraint: [] as unknown[],
-      orchestration: [] as unknown[],
-    }
-    for (const atom of atoms) {
-      if (!this.isRecord(atom)) continue
-      const key = typeof atom.key === 'string' ? atom.key : null
-      if (key === null) {
-        this.logger.warn(`[#1364] atoms[] entry missing key field — dropped`)
-        continue
-      }
-      const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string, surface?: { phaseResolver?: string } } | undefined>)[key]
-      if (!contract || typeof contract.bucket !== 'string') {
-        this.logger.warn(`[#1364] atoms[] unknown key dropped: key=${key}`)
-        continue
-      }
-      // phase enforcement: fixed-entry / fixed-exit / fixed-gate / fixed-program -> server 覆写
-      const resolver = contract.surface?.phaseResolver
-      let normalized: Record<string, unknown> = atom
-      if (typeof resolver === 'string' && resolver.startsWith('fixed-')) {
-        normalized = { ...atom, phase: resolver.slice('fixed-'.length) }
-      }
-      switch (contract.bucket) {
-        case 'trigger': out.trigger.push(normalized); break
-        case 'action': out.action.push(normalized); break
-        case 'risk': out.risk.push(normalized); break
-        case 'positionConstraint': out.positionConstraint.push(normalized); break
-        case 'orchestration': out.orchestration.push(normalized); break
-        default:
-          this.logger.warn(`[#1364] atoms[] unknown bucket dropped: key=${key} bucket=${contract.bucket}`)
-      }
-    }
-    return out
-  }
-
-  private dispatchLegacyBucketArraysByContractBucket(semanticPatch: SemanticPatchRecord): {
-    trigger: unknown[]
-    action: unknown[]
-    risk: unknown[]
-    positionConstraint: unknown[]
-    orchestration: unknown[]
-  } {
-    const out = {
-      trigger: [] as unknown[],
-      action: [] as unknown[],
-      risk: [] as unknown[],
-      positionConstraint: [] as unknown[],
-      orchestration: [] as unknown[],
-    }
-    const inputs = [
-      ...(Array.isArray(semanticPatch.triggers) ? semanticPatch.triggers : []),
-      ...(Array.isArray(semanticPatch.triggerUpdates) ? semanticPatch.triggerUpdates : []),
-      ...(Array.isArray(semanticPatch.actions) ? semanticPatch.actions : []),
-      ...(Array.isArray(semanticPatch.actionUpdates) ? semanticPatch.actionUpdates : []),
-      ...(Array.isArray(semanticPatch.risk) ? semanticPatch.risk : []),
-      ...(Array.isArray(semanticPatch.riskUpdates) ? semanticPatch.riskUpdates : []),
-    ]
-    if (inputs.length === 0) return out
-    return this.dispatchAtomsByContractBucket(inputs)
-  }
-
-  private filterLegacyItemsByRegistryBucket(
-    items: unknown[],
-    bucket: 'trigger' | 'action' | 'risk',
-  ): unknown[] {
-    return items.filter((item) => {
-      if (!this.isRecord(item) || typeof item.key !== 'string') {
-        return true
-      }
-      const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string } | undefined>)[item.key]
-      return !contract || contract.bucket === bucket
-    })
-  }
-
-  private mergePositionConstraintPatch(existing: unknown, constraints: unknown[]): unknown {
-    if (constraints.length === 0) {
-      return existing
-    }
-
-    const existingConstraints = this.isRecord(existing) && Array.isArray(existing.constraints)
-      ? existing.constraints
-      : []
-    const base = this.isRecord(existing)
-      ? existing
-      : {
-          mode: 'constraint_only',
-          value: 0,
-          positionMode: 'long_only',
-          status: 'locked',
-          source: 'derived',
-        }
-
-    return {
-      ...base,
-      constraints: this.coalescePositionConstraintPatches([...existingConstraints, ...constraints]),
-    }
-  }
-
   // Issue #1391：spot 市场强制 sideMode=long_only fail-safe（review M5 升级）
   //   任何 positionConstraint atom 声明 sideMode='both'/'short_only' 而 contextSlots.marketType='spot' 时，
   //   覆写为 'long_only'，并在 atom 上挂 evidence note + 通过 logger.warn 告知此次自动调整，
@@ -712,199 +487,6 @@ export class SemanticSeedStateBuilderService {
       }
     })
     return { ...position, constraints: adjusted }
-  }
-
-  // Issue #1391：通用桶去重 helper（按 key+phase+sideScope+stable params hash + openSlots 签名）
-  //   作用面：trigger/action/risk 三桶 build() 收口；orchestration / position.constraints 已有
-  //   各自专用合并路径不重复。规则与 SemanticStateMergeService.dedupeByAtomIdentity 一致
-  //   保留 locked > open，等强保留先到。memoryKey/timestamp 等派生字段从 hash 排除。
-  private coalesceDuplicateBucketEntries<T extends {
-    key: string
-    status: 'open' | 'locked' | 'superseded'
-    params?: Record<string, unknown>
-    openSlots?: ReadonlyArray<{ slotKey?: string, fieldPath?: string, status?: string }>
-    phase?: 'entry' | 'exit' | 'gate' | 'risk' | undefined
-    sideScope?: 'long' | 'short' | 'both' | null
-  }>(
-    entries: T[],
-    options: { sideScopeAware: boolean },
-  ): T[] {
-    if (entries.length <= 1) return entries
-    const out: T[] = []
-    const indexByIdentity = new Map<string, number>()
-    const rank = (s: T['status']): number => s === 'locked' ? 2 : s === 'superseded' ? 1 : 0
-    for (const entry of entries) {
-      const phase = entry.phase ?? '__nophase__'
-      const sideScope = options.sideScopeAware ? (entry.sideScope ?? '__noside__') : ''
-      const paramsHash = this.stableParamsHashIgnoringDerivedFields(entry.params ?? {})
-      const slotSig = (entry.openSlots ?? [])
-        .map(s => `${s.slotKey ?? ''}@${(s as { fieldPath?: string }).fieldPath ?? ''}`)
-        .sort()
-        .join(',')
-      const identity = `${entry.key}|${phase}|${sideScope}|${paramsHash}|${slotSig}`
-      const existingIdx = indexByIdentity.get(identity)
-      if (existingIdx === undefined) {
-        indexByIdentity.set(identity, out.length)
-        out.push(entry)
-        continue
-      }
-      const incumbent = out[existingIdx]!
-      if (rank(entry.status) > rank(incumbent.status)) {
-        out[existingIdx] = entry
-      }
-    }
-    return out
-  }
-
-  // Issue #1391 review M6：硬编码字段黑名单不可持续——sourceText 在 candle_pattern 是合法
-  //   verbatim-clause 识别 paramSlot（atom-contract-registry.ts 中 paramSlots.sourceText），
-  //   不是派生字段。仅保留确实是 server 派生（不影响 identity 的副产物）的字段：memoryKey
-  //   （partial_take_profit 的 deterministic hash）+ evidenceText / evidence （seed builder
-  //   注入的 trace info，不是 surface 抽取的 slot）。
-  private stableParamsHashIgnoringDerivedFields(params: Record<string, unknown>): string {
-    const sortedEntries = Object.entries(params)
-      .filter(([k]) => !STATE_DERIVED_PARAM_KEYS.has(k))
-      .sort(([a], [b]) => a.localeCompare(b))
-    const normalized: Record<string, unknown> = {}
-    for (const [k, v] of sortedEntries) {
-      normalized[k] = this.normalizeForHash(v)
-    }
-    return JSON.stringify(normalized)
-  }
-
-  private normalizeForHash(v: unknown): unknown {
-    if (v === null || typeof v !== 'object') return v
-    if (Array.isArray(v)) return v.map(x => this.normalizeForHash(x))
-    const obj = v as Record<string, unknown>
-    const out: Record<string, unknown> = {}
-    for (const k of Object.keys(obj).sort()) {
-      out[k] = this.normalizeForHash(obj[k])
-    }
-    return out
-  }
-
-  private coalescePositionConstraintPatches(constraints: unknown[]): unknown[] {
-    const out: unknown[] = []
-    for (const constraint of constraints) {
-      if (!this.isRecord(constraint) || typeof constraint.key !== 'string') {
-        out.push(constraint)
-        continue
-      }
-
-      const constraintKey = this.positionConstraintPatchDedupeKey(constraint)
-      const existingIndex = out.findIndex(item =>
-        this.isRecord(item)
-        && this.positionConstraintPatchDedupeKey(item) === constraintKey,
-      )
-      if (existingIndex < 0) {
-        out.push(constraint)
-        continue
-      }
-
-      const existing = out[existingIndex]
-      out[existingIndex] = this.isRecord(existing)
-        ? this.mergeConstraintPatchRecords(existing, constraint)
-        : constraint
-    }
-
-    return out
-  }
-
-  private positionConstraintPatchDedupeKey(constraint: Record<string, unknown>): string {
-    const params = this.readParams(constraint.params)
-    const sortedParams = Object.fromEntries(
-      Object.entries(params).sort(([left], [right]) => left.localeCompare(right)),
-    )
-    return JSON.stringify({
-      key: constraint.key,
-      params: sortedParams,
-    })
-  }
-
-  private mergeConstraintPatchRecords(
-    existing: Record<string, unknown>,
-    incoming: Record<string, unknown>,
-  ): Record<string, unknown> {
-    const existingParams = this.readParams(existing.params)
-    const incomingParams = this.readParams(incoming.params)
-    const existingOpenSlots = this.readOpenSlots(existing.openSlots)
-    const incomingOpenSlots = this.readOpenSlots(incoming.openSlots)
-
-    return {
-      ...existing,
-      ...incoming,
-      id: this.readTrimmedString(existing.id) ?? this.readTrimmedString(incoming.id),
-      params: { ...existingParams, ...incomingParams },
-      evidence: existing.evidence ?? incoming.evidence,
-      openSlots: [...existingOpenSlots, ...incomingOpenSlots],
-      contracts: incoming.contracts ?? existing.contracts,
-    }
-  }
-
-  private mergeUniqueAtomPatchItems(existing: unknown[], incoming: unknown[]): unknown[] {
-    if (existing.length === 0) {
-      return incoming
-    }
-    if (incoming.length === 0) {
-      return existing
-    }
-
-    const seen = new Set(existing.map(item => this.atomPatchItemDedupeKey(item)))
-    const out = [...existing]
-    for (const item of incoming) {
-      const key = this.atomPatchItemDedupeKey(item)
-      if (seen.has(key)) {
-        continue
-      }
-      seen.add(key)
-      out.push(item)
-    }
-
-    return out
-  }
-
-  private atomPatchItemDedupeKey(item: unknown): string {
-    if (!this.isRecord(item)) {
-      return `raw:${JSON.stringify(item)}`
-    }
-
-    const params = this.readParams(item.params)
-    const sortedParams = Object.fromEntries(
-      Object.entries(params).sort(([left], [right]) => left.localeCompare(right)),
-    )
-    return JSON.stringify({
-      key: item.key,
-      phase: item.phase,
-      sideScope: item.sideScope,
-      params: sortedParams,
-    })
-  }
-
-  // Merge 现有 patch.orchestration 与 atoms[] 派生 orchestration nodes。
-  // 现有 patch.orchestration shape: { nodes: [...], contracts: [...] }
-  // atoms[] 派生项需补 kind（按 key prefix 推断 gate.* / scope.* / program.* / portfolioRisk.*）。
-  private mergeOrchestrationPatch(existing: unknown, atomNodes: unknown[]): unknown {
-    const inferred: Record<string, unknown>[] = []
-    for (const atom of atomNodes) {
-      if (!this.isRecord(atom)) continue
-      const key = typeof atom.key === 'string' ? atom.key : ''
-      let kind: 'gate' | 'scope' | 'program' | 'portfolioRisk' | undefined
-      if (key.startsWith('gate.')) kind = 'gate'
-      else if (key.startsWith('scope.')) kind = 'scope'
-      else if (key.startsWith('program.')) kind = 'program'
-      else if (key.startsWith('portfolioRisk.')) kind = 'portfolioRisk'
-      if (!kind) continue
-      inferred.push({ ...atom, kind })
-    }
-    if (!this.isRecord(existing)) {
-      if (inferred.length === 0) return undefined
-      return { nodes: inferred, contracts: [] }
-    }
-    const existingNodes = Array.isArray(existing.nodes) ? existing.nodes : []
-    return {
-      ...existing,
-      nodes: [...existingNodes, ...inferred],
-    }
   }
 
   private toOrchestrationState(value: unknown): SemanticOrchestrationState | undefined {
@@ -2229,10 +1811,8 @@ export class SemanticSeedStateBuilderService {
   }
 
   private withRequiredSeedOpenSlots(state: SemanticState): SemanticState {
-    const hasExecutableSemantics = readFlatTriggers(state).length > 0
-      || readFlatActions(state).length > 0
-      || (state.positionConstraint?.length ?? 0) > 0
-      || (state.orchestration?.length ?? 0) > 0
+    const facts = this.rulesMainflowReader.readFacts(state)
+    const hasExecutableSemantics = facts.length > 0
     if (!hasExecutableSemantics) {
       return state
     }
@@ -2276,7 +1856,7 @@ export class SemanticSeedStateBuilderService {
           mode: 'fixed_ratio',
           value: 0,
           sizing: null,
-          positionMode: this.inferPositionModeFromActions([...readFlatActions(state)]),
+          positionMode: this.inferPositionModeFromActionFacts(state),
           status: 'open',
           source: 'derived',
           openSlots: [{
@@ -2315,7 +1895,7 @@ export class SemanticSeedStateBuilderService {
         sizing: legacySizingFromNormalized(axis, value, asset),
         mode: legacyModeFromAxis(axis),
         value,
-        positionMode: state.position?.positionMode ?? this.inferPositionModeFromActions([...readFlatActions(state)]),
+        positionMode: state.position?.positionMode ?? this.inferPositionModeFromActionFacts(state),
         status: 'locked',
         source: 'derived',
         openSlots: [],
@@ -2329,6 +1909,12 @@ export class SemanticSeedStateBuilderService {
     if (hasLong && hasShort) return 'long_short'
     if (hasShort) return 'short_only'
     return 'long_only'
+  }
+
+  private inferPositionModeFromActionFacts(state: SemanticState): 'long_only' | 'short_only' | 'long_short' {
+    const actions = this.rulesMainflowReader.readFactsByRole(state, 'action')
+      .map(fact => ({ key: fact.key }) as SemanticActionState)
+    return this.inferPositionModeFromActions(actions)
   }
 
   private synthesizePositionContracts(position: {
