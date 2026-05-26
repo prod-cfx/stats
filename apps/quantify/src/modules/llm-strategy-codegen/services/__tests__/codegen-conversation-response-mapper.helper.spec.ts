@@ -265,6 +265,38 @@ describe('codegenConversationResponseMapperHelper', () => {
     expect(JSON.stringify(result.specDesc)).not.toContain('semanticPredicateGraph')
   })
 
+  it('does not invent generic public condition text when display graph text is missing', () => {
+    const result = helper.finalizeSessionResponse({
+      id: 's-no-generic-condition',
+      status: 'CONFIRM_GATE',
+      missingFields: [],
+      specDesc: {
+        rules: [{
+          id: 'entry-unknown',
+          phase: 'entry',
+          condition: { kind: 'atom', key: 'future.condition' },
+          actions: [{ type: 'OPEN_LONG' }],
+        }],
+      },
+      clarificationState: null,
+    }, () => ({
+      blocked: false,
+      summary: null,
+      items: [],
+      pendingItems: [],
+    }))
+
+    expect(result.specDesc).toEqual({
+      rules: [{
+        id: 'entry-unknown',
+        phase: 'entry',
+        actions: [{ type: 'OPEN_LONG' }],
+      }],
+    })
+    expect(JSON.stringify(result.specDesc)).not.toContain('策略条件')
+    expect(JSON.stringify(result.specDesc)).not.toContain('future.condition')
+  })
+
   it('reads publication gate from nested compiler consistency report', () => {
     expect(helper.readPublicationGate({
       compilerConsistency: {

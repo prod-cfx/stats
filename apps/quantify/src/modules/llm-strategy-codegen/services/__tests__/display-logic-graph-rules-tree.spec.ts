@@ -404,4 +404,93 @@ describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () =>
     expect(serialized).not.toContain('止损')
     expect(serialized).not.toContain('仓位:')
   })
+
+  it('renders program-phase fixed grid rules as first-class display rule blocks', () => {
+    const gridParams = {
+      rangeLower: 79200,
+      rangeUpper: 80200,
+      stepPct: 0.1,
+      levels: 10,
+      sideMode: 'both',
+      breakoutAction: 'stop',
+      perGridSizing: 10,
+    }
+    const state: SemanticState = baseState({
+      rules: [{
+        id: 'program-grid',
+        phase: 'program',
+        sideScope: 'both',
+        condition: { kind: 'atom', key: 'grid.range_rebalance', params: gridParams },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [{
+            kind: 'atom',
+            key: 'program.fixed_grid_gated',
+            params: {
+              lowerBound: 79200,
+              upperBound: 80200,
+              levelCount: 10,
+              stepPct: 0.1,
+              onDeactivate: 'cancel',
+            },
+          }],
+        },
+      }],
+    })
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const ruleBlocks = graph.blocks.filter(block => block.type !== 'EXECUTE')
+    const text = graph.blocks.flatMap(block => block.items).map(item => item.text).join(' ')
+
+    expect(ruleBlocks).toHaveLength(1)
+    expect(text).toContain('网格区间再平衡')
+    expect(text).toContain('区间 79200-80200')
+    expect(text).toContain('每格 0.1%')
+    expect(text).toContain('共 10 格')
+    expect(text).toContain('双向')
+    expect(text).toContain('在 79200-80200 区间挂 10 档网格')
+    expect(text).not.toContain('策略条件')
+    expect(text).not.toContain('条件待补充')
+    expect(text).not.toContain('grid.range_rebalance')
+    expect(text).not.toContain('program.fixed_grid_gated')
+  })
+
+  it('renders grid program effects even when the condition is an always-on program gate', () => {
+    const state: SemanticState = baseState({
+      rules: [{
+        id: 'program-grid-effect-only',
+        phase: 'program',
+        sideScope: 'both',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [{
+            kind: 'atom',
+            key: 'program.fixed_grid_gated',
+            params: {
+              lowerBound: 60000,
+              upperBound: 80000,
+              levelCount: 12,
+              stepPct: 0.5,
+              onDeactivate: 'cancel',
+            },
+          }],
+        },
+      }],
+    })
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const text = graph.blocks.flatMap(block => block.items).map(item => item.text).join(' ')
+
+    expect(graph.blocks.filter(block => block.type !== 'EXECUTE')).toHaveLength(1)
+    expect(text).toContain('启动后执行')
+    expect(text).toContain('在 60000-80000 区间挂 12 档网格')
+    expect(text).not.toContain('等待策略规则补充')
+  })
 })

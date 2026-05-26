@@ -556,11 +556,20 @@ function isPlaceholderConditionText(text: string): boolean {
     || text === '不支持的条件，待补充'
 }
 
-function hasOnlyPlaceholderRuleConditions(rules: readonly DisplayLogicGraphRule[]): boolean {
+function isPlaceholderActionText(text: string): boolean {
+  return text === '未支持的动作，待补充'
+    || text === '等待策略规则补充'
+}
+
+function hasAnyPlaceholderRuleText(rules: readonly DisplayLogicGraphRule[], fallbackSymbol?: string): boolean {
   if (rules.length === 0) return false
-  return rules.every((rule) => {
+  return rules.some((rule) => {
+    if (!rule.condition) return true
     const text = formatConditionText(rule.condition)
-    return isPlaceholderConditionText(text)
+    if (isPlaceholderConditionText(text)) return true
+    return extractDisplayActions(rule)
+      .map(action => formatActionText(action, fallbackSymbol))
+      .some(isPlaceholderActionText)
   })
 }
 
@@ -1010,13 +1019,13 @@ export function buildDisplayLogicGraphFromCodegenSpec(input: BuildDisplayLogicGr
   if (rules.length === 0) {
     if (serverDisplayGraph) return serverDisplayGraph
   }
-  if (hasOnlyPlaceholderRuleConditions(rules) && hasServerRuleBlocks(serverDisplayGraph)) {
+  const executeMeta = extractExecuteMeta(specDesc, nextInput.fallbackMeta)
+  const fallbackSymbol = executeMeta.symbol ?? nextInput.fallbackMeta?.symbol
+  if (hasAnyPlaceholderRuleText(rules, fallbackSymbol ?? undefined) && hasServerRuleBlocks(serverDisplayGraph)) {
     return serverDisplayGraph
   }
   const nonRiskRules = rules.filter(rule => !isRiskDisplayRule(rule))
-  const executeMeta = extractExecuteMeta(specDesc, nextInput.fallbackMeta)
   const executeBlock = buildExecuteBlock(executeMeta)
-  const fallbackSymbol = executeMeta.symbol ?? nextInput.fallbackMeta?.symbol
   const blocks = nonRiskRules.length > 0
     ? nonRiskRules.map((rule, index) => buildConditionBlock(rule, index, fallbackSymbol ?? undefined))
     : buildLegacyRuleBlocks(specDesc)

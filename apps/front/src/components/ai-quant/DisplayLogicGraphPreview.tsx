@@ -45,7 +45,6 @@ export function DisplayLogicGraphPreview({
     ? 'en'
     : 'zh'
   const localizedGraph = localizeDisplayLogicGraph(graph, locale)
-  const emptyThenFallback = locale === 'en' ? 'Waiting for strategy rule details' : '等待策略规则补充'
   const normalizedSnapshotId = typeof publishedSnapshotId === 'string'
     ? publishedSnapshotId.trim()
     : ''
@@ -79,33 +78,35 @@ export function DisplayLogicGraphPreview({
                 )
               : (
                   <div className="mt-3 space-y-3 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-2">
-                    <div>
-                      <p className="!text-xs !font-semibold !leading-5 text-amber-400">IF</p>
-                      <div className="mt-2 space-y-2">
-                        {block.items
-                          .filter(item => item.kind === 'condition')
-                          .map(item => (
-                            <div key={item.id} className="!text-sm !leading-[22px] text-[color:var(--cf-text)]">
-                              {item.text}
-                            </div>
-                          ))}
+                    {block.items.some(item => item.kind === 'condition') && (
+                      <div>
+                        <p className="!text-xs !font-semibold !leading-5 text-amber-400">IF</p>
+                        <div className="mt-2 space-y-2">
+                          {block.items
+                            .filter(item => item.kind === 'condition')
+                            .map(item => (
+                              <div key={item.id} className="!text-sm !leading-[22px] text-[color:var(--cf-text)]">
+                                {item.text}
+                              </div>
+                            ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
-                    <div>
-                      <p className="!text-xs !font-semibold !leading-5 text-sky-400">THEN</p>
-                      <div className="mt-2 space-y-2">
-                        {block.items.some(item => item.kind === 'action')
-                          ? block.items
-                              .filter(item => item.kind === 'action')
-                              .map(item => (
-                                <div key={item.id} className="!text-sm !leading-[22px] text-[color:var(--cf-text)]">
-                                  {item.text}
-                                </div>
-                              ))
-                          : <div className="!text-sm !leading-[22px] text-[color:var(--cf-muted)]">{emptyThenFallback}</div>}
+                    {block.items.some(item => item.kind === 'action') && (
+                      <div>
+                        <p className="!text-xs !font-semibold !leading-5 text-sky-400">THEN</p>
+                        <div className="mt-2 space-y-2">
+                          {block.items
+                            .filter(item => item.kind === 'action')
+                            .map(item => (
+                              <div key={item.id} className="!text-sm !leading-[22px] text-[color:var(--cf-text)]">
+                                {item.text}
+                              </div>
+                            ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
           </div>

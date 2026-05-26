@@ -200,7 +200,7 @@ describe('displayLogicGraphPreview', () => {
     expect(container.querySelector('button')?.disabled).toBe(true)
   })
 
-  it('shows a fallback THEN message when a block has no actions', () => {
+  it('does not invent a THEN fallback when a block has no actions', () => {
     act(() => {
       root.render(
         <DisplayLogicGraphPreview
@@ -225,8 +225,8 @@ describe('displayLogicGraphPreview', () => {
     })
 
     expect(container.textContent).toContain('IF')
-    expect(container.textContent).toContain('THEN')
-    expect(container.textContent).toContain('等待策略规则补充')
+    expect(container.textContent).not.toContain('THEN')
+    expect(container.textContent).not.toContain('等待策略规则补充')
   })
 
   it('shows the published snapshot id below graph actions only after confirmation', () => {

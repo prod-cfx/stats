@@ -425,7 +425,7 @@ function toPublicConditionText(condition: Record<string, unknown> | null): strin
     return parts.length > 0 ? parts.join('，') : '网格运行条件'
   }
 
-  return '策略条件'
+  return null
 }
 
 function readNumericParam(params: Record<string, unknown>, key: string): number | null {

@@ -29,6 +29,13 @@ const TECHNICAL_RULE_CONDITION_ATOM_KEYS: ReadonlySet<string> = new Set([
   'position.no_position',
 ])
 
+const GRID_PROGRAM_ATOM_KEYS: ReadonlySet<string> = new Set([
+  'grid.range_rebalance',
+  'program.fixed_grid_gated',
+  'program.dynamic_grid',
+  'program.adaptive_volatility_grid',
+])
+
 /**
  * Issue #1443 D 方案：通用 enum value → 人话标签内置表。
  *
@@ -446,7 +453,7 @@ export class SemanticStateProjectionService {
     return [
       ...collectAtomLeaves(rule.condition),
       ...listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)),
-    ].some(leaf => leaf.key === 'grid.range_rebalance')
+    ].some(leaf => GRID_PROGRAM_ATOM_KEYS.has(leaf.key))
   }
 
   private isAlwaysOnCondition(rule: SemanticRule): boolean {

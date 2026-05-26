@@ -1057,6 +1057,113 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(text).not.toContain('条件待补充')
   })
 
+  it('uses server display graph when only one typed rule condition is placeholder', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        displayLogicGraph: {
+          blocks: [
+            {
+              type: 'IF',
+              items: [
+                { kind: 'condition', id: 'condition-entry', text: '价格在 EMA20 EMA60 EMA144 上方' },
+                { kind: 'action', id: 'action-entry', text: '开多 10 USDT' },
+              ],
+            },
+            {
+              type: 'IF',
+              items: [
+                { kind: 'condition', id: 'condition-exit', text: '价格低于 EMA20' },
+                { kind: 'action', id: 'action-exit', text: '平多' },
+              ],
+            },
+          ],
+        },
+        rules: [
+          {
+            id: 'entry-readable',
+            phase: 'entry',
+            condition: { text: '价格在 EMA20 EMA60 EMA144 上方' },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+          {
+            id: 'exit-placeholder',
+            phase: 'exit',
+            condition: { text: '策略条件' },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(text).toContain('价格在 EMA20 EMA60 EMA144 上方')
+    expect(text).toContain('价格低于 EMA20')
+    expect(text).toContain('开多 10 USDT')
+    expect(text).not.toContain('策略条件')
+  })
+
+  it('uses server display graph when typed rule condition is missing', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        displayLogicGraph: {
+          blocks: [
+            {
+              type: 'IF',
+              items: [
+                { kind: 'condition', id: 'condition-entry', text: '15m 价格在 EMA20 EMA60 EMA144 上方' },
+                { kind: 'action', id: 'action-entry', text: '开多 10 USDT' },
+              ],
+            },
+          ],
+        },
+        rules: [
+          {
+            id: 'entry-missing-condition',
+            phase: 'entry',
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(text).toContain('15m 价格在 EMA20 EMA60 EMA144 上方')
+    expect(text).not.toContain('条件待补充')
+  })
+
+  it('uses server display graph when typed rule actions are placeholders', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        displayLogicGraph: {
+          blocks: [
+            {
+              type: 'IF',
+              items: [
+                { kind: 'condition', id: 'condition-entry', text: '网格区间 79200 - 80200，步长 0.1%' },
+                { kind: 'action', id: 'action-grid', text: '双向网格挂单，每格 10%' },
+              ],
+            },
+          ],
+        },
+        rules: [
+          {
+            id: 'grid-program',
+            phase: 'program',
+            condition: { text: '网格区间 79200 - 80200，步长 0.1%' },
+            actions: [{ type: 'FUTURE_GRID_PROGRAM' }],
+          },
+        ],
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(text).toContain('双向网格挂单')
+    expect(text).not.toContain('未支持的动作')
+  })
+
   it('falls back to legacy parsing when server displayLogicGraph has no rule blocks', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {

@@ -43,7 +43,7 @@ describe('buildLogicGraphFromCodegenSpec', () => {
       1,
     )
 
-    expect(graph.trigger[0].subject).toBe('ETHUSDT')
+    expect(graph.trigger).toHaveLength(0)
     expect(graph.meta.exchange).toBe('okx')
     expect(graph.meta.timeframe).toBe('1h')
     expect(graph.actions).toHaveLength(0)
