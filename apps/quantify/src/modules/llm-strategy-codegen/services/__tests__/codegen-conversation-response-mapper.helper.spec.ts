@@ -145,6 +145,48 @@ describe('codegenConversationResponseMapperHelper', () => {
     expect(JSON.stringify(result.specDesc)).not.toContain('triggerKeys')
   })
 
+  it('projects rules-only display condition text when display item id uses condition-rule prefix', () => {
+    const result = helper.finalizeSessionResponse({
+      id: 's-rules-only-display',
+      status: 'CONFIRM_GATE',
+      missingFields: [],
+      specDesc: {
+        displayLogicGraph: {
+          blocks: [{
+            items: [
+              {
+                id: 'condition-rule-semantic-entry-ema-cross',
+                kind: 'condition',
+                text: 'EMA20 上穿 EMA60 时做多开仓',
+              },
+            ],
+          }],
+        },
+        rules: [{
+          id: 'semantic-entry-ema-cross',
+          phase: 'entry',
+          condition: { kind: 'atom', key: 'ma.golden_cross' },
+          actions: [{ type: 'OPEN_LONG' }],
+        }],
+      },
+      clarificationState: null,
+    }, () => ({
+      blocked: false,
+      summary: null,
+      items: [],
+      pendingItems: [],
+    }))
+
+    expect(result.specDesc).toMatchObject({
+      rules: [{
+        id: 'semantic-entry-ema-cross',
+        condition: { text: 'EMA20 上穿 EMA60 时做多开仓' },
+      }],
+    })
+    expect(JSON.stringify(result.specDesc)).not.toContain('策略条件')
+    expect(JSON.stringify(result.specDesc)).not.toContain('ma.golden_cross')
+  })
+
   it('does not leak grid rule keys from published specDesc without display graph text', () => {
     const result = helper.finalizeSessionResponse({
       id: 's-grid',
