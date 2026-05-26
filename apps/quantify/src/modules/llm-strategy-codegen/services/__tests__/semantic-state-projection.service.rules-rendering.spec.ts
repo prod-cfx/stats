@@ -291,6 +291,46 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
     expect(view.summary).toContain('3')
   })
 
+  it('renders condition.expression and position.per_order_budget without internal-key fallback', () => {
+    const rules: SemanticRule[] = [{
+      id: 'rule-expression-budget',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: {
+        kind: 'atom',
+        key: 'condition.expression',
+        params: {
+          expression: {
+            kind: 'predicate',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            op: 'GT',
+            right: { kind: 'indicator', name: 'ema', params: { period: 20 }, output: 'value' },
+          },
+        },
+      },
+      effects: {
+        actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        risks: [],
+        positions: [{ kind: 'atom', key: 'position.per_order_budget', params: { value: 10, asset: 'USDT' } }],
+        orchestration: [],
+        programs: [],
+      },
+    }]
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const view = service.buildConversationView(baseState({ rules }))
+      expect(view.summary).toContain('收盘价高于EMA20')
+      expect(view.summary).toContain('单笔仓位 10 USDT')
+      expect(view.summary).not.toContain('condition.expression')
+      expect(view.summary).not.toContain('position.per_order_budget')
+      expect(view.summary).not.toContain('已识别条件，参数待补充')
+      expect(warnSpy).not.toHaveBeenCalled()
+    }
+    finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   // Issue #1403 子故障 B：UI 实际消费的 displayLogicGraph 必须基于 state.rules 渲染，
   //   而非 flat-lift 出来的 state.trigger（lift 可能含 LLM 幻觉参数）。
   describe('buildDisplayLogicGraph rules-first（#1403 子故障 B）', () => {

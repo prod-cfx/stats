@@ -3627,6 +3627,28 @@ export class SemanticStateProjectionService {
   }
 
   private tryRenderRulesTreeAtomSummary(atomKey: string, params: Record<string, unknown>): string | null {
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- condition.expression not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
+    if (atomKey === 'condition.expression') {
+      const condition = this.formatSemanticExpression(params.expression)
+      if (condition.length > 0) return condition
+      const label = this.readString(params.label)
+      return label && label.length > 0 ? label : '表达式条件'
+    }
+
+    // eslint-disable-next-line atom-keys/no-atom-key-literal -- position.per_order_budget is a sizing effect leaf, not yet an atom contract key
+    if (atomKey === 'position.per_order_budget') {
+      const value = this.readFiniteNumber(params.value)
+      if (value === null) return '单笔仓位待补充'
+      const kind = this.readString(params.kind)
+      const unit = this.readString(params.unit)
+      if (kind === 'ratio') {
+        const pct = unit === 'percent' ? value : value * 100
+        return `单笔仓位 ${this.formatPercent(pct)}%`
+      }
+      const asset = this.readString(params.asset) ?? 'USDT'
+      return `单笔仓位 ${this.formatNumber(value)} ${asset}`
+    }
+
     if (atomKey === ATOM_CONTRACT_REGISTRY['indicator.above'].key || atomKey === ATOM_CONTRACT_REGISTRY['indicator.below'].key) {
       const period = this.readIndicatorReferencePeriod(params) ?? this.readFiniteNumber(params.period)
       if (period === null) return null
