@@ -3743,10 +3743,12 @@ export class SemanticStateProjectionService {
     //   扩此常量集。
     const isAlwaysOnCondition = rule.condition.kind === 'atom'
       && ALWAYS_ON_ATOM_KEYS.has(rule.condition.key)
+    const hasOrchestrationEffect = listRuleEffects(rule.effects)
+      .some(effect => collectAtomLeaves(effect).some(leaf => ATOM_CONTRACT_REGISTRY[leaf.key]?.bucket === 'orchestration'))
 
     let bodyText: string
-    if (isAlwaysOnCondition) {
-      // 跳过 always-on condition；只输出 effects（如 "止损 5% 强制平仓"）
+    if (isAlwaysOnCondition || (rule.phase === 'gate' && hasOrchestrationEffect)) {
+      // 跳过技术性 gate condition；只输出 effects（如 "账户最大回撤超过 15% 时阻止开新仓"）。
       const effectParts = this.dedupeKeepOrder(rawEffectParts)
       bodyText = effectParts.length > 0 ? effectParts.join('，') : ''
     }

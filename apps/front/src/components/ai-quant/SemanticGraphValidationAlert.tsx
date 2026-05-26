@@ -2,6 +2,7 @@ import type { LlmSemanticGraphValidationReport } from '@/lib/api'
 
 const DIAGNOSTIC_ONLY_CODES = new Set([
   'evidence_text_not_substring',
+  'rule_shape_invalid',
 ])
 
 interface SemanticGraphValidationAlertProps {

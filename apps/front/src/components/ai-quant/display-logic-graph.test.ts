@@ -1011,6 +1011,52 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(text).not.toContain('price.detect.indicator_boundary')
   })
 
+  it('uses server display graph when typed rule conditions are placeholders', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        displayLogicGraph: {
+          blocks: [
+            {
+              type: 'IF',
+              items: [
+                { kind: 'condition', id: 'condition-entry', text: 'EMA20 上穿 EMA60' },
+                { kind: 'action', id: 'action-entry', text: '开多 1%' },
+              ],
+            },
+            {
+              type: 'AND_AT_THEN',
+              items: [
+                { kind: 'condition', id: 'condition-exit', text: 'EMA20 下穿 EMA60' },
+                { kind: 'action', id: 'action-exit', text: '平多' },
+              ],
+            },
+          ],
+        },
+        rules: [
+          {
+            id: 'entry-placeholder',
+            phase: 'entry',
+            condition: { text: '策略条件' },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+          {
+            id: 'exit-placeholder',
+            phase: 'exit',
+            condition: { text: '条件待补充' },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(text).toContain('EMA20 上穿 EMA60')
+    expect(text).toContain('EMA20 下穿 EMA60')
+    expect(text).not.toContain('策略条件')
+    expect(text).not.toContain('条件待补充')
+  })
+
   it('falls back to legacy parsing when server displayLogicGraph has no rule blocks', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {
