@@ -369,6 +369,50 @@ describe('publication gate rules-only hash chain', () => {
     ]))
   })
 
+  it('blocks when a canonical action under an otherwise traced rule is missing from IR and AST traces', () => {
+    const input = fixture()
+    const canonicalRules = input.canonicalSpec.rules as Array<Record<string, unknown>>
+    canonicalRules[0].actions = [
+      { type: 'OPEN_LONG', sourcePath: 'rules[0].effects.actions[0]' },
+      { type: 'OPEN_SHORT', sourcePath: 'rules[0].effects.actions[1]' },
+    ]
+    input.rules[0] = {
+      id: 'rule-entry',
+      phase: 'entry',
+      condition: { kind: 'atom', key: 'price.above' },
+      effects: {
+        actions: [
+          { kind: 'atom', key: 'action.open_long' },
+          { kind: 'atom', key: 'action.open_short' },
+        ],
+      },
+    }
+    linkFixtureHashes(input)
+    input.script = emitScript(input.ast)
+
+    const result = newGate().validateRulesOnlyHashChain(input)
+
+    expect(result.passed).toBe(false)
+    expect(result.blocked).toBe(true)
+    expect(result.reason).toBe('rules_only_trace_missing')
+    expect(result.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'trace.ir',
+        passed: false,
+        actual: expect.objectContaining({
+          missingCanonical: expect.arrayContaining(['rules[0].effects.actions[1]']),
+        }),
+      }),
+      expect.objectContaining({
+        key: 'trace.ast',
+        passed: false,
+        actual: expect.objectContaining({
+          missingCanonical: expect.arrayContaining(['rules[0].effects.actions[1]']),
+        }),
+      }),
+    ]))
+  })
+
   it('blocks when canonical rulesHash is missing', () => {
     const input = fixture()
     delete input.canonicalSpec.metadata

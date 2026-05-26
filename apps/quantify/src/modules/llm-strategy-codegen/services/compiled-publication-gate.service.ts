@@ -627,8 +627,20 @@ export class CompiledPublicationGateService {
   } {
     const sourcePaths = new Set<string>()
     const missing: string[] = []
+    ir.ruleBlocks.forEach((item, index) => {
+      this.collectExecutableSourcePath(item, `ir.ruleBlocks[${index}]`, sourcePaths, missing)
+      const ruleSourcePath = this.readRulesSourcePath(this.readRecord(item.metadata)?.sourcePath)
+      item.actions.forEach((action, actionIndex) => {
+        this.collectExecutableSourcePath(
+          action,
+          `ir.ruleBlocks[${index}].actions[${actionIndex}]`,
+          sourcePaths,
+          missing,
+          ruleSourcePath ? `${ruleSourcePath}.effects.actions[${actionIndex}]` : null,
+        )
+      })
+    })
     ;[
-      ...ir.ruleBlocks.map((item, index) => [item, `ir.ruleBlocks[${index}]`] as const),
       ...ir.orderPrograms.map((item, index) => [item, `ir.orderPrograms[${index}]`] as const),
       ...(ir.orchestrationGates ?? []).map((item, index) => [item, `ir.orchestrationGates[${index}]`] as const),
       ...(ir.orchestrationPrograms ?? []).map((item, index) => [item, `ir.orchestrationPrograms[${index}]`] as const),
@@ -644,8 +656,20 @@ export class CompiledPublicationGateService {
   } {
     const sourcePaths = new Set<string>()
     const missing: string[] = []
+    ast.decisionPrograms.forEach((item, index) => {
+      this.collectExecutableSourcePath(item, `ast.decisionPrograms[${index}]`, sourcePaths, missing)
+      const ruleSourcePath = this.readRulesSourcePath(this.readRecord(item.metadata)?.sourcePath)
+      item.actions.forEach((action, actionIndex) => {
+        this.collectExecutableSourcePath(
+          action,
+          `ast.decisionPrograms[${index}].actions[${actionIndex}]`,
+          sourcePaths,
+          missing,
+          ruleSourcePath ? `${ruleSourcePath}.effects.actions[${actionIndex}]` : null,
+        )
+      })
+    })
     ;[
-      ...ast.decisionPrograms.map((item, index) => [item, `ast.decisionPrograms[${index}]`] as const),
       ...ast.orderPrograms.map((item, index) => [item, `ast.orderPrograms[${index}]`] as const),
       ...(ast.orchestrationPrograms ?? []).map((item, index) => [item, `ast.orchestrationPrograms[${index}]`] as const),
     ].forEach(([item, label]) => {
@@ -690,7 +714,7 @@ export class CompiledPublicationGateService {
     actualSourcePaths: readonly string[],
   ): string[] {
     return canonicalSourcePaths
-      .filter(canonical => !actualSourcePaths.some(actual => this.isSameRulesSource(actual, canonical)))
+      .filter(canonical => !actualSourcePaths.some(actual => this.isKnownRulesSourcePath(actual, canonical)))
       .sort()
   }
 
@@ -698,11 +722,6 @@ export class CompiledPublicationGateService {
     return actual === canonical
       || actual.startsWith(`${canonical}.`)
       || actual.startsWith(`${canonical}[`)
-  }
-
-  private isSameRulesSource(actual: string, canonical: string): boolean {
-    return this.isKnownRulesSourcePath(actual, canonical)
-      || this.isKnownRulesSourcePath(canonical, actual)
   }
 
   private readRulesSourcePath(value: unknown): string | null {
