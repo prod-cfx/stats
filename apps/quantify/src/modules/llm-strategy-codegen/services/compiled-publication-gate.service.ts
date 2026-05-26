@@ -246,6 +246,14 @@ export class CompiledPublicationGateService {
     const astTrace = this.collectAstExecutableTrace(input.ast)
     const irUnknownSourcePaths = this.findUnknownRulesSourcePaths(irTrace.sourcePaths, canonicalTrace.sourcePaths)
     const astUnknownSourcePaths = this.findUnknownRulesSourcePaths(astTrace.sourcePaths, canonicalTrace.sourcePaths)
+    const irMissingCanonicalSourcePaths = this.findMissingCanonicalSourcePaths(
+      canonicalTrace.sourcePaths,
+      irTrace.sourcePaths,
+    )
+    const astMissingCanonicalSourcePaths = this.findMissingCanonicalSourcePaths(
+      canonicalTrace.sourcePaths,
+      astTrace.sourcePaths,
+    )
     const scriptManifest = this.readCompiledScriptManifest(input.script)
     const hashChecks = this.buildRulesOnlyHashChecks(input, hashes, scriptManifest)
     const scriptHashLinked = hashChecks
@@ -266,17 +274,27 @@ export class CompiledPublicationGateService {
         key: 'trace.ir',
         passed: irTrace.sourcePaths.length > 0
           && irTrace.missing.length === 0
+          && irMissingCanonicalSourcePaths.length === 0
           && irUnknownSourcePaths.length === 0,
         expected: canonicalTrace.sourcePaths,
-        actual: { ...irTrace, unknown: irUnknownSourcePaths },
+        actual: {
+          ...irTrace,
+          unknown: irUnknownSourcePaths,
+          missingCanonical: irMissingCanonicalSourcePaths,
+        },
       },
       {
         key: 'trace.ast',
         passed: astTrace.sourcePaths.length > 0
           && astTrace.missing.length === 0
+          && astMissingCanonicalSourcePaths.length === 0
           && astUnknownSourcePaths.length === 0,
         expected: canonicalTrace.sourcePaths,
-        actual: { ...astTrace, unknown: astUnknownSourcePaths },
+        actual: {
+          ...astTrace,
+          unknown: astUnknownSourcePaths,
+          missingCanonical: astMissingCanonicalSourcePaths,
+        },
       },
       {
         key: 'trace.script',
@@ -667,10 +685,24 @@ export class CompiledPublicationGateService {
       .sort()
   }
 
+  private findMissingCanonicalSourcePaths(
+    canonicalSourcePaths: readonly string[],
+    actualSourcePaths: readonly string[],
+  ): string[] {
+    return canonicalSourcePaths
+      .filter(canonical => !actualSourcePaths.some(actual => this.isSameRulesSource(actual, canonical)))
+      .sort()
+  }
+
   private isKnownRulesSourcePath(actual: string, canonical: string): boolean {
     return actual === canonical
       || actual.startsWith(`${canonical}.`)
       || actual.startsWith(`${canonical}[`)
+  }
+
+  private isSameRulesSource(actual: string, canonical: string): boolean {
+    return this.isKnownRulesSourcePath(actual, canonical)
+      || this.isKnownRulesSourcePath(canonical, actual)
   }
 
   private readRulesSourcePath(value: unknown): string | null {
