@@ -52,6 +52,52 @@ describe('codegenSessionPublicationPipeline', () => {
       { id: 'action-open-short', key: 'open_short', status: 'locked', source: 'user_explicit' },
       { id: 'action-close-short', key: 'close_short', status: 'locked', source: 'user_explicit' },
     ],
+    rules: [
+      {
+        id: 'entry-bollinger-upper',
+        phase: 'entry',
+        sideScope: 'short',
+        condition: {
+          kind: 'atom',
+          key: 'bollinger.touch_upper',
+          params: {
+            indicator: 'bollinger',
+            period: 30,
+            stdDev: 2.5,
+            confirmationMode: 'close_confirm',
+          },
+        },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_short', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      },
+      {
+        id: 'exit-bollinger-middle',
+        phase: 'exit',
+        sideScope: 'short',
+        condition: {
+          kind: 'atom',
+          key: 'bollinger.touch_middle',
+          params: {
+            indicator: 'bollinger',
+            period: 30,
+            stdDev: 2.5,
+            confirmationMode: 'close_confirm',
+          },
+        },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.close_short', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      },
+    ],
     risk: [],
     position: {
       mode: 'fixed_ratio',
@@ -126,7 +172,7 @@ describe('codegenSessionPublicationPipeline', () => {
   function createPipeline(overrides?: {
     parser?: { parse: jest.Mock }
     consistency?: { evaluate: jest.Mock }
-    gate?: { publish: jest.Mock }
+    gate?: { publish: jest.Mock, assertClarificationResolvedForIrBuild?: jest.Mock, validateRulesOnlyHashChain?: jest.Mock }
     repo?: Partial<Record<string, jest.Mock>>
   }) {
     const repo = {
@@ -332,6 +378,66 @@ describe('codegenSessionPublicationPipeline', () => {
     expect(repo.updateSession).toHaveBeenCalledWith('session-5', expect.objectContaining({
       status: 'REJECTED',
       rejectReason: 'bind failed',
+    }))
+  })
+
+  it('persists rules-only hash-chain publication gate payload instead of generic rejected fallback', async () => {
+    const rulesOnlyGate = {
+      assertClarificationResolvedForIrBuild: jest.fn(),
+      validateRulesOnlyHashChain: jest.fn().mockReturnValue({
+        passed: false,
+        blocked: true,
+        reason: 'rules_only_hash_mismatch',
+        hashes: {
+          rulesHash: 'rules-hash',
+          canonicalSpecHash: 'canonical-hash',
+          irHash: 'ir-hash',
+          astHash: 'ast-hash',
+          scriptHash: 'script-hash',
+        },
+        checks: [{ key: 'hash.script.irHash', passed: false, expected: 'ir-hash', actual: 'bad' }],
+      }),
+      publish: jest.fn(),
+    }
+    const { pipeline, repo } = createPipeline({ gate: rulesOnlyGate })
+
+    await pipeline.run({
+      sessionId: 'session-rules-gate',
+      userId: 'user-1',
+      semanticState: {
+        ...semanticState,
+        rules: [{
+          id: 'typed-entry',
+          phase: 'entry',
+          sideScope: 'short',
+          condition: { kind: 'atom', key: 'bollinger.touch_upper', params: { period: 30, stdDev: 2.5 } },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.open_short', params: {} }],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        }],
+      },
+      message: '生成策略',
+    })
+
+    expect(rulesOnlyGate.publish).not.toHaveBeenCalled()
+    expect(repo.updateSession).toHaveBeenLastCalledWith('session-rules-gate', expect.objectContaining({
+      status: 'REJECTED',
+      rejectReason: expect.stringContaining('rules_only_hash_mismatch'),
+      latestSpecDesc: expect.objectContaining({
+        publicationGate: expect.objectContaining({
+          passed: false,
+          blocked: true,
+          reason: 'rules_only_hash_mismatch',
+          hashes: expect.objectContaining({ irHash: 'ir-hash' }),
+          checks: expect.arrayContaining([
+            expect.objectContaining({ key: 'hash.script.irHash', passed: false }),
+          ]),
+        }),
+      }),
     }))
   })
 })

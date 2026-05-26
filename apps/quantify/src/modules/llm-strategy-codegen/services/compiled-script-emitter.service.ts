@@ -3,6 +3,7 @@ import type { CompiledScriptExecutionEnvelope, CompiledScriptProjection, Compile
 import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
+import { buildStrategyAstDigestProjection } from './canonical-strategy-ast-compiler.service'
 
 export const FIXED_IMPORT_BLOCK = [
   "import type { StrategyAdapterV1 } from '@ai/shared'",
@@ -166,20 +167,6 @@ export class CompiledScriptEmitterService {
     ast: StrategyAstV1,
     executionEnvelope: CompiledScriptExecutionEnvelope,
   ): CompiledStrategyManifest {
-    const astProjection = {
-      astVersion: ast.astVersion,
-      executionModel: ast.executionModel,
-      dataRequirements: ast.dataRequirements,
-      runtimeRequirements: ast.runtimeRequirements,
-      exprPool: this.projectByOrder(ast.exprPool, ast.topology.exprOrder),
-      guards: this.projectByOrder(ast.guards, ast.topology.guardOrder),
-      riskPredicates: this.projectOptionalByOrder(ast.riskPredicates, ast.topology.riskPredicateOrder),
-      decisionPrograms: this.projectByOrder(ast.decisionPrograms, ast.topology.decisionOrder),
-      orderPrograms: this.projectByOrder(ast.orderPrograms, ast.topology.orderProgramOrder),
-      ...(ast.orchestrationPortfolioRisks ? { orchestrationPortfolioRisks: ast.orchestrationPortfolioRisks } : {}),
-      ...(ast.orchestrationPrograms ? { orchestrationPrograms: ast.orchestrationPrograms } : {}),
-      topology: ast.topology,
-    }
     const structuralProjection = {
       executionModel: {
         ...ast.executionModel,
@@ -201,7 +188,7 @@ export class CompiledScriptEmitterService {
       compileVersion: 'compiler.v1',
       irHash: ast.manifest.irHash,
       specHash: ast.manifest.specHash,
-      astDigest: hashCanonicalJson(astProjection),
+      astDigest: hashCanonicalJson(buildStrategyAstDigestProjection(ast)),
       structuralDigest: hashCanonicalJson(structuralProjection),
     }
   }

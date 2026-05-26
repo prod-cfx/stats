@@ -504,11 +504,14 @@ const SIZING_SLOT_RE = /(?:sizing|size|budget)/iu
 const SIZING_ROLE_PREFIX_RE = /(?:仓位|资金(?!费率)|比例|使用|投入|固定|单笔|每格|每次|每笔|每单|用|加投|加仓|补仓|账户权益(?:的)?|权益(?:的)?|账户资金(?:的)?|(?:使用|用|投入).*(?:账户权益|权益|账户资金)(?:的)?)\s*(?:使用|用|投入)?\s*[：:]?\s*$/u
 const SIZING_ROLE_SUFFIX_RE = /^\s*(?:仓位|资金(?!费率)|比例)/u
 const RISK_ROLE_NEAR_RE = /(?:止损|止盈|亏损|盈利|ATR|atr)\s*$/u
+const EXIT_PRICE_CHANGE_NEAR_RE = /(?:上涨|下跌|涨|跌|突破|跌破|回撤|回落|回到|低于|高于|触及|相对入场均价)\s*$/u
+const EXIT_ACTION_AFTER_RE = /^\s*(?:时|就|则)?\s*(?:卖出|平仓|平多|平空|退出|止损|止盈)/u
 
 function hasSizingRoleContext(text: string, index: number, length: number): boolean {
   const prefix = text.slice(Math.max(0, index - 14), index)
   const suffix = text.slice(index + length, index + length + 14)
   if (RISK_ROLE_NEAR_RE.test(prefix) || /^(?:\s*(?:止损|止盈|亏损|盈利|ATR|atr))/u.test(suffix)) return false
+  if (EXIT_PRICE_CHANGE_NEAR_RE.test(prefix) && EXIT_ACTION_AFTER_RE.test(suffix)) return false
   return SIZING_ROLE_PREFIX_RE.test(prefix) || SIZING_ROLE_SUFFIX_RE.test(suffix)
 }
 
@@ -576,6 +579,17 @@ function extractSizingRoleFromText(text: string): ExtractedSizingRole | null {
   }
 
   return null
+}
+
+function extractTopLevelPositionSizingRole(clauses: readonly string[], fullText: string): ExtractedSizingRole | null {
+  const isLifecycleClause = (clause: string): boolean =>
+    /(?:DCA|dca|定投|加投|加仓|补仓|回撤)/u.test(clause)
+
+  return clauses
+    .filter(clause => !isLifecycleClause(clause))
+    .map(clause => extractSizingRoleFromText(clause))
+    .find((role): role is ExtractedSizingRole => role !== null)
+    ?? (isLifecycleClause(fullText) ? null : extractSizingRoleFromText(fullText))
 }
 
 function toPerOrderSizingShape(sizing: SemanticPositionSizingContract): Record<string, unknown> {
@@ -1030,8 +1044,7 @@ export class GenericSeedDispatcher {
     if (ctx) patch.contextSlots = ctx as CodegenSemanticPatch['contextSlots']
 
     const clauses = splitClauses(text)
-    const sizingRole = clauses.map(clause => extractSizingRoleFromText(clause)).find((role): role is ExtractedSizingRole => role !== null)
-      ?? extractSizingRoleFromText(text)
+    const sizingRole = extractTopLevelPositionSizingRole(clauses, text)
     if (sizingRole) {
       patch.position = {
         mode: semanticPositionModeFromSizing(sizingRole.sizing),
@@ -1531,13 +1544,15 @@ export class GenericSeedDispatcher {
       const atoms = flatPatch.atoms ?? []
       const hasGrid = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
       const hasAdaptive = atoms.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key)
-      const hasEvent = (flatPatch.triggers ?? []).some(trigger => trigger.key === ATOM_CONTRACT_REGISTRY['external.signal'].key)
-      const explicitProgramEvidence = this.findEvidenceText(userMessage, '(?:webhook|外部事件|事件监听)')
+      const explicitProgramEvidence = this.findEvidenceText(
+        userMessage,
+        '(?:事件监听|webhook\\s*监听|外部事件订阅|订阅[^，。；;]{0,20}(?:事件源|webhook))',
+      )
       const programKey = hasAdaptive
         ? ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key
         : hasGrid
           ? ATOM_CONTRACT_REGISTRY['program.dynamic_grid'].key
-          : hasEvent || explicitProgramEvidence
+          : explicitProgramEvidence
             ? ATOM_CONTRACT_REGISTRY['program.event_listener'].key
             : null
       if (programKey) {

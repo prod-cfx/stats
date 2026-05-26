@@ -68,14 +68,6 @@ const OHLC_COMPARE_GAP_CASES: readonly OhlcGapCase[] = [
   },
 ]
 
-function collectTotalNodes(patch: CodegenSemanticPatch): number {
-  return (
-    (patch.triggers?.length ?? 0)
-    + (patch.actions?.length ?? 0)
-    + (patch.risk?.length ?? 0)
-  )
-}
-
 describe('issue #1279 PR2c5b — dispatcher condition.expression gap（OHLC compare）', () => {
   describe.each(OHLC_COMPARE_GAP_CASES)('$id: $description', ({ id: _id, utterance }) => {
     let patch: CodegenSemanticPatch
@@ -99,12 +91,12 @@ describe('issue #1279 PR2c5b — dispatcher condition.expression gap（OHLC comp
       expect(() => dispatcher.dispatch(utterance)).not.toThrow()
     })
 
-    it('dispatcher 总节点数 >= 1（OHLC trigger 缺失时其余子句仍被识别）', () => {
-      // OHLC 比较触发条件缺失（gap），但 dispatcher 对 utterance 中其他子句
-      // （价格突破、时间窗口等）仍会产出至少 1 个节点，证明 gap 是精确命中
-      // condition.expression 这一特定语义，而非 dispatcher 对整条 utterance 完全失效。
-      const total = collectTotalNodes(patch)
-      expect(total).toBeGreaterThanOrEqual(1)
+    it('dispatcher 不制造替代 flat 节点（零命中是当前已知 gap）', () => {
+      // Rules-only 主链路不允许为了填补 condition.expression gap 制造无 source path 的
+      // flat fallback 节点；PR3 应引入结构化 rules/IR 表达后再反转此断言。
+      expect(patch.triggers ?? []).toEqual([])
+      expect(patch.actions ?? []).toEqual([])
+      expect(patch.risk ?? []).toEqual([])
     })
   })
 })

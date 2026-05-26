@@ -6695,8 +6695,16 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       flow = await continueReportedConversation(sessionId, flow.semanticState, 'okx')
       flow = await continueReportedConversation(sessionId, flow.semanticState, '合约')
 
+      const prompt = flow.result.assistantPrompt ?? ''
       expect(flow.result.assistantPrompt ?? '').toContain('EMA20 下穿 EMA60')
       expect(flow.result.assistantPrompt ?? '').toContain('最大回撤超过 15%')
+      expect(prompt.match(/入场：EMA20 上穿 EMA60 → 开多/g) ?? []).toHaveLength(1)
+      expect(prompt.match(/出场：EMA20 下穿 EMA60 → 平多/g) ?? []).toHaveLength(1)
+      expect(prompt.match(/最大回撤超过 15%/g) ?? []).toHaveLength(1)
+      expect(prompt).not.toContain('前置：EMA20 上穿 EMA60 → 账户最大回撤超过 15% 时阻止开新仓')
+      expect((flow.semanticState.rules as Array<{ phase?: string }>).filter(rule => rule.phase === 'entry')).toHaveLength(1)
+      expect((flow.semanticState.rules as Array<{ phase?: string }>).filter(rule => rule.phase === 'exit')).toHaveLength(1)
+      expect((flow.semanticState.rules as Array<{ phase?: string }>).filter(rule => rule.phase === 'gate')).toHaveLength(1)
       expect(flow.semanticState.orchestration).toEqual(expect.arrayContaining([
         expect.objectContaining({
           kind: 'portfolioRisk',

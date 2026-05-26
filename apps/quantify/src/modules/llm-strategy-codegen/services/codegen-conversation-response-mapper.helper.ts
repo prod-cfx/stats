@@ -425,7 +425,7 @@ function toPublicConditionText(condition: Record<string, unknown> | null): strin
     return parts.length > 0 ? parts.join('，') : '网格运行条件'
   }
 
-  return '策略条件'
+  return null
 }
 
 function readNumericParam(params: Record<string, unknown>, key: string): number | null {
@@ -500,9 +500,14 @@ function readDisplayConditionTextByRuleId(displayLogicGraph: unknown): ReadonlyM
       if (!id.startsWith(prefix) || text.length === 0) {
         continue
       }
-      const ruleId = id.slice(prefix.length)
-      if (ruleId && !conditionTextByRuleId.has(ruleId)) {
-        conditionTextByRuleId.set(ruleId, text)
+      const rawRuleId = id.slice(prefix.length)
+      const ruleIds = rawRuleId.startsWith('rule-')
+        ? [rawRuleId, rawRuleId.slice('rule-'.length)]
+        : [rawRuleId]
+      for (const ruleId of ruleIds) {
+        if (ruleId && !conditionTextByRuleId.has(ruleId)) {
+          conditionTextByRuleId.set(ruleId, text)
+        }
       }
     }
   }

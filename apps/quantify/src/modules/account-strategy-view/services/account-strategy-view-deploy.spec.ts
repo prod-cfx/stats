@@ -1,5 +1,9 @@
 import type { CanonicalStrategyIrV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ir'
+import { createHash } from 'node:crypto'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { CanonicalStrategyAstCompilerService } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
+import { CompiledScriptEmitterService } from '@/modules/llm-strategy-codegen/services/compiled-script-emitter.service'
+import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/services/compiled-script-parser.service'
 import { AccountStrategyViewService } from './account-strategy-view.service'
 
 function createRuntimeExecutionStateService() {
@@ -23,6 +27,28 @@ function createStructuredRuntimeExecutionSemantics() {
     },
     sourceRefs: ['entry-primary'],
   }]
+}
+
+function hashCanonical(value: unknown): `sha256:${string}` {
+  return `sha256:${createHash('sha256').update(canonicalSerialize(value)).digest('hex')}`
+}
+
+function hashText(value: string): `sha256:${string}` {
+  return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`
+}
+
+function cleanForCanonical<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.filter(item => item !== undefined).map(item => cleanForCanonical(item)) as T
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => [key, cleanForCanonical(item)]),
+    ) as T
+  }
+  return value
 }
 
 function createGridOrderProgramAstSnapshot() {
@@ -71,6 +97,126 @@ function createGridOrderProgramAstSnapshot() {
 
 function createCombinationDecisionAstSnapshot() {
   return new CanonicalStrategyAstCompilerService().compile(createDeployCombinationIrFixture())
+}
+
+let deployableTruthCache: Record<string, unknown> | null = null
+
+function createDeployableTruthFields(): Record<string, unknown> {
+  if (deployableTruthCache) return deployableTruthCache
+  const irSnapshot = createDeployCombinationIrFixture()
+  const rulesHash = hashCanonical([{ id: 'entry_long', sourcePath: 'rules[0]' }])
+  const canonicalSnapshot = {
+    metadata: { rulesHash },
+    market: { exchange: 'okx', symbol: 'ETHUSDT', marketType: 'perp', timeframe: '15m' },
+    rules: [{ id: 'entry_long', sourcePath: 'rules[0]' }],
+  }
+  const canonicalSpecHash = hashCanonical(canonicalSnapshot)
+  irSnapshot.source.graphDigest = canonicalSpecHash
+  irSnapshot.source.specHash = canonicalSpecHash
+  const astSnapshot = new CanonicalStrategyAstCompilerService().compile(irSnapshot)
+  const scriptSnapshot = new CompiledScriptEmitterService().emit({
+    ast: astSnapshot,
+    executionEnvelope: {
+      positionMode: 'long_only',
+      marginMode: 'isolated',
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 4,
+      fillAssumption: 'strict',
+    },
+  })
+  const compiledManifest = new CompiledScriptParserService().parse(scriptSnapshot).compiledManifest
+  deployableTruthCache = {
+    canonicalSnapshot,
+    specSnapshot: canonicalSnapshot,
+    irSnapshot,
+    astSnapshot,
+    scriptSnapshot,
+    compiledManifest,
+    rulesOnlyHashChain: {
+      passed: true,
+      hashes: {
+        rulesHash,
+        canonicalSpecHash,
+        irHash: compiledManifest.irHash,
+        astHash: compiledManifest.astDigest,
+        scriptHash: hashText(scriptSnapshot),
+      },
+    },
+  }
+  return deployableTruthCache
+}
+
+function rebuildTruthForAst(truth: Record<string, unknown>, astOverride: Record<string, unknown>): Record<string, unknown> {
+  const baseAst = truth.astSnapshot as Record<string, unknown>
+  const decisionPrograms = (astOverride.decisionPrograms as Array<{ id: string }> | undefined)
+    ?? (astOverride.orderPrograms ? [] : baseAst.decisionPrograms as Array<{ id: string }>)
+  const orderPrograms = (astOverride.orderPrograms as Array<{ id: string }> | undefined)
+    ?? (astOverride.decisionPrograms ? [] : baseAst.orderPrograms as Array<{ id: string }>)
+  const astSnapshot = cleanForCanonical({
+    ...baseAst,
+    ...astOverride,
+    decisionPrograms,
+    orderPrograms,
+    manifest: baseAst.manifest,
+    topology: {
+      ...(baseAst.topology as Record<string, unknown>),
+      ...(astOverride.topology as Record<string, unknown> | undefined),
+      exprOrder: ((astOverride.exprPool as Array<{ id: string }> | undefined) ?? (baseAst.exprPool as Array<{ id: string }>)).map(item => item.id),
+      guardOrder: ((astOverride.guards as Array<{ id: string }> | undefined) ?? (baseAst.guards as Array<{ id: string }>)).map(item => item.id),
+      decisionOrder: decisionPrograms.map(item => item.id),
+      orderProgramOrder: orderPrograms.map(item => item.id),
+    },
+  })
+  const scriptSnapshot = new CompiledScriptEmitterService().emit({
+    ast: astSnapshot as never,
+    executionEnvelope: {
+      positionMode: 'long_only',
+      marginMode: 'isolated',
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 4,
+      fillAssumption: 'strict',
+    },
+  })
+  const compiledManifest = new CompiledScriptParserService().parse(scriptSnapshot).compiledManifest
+  const hashes = (truth.rulesOnlyHashChain as { hashes: Record<string, unknown> }).hashes
+  return {
+    ...truth,
+    astSnapshot,
+    scriptSnapshot,
+    compiledManifest,
+    rulesOnlyHashChain: {
+      passed: true,
+      hashes: {
+        rulesHash: hashes.rulesHash,
+        canonicalSpecHash: compiledManifest.specHash,
+        irHash: compiledManifest.irHash,
+        astHash: compiledManifest.astDigest,
+        scriptHash: hashText(scriptSnapshot),
+      },
+    },
+  }
+}
+
+function withDeployableSnapshotTruth<T extends Record<string, unknown>>(snapshot: T): T {
+  const baseTruth = createDeployableTruthFields()
+  const astSnapshot = snapshot.astSnapshot && typeof snapshot.astSnapshot === 'object' && !Array.isArray(snapshot.astSnapshot)
+    ? snapshot.astSnapshot as Record<string, unknown>
+    : null
+  const truth = astSnapshot ? rebuildTruthForAst(baseTruth, { astVersion: 'csa.v1', ...astSnapshot }) : baseTruth
+
+  return {
+    ...truth,
+    ...snapshot,
+    canonicalSnapshot: snapshot.canonicalSnapshot ?? truth.canonicalSnapshot,
+    specSnapshot: snapshot.specSnapshot ?? truth.specSnapshot,
+    irSnapshot: snapshot.irSnapshot ?? truth.irSnapshot,
+    scriptSnapshot: snapshot.scriptSnapshot ?? truth.scriptSnapshot,
+    compiledManifest: snapshot.compiledManifest ?? truth.compiledManifest,
+    rulesOnlyHashChain: snapshot.rulesOnlyHashChain ?? truth.rulesOnlyHashChain,
+    astSnapshot: truth.astSnapshot,
+  }
 }
 
 function createDeployCombinationIrFixture(): CanonicalStrategyIrV1 {
@@ -177,7 +323,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       createFromDeployment: jest.fn().mockResolvedValue({ id: 'grid-runtime-1' }),
     }
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-grid-1',
         snapshotHash: 'snapshot-grid-hash-1',
         strategyConfig: {
@@ -203,7 +349,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
         strategyInstanceId: 'inst-draft-grid-1',
         strategyTemplateId: 'template-grid-1',
         astSnapshot: createGridOrderProgramAstSnapshot(),
-      }),
+      })),
     }
     const tradingService = {
       getBalance: jest.fn().mockResolvedValue([
@@ -274,7 +420,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
     const runtimeExecutionStateService = createRuntimeExecutionStateService()
     const gridRuntimeService = { createFromDeployment: jest.fn() }
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-mixed-1',
         snapshotHash: 'snapshot-mixed-hash-1',
         strategyConfig: {
@@ -309,7 +455,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
             actions: [{ kind: 'OPEN_LONG' }],
           }],
         },
-      }),
+      })),
     }
     const service = new AccountStrategyViewService(
       repo as any,
@@ -357,7 +503,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
     }
     const runtimeExecutionStateService = createRuntimeExecutionStateService()
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-combination-1',
         snapshotHash: 'snapshot-combination-hash-1',
         strategyConfig: {
@@ -382,11 +528,8 @@ describe('accountStrategyViewService.deployStrategy', () => {
         },
         strategyInstanceId: 'inst-draft-combination-1',
         strategyTemplateId: 'template-combination-1',
-        compiledManifest: {
-          compileVersion: 'compiler.v1',
-        },
         astSnapshot: createCombinationDecisionAstSnapshot(),
-      }),
+      })),
     }
     const tradingService = {
       getLeverageConstraints: jest.fn().mockResolvedValue({
@@ -475,7 +618,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       initializeStatesForDeploy: jest.fn().mockResolvedValue(['on_start.entry.primary']),
     }
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-1',
         snapshotHash: 'snapshot-hash-1',
         strategyConfig: {
@@ -504,7 +647,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
           decisionPrograms: [{ phase: 'entry' }],
           runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
-      }),
+      })),
     }
 
     const service = new AccountStrategyViewService(
@@ -567,7 +710,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-1',
         snapshotHash: 'snapshot-hash-1',
         strategyConfig: {
@@ -603,7 +746,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
         astSnapshot: {
           runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
-      }),
+      })),
     }
     const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
     const strategyInstancesService = { updateInstance: jest.fn() }
@@ -663,7 +806,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-fixed-quote',
         snapshotHash: 'snapshot-hash-fixed',
         strategyConfig: {
@@ -692,7 +835,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
         astSnapshot: {
           runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
-      }),
+      })),
     }
     const service = new AccountStrategyViewService(
       repo as any,
@@ -735,7 +878,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-1',
         snapshotHash: 'snapshot-hash-1',
         strategyConfig: {
@@ -764,7 +907,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
           decisionPrograms: [{ phase: 'entry' }],
           runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
-      }),
+      })),
     }
     const tradingService = {
       getBalance: jest.fn().mockResolvedValue([
@@ -822,7 +965,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-1',
         snapshotHash: 'snapshot-hash-1',
         strategyConfig: {
@@ -851,7 +994,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
           decisionPrograms: [{ phase: 'entry' }],
           runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
-      }),
+      })),
     }
     const runtimeExecutionStateService = createRuntimeExecutionStateService()
 
@@ -903,7 +1046,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-2',
         snapshotHash: 'snapshot-hash-2',
         strategyConfig: {
@@ -939,7 +1082,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
         astSnapshot: {
           runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
-      }),
+      })),
     }
     const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
     const strategyInstancesService = { updateInstance: jest.fn() }
@@ -998,7 +1141,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-missing-instance',
         snapshotHash: 'snapshot-hash-missing-instance',
         strategyConfig: {
@@ -1026,7 +1169,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
         astSnapshot: {
           runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
-      }),
+      })),
     }
     const service = new AccountStrategyViewService(
       repo as any,
@@ -1065,7 +1208,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-missing-market-type',
         snapshotHash: 'snapshot-hash-missing-market-type',
         strategyConfig: {
@@ -1092,7 +1235,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
         astSnapshot: {
           runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
-      }),
+      })),
     }
     const service = new AccountStrategyViewService(
       repo as any,
@@ -1130,7 +1273,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-live-balance',
         snapshotHash: 'snapshot-hash-3',
         strategyConfig: {
@@ -1166,7 +1309,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
         astSnapshot: {
           runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
-      }),
+      })),
     }
     const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
     const strategyInstancesService = { updateInstance: jest.fn() }
@@ -1229,7 +1372,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-default-account-balance',
         snapshotHash: 'snapshot-hash-default-account',
         strategyConfig: {
@@ -1257,7 +1400,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
         astSnapshot: {
           runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
-      }),
+      })),
     }
     const tradingService = {
       getBalance: jest.fn().mockResolvedValue([
@@ -1315,7 +1458,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-default-perp-account',
         snapshotHash: 'snapshot-hash-default-perp-account',
         strategyConfig: {
@@ -1344,7 +1487,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
         astSnapshot: {
           runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
-      }),
+      })),
     }
     const tradingService = {
       getLeverageConstraints: jest.fn().mockResolvedValue({
@@ -1407,7 +1550,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-missing-asset',
         snapshotHash: 'snapshot-hash-4',
         strategyConfig: {
@@ -1443,7 +1586,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
         astSnapshot: {
           runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
-      }),
+      })),
     }
     const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
     const strategyInstancesService = { updateInstance: jest.fn() }
@@ -1580,7 +1723,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-exec-1',
         snapshotHash: 'snapshot-exec-hash-1',
         strategyConfig: {
@@ -1610,7 +1753,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
         astSnapshot: {
           runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
-      }),
+      })),
     }
     const tradingService = {
       getLeverageConstraints: jest.fn().mockResolvedValue({
@@ -1677,7 +1820,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-legacy-exec-1',
         snapshotHash: 'snapshot-legacy-exec-hash-1',
         strategyConfig: {
@@ -1706,7 +1849,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
         astSnapshot: {
           runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
-      }),
+      })),
     }
     const tradingService = {
       getLeverageConstraints: jest.fn().mockResolvedValue({
@@ -1761,7 +1904,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-legacy-deploy-1',
         snapshotHash: 'snapshot-legacy-deploy-hash-1',
         paramsSnapshot: { symbol: 'ETHUSDT', timeframe: '15m' },
@@ -1771,7 +1914,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
         astSnapshot: {
           runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
-      }),
+      })),
     }
     const service = new AccountStrategyViewService(
       repo as any,

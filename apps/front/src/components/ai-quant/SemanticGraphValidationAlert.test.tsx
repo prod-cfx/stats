@@ -38,6 +38,24 @@ describe('SemanticGraphValidationAlert', () => {
     container.remove()
   })
 
+  it('hides planner schema shape diagnostics from normal user alert', async () => {
+    const { container, root } = await renderAlert({
+      ok: false,
+      errors: [{
+        code: 'rule_shape_invalid',
+        message: 'Planner schema rejected semantic patch: rule_shape_invalid',
+      }],
+    })
+
+    expect(container.textContent).not.toContain('Semantic Graph Validation')
+    expect(container.textContent).not.toContain('rule_shape_invalid')
+
+    await act(async () => {
+      root.unmount()
+    })
+    container.remove()
+  })
+
   it('keeps hard validation errors visible', async () => {
     const { container, root } = await renderAlert({
       ok: false,

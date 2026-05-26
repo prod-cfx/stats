@@ -33,6 +33,7 @@ import { PerTradeSizingResolver } from './services/per-trade-sizing-resolver.ser
 import { PlannerDispatcherMergeService } from './services/planner-dispatcher-merge.service'
 import { PositionSizingContractService } from './services/position-sizing-contract.service'
 import { RecommendationIndexService } from './services/recommendation-index.service'
+import { RulesMainflowReaderService } from './services/rules-mainflow-reader.service'
 import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
 import { ScriptProfileExtractorService } from './services/script-profile-extractor.service'
 import { SemanticAtomContractService } from './services/semantic-atom-contract.service'
@@ -109,6 +110,7 @@ import { UnsupportedFallbackService } from './services/unsupported-fallback.serv
     StrategyIrCanonicalAdapterService,
     StrategySummaryObservationService,
     StrategySummaryBuilderService,
+    RulesMainflowReaderService,
     SemanticClarificationQuestionRendererService,
     StrategyClarificationRulesService,
     StrategyClarificationQuestionService,

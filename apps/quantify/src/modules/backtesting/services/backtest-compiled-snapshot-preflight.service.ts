@@ -5,6 +5,7 @@ import { ErrorCode } from '@ai/shared'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { buildStrategyAstDigestProjection } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
 import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/services/compiled-script-parser.service'
 
 interface BacktestCompiledSnapshot {
@@ -80,21 +81,7 @@ export class BacktestCompiledSnapshotPreflightService {
       this.raiseInvalid('ast_snapshot_missing')
     }
 
-    const astProjection = {
-      astVersion: astSnapshot.astVersion,
-      executionModel: astSnapshot.executionModel,
-      dataRequirements: astSnapshot.dataRequirements,
-      runtimeRequirements: astSnapshot.runtimeRequirements,
-      exprPool: this.projectByOrder(astSnapshot.exprPool, astSnapshot.topology.exprOrder),
-      guards: this.projectByOrder(astSnapshot.guards, astSnapshot.topology.guardOrder),
-      riskPredicates: this.projectOptionalByOrder(astSnapshot.riskPredicates, astSnapshot.topology.riskPredicateOrder),
-      decisionPrograms: this.projectByOrder(astSnapshot.decisionPrograms, astSnapshot.topology.decisionOrder),
-      orderPrograms: this.projectByOrder(astSnapshot.orderPrograms, astSnapshot.topology.orderProgramOrder),
-      ...(astSnapshot.orchestrationPrograms ? { orchestrationPrograms: astSnapshot.orchestrationPrograms } : {}),
-      topology: astSnapshot.topology,
-    }
-
-    if (hashCanonicalJson(astProjection) !== expectedAstDigest) {
+    if (hashCanonicalJson(buildStrategyAstDigestProjection(astSnapshot)) !== expectedAstDigest) {
       this.raiseInvalid('ast_digest_mismatch')
     }
   }
@@ -128,22 +115,6 @@ export class BacktestCompiledSnapshotPreflightService {
   private readJsonRecord(raw: unknown): Record<string, unknown> | null {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
     return raw as Record<string, unknown>
-  }
-
-  private projectByOrder<T extends { id: string }>(items: T[], order: string[]): T[] {
-    const itemIndex = new Map(items.map(item => [item.id, item]))
-
-    return order
-      .map(id => itemIndex.get(id))
-      .filter((item): item is T => item !== undefined)
-  }
-
-  private projectOptionalByOrder<T extends { id: string }>(
-    items: T[] | undefined,
-    order: string[] | undefined,
-  ): T[] | undefined {
-    if (!items || !order) return undefined
-    return this.projectByOrder(items, order)
   }
 
   private raiseInvalid(reason: string): never {

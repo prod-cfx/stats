@@ -14,8 +14,10 @@ import type { StrategySignalsRuntimeConfig } from '@/modules/strategy-signals/ty
 import type { StrategyFundingSnapshot } from '@/modules/trading/core/strategy-buying-power.resolver'
 import type { ExchangeId, MarketType, UnifiedBalance, UnifiedOrder } from '@/modules/trading/core/types'
 import type { PrismaClient } from '@/prisma/prisma.types'
+import type { StrategyAstV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ast'
 import { createHash } from 'node:crypto'
 import { ErrorCode } from '@ai/shared'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common'
@@ -29,6 +31,8 @@ import { GridRuntimeService } from '@/modules/grid-runtime/services/grid-runtime
 import { ScopeTimeframeLiveUnsupportedException } from '@/modules/llm-strategy-codegen/exceptions/scope-timeframe-live-unsupported.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
+import { buildStrategyAstDigestProjection } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
+import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/services/compiled-script-parser.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
@@ -108,6 +112,7 @@ export class AccountStrategyViewService {
   private static readonly DEFAULT_PERP_DEPLOY_MAX_LEVERAGE = 5
   private readonly logger = new Logger(AccountStrategyViewService.name)
   private readonly liquidationLocks = new Map<string, Promise<void>>()
+  private readonly compiledScriptParser = new CompiledScriptParserService()
 
   constructor(
     private readonly repo: AccountStrategyViewRepository,
@@ -2538,28 +2543,13 @@ export class AccountStrategyViewService {
       })
     }
 
-    if (!this.hasDeployableCompiledOrderProgramSnapshot(snapshot)) {
-      const runtimeExecutionStateService = this.requireRuntimeExecutionStateService()
-      try {
-        const semanticKeys = runtimeExecutionStateService.buildExecutionSemanticKeysFromSnapshot(snapshot)
-        if (
-          !semanticKeys.length
-          && !this.isContinuousOfficialStrategyPlazaSnapshot(snapshot)
-          && !this.hasDeployableCompiledDecisionSnapshot(snapshot)
-        ) {
-          throw new DeploySnapshotRequiresRepublishException({
-            publishedSnapshotId: snapshot.id,
-          })
-        }
-      } catch (error) {
-        if (error instanceof DomainException || error instanceof DeploySnapshotRequiresRepublishException) {
-          throw error
-        }
-
-        throw new DeploySnapshotRequiresRepublishException({
-          publishedSnapshotId: snapshot.id,
-        })
-      }
+    if (
+      !this.isContinuousOfficialStrategyPlazaSnapshot(snapshot)
+      && !this.hasDeployableRulesOnlySnapshotTruth(snapshot)
+    ) {
+      throw new DeploySnapshotRequiresRepublishException({
+        publishedSnapshotId: snapshot.id,
+      })
     }
 
     const strategyConfig = this.readRecord((snapshot as Record<string, unknown>).strategyConfig)
@@ -2727,48 +2717,206 @@ export class AccountStrategyViewService {
       && this.readString(executionEnvelope, ['runtime']) === 'signal-generator'
   }
 
-  private hasDeployableCompiledDecisionSnapshot(snapshot: unknown): boolean {
+  private hasDeployableRulesOnlySnapshotTruth(snapshot: unknown): boolean {
     const record = this.readRecord(snapshot)
-    const astSnapshot = this.readRecord(record?.astSnapshot)
-    if (!record || !astSnapshot) return false
-    if (this.readString(astSnapshot, ['astVersion']) !== 'csa.v1') return false
-    if (!this.isCompilerV1Snapshot(record, astSnapshot)) return false
-
-    const decisionPrograms = astSnapshot.decisionPrograms
-    if (!Array.isArray(decisionPrograms)) return false
-
-    return decisionPrograms.some(program => this.isDeployableDecisionProgram(program))
-  }
-
-  private isCompilerV1Snapshot(
-    snapshot: Record<string, unknown>,
-    astSnapshot: Record<string, unknown>,
-  ): boolean {
-    const compiledManifest = this.readRecord(snapshot.compiledManifest)
-    const astManifest = this.readRecord(astSnapshot.manifest)
-    if (this.readString(compiledManifest ?? {}, ['compileVersion']) === 'compiler.v1') return true
-    if (this.readString(astManifest ?? {}, ['compileVersion']) === 'compiler.v1') return true
-
-    const scriptSnapshot = snapshot.scriptSnapshot
-    return typeof scriptSnapshot === 'string' && scriptSnapshot.includes('@generated by compiler.v1')
-  }
-
-  private isDeployableDecisionProgram(program: unknown): boolean {
-    const record = this.readRecord(program)
     if (!record) return false
-    const phase = this.readString(record, ['phase'])
-    if (phase !== 'entry' && phase !== 'exit' && phase !== 'rebalance') return false
-    if (!this.readString(record, ['id'])) return false
-    if (!this.readString(record, ['sourceRef'])) return false
-    if (!this.readString(record, ['when'])) return false
 
-    const actions = record.actions
-    if (!Array.isArray(actions) || actions.length === 0) return false
+    const canonicalSnapshot = this.readRecord(record.canonicalSnapshot)
+      ?? this.readRecord(record.specSnapshot)
+    const irSnapshot = this.readRecord(record.irSnapshot)
+      ?? this.readRecord(record.compiledIr)
+    const astSnapshot = this.readRecord(record.astSnapshot)
+    const compiledManifest = this.readRecord(record.compiledManifest)
+    const scriptSnapshot = this.readString(record, ['scriptSnapshot', 'script'])
 
-    return actions.some((action) => {
-      const actionRecord = this.readRecord(action)
-      return !!actionRecord && !!this.readString(actionRecord, ['kind'])
-    })
+    if (!canonicalSnapshot || !irSnapshot || !astSnapshot || !compiledManifest || !scriptSnapshot) {
+      return false
+    }
+    if (!this.hasValidCompiledManifest(compiledManifest)) return false
+    if (this.readString(irSnapshot, ['irVersion']) !== 'csi.v1') return false
+    if (this.readString(astSnapshot, ['astVersion']) !== 'csa.v1') return false
+    const hashChain = this.resolveRulesOnlyHashChainEvidence(record)
+    if (!hashChain) return false
+
+    try {
+      const parsed = this.compiledScriptParser.parse(scriptSnapshot)
+      return this.compiledManifestMatches(
+        parsed.compiledManifest as unknown as Record<string, unknown>,
+        compiledManifest,
+      )
+        && this.snapshotTruthHashesMatch({
+          canonicalSnapshot,
+          irSnapshot,
+          astSnapshot,
+          compiledManifest,
+          scriptSnapshot,
+          hashChain,
+        })
+    } catch {
+      return false
+    }
+  }
+
+  private hasValidCompiledManifest(manifest: Record<string, unknown>): boolean {
+    return this.readString(manifest, ['compileVersion']) === 'compiler.v1'
+      && this.readString(manifest, ['irVersion']) === 'csi.v1'
+      && this.readString(manifest, ['astVersion']) === 'csa.v1'
+      && this.isSha256String(this.readString(manifest, ['irHash']))
+      && this.isSha256String(this.readString(manifest, ['specHash']))
+      && this.isSha256String(this.readString(manifest, ['astDigest']))
+      && this.isSha256String(this.readString(manifest, ['structuralDigest']))
+  }
+
+  private compiledManifestMatches(
+    parsed: Record<string, unknown>,
+    expected: Record<string, unknown>,
+  ): boolean {
+    return this.readString(parsed, ['compileVersion']) === this.readString(expected, ['compileVersion'])
+      && this.readString(parsed, ['irVersion']) === this.readString(expected, ['irVersion'])
+      && this.readString(parsed, ['astVersion']) === this.readString(expected, ['astVersion'])
+      && this.readString(parsed, ['irHash']) === this.readString(expected, ['irHash'])
+      && this.readString(parsed, ['specHash']) === this.readString(expected, ['specHash'])
+      && this.readString(parsed, ['astDigest']) === this.readString(expected, ['astDigest'])
+      && this.readString(parsed, ['structuralDigest']) === this.readString(expected, ['structuralDigest'])
+  }
+
+  private resolveRulesOnlyHashChainEvidence(snapshot: Record<string, unknown>): Record<string, unknown> | null {
+    const candidates = [
+      this.readRecord(snapshot.rulesOnlyHashChain),
+      this.readRecord(snapshot.stage1ConsistencyEvidence),
+      this.readRecord(this.readRecord(snapshot.specSnapshot)?.rulesOnlyHashChain),
+      this.readRecord(this.readRecord(snapshot.specSnapshot)?.stage1ConsistencyEvidence),
+      this.buildRulesOnlyHashChainEvidenceFromPersistedSnapshot(snapshot),
+    ]
+
+    return candidates.find(evidence => this.isDeployableHashChainEvidence(evidence)) ?? null
+  }
+
+  private buildRulesOnlyHashChainEvidenceFromPersistedSnapshot(
+    snapshot: Record<string, unknown>,
+  ): Record<string, unknown> | null {
+    const compiledManifest = this.readRecord(snapshot.compiledManifest)
+    const consistencyReport = this.readRecord(snapshot.consistencyReport)
+    const compilerConsistency = this.readRecord(consistencyReport?.compilerConsistency)
+    const manifestSelfCheck = this.readRecord(compilerConsistency?.manifestSelfCheck)
+    const graphVsIr = this.readRecord(compilerConsistency?.graphVsIr)
+    const irVsScript = this.readRecord(compilerConsistency?.irVsScript)
+    const specSnapshot = this.readRecord(snapshot.specSnapshot)
+    const specMetadata = this.readRecord(specSnapshot?.metadata)
+
+    const rulesHash = this.readString(specMetadata ?? {}, ['rulesHash', 'canonicalRulesHash'])
+    const canonicalSpecHash = this.readString(compiledManifest ?? {}, ['specHash'])
+      ?? this.readString(snapshot, ['specHash'])
+      ?? this.readString(manifestSelfCheck ?? {}, ['specHash'])
+      ?? this.readString(graphVsIr ?? {}, ['specHash'])
+    const irHash = this.readString(compiledManifest ?? {}, ['irHash'])
+      ?? this.readString(snapshot, ['irHash'])
+      ?? this.readString(manifestSelfCheck ?? {}, ['irHash'])
+      ?? this.readString(irVsScript ?? {}, ['irHash'])
+    const astHash = this.readString(compiledManifest ?? {}, ['astDigest'])
+      ?? this.readString(snapshot, ['astDigest'])
+      ?? this.readString(manifestSelfCheck ?? {}, ['astDigest'])
+      ?? this.readString(irVsScript ?? {}, ['astDigest'])
+    const scriptHash = this.readString(snapshot, ['scriptHash'])
+
+    const evidence = {
+      passed: consistencyReport?.status === 'PASSED' && compilerConsistency?.status === 'PASSED',
+      hashes: {
+        rulesHash,
+        canonicalSpecHash,
+        irHash,
+        astHash,
+        scriptHash,
+      },
+    }
+
+    return this.isDeployableHashChainEvidence(evidence) ? evidence : null
+  }
+
+  private isDeployableHashChainEvidence(evidence: Record<string, unknown> | null): boolean {
+    if (!evidence) return false
+    if (evidence.passed === false || evidence.blocked === true) return false
+    const hashes = this.readRecord(evidence.hashes) ?? evidence
+
+    return (this.isSha256LikeString(this.readString(hashes, ['rulesHash']))
+      || this.isSha256LikeString(this.readString(hashes, ['canonicalRulesHash'])))
+      && (this.isSha256LikeString(this.readString(hashes, ['canonicalSpecHash']))
+        || this.isSha256LikeString(this.readString(hashes, ['specHash'])))
+      && this.isSha256LikeString(this.readString(hashes, ['irHash']))
+      && (this.isSha256LikeString(this.readString(hashes, ['astHash']))
+        || this.isSha256LikeString(this.readString(hashes, ['astDigest'])))
+      && this.isSha256LikeString(this.readString(hashes, ['scriptHash']))
+  }
+
+  private snapshotTruthHashesMatch(input: {
+    canonicalSnapshot: Record<string, unknown>
+    irSnapshot: Record<string, unknown>
+    astSnapshot: Record<string, unknown>
+    compiledManifest: Record<string, unknown>
+    scriptSnapshot: string
+    hashChain: Record<string, unknown>
+  }): boolean {
+    const hashes = this.readRecord(input.hashChain.hashes) ?? input.hashChain
+    const canonicalSpecHash = this.hashCanonicalJson(this.canonicalSnapshotForHash(input.canonicalSnapshot))
+    const irHash = this.hashCanonicalJson(input.irSnapshot)
+    const astHash = this.hashCanonicalJson(buildStrategyAstDigestProjection(input.astSnapshot as Omit<StrategyAstV1, 'manifest'>))
+    const scriptHash = this.hashText(input.scriptSnapshot)
+
+    if (!this.hashEquals(canonicalSpecHash, this.readString(input.compiledManifest, ['specHash']))) return false
+    if (!this.hashEquals(canonicalSpecHash, this.readString(hashes, ['canonicalSpecHash']))
+      && !this.hashEquals(canonicalSpecHash, this.readString(hashes, ['specHash']))) return false
+    if (!this.hashEquals(irHash, this.readString(input.compiledManifest, ['irHash']))) return false
+    if (!this.hashEquals(irHash, this.readString(hashes, ['irHash']))) return false
+    if (!this.hashEquals(astHash, this.readString(input.compiledManifest, ['astDigest']))) return false
+    if (!this.hashEquals(astHash, this.readString(hashes, ['astHash']))
+      && !this.hashEquals(astHash, this.readString(hashes, ['astDigest']))) return false
+    if (!this.hashEquals(scriptHash, this.readString(hashes, ['scriptHash']))) return false
+
+    const canonicalRulesHash = this.readString(this.readRecord(input.canonicalSnapshot.metadata), ['rulesHash'])
+      ?? this.readString(input.canonicalSnapshot, ['rulesHash'])
+    if (canonicalRulesHash) {
+      return this.hashEquals(canonicalRulesHash, this.readString(hashes, ['rulesHash']))
+        || this.hashEquals(canonicalRulesHash, this.readString(hashes, ['canonicalRulesHash']))
+    }
+
+    return true
+  }
+
+  private canonicalSnapshotForHash(snapshot: Record<string, unknown>): Record<string, unknown> {
+    const { rulesOnlyHashChain: _rulesOnlyHashChain, stage1ConsistencyEvidence: _stage1ConsistencyEvidence, ...canonical } = snapshot
+    return canonical
+  }
+
+  private hashCanonicalJson(value: unknown): `sha256:${string}` {
+    return `sha256:${createHash('sha256').update(canonicalSerialize(value)).digest('hex')}`
+  }
+
+  private hashText(value: string): `sha256:${string}` {
+    return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`
+  }
+
+  private hashEquals(actual: string | null, expected: string | null): boolean {
+    const normalizedActual = this.normalizeSha256String(actual)
+    const normalizedExpected = this.normalizeSha256String(expected)
+    return normalizedActual !== null
+      && normalizedExpected !== null
+      && normalizedActual === normalizedExpected
+  }
+
+  private isSha256String(value: string | null): boolean {
+    return typeof value === 'string' && /^sha256:[a-f0-9]{64}$/iu.test(value.trim())
+  }
+
+  private isSha256LikeString(value: string | null): boolean {
+    return this.normalizeSha256String(value) !== null
+  }
+
+  private normalizeSha256String(value: string | null): `sha256:${string}` | null {
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim().toLowerCase()
+    if (/^sha256:[a-f0-9]{64}$/u.test(trimmed)) return trimmed as `sha256:${string}`
+    if (/^[a-f0-9]{64}$/u.test(trimmed)) return `sha256:${trimmed}`
+    return null
   }
 
   /**
@@ -2788,15 +2936,6 @@ export class AccountStrategyViewService {
       const kind = (scope as Record<string, unknown>).scopeKind
       return kind === 'timeframe'
     })
-  }
-
-  private hasDeployableCompiledOrderProgramSnapshot(snapshot: unknown): boolean {
-    const record = this.readRecord(snapshot)
-    const astSnapshot = this.readRecord(record?.astSnapshot)
-    if (!record || !astSnapshot) return false
-    if (this.readString(astSnapshot, ['astVersion']) !== 'csa.v1') return false
-    if (!this.isCompilerV1Snapshot(record, astSnapshot)) return false
-    return this.hasExclusiveAstOrderPrograms(record)
   }
 
   private hasExclusiveAstOrderPrograms(snapshot: unknown): boolean {

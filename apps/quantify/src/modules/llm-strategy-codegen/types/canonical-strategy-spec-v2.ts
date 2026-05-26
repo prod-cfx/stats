@@ -79,6 +79,7 @@ export interface CanonicalRuleAction {
     asset?: string
   }
   params?: Record<string, number | string | boolean>
+  readonly sourcePath?: string
   /**
    * Issue #1313 PR5b — 透传触发该 action 的语义 atom key（如 `action.open_long`）。
    * 仅在 builder 从 semantic action atom 派生 action 时挂载；启发式 / risk / fallback
@@ -134,6 +135,7 @@ export interface CanonicalRuleV2 {
 
 export interface CanonicalOrchestrationGate {
   id: string
+  sourcePath?: string
   // Phase 5 S10 (#1111): target 升级为 union（entry / strategy / subStrategy）
   target: SemanticOrchestrationGateTarget
   activeWhen: CanonicalConditionNode
@@ -148,6 +150,7 @@ export interface CanonicalPortfolioDrawdownRisk {
   mode: 'observe' | 'enforce'
   thresholdPct: number
   effectWhenTriggered: 'block_new_entries'
+  sourcePath?: string
 }
 
 // Phase 5 S8 (#1119): symbol exposure cap portfolioRisk —— scope='symbol'
@@ -159,6 +162,7 @@ export interface CanonicalPortfolioSymbolExposureCapRisk {
   notionalCapPct: number
   symbolScopeRef: string
   effectWhenTriggered: 'block_new_entries' | 'reduce_exposure'
+  sourcePath?: string
 }
 
 // Phase 5 S8 (#1119): subStrategy exposure cap portfolioRisk —— scope='subStrategy'
@@ -169,6 +173,7 @@ export interface CanonicalPortfolioSubStrategyExposureCapRisk {
   notionalCapPct: number
   subStrategyScopeRef: string
   effectWhenTriggered: 'block_new_entries' | 'pause_substrategy'
+  sourcePath?: string
 }
 
 // Phase 5 S8 (#1119): union with discriminator `scope`
@@ -215,6 +220,8 @@ export interface CanonicalOrchestrationProgramAdaptiveGridParams {
 
 export interface CanonicalFixedGridGatedProgram {
   id: string
+  sourcePath?: string
+  sourceAtomKey?: string
   programKind: 'fixed_grid_gated'
   activeWhenRef: string
   onDeactivate: 'cancel' | 'keep' | 'close'
@@ -225,6 +232,8 @@ export interface CanonicalFixedGridGatedProgram {
 
 export interface CanonicalDynamicGridProgram {
   id: string
+  sourcePath?: string
+  sourceAtomKey?: string
   programKind: 'dynamic_grid'
   activeWhenRef: string
   onDeactivate: 'cancel' | 'keep' | 'close'
@@ -235,6 +244,8 @@ export interface CanonicalDynamicGridProgram {
 
 export interface CanonicalAdaptiveVolatilityGridProgram {
   id: string
+  sourcePath?: string
+  sourceAtomKey?: string
   programKind: 'adaptive_volatility_grid'
   activeWhenRef: string
   onDeactivate: 'cancel' | 'keep' | 'close'
@@ -248,6 +259,8 @@ export interface CanonicalAdaptiveVolatilityGridProgram {
 //   onDeactivate ∈ {'cancel','keep'}（readiness fail-closed 拒收 'close'）
 export interface CanonicalEventListenerProgram {
   id: string
+  sourcePath?: string
+  sourceAtomKey?: string
   programKind: 'event_listener'
   activeWhenRef: string
   onDeactivate: 'cancel' | 'keep'
@@ -273,6 +286,7 @@ export interface CanonicalSymbolScope {
   scopeKind: 'symbol'
   symbols: readonly string[]
   primarySymbol?: string
+  sourcePath?: string
 }
 
 // Phase 5 S11 (#1112): scope.leg substrate
@@ -295,6 +309,7 @@ export interface CanonicalOrchestrationLegScope {
   instrumentRef: string
   legSizing?: CanonicalOrchestrationLegSizing
   syncTriggerRequired?: boolean
+  sourcePath?: string
 }
 
 // Phase 5 S3 (#1109): scope.timeframe substrate
@@ -304,6 +319,7 @@ export interface CanonicalOrchestrationTimeframeScope {
   primaryTimeframe: string
   requiredTimeframes: readonly string[]
   alignmentPolicy: 'strict' | 'tolerant'
+  sourcePath?: string
 }
 
 // Phase 5 S9 (#1110): scope.dataSource substrate
@@ -313,6 +329,7 @@ export interface CanonicalOrchestrationDataSourceScope {
   role: SemanticOrchestrationDataSourceRole
   feedId: string
   schemaRef: SemanticOrchestrationDataSourceSchema
+  sourcePath?: string
 }
 
 // Phase 5 S10 (#1111): scope.subStrategy substrate
@@ -323,6 +340,7 @@ export interface CanonicalSubStrategyScope {
   subStrategyLabel?: string
   positionHandlingOnDeactivate: 'close' | 'keep'
   orderHandlingOnDeactivate: 'cancel' | 'keep'
+  sourcePath?: string
 }
 
 // Phase 5 S10 (#1111): scope union — discriminator scopeKind
@@ -371,5 +389,9 @@ export interface CanonicalStrategySpecV2 {
   }
   metadata?: {
     normalized?: CanonicalStrategySpecNormalizedMetadata
+    rulesHash?: string
+    rulesMainflow?: {
+      positionSourcePaths?: string[]
+    }
   }
 }

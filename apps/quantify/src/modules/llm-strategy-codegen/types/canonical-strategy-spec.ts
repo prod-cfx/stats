@@ -48,6 +48,7 @@ export interface CanonicalStrategySpecV1 {
 export interface CanonicalOrderProgramIntent {
   id: string
   kind: 'contract_order_program'
+  sourcePath?: string
   programKind?: 'fixed_grid_gated' | 'dynamic_grid' | 'adaptive_volatility_grid' | 'event_listener'
   mode: 'spot' | 'perp_long' | 'perp_short' | 'perp_neutral'
   levelSet: {

@@ -17,17 +17,11 @@ function formatLegacyConditionText(subject: string, operator: string, value: str
 }
 
 function buildDisplayGraph(graph: StrategyLogicGraph): DisplayLogicGraph {
-  const conditions = graph.trigger.length > 0
-    ? graph.trigger.map((trigger, index) => ({
-        kind: 'condition' as const,
-        id: trigger.id,
-        text: `${index > 0 && trigger.join ? `${trigger.join} ` : ''}${formatLegacyConditionText(trigger.subject, trigger.operator, trigger.value)}`,
-      }))
-    : [{
-        kind: 'condition' as const,
-        id: 'condition-fallback',
-        text: '条件待补充',
-      }]
+  const conditions = graph.trigger.map((trigger, index) => ({
+    kind: 'condition' as const,
+    id: trigger.id,
+    text: `${index > 0 && trigger.join ? `${trigger.join} ` : ''}${formatLegacyConditionText(trigger.subject, trigger.operator, trigger.value)}`,
+  }))
 
   const actions = graph.actions.map(action => ({
     kind: 'action' as const,

@@ -5,7 +5,7 @@
  *  - S1 grid: 单 rule + grid.range_rebalance condition → 闭环
  *  - S2 sequence root + action.open_long effects → entry ok
  *  - S4 AND(predicate1, predicate2) entry + action.open_long effect → entry ok
- *  - rules 空：missing rules_empty（调用方 fallback 旧扁平桶）
+ *  - rules 空：missing rules_empty（主链路 fail-closed）
  *  - rules 全空 effects：missing_entry / missing_exit / missing_risk
  *  - grid 越界 breakoutAction=stop：exit 强化
  */
@@ -121,7 +121,7 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     expect(r.hasRisk).toBe(true)
   })
 
-  it('rules 为空 → 返回 rules_empty，调用方据此走旧扁平桶 fallback', () => {
+  it('rules 为空 → 返回 rules_empty，主链路据此 fail-closed', () => {
     const r = svc.evaluateRulesReadiness([])
     expect(r.missing).toEqual(['rules_empty'])
     expect(r.hasEntry).toBe(false)
@@ -262,6 +262,244 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     expect(r.hasEntry).toBe(true)
     expect(r.hasExit).toBe(true)
     expect(r.missing).toEqual([])
+  })
+
+  it('mainflow rejects empty rules instead of falling back to flat buckets', () => {
+    const r = svc.evaluateMainflowRulesReadiness([])
+
+    expect(r.ready).toBe(false)
+    expect(r.blockingReasons).toContain('rules_missing_or_empty')
+    expect(JSON.stringify(r.openSlots)).not.toContain('trigger[')
+    expect(JSON.stringify(r.openSlots)).not.toContain('risk[')
+  })
+
+  it('mainflow missing stop loss slot points to typed rules path', () => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'r-entry',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.stop_loss_pct', {})],
+          positions: [atom('position.sizing', { value: 10, unit: 'USDT' })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ]
+
+    const r = svc.evaluateMainflowRulesReadiness(rules)
+
+    expect(r.ready).toBe(false)
+    expect(r.openSlots).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        fieldPath: 'rules[0].effects.risks[0].params.valuePct',
+        slotKey: 'risk.stop_loss_pct.valuePct',
+      }),
+    ]))
+  })
+
+  it('mainflow accepts stop loss valuePct without opening stop loss slot', () => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'r-entry',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.stop_loss_pct', { valuePct: 5 })],
+          positions: [atom('position.sizing', { value: 10, unit: 'USDT' })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ]
+
+    const r = svc.evaluateMainflowRulesReadiness(rules)
+
+    expect(r.openSlots).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'risk.stop_loss_pct.valuePct',
+      }),
+    ]))
+  })
+
+  it('mainflow does not combine entry condition with exit close action as entry executable', () => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'r-entry',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [atom('position.sizing', { value: 10, unit: 'USDT' })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+      rule({
+        id: 'r-exit',
+        phase: 'exit',
+        condition: atom('price.breakout_down', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.close_long')],
+          risks: [atom('risk.stop_loss_pct', { valuePct: 5 })],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }),
+    ]
+
+    const r = svc.evaluateMainflowRulesReadiness(rules)
+
+    expect(r.ready).toBe(false)
+    expect(r.blockingReasons).toContain('missing_entry_rules')
+  })
+
+  it('mainflow accepts entry rule with open action as entry executable', () => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'r-entry',
+        phase: 'gate',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.stop_loss_pct', { valuePct: 5 })],
+          positions: [atom('position.sizing', { value: 10, unit: 'USDT' })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ]
+
+    const r = svc.evaluateMainflowRulesReadiness(rules)
+
+    expect(r.blockingReasons).not.toContain('missing_entry_rules')
+  })
+
+  it('mainflow accepts DCA schedule and add-position rules as entry executable', () => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'r-daily-dca',
+        phase: 'entry',
+        condition: atom('execution.on_start', { timing: 'on_start' }),
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [
+            atom('position.dca_schedule', {
+              triggerMode: 'time_interval',
+              timeIntervalBars: 1,
+              perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+            }),
+          ],
+          orchestration: [],
+          programs: [],
+        },
+      }),
+      rule({
+        id: 'r-drawdown-add',
+        phase: 'entry',
+        condition: atom('price.percent_change', {
+          direction: 'down',
+          valuePct: 5,
+          basis: 'entry_avg_price',
+        }),
+        effects: {
+          actions: [
+            atom('action.add_position', {
+              sizing: { kind: 'quote', value: 200, asset: 'USDT' },
+              addMode: 'drawdown_pct',
+            }),
+          ],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }),
+      rule({
+        id: 'r-exit',
+        phase: 'exit',
+        condition: atom('price.percent_change', {
+          direction: 'down',
+          valuePct: 5,
+          basis: 'entry_avg_price',
+        }),
+        effects: {
+          actions: [atom('action.close_long')],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }),
+    ]
+
+    const r = svc.evaluateMainflowRulesReadiness(rules)
+
+    expect(r.blockingReasons).not.toContain('missing_entry_rules')
+  })
+
+  it.each([
+    ['NaN', Number.NaN],
+    ['zero', 0],
+    ['negative', -5],
+  ])('mainflow rejects invalid stop loss valuePct: %s', (_label, valuePct) => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'r-entry',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.stop_loss_pct', { valuePct })],
+          positions: [atom('position.sizing', { value: 10, unit: 'USDT' })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ]
+
+    const r = svc.evaluateMainflowRulesReadiness(rules)
+
+    expect(r.openSlots).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'risk.stop_loss_pct.valuePct',
+      }),
+    ]))
+  })
+
+  it.each([
+    ['NaN', Number.NaN],
+    ['zero', 0],
+    ['negative', -100],
+  ])('mainflow rejects invalid position sizing value: %s', (_label, value) => {
+    const rules: SemanticRule[] = [
+      rule({
+        id: 'r-entry',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.stop_loss_pct', { valuePct: 5 })],
+          positions: [atom('position.sizing', { value, unit: 'USDT' })],
+          orchestration: [atom('scope.timeframe', { timeframe: '15m' })],
+          programs: [],
+        },
+      }),
+    ]
+
+    const r = svc.evaluateMainflowRulesReadiness(rules)
+
+    expect(r.openSlots).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'position.sizing.value',
+      }),
+    ]))
   })
 })
 

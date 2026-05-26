@@ -30,6 +30,18 @@ function baseState(overrides: Partial<SemanticState>): SemanticState {
   }
 }
 
+function lockedContextSlot(field: 'symbol' | 'timeframe', value: string): SemanticState['contextSlots']['symbol'] {
+  return {
+    slotKey: `context.${field}`,
+    fieldPath: `contextSlots.${field}`,
+    value,
+    status: 'locked',
+    priority: 'context',
+    questionHint: '',
+    affectsExecution: true,
+  }
+}
+
 describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () => {
   const service = new SemanticStateProjectionService()
 
@@ -225,5 +237,260 @@ describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () =>
     const graph = service.buildDisplayLogicGraph(baseState({ rules }))
     const ifBlocks = graph.blocks.filter(b => b.type === 'IF')
     expect(ifBlocks).toHaveLength(2)
+  })
+
+  it('does not render flat-only action when rules omit it', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      trigger: [],
+      action: [{
+        id: 'flat-action',
+        key: 'action.open_long',
+        params: {},
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+      }],
+      risk: [],
+      positionConstraint: [],
+      orchestration: [],
+      position: null,
+      orchestrationContracts: [],
+      normalizationNotes: [],
+      updatedAt: new Date(0).toISOString(),
+      rules: [{
+        id: 'r1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.breakout_up', params: {} },
+        effects: { actions: [], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    }
+
+    const graph = service.buildDisplayLogicGraph(state)
+
+    expect(JSON.stringify(graph)).toContain('rules[0].condition')
+    expect(JSON.stringify(graph)).not.toContain('flat-action')
+    expect(JSON.stringify(graph)).not.toContain('action.open_long')
+  })
+
+  it('does not render flat-only risk or position when rules omit them', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      trigger: [],
+      action: [],
+      risk: [{
+        id: 'flat-risk',
+        key: 'risk.stop_loss_pct',
+        params: { valuePct: 99, basis: 'entry_avg_price' },
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+      }],
+      positionConstraint: [],
+      orchestration: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 99,
+        sizing: null,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+      },
+      orchestrationContracts: [],
+      normalizationNotes: [],
+      updatedAt: new Date(0).toISOString(),
+      rules: [{
+        id: 'r1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.breakout_up', params: {} },
+        effects: { actions: [], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    }
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const serialized = JSON.stringify(graph)
+
+    expect(serialized).toContain('rules[0].condition')
+    expect(serialized).not.toContain('flat-risk')
+    expect(serialized).not.toContain('execute-risk')
+    expect(serialized).not.toContain('止损')
+    expect(serialized).not.toContain('仓位:')
+  })
+
+  it('uses typed rule effect source paths for actions and risks', () => {
+    const state: SemanticState = baseState({
+      rules: [{
+        id: 'typed-effects',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.breakout_up', params: {} },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [{ kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } }],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const serialized = JSON.stringify(graph)
+
+    expect(serialized).toContain('rules[0].effects.actions[0]')
+    expect(serialized).toContain('rules[0].effects.risks[0]')
+    expect(serialized).not.toContain('rules[0].effects[0]')
+    expect(serialized).not.toContain('rules[0].effects[1]')
+  })
+
+  it('keeps context execute items in rules mode without flat-only risk or position', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      contextSlots: {
+        exchange: null,
+        symbol: lockedContextSlot('symbol', 'BTCUSDT'),
+        marketType: null,
+        timeframe: lockedContextSlot('timeframe', '15m'),
+      },
+      trigger: [],
+      action: [],
+      risk: [{
+        id: 'flat-risk',
+        key: 'risk.stop_loss_pct',
+        params: { valuePct: 99, basis: 'entry_avg_price' },
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+      }],
+      positionConstraint: [],
+      orchestration: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 99,
+        sizing: null,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+      },
+      orchestrationContracts: [],
+      normalizationNotes: [],
+      updatedAt: new Date(0).toISOString(),
+      rules: [{
+        id: 'r1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.breakout_up', params: {} },
+        effects: { actions: [], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    }
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const serialized = JSON.stringify(graph)
+
+    expect(serialized).toContain('execute-symbol')
+    expect(serialized).toContain('BTCUSDT')
+    expect(serialized).toContain('execute-timeframe')
+    expect(serialized).toContain('15m')
+    expect(serialized).not.toContain('execute-risk')
+    expect(serialized).not.toContain('止损')
+    expect(serialized).not.toContain('仓位:')
+  })
+
+  it('renders program-phase fixed grid rules as first-class display rule blocks', () => {
+    const gridParams = {
+      rangeLower: 79200,
+      rangeUpper: 80200,
+      stepPct: 0.1,
+      levels: 10,
+      sideMode: 'both',
+      breakoutAction: 'stop',
+      perGridSizing: 10,
+    }
+    const state: SemanticState = baseState({
+      rules: [{
+        id: 'program-grid',
+        phase: 'program',
+        sideScope: 'both',
+        condition: { kind: 'atom', key: 'grid.range_rebalance', params: gridParams },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [{
+            kind: 'atom',
+            key: 'program.fixed_grid_gated',
+            params: {
+              lowerBound: 79200,
+              upperBound: 80200,
+              levelCount: 10,
+              stepPct: 0.1,
+              onDeactivate: 'cancel',
+            },
+          }],
+        },
+      }],
+    })
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const ruleBlocks = graph.blocks.filter(block => block.type !== 'EXECUTE')
+    const text = graph.blocks.flatMap(block => block.items).map(item => item.text).join(' ')
+
+    expect(ruleBlocks).toHaveLength(1)
+    expect(text).toContain('网格区间再平衡')
+    expect(text).toContain('区间 79200-80200')
+    expect(text).toContain('每格 0.1%')
+    expect(text).toContain('共 10 格')
+    expect(text).toContain('双向')
+    expect(text).toContain('在 79200-80200 区间挂 10 档网格')
+    expect(text).not.toContain('策略条件')
+    expect(text).not.toContain('条件待补充')
+    expect(text).not.toContain('grid.range_rebalance')
+    expect(text).not.toContain('program.fixed_grid_gated')
+  })
+
+  it('renders grid program effects even when the condition is an always-on program gate', () => {
+    const state: SemanticState = baseState({
+      rules: [{
+        id: 'program-grid-effect-only',
+        phase: 'program',
+        sideScope: 'both',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [{
+            kind: 'atom',
+            key: 'program.fixed_grid_gated',
+            params: {
+              lowerBound: 60000,
+              upperBound: 80000,
+              levelCount: 12,
+              stepPct: 0.5,
+              onDeactivate: 'cancel',
+            },
+          }],
+        },
+      }],
+    })
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const text = graph.blocks.flatMap(block => block.items).map(item => item.text).join(' ')
+
+    expect(graph.blocks.filter(block => block.type !== 'EXECUTE')).toHaveLength(1)
+    expect(text).toContain('启动后执行')
+    expect(text).toContain('在 60000-80000 区间挂 12 档网格')
+    expect(text).not.toContain('等待策略规则补充')
   })
 })

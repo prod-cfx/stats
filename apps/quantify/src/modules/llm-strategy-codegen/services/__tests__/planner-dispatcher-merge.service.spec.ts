@@ -815,6 +815,77 @@ describe('PlannerDispatcherMergeService', () => {
     }))
   })
 
+  it('does not promote DCA drawdown or exit percentages to top-level position sizing during merge fallback', () => {
+    const text = 'rulesMainflow.missing_exit_rules: 补充退出：价格相对入场均价下跌 5% 时卖出退出。'
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+    const fallback = svc.buildRulesTreeFallbackFromDispatcher(dispatcher, text)
+
+    expect(fallback?.position?.sizing).toBeUndefined()
+  })
+
+  it('drops empty position-constraint condition rules before planner schema validation', () => {
+    const text = 'semantic.action.add_position.constraint: 最多加投 1 次；按原策略：回撤 5% 时加投 200 USDT。'
+    const planner = {
+      rules: [
+        {
+          id: 'clarified-position-pyramiding-limit',
+          phase: 'gate',
+          sideScope: 'both',
+          condition: { kind: 'atom', key: 'position.pyramiding_limit', params: { maxLayers: 1 } },
+          effects: [],
+          evidence: { text },
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+
+    expect(merged?.rules?.some(rule =>
+      JSON.stringify(rule.condition).includes('position.pyramiding_limit')
+      && listRuleEffects(rule.effects).length === 0,
+    )).toBe(false)
+  })
+
+  it('keeps DCA lifecycle entry on an event condition when planner emits position presence noise', () => {
+    const text = 'executionContext.timeframe: 1d'
+    const planner = {
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.05,
+        sizing: { kind: 'ratio', unit: 'ratio', value: 0.05 },
+        positionMode: 'long_only',
+        status: 'locked',
+        openSlots: [],
+      },
+      rules: [
+        {
+          id: 'entry-dca-daily',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'position.no_position', params: { sideScope: 'both' }, evidence: { text } },
+          effects: {
+            actions: [],
+            risks: [],
+            positions: [{ kind: 'atom', key: 'position.dca_schedule', params: { interval: '1d', perOrderBudget: 100 } }],
+            orchestration: [],
+            programs: [],
+          },
+          evidence: { text },
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, {}, text)
+
+    expect(merged?.rules?.[0]?.condition).toEqual(expect.objectContaining({
+      key: 'execution.on_start',
+    }))
+    expect(JSON.stringify(merged?.rules)).not.toContain('position.no_position')
+    expect(merged?.position?.sizing).toBeUndefined()
+    expect(merged?.position?.mode).toBe('constraint_only')
+  })
+
   it('execution-slot merge does not append EMA cross rules when planner params are richer', () => {
     const planner = {
       rules: [

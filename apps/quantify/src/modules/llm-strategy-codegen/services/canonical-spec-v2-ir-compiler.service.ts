@@ -245,7 +245,7 @@ export class CanonicalSpecV2IrCompilerService {
     for (const rule of input.canonicalSpec.rules) {
       const riskPredicate = this.tryCompileRiskPredicate(rule, context)
       if (riskPredicate) {
-        riskPredicates.push(riskPredicate)
+        riskPredicates.push(this.withRuleSourcePath(riskPredicate, rule))
         continue
       }
 
@@ -285,7 +285,7 @@ export class CanonicalSpecV2IrCompilerService {
 
       const compiledGuards = this.tryCompileRiskGuards(rule, context)
       if (compiledGuards.length > 0) {
-        guards.push(...compiledGuards)
+        guards.push(...compiledGuards.map(guard => this.withRuleSourcePath(guard, rule)))
         continue
       }
 
@@ -451,6 +451,7 @@ export class CanonicalSpecV2IrCompilerService {
       return {
         id: compiledId,
         kind: 'LIMIT_LADDER',
+        ...(intent.sourcePath ? { sourcePath: intent.sourcePath } : {}),
         activeWhen: levelSetRefs.activeWhen,
         side: this.resolveOrderProgramSide(intent.mode),
         sidePolicy: this.resolveOrderProgramSidePolicy(intent.mode),
@@ -584,9 +585,9 @@ export class CanonicalSpecV2IrCompilerService {
   ): string {
     const closeRef = this.ensurePriceSeries(context, 'close')
     const seed = intent.id.replace(/\W+/g, '_')
-    const aboveLower = this.upsertPredicate(context.predicateMap, `${seed}_active_lower`, 'GTE', [closeRef, lowerRef])
-    const belowUpper = this.upsertPredicate(context.predicateMap, `${seed}_active_upper`, 'LTE', [closeRef, upperRef])
-    return this.upsertPredicate(context.predicateMap, `${seed}_active_range`, 'AND', [aboveLower, belowUpper])
+    const aboveLower = this.insertPredicate(context.predicateMap, `${seed}_active_lower`, 'GTE', [closeRef, lowerRef])
+    const belowUpper = this.insertPredicate(context.predicateMap, `${seed}_active_upper`, 'LTE', [closeRef, upperRef])
+    return this.insertPredicate(context.predicateMap, `${seed}_active_range`, 'AND', [aboveLower, belowUpper])
   }
 
   private ensureOrderProgramActiveLevelSetPredicate(
@@ -596,7 +597,7 @@ export class CanonicalSpecV2IrCompilerService {
   ): string {
     const closeRef = this.ensurePriceSeries(context, 'close')
     const seed = intent.id.replace(/\W+/g, '_')
-    return this.upsertPredicate(context.predicateMap, `${seed}_active_level_set`, 'WITHIN_LEVEL_SET', [closeRef, levelSetRef])
+    return this.insertPredicate(context.predicateMap, `${seed}_active_level_set`, 'WITHIN_LEVEL_SET', [closeRef, levelSetRef])
   }
 
   private resolveOrderProgramSpacing(
@@ -1068,6 +1069,7 @@ export class CanonicalSpecV2IrCompilerService {
       )
       return {
         id: gate.id,
+        ...(gate.sourcePath ? { sourcePath: gate.sourcePath } : {}),
         exprId,
         target: gate.target,
         effectWhenFalse: gate.effectWhenFalse,
@@ -1125,6 +1127,7 @@ export class CanonicalSpecV2IrCompilerService {
       if (program.programKind === 'fixed_grid_gated') {
         result.push({
           id: program.id,
+          ...(program.sourcePath ? { sourcePath: program.sourcePath } : {}),
           programKind: 'fixed_grid_gated',
           activeWhenExprId: exprId,
           onDeactivate: program.onDeactivate,
@@ -1138,6 +1141,7 @@ export class CanonicalSpecV2IrCompilerService {
       if (program.programKind === 'dynamic_grid') {
         result.push({
           id: program.id,
+          ...(program.sourcePath ? { sourcePath: program.sourcePath } : {}),
           programKind: 'dynamic_grid',
           activeWhenExprId: exprId,
           onDeactivate: program.onDeactivate,
@@ -1154,6 +1158,7 @@ export class CanonicalSpecV2IrCompilerService {
       if (program.programKind === 'adaptive_volatility_grid') {
         result.push({
           id: program.id,
+          ...(program.sourcePath ? { sourcePath: program.sourcePath } : {}),
           programKind: 'adaptive_volatility_grid',
           activeWhenExprId: exprId,
           onDeactivate: program.onDeactivate,
@@ -1176,6 +1181,7 @@ export class CanonicalSpecV2IrCompilerService {
         if (typeof dataSourceScope.feedId !== 'string' || dataSourceScope.feedId.length === 0) continue
         result.push({
           id: program.id,
+          ...(program.sourcePath ? { sourcePath: program.sourcePath } : {}),
           programKind: 'event_listener',
           activeWhenExprId: exprId,
           onDeactivate: program.onDeactivate,
@@ -2896,11 +2902,28 @@ export class CanonicalSpecV2IrCompilerService {
       if (!opensRawPosition) continue
       if (block.metadata?.dcaSchedule) continue
       if (block.metadata?.addPosition) continue
+      if (this.predicateTreeContainsExecutionOnStart(block.when, context.predicateMap)) continue
       const leafKinds = collectEntryRuleLeafKinds(block.when, context.predicateMap)
       if (leafKinds.length === 0) continue
       if (leafKindsContainEvent(leafKinds)) continue
       throw new EntryRuleRequiresEventLeafException({ ruleId: block.id, leafKinds })
     }
+  }
+
+  private predicateTreeContainsExecutionOnStart(
+    rootPredicateId: string,
+    predicateById: ReadonlyMap<string, PredicateDef>,
+  ): boolean {
+    const visited = new Set<string>()
+    const visit = (predicateId: string): boolean => {
+      if (visited.has(predicateId)) return false
+      visited.add(predicateId)
+      if (predicateId.includes('execution_on_start')) return true
+      const predicate = predicateById.get(predicateId)
+      if (!predicate) return false
+      return predicate.args.some(arg => visit(arg))
+    }
+    return visit(rootPredicateId)
   }
 
   private upsertPredicate(
@@ -2919,6 +2942,24 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     const id = this.resolveCollisionFreePredicateId(predicateMap, baseId, signature)
+    predicateMap.set(id, {
+      id,
+      kind,
+      args,
+      ...(params ? { params } : {}),
+    })
+    return id
+  }
+
+  private insertPredicate(
+    predicateMap: Map<string, PredicateDef>,
+    baseId: string,
+    kind: PredicateDef['kind'],
+    args: string[],
+    params?: PredicateDef['params'],
+  ): string {
+    const signature = this.buildPredicateSignature(kind, args, params)
+    const id = this.resolveCollisionFreePredicateId(predicateMap, baseId, `${baseId}:${signature}`)
     predicateMap.set(id, {
       id,
       kind,
@@ -4105,6 +4146,14 @@ export class CanonicalSpecV2IrCompilerService {
     }
   }
 
+  private withRuleSourcePath<T extends { sourcePath?: string }>(item: T, rule: CanonicalRuleV2): T {
+    const sourcePath = typeof rule.metadata?.sourcePath === 'string'
+      ? rule.metadata.sourcePath.trim()
+      : ''
+    if (!sourcePath) return item
+    return { ...item, sourcePath }
+  }
+
   private collectPositionLifecycleRuntimeRequirements(
     rule: CanonicalRuleV2,
     actions: ActionDef[],
@@ -4167,6 +4216,7 @@ export class CanonicalSpecV2IrCompilerService {
       && subRef.trim() !== ''
       && (!supportedSubStrategyScopeIds || supportedSubStrategyScopeIds.has(subRef.trim()))
     return {
+      ...(typeof metadata.sourcePath === 'string' && metadata.sourcePath.trim() !== '' ? { sourcePath: metadata.sourcePath.trim() } : {}),
       ...(metadata.partialTakeProfit ? { partialTakeProfit: { ...metadata.partialTakeProfit } } : {}),
       ...(metadata.reversePosition ? { reversePosition: { ...metadata.reversePosition } } : {}),
       ...(metadata.addPosition ? { addPosition: { ...metadata.addPosition } } : {}),

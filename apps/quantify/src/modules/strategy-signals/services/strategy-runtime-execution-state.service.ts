@@ -202,7 +202,16 @@ export class StrategyRuntimeExecutionStateService {
       throw new Error('misplaced_runtime_execution_semantics')
     }
     const astSnapshot = this.readRecord(root?.astSnapshot)
-    return this.readCanonicalSemanticKeyArray(astSnapshot?.runtimeExecutionSemantics)
+    const astKeys = this.readCanonicalSemanticKeyArray(astSnapshot?.runtimeExecutionSemantics)
+    if (astKeys.length > 0) return astKeys
+
+    const irSnapshot = this.readRecord(root?.irSnapshot)
+      ?? this.readRecord(root?.compiledIr)
+    const irKeys = this.readCanonicalSemanticKeyArray(irSnapshot?.runtimeExecutionSemantics)
+    if (irKeys.length > 0) return irKeys
+
+    const executionEnvelope = this.readRecord(root?.executionEnvelope)
+    return this.readCanonicalSemanticKeyArray(executionEnvelope?.runtimeExecutionSemantics)
   }
 
   private readCanonicalSemanticKeyArray(value: unknown): string[] {

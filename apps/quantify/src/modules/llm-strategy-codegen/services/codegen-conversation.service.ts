@@ -14,7 +14,7 @@ import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gat
 import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant-conversations.repository'
 import type { EditablePublishedStrategySnapshotRecord } from '../repositories/published-strategy-snapshots.repository'
 import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
-import { collectAtomLeaves, gracefulParseSemanticRule, type SemanticRule } from '../types/atom-expr'
+import { collectAtomLeaves, gracefulParseSemanticRule, isRuleEffectsByRole, type AtomExpr, type RuleEffectsByRole, type SemanticRule } from '../types/atom-expr'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { SemanticEditDecision } from '../types/semantic-edit'
@@ -203,6 +203,11 @@ interface StructuredClarificationContinuationArgs {
   message: string
   userId: string
 }
+
+type RuleExprPathSegment =
+  | { kind: 'children', exprKind: 'and' | 'or', index: number }
+  | { kind: 'steps', index: number }
+  | { kind: 'not' }
 
 const ALLOWED_HELPER_CATEGORIES = ['finance', 'array', 'ta', 'signal'] as const
 const MAX_HELPER_SIGNATURE_LINES = 24
@@ -1679,16 +1684,36 @@ export class CodegenConversationService {
       }),
       supportGateResponse.strategyVersion,
     )
-    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
-    const clarificationState = semanticArtifacts.clarificationState
-    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
-    const clarificationPrompt = semanticArtifacts.clarificationPrompt
     const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
       dto.message,
       reducedSemanticState,
       constraintPack.recommendationStyle,
     )
     const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
+    const rulesReadiness = this.semanticContractReadiness.evaluateMainflowRulesReadiness(reducedSemanticState.rules)
+    if (!rulesReadiness.ready) {
+      const clarificationState = this.buildRulePathClarificationState(rulesReadiness.openSlots, rulesReadiness.blockingReasons)
+      const assistantPrompt = this.renderRulePathClarificationPrompt(clarificationState, responseLocale)
+      await this.sessionsRepo.updateSession(session.id, {
+        ...this.stateMachine.buildConversationUpdate({
+          status: 'DRAFTING',
+          semanticState: reducedSemanticState,
+          clarificationState,
+          constraintPack: nextConstraintPack,
+        }),
+      } as Prisma.LlmStrategyCodegenSessionUpdateInput)
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, this.finalizeSessionResponse({
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt,
+        clarificationState,
+      }))
+    }
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
+    const clarificationState = semanticArtifacts.clarificationState
+    const semanticReadyForGenerate = this.isSemanticReadyForGenerate(clarificationState)
+    const clarificationPrompt = semanticArtifacts.clarificationPrompt
     const normalization = semanticArtifacts.normalization
     const canonicalSpec = this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
@@ -1963,7 +1988,7 @@ export class CodegenConversationService {
     )
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const clarificationState = semanticArtifacts.clarificationState
-    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const semanticReadyForGenerate = this.isSemanticReadyForGenerate(clarificationState)
     const normalization = semanticArtifacts.normalization
     const canonicalSpec = this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
@@ -2250,7 +2275,7 @@ export class CodegenConversationService {
       )
       const semanticArtifacts = this.resolveSemanticClarificationArtifacts(replacementState, responseLocale)
       const clarificationState = semanticArtifacts.clarificationState
-      const semanticReadyForGenerate = this.findNextOpenSemanticSlot(replacementState) === null
+      const semanticReadyForGenerate = this.isSemanticReadyForGenerate(clarificationState)
       const normalization = semanticArtifacts.normalization
       const canonicalSpec = this.buildCanonicalSpecForConversation(replacementState, normalization)
       const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
@@ -2424,7 +2449,7 @@ export class CodegenConversationService {
     )
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const clarificationState = semanticArtifacts.clarificationState
-    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const semanticReadyForGenerate = this.isSemanticReadyForGenerate(clarificationState)
     const normalization = semanticArtifacts.normalization
     const canonicalSpec = this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
@@ -2559,7 +2584,7 @@ export class CodegenConversationService {
     }
     const activeClarificationState = this.hasPendingBlockingClarification(baseClarificationState)
       ? baseClarificationState
-      : this.resolveSemanticClarificationArtifacts(persistedSemanticState, responseLocale).clarificationState
+      : { status: 'CLEAR', items: [] } satisfies StrategyClarificationState
     const inferredSemanticClarificationAnswers = this.inferFreeformSemanticClarificationAnswers(
       activeClarificationState,
       dto.message,
@@ -2591,6 +2616,44 @@ export class CodegenConversationService {
       this.reconcileSemanticMissingPlaceholders(supportGateResponse.semanticState),
       supportGateResponse.strategyVersion,
     )
+    const reducedSemanticState = this.normalizeSemanticContractReadiness(
+      this.withRequiredSemanticOpenSlots(
+        this.reconcileSemanticMissingPlaceholders(semanticStateAfterAnswers),
+        {},
+        {
+          preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticStateAfterAnswers.position),
+        },
+      ),
+      supportGateResponse.strategyVersion,
+    )
+    const rulesReadiness = this.semanticContractReadiness.evaluateMainflowRulesReadiness(reducedSemanticState.rules)
+    if (!rulesReadiness.ready) {
+      const clarificationState = this.buildRulePathClarificationState(rulesReadiness.openSlots, rulesReadiness.blockingReasons)
+      const assistantPrompt = this.renderRulePathClarificationPrompt(clarificationState, responseLocale)
+      const historyAfterRulePathClarification = this.appendConversationHistory(
+        constraintPack.conversationHistory ?? [],
+        dto.message,
+        assistantPrompt,
+      )
+      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        semanticState: reducedSemanticState,
+        clarificationState,
+        constraintPack: {
+          ...constraintPack,
+          conversationHistory: historyAfterRulePathClarification,
+        },
+      }))
+
+      const response = this.finalizeSessionResponse({
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt,
+        clarificationState,
+      })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+    }
     const confirmationViewArtifacts = this.resolveSemanticClarificationArtifacts(semanticStateAfterAnswers, responseLocale)
     const confirmationViewNormalization = confirmationViewArtifacts.normalization
     const confirmationViewSpecDesc = this.specDescBuilder.buildFromCanonicalSpec(
@@ -2603,23 +2666,13 @@ export class CodegenConversationService {
       },
     )
     const confirmationViewDigest = this.readCanonicalDigest(confirmationViewSpecDesc)
-    const reducedSemanticState = this.normalizeSemanticContractReadiness(
-      this.withRequiredSemanticOpenSlots(
-        this.reconcileSemanticMissingPlaceholders(semanticStateAfterAnswers),
-        {},
-        {
-          preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticStateAfterAnswers.position),
-        },
-      ),
-      supportGateResponse.strategyVersion,
-    )
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const clarificationState = this.mergePersistedBlockingClarificationItems(
       semanticArtifacts.clarificationState,
       baseClarificationState,
       reducedSemanticState,
     )
-    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const semanticReadyForGenerate = this.isSemanticReadyForGenerate(clarificationState)
     const rawConfirmedCanonicalDigest = dto.confirmedCanonicalDigest?.trim() ?? ''
     const confirmedCanonicalDigest = rawConfirmedCanonicalDigest
       || (options.allowServerSideConfirmationDigest ? confirmationViewDigest : '')
@@ -2919,7 +2972,14 @@ export class CodegenConversationService {
 
     let nextState = currentState
     for (const item of clarificationState?.items ?? []) {
-      const rawAnswer = answers[item.key]
+      const rawAnswer = this.readClarificationAnswerForItem(answers, item)
+      if (typeof rawAnswer === 'string' && rawAnswer.trim()) {
+        const rulePathAppliedState = this.applyRulePathClarificationAnswer(nextState, item, rawAnswer.trim())
+        if (rulePathAppliedState !== nextState) {
+          nextState = rulePathAppliedState
+          continue
+        }
+      }
       const isLegacyPositionSizingAnswer = item.key === 'sizing.positionPct' || item.field === 'riskRules.positionPct'
       if (
         typeof rawAnswer !== 'string'
@@ -2954,6 +3014,231 @@ export class CodegenConversationService {
     }
 
     return nextState
+  }
+
+  private applyRulePathClarificationAnswer(
+    currentState: SemanticState,
+    item: StrategyClarificationItem,
+    answer: string,
+  ): SemanticState {
+    const path = this.readRuleParamClarificationPath(item)
+    if (!path) return currentState
+
+    const value = this.parseRulePathClarificationValue(path.paramKey, item.slotKey, answer)
+    if (value === null) return currentState
+    const nextRules = this.withRuleParamValue(currentState.rules, path, value)
+    if (nextRules === currentState.rules) return currentState
+
+    return {
+      ...currentState,
+      rules: nextRules,
+    }
+  }
+
+  private readRuleParamClarificationPath(item: StrategyClarificationItem): {
+    ruleIndex: number
+    effectRole?: keyof RuleEffectsByRole
+    effectIndex?: number
+    exprPath: RuleExprPathSegment[]
+    paramKey: string
+  } | null {
+    const candidates = [item.fieldPath, item.field, item.key]
+    for (const candidate of candidates) {
+      if (typeof candidate !== 'string') continue
+      const effectMatch = candidate.match(/^rules\[(\d+)\]\.effects\.(actions|risks|positions|orchestration|programs)\[(\d+)\]((?:\.(?:and\.children\[\d+\]|or\.children\[\d+\]|not\.child|sequence\.steps\[\d+\]))*)\.params\.([A-Za-z_$][\w$]*)$/u)
+      if (effectMatch?.[1] && effectMatch[2] && effectMatch[3] && effectMatch[5]) {
+        const exprPath = this.parseRuleExprPathSegments(effectMatch[4] ?? '')
+        if (!exprPath) continue
+        return {
+          ruleIndex: Number.parseInt(effectMatch[1], 10),
+          effectRole: effectMatch[2] as keyof RuleEffectsByRole,
+          effectIndex: Number.parseInt(effectMatch[3], 10),
+          exprPath,
+          paramKey: effectMatch[5],
+        }
+      }
+      const conditionMatch = candidate.match(/^rules\[(\d+)\]\.condition\.params\.([A-Za-z_$][\w$]*)$/u)
+      if (conditionMatch?.[1] && conditionMatch[2]) {
+        return {
+          ruleIndex: Number.parseInt(conditionMatch[1], 10),
+          exprPath: [],
+          paramKey: conditionMatch[2],
+        }
+      }
+    }
+
+    return null
+  }
+
+  private parseRuleExprPathSegments(path: string): RuleExprPathSegment[] | null {
+    if (!path) return []
+    const segments: RuleExprPathSegment[] = []
+    let rest = path
+    while (rest.length > 0) {
+      const childrenMatch = rest.match(/^\.(and|or)\.children\[(\d+)\]/u)
+      if (childrenMatch?.[1] && childrenMatch[2]) {
+        segments.push({
+          kind: 'children',
+          exprKind: childrenMatch[1] as 'and' | 'or',
+          index: Number.parseInt(childrenMatch[2], 10),
+        })
+        rest = rest.slice(childrenMatch[0].length)
+        continue
+      }
+
+      const sequenceMatch = rest.match(/^\.sequence\.steps\[(\d+)\]/u)
+      if (sequenceMatch?.[1]) {
+        segments.push({
+          kind: 'steps',
+          index: Number.parseInt(sequenceMatch[1], 10),
+        })
+        rest = rest.slice(sequenceMatch[0].length)
+        continue
+      }
+
+      if (rest.startsWith('.not.child')) {
+        segments.push({ kind: 'not' })
+        rest = rest.slice('.not.child'.length)
+        continue
+      }
+
+      return null
+    }
+
+    return segments
+  }
+
+  private parseRulePathClarificationValue(
+    paramKey: string,
+    slotKey: string | undefined,
+    answer: string,
+  ): number | string | null {
+    if (this.containsNegativeNumericSign(answer)) {
+      return null
+    }
+    if (paramKey === 'valuePct' || slotKey === 'risk.stop_loss_pct.valuePct') {
+      return this.normalizePositionPctClarificationAnswer(answer)
+    }
+    if (paramKey === 'value' || slotKey === 'position.sizing.value') {
+      const match = answer.replace(/,/gu, '').match(/(\d+(?:\.\d+)?)/u)
+      if (!match?.[1]) return null
+      const value = Number(match[1])
+      return Number.isFinite(value) && value > 0 ? value : null
+    }
+
+    return answer.trim() || null
+  }
+
+  private containsNegativeNumericSign(answer: string): boolean {
+    return /[-−﹣－]\s*\d/u.test(answer)
+  }
+
+  private withRuleParamValue(
+    rules: SemanticState['rules'],
+    path: {
+      ruleIndex: number
+      effectRole?: keyof RuleEffectsByRole
+      effectIndex?: number
+      exprPath: RuleExprPathSegment[]
+      paramKey: string
+    },
+    value: number | string,
+  ): SemanticState['rules'] {
+    if (!rules?.[path.ruleIndex]) return rules
+
+    const nextRules = [...rules]
+    const rule = nextRules[path.ruleIndex]
+    if (!rule) return rules
+
+    if (!path.effectRole) {
+      const nextCondition = this.withExprParamValue(rule.condition, path.exprPath, path.paramKey, value)
+      if (!nextCondition) return rules
+      nextRules[path.ruleIndex] = {
+        ...rule,
+        condition: nextCondition,
+      }
+      return nextRules
+    }
+
+    if (!isRuleEffectsByRole(rule.effects) || typeof path.effectIndex !== 'number') return rules
+    const effectsForRole = rule.effects[path.effectRole]
+    const effect = effectsForRole[path.effectIndex]
+    if (!effect) return rules
+    const nextEffect = this.withExprParamValue(effect, path.exprPath, path.paramKey, value)
+    if (!nextEffect) return rules
+
+    nextRules[path.ruleIndex] = {
+      ...rule,
+      effects: {
+        ...rule.effects,
+        [path.effectRole]: effectsForRole.map((candidate, index) =>
+          index === path.effectIndex
+            ? nextEffect
+            : candidate,
+        ),
+      },
+    }
+    return nextRules
+  }
+
+  private withExprParamValue(
+    expr: AtomExpr,
+    path: readonly RuleExprPathSegment[],
+    paramKey: string,
+    value: number | string,
+  ): AtomExpr | null {
+    const [segment, ...rest] = path
+    if (!segment) {
+      return expr.kind === 'atom'
+        ? this.withAtomParamValue(expr, paramKey, value)
+        : null
+    }
+
+    if (segment.kind === 'children') {
+      if (expr.kind !== segment.exprKind) return null
+      const child = expr.children[segment.index]
+      if (!child) return null
+      const nextChild = this.withExprParamValue(child, rest, paramKey, value)
+      if (!nextChild) return null
+      return {
+        ...expr,
+        children: expr.children.map((candidate, index) =>
+          index === segment.index ? nextChild : candidate,
+        ),
+      }
+    }
+
+    if (segment.kind === 'steps') {
+      if (expr.kind !== 'sequence') return null
+      const step = expr.steps[segment.index]
+      if (!step) return null
+      const nextStep = this.withExprParamValue(step, rest, paramKey, value)
+      if (!nextStep) return null
+      return {
+        ...expr,
+        steps: expr.steps.map((candidate, index) =>
+          index === segment.index ? nextStep : candidate,
+        ),
+      }
+    }
+
+    if (expr.kind !== 'not') return null
+    const nextChild = this.withExprParamValue(expr.child, rest, paramKey, value)
+    if (!nextChild) return null
+    return {
+      ...expr,
+      child: nextChild,
+    }
+  }
+
+  private withAtomParamValue(atom: Extract<AtomExpr, { kind: 'atom' }>, paramKey: string, value: number | string): AtomExpr {
+    return {
+      ...atom,
+      params: {
+        ...atom.params,
+        [paramKey]: value,
+      },
+    }
   }
 
   private resolveStructuredSemanticOpenSlotAnswers(
@@ -3957,6 +4242,97 @@ export class CodegenConversationService {
       ...openOrchestrationSlots,
       ...openContextSlots,
     ]
+  }
+
+  private buildRulePathClarificationState(
+    openSlots: SemanticSlotState[],
+    blockingReasons: string[],
+  ): StrategyClarificationState {
+    if (openSlots.length === 0) {
+      const reason = blockingReasons[0] ?? 'rules_mainflow_blocked'
+      return {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          key: `rulesMainflow.${reason}`,
+          field: `rulesMainflow.${reason}`,
+          fieldPath: `rulesMainflow.${reason}`,
+          status: 'pending',
+          reason: 'missing_semantic_contract_requirement',
+          question: this.renderRulePathBlockerQuestion(reason),
+          priority: 100,
+          blocking: true,
+        }],
+      }
+    }
+
+    return {
+      status: 'NEEDS_CLARIFICATION',
+      items: openSlots.map(slot => ({
+        key: slot.fieldPath,
+        field: slot.fieldPath,
+        fieldPath: slot.fieldPath,
+        slotKey: slot.slotKey,
+        status: 'pending',
+        reason: this.rulePathClarificationReason(slot),
+        question: slot.questionHint,
+        priority: this.rulePathClarificationPriority(slot.priority),
+        blocking: true,
+      })),
+    }
+  }
+
+  private renderRulePathBlockerQuestion(reason: string): string {
+    switch (reason) {
+      case 'rules_missing_or_empty':
+        return '当前还没有形成可执行规则。请补充入场条件、出场条件、风控和仓位。'
+      case 'missing_entry_rules':
+        return '请补充入场规则，例如什么价格或指标条件触发开仓。'
+      case 'missing_exit_rules':
+        return '请补充出场规则，例如什么价格或指标条件触发平仓。'
+      case 'legacy_effects_array':
+      case 'invalid_expr':
+        return '当前规则结构不完整，请补充为可执行的规则参数后再生成脚本。'
+      default:
+        return '请先补充缺失的规则参数，我再生成脚本。'
+    }
+  }
+
+  private renderRulePathClarificationPrompt(
+    clarificationState: StrategyClarificationState,
+    locale: CodegenConversationLocale,
+  ): string {
+    const first = clarificationState.items.find(item => item.status === 'pending')
+    if (first?.question) return first.question
+    return this.localizedText(
+      locale,
+      'Please clarify the missing rule parameter before I generate the script.',
+      '请先补充缺失的规则参数，我再生成脚本。',
+    )
+  }
+
+  private rulePathClarificationPriority(priority: SemanticSlotState['priority']): number {
+    switch (priority) {
+      case 'core':
+        return 100
+      case 'risk':
+        return 90
+      case 'behavior':
+        return 80
+      case 'context':
+        return 70
+      default:
+        return 60
+    }
+  }
+
+  private rulePathClarificationReason(slot: SemanticSlotState): StrategyClarificationItem['reason'] {
+    if (slot.slotKey.startsWith('position.sizing')) {
+      return 'missing_semantic_position_sizing'
+    }
+    if (slot.priority === 'risk' || slot.slotKey.startsWith('risk.')) {
+      return 'missing_semantic_risk'
+    }
+    return 'missing_semantic_contract_requirement'
   }
 
   private buildClarificationFromSemanticState(
@@ -5951,6 +6327,8 @@ export class CodegenConversationService {
       || field === 'actions'
       || field === 'risk'
       || field.startsWith('position.')
+      || field.startsWith('rules[')
+      || field.startsWith('rulesMainflow.')
       || field.startsWith('triggers[')
       || field.startsWith('actions[')
       || field.startsWith('risk[')
@@ -7308,7 +7686,7 @@ export class CodegenConversationService {
     )
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const clarificationState = semanticArtifacts.clarificationState
-    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const semanticReadyForGenerate = this.isSemanticReadyForGenerate(clarificationState)
     const normalization = semanticArtifacts.normalization
     const canonicalSpec = this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
@@ -7611,6 +7989,12 @@ export class CodegenConversationService {
       && clarificationState.items.some(item => item.blocking && item.status === 'pending')
   }
 
+  private isSemanticReadyForGenerate(
+    clarificationState: Pick<StrategyClarificationState, 'status' | 'items'>,
+  ): boolean {
+    return !this.hasPendingBlockingClarification(clarificationState)
+  }
+
   private estimateBlockingReasonPriority(
     reason: StrategyClarificationItem['reason'],
   ): number {
@@ -7768,8 +8152,18 @@ export class CodegenConversationService {
     blockingReasons: StrategyBlockingReason[]
     clarificationPrompt: string | null
   } {
-    const clarificationState = this.buildClarificationFromSemanticState(semanticState)
+    let clarificationState = this.buildClarificationFromSemanticState(semanticState)
     const normalization = this.buildNormalizationFromSemanticState(semanticState, locale)
+    if (clarificationState.status === 'CLEAR' && normalization.blocked) {
+      const nextOpenSlot = this.findNextOpenSemanticSlot(semanticState)
+      if (nextOpenSlot) {
+        clarificationState = {
+          status: 'NEEDS_CLARIFICATION',
+          items: [this.buildSemanticClarificationItem(nextOpenSlot, locale)],
+          summary: this.buildSemanticClarificationSummary(semanticState),
+        }
+      }
+    }
     const executionContext = this.executionContext.resolveFromSemanticState(semanticState)
     const blockingReasons = this.buildEffectiveBlockingReasonsFromClarificationState(clarificationState)
     const clarificationPrompt = this.buildSemanticClarificationPrompt(semanticState, locale)

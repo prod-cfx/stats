@@ -347,14 +347,7 @@ export function buildLogicGraphFromCodegenSpec(
   return {
     version,
     status,
-    trigger: trigger.length > 0
-      ? trigger
-      : [{
-          id: `trigger-default-${version}`,
-          subject: symbol,
-          operator: '等待策略规则补充',
-          value: 'true',
-        }],
+    trigger,
     actions,
     risk,
     meta: {

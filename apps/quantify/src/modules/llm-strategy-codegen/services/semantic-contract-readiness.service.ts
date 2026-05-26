@@ -34,6 +34,7 @@ import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
 import { validateSemanticExpressionContract } from './strategy-semantic-contracts'
 import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 import { SemanticRuleProjectionService } from './semantic-rule-projection.service'
+import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
 
 type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position'
 type ExecutableContextField = keyof SemanticState['contextSlots']
@@ -83,6 +84,12 @@ export interface SemanticContractReadinessNormalizationResult {
   missingRequirements: MissingSemanticContractRequirement[]
 }
 
+export interface MainflowRulesReadinessResult {
+  ready: boolean
+  blockingReasons: string[]
+  openSlots: SemanticSlotState[]
+}
+
 interface SemanticContractOwnerRef {
   ownerKind: SemanticContractOwnerKind
   ownerId: string
@@ -114,6 +121,7 @@ export class SemanticContractReadinessService {
     private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
     // #1493 块 D：normalize() 入口跑一次 reproject，把 `flat = pure function of rules` 落成硬不变量。
     private readonly ruleProjection: SemanticRuleProjectionService = new SemanticRuleProjectionService(),
+    private readonly rulesMainflowReader: RulesMainflowReaderService = new RulesMainflowReaderService(),
   ) {}
 
   normalize(
@@ -133,11 +141,11 @@ export class SemanticContractReadinessService {
       // Issue #1493 C2：normalize() 入口同样观测 rules 空 + flat 非空 legacy 路径。
       //   生产规约见 types/semantic-state.ts 顶部 docstring。
       const flatNonEmptyCount
-        = state.trigger.length
-        + state.action.length
-        + state.risk.length
+        = (state.trigger?.length ?? 0)
+        + (state.action?.length ?? 0)
+        + (state.risk?.length ?? 0)
         + (state.positionConstraint?.length ?? 0)
-        + state.orchestration.length
+        + (state.orchestration?.length ?? 0)
       if (flatNonEmptyCount > 0) {
         this.logger.warn(
           `[#1493] normalize_rules_missing flatNonEmptyCount=${flatNonEmptyCount}`
@@ -654,6 +662,90 @@ export class SemanticContractReadinessService {
 
     return summary
   }
+
+  evaluateMainflowRulesReadiness(rules: readonly SemanticRule[] | null | undefined): MainflowRulesReadinessResult {
+    const read = this.rulesMainflowReader.readMainflowRules(rules)
+    if (read.ok === false) {
+      return {
+        ready: false,
+        blockingReasons: [read.reason],
+        openSlots: [],
+      }
+    }
+
+    const openSlots: SemanticSlotState[] = []
+    for (const leaf of read.leaves) {
+      if (leaf.role === 'risk' && leaf.key === 'risk.stop_loss_pct' && !isPositiveFiniteNumber(leaf.params.valuePct)) {
+        openSlots.push({
+          slotKey: 'risk.stop_loss_pct.valuePct',
+          fieldPath: `${leaf.path}.params.valuePct`,
+          status: 'open',
+          priority: 'risk',
+          questionHint: '请确认止损百分比。',
+          affectsExecution: true,
+          atomKey: leaf.key,
+          paramSlotKey: 'valuePct',
+        })
+      }
+      if (leaf.role === 'position' && leaf.key === 'position.sizing' && !isPositiveFiniteNumber(leaf.params.value)) {
+        openSlots.push({
+          slotKey: 'position.sizing.value',
+          fieldPath: `${leaf.path}.params.value`,
+          status: 'open',
+          priority: 'risk',
+          questionHint: '请确认单笔仓位大小。',
+          affectsExecution: true,
+          atomKey: leaf.key,
+          paramSlotKey: 'value',
+        })
+      }
+    }
+
+    const entryRuleIndexes = new Set(
+      read.leaves
+        .filter(leaf =>
+          leaf.role === 'condition'
+          && (leaf.phase === 'entry' || leaf.phase === 'gate' || leaf.phase === 'program'),
+        )
+        .map(leaf => leaf.ruleIndex),
+    )
+    const gridRuleIndexes = new Set(
+      read.leaves
+        .filter(leaf =>
+          leaf.role === 'condition'
+          // eslint-disable-next-line atom-keys/no-atom-key-literal -- rules-only mainflow: grid.range_rebalance condition is the executable grid program contract.
+          && leaf.key === 'grid.range_rebalance',
+        )
+        .map(leaf => leaf.ruleIndex),
+    )
+    const hasEntry = read.leaves.some(leaf =>
+      entryRuleIndexes.has(leaf.ruleIndex)
+      && (
+        (leaf.role === 'action' && leaf.key.startsWith('action.open_'))
+        || (leaf.role === 'action' && leaf.key === 'action.add_position')
+        || (leaf.role === 'position' && leaf.key === 'position.dca_schedule')
+        || leaf.role === 'program'
+        || gridRuleIndexes.has(leaf.ruleIndex)
+      ),
+    )
+    const hasExit = read.leaves.some(leaf =>
+      leaf.phase === 'exit'
+      || (leaf.role === 'risk' && leaf.key.includes('stop'))
+      || gridRuleIndexes.has(leaf.ruleIndex),
+    )
+
+    const blockingReasons = [
+      ...(!hasEntry ? ['missing_entry_rules'] : []),
+      ...(!hasExit ? ['missing_exit_rules'] : []),
+      ...(openSlots.length > 0 ? ['missing_required_rule_params'] : []),
+    ]
+
+    return {
+      ready: blockingReasons.length === 0,
+      blockingReasons,
+      openSlots,
+    }
+  }
 }
 
 export interface RulesReadinessSummary {
@@ -672,6 +764,10 @@ function collectAtomLeavesSafe(expr: AtomExpr | undefined): AtomExprAtom[] {
   catch {
     return []
   }
+}
+
+function isPositiveFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
 }
 
 function dedupeSemanticRulesForReadiness(rules: readonly SemanticRule[]): SemanticRule[] {

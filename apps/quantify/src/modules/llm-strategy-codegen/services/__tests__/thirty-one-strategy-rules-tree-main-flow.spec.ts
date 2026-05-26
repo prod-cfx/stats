@@ -47,6 +47,22 @@ function contextSlot(slotKey: string, value: string): SemanticSlotState {
 }
 
 describe('31-strategy rules tree main flow regressions', () => {
+  it('keeps simple webhook signal as executable external signal without event-listener phase0 blocker', () => {
+    const text = 'OKX 合约 BTCUSDT 15m，收到 webhook 事件 signalId 为 whale_buy 且 secret 已配置时开多，每次 100'
+    const dispatcherPatch = new GenericSeedDispatcher().dispatch(text)
+    const fallback = new PlannerDispatcherMergeService().buildRulesTreeFallbackFromDispatcher(dispatcherPatch, text)
+    const state = new SemanticSeedStateBuilderService().build(fallback, text)
+    const projected = state ? new SemanticRuleProjectionService().reprojectFromRules(state) : null
+    const rules = projected?.rules ?? []
+    const serializedRules = JSON.stringify(rules)
+    const openSlotKeys = JSON.stringify(projected?.orchestration?.flatMap(node => node.openSlots ?? []))
+
+    expect(serializedRules).toContain('"key":"external.signal"')
+    expect(serializedRules).toContain('"key":"action.open_long"')
+    expect(serializedRules).not.toContain('"key":"program.event_listener"')
+    expect(openSlotKeys).not.toContain('orchestration.phase0.unsupported')
+  })
+
   it('fills missing grid rule params from same dispatcher atom without overwriting explicit planner params', () => {
     const plannerPatch: CodegenSemanticPatch = {
       rules: [{
@@ -596,11 +612,17 @@ describe('31-strategy rules tree main flow regressions', () => {
             params: { indicator: 'ma', 'reference.period': 120 },
             evidence: { text: 'ETH 日线在 MA120 上方时' },
           },
-          effects: [{
-            kind: 'atom',
-            key: 'portfolioRisk.substrategy_exposure_cap',
-            params: { mode: 'enforce', notionalCapPct: 100, effectWhenTriggered: 'block_new_entries' },
-          }],
+          effects: {
+            actions: [],
+            risks: [{
+              kind: 'atom',
+              key: 'portfolioRisk.substrategy_exposure_cap',
+              params: { mode: 'enforce', notionalCapPct: 100, effectWhenTriggered: 'block_new_entries' },
+            }],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
           evidence: { text: 'ETH 日线在 MA120 上方时' },
         },
         {
@@ -613,7 +635,13 @@ describe('31-strategy rules tree main flow regressions', () => {
             params: { indicator: 'ma', 'reference.period': 120 },
             evidence: { text: 'ETH 日线在 MA120 下方时平仓' },
           },
-          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
           evidence: { text: 'ETH 日线在 MA120 下方时平仓' },
         },
       ],

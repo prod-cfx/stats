@@ -196,6 +196,7 @@ export interface RiskPredicateDef {
   kind: 'atrMultipleStop' | 'atrMultipleTakeProfit' | 'atrTrailingStop' | 'rememberedLevelStop' | 'timeStopBars' | 'cooldownBars'
   params: Record<string, number | string | boolean>
   actions?: RiskPredicateActionDef[]
+  sourcePath?: string
 }
 
 export interface RiskPredicateActionDef {
@@ -211,6 +212,7 @@ export interface RuleBlock {
   guardRefs?: string[]
   actions: ActionDef[]
   metadata?: {
+    sourcePath?: string
     partialTakeProfit?: PartialTakeProfitProgramMetadata
     // Phase 5 S2 (#1104): 多 scope 策略中显式声明该 rule 归属哪个 scope.symbol id
     symbolScopeRef?: string
@@ -243,6 +245,7 @@ export interface ActionDef {
 interface OrderProgramBaseDef {
   id: string
   kind: 'LIMIT_LADDER'
+  sourcePath?: string
   activeWhen?: string
   side: 'buy' | 'sell'
   sidePolicy: 'spot_grid' | 'perp_long' | 'perp_short' | 'perp_neutral'
@@ -279,6 +282,7 @@ export type OrderProgram = OrderProgramDef
 
 export interface IrOrchestrationGate {
   id: string
+  sourcePath?: string
   exprId: string
   // Phase 5 S10 (#1111): target 升级为 union（entry / strategy / subStrategy）
   target: SemanticOrchestrationGateTarget
@@ -359,6 +363,7 @@ export interface IrOrchestrationProgramAdaptiveGridParams {
 
 export interface IrFixedGridGatedProgram {
   id: string
+  sourcePath?: string
   programKind: 'fixed_grid_gated'
   activeWhenExprId: string
   onDeactivate: 'cancel' | 'keep' | 'close'
@@ -369,6 +374,7 @@ export interface IrFixedGridGatedProgram {
 
 export interface IrDynamicGridProgram {
   id: string
+  sourcePath?: string
   programKind: 'dynamic_grid'
   activeWhenExprId: string
   onDeactivate: 'cancel' | 'keep' | 'close'
@@ -379,6 +385,7 @@ export interface IrDynamicGridProgram {
 
 export interface IrAdaptiveVolatilityGridProgram {
   id: string
+  sourcePath?: string
   programKind: 'adaptive_volatility_grid'
   activeWhenExprId: string
   onDeactivate: 'cancel' | 'keep' | 'close'
@@ -392,6 +399,7 @@ export interface IrAdaptiveVolatilityGridProgram {
 //   不带 sizing — 不发限价单
 export interface IrEventListenerProgram {
   id: string
+  sourcePath?: string
   programKind: 'event_listener'
   activeWhenExprId: string
   onDeactivate: 'cancel' | 'keep'
@@ -489,6 +497,7 @@ export interface RiskGuard {
   referenceRef?: string
   predicateRef?: string
   onBreach: 'BLOCK_NEW_ENTRY' | 'FORCE_EXIT' | 'HALT_STRATEGY' | 'CANCEL_ORDER_PROGRAMS'
+  sourcePath?: string
 }
 
 // P4-4 critic round 1 A3 修复：reclaimBars 默认值集中定义，避免 builder 与 IR compiler

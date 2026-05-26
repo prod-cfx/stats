@@ -6,6 +6,7 @@ export interface StrategyAstV1 {
     irVersion: 'csi.v1'
     irHash: `sha256:${string}`
     specHash: `sha256:${string}`
+    astDigest: `sha256:${string}`
     compileVersion: 'compiler.v1'
     structuralDigest: `sha256:${string}`
   }
@@ -58,12 +59,14 @@ export interface GuardProgramNode {
   id: string
   sourceRef: string
   payload: RiskGuard
+  sourcePath?: string
 }
 
 export interface RiskPredicateProgramNode {
   id: string
   sourceRef: string
   payload: RiskPredicateDef
+  sourcePath?: string
 }
 
 export interface DecisionProgramNode {
@@ -75,6 +78,7 @@ export interface DecisionProgramNode {
   cooldownBars?: number
   actions: ActionDef[]
   metadata?: PositionLifecycleActionMetadata & {
+    sourcePath?: string
     // Phase 5 S2 (#1104): 多 scope 策略中的 symbolScopeRef 透传
     symbolScopeRef?: string
     // Phase 5 S11 (#1112): 多 leg 策略中的 legScopeRef 透传
@@ -91,5 +95,6 @@ export interface DecisionProgramNode {
 export interface OrderProgramNode {
   id: string
   sourceRef: string
+  sourcePath?: string
   payload: OrderProgram
 }

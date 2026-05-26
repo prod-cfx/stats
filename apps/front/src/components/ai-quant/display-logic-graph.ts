@@ -192,6 +192,12 @@ function normalizeServerDisplayLogicGraph(value: unknown): DisplayLogicGraph | n
   return blocks.length > 0 && hasRuleBlock ? { blocks } : null
 }
 
+function hasServerRuleBlocks(graph: DisplayLogicGraph | null): graph is DisplayLogicGraph {
+  return Boolean(graph?.blocks.some(block =>
+    block.type !== 'EXECUTE' && block.items.some(item => item.kind === 'condition' || item.kind === 'action'),
+  ))
+}
+
 function asStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.map(asString).filter((item): item is string => Boolean(item))
@@ -542,6 +548,29 @@ function formatConditionText(condition: DisplayLogicGraphCondition | undefined):
     default:
       return '不支持的条件，待补充'
   }
+}
+
+function isPlaceholderConditionText(text: string): boolean {
+  return text === '策略条件'
+    || text === '条件待补充'
+    || text === '不支持的条件，待补充'
+}
+
+function isPlaceholderActionText(text: string): boolean {
+  return text === '未支持的动作，待补充'
+    || text === '等待策略规则补充'
+}
+
+function hasAnyPlaceholderRuleText(rules: readonly DisplayLogicGraphRule[], fallbackSymbol?: string): boolean {
+  if (rules.length === 0) return false
+  return rules.some((rule) => {
+    if (!rule.condition) return true
+    const text = formatConditionText(rule.condition)
+    if (isPlaceholderConditionText(text)) return true
+    return extractDisplayActions(rule)
+      .map(action => formatActionText(action, fallbackSymbol))
+      .some(isPlaceholderActionText)
+  })
 }
 
 function formatExpressionCondition(condition: DisplayLogicGraphCondition | undefined): string {
@@ -986,14 +1015,17 @@ export function buildDisplayLogicGraphFromCodegenSpec(input: BuildDisplayLogicGr
   const nextInput = input ?? {}
   const specDesc = isRecord(nextInput.specDesc) ? nextInput.specDesc as DisplayLogicGraphSpecDesc : null
   const rules = extractRules(specDesc)
+  const serverDisplayGraph = normalizeServerDisplayLogicGraph(specDesc?.displayLogicGraph)
   if (rules.length === 0) {
-    const serverDisplayGraph = normalizeServerDisplayLogicGraph(specDesc?.displayLogicGraph)
     if (serverDisplayGraph) return serverDisplayGraph
   }
-  const nonRiskRules = rules.filter(rule => !isRiskDisplayRule(rule))
   const executeMeta = extractExecuteMeta(specDesc, nextInput.fallbackMeta)
-  const executeBlock = buildExecuteBlock(executeMeta)
   const fallbackSymbol = executeMeta.symbol ?? nextInput.fallbackMeta?.symbol
+  if (hasAnyPlaceholderRuleText(rules, fallbackSymbol ?? undefined) && hasServerRuleBlocks(serverDisplayGraph)) {
+    return serverDisplayGraph
+  }
+  const nonRiskRules = rules.filter(rule => !isRiskDisplayRule(rule))
+  const executeBlock = buildExecuteBlock(executeMeta)
   const blocks = nonRiskRules.length > 0
     ? nonRiskRules.map((rule, index) => buildConditionBlock(rule, index, fallbackSymbol ?? undefined))
     : buildLegacyRuleBlocks(specDesc)

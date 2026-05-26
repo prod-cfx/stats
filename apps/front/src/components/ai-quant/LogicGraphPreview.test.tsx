@@ -159,4 +159,40 @@ describe('logicGraphPreview', () => {
     expect(container.textContent).toContain('SELL 5% 的 BTCUSDT')
     expect(container.textContent).toContain('CLOSE 100% 的 BTCUSDT')
   })
+
+  it('does not invent placeholder conditions when legacy triggers are empty', () => {
+    act(() => {
+      root.render(
+        <LogicGraphPreview
+          graph={{
+            version: 2,
+            status: 'draft',
+            trigger: [],
+            actions: [
+              {
+                id: 'action-1',
+                action: 'BUY',
+                target: 'BTCUSDT',
+                amount: '10%',
+              },
+            ],
+            risk: [],
+            meta: {
+              exchange: 'okx',
+              symbol: 'BTCUSDT',
+              timeframe: '15m',
+              positionPct: 10,
+            },
+          }}
+          confirmDisabled
+          onConfirm={() => {}}
+          onRevise={() => {}}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('BUY 10% 的 BTCUSDT')
+    expect(container.textContent).not.toContain('条件待补充')
+    expect(container.textContent).not.toContain('等待策略规则补充')
+  })
 })

@@ -1,8 +1,13 @@
 import { createHash } from 'node:crypto'
 
 import { ErrorCode } from '@ai/shared'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { ScopeTimeframeLiveUnsupportedException } from '@/modules/llm-strategy-codegen/exceptions/scope-timeframe-live-unsupported.exception'
+import { CanonicalStrategyAstCompilerService } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
+import { CompiledScriptEmitterService } from '@/modules/llm-strategy-codegen/services/compiled-script-emitter.service'
+import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/services/compiled-script-parser.service'
+import type { CanonicalStrategyIrV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ir'
 import { DeployIdempotencyConflictException, DeploySnapshotRequiresRepublishException } from '../exceptions'
 import { AccountStrategyViewService } from './account-strategy-view.service'
 
@@ -22,6 +27,209 @@ function buildDeployPayloadHash(input: {
       leverage: input.leverage ?? null,
     }))
     .digest('hex')
+}
+
+function hashCanonical(value: unknown): `sha256:${string}` {
+  return `sha256:${createHash('sha256').update(canonicalSerialize(value)).digest('hex')}`
+}
+
+function hashText(value: string): `sha256:${string}` {
+  return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`
+}
+
+function cleanForCanonical<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.filter(item => item !== undefined).map(item => cleanForCanonical(item)) as T
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => [key, cleanForCanonical(item)]),
+    ) as T
+  }
+  return value
+}
+
+let deployableTruthCache: Record<string, unknown> | null = null
+
+function createDeployableTruthFields(): Record<string, unknown> {
+  if (deployableTruthCache) return deployableTruthCache
+  const rulesHash = hashCanonical([{ id: 'entry_on_start', sourcePath: 'rules[0]' }])
+  const canonicalSnapshot = {
+    metadata: { rulesHash },
+    market: { exchange: 'okx', symbol: 'SOLUSDT', marketType: 'spot', timeframe: '5m' },
+    rules: [{ id: 'entry_on_start', sourcePath: 'rules[0]' }],
+  }
+  const canonicalSpecHash = hashCanonical(canonicalSnapshot)
+  const irSnapshot: CanonicalStrategyIrV1 = {
+    irVersion: 'csi.v1',
+    source: {
+      graphVersion: 18,
+      graphDigest: canonicalSpecHash,
+      specHash: canonicalSpecHash,
+    },
+    market: {
+      venue: 'okx',
+      instrumentType: 'spot',
+      symbol: 'SOLUSDT',
+      timeframes: ['5m'],
+      priceFeed: 'close',
+    },
+    portfolio: {
+      positionMode: 'long_only',
+      sizing: { mode: 'pct_equity', value: 10 },
+      maxConcurrentPositions: 1,
+      allowPyramiding: false,
+      maxPyramidingLayers: 1,
+    },
+    dataRequirements: {
+      warmupBars: 2,
+      maxLookback: 2,
+      requiredTimeframes: ['5m'],
+    },
+    signalCatalog: {
+      series: [
+        { id: 'bar_index', kind: 'BAR_INDEX' },
+        { id: 'one', kind: 'CONST', value: 1 },
+      ],
+      levelSets: [],
+      predicates: [
+        { id: 'entry_on_start', kind: 'EQ', args: ['bar_index', 'one'] },
+      ],
+    },
+    runtimeRequirements: {
+      helpers: [],
+      stateKeys: [],
+    },
+    ruleBlocks: [{
+      id: 'entry_on_start',
+      phase: 'entry',
+      when: 'entry_on_start',
+      priority: 100,
+      actions: [
+        { kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 10 } },
+      ],
+    }],
+    orderPrograms: [],
+    riskPolicy: {
+      guards: [],
+      riskPredicates: [],
+    },
+    executionPolicy: {
+      signalEvaluation: 'bar_close',
+      fillPolicy: 'next_bar_open',
+      timeframeAlignment: 'strict',
+      orderTypeDefault: 'market',
+      timeInForce: 'gtc',
+      allowPartialFill: false,
+    },
+  }
+  const astSnapshot = new CanonicalStrategyAstCompilerService().compile(irSnapshot)
+  const scriptSnapshot = new CompiledScriptEmitterService().emit({
+    ast: astSnapshot,
+    executionEnvelope: {
+      positionMode: 'long_only',
+      marginMode: 'cash',
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 4,
+      fillAssumption: 'strict',
+    },
+  })
+  const compiledManifest = new CompiledScriptParserService().parse(scriptSnapshot).compiledManifest
+
+  deployableTruthCache = {
+    canonicalSnapshot,
+    specSnapshot: canonicalSnapshot,
+    irSnapshot,
+    astSnapshot,
+    scriptSnapshot,
+    compiledManifest,
+    rulesOnlyHashChain: {
+      passed: true,
+      hashes: {
+        rulesHash,
+        canonicalSpecHash,
+        irHash: compiledManifest.irHash,
+        astHash: compiledManifest.astDigest,
+        scriptHash: hashText(scriptSnapshot),
+      },
+    },
+  }
+  return deployableTruthCache
+}
+
+function rebuildTruthForAst(truth: Record<string, unknown>, astOverride: Record<string, unknown>): Record<string, unknown> {
+  const baseAst = truth.astSnapshot as Record<string, unknown>
+  const decisionPrograms = (astOverride.decisionPrograms as Array<{ id: string }> | undefined)
+    ?? (astOverride.orderPrograms ? [] : baseAst.decisionPrograms as Array<{ id: string }>)
+  const orderPrograms = (astOverride.orderPrograms as Array<{ id: string }> | undefined)
+    ?? (astOverride.decisionPrograms ? [] : baseAst.orderPrograms as Array<{ id: string }>)
+  const astSnapshot = cleanForCanonical({
+    ...baseAst,
+    ...astOverride,
+    decisionPrograms,
+    orderPrograms,
+    manifest: baseAst.manifest,
+    topology: {
+      ...(baseAst.topology as Record<string, unknown>),
+      ...(astOverride.topology as Record<string, unknown> | undefined),
+      exprOrder: ((astOverride.exprPool as Array<{ id: string }> | undefined) ?? (baseAst.exprPool as Array<{ id: string }>)).map(item => item.id),
+      guardOrder: ((astOverride.guards as Array<{ id: string }> | undefined) ?? (baseAst.guards as Array<{ id: string }>)).map(item => item.id),
+      decisionOrder: decisionPrograms.map(item => item.id),
+      orderProgramOrder: orderPrograms.map(item => item.id),
+    },
+  })
+  const scriptSnapshot = new CompiledScriptEmitterService().emit({
+    ast: astSnapshot as never,
+    executionEnvelope: {
+      positionMode: 'long_only',
+      marginMode: 'cash',
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 4,
+      fillAssumption: 'strict',
+    },
+  })
+  const compiledManifest = new CompiledScriptParserService().parse(scriptSnapshot).compiledManifest
+  const hashes = (truth.rulesOnlyHashChain as { hashes: Record<string, unknown> }).hashes
+  return {
+    ...truth,
+    astSnapshot,
+    scriptSnapshot,
+    compiledManifest,
+    rulesOnlyHashChain: {
+      passed: true,
+      hashes: {
+        rulesHash: hashes.rulesHash,
+        canonicalSpecHash: compiledManifest.specHash,
+        irHash: compiledManifest.irHash,
+        astHash: compiledManifest.astDigest,
+        scriptHash: hashText(scriptSnapshot),
+      },
+    },
+  }
+}
+
+function withDeployableSnapshotTruth<T extends Record<string, unknown>>(snapshot: T): T {
+  const baseTruth = createDeployableTruthFields()
+  const astSnapshot = snapshot.astSnapshot && typeof snapshot.astSnapshot === 'object' && !Array.isArray(snapshot.astSnapshot)
+    ? snapshot.astSnapshot as Record<string, unknown>
+    : null
+  const truth = astSnapshot ? rebuildTruthForAst(baseTruth, { astVersion: 'csa.v1', ...astSnapshot }) : baseTruth
+
+  return {
+    ...truth,
+    ...snapshot,
+    canonicalSnapshot: snapshot.canonicalSnapshot ?? truth.canonicalSnapshot,
+    specSnapshot: snapshot.specSnapshot ?? truth.specSnapshot,
+    irSnapshot: snapshot.irSnapshot ?? truth.irSnapshot,
+    scriptSnapshot: snapshot.scriptSnapshot ?? truth.scriptSnapshot,
+    compiledManifest: snapshot.compiledManifest ?? truth.compiledManifest,
+    rulesOnlyHashChain: snapshot.rulesOnlyHashChain ?? truth.rulesOnlyHashChain,
+    astSnapshot: truth.astSnapshot,
+  }
 }
 
 describe('accountStrategyViewService.deployStrategy safety', () => {
@@ -65,7 +273,7 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = options?.snapshotsRepository ?? {
-      findByIdForUser: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
         id: 'snapshot-1',
         snapshotHash: 'snapshot-hash-1',
         strategyConfig: {
@@ -94,7 +302,7 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
           decisionPrograms: [{ phase: 'entry' }],
           runtimeExecutionSemantics: structuredRuntimeExecutionSemantics,
         },
-      }),
+      })),
     }
 
     const runtimeExecutionStateService = options && Object.prototype.hasOwnProperty.call(options, 'runtimeExecutionStateService')
@@ -152,9 +360,13 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       message: 'account_strategy.deploy_runtime_execution_state_service_unavailable',
     })
 
-    expect(repo.createDeployRequestProcessing).not.toHaveBeenCalled()
+    expect(repo.createDeployRequestProcessing).toHaveBeenCalled()
     expect(repo.markDeployRequestSucceeded).not.toHaveBeenCalled()
-    expect(repo.markDeployRequestFailed).not.toHaveBeenCalled()
+    expect(repo.markDeployRequestFailed).toHaveBeenCalledWith(
+      'req-1',
+      'SERVICE_TEMPORARILY_UNAVAILABLE',
+      'account_strategy.deploy_runtime_execution_state_service_unavailable',
+    )
   })
 
   it('requires canonical structured runtime execution truth before deploy can proceed', async () => {
@@ -217,13 +429,9 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
     }
     const { service, repo } = buildService({
       snapshotsRepository: {
-        findByIdForUser: jest.fn().mockResolvedValue({
+        findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
           id: 'snapshot-compiled-continuous',
           snapshotHash: 'snapshot-hash-compiled-continuous',
-          scriptSnapshot: '/* @generated by compiler.v1 */\nexport default {}',
-          compiledManifest: {
-            compileVersion: 'compiler.v1',
-          },
           strategyConfig: {
             exchange: 'okx',
             symbol: 'SOLUSDT',
@@ -256,7 +464,7 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
               actions: [{ kind: 'OPEN_LONG' }],
             }],
           },
-        }),
+        })),
       },
       runtimeExecutionStateService,
     })
@@ -269,9 +477,6 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       exchangeAccountId: 'acc-1',
     } as any)).resolves.toEqual({ id: 'inst-1' })
 
-    expect(runtimeExecutionStateService.buildExecutionSemanticKeysFromSnapshot).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'snapshot-compiled-continuous' }),
-    )
     expect(runtimeExecutionStateService.initializeStatesForDeploy).toHaveBeenCalledWith({
       strategyInstanceId: 'inst-1',
       publishedSnapshotId: 'snapshot-compiled-continuous',
@@ -336,9 +541,6 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       exchangeAccountId: 'acc-1',
     } as any)).rejects.toBeInstanceOf(DeploySnapshotRequiresRepublishException)
 
-    expect(runtimeExecutionStateService.buildExecutionSemanticKeysFromSnapshot).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'snapshot-missing-runtime-truth' }),
-    )
     expect(repo.createDeployRequestProcessing).not.toHaveBeenCalled()
     expect(repo.deployStrategyForUser).not.toHaveBeenCalled()
   })
@@ -350,7 +552,7 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
     }
     const { service, repo } = buildService({
       snapshotsRepository: {
-        findByIdForUser: jest.fn().mockResolvedValue({
+        findByIdForUser: jest.fn().mockResolvedValue(withDeployableSnapshotTruth({
           id: 'snapshot-official-plaza-continuous',
           snapshotHash: 'snapshot-hash-official-plaza-continuous',
           strategyConfig: {
@@ -383,7 +585,7 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
           astSnapshot: {
             runtimeExecutionSemantics: [],
           },
-        }),
+        })),
       },
       runtimeExecutionStateService,
     })
@@ -397,9 +599,6 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       deploymentExecutionConfig: { leverage: 2 },
     } as any)).resolves.toEqual({ id: 'inst-1' })
 
-    expect(runtimeExecutionStateService.buildExecutionSemanticKeysFromSnapshot).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'snapshot-official-plaza-continuous' }),
-    )
     expect(runtimeExecutionStateService.initializeStatesForDeploy).toHaveBeenCalledWith({
       strategyInstanceId: 'inst-1',
       publishedSnapshotId: 'snapshot-official-plaza-continuous',
@@ -697,11 +896,9 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
   // 理由：live 端 buildPublishedStrategyContext 不携带多 timeframe 数据；fail-closed 优先
   describe('Phase 5 S3 (#1109): scope.timeframe live publication-gate', () => {
     function buildSnapshotWithTimeframeScope(): Record<string, unknown> {
-      return {
+      return withDeployableSnapshotTruth({
         id: 'snap-tf-1',
         snapshotHash: 'snap-tf-hash-1',
-        scriptSnapshot: '/* @generated by compiler.v1 */\nexport default {}',
-        compiledManifest: { compileVersion: 'compiler.v1' },
         strategyConfig: {
           exchange: 'okx',
           symbol: 'SOLUSDT',
@@ -738,7 +935,7 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
             },
           ],
         },
-      }
+      })
     }
 
     it('LIVE + snapshot 含 scope.timeframe → 抛 ScopeTimeframeLiveUnsupportedException', async () => {

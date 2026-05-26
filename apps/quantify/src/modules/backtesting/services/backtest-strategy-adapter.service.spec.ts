@@ -11,8 +11,8 @@ describe('backtestStrategyAdapterService', () => {
     jest.restoreAllMocks()
   })
 
-  it('builds runner strategy fn from valid StrategyAdapterV1 script', async () => {
-    const strategy = await service.build({
+  it('fails closed when script lacks compiled manifest truth', async () => {
+    await expect(service.build({
       id: 's1',
       protocolVersion: 'v1',
       scriptCode: `const strategy: StrategyAdapterV1 = {
@@ -23,11 +23,9 @@ describe('backtestStrategyAdapterService', () => {
 }
 strategy`,
       params: { risk: 0.1 },
-    })
-
-    expect(strategy.id).toBe('s1')
-    expect(strategy.params).toEqual({ risk: 0.1 })
-    await expect(strategy.fn({} as any)).resolves.toEqual({ action: 'NOOP' })
+    })).rejects.toMatchObject({
+      message: 'backtest.compiled_strategy_invalid',
+    } as Partial<DomainException>)
   })
 
   it('builds runner strategy fn from generated compiled script', async () => {
@@ -85,7 +83,6 @@ strategy`,
   })
 
   it('executes compiled combination scripts through the parser fast path and force-exits on ATR risk', async () => {
-    const executeAdapter = jest.spyOn(service as any, 'executeAdapter')
     const strategy = await service.build({
       id: 'compiled-combination-s1',
       protocolVersion: 'v1',
@@ -116,7 +113,6 @@ strategy`,
         }),
       }),
     })
-    expect(executeAdapter).not.toHaveBeenCalled()
   })
 
   it('fails closed when a compiler.v1 generated script fails compiled parser validation', async () => {
@@ -124,12 +120,6 @@ strategy`,
       'export default strategy',
       'export default strategy\n// tampered fixed wrapper',
     )
-    const executeAdapter = jest
-      .spyOn(service as any, 'executeAdapter')
-      .mockResolvedValue({
-        protocolVersion: 'v1',
-        onBar: () => ({ action: 'NOOP', reason: 'vm.fallback' }),
-      })
 
     await expect(service.build({
       id: 'compiled-tampered-s1',
@@ -139,7 +129,6 @@ strategy`,
     })).rejects.toMatchObject({
       message: 'backtest.compiled_strategy_invalid',
     } as Partial<DomainException>)
-    expect(executeAdapter).not.toHaveBeenCalled()
   })
 
   it('fails when protocolVersion is not v1', async () => {
@@ -164,7 +153,7 @@ strategy`,
     } as Partial<DomainException>)
   })
 
-  it('fails when script TypeScript compile fails', async () => {
+  it('fails closed instead of compiling a non-manifest TypeScript script', async () => {
     await expect(service.build({
       id: 's1',
       protocolVersion: 'v1',
@@ -177,29 +166,29 @@ strategy`,
 strategy(`,
       params: {},
     })).rejects.toMatchObject({
-      message: 'backtest.strategy_compile_failed',
+      message: 'backtest.compiled_strategy_invalid',
     } as Partial<DomainException>)
   })
 
-  it('fails when script export is not StrategyAdapterV1', async () => {
+  it('fails closed when script export is not compiled manifest truth', async () => {
     await expect(service.build({
       id: 's1',
       protocolVersion: 'v1',
       scriptCode: '({ invalid: true })',
       params: {},
     })).rejects.toMatchObject({
-      message: 'backtest.strategy_adapter_invalid',
+      message: 'backtest.compiled_strategy_invalid',
     } as Partial<DomainException>)
   })
 
-  it('fails when script executes with runtime error', async () => {
+  it('fails closed instead of executing non-manifest scripts', async () => {
     await expect(service.build({
       id: 's1',
       protocolVersion: 'v1',
       scriptCode: 'throw new Error("boom")',
       params: {},
     })).rejects.toMatchObject({
-      message: 'backtest.strategy_execute_failed',
+      message: 'backtest.compiled_strategy_invalid',
     } as Partial<DomainException>)
   })
 })

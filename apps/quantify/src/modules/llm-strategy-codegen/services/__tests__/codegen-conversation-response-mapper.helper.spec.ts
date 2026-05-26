@@ -145,6 +145,48 @@ describe('codegenConversationResponseMapperHelper', () => {
     expect(JSON.stringify(result.specDesc)).not.toContain('triggerKeys')
   })
 
+  it('projects rules-only display condition text when display item id uses condition-rule prefix', () => {
+    const result = helper.finalizeSessionResponse({
+      id: 's-rules-only-display',
+      status: 'CONFIRM_GATE',
+      missingFields: [],
+      specDesc: {
+        displayLogicGraph: {
+          blocks: [{
+            items: [
+              {
+                id: 'condition-rule-semantic-entry-ema-cross',
+                kind: 'condition',
+                text: 'EMA20 上穿 EMA60 时做多开仓',
+              },
+            ],
+          }],
+        },
+        rules: [{
+          id: 'semantic-entry-ema-cross',
+          phase: 'entry',
+          condition: { kind: 'atom', key: 'ma.golden_cross' },
+          actions: [{ type: 'OPEN_LONG' }],
+        }],
+      },
+      clarificationState: null,
+    }, () => ({
+      blocked: false,
+      summary: null,
+      items: [],
+      pendingItems: [],
+    }))
+
+    expect(result.specDesc).toMatchObject({
+      rules: [{
+        id: 'semantic-entry-ema-cross',
+        condition: { text: 'EMA20 上穿 EMA60 时做多开仓' },
+      }],
+    })
+    expect(JSON.stringify(result.specDesc)).not.toContain('策略条件')
+    expect(JSON.stringify(result.specDesc)).not.toContain('ma.golden_cross')
+  })
+
   it('does not leak grid rule keys from published specDesc without display graph text', () => {
     const result = helper.finalizeSessionResponse({
       id: 's-grid',
@@ -221,6 +263,38 @@ describe('codegenConversationResponseMapperHelper', () => {
     expect(JSON.stringify(result.specDesc)).not.toContain('semanticAtomInvariant')
     expect(JSON.stringify(result.specDesc)).not.toContain('stage1ConsistencyEvidence')
     expect(JSON.stringify(result.specDesc)).not.toContain('semanticPredicateGraph')
+  })
+
+  it('does not invent generic public condition text when display graph text is missing', () => {
+    const result = helper.finalizeSessionResponse({
+      id: 's-no-generic-condition',
+      status: 'CONFIRM_GATE',
+      missingFields: [],
+      specDesc: {
+        rules: [{
+          id: 'entry-unknown',
+          phase: 'entry',
+          condition: { kind: 'atom', key: 'future.condition' },
+          actions: [{ type: 'OPEN_LONG' }],
+        }],
+      },
+      clarificationState: null,
+    }, () => ({
+      blocked: false,
+      summary: null,
+      items: [],
+      pendingItems: [],
+    }))
+
+    expect(result.specDesc).toEqual({
+      rules: [{
+        id: 'entry-unknown',
+        phase: 'entry',
+        actions: [{ type: 'OPEN_LONG' }],
+      }],
+    })
+    expect(JSON.stringify(result.specDesc)).not.toContain('策略条件')
+    expect(JSON.stringify(result.specDesc)).not.toContain('future.condition')
   })
 
   it('reads publication gate from nested compiler consistency report', () => {
