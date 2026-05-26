@@ -63,7 +63,7 @@ function symbolScopeNode(overrides: Partial<SemanticOrchestrationNode> = {}): Se
   }
 }
 
-describe.skip('orchestration scope.symbol — golden corpus (Phase 5 S2 Task 11)', () => {
+describe('orchestration scope.symbol — golden corpus (Phase 5 S2 Task 11)', () => {
   // ============================================================
   // Section A: NL pipeline
   // ============================================================

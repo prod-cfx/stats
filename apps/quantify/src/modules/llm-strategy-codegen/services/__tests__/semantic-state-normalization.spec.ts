@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import type { SemanticRiskState, SemanticTriggerState } from '../../types/semantic-state'
 import {
   normalizeConditionSequenceTrigger,
@@ -7,18 +5,6 @@ import {
   normalizeTriggerCombinationContracts,
 } from '../semantic-state-normalization'
 import { buildLockedAtomicState } from './fixtures/semantic-state-golden-cases'
-
-describe('stage3 rules-only source guard', () => {
-  it('keeps semantic-state-normalization off legacy flat readers and bucket state access', () => {
-    const source = readFileSync(
-      join(__dirname, '../semantic-state-normalization.ts'),
-      'utf8',
-    )
-
-    expect(source).not.toMatch(/semantic-state-flat-readers|readFlat|projectToFlat|reprojectFromRules|SemanticStateBuckets/u)
-    expect(source).not.toMatch(/\bstate\.(trigger|action|risk|positionConstraint|orchestration)\b/u)
-  })
-})
 
 describe('normalizeRiskSemantics', () => {
   it('defaults plain stop loss basis and removes basis open slots', () => {

@@ -1,45 +1,6 @@
 import type { SemanticState } from '../types/semantic-state'
 import { CodegenSessionsRepository } from './codegen-sessions.repository'
 
-const emptyRuleEffects = () => ({
-  actions: [],
-  risks: [],
-  positions: [],
-  orchestration: [],
-  programs: [],
-})
-
-const minimalSemanticState = (updatedAt: string): SemanticState => ({
-  version: 1,
-  families: ['single-leg'],
-  position: null,
-  orchestrationContracts: [],
-  contextSlots: {
-    exchange: null,
-    symbol: null,
-    marketType: null,
-    timeframe: null,
-  },
-  normalizationNotes: [],
-  updatedAt,
-  rules: [
-    {
-      id: 'entry-ma-long',
-      phase: 'entry',
-      sideScope: 'long',
-      condition: {
-        kind: 'atom',
-        key: 'indicator.above',
-        params: { indicator: 'ma', referenceRole: 'long_term' },
-      },
-      effects: {
-        ...emptyRuleEffects(),
-        actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
-      },
-    },
-  ],
-})
-
 describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSession', () => {
   const buildInput = () => ({
     userId: 'user-1',
@@ -426,7 +387,44 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     }
     const repository = new CodegenSessionsRepository(txHost as never)
 
-    const semanticState = minimalSemanticState('2026-04-15T10:00:00.000Z')
+    const semanticState: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      trigger: [
+        {
+          id: 'trigger-entry-ma-long',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: { indicator: 'ma', referenceRole: 'long_term' },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'reference.period.entry',
+              fieldPath: 'triggers[0].params.reference.period',
+              status: 'open',
+              priority: 'core',
+              questionHint: '长期均线是多少？',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      action: [],
+      risk: [],
+      position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-15T10:00:00.000Z',
+    }
 
     const created = await repository.createSession({
       userId: 'u1',
@@ -448,11 +446,17 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
       version: 1,
       families: ['single-leg'],
       updatedAt: '2026-04-15T10:00:00.000Z',
-      rules: expect.arrayContaining([
+      trigger: expect.arrayContaining([
         expect.objectContaining({
-          condition: expect.objectContaining({ key: 'indicator.above' }),
+          openSlots: expect.arrayContaining([
+            expect.objectContaining({
+              slotKey: 'reference.period.entry',
+            }),
+          ]),
         }),
       ]),
+      positionConstraint: [],
+      orchestration: [],
       orchestrationContracts: [],
       contextSlots: expect.objectContaining({
         timeframe: null,
@@ -462,15 +466,17 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
       version: 1,
       families: ['single-leg'],
       updatedAt: '2026-04-15T10:00:00.000Z',
-      rules: expect.arrayContaining([
+      trigger: expect.arrayContaining([
         expect.objectContaining({
-          effects: expect.objectContaining({
-            actions: expect.arrayContaining([
-              expect.objectContaining({ key: 'action.open_long' }),
-            ]),
-          }),
+          openSlots: expect.arrayContaining([
+            expect.objectContaining({
+              slotKey: 'reference.period.entry',
+            }),
+          ]),
         }),
       ]),
+      positionConstraint: [],
+      orchestration: [],
       orchestrationContracts: [],
       contextSlots: expect.objectContaining({
         timeframe: null,
@@ -533,7 +539,25 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     }
     const repository = new CodegenSessionsRepository(txHost as never)
 
-    const baseSemanticState = minimalSemanticState('2026-04-20T10:00:00.000Z')
+    const baseSemanticState: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      trigger: [],
+      action: [],
+      risk: [],
+      position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-20T10:00:00.000Z',
+    }
 
     await repository.createSession({
       userId: 'u-unsupported-fallback',
@@ -560,25 +584,17 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
           strategyKey: 'price_breakout_with_fixed_risk',
           description: '用价格突破搭配固定止损作为可执行替代方案。',
           patch: {
-            rules: [
+            triggers: [
               {
-                id: 'entry-breakout-with-fixed-risk',
+                key: 'price.breakout',
                 phase: 'entry',
-                sideScope: 'long',
-                condition: {
-                  kind: 'atom',
-                  key: 'price.breakout_up',
-                  params: { lookbackBars: 20 },
-                },
-                effects: {
-                  ...emptyRuleEffects(),
-                  actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
-                  risks: [{
-                    kind: 'atom',
-                    key: 'risk.stop_loss_pct',
-                    params: { valuePct: 2, direction: 'loss', basis: 'entry_avg_price' },
-                  }],
-                },
+                params: { direction: 'up', lookbackBars: 20 },
+              },
+            ],
+            risk: [
+              {
+                key: 'risk.percent_stop',
+                params: { valuePct: 2, direction: 'loss', basis: 'entry_avg_price' },
               },
             ],
           },
@@ -616,16 +632,14 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
         recommendedStrategy: expect.objectContaining({
           strategyKey: 'price_breakout_with_fixed_risk',
           patch: expect.objectContaining({
-            rules: expect.arrayContaining([
+            triggers: expect.arrayContaining([
               expect.objectContaining({
-                condition: expect.objectContaining({
-                  key: 'price.breakout_up',
-                }),
-                effects: expect.objectContaining({
-                  risks: expect.arrayContaining([
-                    expect.objectContaining({ key: 'risk.stop_loss_pct' }),
-                  ]),
-                }),
+                key: 'price.breakout',
+              }),
+            ]),
+            risk: expect.arrayContaining([
+              expect.objectContaining({
+                key: 'risk.percent_stop',
               }),
             ]),
           }),
@@ -636,7 +650,25 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
   })
 
   it('persists codegen sessions without a checklist column', async () => {
-    const semanticState = minimalSemanticState('2026-04-15T10:00:00.000Z')
+    const semanticState: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      trigger: [],
+      action: [],
+      risk: [],
+      position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-15T10:00:00.000Z',
+    }
 
     const tx = {
       llmStrategyCodegenSession: {
@@ -696,7 +728,12 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
       semanticState: {
         version: 1,
         families: [],
+        triggers: [],
+        actions: [],
+        risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
         orchestrationContracts: [],
         contextSlots: {
           exchange: null,
@@ -706,7 +743,6 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
         },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-        rules: [],
       },
       clarificationState: { status: 'CLEAR', items: [] },
       constraintPack: null,
@@ -832,7 +868,12 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
       semanticState: {
         version: 1,
         families: [],
+        trigger: [],
+        action: [],
+        risk: [],
         position: null,
+        positionConstraint: [],
+        orchestration: [],
         orchestrationContracts: [],
         contextSlots: {
           exchange: null,
@@ -842,7 +883,6 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
         },
         normalizationNotes: [],
         updatedAt: '2026-04-15T10:00:00.000Z',
-        rules: [],
       } satisfies SemanticState,
     } as any)
     const found = await repository.findById('session-1')

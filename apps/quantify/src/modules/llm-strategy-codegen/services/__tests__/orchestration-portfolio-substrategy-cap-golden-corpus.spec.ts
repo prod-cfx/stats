@@ -92,7 +92,7 @@ function subStrategyCapNode(
   }
 }
 
-describe.skip('orchestration portfolioRisk.substrategy_exposure_cap — golden corpus (Phase 5 S8 #1119)', () => {
+describe('orchestration portfolioRisk.substrategy_exposure_cap — golden corpus (Phase 5 S8 #1119)', () => {
   // ============================================================
   // Section A — NL → frame → patch → state pipeline
   // ============================================================

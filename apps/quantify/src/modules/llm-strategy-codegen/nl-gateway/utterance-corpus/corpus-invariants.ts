@@ -11,12 +11,13 @@
  */
 
 import type { SemanticNaturalLanguageFrame } from '../../types/semantic-natural-language-frame'
-import type { AtomExpr, RuleEffectsByRole } from '../../types/atom-expr'
 import type {
   SemanticOrchestrationContractKind,
+  SemanticOrchestrationNode,
   SemanticState,
 } from '../../types/semantic-state'
 import type { SupportedAtomKey } from './utterance-corpus.types'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../../types/semantic-state-flat-readers'
 
 // =========================================================
 // 不变量 A — NLG → state parity（全 frame kind）
@@ -29,96 +30,19 @@ import type { SupportedAtomKey } from './utterance-corpus.types'
 type FrameKind = SemanticNaturalLanguageFrame['kind']
 type AtomLookup = (state: SemanticState) => readonly { readonly key?: string }[]
 
-type RuleAtomRole = 'condition' | 'action' | 'risk' | 'position' | 'orchestration' | 'program'
-type RuleAtomLookup = {
-  readonly key?: string
-  readonly kind?: SemanticOrchestrationContractKind
-  readonly symbolScopeKind?: 'symbol'
-  readonly legScopeKind?: 'leg'
-  readonly timeframeScopeKind?: 'timeframe'
-  readonly dataSourceScopeKind?: 'dataSource'
-  readonly subStrategyScopeKind?: 'subStrategy'
-}
-
-function orchestrationNodes(state: SemanticState): readonly RuleAtomLookup[] {
-  return collectRuleAtoms(state, ['orchestration', 'program'])
-}
-
-function collectRuleAtoms(state: SemanticState, roles: readonly RuleAtomRole[]): readonly RuleAtomLookup[] {
-  const out: RuleAtomLookup[] = []
-
-  for (const rule of state.rules ?? []) {
-    if (roles.includes('condition')) collectExprAtoms(rule.condition, 'condition', out)
-    if (!isRuleEffectsByRole(rule.effects)) continue
-    collectRoleEffects(rule.effects.actions, 'action', roles, out)
-    collectRoleEffects(rule.effects.risks, 'risk', roles, out)
-    collectRoleEffects(rule.effects.positions, 'position', roles, out)
-    collectRoleEffects(rule.effects.orchestration, 'orchestration', roles, out)
-    collectRoleEffects(rule.effects.programs, 'program', roles, out)
-  }
-
-  return out
-}
-
-function collectRoleEffects(
-  effects: readonly AtomExpr[],
-  role: RuleAtomRole,
-  selectedRoles: readonly RuleAtomRole[],
-  out: RuleAtomLookup[],
-): void {
-  if (!selectedRoles.includes(role)) return
-  for (const effect of effects) collectExprAtoms(effect, role, out)
-}
-
-function collectExprAtoms(expr: AtomExpr, role: RuleAtomRole, out: RuleAtomLookup[]): void {
-  switch (expr.kind) {
-    case 'atom':
-      out.push(toRuleAtomLookup(expr.key, role))
-      return
-    case 'and':
-    case 'or':
-      for (const child of expr.children) collectExprAtoms(child, role, out)
-      return
-    case 'not':
-      collectExprAtoms(expr.child, role, out)
-      return
-    case 'sequence':
-      for (const step of expr.steps) collectExprAtoms(step, role, out)
-  }
-}
-
-function isRuleEffectsByRole(value: unknown): value is RuleEffectsByRole {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-    && Array.isArray((value as Partial<RuleEffectsByRole>).actions)
-    && Array.isArray((value as Partial<RuleEffectsByRole>).risks)
-    && Array.isArray((value as Partial<RuleEffectsByRole>).positions)
-    && Array.isArray((value as Partial<RuleEffectsByRole>).orchestration)
-    && Array.isArray((value as Partial<RuleEffectsByRole>).programs)
-}
-
-function toRuleAtomLookup(key: string, role: RuleAtomRole): RuleAtomLookup {
-  if (role === 'program' || key.startsWith('program.') || key.startsWith('grid.')) {
-    return { key, kind: 'program' }
-  }
-  if (key.startsWith('portfolioRisk.')) return { key, kind: 'portfolioRisk' }
-  if (key.startsWith('scope.symbol')) return { key, kind: 'scope', symbolScopeKind: 'symbol' }
-  if (key.startsWith('scope.leg')) return { key, kind: 'scope', legScopeKind: 'leg' }
-  if (key.startsWith('scope.timeframe')) return { key, kind: 'scope', timeframeScopeKind: 'timeframe' }
-  if (key.startsWith('scope.dataSource')) return { key, kind: 'scope', dataSourceScopeKind: 'dataSource' }
-  if (key.startsWith('scope.subStrategy')) return { key, kind: 'scope', subStrategyScopeKind: 'subStrategy' }
-  if (role === 'orchestration') return { key, kind: 'gate' }
-  return { key }
+function orchestrationNodes(state: SemanticState): readonly SemanticOrchestrationNode[] {
+  return state.orchestration ?? []
 }
 
 export const FRAME_KIND_TO_STATE_LOOKUP: Record<FrameKind, AtomLookup | 'no_state_projection'> = {
-  // —— rules[] facts ——
-  action: state => collectRuleAtoms(state, ['action']),
-  risk: state => collectRuleAtoms(state, ['risk']),
-  indicator_compare: state => collectRuleAtoms(state, ['condition']),
-  boundary_touch: state => collectRuleAtoms(state, ['condition']),
-  combination: state => collectRuleAtoms(state, ['condition']),
+  // —— 顶层 state 字段 ——
+  action: state => readFlatActions(state) ?? [],
+  risk: state => readFlatRisks(state) ?? [],
+  indicator_compare: state => readFlatTriggers(state) ?? [],
+  boundary_touch: state => readFlatTriggers(state) ?? [],
+  combination: state => readFlatTriggers(state) ?? [],
 
-  // —— orchestration facts filter by kind + key ——
+  // —— state.orchestration.nodes filter by kind + key ——
   portfolio_drawdown: state =>
     orchestrationNodes(state).filter(
       n => n.kind === 'portfolioRisk' && n.key === 'portfolioRisk.drawdown_block',
@@ -132,7 +56,7 @@ export const FRAME_KIND_TO_STATE_LOOKUP: Record<FrameKind, AtomLookup | 'no_stat
       n => n.kind === 'portfolioRisk' && n.key === 'portfolioRisk.substrategy_exposure_cap',
     ),
 
-  // —— orchestration facts filter by kind ——
+  // —— state.orchestration.nodes filter by kind ——
   regime_gate: state => orchestrationNodes(state).filter(n => n.kind === 'gate'),
   sub_strategy_gate: state => orchestrationNodes(state).filter(n => n.kind === 'gate'),
   fixed_grid_gated: state => orchestrationNodes(state).filter(n => n.kind === 'program'),
@@ -140,7 +64,7 @@ export const FRAME_KIND_TO_STATE_LOOKUP: Record<FrameKind, AtomLookup | 'no_stat
   adaptive_volatility_grid: state => orchestrationNodes(state).filter(n => n.kind === 'program'),
   event_listener: state => orchestrationNodes(state).filter(n => n.kind === 'program'),
 
-  // —— scope 类 frame：落 rules orchestration facts 中 kind:'scope'，按 sub-kind 区分 ——
+  // —— scope 类 frame：落 state.orchestration.nodes 中 kind:'scope'，按 sub-kind 区分 ——
   symbol_scope: state =>
     orchestrationNodes(state).filter(n => n.kind === 'scope' && n.symbolScopeKind === 'symbol'),
   leg_scope: state =>

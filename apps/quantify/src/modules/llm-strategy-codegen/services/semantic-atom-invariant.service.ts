@@ -6,9 +6,9 @@ import type { StrategyConsistencyCheck } from '../types/strategy-consistency-rep
 import { Injectable } from '@nestjs/common'
 import { SemanticAtomContractService } from './semantic-atom-contract.service'
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
-import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
 
 type PriceChangeDirection = 'up' | 'down'
 type PositionAction = 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
@@ -109,7 +109,6 @@ interface ExpectedOrderProgramContract {
 export class SemanticAtomInvariantService {
   constructor(
     private readonly contracts: SemanticAtomContractService = new SemanticAtomContractService(),
-    private readonly rulesMainflowReader: RulesMainflowReaderService = new RulesMainflowReaderService(),
   ) {}
 
   validate(input: {
@@ -382,17 +381,11 @@ export class SemanticAtomInvariantService {
 
   private collectContracts(state: SemanticState): SemanticAtomContract[] {
     return [
-      ...this.rulesMainflowReader.readFacts(state)
-        .filter(atom => atom.status === 'locked')
-        .flatMap(atom => atom.contracts ?? [])
-        .filter((contract): contract is SemanticAtomContract =>
-          contract.kind === 'trigger'
-          || contract.kind === 'action'
-          || contract.kind === 'risk'
-          || contract.kind === 'position'
-          || contract.kind === 'context',
-        ),
+      ...readFlatTriggers(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...readFlatActions(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...readFlatRisks(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
       ...(state.position?.status === 'locked' ? state.position.contracts ?? [] : []),
+      ...(state.position?.constraints ?? []).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
     ]
   }
 
@@ -863,8 +856,8 @@ export class SemanticAtomInvariantService {
   private hasBothSideGridIntent(state: SemanticState): boolean {
     const hasBothSideParams = (params: Record<string, unknown> | undefined): boolean =>
       params?.sideMode === 'both'
-    for (const fact of this.rulesMainflowReader.readFacts(state)) {
-      if (fact.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && hasBothSideParams(fact.params)) {
+    for (const constraint of state.positionConstraint ?? []) {
+      if (constraint.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && hasBothSideParams(constraint.params)) {
         return true
       }
     }
@@ -912,7 +905,7 @@ export class SemanticAtomInvariantService {
       expected: expectedIr,
       actual: input.ir.portfolio.sizing,
     }
-    const astCandidates = this.readAstOpenActionPositionSizings(input.ast, input.semanticState)
+    const astCandidates = this.readAstOpenActionPositionSizings(input.ast)
     const ast = {
       passed: astCandidates.length > 0
         && astCandidates.every(candidate => this.matchesPositionSizingSnapshot(candidate, expectedIr)),
@@ -989,50 +982,28 @@ export class SemanticAtomInvariantService {
     }
   }
 
-  private readAstOpenActionPositionSizings(ast: StrategyAstV1, semanticState?: SemanticState): PositionSizingSnapshot[] {
+  private readAstOpenActionPositionSizings(ast: StrategyAstV1): PositionSizingSnapshot[] {
     const decisionActions = ast.decisionPrograms.flatMap(program => program.actions)
     const openActionSizings = decisionActions
       .filter(action => action.kind === 'OPEN_LONG' || action.kind === 'OPEN_SHORT')
       .map(action => action.quantity)
-    const strictDcaAddOnly = semanticState ? this.hasOpenActionAndOrdinaryAddPositionRules(semanticState) : false
     const addActionSizings = decisionActions
       // DCA-only 策略没有 OPEN_* 主仓动作，此时 ADD_* 是入场 sizing 载体。
-      // 若 OPEN_* 存在，只有 DCA/未标明 atomKey 的 ADD_* 仍纳入；普通 action.add_position
-      // 表示加仓 sizing，不能要求等于主仓 position.sizing。
+      // 若 OPEN_* 存在，ADD_* 表示加仓 sizing，不能要求等于主仓 position.sizing。
       .filter(action =>
         (action.kind === 'ADD_LONG' || action.kind === 'ADD_SHORT')
-        && (
-          openActionSizings.length === 0
-          || (strictDcaAddOnly ? this.isExplicitDcaScheduleAstAddAction(action) : this.isDcaScheduleAstAddAction(action))
-        ),
+        && this.isDcaScheduleAstAddAction(action),
       )
       .map(action => action.quantity)
     return [
-      ...openActionSizings,
-      ...addActionSizings,
+      ...(openActionSizings.length > 0 ? openActionSizings : addActionSizings),
       ...ast.orderPrograms.map(program => program.payload.quantity),
     ]
   }
 
   private isDcaScheduleAstAddAction(action: ActionDef): boolean {
     if (action.kind !== 'ADD_LONG' && action.kind !== 'ADD_SHORT') return false
-    const atomKey = this.readString((action as unknown as Record<string, unknown>).atomKey)
-    return atomKey === null || atomKey === 'position.dca_schedule'
-  }
-
-  private isExplicitDcaScheduleAstAddAction(action: ActionDef): boolean {
-    if (action.kind !== 'ADD_LONG' && action.kind !== 'ADD_SHORT') return false
     return this.readString((action as unknown as Record<string, unknown>).atomKey) === 'position.dca_schedule'
-  }
-
-  private hasOpenActionAndOrdinaryAddPositionRules(state: SemanticState): boolean {
-    const actionFacts = this.rulesMainflowReader.readFactsByRole(state, 'action')
-    const hasOpen = actionFacts.some(fact =>
-      fact.key === ATOM_CONTRACT_REGISTRY['action.open_long'].key
-      || fact.key === ATOM_CONTRACT_REGISTRY['action.open_short'].key,
-    )
-    const hasOrdinaryAdd = actionFacts.some(fact => fact.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key)
-    return hasOpen && hasOrdinaryAdd
   }
 
   private matchesPositionSizingSnapshot(
@@ -1042,7 +1013,6 @@ export class SemanticAtomInvariantService {
     if (!actual) return false
     if (actual.mode !== expected.mode) return false
     if (Math.abs(actual.value - expected.value) > 0.000001) return false
-    if (expected.asset === 'USDT' && actual.asset === undefined) return true
     if (expected.asset !== undefined && actual.asset !== expected.asset) return false
     return true
   }
@@ -1053,7 +1023,7 @@ export class SemanticAtomInvariantService {
     ir: CanonicalStrategyIrV1
     ast: StrategyAstV1
   }): StrategyConsistencyCheck[] {
-    const triggers = this.readConditionTriggerFacts(input.semanticState)
+    const triggers = readFlatTriggers(input.semanticState)
       .filter(trigger => this.isBlockingGenericExpressionTrigger(trigger))
     const triggersByBucket = new Map<string, SemanticTriggerState[]>()
 
@@ -1534,7 +1504,7 @@ export class SemanticAtomInvariantService {
     // First-stage blocking scope: explicit trigger-level price percent changes.
     // Risk percent rules (stop loss / take profit / trailing stop) remain covered
     // by canonical risk guards and the existing strategy consistency checks.
-    const triggers = this.readConditionTriggerFacts(input.semanticState)
+    const triggers = readFlatTriggers(input.semanticState)
       .filter(trigger => this.isBlockingPricePercentChangeTrigger(trigger))
     const triggersByBucket = new Map<string, SemanticTriggerState[]>()
 
@@ -1560,7 +1530,7 @@ export class SemanticAtomInvariantService {
     // eslint-disable-next-line atom-keys/no-atom-key-literal -- legacy atom key not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     return trigger.key === 'price.percent_change'
       && trigger.status === 'locked'
-      && (trigger.source === 'user_explicit' || trigger.source === 'derived')
+      && trigger.source === 'user_explicit'
       && basis === 'prev_close'
       && (trigger.phase === 'entry' || trigger.phase === 'exit')
   }
@@ -1994,25 +1964,5 @@ export class SemanticAtomInvariantService {
     const timeframe = semanticState.contextSlots.timeframe
     if (!timeframe || timeframe.status !== 'locked') return null
     return this.readString(timeframe.value)
-  }
-
-  private readConditionTriggerFacts(state: SemanticState): SemanticTriggerState[] {
-    return this.rulesMainflowReader.readFactsByRole(state, 'condition').map(fact => ({
-      id: fact.id,
-      key: fact.key,
-      phase: fact.phase === 'entry' || fact.phase === 'exit' || fact.phase === 'gate' ? fact.phase : 'gate',
-      params: fact.params,
-      sideScope: fact.sideScope,
-      status: fact.status,
-      source: fact.source,
-      openSlots: [...fact.openSlots],
-      contracts: fact.contracts?.filter((contract): contract is SemanticAtomContract =>
-        contract.kind === 'trigger'
-        || contract.kind === 'action'
-        || contract.kind === 'risk'
-        || contract.kind === 'position'
-        || contract.kind === 'context',
-      ),
-    }))
   }
 }

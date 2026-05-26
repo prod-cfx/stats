@@ -1,474 +1,10 @@
-import type {
-  SemanticActionState,
-  SemanticContextSlotState,
-  SemanticOrchestrationContract,
-  SemanticOrchestrationNode,
-  SemanticPositionConstraintState,
-  SemanticPositionState,
-  SemanticRiskState,
-  SemanticState,
-  SemanticTriggerState,
-} from '../../types/semantic-state'
-import type { SemanticRule } from '../../types/atom-expr'
 import { buildSemanticSlotId } from '../../types/semantic-state'
 import { SemanticOpenSlotAnswerResolverService } from '../semantic-open-slot-answer-resolver.service'
 import { type EvidenceInvariantMode, SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticStateReducerService } from '../semantic-state-reducer.service'
-import { RulesMainflowReaderService } from '../rules-mainflow-reader.service'
 
-type DispatchedSeedAtoms = {
-  trigger: unknown[]
-  action: unknown[]
-  risk: unknown[]
-  positionConstraint: unknown[]
-  orchestration: unknown[]
-}
-
-type SeedBuilderPrivate = SemanticSeedStateBuilderService & {
-  evidenceInvariantMode: EvidenceInvariantMode
-  dispatchAtomsByContractBucket: (atoms: unknown[]) => DispatchedSeedAtoms
-  dispatchLegacyBucketArraysByContractBucket: (patch: Record<string, unknown>) => DispatchedSeedAtoms
-  mergeUniqueAtomPatchItems: (left: unknown[], right: unknown[]) => unknown[]
-  mergePositionConstraintPatch: (existing: unknown, constraints: unknown[]) => unknown
-  mergeOrchestrationPatch: (existing: unknown, nodes: unknown[]) => unknown
-  filterLegacyItemsByRegistryBucket: (items: unknown[], bucket: 'trigger' | 'action' | 'risk') => unknown[]
-  toTriggerState: (item: unknown, index: number) => SemanticTriggerState | null
-  toActionState: (item: unknown, index: number) => SemanticActionState | null
-  toRiskState: (item: unknown, index: number) => SemanticRiskState | null
-  toPositionState: (item: unknown) => SemanticPositionState | null
-  toContextSlots: (item: unknown) => SemanticContextSlotState
-  applySpotSideModeConstraint: (
-    position: SemanticPositionState | null,
-    contextSlots: SemanticContextSlotState,
-  ) => SemanticPositionState | null
-  toOrchestrationState: (item: unknown) => { nodes: SemanticOrchestrationNode[], contracts: readonly SemanticOrchestrationContract[] } | null
-  coalesceDuplicateBucketEntries: <T extends {
-    key: string
-    status: 'open' | 'locked' | 'superseded'
-    params?: Record<string, unknown>
-    openSlots?: ReadonlyArray<{ slotKey?: string, fieldPath?: string, status?: string }>
-    phase?: 'entry' | 'exit' | 'gate' | 'risk' | undefined
-    sideScope?: 'long' | 'short' | 'both' | null
-  }>(entries: T[], options: { sideScopeAware: boolean }) => T[]
-  withMovingAverageStackCombinationContracts: (triggers: SemanticTriggerState[]) => SemanticTriggerState[]
-}
-
-type SemanticSeedStateView = SemanticState & {
-  trigger: SemanticTriggerState[]
-  action: SemanticActionState[]
-  risk: SemanticRiskState[]
-  positionConstraint: SemanticPositionConstraintState[]
-  orchestration: SemanticOrchestrationNode[]
-}
-
-const rulesMainflowReader = new RulesMainflowReaderService()
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function createEmptyContextSlots(): SemanticContextSlotState {
-  return {
-    exchange: null,
-    symbol: null,
-    marketType: null,
-    timeframe: null,
-  }
-}
-
-function createOpenContextSlots(): SemanticContextSlotState {
-  return {
-    exchange: {
-      slotKey: 'exchange',
-      fieldPath: 'contextSlots.exchange',
-      value: null,
-      status: 'open',
-      priority: 'context',
-      questionHint: '请确认交易所（binance / okx / hyperliquid）。',
-      affectsExecution: true,
-    },
-    symbol: {
-      slotKey: 'symbol',
-      fieldPath: 'contextSlots.symbol',
-      value: null,
-      status: 'open',
-      priority: 'context',
-      questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
-      affectsExecution: true,
-    },
-    marketType: {
-      slotKey: 'marketType',
-      fieldPath: 'contextSlots.marketType',
-      value: null,
-      status: 'open',
-      priority: 'context',
-      questionHint: '请确认市场类型（现货或合约/perp）。',
-      affectsExecution: true,
-    },
-    timeframe: {
-      slotKey: 'timeframe',
-      fieldPath: 'contextSlots.timeframe',
-      value: null,
-      status: 'open',
-      priority: 'context',
-      questionHint: '请确认策略主周期（例如 15m 或 1h）。',
-      affectsExecution: true,
-    },
-  }
-}
-
-function makeSeedViewService(mode?: EvidenceInvariantMode): SemanticSeedStateBuilderService {
-  const builder = new SemanticSeedStateBuilderService(undefined, undefined, undefined, mode)
-  const originalBuild = builder.build.bind(builder)
-  const wrapped = builder as SeedBuilderPrivate
-  wrapped.build = (input: unknown, message?: string) => buildSeedViewWith(wrapped, originalBuild, input, message)
-  return builder
-}
-
-function buildSeedViewWith(
-  builder: SeedBuilderPrivate,
-  originalBuild: SemanticSeedStateBuilderService['build'],
-  input: unknown,
-  message?: string,
-): SemanticSeedStateView | null {
-  const state = originalBuild(input, message)
-  const materialized = materializeSeedPatch(builder, input, message)
-  if (
-    !state
-    && materialized.trigger.length === 0
-    && materialized.action.length === 0
-    && materialized.risk.length === 0
-    && materialized.positionConstraint.length === 0
-    && materialized.orchestration.length === 0
-    && !materialized.position
-  ) {
-    return null
-  }
-
-  const hasExecutableSemantics = [
-    materialized.trigger,
-    materialized.action,
-    materialized.risk,
-    materialized.positionConstraint,
-    materialized.orchestration,
-  ].some(items => items.length > 0) || rulesMainflowReader.readFacts(state ?? { rules: undefined }).length > 0
-  const contextSlots = hasExecutableSemantics
-    ? mergeContextSlots(createOpenContextSlots(), state?.contextSlots, materialized.contextSlots)
-    : (state?.contextSlots ?? materialized.contextSlots)
-  const position = materialized.position
-    ? { ...(state?.position ?? {}), ...materialized.position }
-    : (state?.position ?? null)
-
-  return {
-    version: 1,
-    families: [],
-    normalizationNotes: [],
-    updatedAt: state?.updatedAt ?? new Date().toISOString(),
-    orchestrationContracts: state?.orchestrationContracts ?? [],
-    contextSlots,
-    position,
-    ...(state ?? {}),
-    contextSlots,
-    position,
-    trigger: materialized.trigger,
-    action: materialized.action,
-    risk: materialized.risk,
-    positionConstraint: materialized.positionConstraint,
-    orchestration: materialized.orchestration,
-    ...(materialized.isMultiLeg === true ? { isMultiLeg: true } : {}),
-  }
-}
-
-function mergeContextSlots(
-  base: SemanticContextSlotState,
-  ...overrides: Array<SemanticContextSlotState | undefined>
-): SemanticContextSlotState {
-  const next = { ...base }
-  for (const override of overrides) {
-    if (!override) continue
-    for (const field of ['exchange', 'symbol', 'marketType', 'timeframe'] as const) {
-      if (override[field]) {
-        next[field] = override[field]
-      }
-    }
-  }
-  return next
-}
-
-function materializeSeedPatch(
-  builder: SeedBuilderPrivate,
-  input: unknown,
-  message?: string,
-): {
-  trigger: SemanticTriggerState[]
-  action: SemanticActionState[]
-  risk: SemanticRiskState[]
-  position: SemanticPositionState | null
-  positionConstraint: SemanticPositionConstraintState[]
-  orchestration: SemanticOrchestrationNode[]
-  isMultiLeg?: boolean
-  contextSlots: SemanticContextSlotState
-} {
-  if (!isRecord(input)) {
-    return {
-      trigger: [],
-      action: [],
-      risk: [],
-      position: null,
-      positionConstraint: [],
-      orchestration: [],
-      isMultiLeg: undefined,
-      contextSlots: createEmptyContextSlots(),
-    }
-  }
-
-  let semanticPatch: Record<string, unknown> = input
-  if (Array.isArray(semanticPatch.atoms)) {
-    const dispatched = builder.dispatchAtomsByContractBucket(semanticPatch.atoms)
-    semanticPatch = {
-      ...semanticPatch,
-      triggers: builder.mergeUniqueAtomPatchItems(Array.isArray(semanticPatch.triggers) ? semanticPatch.triggers : [], dispatched.trigger),
-      actions: builder.mergeUniqueAtomPatchItems(Array.isArray(semanticPatch.actions) ? semanticPatch.actions : [], dispatched.action),
-      risk: builder.mergeUniqueAtomPatchItems(Array.isArray(semanticPatch.risk) ? semanticPatch.risk : [], dispatched.risk),
-      position: builder.mergePositionConstraintPatch(semanticPatch.position ?? semanticPatch.positionUpdate, dispatched.positionConstraint),
-      orchestration: builder.mergeOrchestrationPatch(semanticPatch.orchestration, dispatched.orchestration),
-    }
-  }
-
-  const legacyDispatched = builder.dispatchLegacyBucketArraysByContractBucket(semanticPatch)
-  const positionPatchInput = builder.mergePositionConstraintPatch(
-    semanticPatch.position ?? semanticPatch.positionUpdate,
-    legacyDispatched.positionConstraint,
-  )
-  const orchestrationPatchInput = builder.mergeOrchestrationPatch(
-    semanticPatch.orchestration,
-    legacyDispatched.orchestration,
-  )
-  const triggerItems = filterByTestEvidenceInvariant(
-    builder,
-    builder.filterLegacyItemsByRegistryBucket(
-      Array.isArray(semanticPatch.triggers)
-        ? semanticPatch.triggers
-        : (Array.isArray(semanticPatch.triggerUpdates) ? semanticPatch.triggerUpdates : []),
-      'trigger',
-    ),
-    'trigger',
-    message,
-  )
-  const actionItems = filterByTestEvidenceInvariant(
-    builder,
-    builder.filterLegacyItemsByRegistryBucket(
-      Array.isArray(semanticPatch.actions)
-        ? semanticPatch.actions
-        : (Array.isArray(semanticPatch.actionUpdates) ? semanticPatch.actionUpdates : []),
-      'action',
-    ),
-    'action',
-    message,
-  )
-  const riskItems = filterByTestEvidenceInvariant(
-    builder,
-    builder.filterLegacyItemsByRegistryBucket(
-      Array.isArray(semanticPatch.risk)
-        ? semanticPatch.risk
-        : (Array.isArray(semanticPatch.riskUpdates) ? semanticPatch.riskUpdates : []),
-      'risk',
-    ),
-    'risk',
-    message,
-  )
-
-  const trigger = builder.withMovingAverageStackCombinationContracts(
-    builder.coalesceDuplicateBucketEntries(
-      triggerItems.map((item, index) => builder.toTriggerState(item, index)).filter((item): item is SemanticTriggerState => item !== null),
-      { sideScopeAware: true },
-    ),
-  )
-  const action = actionItems
-    .map((item, index) => builder.toActionState(item, index))
-    .filter((item): item is SemanticActionState => item !== null)
-  const risk = builder.coalesceDuplicateBucketEntries(
-    riskItems.map((item, index) => builder.toRiskState(item, index)).filter((item): item is SemanticRiskState => item !== null),
-    { sideScopeAware: false },
-  )
-  const contextSlots = builder.toContextSlots(semanticPatch.contextSlots ?? semanticPatch.contextUpdates ?? semanticPatch.context)
-  const positionProjection = projectActionBudgetToPosition(action)
-  const positionBase = builder.applySpotSideModeConstraint(builder.toPositionState(positionPatchInput), contextSlots)
-  const position = positionBase ?? positionProjection.position
-  const orchestrationState = builder.toOrchestrationState(orchestrationPatchInput)
-
-  return {
-    trigger,
-    action,
-    risk,
-    position,
-    positionConstraint: position?.constraints ?? [],
-    orchestration: orchestrationState?.nodes ?? [],
-    isMultiLeg: positionProjection.isMultiLeg,
-    contextSlots,
-  }
-}
-
-function projectActionBudgetToPosition(actions: readonly SemanticActionState[]): {
-  position: SemanticPositionState | null
-  isMultiLeg?: boolean
-} {
-  const budgets = actions
-    .flatMap(action => action.contracts ?? [])
-    .flatMap(contract => contract.capabilities)
-    .filter(capability =>
-      capability.domain === 'capital'
-      && capability.verb === 'allocate'
-      && capability.object === 'per_order_budget'
-      && isRecord(capability.shape),
-    )
-    .map(capability => capability.shape)
-
-  if (budgets.length === 0) {
-    return { position: null }
-  }
-  if (budgets.length > 1) {
-    return { position: null, isMultiLeg: true }
-  }
-
-  const budget = budgets[0]!
-  const kind = budget.kind
-  const value = typeof budget.value === 'number' ? budget.value : 0
-  if (kind === 'quote' && typeof budget.asset === 'string') {
-    return {
-      position: {
-        mode: 'fixed_quote',
-        value,
-        sizing: { kind: 'quote', value, asset: budget.asset as 'USDT' | 'USDC' | 'USD' },
-        positionMode: 'long_only',
-        status: 'locked',
-        source: 'derived',
-        openSlots: [],
-      },
-    }
-  }
-  if (kind === 'ratio') {
-    return {
-      position: {
-        mode: 'fixed_ratio',
-        value,
-        sizing: { kind: 'ratio', value, unit: budget.unit === 'percent' ? 'percent' : 'ratio' },
-        positionMode: 'long_only',
-        status: 'locked',
-        source: 'derived',
-        openSlots: [],
-      },
-    }
-  }
-  if (kind === 'base' && typeof budget.asset === 'string') {
-    return {
-      position: {
-        mode: 'fixed_qty',
-        value,
-        sizing: { kind: 'base', value, asset: budget.asset },
-        positionMode: 'long_only',
-        status: 'locked',
-        source: 'derived',
-        openSlots: [],
-      },
-    }
-  }
-  return { position: null }
-}
-
-function filterByTestEvidenceInvariant(
-  builder: SeedBuilderPrivate,
-  items: unknown[],
-  kind: 'trigger' | 'action' | 'risk',
-  message?: string,
-): unknown[] {
-  if (builder.evidenceInvariantMode !== 'drop' || typeof message !== 'string') {
-    return items
-  }
-  return items.filter((item) => {
-    if (!isRecord(item) || item.source === 'system_default') return true
-    const evidence = isRecord(item.evidence) ? item.evidence : null
-    const hasEvidenceField = evidence !== null || item.evidence !== undefined
-    const evidenceText = evidence && typeof evidence.text === 'string' ? evidence.text : null
-    void kind
-    return hasEvidenceField && evidenceText !== null && evidenceText !== '' && message.includes(evidenceText)
-  })
-}
-
-function applyMaterializedPositionConstraintSlotAnswer(
-  state: SemanticSeedStateView,
-  slot: { slotKey: string, fieldPath: string },
-  paramsPatch: Record<string, unknown>,
-): SemanticSeedStateView {
-  const constraints = (state.position?.constraints ?? []).map((constraint) => {
-    const ownsSlot = constraint.openSlots.some(item =>
-      item.slotKey === slot.slotKey && item.fieldPath === slot.fieldPath,
-    )
-    if (!ownsSlot) return constraint
-    const openSlots = constraint.openSlots.filter(item =>
-      !(item.slotKey === slot.slotKey && item.fieldPath === slot.fieldPath),
-    )
-    return {
-      ...constraint,
-      params: { ...constraint.params, ...paramsPatch },
-      status: openSlots.some(item => item.status === 'open') ? 'open' : 'locked',
-      openSlots,
-    }
-  })
-
-  return {
-    ...state,
-    position: state.position
-      ? { ...state.position, constraints }
-      : state.position,
-    positionConstraint: constraints,
-  }
-}
-
-describe('SemanticSeedStateBuilderService — rules-only seed input', () => {
-  it('preserves rules as the only executable semantic source', () => {
-    const service = new SemanticSeedStateBuilderService()
-    const rule: SemanticRule = {
-      id: 'rule-rules-only-seed',
-      phase: 'entry',
-      sideScope: 'long',
-      condition: {
-        kind: 'atom',
-        key: 'indicator.above',
-        params: { indicator: 'ema', 'reference.period': 20 },
-      },
-      effects: [{
-        kind: 'atom',
-        key: 'open_long',
-        params: { orderType: 'market' },
-      }],
-    }
-
-    const state = service.build({ rules: [rule] })
-
-    expect(state?.rules).toEqual([rule])
-    expect(state).not.toHaveProperty('trigger')
-    expect(state).not.toHaveProperty('action')
-    expect(state).not.toHaveProperty('risk')
-    expect(state).not.toHaveProperty('positionConstraint')
-    expect(state).not.toHaveProperty('orchestration')
-  })
-
-  it('ignores legacy flat bucket patch input after Stage 3 hard delete', () => {
-    const service = new SemanticSeedStateBuilderService()
-
-    const state = service.build({
-      triggers: [{ key: 'indicator.above', params: { indicator: 'ema' } }],
-      actions: [{ key: 'open_long', params: {} }],
-      risk: [{ key: 'risk.stop_loss_pct', params: { valuePct: 5 } }],
-    })
-
-    expect(state).toBeNull()
-  })
-})
-
-describe.skip('SemanticSeedStateBuilderService legacy flat bucket fixtures', () => {
-  const service = makeSeedViewService()
+describe('SemanticSeedStateBuilderService', () => {
+  const service = new SemanticSeedStateBuilderService()
   const reducer = new SemanticStateReducerService()
   const openSlotAnswerResolver = new SemanticOpenSlotAnswerResolverService()
   const expectContractRequiredSlot = (fieldPath: string) => expect.objectContaining({
@@ -966,13 +502,28 @@ describe.skip('SemanticSeedStateBuilderService legacy flat bucket fixtures', () 
     expect(densitySlot).toBeDefined()
 
     // #1409: 通用通道按 atomKey+paramSlotKey 调度；levels paramSlot 接受"N 格"格式
-    const nextState = applyMaterializedPositionConstraintSlotAnswer(state!, densitySlot!, { levels: 20 })
-    const params = nextState.position?.constraints?.[0]?.params
+    const resolved = openSlotAnswerResolver.resolve({
+      currentState: state!,
+      message: '20格',
+      clarificationState: {
+        items: [{
+          status: 'pending',
+          slotKey: densitySlot!.slotKey,
+          fieldPath: densitySlot!.fieldPath,
+          slotId: buildSemanticSlotId(densitySlot!),
+        }],
+      },
+    })
+    if (!resolved.consumed) {
+      throw new Error('expected grid density answer to be consumed')
+    }
+
+    const params = resolved.nextState.position?.constraints?.[0]?.params
 
     expect(params).toEqual(expect.objectContaining({
       levels: 20,
     }))
-    expect(nextState.position?.constraints?.[0]?.openSlots).toEqual(expect.not.arrayContaining([
+    expect(resolved.nextState.position?.constraints?.[0]?.openSlots).toEqual(expect.not.arrayContaining([
       expect.objectContaining({
         slotKey: 'grid.range_rebalance.levels',
         atomKey: 'grid.range_rebalance',
@@ -2403,7 +1954,7 @@ describe.skip('SemanticSeedStateBuilderService legacy flat bucket fixtures', () 
 // sub-fix 3: base_qty asset 字段投影启用
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe.skip('projectSingleAnchorToPosition — legacy flat action projection', () => {
+describe('projectSingleAnchorToPosition — base_qty asset 投影', () => {
   const svc = new SemanticSeedStateBuilderService()
 
   function makeBaseQtyCapabilityState(asset: string | undefined): import('../../types/semantic-state').SemanticState {
@@ -2490,12 +2041,12 @@ describe.skip('projectSingleAnchorToPosition — legacy flat action projection',
 // ─────────────────────────────────────────────────────────────────────────────
 
 function makeService(mode: EvidenceInvariantMode): SemanticSeedStateBuilderService {
-  return makeSeedViewService(mode)
+  return new SemanticSeedStateBuilderService(undefined, undefined, undefined, mode)
 }
 
 const MSG = '当收盘价在 EMA20 上方时开多，止损 2%'
 
-describe.skip('SemanticSeedStateBuilderService — legacy evidence invariant (throw mode)', () => {
+describe('SemanticSeedStateBuilderService — evidence invariant (throw mode)', () => {
   const svc = makeService('throw')
 
   it('passes when all non-default atoms have evidence.text as message substring', () => {
@@ -2623,7 +2174,7 @@ describe.skip('SemanticSeedStateBuilderService — legacy evidence invariant (th
   })
 })
 
-describe.skip('SemanticSeedStateBuilderService — legacy evidence invariant (drop mode)', () => {
+describe('SemanticSeedStateBuilderService — evidence invariant (drop mode)', () => {
   const svc = makeService('drop')
 
   it('drops trigger with evidence.text that is not a message substring', () => {
@@ -2709,7 +2260,7 @@ describe.skip('SemanticSeedStateBuilderService — legacy evidence invariant (dr
   })
 })
 
-describe.skip('SemanticSeedStateBuilderService — legacy evidence invariant (off mode)', () => {
+describe('SemanticSeedStateBuilderService — evidence invariant (off mode)', () => {
   const svc = makeService('off')
 
   it('allows atoms without evidence when mode is off', () => {
@@ -2729,8 +2280,8 @@ describe.skip('SemanticSeedStateBuilderService — legacy evidence invariant (of
 // Issue #1354：toActionState action.* 前缀剥离边界
 // review M2/w1：补 isolated unit case，三条等价类锚定 boundary normalizer 语义
 // ─────────────────────────────────────────────────────────────────────────────
-describe.skip('SemanticSeedStateBuilderService.toActionState — legacy flat action prefix normalization (#1354)', () => {
-  const svc = makeSeedViewService()
+describe('SemanticSeedStateBuilderService.toActionState — action.* 前缀归一化 (#1354)', () => {
+  const svc = new SemanticSeedStateBuilderService()
   const MSG = 'unit-spec evidence carrier text，避免 evidence_invariant_drop'
 
   function buildPatchWithAction(actionKey: string): Record<string, unknown> {
@@ -2769,7 +2320,7 @@ describe.skip('SemanticSeedStateBuilderService.toActionState — legacy flat act
 
   // #1364 AC-3: patch.atoms[] 单数组 + 服务端按 contract.bucket 归桶
   describe('#1364 AC-3: patch.atoms[] dispatch by contract.bucket', () => {
-    const builder = makeSeedViewService()
+    const builder = new SemanticSeedStateBuilderService()
 
     it('routes trigger atom by contract.bucket=trigger', () => {
       const state = builder.build({

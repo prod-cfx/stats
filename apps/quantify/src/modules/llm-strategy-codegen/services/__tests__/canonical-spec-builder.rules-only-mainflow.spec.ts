@@ -1,8 +1,6 @@
 import type { SemanticState } from '../../types/semantic-state'
 import type { AtomExprAtom, SemanticRule } from '../../types/atom-expr'
 import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
@@ -73,16 +71,6 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     baseTimeframe: '1m',
     positionPct: 10,
   }
-
-  it('keeps builder source on rules-mainflow and away from flat/projection/state buckets', () => {
-    const source = readFileSync(join(__dirname, '../canonical-spec-builder.service.ts'), 'utf8')
-
-    expect(source).not.toContain('semantic-state-flat-readers')
-    expect(source).not.toContain('SemanticRuleProjectionService')
-    expect(source).not.toContain('reprojectFromRules')
-    expect(source).not.toMatch(/\bstate\.(?:trigger|action|risk|positionConstraint|orchestration)\b/u)
-    expect(source).toContain('RulesMainflowReaderService')
-  })
 
   it('builds execution semantics from rule effects and ignores conflicting flat-only buckets', () => {
     const state = baseState({

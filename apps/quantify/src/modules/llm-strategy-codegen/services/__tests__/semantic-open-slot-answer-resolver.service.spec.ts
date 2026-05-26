@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import type { CodegenSemanticPatch } from '../../types/codegen-semantic-patch'
 import type { SemanticRule } from '../../types/atom-expr'
 import type { SemanticCapabilityShape, SemanticSlotState, SemanticState } from '../../types/semantic-state'
@@ -8,20 +6,8 @@ import { buildSemanticSlotId } from '../../types/semantic-state'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { SemanticContractShapeNormalizerService } from '../semantic-contract-shape-normalizer.service'
 import { SemanticOpenSlotAnswerResolverService } from '../semantic-open-slot-answer-resolver.service'
-import { SemanticStateProjectionService as SemanticRuleProjectionService } from '../semantic-state-projection.service'
+import { SemanticRuleProjectionService } from '../semantic-rule-projection.service'
 import { buildGridClarificationSlot } from './fixtures/build-grid-slot'
-
-describe('stage3 rules-only source guard', () => {
-  it('keeps open-slot resolver off legacy flat readers and direct bucket state access', () => {
-    const source = readFileSync(
-      join(__dirname, '../semantic-open-slot-answer-resolver.service.ts'),
-      'utf8',
-    )
-
-    expect(source).not.toMatch(/semantic-state-flat-readers|readFlat|projectToFlat|reprojectFromRules|SemanticStateBuckets/u)
-    expect(source).not.toMatch(/\bstate\.(trigger|action|risk|positionConstraint|orchestration)\b/u)
-  })
-})
 
 describe('semanticOpenSlotAnswerResolverService', () => {
   const service = new SemanticOpenSlotAnswerResolverService()

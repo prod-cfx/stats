@@ -187,32 +187,4 @@ describe('RulesMainflowReaderService', () => {
 
     expect(providers).toContain(RulesMainflowReaderService)
   })
-
-  it('reads rules-native atom facts without materializing legacy buckets', () => {
-    const rules: SemanticRule[] = [{
-      id: 'facts',
-      phase: 'entry',
-      sideScope: 'long',
-      condition: atom('volume.threshold', { value: 1000 }),
-      effects: {
-        actions: [{ kind: 'atom', key: 'action.open_long', params: { sizing: { kind: 'quote', value: 100, asset: 'USDT' } } }],
-        risks: [],
-        positions: [atom('position.dca_schedule', { perOrderSizing: { kind: 'quote', value: 50, asset: 'USDT' } })],
-        orchestration: [atom('portfolioRisk.drawdown_block', { thresholdPct: 10 })],
-        programs: [],
-      },
-    }]
-
-    const facts = reader.readFactsByRole({ rules }, 'position')
-
-    expect(facts).toEqual([
-      expect.objectContaining({
-        id: 'facts:rules-0-effects-positions-0',
-        role: 'position',
-        key: 'position.dca_schedule',
-        status: 'locked',
-        openSlots: [],
-      }),
-    ])
-  })
 })

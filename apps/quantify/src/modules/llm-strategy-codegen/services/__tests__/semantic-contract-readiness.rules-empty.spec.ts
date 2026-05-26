@@ -1,10 +1,14 @@
 /**
- * Issue #1633 Stage 3 — readiness 以 rules tree 为权威。
+ * Issue #1493 块 D — readiness 以 rules tree 为权威。
  *
  * 覆盖（验收标准 #19/#21/#24）：
- *  - rules 非空但旧 bucket 强制传入 → normalize() 不读不回写旧 bucket
- *  - rules 含 AND(a,b) → rules readiness 仍按复合条件闭环
- *  - rules=[] + 旧 bucket 非空 → fail-closed，不退回 legacy bucket
+ *  - rules 非空但 flat 强制清空 → normalize() 入口 reproject 重建 flat → ready 由 rules 判定
+ *  - rules 含 AND(a,b) → projectToFlat 拆叶子但 combinationContract 挂在首叶子，
+ *    不会被拆成 2 条独立 trigger entry（结构性"AND 不被拆散"契约）
+ *  - rules=[] + flat 非空 → 走 legacy flat 路径（块 D 注释明确：full rules-only
+ *    切流留给后续 PR；本 spec 仅锁定"rules 空时不退化、走原 flat 路径"行为）
+ *  - rules 非空时 normalize() 返回的 state.trigger 已被 reproject 覆盖（与传入的
+ *    flat 完全无关），证实 flat ≡ projection(rules)
  */
 import type { AtomExpr, SemanticRule } from '../../types/atom-expr'
 import type { SemanticState } from '../../types/semantic-state'
@@ -32,6 +36,11 @@ function baseState(overrides: Partial<SemanticState> = {}): SemanticState {
   return {
     version: 1,
     families: [],
+    trigger: [],
+    action: [],
+    risk: [],
+    positionConstraint: [],
+    orchestration: [],
     orchestrationContracts: [],
     position: null,
     contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
@@ -50,14 +59,10 @@ function lockedExecutableContext(): SemanticState['contextSlots'] {
   }
 }
 
-function hasLegacyBucket(state: SemanticState, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(state, key)
-}
-
-describe('#1633 Stage 3 — readiness rules-only source-of-truth', () => {
+describe('#1493 块 D — readiness rules-as-source-of-truth', () => {
   const svc = new SemanticContractReadinessService()
 
-  it('rules 非空 + 旧 bucket 强制传入：normalize() 不读不回写旧 bucket', () => {
+  it('rules 非空 + flat 强制清空：normalize() 入口 reproject 把 flat 由 rules 重建', () => {
     const rules: SemanticRule[] = [
       rule({
         id: 'r1',
@@ -72,23 +77,20 @@ describe('#1633 Stage 3 — readiness rules-only source-of-truth', () => {
         effects: [atom('action.close_long'), atom('risk.stop_loss_pct', { pct: 5 })],
       }),
     ]
-    const state = baseState({
-      rules,
-      contextSlots: lockedExecutableContext(),
-      trigger: [],
-      action: [],
-      risk: [],
-    } as Partial<SemanticState>)
+    // 传入 flat=[] 强制证伪：rules 才是真源
+    const state = baseState({ rules, trigger: [], action: [], risk: [], contextSlots: lockedExecutableContext() })
 
     const result = svc.normalize(state)
 
+    // flat 已由 reproject 重建：trigger / action / risk 桶都不再是空
+    expect(result.state.trigger.length).toBeGreaterThan(0)
+    expect(result.state.action.length).toBeGreaterThan(0)
+    expect(result.state.risk.length).toBeGreaterThan(0)
+    // ready 由 evaluateRulesReadiness 决定（entry+exit+risk 齐备）
     expect(result.ready).toBe(true)
-    expect(hasLegacyBucket(result.state, 'trigger')).toBe(false)
-    expect(hasLegacyBucket(result.state, 'action')).toBe(false)
-    expect(hasLegacyBucket(result.state, 'risk')).toBe(false)
   })
 
-  it('rules AND(a, b) 多叶子：rules readiness 按复合条件闭环，不暴露 trigger bucket', () => {
+  it('rules AND(a, b) 多叶子：reproject 后 trigger 多叶展开，combinationContract 挂在首叶子（不被拆散）', () => {
     const rules: SemanticRule[] = [
       rule({
         id: 'r1',
@@ -106,6 +108,7 @@ describe('#1633 Stage 3 — readiness rules-only source-of-truth', () => {
         effects: [atom('action.close_long'), atom('risk.stop_loss_pct', { pct: 3 })],
       }),
     ]
+    // 上游"flat 拆开成多 entry"伪造：reproject 会把它彻底覆盖
     const state = baseState({
       rules,
       contextSlots: lockedExecutableContext(),
@@ -119,11 +122,22 @@ describe('#1633 Stage 3 — readiness rules-only source-of-truth', () => {
 
     const result = svc.normalize(state)
 
+    // reproject 后 entry rule 的 AND 两叶子在 trigger 桶里，且每个 member 都带同一 combinationContract
+    const entryTriggers = result.state.trigger.filter(t => t.phase === 'entry')
+    expect(entryTriggers.length).toBe(2)
+    const isCombinationContract = (c: { capabilities?: ReadonlyArray<{ object?: string }> }) =>
+      (c.capabilities ?? []).some(cap => cap.object === 'predicate_group')
+    const firstHasCombination = (entryTriggers[0].contracts ?? []).some(isCombinationContract)
+    expect(firstHasCombination).toBe(true)
+    const secondHasCombination = (entryTriggers[1].contracts ?? []).some(isCombinationContract)
+    expect(secondHasCombination).toBe(true)
+    expect(entryTriggers[1].contracts?.[0]).toEqual(entryTriggers[0].contracts?.[0])
+    // rules 判定：entry + exit + risk 齐备
     expect(result.ready).toBe(true)
-    expect(hasLegacyBucket(result.state, 'trigger')).toBe(false)
   })
 
-  it('rules=[] + 旧 bucket 非空：fail-closed，不回退 legacy bucket', () => {
+  it('rules=[] + flat 非空：保留 legacy 路径（块 D 注释说明 full rules-only 切流留后续）', () => {
+    // 老 fixture：直接构造 flat，rules undefined
     const state = baseState({
       trigger: [{
         id: 'legacy-trigger',
@@ -169,15 +183,15 @@ describe('#1633 Stage 3 — readiness rules-only source-of-truth', () => {
 
     const result = svc.normalize(state)
 
-    expect(result.ready).toBe(false)
-    expect(result.missingRequirements).toEqual(expect.arrayContaining([
-      expect.objectContaining({ errorCode: 'READINESS_RULES_TREE_EMPTY' }),
-    ]))
-    expect(hasLegacyBucket(result.state, 'trigger')).toBe(false)
-    expect(hasLegacyBucket(result.state, 'action')).toBe(false)
+    // legacy 路径：normalize 不应抛错，flat 不被清空（rules empty → reproject no-op）
+    expect(result.state.trigger.length).toBe(1)
+    expect(result.state.action.length).toBe(1)
+    // 关键不变量：legacy 路径保留了原 flat 数据（id/key 未被改写），证明 reproject 没误清
+    expect(result.state.trigger[0].id).toBe('legacy-trigger')
+    expect(result.state.action[0].id).toBe('legacy-action')
   })
 
-  it('rules 非空时即便上游传入旧 bucket 与 rules 不一致也丢弃旧 bucket', () => {
+  it('rules 非空时即便上游传入 flat 与 rules 不一致也以 rules 为准（反向投影 invariant）', () => {
     const rules: SemanticRule[] = [
       rule({
         id: 'r1',
@@ -203,6 +217,9 @@ describe('#1633 Stage 3 — readiness rules-only source-of-truth', () => {
 
     const result = svc.normalize(state)
 
-    expect(hasLegacyBucket(result.state, 'trigger')).toBe(false)
+    // reproject 后 trigger 桶只能含 bollinger.touch_lower（来自 rules）
+    const keys = result.state.trigger.map(t => t.key)
+    expect(keys).toContain('bollinger.touch_lower')
+    expect(keys).not.toContain('price.breakout_up')
   })
 })

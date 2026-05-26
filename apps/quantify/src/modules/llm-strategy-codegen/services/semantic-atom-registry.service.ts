@@ -230,81 +230,64 @@ function externalSignalSubstrate(): SemanticAtomContractSubstrate {
 // ── DEFAULT_REPLACEMENT (used by recognized_unsupported atoms) ──────────────
 
 const DEFAULT_REPLACEMENT_PATCH: CodegenSemanticPatch = {
-  rules: [
+  triggers: [
     {
-      id: 'replacement-ma-cross-entry',
+      key: 'indicator.cross_over',
       phase: 'entry',
       sideScope: 'long',
-      condition: {
-        kind: 'atom',
-        key: 'indicator.cross_over',
-        params: {
-          indicator: 'ma',
-          fastPeriod: 20,
-          slowPeriod: 50,
-          confirmationMode: 'bar_close',
-        },
-      },
-      effects: {
-        actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
-        risks: [
-          {
-            kind: 'atom',
-            key: 'risk.stop_loss_pct',
-            params: {
-              valuePct: 5,
-              direction: 'loss',
-              basis: 'entry_avg_price',
-              basisSource: 'system_default',
-              effect: 'close_position',
-              scope: 'current_position',
-            },
-          },
-          {
-            kind: 'atom',
-            key: 'risk.take_profit_pct',
-            params: {
-              valuePct: 10,
-              direction: 'profit',
-              basis: 'entry_avg_price',
-              basisSource: 'system_default',
-              effect: 'close_position',
-              scope: 'current_position',
-            },
-          },
-        ],
-        positions: [{
-          kind: 'atom',
-          key: 'position.sizing',
-          params: { sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' } },
-        }],
-        orchestration: [],
-        programs: [],
+      params: {
+        indicator: 'ma',
+        fastPeriod: 20,
+        slowPeriod: 50,
+        confirmationMode: 'bar_close',
       },
     },
     {
-      id: 'replacement-ma-cross-exit',
+      key: 'indicator.cross_under',
       phase: 'exit',
       sideScope: 'long',
-      condition: {
-        kind: 'atom',
-        key: 'indicator.cross_under',
-        params: {
-          indicator: 'ma',
-          fastPeriod: 20,
-          slowPeriod: 50,
-          confirmationMode: 'bar_close',
-        },
-      },
-      effects: {
-        actions: [{ kind: 'atom', key: 'action.close_long', params: {} }],
-        risks: [],
-        positions: [],
-        orchestration: [],
-        programs: [],
+      params: {
+        indicator: 'ma',
+        fastPeriod: 20,
+        slowPeriod: 50,
+        confirmationMode: 'bar_close',
       },
     },
   ],
+  actions: [
+    { key: 'open_long' },
+    { key: 'close_long' },
+  ],
+  risk: [
+    {
+      key: 'risk.stop_loss_pct',
+      params: {
+        valuePct: 5,
+        direction: 'loss',
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+        effect: 'close_position',
+        scope: 'current_position',
+      },
+    },
+    {
+      key: 'risk.take_profit_pct',
+      params: {
+        valuePct: 10,
+        direction: 'profit',
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+        effect: 'close_position',
+        scope: 'current_position',
+      },
+    },
+  ],
+  position: {
+    mode: 'fixed_ratio',
+    value: 0.1,
+    positionMode: 'long_only',
+    sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+  },
 }
 
 const DEFAULT_REPLACEMENT: SemanticAtomReplacementStrategy = {

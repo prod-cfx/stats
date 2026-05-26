@@ -30,10 +30,6 @@ function sequence(...steps: AtomExpr[]): AtomExpr {
   return { kind: 'sequence', steps }
 }
 
-function hasLegacyBucket(state: SemanticState, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(state, key)
-}
-
 function rule(partial: Partial<SemanticRule> & { id: string; condition: AtomExpr }): SemanticRule {
   return {
     id: partial.id,
@@ -266,51 +262,6 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     expect(r.hasEntry).toBe(true)
     expect(r.hasExit).toBe(true)
     expect(r.missing).toEqual([])
-  })
-
-  it('normalize reads rules mainflow and drops stale legacy buckets', () => {
-    const service = new SemanticContractReadinessService()
-    const rules: SemanticRule[] = [
-      rule({
-        id: 'r-entry',
-        phase: 'entry',
-        condition: atom('price.breakout_up', { reference: 'range_high' }),
-        effects: {
-          actions: [atom('action.open_long')],
-          risks: [atom('risk.stop_loss_pct', { valuePct: 5 })],
-          positions: [],
-          orchestration: [],
-          programs: [],
-        },
-      }),
-      rule({
-        id: 'r-exit',
-        phase: 'exit',
-        condition: atom('price.breakout_down', { reference: 'range_low' }),
-        effects: {
-          actions: [atom('action.close_long')],
-          risks: [],
-          positions: [],
-          orchestration: [],
-          programs: [],
-        },
-      }),
-    ]
-
-    const result = service.normalize({
-      ...stateWithRules(rules),
-      position: null,
-      action: [{
-        id: 'stale-flat-action',
-        key: 'action.add_position',
-        status: 'locked',
-        source: 'derived',
-        openSlots: [],
-      }],
-    } as SemanticState)
-
-    expect(result.ready).toBe(true)
-    expect(hasLegacyBucket(result.state, 'action')).toBe(false)
   })
 
   it('mainflow rejects empty rules instead of falling back to flat buckets', () => {
@@ -557,7 +508,7 @@ describe('semanticContractReadinessService.normalize DCA exit contract in rules 
   const CURRENT_VERSION: StrategyVersionInfo = { deployedAtSemanticVersion: '2026.05.W02' }
 
   it('routes risk effect open slot fieldPath through typed rule effects path', () => {
-    const result = svc.evaluateMainflowRulesReadiness([
+    const result = svc.normalize(stateWithRules([
       rule({
         id: 'entry-with-missing-risk-slot',
         phase: 'entry',
@@ -584,9 +535,10 @@ describe('semanticContractReadinessService.normalize DCA exit contract in rules 
           programs: [],
         },
       }),
-    ])
+    ]))
 
-    const riskSlot = result.openSlots
+    const riskSlot = result.state.risk
+      .flatMap(risk => risk.openSlots ?? [])
       .find(slot => slot.slotKey.includes('risk.stop_loss_pct.valuePct'))
 
     expect(riskSlot).toEqual(expect.objectContaining({
@@ -625,8 +577,14 @@ describe('semanticContractReadinessService.normalize DCA exit contract in rules 
       }),
     ]), CURRENT_VERSION)
 
-    expect(result.ready).toBe(false)
-    expect(hasLegacyBucket(result.state, 'orchestration')).toBe(false)
+    const orchestrationSlot = result.state.orchestration
+      .flatMap(node => node.openSlots ?? [])
+      .find(slot => slot.slotKey.includes('orchestration.portfolio_drawdown.threshold_pct'))
+
+    expect(orchestrationSlot).toEqual(expect.objectContaining({
+      fieldPath: expect.stringContaining('rules[0].effects.orchestration[0]'),
+    }))
+    expect(orchestrationSlot?.fieldPath).not.toContain('orchestration.portfolioRisk')
   })
 
   it('routes program effect readiness slot fieldPath through typed rule effects path', () => {
@@ -659,8 +617,14 @@ describe('semanticContractReadinessService.normalize DCA exit contract in rules 
       }),
     ]), CURRENT_VERSION)
 
-    expect(result.ready).toBe(false)
-    expect(hasLegacyBucket(result.state, 'orchestration')).toBe(false)
+    const programSlot = result.state.orchestration
+      .find(node => node.key === 'program.fixed_grid_gated')
+      ?.openSlots?.find(slot => slot.slotKey === 'orchestration.phase0.unsupported')
+
+    expect(programSlot).toEqual(expect.objectContaining({
+      fieldPath: expect.stringContaining('rules[0].effects.programs[0]'),
+    }))
+    expect(programSlot?.fieldPath).not.toContain('orchestration.program')
   })
 
   it('treats an explicit sibling exit rule as satisfying position.dca_schedule dca_exit_rule', () => {
@@ -887,6 +851,11 @@ function stateWithRules(rules: SemanticRule[]): SemanticState {
   return {
     version: 1,
     families: [],
+    trigger: [],
+    action: [],
+    risk: [],
+    positionConstraint: [],
+    orchestration: [],
     orchestrationContracts: [],
     position: {
       mode: 'constraint_only',

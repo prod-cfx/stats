@@ -85,7 +85,7 @@ function legScopeNode(overrides: Partial<SemanticOrchestrationNode> = {}): Seman
   }
 }
 
-describe.skip('orchestration scope.leg — golden corpus (Phase 5 S11 #1112)', () => {
+describe('orchestration scope.leg — golden corpus (Phase 5 S11 #1112)', () => {
   // ============================================================
   // Section A: NL pipeline
   // ============================================================

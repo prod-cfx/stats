@@ -5,6 +5,7 @@ import type {
   SemanticSlotIdentity,
   SemanticActionState,
   SemanticOrchestrationContractKind,
+  SemanticOrchestrationNode,
   SemanticPositionConstraintState,
   SemanticPositionState,
   SemanticRiskState,
@@ -24,8 +25,7 @@ import { toSemanticSupportOpenSlot } from '../types/semantic-atom-support'
 import { isAtomExecutableForStrategy } from '../nl-gateway/version-gate/version-gate'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { SemanticOrchestrationRegistryService } from './semantic-orchestration-registry.service'
-import type { RulesMainflowAtomFact } from './rules-mainflow-reader.service'
-import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 export type SemanticSupportRoute =
   | 'projection_gate'
@@ -64,45 +64,40 @@ export class SemanticSupportClassifierService {
   constructor(
     private readonly registry: SemanticAtomRegistryService,
     private readonly orchestrationRegistry?: SemanticOrchestrationRegistryService,
-    private readonly rulesMainflowReader: RulesMainflowReaderService = new RulesMainflowReaderService(),
   ) {}
 
   classify(state: SemanticState, strategyVersion?: StrategyVersionInfo): SemanticSupportClassification {
     const unsupportedAtoms: SemanticSupportClassification['unsupportedAtoms'] = []
     const unknownAtoms: string[] = []
-    const derivedOpenSlots: SemanticSlotState[] = []
 
-    this.collectRulesFactSupport(state, unsupportedAtoms, unknownAtoms, strategyVersion)
-    const facts = this.rulesMainflowReader.readFacts(state)
-
-    facts.filter(fact => fact.role === 'condition').map(fact => this.factToTrigger(fact)).forEach((trigger) => {
+    const triggers = readFlatTriggers(state).map((trigger) => {
       if (trigger.status === 'superseded') {
-        return
+        return { ...trigger }
       }
 
       const resolved = this.applyRuntimeVersionGate(this.resolveTriggerSupport(trigger), strategyVersion)
       this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
-      derivedOpenSlots.push(...readNodeOpenSlots(withRegistryOpenSlots(withSupportMetadata(trigger, resolved), resolved)))
+      return withRegistryOpenSlots(withSupportMetadata(trigger, resolved), resolved)
     })
 
     const position = this.classifyPosition(state.position, unsupportedAtoms, unknownAtoms, strategyVersion)
 
-    facts.filter(fact => fact.role === 'action').map(fact => this.factToAction(fact)).forEach((action) => {
+    const actions = readFlatActions(state).map((action) => {
       if (action.status === 'superseded') {
-        return
+        return { ...action }
       }
 
       const resolved = this.applyRuntimeVersionGate(this.registry.resolve(action.key), strategyVersion)
       this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
-      derivedOpenSlots.push(...readNodeOpenSlots(withAddPositionConstraintOpenSlot(
+      return withAddPositionConstraintOpenSlot(
         withRegistryOpenSlots(withSupportMetadata(action, resolved), resolved),
-        hasActiveAddPositionConstraint(state, this.rulesMainflowReader),
-      )))
+        position,
+      )
     })
 
-    facts.filter(fact => fact.role === 'risk').map(fact => this.factToRisk(fact)).forEach((riskState) => {
+    const risk = readFlatRisks(state).map((riskState) => {
       if (riskState.status === 'superseded') {
-        return
+        return { ...riskState }
       }
 
       const riskParams = 'params' in riskState && riskState.params !== undefined
@@ -110,14 +105,18 @@ export class SemanticSupportClassifierService {
         : {}
       const resolved = this.applyRuntimeVersionGate(this.registry.resolve(riskState.key, riskParams), strategyVersion)
       this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
-      derivedOpenSlots.push(...readNodeOpenSlots(withRegistryOpenSlots(withSupportMetadata(riskState, resolved), resolved)))
+      return withRegistryOpenSlots(withSupportMetadata(riskState, resolved), resolved)
     })
 
-    this.classifyOrchestrationFacts(state, unknownAtoms)
+    const orchestrationNodes = this.classifyOrchestrationNodes(state, unknownAtoms)
 
     const nextState: SemanticState = {
       ...state,
+      trigger: triggers,
+      action: actions,
+      risk,
       position,
+      orchestration: [...orchestrationNodes],
     }
 
     if (unknownAtoms.length > 0) {
@@ -140,10 +139,7 @@ export class SemanticSupportClassifierService {
       }
     }
 
-    const openSlots = [
-      ...derivedOpenSlots,
-      ...collectOpenSlots(nextState, this.rulesMainflowReader),
-    ]
+    const openSlots = collectOpenSlots(nextState)
     if (openSlots.length > 0) {
       return {
         route: 'open_slots',
@@ -160,44 +156,6 @@ export class SemanticSupportClassifierService {
       unsupportedAtoms: [],
       unknownAtoms: [],
       openSlots: [],
-    }
-  }
-
-  private factToTrigger(fact: RulesMainflowAtomFact): SemanticTriggerState {
-    return {
-      id: fact.id,
-      key: fact.key,
-      phase: fact.phase === 'entry' || fact.phase === 'exit' ? fact.phase : 'gate',
-      sideScope: fact.sideScope,
-      params: { ...fact.params },
-      status: fact.status,
-      source: fact.source,
-      openSlots: [...fact.openSlots],
-      ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' } } : {}),
-    }
-  }
-
-  private factToAction(fact: RulesMainflowAtomFact): SemanticActionState {
-    return {
-      id: fact.id,
-      key: fact.key,
-      params: { ...fact.params },
-      status: fact.status,
-      source: fact.source,
-      openSlots: [...fact.openSlots],
-      ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' } } : {}),
-    }
-  }
-
-  private factToRisk(fact: RulesMainflowAtomFact): SemanticRiskState {
-    return {
-      id: fact.id,
-      key: fact.key,
-      params: { ...fact.params },
-      status: fact.status,
-      source: fact.source,
-      openSlots: [...fact.openSlots],
-      ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' } } : {}),
     }
   }
 
@@ -245,44 +203,28 @@ export class SemanticSupportClassifierService {
   //   仅对 status==='locked' 的节点判 unknown；非 locked 节点透传不进 unknownAtoms
   //   （open slot 走 collectOpenSlots 分支；superseded/pending 不参与 support 判定）。
   //   未来新增 SemanticOrchestrationContractKind 由 TS exhaustive 静态守住。
-  private classifyOrchestrationFacts(
+  private classifyOrchestrationNodes(
     state: SemanticState,
     unknownAtoms: string[],
-  ): void {
-    const facts = this.rulesMainflowReader.readFactsByRole(state, 'orchestration')
-    if (!this.orchestrationRegistry || facts.length === 0) {
-      return
+  ): readonly SemanticOrchestrationNode[] {
+    const nodes = state.orchestration ?? []
+    if (!this.orchestrationRegistry || nodes.length === 0) {
+      return nodes
     }
-    for (const fact of facts) {
-      if (fact.status !== 'locked' || !fact.key) {
+    for (const node of nodes) {
+      if (node.status !== 'locked' || !node.key) {
         continue
       }
-      const source = ORCHESTRATION_KIND_SUPPORT_SOURCE[toOrchestrationKind(fact.key)]
+      const source = ORCHESTRATION_KIND_SUPPORT_SOURCE[node.kind]
       if (source !== 'orchestration_registry') {
         continue
       }
-      const contract = this.orchestrationRegistry.getContractByKey(fact.key)
+      const contract = this.orchestrationRegistry.getContractByKey(node.key)
       if (contract === null) {
-        unknownAtoms.push(fact.key)
+        unknownAtoms.push(node.key)
       }
     }
-  }
-
-  private collectRulesFactSupport(
-    state: SemanticState,
-    unsupportedAtoms: SemanticSupportClassification['unsupportedAtoms'],
-    unknownAtoms: string[],
-    strategyVersion?: StrategyVersionInfo,
-  ): void {
-    if (!state.rules?.length) return
-    const supportRoles = ['condition', 'action', 'risk', 'position'] as const
-    for (const role of supportRoles) {
-      for (const fact of this.rulesMainflowReader.readFactsByRole(state, role)) {
-        if (fact.status === 'superseded') continue
-        const resolved = this.applyRuntimeVersionGate(this.registry.resolve(fact.key, fact.params), strategyVersion)
-        this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
-      }
-    }
+    return nodes
   }
 
   private resolveTriggerSupport(trigger: SemanticTriggerState): ResolvedSemanticAtom {
@@ -390,13 +332,14 @@ function withRegistryOpenSlots<
 
 function withAddPositionConstraintOpenSlot(
   action: SemanticActionState,
-  hasConstraint: boolean,
+  position: SemanticPositionState | null,
 ): SemanticActionState {
   if (action.key !== ATOM_CONTRACT_REGISTRY['action.add_position'].key || action.status === 'superseded') {
     return action
   }
 
   const currentOpenSlots = action.openSlots ?? []
+  const hasConstraint = hasActiveAddPositionConstraint(position)
   const openSlots = hasConstraint
     ? currentOpenSlots.filter(slot => slot.slotKey !== 'action.add_position.constraint')
     : currentOpenSlots
@@ -426,15 +369,13 @@ function withAddPositionConstraintOpenSlot(
   }
 }
 
-function hasActiveAddPositionConstraint(
-  state: SemanticState,
-  rulesMainflowReader: RulesMainflowReaderService,
-): boolean {
-  return rulesMainflowReader.readFactsByRole(state, 'position').some(constraint =>
+function hasActiveAddPositionConstraint(position: SemanticPositionState | null): boolean {
+  // DEPRECATED Task 6: position.constraints moved to top-level positionConstraint[]
+  return (position as { constraints?: SemanticPositionConstraintState[] } | null)?.constraints?.some(constraint =>
     constraint.status !== 'superseded'
     // eslint-disable-next-line atom-keys/no-atom-key-literal -- position.max_exposure_pct not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     && (constraint.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key || constraint.key === 'position.max_exposure_pct'),
-  )
+  ) ?? false
 }
 
 function toSlotId(slot: SemanticSlotIdentity): string {
@@ -533,13 +474,16 @@ function toSupportMetadata(resolved: ResolvedSemanticAtom): SemanticAtomSupportM
   }
 }
 
-function collectOpenSlots(
-  state: SemanticState,
-  rulesMainflowReader: RulesMainflowReaderService,
-): SemanticSlotState[] {
+function collectOpenSlots(state: SemanticState): SemanticSlotState[] {
   return [
-    ...rulesMainflowReader.readFacts(state).flatMap(fact => fact.openSlots.filter(isOpenSlot)),
+    ...readFlatTriggers(state).flatMap(trigger => readNodeOpenSlots(trigger)),
+    ...readFlatActions(state).flatMap(action => readNodeOpenSlots(action)),
+    ...readFlatRisks(state).flatMap(risk => readNodeOpenSlots(risk)),
     ...readNodeOpenSlots(state.position),
+    ...(state.positionConstraint ?? []).flatMap(constraint => readNodeOpenSlots(constraint)),
+    ...(state.orchestration ?? []).flatMap(node =>
+      node.status === 'superseded' ? [] : node.openSlots.filter(isOpenSlot),
+    ),
     ...Object.values(state.contextSlots).filter(isOpenSlot),
   ]
 }
@@ -584,11 +528,4 @@ function hasReplacement(
   resolved: ResolvedSemanticAtom,
 ): resolved is SemanticAtomDefinition & { replacement: SemanticAtomReplacementStrategy } {
   return 'replacement' in resolved && resolved.replacement !== undefined
-}
-
-function toOrchestrationKind(key: string): SemanticOrchestrationContractKind {
-  if (key.startsWith('scope.')) return 'scope'
-  if (key.startsWith('program.')) return 'program'
-  if (key.startsWith('portfolioRisk.')) return 'portfolioRisk'
-  return 'gate'
 }

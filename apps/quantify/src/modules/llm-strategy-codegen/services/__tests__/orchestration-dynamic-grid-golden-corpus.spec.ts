@@ -119,7 +119,7 @@ function makeBars(count: number, recipe: (i: number) => { high: number; low: num
   return bars
 }
 
-describe.skip('orchestration program.dynamic_grid — golden corpus (Phase 5 S5 #984)', () => {
+describe('orchestration program.dynamic_grid — golden corpus (Phase 5 S5 #984)', () => {
   // ============================================================
   // Section A — NL → frame → patch → state pipeline (6 cases)
   // ============================================================

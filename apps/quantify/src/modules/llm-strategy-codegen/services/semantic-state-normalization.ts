@@ -1,4 +1,4 @@
-import type { SemanticActionState, SemanticAtomContract, SemanticRiskState, SemanticSlotState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
+import type { SemanticAtomContract, SemanticRiskState, SemanticSlotState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 
 import type {
@@ -6,8 +6,7 @@ import type {
   StrategyNormalizedIntent,
 } from '../types/strategy-normalized-intent'
 import { createHash } from 'node:crypto'
-import type { RulesMainflowAtomFact } from './rules-mainflow-reader.service'
-import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 type TriggerCombinationJoin = 'AND' | 'OR'
 
@@ -21,11 +20,13 @@ interface BuildTriggerCombinationContractInput {
   actionKeySource?: 'default' | 'explicit'
 }
 
-const rulesMainflowReader = new RulesMainflowReaderService()
-
+/**
+ * Legacy adapter: projects SemanticState into StrategyNormalizedIntent for compatibility paths.
+ * New semantic mainline code should build canonical specs from SemanticState contracts directly.
+ */
 export function buildNormalizedIntentFromSemanticState(state: SemanticState): StrategyNormalizedIntent {
   const normalizedState = normalizeSemanticStateCombinationContracts(state)
-  const normalizedTriggers = factsToTriggers(rulesMainflowReader.readFactsByRole(normalizedState, 'condition'))
+  const normalizedTriggers = readFlatTriggers(normalizedState)
   const families = new Set(normalizedState.families)
   if (normalizedTriggers.some(trigger => trigger.phase === 'gate')) {
     families.add('state-gated')
@@ -37,11 +38,11 @@ export function buildNormalizedIntentFromSemanticState(state: SemanticState): St
     triggers: normalizedTriggers
       .filter(trigger => trigger.status !== 'superseded')
       .map(trigger => toNormalizedTrigger(trigger)),
-    actions: factsToActions(rulesMainflowReader.readFactsByRole(normalizedState, 'action')).map(action => ({
+    actions: readFlatActions(normalizedState).map(action => ({
       key: action.key,
       ...(action.params ? { params: { ...action.params } } : {}),
     })),
-    risk: factsToRisks(rulesMainflowReader.readFactsByRole(normalizedState, 'risk')).map(risk => ({
+    risk: readFlatRisks(normalizedState).map(risk => ({
       key: risk.key,
       params: { ...risk.params },
     })),
@@ -255,7 +256,19 @@ export function normalizeSemanticStateCombinationContracts(state: SemanticState)
   return {
     ...state,
     families: [...state.families],
-    ...(state.rules ? { rules: [...state.rules] } : {}),
+    trigger: normalizeTriggerCombinationContracts(readFlatTriggers(state)),
+    action: readFlatActions(state).map(action => ({
+      ...action,
+      ...(action.params ? { params: { ...action.params } } : {}),
+      ...(action.openSlots ? { openSlots: [...action.openSlots] } : {}),
+      ...(action.contracts ? { contracts: [...action.contracts] } : {}),
+    })),
+    risk: readFlatRisks(state).map(risk => ({
+      ...risk,
+      params: { ...risk.params },
+      openSlots: [...risk.openSlots],
+      ...(risk.contracts ? { contracts: [...risk.contracts] } : {}),
+    })),
     position: state.position
       ? {
           ...state.position,
@@ -266,54 +279,6 @@ export function normalizeSemanticStateCombinationContracts(state: SemanticState)
     contextSlots: { ...state.contextSlots },
     normalizationNotes: [...state.normalizationNotes],
   }
-}
-
-function factsToTriggers(facts: readonly RulesMainflowAtomFact[]): SemanticTriggerState[] {
-  return normalizeTriggerCombinationContracts(facts.map(fact => ({
-    id: fact.id,
-    key: fact.key,
-    phase: fact.phase === 'entry' || fact.phase === 'exit' || fact.phase === 'gate' ? fact.phase : 'gate',
-    sideScope: fact.sideScope,
-    params: { ...fact.params },
-    status: fact.status,
-    source: fact.source,
-    ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: fact.source } } : {}),
-    openSlots: [...fact.openSlots],
-    ...optionalAtomContracts(fact),
-  })))
-}
-
-function factsToActions(facts: readonly RulesMainflowAtomFact[]): SemanticActionState[] {
-  return facts.map(fact => ({
-    id: fact.id,
-    key: fact.key,
-    params: { ...fact.params },
-    status: fact.status,
-    source: fact.source,
-    ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: fact.source } } : {}),
-    openSlots: [...fact.openSlots],
-    ...optionalAtomContracts(fact),
-  }))
-}
-
-function factsToRisks(facts: readonly RulesMainflowAtomFact[]): SemanticRiskState[] {
-  return facts.map((fact, index) => normalizeRiskSemantic({
-    id: fact.id,
-    key: fact.key,
-    params: { ...fact.params },
-    status: fact.status,
-    source: fact.source,
-    ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: fact.source } } : {}),
-    openSlots: [...fact.openSlots],
-    ...optionalAtomContracts(fact),
-  }, index))
-}
-
-function optionalAtomContracts(fact: RulesMainflowAtomFact): { contracts?: SemanticAtomContract[] } {
-  const contracts = fact.contracts?.filter((contract): contract is SemanticAtomContract =>
-    contract.kind === 'trigger' || contract.kind === 'action' || contract.kind === 'risk' || contract.kind === 'position' || contract.kind === 'context',
-  )
-  return contracts?.length ? { contracts: [...contracts] } : {}
 }
 
 export function normalizeTriggerCombinationContract(trigger: SemanticTriggerState): SemanticTriggerState {

@@ -5,17 +5,13 @@ import { Injectable } from '@nestjs/common'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { resolveStrategyDefaultTimeframe } from './rule-draft-projection'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
-import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
+import { readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 type ExecutionContextField = StrategyExecutionContextResolution['ambiguities'][number]['field']
 type ExecutionContextMissingReason = StrategyExecutionContextResolution['ambiguities'][number]['reason']
 
 @Injectable()
 export class StrategyExecutionContextService {
-  constructor(
-    private readonly rulesMainflowReader: RulesMainflowReaderService = new RulesMainflowReaderService(),
-  ) {}
-
   resolve(checklist: StrategyLogicSnapshot): StrategyExecutionContextResolution {
     const context: StrategyExecutionContext = {
       exchange: this.readExchange(checklist),
@@ -129,10 +125,7 @@ export class StrategyExecutionContextService {
   }
 
   private hasSemanticGridTrigger(state: SemanticState): boolean {
-    return this.rulesMainflowReader.readFacts(state).some(fact =>
-      fact.status !== 'superseded'
-      && fact.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key,
-    )
+    return readFlatTriggers(state).some(trigger => trigger.status !== 'superseded' && trigger.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
   }
 
   private readPrimaryValue(values: string[] | undefined): string | null {

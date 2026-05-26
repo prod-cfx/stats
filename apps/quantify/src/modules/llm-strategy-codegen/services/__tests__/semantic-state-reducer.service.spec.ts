@@ -1,47 +1,7 @@
 import { buildSemanticSlotId, type SemanticState } from '../../types/semantic-state'
 import { SemanticStateReducerService } from '../semantic-state-reducer.service'
 
-describe('SemanticStateReducerService — rules-only service smoke', () => {
-  const service = new SemanticStateReducerService()
-
-  it('keeps rules as the executable semantic source when flat buckets are absent', () => {
-    const state: SemanticState = {
-      version: 1,
-      families: [],
-      position: null,
-      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
-      normalizationNotes: [],
-      updatedAt: '2026-05-26T00:00:00.000Z',
-      orchestrationContracts: [],
-      rules: [{
-        id: 'rule-rules-only-reducer-smoke',
-        phase: 'entry',
-        sideScope: 'long',
-        condition: {
-          kind: 'atom',
-          key: 'oscillator.rsi_lte',
-          params: { period: 14, value: 30 },
-        },
-        effects: [],
-      }],
-    }
-
-    const next = service.applyClarificationAnswer({
-      currentState: state,
-      targetSlotKey: 'missing.slot',
-      answer: 'noop',
-    })
-
-    expect(next.rules).toEqual(state.rules)
-    expect(next).not.toHaveProperty('trigger')
-    expect(next).not.toHaveProperty('action')
-    expect(next).not.toHaveProperty('risk')
-    expect(next).not.toHaveProperty('positionConstraint')
-    expect(next).not.toHaveProperty('orchestration')
-  })
-})
-
-describe.skip('SemanticStateReducerService legacy flat bucket fixtures', () => {
+describe('SemanticStateReducerService', () => {
   const service = new SemanticStateReducerService()
 
   it('locks action open slots from clarification answers', () => {

@@ -44,17 +44,7 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch stage1 sche
     }
   })
 
-  it.each([
-    ['atoms', [atom('execution.on_start')]],
-    ['triggers', [atom('execution.on_start')]],
-    ['actions', [atom('action.open_long')]],
-    ['risks', [atom('risk.stop_loss_pct', { valuePct: 5 })]],
-    ['risk', { stopLossPct: 5 }],
-    ['position', { sizing: 'fixed' }],
-    ['positionConstraints', [atom('grid.range_rebalance')]],
-    ['positionConstraint', [atom('grid.range_rebalance')]],
-    ['orchestration', { nodes: [atom('program.dynamic_grid', { symbol: 'BTCUSDT' })] }],
-  ])('rejects top-level legacy flat field semanticPatch.%s when typed rules are present', (field, legacyValue) => {
+  it('rejects top-level risk and position legacy fields when typed rules are present', () => {
     const patch = {
       rules: [
         {
@@ -69,7 +59,8 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch stage1 sche
           evidence: { text: 'BTCUSDT 网格策略' },
         },
       ],
-      [field]: legacyValue,
+      risk: { stopLossPct: 5 },
+      position: { sizing: 'fixed' },
     }
 
     const result = svc.validatePlannerSemanticPatch(patch, userMessage)

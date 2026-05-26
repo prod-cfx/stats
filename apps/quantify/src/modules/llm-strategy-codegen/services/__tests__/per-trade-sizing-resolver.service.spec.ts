@@ -624,45 +624,6 @@ describe('PerTradeSizingResolver', () => {
     })
   })
 
-  describe('rules-native facts', () => {
-    it('resolves action sizing from rules-only mainflow leaves', () => {
-      const state: SemanticState = {
-        ...buildEmptyState(),
-        rules: [{
-          id: 'rules-sizing',
-          phase: 'entry',
-          sideScope: 'long',
-          condition: { kind: 'atom', key: 'volume.threshold', params: { value: 1000 } },
-          effects: {
-            actions: [{
-              kind: 'atom',
-              key: 'action.open_long',
-              params: { sizing: { kind: 'quote', value: 125, asset: 'USDT' } },
-            }],
-            risks: [],
-            positions: [],
-            orchestration: [],
-            programs: [],
-          },
-        }],
-      }
-
-      const result = resolver.resolve(state)
-      const anchor = result.get('action:rules-sizing:rules-0-effects-actions-0') as SizingAnchor
-
-      expect(anchor).toEqual(expect.objectContaining({
-        source: 'action',
-        executionAnchored: true,
-        fullySpecified: true,
-        normalized: expect.objectContaining({
-          axis: 'notional_quote',
-          value: 125,
-          asset: 'USDT',
-        }),
-      }))
-    })
-  })
-
   // ---------------------------------------------------------------------------
   // #1186 PR2 (decision 6): getExecutableLegScopes shared method
   // 仅返 kind==='action' 且 executionAnchored 的 scopeKey；

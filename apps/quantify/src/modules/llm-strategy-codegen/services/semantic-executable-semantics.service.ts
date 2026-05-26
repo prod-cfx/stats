@@ -19,13 +19,14 @@ import {
   getAtomFulfillsStrategyPhase,
 } from '../atom-contracts/atom-contract-registry'
 import type { AtomContractKey } from '../atom-contracts/atom-contract-types'
+import { collectAtomLeaves, listRuleEffects, type SemanticRule } from '../types/atom-expr'
 import type {
   SemanticCapability,
+  SemanticPositionConstraintState,
   SemanticState,
   SemanticTriggerState,
 } from '../types/semantic-state'
-import type { RulesMainflowAtomFact } from './rules-mainflow-reader.service'
-import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 const FIELD_KEY_RISK_STOP_LOSS_PCT = 'risk.stop_loss_pct'
 const FIELD_KEY_RISK_TAKE_PROFIT_PCT = 'risk.take_profit_pct'
@@ -56,10 +57,6 @@ interface LockedAtom {
 
 @Injectable()
 export class SemanticExecutableSemanticsService {
-  constructor(
-    private readonly rulesMainflowReader: RulesMainflowReaderService = new RulesMainflowReaderService(),
-  ) {}
-
   /**
    * 入场语义判定 —— Issue #1383 Lane A：完全 registry-driven。
    * 历史等价：trigger.phase==='entry' locked || order_program contract || schedule。
@@ -106,9 +103,10 @@ export class SemanticExecutableSemanticsService {
     state: SemanticState,
     phase: Extract<SemanticTriggerState['phase'], 'entry' | 'exit'>,
   ): boolean {
-    return this.rulesMainflowReader.readFactsByRole(state, 'condition').some(fact =>
-      fact.phase === phase
-      && this.isLockedWithoutOpenSlots(fact),
+    return readFlatTriggers(state).some(trigger =>
+      trigger.phase === phase
+      && trigger.status === 'locked'
+      && trigger.openSlots.every(slot => slot.status !== 'open'),
     )
   }
 
@@ -117,9 +115,14 @@ export class SemanticExecutableSemanticsService {
    * registry-driven：constraint key 自声明同时满足 entry+exit 视为双向 program。
    */
   hasOrderProgramContractSemantics(state: SemanticState): boolean {
-    return this.rulesMainflowReader.readFacts(state).some((fact) => {
-      if (fact.status === 'superseded') return false
-      const phases = this.lookupFulfillsPhase(fact.key)
+    const topLevelConstraintIds = new Set(state.positionConstraint.map(c => c.id))
+    const constraints: SemanticPositionConstraintState[] = [
+      ...(state.positionConstraint ?? []),
+      ...((state.position?.constraints ?? []).filter(c => !topLevelConstraintIds.has(c.id))),
+    ]
+    return constraints.some((constraint) => {
+      if (constraint.status === 'superseded') return false
+      const phases = this.lookupFulfillsPhase(constraint.key)
       return phases.includes('entry') && phases.includes('exit')
     })
   }
@@ -157,13 +160,35 @@ export class SemanticExecutableSemanticsService {
       for (const contract of contracts ?? []) capabilities.push(...contract.capabilities)
     }
 
-    for (const fact of this.rulesMainflowReader.readFacts(state)) {
-      if (this.isLockedWithoutOpenSlots(fact)) {
-        pushContracts(fact.contracts)
+    for (const trigger of readFlatTriggers(state)) {
+      if (trigger.status === 'locked' && trigger.openSlots.every(slot => slot.status !== 'open')) {
+        pushContracts(trigger.contracts)
       }
     }
+    for (const action of readFlatActions(state)) {
+      if (action.status === 'locked' && (action.openSlots ?? []).every(slot => slot.status !== 'open')) {
+        pushContracts(action.contracts)
+      }
+    }
+    for (const risk of readFlatRisks(state)) {
+      if (risk.status === 'locked' && risk.openSlots.every(slot => slot.status !== 'open')) {
+        pushContracts(risk.contracts)
+      }
+    }
+    const topLevelConstraintIds = new Set(state.positionConstraint.map(c => c.id))
     if (state.position?.status === 'locked' && (state.position.openSlots ?? []).every(slot => slot.status !== 'open')) {
       pushContracts(state.position.contracts)
+      for (const constraint of state.position.constraints ?? []) {
+        if (topLevelConstraintIds.has(constraint.id)) continue
+        if (constraint.status === 'locked' && constraint.openSlots.every(slot => slot.status !== 'open')) {
+          pushContracts(constraint.contracts)
+        }
+      }
+    }
+    for (const constraint of state.positionConstraint) {
+      if (constraint.status === 'locked' && constraint.openSlots.every(slot => slot.status !== 'open')) {
+        pushContracts(constraint.contracts)
+      }
     }
     return capabilities
   }
@@ -190,7 +215,24 @@ export class SemanticExecutableSemanticsService {
   anyAtomFulfillsPhase(state: SemanticState, phase: StrategyPhase): boolean {
     const fulfills = (key: string): boolean => this.lookupFulfillsPhase(key).includes(phase)
 
-    return this.rulesMainflowReader.readFacts(state).some(fact => fulfills(fact.key))
+    if (readFlatTriggers(state).some(t => fulfills(t.key))) return true
+    if (readFlatActions(state).some(a => fulfills(a.key))) return true
+    if (readFlatRisks(state).some(r => fulfills(r.key))) return true
+    if (state.positionConstraint.some(c => fulfills(c.key))) return true
+    for (const c of state.position?.constraints ?? []) {
+      if (fulfills(c.key)) return true
+    }
+    for (const node of state.orchestration ?? []) {
+      if (node.key && fulfills(node.key)) return true
+    }
+    for (const rule of state.rules ?? []) {
+      const leaves = [
+        ...collectAtomLeaves(rule.condition),
+        ...listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)),
+      ]
+      if (leaves.some(leaf => fulfills(leaf.key))) return true
+    }
+    return false
   }
 
   /**
@@ -226,15 +268,41 @@ export class SemanticExecutableSemanticsService {
    */
   collectLockedAtoms(state: SemanticState): LockedAtom[] {
     const atoms: LockedAtom[] = []
-    for (const fact of this.rulesMainflowReader.readFacts(state)) {
-      if (!this.isLockedWithoutOpenSlots(fact)) continue
-      if (!fact.key) continue
-      atoms.push({
-        key: fact.key,
-        bucket: this.bucketForFact(fact),
-        phase: fact.role === 'condition' ? fact.phase as SemanticTriggerState['phase'] : undefined,
-        params: fact.params,
-      })
+    for (const trigger of readFlatTriggers(state)) {
+      if (trigger.status === 'locked' && trigger.openSlots.every(slot => slot.status !== 'open')) {
+        atoms.push({ key: trigger.key, bucket: 'trigger', phase: trigger.phase, params: trigger.params })
+      }
+    }
+    for (const action of readFlatActions(state)) {
+      if (action.status === 'locked' && (action.openSlots ?? []).every(slot => slot.status !== 'open')) {
+        atoms.push({ key: action.key, bucket: 'action', params: action.params ?? {} })
+      }
+    }
+    for (const risk of readFlatRisks(state)) {
+      if (risk.status === 'locked' && risk.openSlots.every(slot => slot.status !== 'open')) {
+        atoms.push({ key: risk.key, bucket: 'risk', params: risk.params })
+      }
+    }
+    for (const constraint of state.positionConstraint) {
+      if (constraint.status === 'locked' && constraint.openSlots.every(slot => slot.status !== 'open')) {
+        atoms.push({ key: constraint.key, bucket: 'positionConstraint', params: constraint.params })
+      }
+    }
+    if (state.position) {
+      for (const constraint of state.position.constraints ?? []) {
+        if (constraint.status === 'locked' && constraint.openSlots.every(slot => slot.status !== 'open')) {
+          atoms.push({ key: constraint.key, bucket: 'positionConstraint', params: constraint.params })
+        }
+      }
+    }
+    for (const node of state.orchestration ?? []) {
+      if (node.status !== 'locked' || node.openSlots.some(slot => slot.status === 'open')) continue
+      // Issue #1383 Round 1 M8：缺 key 的 orchestration node 跳过收集而不是推 key=''。
+      //   推 ''/未注册 key 会被 lookupFulfillsPhase 返回 []，等同永远不满足任何 phase，
+      //   且静默掩盖了上游种子生成器忘填 node.key 的 bug。skip + 跑 invariant
+      //   ("orchestration node 必须有 registry key") 才能 fail-loud 暴露漏注册。
+      if (!node.key) continue
+      atoms.push({ key: node.key, bucket: 'orchestration', params: node.params })
     }
     return atoms
   }
@@ -263,9 +331,13 @@ export class SemanticExecutableSemanticsService {
       'position.dca_schedule',
       'position.pyramiding_limit',
     ])
-    return this.rulesMainflowReader.readFactsByRole(state, 'position').some((fact) => {
-      if (fact.status === 'superseded') return false
-      return CONTINUOUS_ENTRY_KEYS.has(fact.key)
+    const constraints: SemanticPositionConstraintState[] = [
+      ...state.positionConstraint,
+      ...((state.position?.constraints ?? [])),
+    ]
+    return constraints.some((c) => {
+      if (c.status === 'superseded') return false
+      return CONTINUOUS_ENTRY_KEYS.has(c.key)
     })
   }
 
@@ -275,10 +347,14 @@ export class SemanticExecutableSemanticsService {
    */
   private hasGridBreakoutExitSemantics(state: SemanticState): boolean {
     const VALID_BREAKOUT_ACTIONS: ReadonlySet<string> = new Set(['stop', 'pause', 'continue'])
-    return this.rulesMainflowReader.readFacts(state).some((fact) => {
-      if (fact.status === 'superseded') return false
-      if (fact.key !== 'grid.range_rebalance') return false
-      const action = (fact.params as { breakoutAction?: unknown }).breakoutAction
+    const constraints: SemanticPositionConstraintState[] = [
+      ...state.positionConstraint,
+      ...((state.position?.constraints ?? [])),
+    ]
+    return constraints.some((c) => {
+      if (c.status === 'superseded') return false
+      if (c.key !== 'grid.range_rebalance') return false
+      const action = (c.params as { breakoutAction?: unknown }).breakoutAction
       return typeof action === 'string' && VALID_BREAKOUT_ACTIONS.has(action)
     })
   }
@@ -288,29 +364,41 @@ export class SemanticExecutableSemanticsService {
    * 树至少含一个 atom 叶子 → 视为已具备入场语义。
    */
   private hasRulesEntrySemantics(state: SemanticState): boolean {
-    if (!state.rules?.length) return false
-    return this.rulesMainflowReader.readFactsByRole(state, 'condition').some(fact => fact.phase === 'entry')
+    const rules: readonly SemanticRule[] | undefined = state.rules
+    if (!rules || rules.length === 0) return false
+    return rules.some((rule) => {
+      if (rule.phase !== 'entry') return false
+      const leaves = collectAtomLeaves(rule.condition)
+      return leaves.length > 0
+    })
   }
 
   /**
-   * Issue #1395 (c)：rules 中显式 close action 或 grid breakout 才补充出场语义。
-   * risk.* 仍走 registry / forced-exit 阈值校验，避免 partial take profit 或空阈值止损误判。
+   * Issue #1395 (c)：state.rules 内存在 phase==='exit' 的 rule，
+   * 或 effects 含 risk.* / action.close_* / 任何带 breakoutAction 的 grid 节点。
    */
   private hasRulesExitSemantics(state: SemanticState): boolean {
-    if (!state.rules?.length) return false
-    return this.rulesMainflowReader.readFacts(state).some((fact) => {
-      if (fact.role === 'action' && fact.key.startsWith('action.close_')) return true
-      if (fact.key === 'grid.range_rebalance') {
-        const action = (fact.params as { breakoutAction?: unknown }).breakoutAction
-        return typeof action === 'string' && action.length > 0
+    const rules: readonly SemanticRule[] | undefined = state.rules
+    if (!rules || rules.length === 0) return false
+    return rules.some((rule) => {
+      if (rule.phase === 'exit') return true
+      for (const effect of listRuleEffects(rule.effects)) {
+        for (const leaf of collectAtomLeaves(effect)) {
+          if (leaf.key.startsWith('risk.')) return true
+          if (leaf.key.startsWith('action.close_')) return true
+          if (leaf.key === 'grid.range_rebalance') {
+            const action = (leaf.params as { breakoutAction?: unknown }).breakoutAction
+            if (typeof action === 'string' && action.length > 0) return true
+          }
+        }
       }
       return false
     })
   }
 
   private hasLegacyForcedExitRiskSemantics(state: SemanticState): boolean {
-    return this.rulesMainflowReader.readFactsByRole(state, 'risk').some((risk) => {
-      if (!this.isLockedWithoutOpenSlots(risk)) {
+    return readFlatRisks(state).some((risk) => {
+      if (risk.status !== 'locked' || risk.openSlots.some(slot => slot.status === 'open')) {
         return false
       }
       // Issue #1383 Lane A：risk.partial_take_profit 已在 ATOM_FULFILLS_STRATEGY_PHASE
@@ -328,19 +416,5 @@ export class SemanticExecutableSemanticsService {
         || risk.key === FIELD_KEY_RISK_MAX_DRAWDOWN_PCT
         || risk.key === FIELD_KEY_RISK_MAX_SINGLE_LOSS_PCT
     })
-  }
-
-  private isLockedWithoutOpenSlots(fact: RulesMainflowAtomFact): boolean {
-    return fact.status === 'locked' && fact.openSlots.every(slot => slot.status !== 'open')
-  }
-
-  private bucketForFact(fact: RulesMainflowAtomFact): LockedAtom['bucket'] {
-    const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: LockedAtom['bucket'] }>)[fact.key]
-    if (contract?.bucket) return contract.bucket
-    if (fact.role === 'action') return 'action'
-    if (fact.role === 'risk') return 'risk'
-    if (fact.role === 'position') return 'positionConstraint'
-    if (fact.role === 'orchestration' || fact.role === 'program') return 'orchestration'
-    return 'trigger'
   }
 }

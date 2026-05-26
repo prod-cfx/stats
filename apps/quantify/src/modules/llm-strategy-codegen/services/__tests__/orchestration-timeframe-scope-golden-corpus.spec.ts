@@ -76,7 +76,7 @@ function symbolScopeNode(overrides: Partial<SemanticOrchestrationNode> = {}): Se
   }
 }
 
-describe.skip('orchestration scope.timeframe — golden corpus (Phase 5 S3 #1109)', () => {
+describe('orchestration scope.timeframe — golden corpus (Phase 5 S3 #1109)', () => {
   // ============================================================
   // Section A: NL pipeline parseTimeframeScope
   // ============================================================

@@ -1,65 +1,63 @@
 /**
  * Issue #1493 块 B：reducer 不变量回归
  *
- * 锁定 rules-only 写路径：reducer 在写入路径上通过
- * `updateRuleAtomParams` 同步重建 rules 子树；不再依赖旧投影服务回填五桶。
+ * 锁定「flat 五桶 ≡ projectToFlat(rules)」硬约束：reducer 在写入路径上通过
+ * `updateRuleAtomParams` 同步重建 rules 子树；末尾 `reprojectFromRules` 把
+ * rules 重新派生回 flat。本 spec 验证 5 条核心路径（trigger / action / risk /
+ * positionConstraint / protective_exit 换 key）下，invariant 成立。
+ *
+ * 与 `semantic-state-reducer.service.spec.ts` 区分：
+ *   - 后者断言 reducer 的语义产物（flat 五桶值），fixture **不带 rules**
+ *     → reducer 走 fail-open 纯 flat mutation 路径
+ *   - 本 spec fixture **带 rules + provenance**
+ *     → reducer 走 rules-first 路径，末尾 reproject 重新派生 flat
  */
 
 import type { SemanticRule } from '../../types/atom-expr'
 import type { SemanticState } from '../../types/semantic-state'
+import { SemanticRuleProjectionService } from '../semantic-rule-projection.service'
 import { SemanticStateReducerService } from '../semantic-state-reducer.service'
 
 describe('SemanticStateReducerService — rules invariant (#1493 块 B)', () => {
   const service = new SemanticStateReducerService()
+  const projection = new SemanticRuleProjectionService()
 
-  function assertRulesOnlyState(state: SemanticState): void {
-    expect(state.rules?.length ?? 0).toBeGreaterThan(0)
+  // Issue #1493 C1：reducer 走 applyEvidenceOverrides 后，flat 五桶在 owner/slot
+  //   层会被叠加 user_explicit evidence（projectToFlat 派生路径不含该字段）。
+  //   invariant 比较时剥离 evidence + openSlots.evidence，仅比较结构性字段。
+  function stripEvidence<T extends { evidence?: unknown, openSlots?: ReadonlyArray<{ evidence?: unknown }> }>(
+    nodes: ReadonlyArray<T>,
+  ): unknown[] {
+    return nodes.map((node) => {
+      const { evidence, openSlots, ...rest } = node as Record<string, unknown> & { openSlots?: ReadonlyArray<Record<string, unknown>> }
+      const cleanedSlots = Array.isArray(openSlots)
+        ? openSlots.map((s) => {
+            const { evidence: _e, ...slotRest } = s as Record<string, unknown>
+            return slotRest
+          })
+        : openSlots
+      return { ...rest, ...(cleanedSlots !== undefined ? { openSlots: cleanedSlots } : {}) }
+    })
   }
 
-  it('trigger slot fill reads rules when flat buckets are stale', () => {
-    const ruleId = 'rule-stale-flat-trigger'
-    const initialRule: SemanticRule = {
-      id: ruleId,
-      phase: 'entry',
-      sideScope: 'long',
-      condition: {
-        kind: 'atom',
-        key: 'oscillator.rsi_lte',
-        params: { period: 14 },
-      },
-      effects: [],
+  function assertFlatEqualsProjection(state: SemanticState): void {
+    if (!state.rules || state.rules.length === 0) {
+      // 无 rules → fail-open 路径不变更 flat，跳过 invariant（与 reproject 守门一致）
+      return
     }
-    const initial: SemanticState = {
-      version: 1,
-      families: [],
-      trigger: [],
-      action: [],
-      risk: [],
-      position: null,
-      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
-      normalizationNotes: [],
-      updatedAt: '2026-05-18T00:00:00.000Z',
-      positionConstraint: [],
-      orchestration: [],
-      orchestrationContracts: [],
-      rules: [initialRule],
-    }
+    const projected = projection.projectToFlat(state.rules)
+    expect(stripEvidence(state.trigger)).toEqual(stripEvidence(projected.trigger))
+    expect(stripEvidence(state.action)).toEqual(stripEvidence(projected.action))
+    expect(stripEvidence(state.positionConstraint ?? [])).toEqual(stripEvidence(projected.positionConstraint))
+    expect(stripEvidence(state.orchestration)).toEqual(stripEvidence(projected.orchestration))
+    // risk 桶经过 normalizeRiskSemantics 二次重排，invariant 不直接比较元素顺序，
+    // 但元素 id / key 集合必须一致。
+    const flatRiskIds = new Set(state.risk.map(r => r.id))
+    const projectedRiskIds = new Set(projected.risk.map(r => r.id))
+    expect(flatRiskIds).toEqual(projectedRiskIds)
+  }
 
-    const next = service.applyClarificationAnswer({
-      currentState: initial,
-      targetSlotKey: 'oscillator.rsi_lte.value',
-      answer: '40',
-      messageIndex: 1,
-    })
-
-    expect(next.rules?.[0].condition).toMatchObject({
-      kind: 'atom',
-      params: expect.objectContaining({ period: 14 }),
-    })
-    assertRulesOnlyState(next)
-  })
-
-  it('trigger slot fill: rules-only mutation', () => {
+  it('trigger slot fill: flat ≡ projectToFlat(rules)', () => {
     const ruleId = 'rule-trigger-1'
     const initialRule: SemanticRule = {
       id: ruleId,
@@ -119,10 +117,10 @@ describe('SemanticStateReducerService — rules invariant (#1493 块 B)', () => 
       params: expect.objectContaining({ multiplier: 1.5 }),
     })
     // flat ≡ reproject(rules)
-    assertRulesOnlyState(next)
+    assertFlatEqualsProjection(next)
   })
 
-  it('action slot fill: rules-only mutation', () => {
+  it('action slot fill: flat ≡ projectToFlat(rules)', () => {
     const ruleId = 'rule-action-1'
     const initialRule: SemanticRule = {
       id: ruleId,
@@ -174,10 +172,10 @@ describe('SemanticStateReducerService — rules invariant (#1493 块 B)', () => 
       kind: 'atom',
       params: expect.objectContaining({ orderType: '市价单' }),
     })
-    assertRulesOnlyState(next)
+    assertFlatEqualsProjection(next)
   })
 
-  it('risk generic param fill: rules-only mutation', () => {
+  it('risk generic param fill: flat ≡ projectToFlat(rules)', () => {
     const ruleId = 'rule-risk-1'
     const initialRule: SemanticRule = {
       id: ruleId,
@@ -229,7 +227,7 @@ describe('SemanticStateReducerService — rules invariant (#1493 块 B)', () => 
       kind: 'atom',
       params: expect.objectContaining({ definition: '下一根 K 线收阳' }),
     })
-    assertRulesOnlyState(next)
+    assertFlatEqualsProjection(next)
   })
 
   it('protective_exit key swap: rules atom.key 同步重写', () => {
@@ -286,8 +284,8 @@ describe('SemanticStateReducerService — rules invariant (#1493 块 B)', () => 
     // rules 内的 atom.key 已从 risk.protective_exit 切到 risk.stop_loss_pct
     // eslint-disable-next-line atom-keys/no-atom-key-literal -- follow-up #1329
     expect((next.rules?.[0].condition as { kind: 'atom', key: string }).key).toBe('risk.stop_loss_pct')
-    // rules-only mutation（risk 桶通过 id 集合等价检查）
-    assertRulesOnlyState(next)
+    // flat ≡ projectToFlat(rules)（risk 桶通过 id 集合等价检查）
+    assertFlatEqualsProjection(next)
   })
 
   it('add_position constraint append: rules 新增 single-leaf gate rule', () => {
@@ -350,7 +348,7 @@ describe('SemanticStateReducerService — rules invariant (#1493 块 B)', () => 
         params: expect.objectContaining({ maxLayers: 3 }),
       },
     })
-    assertRulesOnlyState(next)
+    assertFlatEqualsProjection(next)
   })
 
   it('#1493-C3: 既有 positionConstraint 二次更新同步 rules（既有 pyramiding_limit constraint 重新调整 maxLayers）', () => {
@@ -427,9 +425,10 @@ describe('SemanticStateReducerService — rules invariant (#1493 块 B)', () => 
     if (updatedRule?.condition.kind === 'atom') {
       expect(updatedRule.condition.params).toMatchObject({ maxLayers: 5 })
     }
-    const pyramidConstraint = next.positionConstraint.find(t => t.key === 'position.pyramiding_limit')
-    expect(pyramidConstraint?.params).toMatchObject({ maxLayers: 5 })
-    assertRulesOnlyState(next)
+    // flat trigger 由 projectCondition 派生（rule.condition.atom 不论 bucket 全进 trigger 桶）
+    const pyramidTrigger = next.trigger.find(t => t.key === 'position.pyramiding_limit')
+    expect(pyramidTrigger?.params).toMatchObject({ maxLayers: 5 })
+    assertFlatEqualsProjection(next)
   })
 
   // Issue #1493 R2 M-new-1：applyEquivalentConfirmationSlots 同义槽降复路径
@@ -440,10 +439,10 @@ describe('SemanticStateReducerService — rules invariant (#1493 块 B)', () => 
   //
   //   规约：reducer.applyEquivalentConfirmationSlotReduction 被调用时，必须对每个被
   //   mutate 的兄弟 slot 调用 evidenceCollector，使其进入 evidenceOverrides。这里通过
-  //   spy on projection.rules finalization + applyEvidenceOverrides 不便（私有），改为
+  //   spy on projection.reprojectFromRules + applyEvidenceOverrides 不便（私有），改为
   //   验证 reducer 返回结果：兄弟 trigger 上的 slot.evidence.source === 'user_explicit'。
   //
-  //   fixture 不含 rules → reducer 走  路径（reproject 退化为 no-op），但
+  //   fixture 不含 rules → reducer 走 fail-open 路径（reproject 退化为 no-op），但
   //   evidenceOverrides 仍会在 applyEvidenceOverrides 上对 _provenance 命中的 owner
   //   叠加 evidence。我们额外在兄弟 trigger 上挂 _provenance，让 override 真正落地。
   it('M-new-1: applyEquivalentConfirmationSlots preserves user_explicit evidence on sibling slots', () => {
@@ -500,7 +499,7 @@ describe('SemanticStateReducerService — rules invariant (#1493 块 B)', () => 
       positionConstraint: [],
       orchestration: [],
       orchestrationContracts: [],
-      // 故意不挂 rules：reducer 走  路径，rules finalization 退化为 no-op，
+      // 故意不挂 rules：reducer 走 fail-open 路径，reprojectFromRules 退化为 no-op，
       // 保证 confirmationMode 兄弟 slot 不被 reproject 重新派生丢弃；
       // 但 applyEvidenceOverrides 仍会按 _provenance 命中 owner 应用 override —
       // 覆盖回 evidence。修复后兄弟 slot 走 evidenceCollector，override 中带兄弟 slot
@@ -589,7 +588,7 @@ describe('SemanticStateReducerService — rules invariant (#1493 块 B)', () => 
       value: 'okx',
       status: 'locked',
     }))
-    assertRulesOnlyState(next)
+    assertFlatEqualsProjection(next)
   })
 
   it('normalizes legacy contextSlots marketType slot answer without clearing rules', () => {
@@ -645,7 +644,7 @@ describe('SemanticStateReducerService — rules invariant (#1493 块 B)', () => 
       value: 'perp',
       status: 'locked',
     }))
-    assertRulesOnlyState(next)
+    assertFlatEqualsProjection(next)
   })
 
   it('fills negative reverse-position answer without re-planning', () => {
@@ -705,11 +704,7 @@ describe('SemanticStateReducerService — rules invariant (#1493 块 B)', () => 
       status: 'locked',
       params: expect.objectContaining({ reversePosition: false }),
     }))
-    expect(next.action[0]?.openSlots).toEqual([expect.objectContaining({
-      slotKey: 'action.reverse_position.confirmation',
-      status: 'locked',
-      value: false,
-    })])
-    assertRulesOnlyState(next)
+    expect(next.action[0]?.openSlots).toEqual([])
+    assertFlatEqualsProjection(next)
   })
 })

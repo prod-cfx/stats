@@ -2,13 +2,18 @@ import { Injectable } from '@nestjs/common'
 
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import type {
+  SemanticActionState,
   SemanticAtomContract,
   SemanticContextSlotState,
   SemanticOrchestrationContract,
+  SemanticOrchestrationNode,
+  SemanticPositionConstraintState,
   SemanticPositionState,
-  SemanticSlotState,
+  SemanticRiskState,
   SemanticState,
+  SemanticTriggerState,
 } from '../types/semantic-state'
+import { normalizeRiskSemantics } from './semantic-state-normalization'
 import {
   collectAtomLeaves,
   isRuleEffectsByRole,
@@ -38,7 +43,7 @@ interface AtomLikeEntry {
 export class SemanticStateMergeService {
   merge(input: { persisted: SemanticState | null, derived: SemanticState }): SemanticState {
     if (!input.persisted) {
-      return this.reprojectWhenRulesPresent(input.derived)
+      return input.derived
     }
 
     // Issue #1395 Wave 4 + Issue #1403 子故障 D：rules[] 表达式树合并策略
@@ -57,9 +62,19 @@ export class SemanticStateMergeService {
     const derivedRulesArr = Array.isArray(derivedRules) ? derivedRules as SemanticState['rules'] : undefined
     const mergedRules = this.mergeRulesByIdentity(persistedRulesArr, derivedRulesArr)
 
-    const mergedState = {
+    return {
       ...input.derived,
       families: [...new Set([...input.persisted.families, ...input.derived.families])],
+      trigger: this.mergeTriggers(input.persisted.trigger, input.derived.trigger),
+      action: this.mergeActions(input.persisted.action, input.derived.action),
+      risk: this.mergeRisk(input.persisted.risk, input.derived.risk),
+      // #1383 Lane B：补齐 orchestration / positionConstraint 两个 bucket 的显式合并，
+      // 否则 `...input.derived` 会用 derived 的空数组静默覆盖持久态。
+      orchestration: this.mergeOrchestration(input.persisted.orchestration, input.derived.orchestration),
+      positionConstraint: this.mergePositionConstraintBucket(
+        input.persisted.positionConstraint,
+        input.derived.positionConstraint,
+      ),
       position: this.mergePosition(input.persisted.position, input.derived.position),
       contextSlots: this.mergeContextSlots(input.persisted.contextSlots, input.derived.contextSlots),
       normalizationNotes: [...new Set([...input.persisted.normalizationNotes, ...input.derived.normalizationNotes])],
@@ -69,12 +84,293 @@ export class SemanticStateMergeService {
       ),
       updatedAt: new Date().toISOString(),
       ...(mergedRules !== undefined ? { rules: mergedRules as SemanticState['rules'] } : {}),
-    } as unknown as SemanticState
-    return this.reprojectWhenRulesPresent(mergedState)
+    }
   }
 
-  private reprojectWhenRulesPresent(state: SemanticState): SemanticState {
-    return state
+  private mergeTriggers(
+    persisted: ReadonlyArray<SemanticTriggerState>,
+    derived: ReadonlyArray<SemanticTriggerState>,
+  ): SemanticTriggerState[] {
+    if (derived.length === 0) {
+      return persisted.map(trigger => ({
+        ...trigger,
+        params: { ...trigger.params },
+        openSlots: trigger.openSlots.map(slot => ({ ...slot })),
+      }))
+    }
+
+    const next = derived.map(trigger => ({
+      ...trigger,
+      params: { ...trigger.params },
+      openSlots: trigger.openSlots.map(slot => ({ ...slot })),
+    }))
+    const originalDerivedCount = next.length
+    const consumedDerivedIndexes = new Set<number>()
+
+    for (const persistedTrigger of persisted) {
+      const matchIndex = this.findBestTriggerMatchIndex(
+        persistedTrigger,
+        next,
+        consumedDerivedIndexes,
+        originalDerivedCount,
+      )
+      if (matchIndex < 0) {
+        next.push({
+          ...persistedTrigger,
+          params: { ...persistedTrigger.params },
+          openSlots: persistedTrigger.openSlots.map(slot => ({ ...slot })),
+        })
+        continue
+      }
+
+      const derivedTrigger = next[matchIndex]
+      consumedDerivedIndexes.add(matchIndex)
+      const preferPersisted = this.compareNodeStrength(persistedTrigger, derivedTrigger) > 0
+      next[matchIndex] = {
+        ...(preferPersisted ? derivedTrigger : persistedTrigger),
+        ...(preferPersisted ? persistedTrigger : derivedTrigger),
+        id: persistedTrigger.id,
+        sideScope: persistedTrigger.sideScope ?? derivedTrigger.sideScope,
+        params: preferPersisted
+          ? { ...derivedTrigger.params, ...persistedTrigger.params }
+          : { ...persistedTrigger.params, ...derivedTrigger.params },
+        contracts: this.mergeContracts(persistedTrigger.contracts, derivedTrigger.contracts),
+        openSlots: this.mergeOpenSlotsForMatchedNodes(
+          persistedTrigger,
+          derivedTrigger,
+          persistedTrigger.openSlots,
+          derivedTrigger.openSlots,
+        ),
+        status: derivedTrigger.status === 'locked' || persistedTrigger.status === 'superseded'
+          ? derivedTrigger.status
+          : persistedTrigger.status,
+        evidence: preferPersisted
+          ? persistedTrigger.evidence ?? derivedTrigger.evidence
+          : derivedTrigger.evidence ?? persistedTrigger.evidence,
+      }
+    }
+
+    return this.dedupeByAtomIdentity(this.coalesceEquivalentTriggers(next))
+  }
+
+  private findBestTriggerMatchIndex(
+    persistedTrigger: SemanticTriggerState,
+    derivedTriggers: SemanticTriggerState[],
+    consumedDerivedIndexes: Set<number>,
+    searchLimit: number = derivedTriggers.length,
+  ): number {
+    let bestIndex = -1
+    let bestScore = -1
+
+    for (const [index, candidate] of derivedTriggers.entries()) {
+      if (index >= searchLimit) {
+        break
+      }
+      if (consumedDerivedIndexes.has(index) || !this.isSameTriggerIdentity(persistedTrigger, candidate)) {
+        continue
+      }
+
+      const score = this.scoreTriggerMatch(persistedTrigger, candidate)
+      if (score > bestScore) {
+        bestScore = score
+        bestIndex = index
+      }
+    }
+
+    return bestIndex
+  }
+
+  private mergeActions(
+    persisted: ReadonlyArray<SemanticActionState>,
+    derived: ReadonlyArray<SemanticActionState>,
+  ): SemanticActionState[] {
+    const next = derived.map(action => ({
+      ...action,
+      params: action.params ? { ...action.params } : undefined,
+      openSlots: (action.openSlots ?? []).map(slot => ({ ...slot })),
+    }))
+    const consumedDerivedIndexes = new Set<number>()
+
+    for (const persistedAction of persisted) {
+      const matchIndex = next.findIndex((candidate, index) =>
+        !consumedDerivedIndexes.has(index) && this.isSameActionIdentity(persistedAction, candidate))
+      if (matchIndex < 0) {
+        // #1162 Task 7：identity miss 时检查是否完全相同（真重复）→ 丢弃；否则 push（保留合法多档）
+        const isTrueDuplicate = next.some(candidate => this.isTrueDuplicateAction(persistedAction, candidate))
+        if (!isTrueDuplicate) {
+          next.push({
+            ...persistedAction,
+            params: persistedAction.params ? { ...persistedAction.params } : undefined,
+            openSlots: (persistedAction.openSlots ?? []).map(slot => ({ ...slot })),
+          })
+        }
+        continue
+      }
+
+      consumedDerivedIndexes.add(matchIndex)
+      const derivedAction = next[matchIndex]
+      const preferPersisted = this.compareNodeStrength(persistedAction, derivedAction) > 0
+      next[matchIndex] = {
+        ...(preferPersisted ? derivedAction : persistedAction),
+        ...(preferPersisted ? persistedAction : derivedAction),
+        id: persistedAction.id,
+        params: preferPersisted
+          ? { ...derivedAction.params, ...persistedAction.params }
+          : { ...persistedAction.params, ...derivedAction.params },
+        contracts: this.mergeContracts(persistedAction.contracts, derivedAction.contracts),
+        openSlots: this.mergeOpenSlotsForMatchedNodes(
+          persistedAction,
+          derivedAction,
+          persistedAction.openSlots ?? [],
+          derivedAction.openSlots ?? [],
+        ),
+        evidence: preferPersisted
+          ? persistedAction.evidence ?? derivedAction.evidence
+          : derivedAction.evidence ?? persistedAction.evidence,
+      }
+    }
+
+    return this.dedupeByAtomIdentity(next)
+  }
+
+  private mergeRisk(
+    persisted: ReadonlyArray<SemanticRiskState>,
+    derived: ReadonlyArray<SemanticRiskState>,
+  ): SemanticRiskState[] {
+    const next = derived.map(risk => ({
+      ...risk,
+      params: { ...risk.params },
+      openSlots: risk.openSlots.map(slot => ({ ...slot })),
+    }))
+    const consumedDerivedIndexes = new Set<number>()
+
+    for (const persistedRisk of persisted) {
+      const matchIndex = next.findIndex((candidate, index) =>
+        !consumedDerivedIndexes.has(index) && this.isSameRiskIdentity(persistedRisk, candidate))
+      if (matchIndex < 0) {
+        // #1162 Task 7：identity miss 时检查是否完全相同（真重复）→ 丢弃；否则 push
+        const isTrueDuplicate = next.some(candidate => this.isTrueDuplicateRisk(persistedRisk, candidate))
+        if (!isTrueDuplicate) {
+          next.push({
+            ...persistedRisk,
+            params: { ...persistedRisk.params },
+            openSlots: persistedRisk.openSlots.map(slot => ({ ...slot })),
+          })
+        }
+        continue
+      }
+
+      consumedDerivedIndexes.add(matchIndex)
+      const derivedRisk = next[matchIndex]
+      const preferPersisted = this.compareNodeStrength(persistedRisk, derivedRisk) > 0
+      next[matchIndex] = {
+        ...(preferPersisted ? derivedRisk : persistedRisk),
+        ...(preferPersisted ? persistedRisk : derivedRisk),
+        id: persistedRisk.id,
+        params: preferPersisted
+          ? { ...derivedRisk.params, ...persistedRisk.params }
+          : { ...persistedRisk.params, ...derivedRisk.params },
+        contracts: this.mergeContracts(persistedRisk.contracts, derivedRisk.contracts),
+        openSlots: this.mergeOpenSlotsForMatchedNodes(
+          persistedRisk,
+          derivedRisk,
+          persistedRisk.openSlots,
+          derivedRisk.openSlots,
+        ),
+        evidence: preferPersisted
+          ? persistedRisk.evidence ?? derivedRisk.evidence
+          : derivedRisk.evidence ?? persistedRisk.evidence,
+      }
+    }
+
+    return this.dedupeByAtomIdentity(normalizeRiskSemantics(next))
+  }
+
+  // #1383 Lane B：orchestration bucket。identity = atom `key`（缺失则 fallback id）。
+  private mergeOrchestration(
+    persisted: ReadonlyArray<SemanticOrchestrationNode>,
+    derived: ReadonlyArray<SemanticOrchestrationNode>,
+  ): SemanticOrchestrationNode[] {
+    const next = derived.map(node => this.cloneOrchestrationNode(node))
+    const consumed = new Set<number>()
+
+    for (const persistedNode of persisted) {
+      const matchIndex = next.findIndex((candidate, index) =>
+        !consumed.has(index) && this.isSameOrchestrationIdentity(persistedNode, candidate))
+      if (matchIndex < 0) {
+        next.push(this.cloneOrchestrationNode(persistedNode))
+        continue
+      }
+
+      consumed.add(matchIndex)
+      const derivedNode = next[matchIndex]!
+      const preferPersisted = this.compareNodeStrength(persistedNode, derivedNode) > 0
+      const stronger = preferPersisted ? persistedNode : derivedNode
+      const weaker = preferPersisted ? derivedNode : persistedNode
+
+      next[matchIndex] = {
+        ...weaker,
+        ...stronger,
+        id: persistedNode.id,
+        params: preferPersisted
+          ? { ...derivedNode.params, ...persistedNode.params }
+          : { ...persistedNode.params, ...derivedNode.params },
+        openSlots: this.mergeOpenSlotsForMatchedNodes(
+          persistedNode,
+          derivedNode,
+          [...persistedNode.openSlots],
+          [...derivedNode.openSlots],
+        ),
+        contracts: this.mergeOrchestrationContracts(persistedNode.contracts, derivedNode.contracts),
+        evidence: stronger.evidence ?? weaker.evidence,
+      } as SemanticOrchestrationNode
+    }
+
+    return this.dedupeByAtomIdentity(next)
+  }
+
+  private cloneOrchestrationNode(node: SemanticOrchestrationNode): SemanticOrchestrationNode {
+    return {
+      ...node,
+      params: { ...node.params },
+      evidence: node.evidence ? { ...node.evidence } : undefined,
+      openSlots: node.openSlots.map(slot => ({ ...slot })),
+      contracts: node.contracts.map(contract => this.cloneOrchestrationContract(contract)),
+      activeWhen: node.activeWhen ? { ...node.activeWhen } : undefined,
+      gridParams: node.gridParams ? { ...node.gridParams } : undefined,
+      sizing: node.sizing ? { ...node.sizing } : undefined,
+      dynamicGridStep: node.dynamicGridStep ? { ...node.dynamicGridStep } : undefined,
+      idempotencyKey: node.idempotencyKey ? { ...node.idempotencyKey } : undefined,
+      symbols: node.symbols ? [...node.symbols] : undefined,
+      requiredTimeframes: node.requiredTimeframes ? [...node.requiredTimeframes] : undefined,
+      legSizing: node.legSizing ? { ...node.legSizing } : undefined,
+    }
+  }
+
+  private isSameOrchestrationIdentity(
+    left: SemanticOrchestrationNode,
+    right: SemanticOrchestrationNode,
+  ): boolean {
+    if (left.kind !== right.kind) return false
+    // Issue #1383 Round 1 M7：identity 同时比 (key, stableParamsHash)，
+    //   避免两个同名 program（如 program.dynamic_grid 各持不同 lower/upper）
+    //   仅因 key 相同被误折叠 + 后续 params 浅合并丢嵌套。
+    if (left.key !== undefined && right.key !== undefined) {
+      if (left.key !== right.key) return false
+      return this.stableParamsHash(left.params) === this.stableParamsHash(right.params)
+    }
+    return left.id === right.id
+  }
+
+  // #1383 Lane B：positionConstraint bucket 顶层入口。
+  // 复用既有 mergePositionConstraints（基于 byKey + identity = constraint.key），
+  // 再额外跑一遍 dedupeByAtomIdentity 以折叠真重复。
+  private mergePositionConstraintBucket(
+    persisted: ReadonlyArray<SemanticPositionConstraintState>,
+    derived: ReadonlyArray<SemanticPositionConstraintState>,
+  ): SemanticPositionConstraintState[] {
+    const merged = this.mergePositionConstraints(persisted, derived) ?? []
+    return this.dedupeByAtomIdentity([...merged])
   }
 
   private mergePosition(
@@ -193,6 +489,116 @@ export class SemanticStateMergeService {
       ...contract.requires.map(requirement => this.semanticTupleKey(requirement)),
       ...(contract.effects ?? []).map(effect => this.semanticTupleKey(effect)),
     ])
+  }
+
+  private mergePositionConstraints(
+    persisted: readonly SemanticPositionConstraintState[] | undefined,
+    derived: readonly SemanticPositionConstraintState[] | undefined,
+  ): readonly SemanticPositionConstraintState[] | undefined {
+    if (!persisted && !derived) return undefined
+    const byKey = new Map<string, SemanticPositionConstraintState>()
+
+    // 持久态先全量克隆入桶 —— 避免后续路径直接持有 caller 引用，对齐
+    // mergeTriggers / mergeActions / mergeRisks 的克隆约定（参数与 openSlots 浅克隆）。
+    for (const constraint of persisted ?? []) {
+      byKey.set(constraint.key, this.clonePositionConstraint(constraint))
+    }
+
+    for (const incoming of derived ?? []) {
+      const existing = byKey.get(incoming.key)
+      if (!existing) {
+        byKey.set(incoming.key, this.clonePositionConstraint(incoming))
+        continue
+      }
+
+      // tie-break 统一到 `> 0`（等强偏 derived），与 mergeTriggers / mergeActions /
+      // mergeRisk / mergePosition 顶层 / mergeSlotState 全文件其它 6 处保持一致；
+      // 等强偏 persisted 的语义已经由本函数顶层"persisted 先入桶 + derived 仅在更强时
+      // 覆盖"的顺序保证：strict greater 让真正更强的 derived（如 planner 后续 patch
+      // 把 dca_schedule 从 open 推到 locked）能压过持久态。
+      const preferPersisted = this.compareNodeStrength(existing, incoming) > 0
+      const stronger = preferPersisted ? existing : incoming
+      const weaker = preferPersisted ? incoming : existing
+
+      byKey.set(existing.key, {
+        ...weaker,
+        ...stronger,
+        id: existing.id,
+        // params 一层 spread 仍会把 stronger.perOrderSizing 这类 sub-object 整段覆盖
+        // weaker 同名 sub-object（典型现象：stronger 只回 `{ value: 50 }` 会把
+        // `{ kind:'quote', value:100, asset:'USDT' }` 压扁成 `{ value:50 }`），破坏
+        // SemanticPositionSizingContract discriminated-union 形态。
+        // 改走 mergePositionConstraintParams 做一层深合并：plain object 字段（如
+        // perOrderSizing/capitalCap/exitRule）走子对象 spread，其余字段沿用顶层 spread。
+        params: this.mergePositionConstraintParams(
+          weaker.params,
+          stronger.params,
+        ),
+        contracts: this.mergeContracts(existing.contracts, incoming.contracts),
+        openSlots: this.mergeOpenSlotsForMatchedNodes(
+          existing,
+          incoming,
+          existing.openSlots,
+          incoming.openSlots,
+        ),
+        evidence: preferPersisted
+          ? existing.evidence ?? incoming.evidence
+          : incoming.evidence ?? existing.evidence,
+      })
+    }
+
+    // m1 修复：原先 length===0 返回 undefined 与原 spread 行为不完全等价
+    // （旧逻辑会保留 stronger 的 [] 引用）。返回 `[]` 让 'constraints' in pos 等
+    // 存在性判断与 .length 判空仍保持一致。
+    return [...byKey.values()]
+  }
+
+  private clonePositionConstraint(
+    constraint: SemanticPositionConstraintState,
+  ): SemanticPositionConstraintState {
+    return {
+      ...constraint,
+      params: { ...(constraint.params ?? {}) },
+      openSlots: (constraint.openSlots ?? []).map(slot => ({ ...slot })),
+      contracts: constraint.contracts
+        ? constraint.contracts.map(item => ({ ...item }))
+        : undefined,
+    }
+  }
+
+  private mergePositionConstraintParams(
+    weaker: Record<string, unknown> | undefined,
+    stronger: Record<string, unknown> | undefined,
+  ): Record<string, unknown> {
+    const base: Record<string, unknown> = { ...(weaker ?? {}) }
+    for (const [key, strongerValue] of Object.entries(stronger ?? {})) {
+      // R2-M1 修复：null/undefined 一律视为"stronger 未说"，保留 weaker——与 H1 顶层
+      //   `sizing: stronger.sizing ?? weaker.sizing` 语义对齐。否则同一份 patch 里
+      //   顶层 sizing 与内层 perOrderSizing/capitalCap 出现两种 null 语义，调用方
+      //   （planner / reducer）容易踩坑。如需"显式清空子合约"语义请走专用 reducer 路径。
+      if (strongerValue === null || strongerValue === undefined) {
+        continue
+      }
+      const weakerValue = base[key]
+      if (
+        this.isPlainObject(strongerValue)
+        && this.isPlainObject(weakerValue)
+      ) {
+        // R2-m2 限制说明：仅做一层 spread。当前 contract shape 是两层
+        //   （params.perOrderSizing.{kind,value,asset}）；若未来出现三层嵌套
+        //   （如 perOrderSizing.range.{lo,hi}）需要递归扩展，spec 应同步加 case。
+        base[key] = { ...weakerValue, ...strongerValue }
+        continue
+      }
+      base[key] = strongerValue
+    }
+    return base
+  }
+
+  private isPlainObject(value: unknown): value is Record<string, unknown> {
+    return value !== null
+      && typeof value === 'object'
+      && !Array.isArray(value)
   }
 
   private mergeContracts(
@@ -354,6 +760,23 @@ export class SemanticStateMergeService {
     }
   }
 
+  private mergeOpenSlotsForMatchedNodes(
+    persistedNode: { status: 'open' | 'locked' | 'superseded', source?: 'user_explicit' | 'inferred' | 'derived', value?: unknown },
+    derivedNode: { status: 'open' | 'locked' | 'superseded', source?: 'user_explicit' | 'inferred' | 'derived', value?: unknown },
+    persistedSlots: SemanticTriggerState['openSlots'],
+    derivedSlots: SemanticTriggerState['openSlots'],
+  ): SemanticTriggerState['openSlots'] {
+    if (
+      persistedNode.status === 'locked'
+      && derivedNode.status === 'open'
+      && this.compareNodeStrength(persistedNode, derivedNode) > 0
+    ) {
+      return persistedSlots.map(slot => ({ ...slot }))
+    }
+
+    return this.mergeOpenSlots(persistedSlots, derivedSlots)
+  }
+
   private mergeContextSlots(
     persisted: SemanticContextSlotState,
     derived: SemanticContextSlotState,
@@ -364,6 +787,239 @@ export class SemanticStateMergeService {
       marketType: this.mergeSlotState(persisted.marketType, derived.marketType),
       timeframe: this.mergeSlotState(persisted.timeframe, derived.timeframe),
     }
+  }
+
+  private isSameTriggerIdentity(left: SemanticTriggerState, right: SemanticTriggerState): boolean {
+    if (left.phase !== right.phase || left.key !== right.key) {
+      return false
+    }
+
+    if (left.sideScope && right.sideScope && left.sideScope !== right.sideScope) {
+      return false
+    }
+
+    const stableIdentityKeys = [
+      'indicator',
+      'referenceRole',
+      'basis',
+    ] as const
+
+    return this.haveCompatibleParamValues(left.params, right.params, stableIdentityKeys)
+  }
+
+  private coalesceEquivalentTriggers(
+    triggers: SemanticTriggerState[],
+  ): SemanticTriggerState[] {
+    const next: SemanticTriggerState[] = []
+
+    for (const trigger of triggers) {
+      const matchIndex = next.findIndex(candidate => this.isEquivalentTriggerForCoalescing(candidate, trigger))
+      if (matchIndex < 0) {
+        next.push(trigger)
+        continue
+      }
+
+      next[matchIndex] = this.mergeEquivalentTrigger(next[matchIndex]!, trigger)
+    }
+
+    return next
+  }
+
+  private isEquivalentTriggerForCoalescing(
+    left: SemanticTriggerState,
+    right: SemanticTriggerState,
+  ): boolean {
+    if (this.isEquivalentBollingerBoundaryTrigger(left, right)) {
+      return true
+    }
+
+    if (
+      left.id !== right.id
+      && left.source === 'user_explicit'
+      && right.source === 'user_explicit'
+    ) {
+      return false
+    }
+
+    if (left.phase !== right.phase || left.key !== right.key) {
+      return false
+    }
+
+    if (left.sideScope && right.sideScope && left.sideScope !== right.sideScope) {
+      return false
+    }
+
+    return this.haveCompatibleParamValues(
+      this.omitTriggerConfirmationParam(left.params),
+      this.omitTriggerConfirmationParam(right.params),
+    )
+  }
+
+  private mergeEquivalentTrigger(
+    existing: SemanticTriggerState,
+    incoming: SemanticTriggerState,
+  ): SemanticTriggerState {
+    const preferIncoming = this.compareNodeStrength(incoming, existing) > 0
+    const stronger = preferIncoming ? incoming : existing
+    const weaker = preferIncoming ? existing : incoming
+    const confirmationMode = this.resolvePreferredConfirmationMode(
+      stronger.params.confirmationMode,
+      weaker.params.confirmationMode,
+    )
+
+    return {
+      ...weaker,
+      ...stronger,
+      id: stronger.id,
+      sideScope: stronger.sideScope ?? weaker.sideScope,
+      params: {
+        ...weaker.params,
+        ...stronger.params,
+        ...(confirmationMode ? { confirmationMode } : {}),
+      },
+      contracts: this.mergeContracts(existing.contracts, incoming.contracts),
+      openSlots: this.mergeOpenSlots(existing.openSlots, incoming.openSlots),
+      evidence: stronger.evidence ?? weaker.evidence,
+    }
+  }
+
+  private isEquivalentBollingerBoundaryTrigger(
+    left: SemanticTriggerState,
+    right: SemanticTriggerState,
+  ): boolean {
+    if (left.phase !== right.phase) {
+      return false
+    }
+    if (left.sideScope && right.sideScope && left.sideScope !== right.sideScope) {
+      return false
+    }
+
+    const leftBoundary = this.readBollingerBoundaryIdentity(left)
+    const rightBoundary = this.readBollingerBoundaryIdentity(right)
+    if (!leftBoundary || !rightBoundary) {
+      return false
+    }
+
+    return leftBoundary.role === rightBoundary.role
+      && this.sameOptionalNumber(leftBoundary.period, rightBoundary.period)
+      && this.sameOptionalNumber(leftBoundary.stdDev, rightBoundary.stdDev)
+  }
+
+  private readBollingerBoundaryIdentity(
+    trigger: SemanticTriggerState,
+  ): { role: string, period: number | null, stdDev: number | null } | null {
+    if (
+      trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key
+      || trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key
+      || trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key
+    ) {
+      return {
+        role: trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key
+          ? 'upper'
+          : trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key
+            ? 'lower'
+            : 'middle',
+        period: this.readFiniteNumber(trigger.params.period),
+        stdDev: this.readFiniteNumber(trigger.params.stdDev),
+      }
+    }
+
+    if (trigger.key !== ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key) {
+      return null
+    }
+
+    const indicator = trigger.params.indicator
+    if (!indicator || typeof indicator !== 'object' || Array.isArray(indicator)) {
+      return null
+    }
+    const indicatorRecord = indicator as Record<string, unknown>
+    if (indicatorRecord.name !== 'bollinger') {
+      return null
+    }
+
+    const role = typeof trigger.params.boundaryRole === 'string' ? trigger.params.boundaryRole : null
+    if (role !== 'upper' && role !== 'lower' && role !== 'middle') {
+      return null
+    }
+
+    return {
+      role,
+      period: this.readFiniteNumber(indicatorRecord.period),
+      stdDev: this.readFiniteNumber(indicatorRecord.stdDev),
+    }
+  }
+
+  private sameOptionalNumber(left: number | null, right: number | null): boolean {
+    return left === null || right === null || left === right
+  }
+
+  private readFiniteNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
+  private omitTriggerConfirmationParam(params: Record<string, unknown>): Record<string, unknown> {
+    const { confirmationMode: _confirmationMode, ...rest } = params
+    return rest
+  }
+
+  private resolvePreferredConfirmationMode(
+    left: unknown,
+    right: unknown,
+  ): string | null {
+    const rank = (value: unknown): number => {
+      if (value === 'close_confirm') return 3
+      if (value === 'touch') return 2
+      if (value === 'ambiguous_touch_or_close_confirm') return 1
+      return 0
+    }
+
+    if (rank(left) >= rank(right)) {
+      return typeof left === 'string' && left ? left : null
+    }
+    return typeof right === 'string' && right ? right : null
+  }
+
+  private scoreTriggerMatch(left: SemanticTriggerState, right: SemanticTriggerState): number {
+    let score = 0
+
+    if (left.sideScope && right.sideScope && left.sideScope === right.sideScope) {
+      score += 5
+    }
+
+    const candidateKeys = new Set([
+      ...Object.keys(left.params),
+      ...Object.keys(right.params),
+    ])
+    for (const key of candidateKeys) {
+      if (left.params[key] !== undefined && left.params[key] === right.params[key]) {
+        score += 1
+      }
+    }
+
+    const leftSlotKeys = new Set(left.openSlots.map(slot => slot.slotKey))
+    for (const slot of right.openSlots) {
+      if (leftSlotKeys.has(slot.slotKey)) {
+        score += 3
+      }
+    }
+
+    return score
+  }
+
+  private isSameActionIdentity(left: SemanticActionState, right: SemanticActionState): boolean {
+    if (left.key !== right.key) {
+      return false
+    }
+
+    return this.haveCompatibleParamValues(left.params ?? {}, right.params ?? {})
+  }
+
+  private isSameRiskIdentity(left: SemanticRiskState, right: SemanticRiskState): boolean {
+    if (left.key !== right.key) {
+      return false
+    }
+
+    return this.haveCompatibleParamValues(left.params, right.params)
   }
 
   private haveCompatibleParamValues(
@@ -384,9 +1040,9 @@ export class SemanticStateMergeService {
   }
 
   private mergeOpenSlots(
-    persisted: readonly SemanticSlotState[],
-    derived: readonly SemanticSlotState[],
-  ): SemanticSlotState[] {
+    persisted: SemanticTriggerState['openSlots'],
+    derived: SemanticTriggerState['openSlots'],
+  ): SemanticTriggerState['openSlots'] {
     const next = derived.map(slot => ({ ...slot }))
 
     for (const persistedSlot of persisted) {
@@ -492,6 +1148,18 @@ export class SemanticStateMergeService {
       acc[k] = this.stableValue(obj[k])
       return acc
     }, {})
+  }
+
+  // #1167：SemanticActionState / SemanticRiskState 顶层无 sideScope 字段（在 params 内 / trigger 才有）
+  //   去掉 sideScope 比较；真重复判定用 key + stableParamsHash（params 内 sideScope 已含在 hash 内）
+  private isTrueDuplicateAction(left: SemanticActionState, right: SemanticActionState): boolean {
+    return left.key === right.key
+      && this.stableParamsHash(left.params) === this.stableParamsHash(right.params)
+  }
+
+  private isTrueDuplicateRisk(left: SemanticRiskState, right: SemanticRiskState): boolean {
+    return left.key === right.key
+      && this.stableParamsHash(left.params) === this.stableParamsHash(right.params)
   }
 
   /**
@@ -619,7 +1287,7 @@ export class SemanticStateMergeService {
     //   守门：
     //   - condition 含任何非 risk-bucket leaf（如 AND(price.above, risk.stop_loss)）→ 不归一化
     //     （混合 condition 语义复杂，保守保留 Pass 2 行为）
-    //   - condition leaf bucket 在 registry 缺失 →  不归一化（避免新 atom 未注册时
+    //   - condition leaf bucket 在 registry 缺失 → fail-open 不归一化（避免新 atom 未注册时
     //     被错合并）
     const conditionAllRiskBucket = (rule: SemanticRule): boolean => {
       const leaves = collectAtomLeaves(rule.condition)
@@ -644,7 +1312,7 @@ export class SemanticStateMergeService {
       byRiskSig.set(sig, rule)
     }
     // 保持原顺序：风控 rule 在出现位置插入归一化后的代表（按 riskOrder 一致取首次出现位置）。
-    // 实际渲染顺序对 UI 影响有限（rules 层会按 phase 重排），这里简化为「先非风控，
+    // 实际渲染顺序对 UI 影响有限（projection 层会按 phase 重排），这里简化为「先非风控，
     // 后归一化风控」——既往 Pass 2 输出顺序也不保证严格稳定。
     if (riskOrder.length === 0) return afterShapePass
     return [...nonRiskRules, ...riskOrder.map(s => byRiskSig.get(s)!)]

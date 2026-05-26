@@ -14,7 +14,7 @@ import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gat
 import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant-conversations.repository'
 import type { EditablePublishedStrategySnapshotRecord } from '../repositories/published-strategy-snapshots.repository'
 import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
-import { collectAtomLeaves, gracefulParseSemanticRule, isRuleEffectsByRole, updateRuleAtomParams, type AtomExpr, type RuleEffectsByRole, type SemanticRule } from '../types/atom-expr'
+import { collectAtomLeaves, gracefulParseSemanticRule, isRuleEffectsByRole, type AtomExpr, type RuleEffectsByRole, type SemanticRule } from '../types/atom-expr'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { SemanticEditDecision } from '../types/semantic-edit'
@@ -133,7 +133,7 @@ import { StrategyClarificationRulesService } from './strategy-clarification-rule
 import { StrategyExecutionContextService } from './strategy-execution-context.service'
 import { validateSemanticPositionContract } from './strategy-semantic-contracts'
 import { UnsupportedFallbackService } from './unsupported-fallback.service'
-import { RulesMainflowReaderService, type RulesMainflowAtomFact } from './rules-mainflow-reader.service'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 // PR3b: 非 atom 字段路径的类型化引用（Issue #1279 AC-4）
 // 这些 key 不在 ATOM_CONTRACT_REGISTRY,但恰好匹配 lint 规则的 prefix regex,
@@ -252,34 +252,6 @@ const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
 
 const conversationContextHelper = new CodegenConversationContextHelper()
 const responseMapperHelper = new CodegenConversationResponseMapperHelper()
-const conversationRulesMainflowReader = new RulesMainflowReaderService()
-
-function semanticFactsByRole(
-  state: SemanticState,
-  role: 'condition' | 'action' | 'risk' | 'position' | 'orchestration',
-): RulesMainflowAtomFact[] {
-  return [...conversationRulesMainflowReader.readFactsByRole(state, role)]
-}
-
-function semanticTriggerFacts(state: SemanticState): SemanticTriggerState[] {
-  return semanticFactsByRole(state, 'condition') as unknown as SemanticTriggerState[]
-}
-
-function semanticActionFacts(state: SemanticState): SemanticActionState[] {
-  return semanticFactsByRole(state, 'action') as unknown as SemanticActionState[]
-}
-
-function semanticRiskFacts(state: SemanticState): SemanticRiskState[] {
-  return semanticFactsByRole(state, 'risk') as unknown as SemanticRiskState[]
-}
-
-function semanticPositionFacts(state: SemanticState): RulesMainflowAtomFact[] {
-  return semanticFactsByRole(state, 'position')
-}
-
-function semanticOrchestrationFacts(state: SemanticState): RulesMainflowAtomFact[] {
-  return semanticFactsByRole(state, 'orchestration')
-}
 
 function normalizePublishedSymbol(raw: string): string {
   return raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
@@ -400,7 +372,7 @@ export class CodegenConversationService {
     if (initialSupportGate.route === 'unsupported_fallback') {
       const unsupportedFallback = this.unsupportedFallback.buildPendingFallback(
         initialSupportGate.unsupportedAtoms,
-        semanticTriggerFacts(initialSupportGate.state),
+        readFlatTriggers(initialSupportGate.state),
         responseLocale,
       )
       if (unsupportedFallback !== null) {
@@ -442,7 +414,7 @@ export class CodegenConversationService {
         site: 'initial_session',
         userId: sessionUserId,
         unsupportedAtoms: initialSupportGate.unsupportedAtoms.map(a => a.key),
-        supportedTriggers: semanticTriggerFacts(initialSupportGate.state)?.map(t => t.key) ?? [],
+        supportedTriggers: readFlatTriggers(initialSupportGate.state)?.map(t => t.key) ?? [],
       })
       initialSemanticState = this.clearUnsupportedFallback(initialSemanticState)
     }
@@ -1003,7 +975,7 @@ export class CodegenConversationService {
     state: SemanticState,
     snapshot: EditablePublishedStrategySnapshotRecord,
   ): SemanticState {
-    if (semanticTriggerFacts(state).length > 0 || semanticActionFacts(state).length > 0 || semanticRiskFacts(state).length > 0) {
+    if (readFlatTriggers(state).length > 0 || readFlatActions(state).length > 0 || readFlatRisks(state).length > 0) {
       return state
     }
 
@@ -1030,7 +1002,9 @@ export class CodegenConversationService {
 
     return {
       ...state,
-      rules: this.buildRecoveredRulesFromSemanticFacts(triggers, actions, risk),
+      trigger: triggers,
+      action: actions,
+      risk,
       updatedAt: new Date().toISOString(),
     }
   }
@@ -1197,43 +1171,6 @@ export class CodegenConversationService {
       },
       openSlots: [],
     }
-  }
-
-  private buildRecoveredRulesFromSemanticFacts(
-    triggers: readonly SemanticTriggerState[],
-    actions: readonly SemanticActionState[],
-    risks: readonly SemanticRiskState[],
-  ): SemanticRule[] {
-    return triggers.map((trigger, index): SemanticRule => ({
-      id: trigger.id || `recovered-rule-${index + 1}`,
-      phase: trigger.phase === 'gate' ? 'gate' : trigger.phase === 'exit' ? 'exit' : 'entry',
-      sideScope: trigger.sideScope === 'short' || trigger.sideScope === 'both' ? trigger.sideScope : 'long',
-      condition: {
-        kind: 'atom',
-        key: trigger.key,
-        params: { ...trigger.params },
-        ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
-        ...(trigger.evidence?.text ? { evidence: { text: trigger.evidence.text } } : {}),
-      },
-      effects: {
-        actions: actions.map(action => ({
-          kind: 'atom',
-          key: action.key,
-          params: { ...action.params },
-          ...(action.evidence?.text ? { evidence: { text: action.evidence.text } } : {}),
-        })),
-        risks: risks.map(risk => ({
-          kind: 'atom',
-          key: risk.key,
-          params: { ...risk.params },
-          ...(risk.evidence?.text ? { evidence: { text: risk.evidence.text } } : {}),
-        })),
-        positions: [],
-        orchestration: [],
-        programs: [],
-      },
-      ...(trigger.evidence?.text ? { evidence: { text: trigger.evidence.text } } : {}),
-    }))
   }
 
   private readSemanticSideScope(value: unknown): 'long' | 'short' | 'both' | undefined {
@@ -2949,12 +2886,18 @@ export class CodegenConversationService {
   private hasPersistedSemanticState(
     payload: Prisma.JsonValue | null | undefined,
   ): payload is Prisma.JsonValue & SemanticState {
+    // Issue #1383 Round 2 真根因：SemanticState 字段是单数 trigger/action（无 s），
+    //   旧实现查 payload.triggers/actions（带 s）导致**任何合法持久化 state 都被判 false**，
+    //   进而 shouldRejectChecklistOnlySession 误触 REJECTED + "当前会话缺少语义状态"。
+    //   原 user 报告的核心回归即由此引起（S1 网格 turn 2 失败）。
     return Boolean(
       payload
       && typeof payload === 'object'
       && !Array.isArray(payload)
       && (payload as { version?: unknown }).version === 1
-      && Array.isArray((payload as { rules?: unknown }).rules),
+      && Array.isArray((payload as { trigger?: unknown }).trigger)
+      && Array.isArray((payload as { action?: unknown }).action)
+      && Array.isArray((payload as { risk?: unknown }).risk),
     )
   }
 
@@ -2966,11 +2909,14 @@ export class CodegenConversationService {
   }
 
   private isEmptySemanticState(semanticState: SemanticState): boolean {
-    return semanticTriggerFacts(semanticState).length === 0
-      && semanticActionFacts(semanticState).length === 0
-      && semanticRiskFacts(semanticState).length === 0
-      && semanticPositionFacts(semanticState).length === 0
-      && semanticOrchestrationFacts(semanticState).length === 0
+    // Issue #1383 Round 2 真根因：旧实现不查 positionConstraint / orchestration，
+    //   导致仅含 grid.range_rebalance / DCA schedule / program.* 的合法 state 被判 empty。
+    //   叠加 hasPersistedSemanticState bug 触发 REJECTED 链路。
+    return readFlatTriggers(semanticState).length === 0
+      && readFlatActions(semanticState).length === 0
+      && readFlatRisks(semanticState).length === 0
+      && semanticState.positionConstraint.length === 0
+      && (semanticState.orchestration?.length ?? 0) === 0
       && semanticState.position === null
       && Object.values(semanticState.contextSlots).every(slot => slot === null)
   }
@@ -3376,13 +3322,13 @@ export class CodegenConversationService {
 
   private collectStructuredLevelSetOpenSlots(semanticState: SemanticState): SemanticSlotState[] {
     const slots: SemanticSlotState[] = []
-    for (const trigger of semanticTriggerFacts(semanticState)) {
+    for (const trigger of readFlatTriggers(semanticState)) {
       slots.push(...trigger.openSlots.filter(slot => this.isStructuredLevelSetOpenSlot(slot)))
     }
-    for (const action of semanticActionFacts(semanticState)) {
+    for (const action of readFlatActions(semanticState)) {
       slots.push(...(action.openSlots ?? []).filter(slot => this.isStructuredLevelSetOpenSlot(slot)))
     }
-    for (const risk of semanticRiskFacts(semanticState)) {
+    for (const risk of readFlatRisks(semanticState)) {
       slots.push(...risk.openSlots.filter(slot => this.isStructuredLevelSetOpenSlot(slot)))
     }
     if (semanticState.position?.openSlots?.length) {
@@ -3468,9 +3414,9 @@ export class CodegenConversationService {
   }
 
   private hasExecutableBehaviorSemantics(state: SemanticState): boolean {
-    return semanticTriggerFacts(state).length > 0
-      || semanticActionFacts(state).length > 0
-      || semanticPositionFacts(state).length > 0
+    return readFlatTriggers(state).length > 0
+      || readFlatActions(state).length > 0
+      || state.positionConstraint.length > 0
       || Boolean(state.position?.constraints?.length)
       || this.hasExecutableCapabilityGraph(state)
   }
@@ -3559,7 +3505,7 @@ export class CodegenConversationService {
 
   private resolvePrimaryExecutionTimeframeFromRules(state: SemanticState): string | null {
     const timeframes = new Set<string>()
-    for (const trigger of semanticTriggerFacts(state)) {
+    for (const trigger of readFlatTriggers(state)) {
       if (trigger.status !== 'locked') continue
       const timeframe = trigger.params.timeframe
       if (typeof timeframe === 'string' && timeframe.trim().length > 0) {
@@ -3615,7 +3561,7 @@ export class CodegenConversationService {
         mode: 'fixed_ratio',
         value: positionPct / 100,
         sizing: { kind: 'ratio', value: positionPct / 100, unit: 'ratio' },
-        positionMode: state.position?.positionMode ?? this.inferPositionModeFromActions(semanticActionFacts(state), checklist),
+        positionMode: state.position?.positionMode ?? this.inferPositionModeFromActions(readFlatActions(state), checklist),
         status: 'locked',
         source: 'user_explicit',
         openSlots: [],
@@ -3632,81 +3578,29 @@ export class CodegenConversationService {
       return state
     }
 
-    if (this.hasStopLossRisk(semanticRiskFacts(state))) {
+    if (this.hasStopLossRisk(readFlatRisks(state))) {
       return state
     }
     const stopLossBasis = checklist.riskRules?.stopLossBasis ?? 'entry_avg_price'
 
-    return this.withAppendedRiskEffect(
-      this.withFilteredRiskEffects(state, risk => risk.key !== FIELD_KEY.RISK_PROTECTIVE_EXIT),
-      {
-        kind: 'atom',
-        key: 'risk.stop_loss_pct',
-        params: {
-          valuePct: stopLossPct,
-          basis: stopLossBasis,
-          ...(checklist.riskRules?.stopLossBasis == null ? { basisSource: 'system_default' } : {}),
-        },
-      },
-    )
-  }
-
-  private withFilteredRiskEffects(
-    state: SemanticState,
-    predicate: (risk: AtomExpr & { kind: 'atom' }) => boolean,
-  ): SemanticState {
-    const rules = state.rules?.map((rule) => {
-      if (!isRuleEffectsByRole(rule.effects)) return rule
-      return {
-        ...rule,
-        effects: {
-          ...rule.effects,
-          risks: rule.effects.risks.filter(effect => effect.kind !== 'atom' || predicate(effect)),
-        },
-      }
-    })
-    return rules ? { ...state, rules, updatedAt: new Date().toISOString() } : state
-  }
-
-  private withAppendedRiskEffect(
-    state: SemanticState,
-    risk: AtomExpr & { kind: 'atom' },
-  ): SemanticState {
-    if (!state.rules?.length) return state
-    const [firstRule, ...rest] = state.rules
-    if (!firstRule || !isRuleEffectsByRole(firstRule.effects)) return state
     return {
       ...state,
-      rules: [{
-        ...firstRule,
-        effects: {
-          ...firstRule.effects,
-          risks: [...firstRule.effects.risks, risk],
+      risk: [
+        ...readFlatRisks(state).filter(risk => !(risk.key === FIELD_KEY.RISK_PROTECTIVE_EXIT && risk.status === 'open')),
+        {
+          id: `risk-stop-loss-${readFlatRisks(state).length + 1}`,
+          key: 'risk.stop_loss_pct',
+          params: {
+            valuePct: stopLossPct,
+            basis: stopLossBasis,
+            ...(checklist.riskRules?.stopLossBasis == null ? { basisSource: 'system_default' } : {}),
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
         },
-      }, ...rest],
-      updatedAt: new Date().toISOString(),
+      ],
     }
-  }
-
-  private withRiskEffects(
-    state: SemanticState,
-    risks: readonly (AtomExpr & { kind: 'atom' })[],
-  ): SemanticState {
-    if (!state.rules?.length) return state
-    let attached = false
-    const rules = state.rules.map((rule) => {
-      if (!isRuleEffectsByRole(rule.effects)) return rule
-      const nextRisks = attached ? [] : risks
-      attached = true
-      return {
-        ...rule,
-        effects: {
-          ...rule.effects,
-          risks: nextRisks,
-        },
-      }
-    })
-    return attached ? { ...state, rules, updatedAt: new Date().toISOString() } : state
   }
 
   private ensurePositionSizingSlot(
@@ -3742,7 +3636,7 @@ export class CodegenConversationService {
         mode: 'fixed_ratio',
         value: 0,
         sizing: null,
-        positionMode: this.inferPositionModeFromActions(semanticActionFacts(state), checklist),
+        positionMode: this.inferPositionModeFromActions(readFlatActions(state), checklist),
         status: 'open',
         source: 'derived',
         openSlots: [{
@@ -3763,7 +3657,7 @@ export class CodegenConversationService {
     }
 
     if (
-      semanticRiskFacts(state).some(risk =>
+      readFlatRisks(state).some(risk =>
         risk.key === FIELD_KEY.RISK_PROTECTIVE_EXIT
         && risk.status === 'open'
         && risk.openSlots.some(slot => slot.slotKey === FIELD_KEY.RISK_PROTECTIVE_EXIT && slot.status === 'open'),
@@ -3780,7 +3674,7 @@ export class CodegenConversationService {
       return true
     }
 
-    return semanticRiskFacts(state).some((risk) => {
+    return readFlatRisks(state).some((risk) => {
       if (risk.status !== 'locked') {
         return false
       }
@@ -3815,13 +3709,14 @@ export class CodegenConversationService {
   }
 
   private hasProtectiveOrchestrationRisk(state: SemanticState): boolean {
-    return semanticOrchestrationFacts(state).some(node =>
-      node.key === 'portfolioRisk.drawdown_block'
+    return (state.orchestration ?? []).some(node =>
+      node.kind === 'portfolioRisk'
+      && node.key === 'portfolioRisk.drawdown_block'
       && node.status === 'locked'
-      && node.params.mode === 'enforce'
-      && typeof node.params.thresholdPct === 'number'
-      && Number.isFinite(node.params.thresholdPct)
-      && node.params.thresholdPct > 0,
+      && node.mode === 'enforce'
+      && typeof node.thresholdPct === 'number'
+      && Number.isFinite(node.thresholdPct)
+      && node.thresholdPct > 0,
     )
   }
 
@@ -3837,7 +3732,7 @@ export class CodegenConversationService {
     )
   }
 
-  private hasStopLossRisk(riskItems: readonly SemanticRiskState[]): boolean {
+  private hasStopLossRisk(riskItems: SemanticState['risk']): boolean {
     return riskItems.some((risk) => {
       if (risk.status !== 'locked' || risk.key !== FIELD_KEY.RISK_STOP_LOSS_PCT) {
         return false
@@ -3849,7 +3744,7 @@ export class CodegenConversationService {
   }
 
   private inferPositionModeFromActions(
-    actions: readonly SemanticActionState[],
+    actions: SemanticState['action'],
     checklist: StrategyLogicSnapshot,
   ): string {
     if (checklist.riskRules?.marketType === 'spot' || checklist.market?.marketType === 'spot') {
@@ -3885,11 +3780,16 @@ export class CodegenConversationService {
       return state
     }
 
-    return this.withFilteredRiskEffects(state, risk => risk.key !== FIELD_KEY.RISK_PROTECTIVE_EXIT)
+    return {
+      ...state,
+      risk: readFlatRisks(state).filter(risk =>
+        !(risk.key === FIELD_KEY.RISK_PROTECTIVE_EXIT && risk.status === 'open'),
+      ),
+    }
   }
 
   private hasLockedExitSemantics(state: SemanticState): boolean {
-    return semanticTriggerFacts(state).some(trigger =>
+    return readFlatTriggers(state).some(trigger =>
       trigger.phase === 'exit'
       && trigger.status === 'locked'
       && trigger.openSlots.every(slot => slot.status !== 'open'),
@@ -3898,7 +3798,7 @@ export class CodegenConversationService {
   }
 
   private hasLockedExitRiskSemantics(state: SemanticState): boolean {
-    return semanticRiskFacts(state).some((risk) => {
+    return readFlatRisks(state).some((risk) => {
       if (risk.status !== 'locked' || risk.openSlots.some(slot => slot.status === 'open')) {
         return false
       }
@@ -4060,7 +3960,7 @@ export class CodegenConversationService {
 
     if (this.isTakeProfitClarificationItem(item)) {
       return this.hasLockedExitSemantics(semanticState)
-        || semanticRiskFacts(semanticState).some(risk =>
+        || readFlatRisks(semanticState).some(risk =>
           risk.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT
           && risk.status === 'locked'
           && typeof risk.params.valuePct === 'number'
@@ -4078,7 +3978,7 @@ export class CodegenConversationService {
       return false
     }
 
-    return semanticTriggerFacts(semanticState).some(trigger =>
+    return readFlatTriggers(semanticState).some(trigger =>
       trigger.phase === 'gate'
       && trigger.status === 'locked'
       && trigger.openSlots.every(slot => slot.status !== 'open'),
@@ -4154,7 +4054,7 @@ export class CodegenConversationService {
   private findNextOpenSemanticSlot(state: SemanticState): SemanticSlotState | null {
     const triggerPhaseOrder: Array<'entry' | 'exit' | 'risk' | 'gate'> = ['entry', 'exit', 'risk', 'gate']
     const openTriggerSlots = triggerPhaseOrder.flatMap(phase =>
-      semanticTriggerFacts(state)
+      readFlatTriggers(state)
         .filter(trigger => trigger.phase === phase && trigger.status !== 'superseded')
         .flatMap(trigger => trigger.openSlots)
         .filter(isBlockingSemanticOpenSlot),
@@ -4196,26 +4096,26 @@ export class CodegenConversationService {
       return nestedPositionConstraintSlot
     }
 
-    const positionConstraintSlot = semanticPositionFacts(state)
+    const positionConstraintSlot = state.positionConstraint
       .flatMap(constraint => constraint.openSlots)
       .find(isBlockingSemanticOpenSlot)
     if (positionConstraintSlot) {
       return positionConstraintSlot
     }
 
-    const actionSlot = semanticActionFacts(state)
+    const actionSlot = readFlatActions(state)
       .flatMap(action => action.openSlots ?? [])
       .find(isBlockingSemanticOpenSlot)
     if (actionSlot) {
       return actionSlot
     }
 
-    const riskSlot = semanticRiskFacts(state).flatMap(risk => risk.openSlots).find(isBlockingSemanticOpenSlot)
+    const riskSlot = readFlatRisks(state).flatMap(risk => risk.openSlots).find(isBlockingSemanticOpenSlot)
     if (riskSlot) {
       return riskSlot
     }
 
-    const orchestrationSlot = semanticOrchestrationFacts(state)
+    const orchestrationSlot = state.orchestration
       .flatMap(node => node.openSlots)
       .find(isBlockingSemanticOpenSlot)
     if (orchestrationSlot) {
@@ -4299,15 +4199,15 @@ export class CodegenConversationService {
   private listOpenSemanticSlots(state: SemanticState): SemanticSlotState[] {
     const triggerPhaseOrder: Array<'entry' | 'exit' | 'risk' | 'gate'> = ['entry', 'exit', 'risk', 'gate']
     const openTriggerSlots = triggerPhaseOrder.flatMap(phase =>
-      semanticTriggerFacts(state)
+      readFlatTriggers(state)
         .filter(trigger => trigger.phase === phase)
         .flatMap(trigger => trigger.openSlots)
         .filter(isBlockingSemanticOpenSlot),
     )
-    const openRiskSlots = semanticRiskFacts(state)
+    const openRiskSlots = readFlatRisks(state)
       .flatMap(risk => risk.openSlots)
       .filter(isBlockingSemanticOpenSlot)
-    const openActionSlots = semanticActionFacts(state)
+    const openActionSlots = readFlatActions(state)
       .flatMap(action => action.openSlots ?? [])
       .filter(isBlockingSemanticOpenSlot)
     // Issue #1403 子故障 A：与 findNextOpenSemanticSlot 同步——atom 自声明 'sizing'
@@ -4316,17 +4216,17 @@ export class CodegenConversationService {
     const openPositionSlots = hasContinuousSizing
       ? []
       : (state.position?.openSlots?.filter(isBlockingSemanticOpenSlot) ?? [])
-    const topLevelConstraintIds = new Set(semanticPositionFacts(state).map(constraint => constraint.id))
+    const topLevelConstraintIds = new Set(state.positionConstraint.map(constraint => constraint.id))
     const openNestedPositionConstraintSlots = hasContinuousSizing
       ? []
       : (state.position?.constraints
         ?.filter(constraint => !topLevelConstraintIds.has(constraint.id))
         .flatMap(constraint => constraint.openSlots)
         .filter(isBlockingSemanticOpenSlot) ?? [])
-    const openPositionConstraintSlots = semanticPositionFacts(state)
+    const openPositionConstraintSlots = state.positionConstraint
       .flatMap(constraint => constraint.openSlots)
       .filter(isBlockingSemanticOpenSlot)
-    const openOrchestrationSlots = semanticOrchestrationFacts(state)
+    const openOrchestrationSlots = state.orchestration
       .flatMap(node => node.openSlots)
       .filter(isBlockingSemanticOpenSlot)
     const openContextSlots = Object.values(state.contextSlots)
@@ -4539,11 +4439,11 @@ export class CodegenConversationService {
       return []
     }
 
-    const hasShortAction = semanticActionFacts(state).some(action =>
+    const hasShortAction = readFlatActions(state).some(action =>
       action.status === 'locked'
       && (action.key === 'open_short' || action.key === 'close_short' || action.key === 'reduce_short'),
     )
-    const hasShortScopedTrigger = semanticTriggerFacts(state).some(trigger =>
+    const hasShortScopedTrigger = readFlatTriggers(state).some(trigger =>
       trigger.status === 'locked'
       && trigger.sideScope === 'short',
     )
@@ -4563,9 +4463,9 @@ export class CodegenConversationService {
   }
 
   private hasSemanticMainFlowEvidence(state: SemanticState): boolean {
-    return semanticTriggerFacts(state).length > 0
-      || semanticActionFacts(state).length > 0
-      || semanticRiskFacts(state).length > 0
+    return readFlatTriggers(state).length > 0
+      || readFlatActions(state).length > 0
+      || readFlatRisks(state).length > 0
       || state.position !== null
   }
 
@@ -4623,19 +4523,19 @@ export class CodegenConversationService {
     message?: string
   }): SemanticState {
     let nextState = input.currentState
-    const derivedSemanticState = this.buildSemanticStateFromPlannerPatch(input.plan.semanticPatch, input.message)
+    const semanticPatchState = this.buildSemanticStateFromPlannerPatch(input.plan.semanticPatch, input.message)
 
-    if (derivedSemanticState) {
+    if (semanticPatchState) {
       nextState = this.semanticStateMerge.merge({
         persisted: nextState,
-        derived: derivedSemanticState,
+        derived: semanticPatchState,
       })
     }
 
     const reconciledNextState = this.reconcileSemanticMissingPlaceholders(nextState)
     const stateWithRequiredSlots = this.withRequiredSemanticOpenSlots(reconciledNextState, {}, {
       preserveLockedPositionSizing: Boolean(
-        this.hasValidLockedPositionSizing(derivedSemanticState?.position)
+        this.hasValidLockedPositionSizing(semanticPatchState?.position)
         || this.hasValidLockedPositionSizing(input.currentState.position),
       ),
     })
@@ -4677,6 +4577,11 @@ export class CodegenConversationService {
     return {
       version: 1,
       families: [],
+      trigger: [],
+      action: [],
+      risk: [],
+      positionConstraint: [],
+      orchestration: [],
       orchestrationContracts: [],
       position: null,
       contextSlots: {
@@ -6517,7 +6422,7 @@ export class CodegenConversationService {
       }
     }
 
-    for (const risk of semanticRiskFacts(semanticState)) {
+    for (const risk of readFlatRisks(semanticState)) {
       if (risk.status !== 'locked' || risk.openSlots.length > 0) continue
       if (
         risk.key === FIELD_KEY.RISK_CONDITION_EXPRESSION
@@ -7054,7 +6959,7 @@ export class CodegenConversationService {
     state: SemanticState,
     fallbackLogicSnapshot: StrategyLogicSnapshot = {},
   ): StrategyLogicSnapshot {
-    const projectedGrid = this.buildLegacyGrid([...semanticTriggerFacts(state)])
+    const projectedGrid = this.buildLegacyGrid([...readFlatTriggers(state)])
     const nextLogicSnapshot: StrategyLogicSnapshot = {
       ...fallbackLogicSnapshot,
       riskRules: fallbackLogicSnapshot.riskRules ? { ...fallbackLogicSnapshot.riskRules } : undefined,
@@ -7087,7 +6992,7 @@ export class CodegenConversationService {
       ...(nextLogicSnapshot.riskRules ?? {}),
     } as Record<string, unknown>
 
-    for (const risk of semanticRiskFacts(state)) {
+    for (const risk of readFlatRisks(state)) {
       if (risk.key === FIELD_KEY.RISK_STOP_LOSS_PCT && typeof risk.params.valuePct === 'number') {
         riskRules.stopLossPct = risk.params.valuePct
       }
@@ -7196,7 +7101,7 @@ export class CodegenConversationService {
   private buildProjectedStateGates(state: SemanticState): NonNullable<StrategyLogicSnapshot['stateGates']> {
     const nextStateGates: NonNullable<StrategyLogicSnapshot['stateGates']> = {}
 
-    for (const trigger of semanticTriggerFacts(state)) {
+    for (const trigger of readFlatTriggers(state)) {
       if (trigger.phase !== 'gate') continue
 
       if (trigger.key === ATOM_CONTRACT_REGISTRY['market.regime'].key && typeof trigger.params.value === 'string') {
@@ -7217,7 +7122,7 @@ export class CodegenConversationService {
     state: SemanticState,
     phase: 'entry' | 'exit',
   ): string[] {
-    return semanticTriggerFacts(state)
+    return readFlatTriggers(state)
       .filter(trigger => trigger.phase === phase && trigger.status !== 'superseded')
       .map(trigger => this.buildProjectedRuleText(trigger))
       .filter((rule): rule is string => Boolean(rule))
@@ -7410,22 +7315,19 @@ export class CodegenConversationService {
   }
 
   private normalizeRiskState(state: SemanticState): SemanticState {
-    const normalizedRisk = normalizeRiskSemantics([...semanticRiskFacts(state)])
-    const hasPortfolioDrawdownOrchestration = semanticOrchestrationFacts(state).some(node =>
-      node.key === 'portfolioRisk.drawdown_block'
+    const normalizedRisk = normalizeRiskSemantics([...readFlatRisks(state)])
+    const hasPortfolioDrawdownOrchestration = (state.orchestration ?? []).some(node =>
+      node.kind === 'portfolioRisk'
+      && node.key === 'portfolioRisk.drawdown_block'
       && node.status !== 'superseded',
     ) === true
 
-    const nextRisk = hasPortfolioDrawdownOrchestration
-      ? normalizedRisk.filter(risk => risk.key !== 'portfolioRisk.drawdown_block')
-      : normalizedRisk
-
-    return this.withRiskEffects(state, nextRisk.map(risk => ({
-      kind: 'atom',
-      key: risk.key,
-      params: { ...risk.params },
-      ...(risk.evidence?.text ? { evidence: { text: risk.evidence.text } } : {}),
-    })))
+    return {
+      ...state,
+      risk: hasPortfolioDrawdownOrchestration
+        ? normalizedRisk.filter(risk => risk.key !== 'portfolioRisk.drawdown_block')
+        : normalizedRisk,
+    }
   }
 
   private normalizeSemanticContractReadiness(
@@ -7473,7 +7375,7 @@ export class CodegenConversationService {
     if (classification.route === 'unsupported_fallback') {
       const unsupportedFallback = this.unsupportedFallback.buildPendingFallback(
         classification.unsupportedAtoms,
-        semanticTriggerFacts(classification.state),
+        readFlatTriggers(classification.state),
         responseLocale,
       )
       if (unsupportedFallback !== null) {
@@ -7525,7 +7427,7 @@ export class CodegenConversationService {
         userId: args.userId,
         sessionId: args.session.id,
         unsupportedAtoms: classification.unsupportedAtoms.map(a => a.key),
-        supportedTriggers: semanticTriggerFacts(classification.state)?.map(t => t.key) ?? [],
+        supportedTriggers: readFlatTriggers(classification.state)?.map(t => t.key) ?? [],
       })
       return {
         semanticState: this.clearUnsupportedFallback(classification.state),
@@ -7886,39 +7788,21 @@ export class CodegenConversationService {
       const positionPct = this.extractFallbackPositionPct(modificationMessage)
       if (positionPct !== null) {
         const value = positionPct / 100
-        nextPatch.rules = this.withPatchPositionSizingRule(nextPatch.rules, value)
+        nextPatch.position = {
+          ...(nextPatch.position ?? {
+            mode: 'fixed_ratio',
+            value,
+            positionMode: 'long_only',
+          }),
+          mode: 'fixed_ratio',
+          value,
+          sizing: { kind: 'ratio', value, unit: 'ratio' },
+        }
         modifiedFields.push(`仓位为 ${positionPct}%`)
       }
     }
 
     return { patch: nextPatch, modifiedFields }
-  }
-
-  private withPatchPositionSizingRule(
-    rules: CodegenSemanticPatch['rules'],
-    value: number,
-  ): CodegenSemanticPatch['rules'] {
-    if (!rules?.length) return rules
-    const [firstRule, ...rest] = rules
-    if (!firstRule || !isRuleEffectsByRole(firstRule.effects)) return rules
-    return [{
-      ...firstRule,
-      effects: {
-        ...firstRule.effects,
-        positions: [
-          ...firstRule.effects.positions,
-          {
-            kind: 'atom',
-            key: 'position.sizing',
-            params: {
-              mode: 'fixed_ratio',
-              value,
-              sizing: { kind: 'ratio', value, unit: 'ratio' },
-            },
-          },
-        ],
-      },
-    }, ...rest]
   }
 
   private cloneSemanticPatch(patch: CodegenSemanticPatch): CodegenSemanticPatch {
@@ -8006,6 +7890,9 @@ export class CodegenConversationService {
   private clearRejectedUnsupportedFallbackState(state: SemanticState): SemanticState {
     return {
       ...state,
+      trigger: readFlatTriggers(state).map(trigger => this.supersedeUnsupportedNode(trigger)),
+      action: readFlatActions(state).map(action => this.supersedeUnsupportedNode(action)),
+      risk: readFlatRisks(state).map(risk => this.supersedeUnsupportedNode(risk)),
       position: state.position ? this.supersedeUnsupportedNode(state.position) : null,
       unsupportedFallback: null,
       updatedAt: new Date().toISOString(),
@@ -8058,7 +7945,7 @@ export class CodegenConversationService {
     }
 
     const riskKey = key === 'risk.stopLossBasis' ? 'risk.stop_loss_pct' : 'risk.take_profit_pct'
-    return semanticRiskFacts(state).some(risk =>
+    return readFlatRisks(state).some(risk =>
       risk.key === riskKey
       && risk.status === 'locked'
       && risk.openSlots.length === 0
@@ -8469,60 +8356,46 @@ export class CodegenConversationService {
     }
 
     let changed = false
-    let nextRules = [...(semanticState.rules ?? [])]
-    for (const item of semanticRiskFacts(semanticState)) {
+    const nextRisk = readFlatRisks(semanticState).map(item => {
       if (item.key === FIELD_KEY.RISK_STOP_LOSS_PCT && nextStopLossBasis) {
         const currentBasis = this.readStrategyRuleBasisKind(item.params?.basis)
         if (currentBasis !== nextStopLossBasis) {
           changed = true
-          nextRules = this.updateRuleFactParams(nextRules, item as unknown as RulesMainflowAtomFact, {
-            ...item.params,
-            basis: nextStopLossBasis,
-            basisSource: 'user_explicit',
-          })
+          return {
+            ...item,
+            params: {
+              ...(item.params ?? {}),
+              basis: nextStopLossBasis,
+              basisSource: 'user_explicit',
+            },
+          }
         }
       }
       if (item.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT && nextTakeProfitBasis) {
         const currentBasis = this.readStrategyRuleBasisKind(item.params?.basis)
         if (currentBasis !== nextTakeProfitBasis) {
           changed = true
-          nextRules = this.updateRuleFactParams(nextRules, item as unknown as RulesMainflowAtomFact, {
+          return {
+            ...item,
+            params: {
               ...(item.params ?? {}),
               basis: nextTakeProfitBasis,
               basisSource: 'user_explicit',
-          })
+            },
+          }
         }
       }
-    }
+
+      return item
+    })
 
     return changed
       ? {
           ...semanticState,
-          rules: nextRules,
+          risk: nextRisk,
           updatedAt: new Date().toISOString(),
         }
       : semanticState
-  }
-
-  private updateRuleFactParams(
-    rules: readonly SemanticRule[],
-    fact: RulesMainflowAtomFact,
-    params: Record<string, unknown>,
-  ): SemanticRule[] {
-    const path = fact.path.replace(/^rules\[\d+\]\./u, '')
-    try {
-      return updateRuleAtomParams(rules, fact.ruleId, path, atom => ({
-        ...atom,
-        params,
-      }))
-    }
-    catch (err) {
-      this.logger.warn(
-        `[#1633] rules-only risk basis update path miss: ruleId=${fact.ruleId} path=${fact.path}`,
-        err,
-      )
-      return [...rules]
-    }
   }
 
   private readStrategyRuleBasisKind(value: unknown): StrategyRuleBasis['kind'] | null {

@@ -108,7 +108,7 @@ function fixedGridGatedNode(overrides: Partial<SemanticOrchestrationNode> = {}):
   }
 }
 
-describe.skip('orchestration program.fixed_grid_gated — golden corpus (Phase 5 S4 Task 15)', () => {
+describe('orchestration program.fixed_grid_gated — golden corpus (Phase 5 S4 Task 15)', () => {
   // ============================================================
   // Section A — NL → frame → patch → state pipeline
   // ============================================================

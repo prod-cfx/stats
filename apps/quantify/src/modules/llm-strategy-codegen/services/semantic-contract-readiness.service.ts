@@ -1,12 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common'
 
 import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
-import type { AtomExpr, AtomExprAtom, RuleEffectsByRole, SemanticRule, SemanticRuleSideScope } from '../types/atom-expr'
+import type { AtomExpr, AtomExprAtom, SemanticRule, SemanticRuleSideScope } from '../types/atom-expr'
 import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
 import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gate.types'
 import type {
   SemanticAtomContract,
-  SemanticActionState,
   SemanticCapability,
   SemanticCapabilityDomain,
   SemanticFlatAtomProvenance,
@@ -21,8 +20,6 @@ import type {
   SemanticSlotState,
   SemanticState,
   SemanticStateRequirement,
-  SemanticTriggerState,
-  SemanticRiskState,
 } from '../types/semantic-state'
 import type { SemanticAtomSupportMetadata } from '../types/semantic-atom-support'
 import { buildSemanticSlotId } from '../types/semantic-state'
@@ -34,11 +31,10 @@ import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
 import { SemanticOrchestrationRegistryService } from './semantic-orchestration-registry.service'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
-import { buildTriggerCombinationContract } from './semantic-state-normalization'
 import { validateSemanticExpressionContract } from './strategy-semantic-contracts'
-import type { RulesMainflowAtomFact } from './rules-mainflow-reader.service'
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
+import { SemanticRuleProjectionService } from './semantic-rule-projection.service'
 import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
-import type { ParamSlotSchema } from '../atom-contracts/atom-contract-surface.types'
 
 type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position'
 type ExecutableContextField = keyof SemanticState['contextSlots']
@@ -52,7 +48,7 @@ type SemanticSubstrateRequirementKind =
   | 'order_requirement'
 
 interface Phase0OrchestrationNormalizationResult {
-  state: readonly SemanticOrchestrationNode[] | undefined
+  state: SemanticState['orchestration']
   hasBlockingSlots: boolean
 }
 
@@ -112,16 +108,6 @@ interface NormalizedProviderContracts {
   shapeSlotsByOwnerKey: Map<string, SemanticSlotState[]>
 }
 
-interface ReadinessMaterializedState {
-  source: SemanticState
-  trigger: SemanticTriggerState[]
-  action: SemanticActionState[]
-  risk: SemanticRiskState[]
-  positionConstraint: SemanticPositionConstraintState[]
-  orchestration: SemanticOrchestrationNode[]
-  position: SemanticPositionState | null
-}
-
 @Injectable()
 export class SemanticContractReadinessService {
   private readonly logger = new Logger(SemanticContractReadinessService.name)
@@ -133,6 +119,8 @@ export class SemanticContractReadinessService {
     private readonly orchestrationRegistry: SemanticOrchestrationRegistryService = new SemanticOrchestrationRegistryService(),
     // #1186 PR3 (decision 选项 A): multi-leg per_order_budget 判定共用 PR2 落地的 getExecutableLegScopes()
     private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
+    // #1493 块 D：normalize() 入口跑一次 reproject，把 `flat = pure function of rules` 落成硬不变量。
+    private readonly ruleProjection: SemanticRuleProjectionService = new SemanticRuleProjectionService(),
     private readonly rulesMainflowReader: RulesMainflowReaderService = new RulesMainflowReaderService(),
   ) {}
 
@@ -140,44 +128,61 @@ export class SemanticContractReadinessService {
     state: SemanticState,
     strategyVersion?: StrategyVersionInfo,
   ): SemanticContractReadinessNormalizationResult {
-    const hasRules = Boolean(state.rules && state.rules.length > 0)
-    if (!hasRules) {
-      const missingRequirements: MissingSemanticContractRequirement[] = [{
-        ownerKind: 'position',
-        ownerId: 'rules_tree',
-        contractId: 'rules_tree.empty',
-        domain: 'state',
-        verb: 'define',
-        object: 'rules_tree',
-        errorCode: 'READINESS_RULES_TREE_EMPTY',
-      }]
-      return {
-        state: stripDerivedBuckets(state),
-        ready: false,
-        missingRequirements,
+    // #1493 块 D：rules 非空时统一从 rules tree 重新投影出 flat 五桶，确保后续
+    //   读 flat 等价于读 rules。rules 为空时透传原 state，保留老 fixture 兼容路径。
+    //   注意：rules 非空时 ready 由 evaluateRulesReadiness() 决定，flat 8 路 fail-closed
+    //   不参与最终判定（见下方 `rulesReady !== null` 分支），但 flat 仍用于
+    //   provider-contract / orchestration / missingRequirements 等读路径。
+    if (state.rules && state.rules.length > 0) {
+      state = { ...state, rules: dedupeSemanticRulesForReadiness(state.rules) }
+      state = this.ruleProjection.reprojectFromRules(state)
+    }
+    else {
+      // Issue #1493 C2：normalize() 入口同样观测 rules 空 + flat 非空 legacy 路径。
+      //   生产规约见 types/semantic-state.ts 顶部 docstring。
+      const flatNonEmptyCount
+        = (state.trigger?.length ?? 0)
+        + (state.action?.length ?? 0)
+        + (state.risk?.length ?? 0)
+        + (state.positionConstraint?.length ?? 0)
+        + (state.orchestration?.length ?? 0)
+      if (flatNonEmptyCount > 0) {
+        this.logger.warn(
+          `[#1493] normalize_rules_missing flatNonEmptyCount=${flatNonEmptyCount}`
+          + ` metric=semantic_state_rules_missing_total+=1`,
+        )
       }
     }
-
-    let materialized = this.materializeRulesMainflowState({
-      ...state,
-      rules: normalizeRulesForMainflowFacts(dedupeSemanticRulesForReadiness(state.rules ?? [])),
-    })
-    state = materialized.source
-
+    const hasRules = Boolean(state.rules && state.rules.length > 0)
     const rulesReadinessForMissing = hasRules
       ? this.evaluateRulesReadiness(state.rules)
       : null
-    const rulesTreeMissingRequirements: MissingSemanticContractRequirement[] = []
+    const flatNonEmptyCountForEmptyRules
+      = state.trigger.length
+      + state.action.length
+      + state.risk.length
+      + (state.positionConstraint?.length ?? 0)
+      + state.orchestration.length
+    const rulesTreeMissingRequirements: MissingSemanticContractRequirement[] = !hasRules && flatNonEmptyCountForEmptyRules === 0
+      ? [{
+          ownerKind: 'position',
+          ownerId: 'rules_tree',
+          contractId: 'rules_tree.empty',
+          domain: 'state',
+          verb: 'define',
+          object: 'rules_tree',
+          errorCode: 'READINESS_RULES_TREE_EMPTY',
+        }]
+      : []
     const rulesReadinessMissingRequirements = rulesReadinessForMissing
       ? this.buildRulesReadinessMissingRequirements(rulesReadinessForMissing)
       : []
-    const activeOwners = collectActiveContractOwners(materialized)
+    const activeOwners = collectActiveContractOwners(state)
     const orchestrationResult = normalizePhase0Orchestration(
-      materialized.orchestration,
+      state.orchestration,
       this.orchestrationRegistry,
       strategyVersion,
     )
-    materialized = { ...materialized, orchestration: [...(orchestrationResult.state ?? [])] }
     const unsupportedOrUnknownOwnerKeys = new Set(
       activeOwners
         .filter(owner => this.isUnsupportedOrUnknownOwner(owner))
@@ -201,47 +206,47 @@ export class SemanticContractReadinessService {
       buildMissingSubstrateSlots(supportedOwners),
       buildUnsupportedSubstrateRequirementSlots(supportedOwners),
       buildContractOpenSlotMap(supportedOwners),
-      buildAddPositionConstraintRelationshipSlots(materialized),
+      buildAddPositionConstraintRelationshipSlots(state),
     )
-    materialized = {
-      ...materialized,
-      trigger: materialized.trigger.map(trigger =>
+    const baseNextState: SemanticState = {
+      ...state,
+      trigger: readFlatTriggers(state).map(trigger =>
         mergeOwnerOpenSlots(
           withTypedRuleOpenSlotPaths(trigger, state),
           slotsByOwnerKey.get(ownerKey('trigger', trigger.id)),
         ),
       ),
-      action: materialized.action.map(action =>
+      action: readFlatActions(state).map(action =>
         mergeOwnerOpenSlots(
           withTypedRuleOpenSlotPaths(action, state),
           slotsByOwnerKey.get(ownerKey('action', action.id)),
         ),
       ),
-      risk: materialized.risk.map(risk =>
+      risk: readFlatRisks(state).map(risk =>
         mergeOwnerOpenSlots(
           withTypedRuleOpenSlotPaths(risk, state),
           slotsByOwnerKey.get(ownerKey('risk', risk.id)),
         ),
       ),
       position: mergePositionOpenSlots(state.position, slotsByOwnerKey),
-      positionConstraint: materialized.positionConstraint.map(constraint =>
+      positionConstraint: state.positionConstraint?.map(constraint =>
         mergeOwnerOpenSlots(
           withTypedRuleOpenSlotPaths(constraint, state),
           slotsByOwnerKey.get(ownerKey('position', positionConstraintOwnerId(constraint))),
         ),
       ),
-      orchestration: materialized.orchestration.map(node =>
+      orchestration: orchestrationResult.state?.map(node =>
         withTypedRuleOpenSlotPaths(node, state),
       ),
     }
     // Phase 5 S2 (#1104): 多 scope 策略对 trigger/action/risk/positionConstraint 加 missing_binding fail-closed
     const { state: afterSymbolBinding, hasBlockingSlots: symbolBindingHasBlockingSlots } =
-      applySymbolScopeBindingFailClosed(materialized)
+      applySymbolScopeBindingFailClosed(baseNextState)
     // Phase 5 S11 (#1112): 多 leg 策略对 trigger/action/risk/positionConstraint 加 missing_binding fail-closed
     //   leg binding 第二参 baseNextState 用作 pre-binding 原始 status：避免被 symbol binding 链式降级后误跳过判断
     //   （两条 binding 各自独立 fail-closed，同一 owner 双 ref 缺失会同时落两条 missing_binding open slot）
     const { state: afterLegBinding, hasBlockingSlots: legBindingHasBlockingSlots } =
-      applyLegScopeBindingFailClosed(afterSymbolBinding, materialized)
+      applyLegScopeBindingFailClosed(afterSymbolBinding, baseNextState)
     // Phase 5 S3 (#1109): timeframe scope binding fail-closed（≥1 scope.timeframe locked 即强制）
     const timeframeBound = applyTimeframeScopeBindingFailClosed(afterLegBinding)
     // Phase 5 S9 (#1110): 多 dataSource scope 策略 binding fail-closed（dataSourceScopeRef 声明且 ref 不在 supported 集合时降为 open + missing_binding slot）
@@ -251,10 +256,9 @@ export class SemanticContractReadinessService {
     const { state: nextStateBeforeContextGate, hasBlockingSlots: subStrategyBindingHasBlockingSlots } =
       applySubStrategyScopeBindingFailClosed(afterDataSourceBinding)
     const executableContextGate = state.rules && state.rules.length > 0
-      ? applyExecutableContextGate(nextStateBeforeContextGate.source)
-      : { state: nextStateBeforeContextGate.source, hasBlockingSlots: false }
+      ? applyExecutableContextGate(nextStateBeforeContextGate)
+      : { state: nextStateBeforeContextGate, hasBlockingSlots: false }
     const nextState = executableContextGate.state
-    const nextMaterialized = { ...nextStateBeforeContextGate, source: nextState }
 
     // Issue #1395 (mute-spider) Stage I.A：state.rules 非空时优先走 rules-tree 判定，
     //   绕过扁平桶 8 路 binding/blocking-owner-open-slots fail-closed（这些信号在
@@ -267,7 +271,7 @@ export class SemanticContractReadinessService {
       && rulesTreeMissingRequirements.length === 0
       && missingRequirements.length === 0
       && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey)
-      && !hasBlockingOwnerOpenSlots(nextMaterialized)
+      && !hasBlockingOwnerOpenSlots(nextState)
       && !orchestrationResult.hasBlockingSlots
       && !symbolBindingHasBlockingSlots
       && !legBindingHasBlockingSlots
@@ -291,192 +295,6 @@ export class SemanticContractReadinessService {
       ready,
       missingRequirements,
     }
-  }
-
-  private materializeRulesMainflowState(state: SemanticState): ReadinessMaterializedState {
-    const source = stripDerivedBuckets(state)
-    const rules = state.rules ?? []
-    const allFacts = this.rulesMainflowReader.readFacts({ rules })
-    const conditionFacts = this.rulesMainflowReader.readFactsByRole({ rules }, 'condition')
-    const actionFacts = this.rulesMainflowReader.readFactsByRole({ rules }, 'action')
-    const riskFacts = this.rulesMainflowReader.readFactsByRole({ rules }, 'risk')
-    const positionFacts = this.rulesMainflowReader.readFactsByRole({ rules }, 'position')
-    const orchestrationFacts = [
-      ...this.rulesMainflowReader.readFactsByRole({ rules }, 'orchestration'),
-      ...this.rulesMainflowReader.readFactsByRole({ rules }, 'program'),
-    ]
-
-    if (allFacts.length === 0) {
-      this.logger.warn('[readiness] rules mainflow reader returned no facts for non-empty rules')
-    }
-
-    return {
-      source,
-      trigger: this.withConditionCombinationContracts(rules, conditionFacts).map(fact => this.factToTrigger(fact)),
-      action: actionFacts.map(fact => this.factToAction(fact)),
-      risk: riskFacts.map(fact => this.factToRisk(fact)),
-      position: source.position,
-      positionConstraint: positionFacts.map(fact => this.factToPositionConstraint(fact)),
-      orchestration: orchestrationFacts.flatMap(fact => this.factToOrchestrationNodes(fact)),
-    }
-  }
-
-  private withConditionCombinationContracts(
-    rules: readonly SemanticRule[],
-    facts: readonly RulesMainflowAtomFact[],
-  ): RulesMainflowAtomFact[] {
-    const contractByRuleId = new Map<string, SemanticAtomContract>()
-
-    for (const rule of rules) {
-      const condition = rule.condition
-      if ((condition.kind !== 'and' && condition.kind !== 'or') || collectAtomLeaves(condition).length <= 1) {
-        continue
-      }
-
-      contractByRuleId.set(rule.id, buildTriggerCombinationContract({
-        groupId: `${rule.id}:condition`,
-        join: condition.kind === 'and' ? 'AND' : 'OR',
-        phase: rule.phase === 'program' ? 'gate' : rule.phase,
-        sideScope: rule.sideScope,
-      }))
-    }
-
-    return facts.map((fact) => {
-      const contract = contractByRuleId.get(fact.ruleId)
-      if (!contract) return fact
-      return {
-        ...fact,
-        contracts: [contract, ...(fact.contracts ?? [])],
-      }
-    })
-  }
-
-  private factToTrigger(fact: RulesMainflowAtomFact): SemanticTriggerState {
-    const openSlots = this.readFactOpenSlots(fact)
-    return {
-      id: fact.id,
-      key: fact.key,
-      phase: fact.phase === 'program' ? 'gate' : fact.phase,
-      sideScope: fact.sideScope,
-      params: { ...fact.params },
-      status: openSlots.length ? 'open' : fact.status,
-      source: fact.source,
-      openSlots,
-      ...(fact.contracts ? { contracts: fact.contracts.filter((contract): contract is SemanticAtomContract =>
-        contract.kind === 'trigger'
-        || contract.kind === 'action'
-        || contract.kind === 'risk'
-        || contract.kind === 'position'
-        || contract.kind === 'context',
-      ) } : {}),
-      _provenance: factToProvenance(fact),
-    }
-  }
-
-  private factToAction(fact: RulesMainflowAtomFact): SemanticActionState {
-    const openSlots = this.readFactOpenSlots(fact)
-    return {
-      id: fact.id,
-      key: fact.key,
-      params: { ...fact.params },
-      status: openSlots.length ? 'open' : fact.status,
-      source: fact.source,
-      openSlots,
-      _provenance: factToProvenance(fact),
-    }
-  }
-
-  private factToRisk(fact: RulesMainflowAtomFact): SemanticRiskState {
-    const openSlots = this.readFactOpenSlots(fact)
-    return {
-      id: fact.id,
-      key: fact.key,
-      params: { ...fact.params },
-      status: openSlots.length ? 'open' : fact.status,
-      source: fact.source,
-      openSlots,
-      _provenance: factToProvenance(fact),
-    }
-  }
-
-  private factToPositionConstraint(fact: RulesMainflowAtomFact): SemanticPositionConstraintState {
-    const openSlots = this.readFactOpenSlots(fact)
-    return {
-      id: fact.id,
-      key: fact.key as SemanticPositionConstraintState['key'],
-      params: { ...fact.params },
-      status: openSlots.length ? 'open' : fact.status,
-      source: fact.source,
-      openSlots,
-      _provenance: factToProvenance(fact),
-    }
-  }
-
-  private factToOrchestrationNodes(fact: RulesMainflowAtomFact): SemanticOrchestrationNode[] {
-    const kind = inferOrchestrationKind(fact.key)
-    if (!kind) return []
-    const openSlots = this.readFactOpenSlots(fact)
-    const base: SemanticOrchestrationNode = {
-      id: fact.id,
-      kind,
-      key: fact.key,
-      params: { ...fact.params },
-      status: openSlots.length ? 'open' : fact.status,
-      source: fact.source,
-      openSlots,
-      contracts: [],
-      _provenance: factToProvenance(fact),
-    }
-
-    if (fact.key === 'portfolioRisk.drawdown_block') {
-      return [{
-        ...base,
-        scope: readEnum(fact.params.scope, ['portfolio', 'symbol', 'subStrategy'] as const) ?? 'portfolio',
-        mode: readEnum(fact.params.mode, ['observe', 'enforce'] as const) ?? 'enforce',
-        thresholdPct: readNumber(fact.params.thresholdPct) ?? readNumber(fact.params.pct),
-      }]
-    }
-
-    if (fact.key === 'program.fixed_grid_gated') {
-      const activeWhenRef = readString(fact.params.activeWhenRef)
-      return [{
-        ...base,
-        programKind: 'fixed_grid_gated',
-        ...(activeWhenRef ? { activeWhenRef } : {}),
-        onDeactivate: readEnum(fact.params.onDeactivate, ['cancel', 'keep', 'close'] as const) ?? 'cancel',
-        rebuildPolicy: 'static',
-        gridParams: normalizeFixedGridParams(fact.params),
-        sizing: normalizeProgramSizing(fact.params.sizing) ?? normalizeProgramSizing(fact.params) ?? { mode: 'fixed_pct', value: 10 },
-      }]
-    }
-
-    return [base]
-  }
-
-  private readFactOpenSlots(fact: RulesMainflowAtomFact): SemanticSlotState[] {
-    const openSlots = [...fact.openSlots]
-    const entry = (ATOM_CONTRACT_REGISTRY as Record<string, { surface?: { paramSlots?: Record<string, ParamSlotSchema> } } | undefined>)[fact.key]
-    const paramSlots = entry?.surface?.paramSlots
-    if (!paramSlots) return openSlots
-
-    for (const [slotKey, schema] of Object.entries(paramSlots)) {
-      if (!schema.required) continue
-      const value = fact.params[slotKey]
-      const missing = value === undefined || value === null || (typeof value === 'string' && value.trim() === '')
-      if (!missing) continue
-      openSlots.push({
-        slotKey: `${fact.key}.${slotKey}`,
-        fieldPath: `${fact.path}.params.${slotKey}`,
-        status: 'open',
-        priority: 'core',
-        questionHint: '请补充该参数。',
-        affectsExecution: true,
-        atomKey: fact.key,
-        paramSlotKey: slotKey,
-      })
-    }
-
-    return openSlots
   }
 
   private buildRulesReadinessMissingRequirements(
@@ -930,29 +748,6 @@ export class SemanticContractReadinessService {
   }
 }
 
-function stripDerivedBuckets(state: SemanticState): SemanticState {
-  const {
-    trigger: _trigger,
-    action: _action,
-    risk: _risk,
-    positionConstraint: _positionConstraint,
-    orchestration: _orchestration,
-    ...source
-  } = state as SemanticState & {
-    trigger?: unknown
-    action?: unknown
-    risk?: unknown
-    positionConstraint?: unknown
-    orchestration?: unknown
-  }
-  void _trigger
-  void _action
-  void _risk
-  void _positionConstraint
-  void _orchestration
-  return source
-}
-
 export interface RulesReadinessSummary {
   hasEntry: boolean
   hasExit: boolean
@@ -973,106 +768,6 @@ function collectAtomLeavesSafe(expr: AtomExpr | undefined): AtomExprAtom[] {
 
 function isPositiveFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
-}
-
-function normalizeRulesForMainflowFacts(rules: readonly SemanticRule[]): SemanticRule[] {
-  return rules.map((rule) => {
-    if (isRuleEffectsByRole(rule.effects)) return rule
-
-    const effects: {
-      actions: AtomExpr[]
-      risks: AtomExpr[]
-      positions: AtomExpr[]
-      orchestration: AtomExpr[]
-      programs: AtomExpr[]
-    } = {
-      actions: [],
-      risks: [],
-      positions: [],
-      orchestration: [],
-      programs: [],
-    }
-
-    for (const effect of listRuleEffects(rule.effects)) {
-      const leaves = collectAtomLeavesSafe(effect)
-      const firstKey = leaves[0]?.key
-      const bucket = firstKey
-        ? (ATOM_CONTRACT_REGISTRY as Record<string, { bucket?: string } | undefined>)[firstKey]?.bucket
-        : undefined
-      if (bucket === 'risk') {
-        effects.risks.push(effect)
-      }
-      else if (bucket === 'positionConstraint') {
-        effects.positions.push(effect)
-      }
-      else if (bucket === 'orchestration') {
-        if (firstKey?.startsWith('program.')) effects.programs.push(effect)
-        else effects.orchestration.push(effect)
-      }
-      else {
-        effects.actions.push(effect)
-      }
-    }
-
-    return {
-      ...rule,
-      effects,
-    }
-  })
-}
-
-function factToProvenance(fact: RulesMainflowAtomFact): SemanticFlatAtomProvenance {
-  return {
-    ruleId: fact.ruleId,
-    conditionPath: fact.path.replace(/^rules\[\d+\]\./u, ''),
-  }
-}
-
-function inferOrchestrationKind(key: string): SemanticOrchestrationNode['kind'] | null {
-  if (key.startsWith('program.')) return 'program'
-  if (key.startsWith('gate.')) return 'gate'
-  if (key.startsWith('scope.')) return 'scope'
-  if (key.startsWith('portfolioRisk.')) return 'portfolioRisk'
-  return null
-}
-
-function readNumber(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value !== 'string') return undefined
-  const parsed = Number(value.trim().match(/^-?\d+(?:\.\d+)?/u)?.[0])
-  return Number.isFinite(parsed) ? parsed : undefined
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
-}
-
-function readEnum<const T extends readonly string[]>(value: unknown, allowed: T): T[number] | undefined {
-  if (typeof value !== 'string') return undefined
-  return allowed.includes(value) ? value as T[number] : undefined
-}
-
-function normalizeFixedGridParams(params: Readonly<Record<string, unknown>>): SemanticOrchestrationNode['gridParams'] {
-  const lowerBound = readNumber(params.lowerBound) ?? readNumber(params.lower)
-  const upperBound = readNumber(params.upperBound) ?? readNumber(params.upper)
-  const anchorPrice = readNumber(params.anchorPrice)
-    ?? (lowerBound !== undefined && upperBound !== undefined ? (lowerBound + upperBound) / 2 : 1)
-  return {
-    anchorPrice,
-    levelCount: readNumber(params.levelCount) ?? readNumber(params.levels) ?? 10,
-    stepPct: readNumber(params.stepPct) ?? 1,
-    ...(lowerBound !== undefined && lowerBound > 0 ? { lowerBound } : {}),
-    ...(upperBound !== undefined && upperBound > 0 ? { upperBound } : {}),
-  }
-}
-
-function normalizeProgramSizing(value: unknown): SemanticOrchestrationNode['sizing'] | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
-  const record = value as Record<string, unknown>
-  const mode = readEnum(record.mode, ['fixed_quote', 'fixed_base', 'fixed_pct'] as const)
-  const amount = readNumber(record.value) ?? readNumber(record.quote) ?? readNumber(record.pct)
-  if (!mode || amount === undefined || amount <= 0) return undefined
-  return { mode, value: amount }
 }
 
 function dedupeSemanticRulesForReadiness(rules: readonly SemanticRule[]): SemanticRule[] {
@@ -1279,11 +974,11 @@ function isSupportedAtom(resolved: ReturnType<SemanticAtomRegistryService['resol
 }
 
 function normalizePhase0Orchestration(
-  orchestration: readonly SemanticOrchestrationNode[] | undefined,
+  orchestration: SemanticState['orchestration'],
   registry: SemanticOrchestrationRegistryService,
   strategyVersion: StrategyVersionInfo | undefined,
 ): Phase0OrchestrationNormalizationResult {
-  if (!orchestration?.length) {
+  if (!orchestration) {
     return { state: orchestration, hasBlockingSlots: false }
   }
 
@@ -2417,11 +2112,11 @@ function applyRegistryDrivenReadiness(
  *     加 orchestration.scope.symbol.missing_binding open slot
  */
 function applySymbolScopeBindingFailClosed(
-  materialized: ReadinessMaterializedState,
-): { state: ReadinessMaterializedState; hasBlockingSlots: boolean } {
-  const orchestration = materialized.orchestration
-  if (!orchestration.length) {
-    return { state: materialized, hasBlockingSlots: false }
+  state: SemanticState,
+): { state: SemanticState; hasBlockingSlots: boolean } {
+  const orchestration = state.orchestration
+  if (!orchestration) {
+    return { state, hasBlockingSlots: false }
   }
   const supportedScopeIds = new Set<string>()
   for (const node of orchestration) {
@@ -2435,7 +2130,7 @@ function applySymbolScopeBindingFailClosed(
     }
   }
   if (supportedScopeIds.size < 2) {
-    return { state: materialized, hasBlockingSlots: false }
+    return { state, hasBlockingSlots: false }
   }
 
   let hasBlockingSlots = false
@@ -2458,7 +2153,7 @@ function applySymbolScopeBindingFailClosed(
     return !supportedScopeIds.has(trimmed)
   }
 
-  const trigger = materialized.trigger.map((trigger) => {
+  const trigger = readFlatTriggers(state).map((trigger) => {
     if (trigger.status !== 'locked' || !isMissingRef(trigger.symbolScopeRef)) return trigger
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('trigger', trigger.id)
@@ -2468,7 +2163,7 @@ function applySymbolScopeBindingFailClosed(
       openSlots: [...(trigger.openSlots ?? []), slot],
     }
   })
-  const action = materialized.action.map((action) => {
+  const action = readFlatActions(state).map((action) => {
     if (action.status !== 'locked' || !isMissingRef(action.symbolScopeRef)) return action
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('action', action.id)
@@ -2478,7 +2173,7 @@ function applySymbolScopeBindingFailClosed(
       openSlots: [...(action.openSlots ?? []), slot],
     }
   })
-  const risk = materialized.risk.map((risk) => {
+  const risk = readFlatRisks(state).map((risk) => {
     if (risk.status !== 'locked' || !isMissingRef(risk.symbolScopeRef)) return risk
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('risk', risk.id)
@@ -2488,10 +2183,10 @@ function applySymbolScopeBindingFailClosed(
       openSlots: [...(risk.openSlots ?? []), slot],
     }
   })
-  const position = materialized.position
+  const position = state.position
     ? (() => {
-        const constraints = materialized.positionConstraint
-        if (constraints.length === 0) return materialized.position
+        const constraints = state.positionConstraint
+        if (!Array.isArray(constraints) || constraints.length === 0) return state.position
         const nextConstraints = constraints.map((constraint) => {
           if (constraint.status !== 'locked' || !isMissingRef(constraint.symbolScopeRef)) return constraint
           hasBlockingSlots = true
@@ -2502,12 +2197,12 @@ function applySymbolScopeBindingFailClosed(
             openSlots: [...(constraint.openSlots ?? []), slot],
           }
         })
-        return { ...materialized.position, constraints: nextConstraints } as typeof materialized.position
+        return { ...state.position, constraints: nextConstraints } as typeof state.position
       })()
-    : materialized.position
+    : state.position
 
   return {
-    state: { ...materialized, trigger, action, risk, position, positionConstraint: position?.constraints ?? materialized.positionConstraint },
+    state: { ...state, trigger, action, risk, position },
     hasBlockingSlots,
   }
 }
@@ -2519,12 +2214,12 @@ function applySymbolScopeBindingFailClosed(
  *   - preBindingState 用于在 symbol binding 链式降级后仍保留 owner 原始 status，避免误跳过
  */
 function applyLegScopeBindingFailClosed(
-  materialized: ReadinessMaterializedState,
-  preBindingState?: ReadinessMaterializedState,
-): { state: ReadinessMaterializedState; hasBlockingSlots: boolean } {
-  const orchestration = materialized.orchestration
-  if (!orchestration.length) {
-    return { state: materialized, hasBlockingSlots: false }
+  state: SemanticState,
+  preBindingState?: SemanticState,
+): { state: SemanticState; hasBlockingSlots: boolean } {
+  const orchestration = state.orchestration
+  if (!orchestration) {
+    return { state, hasBlockingSlots: false }
   }
   const supportedLegScopeIds = new Set<string>()
   for (const node of orchestration) {
@@ -2538,18 +2233,18 @@ function applyLegScopeBindingFailClosed(
     }
   }
   if (supportedLegScopeIds.size < 2) {
-    return { state: materialized, hasBlockingSlots: false }
+    return { state, hasBlockingSlots: false }
   }
 
   const triggerStatusBeforeBinding = new Map<string, SemanticNodeStatus>()
   const actionStatusBeforeBinding = new Map<string, SemanticNodeStatus>()
   const riskStatusBeforeBinding = new Map<string, SemanticNodeStatus>()
   const constraintStatusBeforeBinding = new Map<string, SemanticNodeStatus>()
-  const sourceState = preBindingState ?? materialized
-  for (const t of sourceState.trigger) triggerStatusBeforeBinding.set(t.id, t.status)
-  for (const a of sourceState.action) actionStatusBeforeBinding.set(a.id, a.status)
-  for (const r of sourceState.risk) riskStatusBeforeBinding.set(r.id, r.status)
-  for (const c of sourceState.positionConstraint) constraintStatusBeforeBinding.set(c.id, c.status)
+  const sourceState = preBindingState ?? state
+  for (const t of readFlatTriggers(sourceState)) triggerStatusBeforeBinding.set(t.id, t.status)
+  for (const a of readFlatActions(sourceState)) actionStatusBeforeBinding.set(a.id, a.status)
+  for (const r of readFlatRisks(sourceState)) riskStatusBeforeBinding.set(r.id, r.status)
+  for (const c of sourceState.positionConstraint ?? []) constraintStatusBeforeBinding.set(c.id, c.status)
 
   let hasBlockingSlots = false
 
@@ -2571,31 +2266,31 @@ function applyLegScopeBindingFailClosed(
     return !supportedLegScopeIds.has(trimmed)
   }
 
-  const trigger = materialized.trigger.map((trigger) => {
+  const trigger = readFlatTriggers(state).map((trigger) => {
     const preStatus = triggerStatusBeforeBinding.get(trigger.id) ?? trigger.status
     if (preStatus !== 'locked' || !isMissingLegRef(trigger.legScopeRef)) return trigger
     hasBlockingSlots = true
     const slot = buildLegMissingBindingSlot('trigger', trigger.id)
     return { ...trigger, status: 'open' as SemanticNodeStatus, openSlots: [...(trigger.openSlots ?? []), slot] }
   })
-  const action = materialized.action.map((action) => {
+  const action = readFlatActions(state).map((action) => {
     const preStatus = actionStatusBeforeBinding.get(action.id) ?? action.status
     if (preStatus !== 'locked' || !isMissingLegRef(action.legScopeRef)) return action
     hasBlockingSlots = true
     const slot = buildLegMissingBindingSlot('action', action.id)
     return { ...action, status: 'open' as SemanticNodeStatus, openSlots: [...(action.openSlots ?? []), slot] }
   })
-  const risk = materialized.risk.map((riskItem) => {
+  const risk = readFlatRisks(state).map((riskItem) => {
     const preStatus = riskStatusBeforeBinding.get(riskItem.id) ?? riskItem.status
     if (preStatus !== 'locked' || !isMissingLegRef(riskItem.legScopeRef)) return riskItem
     hasBlockingSlots = true
     const slot = buildLegMissingBindingSlot('risk', riskItem.id)
     return { ...riskItem, status: 'open' as SemanticNodeStatus, openSlots: [...(riskItem.openSlots ?? []), slot] }
   })
-  const position = materialized.position
+  const position = state.position
     ? (() => {
-        const constraints = materialized.positionConstraint
-        if (constraints.length === 0) return materialized.position
+        const constraints = state.positionConstraint
+        if (!Array.isArray(constraints) || constraints.length === 0) return state.position
         const nextConstraints = constraints.map((constraint) => {
           const preStatus = constraintStatusBeforeBinding.get(constraint.id) ?? constraint.status
           if (preStatus !== 'locked' || !isMissingLegRef(constraint.legScopeRef)) return constraint
@@ -2603,11 +2298,11 @@ function applyLegScopeBindingFailClosed(
           const slot = buildLegMissingBindingSlot('positionConstraint', constraint.id)
           return { ...constraint, status: 'open' as SemanticNodeStatus, openSlots: [...(constraint.openSlots ?? []), slot] }
         })
-        return { ...materialized.position, constraints: nextConstraints } as typeof materialized.position
+        return { ...state.position, constraints: nextConstraints } as typeof state.position
       })()
-    : materialized.position
+    : state.position
 
-  return { state: { ...materialized, trigger, action, risk, position, positionConstraint: position?.constraints ?? materialized.positionConstraint }, hasBlockingSlots }
+  return { state: { ...state, trigger, action, risk, position }, hasBlockingSlots }
 }
 
 /**
@@ -2617,11 +2312,11 @@ function applyLegScopeBindingFailClosed(
  *   - 通过 openSlots 检测 wasOriginallyLocked：含 symbol_missing_binding slot 即视为"原本 locked"，继续检查 tf ref
  */
 function applyTimeframeScopeBindingFailClosed(
-  materialized: ReadinessMaterializedState,
-): { state: ReadinessMaterializedState; hasBlockingSlots: boolean } {
-  const orchestration = materialized.orchestration
-  if (!orchestration.length) {
-    return { state: materialized, hasBlockingSlots: false }
+  state: SemanticState,
+): { state: SemanticState; hasBlockingSlots: boolean } {
+  const orchestration = state.orchestration
+  if (!orchestration) {
+    return { state, hasBlockingSlots: false }
   }
   const supportedScopeIds = new Set<string>()
   for (const node of orchestration) {
@@ -2635,7 +2330,7 @@ function applyTimeframeScopeBindingFailClosed(
     }
   }
   if (supportedScopeIds.size < 1) {
-    return { state: materialized, hasBlockingSlots: false }
+    return { state, hasBlockingSlots: false }
   }
 
   let hasBlockingSlots = false
@@ -2666,39 +2361,39 @@ function applyTimeframeScopeBindingFailClosed(
     )
   }
 
-  const trigger = materialized.trigger.map((trigger) => {
+  const trigger = readFlatTriggers(state).map((trigger) => {
     if (!wasOriginallyLocked(trigger) || !isMissingTfRef(trigger.timeframeScopeRef)) return trigger
     hasBlockingSlots = true
     const slot = buildTfMissingBindingSlot('trigger', trigger.id)
     return { ...trigger, status: 'open' as SemanticNodeStatus, openSlots: [...(trigger.openSlots ?? []), slot] }
   })
-  const action = materialized.action.map((action) => {
+  const action = readFlatActions(state).map((action) => {
     if (!wasOriginallyLocked(action) || !isMissingTfRef(action.timeframeScopeRef)) return action
     hasBlockingSlots = true
     const slot = buildTfMissingBindingSlot('action', action.id)
     return { ...action, status: 'open' as SemanticNodeStatus, openSlots: [...(action.openSlots ?? []), slot] }
   })
-  const risk = materialized.risk.map((riskItem) => {
+  const risk = readFlatRisks(state).map((riskItem) => {
     if (!wasOriginallyLocked(riskItem) || !isMissingTfRef(riskItem.timeframeScopeRef)) return riskItem
     hasBlockingSlots = true
     const slot = buildTfMissingBindingSlot('risk', riskItem.id)
     return { ...riskItem, status: 'open' as SemanticNodeStatus, openSlots: [...(riskItem.openSlots ?? []), slot] }
   })
-  const position = materialized.position
+  const position = state.position
     ? (() => {
-        const constraints = materialized.positionConstraint
-        if (constraints.length === 0) return materialized.position
+        const constraints = state.positionConstraint
+        if (!Array.isArray(constraints) || constraints.length === 0) return state.position
         const nextConstraints = constraints.map((constraint) => {
           if (!wasOriginallyLocked(constraint) || !isMissingTfRef(constraint.timeframeScopeRef)) return constraint
           hasBlockingSlots = true
           const slot = buildTfMissingBindingSlot('positionConstraint', constraint.id)
           return { ...constraint, status: 'open' as SemanticNodeStatus, openSlots: [...(constraint.openSlots ?? []), slot] }
         })
-        return { ...materialized.position, constraints: nextConstraints } as typeof materialized.position
+        return { ...state.position, constraints: nextConstraints } as typeof state.position
       })()
-    : materialized.position
+    : state.position
 
-  return { state: { ...materialized, trigger, action, risk, position, positionConstraint: position?.constraints ?? materialized.positionConstraint }, hasBlockingSlots }
+  return { state: { ...state, trigger, action, risk, position }, hasBlockingSlots }
 }
 
 /**
@@ -2710,11 +2405,11 @@ function applyTimeframeScopeBindingFailClosed(
  *   - **不强制要求所有 binding 节点必须声明 dataSourceScopeRef**（dataSource 是声明性 feed 集合，不需 per-program 路由）
  */
 function applyDataSourceScopeBindingFailClosed(
-  materialized: ReadinessMaterializedState,
-): { state: ReadinessMaterializedState; hasBlockingSlots: boolean } {
-  const orchestration = materialized.orchestration
-  if (!orchestration.length) {
-    return { state: materialized, hasBlockingSlots: false }
+  state: SemanticState,
+): { state: SemanticState; hasBlockingSlots: boolean } {
+  const orchestration = state.orchestration
+  if (!orchestration) {
+    return { state, hasBlockingSlots: false }
   }
   const supportedScopeIds = new Set<string>()
   for (const node of orchestration) {
@@ -2727,7 +2422,7 @@ function applyDataSourceScopeBindingFailClosed(
     }
   }
   if (supportedScopeIds.size === 0) {
-    return { state: materialized, hasBlockingSlots: false }
+    return { state, hasBlockingSlots: false }
   }
 
   let hasBlockingSlots = false
@@ -2752,7 +2447,7 @@ function applyDataSourceScopeBindingFailClosed(
     return !supportedScopeIds.has(trimmed)
   }
 
-  const trigger = materialized.trigger.map((trigger) => {
+  const trigger = readFlatTriggers(state).map((trigger) => {
     if (trigger.status !== 'locked' || !isInvalidExplicitRef(trigger.dataSourceScopeRef)) return trigger
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('trigger', trigger.id)
@@ -2762,7 +2457,7 @@ function applyDataSourceScopeBindingFailClosed(
       openSlots: [...(trigger.openSlots ?? []), slot],
     }
   })
-  const action = materialized.action.map((action) => {
+  const action = readFlatActions(state).map((action) => {
     if (action.status !== 'locked' || !isInvalidExplicitRef(action.dataSourceScopeRef)) return action
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('action', action.id)
@@ -2772,7 +2467,7 @@ function applyDataSourceScopeBindingFailClosed(
       openSlots: [...(action.openSlots ?? []), slot],
     }
   })
-  const risk = materialized.risk.map((risk) => {
+  const risk = readFlatRisks(state).map((risk) => {
     if (risk.status !== 'locked' || !isInvalidExplicitRef(risk.dataSourceScopeRef)) return risk
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('risk', risk.id)
@@ -2782,10 +2477,10 @@ function applyDataSourceScopeBindingFailClosed(
       openSlots: [...(risk.openSlots ?? []), slot],
     }
   })
-  const position = materialized.position
+  const position = state.position
     ? (() => {
-        const constraints = materialized.positionConstraint
-        if (constraints.length === 0) return materialized.position
+        const constraints = state.positionConstraint
+        if (!Array.isArray(constraints) || constraints.length === 0) return state.position
         const nextConstraints = constraints.map((constraint) => {
           if (constraint.status !== 'locked' || !isInvalidExplicitRef(constraint.dataSourceScopeRef)) return constraint
           hasBlockingSlots = true
@@ -2796,12 +2491,12 @@ function applyDataSourceScopeBindingFailClosed(
             openSlots: [...(constraint.openSlots ?? []), slot],
           }
         })
-        return { ...materialized.position, constraints: nextConstraints } as typeof materialized.position
+        return { ...state.position, constraints: nextConstraints } as typeof state.position
       })()
-    : materialized.position
+    : state.position
 
   return {
-    state: { ...materialized, trigger, action, risk, position, positionConstraint: position?.constraints ?? materialized.positionConstraint },
+    state: { ...state, trigger, action, risk, position },
     hasBlockingSlots,
   }
 }
@@ -2817,11 +2512,11 @@ function applyDataSourceScopeBindingFailClosed(
  * "并行新增独立函数，不重命名既有 S2 helper；公共 helper 抽取留 follow-up #1113"。
  */
 function applySubStrategyScopeBindingFailClosed(
-  materialized: ReadinessMaterializedState,
-): { state: ReadinessMaterializedState; hasBlockingSlots: boolean } {
-  const orchestration = materialized.orchestration
-  if (!orchestration.length) {
-    return { state: materialized, hasBlockingSlots: false }
+  state: SemanticState,
+): { state: SemanticState; hasBlockingSlots: boolean } {
+  const orchestration = state.orchestration
+  if (!orchestration) {
+    return { state, hasBlockingSlots: false }
   }
   const supportedScopeIds = new Set<string>()
   for (const node of orchestration) {
@@ -2834,7 +2529,7 @@ function applySubStrategyScopeBindingFailClosed(
     }
   }
   if (supportedScopeIds.size < 2) {
-    return { state: materialized, hasBlockingSlots: false }
+    return { state, hasBlockingSlots: false }
   }
 
   let hasBlockingSlots = false
@@ -2857,7 +2552,7 @@ function applySubStrategyScopeBindingFailClosed(
     return !supportedScopeIds.has(trimmed)
   }
 
-  const trigger = materialized.trigger.map((trigger) => {
+  const trigger = readFlatTriggers(state).map((trigger) => {
     if (trigger.status !== 'locked' || !isMissingSubStrategyRef(trigger.subStrategyScopeRef)) return trigger
     hasBlockingSlots = true
     const slot = buildSubStrategyMissingBindingSlot('trigger', trigger.id)
@@ -2867,7 +2562,7 @@ function applySubStrategyScopeBindingFailClosed(
       openSlots: [...(trigger.openSlots ?? []), slot],
     }
   })
-  const action = materialized.action.map((action) => {
+  const action = readFlatActions(state).map((action) => {
     if (action.status !== 'locked' || !isMissingSubStrategyRef(action.subStrategyScopeRef)) return action
     hasBlockingSlots = true
     const slot = buildSubStrategyMissingBindingSlot('action', action.id)
@@ -2877,7 +2572,7 @@ function applySubStrategyScopeBindingFailClosed(
       openSlots: [...(action.openSlots ?? []), slot],
     }
   })
-  const risk = materialized.risk.map((risk) => {
+  const risk = readFlatRisks(state).map((risk) => {
     if (risk.status !== 'locked' || !isMissingSubStrategyRef(risk.subStrategyScopeRef)) return risk
     hasBlockingSlots = true
     const slot = buildSubStrategyMissingBindingSlot('risk', risk.id)
@@ -2887,10 +2582,10 @@ function applySubStrategyScopeBindingFailClosed(
       openSlots: [...(risk.openSlots ?? []), slot],
     }
   })
-  const position = materialized.position
+  const position = state.position
     ? (() => {
-        const constraints = materialized.positionConstraint
-        if (constraints.length === 0) return materialized.position
+        const constraints = state.positionConstraint
+        if (!Array.isArray(constraints) || constraints.length === 0) return state.position
         const nextConstraints = constraints.map((constraint) => {
           if (constraint.status !== 'locked' || !isMissingSubStrategyRef(constraint.subStrategyScopeRef)) return constraint
           hasBlockingSlots = true
@@ -2901,12 +2596,12 @@ function applySubStrategyScopeBindingFailClosed(
             openSlots: [...(constraint.openSlots ?? []), slot],
           }
         })
-        return { ...materialized.position, constraints: nextConstraints } as typeof materialized.position
+        return { ...state.position, constraints: nextConstraints } as typeof state.position
       })()
-    : materialized.position
+    : state.position
 
   return {
-    state: { ...materialized, trigger, action, risk, position, positionConstraint: position?.constraints ?? materialized.positionConstraint },
+    state: { ...state, trigger, action, risk, position },
     hasBlockingSlots,
   }
 }
@@ -2958,13 +2653,26 @@ function isBoundaryCancelRequirement(object: string): boolean {
   return /boundary|breakout|breach|cancel|halt|stop|order|grid/u.test(object)
 }
 
-function collectActiveContractOwners(materialized: ReadinessMaterializedState): SemanticContractOwnerRef[] {
+/**
+ * #1493 块 D：rules 真源前置保证后，flat 五桶（trigger/action/risk/positionConstraint
+ * 含 position）已由 `normalize()` 入口的 `reprojectFromRules` 重新派生自 rules tree。
+ *
+ * 因此本函数读 flat 等价于读 rules（AND/OR/sequence/NOT 复合表达式由 projectToFlat
+ * 拆叶子并把 combinationContract 挂到首叶子上，不会被"拆散"成多条独立 owner）。
+ *
+ * rules 为空时本函数仍读取原始 flat — 这条 legacy 路径保留是为兼容老 fixture / 直接
+ * 写 flat 的测试用例；最终 readiness 由 normalize() 决定，rules 空 + flat 非空时
+ * 不再触发 reproject，readiness 走 legacy flat 8 路 fail-closed 路径。
+ *
+ * 完整切流 rules-only readiness（即 rules 空 → ready=false rules_missing）的 fixture
+ * 迁移留给后续 PR，避免单次推动 86 个 readiness spec 同步改写。
+ */
+function collectActiveContractOwners(state: SemanticState): SemanticContractOwnerRef[] {
   const owners: SemanticContractOwnerRef[] = []
-  const source = materialized.source
 
-  for (const trigger of materialized.trigger) {
+  for (const trigger of readFlatTriggers(state)) {
     if (trigger.status !== 'superseded' && trigger.contracts?.length) {
-      const sourceRulePath = buildSourceRulePath(source, trigger._provenance)
+      const sourceRulePath = buildSourceRulePath(state, trigger._provenance)
       owners.push({
         ownerKind: 'trigger',
         ownerId: trigger.id,
@@ -2980,9 +2688,9 @@ function collectActiveContractOwners(materialized: ReadinessMaterializedState): 
     }
   }
 
-  for (const action of materialized.action) {
+  for (const action of readFlatActions(state)) {
     if (action.status !== 'superseded' && action.contracts?.length) {
-      const sourceRulePath = buildSourceRulePath(source, action._provenance)
+      const sourceRulePath = buildSourceRulePath(state, action._provenance)
       owners.push({
         ownerKind: 'action',
         ownerId: action.id,
@@ -2998,9 +2706,9 @@ function collectActiveContractOwners(materialized: ReadinessMaterializedState): 
     }
   }
 
-  for (const risk of materialized.risk) {
+  for (const risk of readFlatRisks(state)) {
     if (risk.status !== 'superseded' && risk.contracts?.length) {
-      const sourceRulePath = buildSourceRulePath(source, risk._provenance)
+      const sourceRulePath = buildSourceRulePath(state, risk._provenance)
       owners.push({
         ownerKind: 'risk',
         ownerId: risk.id,
@@ -3017,31 +2725,31 @@ function collectActiveContractOwners(materialized: ReadinessMaterializedState): 
   }
 
   if (
-    materialized.position
-    && materialized.position.mode !== 'constraint_only'
-    && materialized.position.status !== 'superseded'
-    && materialized.position.contracts?.length
+    state.position
+    && state.position.mode !== 'constraint_only'
+    && state.position.status !== 'superseded'
+    && state.position.contracts?.length
   ) {
     owners.push({
       ownerKind: 'position',
       ownerId: positionOwnerId(),
-      atomKey: toPositionAtomKey(materialized.position.mode),
+      atomKey: toPositionAtomKey(state.position.mode),
       params: {
-        mode: materialized.position.mode,
-        value: materialized.position.value,
-        positionMode: materialized.position.positionMode,
-        sizing: materialized.position.sizing,
+        mode: state.position.mode,
+        value: state.position.value,
+        positionMode: state.position.positionMode,
+        sizing: state.position.sizing,
       },
-      support: materialized.position.support,
-      status: materialized.position.status,
-      openSlots: materialized.position.openSlots ?? [],
-      contracts: materialized.position.contracts,
+      support: state.position.support,
+      status: state.position.status,
+      openSlots: state.position.openSlots ?? [],
+      contracts: state.position.contracts,
     })
   }
 
-  for (const constraint of materialized.position?.constraints ?? []) {
+  for (const constraint of state.position?.constraints ?? []) {
     if (constraint.status !== 'superseded' && constraint.contracts?.length) {
-      const sourceRulePath = buildSourceRulePath(source, constraint._provenance)
+      const sourceRulePath = buildSourceRulePath(state, constraint._provenance)
       owners.push({
         ownerKind: 'position',
         ownerId: positionConstraintOwnerId(constraint),
@@ -3057,9 +2765,9 @@ function collectActiveContractOwners(materialized: ReadinessMaterializedState): 
     }
   }
 
-  for (const constraint of materialized.positionConstraint) {
+  for (const constraint of state.positionConstraint ?? []) {
     if (constraint.status !== 'superseded' && constraint.contracts?.length) {
-      const sourceRulePath = buildSourceRulePath(source, constraint._provenance)
+      const sourceRulePath = buildSourceRulePath(state, constraint._provenance)
       owners.push({
         ownerKind: 'position',
         ownerId: positionConstraintOwnerId(constraint),
@@ -3346,13 +3054,13 @@ function buildContractOpenSlotMap(
   return slotsByOwnerKey
 }
 
-function buildAddPositionConstraintRelationshipSlots(materialized: ReadinessMaterializedState): Map<string, SemanticSlotState[]> {
+function buildAddPositionConstraintRelationshipSlots(state: SemanticState): Map<string, SemanticSlotState[]> {
   const slotsByOwnerKey = new Map<string, SemanticSlotState[]>()
-  if (hasActiveAddPositionConstraint(materialized)) {
+  if (hasActiveAddPositionConstraint(state)) {
     return slotsByOwnerKey
   }
 
-  for (const action of materialized.action) {
+  for (const action of readFlatActions(state)) {
     if (action.status === 'superseded' || action.key !== ATOM_CONTRACT_REGISTRY['action.add_position'].key) {
       continue
     }
@@ -3374,11 +3082,12 @@ function buildAddPositionConstraintRelationshipSlots(materialized: ReadinessMate
   return slotsByOwnerKey
 }
 
-function hasActiveAddPositionConstraint(materialized: ReadinessMaterializedState): boolean {
-  const topLevel = materialized.positionConstraint.some(isActiveAddPositionConstraint)
+function hasActiveAddPositionConstraint(state: SemanticState): boolean {
+  const topLevel = state.positionConstraint?.some(isActiveAddPositionConstraint) ?? false
   if (topLevel) return true
 
-  return materialized.position?.constraints?.some(isActiveAddPositionConstraint) ?? false
+  // DEPRECATED Task 6: position.constraints moved to top-level positionConstraint[]
+  return (state.position as { constraints?: SemanticPositionConstraintState[] } | null)?.constraints?.some(isActiveAddPositionConstraint) ?? false
 }
 
 function isActiveAddPositionConstraint(constraint: SemanticPositionConstraintState): boolean {
@@ -3423,12 +3132,12 @@ function hasOpenSlots(slotsByOwnerKey: Map<string, SemanticSlotState[]>): boolea
   return false
 }
 
-function hasBlockingOwnerOpenSlots(materialized: ReadinessMaterializedState): boolean {
-  return materialized.trigger.some(ownerHasOpenSlot)
-    || materialized.action.some(ownerHasOpenSlot)
-    || materialized.risk.some(ownerHasOpenSlot)
-    || ownerHasOpenSlot(materialized.position)
-    || materialized.positionConstraint.some(ownerHasOpenSlot)
+function hasBlockingOwnerOpenSlots(state: SemanticState): boolean {
+  return readFlatTriggers(state).some(ownerHasOpenSlot)
+    || readFlatActions(state).some(ownerHasOpenSlot)
+    || readFlatRisks(state).some(ownerHasOpenSlot)
+    || ownerHasOpenSlot(state.position)
+    || (state.positionConstraint ?? []).some(ownerHasOpenSlot)
 }
 
 function ownerHasOpenSlot(owner: { openSlots?: readonly SemanticSlotState[] } | null): boolean {

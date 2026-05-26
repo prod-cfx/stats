@@ -3,7 +3,7 @@ import { collectAtomLeaves, listRuleEffects } from '../../types/atom-expr'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { PlannerDispatcherMergeService } from '../planner-dispatcher-merge.service'
 
-describe.skip('PlannerDispatcherMergeService legacy five-bucket merge spec', () => {
+describe('PlannerDispatcherMergeService', () => {
   const svc = new PlannerDispatcherMergeService()
 
   it('returns null when both inputs are null/empty', () => {

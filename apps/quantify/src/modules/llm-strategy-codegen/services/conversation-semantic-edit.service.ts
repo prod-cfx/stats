@@ -7,28 +7,15 @@ import type {
   SemanticEditPatch,
 } from '../types/semantic-edit'
 import type { MarketInstrumentSymbolResolution } from '../types/market-instrument-symbol'
-import type { SemanticActionState, SemanticPositionState, SemanticRiskState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
+import type { SemanticActionState, SemanticPositionState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import type { AtomExpr, SemanticRule } from '../types/atom-expr'
 import { isProcessingCodegenSessionStatus } from '../types/codegen-session-status'
 import { readPendingSemanticEdit, withPendingSemanticEdit } from '../types/semantic-edit'
 import { updateRuleAtomParams } from '../types/atom-expr'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
+import { SemanticRuleProjectionService } from './semantic-rule-projection.service'
 import { resolveEditableRangeParamPairs, resolveEditableScalarParamPaths } from './strategy-semantic-contracts'
-import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
-
-const editRulesMainflowReader = new RulesMainflowReaderService()
-
-function rulesPathTriggers(state: SemanticState): readonly SemanticTriggerState[] {
-  return editRulesMainflowReader.readFactsByRole(state, 'condition') as unknown as readonly SemanticTriggerState[]
-}
-
-function rulesPathActions(state: SemanticState): readonly SemanticActionState[] {
-  return editRulesMainflowReader.readFactsByRole(state, 'action') as unknown as readonly SemanticActionState[]
-}
-
-function rulesPathRisks(state: SemanticState): readonly SemanticRiskState[] {
-  return editRulesMainflowReader.readFactsByRole(state, 'risk') as unknown as readonly SemanticRiskState[]
-}
+import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 
 export interface ConversationSemanticEditDecisionInput {
   status: LlmCodegenSessionStatus
@@ -41,48 +28,51 @@ type SemanticActionKey = 'open_long' | 'open_short' | 'close_long' | 'close_shor
 
 @Injectable()
 export class ConversationSemanticEditService {
+  // Issue #1493 块 C：rules 树非空时通过 projection 将 flat 五桶重新派生回 state。
+  // flat 直接 mutation 路径保留作为 rules 缺席场景（老 fixture / pure-flat seed）的兜底。
   private readonly logger = new Logger(ConversationSemanticEditService.name)
 
   constructor(
     private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
+    private readonly projection: SemanticRuleProjectionService = new SemanticRuleProjectionService(),
   ) {}
 
   /**
    * Issue #1493 块 C：edit 路径统一收口。
    *
-   * - rules 树已由各 edit 分支直接更新；
-   * - 返回同一 rules-path state，不再从旧五桶投影。
+   * - 若 `nextState.rules` 存在且非空 → 跑 reprojectFromRules 让 flat 五桶等于
+   *   `projectToFlat(rules)`，确保 rules 是单一真相源；
+   * - 否则（老 fixture / pure-flat 路径）→ 直接返回 `nextState`。
    */
   private finalizeEdit(nextState: SemanticState): SemanticState {
+    if (nextState.rules && nextState.rules.length > 0) {
+      return this.projection.reprojectFromRules(nextState)
+    }
     return nextState
   }
 
-  private reprojectWhenRulesPresent(state: SemanticState): SemanticState {
-    return state
-  }
-
   /**
-   * Issue #1493 块 C：按 rules-path atom id 与 `_provenance.conditionPath` 反查到
+   * Issue #1493 块 C：按 flat atom id 与 `_provenance.conditionPath` 反查到
    * rules 树叶子并应用 mutator，不可变重建 rules。
    *
-   * 用法：调用方先在 rules-path 桶里识别"哪些 atom 需要改"（沿用现有 atomKey/params 匹配），
+   * 用法：调用方先在 flat 桶里识别"哪些 atom 需要改"（沿用现有 atomKey/params 匹配），
    * 拿到匹配 atom 的 `_provenance` 后调用本 helper。
    *
    * 未命中 / `_provenance` 缺失 → 直接返回原 rules 引用（前向兼容老 fixture）。
    */
   private mutateRulesAtom(
     rules: readonly SemanticRule[] | undefined,
-    rulesPathAtom: { _provenance?: { ruleId: string, conditionPath: string } } | undefined,
+    flatAtom: { _provenance?: { ruleId: string, conditionPath: string } } | undefined,
     mutator: (atom: AtomExpr & { kind: 'atom' }) => AtomExpr & { kind: 'atom' },
   ): readonly SemanticRule[] | undefined {
     if (!rules || rules.length === 0) return rules
-    const prov = rulesPathAtom?._provenance
+    const prov = flatAtom?._provenance
     if (!prov) return rules
     try {
       return updateRuleAtomParams(rules, prov.ruleId, prov.conditionPath, mutator)
     }
     catch (err) {
-      // Issue #1493 M1：路径不命中（fixture 不一致）→  保留原 rules。
+      // Issue #1493 M1：路径不命中（fixture 不一致）→ fail-open 保留原 rules。
       //   原本静默 swallow 让 edit / rules 漂移线上无观测，改为结构化 warn 暴露。
       this.logger.warn(
         `[#1493] mutateRulesAtom path miss: ruleId=${prov.ruleId} path=${prov.conditionPath} op=edit.mutateRulesAtom`,
@@ -93,7 +83,6 @@ export class ConversationSemanticEditService {
   }
 
   applyPatch(state: SemanticState, patch: SemanticEditPatch): SemanticState {
-    const initialState = this.reprojectWhenRulesPresent(state)
     return patch.operations.reduce((next, operation) => {
       if (operation.op === 'cancel_pending_edit') {
         return withPendingSemanticEdit(next, null)
@@ -129,22 +118,21 @@ export class ConversationSemanticEditService {
         return this.applyActionReplacement(next, operation.text ?? '')
       }
       return next
-    }, initialState)
+    }, state)
   }
 
   decide(input: ConversationSemanticEditDecisionInput): SemanticEditDecision {
-    const semanticState = this.reprojectWhenRulesPresent(input.semanticState)
     const message = input.message.trim()
     if (!message) return { kind: 'NO_EDIT' }
 
-    if (isProcessingCodegenSessionStatus(input.status) && this.hasSemanticEditIntent(message, semanticState)) {
+    if (isProcessingCodegenSessionStatus(input.status) && this.hasSemanticEditIntent(message, input.semanticState)) {
       return {
         kind: 'REJECT_WHILE_PROCESSING',
         message: PROCESSING_REJECTION_MESSAGE,
       }
     }
 
-    const pendingEdit = readPendingSemanticEdit(semanticState)
+    const pendingEdit = readPendingSemanticEdit(input.semanticState)
     if (pendingEdit && /算了|保持原来|不改了|取消/u.test(message)) {
       return {
         kind: 'APPLY_TO_SEMANTIC_STATE',
@@ -169,7 +157,7 @@ export class ConversationSemanticEditService {
     }
 
     if (pendingEdit && this.isPendingRsiTriggerReplacement(pendingEdit)) {
-      if (!pendingEdit.targetRef && rulesPathTriggers(semanticState).length > 1) {
+      if (!pendingEdit.targetRef && readFlatTriggers(input.semanticState).length > 1) {
         return {
           kind: 'ASK_EDIT_CLARIFICATION',
           question: '你正在把触发语义改成 RSI。当前有多个触发，请先说明要替换哪一个触发条件。',
@@ -191,7 +179,7 @@ export class ConversationSemanticEditService {
       }
     }
 
-    const implicitReplacementSeed = this.extractImplicitStrategyReplacementSeed(message, semanticState)
+    const implicitReplacementSeed = this.extractImplicitStrategyReplacementSeed(message, input.semanticState)
     if (implicitReplacementSeed) {
       return {
         kind: 'REPLACE_STRATEGY_DRAFT',
@@ -288,7 +276,7 @@ export class ConversationSemanticEditService {
     if (/触发.*改成\s*RSI|把触发改成\s*RSI/u.test(message)) {
       const triggerPendingEdit = this.createPendingTriggerReplacement(
         message,
-        this.inferSingleTriggerTargetRef(semanticState),
+        this.inferSingleTriggerTargetRef(input.semanticState),
         input.status === 'PUBLISHED' ? 'PUBLISHED' : undefined,
       )
       return {
@@ -302,13 +290,18 @@ export class ConversationSemanticEditService {
   }
 
   hasEditIntent(input: ConversationSemanticEditDecisionInput): boolean {
-    return this.hasSemanticEditIntent(input.message.trim(), this.reprojectWhenRulesPresent(input.semanticState))
+    return this.hasSemanticEditIntent(input.message.trim(), input.semanticState)
   }
 
   createEmptySemanticStateForTest(): SemanticState {
     return {
       version: 1,
       families: [],
+      trigger: [],
+      action: [],
+      risk: [],
+      positionConstraint: [],
+      orchestration: [],
       orchestrationContracts: [],
       position: null,
       contextSlots: {
@@ -337,12 +330,12 @@ export class ConversationSemanticEditService {
   private applyTriggerReplacement(state: SemanticState, text: string): SemanticState {
     const pendingEdit = readPendingSemanticEdit(state)
     if (!pendingEdit || !this.isPendingRsiTriggerReplacement(pendingEdit)) return state
-    if (!pendingEdit.targetRef && rulesPathTriggers(state).length > 1) return state
+    if (!pendingEdit.targetRef && readFlatTriggers(state).length > 1) return state
 
     const threshold = this.extractRsiThreshold(text)
     if (!threshold) return state
 
-    const targetRef = pendingEdit.targetRef ?? (rulesPathTriggers(state).length === 1 ? rulesPathTriggers(state)[0]?.id : undefined)
+    const targetRef = pendingEdit.targetRef ?? (readFlatTriggers(state).length === 1 ? readFlatTriggers(state)[0]?.id : undefined)
     const trigger: SemanticTriggerState = {
       ...pendingEdit.candidate,
       id: targetRef ?? pendingEdit.candidate.id,
@@ -362,50 +355,27 @@ export class ConversationSemanticEditService {
       openSlots: [],
     }
     const triggers = targetRef
-      ? rulesPathTriggers(state).map((item) => item.id === targetRef ? trigger : item)
-      : [trigger, ...rulesPathTriggers(state).filter((item) => item.id !== trigger.id)]
+      ? readFlatTriggers(state).map((item) => item.id === targetRef ? trigger : item)
+      : [trigger, ...readFlatTriggers(state).filter((item) => item.id !== trigger.id)]
 
     // Issue #1493 块 C：同步 rules 树。原触发 atom 改成 oscillator.rsi_gte/_lte，
-    // 通过 targetRef 匹配的 rules-path trigger 的 _provenance 反查回 rules 叶子。
+    // 通过 targetRef 匹配的 flat trigger 的 _provenance 反查回 rules 叶子。
     const sourceFlatTrigger = targetRef
-      ? rulesPathTriggers(state).find(item => item.id === targetRef)
-      : rulesPathTriggers(state)[0]
-    const nextRules = sourceFlatTrigger
-      ? this.mutateRulesAtom(state.rules, sourceFlatTrigger, () => ({
-          kind: 'atom',
-          key: trigger.key,
-          params: { ...trigger.params },
-          ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
-        }))
-      : [...(state.rules ?? []), this.buildSingleTriggerRule(trigger)]
+      ? readFlatTriggers(state).find(item => item.id === targetRef)
+      : readFlatTriggers(state)[0]
+    const nextRules = this.mutateRulesAtom(state.rules, sourceFlatTrigger, () => ({
+      kind: 'atom',
+      key: trigger.key,
+      params: { ...trigger.params },
+      ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
+    }))
 
     return withPendingSemanticEdit(this.finalizeEdit({
       ...state,
+      trigger: triggers,
       rules: nextRules,
       updatedAt: new Date().toISOString(),
     }), null)
-  }
-
-  private buildSingleTriggerRule(trigger: SemanticTriggerState): SemanticRule {
-    return {
-      id: trigger.id,
-      phase: trigger.phase === 'gate' ? 'gate' : trigger.phase === 'exit' ? 'exit' : 'entry',
-      sideScope: trigger.sideScope === 'short' || trigger.sideScope === 'both' ? trigger.sideScope : 'long',
-      condition: {
-        kind: 'atom',
-        key: trigger.key,
-        params: { ...trigger.params },
-        ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
-        ...(trigger.evidence?.text ? { evidence: { text: trigger.evidence.text } } : {}),
-      },
-      effects: {
-        actions: [],
-        risks: [],
-        positions: [],
-        orchestration: [],
-        programs: [],
-      },
-    }
   }
 
   private applyContextReplacement(
@@ -487,7 +457,7 @@ export class ConversationSemanticEditService {
       openSlots: [],
     }
 
-    // Issue #1493 块 C：position 不属于 rules 子树（仍是 rules-path 顶层字段），不需要走
+    // Issue #1493 块 C：position 不属于 rules 子树（仍是 flat 顶层字段），不需要走
     // updateRuleAtomParams；但末尾仍跑 finalizeEdit 兜底（rules 非空 → reproject）。
     return this.finalizeEdit({
       ...state,
@@ -503,7 +473,7 @@ export class ConversationSemanticEditService {
     const targetIndicator = operation.indicator?.trim().toLowerCase()
     let changed = false
     let nextRules = state.rules
-    const triggers = rulesPathTriggers(state).map((trigger) => {
+    const triggers = readFlatTriggers(state).map((trigger) => {
       const triggerIndicator = typeof trigger.params.indicator === 'string'
         ? trigger.params.indicator.trim().toLowerCase()
         : ''
@@ -547,6 +517,7 @@ export class ConversationSemanticEditService {
 
     return this.finalizeEdit({
       ...state,
+      trigger: triggers,
       rules: nextRules,
       updatedAt: new Date().toISOString(),
     })
@@ -558,7 +529,7 @@ export class ConversationSemanticEditService {
   ): SemanticState {
     let changed = false
     let nextRules = state.rules
-    const triggers = rulesPathTriggers(state).map((trigger) => {
+    const triggers = readFlatTriggers(state).map((trigger) => {
       if (!this.doesTriggerMatchNumberReplacementDirection(trigger, operation.direction)) {
         return trigger
       }
@@ -586,6 +557,7 @@ export class ConversationSemanticEditService {
 
     return this.finalizeEdit({
       ...state,
+      trigger: triggers,
       rules: nextRules,
       updatedAt: new Date().toISOString(),
     })
@@ -597,7 +569,7 @@ export class ConversationSemanticEditService {
   ): SemanticState {
     let changed = false
     let nextRules = state.rules
-    const triggers = rulesPathTriggers(state).map((trigger) => {
+    const triggers = readFlatTriggers(state).map((trigger) => {
       const nextParams = this.replaceNumericParamValue(trigger.key, trigger.params, operation.from, operation.to, operation.unit)
       if (nextParams === trigger.params) return trigger
 
@@ -617,7 +589,7 @@ export class ConversationSemanticEditService {
       }
     })
 
-    const risk = rulesPathRisks(state).map((riskItem) => {
+    const risk = readFlatRisks(state).map((riskItem) => {
       const nextParams = this.replaceNumericParamValue(riskItem.key, riskItem.params, operation.from, operation.to, operation.unit)
       if (nextParams === riskItem.params) return riskItem
 
@@ -643,6 +615,8 @@ export class ConversationSemanticEditService {
 
     return this.finalizeEdit({
       ...state,
+      trigger: triggers,
+      risk,
       position,
       rules: nextRules,
       updatedAt: new Date().toISOString(),
@@ -655,7 +629,7 @@ export class ConversationSemanticEditService {
   ): SemanticState {
     let changed = false
     let nextRules = state.rules
-    const triggers = rulesPathTriggers(state).map((trigger) => {
+    const triggers = readFlatTriggers(state).map((trigger) => {
       const nextParams = this.replaceRangeParamValue(trigger.key, trigger.params, operation.from, operation.to)
       if (nextParams === trigger.params) return trigger
 
@@ -674,7 +648,7 @@ export class ConversationSemanticEditService {
       }
     })
 
-    const risk = rulesPathRisks(state).map((riskItem) => {
+    const risk = readFlatRisks(state).map((riskItem) => {
       const nextParams = this.replaceRangeParamValue(riskItem.key, riskItem.params, operation.from, operation.to)
       if (nextParams === riskItem.params) return riskItem
 
@@ -697,6 +671,8 @@ export class ConversationSemanticEditService {
 
     return this.finalizeEdit({
       ...state,
+      trigger: triggers,
+      risk,
       rules: nextRules,
       updatedAt: new Date().toISOString(),
     })
@@ -859,8 +835,8 @@ export class ConversationSemanticEditService {
 
     let changed = false
     let nextRules = state.rules
-    const rulesPathActionItems = rulesPathActions(state)
-    const actions = rulesPathActionItems.map((action) => {
+    const flatActions = readFlatActions(state)
+    const actions = flatActions.map((action) => {
       if (action.key !== replacement.from) return action
       changed = true
       // Issue #1493 块 C：同步 rules 树（effects 里 action atom 改 key）
@@ -882,8 +858,8 @@ export class ConversationSemanticEditService {
         changed = true
         for (let index = 0; index < actions.length; index += 1) {
           if (actions[index]?.key === pairedFromAction) {
-            // 通过原 rulesPathActionItems 反查 provenance（actions 已是新值）
-            const origAction = rulesPathActionItems[index]
+            // 通过原 flatActions 反查 provenance（actions 已是新值）
+            const origAction = flatActions[index]
             nextRules = this.mutateRulesAtom(nextRules, origAction, atom => ({
               ...atom,
               key: pairedToAction,
@@ -894,9 +870,9 @@ export class ConversationSemanticEditService {
       }
     }
 
-    const rulesPathTriggerItems = rulesPathTriggers(state)
+    const flatTriggers = readFlatTriggers(state)
     const triggers = fromSide && toSide && fromSide !== toSide
-      ? rulesPathTriggerItems.map((trigger) => {
+      ? flatTriggers.map((trigger) => {
           if (trigger.sideScope !== fromSide) return trigger
           changed = true
           // Issue #1493 块 C：rules 树里 atom 的 sideScope 也跟着翻
@@ -913,7 +889,7 @@ export class ConversationSemanticEditService {
             },
           }
         })
-      : rulesPathTriggerItems
+      : flatTriggers
 
     const position = fromSide && toSide && fromSide !== toSide && state.position
       ? {
@@ -930,6 +906,8 @@ export class ConversationSemanticEditService {
 
     return this.finalizeEdit({
       ...state,
+      action: actions,
+      trigger: triggers,
       position,
       rules: nextRules,
       updatedAt: new Date().toISOString(),
@@ -1288,9 +1266,9 @@ export class ConversationSemanticEditService {
   }
 
   private hasActiveStrategySemantics(state: SemanticState): boolean {
-    return rulesPathTriggers(state).length > 0
-      || rulesPathActions(state).length > 0
-      || rulesPathRisks(state).length > 0
+    return readFlatTriggers(state).length > 0
+      || readFlatActions(state).length > 0
+      || readFlatRisks(state).length > 0
       || state.position !== null
       || Object.values(state.contextSlots).some((slot) => Boolean(slot?.value))
   }
@@ -1333,7 +1311,7 @@ export class ConversationSemanticEditService {
   }
 
   private inferSingleTriggerTargetRef(state: SemanticState): string | undefined {
-    return rulesPathTriggers(state).length === 1 ? rulesPathTriggers(state)[0]?.id : undefined
+    return readFlatTriggers(state).length === 1 ? readFlatTriggers(state)[0]?.id : undefined
   }
 
   private createPendingTriggerReplacement(

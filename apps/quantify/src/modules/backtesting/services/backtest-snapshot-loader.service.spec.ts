@@ -123,27 +123,11 @@ describe('backtestSnapshotLoaderService', () => {
         compiledManifest: compiledSnapshot.compiledManifest,
         executionEnvelope: compiledSnapshot.executionEnvelope,
         specSnapshot: {
-          version: 2,
           market: { exchange: 'okx' },
           indicators: [{ kind: 'bollingerBands', params: { period: 20, stdDev: 2 } }],
-          sizing: null,
-          executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
-          dataRequirements: { requiredTimeframes: ['3m', '15m'] },
-          rules: [
-            {
-              id: 'risk-stop-loss',
-              phase: 'risk',
-              priority: 100,
-              condition: { kind: 'atom', key: 'position_loss_pct', value: 0.05 },
-              actions: [{ type: 'FORCE_EXIT' }],
-            },
-            {
-              id: 'risk-outside-band-3-bars',
-              phase: 'risk',
-              priority: 90,
-              condition: { kind: 'atom', key: 'bollinger.bars_outside', params: { bars: 3 } },
-              actions: [{ type: 'REDUCE_LONG' }],
-            },
+          riskRules: [
+            { id: 'risk-stop-loss', trigger: 'lossPct >= 0.0500', effect: 'FORCE_STOP' },
+            { id: 'risk-outside-band-3-bars', trigger: '价格连续3根K线在轨外时考虑提前止损或减仓', effect: 'REDUCE_POSITION' },
           ],
         },
       }),
@@ -225,7 +209,7 @@ describe('backtestSnapshotLoaderService', () => {
     })
   })
 
-  it('does not infer backtest risk rules from legacy graph snapshot trigger text', async () => {
+  it('derives backtest risk rules from graph snapshot triggers when published spec snapshot is not canonical spec', async () => {
     const compiledSnapshot = createBollingerCompiledSnapshotFixture()
     const snapshotsRepository = {
       findByIdForUser: jest.fn().mockResolvedValue({
@@ -331,7 +315,16 @@ describe('backtestSnapshotLoaderService', () => {
         fillTiming: 'NEXT_BAR_OPEN',
         noNextBarHandling: 'KEEP_PENDING',
       },
-      riskRules: undefined,
+      riskRules: {
+        maxFloatingLossPct: 5,
+        outsideBand: expect.objectContaining({
+          mode: 'BOLLINGER_BANDS',
+          indicator: { kind: 'bollingerBands', period: 20, stdDev: 2 },
+          consecutiveBars: 3,
+          action: 'REDUCE',
+          reduceRatio: 0.5,
+        }),
+      },
     })
   })
 

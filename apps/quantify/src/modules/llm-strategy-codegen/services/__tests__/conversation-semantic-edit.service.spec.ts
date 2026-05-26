@@ -1,77 +1,5 @@
 import { ConversationSemanticEditService } from '../conversation-semantic-edit.service'
 import { buildReplacementSemanticState } from '../../types/semantic-edit'
-import type { SemanticActionState, SemanticRiskState, SemanticState, SemanticTriggerState } from '../../types/semantic-state'
-import type { SemanticRule } from '../../types/atom-expr'
-import { RulesMainflowReaderService } from '../rules-mainflow-reader.service'
-
-type LegacySemanticStateView = SemanticState & {
-  trigger: SemanticTriggerState[]
-  action: SemanticActionState[]
-  risk: SemanticRiskState[]
-}
-
-const rulesMainflowReader = new RulesMainflowReaderService()
-
-function withLegacyView(
-  input: SemanticState & {
-    trigger?: SemanticTriggerState[]
-    action?: SemanticActionState[]
-    risk?: SemanticRiskState[]
-  },
-): LegacySemanticStateView {
-  const {
-    trigger: inputTriggers,
-    action: inputActions,
-    risk: inputRisks,
-    ...state
-  } = input
-  const rules = state.rules ?? buildRulesFromLegacyBuckets(inputTriggers ?? [], inputActions ?? [], inputRisks ?? [])
-  const rulesOnlyState = { ...state, rules }
-  const triggers = rulesMainflowReader.readFactsByRole(rulesOnlyState, 'condition') as unknown as SemanticTriggerState[]
-  const actions = rulesMainflowReader.readFactsByRole(rulesOnlyState, 'action') as unknown as SemanticActionState[]
-  const risks = rulesMainflowReader.readFactsByRole(rulesOnlyState, 'risk') as unknown as SemanticRiskState[]
-  Object.defineProperties(rulesOnlyState, {
-    trigger: { value: triggers, enumerable: false },
-    action: { value: actions, enumerable: false },
-    risk: { value: risks, enumerable: false },
-  })
-  return rulesOnlyState as LegacySemanticStateView
-}
-
-function buildRulesFromLegacyBuckets(
-  triggers: readonly SemanticTriggerState[],
-  actions: readonly SemanticActionState[],
-  risks: readonly SemanticRiskState[],
-): SemanticRule[] {
-  return triggers.map((trigger, index): SemanticRule => ({
-    id: trigger.id,
-    phase: trigger.phase === 'gate' ? 'gate' : trigger.phase === 'exit' ? 'exit' : 'entry',
-    sideScope: trigger.sideScope === 'short' || trigger.sideScope === 'both' ? trigger.sideScope : 'long',
-    condition: {
-      kind: 'atom',
-      key: trigger.key,
-      params: { ...trigger.params },
-      ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
-    },
-    effects: {
-      actions: actions
-        .filter(action => actionBelongsToTriggerPhase(action.key, trigger.phase))
-        .map(action => ({ kind: 'atom', key: action.key, params: { ...(action.params ?? {}) } })),
-      risks: index === 0
-        ? risks.map(risk => ({ kind: 'atom', key: risk.key, params: { ...risk.params } }))
-        : [],
-      positions: [],
-      orchestration: [],
-      programs: [],
-    },
-  }))
-}
-
-function actionBelongsToTriggerPhase(key: string, phase: SemanticTriggerState['phase']): boolean {
-  if (phase === 'entry') return key.startsWith('open_') || key.startsWith('add_')
-  if (phase === 'exit') return key.startsWith('close_') || key.startsWith('reduce_')
-  return false
-}
 
 describe('ConversationSemanticEditService', () => {
   const service = new ConversationSemanticEditService()
@@ -179,7 +107,7 @@ describe('ConversationSemanticEditService', () => {
   })
 
   it('classifies a complete new grid description as a full strategy replacement instead of a merge', () => {
-    const semanticState = withLegacyView({
+    const semanticState = {
       ...service.createEmptySemanticStateForTest(),
       trigger: [
         {
@@ -219,7 +147,7 @@ describe('ConversationSemanticEditService', () => {
         source: 'user_explicit' as const,
         openSlots: [],
       },
-    })
+    }
     const message = '在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈'
 
     const decision = service.decide({
@@ -278,7 +206,7 @@ describe('ConversationSemanticEditService', () => {
 
   it('applies context replacement without changing triggers', () => {
     const base = service.createEmptySemanticStateForTest()
-    const state = withLegacyView({
+    const state = {
       ...base,
       trigger: [{
         id: 'trigger-1',
@@ -289,11 +217,11 @@ describe('ConversationSemanticEditService', () => {
         source: 'user_explicit' as const,
         openSlots: [],
       }],
-    })
+    }
 
-    const next = withLegacyView(service.applyPatch(state, {
+    const next = service.applyPatch(state, {
       operations: [{ op: 'replace_context', field: 'symbol', value: 'BTCUSDT' }],
-    }))
+    })
 
     expect(next.contextSlots.symbol).toEqual(expect.objectContaining({
       slotKey: 'symbol',
@@ -320,7 +248,7 @@ describe('ConversationSemanticEditService', () => {
     })
     if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
 
-    const next = withLegacyView(service.applyPatch(semanticState, decision.patch))
+    const next = service.applyPatch(semanticState, decision.patch)
 
     expect(next.contextSlots.symbol).toEqual(expect.objectContaining({
       slotKey: 'symbol',
@@ -376,7 +304,7 @@ describe('ConversationSemanticEditService', () => {
     })
     if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
 
-    const next = withLegacyView(service.applyPatch(semanticState, decision.patch))
+    const next = service.applyPatch(semanticState, decision.patch)
 
     expect(next.contextSlots.symbol).toEqual(expect.objectContaining({
       value: 'ETHUSDC',
@@ -431,7 +359,7 @@ describe('ConversationSemanticEditService', () => {
     })
     if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
 
-    const next = withLegacyView(service.applyPatch(semanticState, decision.patch))
+    const next = service.applyPatch(semanticState, decision.patch)
 
     expect(next.contextSlots.symbol).toEqual(expect.objectContaining({
       value: 'BTCUSDT',
@@ -480,7 +408,7 @@ describe('ConversationSemanticEditService', () => {
     })
     if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
 
-    const next = withLegacyView(service.applyPatch(semanticState, decision.patch))
+    const next = service.applyPatch(semanticState, decision.patch)
 
     expect(next.contextSlots.symbol?.contracts?.[0]?.capabilities[0]?.shape).toEqual(expect.objectContaining({
       symbol: 'BTCBUSD',
@@ -494,7 +422,7 @@ describe('ConversationSemanticEditService', () => {
     ['把仓位35%换成20%'],
     ['仓位改成20%'],
   ])('classifies and applies position replacement wording: %s', (message) => {
-    const semanticState = withLegacyView({
+    const semanticState = {
       ...service.createEmptySemanticStateForTest(),
       position: {
         mode: 'fixed_ratio',
@@ -503,7 +431,7 @@ describe('ConversationSemanticEditService', () => {
         status: 'locked' as const,
         source: 'user_explicit' as const,
       },
-    })
+    }
 
     const decision = service.decide({
       status: 'DRAFTING',
@@ -535,7 +463,7 @@ describe('ConversationSemanticEditService', () => {
     ['open long 改成 open short'],
     ['入场：触及布林带 30 周期 0.9 倍标准差下轨时做多开仓，改为做空开仓'],
   ])('classifies and applies action side replacement wording: %s', (message) => {
-    const semanticState = withLegacyView({
+    const semanticState = {
       ...service.createEmptySemanticStateForTest(),
       trigger: [
         {
@@ -626,7 +554,7 @@ describe('ConversationSemanticEditService', () => {
           affectsExecution: true,
         },
       },
-    })
+    }
 
     const decision = service.decide({
       status: 'DRAFTING',
@@ -640,7 +568,7 @@ describe('ConversationSemanticEditService', () => {
     })
     if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
 
-    const next = withLegacyView(service.applyPatch(semanticState, decision.patch))
+    const next = service.applyPatch(semanticState, decision.patch)
 
     expect(next.contextSlots.exchange?.value).toBe('okx')
     expect(next.action.map(action => action.key)).toEqual(['open_short', 'close_short'])
@@ -663,7 +591,7 @@ describe('ConversationSemanticEditService', () => {
     ['把sma6改为sma10'],
     ['把6周期均线换成10周期均线'],
   ])('classifies and applies moving-average period replacement wording: %s', (message) => {
-    const semanticState = withLegacyView({
+    const semanticState = {
       ...service.createEmptySemanticStateForTest(),
       trigger: [
         {
@@ -685,7 +613,7 @@ describe('ConversationSemanticEditService', () => {
           openSlots: [],
         },
       ],
-    })
+    }
 
     const decision = service.decide({
       status: 'DRAFTING',
@@ -705,7 +633,7 @@ describe('ConversationSemanticEditService', () => {
     })
     if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
 
-    const next = withLegacyView(service.applyPatch(semanticState, decision.patch))
+    const next = service.applyPatch(semanticState, decision.patch)
 
     expect(next.trigger).toEqual([
       expect.objectContaining({
@@ -723,7 +651,7 @@ describe('ConversationSemanticEditService', () => {
     '上穿 38改为40',
     'RSI14 上穿 38 时做多开仓，改为RSI14 上穿 40 时做多开仓',
   ])('classifies and applies trigger numeric threshold replacement without dropping existing semantics: %s', (message) => {
-    const semanticState = withLegacyView({
+    const semanticState = {
       ...service.createEmptySemanticStateForTest(),
       contextSlots: {
         exchange: {
@@ -815,7 +743,7 @@ describe('ConversationSemanticEditService', () => {
         source: 'user_explicit' as const,
         openSlots: [],
       },
-    })
+    }
     const decision = service.decide({
       status: 'DRAFTING',
       message,
@@ -836,7 +764,7 @@ describe('ConversationSemanticEditService', () => {
     })
     if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
 
-    const next = withLegacyView(service.applyPatch(semanticState, decision.patch))
+    const next = service.applyPatch(semanticState, decision.patch)
 
     expect(next.contextSlots.exchange?.value).toBe('okx')
     expect(next.contextSlots.symbol?.value).toBe('ETHUSDT')
@@ -859,7 +787,7 @@ describe('ConversationSemanticEditService', () => {
   })
 
   it('classifies and applies generic semantic number replacement without dropping grid semantics', () => {
-    const semanticState = withLegacyView({
+    const semanticState = {
       ...service.createEmptySemanticStateForTest(),
       contextSlots: {
         exchange: {
@@ -943,7 +871,7 @@ describe('ConversationSemanticEditService', () => {
         source: 'user_explicit' as const,
         openSlots: [],
       },
-    })
+    }
     const message = '36根K线改为30根K线'
 
     const decision = service.decide({
@@ -966,7 +894,7 @@ describe('ConversationSemanticEditService', () => {
     })
     if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
 
-    const next = withLegacyView(service.applyPatch(semanticState, decision.patch))
+    const next = service.applyPatch(semanticState, decision.patch)
 
     expect(next.contextSlots.exchange?.value).toBe('okx')
     expect(next.contextSlots.symbol?.value).toBe('BTCUSDT')
@@ -986,7 +914,7 @@ describe('ConversationSemanticEditService', () => {
   })
 
   it('classifies and applies semantic range replacement without dropping fixed grid semantics', () => {
-    const semanticState = withLegacyView({
+    const semanticState = {
       ...service.createEmptySemanticStateForTest(),
       families: ['grid.range_rebalance'],
       contextSlots: {
@@ -1069,7 +997,7 @@ describe('ConversationSemanticEditService', () => {
         source: 'user_explicit' as const,
         openSlots: [],
       },
-    })
+    }
     const message = '区间网格 60000-80000，改为60000-70000'
 
     const decision = service.decide({
@@ -1091,7 +1019,7 @@ describe('ConversationSemanticEditService', () => {
     })
     if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
 
-    const next = withLegacyView(service.applyPatch(semanticState, decision.patch))
+    const next = service.applyPatch(semanticState, decision.patch)
 
     expect(next.contextSlots.exchange?.value).toBe('okx')
     expect(next.contextSlots.symbol?.value).toBe('BTCUSDT')
@@ -1157,7 +1085,7 @@ describe('ConversationSemanticEditService', () => {
     })
     if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
 
-    const next = withLegacyView(service.applyPatch(semanticState, decision.patch))
+    const next = service.applyPatch(semanticState, decision.patch)
 
     expect(service.readPendingEditForTest(next)).toBeNull()
     expect(next.trigger[0]).toEqual(expect.objectContaining({
@@ -1173,7 +1101,7 @@ describe('ConversationSemanticEditService', () => {
   })
 
   it('replaces the single existing trigger and parses RSI threshold after period', () => {
-    const base = withLegacyView({
+    const base = {
       ...service.createEmptySemanticStateForTest(),
       trigger: [{
         id: 'trigger-ma',
@@ -1184,7 +1112,7 @@ describe('ConversationSemanticEditService', () => {
         source: 'user_explicit' as const,
         openSlots: [],
       }],
-    })
+    }
     const pendingDecision = service.decide({
       status: 'DRAFTING',
       message: '把触发改成 RSI',
@@ -1198,10 +1126,10 @@ describe('ConversationSemanticEditService', () => {
       service.withPendingEditForTest(base, '把触发改成 RSI'),
       { operations: [{ op: 'cancel_pending_edit' }] },
     )
-    const semanticState = withLegacyView({
+    const semanticState = {
       ...withPending,
       pendingEdit: pendingDecision.pendingEdit,
-    })
+    }
     const applyDecision = service.decide({
       status: 'DRAFTING',
       message: 'RSI 14 周期低于 30',
@@ -1210,7 +1138,7 @@ describe('ConversationSemanticEditService', () => {
     expect(applyDecision.kind).toBe('APPLY_TO_SEMANTIC_STATE')
     if (applyDecision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
 
-    const next = withLegacyView(service.applyPatch(semanticState, applyDecision.patch))
+    const next = service.applyPatch(semanticState, applyDecision.patch)
 
     expect(next.trigger).toHaveLength(1)
     expect(next.trigger[0]).toEqual(expect.objectContaining({
@@ -1229,7 +1157,7 @@ describe('ConversationSemanticEditService', () => {
       service.createEmptySemanticStateForTest(),
       '把触发改成 RSI',
     )
-    const semanticState = withLegacyView({
+    const semanticState = {
       ...service.createEmptySemanticStateForTest(),
       trigger: [
         {
@@ -1252,7 +1180,7 @@ describe('ConversationSemanticEditService', () => {
         },
       ],
       pendingEdit: service.readPendingEditForTest(pendingState),
-    })
+    }
 
     const decision = service.decide({
       status: 'DRAFTING',
@@ -1263,7 +1191,7 @@ describe('ConversationSemanticEditService', () => {
     expect(decision.kind).toBe('ASK_EDIT_CLARIFICATION')
     if (decision.kind !== 'ASK_EDIT_CLARIFICATION') return
     expect(decision.question).toContain('多个触发')
-    expect(withLegacyView(service.applyPatch(semanticState, { operations: [{ op: 'replace_trigger', text: '低于 30' }] })).trigger)
+    expect(service.applyPatch(semanticState, { operations: [{ op: 'replace_trigger', text: '低于 30' }] }).trigger)
       .toEqual(semanticState.trigger)
   })
 
