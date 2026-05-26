@@ -305,6 +305,17 @@ describe('accountStrategyViewService deploy rules-only snapshot truth', () => {
     }))
   })
 
+  it('normalizes sha256 prefixes on both sides of rules-only hash comparisons', () => {
+    const truth = createCompiledTruthFixture()
+    const hashes = truth.rulesOnlyHashChain.hashes
+    const bareRulesHash = hashes.rulesHash.replace(/^sha256:/u, '')
+    const { service } = createService(createDeploySnapshot())
+
+    expect((service as any).hashEquals(bareRulesHash, bareRulesHash)).toBe(true)
+    expect((service as any).hashEquals(hashes.rulesHash, bareRulesHash)).toBe(true)
+    expect((service as any).hashEquals(bareRulesHash, hashes.rulesHash)).toBe(true)
+  })
+
   it('requires republish when ast orchestration scope content no longer matches hash chain', async () => {
     const truth = createCompiledTruthFixture()
     const snapshot = createDeploySnapshot({

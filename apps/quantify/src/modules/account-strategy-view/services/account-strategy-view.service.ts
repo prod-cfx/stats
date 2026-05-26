@@ -2895,9 +2895,12 @@ export class AccountStrategyViewService {
     return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`
   }
 
-  private hashEquals(actual: string, expected: string | null): boolean {
-    const normalized = this.normalizeSha256String(expected)
-    return normalized !== null && actual.toLowerCase() === normalized
+  private hashEquals(actual: string | null, expected: string | null): boolean {
+    const normalizedActual = this.normalizeSha256String(actual)
+    const normalizedExpected = this.normalizeSha256String(expected)
+    return normalizedActual !== null
+      && normalizedExpected !== null
+      && normalizedActual === normalizedExpected
   }
 
   private isSha256String(value: string | null): boolean {
