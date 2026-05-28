@@ -128,7 +128,13 @@ function pushSynthesizedSizingEvidence(
   mount: CapabilityMountKind,
 ): void {
   if (fact.ruleIndex < 0) return
-  if (mount !== 'action') return
+  // Issue #1707 Gap B：rules-only mode 下 dispatcher / planner emit 的 `position.sizing` /
+  // 其它 positionConstraint leaf 走 role='position' → mount='position_constraint'。
+  // 原先只对 mount='action' 合成 per_order_budget evidence，PerTradeSizingResolver
+  // (c) 路径在 position_constraint 这边永远拿不到 evidence，叠加 dispatcher 的空 emit
+  // (Gap C) 导致仓位识别不出来，clarification 一直追问 position.sizing。
+  // 与 action mount 对称地放开：fact.contracts 为空（atom 未显式带 contract）时合成。
+  if (mount !== 'action' && mount !== 'position_constraint') return
   if (fact.contracts?.length) return
   const capability = synthesizeSizingCapability(fact)
   if (!capability) return

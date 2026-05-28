@@ -174,37 +174,43 @@ describe('PerTradeSizingResolver', () => {
       })
     })
 
-    // --- Source: position_constraint_params_fallback (rule effects.positions[].params.perOrderSizing) ---
+    // --- Source: position_constraint (rule effects.positions[].params.{sizing|perOrderSizing}) ---
+    //
+    // Issue #1707 Gap B：capability path (c) 在 mount=position_constraint 接通后，
+    //   dispatcher / planner emit 的 position.sizing leaf 与 DCA leaf 的 sizing
+    //   evidence 优先走 capability path，source='position_constraint'，带 evidenceRef。
+    //   (d) `position_constraint_params_fallback` 仍作为兜底保留（fact.contracts 非空
+    //   但无合适 capability 等罕见场景），但常规 rules-only 路径已不会命中。
 
-    describe('source=position_constraint_params_fallback / scope=position_constraint:<key>', () => {
-      it('quote params fallback: executionAnchored=true, fullySpecified=true', () => {
+    describe('source=position_constraint / scope=position_constraint:<key>', () => {
+      it('quote params (DCA perOrderSizing) → capability path, executionAnchored=true, fullySpecified=true', () => {
         const state = buildStateWithDcaPerOrderSizing({ ownerKey: 'position.dca_schedule', value: 100, unit: 'quote' })
         const result = resolver.resolve(state)
         const anchor = result.get(PC_KEY) as SizingAnchor
         expect(anchor).toBeDefined()
-        expect(anchor.source).toBe('position_constraint_params_fallback')
+        expect(anchor.source).toBe('position_constraint')
         expect(anchor.executionAnchored).toBe(true)
         expect(anchor.fullySpecified).toBe(true)
         expect(anchor.normalized?.axis).toBe('notional_quote')
         expect(anchor.normalized?.value).toBe(100)
         expect(anchor.normalized?.needsRuntimeResolution).toBe(false)
-        // No evidenceRef in fallback path
-        expect(anchor.evidenceRef).toBeUndefined()
+        // capability path 带 evidenceRef，区别于旧 fallback 路径
+        expect(anchor.evidenceRef).toBeDefined()
       })
 
-      it('base params fallback: executionAnchored=true', () => {
+      it('base params (DCA perOrderSizing) → capability path, executionAnchored=true', () => {
         const state = buildStateWithDcaPerOrderSizing({ ownerKey: 'position.dca_schedule', value: 0.01, unit: 'base' })
         const result = resolver.resolve(state)
         const anchor = result.get(PC_KEY) as SizingAnchor
-        expect(anchor?.source).toBe('position_constraint_params_fallback')
+        expect(anchor?.source).toBe('position_constraint')
         expect(anchor?.executionAnchored).toBe(true)
         expect(anchor?.normalized?.axis).toBe('base_qty')
         expect(anchor?.normalized?.value).toBe(0.01)
       })
 
       // Dispatcher writes `params.sizing` (not `perOrderSizing`) for position.sizing atoms.
-      // Resolver must fall back to `params.sizing` when `perOrderSizing` is absent.
-      it('params.sizing (dispatcher shape) ratio=0.35 → anchor source=position_constraint_params_fallback', () => {
+      // Issue #1707 Gap B：capability path 直读 `params.sizing` 也能合成 evidence。
+      it('params.sizing (dispatcher shape) ratio=0.35 → capability path, source=position_constraint', () => {
         const state = buildStateWithPositionConstraintParamsSizing({
           ownerKey: 'position.sizing',
           shape: { kind: 'ratio', value: 0.35, unit: 'ratio' },
@@ -212,16 +218,20 @@ describe('PerTradeSizingResolver', () => {
         const result = resolver.resolve(state)
         const anchor = result.get('position_constraint:position.sizing') as SizingAnchor
         expect(anchor).toBeDefined()
-        expect(anchor.source).toBe('position_constraint_params_fallback')
+        expect(anchor.source).toBe('position_constraint')
         expect(anchor.executionAnchored).toBe(true)
         expect(anchor.fullySpecified).toBe(true)
         expect(anchor.normalized?.axis).toBe('equity_ratio')
         expect(anchor.normalized?.value).toBeCloseTo(0.35)
         expect(anchor.normalized?.needsRuntimeResolution).toBe(true)
-        expect(anchor.evidenceRef).toBeUndefined()
+        expect(anchor.evidenceRef).toBeDefined()
       })
 
-      it('both params.perOrderSizing and params.sizing present → perOrderSizing wins (backward compat)', () => {
+      it('both params.perOrderSizing and params.sizing present → params.sizing wins via capability path', () => {
+        // Issue #1707 Gap B：capability synthesizer 优先读 `params.sizing`（dispatcher
+        //   语义层 direct 字段）；只有 params.sizing 缺失时才回退到 atom contract
+        //   `sizingEvidence.paramSource` 指向的字段。fact.key='position.sizing' 没登记
+        //   sizingEvidence，因此 params.sizing 是唯一来源。
         const state = buildStateWithPositionConstraintBothShapes({
           ownerKey: 'position.sizing',
           perOrderSizingShape: { kind: 'quote', value: 200, asset: 'USDT' },
@@ -230,9 +240,9 @@ describe('PerTradeSizingResolver', () => {
         const result = resolver.resolve(state)
         const anchor = result.get('position_constraint:position.sizing') as SizingAnchor
         expect(anchor).toBeDefined()
-        expect(anchor.source).toBe('position_constraint_params_fallback')
-        expect(anchor.normalized?.axis).toBe('notional_quote')
-        expect(anchor.normalized?.value).toBe(200)
+        expect(anchor.source).toBe('position_constraint')
+        expect(anchor.normalized?.axis).toBe('equity_ratio')
+        expect(anchor.normalized?.value).toBeCloseTo(0.35)
       })
 
       // m3：perOrderSizing 畸形（无 kind）时不应静默吞掉合法 sizing
@@ -512,13 +522,17 @@ describe('PerTradeSizingResolver', () => {
   // Group 6: degraded path source label
   // ---------------------------------------------------------------------------
 
-  describe('Group 6 — degraded path source label', () => {
-    it('DCA params.perOrderSizing → source=position_constraint_params_fallback', () => {
+  // Issue #1707 Gap B：capability path 在 mount=position_constraint 接通后，
+  //   DCA `params.perOrderSizing` 升级走 (c) capability path，source='position_constraint'。
+  //   degraded `position_constraint_params_fallback` 仍作为兜底保留（fact.contracts
+  //   非空但缺合适 capability 等罕见场景），但常规 rules-only emit 路径不会命中。
+  describe('Group 6 — capability path priority for position constraint sizing', () => {
+    it('DCA params.perOrderSizing → source=position_constraint (capability path)', () => {
       const state = buildStateWithDcaPerOrderSizing({ ownerKey: 'position.dca_schedule', value: 100, unit: 'quote' })
       const result = resolver.resolve(state)
       const anchor = result.get(PC_KEY) as SizingAnchor
       expect(anchor).toBeDefined()
-      expect(anchor.source).toBe('position_constraint_params_fallback')
+      expect(anchor.source).toBe('position_constraint')
       expect(anchor.executionAnchored).toBe(true)
     })
   })

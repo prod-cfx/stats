@@ -1573,18 +1573,14 @@ export class GenericSeedDispatcher {
         ...(isEvidenceWithText(flatPatch.position.evidence) ? { evidence: { text: flatPatch.position.evidence.text } } : {}),
       })
     }
-    else if (
-      !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'positions')
-      && this.hasSizingIntent(userMessage)
-    ) {
-      const evidence = this.findSizingEvidence(userMessage)
-      out.push({
-        kind: 'atom',
-        key: 'position.sizing',
-        params: { phase: 'entry' },
-        ...(evidence ? { evidence: { text: evidence } } : {}),
-      })
-    }
+    // Issue #1707 Gap C：原 fallback 在 hasSizingIntent && 无 sizing shape 时硬塞一个
+    //   params={phase:'entry'} 的空 `position.sizing` atom，PerTradeSizingResolver (d)
+    //   `tryReadSizingShape(params.sizing)` 立刻返回 null → anchor 永不 executionAnchored，
+    //   叠加 Gap B 后整条 position.sizing leaf 零 anchor。
+    //   clarification 仍会通过 detectSizingItems（resolver 返回空 anchors）追问 sizing，
+    //   readiness 通过 capital.allocate.per_order_budget 缺失报 READINESS_PER_ORDER_BUDGET_MISSING。
+    //   删空 emit 避免污染 rules tree / 生成假 position role fact，让 clarification 与
+    //   readiness 在"识别到 sizing 意图但无形状"的灰色态下输出干净。
     if (
       !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'actions')
       && this.hasOpenActionIntent(userMessage)
@@ -1719,10 +1715,6 @@ export class GenericSeedDispatcher {
     return /止损|止盈|stop\s*loss|take\s*profit/iu.test(userMessage)
   }
 
-  private hasSizingIntent(userMessage: string): boolean {
-    return this.findSizingEvidence(userMessage) !== null
-  }
-
   private hasTimeframeIntent(userMessage: string): boolean {
     return /(?:\d+\s*(?:m|min|分钟|小时|h|d|天|日线|周线)|K\s*线|周期|timeframe)/iu.test(userMessage)
   }
@@ -1739,13 +1731,6 @@ export class GenericSeedDispatcher {
     const match = new RegExp(pattern, 'iu').exec(userMessage)
     if (!match) return null
     return match[0]
-  }
-
-  private findSizingEvidence(userMessage: string): string | null {
-    return this.findEvidenceText(
-      userMessage,
-      '(?:(?:单笔|仓位|资金(?!费率)|每次|每格|使用|加投|定投)[^\\d费率]{0,12}(?:百分\\s*)?\\d+(?:\\.\\d+)?\\s*(?:%|USDT|USDC|USD|U|刀)?|买一点|买入一点|开多一点|开空一点)',
-    )
   }
 
   private escapeRegexText(value: unknown): string {

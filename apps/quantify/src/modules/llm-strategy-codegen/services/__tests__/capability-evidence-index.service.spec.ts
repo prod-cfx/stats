@@ -187,6 +187,47 @@ describe('CapabilityEvidenceIndex', () => {
     })
   })
 
+  // Issue #1707 Gap B regression：rules-only mode 下 dispatcher emit 的 position.sizing
+  // leaf 走 role='position' → mount='position_constraint'，必须合成
+  // capital.allocate.per_order_budget evidence，否则 PerTradeSizingResolver (c) 路径拿不到
+  // anchor，叠加 (d) 兜底失败导致仓位永远识别不出来。
+  describe('rules-only position constraint sizing synthesis (Issue #1707)', () => {
+    it('synthesizes per_order_budget evidence at position_constraint mount when params.sizing present', () => {
+      const idx = CapabilityEvidenceIndex.build({
+        ...baseState(),
+        rules: [{
+          id: 'rules-pc-sizing',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'volume.threshold', params: { value: 1000 } },
+          effects: {
+            actions: [],
+            risks: [],
+            positions: [{
+              kind: 'atom',
+              key: 'position.sizing',
+              params: { sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' } },
+            }],
+            orchestration: [],
+            programs: [],
+          },
+        }],
+      })
+
+      const evidences = idx.byKey('capital', 'allocate', 'per_order_budget')
+      const pcEvidence = evidences.find(e => e.mount === 'position_constraint')
+      expect(pcEvidence).toBeDefined()
+      expect(pcEvidence).toEqual(expect.objectContaining({
+        mount: 'position_constraint',
+        ownerKey: 'position.sizing',
+        ownerStatus: 'locked',
+        capability: expect.objectContaining({
+          shape: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+        }),
+      }))
+    })
+  })
+
   describe('rules-native facts', () => {
     it('indexes sizing evidence from rules-only action leaves', () => {
       const idx = CapabilityEvidenceIndex.build({

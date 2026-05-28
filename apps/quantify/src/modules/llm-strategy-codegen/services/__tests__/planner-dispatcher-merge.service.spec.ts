@@ -1732,3 +1732,386 @@ describe('PlannerDispatcherMergeService program-phase subset fold (s13)', () => 
     expect(entryRules.length).toBeGreaterThanOrEqual(2)
   })
 })
+
+// =========================================================================
+// Issue #1707 iter2 — positions bucket append-when-missing
+// =========================================================================
+//
+// 现象：staging30 上 "仓位：10usdt" 这种 sizing 元信息 LLM planner 不强制 emit
+//   position.sizing leaf，dispatcher extractor 可信地抓到了，但旧 merge 路径
+//   走 enrich-only —— planner spine 没该 leaf → 直接丢 dispatcher leaf →
+//   PerTradeSizingResolver 拿不到 anchor → clarification 死循环追问仓位。
+//
+// 修复：positions 桶单独走 append-when-missing；actions/risks 仍保留 enrich-only
+//   契约，避免 dispatcher 凭空塞 action/risk leaf。
+describe('PlannerDispatcherMergeService — positions bucket append-when-missing (Issue #1707 iter2)', () => {
+  const svc = new PlannerDispatcherMergeService()
+
+  const sharedCondition = {
+    kind: 'atom' as const,
+    key: 'volume.threshold',
+    params: { value: 1000 },
+  }
+
+  it('appends dispatcher position.sizing leaf when planner positions[] is empty', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: sharedCondition,
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher: CodegenSemanticPatch = {
+      rules: [{
+        id: 'dispatcher-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: sharedCondition,
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [{
+            kind: 'atom',
+            key: 'position.sizing',
+            params: { sizing: { kind: 'quote', value: 10, asset: 'USDT' }, phase: 'entry' },
+          }],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
+    const entryRule = (merged?.rules ?? []).find(r => r.phase === 'entry')
+    expect(entryRule).toBeDefined()
+    const positions = (entryRule!.effects as { positions: Array<{ key: string; params: Record<string, unknown> }> }).positions
+    expect(positions).toHaveLength(1)
+    expect(positions[0]).toEqual(expect.objectContaining({
+      key: 'position.sizing',
+      params: expect.objectContaining({
+        sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+      }),
+    }))
+  })
+
+  it('does NOT duplicate position.sizing when both planner and dispatcher emit it (enrich the existing one)', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: sharedCondition,
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [{
+            kind: 'atom',
+            key: 'position.sizing',
+            params: { phase: 'entry' },
+          }],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher: CodegenSemanticPatch = {
+      rules: [{
+        id: 'dispatcher-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: sharedCondition,
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [{
+            kind: 'atom',
+            key: 'position.sizing',
+            params: { sizing: { kind: 'quote', value: 10, asset: 'USDT' }, phase: 'entry' },
+          }],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
+    const entryRule = (merged?.rules ?? []).find(r => r.phase === 'entry')
+    const positions = (entryRule!.effects as { positions: Array<{ key: string; params: Record<string, unknown> }> }).positions
+    expect(positions).toHaveLength(1)
+    expect(positions[0].params).toEqual(expect.objectContaining({
+      sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+      phase: 'entry',
+    }))
+  })
+
+  it('regression: dispatcher action leaves are NOT appended when planner has no action (enrich-only contract for actions)', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: sharedCondition,
+        effects: { actions: [], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher: CodegenSemanticPatch = {
+      rules: [{
+        id: 'dispatcher-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: sharedCondition,
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
+    const entryRule = (merged?.rules ?? []).find(r => r.phase === 'entry')
+    // Action / risk buckets stay enrich-only: dispatcher action leaf must NOT
+    //   be appended when planner spine has no matching leaf.
+    const actions = (entryRule!.effects as { actions: unknown[] }).actions
+    expect(actions).toEqual([])
+  })
+})
+
+// =========================================================================
+// Issue #1707 iter4 — lift dispatcher position.sizing across mismatched rule
+// =========================================================================
+//
+// 真因：mergeRulesById 契约——dispatcher rule 与 planner rule 语义不匹配 → 整条丢；
+//   dispatcher 自创 sizing rule 的 condition（如 trigger leaf / execution.on_start）
+//   永远不等于 planner entry rule 的 condition（indicator 组合）→ 100% 丢 sizing leaf。
+// 修复：spine 任何 rule 都没 position.sizing 时，把 dispatcher 全集 sizing leaves 注入到
+//   首选 entry rule（long entry → 任意 entry → 非 program rule）。
+describe('PlannerDispatcherMergeService — lift dispatcher position.sizing across mismatched rule (Issue #1707 iter4)', () => {
+  const svc = new PlannerDispatcherMergeService()
+
+  const plannerEntryCondition = {
+    kind: 'and' as const,
+    children: [
+      { kind: 'atom' as const, key: 'indicator.above', params: { indicator: 'ema', reference: { period: 20 } } },
+      { kind: 'atom' as const, key: 'indicator.above', params: { indicator: 'ema', reference: { period: 60 } } },
+    ],
+  }
+
+  it('lifts dispatcher position.sizing into planner long entry rule when spine has none', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: plannerEntryCondition,
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher: CodegenSemanticPatch = {
+      rules: [{
+        id: 'dispatcher-typed-rule-1',
+        phase: 'entry',
+        sideScope: 'long',
+        // mismatch with planner spine (different condition leaf set)
+        condition: { kind: 'atom', key: 'indicator.cross_up', params: {} },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [{
+            kind: 'atom',
+            key: 'position.sizing',
+            params: { sizing: { kind: 'quote', value: 10, asset: 'USDT' }, phase: 'entry' },
+          }],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
+    const entryRule = (merged?.rules ?? []).find(r => r.phase === 'entry' && r.sideScope === 'long')
+    expect(entryRule).toBeDefined()
+    const positions = (entryRule!.effects as { positions: Array<{ key: string; params: Record<string, unknown> }> }).positions
+    expect(positions).toHaveLength(1)
+    expect(positions[0]).toEqual(expect.objectContaining({
+      key: 'position.sizing',
+      params: expect.objectContaining({
+        sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+      }),
+    }))
+  })
+
+  it('does NOT lift dispatcher sizing leaf carried in sideScope=short rule into planner long entry rule', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: plannerEntryCondition,
+        effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher: CodegenSemanticPatch = {
+      rules: [{
+        id: 'dispatcher-typed-rule-short',
+        phase: 'entry',
+        sideScope: 'short',
+        condition: { kind: 'atom', key: 'indicator.cross_down', params: {} },
+        effects: {
+          actions: [], risks: [],
+          positions: [{
+            kind: 'atom',
+            key: 'position.sizing',
+            params: { sizing: { kind: 'quote', value: 10, asset: 'USDT' }, phase: 'entry' },
+          }],
+          orchestration: [], programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
+    const entryRule = (merged?.rules ?? []).find(r => r.phase === 'entry' && r.sideScope === 'long')
+    const positions = (entryRule!.effects as { positions: unknown[] }).positions
+    expect(positions).toEqual([])
+  })
+
+  it('does NOT lift dispatcher sizing leaf carried in phase=program rule (DCA/grid 不跨阶段提升)', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: plannerEntryCondition,
+        effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher: CodegenSemanticPatch = {
+      rules: [{
+        id: 'dispatcher-typed-rule-program',
+        phase: 'program',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [], risks: [],
+          positions: [{
+            kind: 'atom',
+            key: 'position.sizing',
+            params: { sizing: { kind: 'quote', value: 100, asset: 'USDT' }, phase: 'program' },
+          }],
+          orchestration: [], programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
+    const entryRule = (merged?.rules ?? []).find(r => r.phase === 'entry' && r.sideScope === 'long')
+    const positions = (entryRule!.effects as { positions: unknown[] }).positions
+    expect(positions).toEqual([])
+  })
+
+  it('dedupe two dispatcher sizing leaves with key-reordered params (stable signature)', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: plannerEntryCondition,
+        effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher: CodegenSemanticPatch = {
+      rules: [{
+        id: 'd1',
+        phase: 'entry', sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_up', params: {} },
+        effects: {
+          actions: [], risks: [],
+          positions: [{
+            kind: 'atom',
+            key: 'position.sizing',
+            params: { sizing: { kind: 'quote', value: 10, asset: 'USDT' }, phase: 'entry' },
+          }],
+          orchestration: [], programs: [],
+        },
+      }, {
+        id: 'd2',
+        phase: 'entry', sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_up', params: {} },
+        effects: {
+          actions: [], risks: [],
+          positions: [{
+            kind: 'atom',
+            key: 'position.sizing',
+            // 同语义不同 key 顺序
+            params: { phase: 'entry', sizing: { kind: 'quote', value: 10, asset: 'USDT' } },
+          }],
+          orchestration: [], programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
+    const entryRule = (merged?.rules ?? []).find(r => r.phase === 'entry' && r.sideScope === 'long')
+    const positions = (entryRule!.effects as { positions: unknown[] }).positions
+    expect(positions).toHaveLength(1)
+  })
+
+  it('does NOT lift when planner spine already has position.sizing (no double-insert)', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: plannerEntryCondition,
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [{
+            kind: 'atom',
+            key: 'position.sizing',
+            params: { sizing: { kind: 'ratio', value: 0.5, unit: 'ratio' }, phase: 'entry' },
+          }],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher: CodegenSemanticPatch = {
+      rules: [{
+        id: 'dispatcher-typed-rule-1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_up', params: {} },
+        effects: {
+          actions: [], risks: [],
+          positions: [{
+            kind: 'atom',
+            key: 'position.sizing',
+            params: { sizing: { kind: 'quote', value: 10, asset: 'USDT' }, phase: 'entry' },
+          }],
+          orchestration: [], programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
+    const entryRule = (merged?.rules ?? []).find(r => r.phase === 'entry' && r.sideScope === 'long')
+    const positions = (entryRule!.effects as { positions: unknown[] }).positions
+    expect(positions).toHaveLength(1)
+  })
+})

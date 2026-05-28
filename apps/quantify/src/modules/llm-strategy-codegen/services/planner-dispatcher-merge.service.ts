@@ -207,7 +207,104 @@ export class PlannerDispatcherMergeService {
       (patch as { __zodQuarantine?: unknown }).__zodQuarantine = plannerQuarantine
     }
     this.overrideRulesLeafParamsFromDispatcher(patch, dispatcher)
+    this.liftDispatcherPositionSizingIntoPlannerRules(patch, dispatcher)
     return patch.rules?.length || patch.contextSlots ? patch : null
+  }
+
+  /**
+   * Issue #1707 iter4：dispatcher emit 的 `position.sizing` leaf 提升到 planner spine。
+   *
+   * 真因：`mergeRulesById` 契约——dispatcher rule 与 planner rule 语义不匹配（condition 不等）
+   *   → 整条 dispatcher rule 被丢。dispatcher 自创一条 rule 承载 `position.sizing` 时，
+   *   condition 通常是 dispatcher predicate[0]（如 trigger leaf 或 execution.on_start），
+   *   而 planner entry rule 的 condition 是 indicator 组合 → 永远不匹配 → sizing leaf 100%
+   *   被丢，readiness 死循环追问。
+   *
+   * 修复：planner spine 任何 rule 都没有 `position.sizing` 叶子时，
+   *   把 dispatcher 全集中的 `position.sizing` leaves 注入到 planner 首选 entry rule。
+   *   首选规则：long entry → 首条 entry。spine 完全无 entry rule 时直接 return + warn，
+   *   不再退化到 exit/risk rule（避免把 sizing 元数据 leaf 错绑到非 entry 宿主）。
+   *
+   * 边界守卫（iter4 review 反馈修复）：
+   *   - 跨边过滤：只收 source rule.sideScope ∈ {'both', target.sideScope} 的 sizing leaf；
+   *     leaf.sideScope 在 append 前 rewrite 为 target.sideScope，避免 short sizing 落到 long entry
+   *   - 跨阶段过滤：只收 source rule.phase ∈ {'entry','gate'} 的 sizing leaf；
+   *     program-phase（DCA / grid 程序）sizing 语义不同，不能跨阶段提升
+   *   - 去重签名：与 `mergeAppendMissingEffectListParams` 统一为 `key|sideScope|stable(params)`，
+   *     避免 params key 顺序敏感导致重复 append
+   *   - legacy 数组分支：先 normalize 成 RuleEffectsByRole 再注入，避免与 iter3 typed 分支行为漂移
+   *
+   * 不动 dispatcher 已被 enrich-only / append-when-missing 合入的场景（spine 已有 leaf）；
+   *   动作只在 spine 完全缺 sizing leaf 时发生。
+   */
+  private liftDispatcherPositionSizingIntoPlannerRules(
+    merged: InternalPlannerPatch,
+    dispatcher: InternalPlannerPatch,
+  ): void {
+    const rules = merged.rules
+    if (!rules || rules.length === 0) return
+    const SIZING_KEY = 'position.sizing'
+
+    const spineHasSizing = rules.some(rule =>
+      listRuleEffects(rule.effects)
+        .flatMap(effect => collectAtomLeaves(effect))
+        .some(leaf => leaf.key === SIZING_KEY),
+    )
+    if (spineHasSizing) return
+
+    // target 选择：long entry → 首条 entry。完全无 entry 时直接 return + warn，
+    //   不退化到 exit/risk/program rule（避免 sizing 元数据落到非 entry 宿主造成 anchor 跨界）。
+    const targetIndex = (() => {
+      const longEntry = rules.findIndex(r => r.phase === 'entry' && r.sideScope === 'long')
+      if (longEntry >= 0) return longEntry
+      return rules.findIndex(r => r.phase === 'entry')
+    })()
+    if (targetIndex < 0) {
+      this.logger.warn('[liftDispatcherPositionSizingIntoPlannerRules] spine has no entry rule; sizing lift skipped — clarification will report missing per_order_budget')
+      return
+    }
+    const target = rules[targetIndex]
+
+    const stableParamsSig = (params: Readonly<Record<string, unknown>> | undefined): string => {
+      const entries = Object.entries(params ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      return JSON.stringify(entries)
+    }
+
+    const sizingLeaves: AtomExprAtom[] = []
+    const seen = new Set<string>()
+    for (const rule of dispatcher.rules ?? []) {
+      // 跨阶段过滤：只接受 entry/gate phase（gate 与 entry 同生命周期段，sizing 语义一致）
+      if (rule.phase !== 'entry' && rule.phase !== 'gate') continue
+      // 跨边过滤：source rule.sideScope 必须 'both' 或与 target.sideScope 一致
+      if (rule.sideScope !== 'both' && rule.sideScope !== target.sideScope) continue
+      for (const effect of listRuleEffects(rule.effects)) {
+        for (const leaf of collectAtomLeaves(effect)) {
+          if (leaf.key !== SIZING_KEY) continue
+          // append 前 rewrite leaf.sideScope 为 target.sideScope，强一致
+          const normalized: AtomExprAtom = {
+            ...leaf,
+            sideScope: target.sideScope,
+          }
+          // 与 mergeAppendMissingEffectListParams 统一去重签名：key|sideScope|stable(params)
+          const sig = `${normalized.key}|${normalized.sideScope ?? ''}|${stableParamsSig(normalized.params)}`
+          if (seen.has(sig)) continue
+          seen.add(sig)
+          sizingLeaves.push(normalized)
+        }
+      }
+    }
+    if (sizingLeaves.length === 0) return
+
+    // legacy 数组 effects 分支先 normalize 成 RuleEffectsByRole 再注入，
+    //   避免与 iter3 typed 分支行为漂移（iter3 typed 分支 passthrough，legacy 分支 registry 路由）。
+    const targetEffectsByRole: RuleEffectsByRole = isRuleEffectsByRole(target.effects)
+      ? target.effects
+      : this.toRuleEffectsByRole(target.effects)
+    const nextEffects: RuleEffects = {
+      ...targetEffectsByRole,
+      positions: [...(targetEffectsByRole.positions ?? []), ...sizingLeaves],
+    }
+    merged.rules = rules.map((rule, idx) => (idx === targetIndex ? { ...rule, effects: nextEffects } : rule))
   }
 
   private mergeRulesById(
@@ -386,7 +483,12 @@ export class PlannerDispatcherMergeService {
       return {
         actions: this.mergeMissingEffectListParams(existingByRole.actions, candidateByRole.actions),
         risks: this.mergeMissingEffectListParams(existingByRole.risks, candidateByRole.risks),
-        positions: this.mergeMissingEffectListParams(existingByRole.positions, candidateByRole.positions),
+        // Issue #1707 iter2：positions 桶接收 dispatcher 缺失补齐（append-when-missing）。
+        //   原 enrich-only 行为对 lifecycle 副作用（action/risk）安全，但 position.sizing
+        //   是单一仓位 sizing 元数据 leaf，planner LLM 通常不产出（"仓位 10usdt" 这种 sizing
+        //   元信息 prompt 没强制 emit），dispatcher extractor 可信度更高。enrich-only 丢
+        //   dispatcher leaf 直接导致仓位 anchor 缺失 → clarification 持续追问。
+        positions: this.mergeAppendMissingEffectListParams(existingByRole.positions, candidateByRole.positions),
         orchestration: this.mergeMissingEffectListParams(existingByRole.orchestration, candidateByRole.orchestration),
         programs: this.mergeMissingEffectListParams(existingByRole.programs, candidateByRole.programs),
       }
@@ -408,39 +510,32 @@ export class PlannerDispatcherMergeService {
       orchestration: [],
       programs: [],
     }
-    const route = (effect: AtomExpr): void => {
-      if (effect.kind !== 'atom') return
-      // program.* atom 走 programs，与 isProgramEffectAtom 一致
+    if (isRuleEffectsByRole(effects)) {
+      // Issue #1707 iter3：rules-only — typed RuleEffectsByRole 输入下 role 即真理，
+      //   passthrough 不做任何 registry 重派。
+      //   先前 iter2 fallback 仍对已登记 atom 重路由，导致 dispatcher 合法 emit 的
+      //   position.sizing 等 leaf 被静默搬桶/丢弃，让 readiness 持续追问 position.sizing。
+      //   grid.range_rebalance 等 bucket 一致性校验由 collectEffectRoleViolations
+      //   (planner schema 硬校验) 兜底，不在此 normalize 路径上做。
+      for (const role of ['actions', 'risks', 'positions', 'orchestration', 'programs'] as const) {
+        for (const effect of (effects[role] ?? [])) {
+          out[role].push(effect)
+        }
+      }
+      return out
+    }
+    // legacy 数组输入：无 role 信息，按 registry bucket 路由。
+    for (const effect of effects) {
+      if (effect.kind !== 'atom') continue
       if (this.isProgramEffectAtom(effect.key)) {
         out.programs.push(effect)
-        return
+        continue
       }
       const bucket = this.readAtomBucket(effect.key)
       if (bucket === 'action') out.actions.push(effect)
       else if (bucket === 'risk') out.risks.push(effect)
       else if (bucket === 'positionConstraint') out.positions.push(effect)
       else if (bucket === 'orchestration') out.orchestration.push(effect)
-    }
-    if (isRuleEffectsByRole(effects)) {
-      // #1633 rules-only generic bucket normalization：typed 输入下，
-      //   每个 effect leaf 按 registry bucket 重派；防止 grid.range_rebalance
-      //   (positionConstraint) 被塞入 effects.programs 而触发 canonical-spec
-      //   builder 抛 UnsupportedSemanticRuleProgramEffect。
-      for (const role of ['actions', 'risks', 'positions', 'orchestration', 'programs'] as const) {
-        for (const effect of (effects[role] ?? [])) {
-          if (effect.kind === 'atom') {
-            route(effect)
-            continue
-          }
-          // 复合 expr（and/or/not/sequence）保留输入 role —— bucket 不明确时
-          //   走 fail-open 原桶，避免误改语义结构。
-          out[role].push(effect)
-        }
-      }
-      return out
-    }
-    for (const effect of effects) {
-      route(effect)
     }
     return out
   }
@@ -456,6 +551,38 @@ export class PlannerDispatcherMergeService {
         const matched = candidateAtoms.find(candidateEffect => this.effectLeafMatches(effect, candidateEffect))
         return matched ? this.mergeMissingAtomParams(effect, matched) as AtomExprAtom : effect
       })
+  }
+
+  /**
+   * Issue #1707 iter2：append-when-missing 变体，专给 positions 桶用。
+   * 行为：
+   *   1) existing 中的 leaf 优先（沿用原 enrich-only 行为：在 candidate 中找同 key+sideScope，
+   *      用 candidate.params 填 existing 缺失字段）
+   *   2) candidate 中 existing 没有的 leaf 直接 append（key 维度去重）
+   *
+   * 为什么单独给 positions：planner LLM prompt 对 sizing 元信息（"仓位 10usdt"）
+   *   不强制 emit position.sizing leaf；dispatcher extractor 可靠度更高；丢 leaf
+   *   直接 readiness fail-closed → clarification 死循环。actions/risks 是 lifecycle
+   *   副作用，必须由 planner 谱系，沿用 enrich-only 避免 dispatcher 凭空塞 action。
+   */
+  private mergeAppendMissingEffectListParams(
+    existing: readonly AtomExpr[],
+    candidate: readonly AtomExpr[],
+  ): AtomExprAtom[] {
+    const candidateAtoms = candidate.filter((effect): effect is AtomExprAtom => effect.kind === 'atom')
+    const existingAtoms = existing.filter((effect): effect is AtomExprAtom => effect.kind === 'atom')
+    const enriched: AtomExprAtom[] = existingAtoms.map((effect) => {
+      const matched = candidateAtoms.find(candidateEffect => this.effectLeafMatches(effect, candidateEffect))
+      return matched ? this.mergeMissingAtomParams(effect, matched) as AtomExprAtom : effect
+    })
+    const existingKeys = new Set(existingAtoms.map(e => `${e.key}|${e.sideScope ?? ''}`))
+    for (const candidateAtom of candidateAtoms) {
+      const sig = `${candidateAtom.key}|${candidateAtom.sideScope ?? ''}`
+      if (existingKeys.has(sig)) continue
+      existingKeys.add(sig)
+      enriched.push(candidateAtom)
+    }
+    return enriched
   }
 
   private mergeMissingAtomParams(existing: AtomExpr, candidate: AtomExpr): AtomExpr {
