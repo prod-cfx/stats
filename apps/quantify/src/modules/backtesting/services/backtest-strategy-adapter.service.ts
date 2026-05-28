@@ -100,6 +100,22 @@ export class BacktestStrategyAdapterService {
         (s) => s.scopeKind === 'timeframe',
       )
 
+      // Issue #1712: ORCHESTRATION_SCOPES 含 dataSource scope 时预合成 ctx.dataSourceFeeds。
+      // run-decision-programs.applyDataSourceScopeFailClosed 在循环外短路检查；
+      // 缺失时整条主链路 fail-closed.feeds_unprovided，导致信号永远不触发（rules-only
+      // stage3 后 LLM 普遍生成此类 scope，是 22/27 staging 策略 0 trade 的真因）。
+      // backtest 场景下：bars 已加载到 ctx.bars → hasData=true；权限/schema 由 scope 自带。
+      const dataSourceFeedsTemplate: Record<string, { schema: string; permissionGranted: true; hasData: true }> = {}
+      for (const scope of orchestrationScopes ?? []) {
+        if (scope.scopeKind !== 'dataSource') continue
+        dataSourceFeedsTemplate[scope.feedId] = {
+          schema: scope.schemaRef,
+          permissionGranted: true,
+          hasData: true,
+        }
+      }
+      const hasDataSourceScope = Object.keys(dataSourceFeedsTemplate).length > 0
+
       // peakEquity 在 build() 闭包内逐 bar 维护，与 account-strategy-view.service.ts:1970 同公式
       let peakEquity: number | undefined
 
@@ -137,6 +153,12 @@ export class BacktestStrategyAdapterService {
             if (tfBarStatus !== undefined) {
               ;(ctx as { timeframeBarStatus?: Record<string, { lastClosedBarTs: number; lastClosedBarIndex: number }> }).timeframeBarStatus = tfBarStatus
             }
+          }
+
+          // Issue #1712: 注入 dataSourceFeeds，避免 applyDataSourceScopeFailClosed 全局短路。
+          // 每根 bar clone 一份（避免 frozen ctx 复用同一引用被 runtime mutate）。
+          if (hasDataSourceScope) {
+            ;(ctx as { dataSourceFeeds?: Record<string, unknown> }).dataSourceFeeds = { ...dataSourceFeedsTemplate }
           }
 
           const exprValues = evaluateExprPool(
