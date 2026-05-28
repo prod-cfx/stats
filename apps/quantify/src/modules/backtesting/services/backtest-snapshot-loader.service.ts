@@ -1,5 +1,4 @@
 import type { BacktestExecutionPolicy, BacktestRunInput } from '../types/backtesting.types'
-import type { BacktestSymbolAvailabilityCheckInput } from './backtest-symbol-availability.service'
 import type { CanonicalRuleV2, CanonicalStrategySpec } from '@/modules/llm-strategy-codegen/types/canonical-strategy-spec'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
@@ -44,47 +43,6 @@ export interface SnapshotBacktestStrategyInput {
   params?: Record<string, unknown>
 }
 
-export function extractSnapshotBoundSymbolAvailabilityInput(
-  strategy: BacktestRunInput['strategy'],
-): BacktestSymbolAvailabilityCheckInput | null {
-  if (strategy.bindingSource !== 'PUBLISHED_SNAPSHOT_STRICT') {
-    return null
-  }
-
-  const params = strategy.params as Record<string, unknown>
-  const exchange = readSnapshotBoundTrimmedString(params.exchange)
-  const symbol = readSnapshotBoundTrimmedString(params.symbol)
-  const baseTimeframe = readSnapshotBoundTrimmedString(params.timeframe)
-  const marketTypeRaw = readSnapshotBoundTrimmedString(params.marketType)
-  const marketType = marketTypeRaw === 'spot' || marketTypeRaw === 'perp'
-    ? marketTypeRaw
-    : null
-  const missingFields = [
-    !exchange ? 'exchange' : null,
-    !symbol ? 'symbol' : null,
-    !baseTimeframe ? 'timeframe' : null,
-    !marketType ? 'marketType' : null,
-  ].filter((field): field is string => field !== null)
-
-  if (missingFields.length > 0) {
-    throw new DomainException('backtest.snapshot_params_missing', {
-      code: ErrorCode.BAD_REQUEST,
-      status: HttpStatus.BAD_REQUEST,
-      args: {
-        snapshotId: strategy.snapshotId ?? strategy.id,
-        missingFields,
-      },
-    })
-  }
-
-  return {
-    exchange,
-    symbol,
-    marketType,
-    baseTimeframe,
-  }
-}
-
 interface FormalSnapshotTruth {
   strategyConfig: {
     exchange: string
@@ -120,15 +78,6 @@ interface SnapshotPositionSizing {
   mode: 'pct_equity' | 'fixed_quote' | 'fixed_base' | 'position_pct'
   value: number
   asset?: string
-}
-
-function readSnapshotBoundTrimmedString(value: unknown): string | null {
-  if (typeof value !== 'string') {
-    return null
-  }
-
-  const normalized = value.trim()
-  return normalized || null
 }
 
 @Injectable()

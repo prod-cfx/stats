@@ -7,16 +7,15 @@ import { Injectable, HttpStatus, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AiQuantConversationsRepository } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
+import { getMarketTimeframeMs } from '@/modules/market-data/utils/market-timeframe.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from '../core/backtest-runner.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestMarketDataService } from '../services/backtest-market-data.service'
-import { extractSnapshotBoundSymbolAvailabilityInput } from '../services/backtest-snapshot-loader.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestSymbolAvailabilityService } from '../services/backtest-symbol-availability.service'
-import { getMarketTimeframeMs } from '@/modules/market-data/utils/market-timeframe.util'
 
 interface LastBacktestRangeConfig {
   preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
@@ -212,12 +211,40 @@ export class BacktestJobsService {
   }
 
   private async validateSymbolAvailability(input: BacktestRunInput): Promise<void> {
-    const availabilityInput = extractSnapshotBoundSymbolAvailabilityInput(input.strategy)
-    if (!availabilityInput) {
+    if (input.strategy.bindingSource !== 'PUBLISHED_SNAPSHOT_STRICT') {
       return
     }
-
-    const availability = await this.symbolAvailabilityService.check(availabilityInput)
+    // Snapshot loader 已 strict parse 这四个字段；这里再 runtime guard 兜住「loader 契约
+    // 被绕过 / 上游协议演进」的极端情况，让 missing 报到 snapshot_params_missing 而不是
+    // 把 undefined 透传给下游 availability check 制造误导性报错。
+    const params = input.strategy.params as Record<string, unknown>
+    const exchange = typeof params.exchange === 'string' ? params.exchange : ''
+    const symbol = typeof params.symbol === 'string' ? params.symbol : ''
+    const baseTimeframe = typeof params.timeframe === 'string' ? params.timeframe : ''
+    const marketType = params.marketType === 'spot' || params.marketType === 'perp' ? params.marketType : null
+    const missingFields = [
+      !exchange ? 'exchange' : null,
+      !symbol ? 'symbol' : null,
+      !baseTimeframe ? 'timeframe' : null,
+      !marketType ? 'marketType' : null,
+    ].filter((field): field is string => field !== null)
+    if (missingFields.length > 0) {
+      const snapshotId = this.readStrategyMetadata(input.strategy, 'snapshotId')
+      throw new DomainException('backtest.snapshot_params_missing', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: {
+          ...(snapshotId ? { snapshotId } : {}),
+          missingFields,
+        },
+      })
+    }
+    const availability = await this.symbolAvailabilityService.check({
+      exchange,
+      symbol,
+      baseTimeframe,
+      marketType,
+    })
     if (availability.supported) {
       return
     }
@@ -312,13 +339,14 @@ export class BacktestJobsService {
 
     try {
       const { resolvedSummary, result } = await this.runBacktestJob(input, initialSummary)
+      const enrichedResult = this.enrichResultWithDiagnosticReason(result)
       const completedAt = new Date()
       await this.prisma.backtestJob.update({
         where: { id },
         data: {
           status: 'succeeded',
           inputSummary: resolvedSummary as Prisma.InputJsonValue,
-          result: result as unknown as Prisma.InputJsonValue,
+          result: enrichedResult as unknown as Prisma.InputJsonValue,
           error: null,
           finishedAt: completedAt,
         },
@@ -331,7 +359,7 @@ export class BacktestJobsService {
         conversationId: job.conversationId,
         snapshotId: resolvedSummary.snapshotId,
         marketType: resolvedSummary.marketType,
-        result,
+        result: enrichedResult,
         completedAt,
       })
     } catch (error) {
@@ -367,6 +395,46 @@ export class BacktestJobsService {
       job.error = error instanceof Error ? error.message : String(error)
       job.errorDetails = this.extractErrorDetails(error)
       job.finishedAt = new Date().toISOString()
+    }
+  }
+
+  /**
+   * Issue #1699 P2a：按 BacktestDiagnostics 派发三类「未产生有效成交」的诊断错误码，
+   * 落到 result.summary.diagnosticReason，让前端/调用方能区分根因（规则没编译 /
+   * 信号没触发 / 信号触发了但没成交）而不是统一报「未产生有效成交」。
+   *
+   * - compiledRulesCount === 0 → NO_RULES_COMPILED（spec.rules 编译丢失，常因 codegen
+   *   解析 bug，如 #1700）
+   * - signalTriggerCount === 0 → NO_SIGNAL_FIRED_IN_RANGE（rules 有但区间内未触发任一信号）
+   * - signalTriggerCount > 0 && fillCount === 0 → SIGNAL_FIRED_BUT_NO_FILL（信号有但风控
+   *   / 资金 / next-bar gap 阻断撮合）
+   * - totalTrades > 0：不附诊断
+   */
+  private enrichResultWithDiagnosticReason(result: BacktestReport): BacktestReport {
+    if (result.summary.totalTrades > 0) {
+      return result
+    }
+    if (!result.diagnostics) {
+      return result
+    }
+    const { compiledRulesCount, signalTriggerCount, fillCount } = result.diagnostics
+    let diagnosticReason: BacktestReport['summary']['diagnosticReason']
+    if (compiledRulesCount === 0) {
+      diagnosticReason = ErrorCode.BACKTEST_NO_RULES_COMPILED as BacktestReport['summary']['diagnosticReason']
+    } else if (signalTriggerCount === 0) {
+      diagnosticReason = ErrorCode.BACKTEST_NO_SIGNAL_FIRED_IN_RANGE as BacktestReport['summary']['diagnosticReason']
+    } else if (fillCount === 0) {
+      diagnosticReason = ErrorCode.BACKTEST_SIGNAL_FIRED_BUT_NO_FILL as BacktestReport['summary']['diagnosticReason']
+    }
+    if (!diagnosticReason) {
+      return result
+    }
+    return {
+      ...result,
+      summary: {
+        ...result.summary,
+        diagnosticReason,
+      },
     }
   }
 

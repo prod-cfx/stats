@@ -149,6 +149,11 @@ export class BacktestRunnerService {
     const ledger = this.ledgerFactory.create(input.initialCash)
     const reporter = this.reporterService.create()
     const symbolSet = buildRuntimeSymbolSet(input)
+    const diagnostics = {
+      compiledRulesCount: this.countCompiledRules(input.strategy.specSnapshot),
+      signalTriggerCount: 0,
+      fillCount: 0,
+    }
 
     const baseBars = input.bars
       .filter(bar =>
@@ -259,6 +264,12 @@ export class BacktestRunnerService {
         : await input.strategy.fn({
           ...strategyContext,
         })
+      // 任何非 NOOP 都算 trigger；intent 必为 object（null/undefined 视为无信号不计数）。
+      const isObjectIntent = intent != null && typeof intent === 'object'
+      const isNoop = isObjectIntent && 'type' in intent && (intent as { type?: unknown }).type === 'NOOP'
+      if (isObjectIntent && !isNoop) {
+        diagnostics.signalTriggerCount += 1
+      }
       this.applyCompiledOrderProgramFills({
         intent,
         input,
@@ -345,6 +356,8 @@ export class BacktestRunnerService {
       ...(pos.entryTimeframe ? { entryTimeframe: pos.entryTimeframe } : {}),
     }))
     const openPnl = openPositions.reduce((sum, position) => sum + position.unrealizedPnl, 0)
+    // 只数已完结撮合，避免「开仓未平」被误判为成交导致 SIGNAL_FIRED_BUT_NO_FILL 错判。
+    diagnostics.fillCount = report.trades.length
 
     this.stateEngine.reset()
     this.riskEvaluator.reset()
@@ -356,9 +369,16 @@ export class BacktestRunnerService {
         totalOpenTrades: openPositions.length,
         openPnl,
       },
+      diagnostics,
       openPositions,
       pendingSignals,
     }
+  }
+
+  private countCompiledRules(specSnapshot: BacktestRunInput['strategy']['specSnapshot']): number {
+    if (!specSnapshot || typeof specSnapshot !== 'object') return 0
+    const rules = (specSnapshot as { rules?: unknown }).rules
+    return Array.isArray(rules) ? rules.length : 0
   }
 
   private applyDeltaOrder(input: {

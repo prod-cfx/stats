@@ -1281,6 +1281,94 @@ describe('backtestRunnerService', () => {
       expect(report.summary.totalTrades).toBe(1)
     })
   })
+
+  // Issue #1699 P2a：诊断 metadata 让「未产生有效成交」可定位到 rules / 信号 / 撮合三层
+  describe('Issue #1699: backtest diagnostics', () => {
+    const baseBars = [
+      createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, close: 100 }),
+      createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, close: 110 }),
+      createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, close: 120 }),
+    ]
+    const baseInput: Omit<BacktestRunInput, 'strategy'> = {
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      dataRange: { fromTs: 0, toTs: 10 },
+      bars: baseBars,
+    }
+
+    it('compiledRulesCount=0 时反映规则编译为空 → NO_RULES_COMPILED 错误码可派发', async () => {
+      const runner = createRunner()
+      const report = await runner.run({
+        ...baseInput,
+        strategy: {
+          id: 'no-rules', params: {}, fn: () => ({ type: 'NOOP' }),
+          specSnapshot: { rules: [] },
+        },
+      })
+      expect(report.diagnostics).toEqual({ compiledRulesCount: 0, signalTriggerCount: 0, fillCount: 0 })
+    })
+
+    it('规则已编译但 fn 全程 NOOP → signalTriggerCount=0 反映 NO_SIGNAL_FIRED_IN_RANGE', async () => {
+      const runner = createRunner()
+      const report = await runner.run({
+        ...baseInput,
+        strategy: {
+          id: 'rules-no-signal', params: {}, fn: () => ({ type: 'NOOP' }),
+          specSnapshot: { rules: [{ id: 'r1' }, { id: 'r2' }] },
+        },
+      })
+      expect(report.diagnostics.compiledRulesCount).toBe(2)
+      expect(report.diagnostics.signalTriggerCount).toBe(0)
+      expect(report.diagnostics.fillCount).toBe(0)
+    })
+
+    it('信号触发 + 完整 OPEN→CLOSE 撮合 → fillCount > 0 反映已完结成交', async () => {
+      const runner = createRunner()
+      let opened = false
+      const report = await runner.run({
+        ...baseInput,
+        strategy: {
+          id: 'signal-and-fill', params: {},
+          fn: (ctx: StrategyContext) => {
+            if (ctx.position.qty === 0 && !opened) {
+              opened = true
+              return { type: 'OPEN_LONG', qty: 1 }
+            }
+            if (ctx.position.qty > 0) {
+              return { type: 'CLOSE' }
+            }
+            return { type: 'NOOP' }
+          },
+          specSnapshot: { rules: [{ id: 'r1' }] },
+        },
+      })
+      expect(report.diagnostics.compiledRulesCount).toBe(1)
+      expect(report.diagnostics.signalTriggerCount).toBeGreaterThan(0)
+      // fillCount 只数已完结撮合（report.trades.length），开仓未平不算
+      expect(report.diagnostics.fillCount).toBeGreaterThan(0)
+    })
+
+    it('信号触发但仅 OPEN 未 CLOSE → fillCount=0 反映 SIGNAL_FIRED_BUT_NO_FILL 边界', async () => {
+      const runner = createRunner()
+      const report = await runner.run({
+        ...baseInput,
+        strategy: {
+          id: 'signal-no-close', params: {},
+          fn: (ctx: StrategyContext) => ctx.position.qty === 0
+            ? { type: 'OPEN_LONG', qty: 1 }
+            : { type: 'NOOP' },
+          specSnapshot: { rules: [{ id: 'r1' }] },
+        },
+      })
+      expect(report.diagnostics.compiledRulesCount).toBe(1)
+      expect(report.diagnostics.signalTriggerCount).toBeGreaterThan(0)
+      expect(report.diagnostics.fillCount).toBe(0)
+    })
+  })
 })
 
 function createCompiledCombinationScriptFixture(): {

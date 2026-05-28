@@ -1,3 +1,4 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { StrategyAstV1 } from '../types/canonical-strategy-ast'
 import type { CanonicalStrategyIrV1 } from '../types/canonical-strategy-ir'
 import type { CompiledScriptExecutionEnvelope } from '../types/compiled-script-projection'
@@ -9,18 +10,19 @@ import type {
 } from '../types/publication-gate'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
-import { lookupIrFieldsForClarificationReason } from '../types/clarification-slot-ir-mapping'
-import { GRID_PROGRAM_KINDS } from '../types/semantic-state'
-import { createHash } from 'node:crypto'
-import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { PrismaClient } from '@/prisma/prisma.types'
+import { createHash } from 'node:crypto'
+import { ErrorCode } from '@ai/shared'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { TransactionHost } from '@nestjs-cls/transactional'
-import { Injectable, Logger } from '@nestjs/common'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { normalizeRuntimeRequirements } from '@/modules/strategy-runtime/semantic-runtime-state.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
+import { lookupIrFieldsForClarificationReason } from '../types/clarification-slot-ir-mapping'
+import { GRID_PROGRAM_KINDS } from '../types/semantic-state'
 import { buildStrategyAstDigestProjection } from './canonical-strategy-ast-compiler.service'
 import { CompiledScriptParserService } from './compiled-script-parser.service'
 
@@ -122,6 +124,23 @@ interface FormalDeploymentExecutionConstraints {
 
 const ON_START_SOURCE_REF_PATTERN = /(^|[_-])(?:execution[_-])?on_start([_-]|$)/i
 const DEFAULT_PERP_PLATFORM_MAX_LEVERAGE = 5
+
+/**
+ * Issue #1699 P1：publish 闸门 symbol strict 校验认可的 quote 后缀集合。新增 quote
+ * 时只改这里一处；与下游 market-symbol-code.util / market-data 模块保持一致语义。
+ */
+const KNOWN_QUOTE_SUFFIXES = [
+  'USDT',
+  'USDC',
+  'USD',
+  'BUSD',
+  'FDUSD',
+  'TUSD',
+  'DAI',
+  'USDE',
+  'BTC',
+  'ETH',
+] as const
 
 /**
  * Issue #1456 / 父 Issue #1455 闸 1：publication-gate 阻断未澄清 IR 编译。
@@ -824,10 +843,12 @@ export class CompiledPublicationGateService {
 
   private buildStrategyConfig(input: PublishCompiledSnapshotInput): FormalStrategyConfig {
     const [baseTimeframe, ...stateTimeframes] = input.ir.market.timeframes
+    const marketType = input.ir.market.instrumentType === 'perpetual' ? 'perp' : 'spot'
+    const symbol = this.assertStrictSymbol(input.ir.market.symbol, marketType, input.sessionId)
     return {
       exchange: input.ir.market.venue,
-      symbol: input.ir.market.symbol,
-      marketType: input.ir.market.instrumentType === 'perpetual' ? 'perp' : 'spot',
+      symbol,
+      marketType,
       baseTimeframe: baseTimeframe ?? null,
       stateTimeframes,
       positionPct: input.ir.portfolio.sizing.mode === 'pct_equity'
@@ -836,6 +857,65 @@ export class CompiledPublicationGateService {
       positionSizing: input.ir.portfolio.sizing,
       strategyDeclaredLeverageRange: null,
     }
+  }
+
+  /**
+   * Stage3 单一真相要求 published snapshot 的 symbol 必须形如 `BASEQUOTE`
+   * （全大写，含已知 quote 后缀，例 BTCUSDT / ETHUSDC / SOLUSD），可选 `:SPOT/:PERP`
+   * 后缀作为 venue 原生标记。下游 backtest / runtime 直接照搬，不再做二次归一化。
+   * 错 1（ETH 不支持回测）的根因就是裸 base `eth` 落库 → 此校验把上游脏值挡在闸门外。
+   *
+   * Venue 原生格式（如 OKX 的 `BTC-USDT-SWAP`）由 LLM/codegen 在产出 IR 前归一为 `BTCUSDT`，
+   * 不允许把 venue-specific 形态直接落到 snapshot truth。
+   */
+  private assertStrictSymbol(rawSymbol: string, marketType: 'spot' | 'perp', sessionId: string): string {
+    if (typeof rawSymbol !== 'string' || rawSymbol.length === 0) {
+      throw new DomainException('publication.snapshot_symbol_invalid', {
+        code: ErrorCode.BACKTEST_SNAPSHOT_SYMBOL_INVALID,
+        status: HttpStatus.BAD_REQUEST,
+        args: { sessionId, symbol: rawSymbol, marketType, reason: 'empty' },
+      })
+    }
+    if (rawSymbol !== rawSymbol.toUpperCase()) {
+      throw new DomainException('publication.snapshot_symbol_invalid', {
+        code: ErrorCode.BACKTEST_SNAPSHOT_SYMBOL_INVALID,
+        status: HttpStatus.BAD_REQUEST,
+        args: { sessionId, symbol: rawSymbol, marketType, reason: 'not_uppercase' },
+      })
+    }
+    const match = /^(?<basePair>[A-Z0-9]+)(?::(?<suffix>SPOT|PERP))?$/.exec(rawSymbol)
+    if (!match || !match.groups) {
+      throw new DomainException('publication.snapshot_symbol_invalid', {
+        code: ErrorCode.BACKTEST_SNAPSHOT_SYMBOL_INVALID,
+        status: HttpStatus.BAD_REQUEST,
+        args: { sessionId, symbol: rawSymbol, marketType, reason: 'shape_mismatch' },
+      })
+    }
+    const { basePair, suffix } = match.groups
+    if (suffix && marketType === 'perp' && suffix !== 'PERP') {
+      throw new DomainException('publication.snapshot_symbol_invalid', {
+        code: ErrorCode.BACKTEST_SNAPSHOT_SYMBOL_INVALID,
+        status: HttpStatus.BAD_REQUEST,
+        args: { sessionId, symbol: rawSymbol, marketType, actualSuffix: suffix, reason: 'market_suffix_mismatch' },
+      })
+    }
+    if (suffix && marketType === 'spot' && suffix !== 'SPOT') {
+      throw new DomainException('publication.snapshot_symbol_invalid', {
+        code: ErrorCode.BACKTEST_SNAPSHOT_SYMBOL_INVALID,
+        status: HttpStatus.BAD_REQUEST,
+        args: { sessionId, symbol: rawSymbol, marketType, actualSuffix: suffix, reason: 'market_suffix_mismatch' },
+      })
+    }
+    // 必须含已知 quote 后缀；拦下裸 base 如 "ETH"（错 1 真因）
+    const hasKnownQuote = KNOWN_QUOTE_SUFFIXES.some(q => basePair.endsWith(q) && basePair.length > q.length)
+    if (!hasKnownQuote) {
+      throw new DomainException('publication.snapshot_symbol_invalid', {
+        code: ErrorCode.BACKTEST_SNAPSHOT_SYMBOL_INVALID,
+        status: HttpStatus.BAD_REQUEST,
+        args: { sessionId, symbol: rawSymbol, marketType, basePair, knownQuotes: [...KNOWN_QUOTE_SUFFIXES], reason: 'missing_quote' },
+      })
+    }
+    return rawSymbol
   }
 
   private buildBacktestConfigDefaults(input: PublishCompiledSnapshotInput): FormalBacktestConfigDefaults {

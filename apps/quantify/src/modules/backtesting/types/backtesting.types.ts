@@ -181,13 +181,36 @@ export interface BacktestReport {
     totalTrades: number
     totalOpenTrades?: number
     openPnl?: number
+    /**
+     * Issue #1699 P2a：trades=0 时按 diagnostics 派发的根因错误码（ErrorCode 字符串）。
+     * 前端拿到此值后可把笼统「未产生有效成交」拆为「rules 没编译 / 信号未触发 / 触发未成交」三类提示。
+     */
+    diagnosticReason?: BacktestDiagnosticReasonCode
   }
+  diagnostics: BacktestDiagnostics
   equityCurve: Array<{ ts: number; equity: number }>
   trades: TradeRecord[]
   markers: TradeMarker[]
   bySymbol: Array<{ symbol: string; pnl: number; trades: number; winRate: number }>
   openPositions?: Array<{ symbol: string; qty: number; avgEntryPrice: number; unrealizedPnl: number; entryTimeframe?: Timeframe }>
   pendingSignals?: Array<{ symbol: string; ts: number; deltaQty: number; reason?: string; reasonSource: BacktestReasonSource }>
+}
+
+export type BacktestDiagnosticReasonCode =
+  | 'BACKTEST_NO_RULES_COMPILED'
+  | 'BACKTEST_NO_SIGNAL_FIRED_IN_RANGE'
+  | 'BACKTEST_SIGNAL_FIRED_BUT_NO_FILL'
+
+/**
+ * 回测主流诊断：让「未产生有效成交」可定位到 rules / 信号 / 撮合三层。
+ * compiledRulesCount=0 → NO_RULES_COMPILED
+ * signalTriggerCount=0 → NO_SIGNAL_FIRED_IN_RANGE
+ * signalTriggerCount>0 但 fillCount=0 → SIGNAL_FIRED_BUT_NO_FILL
+ */
+export interface BacktestDiagnostics {
+  compiledRulesCount: number
+  signalTriggerCount: number
+  fillCount: number
 }
 
 export type BacktestRequestedRangePreset = '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'

@@ -274,7 +274,7 @@ describe('backtestMarketDataService', () => {
     await expect(service.ensureBacktestSymbolAvailable({
       exchange: 'okx',
       marketType: 'spot',
-      symbol: 'ORDIUSDT',
+      symbol: 'ORDIUSDT:SPOT',
       baseTimeframe: '1h',
     })).resolves.toEqual({ supported: true })
 

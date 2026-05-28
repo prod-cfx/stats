@@ -222,7 +222,7 @@ describe('compiledPublicationGateService', () => {
     )
     const ir = createIrFixture({
       exchange: 'okx',
-      symbol: 'BTC-USDT-SWAP',
+      symbol: 'BTCUSDT',
       instrumentType: 'perpetual',
       timeframes: ['15m'],
     })
@@ -243,19 +243,19 @@ describe('compiledPublicationGateService', () => {
       strategyInstanceId: 'instance-perp',
       canonicalSnapshot: {
         version: 2,
-        market: { exchange: 'okx', symbol: 'BTC-USDT-SWAP', timeframe: '15m' },
+        market: { exchange: 'okx', symbol: 'BTCUSDT', timeframe: '15m' },
         indicators: [],
         rules: [],
       },
       semanticView: { viewType: 'canonical-semantic-view.v1', canonicalDigest: 'sha256:perp', confirmation: { required: false } },
       semanticPredicateGraph: createSemanticPredicateGraphFixture(),
-      graphSnapshot: { version: 3, status: 'confirmed', trigger: [], actions: [], risk: [], meta: { exchange: 'okx', symbol: 'BTC-USDT-SWAP', timeframe: '15m', positionPct: 25, executionTags: [] } },
+      graphSnapshot: { version: 3, status: 'confirmed', trigger: [], actions: [], risk: [], meta: { exchange: 'okx', symbol: 'BTCUSDT', timeframe: '15m', positionPct: 25, executionTags: [] } },
       ir,
       ast,
       executionEnvelope,
       script,
       semanticConsistencyReport: { status: 'PASSED', checks: [] },
-      userIntentSummary: { marketScope: ['BTC-USDT-SWAP'] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
       strategySummary: { thesis: 'perp-cross' },
       scriptSummary: { indicators: [] },
       lockedParams: { positionPct: 25 },
@@ -1656,6 +1656,77 @@ describe('compiledPublicationGateService', () => {
       strategyTemplateId: 'template-strategy-instance-1',
       strategyInstanceId: 'strategy-instance-id-from-codegen',
     }))
+  })
+
+  // Issue #1699 P1：publish 闸门 symbol strict 校验，挡住裸 base / 小写 / 缺 quote /
+  //   marketType ↔ :suffix 矛盾的脏值，避免下游 backtest 拿到「ETH 不支持回测」这种
+  //   把上游 codegen bug 包装成下游报错的情况
+  describe('Issue #1699: snapshot symbol strict 校验', () => {
+    const buildGate = () =>
+      new CompiledPublicationGateService(
+        { create: jest.fn().mockResolvedValue({ id: 's' }) } as never,
+        { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
+      )
+
+    const publishWith = async (symbol: string, instrumentType: 'spot' | 'perpetual') => {
+      const gate = buildGate()
+      const ir = createIrFixture({ symbol, instrumentType, timeframes: ['15m'] })
+      const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+      const executionEnvelope = {
+        positionMode: 'long_only' as const,
+        marginMode: 'cross' as const,
+        tickSize: 0.1,
+        pricePrecision: 1,
+        quantityPrecision: 2,
+        fillAssumption: 'strict' as const,
+      }
+      const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+      return gate.publish({
+        sessionId: 'session-symbol-strict',
+        strategyTemplateId: 'template-symbol-strict',
+        canonicalSnapshot: { version: 2, market: { exchange: 'binance', symbol, timeframe: '15m' }, indicators: [], rules: [] },
+        semanticView: { viewType: 'canonical-semantic-view.v1', canonicalDigest: 'sha256:strict', confirmation: { required: false } },
+        semanticPredicateGraph: createSemanticPredicateGraphFixture(),
+        graphSnapshot: { version: 3, status: 'confirmed', trigger: [], actions: [], risk: [], meta: { exchange: 'binance', symbol, timeframe: '15m', positionPct: 25, executionTags: [] } },
+        ir,
+        ast,
+        executionEnvelope,
+        script,
+        semanticConsistencyReport: { status: 'PASSED', checks: [] },
+        userIntentSummary: { marketScope: [symbol] },
+        strategySummary: { thesis: 'symbol-strict' },
+        scriptSummary: { indicators: [] },
+        lockedParams: { positionPct: 25 },
+      })
+    }
+
+    it('rejects bare base token (eth) — 错 1 实证根因', async () => {
+      await expect(publishWith('eth', 'perpetual')).rejects.toThrow(/snapshot_symbol_invalid/)
+    })
+
+    it('rejects lowercase BTCUSDT', async () => {
+      await expect(publishWith('btcusdt', 'spot')).rejects.toThrow(/snapshot_symbol_invalid/)
+    })
+
+    it('rejects venue-specific OKX swap notation', async () => {
+      await expect(publishWith('BTC-USDT-SWAP', 'perpetual')).rejects.toThrow(/snapshot_symbol_invalid/)
+    })
+
+    it('rejects symbol with mismatching :SPOT suffix when marketType=perp', async () => {
+      await expect(publishWith('BTCUSDT:SPOT', 'perpetual')).rejects.toThrow(/snapshot_symbol_invalid/)
+    })
+
+    it('accepts canonical BASEQUOTE (BTCUSDT) for spot', async () => {
+      await expect(publishWith('BTCUSDT', 'spot')).resolves.toBeDefined()
+    })
+
+    it('accepts canonical BASEQUOTE (ETHUSDT) for perp', async () => {
+      await expect(publishWith('ETHUSDT', 'perpetual')).resolves.toBeDefined()
+    })
+
+    it('accepts canonical BASEQUOTE:PERP suffix when marketType=perp', async () => {
+      await expect(publishWith('BTCUSDT:PERP', 'perpetual')).resolves.toBeDefined()
+    })
   })
 
   // Issue #1437：网格策略 readCanonicalPositionMode 应识别 orchestration.programs 中

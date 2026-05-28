@@ -1110,6 +1110,58 @@ describe('backtestJobsService', () => {
     await expect(service.getJob('missing', OWNER_USER_ID)).rejects.toThrow('backtest.job_not_found')
   })
 
+  // Issue #1699 P2a：runner 完成回测后，jobs service 按 BacktestDiagnostics 派发
+  //   summary.diagnosticReason，让 trades=0 的根因可被前端区分
+  describe('Issue #1699: diagnosticReason 派发', () => {
+    const buildRunner = (diagnostics: { compiledRulesCount: number; signalTriggerCount: number; fillCount: number }) => ({
+      run: jest.fn().mockResolvedValue({
+        summary: { netProfit: 0, netProfitPct: 0, maxDrawdownPct: 0, winRate: 0, profitFactor: 0, totalTrades: 0 },
+        diagnostics,
+        equityCurve: [],
+        trades: [],
+        markers: [],
+        bySymbol: [],
+      }),
+    })
+
+    const runAndReadResult = async (diagnostics: { compiledRulesCount: number; signalTriggerCount: number; fillCount: number }) => {
+      const runner = buildRunner(diagnostics)
+      const marketData = createMarketDataMock()
+      const availability = createAvailabilityMock()
+      const prisma = createPrismaMock()
+      const service = new BacktestJobsService(
+        runner as never,
+        marketData as never,
+        availability as never,
+        createConversationsMock() as never,
+        prisma as never,
+      )
+      const created = await service.createJob(createInput(), OWNER_USER_ID)
+      await flushMicrotasks()
+      const updateCall = prisma.backtestJob.update.mock.calls.find(
+        ([arg]) => (arg as { data?: { status?: string } }).data?.status === 'succeeded',
+      )
+      expect(updateCall).toBeDefined()
+      const persistedResult = (updateCall![0] as { data: { result: unknown } }).data.result as { summary: { diagnosticReason?: string } }
+      return { created, persistedResult }
+    }
+
+    it('compiledRulesCount=0 派发 BACKTEST_NO_RULES_COMPILED', async () => {
+      const { persistedResult } = await runAndReadResult({ compiledRulesCount: 0, signalTriggerCount: 0, fillCount: 0 })
+      expect(persistedResult.summary.diagnosticReason).toBe('BACKTEST_NO_RULES_COMPILED')
+    })
+
+    it('规则编译但信号未触发 → BACKTEST_NO_SIGNAL_FIRED_IN_RANGE', async () => {
+      const { persistedResult } = await runAndReadResult({ compiledRulesCount: 2, signalTriggerCount: 0, fillCount: 0 })
+      expect(persistedResult.summary.diagnosticReason).toBe('BACKTEST_NO_SIGNAL_FIRED_IN_RANGE')
+    })
+
+    it('信号触发但未撮合 → BACKTEST_SIGNAL_FIRED_BUT_NO_FILL', async () => {
+      const { persistedResult } = await runAndReadResult({ compiledRulesCount: 1, signalTriggerCount: 5, fillCount: 0 })
+      expect(persistedResult.summary.diagnosticReason).toBe('BACKTEST_SIGNAL_FIRED_BUT_NO_FILL')
+    })
+  })
+
   it('falls back to in-memory jobs when backtest job persistence table is unavailable', async () => {
     const runner = {
       run: jest.fn().mockResolvedValue({

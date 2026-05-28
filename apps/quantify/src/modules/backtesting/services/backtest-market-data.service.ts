@@ -135,8 +135,7 @@ export class BacktestMarketDataService {
     input: BacktestSymbolAvailabilityCheckInput,
   ): Promise<BacktestSymbolAvailabilityResult> {
     const normalizedExchange = this.normalizeExchange(input.exchange)
-    const requestedSymbol = normalizeExactCode(input.symbol)
-    const normalizedSymbol = this.normalizeAvailabilitySymbol(requestedSymbol, input.marketType)
+    const normalizedSymbol = normalizeExactCode(input.symbol)
     if (await this.hasSupportedSymbol(normalizedExchange, normalizedSymbol)) {
       if (await this.hasHistoricalBars(normalizedExchange, normalizedSymbol, input.baseTimeframe as Timeframe)) {
         return { supported: true }
@@ -144,7 +143,7 @@ export class BacktestMarketDataService {
       return {
         supported: false,
         reasonCode: 'BACKTEST_MARKET_DATA_UNAVAILABLE',
-        args: this.buildAvailabilityArgs(input, normalizedExchange, requestedSymbol),
+        args: this.buildAvailabilityArgs(input, normalizedExchange, normalizedSymbol),
       }
     }
 
@@ -155,7 +154,7 @@ export class BacktestMarketDataService {
         return {
           supported: false,
           reasonCode: 'BACKTEST_SYMBOL_UNAVAILABLE',
-          args: this.buildAvailabilityArgs(input, normalizedExchange, requestedSymbol),
+          args: this.buildAvailabilityArgs(input, normalizedExchange, normalizedSymbol),
         }
       }
 
@@ -168,14 +167,14 @@ export class BacktestMarketDataService {
         return {
           supported: false,
           reasonCode: 'BACKTEST_MARKET_DATA_UNAVAILABLE',
-          args: this.buildAvailabilityArgs(input, normalizedExchange, requestedSymbol),
+          args: this.buildAvailabilityArgs(input, normalizedExchange, normalizedSymbol),
         }
       }
 
       return {
         supported: false,
         reasonCode: 'BACKTEST_SYMBOL_UNAVAILABLE',
-        args: this.buildAvailabilityArgs(input, normalizedExchange, requestedSymbol),
+        args: this.buildAvailabilityArgs(input, normalizedExchange, normalizedSymbol),
       }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
@@ -328,27 +327,6 @@ export class BacktestMarketDataService {
       limit: 1,
     })
     return Array.isArray(bars) && bars.length > 0
-  }
-
-  private normalizeAvailabilitySymbol(
-    symbol: string,
-    marketType: 'spot' | 'perp',
-  ): string {
-    if (!symbol) {
-      throw new DomainException('backtesting.symbol_check_invalid_symbol', {
-        code: ErrorCode.BAD_REQUEST,
-        status: HttpStatus.BAD_REQUEST,
-        args: { symbol },
-      })
-    }
-
-    if (symbol.includes(':')) {
-      return symbol
-    }
-
-    return marketType === 'perp'
-      ? toSymbolCode(symbol, 'PERP')
-      : normalizeRequestedCode(symbol)
   }
 
   private extractExchange(params: Record<string, unknown>): BacktestExchangeId | null {

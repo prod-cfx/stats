@@ -127,6 +127,14 @@ export class BacktestReporter {
         profitFactor: grossLoss === 0 ? (grossProfit > 0 ? Number.POSITIVE_INFINITY : 0) : grossProfit / grossLoss,
         totalTrades: this.trades.length,
       },
+      // 占位 diagnostics：reporter 没有 strategy / signal 上下文，rules 与信号计数留 0；
+      // runner.run() 出口会用真值覆盖（backtest-runner.service.ts），调用方应只信 runner
+      // 路径返回的 BacktestReport，不要直接消费 reporter.toReport() 派发错误码。
+      diagnostics: {
+        compiledRulesCount: 0,
+        signalTriggerCount: 0,
+        fillCount: this.trades.length,
+      },
       equityCurve: this.equityCurve,
       trades: this.trades,
       markers: this.markers,
