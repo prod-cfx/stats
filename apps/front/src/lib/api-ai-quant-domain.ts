@@ -176,8 +176,9 @@ export async function fetchAccountAiQuantStrategies(
         throw new ApiError('userId is required', 'INVALID_INPUT')
       }
 
+      // Backend identifies caller via JWT (`@CurrentUser`); do not send client-provided
+      // `userId` query — it has no effect server-side. See #1698.
       const search = new URLSearchParams({
-        userId: query.userId.trim(),
         page: String(query.page ?? 1),
         limit: String(query.limit ?? 20),
         subscribedOnly: String(subscribedOnly),
@@ -215,9 +216,11 @@ export async function fetchAccountAiQuantStrategyDetail(
         throw new ApiError('userId is required', 'INVALID_INPUT')
       }
 
-      const search = new URLSearchParams({ userId: userId.trim() })
+      // Backend identifies caller via JWT (`@CurrentUser`); do not send client-provided
+      // `userId` query — it has no effect server-side and risks leaking stale/mock ids
+      // (e.g. mistaken `userId=1000`) into request logs. See #1698.
       const response = await fetch(
-        `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}?${search.toString()}`,
+        `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}`,
         { method: 'GET', headers: buildAccountAiQuantHeaders(userId.trim()) },
       )
       const json = await parseAccountAiQuantJson(response, '获取 AI 量化策略详情失败')
@@ -296,12 +299,15 @@ export async function deleteAccountAiQuantStrategy(
       throw new ApiError('userId is required', 'INVALID_INPUT')
     }
 
-    const search = new URLSearchParams({ userId: userId.trim() })
+    // Backend identifies caller via JWT (`@CurrentUser`); do not send client-provided
+    // `userId` query — backend ignores it. See #1698.
+    const search = new URLSearchParams()
     if (options.deleteStoppedStrategy === true) {
       search.set('deleteStoppedStrategy', 'true')
     }
+    const qs = search.toString()
     const response = await fetch(
-      `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}?${search.toString()}`,
+      `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}${qs ? `?${qs}` : ''}`,
       { method: 'DELETE', headers: buildAccountAiQuantHeaders(userId.trim()) },
     )
     await parseAccountAiQuantJson(response, '删除策略失败')
