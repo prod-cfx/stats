@@ -298,9 +298,25 @@ export function isAtomParamsStrictlyValid(key: string, params: Record<string, un
     }
     // preset 声明且未命中 → 继续走单 slot 校验（容忍 indicator!='macd' 等非 preset 场景）
   }
+  // indicator.cross_over / cross_under 在非 MACD 场景下，fastPeriod/slowPeriod/signalPeriod
+  // 对 RSI/MA/EMA 无意义；LLM 常误填 0 占位导致 range[1,500] 越界 → 整 rule 进 quarantine。
+  // 非 MACD 且这些字段为 0 或缺省时，按 N/A 处理跳过 range/multipleOf 严校。
+  const isIndicatorCrossAtom = key === 'indicator.cross_over' || key === 'indicator.cross_under'
+  const rawIndicator = isIndicatorCrossAtom && typeof params.indicator === 'string'
+    ? params.indicator.trim().toLowerCase()
+    : ''
+  // indicator 缺省（''）维持严校；仅 indicator 显式非 macd 时启用 N/A 跳过
+  const isNonMacdCross = isIndicatorCrossAtom && rawIndicator !== '' && rawIndicator !== 'macd'
   for (const [slotKey, raw] of Object.entries(params)) {
     const slot = slots[slotKey]
     if (!slot) continue // 未声明 slot → 不校
+    if (
+      isNonMacdCross
+      && (slotKey === 'fastPeriod' || slotKey === 'slowPeriod' || slotKey === 'signalPeriod')
+      && (raw === 0 || raw === '0' || raw === null)
+    ) {
+      continue
+    }
     if (slot.kind === 'enum' && slot.enum && slot.enum.length > 0) {
       if (typeof raw !== 'string' && typeof raw !== 'number') return false
       const rawValue = String(raw)

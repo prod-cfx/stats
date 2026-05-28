@@ -20,8 +20,13 @@ import { buildConversationPlannerSystemPrompt } from '../conversation-planner-sy
 //   heuristic token estimate（char-based）从 ~9900 → ~10300（cjk/1.5 + ascii/4 派生，
 //   非 OpenAI BPE token）。HEURISTIC_THRESHOLD 同步从 10000 → 11000 维持 ~10% safety margin。
 //   REAL_OPENAI_THRESHOLD（OpenAI usage.prompt_tokens 实测值）保留 8000，未受影响。
+// Issue: 新增「回踩 MA(N) 后重新站上 MA(N)」复合形态 hint + S5 example（含完整 JSON
+//   rules[] 演示「长周期 MA gate AND sequence([below(maN), above(maN)])」结构），
+//   heuristic 估算从 ~10950 → ~11140，HEURISTIC_THRESHOLD 抬升到 11200。
+//   实际 margin ~0.5%（11200-11140≈60 chars，接近阈值）；下次 prompt 扩容时需同步上调，
+//   不要默认还有 10% 缓冲。
 const REAL_OPENAI_THRESHOLD = 8000
-const HEURISTIC_THRESHOLD = 11000
+const HEURISTIC_THRESHOLD = 11200
 
 function charBasedEstimate(text: string): number {
   let cjk = 0

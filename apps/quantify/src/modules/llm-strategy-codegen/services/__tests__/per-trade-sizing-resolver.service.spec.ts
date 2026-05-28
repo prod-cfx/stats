@@ -12,6 +12,8 @@ import {
   buildStateWithActionSizingShape,
   buildStateWithChecklistPositionPct,
   buildStateWithDcaPerOrderSizing,
+  buildStateWithPositionConstraintBothShapes,
+  buildStateWithPositionConstraintParamsSizing,
   buildStateWithPositionSizing,
 } from './fixtures/sizing-resolver-fixtures'
 
@@ -198,6 +200,53 @@ describe('PerTradeSizingResolver', () => {
         expect(anchor?.executionAnchored).toBe(true)
         expect(anchor?.normalized?.axis).toBe('base_qty')
         expect(anchor?.normalized?.value).toBe(0.01)
+      })
+
+      // Dispatcher writes `params.sizing` (not `perOrderSizing`) for position.sizing atoms.
+      // Resolver must fall back to `params.sizing` when `perOrderSizing` is absent.
+      it('params.sizing (dispatcher shape) ratio=0.35 → anchor source=position_constraint_params_fallback', () => {
+        const state = buildStateWithPositionConstraintParamsSizing({
+          ownerKey: 'position.sizing',
+          shape: { kind: 'ratio', value: 0.35, unit: 'ratio' },
+        })
+        const result = resolver.resolve(state)
+        const anchor = result.get('position_constraint:position.sizing') as SizingAnchor
+        expect(anchor).toBeDefined()
+        expect(anchor.source).toBe('position_constraint_params_fallback')
+        expect(anchor.executionAnchored).toBe(true)
+        expect(anchor.fullySpecified).toBe(true)
+        expect(anchor.normalized?.axis).toBe('equity_ratio')
+        expect(anchor.normalized?.value).toBeCloseTo(0.35)
+        expect(anchor.normalized?.needsRuntimeResolution).toBe(true)
+        expect(anchor.evidenceRef).toBeUndefined()
+      })
+
+      it('both params.perOrderSizing and params.sizing present → perOrderSizing wins (backward compat)', () => {
+        const state = buildStateWithPositionConstraintBothShapes({
+          ownerKey: 'position.sizing',
+          perOrderSizingShape: { kind: 'quote', value: 200, asset: 'USDT' },
+          sizingShape: { kind: 'ratio', value: 0.35, unit: 'ratio' },
+        })
+        const result = resolver.resolve(state)
+        const anchor = result.get('position_constraint:position.sizing') as SizingAnchor
+        expect(anchor).toBeDefined()
+        expect(anchor.source).toBe('position_constraint_params_fallback')
+        expect(anchor.normalized?.axis).toBe('notional_quote')
+        expect(anchor.normalized?.value).toBe(200)
+      })
+
+      // m3：perOrderSizing 畸形（无 kind）时不应静默吞掉合法 sizing
+      it('malformed perOrderSizing (no kind) + valid params.sizing → falls back to sizing', () => {
+        const state = buildStateWithPositionConstraintBothShapes({
+          ownerKey: 'position.sizing',
+          perOrderSizingShape: {},
+          sizingShape: { kind: 'ratio', value: 0.35, unit: 'ratio' },
+        })
+        const result = resolver.resolve(state)
+        const anchor = result.get('position_constraint:position.sizing') as SizingAnchor
+        expect(anchor).toBeDefined()
+        expect(anchor.normalized?.axis).toBe('equity_ratio')
+        expect(anchor.normalized?.value).toBeCloseTo(0.35)
       })
     })
   })

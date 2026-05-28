@@ -153,6 +153,30 @@ describe('issue #1395 — planner prompt rules shape', () => {
     expect(prompt).toContain('多周期共振')
   })
 
+  // Issue: planner 漏识「价格回踩 MA(N) 后重新站上 MA(N)」复合时序，
+  //   退化为简单 indicator.above(maN)。补 hint + example 让 LLM 输出 sequence。
+  it('contains 回踩 MA(N) 后重新站上 MA(N) compositional hint', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+    // hint 触发短语
+    expect(prompt).toContain('回踩 MA(N)')
+    expect(prompt).toContain('重新站上 MA(N)')
+    expect(prompt).toContain('跌破 MA(N) 后重新站上 MA(N)')
+    expect(prompt).toContain('重新站回 MA(N)')
+    // hint 输出形态：sequence([indicator.below, indicator.above])
+    expect(prompt).toContain('sequence([indicator.below')
+    expect(prompt).toContain('indicator.above')
+  })
+
+  it('contains S5 example: 长周期 MA gate + 回踩短周期 MA 后重新站上 sequence', () => {
+    const prompt = buildConversationPlannerSystemPrompt('zh')
+    expect(prompt).toContain('【S5 复合：长周期 MA gate + 回踩短周期 MA 后重新站上 sequence】')
+    // 用户原句关键短语
+    expect(prompt).toContain('ETH 日线在 MA120 上方时')
+    expect(prompt).toContain('价格回踩 MA20 后重新站上 MA20 买入')
+    // 期望 rule id
+    expect(prompt).toContain('entry-ma120-gate-ma20-retest-reclaim')
+  })
+
   it('does not contain legacy atoms[] schema', () => {
     const prompt = buildConversationPlannerSystemPrompt('zh')
     // 旧 schema 有 "atoms":[{ "key": string, "phase": ... }] 形态；新 prompt 不应再用

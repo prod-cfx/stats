@@ -271,6 +271,60 @@ describe('Issue #1395 mute-spider S5 — atom params strict validation', () => {
     })).toBe(false)
   })
 
+  // ───────────────── indicator.cross_* 非 MACD 场景：MACD 专属字段视为 N/A ─────────────────
+  // Issue: RSI 跌破 30 场景，LLM 误填 fastPeriod=0/slowPeriod=0 → range [1,500] 越界 → 整 rule
+  // 进 quarantine。非 MACD indicator 下，fastPeriod/slowPeriod/signalPeriod 无意义，应放行。
+  it('RSI cross_under fastPeriod=0/slowPeriod=0（LLM 占位）→ strict valid', () => {
+    const ok = isAtomParamsStrictlyValid('indicator.cross_under', {
+      indicator: 'rsi', value: 30, period: 14, fastPeriod: 0, slowPeriod: 0,
+    })
+    expect(ok).toBe(true)
+  })
+
+  it('RSI cross_over signalPeriod=0 占位 → strict valid', () => {
+    const ok = isAtomParamsStrictlyValid('indicator.cross_over', {
+      indicator: 'rsi', value: 70, period: 14, signalPeriod: 0,
+    })
+    expect(ok).toBe(true)
+  })
+
+  it('MA cross_under 仅 fastPeriod=20/slowPeriod=60（无 MACD 字段越界）→ strict valid', () => {
+    const ok = isAtomParamsStrictlyValid('indicator.cross_under', {
+      indicator: 'ma', fastPeriod: 20, slowPeriod: 60,
+    })
+    expect(ok).toBe(true)
+  })
+
+  it('MACD cross_over 12/26/9 仍走 preset 白名单 → strict valid', () => {
+    const ok = isAtomParamsStrictlyValid('indicator.cross_over', {
+      indicator: 'macd', fastPeriod: 12, slowPeriod: 26, signalPeriod: 9,
+    })
+    expect(ok).toBe(true)
+  })
+
+  it('MACD cross_over fastPeriod=0 仍 strict invalid（MACD 字段保持严校）', () => {
+    const ok = isAtomParamsStrictlyValid('indicator.cross_over', {
+      indicator: 'macd', fastPeriod: 0, slowPeriod: 26, signalPeriod: 9,
+    })
+    expect(ok).toBe(false)
+  })
+
+  // M1：indicator 缺省（''）维持严校，不放行 0 占位
+  it('cross_under indicator 缺省 + fastPeriod=0 → strict invalid（缺 indicator 是脏数据）', () => {
+    const ok = isAtomParamsStrictlyValid('indicator.cross_under', {
+      indicator: '', fastPeriod: 0, slowPeriod: 0,
+    })
+    expect(ok).toBe(false)
+  })
+
+  // m2：LLM 字符串占位 '0' 同样放行
+  it('RSI cross_under fastPeriod="0"（字符串占位）→ strict valid', () => {
+    const ok = isAtomParamsStrictlyValid('indicator.cross_under', {
+      indicator: 'rsi', value: 30, period: 14, fastPeriod: '0', slowPeriod: '0',
+    })
+    expect(ok).toBe(true)
+  })
+
   // ───────────────────────────── A3 兼容（未注册 atom + unknown slot key）─────────────────
   it('A3 mock atom（key 不在 registry）→ strict 跳过 = 合法（不 break A3）', () => {
     expect(isAtomParamsStrictlyValid('atom.x', { threshold: 65 })).toBe(true)

@@ -126,21 +126,32 @@ function resolveAxisFromPositionSizing(sizing: SemanticPositionSizingContract): 
 }
 
 /**
- * Try to extract a sizing shape from params.perOrderSizing.
- * Only recognises shapes with an explicit `kind` field ('quote' | 'base' | 'ratio' | 'risk_budget').
- * Any shape without a recognised explicit kind returns null (no unit/asset heuristics).
+ * Try to extract a sizing shape from a position constraint's params.
+ *
+ * Recognised field names (in lookup order):
+ *   1. `params.perOrderSizing` — legacy / DCA-style emit
+ *   2. `params.sizing` — dispatcher emit (GenericSeedDispatcherService writes
+ *      `position.sizing` atoms with `params.sizing`)
+ *
+ * Both shapes must carry an explicit `kind` field ('quote' | 'base' | 'ratio' | 'risk_budget').
+ * Any shape without a recognised explicit kind is ignored (no unit/asset heuristics).
  * Note: risk_budget axis is only produced via the capability shape path (PR4+ atoms can emit it).
  */
-function readPerOrderSizingFromParams(params: unknown): { axis: SizingAxis; value: number } | null {
+function readSizingShapeFromParams(params: unknown): { axis: SizingAxis; value: number } | null {
   if (!params || typeof params !== 'object') return null
-  const raw = (params as Record<string, unknown>)['perOrderSizing']
+  const bag = params as Record<string, unknown>
+  // perOrderSizing wins for backward compat; sizing is the dispatcher path.
+  // 若 perOrderSizing 畸形（缺 kind / value 非数字）→ 回退尝试 sizing，避免合法 sizing 被静默吞掉。
+  return tryReadSizingShape(bag['perOrderSizing']) ?? tryReadSizingShape(bag['sizing'])
+}
+
+function tryReadSizingShape(raw: unknown): { axis: SizingAxis; value: number } | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const shape = raw as Record<string, unknown>
   const kind = shape['kind']
   if (kind !== 'quote' && kind !== 'base' && kind !== 'ratio' && kind !== 'risk_budget') return null
   const value = typeof shape['value'] === 'number' ? shape['value'] : Number.NaN
   if (!Number.isFinite(value)) return null
-  // Delegate to resolveAxisFromShape for consistent handling (including percent normalization)
   return resolveAxisFromShape(shape)
 }
 
@@ -328,7 +339,7 @@ export class PerTradeSizingResolver {
     for (const pc of this.rulesMainflowReader.readFactsByRole(state, 'position')) {
       const sk = scopeKey({ kind: 'position_constraint', ownerKey: pc.key })
       if (out.has(sk)) continue // capability main path already placed — skip fallback
-      const resolved = readPerOrderSizingFromParams(pc.params)
+      const resolved = readSizingShapeFromParams(pc.params)
       if (!resolved) continue
       const anchor = anchorFromParamsSizing(pc, resolved)
       if (anchor.executionAnchored) {

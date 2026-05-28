@@ -118,6 +118,41 @@ export function buildStateWithDcaPerOrderSizing(opts: {
   return { ...baseState(), rules: [entryRule('dca-rule', effects)] }
 }
 
+/**
+ * Dispatcher path: position constraint atom carries `params.sizing` (not `perOrderSizing`).
+ * Mirrors GenericSeedDispatcherService output for `position.sizing` atoms.
+ */
+export function buildStateWithPositionConstraintParamsSizing(opts: {
+  ownerKey: string
+  shape: Record<string, unknown>
+}): SemanticState {
+  const effects = emptyEffects()
+  effects.positions = [{
+    kind: 'atom',
+    key: opts.ownerKey,
+    params: { sizing: opts.shape },
+  }]
+  return { ...baseState(), rules: [entryRule('pc-sizing-rule', effects)] }
+}
+
+/**
+ * Both `perOrderSizing` and `sizing` present on the same position constraint atom.
+ * Backward-compat check: resolver should prefer `perOrderSizing`.
+ */
+export function buildStateWithPositionConstraintBothShapes(opts: {
+  ownerKey: string
+  perOrderSizingShape: Record<string, unknown>
+  sizingShape: Record<string, unknown>
+}): SemanticState {
+  const effects = emptyEffects()
+  effects.positions = [{
+    kind: 'atom',
+    key: opts.ownerKey,
+    params: { perOrderSizing: opts.perOrderSizingShape, sizing: opts.sizingShape },
+  }]
+  return { ...baseState(), rules: [entryRule('pc-both-rule', effects)] }
+}
+
 export function buildStateWithChecklistPositionPct(_opts: {
   positionPct: number
 }): { state: SemanticState; checklist: { riskRules: { positionPct: number } } } {
