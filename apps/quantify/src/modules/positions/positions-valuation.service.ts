@@ -86,6 +86,8 @@ export class PositionsValuationService {
       eventTime?: string | number | Date | null
     }
   }): Promise<void> {
+    if (process.env.POSITION_QUOTE_VALUATION_ENABLED === 'false') return
+
     const symbol = typeof event.data?.symbol === 'string' ? event.data.symbol.trim() : ''
     const rawLastPrice = event.data?.lastPrice
     const price = typeof rawLastPrice === 'number'

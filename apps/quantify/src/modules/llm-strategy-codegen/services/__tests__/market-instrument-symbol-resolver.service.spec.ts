@@ -72,6 +72,15 @@ describe('MarketInstrumentSymbolResolverService', () => {
     expect(resolver.resolve('MACD')).toBeNull()
   })
 
+  it('rejects internal clarification tokens as inferred symbols', () => {
+    expect(resolver.resolve('missing')).toBeNull()
+    expect(resolver.resolve('legacy')).toBeNull()
+    expect(resolver.resolve('rulesMainflow')).toBeNull()
+    expect(resolver.resolve('executionContext')).toBeNull()
+    expect(resolver.resolve('semantic')).toBeNull()
+    expect(resolver.resolve('contextSlots')).toBeNull()
+  })
+
   it('builds a market identify instrument context contract', () => {
     const resolution = resolver.resolve('ETH usdt')
 

@@ -114,6 +114,115 @@ function createSizingCanonicalSpec(
 }
 
 describe('canonicalSpecV2IrCompilerService', () => {
+  it('preserves rules-only EMA stack reference periods through canonical and IR compile', () => {
+    const semanticState: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      contextSlots: {
+        exchange: { slotKey: 'context.exchange', fieldPath: 'exchange', value: 'okx', status: 'locked', priority: 'context', affectsExecution: true },
+        symbol: { slotKey: 'context.symbol', fieldPath: 'symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', affectsExecution: true },
+        marketType: { slotKey: 'context.marketType', fieldPath: 'marketType', value: 'perp', status: 'locked', priority: 'context', affectsExecution: true },
+        timeframe: { slotKey: 'context.timeframe', fieldPath: 'timeframe', value: '15m', status: 'locked', priority: 'context', affectsExecution: true },
+      },
+      position: null,
+      orchestrationContracts: [],
+      normalizationNotes: [],
+      updatedAt: '2026-05-27T00:00:00.000Z',
+      rules: [{
+        id: 'entry-ema-stack',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'and',
+          children: [20, 60, 144].map(period => ({
+            kind: 'atom',
+            key: 'indicator.above',
+            params: {
+              indicator: 'ema',
+              reference: { period },
+              referenceRole: 'stack',
+              timeframe: '15m',
+            },
+          })),
+        },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    }
+
+    const canonicalSpec = new CanonicalSpecBuilderService().buildFromSemanticState(semanticState)
+    const result = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'ema_20_15m', kind: 'EMA', timeframe: '15m' }),
+      expect.objectContaining({ id: 'ema_60_15m', kind: 'EMA', timeframe: '15m' }),
+      expect.objectContaining({ id: 'ema_144_15m', kind: 'EMA', timeframe: '15m' }),
+    ]))
+    expect(result.ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'GTE', args: ['close_15m', 'ema_20_15m'] }),
+      expect.objectContaining({ kind: 'GTE', args: ['close_15m', 'ema_60_15m'] }),
+      expect.objectContaining({ kind: 'GTE', args: ['close_15m', 'ema_144_15m'] }),
+    ]))
+  })
+
+  it('filters mixed rule effects by rule sideScope in rules-only canonical build', () => {
+    const semanticState: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      contextSlots: {
+        exchange: { slotKey: 'context.exchange', fieldPath: 'exchange', value: 'okx', status: 'locked', priority: 'context', affectsExecution: true },
+        symbol: { slotKey: 'context.symbol', fieldPath: 'symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', affectsExecution: true },
+        marketType: { slotKey: 'context.marketType', fieldPath: 'marketType', value: 'perp', status: 'locked', priority: 'context', affectsExecution: true },
+        timeframe: { slotKey: 'context.timeframe', fieldPath: 'timeframe', value: '1h', status: 'locked', priority: 'context', affectsExecution: true },
+      },
+      position: null,
+      orchestrationContracts: [],
+      normalizationNotes: [],
+      updatedAt: '2026-05-27T00:00:00.000Z',
+      rules: [{
+        id: 'entry-short-boll-upper',
+        phase: 'entry',
+        sideScope: 'short',
+        condition: {
+          kind: 'atom',
+          key: 'bollinger.touch_upper',
+          params: { band: 'upper', period: 20, stdDev: 2, confirmationMode: 'touch' },
+        },
+        effects: {
+          actions: [
+            { kind: 'atom', key: 'action.open_short', params: {} },
+            { kind: 'atom', key: 'action.open_long', params: {} },
+          ],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    }
+
+    const canonicalSpec = new CanonicalSpecBuilderService().buildFromSemanticState(semanticState)
+
+    expect(canonicalSpec.rules).toHaveLength(1)
+    expect(canonicalSpec.rules[0]?.sideScope).toBe('short')
+    expect(canonicalSpec.rules[0]?.actions).toEqual([
+      expect.objectContaining({ type: 'OPEN_SHORT' }),
+    ])
+  })
+
   it('compiles contract order program intents into level sets and order programs', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
@@ -1647,6 +1756,55 @@ describe('canonicalSpecV2IrCompilerService', () => {
       positionConstraint: [],
       orchestration: [],
       orchestrationContracts: [],
+      rules: [
+        {
+          id: 'entry-ema-stack',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: {
+            kind: 'and',
+            children: ['5m', '1h', '4h'].map(timeframe => ({
+              kind: 'atom',
+              key: 'indicator.above',
+              params: {
+                indicator: 'ema',
+                referenceRole: 'long_term',
+                'reference.period': 20,
+                timeframe,
+              },
+            })),
+          },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+            risks: [{ kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: 3, basis: 'entry_avg_price' } }],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        },
+        {
+          id: 'exit-ema-15m',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: {
+            kind: 'atom',
+            key: 'indicator.below',
+            params: {
+              indicator: 'ema',
+              referenceRole: 'long_term',
+              'reference.period': 20,
+              timeframe: '15m',
+            },
+          },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        },
+      ],
       normalizationNotes: [],
       updatedAt: '2026-05-06T00:00:00.000Z',
     }
@@ -1678,7 +1836,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
 
     expect(entryBlocks).toHaveLength(1)
     expect(entryPredicate).toEqual(expect.objectContaining({
-      kind: 'allOf',
+      kind: 'AND',
       args: expect.any(Array),
     }))
     expect(entryPredicate?.args).toHaveLength(3)
@@ -3156,6 +3314,38 @@ describe('canonicalSpecV2IrCompilerService', () => {
         marketType: { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'perp', status: 'locked', priority: 'context', questionHint: '请选择市场类型', affectsExecution: true },
         timeframe: { slotKey: 'timeframe', fieldPath: 'contextSlots.timeframe', value: '1m', status: 'locked', priority: 'context', questionHint: '请选择周期', affectsExecution: true },
       },
+      rules: [
+        {
+          id: 'entry-close-gt-open',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: {
+            kind: 'and',
+            children: [
+              {
+                kind: 'atom',
+                key: 'condition.expression',
+                params: {
+                  expression: {
+                    kind: 'predicate',
+                    op: 'GT',
+                    left: { kind: 'series', source: 'bar', field: 'close' },
+                    right: { kind: 'series', source: 'bar', field: 'open' },
+                  },
+                },
+              },
+              { kind: 'atom', key: 'position.no_position', params: { sideScope: 'long' } },
+            ],
+          },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        },
+      ],
       normalizationNotes: [],
       updatedAt: '2026-04-28T00:00:00.000Z',
     }
@@ -3317,6 +3507,40 @@ describe('canonicalSpecV2IrCompilerService', () => {
         marketType: { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'perp', status: 'locked', priority: 'context', questionHint: '请选择市场类型', affectsExecution: true },
         timeframe: { slotKey: 'timeframe', fieldPath: 'contextSlots.timeframe', value: '1m', status: 'locked', priority: 'context', questionHint: '请选择周期', affectsExecution: true },
       },
+      rules: [
+        {
+          id: 'entry-bullish-candle',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: {
+            kind: 'and',
+            children: [
+              { kind: 'atom', key: 'position.no_position', params: { sideScope: 'long' } },
+              { kind: 'atom', key: 'price.candle_pattern', params: { pattern: 'consecutive_body', direction: 'bullish', minBars: 1 } },
+            ],
+          },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        },
+        {
+          id: 'exit-bearish-candle',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.candle_pattern', params: { pattern: 'consecutive_body', direction: 'bearish', minBars: 1 } },
+          effects: {
+            actions: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        },
+      ],
       normalizationNotes: [],
       updatedAt: '2026-05-19T00:00:00.000Z',
     }
@@ -4218,6 +4442,21 @@ describe('canonicalSpecV2IrCompilerService phase-1 gate atoms', () => {
         positionConstraint: [],
         orchestration: [],
         orchestrationContracts: [],
+        rules: [
+          {
+            id: 'entry-on-start',
+            phase: 'entry',
+            sideScope: 'long',
+            condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+            effects: {
+              actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+              risks: [{ kind: 'atom', key: 'risk.partial_take_profit', params }],
+              positions: [],
+              orchestration: [],
+              programs: [],
+            },
+          },
+        ],
         normalizationNotes: [],
         updatedAt: '2026-05-07T00:00:00.000Z',
       }

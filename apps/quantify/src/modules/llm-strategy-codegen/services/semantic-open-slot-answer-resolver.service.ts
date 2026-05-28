@@ -20,22 +20,36 @@ import { collectAtomLeaves, listRuleEffects } from '../types/atom-expr'
 import { GenericSeedDispatcher } from './generic-seed-dispatcher.service'
 import { pickPendingClarificationTarget } from './strategy-clarification-question.service'
 import { SemanticStateReducerService } from './semantic-state-reducer.service'
-import {
-  readFlatActions,
-  readFlatPositionConstraints,
-  readFlatRisks,
-  readFlatTriggers,
-} from '../types/semantic-state-flat-readers'
+import type { RulesMainflowAtomFact } from './rules-mainflow-reader.service'
+import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
 
 const ENTRY_TRIGGER_SLOT_KEY = 'trigger.entry'
 const EXIT_TRIGGER_SLOT_KEY = 'trigger.exit'
 const MARKET_INSTRUMENT_QUOTES: readonly MarketInstrumentQuote[] = ['FDUSD', 'USDT', 'USDC', 'BUSD', 'TUSD', 'USD']
+const rulesMainflowReader = new RulesMainflowReaderService()
 
 type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position' | 'positionConstraint'
 type FulfilledTriggerPhase = 'entry' | 'exit'
-type FragmentTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
-type FragmentAction = NonNullable<CodegenSemanticPatch['actions']>[number]
 type PatchContextSlotValue = NonNullable<CodegenSemanticPatch['contextSlots']>[keyof SemanticContextSlotState]
+
+interface FragmentNode {
+  id?: string
+  key: string
+  phase?: SemanticTriggerState['phase'] | SemanticRule['phase']
+  sideScope?: SemanticTriggerState['sideScope']
+  params?: Record<string, unknown>
+  status?: SemanticTriggerState['status']
+  evidence?: SemanticEvidence
+  openSlots?: SemanticSlotState[]
+  contracts?: SemanticAtomContract[]
+}
+
+interface SemanticFragmentPatch {
+  rules?: readonly SemanticRule[]
+  triggers?: FragmentNode[]
+  actions?: FragmentNode[]
+  contextSlots?: CodegenSemanticPatch['contextSlots']
+}
 
 interface SemanticOpenSlotAnswerResolverInput {
   currentState: SemanticState
@@ -340,31 +354,25 @@ function findActiveOpenSlotRef(
     return false
   }
 
-  for (const trigger of readFlatTriggers(state)) {
-    const slot = trigger.openSlots.find(matchSlot)
-    if (slot) return { ownerKind: 'trigger', ownerId: trigger.id, slot }
+  for (const fact of rulesMainflowReader.readFactsByRole(state, 'condition')) {
+    const slot = fact.openSlots.find(matchSlot)
+    if (slot) return { ownerKind: 'trigger', ownerId: fact.id, slot }
   }
-  for (const action of readFlatActions(state)) {
-    const slot = (action.openSlots ?? []).find(matchSlot)
-    if (slot) return { ownerKind: 'action', ownerId: action.id, slot }
+  for (const fact of rulesMainflowReader.readFactsByRole(state, 'action')) {
+    const slot = fact.openSlots.find(matchSlot)
+    if (slot) return { ownerKind: 'action', ownerId: fact.id, slot }
   }
-  for (const risk of readFlatRisks(state)) {
-    const slot = risk.openSlots.find(matchSlot)
-    if (slot) return { ownerKind: 'risk', ownerId: risk.id, slot }
+  for (const fact of rulesMainflowReader.readFactsByRole(state, 'risk')) {
+    const slot = fact.openSlots.find(matchSlot)
+    if (slot) return { ownerKind: 'risk', ownerId: fact.id, slot }
   }
   if (state.position?.openSlots?.length) {
     const slot = state.position.openSlots.find(matchSlot)
     if (slot) return { ownerKind: 'position', ownerId: 'position', slot }
   }
-  // #1395 扁平桶（grid.range_rebalance 等 bucket=positionConstraint 的 atom 由 seed-builder 放这）
-  for (const constraint of readFlatPositionConstraints(state)) {
-    const slot = constraint.openSlots.find(matchSlot)
-    if (slot) return { ownerKind: 'positionConstraint', ownerId: constraint.id, slot }
-  }
-  // 旧嵌套桶残留 fallback（legacy state 反序列化 / 部分 reader 仍查询）
-  for (const constraint of state.position?.constraints ?? []) {
-    const slot = constraint.openSlots.find(matchSlot)
-    if (slot) return { ownerKind: 'positionConstraint', ownerId: constraint.id, slot }
+  for (const fact of rulesMainflowReader.readFactsByRole(state, 'position')) {
+    const slot = fact.openSlots.find(matchSlot)
+    if (slot) return { ownerKind: 'positionConstraint', ownerId: fact.id, slot }
   }
   return null
 }
@@ -458,7 +466,7 @@ function canConsumeSymbolAnswer(symbolSlot: SemanticSlotState, clarificationStat
   const pendingItems = readPendingClarificationItems(clarificationState)
   const activeItem = pickPendingClarificationTarget(pendingItems)
   if (!activeItem) {
-    return true
+    return !hasRawPendingClarificationItem(clarificationState)
   }
 
   if (typeof activeItem.slotId === 'string' && buildSemanticSlotId(symbolSlot) === activeItem.slotId) {
@@ -466,6 +474,12 @@ function canConsumeSymbolAnswer(symbolSlot: SemanticSlotState, clarificationStat
   }
 
   return activeItem.slotKey === symbolSlot.slotKey && activeItem.fieldPath === symbolSlot.fieldPath
+}
+
+function hasRawPendingClarificationItem(clarificationState: unknown): boolean {
+  return isRecord(clarificationState)
+    && Array.isArray(clarificationState.items)
+    && clarificationState.items.some(item => isRecord(item) && item.status === 'pending')
 }
 
 function canConsumeSemanticFragment(state: SemanticState, clarificationState: unknown): boolean {
@@ -514,13 +528,12 @@ function fulfillSemanticFragment(
   }
 }
 
-function projectTypedRulesToFragmentPatch(patch: CodegenSemanticPatch): CodegenSemanticPatch {
+function projectTypedRulesToFragmentPatch(patch: CodegenSemanticPatch): SemanticFragmentPatch {
   const rules = patch.rules
-  if (!rules || rules.length === 0) return patch
+  if (!rules || rules.length === 0) return { contextSlots: patch.contextSlots }
 
-  const projected: CodegenSemanticPatch = { ...patch }
-  const triggers = [...(patch.triggers ?? [])]
-  const actions = [...(patch.actions ?? [])]
+  const triggers: FragmentNode[] = []
+  const actions: FragmentNode[] = []
   for (const rule of rules) {
     for (const leaf of collectAtomLeaves(rule.condition)) {
       if (readAtomBucket(leaf.key) !== 'trigger') continue
@@ -544,9 +557,12 @@ function projectTypedRulesToFragmentPatch(patch: CodegenSemanticPatch): CodegenS
       }
     }
   }
-  projected.triggers = dedupeFragmentNodes(triggers)
-  projected.actions = dedupeFragmentNodes(actions)
-  return projected
+  return {
+    rules,
+    contextSlots: patch.contextSlots,
+    triggers: dedupeFragmentNodes(triggers),
+    actions: dedupeFragmentNodes(actions),
+  }
 }
 
 function readAtomBucket(key: string): string | undefined {
@@ -577,84 +593,78 @@ function dedupeFragmentNodes<T extends { key: string, phase?: unknown, sideScope
 }
 
 function hasOpenSlot(state: SemanticState, slotKey: string): boolean {
-  return readFlatTriggers(state).some(trigger => trigger.openSlots.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
-    || readFlatActions(state).some(action => (action.openSlots ?? []).some(slot => slot.slotKey === slotKey && slot.status === 'open'))
-    || readFlatRisks(state).some(risk => risk.openSlots.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
+  return rulesMainflowReader.readFacts(state).some(fact => fact.openSlots.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
     || Boolean(state.position?.openSlots?.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
 }
 
 function mergeFragmentPatch(
   state: SemanticState,
-  patch: CodegenSemanticPatch,
+  patch: SemanticFragmentPatch,
   fulfilledPhases: readonly FulfilledTriggerPhase[],
   symbolResolver: MarketInstrumentSymbolResolverService,
 ): SemanticState {
-  const fulfilledPhaseSet = new Set<FulfilledTriggerPhase>(fulfilledPhases)
-  const existingTriggerIds = new Set(readFlatTriggers(state).map(trigger => trigger.id))
-  const existingActionIds = new Set(readFlatActions(state).map(action => action.id))
-  const nextTriggers = [
-    ...readFlatTriggers(state),
-    ...(patch.triggers ?? [])
-      .filter(trigger => shouldMergeFragmentTrigger(trigger, fulfilledPhaseSet))
-      .map((trigger, index): SemanticTriggerState => {
-        const id = ensureUniqueId(
-          trigger.id ?? `semantic-fragment-trigger-${trigger.phase}-${slugifyFragmentId(trigger.key)}-${index + 1}`,
-          existingTriggerIds,
-        )
-
-        return {
-          id,
-          key: trigger.key,
-          phase: trigger.phase,
-          sideScope: trigger.sideScope,
-          params: trigger.params ?? {},
-          status: resolveFragmentNodeStatus(trigger),
-          source: 'user_explicit',
-          evidence: trigger.evidence,
-          openSlots: trigger.openSlots ?? [],
-          contracts: trigger.contracts,
-          support: trigger.support,
-        }
-      }),
-  ]
-  const existingActionKeys = new Set(readFlatActions(state).map(action => action.key))
-  const nextActions = [
-    ...readFlatActions(state),
-    ...(patch.actions ?? [])
-      .filter(action => !existingActionKeys.has(action.key))
-      .filter(action => actionMatchesFulfilledPhases(action, fulfilledPhaseSet))
-      .map((action, index): SemanticActionState => {
-        const id = ensureUniqueId(
-          action.id ?? `semantic-fragment-action-${slugifyFragmentId(action.key)}-${index + 1}`,
-          existingActionIds,
-        )
-
-        return {
-          id,
-          key: action.key,
-          params: action.params,
-          status: resolveFragmentNodeStatus(action),
-          source: 'user_explicit',
-          evidence: action.evidence,
-          openSlots: action.openSlots ?? [],
-          contracts: action.contracts,
-          support: action.support,
-        }
-      }),
-  ]
-
   return {
     ...state,
-    trigger: nextTriggers,
-    action: nextActions,
+    rules: [
+      ...(state.rules ?? []),
+      ...(patch.rules ?? []).filter(rule => ruleMatchesFulfilledPhases(rule, fulfilledPhases)),
+    ],
     contextSlots: mergeFragmentContextSlots(state.contextSlots, patch.contextSlots, symbolResolver),
   }
 }
 
+function ruleMatchesFulfilledPhases(rule: SemanticRule, fulfilledPhases: readonly FulfilledTriggerPhase[]): boolean {
+  if (rule.phase === 'gate') return fulfilledPhases.length > 0
+  return fulfilledPhases.includes(rule.phase as FulfilledTriggerPhase)
+}
+
+function readTriggerStates(state: SemanticState): SemanticTriggerState[] {
+  return rulesMainflowReader.readFactsByRole(state, 'condition').map(factToTriggerState)
+}
+
+function readActionStates(state: SemanticState): SemanticActionState[] {
+  return rulesMainflowReader.readFactsByRole(state, 'action').map(factToActionState)
+}
+
+function factToTriggerState(fact: RulesMainflowAtomFact): SemanticTriggerState {
+  return {
+    id: fact.id,
+    key: fact.key,
+    phase: fact.phase === 'entry' || fact.phase === 'exit' || fact.phase === 'gate' ? fact.phase : 'gate',
+    sideScope: fact.sideScope,
+    params: { ...fact.params },
+    status: fact.status,
+    source: fact.source,
+    ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: fact.source } } : {}),
+    openSlots: [...fact.openSlots],
+    ...optionalAtomContracts(fact),
+  }
+}
+
+function factToActionState(fact: RulesMainflowAtomFact): SemanticActionState {
+  return {
+    id: fact.id,
+    key: fact.key,
+    params: { ...fact.params },
+    status: fact.status,
+    source: fact.source,
+    ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: fact.source } } : {}),
+    openSlots: [...fact.openSlots],
+    ...optionalAtomContracts(fact),
+  }
+}
+
+function optionalAtomContracts(fact: RulesMainflowAtomFact): { contracts?: SemanticAtomContract[] } {
+  const contracts = fact.contracts?.filter((contract): contract is SemanticAtomContract =>
+    contract.kind === 'trigger' || contract.kind === 'action' || contract.kind === 'risk' || contract.kind === 'position' || contract.kind === 'context',
+  )
+  return contracts?.length ? { contracts: [...contracts] } : {}
+}
+
 function shouldMergeFragmentTrigger(
-  trigger: FragmentTrigger,
+  trigger: FragmentNode,
   fulfilledPhases: ReadonlySet<FulfilledTriggerPhase>,
-): trigger is FragmentTrigger & { phase: SemanticTriggerState['phase'] } {
+): trigger is FragmentNode & { phase: SemanticTriggerState['phase'] } {
   if (isFulfilledTriggerPhase(trigger.phase)) {
     return fulfilledPhases.has(trigger.phase)
   }
@@ -669,7 +679,7 @@ function shouldMergeFragmentTrigger(
 // dispatcher 在解析时通过 surface.phaseResolver 派生 phase 并写入 action 节点；
 // 若 phase 缺失（legacy patch 或尚未迁移路径）则保守保留，不过滤。
 function actionMatchesFulfilledPhases(
-  action: FragmentAction,
+  action: FragmentNode,
   fulfilledPhases: ReadonlySet<FulfilledTriggerPhase>,
 ): boolean {
   if (isFulfilledTriggerPhase(action.phase)) {
@@ -679,7 +689,7 @@ function actionMatchesFulfilledPhases(
   return true
 }
 
-function isFulfilledTriggerPhase(phase: FragmentAction['phase']): phase is FulfilledTriggerPhase {
+function isFulfilledTriggerPhase(phase: FragmentNode['phase']): phase is FulfilledTriggerPhase {
   return phase === 'entry' || phase === 'exit'
 }
 
@@ -691,11 +701,11 @@ function triggerPhaseFieldPath(phase: FulfilledTriggerPhase): 'triggers[entry]' 
   return phase === 'entry' ? 'triggers[entry]' : 'triggers[exit]'
 }
 
-function isCompleteFragmentNode(node: FragmentTrigger | FragmentAction): boolean {
+function isCompleteFragmentNode(node: FragmentNode): boolean {
   return !hasOpenStatusSlot(node.openSlots ?? [])
 }
 
-function resolveFragmentNodeStatus(node: FragmentTrigger | FragmentAction): SemanticTriggerState['status'] {
+function resolveFragmentNodeStatus(node: FragmentNode): SemanticTriggerState['status'] {
   if (hasOpenStatusSlot(node.openSlots ?? [])) {
     return node.status === 'open' ? node.status : 'open'
   }
@@ -709,7 +719,7 @@ function hasOpenStatusSlot(slots: readonly SemanticSlotState[]): boolean {
 
 function mergeFragmentContextSlots(
   current: SemanticContextSlotState,
-  patchContextSlots: CodegenSemanticPatch['contextSlots'],
+  patchContextSlots: SemanticFragmentPatch['contextSlots'],
   symbolResolver: MarketInstrumentSymbolResolverService,
 ): SemanticContextSlotState {
   if (!patchContextSlots) {

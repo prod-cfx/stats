@@ -193,6 +193,15 @@ describe('semanticAtomRegistryService', () => {
     ])
   })
 
+  it('classifies rules-only position sizing effect as supported executable', () => {
+    expect(service.resolve('position.sizing', { sizing: { kind: 'quote', value: 10, asset: 'USDT' } })).toMatchObject({
+      key: 'position.sizing',
+      category: 'position',
+      supportStatus: 'supported_executable',
+      executableProjection: expect.arrayContaining(['canonical_spec_v2', 'compiled_runtime']),
+    })
+  })
+
   it('requires supported atoms to declare phase 0 substrate metadata', () => {
     const supportedAtoms = service.list().filter(atom =>
       atom.supportStatus === 'supported_executable'
@@ -238,9 +247,9 @@ describe('semanticAtomRegistryService', () => {
 
     const state = new SemanticSeedStateBuilderService().build(replacement?.patch)
 
-    expect(state?.trigger.length ?? 0).toBeGreaterThan(0)
-    for (const trigger of state?.trigger ?? []) {
-      expect(trigger.openSlots).toEqual([])
+    expect(state?.rules?.length ?? 0).toBeGreaterThan(0)
+    for (const rule of state?.rules ?? []) {
+      expect(JSON.stringify(rule)).not.toContain('"openSlots":[{')
     }
   })
 

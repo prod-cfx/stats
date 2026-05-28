@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { CodegenSemanticPatch } from '../../types/codegen-semantic-patch'
 import type { SemanticRule } from '../../types/atom-expr'
 import type { SemanticCapabilityShape, SemanticSlotState, SemanticState } from '../../types/semantic-state'
@@ -6,8 +8,20 @@ import { buildSemanticSlotId } from '../../types/semantic-state'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { SemanticContractShapeNormalizerService } from '../semantic-contract-shape-normalizer.service'
 import { SemanticOpenSlotAnswerResolverService } from '../semantic-open-slot-answer-resolver.service'
-import { SemanticRuleProjectionService } from '../semantic-rule-projection.service'
+import { SemanticStateProjectionService as SemanticRuleProjectionService } from '../semantic-state-projection.service'
 import { buildGridClarificationSlot } from './fixtures/build-grid-slot'
+
+describe('stage3 rules-only source guard', () => {
+  it('keeps open-slot resolver off legacy flat readers and direct bucket state access', () => {
+    const source = readFileSync(
+      join(__dirname, '../semantic-open-slot-answer-resolver.service.ts'),
+      'utf8',
+    )
+
+    expect(source).not.toMatch(/semantic-state-flat-readers|readFlat|projectToFlat|reprojectFromRules|SemanticStateBuckets/u)
+    expect(source).not.toMatch(/\bstate\.(trigger|action|risk|positionConstraint|orchestration)\b/u)
+  })
+})
 
 describe('semanticOpenSlotAnswerResolverService', () => {
   const service = new SemanticOpenSlotAnswerResolverService()
@@ -950,6 +964,39 @@ describe('semanticOpenSlotAnswerResolverService semantic fragments', () => {
           status: 'pending',
           slotKey: timeframeSlot.slotKey,
           fieldPath: timeframeSlot.fieldPath,
+        }],
+      },
+    })
+
+    expect(result).toEqual({
+      consumed: false,
+      nextState: state,
+    })
+    expect(state.contextSlots.symbol).toBe(symbolSlot)
+  })
+
+  it('does not consume missing-exit clarification text as a symbol answer without an active symbol target', () => {
+    const state = stateWithMissingEntry()
+    const symbolSlot: SemanticSlotState = {
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: null,
+      status: 'open',
+      priority: 'context',
+      questionHint: '请选择标的。',
+      affectsExecution: true,
+    }
+    state.contextSlots.symbol = symbolSlot
+
+    const result = service.resolve({
+      currentState: state,
+      message: 'rulesMainflow.missing_exit_rules: 补充退出：价格相对入场均价下跌 5% 时卖出退出。',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          reason: 'missing_exit_rules',
+          key: 'exitRules',
         }],
       },
     })

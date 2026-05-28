@@ -27,6 +27,32 @@ const BLOCKED_INFERRED_BASES = new Set([
   'KDJ',
   'BOLL',
   'BOLLINGER',
+  'MISSING',
+  'LEGACY',
+  'RULESMAINFLOW',
+  'EXECUTIONCONTEXT',
+  'SEMANTIC',
+  'CONTEXTSLOTS',
+  // SemanticState / StrategyClarificationItem 字段路径片段。
+  // 用户在 clarification 答里粘了 fieldPath 时（e.g. "rules[0].effects.positions[0].params.value: 10%"），
+  // 不应被推断为合法 base symbol。
+  'PARAMS',
+  'VALUE',
+  'REASON',
+  'FIELDPATH',
+  'SLOTKEY',
+  'SLOTID',
+  'OPENSLOTS',
+  'EVIDENCE',
+  'STATUS',
+  'KEY',
+  'KIND',
+  'EFFECTS',
+  'ACTIONS',
+  'RISKS',
+  'POSITIONS',
+  'ORCHESTRATION',
+  'PROGRAMS',
 ])
 
 const BASE_SYMBOL_ALIASES: Readonly<Record<string, string>> = {
@@ -144,14 +170,15 @@ export class MarketInstrumentSymbolResolverService {
   }
 
   private resolveBaseAlias(evidenceText: string): { base: string; marketTypeHint?: 'perp' | 'spot' } | null {
-    const normalized = evidenceText.trim().toUpperCase()
+    const trimmed = evidenceText.trim()
+    const normalized = trimmed.toUpperCase()
 
     const alias = BASE_SYMBOL_ALIASES[normalized]
     if (alias) {
       return { base: alias }
     }
 
-    if (this.isSupportedInferredBase(normalized)) {
+    if (trimmed === normalized && this.isSupportedInferredBase(normalized)) {
       return { base: normalized }
     }
 

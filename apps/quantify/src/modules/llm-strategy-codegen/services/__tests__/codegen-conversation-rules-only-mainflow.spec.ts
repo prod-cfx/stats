@@ -2,6 +2,8 @@ import { isRuleEffectsByRole, type AtomExpr, type SemanticRule } from '../../typ
 import type { SemanticSlotState, SemanticState } from '../../types/semantic-state'
 import { CodegenConversationService } from '../codegen-conversation.service'
 import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 function atom(key: string, params: Record<string, unknown> = {}): AtomExpr {
   return { kind: 'atom', key, params }
@@ -55,6 +57,16 @@ function semanticState(rules: SemanticState['rules'] = []): SemanticState {
 }
 
 describe('CodegenConversationService rules-only mainflow helpers', () => {
+  it('keeps conversation service off legacy flat state readers', () => {
+    const source = readFileSync(join(__dirname, '../codegen-conversation.service.ts'), 'utf8')
+
+    expect(source).not.toMatch(/semantic-state-flat-readers/u)
+    expect(source).not.toMatch(/\breadFlat(?:Triggers|Actions|Risks|PositionConstraints)\b/u)
+    expect(source).not.toMatch(/\bprojectToFlat\b|\breprojectFromRules\b/u)
+    expect(source).not.toMatch(/\b(?:state|semanticState)\.(?:trigger|action|risk|positionConstraint|orchestration)\b/u)
+    expect(source).not.toMatch(/\bsemanticPatch\.(?:atoms|triggers|actions|risk|position|orchestration)\b/u)
+  })
+
   it('builds clarification items using rule paths', () => {
     const service = Object.create(CodegenConversationService.prototype) as {
       buildRulePathClarificationState: (slots: SemanticSlotState[], reasons: string[]) => { items: Array<{ key: string, field: string }> }

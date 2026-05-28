@@ -54,6 +54,7 @@ const LEGACY_FLAT_FIELDS: ReadonlyArray<string> = [
   'risk',
   'position',
   'positionConstraints',
+  'positionConstraint',
   'orchestration',
 ] as const
 
@@ -97,6 +98,36 @@ const DCA_SCHEDULE_ATOM_KEY = ATOM_CONTRACT_REGISTRY['position.dca_schedule'].ke
 const ADD_POSITION_ATOM_KEY = ATOM_CONTRACT_REGISTRY['action.add_position'].key
 const EXECUTION_ON_START_ATOM_KEY = ATOM_CONTRACT_REGISTRY['execution.on_start'].key
 
+type PlannerPatchAtomNode = Record<string, unknown> & {
+  key: string
+  phase?: SemanticRule['phase'] | 'risk'
+  sideScope?: 'long' | 'short' | 'both'
+  params?: Record<string, unknown>
+  evidence?: unknown
+}
+
+type PlannerPositionPatch = Record<string, unknown> & {
+  mode?: string
+  value?: number
+  positionMode?: string
+  status?: string
+  source?: string
+  openSlots?: unknown[]
+  sizing?: unknown
+  constraints?: PlannerPatchAtomNode[]
+  evidence?: unknown
+}
+
+type InternalPlannerPatch = CodegenSemanticPatch & {
+  atoms?: PlannerPatchAtomNode[]
+  triggers?: PlannerPatchAtomNode[]
+  actions?: PlannerPatchAtomNode[]
+  risk?: PlannerPatchAtomNode[]
+  position?: PlannerPositionPatch
+  orchestration?: { nodes?: PlannerPatchAtomNode[] }
+  __zodQuarantine?: unknown
+}
+
 type FallbackPredicateAtom = {
   key: string
   phase?: 'entry' | 'exit' | 'risk' | 'gate' | 'program'
@@ -125,38 +156,387 @@ export class PlannerDispatcherMergeService {
   private readonly logger = new Logger(PlannerDispatcherMergeService.name)
 
   buildRulesTreeFallbackFromDispatcher(
-    dispatcherPatch: CodegenSemanticPatch | null | undefined,
+    dispatcherPatch: InternalPlannerPatch | null | undefined,
     userMessage: string,
-  ): CodegenSemanticPatch | null {
+  ): InternalPlannerPatch | null {
     if (!this.isNonEmpty(dispatcherPatch)) return null
-    const dispatcher = this.expandRulesForInternalFlat(dispatcherPatch as CodegenSemanticPatch)
-    const rules = this.buildFallbackRules(dispatcher, userMessage)
-    if (rules.length === 0) return null
-    const position = this.buildFallbackPositionFromDispatcherConstraints(dispatcher)
-    const explicitSizing = this.extractExplicitPositionSizingFromText(userMessage)
-    const patch: CodegenSemanticPatch = {
-      ...(dispatcher.contextSlots ? { contextSlots: dispatcher.contextSlots } : {}),
-      ...(position ? { position } : dispatcher.position ? { position: dispatcher.position } : {}),
-      rules,
+    const patch: InternalPlannerPatch = { ...(dispatcherPatch as InternalPlannerPatch) }
+    if (!patch.rules?.length) return null
+    this.hydrateExplicitPercentRisksFromText(patch, userMessage)
+    this.pruneInvalidDeterministicNoiseRules(patch, { rules: patch.rules }, userMessage)
+    return patch
+  }
+
+  private cloneRulesNativePatch(patch: InternalPlannerPatch): InternalPlannerPatch {
+    const zodQuarantine = (patch as { __zodQuarantine?: unknown }).__zodQuarantine
+    return {
+      ...(patch.contextSlots ? { contextSlots: patch.contextSlots } : {}),
+      ...(patch.rules?.length ? { rules: patch.rules } : {}),
+      ...(Array.isArray(zodQuarantine) && zodQuarantine.length > 0 ? { __zodQuarantine: zodQuarantine } : {}),
+    } as InternalPlannerPatch
+  }
+
+  private mergeRulesNativePatches(
+    plannerPatch: InternalPlannerPatch | null | undefined,
+    dispatcherPatch: InternalPlannerPatch | null | undefined,
+  ): InternalPlannerPatch | null {
+    const plannerHas = this.isNonEmpty(plannerPatch)
+    const dispatcherHas = this.isNonEmpty(dispatcherPatch)
+    if (!plannerHas && !dispatcherHas) return null
+    if (plannerHas && !dispatcherHas) {
+      const cloned = this.cloneRulesNativePatch(plannerPatch as InternalPlannerPatch)
+      if (cloned.rules?.length) cloned.rules = this.dedupeRulesBySignature(cloned.rules)
+      return cloned
     }
-    if (explicitSizing) {
-      patch.position = {
-        ...(patch.position ?? {
-          positionMode: this.hasShortEntryIntent(dispatcher, userMessage) ? 'long_short' : 'long_only',
-          openSlots: [],
-        }),
-        mode: explicitSizing.sizing.kind === 'ratio' ? 'fixed_ratio' : explicitSizing.sizing.kind === 'quote' ? 'fixed_quote' : 'fixed_qty',
-        value: explicitSizing.sizing.value,
-        sizing: explicitSizing.sizing,
-        status: 'locked',
-        source: 'user_explicit',
-        evidence: { text: explicitSizing.evidenceText, source: 'user_explicit' },
-        openSlots: [],
+    if (!plannerHas && dispatcherHas) {
+      const cloned = this.cloneRulesNativePatch(dispatcherPatch as InternalPlannerPatch)
+      if (cloned.rules?.length) cloned.rules = this.dedupeRulesBySignature(cloned.rules)
+      return cloned
+    }
+
+    const planner = plannerPatch as InternalPlannerPatch
+    const dispatcher = dispatcherPatch as InternalPlannerPatch
+    const patch: InternalPlannerPatch = {
+      ...(planner.contextSlots || dispatcher.contextSlots
+        ? { contextSlots: { ...(dispatcher.contextSlots ?? {}), ...(planner.contextSlots ?? {}) } }
+        : {}),
+      rules: this.mergeRulesById(planner.rules, dispatcher.rules),
+    }
+    const plannerQuarantine = (planner as { __zodQuarantine?: unknown }).__zodQuarantine
+    if (Array.isArray(plannerQuarantine) && plannerQuarantine.length > 0) {
+      (patch as { __zodQuarantine?: unknown }).__zodQuarantine = plannerQuarantine
+    }
+    this.overrideRulesLeafParamsFromDispatcher(patch, dispatcher)
+    return patch.rules?.length || patch.contextSlots ? patch : null
+  }
+
+  private mergeRulesById(
+    plannerRules: readonly SemanticRule[] | undefined,
+    dispatcherRules: readonly SemanticRule[] | undefined,
+  ): SemanticRule[] | undefined {
+    const planner = [...(plannerRules ?? [])]
+    const dispatcher = [...(dispatcherRules ?? [])]
+    if (!planner.length && !dispatcher.length) return undefined
+    // No planner spine → dispatcher rules become the fallback spine.
+    if (!planner.length) return this.dedupeRulesBySignature(dispatcher)
+
+    // Contract (codegen-conversation.service.ts: "rules tree 是唯一策略语义真源；
+    // deterministic dispatcher 只校准执行槽位，禁止 union 补 rule"):
+    // planner rules are the only semantic spine. Dispatcher rules may ONLY enrich a
+    // semantically-matching planner rule (fill missing leaf params); they are never
+    // appended. A dispatcher rule that matches no planner rule is dropped.
+    const spine = this.dedupeRulesBySignature(planner)
+    for (const incoming of dispatcher) {
+      const targetIndex = spine.findIndex(rule => this.rulesRepresentSameExecution(rule, incoming))
+      if (targetIndex >= 0) spine[targetIndex] = this.mergeEquivalentRule(spine[targetIndex], incoming)
+    }
+    return spine
+  }
+
+  private dedupeRulesBySignature(rules: readonly SemanticRule[]): SemanticRule[] {
+    const byId = new Map<string, SemanticRule>()
+    const semanticIndex = new Map<string, string>()
+    const order: string[] = []
+    for (const rule of rules) {
+      const signature = this.ruleSemanticSignature(rule)
+      const existingSemanticId = semanticIndex.get(signature)
+      if (existingSemanticId && byId.has(existingSemanticId)) {
+        const existing = byId.get(existingSemanticId) as SemanticRule
+        byId.set(existingSemanticId, this.mergeEquivalentRule(existing, rule))
+        continue
+      }
+      const id = rule.id
+      if (!byId.has(id)) order.push(id)
+      byId.set(id, byId.get(id) ?? rule)
+      semanticIndex.set(signature, id)
+    }
+    const deduped = order.map(id => byId.get(id) as SemanticRule)
+    return this.foldProgramOrchestrationSubsetRules(deduped)
+  }
+
+  /**
+   * Issue #1633 staging s13：phase=program / orchestration rules whose condition
+   * 完全相同（atomExprSignature 一致）、effect-leaf 集合存在 strict subset 关系时，
+   * 把 subset 折叠进 superset。subset 折叠通过 `mergeEquivalentRule` 让 sub 的
+   * params 补齐 super 缺失的 leaf。effect leaf 签名使用 alias-aware 形式
+   * （feedId↔dataSourceFeedId / role↔dataSourceRole / schemaRef↔dataSourceSchemaRef
+   * 等会被归一为 canonical key），与 semantic-state-merge.service ALIAS_PARAM_KEYS
+   * 行为对齐。
+   *
+   * 仅作用于 phase==='program' 的 rule（rule.phase 枚举无 orchestration；orchestration
+   * 语义当前通过 program-phase + effects.orchestration role 表达）。lifecycle（entry/exit/gate）
+   * 不动，避开误折叠风险。
+   */
+  private foldProgramOrchestrationSubsetRules(rules: readonly SemanticRule[]): SemanticRule[] {
+    if (rules.length < 2) return [...rules]
+    const groups = new Map<string, number[]>()
+    for (let i = 0; i < rules.length; i++) {
+      const rule = rules[i]
+      if (rule.phase !== 'program') continue
+      const key = `${rule.phase}|${this.normalizeRuleSideForSignature(rule)}|${this.atomExprSignature(rule.condition)}`
+      const list = groups.get(key) ?? []
+      list.push(i)
+      groups.set(key, list)
+    }
+    const dropped = new Set<number>()
+    const mutated = new Map<number, SemanticRule>()
+    for (const indices of groups.values()) {
+      if (indices.length < 2) continue
+      const sigs = indices.map(i => this.effectCanonicalSignatureSet(rules[i].effects))
+      for (let a = 0; a < indices.length; a++) {
+        if (dropped.has(indices[a])) continue
+        for (let b = 0; b < indices.length; b++) {
+          if (a === b) continue
+          if (dropped.has(indices[b])) continue
+          const superSet = sigs[a]
+          const subSet = sigs[b]
+          if (superSet.size <= subSet.size) continue
+          let isSubset = true
+          for (const sig of subSet) {
+            if (!superSet.has(sig)) { isSubset = false; break }
+          }
+          if (!isSubset) continue
+          const superIdx = indices[a]
+          const subIdx = indices[b]
+          const superRule = mutated.get(superIdx) ?? rules[superIdx]
+          const merged = this.mergeEquivalentRule(superRule, rules[subIdx])
+          mutated.set(superIdx, merged)
+          dropped.add(subIdx)
+        }
       }
     }
-    this.hydrateExplicitPercentRisksFromText(patch, userMessage)
-    this.pruneInvalidDeterministicNoiseRules(patch, dispatcher, userMessage)
-    return patch
+    if (dropped.size === 0) return [...rules]
+    return rules
+      .map((rule, i) => mutated.get(i) ?? rule)
+      .filter((_, i) => !dropped.has(i))
+  }
+
+  private effectCanonicalSignatureSet(effects: RuleEffects): Set<string> {
+    const out = new Set<string>()
+    for (const effect of listRuleEffects(effects)) {
+      for (const leaf of collectAtomLeaves(effect)) {
+        out.add(this.atomLeafCanonicalSignature(leaf))
+      }
+    }
+    return out
+  }
+
+  /**
+   * Issue #1633 staging s13：alias-aware leaf signature 用于 program/orchestration
+   * subset-fold。镜像 semantic-state-merge.service.ts 的 ALIAS_PARAM_KEYS 行为：
+   *   feedId → dataSourceFeedId
+   *   role → dataSourceRole
+   *   schemaRef → dataSourceSchemaRef
+   * 若同 atom 同时含 canonical + alias，保留 canonical。
+   */
+  private atomLeafCanonicalSignature(atom: AtomExprAtom): string {
+    const aliasMap: Readonly<Record<string, string>> = {
+      feedId: 'dataSourceFeedId',
+      role: 'dataSourceRole',
+      schemaRef: 'dataSourceSchemaRef',
+    }
+    const raw = this.omitParams(atom.params ?? {}, ['phase', 'source', 'basisSource', 'evidence'])
+    const canonical: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(raw)) {
+      const target = aliasMap[key] ?? key
+      if (target !== key && target in canonical) continue
+      canonical[target] = value
+    }
+    return `${atom.key}|${this.stableParamsHash(canonical)}|${atom.sideScope ?? ''}`
+  }
+
+  private rulesRepresentSameExecution(planner: SemanticRule, dispatcher: SemanticRule): boolean {
+    if (planner.phase !== dispatcher.phase) return false
+    if (!this.sideScopesCompatible(planner.sideScope, dispatcher.sideScope)) return false
+    if (collectAtomLeaves(planner.condition).length === 0) return false
+    if (collectAtomLeaves(dispatcher.condition).length === 0) return false
+    if (!this.conditionsRepresentSameLifecycle(planner, dispatcher)) return false
+    const plannerActions = this.lifecycleActionKeys(planner)
+    const dispatcherActions = this.lifecycleActionKeys(dispatcher)
+    if (plannerActions.size === 0 || dispatcherActions.size === 0) return false
+    for (const key of dispatcherActions) if (plannerActions.has(key)) return true
+    return false
+  }
+
+  private lifecycleActionKeys(rule: SemanticRule): Set<string> {
+    const lifecycle = new Set<string>([
+      ATOM_CONTRACT_REGISTRY['action.open_long'].key,
+      ATOM_CONTRACT_REGISTRY['action.open_short'].key,
+      ATOM_CONTRACT_REGISTRY['action.close_long'].key,
+      ATOM_CONTRACT_REGISTRY['action.close_short'].key,
+    ])
+    return new Set(listRuleEffects(rule.effects)
+      .flatMap(effect => collectAtomLeaves(effect))
+      .map(leaf => leaf.key)
+      .filter(key => lifecycle.has(key)))
+  }
+
+  private mergeEquivalentRule(existing: SemanticRule, candidate: SemanticRule): SemanticRule {
+    return {
+      ...existing,
+      condition: this.mergeMissingAtomParams(existing.condition, candidate.condition),
+      effects: this.mergeMissingRuleEffectParams(existing.effects, candidate.effects),
+    }
+  }
+
+  private mergeMissingRuleEffectParams(existing: RuleEffects, candidate: RuleEffects): RuleEffects {
+    if (isRuleEffectsByRole(existing) || isRuleEffectsByRole(candidate)) {
+      const existingByRole = this.toRuleEffectsByRole(existing)
+      const candidateByRole = this.toRuleEffectsByRole(candidate)
+      return {
+        actions: this.mergeMissingEffectListParams(existingByRole.actions, candidateByRole.actions),
+        risks: this.mergeMissingEffectListParams(existingByRole.risks, candidateByRole.risks),
+        positions: this.mergeMissingEffectListParams(existingByRole.positions, candidateByRole.positions),
+        orchestration: this.mergeMissingEffectListParams(existingByRole.orchestration, candidateByRole.orchestration),
+        programs: this.mergeMissingEffectListParams(existingByRole.programs, candidateByRole.programs),
+      }
+    }
+    return this.mergeMissingEffectListParams(existing, candidate)
+  }
+
+  private toRuleEffectsByRole(effects: RuleEffects): RuleEffectsByRole {
+    const out: {
+      actions: AtomExpr[]
+      risks: AtomExpr[]
+      positions: AtomExpr[]
+      orchestration: AtomExpr[]
+      programs: AtomExpr[]
+    } = {
+      actions: [],
+      risks: [],
+      positions: [],
+      orchestration: [],
+      programs: [],
+    }
+    const route = (effect: AtomExpr): void => {
+      if (effect.kind !== 'atom') return
+      // program.* atom 走 programs，与 isProgramEffectAtom 一致
+      if (this.isProgramEffectAtom(effect.key)) {
+        out.programs.push(effect)
+        return
+      }
+      const bucket = this.readAtomBucket(effect.key)
+      if (bucket === 'action') out.actions.push(effect)
+      else if (bucket === 'risk') out.risks.push(effect)
+      else if (bucket === 'positionConstraint') out.positions.push(effect)
+      else if (bucket === 'orchestration') out.orchestration.push(effect)
+    }
+    if (isRuleEffectsByRole(effects)) {
+      // #1633 rules-only generic bucket normalization：typed 输入下，
+      //   每个 effect leaf 按 registry bucket 重派；防止 grid.range_rebalance
+      //   (positionConstraint) 被塞入 effects.programs 而触发 canonical-spec
+      //   builder 抛 UnsupportedSemanticRuleProgramEffect。
+      for (const role of ['actions', 'risks', 'positions', 'orchestration', 'programs'] as const) {
+        for (const effect of (effects[role] ?? [])) {
+          if (effect.kind === 'atom') {
+            route(effect)
+            continue
+          }
+          // 复合 expr（and/or/not/sequence）保留输入 role —— bucket 不明确时
+          //   走 fail-open 原桶，避免误改语义结构。
+          out[role].push(effect)
+        }
+      }
+      return out
+    }
+    for (const effect of effects) {
+      route(effect)
+    }
+    return out
+  }
+
+  private mergeMissingEffectListParams(
+    existing: readonly AtomExpr[],
+    candidate: readonly AtomExpr[],
+  ): AtomExprAtom[] {
+    const candidateAtoms = candidate.filter((effect): effect is AtomExprAtom => effect.kind === 'atom')
+    return existing
+      .filter((effect): effect is AtomExprAtom => effect.kind === 'atom')
+      .map((effect) => {
+        const matched = candidateAtoms.find(candidateEffect => this.effectLeafMatches(effect, candidateEffect))
+        return matched ? this.mergeMissingAtomParams(effect, matched) as AtomExprAtom : effect
+      })
+  }
+
+  private mergeMissingAtomParams(existing: AtomExpr, candidate: AtomExpr): AtomExpr {
+    if (existing.kind === 'atom' && candidate.kind === 'atom') {
+      return {
+        ...existing,
+        params: this.fillMissingParams(existing.params, [candidate.params ?? {}]) ?? existing.params,
+      }
+    }
+    if ((existing.kind === 'and' || existing.kind === 'or') && existing.kind === candidate.kind) {
+      return {
+        ...existing,
+        children: existing.children.map(child => {
+          const matched = candidate.children.find(candidateChild => this.atomExprSignature(child) === this.atomExprSignature(candidateChild))
+          return matched ? this.mergeMissingAtomParams(child, matched) : child
+        }),
+      }
+    }
+    if (existing.kind === 'not' && candidate.kind === 'not') {
+      return { ...existing, child: this.mergeMissingAtomParams(existing.child, candidate.child) }
+    }
+    if (existing.kind === 'sequence' && candidate.kind === 'sequence') {
+      return {
+        ...existing,
+        steps: existing.steps.map(step => {
+          const matched = candidate.steps.find(candidateStep => this.atomExprSignature(step) === this.atomExprSignature(candidateStep))
+          return matched ? this.mergeMissingAtomParams(step, matched) : step
+        }),
+      }
+    }
+    return existing
+  }
+
+  private ruleSemanticSignature(rule: SemanticRule): string {
+    return [
+      rule.phase,
+      this.normalizeRuleSideForSignature(rule),
+      this.atomExprSignature(rule.condition),
+      JSON.stringify(this.effectSignatureSet(rule.effects)),
+    ].join('|')
+  }
+
+  private normalizeRuleSideForSignature(rule: SemanticRule): string {
+    const actionSides = listRuleEffects(rule.effects)
+      .flatMap(effect => collectAtomLeaves(effect))
+      .filter(leaf => this.readAtomBucket(leaf.key) === 'action')
+      .map(leaf => this.normalizedEffectSideSignature(leaf))
+      .filter(side => side !== 'both')
+      .sort()
+    return actionSides.length > 0 ? actionSides.join(',') : rule.sideScope
+  }
+
+  private effectSignatureSet(effects: RuleEffects): string[] {
+    return listRuleEffects(effects)
+      .flatMap(effect => collectAtomLeaves(effect))
+      .map(leaf => this.atomLeafSemanticSignature(leaf, 'effect'))
+      .sort()
+  }
+
+  private atomExprSignature(expr: AtomExpr): string {
+    if (expr.kind === 'atom') return this.atomLeafSemanticSignature(expr, 'condition')
+    if (expr.kind === 'and' || expr.kind === 'or') {
+      return `${expr.kind}(${expr.children.map(child => this.atomExprSignature(child)).sort().join('&')})`
+    }
+    if (expr.kind === 'not') return `not(${this.atomExprSignature(expr.child)})`
+    if (expr.kind === 'sequence') return `sequence(${expr.steps.map(step => this.atomExprSignature(step)).join('>')})`
+    return JSON.stringify(expr)
+  }
+
+  private atomLeafSemanticSignature(atom: AtomExprAtom, role: 'condition' | 'effect'): string {
+    const bucket = this.readAtomBucket(atom.key)
+    const params = this.omitParams(atom.params ?? {}, [
+      'phase',
+      'source',
+      'basisSource',
+      'evidence',
+    ])
+    if (bucket === 'action' && role === 'effect') {
+      return `${atom.key}|${this.normalizedEffectSideSignature(atom)}`
+    }
+    return `${atom.key}|${this.stableParamsHash(params)}|${atom.sideScope ?? ''}`
   }
 
   /**
@@ -376,6 +756,7 @@ export class PlannerDispatcherMergeService {
           if (bucket === undefined) continue
           const roleAllowed = role === 'programs'
             ? this.isProgramEffectAtom(leaf.key)
+              || (bucket === 'positionConstraint' && CONDITION_ALLOWED_POSITION_CONSTRAINT_ATOMS.has(leaf.key))
             : !this.isProgramEffectAtom(leaf.key) && bucket === RULE_EFFECT_ROLE_ALLOWED_BUCKETS[role]
           if (roleAllowed) continue
           reasons.add('effects_leaf_bucket_invalid')
@@ -410,100 +791,8 @@ export class PlannerDispatcherMergeService {
     return key.startsWith('program.')
   }
 
-  private expandRulesForInternalFlat(dispatcher: CodegenSemanticPatch): CodegenSemanticPatch {
-    const rules = dispatcher.rules
-    if (!rules || rules.length === 0) return dispatcher
-
-    const expanded: CodegenSemanticPatch = { ...dispatcher }
-    const atoms = [...(dispatcher.atoms ?? [])]
-    const triggers = [...(dispatcher.triggers ?? [])]
-    const actions = [...(dispatcher.actions ?? [])]
-    const risk = [...(dispatcher.risk ?? [])]
-    let position = dispatcher.position
-
-    const pushLegacyAtom = (
-      atom: AtomExprAtom,
-      phase: SemanticRule['phase'],
-      sideScope: 'long' | 'short' | 'both',
-    ): void => {
-      if (atom.key === 'position.sizing') {
-        const sizing = atom.params.sizing
-        if (sizing && typeof sizing === 'object' && !Array.isArray(sizing)) {
-          const value = typeof (sizing as { value?: unknown }).value === 'number'
-            ? (sizing as { value: number }).value
-            : 0
-          position = {
-            mode: position?.mode ?? 'fixed',
-            value: position?.value ?? value,
-            positionMode: position?.positionMode ?? 'long_only',
-            status: position?.status ?? 'locked',
-            source: position?.source ?? 'user_explicit',
-            openSlots: position?.openSlots ?? [],
-            ...position,
-            sizing: sizing as NonNullable<CodegenSemanticPatch['position']>['sizing'],
-          }
-        }
-        return
-      }
-
-      const evidence = atom.evidence
-        ? { evidence: { text: atom.evidence.text, source: 'user_explicit' as const } }
-        : {}
-      const node = {
-        key: atom.key,
-        phase,
-        sideScope: atom.sideScope ?? sideScope,
-        params: atom.params ?? {},
-        ...evidence,
-      }
-      atoms.push(node)
-      const bucket = this.readAtomBucket(atom.key)
-      if (bucket === 'trigger') {
-        triggers.push({
-          key: atom.key,
-          phase,
-          sideScope: atom.sideScope ?? sideScope,
-          params: atom.params ?? {},
-          ...evidence,
-        })
-      }
-      else if (bucket === 'action') {
-        actions.push({
-          key: atom.key,
-          phase,
-          params: atom.params ?? {},
-          ...evidence,
-        })
-      }
-      else if (bucket === 'risk') {
-        risk.push({
-          key: atom.key,
-          params: atom.params ?? {},
-          ...evidence,
-        })
-      }
-    }
-
-    for (const rule of rules) {
-      for (const leaf of collectAtomLeaves(rule.condition)) {
-        pushLegacyAtom(leaf, rule.phase, rule.sideScope)
-      }
-      for (const effect of listRuleEffects(rule.effects)) {
-        for (const leaf of collectAtomLeaves(effect)) {
-          pushLegacyAtom(leaf, rule.phase, rule.sideScope)
-        }
-      }
-    }
-
-    const dedupe = <T extends { key: string, phase?: unknown, sideScope?: unknown, params?: unknown }>(items: T[]): T[] =>
-      this.dedupeFallbackAtoms(items)
-
-    expanded.atoms = dedupe(atoms) as CodegenSemanticPatch['atoms']
-    expanded.triggers = dedupe(triggers) as CodegenSemanticPatch['triggers']
-    expanded.actions = dedupe(actions) as CodegenSemanticPatch['actions']
-    expanded.risk = dedupe(risk) as CodegenSemanticPatch['risk']
-    if (position) expanded.position = position
-    return expanded
+  private expandRulesForInternalFlat(dispatcher: InternalPlannerPatch): InternalPlannerPatch {
+    return this.cloneRulesNativePatch(dispatcher)
   }
 
   /**
@@ -557,7 +846,7 @@ export class PlannerDispatcherMergeService {
     }
   }
 
-  private buildFallbackRules(dispatcher: CodegenSemanticPatch, userMessage: string): SemanticRule[] {
+  private buildFallbackRules(dispatcher: InternalPlannerPatch, userMessage: string): SemanticRule[] {
     const predicateAtoms = this.collectFallbackPredicateAtoms(dispatcher)
     if (predicateAtoms.length === 0) return []
     const effectAtoms = this.collectFallbackEffectAtoms(dispatcher)
@@ -611,7 +900,7 @@ export class PlannerDispatcherMergeService {
     rules: SemanticRule[],
     predicateAtoms: ReadonlyArray<FallbackPredicateAtom>,
     effectAtoms: ReadonlyArray<AtomExprAtom>,
-    dispatcher: CodegenSemanticPatch,
+    dispatcher: InternalPlannerPatch,
     userMessage: string,
   ): ReadonlySet<FallbackPredicateAtom> {
     const covered = new Set<FallbackPredicateAtom>()
@@ -989,7 +1278,7 @@ export class PlannerDispatcherMergeService {
   private normalizeFallbackRuleSideScope(
     predicate: FallbackPredicateAtom,
     phase: SemanticRule['phase'],
-    dispatcher: CodegenSemanticPatch,
+    dispatcher: InternalPlannerPatch,
     userMessage: string,
   ): 'long' | 'short' | 'both' {
     const current = predicate.sideScope ?? 'both'
@@ -1003,9 +1292,12 @@ export class PlannerDispatcherMergeService {
     return hasShortIntent ? current : 'long'
   }
 
-  private hasShortEntryIntent(dispatcher: CodegenSemanticPatch, userMessage: string): boolean {
+  private hasShortEntryIntent(dispatcher: InternalPlannerPatch, userMessage: string): boolean {
     const actionOpenShortKey = ATOM_CONTRACT_REGISTRY['action.open_short'].key
-    if ([...(dispatcher.actions ?? []), ...(dispatcher.atoms ?? [])].some(atom => atom.key === actionOpenShortKey)) return true
+    if ((dispatcher.rules ?? []).some(rule =>
+      collectAtomLeaves(rule.condition).some(atom => atom.key === actionOpenShortKey)
+      || listRuleEffects(rule.effects).some(effect => collectAtomLeaves(effect).some(atom => atom.key === actionOpenShortKey)),
+    )) return true
     return /开空|做空|空单|卖空|short/iu.test(userMessage)
   }
 
@@ -1038,72 +1330,39 @@ export class PlannerDispatcherMergeService {
   }
 
   private buildFallbackPositionFromDispatcherConstraints(
-    dispatcher: CodegenSemanticPatch,
-  ): CodegenSemanticPatch['position'] | null {
-    const constraints = (dispatcher.atoms ?? [])
-      .filter(atom => this.readAtomBucket(atom.key) === 'positionConstraint')
-      .map(atom => ({
-        key: atom.key as NonNullable<CodegenSemanticPatch['position']>['constraints'][number]['key'],
-        params: atom.params ?? {},
-        ...(atom.evidence ? { evidence: atom.evidence } : {}),
-        ...(atom.source ? { source: atom.source } : {}),
-        ...(atom.openSlots ? { openSlots: atom.openSlots } : {}),
-        ...(atom.contracts ? { contracts: atom.contracts } : {}),
-      }))
-
-    if (constraints.length === 0) return dispatcher.position ?? null
-
-    const existingConstraints = dispatcher.position?.constraints ?? []
-    return {
-      mode: dispatcher.position?.mode ?? 'constraint_only',
-      value: dispatcher.position?.value ?? 0,
-      positionMode: dispatcher.position?.positionMode ?? 'long_only',
-      status: dispatcher.position?.status ?? 'locked',
-      source: dispatcher.position?.source ?? 'user_explicit',
-      openSlots: dispatcher.position?.openSlots ?? [],
-      ...(dispatcher.position?.sizing !== undefined ? { sizing: dispatcher.position.sizing } : {}),
-      constraints: this.unionDedupByKeyAndHash(existingConstraints, constraints, 'right') ?? constraints,
-    }
+    dispatcher: InternalPlannerPatch,
+  ): null {
+    void dispatcher
+    return null
   }
 
-  private collectFallbackPredicateAtoms(dispatcher: CodegenSemanticPatch): FallbackPredicateAtom[] {
+  private collectFallbackPredicateAtoms(dispatcher: InternalPlannerPatch): FallbackPredicateAtom[] {
     const out: FallbackPredicateAtom[] = []
     const push = (item: typeof out[number]): void => {
       if (typeof item.key !== 'string' || item.key.length === 0) return
       out.push(item)
     }
-    for (const trigger of dispatcher.triggers ?? []) push(trigger)
-    for (const atom of dispatcher.atoms ?? []) {
-      const bucket = this.readAtomBucket(atom.key)
-      if (
-        this.atomHasRole(atom.key, 'predicate')
-        || (bucket === 'positionConstraint' && CONDITION_ALLOWED_POSITION_CONSTRAINT_ATOMS.has(atom.key))
-      ) {
-        push(atom)
+    for (const rule of dispatcher.rules ?? []) {
+      for (const atom of collectAtomLeaves(rule.condition)) {
+        push({
+          key: atom.key,
+          phase: rule.phase,
+          sideScope: atom.sideScope ?? rule.sideScope,
+          params: atom.params,
+          evidence: atom.evidence ?? rule.evidence,
+        })
       }
-      const addPositionPredicate = this.buildAddPositionTriggerPredicate(atom)
-      if (addPositionPredicate) push(addPositionPredicate)
     }
-    const dcaAtom = this.findDispatcherDcaScheduleAtom(dispatcher)
-    if (dcaAtom) {
-      push({
-        key: EXECUTION_ON_START_ATOM_KEY,
-        phase: 'entry',
-        sideScope: 'long',
-        params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
-        evidence: dcaAtom.evidence,
-        sourceActionKey: DCA_SCHEDULE_ATOM_KEY,
-      })
-    }
-    return this.dedupeFallbackAtoms(this.dropRangePositionPredicatesCoveredByAddPosition(out, dispatcher))
+    return this.dedupeFallbackAtoms(out)
   }
 
   private dropRangePositionPredicatesCoveredByAddPosition(
     predicates: FallbackPredicateAtom[],
-    dispatcher: CodegenSemanticPatch,
+    dispatcher: InternalPlannerPatch,
   ): FallbackPredicateAtom[] {
     const addPositionEvidence = new Set(
-      [...(dispatcher.actions ?? []), ...(dispatcher.atoms ?? [])]
+      (dispatcher.rules ?? [])
+        .flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)))
         .filter(atom => atom.key === ADD_POSITION_ATOM_KEY)
         .map(atom => this.readEvidenceText(atom))
         .filter((text): text is string => Boolean(text)),
@@ -1123,45 +1382,18 @@ export class PlannerDispatcherMergeService {
     })
   }
 
-  private collectFallbackEffectAtoms(dispatcher: CodegenSemanticPatch): AtomExprAtom[] {
-    const out: AtomExprAtom[] = []
-    const push = (key: string, params: Record<string, unknown> = {}, sideScope?: 'long' | 'short' | 'both'): void => {
-      if (!key) return
-      out.push({
-        kind: 'atom',
-        key,
-        params,
-        ...(sideScope ? { sideScope } : {}),
-      })
-    }
-    for (const action of dispatcher.actions ?? []) {
-      push(action.key, action.params ?? {})
-    }
-    for (const risk of dispatcher.risk ?? []) {
-      push(risk.key, risk.params ?? {})
-    }
-    for (const atom of dispatcher.atoms ?? []) {
-      const bucket = this.readAtomBucket(atom.key)
-      if (bucket === 'action' || bucket === 'risk' || bucket === 'orchestration' || atom.key === DCA_SCHEDULE_ATOM_KEY) {
-        if (bucket === 'orchestration' && atom.key.startsWith('scope.')) continue
-        push(atom.key, atom.params ?? {}, atom.sideScope)
-      }
-    }
-    const dcaAtom = this.findDispatcherDcaScheduleAtom(dispatcher)
-    if (dcaAtom && !out.some(effect => effect.key === ADD_POSITION_ATOM_KEY)) {
-      push(ADD_POSITION_ATOM_KEY, {
-        lifecycleKind: 'dca_schedule',
-        sizing: (dcaAtom.params ?? {}).perOrderSizing,
-        actionSide: 'long',
-      }, 'long')
-    }
-    return this.dedupeFallbackEffects(out)
+  private collectFallbackEffectAtoms(dispatcher: InternalPlannerPatch): AtomExprAtom[] {
+    return this.dedupeFallbackEffects(
+      (dispatcher.rules ?? [])
+        .flatMap(rule => listRuleEffects(rule.effects))
+        .flatMap(effect => collectAtomLeaves(effect)),
+    )
   }
 
   private findDispatcherDcaScheduleAtom(
-    dispatcher: CodegenSemanticPatch,
+    dispatcher: InternalPlannerPatch,
   ): { params?: Record<string, unknown>, evidence?: { text?: unknown } } | null {
-    return (dispatcher.atoms ?? []).find(atom => atom.key === DCA_SCHEDULE_ATOM_KEY) ?? null
+    return this.collectFallbackEffectAtoms(dispatcher).find(atom => atom.key === DCA_SCHEDULE_ATOM_KEY) ?? null
   }
 
   private resolveFallbackEffects(args: {
@@ -1342,263 +1574,45 @@ export class PlannerDispatcherMergeService {
   }
 
   mergePlannerAndDispatcherPatches(
-    plannerPatch: CodegenSemanticPatch | null | undefined,
-    dispatcherPatch: CodegenSemanticPatch | null | undefined,
-  ): CodegenSemanticPatch | null {
-    const plannerHas = this.isNonEmpty(plannerPatch)
-    const dispatcherHas = this.isNonEmpty(dispatcherPatch)
-    if (!plannerHas && !dispatcherHas) return null
-    // Issue #1443：planner-only / dispatcher-only 早返路径也必须走 filter pass
-    //   过滤 always-on + action 噪音 rule（否则用户实测策略 1 这类 planner-only 场景
-    //   下「出场：平多」噪音 rule 仍漏过）。
-    if (plannerHas && !dispatcherHas) {
-      const cloned = { ...(plannerPatch as CodegenSemanticPatch) }
-      try {
-        this.filterAlwaysOnActionNoiseRules(cloned)
-      }
-      catch (err) {
-        this.logger.warn(`filterAlwaysOnActionNoiseRules (planner-only path) 抛出异常，已 fail-open：${err instanceof Error ? err.message : String(err)}`)
-      }
-      try {
-        this.pruneIntrinsicRuleNoise(cloned)
-      }
-      catch (err) {
-        this.logger.warn(`pruneIntrinsicRuleNoise (planner-only path) 抛出异常，已 fail-open：${err instanceof Error ? err.message : String(err)}`)
-      }
-      return cloned
-    }
-    if (!plannerHas && dispatcherHas) return dispatcherPatch as CodegenSemanticPatch
-
-    const planner = plannerPatch as CodegenSemanticPatch
-    const dispatcher = this.expandRulesForInternalFlat(dispatcherPatch as CodegenSemanticPatch)
-    const merged: CodegenSemanticPatch = {}
-
-    // contextSlots：planner 优先（NL 理解 symbol/timeframe 更广）。
-    const ctxPlanner = planner.contextSlots
-    const ctxDispatcher = dispatcher.contextSlots
-    if (ctxPlanner || ctxDispatcher) {
-      merged.contextSlots = { ...(ctxDispatcher ?? {}), ...(ctxPlanner ?? {}) }
-    }
-
-    // atoms / triggers / actions / risk：identity dedup，planner 条目优先。
-    const atoms = this.unionDedupByIdentity(planner.atoms, dispatcher.atoms)
-    if (atoms) merged.atoms = atoms
-    const triggers = this.unionDedupByIdentity(planner.triggers, dispatcher.triggers)
-    if (triggers) merged.triggers = triggers
-    const actions = this.unionDedupByIdentity(planner.actions, dispatcher.actions)
-    if (actions) merged.actions = actions
-    const risk = this.unionDedupByIdentity(planner.risk, dispatcher.risk)
-    if (risk) merged.risk = risk
-
-    // position：dispatcher 优先（regex 数值更准），constraints union+dedup。
-    if (planner.position || dispatcher.position) {
-      const base = dispatcher.position ?? planner.position
-      if (base) {
-        const constraints = this.unionDedupByKeyAndHash(
-          planner.position?.constraints,
-          dispatcher.position?.constraints,
-          dispatcher.position ? 'right' : 'left',
-        )
-        merged.position = {
-          ...base,
-          ...(constraints ? { constraints } : (base.constraints ? { constraints: base.constraints } : {})),
-        }
-      }
-      else {
-        merged.position = base
-      }
-    }
-
-    // orchestration.nodes：union dedup。
-    const plannerNodes = planner.orchestration?.nodes
-    const dispatcherNodes = dispatcher.orchestration?.nodes
-    if ((plannerNodes && plannerNodes.length) || (dispatcherNodes && dispatcherNodes.length)) {
-      const nodes = this.unionDedupOrchestrationNodes(plannerNodes, dispatcherNodes)
-      if (nodes && nodes.length > 0) {
-        merged.orchestration = { nodes }
-      }
-    }
-
-    // Issue #1395 Wave 4：rules[] 表达式树是 planner 独有产物，dispatcher 不产 rules。
-    // 之前漏掉透传 → 整棵 rules 树被 merge 步骤吞掉，state.rules 永远为空，
-    // 下游 readiness / projection / IR compiler 全部退化到 atoms[] 5-bucket 路径。
-    const plannerRules = (planner as { rules?: unknown }).rules
-    const dispatcherRules = (dispatcher as { rules?: unknown }).rules
-    const rulesFromPlanner = Array.isArray(plannerRules) ? plannerRules : undefined
-    const rulesFromDispatcher = Array.isArray(dispatcherRules) ? dispatcherRules : undefined
-    if (rulesFromPlanner && rulesFromPlanner.length > 0) {
-      (merged as { rules?: unknown }).rules = rulesFromPlanner
-    }
-    else if (rulesFromDispatcher && rulesFromDispatcher.length > 0) {
-      (merged as { rules?: unknown }).rules = rulesFromDispatcher
-    }
-
-    // 同样透传 __zodQuarantine（planner rules zod 失败明细），供观测层消费。
-    const plannerQuarantine = (planner as { __zodQuarantine?: unknown }).__zodQuarantine
-    if (Array.isArray(plannerQuarantine) && plannerQuarantine.length > 0) {
-      (merged as { __zodQuarantine?: unknown }).__zodQuarantine = plannerQuarantine
-    }
-
-    // Issue #1428 R-D（先于 R-B 跑）：对 merged.rules 中每个 atom leaf，若 dispatcher
-    //   桶含同 (key, sideScope) entry，则从 dispatcher 候选补齐 leaf 缺失 params。
-    //   已由 planner 明确给出的 params 永不覆盖；dispatcher regex 抽到的用户原话精细
-    //   params（如 BOLL(5,1) / grid sizing）只作为缺省补充。
-    //
-    //   审查问题 Major #2：两条 pass 各自外层 try/catch，异常时 log + 保留 merged
-    //     原状返回，绝不破坏现行 merge 的 fail-open 承诺。
-    try {
-      this.overrideRulesLeafParamsFromDispatcher(merged, dispatcher)
-    }
-    catch (err) {
-      this.logger.warn(`overrideRulesLeafParamsFromDispatcher 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
-    }
-
-    try {
-      this.repairPlannerRiskDriftFromDispatcherRules(merged, dispatcher, '')
-    }
-    catch (err) {
-      this.logger.warn(`repairPlannerRiskDriftFromDispatcherRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
-    }
-
-    // Issue #1428 R-B：rules 非空时把 dispatcher 桶里 rules 不含的 atom 提升为
-    //   single-leaf SemanticRule 追加到 merged.rules，让 cross-clause inheritance
-    //   (#1383) 派生的 sibling/mirror 在 rules-tree 上也可见。
-    try {
-      this.liftDispatcherAtomsIntoRules(merged, dispatcher)
-    }
-    catch (err) {
-      this.logger.warn(`liftDispatcherAtomsIntoRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
-    }
-
-    try {
-      this.composeDispatcherRulesIntoMergedRules(merged, dispatcher)
-    }
-    catch (err) {
-      this.logger.warn(`composeDispatcherRulesIntoMergedRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
-    }
-
-    // Planner 可能把「买入/卖出」类 long-only 动词扩写成反手做空。
-    // Dispatcher 的 verb-side resolver 是 deterministic 证据源；若 dispatcher 完全没有 short
-    // 意图，则裁掉 planner rules 中的 short action/rule，避免展示层污染主链路。
-    try {
-      this.prunePlannerShortActionsWithoutDispatcherIntent(merged, dispatcher)
-    }
-    catch (err) {
-      this.logger.warn(`prunePlannerShortActionsWithoutDispatcherIntent 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
-    }
-
-    try {
-      this.bindDispatcherLifecycleEffectsIntoPlannerRules(merged, dispatcher)
-    }
-    catch (err) {
-      this.logger.warn(`bindDispatcherLifecycleEffectsIntoPlannerRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
-    }
-
-    // Issue #1443：过滤掉 "always-on condition + action effects" 噪音 rule。
-    //   这类 rule 通常是 planner/dispatcher 把 trigger 和 action 错绑（trigger 缺失或
-    //   被识别为 execution.on_start always-on），让 UI 出现"出场：平多" / "入场：开多"
-    //   等无条件动作的噪音。用户没明确说"启动即开/平仓"——这种 rule 应丢弃。
-    //   risk effects（stop_loss/take_profit）允许 always-on（"持仓期间一直挂止损"是
-    //   常见且合理语义）。
+    plannerPatch: InternalPlannerPatch | null | undefined,
+    dispatcherPatch: InternalPlannerPatch | null | undefined,
+  ): InternalPlannerPatch | null {
+    const merged = this.mergeRulesNativePatches(plannerPatch, dispatcherPatch)
+    if (!merged) return null
     try {
       this.filterAlwaysOnActionNoiseRules(merged)
     }
     catch (err) {
       this.logger.warn(`filterAlwaysOnActionNoiseRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
     }
-
+    try {
+      this.foldSubsetConditionRules(merged)
+    }
+    catch (err) {
+      this.logger.warn(`foldSubsetConditionRules 抛出异常，已 fail-open 保留 merged 原状：${err instanceof Error ? err.message : String(err)}`)
+    }
+    if (Array.isArray(merged.rules) && merged.rules.length > 0) {
+      merged.rules = this.dedupeRulesBySignature(merged.rules as readonly SemanticRule[])
+    }
     return merged
   }
 
   mergeDeterministicExecutionSlots(
-    plannerPatch: CodegenSemanticPatch | null | undefined,
-    dispatcherPatch: CodegenSemanticPatch | null | undefined,
+    plannerPatch: InternalPlannerPatch | null | undefined,
+    dispatcherPatch: InternalPlannerPatch | null | undefined,
     userMessage = '',
-  ): CodegenSemanticPatch | null {
+  ): InternalPlannerPatch | null {
     if (!this.isNonEmpty(plannerPatch)) {
       return this.buildRulesTreeFallbackFromDispatcher(dispatcherPatch, userMessage) ?? plannerPatch ?? null
     }
-    const planner = plannerPatch as CodegenSemanticPatch
-    if (!this.isNonEmpty(dispatcherPatch)) {
-      const merged: CodegenSemanticPatch = { ...planner }
-      if (userMessage.trim().length > 0) {
-        try {
-          this.pruneInvalidDeterministicNoiseRules(merged, {}, userMessage)
-        }
-        catch (err) {
-          this.logger.warn(`pruneInvalidDeterministicNoiseRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
-        }
-      }
-      return merged
-    }
-    const dispatcher = this.expandRulesForInternalFlat(dispatcherPatch as CodegenSemanticPatch)
-    const merged: CodegenSemanticPatch = { ...planner }
-    if (planner.contextSlots || dispatcher.contextSlots) {
-      const plannerContext = planner.contextSlots ?? {}
-      const dispatcherContext = dispatcher.contextSlots ?? {}
-      const dispatcherSymbol = (dispatcherContext as { symbol?: { source?: unknown } }).symbol
-      merged.contextSlots = {
-        ...plannerContext,
-        ...dispatcherContext,
-        ...(
-          plannerContext.symbol
-          && dispatcherSymbol
-          && dispatcherSymbol.source !== 'user_explicit'
-            ? { symbol: plannerContext.symbol }
-            : {}
-        ),
-      }
-    }
-    const dispatcherPosition = this.buildFallbackPositionFromDispatcherConstraints(dispatcher) ?? dispatcher.position
-    if (dispatcherPosition) {
-      const constraints = this.unionDedupByKeyAndHash(
-        planner.position?.constraints,
-        dispatcherPosition.constraints,
-        'right',
-      )
-      merged.position = {
-        ...dispatcherPosition,
-        ...(constraints ? { constraints } : {}),
-      }
-    }
-    const explicitSizing = this.extractExplicitPositionSizingFromText(userMessage)
-    if (explicitSizing) {
-      merged.position = {
-        ...(merged.position ?? {
-          mode: explicitSizing.sizing.kind === 'ratio' ? 'fixed_ratio' : explicitSizing.sizing.kind === 'quote' ? 'fixed_quote' : 'fixed_qty',
-          value: explicitSizing.sizing.value,
-          positionMode: this.hasShortEntryIntent(dispatcher, userMessage) ? 'long_short' : 'long_only',
-          status: 'locked',
-          source: 'user_explicit',
-          openSlots: [],
-        }),
-        mode: explicitSizing.sizing.kind === 'ratio' ? 'fixed_ratio' : explicitSizing.sizing.kind === 'quote' ? 'fixed_quote' : 'fixed_qty',
-        value: explicitSizing.sizing.value,
-        sizing: explicitSizing.sizing,
-        status: 'locked',
-        source: 'user_explicit',
-        evidence: { text: explicitSizing.evidenceText, source: 'user_explicit' },
-        openSlots: [],
-      }
-    }
+    const dispatcher = dispatcherPatch as InternalPlannerPatch | null | undefined
+    const merged = this.mergeRulesNativePatches(plannerPatch, dispatcher) ?? this.cloneRulesNativePatch(plannerPatch as InternalPlannerPatch)
     if (userMessage.trim().length > 0) {
-      try {
-        this.mergeDeterministicRulesIntoPlanner(merged, dispatcher, userMessage)
-      }
-      catch (err) {
-        this.logger.warn(`mergeDeterministicRulesIntoPlanner 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
-      }
       try {
         this.hydratePlannerMultiTimeframeRules(merged, userMessage)
       }
       catch (err) {
         this.logger.warn(`hydratePlannerMultiTimeframeRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
-      }
-      try {
-        this.composeDispatcherRulesIntoMergedRules(merged, dispatcher)
-      }
-      catch (err) {
-        this.logger.warn(`composeDispatcherRulesIntoMergedRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
       }
       try {
         this.hydrateExplicitMacdTupleFromText(merged, userMessage)
@@ -1613,30 +1627,33 @@ export class PlannerDispatcherMergeService {
         this.logger.warn(`hydrateExplicitPercentRisksFromText 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
       }
       try {
-        this.repairPlannerRiskDriftFromDispatcherRules(merged, dispatcher, userMessage)
+        this.hydrateLifecycleAddPositionFromText(merged, userMessage)
       }
       catch (err) {
-        this.logger.warn(`repairPlannerRiskDriftFromDispatcherRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
+        this.logger.warn(`hydrateLifecycleAddPositionFromText 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
       }
       try {
-        this.bindDispatcherLifecycleEffectsIntoPlannerRules(merged, dispatcher)
-      }
-      catch (err) {
-        this.logger.warn(`bindDispatcherLifecycleEffectsIntoPlannerRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
-      }
-      try {
-        this.pruneInvalidDeterministicNoiseRules(merged, dispatcher, userMessage)
+        this.pruneInvalidDeterministicNoiseRules(merged, dispatcher ?? {}, userMessage)
       }
       catch (err) {
         this.logger.warn(`pruneInvalidDeterministicNoiseRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
       }
     }
+    try {
+      this.foldSubsetConditionRules(merged)
+    }
+    catch (err) {
+      this.logger.warn(`foldSubsetConditionRules 抛出异常，已 fail-open 保留 planner rules：${err instanceof Error ? err.message : String(err)}`)
+    }
+    if (Array.isArray(merged.rules) && merged.rules.length > 0) {
+      merged.rules = this.dedupeRulesBySignature(merged.rules as readonly SemanticRule[])
+    }
     return merged
   }
 
   private repairPlannerRiskDriftFromDispatcherRules(
-    merged: CodegenSemanticPatch,
-    dispatcher: CodegenSemanticPatch,
+    merged: InternalPlannerPatch,
+    dispatcher: InternalPlannerPatch,
     userMessage: string,
   ): void {
     const rules = merged.rules
@@ -1675,7 +1692,7 @@ export class PlannerDispatcherMergeService {
   }
 
   private hydratePlannerMultiTimeframeRules(
-    merged: CodegenSemanticPatch,
+    merged: InternalPlannerPatch,
     userMessage: string,
   ): void {
     const rules = merged.rules
@@ -1744,13 +1761,17 @@ export class PlannerDispatcherMergeService {
   }
 
   private pruneInvalidDeterministicNoiseRules(
-    merged: CodegenSemanticPatch,
-    dispatcher: CodegenSemanticPatch,
+    merged: InternalPlannerPatch,
+    dispatcher: InternalPlannerPatch,
     userMessage: string,
   ): void {
     const rules = merged.rules
     if (!rules?.length) return
-    const hasDrawdownBlock = (dispatcher.atoms ?? []).some(atom => atom.key === ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key)
+    const dispatcherLeaves = (dispatcher.rules ?? []).flatMap(rule => [
+      ...collectAtomLeaves(rule.condition),
+      ...listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)),
+    ])
+    const hasDrawdownBlock = dispatcherLeaves.some(atom => atom.key === ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key)
       || rules.some(rule => JSON.stringify(rule).includes(ATOM_CONTRACT_REGISTRY['portfolioRisk.drawdown_block'].key))
     const hasExplicitStopLoss = /止损|stop\s*loss/iu.test(userMessage)
     const hasAtrIntent = /(?:^|[^a-z])ATR(?:[^a-z]|$)|平均真实波幅/iu.test(userMessage)
@@ -1853,26 +1874,11 @@ export class PlannerDispatcherMergeService {
     this.clearLifecycleOnlyTopLevelPositionSizing(merged)
   }
 
-  private clearLifecycleOnlyTopLevelPositionSizing(merged: CodegenSemanticPatch): void {
-    if (!merged.position || !merged.rules?.length) return
-    const leaves = merged.rules.flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)))
-    const hasOpenAction = leaves.some(leaf =>
-      leaf.key === ATOM_CONTRACT_REGISTRY['action.open_long'].key
-      || leaf.key === ATOM_CONTRACT_REGISTRY['action.open_short'].key,
-    )
-    const hasLifecycleSizingCarrier = leaves.some(leaf =>
-      leaf.key === DCA_SCHEDULE_ATOM_KEY || leaf.key === ADD_POSITION_ATOM_KEY,
-    )
-    if (hasOpenAction || !hasLifecycleSizingCarrier) return
-    const { mode: _mode, value: _value, sizing: _sizing, evidence: _evidence, ...position } = merged.position
-    merged.position = {
-      ...position,
-      mode: 'constraint_only',
-      value: 0,
-    } as CodegenSemanticPatch['position']
+  private clearLifecycleOnlyTopLevelPositionSizing(merged: InternalPlannerPatch): void {
+    void merged
   }
 
-  private pruneIntrinsicRuleNoise(merged: CodegenSemanticPatch): void {
+  private pruneIntrinsicRuleNoise(merged: InternalPlannerPatch): void {
     const rules = merged.rules
     if (!rules?.length) return
     const next = rules.map((rule) => {
@@ -1953,7 +1959,7 @@ export class PlannerDispatcherMergeService {
   }
 
   private hydrateExplicitMacdTupleFromText(
-    merged: CodegenSemanticPatch,
+    merged: InternalPlannerPatch,
     userMessage: string,
   ): void {
     const tuple = this.extractExplicitMacdTuple(userMessage)
@@ -2003,13 +2009,12 @@ export class PlannerDispatcherMergeService {
   }
 
   private hydrateExplicitPercentRisksFromText(
-    merged: CodegenSemanticPatch,
+    merged: InternalPlannerPatch,
     userMessage: string,
   ): void {
     const rules = merged.rules
     if (!rules?.length) return
     const additions = this.extractExplicitPercentRiskEffects(userMessage)
-    if (!additions.some(addition => addition.key === ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key)) return
     if (additions.length === 0) return
     let mutated = false
     const entryRiskKeys = new Set<string>()
@@ -2042,6 +2047,129 @@ export class PlannerDispatcherMergeService {
       const closeActions = this.closeActionSet(rule)
       return closeActions.size === 0
     })
+  }
+
+  /**
+   * Generic add_position hydration (#1633 staging s29 follow-up).
+   *
+   * 触发条件（不依赖 per-case 关键词）：
+   *   - rule.phase === 'entry'
+   *   - rule.condition 叶子含 `price.percent_change` 且 params.basis === 'entry_avg_price'
+   *     （= 仓位相对盈利触发，typical "盈利 X% 后加仓" 语义）
+   *   - rule.effects.positions 含 `position.pyramiding_limit`
+   *   - rule.effects.actions 不含 `action.add_position`（避免重复）
+   *
+   * 行为：
+   *   1. 从 userMessage 提取 `加仓\s*N%` → addPercent（百分比数）
+   *   2. 同步覆盖 pyramiding_limit.params.layerSizing = addPercent（让 paramSlot
+   *      kind:'percent' 渲染 → "金字塔加仓限制（M，N%）"）
+   *   3. 追加 `action.add_position` effect，addMode='profit_pct'，
+   *      profitThreshold=condition.valuePct，addRatio=addPercent/100，
+   *      sizing={kind:'ratio',unit:'ratio',value:addRatio}
+   *      → canonical-spec-builder 折叠到 DECISION_PROGRAMS metadata.addPosition
+   *      → staging30 report 通过 addCompiledAddPositionTokens 自动 emit
+   *        take_profit + ${profitPct}% + ${ratioPct}% tokens
+   *
+   * Fail-open：任何步骤缺数据（无 N%、无 valuePct、无 pyramiding）则直接 return，
+   *   不破坏现有 rule。
+   */
+  private hydrateLifecycleAddPositionFromText(
+    merged: InternalPlannerPatch,
+    userMessage: string,
+  ): void {
+    const rules = merged.rules
+    if (!rules?.length) return
+
+    // 提取 "加仓 N%"（generic：百分比仓位补仓比例）。
+    const addPercentMatch = /(?:加仓|补仓|scale\s*in)\D{0,8}(\d+(?:\.\d+)?)\s*%/iu.exec(userMessage)
+    if (!addPercentMatch?.[1]) return
+    const addPercent = Number(addPercentMatch[1])
+    if (!Number.isFinite(addPercent) || addPercent <= 0 || addPercent > 100) return
+    const addRatio = addPercent / 100
+
+    const pyramidingKey = ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
+    const priceChangeKey = ATOM_CONTRACT_REGISTRY['price.percent_change'].key
+    let mutated = false
+
+    const nextRules = rules.map((rule) => {
+      if (rule.phase !== 'entry') return rule
+      const conditionLeaves = collectAtomLeaves(rule.condition)
+      const profitLeaf = conditionLeaves.find((leaf) => {
+        if (leaf.key !== priceChangeKey) return false
+        const basis = (leaf.params as Record<string, unknown> | undefined)?.basis
+        return basis === 'entry_avg_price'
+      })
+      if (!profitLeaf) return rule
+
+      // Guard：condition 必须是「纯盈利触发」——只能含 price.percent_change 叶子。
+      // 若 condition 还包含 indicator.*（如 MA/EMA 突破）或 volume.*（如成交量放量）
+      // 等指标语义，说明这是「指标触发开仓 + pyramiding 上限」组合，不是「盈利后加仓」
+      // 场景；强行注入 action.add_position 会让 take_profit/% token 覆盖原指标语义
+      // 导致 indicator/volume 关键字在 R2 token 报告中缺失（#1633 s04/s18 回归）。
+      if (conditionLeaves.some(leaf => leaf.key !== priceChangeKey)) return rule
+
+      const effectAtoms = listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))
+      const pyramiding = effectAtoms.find(leaf => leaf.key === pyramidingKey)
+      if (!pyramiding) return rule
+      const hasAddAction = effectAtoms.some(leaf => leaf.key === ADD_POSITION_ATOM_KEY)
+      if (hasAddAction) return rule
+      // Guard：若 rule 已含 action.open_long / action.open_short（指标驱动开仓），
+      // 同样跳过——pyramiding 在此仅作为开仓限制存在，不应被 hydration 改写。
+      if (this.ruleHasOpenAction(rule)) return rule
+
+      const profitParams = (profitLeaf.params ?? {}) as Record<string, unknown>
+      const valuePct = typeof profitParams.valuePct === 'number' ? profitParams.valuePct : null
+      if (valuePct === null || !Number.isFinite(valuePct) || valuePct <= 0) return rule
+
+      // 1. 同步覆盖 pyramiding_limit.params.layerSizing = addPercent（修复 planner emits 0）
+      const updatedEffects = this.overridePyramidingLayerSizing(rule.effects, pyramidingKey, addPercent)
+
+      // 2. 追加 action.add_position effect
+      const addAtom: AtomExprAtom = {
+        kind: 'atom',
+        key: ADD_POSITION_ATOM_KEY,
+        params: {
+          addMode: 'profit_pct',
+          profitThreshold: valuePct,
+          addRatio,
+          sizing: { kind: 'ratio', unit: 'ratio', value: addRatio },
+        },
+        evidence: { text: addPercentMatch[0].trim() },
+      }
+
+      mutated = true
+      return {
+        ...rule,
+        effects: this.appendTypedRuleEffects(updatedEffects, [addAtom]),
+      }
+    })
+
+    if (!mutated) return
+    merged.rules = nextRules
+  }
+
+  private overridePyramidingLayerSizing(
+    effects: RuleEffects,
+    pyramidingKey: string,
+    layerSizingPct: number,
+  ): RuleEffects {
+    const rewriteAtom = (atom: AtomExpr): AtomExpr => {
+      if (atom.kind !== 'atom' || atom.key !== pyramidingKey) return atom
+      return {
+        ...atom,
+        params: { ...(atom.params ?? {}), layerSizing: layerSizingPct },
+      }
+    }
+    if (isRuleEffectsByRole(effects)) {
+      return {
+        actions: effects.actions.map(rewriteAtom),
+        risks: effects.risks.map(rewriteAtom),
+        positions: effects.positions.map(rewriteAtom),
+        orchestration: effects.orchestration.map(rewriteAtom),
+        programs: effects.programs.map(rewriteAtom),
+      }
+    }
+    return effects.map(rewriteAtom)
   }
 
   private ruleHasOpenAction(rule: SemanticRule): boolean {
@@ -2592,7 +2720,7 @@ export class PlannerDispatcherMergeService {
     return null
   }
 
-  private findDispatcherTakeProfitEffect(dispatcher: CodegenSemanticPatch): AtomExprAtom | null {
+  private findDispatcherTakeProfitEffect(dispatcher: InternalPlannerPatch): AtomExprAtom | null {
     return this.collectFallbackEffectAtoms(dispatcher)
       .find(effect => effect.key === ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key) ?? null
   }
@@ -2659,8 +2787,8 @@ export class PlannerDispatcherMergeService {
   }
 
   private mergeDeterministicRulesIntoPlanner(
-    merged: CodegenSemanticPatch,
-    dispatcher: CodegenSemanticPatch,
+    merged: InternalPlannerPatch,
+    dispatcher: InternalPlannerPatch,
     userMessage: string,
   ): void {
     const rules = merged.rules
@@ -3129,87 +3257,11 @@ export class PlannerDispatcherMergeService {
   }
 
   private bindDispatcherLifecycleEffectsIntoPlannerRules(
-    merged: CodegenSemanticPatch,
-    dispatcher: CodegenSemanticPatch,
+    merged: InternalPlannerPatch,
+    dispatcher: InternalPlannerPatch,
   ): void {
-    const rules = merged.rules
-    if (!rules || rules.length === 0) return
-    const dispatcherActions = [...(dispatcher.actions ?? []), ...(dispatcher.atoms ?? [])]
-      .filter(atom => atom.key === ADD_POSITION_ATOM_KEY)
-    const dispatcherDca = this.findDispatcherDcaScheduleAtom(dispatcher)
-    if (dispatcherActions.length === 0 && !dispatcherDca) return
-
-    let mutated = false
-    const nextRules = rules.map((rule) => {
-      if (rule.condition.kind === 'atom') {
-        const condition = rule.condition
-        const matched = dispatcherActions.find((action) => {
-          const predicate = this.buildAddPositionTriggerPredicate(action)
-          if (!predicate) return false
-          return predicate.key === condition.key
-            && this.paramsLooselyMatch(condition.params, predicate.params)
-        })
-        if (matched && !listRuleEffects(rule.effects).some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === ADD_POSITION_ATOM_KEY))) {
-          const matchedSideScope = (matched as { sideScope?: 'long' | 'short' | 'both' }).sideScope
-          mutated = true
-          const effects = this.appendTypedRuleEffects(
-            this.removeLifecycleOpenScaffoldEffects(listRuleEffects(rule.effects), matchedSideScope ?? rule.sideScope)
-              .filter(effect => !collectAtomLeaves(effect).some(leaf => leaf.key === DCA_SCHEDULE_ATOM_KEY)),
-            [{
-              kind: 'atom' as const,
-              key: ADD_POSITION_ATOM_KEY,
-              params: matched.params ?? {},
-              ...(matchedSideScope ? { sideScope: matchedSideScope } : {}),
-            }],
-          )
-          return {
-            ...rule,
-            effects,
-          }
-        }
-      }
-      if (dispatcherDca && this.shouldAttachDcaSchedule(rule)) {
-        const evidenceText = typeof dispatcherDca.evidence?.text === 'string' && dispatcherDca.evidence.text.trim().length > 0
-          ? dispatcherDca.evidence.text.trim()
-          : null
-        mutated = true
-        const effects = this.appendTypedRuleEffects(
-          this.removeLifecycleOpenScaffoldEffects(listRuleEffects(rule.effects), rule.sideScope),
-          [{
-            kind: 'atom' as const,
-            key: DCA_SCHEDULE_ATOM_KEY,
-            params: dispatcherDca.params ?? {},
-            ...(evidenceText ? { evidence: { text: evidenceText } } : {}),
-          }],
-        )
-        return {
-          ...rule,
-          effects,
-        }
-      }
-      if (listRuleEffects(rule.effects).length > 0) return rule
-      if (rule.condition.kind !== 'atom') return rule
-      const condition = rule.condition
-      const matched = dispatcherActions.find((action) => {
-        const predicate = this.buildAddPositionTriggerPredicate(action)
-        if (!predicate) return false
-        return predicate.key === condition.key
-          && this.paramsLooselyMatch(condition.params, predicate.params)
-      })
-      if (!matched) return rule
-      const matchedSideScope = (matched as { sideScope?: 'long' | 'short' | 'both' }).sideScope
-      mutated = true
-      return {
-        ...rule,
-        effects: this.toTypedRuleEffects([{
-          kind: 'atom' as const,
-          key: ADD_POSITION_ATOM_KEY,
-          params: matched.params ?? {},
-          ...(matchedSideScope ? { sideScope: matchedSideScope } : {}),
-        }]),
-      }
-    })
-    if (mutated) merged.rules = nextRules
+    void merged
+    void dispatcher
   }
 
   private removeLifecycleOpenScaffoldEffects(
@@ -3326,7 +3378,7 @@ export class PlannerDispatcherMergeService {
    *
    * 通用机制：基于 ALWAYS_ON 集合 + atom contract bucket 派生，不针对单 atom 写特例。
    */
-  private filterAlwaysOnActionNoiseRules(merged: CodegenSemanticPatch): void {
+  private filterAlwaysOnActionNoiseRules(merged: InternalPlannerPatch): void {
     const rules = merged.rules
     if (!rules || rules.length === 0) return
 
@@ -3373,19 +3425,131 @@ export class PlannerDispatcherMergeService {
     }
   }
 
+  /**
+   * Issue #1633 C1：subset-condition entry/exit rule fold pass。
+   *
+   * 背景：staging s18 复测（sessionId cmpoucjvv01qw842nwj871dwj），planner 把同语义
+   * 入场拆成两条 entry rule：
+   *   - rule A: condition = atom(candle_pattern) → effects.actions = [open_long]
+   *   - rule B: condition = and(candle_pattern, volume.threshold) → effects.actions = [add_position]
+   * rule A 只剩 state-only 叶子，被 canonical-spec-v2-ir-compiler 抛
+   * EntryRuleRequiresEventLeafException；rule B 的 lifecycle action 又被改成了
+   * add_position 而非 open_long。
+   *
+   * 通用判定：同 phase ∈ {entry, exit}、sideScope 兼容、共享至少一个 lifecycle action
+   * key、其中一条的 condition 顶层 atom 集合是另一条 condition 顶层 and(...) 直接子
+   * 的严格子集 → 折叠为「保留 superset 条件 + 合并 effects」一条。
+   *
+   * 守门：
+   *  - 仅 entry / exit phase
+   *  - subset 条件必须是单 atom 或顶层 and(...) 全 atom 子；含 or/not/sequence 不折叠
+   *  - superset 条件必须是顶层 and(...) 且所有子是 atom；含 or/not/sequence 不折叠
+   *  - 共享至少一个 lifecycle action（open_long/short/close_long/short），避免无关 rule 合并
+   *  - sideScope：相等，或一方 'both'
+   */
+  private foldSubsetConditionRules(merged: InternalPlannerPatch): void {
+    const rules = merged.rules
+    if (!rules || rules.length < 2) return
+
+    const candidateShape = (rule: SemanticRule): {
+      kind: 'atom' | 'and'
+      atomSigs: Set<string>
+    } | null => {
+      if (rule.phase !== 'entry' && rule.phase !== 'exit') return null
+      const cond = rule.condition
+      if (cond.kind === 'atom') {
+        return { kind: 'atom', atomSigs: new Set([this.atomExprSignature(cond)]) }
+      }
+      if (cond.kind === 'and') {
+        const sigs = new Set<string>()
+        for (const child of cond.children) {
+          if (child.kind !== 'atom') return null
+          sigs.add(this.atomExprSignature(child))
+        }
+        return { kind: 'and', atomSigs: sigs }
+      }
+      return null
+    }
+
+    const sideScopeCompatible = (a: SemanticRule, b: SemanticRule): boolean => {
+      if (a.sideScope === b.sideScope) return true
+      return a.sideScope === 'both' || b.sideScope === 'both'
+    }
+
+    const isStrictSubset = (small: Set<string>, large: Set<string>): boolean => {
+      if (small.size >= large.size) return false
+      for (const s of small) if (!large.has(s)) return false
+      return true
+    }
+
+    const meta = rules.map((rule) => {
+      const shape = candidateShape(rule)
+      const actions = shape ? this.lifecycleActionKeys(rule) : new Set<string>()
+      return { rule, shape, actions }
+    })
+
+    const removed = new Set<number>()
+    const replaced = new Map<number, SemanticRule>()
+
+    for (let i = 0; i < meta.length; i++) {
+      if (removed.has(i)) continue
+      const a = meta[i]
+      if (!a.shape || a.actions.size === 0) continue
+      for (let j = i + 1; j < meta.length; j++) {
+        if (removed.has(j)) continue
+        const b = meta[j]
+        if (!b.shape || b.actions.size === 0) continue
+        if (a.rule.phase !== b.rule.phase) continue
+        if (!sideScopeCompatible(a.rule, b.rule)) continue
+        let sharedAction = false
+        for (const k of a.actions) if (b.actions.has(k)) { sharedAction = true; break }
+        if (!sharedAction) continue
+
+        let subsetIdx: number, supersetIdx: number
+        if (isStrictSubset(a.shape.atomSigs, b.shape.atomSigs) && b.shape.kind === 'and') {
+          subsetIdx = i; supersetIdx = j
+        }
+        else if (isStrictSubset(b.shape.atomSigs, a.shape.atomSigs) && a.shape.kind === 'and') {
+          subsetIdx = j; supersetIdx = i
+        }
+        else continue
+
+        const subsetRule = meta[subsetIdx].rule
+        const supersetRule = meta[supersetIdx].rule
+        const mergedEffects = this.mergeMissingRuleEffectParams(subsetRule.effects, supersetRule.effects)
+        const mergedSide = subsetRule.sideScope === 'both' ? supersetRule.sideScope : subsetRule.sideScope
+        const folded: SemanticRule = {
+          ...subsetRule,
+          condition: structuredClone(supersetRule.condition),
+          sideScope: mergedSide,
+          effects: mergedEffects,
+        }
+        replaced.set(subsetIdx, folded)
+        removed.add(supersetIdx)
+        break
+      }
+    }
+
+    if (removed.size === 0 && replaced.size === 0) return
+    const next: SemanticRule[] = []
+    for (let i = 0; i < meta.length; i++) {
+      if (removed.has(i)) continue
+      next.push(replaced.get(i) ?? meta[i].rule)
+    }
+    merged.rules = next
+  }
+
   private prunePlannerShortActionsWithoutDispatcherIntent(
-    merged: CodegenSemanticPatch,
-    dispatcher: CodegenSemanticPatch,
+    merged: InternalPlannerPatch,
+    dispatcher: InternalPlannerPatch,
   ): void {
     const rules = merged.rules
     if (!rules || rules.length === 0) return
 
-    const dispatcherLeaves = [
-      ...(dispatcher.atoms ?? []),
-      ...(dispatcher.triggers ?? []),
-      ...(dispatcher.actions ?? []),
-      ...(dispatcher.risk ?? []),
-    ]
+    const dispatcherLeaves = (dispatcher.rules ?? []).flatMap(rule => [
+      ...collectAtomLeaves(rule.condition),
+      ...listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)),
+    ])
     const hasDispatcherShortIntent = dispatcherLeaves.some(leaf =>
       (leaf as { sideScope?: unknown }).sideScope === 'short'
       || leaf.key === ATOM_CONTRACT_REGISTRY['action.open_short'].key
@@ -3437,32 +3601,32 @@ export class PlannerDispatcherMergeService {
    * 行为：缺失 key 从 dispatcher 候选中按发现顺序填入；不动 condition 树结构。
    */
   private overrideRulesLeafParamsFromDispatcher(
-    merged: CodegenSemanticPatch,
-    dispatcher: CodegenSemanticPatch,
+    merged: InternalPlannerPatch,
+    dispatcher: InternalPlannerPatch,
   ): void {
     const rules = merged.rules
     if (!rules || rules.length === 0) return
 
-    // 收集 dispatcher 所有桶里的 atom，按 (key, sideScope) 索引；同签名保留全部候选，
+    // 收集 dispatcher rules leaf，按 (key, sideScope) 索引；同签名保留全部候选，
     // 让互补候选可共同补齐同一个 planner leaf。
     const dispatcherByKey = new Map<string, Array<Record<string, unknown>>>()
-    const indexBucket = (
-      source: ReadonlyArray<{ key: string, sideScope?: 'long' | 'short' | 'both', params?: Record<string, unknown> }> | undefined,
+    const indexLeaf = (
+      entry: { key: string, sideScope?: 'long' | 'short' | 'both', params?: Record<string, unknown> },
+      ruleSideScope: 'long' | 'short' | 'both',
     ): void => {
-      if (!source) return
-      for (const entry of source) {
-        const params = entry.params
-        if (!params || Object.keys(params).length === 0) continue
-        const sig = `${entry.key}|${entry.sideScope ?? 'both'}`
-        const bucket = dispatcherByKey.get(sig) ?? []
-        bucket.push(params)
-        dispatcherByKey.set(sig, bucket)
+      const params = entry.params
+      if (!params || Object.keys(params).length === 0) return
+      const sig = `${entry.key}|${entry.sideScope ?? ruleSideScope}`
+      const bucket = dispatcherByKey.get(sig) ?? []
+      bucket.push(params)
+      dispatcherByKey.set(sig, bucket)
+    }
+    for (const rule of dispatcher.rules ?? []) {
+      for (const leaf of collectAtomLeaves(rule.condition)) indexLeaf(leaf, rule.sideScope)
+      for (const effect of listRuleEffects(rule.effects)) {
+        for (const leaf of collectAtomLeaves(effect)) indexLeaf(leaf, rule.sideScope)
       }
     }
-    indexBucket(dispatcher.atoms)
-    indexBucket(dispatcher.triggers)
-    indexBucket(dispatcher.actions)
-    indexBucket(dispatcher.risk)
     if (dispatcherByKey.size === 0) return
 
     const overrideLeaf = (leaf: AtomExprAtom, ruleSideScope: 'long' | 'short' | 'both'): AtomExprAtom => {
@@ -3537,137 +3701,16 @@ export class PlannerDispatcherMergeService {
    *   - dispatcher.risk 桶 phase='risk' → 归位为 'exit'（rule.phase 不允许 risk）
    */
   private liftDispatcherAtomsIntoRules(
-    merged: CodegenSemanticPatch,
-    dispatcher: CodegenSemanticPatch,
+    merged: InternalPlannerPatch,
+    dispatcher: InternalPlannerPatch,
   ): void {
-    const rules = merged.rules
-    if (!rules || rules.length === 0) return
-
-    // Issue #1443：lift 的定位是「planner 漏 atom 时的兜底」，不应产生 sibling 重复。
-    //   旧实现用 (key, phase, sideScope, paramsHash) 严格签名 dedup，但 planner LLM 与
-    //   dispatcher 抽到的同一 atom 经常 params 不完全相同（如 planner 多 basis 字段、
-    //   dispatcher 缺）→ paramsHash 不同 → lift 重复条目，UI 出现「入场×2/出场×2」。
-    //
-    //   通用修复：dedup 用 atom key only。planner rules 已含某 key 的 leaf（任何 phase/
-    //   sideScope/params），就认为该 atom 已被"识别"，dispatcher 不再 lift 同 key 兜底。
-    //   只在 planner 完全没产某 atom key 的场景下，dispatcher 才作为兜底 lift（如
-    //   BOLL touch_lower 没产时由 dispatcher cross-clause inheritance 派生 → 仍 lift）。
-    //
-    //   边界：用户策略真有两条同 key 不同 params 的 entry（如「3 分钟内跌 1%」+
-    //   「5 分钟内跌 2%」）时，planner 应产 2 条 rule，本 dedup 不影响；
-    //   若 planner 只产 1 条 + dispatcher 抽到另一条不同 params，dispatcher 的额外那条
-    //   会被 dedup 跳过——这是设计取舍：宁可丢一个边角识别，也不引入重复 sibling 噪音。
-    const existingKeys = new Set<string>()
-    for (const rule of rules) {
-      for (const leaf of collectAtomLeaves(rule.condition)) {
-        existingKeys.add(leaf.key)
-      }
-      for (const eff of listRuleEffects(rule.effects)) {
-        for (const leaf of collectAtomLeaves(eff)) {
-          existingKeys.add(leaf.key)
-          if (leaf.key === ATOM_CONTRACT_REGISTRY['risk.atr_take_profit'].key) {
-            existingKeys.add(ATOM_CONTRACT_REGISTRY['risk.take_profit_pct'].key)
-          }
-        }
-      }
-    }
-    const existingConditionKeys = new Set(
-      rules.flatMap(rule => collectAtomLeaves(rule.condition).map(leaf => leaf.key)),
-    )
-
-    const lifted: SemanticRule[] = []
-    let liftIndex = 0
-    const liftPhase = (phase: 'entry' | 'exit' | 'risk' | 'gate' | 'program' | undefined): SemanticRule['phase'] => {
-      if (phase === 'entry' || phase === 'exit' || phase === 'gate' || phase === 'program') return phase
-      // TODO(#1428 R-A follow-up)：'risk' 硬降级为 'exit' 是 rule.phase 枚举不允许
-      //   'risk' 时的合理映射；若 #1395 后续扩展 phase 枚举支持 'risk'，需重审。
-      if (phase === 'risk') return 'exit'
-      return 'entry'
-    }
-    const collectBucket = (
-      source: ReadonlyArray<{ key: string, phase?: 'entry' | 'exit' | 'risk' | 'gate' | 'program', sideScope?: 'long' | 'short' | 'both', params?: Record<string, unknown> }> | undefined,
-      defaultPhase: 'entry' | 'exit',
-    ): void => {
-      if (!source) return
-      for (const entry of source) {
-        if (
-          entry.key === ATOM_CONTRACT_REGISTRY['price.detect.indicator_boundary'].key
-          && (
-            existingConditionKeys.has(ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key)
-            || existingConditionKeys.has(ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key)
-            || existingConditionKeys.has(ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key)
-          )
-        ) {
-          continue
-        }
-        // Issue #1443：dedup 用 key only（见 existingKeys 注释），不再用严格四元签名
-        if (existingKeys.has(entry.key)) continue
-        existingKeys.add(entry.key)
-        const phase = liftPhase(entry.phase ?? defaultPhase)
-        const sideScope = (entry.sideScope ?? 'both') as 'long' | 'short' | 'both'
-        const params = entry.params ?? {}
-        liftIndex += 1
-        lifted.push({
-          // 审查问题 #1：atom key 含 `.`（如 `price.percent_change`），下游 projection
-          //   构造 `${rule.id}-cond-N` / `rule-${rule.id}-grp` 时点号会与既有 id 命名风格
-          //   （kebab + `-` 分段）冲突；替换为 `_` 与 projection 现有命名对齐。
-          id: `dispatcher-lift-${liftIndex}-${entry.key.replace(/\./g, '_')}`,
-          phase,
-          sideScope,
-          condition: {
-            kind: 'atom',
-            key: entry.key,
-            params: { ...params },
-            sideScope,
-          },
-          effects: this.emptyRuleEffects(),
-        })
-      }
-    }
-
-    // Issue #1441 通用收紧：只 collect `dispatcher.atoms` 总集。
-    //
-    // 真相源原则：dispatcher 每抽到一个 atom 同时 push `atomItems`（总集）+
-    //   `slotItems[slot]`（triggers/actions/risk 分类子视图，见
-    //   `generic-seed-dispatcher.service.ts:947-950`）。atoms 是 SoT，其它桶是子视图。
-    //
-    // 原 R-B 收 atoms + triggers + risk 三桶是重复 collect——同一 atom 第一次 lift 后
-    //   第二桶虽因 leafSignature 签名相同被 dedup，但实测用户策略多 atom（不同 phase /
-    //   sideScope / params）场景下，子桶 collect 仍能引入与 atoms 不同签名的派生条目，
-    //   造成 UI 出现「入场×2 / 出场×2 / 入场(双向)：开多」等重复孤立 rule。
-    //
-    // 通用方案：只走 atoms 总集 → 重复源头消除；triggers/risk 子桶 lift 移除。
-    //
-    // Issue #1443 用户实测复测真因：dispatcher.atoms 是总集（含 trigger / action /
-    //   risk / positionConstraint / orchestration 全部 bucket 的 atom）。一刀切 lift
-    //   atoms 总集会把 action atom（如 action.close_long）也作为 single-leaf rule.
-    //   condition——渲染时 UI 显示「出场：平多」noise（condition 被错渲染成 action 名），
-    //   且 always-on filter（condition!=execution.on_start）不命中 → 保留 noise。
-    //
-    // 通用过滤：lift 时按 atom contract.bucket 过滤——只 lift bucket ∈ {trigger, risk}
-    //   的真 condition 形态 atom。action / positionConstraint / orchestration 类
-    //   atom 语义上不是 condition leaf，跳过 lift（action 走 dispatcher.actions 桶
-    //   下游 effect-binding 链路，本 lift pass 不重复处理）。
-    //   未注册 atom（contract miss）→ fail-open 允许 lift（与既有 unknown atom 兜底
-    //   一致；避免新 atom 未注册时静默丢失）。
-    type ContractShape = { bucket?: string }
-    const LIFT_ALLOWED_BUCKETS: ReadonlySet<string> = new Set(['trigger', 'risk'])
-    const isLiftableByBucket = (atomKey: string): boolean => {
-      const bucket = (ATOM_CONTRACT_REGISTRY as Record<string, ContractShape | undefined>)[atomKey]?.bucket
-      if (bucket === undefined) return true  // 未注册 fail-open
-      return LIFT_ALLOWED_BUCKETS.has(bucket)
-    }
-    const liftableAtoms = (dispatcher.atoms ?? []).filter(a => isLiftableByBucket(a.key))
-    collectBucket(liftableAtoms, 'entry')
-
-    if (lifted.length > 0) {
-      merged.rules = [...rules, ...lifted]
-    }
+    void merged
+    void dispatcher
   }
 
   private composeDispatcherRulesIntoMergedRules(
-    merged: CodegenSemanticPatch,
-    dispatcher: CodegenSemanticPatch,
+    merged: InternalPlannerPatch,
+    dispatcher: InternalPlannerPatch,
   ): void {
     const rules = merged.rules
     if (!rules || rules.length === 0) return
@@ -3726,20 +3769,10 @@ export class PlannerDispatcherMergeService {
     return `${key}|${phase}|${sideScope ?? 'both'}|${this.stableParamsHash(params)}`
   }
 
-  private isNonEmpty(patch: CodegenSemanticPatch | null | undefined): boolean {
+  private isNonEmpty(patch: InternalPlannerPatch | null | undefined): boolean {
     if (!patch) return false
     if (patch.contextSlots && Object.keys(patch.contextSlots).length > 0) return true
-    if (patch.atoms && patch.atoms.length > 0) return true
-    if (patch.triggers && patch.triggers.length > 0) return true
-    if (patch.actions && patch.actions.length > 0) return true
-    if (patch.risk && patch.risk.length > 0) return true
-    if (patch.position) return true
-    if (patch.orchestration?.nodes && patch.orchestration.nodes.length > 0) return true
-    // Issue #1395 Wave 4：rules[] 也算 non-empty 信号；planner 单产 rules（无 atoms）
-    // 也必须被识别为有效 patch，否则会被当成 empty 整体丢弃。
-    const rules = (patch as { rules?: unknown }).rules
-    if (Array.isArray(rules) && rules.length > 0) return true
-    return false
+    return Array.isArray(patch.rules) && patch.rules.length > 0
   }
 
   private unionDedupByIdentity<T extends { key: string, phase?: string, params?: Record<string, unknown> }>(
@@ -3792,33 +3825,6 @@ export class PlannerDispatcherMergeService {
       }
     }
     return order.map(id => seen.get(id) as T)
-  }
-
-  private unionDedupOrchestrationNodes(
-    plannerNodes: CodegenSemanticPatch['orchestration'] extends infer O
-      ? O extends { nodes?: infer N } ? N : never
-      : never,
-    dispatcherNodes: CodegenSemanticPatch['orchestration'] extends infer O
-      ? O extends { nodes?: infer N } ? N : never
-      : never,
-  ): NonNullable<CodegenSemanticPatch['orchestration']>['nodes'] {
-    type NodeT = NonNullable<CodegenSemanticPatch['orchestration']>['nodes'] extends (infer U)[] | undefined
-      ? U
-      : never
-    const seen = new Map<string, NodeT>()
-    const order: string[] = []
-    const collect = (list: readonly NodeT[] | undefined): void => {
-      for (const node of list ?? []) {
-        const id = this.orchestrationIdentity(node)
-        if (!seen.has(id)) {
-          seen.set(id, node)
-          order.push(id)
-        }
-      }
-    }
-    collect(plannerNodes as readonly NodeT[] | undefined)
-    collect(dispatcherNodes as readonly NodeT[] | undefined)
-    return order.map(id => seen.get(id) as NodeT)
   }
 
   private atomIdentity(entry: { key: string, phase?: string, params?: Record<string, unknown> }): string {

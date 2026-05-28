@@ -423,14 +423,11 @@ export class StrategyClarificationRulesService {
     return items
   }
 
-  private detectSizingItems(riskRules: Record<string, unknown> | undefined, state?: SemanticState): StrategyClarificationItem[] {
+  private detectSizingItems(_riskRules: Record<string, unknown> | undefined, state?: SemanticState): StrategyClarificationItem[] {
     // PR3.3: state-aware 路径优先
     if (state) {
-      const anchors = this.sizingResolver.resolve(state, riskRules?.positionPct != null ? { riskRules: { positionPct: riskRules.positionPct as number } } : undefined)
+      const anchors = this.sizingResolver.resolve(state)
       if ([...anchors.values()].some(a => a.executionAnchored)) return []
-    }
-    else if (typeof riskRules?.positionPct === 'number') {
-      return []
     }
 
     return [{

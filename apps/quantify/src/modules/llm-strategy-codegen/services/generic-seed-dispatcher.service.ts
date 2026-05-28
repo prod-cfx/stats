@@ -9,7 +9,7 @@ import type {
 import type { AtomContract, AtomContractBucket } from '../atom-contracts/atom-contract-types'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { AtomExpr, RuleEffectsByRole, SemanticRule } from '../types/atom-expr'
-import type { SemanticPositionSizingContract } from '../types/semantic-state'
+import type { SemanticPositionSizingContract, SemanticPositionState } from '../types/semantic-state'
 /**
  * GenericSeedDispatcher — Issue #1279 PR2 唯一真相源 NL→seed 分发器
  *
@@ -99,9 +99,16 @@ const INDICATOR_KEYWORDS = new Set([
   'TWO', 'USE', 'WAY', 'WHO', 'YOU', 'AGO', 'API', 'APP', 'BOT',
   // 交易所 / 市场类型 token，避免 "在 okx 买 btc" 推断为 OKXUSDT。
   'OKX', 'BINANCE', 'HYPERLIQUID', 'SPOT', 'PERP', 'SWAP', 'CONTRACT',
-  'EXCHANGE', 'TIMEFRAME', 'MARKETTYPE', 'SYMBOL', 'POSITION',
+  'EXCHANGE', 'TIMEFRAME', 'MARKETTYPE', 'SYMBOL', 'POSITION', 'POSITIONS',
   'EXECUTIONCONTEXT', 'RULESTREE', 'SEMANTIC', 'ACTION', 'ADD',
   'EXIT', 'ENTRY', 'RISK', 'CONSTRAINT', 'SIZING',
+  'MISSING', 'RULES', 'RULESMAINFLOW', 'CONTEXTSLOTS', 'EFFECTS',
+  // 字段路径片段：用户在 clarification 答案里粘了 fieldPath（如
+  // "rules[0].effects.positions[0].params.value: 10%"）时，避免 PARAMS/VALUE/REASON
+  // 等结构性 token 被推断为 base symbol。这些是 SemanticState/StrategyClarificationItem
+  // 内部字段名，不可能是合法交易 base。
+  'PARAMS', 'VALUE', 'REASON', 'FIELDPATH', 'SLOTKEY', 'SLOTID',
+  'OPENSLOTS', 'EVIDENCE', 'STATUS', 'KEY', 'KIND',
 ])
 
 /** 短句 token 形态：3-10 位大写字母 */
@@ -578,6 +585,18 @@ function extractSizingRoleFromText(text: string): ExtractedSizingRole | null {
     }
   }
 
+  const bareNumberPattern = /(?<![\d.])(\d+(?:\.\d+)?)(?![\d.]|\s*(?:%|％))/gu
+  for (const match of normalized.matchAll(bareNumberPattern)) {
+    if (match.index === undefined || !match[1]) continue
+    if (!hasSizingRoleContext(normalized, match.index, match[0].length)) continue
+    const value = Number(match[1])
+    if (!Number.isFinite(value) || value <= 0) continue
+    return {
+      sizing: { kind: 'quote', value, asset: 'USDT' },
+      evidenceText: normalized,
+    }
+  }
+
   return null
 }
 
@@ -675,6 +694,28 @@ function normalizeDcaScheduleParams(
     next.perOrderSizing = { kind: 'quote', value: perOrderBudget, asset: 'USDT' }
   }
   delete next.perOrderBudget
+
+  // #s30：当 DCA 子句同时声明「定投 X」与「回撤 N% 加投 Y」两段 sizing 时，
+  //   主 leg 的 perOrderSizing 取首段，第二段 sizing 透传为 drawdownPerOrderSizing，
+  //   保证回撤加投金额不被静默丢弃（generic：不做 case 模板，只识别 "回撤/加投/补仓" 切分点）。
+  const drawdownSplitMatch = clause.match(/(回撤|加投|补仓)/u)
+  if (drawdownSplitMatch && drawdownSplitMatch.index !== undefined) {
+    const tail = clause.slice(drawdownSplitMatch.index)
+    const tailRole = extractSizingRoleFromText(tail)
+    const primary = next.perOrderSizing as { kind?: string; value?: number; asset?: string } | undefined
+    if (
+      tailRole
+      && tailRole.sizing.kind === 'quote'
+      && (
+        !primary
+        || primary.kind !== tailRole.sizing.kind
+        || primary.value !== tailRole.sizing.value
+        || primary.asset !== tailRole.sizing.asset
+      )
+    ) {
+      next.drawdownPerOrderSizing = toPerOrderSizingShape(tailRole.sizing)
+    }
+  }
 
   const explicitMaxCount = clause.match(/最多\s*(\d{1,4})\s*(?:次|笔|单)/u)
   if (explicitMaxCount) {
@@ -962,6 +1003,15 @@ type PatchAtomNode = Record<string, unknown> & {
   evidence?: unknown
 }
 
+interface InternalSeedDraft {
+  contextSlots?: CodegenSemanticPatch['contextSlots']
+  position?: SemanticPositionState
+  triggers?: PatchAtomNode[]
+  actions?: PatchAtomNode[]
+  risk?: PatchAtomNode[]
+  atoms?: PatchAtomNode[]
+}
+
 type RuleEffectRole = keyof RuleEffectsByRole
 
 const EMPTY_RULE_EFFECTS = (): Record<RuleEffectRole, AtomExpr[]> => ({
@@ -1031,14 +1081,14 @@ export class GenericSeedDispatcher {
     }
   }
 
-  private dispatchFlatPatch(message?: string): CodegenSemanticPatch {
+  private dispatchFlatPatch(message?: string): InternalSeedDraft {
     const text = (message ?? '').trim()
     if (text.length > GenericSeedDispatcher.MAX_UTTERANCE_LENGTH) {
       throw new Error(
         `[GenericSeedDispatcher] utterance length ${text.length} exceeds MAX_UTTERANCE_LENGTH=${GenericSeedDispatcher.MAX_UTTERANCE_LENGTH}; reject to prevent ReDoS.`,
       )
     }
-    const patch: CodegenSemanticPatch = {}
+    const patch: InternalSeedDraft = {}
 
     const ctx = extractContextSlots(text)
     if (ctx) patch.contextSlots = ctx as CodegenSemanticPatch['contextSlots']
@@ -1144,6 +1194,22 @@ export class GenericSeedDispatcher {
       slotDedupeKeys,
     )
 
+    // s30: 跨子句 DCA drawdown leg sizing 回填（generic）
+    //   场景："每天定投 100 USDT，回撤 5% 加投 200 USDT"——splitClauses 在 `，` 处切分后，
+    //   首段命中 position.dca_schedule（"定投"），尾段（"回撤 5% 加投 200 USDT"）不含 DCA
+    //   keyword 故无独立 match。normalizeDcaScheduleParams 仅看单子句，无法察觉尾段 sizing。
+    //   此处在 dispatcher 末段扫描全文：若存在 DCA atom 且 text 含"回撤/加投/补仓"语义切分点，
+    //   抽取尾段 sizing 透传为 drawdownPerOrderSizing（并补 dropPct）。
+    this.applyDcaDrawdownLegBackfill(text, atomItems, slotItems)
+
+    // #1633 s29: 跨子句 pyramiding 触发阈值 + 加仓比例 backfill（generic）
+    //   场景："盈利 N% 后加仓 M% ... 最多加 K 层"——splitClauses 在 `，` 处切分后，
+    //   pyramiding_limit 仅由 "最多加 K 层" 子句命中（keyword '最多加'），单子句
+    //   范围内既无 "加仓 M%" 也无 "盈利 N%"，故 maxLayers 命中但 layerSizing /
+    //   profitThreshold 抽不到。此处在 dispatcher 末段扫描全文回填，让下游 token 检查
+    //   能配对 take_profit + N% + M% pair（staging30 #1633 s29 修复）。
+    this.applyPyramidingProfitTriggerBackfill(text, atomItems, slotItems)
+
     this.applySemanticConflictResolution(atomItems, slotItems)
 
     // review C3：替代 `as never` 类型逃生，使用 patch schema 自身派生的精确 cast；
@@ -1156,23 +1222,23 @@ export class GenericSeedDispatcher {
     const mergedAtomItems = mergeCompatiblePatchAtomNodes(atomItems)
 
     if (mergedSlotItems.triggers.length > 0) {
-      patch.triggers = mergedSlotItems.triggers as CodegenSemanticPatch['triggers']
+      patch.triggers = mergedSlotItems.triggers
     }
     if (mergedSlotItems.actions.length > 0) {
-      patch.actions = mergedSlotItems.actions as CodegenSemanticPatch['actions']
+      patch.actions = mergedSlotItems.actions
     }
     if (mergedSlotItems.risk.length > 0) {
-      patch.risk = mergedSlotItems.risk as CodegenSemanticPatch['risk']
+      patch.risk = mergedSlotItems.risk
     }
     if (mergedAtomItems.length > 0) {
-      patch.atoms = mergedAtomItems as CodegenSemanticPatch['atoms']
+      patch.atoms = mergedAtomItems
     }
 
     return patch
   }
 
   private buildTypedRulesFromFlatPatch(
-    flatPatch: CodegenSemanticPatch,
+    flatPatch: InternalSeedDraft,
     userMessage: string,
   ): SemanticRule[] {
     const predicates = this.collectTypedRulePredicates(flatPatch, userMessage)
@@ -1310,7 +1376,7 @@ export class GenericSeedDispatcher {
   }
 
   private collectTypedRulePredicates(
-    flatPatch: CodegenSemanticPatch,
+    flatPatch: InternalSeedDraft,
     userMessage: string,
   ): PatchAtomNode[] {
     const out: PatchAtomNode[] = []
@@ -1328,6 +1394,30 @@ export class GenericSeedDispatcher {
     for (const trigger of flatPatch.triggers ?? []) push(trigger)
     for (const atom of flatPatch.atoms ?? []) push(atom)
     this.pushTypedLifecyclePredicates(out, flatPatch)
+    // #1633 staging30 s18：用户说 "放量反弹 / 量能放大 / volume spike" 但未给出
+    //   数值时，surface.intent.verbs (gte) 不命中 → volume.threshold 不被
+    //   matchSurface 选中，导致 dispatcher typed-rule condition 缺少 volume 语义。
+    //   按 corpus.phraseHints.triggers 提示，统一兜底成 mode=relative_to_sma 的
+    //   均量倍数预设（multiplier=2, refWindow=20），与 atom-contract 推荐对齐。
+    if (
+      this.hasVolumeSpikeIntent(userMessage)
+      && !out.some(item => item.key === ATOM_CONTRACT_REGISTRY['volume.threshold'].key)
+    ) {
+      const evidence = this.findEvidenceText(userMessage, '(?:放量|放大量|量能放大|量能放量|成交量放大|volume\\s*(?:spike|surge|breakout))')
+      out.push({
+        key: ATOM_CONTRACT_REGISTRY['volume.threshold'].key,
+        phase: 'entry',
+        sideScope: 'both',
+        params: {
+          mode: 'relative_to_sma',
+          multiplier: 2,
+          refWindow: 20,
+          metric: 'base_volume',
+          operator: 'GT',
+        },
+        ...(evidence ? { evidence: { text: evidence } } : {}),
+      })
+    }
     if (/webhook/iu.test(userMessage) && !out.some(item => item.key === ATOM_CONTRACT_REGISTRY['external.signal'].key)) {
       out.push({
         key: ATOM_CONTRACT_REGISTRY['external.signal'].key,
@@ -1349,7 +1439,7 @@ export class GenericSeedDispatcher {
     return mergeCompatiblePatchAtomNodes(out)
   }
 
-  private pushTypedLifecyclePredicates(out: PatchAtomNode[], flatPatch: CodegenSemanticPatch): void {
+  private pushTypedLifecyclePredicates(out: PatchAtomNode[], flatPatch: InternalSeedDraft): void {
     const dcaKey = ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key
     const addPositionKey = ATOM_CONTRACT_REGISTRY['action.add_position'].key
     const onStartKey = ATOM_CONTRACT_REGISTRY['execution.on_start'].key
@@ -1419,7 +1509,7 @@ export class GenericSeedDispatcher {
     }
   }
 
-  private collectTypedRuleGlobalEffects(flatPatch: CodegenSemanticPatch, userMessage: string): AtomExpr[] {
+  private collectTypedRuleGlobalEffects(flatPatch: InternalSeedDraft, userMessage: string): AtomExpr[] {
     const out: AtomExpr[] = []
     const pushAtom = (item: { key: string, phase?: unknown, params?: Record<string, unknown>, sideScope?: 'long' | 'short' | 'both', evidence?: unknown }): void => {
       const effect: AtomExpr = {
@@ -1507,6 +1597,33 @@ export class GenericSeedDispatcher {
         ...(evidence ? { evidence: { text: evidence } } : {}),
       })
     }
+    // Issue #1691 staging30 s28：对称补全 close-action fallback。
+    // 用户描述「下穿平仓 / 跌破止损 / sell」等纯出场动作但未指明 long/short 侧时（如「平多/平空」
+    // 已经被 NL gateway 解析到 action.close_long / action.close_short），需根据已有
+    // entry action 的 side 推断对应 close。无 entry action 时默认 long（对称 open_long fallback）。
+    // 否则 dispatcher exit 规则只剩 scope.timeframe 等 orchestration 副作用，
+    // readiness.hasExit=false，前端持续追问 rulesTree.exit，造成 assistant_prompt_loop。
+    if (
+      this.hasCloseActionIntent(userMessage)
+      && !out.some((effect) => {
+        if (effect.kind !== 'atom') return false
+        return effect.key === ATOM_CONTRACT_REGISTRY['action.close_long'].key
+          || effect.key === ATOM_CONTRACT_REGISTRY['action.close_short'].key
+      })
+    ) {
+      const hasShortEntry = out.some(effect => effect.kind === 'atom' && effect.key === ATOM_CONTRACT_REGISTRY['action.open_short'].key)
+      const hasLongEntry = out.some(effect => effect.kind === 'atom' && effect.key === ATOM_CONTRACT_REGISTRY['action.open_long'].key)
+      const closeKey = hasShortEntry && !hasLongEntry
+        ? ATOM_CONTRACT_REGISTRY['action.close_short'].key
+        : ATOM_CONTRACT_REGISTRY['action.close_long'].key
+      const evidence = this.findEvidenceText(userMessage, '(?:平仓|平多|平空|止盈|止损|离场|卖出|出场|下穿|跌破|close|exit|sell|take[ -]?profit|stop[ -]?loss)')
+      pushAtom({
+        key: closeKey,
+        phase: 'exit',
+        params: {},
+        ...(evidence ? { evidence: { text: evidence } } : {}),
+      })
+    }
     if (
       this.hasRiskIntent(userMessage)
       && !out.some(effect => effect.kind === 'atom' && this.resolveRuleEffectRole(effect) === 'risks')
@@ -1580,6 +1697,20 @@ export class GenericSeedDispatcher {
     return /买入|买|开多|开空|开仓|做多|做空|进场|open|buy|long|short|enter/iu.test(userMessage)
   }
 
+  // #1633 staging30 s18：放量 / 量能放大 / volume spike 等"成交量异动"语义。
+  // 与 ATOM_CONTRACT_REGISTRY['volume.threshold'].surface.intent.keywords 中的
+  // 放量 / 倍均量 等关键词对齐，作为 fallback predicate 兜底触发器。
+  private hasVolumeSpikeIntent(userMessage: string): boolean {
+    return /放量|放大量|量能放大|量能放量|成交量放大|倍均量|倍量|volume\s*(?:spike|surge|breakout)/iu.test(userMessage)
+  }
+
+  // Issue #1691: 与 hasOpenActionIntent 对称的纯出场词法。
+  // 「平仓 / 平多 / 平空 / 止盈 / 止损 / 离场 / 卖出 / close / exit / sell / take-profit / stop-loss」
+  // 与 generic-seed-dispatcher.helpers.ts 中 EXIT_PHRASES 词法对齐。
+  private hasCloseActionIntent(userMessage: string): boolean {
+    return /平仓|平多|平空|止盈|止损|离场|卖出|出场|close|exit|sell|take[ -]?profit|stop[ -]?loss/iu.test(userMessage)
+  }
+
   private hasRiskIntent(userMessage: string): boolean {
     return /止损|止盈|风控|风险|回撤|熔断|stop\s*loss|take\s*profit|risk|drawdown/iu.test(userMessage)
   }
@@ -1643,6 +1774,101 @@ export class GenericSeedDispatcher {
 
     removeInPlace(atomItems, isConflictingTakeProfit)
     removeInPlace(slotItems.risk, isConflictingTakeProfit)
+  }
+
+  /**
+   * s30 generic：DCA drawdown leg sizing 跨子句回填。
+   *
+   * 触发条件：text 含 `回撤|加投|补仓` 切分点，且切分点之后能抽出 quote sizing。
+   * 行为：把尾段 sizing 注入到 atomItems / slotItems 内 key === 'position.dca_schedule'
+   * 的所有节点 params.drawdownPerOrderSizing；若尾段同时含 dropPct 也补 dropPct。
+   * 与首段 perOrderSizing 不同时才回填（避免冗余）。
+   */
+  private applyDcaDrawdownLegBackfill(
+    text: string,
+    atomItems: PatchAtomNode[],
+    slotItems: Record<'triggers' | 'actions' | 'risk', PatchAtomNode[]>,
+  ): void {
+    if (!text) return
+    const dcaKey = ATOM_CONTRACT_REGISTRY['position.dca_schedule'].key
+    const dcaNodes: PatchAtomNode[] = [
+      ...atomItems.filter(n => n.key === dcaKey),
+      ...slotItems.triggers.filter(n => n.key === dcaKey),
+      ...slotItems.actions.filter(n => n.key === dcaKey),
+      ...slotItems.risk.filter(n => n.key === dcaKey),
+    ]
+    if (dcaNodes.length === 0) return
+
+    const splitMatch = text.match(/(回撤|加投|补仓)/u)
+    if (!splitMatch || splitMatch.index === undefined) return
+    const tail = text.slice(splitMatch.index)
+    const tailRole = extractSizingRoleFromText(tail)
+    if (!tailRole || tailRole.sizing.kind !== 'quote') return
+
+    const tailDropPctMatch = tail.match(/(\d+(?:\.\d+)?)\s*%/u)
+    const tailDropPct = tailDropPctMatch ? Number(tailDropPctMatch[1]) : null
+
+    for (const node of dcaNodes) {
+      const params = node.params as Record<string, unknown>
+      const primary = params.perOrderSizing as { kind?: string; value?: number; asset?: string } | undefined
+      const sameAsPrimary = primary
+        && primary.kind === tailRole.sizing.kind
+        && primary.value === tailRole.sizing.value
+        && primary.asset === tailRole.sizing.asset
+      if (!sameAsPrimary && params.drawdownPerOrderSizing === undefined) {
+        params.drawdownPerOrderSizing = toPerOrderSizingShape(tailRole.sizing)
+      }
+      if (tailDropPct !== null && Number.isFinite(tailDropPct) && tailDropPct > 0 && params.dropPct === undefined) {
+        params.dropPct = tailDropPct
+      }
+    }
+  }
+
+  /**
+   * Issue #1633 s29: pyramiding_limit profit-trigger + layer-sizing backfill。
+   *
+   * generic 规则：text 中含 "盈利 N% (后|时|再|则) 加仓 M%" 时，把 N 写入
+   * pyramiding_limit.params.profitThreshold（百分比，未归一化），M 写入
+   * pyramiding_limit.params.layerSizing（百分比，未归一化）。
+   *
+   * 仅当对应 slot 在 atom params 上为 undefined 时回填，已存在则保留 dispatcher 主匹配值。
+   *
+   * 不引入 atom-key 字面量分支：通过 ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
+   * 读 atom key（与本服务其它 lifecycle 后处理一致）。
+   */
+  private applyPyramidingProfitTriggerBackfill(
+    text: string,
+    atomItems: PatchAtomNode[],
+    slotItems: Record<'triggers' | 'actions' | 'risk', PatchAtomNode[]>,
+  ): void {
+    if (!text) return
+    const pyramidingKey = ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key
+    const nodes: PatchAtomNode[] = [
+      ...atomItems.filter(n => n.key === pyramidingKey),
+      ...slotItems.triggers.filter(n => n.key === pyramidingKey),
+      ...slotItems.actions.filter(n => n.key === pyramidingKey),
+      ...slotItems.risk.filter(n => n.key === pyramidingKey),
+    ]
+    if (nodes.length === 0) return
+
+    // "盈利 N% (后|时|再|则) ... 加仓 M%" 必须共存才认定为 profit-trigger + sizing pair
+    const profitMatch = /(?:盈利|获利|利润|赚)\s*(\d+(?:\.\d+)?)\s*%/u.exec(text)
+    const sizingMatch = /(?:加仓|补仓|scale\s*in)\D{0,8}(\d+(?:\.\d+)?)\s*%/iu.exec(text)
+    const profitThreshold = profitMatch?.[1] ? Number(profitMatch[1]) : null
+    const layerSizingPct = sizingMatch?.[1] ? Number(sizingMatch[1]) : null
+    const hasValidProfit = profitThreshold !== null && Number.isFinite(profitThreshold) && profitThreshold > 0 && profitThreshold <= 100
+    const hasValidSizing = layerSizingPct !== null && Number.isFinite(layerSizingPct) && layerSizingPct > 0 && layerSizingPct <= 100
+    if (!hasValidProfit && !hasValidSizing) return
+
+    for (const node of nodes) {
+      const params = node.params as Record<string, unknown>
+      if (hasValidProfit && params.profitThreshold === undefined) {
+        params.profitThreshold = profitThreshold
+      }
+      if (hasValidSizing && (params.layerSizing === undefined || params.layerSizing === 0)) {
+        params.layerSizing = layerSizingPct
+      }
+    }
   }
 
   /**

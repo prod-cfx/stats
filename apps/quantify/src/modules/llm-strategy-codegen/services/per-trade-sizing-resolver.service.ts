@@ -3,7 +3,8 @@ import { Injectable } from '@nestjs/common'
 import type { SemanticNodeStatus, SemanticPositionConstraintState, SemanticPositionSizingContract, SemanticState } from '../types/semantic-state'
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
 import type { CapabilityEvidence, CapabilityMountKind } from './capability-evidence-index.service'
-import { readFlatActions } from '../types/semantic-state-flat-readers'
+import type { RulesMainflowAtomFact } from './rules-mainflow-reader.service'
+import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -32,7 +33,6 @@ export type SizingSource =
   | 'action'
   | 'position_constraint'
   | 'position_constraint_params_fallback'
-  | 'checklist'
 
 export interface NormalizedSizing {
   readonly axis: SizingAxis
@@ -228,7 +228,7 @@ function anchorFromActionCapability(
 
 function anchorFromPositionConstraintCapability(
   ev: CapabilityEvidence,
-  pc: SemanticPositionConstraintState | undefined,
+  pc: RulesMainflowAtomFact | undefined,
 ): SizingAnchor {
   const scope: SizingScope = { kind: 'position_constraint', ownerKey: ev.ownerKey }
   const resolved = resolveAxisFromCapabilityShape(ev)
@@ -258,7 +258,7 @@ function anchorFromPositionConstraintCapability(
 }
 
 function anchorFromParamsSizing(
-  pc: SemanticPositionConstraintState,
+  pc: RulesMainflowAtomFact,
   resolved: { axis: SizingAxis; value: number },
 ): SizingAnchor {
   const scope: SizingScope = { kind: 'position_constraint', ownerKey: pc.key }
@@ -275,22 +275,6 @@ function anchorFromParamsSizing(
   }
 }
 
-function anchorFromChecklist(positionPct: number): SizingAnchor {
-  const scope: SizingScope = { kind: 'strategy_default' }
-  const axis: SizingAxis = 'equity_ratio'
-  // positionPct is 0-100 scale
-  const value = positionPct / 100
-  const anchored = isExecutionAnchored('locked', axis, value)
-
-  return {
-    scope,
-    executionAnchored: anchored,
-    fullySpecified: anchored,
-    normalized: anchored ? { axis, value, needsRuntimeResolution: true } : undefined,
-    source: 'checklist',
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Resolver service
 // ---------------------------------------------------------------------------
@@ -298,10 +282,11 @@ function anchorFromChecklist(positionPct: number): SizingAnchor {
 /** @pure 无 IO 无事务边界 */
 @Injectable()
 export class PerTradeSizingResolver {
-  resolve(
-    state: SemanticState,
-    checklist?: { riskRules?: { positionPct?: number } },
-  ): ReadonlyMap<string, SizingAnchor> {
+  constructor(
+    private readonly rulesMainflowReader: RulesMainflowReaderService = new RulesMainflowReaderService(),
+  ) {}
+
+  resolve(state: SemanticState): ReadonlyMap<string, SizingAnchor> {
     const index = CapabilityEvidenceIndex.build(state)
     const out = new Map<string, SizingAnchor>()
 
@@ -320,7 +305,7 @@ export class PerTradeSizingResolver {
     // (b) action level — capital.allocate.per_order_budget
     for (const ev of index.byKey('capital', 'allocate', 'per_order_budget')) {
       if (ev.mount !== 'action') continue
-      const action = readFlatActions(state).find(a => a.id === ev.ownerId)
+      const action = this.rulesMainflowReader.readFactsByRole(state, 'action').find(a => a.id === ev.ownerId)
       const anchor = anchorFromActionCapability(ev, action?.openSlots)
       if (anchor.executionAnchored) {
         out.set(scopeKey(anchor.scope), anchor)
@@ -332,8 +317,7 @@ export class PerTradeSizingResolver {
       if (ev.mount !== 'position_constraint') continue
       const sk = scopeKey({ kind: 'position_constraint', ownerKey: ev.ownerKey })
       // Don't override an already-placed entry from same scope (shouldn't happen with distinct mounts, but defensive)
-      // Task 6: read top-level positionConstraint[] (legacy position.constraints removed)
-      const pc = (state.positionConstraint ?? []).find(c => c.key === ev.ownerKey)
+      const pc = this.rulesMainflowReader.readFactsByRole(state, 'position').find(c => c.key === ev.ownerKey)
       const anchor = anchorFromPositionConstraintCapability(ev, pc)
       if (anchor.executionAnchored) {
         out.set(sk, anchor)
@@ -341,8 +325,7 @@ export class PerTradeSizingResolver {
     }
 
     // (d) degraded path — positionConstraint[*].params.perOrderSizing
-    // Task 6: read top-level positionConstraint[]
-    for (const pc of state.positionConstraint ?? []) {
+    for (const pc of this.rulesMainflowReader.readFactsByRole(state, 'position')) {
       const sk = scopeKey({ kind: 'position_constraint', ownerKey: pc.key })
       if (out.has(sk)) continue // capability main path already placed — skip fallback
       const resolved = readPerOrderSizingFromParams(pc.params)
@@ -350,14 +333,6 @@ export class PerTradeSizingResolver {
       const anchor = anchorFromParamsSizing(pc, resolved)
       if (anchor.executionAnchored) {
         out.set(sk, anchor)
-      }
-    }
-
-    // (e) checklist fallback — when no evidence at all
-    if (out.size === 0 && checklist?.riskRules?.positionPct != null) {
-      const anchor = anchorFromChecklist(checklist.riskRules.positionPct)
-      if (anchor.executionAnchored) {
-        out.set(scopeKey(anchor.scope), anchor)
       }
     }
 

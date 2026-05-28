@@ -2,21 +2,30 @@ import { PerTradeSizingResolver, scopeKey } from '../per-trade-sizing-resolver.s
 import type { SizingAnchor } from '../per-trade-sizing-resolver.service'
 import type { SemanticState } from '../../types/semantic-state'
 import {
+  actionScopeId,
+  actionScopeKey,
   buildAmbiguousSizingState,
   buildEmptyState,
   buildMultiLegState,
   buildStateWithActionAndConstraint,
   buildStateWithActionPerOrderBudget,
+  buildStateWithActionSizingShape,
   buildStateWithChecklistPositionPct,
   buildStateWithDcaPerOrderSizing,
   buildStateWithPositionSizing,
 } from './fixtures/sizing-resolver-fixtures'
 
+const PC_KEY = 'position_constraint:position.dca_schedule'
+
 describe('PerTradeSizingResolver', () => {
   const resolver = new PerTradeSizingResolver()
 
   // ---------------------------------------------------------------------------
-  // Group 1: 4 source × scope × predicate cases (≥24 cases)
+  // Group 1: source × scope × predicate
+  //
+  // Rules-only reality: action / position_constraint facts are always `locked`
+  // with empty openSlots, so `fullySpecified` tracks value validity only.
+  // Open-status / partial-slot variants survive only for `state.position`.
   // ---------------------------------------------------------------------------
 
   describe('Group 1 — source × scope × predicate', () => {
@@ -116,19 +125,13 @@ describe('PerTradeSizingResolver', () => {
       })
     })
 
-    // --- Source: action ---
+    // --- Source: action (rule effects.actions[].params.sizing) ---
 
-    describe('source=action / scope=action:<id>', () => {
-      it('quote axis: executionAnchored=true, fullySpecified=true (locked, no open slots)', () => {
-        const state = buildStateWithActionPerOrderBudget({
-          actionId: 'a1',
-          value: 200,
-          unit: 'quote',
-          status: 'locked',
-          hasOpenSlots: false,
-        })
+    describe('source=action / scope=action:<rule-fact-id>', () => {
+      it('quote axis: executionAnchored=true, fullySpecified=true (locked rules fact)', () => {
+        const state = buildStateWithActionPerOrderBudget({ actionId: 'a1', value: 200, unit: 'quote' })
         const result = resolver.resolve(state)
-        const anchor = result.get('action:a1') as SizingAnchor
+        const anchor = result.get(actionScopeKey('a1')) as SizingAnchor
         expect(anchor).toBeDefined()
         expect(anchor.source).toBe('action')
         expect(anchor.executionAnchored).toBe(true)
@@ -137,202 +140,45 @@ describe('PerTradeSizingResolver', () => {
         expect(anchor.normalized?.value).toBe(200)
         expect(anchor.normalized?.needsRuntimeResolution).toBe(false)
         expect(anchor.evidenceRef?.mount).toBe('action')
-        expect(anchor.evidenceRef?.ownerId).toBe('a1')
-      })
-
-      it('quote axis: executionAnchored=true, fullySpecified=false (locked, open slots)', () => {
-        const state = buildStateWithActionPerOrderBudget({
-          actionId: 'a2',
-          value: 50,
-          unit: 'quote',
-          status: 'locked',
-          hasOpenSlots: true,
-        })
-        const result = resolver.resolve(state)
-        const anchor = result.get('action:a2') as SizingAnchor
-        expect(anchor?.executionAnchored).toBe(true)
-        expect(anchor?.fullySpecified).toBe(false)
-        expect(anchor?.normalized?.axis).toBe('notional_quote')
+        expect(anchor.evidenceRef?.ownerId).toBe(actionScopeId('a1'))
       })
 
       it('base axis: executionAnchored=true, fullySpecified=true', () => {
-        const state = buildStateWithActionPerOrderBudget({
-          actionId: 'a3',
-          value: 0.05,
-          unit: 'base',
-          status: 'locked',
-        })
+        const state = buildStateWithActionPerOrderBudget({ actionId: 'a3', value: 0.05, unit: 'base' })
         const result = resolver.resolve(state)
-        const anchor = result.get('action:a3') as SizingAnchor
+        const anchor = result.get(actionScopeKey('a3')) as SizingAnchor
         expect(anchor?.executionAnchored).toBe(true)
         expect(anchor?.normalized?.axis).toBe('base_qty')
         expect(anchor?.normalized?.value).toBe(0.05)
         expect(anchor?.normalized?.needsRuntimeResolution).toBe(false)
       })
 
-      it('base axis with asset: NormalizedSizing.asset is populated from capability shape', () => {
-        const state: SemanticState = {
-          version: 1,
-          families: ['single-leg'],
-          trigger: [],
-          action: [{
-            id: 'a-base-asset',
-            key: 'action.open_long',
-            status: 'locked',
-            source: 'user_explicit',
-            openSlots: [],
-            contracts: [{
-              id: 'contract-base-asset',
-              kind: 'action',
-              capabilities: [{
-                domain: 'capital',
-                verb: 'allocate',
-                object: 'per_order_budget',
-                shape: { kind: 'base', value: 0.01, asset: 'BTC' },
-              }],
-              requires: [],
-              params: {},
-              runtimeRequirements: [],
-              stateRequirements: [],
-              orderRequirements: [],
-              openSlots: [],
-            }],
-          }],
-          risk: [],
-          position: null,
-          positionConstraint: [],
-          orchestration: [],
-          orchestrationContracts: [],
-          contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
-          normalizationNotes: [],
-          updatedAt: '2026-05-11T00:00:00.000Z',
-        }
+      it('base axis with asset: NormalizedSizing.asset is populated from sizing shape', () => {
+        const state = buildStateWithActionPerOrderBudget({ actionId: 'a-base-asset', value: 0.01, unit: 'base' })
         const result = resolver.resolve(state)
-        const anchor = result.get('action:a-base-asset') as SizingAnchor
+        const anchor = result.get(actionScopeKey('a-base-asset')) as SizingAnchor
         expect(anchor?.executionAnchored).toBe(true)
         expect(anchor?.normalized?.axis).toBe('base_qty')
         expect(anchor?.normalized?.asset).toBe('BTC')
       })
 
       it('ratio axis: executionAnchored=true, needsRuntimeResolution=true', () => {
-        const state = buildStateWithActionPerOrderBudget({
-          actionId: 'a4',
-          value: 0.2,
-          unit: 'ratio',
-          status: 'locked',
-        })
+        const state = buildStateWithActionPerOrderBudget({ actionId: 'a4', value: 0.2, unit: 'ratio' })
         const result = resolver.resolve(state)
-        const anchor = result.get('action:a4') as SizingAnchor
+        const anchor = result.get(actionScopeKey('a4')) as SizingAnchor
         expect(anchor?.executionAnchored).toBe(true)
         expect(anchor?.normalized?.axis).toBe('equity_ratio')
         expect(anchor?.normalized?.needsRuntimeResolution).toBe(true)
       })
-
-      it('open status: executionAnchored=false (not in map)', () => {
-        const state = buildStateWithActionPerOrderBudget({
-          actionId: 'a5',
-          value: 100,
-          unit: 'quote',
-          status: 'open',
-        })
-        const result = resolver.resolve(state)
-        expect(result.has('action:a5')).toBe(false)
-      })
-
-      it('superseded status: executionAnchored=false (not in map)', () => {
-        const state = buildStateWithActionPerOrderBudget({
-          actionId: 'a6',
-          value: 100,
-          unit: 'quote',
-          status: 'superseded',
-        })
-        const result = resolver.resolve(state)
-        expect(result.has('action:a6')).toBe(false)
-      })
     })
 
-    // --- Source: position_constraint (capability path) ---
-
-    describe('source=position_constraint / scope=position_constraint:<key>', () => {
-      it('quote axis: executionAnchored=true, fullySpecified=true (locked, no open slots)', () => {
-        const state = buildStateWithDcaPerOrderSizing({
-          ownerKey: 'position.dca_schedule',
-          value: 100,
-          unit: 'quote',
-          viaCapability: true,
-          status: 'locked',
-          hasOpenSlots: false,
-        })
-        const result = resolver.resolve(state)
-        const anchor = result.get('position_constraint:position.dca_schedule') as SizingAnchor
-        expect(anchor).toBeDefined()
-        expect(anchor.source).toBe('position_constraint')
-        expect(anchor.executionAnchored).toBe(true)
-        expect(anchor.fullySpecified).toBe(true)
-        expect(anchor.normalized?.axis).toBe('notional_quote')
-        expect(anchor.normalized?.value).toBe(100)
-        expect(anchor.normalized?.needsRuntimeResolution).toBe(false)
-        expect(anchor.evidenceRef?.mount).toBe('position_constraint')
-      })
-
-      it('quote axis: executionAnchored=true, fullySpecified=false (locked, open slots)', () => {
-        const state = buildStateWithDcaPerOrderSizing({
-          ownerKey: 'position.dca_schedule',
-          value: 150,
-          unit: 'quote',
-          viaCapability: true,
-          status: 'locked',
-          hasOpenSlots: true,
-        })
-        const result = resolver.resolve(state)
-        const anchor = result.get('position_constraint:position.dca_schedule') as SizingAnchor
-        expect(anchor?.executionAnchored).toBe(true)
-        expect(anchor?.fullySpecified).toBe(false)
-      })
-
-      it('ratio axis: executionAnchored=false when status=open', () => {
-        const state = buildStateWithDcaPerOrderSizing({
-          ownerKey: 'position.dca_schedule',
-          value: 0.1,
-          unit: 'quote', // use quote as proxy; ratio via params fallback tested separately
-          viaCapability: true,
-          status: 'open',
-        })
-        const result = resolver.resolve(state)
-        expect(result.has('position_constraint:position.dca_schedule')).toBe(false)
-      })
-
-      it('base axis: executionAnchored=true, needsRuntimeResolution=false', () => {
-        const state = buildStateWithDcaPerOrderSizing({
-          ownerKey: 'position.dca_schedule',
-          value: 0.002,
-          unit: 'base',
-          viaCapability: true,
-          status: 'locked',
-          hasOpenSlots: false,
-        })
-        const result = resolver.resolve(state)
-        const anchor = result.get('position_constraint:position.dca_schedule') as SizingAnchor
-        expect(anchor?.executionAnchored).toBe(true)
-        expect(anchor?.normalized?.axis).toBe('base_qty')
-        expect(anchor?.normalized?.needsRuntimeResolution).toBe(false)
-      })
-    })
-
-    // --- Source: position_constraint_params_fallback ---
+    // --- Source: position_constraint_params_fallback (rule effects.positions[].params.perOrderSizing) ---
 
     describe('source=position_constraint_params_fallback / scope=position_constraint:<key>', () => {
       it('quote params fallback: executionAnchored=true, fullySpecified=true', () => {
-        const state = buildStateWithDcaPerOrderSizing({
-          ownerKey: 'position.dca_schedule',
-          value: 100,
-          unit: 'quote',
-          viaCapability: false,
-          status: 'locked',
-          hasOpenSlots: false,
-        })
+        const state = buildStateWithDcaPerOrderSizing({ ownerKey: 'position.dca_schedule', value: 100, unit: 'quote' })
         const result = resolver.resolve(state)
-        const anchor = result.get('position_constraint:position.dca_schedule') as SizingAnchor
+        const anchor = result.get(PC_KEY) as SizingAnchor
         expect(anchor).toBeDefined()
         expect(anchor.source).toBe('position_constraint_params_fallback')
         expect(anchor.executionAnchored).toBe(true)
@@ -344,33 +190,10 @@ describe('PerTradeSizingResolver', () => {
         expect(anchor.evidenceRef).toBeUndefined()
       })
 
-      it('quote params fallback: fullySpecified=false when open slots present', () => {
-        const state = buildStateWithDcaPerOrderSizing({
-          ownerKey: 'position.dca_schedule',
-          value: 200,
-          unit: 'quote',
-          viaCapability: false,
-          status: 'locked',
-          hasOpenSlots: true,
-        })
-        const result = resolver.resolve(state)
-        const anchor = result.get('position_constraint:position.dca_schedule') as SizingAnchor
-        expect(anchor?.source).toBe('position_constraint_params_fallback')
-        expect(anchor?.executionAnchored).toBe(true)
-        expect(anchor?.fullySpecified).toBe(false)
-      })
-
       it('base params fallback: executionAnchored=true', () => {
-        const state = buildStateWithDcaPerOrderSizing({
-          ownerKey: 'position.dca_schedule',
-          value: 0.01,
-          unit: 'base',
-          viaCapability: false,
-          status: 'locked',
-          hasOpenSlots: false,
-        })
+        const state = buildStateWithDcaPerOrderSizing({ ownerKey: 'position.dca_schedule', value: 0.01, unit: 'base' })
         const result = resolver.resolve(state)
-        const anchor = result.get('position_constraint:position.dca_schedule') as SizingAnchor
+        const anchor = result.get(PC_KEY) as SizingAnchor
         expect(anchor?.source).toBe('position_constraint_params_fallback')
         expect(anchor?.executionAnchored).toBe(true)
         expect(anchor?.normalized?.axis).toBe('base_qty')
@@ -380,89 +203,59 @@ describe('PerTradeSizingResolver', () => {
   })
 
   // ---------------------------------------------------------------------------
-  // Group 2: 8 axis boundary cases + risk_budget + percent normalization
+  // Group 2: axis boundary cases + risk_budget + percent normalization
   // ---------------------------------------------------------------------------
 
   describe('Group 2 — axis boundary cases', () => {
     it('notional_quote value=0 → executionAnchored=false', () => {
-      const state = buildStateWithPositionSizing({
-        sizing: { kind: 'quote', value: 0, asset: 'USDT' },
-        status: 'locked',
-      })
+      const state = buildStateWithPositionSizing({ sizing: { kind: 'quote', value: 0, asset: 'USDT' }, status: 'locked' })
       expect(resolver.resolve(state).get('strategy_default')).toBeUndefined()
     })
 
     it('notional_quote value=negative → executionAnchored=false', () => {
-      const state = buildStateWithPositionSizing({
-        sizing: { kind: 'quote', value: -100, asset: 'USDT' },
-        status: 'locked',
-      })
+      const state = buildStateWithPositionSizing({ sizing: { kind: 'quote', value: -100, asset: 'USDT' }, status: 'locked' })
       expect(resolver.resolve(state).get('strategy_default')).toBeUndefined()
     })
 
     it('notional_quote value=NaN → executionAnchored=false', () => {
-      const state = buildStateWithPositionSizing({
-        sizing: { kind: 'quote', value: Number.NaN, asset: 'USDT' },
-        status: 'locked',
-      })
+      const state = buildStateWithPositionSizing({ sizing: { kind: 'quote', value: Number.NaN, asset: 'USDT' }, status: 'locked' })
       expect(resolver.resolve(state).get('strategy_default')).toBeUndefined()
     })
 
     it('notional_quote value=Infinity → executionAnchored=false', () => {
-      const state = buildStateWithPositionSizing({
-        sizing: { kind: 'quote', value: Number.POSITIVE_INFINITY, asset: 'USDT' },
-        status: 'locked',
-      })
+      const state = buildStateWithPositionSizing({ sizing: { kind: 'quote', value: Number.POSITIVE_INFINITY, asset: 'USDT' }, status: 'locked' })
       expect(resolver.resolve(state).get('strategy_default')).toBeUndefined()
     })
 
     it('equity_ratio value=0 → executionAnchored=false', () => {
-      const state = buildStateWithPositionSizing({
-        sizing: { kind: 'ratio', value: 0, unit: 'ratio' },
-        status: 'locked',
-      })
+      const state = buildStateWithPositionSizing({ sizing: { kind: 'ratio', value: 0, unit: 'ratio' }, status: 'locked' })
       expect(resolver.resolve(state).get('strategy_default')).toBeUndefined()
     })
 
     it('equity_ratio value=1 → executionAnchored=true (boundary inclusive)', () => {
-      const state = buildStateWithPositionSizing({
-        sizing: { kind: 'ratio', value: 1, unit: 'ratio' },
-        status: 'locked',
-      })
+      const state = buildStateWithPositionSizing({ sizing: { kind: 'ratio', value: 1, unit: 'ratio' }, status: 'locked' })
       const anchor = resolver.resolve(state).get('strategy_default')
       expect(anchor?.executionAnchored).toBe(true)
       expect(anchor?.normalized?.value).toBe(1)
     })
 
     it('equity_ratio value=1.5 → executionAnchored=false (>1 rejected)', () => {
-      const state = buildStateWithPositionSizing({
-        sizing: { kind: 'ratio', value: 1.5, unit: 'ratio' },
-        status: 'locked',
-      })
+      const state = buildStateWithPositionSizing({ sizing: { kind: 'ratio', value: 1.5, unit: 'ratio' }, status: 'locked' })
       expect(resolver.resolve(state).get('strategy_default')).toBeUndefined()
     })
 
     it('equity_ratio value=0.5 → executionAnchored=true', () => {
-      const state = buildStateWithPositionSizing({
-        sizing: { kind: 'ratio', value: 0.5, unit: 'ratio' },
-        status: 'locked',
-      })
+      const state = buildStateWithPositionSizing({ sizing: { kind: 'ratio', value: 0.5, unit: 'ratio' }, status: 'locked' })
       const anchor = resolver.resolve(state).get('strategy_default')
       expect(anchor?.executionAnchored).toBe(true)
       expect(anchor?.normalized?.value).toBe(0.5)
     })
 
-    // risk_budget via capability shape path (PR4+ atoms can emit this kind)
-    it('risk_budget capability shape value=100 → axis=risk_budget, executionAnchored=true, needsRuntimeResolution=true', () => {
-      const state = buildStateWithActionPerOrderBudget({
-        actionId: 'a-risk-budget',
-        value: 100,
-        unit: 'risk_budget',
-        status: 'locked',
-        hasOpenSlots: false,
-      })
+    // risk_budget via action sizing shape (PR4+ atoms can emit this kind)
+    it('risk_budget sizing shape value=100 → axis=risk_budget, executionAnchored=true, needsRuntimeResolution=true', () => {
+      const state = buildStateWithActionPerOrderBudget({ actionId: 'a-risk-budget', value: 100, unit: 'risk_budget' })
       const result = resolver.resolve(state)
-      const anchor = result.get('action:a-risk-budget') as SizingAnchor
+      const anchor = result.get(actionScopeKey('a-risk-budget')) as SizingAnchor
       expect(anchor).toBeDefined()
       expect(anchor.source).toBe('action')
       expect(anchor.executionAnchored).toBe(true)
@@ -471,35 +264,17 @@ describe('PerTradeSizingResolver', () => {
       expect(anchor.normalized?.needsRuntimeResolution).toBe(true)
     })
 
-    it('risk_budget capability shape value=0 → executionAnchored=false (not in map)', () => {
-      const state = buildStateWithActionPerOrderBudget({
-        actionId: 'a-risk-budget-zero',
-        value: 0,
-        unit: 'risk_budget',
-        status: 'locked',
-        hasOpenSlots: false,
-      })
+    it('risk_budget sizing shape value=0 → executionAnchored=false (not in map)', () => {
+      const state = buildStateWithActionPerOrderBudget({ actionId: 'a-risk-budget-zero', value: 0, unit: 'risk_budget' })
       const result = resolver.resolve(state)
-      expect(result.has('action:a-risk-budget-zero')).toBe(false)
+      expect(result.has(actionScopeKey('a-risk-budget-zero'))).toBe(false)
     })
 
-    // Mi4: percent unit → 0..1 normalization in capability shape
-    it('capability shape { kind: ratio, value: 50, unit: percent } → axis=equity_ratio, value=0.5', () => {
-      // Build state manually with a percent-unit ratio capability shape
-      const state = buildStateWithActionPerOrderBudget({
-        actionId: 'a-percent',
-        value: 50,
-        unit: 'ratio', // makePerOrderBudgetCapability will set kind='ratio'; we override unit via shape below
-        status: 'locked',
-        hasOpenSlots: false,
-      })
-      // Patch the shape to include unit='percent'
-      const action = state.action[0]
-      const cap = action.contracts![0].capabilities[0]
-      ;(cap.shape as Record<string, unknown>)['unit'] = 'percent'
-
+    // percent unit → 0..1 normalization in sizing shape
+    it('sizing shape { kind: ratio, value: 50, unit: percent } → axis=equity_ratio, value=0.5', () => {
+      const state = buildStateWithActionSizingShape('a-percent', { kind: 'ratio', value: 50, unit: 'percent' })
       const result = resolver.resolve(state)
-      const anchor = result.get('action:a-percent') as SizingAnchor
+      const anchor = result.get(actionScopeKey('a-percent')) as SizingAnchor
       expect(anchor).toBeDefined()
       expect(anchor.normalized?.axis).toBe('equity_ratio')
       expect(anchor.normalized?.value).toBeCloseTo(0.5)
@@ -508,7 +283,7 @@ describe('PerTradeSizingResolver', () => {
   })
 
   // ---------------------------------------------------------------------------
-  // Group 3: 3 negative samples
+  // Group 3: negative samples
   // ---------------------------------------------------------------------------
 
   describe('Group 3 — negative samples', () => {
@@ -523,23 +298,18 @@ describe('PerTradeSizingResolver', () => {
     })
 
     it('locked action but value=0 → not anchored, not in map', () => {
-      const state = buildStateWithActionPerOrderBudget({
-        actionId: 'a-zero',
-        value: 0,
-        unit: 'quote',
-        status: 'locked',
-      })
+      const state = buildStateWithActionPerOrderBudget({ actionId: 'a-zero', value: 0, unit: 'quote' })
       const result = resolver.resolve(state)
-      expect(result.has('action:a-zero')).toBe(false)
+      expect(result.has(actionScopeKey('a-zero'))).toBe(false)
     })
   })
 
   // ---------------------------------------------------------------------------
-  // Group 4: 3 axis conflict / coexistence cases
+  // Group 4: axis conflict / coexistence
   // ---------------------------------------------------------------------------
 
   describe('Group 4 — axis conflict / coexistence', () => {
-    it('notional_quote (action) + base_qty (positionConstraint) → two anchors with distinct axes', () => {
+    it('notional_quote (action) + base_qty (position constraint) → two anchors with distinct axes', () => {
       const state = buildStateWithActionAndConstraint({
         actionId: 'a-leg1',
         actionValue: 300,
@@ -547,47 +317,36 @@ describe('PerTradeSizingResolver', () => {
         constraintKey: 'position.dca_schedule',
         constraintValue: 0.01,
         constraintUnit: 'base',
-        constraintViaCapability: true,
       })
       const result = resolver.resolve(state)
       expect(result.size).toBe(2)
-      const actionAnchor = result.get('action:a-leg1') as SizingAnchor
-      const constraintAnchor = result.get('position_constraint:position.dca_schedule') as SizingAnchor
+      const actionAnchor = result.get(actionScopeKey('a-leg1')) as SizingAnchor
+      const constraintAnchor = result.get(PC_KEY) as SizingAnchor
       expect(actionAnchor?.normalized?.axis).toBe('notional_quote')
       expect(constraintAnchor?.normalized?.axis).toBe('base_qty')
     })
 
     it('ratio anchor has needsRuntimeResolution=true', () => {
-      const state = buildStateWithActionPerOrderBudget({
-        actionId: 'a-ratio',
-        value: 0.15,
-        unit: 'ratio',
-        status: 'locked',
-      })
-      const anchor = resolver.resolve(state).get('action:a-ratio')
+      const state = buildStateWithActionPerOrderBudget({ actionId: 'a-ratio', value: 0.15, unit: 'ratio' })
+      const anchor = resolver.resolve(state).get(actionScopeKey('a-ratio'))
       expect(anchor?.normalized?.axis).toBe('equity_ratio')
       expect(anchor?.normalized?.needsRuntimeResolution).toBe(true)
     })
 
     it('quote anchor has needsRuntimeResolution=false', () => {
-      const state = buildStateWithActionPerOrderBudget({
-        actionId: 'a-quote',
-        value: 100,
-        unit: 'quote',
-        status: 'locked',
-      })
-      const anchor = resolver.resolve(state).get('action:a-quote')
+      const state = buildStateWithActionPerOrderBudget({ actionId: 'a-quote', value: 100, unit: 'quote' })
+      const anchor = resolver.resolve(state).get(actionScopeKey('a-quote'))
       expect(anchor?.normalized?.axis).toBe('notional_quote')
       expect(anchor?.normalized?.needsRuntimeResolution).toBe(false)
     })
   })
 
   // ---------------------------------------------------------------------------
-  // Group 5: 2 multi-anchor cases
+  // Group 5: multi-anchor
   // ---------------------------------------------------------------------------
 
   describe('Group 5 — multi-anchor', () => {
-    it('two actions with distinct sizing → 2 anchors with distinct scope keys', () => {
+    it('two action rules with distinct sizing → 2 anchors with distinct scope keys', () => {
       const state = buildMultiLegState({
         legs: [
           { actionId: 'leg-A1', value: 100, unit: 'quote' },
@@ -596,18 +355,18 @@ describe('PerTradeSizingResolver', () => {
       })
       const result = resolver.resolve(state)
       expect(result.size).toBe(2)
-      expect(result.has('action:leg-A1')).toBe(true)
-      expect(result.has('action:leg-A2')).toBe(true)
+      expect(result.has(actionScopeKey('leg-A1', 0))).toBe(true)
+      expect(result.has(actionScopeKey('leg-A2', 1))).toBe(true)
 
-      const a1 = result.get('action:leg-A1') as SizingAnchor
-      const a2 = result.get('action:leg-A2') as SizingAnchor
+      const a1 = result.get(actionScopeKey('leg-A1', 0)) as SizingAnchor
+      const a2 = result.get(actionScopeKey('leg-A2', 1)) as SizingAnchor
       expect(a1.normalized?.value).toBe(100)
       expect(a2.normalized?.value).toBe(200)
-      expect(a1.scope).toEqual({ kind: 'action', id: 'leg-A1' })
-      expect(a2.scope).toEqual({ kind: 'action', id: 'leg-A2' })
+      expect(a1.scope).toEqual({ kind: 'action', id: actionScopeId('leg-A1', 0) })
+      expect(a2.scope).toEqual({ kind: 'action', id: actionScopeId('leg-A2', 1) })
     })
 
-    it('action + positionConstraint co-exist → 2 anchors', () => {
+    it('action + position constraint co-exist → 2 anchors', () => {
       const state = buildStateWithActionAndConstraint({
         actionId: 'main-action',
         actionValue: 500,
@@ -615,18 +374,55 @@ describe('PerTradeSizingResolver', () => {
         constraintKey: 'position.dca_schedule',
         constraintValue: 100,
         constraintUnit: 'quote',
-        constraintViaCapability: true,
       })
       const result = resolver.resolve(state)
       expect(result.size).toBe(2)
-      expect(result.has('action:main-action')).toBe(true)
-      expect(result.has('position_constraint:position.dca_schedule')).toBe(true)
+      expect(result.has(actionScopeKey('main-action'))).toBe(true)
+      expect(result.has(PC_KEY)).toBe(true)
+    })
+  })
+
+  describe('rules-native facts', () => {
+    it('resolves action sizing from rules-only mainflow leaves', () => {
+      const state: SemanticState = {
+        ...buildEmptyState(),
+        rules: [{
+          id: 'rules-sizing',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'volume.threshold', params: { value: 1000 } },
+          effects: {
+            actions: [{
+              kind: 'atom',
+              key: 'action.open_long',
+              params: { sizing: { kind: 'quote', value: 125, asset: 'USDT' } },
+            }],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        }],
+      }
+
+      const result = resolver.resolve(state)
+      const anchor = result.get('action:rules-sizing:rules-0-effects-actions-0') as SizingAnchor
+
+      expect(anchor).toEqual(expect.objectContaining({
+        source: 'action',
+        executionAnchored: true,
+        fullySpecified: true,
+        normalized: expect.objectContaining({
+          axis: 'notional_quote',
+          value: 125,
+          asset: 'USDT',
+        }),
+      }))
     })
   })
 
   // ---------------------------------------------------------------------------
-  // #1186 PR2 (decision 6): getExecutableLegScopes shared method
-  // 仅返 kind==='action' 且 executionAnchored 的 scopeKey；
+  // getExecutableLegScopes — only kind==='action' anchors are legs.
   // position_constraint scope（开仓后约束）不构成 leg。
   // ---------------------------------------------------------------------------
 
@@ -640,10 +436,10 @@ describe('PerTradeSizingResolver', () => {
       })
       const scopes = resolver.getExecutableLegScopes(state)
       expect(scopes).toHaveLength(2)
-      expect(scopes).toEqual(expect.arrayContaining(['action:leg-A1', 'action:leg-A2']))
+      expect(scopes).toEqual(expect.arrayContaining([actionScopeKey('leg-A1', 0), actionScopeKey('leg-A2', 1)]))
     })
 
-    it('action + position_constraint co-exist → only action scope returned (NC6)', () => {
+    it('action + position constraint co-exist → only action scope returned', () => {
       const state = buildStateWithActionAndConstraint({
         actionId: 'main-action',
         actionValue: 500,
@@ -651,11 +447,10 @@ describe('PerTradeSizingResolver', () => {
         constraintKey: 'position.dca_schedule',
         constraintValue: 100,
         constraintUnit: 'quote',
-        constraintViaCapability: true,
       })
       const scopes = resolver.getExecutableLegScopes(state)
-      expect(scopes).toEqual(['action:main-action'])
-      expect(scopes).not.toContain('position_constraint:position.dca_schedule')
+      expect(scopes).toEqual([actionScopeKey('main-action')])
+      expect(scopes).not.toContain(PC_KEY)
     })
 
     it('empty state → returns []', () => {
@@ -665,83 +460,60 @@ describe('PerTradeSizingResolver', () => {
   })
 
   // ---------------------------------------------------------------------------
-  // Group 6: 2 degraded path source label cases
+  // Group 6: degraded path source label
   // ---------------------------------------------------------------------------
 
-  describe('Group 6 — degraded path source labels', () => {
-    it('DCA params.perOrderSizing only (viaCapability=false) → source=position_constraint_params_fallback', () => {
-      const state = buildStateWithDcaPerOrderSizing({
-        ownerKey: 'position.dca_schedule',
-        value: 100,
-        unit: 'quote',
-        viaCapability: false,
-        status: 'locked',
-        hasOpenSlots: false,
-      })
+  describe('Group 6 — degraded path source label', () => {
+    it('DCA params.perOrderSizing → source=position_constraint_params_fallback', () => {
+      const state = buildStateWithDcaPerOrderSizing({ ownerKey: 'position.dca_schedule', value: 100, unit: 'quote' })
       const result = resolver.resolve(state)
-      const anchor = result.get('position_constraint:position.dca_schedule') as SizingAnchor
+      const anchor = result.get(PC_KEY) as SizingAnchor
       expect(anchor).toBeDefined()
       expect(anchor.source).toBe('position_constraint_params_fallback')
       expect(anchor.executionAnchored).toBe(true)
     })
-
-    it('DCA capability + params both present (viaCapability=true) → capability path wins, source=position_constraint, value from capability not params', () => {
-      // capability shape value=100, params.perOrderSizing value=999
-      // resolver must pick capability (main path) and return normalized.value=100, not 999
-      const state = buildStateWithDcaPerOrderSizing({
-        ownerKey: 'position.dca_schedule',
-        value: 100,
-        unit: 'quote',
-        viaCapability: true,
-        status: 'locked',
-        hasOpenSlots: false,
-        capabilityValue: 100,
-        paramsValue: 999,
-      })
-      const result = resolver.resolve(state)
-      const anchor = result.get('position_constraint:position.dca_schedule') as SizingAnchor
-      expect(anchor).toBeDefined()
-      expect(anchor.source).toBe('position_constraint')
-      expect(anchor.evidenceRef?.mount).toBe('position_constraint')
-      // Capability path must win — value must be 100, not 999 (params value)
-      expect(anchor.normalized?.value).toBe(100)
-    })
   })
 
   // ---------------------------------------------------------------------------
-  // Additional: checklist fallback and scopeKey utility
+  // rules-only checklist hard-delete and scopeKey utility
   // ---------------------------------------------------------------------------
 
-  describe('checklist fallback', () => {
-    it('no state evidence + positionPct=10 → single anchor from checklist', () => {
-      const { state, checklist } = buildStateWithChecklistPositionPct({ positionPct: 10 })
-      const result = resolver.resolve(state, checklist)
-      expect(result.size).toBe(1)
-      const anchor = result.get('strategy_default') as SizingAnchor
-      expect(anchor.source).toBe('checklist')
-      expect(anchor.executionAnchored).toBe(true)
-      expect(anchor.normalized?.axis).toBe('equity_ratio')
-      expect(anchor.normalized?.value).toBeCloseTo(0.1)
-      expect(anchor.normalized?.needsRuntimeResolution).toBe(true)
+  describe('rules-only checklist hard-delete', () => {
+    it('no state evidence + positionPct=10 → no checklist-derived anchor', () => {
+      const { state } = buildStateWithChecklistPositionPct({ positionPct: 10 })
+      const result = resolver.resolve(state)
+      expect(result.size).toBe(0)
     })
 
-    it('state has evidence → checklist not used', () => {
-      const actionState = buildStateWithActionPerOrderBudget({
-        actionId: 'dominant',
-        value: 100,
-        unit: 'quote',
-        status: 'locked',
-      })
-      const { checklist } = buildStateWithChecklistPositionPct({ positionPct: 20 })
-      const result = resolver.resolve(actionState, checklist)
-      // action anchor wins; checklist not applied
+    it('state has evidence → rules-native sizing is used', () => {
+      const actionState: SemanticState = {
+        ...buildEmptyState(),
+        rules: [{
+          id: 'dominant',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'price.threshold', params: { value: 1 } },
+          effects: {
+            actions: [{
+              kind: 'atom',
+              key: 'action.open_long',
+              params: { sizing: { kind: 'quote', value: 100, asset: 'USDT' } },
+            }],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        }],
+      }
+      const result = resolver.resolve(actionState)
       expect(result.has('strategy_default')).toBe(false)
-      expect(result.has('action:dominant')).toBe(true)
+      expect([...result.keys()]).toEqual(['action:dominant:rules-0-effects-actions-0'])
     })
 
-    it('positionPct=0 → checklist not anchored', () => {
-      const { state, checklist } = buildStateWithChecklistPositionPct({ positionPct: 0 })
-      const result = resolver.resolve(state, checklist)
+    it('positionPct=0 → no anchor', () => {
+      const { state } = buildStateWithChecklistPositionPct({ positionPct: 0 })
+      const result = resolver.resolve(state)
       expect(result.size).toBe(0)
     })
   })
@@ -766,7 +538,6 @@ describe('PerTradeSizingResolver', () => {
     it('returned map is a Map instance (ReadonlyMap is TS-only — mutability enforced by type system)', () => {
       const result = resolver.resolve(buildEmptyState())
       // ReadonlyMap<K,V> is a TypeScript-only constraint: the runtime object is still a Map.
-      // Mutation prevention is guaranteed by the type signature, not by a runtime seal.
       // @ts-expect-error ReadonlyMap does not expose .set — type-level enforcement
       expect(() => result.set('x', {} as SizingAnchor)).not.toThrow()
       expect(result).toBeInstanceOf(Map)

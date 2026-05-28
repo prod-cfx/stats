@@ -1,4 +1,5 @@
 import type { StrategyVersionInfo } from '../../nl-gateway/version-gate/version-gate.types'
+import type { SemanticRule } from '../../types/atom-expr'
 import type { SemanticOrchestrationNode, SemanticState } from '../../types/semantic-state'
 import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
 
@@ -3102,6 +3103,49 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
 
     expect(result.missingRequirements.filter(r => r.kind === 'timeframe_mismatch')).toEqual([])
     expect(result.ready).toBe(true)
+  })
+
+  it('treats grid-only rules as executable entry and exit without legacy flat buckets', () => {
+    const rules: SemanticRule[] = [{
+      id: 'program-grid-range',
+      phase: 'program',
+      sideScope: 'both',
+      condition: {
+        kind: 'atom',
+        key: 'grid.range_rebalance',
+        params: {
+          rangeLower: 60000,
+          rangeUpper: 80000,
+          stepPct: 0.5,
+          sideMode: 'both',
+          breakoutAction: 'continue',
+        },
+      },
+      effects: {
+        actions: [],
+        risks: [],
+        positions: [{
+          kind: 'atom',
+          key: 'grid.range_rebalance',
+          params: {
+            rangeLower: 60000,
+            rangeUpper: 80000,
+            stepPct: 0.5,
+            sideMode: 'both',
+            breakoutAction: 'continue',
+            phase: 'program',
+          },
+        }],
+        orchestration: [],
+        programs: [],
+      },
+    }]
+
+    const result = new SemanticContractReadinessService().evaluateRulesReadiness(rules)
+
+    expect(result.hasEntry).toBe(true)
+    expect(result.hasExit).toBe(true)
+    expect(result.missing).toEqual([])
   })
 
   it('skips timeframe mismatch for indicator.above HTF filter trigger with timeframeOverride', () => {

@@ -37,6 +37,7 @@ import type {
   CodegenSemanticOrchestrationTimeframeScopeNodePatch,
   CodegenSemanticPatch,
 } from '../types/codegen-semantic-patch'
+import type { AtomExprAtom, SemanticRule } from '../types/atom-expr'
 import type {
   SemanticEvidence,
   SemanticExpression,
@@ -51,10 +52,13 @@ interface SemanticCombinationMetadata {
   evidence: SemanticEvidence
 }
 
+type RuleEffectAtom = AtomExprAtom
+
 @Injectable()
 export class SemanticFrameNormalizerService {
   normalize(frames: readonly SemanticNaturalLanguageFrame[]): CodegenSemanticPatch {
     const patch: CodegenSemanticPatch = {}
+    const conditionAtoms: RuleEffectAtom[] = []
     const indicatorCompareGroups = new Map<
       string,
       {
@@ -64,7 +68,7 @@ export class SemanticFrameNormalizerService {
     >()
     const combinationByKey = new Map<string, SemanticCombinationMetadata>()
     const actionsByKey = new Map<SemanticActionFrame['actionKey'], SemanticActionFrame>()
-    const riskByKey = new Map<string, NonNullable<CodegenSemanticPatch['risk']>[number]>()
+    const riskByKey = new Map<string, RuleEffectAtom>()
     const regimeGateByKey = new Map<string, CodegenSemanticOrchestrationGateNodePatch>()
     const regimeGateFrames: SemanticRegimeGateFrame[] = []
     const portfolioDrawdownByKey = new Map<
@@ -142,7 +146,7 @@ export class SemanticFrameNormalizerService {
           }
           break
         case 'boundary_touch':
-          patch.triggers = [...(patch.triggers ?? []), this.normalizeBoundaryTouch(frame)]
+          conditionAtoms.push(this.normalizeBoundaryTouch(frame))
           break
         case 'indicator_compare':
           this.appendIndicatorCompareGroup(indicatorCompareGroups, frame)
@@ -427,22 +431,16 @@ export class SemanticFrameNormalizerService {
     const gateTriggers = Array.from(indicatorCompareGroups.values()).map(group =>
       this.normalizeIndicatorCompareGroup(group.groupId, group.frames, combinationByKey),
     )
-    if (gateTriggers.length > 0) {
-      patch.triggers = [...gateTriggers, ...(patch.triggers ?? [])]
-    }
+    conditionAtoms.unshift(...gateTriggers)
 
     const actions = Array.from(actionsByKey.values()).map(frame => ({
-      key: frame.actionKey,
+      kind: 'atom' as const,
+      key: this.normalizeActionKey(frame.actionKey),
+      params: {},
       evidence: this.toEvidence(frame),
     }))
-    if (actions.length > 0) {
-      patch.actions = actions
-    }
 
     const risk = Array.from(riskByKey.values())
-    if (risk.length > 0) {
-      patch.risk = risk
-    }
 
     const orchestrationNodes = [
       ...Array.from(regimeGateByKey.values()),
@@ -465,9 +463,10 @@ export class SemanticFrameNormalizerService {
       ...Array.from(subStrategyScopeByKey.values()),
       ...Array.from(subStrategyGateByKey.values()),
     ]
-    if (orchestrationNodes.length > 0) {
-      patch.orchestration = { nodes: orchestrationNodes }
-    }
+    const orchestration = orchestrationNodes.map(node => this.orchestrationNodeToAtom(node))
+
+    const rules = this.buildRules(conditionAtoms, actions, risk, orchestration)
+    if (rules.length > 0) patch.rules = rules
 
     return patch
   }
@@ -880,10 +879,10 @@ export class SemanticFrameNormalizerService {
 
   private normalizeBoundaryTouch(
     frame: SemanticBoundaryTouchFrame,
-  ): NonNullable<CodegenSemanticPatch['triggers']>[number] {
+  ): RuleEffectAtom {
     return {
+      kind: 'atom',
       key: 'price.detect.indicator_boundary',
-      phase: frame.phase,
       sideScope: frame.sideScope,
       params: {
         indicator: { name: 'bollinger', period: 20, stdDev: 2 },
@@ -898,7 +897,7 @@ export class SemanticFrameNormalizerService {
     groupId: string,
     frames: readonly SemanticIndicatorCompareFrame[],
     combinationByKey: ReadonlyMap<string, SemanticCombinationMetadata>,
-  ): NonNullable<CodegenSemanticPatch['triggers']>[number] {
+  ): RuleEffectAtom {
     const sortedFrames = [...frames].sort((left, right) => left.period - right.period)
     const firstFrame = sortedFrames[0]
     const combination = firstFrame
@@ -907,8 +906,8 @@ export class SemanticFrameNormalizerService {
     const join = combination?.join ?? 'AND'
 
     return {
+      kind: 'atom',
       key: 'condition.expression',
-      phase: 'gate',
       sideScope: firstFrame?.sideScope,
       params: {
         expression: this.toExpression(sortedFrames, join),
@@ -974,8 +973,9 @@ export class SemanticFrameNormalizerService {
 
   private normalizeRisk(
     frame: SemanticRiskFrame,
-  ): NonNullable<CodegenSemanticPatch['risk']>[number] {
+  ): RuleEffectAtom {
     return {
+      kind: 'atom',
       key: 'risk.stop_loss_pct',
       params: {
         valuePct: frame.valuePct,
@@ -990,7 +990,7 @@ export class SemanticFrameNormalizerService {
   }
 
   private setRisk(
-    risks: Map<string, NonNullable<CodegenSemanticPatch['risk']>[number]>,
+    risks: Map<string, RuleEffectAtom>,
     frame: SemanticRiskFrame,
   ): void {
     const risk = this.normalizeRisk(frame)
@@ -1003,5 +1003,90 @@ export class SemanticFrameNormalizerService {
 
   private toEvidence(frame: SemanticNaturalLanguageFrame): SemanticEvidence {
     return { text: frame.evidenceText, source: 'user_explicit' }
+  }
+
+  private normalizeActionKey(key: string): string {
+    return key.startsWith('action.') ? key : `action.${key}`
+  }
+
+  private orchestrationNodeToAtom(
+    node: CodegenSemanticOrchestrationGateNodePatch
+      | CodegenSemanticOrchestrationPortfolioRiskNodePatch
+      | CodegenSemanticOrchestrationPortfolioSymbolExposureCapNodePatch
+      | CodegenSemanticOrchestrationPortfolioSubStrategyExposureCapNodePatch
+      | CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch
+      | CodegenSemanticOrchestrationDynamicGridProgramNodePatch
+      | CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch
+      | CodegenSemanticOrchestrationEventListenerProgramNodePatch
+      | CodegenSemanticOrchestrationSymbolScopeNodePatch
+      | CodegenSemanticOrchestrationLegScopeNodePatch
+      | CodegenSemanticOrchestrationTimeframeScopeNodePatch
+      | CodegenSemanticOrchestrationDataSourceScopeNodePatch
+      | CodegenSemanticOrchestrationSubStrategyScopeNodePatch
+      | CodegenSemanticOrchestrationSubStrategyGateNodePatch,
+  ): RuleEffectAtom {
+    return {
+      kind: 'atom',
+      key: node.key,
+      params: { ...node.params, ...node },
+      evidence: node.evidence ? { text: node.evidence.text } : undefined,
+    }
+  }
+
+  private buildRules(
+    conditions: readonly RuleEffectAtom[],
+    actions: readonly RuleEffectAtom[],
+    risks: readonly RuleEffectAtom[],
+    orchestration: readonly RuleEffectAtom[],
+  ): SemanticRule[] {
+    const buildEffects = (sideScope: SemanticRule['sideScope']) => ({
+      actions: actions.filter(action => this.actionMatchesRuleSideScope(action.key, sideScope)),
+      risks,
+      positions: [],
+      orchestration,
+      programs: [],
+    })
+
+    if (conditions.length > 0) {
+      return conditions.map((condition, index) => ({
+        id: `nl-frame-rule-${index + 1}`,
+        phase: condition.key === 'condition.expression' ? 'gate' : 'entry',
+        sideScope: condition.sideScope ?? 'both',
+        condition,
+        effects: buildEffects(condition.sideScope ?? 'both'),
+        evidence: condition.evidence,
+      }))
+    }
+
+    if (actions.length === 0 && risks.length === 0 && orchestration.length === 0) return []
+
+    const fallbackEffects = orchestration.length > 0
+      ? {
+          actions: [],
+          risks,
+          positions: [],
+          orchestration,
+          programs: [],
+        }
+      : buildEffects('both')
+
+    return [{
+      id: 'nl-frame-rule-on-start',
+      phase: 'entry',
+      sideScope: 'both',
+      condition: {
+        kind: 'atom',
+        key: 'execution.on_start',
+        params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
+      },
+      effects: fallbackEffects,
+    }]
+  }
+
+  private actionMatchesRuleSideScope(actionKey: string, sideScope: SemanticRule['sideScope']): boolean {
+    if (sideScope === 'both') return true
+    if (sideScope === 'long') return actionKey === 'action.open_long' || actionKey === 'action.close_long'
+    if (sideScope === 'short') return actionKey === 'action.open_short' || actionKey === 'action.close_short'
+    return true
   }
 }

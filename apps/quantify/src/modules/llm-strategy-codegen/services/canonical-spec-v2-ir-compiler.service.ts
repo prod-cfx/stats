@@ -562,7 +562,8 @@ export class CanonicalSpecV2IrCompilerService {
     ].join('_').replace(/\W+/g, '_')
 
     if (!context.levelSetMap.has(id)) {
-      context.levelSetMap.set(id, {
+      const triggerPct = intent.levelSet.halfRangePct
+      const levelSet: LevelSetDef = {
         id,
         kind: spacingMode,
         anchorRef: centerRef,
@@ -571,7 +572,11 @@ export class CanonicalSpecV2IrCompilerService {
           down: levelsBelowCenter,
           up: levelsAboveCenter,
         },
-      })
+      }
+      if (typeof triggerPct === 'number' && Number.isFinite(triggerPct) && triggerPct > 0) {
+        levelSet.triggerPct = triggerPct
+      }
+      context.levelSetMap.set(id, levelSet)
     }
 
     return id
@@ -1617,11 +1622,12 @@ export class CanonicalSpecV2IrCompilerService {
         const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
           ? atom.params.timeframe.trim()
           : context.timeframe
+        const indicatorSeed = this.indicatorComparePredicateSeed(atom, timeframe)
         const leftRef = this.resolveIndicatorCompareLeftRef(context, atom, timeframe)
         const rightRef = this.ensureIndicatorReferenceSeries(context, atom, timeframe)
         return this.upsertPredicate(
           context.predicateMap,
-          `${seed}_${atom.key.replace(/\./g, '_')}_${timeframe}`,
+          `${seed}_${atom.key.replace(/\./g, '_')}_${indicatorSeed}`,
           atom.key === 'indicator.above' ? 'GTE' : 'LTE',
           [leftRef, rightRef],
         )
@@ -2568,6 +2574,17 @@ export class CanonicalSpecV2IrCompilerService {
     throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:${indicator}`)
   }
 
+  private indicatorComparePredicateSeed(
+    atom: CanonicalConditionAtom,
+    timeframe: string,
+  ): string {
+    const indicator = typeof atom.params?.indicator === 'string' && atom.params.indicator.trim().length > 0
+      ? atom.params.indicator.trim().toLowerCase()
+      : 'sma'
+    const period = this.readNumber([this.readNestedParam(atom.params, 'reference', 'period'), atom.params?.['reference.period'], atom.params?.period], 0)
+    return `${indicator}_${period}_${timeframe}`.replace(/[^a-zA-Z0-9_]+/g, '_')
+  }
+
   private resolveIndicatorCompareLeftRef(
     context: CompileContext,
     atom: CanonicalConditionAtom,
@@ -3255,6 +3272,40 @@ export class CanonicalSpecV2IrCompilerService {
         appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
         predicateRef,
         onBreach: 'BLOCK_NEW_ENTRY',
+      }
+    }
+
+    // #1633 staging30 s23：LLM 在 entry 的 effects.risks 已经声明 risk.atr_multiple_take_profit
+    //   的同时，又冗余产出 phase=exit + condition=volatility.atr_threshold + action.close_*
+    //   的退出规则。canonical-spec-builder 把它原样投到 canonical rule（phase=exit）。
+    //   compileCondition 的 compileAtom 没有 volatility.atr_threshold 分支 → throw
+    //   `canonical_spec_v2_condition_unsupported:volatility.atr_threshold`。
+    //   通用对策：与 phase=gate 的 EXPRESSION_GUARD/BLOCK_NEW_ENTRY 对称，扩展到
+    //   phase=exit + CLOSE_LONG/CLOSE_SHORT → EXPRESSION_GUARD/FORCE_EXIT（position scope）。
+    //   仅复用 compilePhase1GateAtom 已支持的 atom 白名单，不引入新 atom，不做模板化。
+    if (
+      rule.phase === 'exit'
+      && (rule.condition.key === 'volume.threshold'
+        || rule.condition.key === 'volatility.atr_threshold'
+        || rule.condition.key === 'strategy.time_window'
+        || rule.condition.key === 'strategy.multi_timeframe'
+        || rule.condition.key === 'indicator.cross_over'
+        || rule.condition.key === 'indicator.cross_under'
+        || rule.condition.key === 'indicator.threshold_gte'
+        || rule.condition.key === 'indicator.threshold_lte')
+      && rule.actions.some(action => action.type === 'CLOSE_LONG' || action.type === 'CLOSE_SHORT')
+    ) {
+      const predicateRef = this.compilePhase1GateAtom(rule.condition, context, rule.id)
+      if (!predicateRef) {
+        return null
+      }
+      return {
+        id: `guard_${rule.id}`,
+        kind: 'EXPRESSION_GUARD',
+        scope: 'position',
+        appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
+        predicateRef,
+        onBreach: 'FORCE_EXIT',
       }
     }
 
@@ -4220,6 +4271,7 @@ export class CanonicalSpecV2IrCompilerService {
       ...(metadata.partialTakeProfit ? { partialTakeProfit: { ...metadata.partialTakeProfit } } : {}),
       ...(metadata.reversePosition ? { reversePosition: { ...metadata.reversePosition } } : {}),
       ...(metadata.addPosition ? { addPosition: { ...metadata.addPosition } } : {}),
+      ...(metadata.pyramidingHint ? { pyramidingHint: { ...metadata.pyramidingHint } } : {}),
       ...(metadata.dcaSchedule ? { dcaSchedule: { ...metadata.dcaSchedule } } : {}),
       ...(refValid && typeof ref === 'string' ? { symbolScopeRef: ref.trim() } : {}),
       ...(legRefValid && typeof legRef === 'string' ? { legScopeRef: legRef.trim() } : {}),

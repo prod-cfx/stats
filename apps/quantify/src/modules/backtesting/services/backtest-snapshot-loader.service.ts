@@ -1,6 +1,6 @@
 import type { BacktestExecutionPolicy, BacktestRunInput } from '../types/backtesting.types'
 import type { BacktestSymbolAvailabilityCheckInput } from './backtest-symbol-availability.service'
-import type { CanonicalRuleV2, CanonicalStrategySpec, RiskRuleSpec } from '@/modules/llm-strategy-codegen/types/canonical-strategy-spec'
+import type { CanonicalRuleV2, CanonicalStrategySpec } from '@/modules/llm-strategy-codegen/types/canonical-strategy-spec'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
@@ -520,38 +520,8 @@ export class BacktestSnapshotLoaderService {
       return Object.keys(riskRules).length > 0 ? riskRules : undefined
     }
 
-    const stopLossPct = canonicalSpec
-      ? this.parseStopLossPct(canonicalSpec.riskRules.find(rule => rule.effect === 'FORCE_STOP'))
-      : this.parseStopLossPct(this.findGraphTrigger(specSnapshot, trigger => /亏损|lossPct/i.test(trigger)))
-    if (typeof stopLossPct === 'number') {
-      riskRules.maxFloatingLossPct = stopLossPct
-    }
-
-    const outsideBandRule = canonicalSpec?.riskRules.find(rule => this.isOutsideBandRule(rule))
-    const outsideBandTrigger = outsideBandRule?.trigger
-      ?? this.findGraphTrigger(specSnapshot, trigger => this.isOutsideBandTrigger(trigger))
-    const bollingerIndicator = canonicalSpec?.indicators.find(item => item.kind === 'bollingerBands')
-      ?? this.readBollingerIndicatorFromIr(irSnapshot)
-    if (outsideBandTrigger && bollingerIndicator) {
-      const outsideBandAction = outsideBandRule
-        ? outsideBandRule.effect === 'REDUCE_POSITION' ? 'REDUCE' : 'CLOSE'
-        : this.parseOutsideBandAction(outsideBandTrigger)
-      riskRules.outsideBand = {
-        mode: 'BOLLINGER_BANDS',
-        lowerBound: 0,
-        upperBound: 0,
-        indicator: {
-          kind: 'bollingerBands',
-          period: Number(bollingerIndicator.params.period ?? 20),
-          stdDev: Number(bollingerIndicator.params.stdDev ?? 2),
-        },
-        consecutiveBars: this.parseConsecutiveBars(outsideBandTrigger) ?? 3,
-        action: outsideBandAction,
-        reduceRatio: outsideBandAction === 'REDUCE' ? this.parseReduceRatio(outsideBandTrigger) ?? 0.5 : undefined,
-      }
-    }
-
-    return Object.keys(riskRules).length > 0 ? riskRules : undefined
+    void irSnapshot
+    return undefined
   }
 
   private readCanonicalSpec(raw: Record<string, unknown>): CanonicalStrategySpec | undefined {
@@ -561,86 +531,6 @@ export class BacktestSnapshotLoaderService {
     }
     if (!Array.isArray(raw.indicators) || !Array.isArray(raw.riskRules)) return undefined
     return raw as unknown as CanonicalStrategySpec
-  }
-
-  private findGraphTrigger(
-    specSnapshot: Record<string, unknown>,
-    predicate: (trigger: string) => boolean,
-  ): string | undefined {
-    const triggerNodes = Array.isArray(specSnapshot.trigger) ? specSnapshot.trigger : []
-    for (const node of triggerNodes) {
-      if (!node || typeof node !== 'object' || Array.isArray(node)) continue
-      const operator = (node as { operator?: unknown }).operator
-      if (typeof operator === 'string' && predicate(operator)) {
-        return operator
-      }
-    }
-    return undefined
-  }
-
-  private readBollingerIndicatorFromIr(
-    irSnapshot?: Record<string, unknown>,
-  ): { kind: 'bollingerBands', params: Record<string, number | string | boolean> } | undefined {
-    const signalCatalog = this.readJsonRecord(irSnapshot?.signalCatalog)
-    const series = Array.isArray(signalCatalog?.series) ? signalCatalog.series : []
-    for (const rawSeries of series) {
-      if (!rawSeries || typeof rawSeries !== 'object' || Array.isArray(rawSeries)) continue
-      const series = rawSeries as { kind?: unknown, params?: unknown }
-      if (
-        series.kind !== 'LOWER_BAND'
-        && series.kind !== 'MID_BAND'
-        && series.kind !== 'UPPER_BAND'
-      ) {
-        continue
-      }
-      const params = this.readJsonRecord(series.params)
-      return {
-        kind: 'bollingerBands',
-        params: {
-          period: Number(params?.period ?? 20),
-          stdDev: Number(params?.stdDev ?? 2),
-        },
-      }
-    }
-    return undefined
-  }
-
-  private parseStopLossPct(rule?: RiskRuleSpec | string): number | undefined {
-    const trigger = typeof rule === 'string' ? rule : rule?.trigger
-    if (!trigger) return undefined
-    const match = trigger.match(/lossPct\s*>=\s*([0-9.]+)/i)
-      ?? trigger.match(/亏损\s*[≥>=]+\s*([0-9.]+)\s*%/u)
-      ?? trigger.match(/([0-9.]+)\s*%\s*(?:强制)?止损/u)
-    const value = Number(match?.[1] ?? '')
-    if (!Number.isFinite(value) || value <= 0) return undefined
-    return value <= 1 ? value * 100 : value
-  }
-
-  private parseConsecutiveBars(trigger: string): number | undefined {
-    const match = trigger.match(/(?:连续\s*)?(\d+)\s*(?:根|bars?)/i)
-    const value = Number(match?.[1] ?? '')
-    if (!Number.isFinite(value) || value <= 0) return undefined
-    return Math.floor(value)
-  }
-
-  private isOutsideBandRule(rule: RiskRuleSpec): boolean {
-    return /轨外|outside/i.test(rule.trigger)
-  }
-
-  private isOutsideBandTrigger(trigger: string): boolean {
-    return /轨外|outside/i.test(trigger)
-  }
-
-  private parseOutsideBandAction(trigger: string): 'REDUCE' | 'CLOSE' {
-    return /减仓|reduce/i.test(trigger) ? 'REDUCE' : 'CLOSE'
-  }
-
-  private parseReduceRatio(trigger: string): number | undefined {
-    const match = trigger.match(/减仓\s*([0-9.]+)\s*%/u)
-      ?? trigger.match(/reduce(?:\s+position)?\s*([0-9.]+)\s*%/iu)
-    const value = Number(match?.[1] ?? '')
-    if (!Number.isFinite(value) || value <= 0) return undefined
-    return value > 1 ? value / 100 : value
   }
 
   private parseStopLossPctV2(rule?: CanonicalRuleV2): number | undefined {

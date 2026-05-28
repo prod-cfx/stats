@@ -69,6 +69,30 @@ describe('positionsValuationService', () => {
     applyQuotesSpy.mockRestore()
   })
 
+  it('skips market quote event valuation when runtime switch is disabled', async () => {
+    process.env.POSITION_QUOTE_VALUATION_ENABLED = 'false'
+    const txHost = {
+      tx: {},
+      withTransaction: jest.fn(),
+    }
+    const service = new PositionsValuationService(txHost as any, {} as any)
+    const applyQuotesSpy = jest.spyOn(service, 'applyQuotes').mockResolvedValue({
+      updatedPositions: 1,
+      updatedAccounts: 1,
+    })
+
+    await service.handleMarketQuote({
+      data: {
+        symbol: 'BTCUSDT:SPOT',
+        lastPrice: '68600',
+      },
+    } as any)
+
+    expect(applyQuotesSpy).not.toHaveBeenCalled()
+    delete process.env.POSITION_QUOTE_VALUATION_ENABLED
+    applyQuotesSpy.mockRestore()
+  })
+
   it('updates positions and accounts in deterministic order to reduce valuation deadlocks', async () => {
     const positionsRepository = {
       findOpenPositionsBySymbols: jest.fn().mockResolvedValue([

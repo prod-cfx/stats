@@ -219,4 +219,33 @@ describe('SemanticExecutableSemanticsService — fulfillsStrategyPhase invariant
       })
     }
   })
+
+  describe('rules-native facts', () => {
+    it('detects executable entry/exit/sizing semantics from rules-only DCA schedule leaves', () => {
+      const state: SemanticState = {
+        ...emptyState(),
+        rules: [{
+          id: 'rules-dca',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'volume.threshold', params: { value: 1000 } },
+          effects: {
+            actions: [],
+            risks: [],
+            positions: [{
+              kind: 'atom',
+              key: 'position.dca_schedule',
+              params: { perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' } },
+            }],
+            orchestration: [],
+            programs: [],
+          },
+        }],
+      }
+
+      expect(service.hasExecutableEntrySemantics(state)).toBe(true)
+      expect(service.hasExecutableExitSemantics(state)).toBe(true)
+      expect(service.anyAtomFulfillsPhase(state, 'sizing')).toBe(true)
+    })
+  })
 })

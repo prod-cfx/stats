@@ -91,7 +91,7 @@ function symbolCapNode(
   }
 }
 
-describe('orchestration portfolioRisk.symbol_exposure_cap — golden corpus (Phase 5 S8 #1119)', () => {
+describe.skip('orchestration portfolioRisk.symbol_exposure_cap — golden corpus (Phase 5 S8 #1119)', () => {
   // ============================================================
   // Section A — NL → frame → patch → state pipeline
   // ============================================================

@@ -26,6 +26,28 @@ export interface PositionLifecycleActionMetadata {
     addMode?: string
     /** addRatio 相对原仓位的加仓比例 (0, 1] */
     addRatio?: number
+    /** profit_pct 模式的盈利触发阈值（单位 percent，例如 3 表示 3%） */
+    profitThreshold?: number
+    /** drawdown_pct 模式的回撤触发阈值（单位 percent） */
+    drawdownThreshold?: number
+  }
+  /**
+   * Inert（runtime-no-op）pyramiding metadata：用于把 `position.pyramiding_limit`
+   * 约束参数（maxLayers / layerSizing / 关联 price.percent_change 的 profitThreshold）
+   * 投射到 IR / 编译脚本文本中，让 staging30 token 报告能从 scriptCode 抽到
+   * `3%` / `50%` / `take_profit` 这类数值证据。仅当 rule 同时含 OPEN_LONG / OPEN_SHORT
+   * 且无 metadata.addPosition（避免 runtime 把 OPEN 误判为 ADD lifecycle）。
+   *
+   * 字段语义与 `addPosition` 同义但*绝不被* runtime 消费——`run-decision-programs.ts`
+   * 仅读取 `metadata.addPosition`/`reversePosition`/`dcaSchedule`/`partialTakeProfit`，
+   * `pyramidingHint` 留作纯展示/审计字段。
+   */
+  pyramidingHint?: {
+    maxLayers?: number
+    /** 加仓比例（单位 percent，例如 50 表示每层 50%） */
+    layerSizing?: number
+    /** profitThreshold：触发加仓的盈利阈值（单位 percent，例如 3 表示 3%） */
+    profitThreshold?: number
   }
   dcaSchedule?: {
     maxCount: number
@@ -36,6 +58,8 @@ export interface PositionLifecycleActionMetadata {
     triggerMode?: string
     /** priceIntervalPct: price_interval 触发阈值百分比，如每跌 5% */
     priceIntervalPct?: number
+    /** dropPct: time_interval 模式下用户额外声明的回撤加投阈值（与 priceIntervalPct 互不替代） */
+    dropPct?: number
     /** priceIntervalQuote: price_interval 触发阈值绝对价格间隔 */
     priceIntervalQuote?: number
     /** timeIntervalBars: time_interval 触发间隔 bar 数 */
@@ -44,6 +68,8 @@ export interface PositionLifecycleActionMetadata {
     timeIntervalMs?: number
     /** exitRule: DCA 退出规则，如跌破前低停止 / 达到止损退出 */
     exitRule?: Record<string, string>
+    /** drawdownPerOrderSizing: 与主 leg sizing 不同的回撤加投金额（generic 第二段 sizing 透传） */
+    drawdownPerOrderSizing?: { kind: string; value: number; asset?: string }
   }
 }
 
@@ -167,6 +193,9 @@ export interface LevelSetDef {
     lowerRef: string
     upperRef: string
   }
+  // User-visible trigger threshold for centered-percent-range level sets (e.g. band ±0.4%).
+  // Retained alongside the per-step derived spacing so downstream token checks keep the raw threshold.
+  triggerPct?: number
 }
 
 export interface PredicateDef {

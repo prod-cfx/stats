@@ -34,6 +34,10 @@ export class MarketSymbolCatalogService implements OnApplicationBootstrap {
   ) {}
 
   onApplicationBootstrap(): void {
+    if (process.env.QUANTIFY_STAGING_VALIDATION_MODE === 'true') {
+      this.logger.warn('market symbol catalog initial sync skipped: QUANTIFY_STAGING_VALIDATION_MODE=true')
+      return
+    }
     void this.runInitialSync()
   }
 
@@ -69,6 +73,7 @@ export class MarketSymbolCatalogService implements OnApplicationBootstrap {
 
   @Cron(CronExpression.EVERY_30_MINUTES)
   async syncAllExchangeSymbols(): Promise<void> {
+    if (process.env.QUANTIFY_STAGING_VALIDATION_MODE === 'true') return
     if (this.syncAllInProgress) return
     this.syncAllInProgress = true
 

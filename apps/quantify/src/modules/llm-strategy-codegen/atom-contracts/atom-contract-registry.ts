@@ -3439,7 +3439,16 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         const triggerMode = typeof triggerModeVal === 'string'
           ? (ATOM_PRIVATE_DISPLAY.dcaTriggerMode[triggerModeVal as keyof typeof ATOM_PRIVATE_DISPLAY.dcaTriggerMode]?.zh ?? triggerModeVal)
           : ''
-        const parts = [triggerMode, perOrderSizing, maxCount, capitalCap].filter(Boolean)
+        const dropPctVal = params.dropPct
+        const dropPct = typeof dropPctVal === 'number' && dropPctVal > 0 ? `回撤 ${dropPctVal}% 加投` : ''
+        // #s30：drawdownPerOrderSizing 表示第二段（回撤触发）补仓金额，独立于主 leg
+        //   perOrderSizing。当用户描述 "回撤 N% 加投 X USDT" 时需在文案中体现 X USDT，
+        //   否则 token 校验丢失。
+        const drawdownSizing = formatDcaScheduleSizing(params.drawdownPerOrderSizing)
+        const dropPctWithSizing = dropPct && drawdownSizing
+          ? `${dropPct} ${drawdownSizing}`
+          : dropPct || (drawdownSizing ? `加投 ${drawdownSizing}` : '')
+        const parts = [triggerMode, perOrderSizing, dropPctWithSizing, maxCount, capitalCap].filter(Boolean)
         return parts.length > 0 ? `DCA 补仓计划：${parts.join('，')}` : 'DCA 补仓计划'
       },
     },
@@ -3508,6 +3517,12 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         // #1497: maxLayers 收紧到 [1, 10] + multipleOf:1（业务最多 10 层；> 10 几乎一定是幻觉）
         maxLayers: { kind: 'number', required: false, range: [1, 10], multipleOf: 1, extractor: { kind: 'number-int', pattern: '\\d+', range: [1, 10] } },
         layerSizing: { kind: 'percent', required: false, range: [0, 100], extractor: { kind: 'percent', pattern: '\\d+(\\.\\d+)?%', range: [0, 100] } },
+        // #1633 s29: 跨子句 backfill —— "盈利 N% 后加仓 M% ... 最多加 K 层" 场景下，
+        //   seed dispatcher post-pass (applyPyramidingProfitTriggerBackfill) 从全文抽取
+        //   N% (profitThreshold) 写入此 slot，便于下游 (planner-dispatcher-merge / canonical-spec-builder)
+        //   识别 lifecycle 触发阈值，避免 staging30 token 检查丢 take_profit + N% pair。
+        //   extractor 留空：该 slot 不参与单子句 atom 匹配，仅 backfill 写入。
+        profitThreshold: { kind: 'percent', required: false, range: [0, 100] },
       },
       phaseResolver: 'fixed-entry',
       sideResolver: 'inherit',
@@ -3593,7 +3608,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         recycle: { kind: 'enum', required: false, enum: ['true', 'false'], default: 'true', extractor: { kind: 'enum-zh-map', enumMap: { '循环': 'true', 'recycle': 'true', '不循环': 'false' } } },
         // Issue #1391 follow-up：'立即停止'/'撤销订单'/'撤销所有未成交' 是用户对网格越界的停止动作表达，
         //   映射到 breakoutAction='stop'，与"继续/continue"形成完整双向枚举。
-        breakoutAction: { kind: 'enum', required: false, enum: ['continue', 'stop'], default: 'continue', extractor: { kind: 'enum-zh-map', enumMap: { '继续': 'continue', '停止': 'stop', 'continue': 'continue', 'stop': 'stop', 'pause': 'stop', 'cancel': 'stop', '立即停止': 'stop', '撤销订单': 'stop', '撤销所有未成交': 'stop', '撤销未成交': 'stop' } } },
+        breakoutAction: { kind: 'enum', required: false, enum: ['continue', 'stop'], extractor: { kind: 'enum-zh-map', enumMap: { '继续': 'continue', '停止': 'stop', 'continue': 'continue', 'stop': 'stop', 'pause': 'stop', 'cancel': 'stop', '立即停止': 'stop', '撤销订单': 'stop', '撤销所有未成交': 'stop', '撤销未成交': 'stop' } } },
         stepPct: { kind: 'number', required: false, range: [0, 100], extractor: { kind: 'number-decimal', pattern: '(?:每格间距|网格间距|间距|步长)\\s*(\\d+(?:\\.\\d+)?)\\s*%' } },
         perGridSizing: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:每格|per grid|each grid)\\s*(?:使用|用)?\\s*(\\d+(?:\\.\\d+)?)\\s*(?:USDT|USDC|USD|U|刀)' } },
       },
@@ -3602,7 +3617,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       phraseHints: {
         triggers: [{
           keywords: ['网格', 'grid 区间', '双向网格', '上下边界', '停止', '撤销'],
-          mustOutput: '单叶子 rule（phase=program）condition=grid.range_rebalance + sideMode + breakoutAction="stop|continue"；不需要额外的 entry trigger，也不需要 protective_exit；grid 自身即是连续入场源 + 出场覆盖。',
+          mustOutput: '单叶子 rule（phase=program）condition=grid.range_rebalance + sideMode；只有用户明确说突破边界后停止/继续时才输出 breakoutAction，不需要额外的 entry trigger，也不需要 protective_exit；grid 自身即是连续入场源 + 出场覆盖。',
         }],
       },
       // Issue #1409 — open slot 澄清答复 golden 集

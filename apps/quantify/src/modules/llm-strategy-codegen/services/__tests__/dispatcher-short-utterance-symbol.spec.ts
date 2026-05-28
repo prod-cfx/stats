@@ -89,6 +89,39 @@ describe('dispatcher 短句 symbol 推断（PR2c3-A）', () => {
     expect(contextSymbol(patch)).toBeUndefined()
   })
 
+  it.each([
+    'MISSING',
+    'RULES',
+    'RULESMAINFLOW',
+    'EFFECTS',
+    'POSITIONS',
+    'MISSING_EXIT_RULES',
+    'rulesMainflow.missing_exit_rules: 价格相对入场均价下跌 5% 时平仓。',
+  ])('内部字段 token "%s" 不应被推断为交易标的', (utterance) => {
+    const patch = dispatcher.dispatch(utterance)
+    expect(contextSymbol(patch)).toBeUndefined()
+  })
+
+  it('sizing 上下文里的裸数字默认按 quote USDT 锁定，不留下空 position.sizing', () => {
+    const patch = dispatcher.dispatch('OKX 合约 BTCUSDT 15m，收到 webhook 事件 signalId 为 whale_buy 且 secret 已配置时开多，每次 100。')
+
+    expect(patch.position).toBeUndefined()
+    expect(patch.rules?.[0]?.effects).toEqual(expect.objectContaining({
+      positions: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'position.sizing',
+          params: expect.objectContaining({
+            sizing: {
+              kind: 'quote',
+              value: 100,
+              asset: 'USDT',
+            },
+          }),
+        }),
+      ]),
+    }))
+  })
+
   // C2: 两字母 token 下限收紧到 3，'AI'/'OK' 不推断
   it.each([
     'AI',

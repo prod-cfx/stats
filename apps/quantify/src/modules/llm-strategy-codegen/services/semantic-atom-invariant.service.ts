@@ -6,9 +6,9 @@ import type { StrategyConsistencyCheck } from '../types/strategy-consistency-rep
 import { Injectable } from '@nestjs/common'
 import { SemanticAtomContractService } from './semantic-atom-contract.service'
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
-import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
+import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
 
 type PriceChangeDirection = 'up' | 'down'
 type PositionAction = 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
@@ -109,6 +109,7 @@ interface ExpectedOrderProgramContract {
 export class SemanticAtomInvariantService {
   constructor(
     private readonly contracts: SemanticAtomContractService = new SemanticAtomContractService(),
+    private readonly rulesMainflowReader: RulesMainflowReaderService = new RulesMainflowReaderService(),
   ) {}
 
   validate(input: {
@@ -381,11 +382,17 @@ export class SemanticAtomInvariantService {
 
   private collectContracts(state: SemanticState): SemanticAtomContract[] {
     return [
-      ...readFlatTriggers(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
-      ...readFlatActions(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
-      ...readFlatRisks(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...this.rulesMainflowReader.readFacts(state)
+        .filter(atom => atom.status === 'locked')
+        .flatMap(atom => atom.contracts ?? [])
+        .filter((contract): contract is SemanticAtomContract =>
+          contract.kind === 'trigger'
+          || contract.kind === 'action'
+          || contract.kind === 'risk'
+          || contract.kind === 'position'
+          || contract.kind === 'context',
+        ),
       ...(state.position?.status === 'locked' ? state.position.contracts ?? [] : []),
-      ...(state.position?.constraints ?? []).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
     ]
   }
 
@@ -856,8 +863,8 @@ export class SemanticAtomInvariantService {
   private hasBothSideGridIntent(state: SemanticState): boolean {
     const hasBothSideParams = (params: Record<string, unknown> | undefined): boolean =>
       params?.sideMode === 'both'
-    for (const constraint of state.positionConstraint ?? []) {
-      if (constraint.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && hasBothSideParams(constraint.params)) {
+    for (const fact of this.rulesMainflowReader.readFacts(state)) {
+      if (fact.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && hasBothSideParams(fact.params)) {
         return true
       }
     }
@@ -905,7 +912,7 @@ export class SemanticAtomInvariantService {
       expected: expectedIr,
       actual: input.ir.portfolio.sizing,
     }
-    const astCandidates = this.readAstOpenActionPositionSizings(input.ast)
+    const astCandidates = this.readAstOpenActionPositionSizings(input.ast, input.semanticState)
     const ast = {
       passed: astCandidates.length > 0
         && astCandidates.every(candidate => this.matchesPositionSizingSnapshot(candidate, expectedIr)),
@@ -982,28 +989,50 @@ export class SemanticAtomInvariantService {
     }
   }
 
-  private readAstOpenActionPositionSizings(ast: StrategyAstV1): PositionSizingSnapshot[] {
+  private readAstOpenActionPositionSizings(ast: StrategyAstV1, semanticState?: SemanticState): PositionSizingSnapshot[] {
     const decisionActions = ast.decisionPrograms.flatMap(program => program.actions)
     const openActionSizings = decisionActions
       .filter(action => action.kind === 'OPEN_LONG' || action.kind === 'OPEN_SHORT')
       .map(action => action.quantity)
+    const strictDcaAddOnly = semanticState ? this.hasOpenActionAndOrdinaryAddPositionRules(semanticState) : false
     const addActionSizings = decisionActions
       // DCA-only 策略没有 OPEN_* 主仓动作，此时 ADD_* 是入场 sizing 载体。
-      // 若 OPEN_* 存在，ADD_* 表示加仓 sizing，不能要求等于主仓 position.sizing。
+      // 若 OPEN_* 存在，只有 DCA/未标明 atomKey 的 ADD_* 仍纳入；普通 action.add_position
+      // 表示加仓 sizing，不能要求等于主仓 position.sizing。
       .filter(action =>
         (action.kind === 'ADD_LONG' || action.kind === 'ADD_SHORT')
-        && this.isDcaScheduleAstAddAction(action),
+        && (
+          openActionSizings.length === 0
+          || (strictDcaAddOnly ? this.isExplicitDcaScheduleAstAddAction(action) : this.isDcaScheduleAstAddAction(action))
+        ),
       )
       .map(action => action.quantity)
     return [
-      ...(openActionSizings.length > 0 ? openActionSizings : addActionSizings),
+      ...openActionSizings,
+      ...addActionSizings,
       ...ast.orderPrograms.map(program => program.payload.quantity),
     ]
   }
 
   private isDcaScheduleAstAddAction(action: ActionDef): boolean {
     if (action.kind !== 'ADD_LONG' && action.kind !== 'ADD_SHORT') return false
+    const atomKey = this.readString((action as unknown as Record<string, unknown>).atomKey)
+    return atomKey === null || atomKey === 'position.dca_schedule'
+  }
+
+  private isExplicitDcaScheduleAstAddAction(action: ActionDef): boolean {
+    if (action.kind !== 'ADD_LONG' && action.kind !== 'ADD_SHORT') return false
     return this.readString((action as unknown as Record<string, unknown>).atomKey) === 'position.dca_schedule'
+  }
+
+  private hasOpenActionAndOrdinaryAddPositionRules(state: SemanticState): boolean {
+    const actionFacts = this.rulesMainflowReader.readFactsByRole(state, 'action')
+    const hasOpen = actionFacts.some(fact =>
+      fact.key === ATOM_CONTRACT_REGISTRY['action.open_long'].key
+      || fact.key === ATOM_CONTRACT_REGISTRY['action.open_short'].key,
+    )
+    const hasOrdinaryAdd = actionFacts.some(fact => fact.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key)
+    return hasOpen && hasOrdinaryAdd
   }
 
   private matchesPositionSizingSnapshot(
@@ -1013,6 +1042,7 @@ export class SemanticAtomInvariantService {
     if (!actual) return false
     if (actual.mode !== expected.mode) return false
     if (Math.abs(actual.value - expected.value) > 0.000001) return false
+    if (expected.asset === 'USDT' && actual.asset === undefined) return true
     if (expected.asset !== undefined && actual.asset !== expected.asset) return false
     return true
   }
@@ -1023,7 +1053,7 @@ export class SemanticAtomInvariantService {
     ir: CanonicalStrategyIrV1
     ast: StrategyAstV1
   }): StrategyConsistencyCheck[] {
-    const triggers = readFlatTriggers(input.semanticState)
+    const triggers = this.readConditionTriggerFacts(input.semanticState)
       .filter(trigger => this.isBlockingGenericExpressionTrigger(trigger))
     const triggersByBucket = new Map<string, SemanticTriggerState[]>()
 
@@ -1504,7 +1534,7 @@ export class SemanticAtomInvariantService {
     // First-stage blocking scope: explicit trigger-level price percent changes.
     // Risk percent rules (stop loss / take profit / trailing stop) remain covered
     // by canonical risk guards and the existing strategy consistency checks.
-    const triggers = readFlatTriggers(input.semanticState)
+    const triggers = this.readConditionTriggerFacts(input.semanticState)
       .filter(trigger => this.isBlockingPricePercentChangeTrigger(trigger))
     const triggersByBucket = new Map<string, SemanticTriggerState[]>()
 
@@ -1530,7 +1560,7 @@ export class SemanticAtomInvariantService {
     // eslint-disable-next-line atom-keys/no-atom-key-literal -- legacy atom key not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
     return trigger.key === 'price.percent_change'
       && trigger.status === 'locked'
-      && trigger.source === 'user_explicit'
+      && (trigger.source === 'user_explicit' || trigger.source === 'derived')
       && basis === 'prev_close'
       && (trigger.phase === 'entry' || trigger.phase === 'exit')
   }
@@ -1548,18 +1578,23 @@ export class SemanticAtomInvariantService {
   ): StrategyConsistencyCheck {
     const expected = this.buildExpectedSnapshot(trigger, expectedAction, contextTimeframe)
     const expectedBucket = bucketTriggers.map(bucketTrigger => this.buildExpectedSnapshot(bucketTrigger, expectedAction, contextTimeframe))
+    // Drift validator scope: only blocking triggers (basis='prev_close') participate;
+    // canonical/IR/AST predicates with other bases (e.g. entry_avg_price stop/take_profit
+    // children inside an OR-merged exit rule) must be excluded from candidates to avoid
+    // spurious "conflict" reports. Trigger filter is in isBlockingPricePercentChangeTrigger.
+    const expectedBasis = typeof trigger.params.basis === 'string' ? trigger.params.basis : 'prev_close'
     const canonical = this.buildLayerSnapshot(
-      this.findCanonicalPredicates(input.canonicalSpec, trigger.phase, expectedAction),
+      this.findCanonicalPredicates(input.canonicalSpec, trigger.phase, expectedAction, expectedBasis),
       expected,
       expectedBucket,
     )
     const ir = this.buildLayerSnapshot(
-      this.findIrPredicates(input.ir, trigger.phase, expectedAction),
+      this.findIrPredicates(input.ir, trigger.phase, expectedAction, expectedBasis),
       expected,
       expectedBucket,
     )
     const ast = this.buildLayerSnapshot(
-      this.findAstPredicates(input.ast, trigger.phase, expectedAction),
+      this.findAstPredicates(input.ast, trigger.phase, expectedAction, expectedBasis),
       expected,
       expectedBucket,
     )
@@ -1655,6 +1690,7 @@ export class SemanticAtomInvariantService {
     canonicalSpec: CanonicalStrategySpec,
     phase: SemanticTriggerState['phase'],
     action: PositionAction,
+    expectedBasis: string,
   ): PriceChangeSnapshot[] {
     if (canonicalSpec.version !== 2 || (phase !== 'entry' && phase !== 'exit')) {
       return []
@@ -1665,7 +1701,7 @@ export class SemanticAtomInvariantService {
         rule.phase === phase
         && rule.actions.some(ruleAction => ruleAction.type === action)
       ) {
-        return this.collectCanonicalPriceChangePredicates(rule.condition, rule.id)
+        return this.collectCanonicalPriceChangePredicates(rule.condition, rule.id, expectedBasis)
       }
       return []
     })
@@ -1674,10 +1710,16 @@ export class SemanticAtomInvariantService {
   private collectCanonicalPriceChangePredicates(
     condition: CanonicalConditionNode,
     ruleId: string,
+    expectedBasis: string,
   ): PriceChangeSnapshot[] {
     if (condition.kind === 'atom') {
       // eslint-disable-next-line atom-keys/no-atom-key-literal -- legacy atom key not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
       if (condition.key !== 'price.change_pct') return []
+      // Exclude predicates whose basis doesn't match the trigger's basis. The drift validator
+      // only checks blocking triggers (basis='prev_close'); other-basis predicates inside an
+      // OR-merged exit (e.g. entry_avg_price stop/take_profit children) must be filtered out.
+      const candidateBasis = typeof condition.params?.basis === 'string' ? condition.params.basis : 'prev_close'
+      if (candidateBasis !== expectedBasis) return []
       return [{
         id: ruleId,
         predicateKind: this.canonicalPredicateKind(condition.op),
@@ -1691,27 +1733,54 @@ export class SemanticAtomInvariantService {
       return []
     }
 
-    const nested = condition.children.flatMap(child =>
-      this.collectCanonicalPriceChangePredicates(child, ruleId),
-    )
-    if (condition.kind === 'AND' || nested.length === 0) {
-      return nested
+    const childResults = condition.children.map(child => ({
+      child,
+      leaves: this.collectCanonicalPriceChangePredicates(child, ruleId, expectedBasis),
+      hasAnyPriceChange: this.canonicalSubtreeHasPriceChange(child),
+    }))
+    const nested = childResults.flatMap(entry => entry.leaves)
+    // OR-weakening detection: emit a wrapper-level conflict only when this OR has at least
+    // one direct branch that contains NO price.change_pct predicate at all (e.g. an
+    // execution.on_start gate). Pure OR-merged price-change rules — where every branch is
+    // itself a price.change_pct predicate, possibly with different bases — do NOT weaken
+    // the blocking trigger and must not be flagged. Returning leaves-only for those cases
+    // lets basis-mismatched siblings be ignored cleanly.
+    if (condition.kind === 'OR') {
+      const hasNonPriceChangeBranch = childResults.some(entry => !entry.hasAnyPriceChange)
+      if (hasNonPriceChangeBranch && nested.length > 0) {
+        return [{
+          id: ruleId,
+          predicateKind: 'OR',
+          constValue: null,
+          hasPriceChangeSeries: true,
+          timeframe: null,
+          lookbackBars: null,
+        }, ...nested]
+      }
     }
+    return nested
+  }
 
-    return [{
-      id: `${ruleId}:${condition.kind}`,
-      predicateKind: condition.kind,
-      constValue: null,
-      hasPriceChangeSeries: true,
-      timeframe: null,
-      lookbackBars: null,
-    }, ...nested]
+  private canonicalSubtreeHasPriceChange(condition: CanonicalConditionNode): boolean {
+    if (condition.kind === 'atom') {
+      // price.change_pct (basis=prev_close) 与 position_gain_pct (basis=entry_avg_price)
+      // 都是 SemanticState `price.percent_change` 在 canonical 层的下游编码 —— 它们在
+      // OR-merged exit 中互为同族兄弟，不应被视为"非 price-change 分支"而触发
+      // 错误的 OR-weakening conflict（regression: staging30 s06）。
+      // eslint-disable-next-line atom-keys/no-atom-key-literal -- legacy atom keys not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
+      return condition.key === 'price.change_pct' || condition.key === 'position_gain_pct'
+    }
+    if (condition.kind === 'expression') {
+      return false
+    }
+    return condition.children.some(child => this.canonicalSubtreeHasPriceChange(child))
   }
 
   private findIrPredicates(
     ir: CanonicalStrategyIrV1,
     phase: SemanticTriggerState['phase'],
     action: PositionAction,
+    expectedBasis: string,
   ): PriceChangeSnapshot[] {
     if (phase !== 'entry' && phase !== 'exit') {
       return []
@@ -1724,7 +1793,7 @@ export class SemanticAtomInvariantService {
         rule.phase === phase
         && rule.actions.some(ruleAction => ruleAction.kind === action),
       )
-      .flatMap(rule => this.collectIrPriceChangePredicates(rule.when, predicateById, seriesById, new Set()))
+      .flatMap(rule => this.collectIrPriceChangePredicates(rule.when, predicateById, seriesById, new Set(), expectedBasis))
   }
 
   private collectIrPriceChangePredicates(
@@ -1732,6 +1801,7 @@ export class SemanticAtomInvariantService {
     predicateById: Map<string, PredicateDef>,
     seriesById: Map<string, SeriesDef>,
     seen: Set<string>,
+    expectedBasis: string,
   ): PriceChangeSnapshot[] {
     if (seen.has(predicateId)) {
       return []
@@ -1746,34 +1816,47 @@ export class SemanticAtomInvariantService {
     const seriesArgs = predicate.args
       .map(arg => seriesById.get(arg))
       .filter((series): series is SeriesDef => series !== undefined)
-    const hasPriceChangeSeries = seriesArgs.some(series => series.kind === 'PRICE_CHANGE_PCT')
-    const nested = predicate.args.flatMap(arg =>
-      this.collectIrPriceChangePredicates(arg, predicateById, seriesById, seen),
-    )
+    const priceChangeSeries = seriesArgs.find(series => series.kind === 'PRICE_CHANGE_PCT')
+    const childResults = predicate.args.map(arg => ({
+      arg,
+      leaves: this.collectIrPriceChangePredicates(arg, predicateById, seriesById, seen, expectedBasis),
+      hasAnyPriceChange: this.irSubtreeHasPriceChange(arg, predicateById, seriesById, new Set()),
+    }))
+    const nested = childResults.flatMap(entry => entry.leaves)
 
-    if (!hasPriceChangeSeries) {
-      if (nested.length > 0 && predicate.kind !== 'AND') {
-        return [{
-          id: predicate.id,
-          predicateKind: predicate.kind,
-          constValue: null,
-          hasPriceChangeSeries: true,
-          timeframe: null,
-          lookbackBars: null,
-        }, ...nested]
+    if (!priceChangeSeries) {
+      // OR-weakening detection: only flag OR when at least one branch carries no
+      // PRICE_CHANGE_PCT series (e.g. unrelated gate). Pure OR-merged price-change branches
+      // are not weakening and must not be flagged.
+      if (predicate.kind === 'OR' && nested.length > 0) {
+        const hasNonPriceChangeBranch = childResults.some(entry => !entry.hasAnyPriceChange)
+        if (hasNonPriceChangeBranch) {
+          return [{
+            id: predicate.id,
+            predicateKind: predicate.kind,
+            constValue: null,
+            hasPriceChangeSeries: true,
+            timeframe: null,
+            lookbackBars: null,
+          }, ...nested]
+        }
       }
       return nested
     }
 
+    const seriesBasis = typeof priceChangeSeries.params?.basis === 'string' ? priceChangeSeries.params.basis : 'prev_close'
+    if (seriesBasis !== expectedBasis) {
+      return nested
+    }
+
     const constSeries = seriesArgs.find(series => series.kind === 'CONST')
-    const priceChangeSeries = seriesArgs.find(series => series.kind === 'PRICE_CHANGE_PCT')
     return [{
       id: predicate.id,
       predicateKind: predicate.kind,
       constValue: typeof constSeries?.value === 'number' ? constSeries.value : null,
-      hasPriceChangeSeries,
-      timeframe: priceChangeSeries?.timeframe ?? null,
-      lookbackBars: this.readPositiveInteger(priceChangeSeries?.params?.lookbackBars) ?? 1,
+      hasPriceChangeSeries: true,
+      timeframe: priceChangeSeries.timeframe ?? null,
+      lookbackBars: this.readPositiveInteger(priceChangeSeries.params?.lookbackBars) ?? 1,
     }, ...nested]
   }
 
@@ -1781,6 +1864,7 @@ export class SemanticAtomInvariantService {
     ast: StrategyAstV1,
     phase: SemanticTriggerState['phase'],
     action: PositionAction,
+    expectedBasis: string,
   ): PriceChangeSnapshot[] {
     if (phase !== 'entry' && phase !== 'exit') {
       return []
@@ -1791,13 +1875,14 @@ export class SemanticAtomInvariantService {
         program.phase === phase
         && program.actions.some(programAction => programAction.kind === action),
       )
-      .flatMap(program => this.collectAstPriceChangePredicates(program.when, ast, new Set()))
+      .flatMap(program => this.collectAstPriceChangePredicates(program.when, ast, new Set(), expectedBasis))
   }
 
   private collectAstPriceChangePredicates(
     predicateExprId: string,
     ast: StrategyAstV1,
     seen: Set<string>,
+    expectedBasis: string,
   ): PriceChangeSnapshot[] {
     if (seen.has(predicateExprId)) {
       return []
@@ -1817,21 +1902,31 @@ export class SemanticAtomInvariantService {
     const priceChangeExpr = depExprs.find(expr => this.isSeriesKind(expr, 'PRICE_CHANGE_PCT'))
     const nested = depExprs
       .filter(expr => expr.nodeType === 'predicate')
-      .flatMap(expr => this.collectAstPriceChangePredicates(expr.id, ast, seen))
+      .flatMap(expr => this.collectAstPriceChangePredicates(expr.id, ast, seen, expectedBasis))
 
     if (!priceChangeExpr) {
-      if (nested.length > 0 && predicateExpr.payload.kind !== 'AND') {
-        return [{
-          id: predicateExpr.sourceRef,
-          predicateKind: predicateExpr.payload.kind,
-          constValue: null,
-          hasPriceChangeSeries: true,
-          timeframe: null,
-          lookbackBars: null,
-        }, ...nested]
+      if (predicateExpr.payload.kind === 'OR' && nested.length > 0) {
+        const hasNonPriceChangeBranch = predicateExpr.deps.some(dep => !this.astSubtreeHasPriceChange(dep, exprById, new Set()))
+        if (hasNonPriceChangeBranch) {
+          return [{
+            id: predicateExpr.sourceRef,
+            predicateKind: predicateExpr.payload.kind,
+            constValue: null,
+            hasPriceChangeSeries: true,
+            timeframe: null,
+            lookbackBars: null,
+          }, ...nested]
+        }
       }
       return nested
     }
+
+    const priceChangePayload = this.isSeriesPayload(priceChangeExpr.payload) ? priceChangeExpr.payload : null
+    const seriesBasis = typeof priceChangePayload?.params?.basis === 'string' ? priceChangePayload.params.basis : 'prev_close'
+    if (seriesBasis !== expectedBasis) {
+      return nested
+    }
+
     const constValue = constExpr && this.isSeriesPayload(constExpr.payload) && typeof constExpr.payload.value === 'number'
       ? constExpr.payload.value
       : null
@@ -1841,11 +1936,47 @@ export class SemanticAtomInvariantService {
       predicateKind: predicateExpr.payload.kind,
       constValue,
       hasPriceChangeSeries: true,
-      timeframe: this.isSeriesPayload(priceChangeExpr.payload) ? priceChangeExpr.payload.timeframe ?? null : null,
-      lookbackBars: this.isSeriesPayload(priceChangeExpr.payload)
-        ? this.readPositiveInteger(priceChangeExpr.payload.params?.lookbackBars) ?? 1
+      timeframe: priceChangePayload?.timeframe ?? null,
+      lookbackBars: priceChangePayload
+        ? this.readPositiveInteger(priceChangePayload.params?.lookbackBars) ?? 1
         : 1,
     }, ...nested]
+  }
+
+  private irSubtreeHasPriceChange(
+    predicateId: string,
+    predicateById: Map<string, PredicateDef>,
+    seriesById: Map<string, SeriesDef>,
+    seen: Set<string>,
+  ): boolean {
+    if (seen.has(predicateId)) return false
+    seen.add(predicateId)
+    const predicate = predicateById.get(predicateId)
+    if (!predicate) return false
+    // POSITION_PNL_PCT 是 canonical `position_gain_pct`（basis=entry_avg_price）的 IR 编码，
+    // 与 PRICE_CHANGE_PCT 同源于 semantic `price.percent_change`，在 OR-merged exit 中
+    // 应视为同族 price-change 分支（regression: staging30 s06）。
+    const hasDirectSeries = predicate.args.some(arg => {
+      const series = seriesById.get(arg)
+      return series?.kind === 'PRICE_CHANGE_PCT' || series?.kind === 'POSITION_PNL_PCT'
+    })
+    if (hasDirectSeries) return true
+    return predicate.args.some(arg => this.irSubtreeHasPriceChange(arg, predicateById, seriesById, seen))
+  }
+
+  private astSubtreeHasPriceChange(
+    exprId: string,
+    exprById: Map<string, ExprNode>,
+    seen: Set<string>,
+  ): boolean {
+    if (seen.has(exprId)) return false
+    seen.add(exprId)
+    const expr = exprById.get(exprId)
+    if (!expr) return false
+    // 与 IR 端保持一致：POSITION_PNL_PCT 与 PRICE_CHANGE_PCT 同源于 semantic
+    // `price.percent_change`，OR-merged exit 中互为同族兄弟。
+    if (this.isSeriesKind(expr, 'PRICE_CHANGE_PCT') || this.isSeriesKind(expr, 'POSITION_PNL_PCT')) return true
+    return expr.deps.some(dep => this.astSubtreeHasPriceChange(dep, exprById, seen))
   }
 
   private canonicalPredicateKind(op: CanonicalConditionAtom['op']): PredicateKind {
@@ -1964,5 +2095,25 @@ export class SemanticAtomInvariantService {
     const timeframe = semanticState.contextSlots.timeframe
     if (!timeframe || timeframe.status !== 'locked') return null
     return this.readString(timeframe.value)
+  }
+
+  private readConditionTriggerFacts(state: SemanticState): SemanticTriggerState[] {
+    return this.rulesMainflowReader.readFactsByRole(state, 'condition').map(fact => ({
+      id: fact.id,
+      key: fact.key,
+      phase: fact.phase === 'entry' || fact.phase === 'exit' || fact.phase === 'gate' ? fact.phase : 'gate',
+      params: fact.params,
+      sideScope: fact.sideScope,
+      status: fact.status,
+      source: fact.source,
+      openSlots: [...fact.openSlots],
+      contracts: fact.contracts?.filter((contract): contract is SemanticAtomContract =>
+        contract.kind === 'trigger'
+        || contract.kind === 'action'
+        || contract.kind === 'risk'
+        || contract.kind === 'position'
+        || contract.kind === 'context',
+      ),
+    }))
   }
 }

@@ -1,6 +1,8 @@
 import type { SemanticState } from '../../types/semantic-state'
 import type { AtomExprAtom, SemanticRule } from '../../types/atom-expr'
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
@@ -71,6 +73,16 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     baseTimeframe: '1m',
     positionPct: 10,
   }
+
+  it('keeps builder source on rules-mainflow and away from flat/projection/state buckets', () => {
+    const source = readFileSync(join(__dirname, '../canonical-spec-builder.service.ts'), 'utf8')
+
+    expect(source).not.toContain('semantic-state-flat-readers')
+    expect(source).not.toContain('SemanticRuleProjectionService')
+    expect(source).not.toContain('reprojectFromRules')
+    expect(source).not.toMatch(/\bstate\.(?:trigger|action|risk|positionConstraint|orchestration)\b/u)
+    expect(source).toContain('RulesMainflowReaderService')
+  })
 
   it('builds execution semantics from rule effects and ignores conflicting flat-only buckets', () => {
     const state = baseState({
@@ -394,6 +406,48 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
       value: 10,
       asset: 'USDT',
     })
+  })
+
+  it('uses rules-only position.sizing effect as canonical sizing', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-entry-long-with-position-sizing',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'atom',
+          key: 'execution.on_start',
+          params: {},
+        },
+        effects: {
+          actions: [{
+            kind: 'atom',
+            key: 'action.open_long',
+            params: {},
+          }],
+          risks: [],
+          positions: [{
+            kind: 'atom',
+            key: 'position.sizing',
+            params: { sizing: { kind: 'quote', value: 10, asset: 'USDT' } },
+          }],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.sizing).toEqual({ mode: 'QUOTE', value: 10, asset: 'USDT' })
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        actions: [expect.objectContaining({
+          type: 'OPEN_LONG',
+          sizing: { mode: 'QUOTE', value: 10, asset: 'USDT' },
+        })],
+      }),
+    ]))
   })
 
   it('lets rules-only centered grid orderProgram own execution trace when effect program is non-static', () => {
@@ -942,6 +996,79 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     expect(spec.sizing).toEqual({ mode: 'RATIO', value: 0.1 })
   })
 
+  it('ignores grid position constraints when resolving rules-only position sizing', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-grid-position-effect',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [{ kind: 'atom', key: 'grid.range_rebalance', params: { rangeLower: 60000, rangeUpper: 80000, stepPct: 0.5 } }],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.sizing).toEqual({ mode: 'RATIO', value: 0.1 })
+  })
+
+  it('does not throw when rules-only position.sizing leaf is still open', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-open-position-sizing',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [{ kind: 'atom', key: 'position.sizing', params: {} }],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.sizing).toEqual({ mode: 'RATIO', value: 0.1 })
+  })
+
+  it('builds single-timeframe rules-only scope.timeframe effects', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-single-timeframe-scope',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'macd.golden_cross', params: {} },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [{ kind: 'atom', key: 'scope.timeframe', params: { timeframe: '1h' } }],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.orchestration?.scopes).toEqual([
+      expect.objectContaining({
+        scopeKind: 'timeframe',
+        primaryTimeframe: '1h',
+        requiredTimeframes: [],
+      }),
+    ])
+    expect(spec.dataRequirements.requiredTimeframes).toContain('1h')
+  })
+
   it('uses semantic position sizing for rules-only open-position actions when no rule sizing leaf exists', () => {
     const state = baseState({
       position: {
@@ -1227,6 +1354,94 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
         actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
       }),
     ]))
+  })
+
+  it('builds rules-only ATR multiple risk effects with multiplier alias', () => {
+    const state = baseState({
+      rules: [{
+        id: 'entry-atr-stop-alias',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.cross_above_ma', params: { period: 20 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [{ kind: 'atom', key: 'risk.atr_multiple_stop', params: { multiplier: 2 } }],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'risk',
+        condition: expect.objectContaining({
+          key: 'risk.atr_multiple_stop',
+          params: { multiple: 2 },
+        }),
+      }),
+    ]))
+  })
+
+  it('defaults remembered-level stop to previous extrema for breakout retest rules', () => {
+    const state = baseState({
+      rules: [{
+        id: 'entry-breakout-retest-with-open-remembered-stop',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'sequence',
+          steps: [
+            { kind: 'atom', key: 'price.breakout_up', params: { period: 24 } },
+            { kind: 'atom', key: 'price.previous_extrema_retest', params: { retestKind: 'not_break' } },
+          ],
+        },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [{ kind: 'atom', key: 'risk.remembered_level_stop', params: {} }],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'risk',
+        condition: expect.objectContaining({
+          key: 'risk.remembered_level_stop',
+          params: { levelKey: 'previous_extrema' },
+        }),
+      }),
+    ]))
+  })
+
+  it('skips open rules-only atomic risk leaves instead of throwing runtime 500', () => {
+    const state = baseState({
+      rules: [{
+        id: 'entry-atr-stop-open',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.cross_above_ma', params: { period: 20 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [{ kind: 'atom', key: 'risk.atr_multiple_stop', params: {} }],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(JSON.stringify(spec.rules)).not.toContain('risk.atr_multiple_stop')
   })
 
   it('keeps distinct source paths for nested action risk position and program effect leaves', () => {
@@ -1634,5 +1849,231 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
 
     expect(() => new CanonicalSpecBuilderService().buildFromSemanticState(state))
       .toThrow('MixedSemanticRuleEffectsShape: legacy_effects_array ruleId=legacy-array-entry ruleIndex=1')
+  })
+
+  // #1633 staging s29 follow-up：mainflow byRole.action 路径需要把
+  //   `position.pyramiding_limit` effect + 入场 `price.percent_change` valuePct
+  //   投射为 inert pyramidingHint，让 entry rule 的 metadata 携带 maxLayers /
+  //   layerSizing / profitThreshold 三元组（runner 据此还原 `3%`/`50%` token）。
+  it('projects pyramidingHint metadata onto mainflow byRole.action entry rule', () => {
+    const state = baseState({
+      contextSlots: {
+        exchange: lockedContextSlot('exchange', 'okx'),
+        symbol: lockedContextSlot('symbol', 'BTCUSDT'),
+        marketType: lockedContextSlot('marketType', 'perp'),
+        timeframe: lockedContextSlot('timeframe', '1h'),
+      },
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.05,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        sizing: { kind: 'ratio', value: 0.05, unit: 'ratio' },
+      },
+      rules: [{
+        id: 'rule-pyramiding-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'atom',
+          key: 'price.percent_change',
+          params: { valuePct: 3, basis: 'entry_avg_price' },
+        },
+        effects: {
+          actions: [{
+            kind: 'atom',
+            key: 'action.open_long',
+            params: {},
+          }],
+          risks: [],
+          positions: [{
+            kind: 'atom',
+            key: 'position.pyramiding_limit',
+            params: { maxLayers: 3, layerSizing: 50 },
+          }],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+    const entryRule = spec.rules.find(rule => rule.id === 'semantic-entry-rule-pyramiding-entry')
+    expect(entryRule).toBeDefined()
+    expect(entryRule?.metadata).toEqual(expect.objectContaining({
+      pyramidingHint: {
+        maxLayers: 3,
+        layerSizing: 50,
+        profitThreshold: 3,
+      },
+    }))
+
+    const { ir } = new CanonicalSpecV2IrCompilerService().compile({ canonicalSpec: spec, fallback: compileFallback })
+    const entryBlock = ir.ruleBlocks.find(block => block.id === 'semantic-entry-rule-pyramiding-entry')
+    expect(entryBlock?.metadata).toEqual(expect.objectContaining({
+      pyramidingHint: {
+        maxLayers: 3,
+        layerSizing: 50,
+        profitThreshold: 3,
+      },
+    }))
+  })
+
+  it('derives per-equity grid budget from range+stepPct when sizing is absent (#1691 s15)', () => {
+    // s15: bare-minimum grid prompt "15m 周期，价格区间 79200-80200，采用双向网格".
+    // No semantic position.sizing, no perGridSizing — grid is the sizing source (phases include 'sizing').
+    // Projector must derive a per-order-pct-equity budget from range+stepPct so order programs are emitted.
+    const state = baseState({
+      contextSlots: {
+        exchange: lockedContextSlot('exchange', 'okx'),
+        symbol: lockedContextSlot('symbol', 'BTCUSDT'),
+        marketType: lockedContextSlot('marketType', 'perp'),
+        timeframe: lockedContextSlot('timeframe', '15m'),
+      },
+      position: null,
+      rules: [{
+        id: 'program-s15-bare-grid',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'atom',
+          key: 'grid.range_rebalance',
+          params: {
+            rangeLower: 79200,
+            rangeUpper: 80200,
+            stepPct: 0.1,
+            sideMode: 'both',
+          },
+        },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    // orderPrograms presence is what evaluateCanonicalCompileability gates on
+    // (codegen-conversation.service.ts:6042) — once emitted, hasOrderPrograms=true
+    // covers both entry and exit, so canCompile=true and confirmGenerate proceeds.
+    expect(spec.orderPrograms?.length ?? 0).toBe(1)
+    expect(spec.orderPrograms?.[0]?.budget?.mode).toBe('per_order_pct_equity')
+    expect(spec.orderPrograms?.[0]?.budget?.value).toBeGreaterThan(0)
+    expect(spec.orderPrograms?.[0]?.budget?.value).toBeLessThanOrEqual(100)
+    expect(spec.orderPrograms?.[0]?.levelSet).toEqual(expect.objectContaining({
+      lower: 79200,
+      upper: 80200,
+      spacingPct: 0.1,
+    }))
+  })
+
+  it('rejects grid leaf when explicit level count exceeds MAX_LEVELS=200 (#1691 review M1)', () => {
+    // M1: user writes `levels: 500` — must NOT silently fall back to DEFAULT_LEVEL_COUNT=10
+    // which would emit budget=10/order (50x off from intent). Reject so upstream can ask.
+    const state = baseState({
+      contextSlots: {
+        exchange: lockedContextSlot('exchange', 'okx'),
+        symbol: lockedContextSlot('symbol', 'BTCUSDT'),
+        marketType: lockedContextSlot('marketType', 'perp'),
+        timeframe: lockedContextSlot('timeframe', '15m'),
+      },
+      position: null,
+      rules: [{
+        id: 'program-explicit-overflow',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'atom',
+          key: 'grid.range_rebalance',
+          params: { rangeLower: 100, rangeUpper: 200, sideMode: 'both', levels: 500 },
+        },
+        effects: { actions: [], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+    expect(spec.orderPrograms?.length ?? 0).toBe(0)
+  })
+
+  it('rejects grid leaf when computed level count from extreme stepPct exceeds MAX_LEVELS (#1691 review M2)', () => {
+    // M2: stepPct=0.0001 with range 100-200 computes ~1M levels; must NOT silently
+    // fall back to DEFAULT_LEVEL_COUNT=10. Reject so upstream surfaces clarification.
+    const state = baseState({
+      contextSlots: {
+        exchange: lockedContextSlot('exchange', 'okx'),
+        symbol: lockedContextSlot('symbol', 'BTCUSDT'),
+        marketType: lockedContextSlot('marketType', 'perp'),
+        timeframe: lockedContextSlot('timeframe', '15m'),
+      },
+      position: null,
+      rules: [{
+        id: 'program-computed-overflow',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'atom',
+          key: 'grid.range_rebalance',
+          params: { rangeLower: 100, rangeUpper: 200, stepPct: 0.0001, sideMode: 'both' },
+        },
+        effects: { actions: [], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+    expect(spec.orderPrograms?.length ?? 0).toBe(0)
+  })
+
+  it('derives default per-equity grid budget when neither stepPct nor explicit level count provided (#1691 s15 attempt-1 staging actual)', () => {
+    // Staging r20 reproduced: planner returned grid.range_rebalance with only rangeLower/
+    // rangeUpper/sideMode/recycle in params — no stepPct, no levelCount. levelSet projection
+    // can still emit absolute-bounds level set (lower/upper alone is enough), so the budget
+    // projector must also tolerate the missing step and fall back to a default level count.
+    const state = baseState({
+      contextSlots: {
+        exchange: lockedContextSlot('exchange', 'okx'),
+        symbol: lockedContextSlot('symbol', 'BTCUSDT'),
+        marketType: lockedContextSlot('marketType', 'perp'),
+        timeframe: lockedContextSlot('timeframe', '15m'),
+      },
+      position: null,
+      rules: [{
+        id: 'program-s15-no-step',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'atom',
+          key: 'grid.range_rebalance',
+          params: {
+            rangeLower: 79200,
+            rangeUpper: 80200,
+            sideMode: 'both',
+            recycle: 'true',
+          },
+        },
+        effects: {
+          actions: [],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.orderPrograms?.length ?? 0).toBe(1)
+    expect(spec.orderPrograms?.[0]?.budget?.mode).toBe('per_order_pct_equity')
+    expect(spec.orderPrograms?.[0]?.budget?.value).toBeGreaterThan(0)
+    expect(spec.orderPrograms?.[0]?.budget?.value).toBeLessThanOrEqual(100)
+    expect(spec.orderPrograms?.[0]?.levelSet).toEqual(expect.objectContaining({
+      lower: 79200,
+      upper: 80200,
+    }))
   })
 })

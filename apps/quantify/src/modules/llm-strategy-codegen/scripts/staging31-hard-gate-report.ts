@@ -3,6 +3,7 @@ import 'reflect-metadata'
 import type { INestApplicationContext } from '@nestjs/common'
 import type { PoolClient } from 'pg'
 import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
+import type { MainflowLeafRole } from '../services/rules-mainflow-reader.service'
 import type { SemanticState } from '../types/semantic-state'
 import type { StrategyClarificationItem } from '../types/strategy-clarification'
 import type { StrategyClarificationState } from '../types/strategy-clarification'
@@ -62,7 +63,7 @@ import { SemanticExecutableSemanticsService } from '../services/semantic-executa
 import { SemanticFrameNormalizerService } from '../services/semantic-frame-normalizer.service'
 import { SemanticOpenSlotAnswerResolverService } from '../services/semantic-open-slot-answer-resolver.service'
 import { SemanticOrchestrationRegistryService } from '../services/semantic-orchestration-registry.service'
-import { SemanticRuleProjectionService } from '../services/semantic-rule-projection.service'
+import { RulesMainflowReaderService } from '../services/rules-mainflow-reader.service'
 import {
   SEMANTIC_SEED_EVIDENCE_INVARIANT_MODE,
   SemanticSeedStateBuilderService,
@@ -148,7 +149,7 @@ const RUNNER_USER_ID = 'staging31-hard-gate-runner'
     SemanticAtomContractService,
     SemanticAtomRegistryService,
     SemanticOrchestrationRegistryService,
-    SemanticRuleProjectionService,
+    RulesMainflowReaderService,
     SemanticContractReadinessService,
     SemanticContractShapeNormalizerService,
     SemanticExecutableSemanticsService,
@@ -169,7 +170,7 @@ export interface Staging31CaseReport {
   completedInput: string
   assistantResponse: string
   rulesTree: unknown
-  projectedFlat: unknown
+  rulesFacts: unknown
   contextPositionRisk: unknown
   clarification: unknown
   readiness: unknown
@@ -241,7 +242,7 @@ export function assertStaging31ReportShape(report: Staging31CaseReport): void {
     'completedInput',
     'assistantResponse',
     'rulesTree',
-    'projectedFlat',
+    'rulesFacts',
     'contextPositionRisk',
     'clarification',
     'readiness',
@@ -582,23 +583,33 @@ function asClarification(value: unknown): StrategyClarificationState | null {
   return value as StrategyClarificationState
 }
 
-function summarizeFlat(state: SemanticState): Record<string, unknown> {
+function summarizeRulesFacts(
+  state: SemanticState,
+  reader: RulesMainflowReaderService,
+): Record<MainflowLeafRole, unknown> {
   return {
-    trigger: state.trigger ?? [],
-    action: state.action ?? [],
-    risk: state.risk ?? [],
-    positionConstraint: state.positionConstraint ?? [],
-    orchestration: state.orchestration ?? [],
+    condition: reader.readFactsByRole(state, 'condition'),
+    action: reader.readFactsByRole(state, 'action'),
+    risk: reader.readFactsByRole(state, 'risk'),
+    position: reader.readFactsByRole(state, 'position'),
+    orchestration: reader.readFactsByRole(state, 'orchestration'),
+    program: reader.readFactsByRole(state, 'program'),
   }
 }
 
-function buildContextPositionRisk(state: SemanticState): Record<string, unknown> {
+function buildContextPositionRisk(
+  state: SemanticState,
+  reader: RulesMainflowReaderService,
+): Record<string, unknown> {
   return {
     contextSlots: state.contextSlots ?? null,
     position: state.position ?? null,
-    risk: state.risk ?? [],
-    positionConstraint: state.positionConstraint ?? [],
-    orchestration: state.orchestration ?? [],
+    riskFacts: reader.readFactsByRole(state, 'risk'),
+    positionFacts: reader.readFactsByRole(state, 'position'),
+    orchestrationFacts: [
+      ...reader.readFactsByRole(state, 'orchestration'),
+      ...reader.readFactsByRole(state, 'program'),
+    ],
   }
 }
 
@@ -1106,7 +1117,7 @@ async function buildCaseReport(input: {
   index: number
   fallbackInput: string
   services: {
-    ruleProjection: SemanticRuleProjectionService
+    rulesReader: RulesMainflowReaderService
     readiness: SemanticContractReadinessService
     stateProjection: SemanticStateProjectionService
     supportClassifier: SemanticSupportClassifierService
@@ -1122,7 +1133,7 @@ async function buildCaseReport(input: {
         completedInput: input.fallbackInput,
         assistantResponse: '',
       rulesTree: null,
-      projectedFlat: null,
+      rulesFacts: null,
       contextPositionRisk: null,
       clarification: null,
       readiness: null,
@@ -1140,18 +1151,18 @@ async function buildCaseReport(input: {
   const clarification = asClarification(input.row.clarification_state)
   if (!semanticState) failures.push('semantic_state_missing')
 
-  let projectedState = semanticState ? input.services.ruleProjection.reprojectFromRules(semanticState) : null
-  if (projectedState) {
-    projectedState = input.services.supportClassifier.classify(projectedState, {
+  const support = semanticState
+    ? input.services.supportClassifier.classify(semanticState, {
       deployedAtSemanticVersion: CURRENT_SEMANTIC_VERSION,
-    }).state
-  }
-  const readiness = projectedState
-    ? input.services.readiness.normalize(projectedState, {
+    })
+    : null
+  const classifiedState = support?.state ?? null
+  const readiness = classifiedState
+    ? input.services.readiness.normalize(classifiedState, {
         deployedAtSemanticVersion: CURRENT_SEMANTIC_VERSION,
       })
     : null
-  const reportState = readiness?.state ?? projectedState
+  const reportState = readiness?.state ?? classifiedState
   const rulesTree = reportState?.rules ?? []
   const rulesEmpty = !Array.isArray(rulesTree) || rulesTree.length === 0
   const clarificationClear = clarification?.status === 'CLEAR'
@@ -1162,11 +1173,7 @@ async function buildCaseReport(input: {
   if (clarification?.status === 'NEEDS_CLARIFICATION') failures.push('clarification_not_resolved_to_script')
   if (readiness && !readiness.ready) failures.push('readiness_not_ready')
 
-  const unsupportedActions = (reportState?.action ?? []).filter(action =>
-    action.key?.startsWith('action.')
-    && action.support?.supportStatus
-    && action.support.supportStatus !== 'supported_executable'
-  )
+  const unsupportedActions = support?.unsupportedAtoms.filter(atom => atom.key.startsWith('action.')) ?? []
   if (unsupportedActions.length > 0) failures.push('supported_action_reported_unsupported')
 
   let canonicalSpec: unknown = null
@@ -1216,8 +1223,10 @@ async function buildCaseReport(input: {
     completedInput: buildCompletedInput(input.row.messages, input.fallbackInput),
     assistantResponse: readAssistant(input.row.messages),
     rulesTree,
-    projectedFlat: reportState ? summarizeFlat(reportState) : null,
-    contextPositionRisk: reportState ? buildContextPositionRisk(reportState) : null,
+    rulesFacts: reportState ? summarizeRulesFacts(reportState, input.services.rulesReader) : null,
+    contextPositionRisk: reportState
+      ? buildContextPositionRisk(reportState, input.services.rulesReader)
+      : null,
     clarification,
     readiness: readiness ? { ready: readiness.ready, missingRequirements: readiness.missingRequirements } : null,
     uiSummaryOrGraph: reportState
@@ -1304,7 +1313,7 @@ async function run(): Promise<void> {
     }
 
     const services = {
-      ruleProjection: new SemanticRuleProjectionService(),
+      rulesReader: new RulesMainflowReaderService(),
       readiness: new SemanticContractReadinessService(),
       stateProjection: new SemanticStateProjectionService(),
       supportClassifier: new SemanticSupportClassifierService(

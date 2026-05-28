@@ -45,6 +45,14 @@ describe('GenericSeedDispatcher - grid.range_rebalance extraction (Issue #1383 S
       sideMode: 'both',
       stepPct: 0.5,
     })
+    expect(atom!.params).not.toHaveProperty('breakoutAction')
+  })
+
+  it('emits grid breakoutAction only when user explicitly says boundary stop behavior', () => {
+    const msg = 'OKX 现货 ETHUSDT、1m 网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT；当价格突破上下边界时立即停止并撤销所有未成交订单'
+    const atom = findGridAtom(msg)
+    expect(atom).toBeDefined()
+    expect(atom!.params.breakoutAction).toBe('stop')
   })
 
   it('emits grid.range_rebalance for narrow-range / long-only variant (number-agnostic)', () => {

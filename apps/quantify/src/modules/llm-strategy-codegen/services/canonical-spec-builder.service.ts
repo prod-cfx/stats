@@ -8,6 +8,7 @@ import type {
   SemanticCapabilityShape,
   SemanticExpression,
   SemanticExpressionOperand,
+  SemanticOrchestrationContract,
   SemanticOrchestrationNode,
   SemanticPositionConstraintState,
   SemanticPositionState,
@@ -26,7 +27,7 @@ import type {
   StrategyNormalizedIntent,
 } from '../types/strategy-normalized-intent'
 import { createHash } from 'node:crypto'
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable } from '@nestjs/common'
 import { canonicalSerialize, parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
 import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
 import { extractAtrStopParams } from './atr-stop-params'
@@ -50,11 +51,9 @@ import { PerTradeSizingResolver, scopeKey as sizingScopeKey } from './per-trade-
 import type { SizingAnchor, SizingAxis } from './per-trade-sizing-resolver.service'
 import type { CanonicalOrchestrationLegSizing, CanonicalOrchestrationLegSizingMode } from '../types/canonical-strategy-spec'
 import { normalizeLegacyPositionSizing, validateSemanticExpressionContract, validateSemanticPositionContract, validateSemanticRiskContract } from './strategy-semantic-contracts'
-import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
 import type { AtomExpr, AtomExprAtom, RuleEffectsByRole, SemanticRule } from '../types/atom-expr'
 import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../types/atom-expr'
-import { SemanticRuleProjectionService } from './semantic-rule-projection.service'
-import type { RulesMainflowLeaf, RulesMainflowView } from './rules-mainflow-reader.service'
+import type { RulesMainflowAtomFact, RulesMainflowLeaf, RulesMainflowView } from './rules-mainflow-reader.service'
 import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
 
 // PR3b: 非 atom 字段路径的类型化引用（Issue #1279 AC-4）
@@ -76,6 +75,7 @@ const FIELD_KEY = {
   RISK_REMEMBERED_LEVEL_STOP: 'risk.remembered_level_stop',
   RISK_STOP_LOSS_PCT: 'risk.stop_loss_pct',
   RISK_TAKE_PROFIT_PCT: 'risk.take_profit_pct',
+  POSITION_SIZING: 'position.sizing',
   POSITION_PER_ORDER_BUDGET: 'position.per_order_budget',
   VOLUME_RELATIVE_AVERAGE: 'volume.relative_average',
 } as const
@@ -114,10 +114,6 @@ interface ScopedSemanticGateCondition {
 
 @Injectable()
 export class CanonicalSpecBuilderService {
-  // #1364 PR3: bucket 错位 warn-log 用
-  private readonly bucketMismatchLogger = new Logger('CanonicalSpecBuilder.BucketMismatch')
-  private readonly semanticRuleProjection = new SemanticRuleProjectionService()
-
   constructor(
     private readonly strategyIrCanonicalAdapter: StrategyIrCanonicalAdapterService = new StrategyIrCanonicalAdapterService(),
     private readonly contracts: SemanticAtomContractService = new SemanticAtomContractService(),
@@ -127,34 +123,6 @@ export class CanonicalSpecBuilderService {
     private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
     private readonly rulesMainflowReader: RulesMainflowReaderService = new RulesMainflowReaderService(),
   ) {}
-
-  /**
-   * #1364：扫 SemanticState 检测桶错位（trigger atom 出现在 actions[]，
-   * 或 orchestration atom 出现在 triggers[]/actions[] 等），按 contract.bucket
-   * 单一真相源校验，不一致时 warn-log。
-   *
-   * AC-4 后：服务端归桶器已强制把 orchestration atom 路由到 state.orchestration[]，
-   * 兜底 promotion hack（PR #1356/#1359/#1360）已物理删除；此处仅保留
-   * warn-only 监控，捕获任何残留错位（理论上不应再出现）。
-   */
-  private warnBucketMismatchInState(state: SemanticState): void {
-    const checkBucket = (
-      atomKey: string | undefined,
-      observedBucket: 'trigger' | 'action' | 'risk',
-      sourceLabel: string,
-    ): void => {
-      if (typeof atomKey !== 'string' || !(atomKey in ATOM_CONTRACT_REGISTRY)) return
-      const expected = ATOM_CONTRACT_REGISTRY[atomKey as AtomContractKey].bucket
-      if (expected !== observedBucket) {
-        this.bucketMismatchLogger.warn(
-          `event=bucket_mismatch atom=${atomKey} observed=${observedBucket} expected=${expected} source=${sourceLabel} note=#1364 hack 兜底中，待 AC-2/AC-3 完整实施后由服务端归桶单点修正`,
-        )
-      }
-    }
-    for (const t of readFlatTriggers(state)) checkBucket(t.key, 'trigger', 'state.triggers')
-    for (const a of readFlatActions(state)) checkBucket(a.key, 'action', 'state.actions')
-    for (const r of readFlatRisks(state)) checkBucket(r.key, 'risk', 'state.risk')
-  }
 
   buildFromLegacyChecklistForTestsOnly(legacySnapshot: StrategyLogicSnapshotInput): CanonicalStrategySpecV2 {
     if (this.isSemanticState(legacySnapshot.semanticState)) {
@@ -603,80 +571,7 @@ export class CanonicalSpecBuilderService {
       return this.buildFromSemanticRulesMainflow(state, fallbackMarket)
     }
 
-    const normalizedState = normalizeSemanticStateCombinationContracts(this.buildProgramRuleGenerationState(state))
-    const market = this.resolveSemanticStateMarket(normalizedState, fallbackMarket)
-    // #1186 PR2 (decision 7): 多腿场景 sizing 完全经 legScopes[*].legSizing 承载，spec.sizing===null；
-    //                          单腿沿用 spec.sizing，向后兼容。
-    const isMultiLeg = normalizedState.isMultiLeg === true
-    const sizing: CanonicalStrategySpecV2['sizing'] = isMultiLeg
-      ? null
-      : (this.resolveSizingFromSemanticState(normalizedState.position) ?? { mode: 'RATIO' as const, value: 0.1 })
-
-    const orderPrograms = this.buildContractOrderPrograms(normalizedState)
-    // #1186 PR2 (decision 8): isMultiLeg + grid orderProgram 共存互斥 — grid 路径独占 orderPrograms 编排，
-    //                          多腿限价独占 legScopes 派单；共存会导致 PR4 派单链路同时存在 grid worker 与 multi-leg fan-out。
-    if (isMultiLeg && orderPrograms.some(p => p.programKind === 'fixed_grid_gated' || p.programKind === 'dynamic_grid' || p.programKind === 'adaptive_volatility_grid')) {
-      throw new Error('MultiLegMutuallyExclusiveWithOrderProgram: state.isMultiLeg===true 与 grid orderPrograms 不可共存')
-    }
-    const rules = this.filterOrderProgramShadowRules(
-      [
-        ...this.buildRulesFromSemanticState(normalizedState, sizing),
-        ...this.buildBoundaryGuardRulesFromSemanticState(normalizedState, orderPrograms),
-      ],
-      orderPrograms,
-    )
-    const baseRequiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
-    // #1364 AC-4 — bucket 决策真相源已收敛到 ATOM_CONTRACT_REGISTRY[key].bucket
-    // 服务端归桶后，orchestration atom 一律落在 state.orchestration[]，
-    // 下游兜底 hack（#1357/#1358 / PR #1359/#1360）已物理删除。
-    // 这里保留 warn-log 暴露任何残留错位形态。
-    this.warnBucketMismatchInState(normalizedState)
-    const orchestrationGates = this.buildOrchestrationGates(normalizedState)
-    const orchestrationPortfolioRisks = this.buildOrchestrationPortfolioRisks(normalizedState)
-    const orchestrationPrograms = this.buildOrchestrationPrograms(normalizedState)
-    const orchestrationScopes = this.buildOrchestrationScopes(normalizedState)
-    const orchestrationLegScopes = this.buildOrchestrationLegScopes(normalizedState)
-    // Phase 5 S3 (#1109): 把 scope.timeframe 声明的 tf 合并到 dataRequirements
-    const requiredTimeframes = this.mergeTimeframeScopeIntoDataRequirements(
-      baseRequiredTimeframes,
-      orchestrationScopes,
-    )
-    const hasOrchestration = orchestrationGates.length > 0
-      || orchestrationPortfolioRisks.length > 0
-      || orchestrationPrograms.length > 0
-      || orchestrationScopes.length > 0
-      || orchestrationLegScopes.length > 0
-
-    return {
-      version: 2,
-      market: this.withRequiredMarketTimeframes(
-        market,
-        requiredTimeframes,
-        readFlatTriggers(normalizedState).some(trigger => this.readTriggerParamTimeframe(trigger.params)),
-      ),
-      indicators: this.resolveIndicatorsFromSemanticTriggers([...readFlatTriggers(normalizedState)]),
-      sizing,
-      executionPolicy: {
-        signalTiming: 'BAR_CLOSE',
-        fillTiming: 'NEXT_BAR_OPEN',
-      },
-      dataRequirements: {
-        requiredTimeframes,
-      },
-      orderPrograms,
-      rules,
-      ...(hasOrchestration
-        ? {
-            orchestration: {
-              ...(orchestrationGates.length > 0 ? { gates: orchestrationGates } : {}),
-              ...(orchestrationPortfolioRisks.length > 0 ? { portfolioRisks: orchestrationPortfolioRisks } : {}),
-              ...(orchestrationPrograms.length > 0 ? { programs: orchestrationPrograms } : {}),
-              ...(orchestrationScopes.length > 0 ? { scopes: orchestrationScopes } : {}),
-              ...(orchestrationLegScopes.length > 0 ? { legScopes: orchestrationLegScopes } : {}),
-            },
-          }
-        : {}),
-    }
+    throw new Error(`InvalidSemanticRulesMainflow: reason=${rulesMainflowRoute}`)
   }
 
   private resolveSemanticRulesMainflowRoute(state: SemanticState): 'empty_or_legacy' | 'typed' {
@@ -709,17 +604,14 @@ export class CanonicalSpecBuilderService {
     const mainflow = readResult.view
     const market = this.resolveSemanticStateMarket(state, fallbackMarket)
     const isMultiLeg = state.isMultiLeg === true
+    // 单一真相源：state.position 是 semantic-atom-invariant 锁定的 sizing 权威；
+    // rule.effects.positions 可能携带多条同义 sizing 叶子（如 quote + ratio），必须让位，
+    // 否则会触发 validatePositionSizingContract → codegen.semantic_atom_drift。
     const sizing: CanonicalStrategySpecV2['sizing'] = isMultiLeg
       ? null
       : (
-          this.resolveSizingFromSemanticRulePositionLeaves(mainflow.byRole.position)
-          ?? (
-            this.hasRulesMainflowOpenPositionAction(mainflow)
-              || mainflow.byRole.program.length > 0
-              || mainflow.byRole.condition.some(leaf => leaf.key === 'grid.range_rebalance')
-              ? this.resolveSizingFromSemanticState(state.position)
-              : null
-          )
+          this.resolveSizingFromSemanticState(state.position)
+          ?? this.resolveSizingFromSemanticRulePositionLeaves(mainflow.byRole.position)
           ?? { mode: 'RATIO' as const, value: 0.1 }
         )
     const orderPrograms = this.buildOrderProgramsFromSemanticRulesMainflow(mainflow, state)
@@ -732,7 +624,19 @@ export class CanonicalSpecBuilderService {
       ...this.buildOrchestrationScopesFromSemanticRulesMainflow(mainflow),
     ]
     const orchestrationPortfolioRisks = this.buildOrchestrationPortfolioRisksFromSemanticRulesMainflow(mainflow)
-    const baseRequiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
+    // Task C: contextSlots.timeframe 缺省但 effects-orchestration scope.timeframe 声明了 primaryTimeframe 时，
+    // 通用提升首个 timeframe scope 的 primaryTimeframe 到 market.defaultTimeframe，
+    // 避免下游 IR 回退到 compile-time baseTimeframe 而丢失编排声明的主周期。
+    const effectiveMarket: CanonicalStrategySpecV2['market'] = ((): CanonicalStrategySpecV2['market'] => {
+      if (market.defaultTimeframe !== null && market.defaultTimeframe !== '') return market
+      const timeframeScope = orchestrationScopes.find(
+        (scope): scope is Extract<CanonicalOrchestrationScope, { scopeKind: 'timeframe' }> => scope.scopeKind === 'timeframe',
+      )
+      const lifted = timeframeScope?.primaryTimeframe
+      if (!lifted) return market
+      return { ...market, defaultTimeframe: lifted }
+    })()
+    const baseRequiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, effectiveMarket.defaultTimeframe)
     const requiredTimeframes = this.mergeTimeframeScopeIntoDataRequirements(baseRequiredTimeframes, orchestrationScopes)
     const hasOrchestration = orchestrationGates.length > 0
       || orchestrationPrograms.length > 0
@@ -741,7 +645,7 @@ export class CanonicalSpecBuilderService {
 
     return {
       version: 2,
-      market: this.withRequiredMarketTimeframes(market, requiredTimeframes),
+      market: this.withRequiredMarketTimeframes(effectiveMarket, requiredTimeframes),
       indicators: [],
       sizing,
       executionPolicy: {
@@ -776,35 +680,131 @@ export class CanonicalSpecBuilderService {
     return createHash('sha256').update(canonicalSerialize(rules ?? [])).digest('hex')
   }
 
-  private buildProgramRuleGenerationState(state: SemanticState): SemanticState {
-    if (!state.rules?.some(rule => rule.phase === 'program' && isRuleEffectsByRole(rule.effects) && rule.effects.programs.length > 0)) {
-      return state
-    }
+  private readSemanticTriggerFacts(state: SemanticState): SemanticTriggerState[] {
+    return this.rulesMainflowReader.readFactsByRole(state, 'condition').map(fact => ({
+      id: fact.id,
+      key: fact.key,
+      phase: fact.phase === 'entry' || fact.phase === 'exit' ? fact.phase : 'gate',
+      sideScope: fact.sideScope,
+      params: fact.params,
+      status: fact.status,
+      source: fact.source,
+      openSlots: [...fact.openSlots],
+      ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' as const } } : {}),
+      ...this.optionalAtomContracts(fact),
+    }))
+  }
 
-    const projected = this.semanticRuleProjection.reprojectFromRules(state)
-    const sizingByRuleId = new Map<string, NonNullable<SemanticOrchestrationNode['sizing']>>()
-    for (const rule of state.rules) {
-      if (rule.phase !== 'program' || !isRuleEffectsByRole(rule.effects) || rule.effects.programs.length === 0) {
-        continue
-      }
-      const sizing = this.resolveProgramSizingFromTypedRuleEffects(rule.effects)
-      if (sizing) sizingByRuleId.set(rule.id, sizing)
-    }
-    if (sizingByRuleId.size === 0) {
-      return projected
-    }
+  private readSemanticActionFacts(state: SemanticState): SemanticActionState[] {
+    return this.rulesMainflowReader.readFactsByRole(state, 'action').map(fact => ({
+      id: fact.id,
+      key: fact.key,
+      params: fact.params,
+      status: fact.status,
+      source: fact.source,
+      openSlots: [...fact.openSlots],
+      ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' as const } } : {}),
+      ...this.optionalAtomContracts(fact),
+    }))
+  }
 
-    let changed = false
-    const orchestration = projected.orchestration.map((node) => {
-      if (node.kind !== 'program') return node
-      const ruleId = node._provenance?.ruleId
-      const sizing = ruleId ? sizingByRuleId.get(ruleId) : undefined
-      if (!sizing) return node
-      changed = true
-      return { ...node, sizing }
-    })
+  private readSemanticRiskFacts(state: SemanticState): SemanticRiskState[] {
+    return this.rulesMainflowReader.readFactsByRole(state, 'risk').map(fact => ({
+      id: fact.id,
+      key: fact.key,
+      params: fact.params,
+      status: fact.status,
+      source: fact.source,
+      openSlots: [...fact.openSlots],
+      ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' as const } } : {}),
+      ...this.optionalAtomContracts(fact),
+    }))
+  }
 
-    return changed ? { ...projected, orchestration } : projected
+  private readSemanticPositionConstraintFacts(state: SemanticState): SemanticPositionConstraintState[] {
+    return this.rulesMainflowReader.readFactsByRole(state, 'position')
+      .filter((fact): fact is RulesMainflowAtomFact & { key: SemanticPositionConstraintState['key'] } =>
+        this.isSemanticPositionConstraintKey(fact.key),
+      )
+      .map(fact => ({
+        id: fact.id,
+        key: fact.key,
+        params: fact.params,
+        status: fact.status,
+        source: fact.source,
+        openSlots: [...fact.openSlots],
+        ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' as const } } : {}),
+        ...this.optionalAtomContracts(fact),
+      }))
+  }
+
+  private readSemanticOrchestrationFacts(state: SemanticState): SemanticOrchestrationNode[] {
+    return this.rulesMainflowReader.readFactsByRole(state, 'orchestration').map(fact => ({
+      id: fact.id,
+      kind: this.resolveOrchestrationKind(fact.key),
+      key: fact.key,
+      params: fact.params,
+      status: fact.status,
+      source: fact.source,
+      openSlots: [...fact.openSlots],
+      contracts: this.orchestrationContracts(fact),
+      ...(fact.evidenceText ? { evidence: { text: fact.evidenceText, source: 'user_explicit' as const } } : {}),
+      ...this.orchestrationFieldsFromParams(fact.params),
+    }))
+  }
+
+  private optionalAtomContracts(fact: RulesMainflowAtomFact): { contracts?: SemanticAtomContract[] } {
+    const contracts = fact.contracts?.filter((contract): contract is SemanticAtomContract =>
+      contract.kind === 'trigger'
+      || contract.kind === 'action'
+      || contract.kind === 'risk'
+      || contract.kind === 'position'
+      || contract.kind === 'context',
+    ) ?? []
+    return contracts.length > 0 ? { contracts } : {}
+  }
+
+  private orchestrationContracts(fact: RulesMainflowAtomFact): SemanticOrchestrationContract[] {
+    return fact.contracts?.filter((contract): contract is SemanticOrchestrationContract =>
+      contract.kind === 'scope'
+      || contract.kind === 'gate'
+      || contract.kind === 'program'
+      || contract.kind === 'portfolioRisk',
+    ) ?? []
+  }
+
+  private isSemanticPositionConstraintKey(key: string): key is SemanticPositionConstraintState['key'] {
+    return key === 'position.pyramiding_limit'
+      || key === 'position.max_exposure_pct'
+      || key === 'position.dca_schedule'
+      || key === 'grid.range_rebalance'
+  }
+
+  private resolveOrchestrationKind(key: string): SemanticOrchestrationNode['kind'] {
+    if (key.startsWith('scope.')) return 'scope'
+    if (key.startsWith('gate.')) return 'gate'
+    if (key.startsWith('portfolioRisk.')) return 'portfolioRisk'
+    return 'program'
+  }
+
+  private orchestrationFieldsFromParams(params: Record<string, unknown>): Partial<SemanticOrchestrationNode> {
+    const fields: Partial<SemanticOrchestrationNode> = {}
+    if (params.programKind === 'fixed_grid_gated' || params.programKind === 'dynamic_grid' || params.programKind === 'adaptive_volatility_grid' || params.programKind === 'event_listener') {
+      fields.programKind = params.programKind
+    }
+    if (params.onDeactivate === 'cancel' || params.onDeactivate === 'keep' || params.onDeactivate === 'close') {
+      fields.onDeactivate = params.onDeactivate
+    }
+    if (params.rebuildPolicy === 'static' || params.rebuildPolicy === 'anchor_on_state_change' || params.rebuildPolicy === 'atr_window' || params.rebuildPolicy === 'on_schema_version_bump') {
+      fields.rebuildPolicy = params.rebuildPolicy
+    }
+    if (typeof params.activeWhenRef === 'string') {
+      fields.activeWhenRef = params.activeWhenRef
+    }
+    if (this.isValidSemanticExpression(params.activeWhen)) {
+      fields.activeWhen = params.activeWhen
+    }
+    return fields
   }
 
   private resolveProgramSizingFromTypedRuleEffects(
@@ -812,6 +812,15 @@ export class CanonicalSpecBuilderService {
   ): NonNullable<SemanticOrchestrationNode['sizing']> | null {
     const positionLeaves = effects.positions.flatMap(effect => collectAtomLeaves(effect))
     for (const leaf of positionLeaves) {
+      if (leaf.key === FIELD_KEY.POSITION_SIZING) {
+        const sizing = this.resolveSemanticRulePositionSizing(leaf)
+        if (!sizing) {
+          continue
+        }
+        if (sizing.mode === 'QUOTE') return { mode: 'fixed_quote', value: sizing.value }
+        if (sizing.mode === 'QTY') return { mode: 'fixed_base', value: sizing.value }
+        return { mode: 'fixed_pct', value: sizing.value }
+      }
       if (leaf.key !== FIELD_KEY.POSITION_PER_ORDER_BUDGET) {
         continue
       }
@@ -839,7 +848,11 @@ export class CanonicalSpecBuilderService {
     for (const [ruleIndex, rule] of mainflow.rules.entries()) {
       if (rule.phase === 'entry' || rule.phase === 'exit') {
         const phase = rule.phase
-        if (phase === 'exit' && rule.condition.kind === 'atom' && this.isRulesMainflowExitRiskConditionAtom(rule.condition.key)) {
+        const effectsRiskLeavesForRule = mainflow.byRole.risk.filter(leaf => leaf.ruleId === rule.id)
+        const isRiskKeyedExitCondition = phase === 'exit'
+          && rule.condition.kind === 'atom'
+          && this.isRulesMainflowExitRiskConditionAtom(rule.condition.key)
+        if (isRiskKeyedExitCondition && effectsRiskLeavesForRule.length === 0) {
           const riskRule = this.buildCanonicalRiskRuleFromRuleEffectLeaf({
             leaf: rule.condition,
             rule,
@@ -853,6 +866,10 @@ export class CanonicalSpecBuilderService {
           riskPriority -= 1
           continue
         }
+        if (isRiskKeyedExitCondition && effectsRiskLeavesForRule.length > 0) {
+          // Effects.risks is authoritative; condition is evidence-only. Skip action emit; let effects.risks loop below handle all risks.
+        }
+        else {
         const split = this.splitPositionPresenceGatesFromSemanticRuleCondition(rule.condition)
         if (phase === 'entry') {
           for (const [gateIndex, gateAtom] of split.gateAtoms.entries()) {
@@ -888,16 +905,37 @@ export class CanonicalSpecBuilderService {
                 const actionLeaf = this.atomLeafFromMainflowLeaf(leaf)
                 const builtActions = this.buildCanonicalActionsFromRuleEffectLeaf(actionLeaf, phase, sizing, leaf.path)
                 if (builtActions.length === 0) {
+                  if (this.isKnownCanonicalActionEffectLeaf(leaf.key)) {
+                    return []
+                  }
                   throw new Error(`UnsupportedSemanticRuleActionEffect: key=${leaf.key} sourcePath=${leaf.path}`)
                 }
-                return builtActions.map(action => ({
-                  ...action,
-                  sourcePath: leaf.path,
-                }))
+                return builtActions
+                  .filter(action => this.actionMatchesRuleSideScope(action.type, rule.sideScope) || leaf.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key)
+                  .map(action => ({
+                    ...action,
+                    sourcePath: leaf.path,
+                  }))
               })
           : []
 
         if (condition && actions.length > 0) {
+          // #1633 staging s29 follow-up：mainflow byRole.action 路径也需要把
+          //   `position.pyramiding_limit` effect + 入场 `price.percent_change`
+          //   叶子的 valuePct 投射为 inert pyramidingHint，让 entry OPEN_LONG/SHORT
+          //   编译脚本文本携带 `3%` / `50%` 数值证据；与 direct rule / trigger group
+          //   两条路径保持同形。
+          const hasOpenAction = actions.some(a => a.type === 'OPEN_LONG' || a.type === 'OPEN_SHORT')
+          // #1633 staging30 s29：pyramiding_limit effect 可能挂在 *另一条*
+          //   semantic rule 上（如 has_position → effects.positions[pyramiding_limit]）。
+          //   只看当前 rule 会漏抽 layerSizing / profitThreshold / maxLayers。
+          //   改为跨 mainflow.rules 聚合，profitThreshold 优先读 pyramiding params。
+          const profitThresholdFallback = phase === 'entry' && hasOpenAction
+            ? this.extractProfitThresholdFromSemanticCondition(rule.condition)
+            : null
+          const pyramidingHint = phase === 'entry' && hasOpenAction
+            ? this.extractPyramidingHintFromSemanticRules(mainflow.rules, profitThresholdFallback)
+            : undefined
           canonicalRules.push({
             id: `semantic-${phase}-${rule.id}`,
             phase,
@@ -913,12 +951,34 @@ export class CanonicalSpecBuilderService {
                 family: 'single-leg',
               },
               sourcePath: `rules[${ruleIndex}]`,
+              ...(pyramidingHint ? { pyramidingHint } : {}),
             },
           })
+        }
         }
       }
 
       for (const leaf of mainflow.byRole.risk.filter(leaf => leaf.ruleId === rule.id)) {
+        if (leaf.key === ATOM_CONTRACT_REGISTRY['risk.partial_take_profit'].key) {
+          const partialTakeProfitRules = this.buildPartialTakeProfitRules(
+            {
+              id: `${rule.id}-${this.stableRulesPathId(leaf.path)}`,
+              key: leaf.key,
+              params: this.atomLeafFromMainflowLeaf(leaf).params,
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+            },
+            rule.sideScope,
+            riskPriority,
+          )
+          if (partialTakeProfitRules.length === 0) {
+            throw new Error(`UnsupportedSemanticRuleRiskEffect: key=${leaf.key} sourcePath=${leaf.path}`)
+          }
+          canonicalRules.push(...partialTakeProfitRules)
+          riskPriority -= partialTakeProfitRules.length
+          continue
+        }
         const riskRule = this.buildCanonicalRiskRuleFromRuleEffectLeaf({
           leaf: this.atomLeafFromMainflowLeaf(leaf),
           rule,
@@ -926,6 +986,9 @@ export class CanonicalSpecBuilderService {
           priority: riskPriority,
         })
         if (!riskRule) {
+          if (this.isOpenAtomicRiskEffectLeaf(leaf.key)) {
+            continue
+          }
           throw new Error(`UnsupportedSemanticRuleRiskEffect: key=${leaf.key} sourcePath=${leaf.path}`)
         }
         canonicalRules.push(riskRule)
@@ -953,6 +1016,20 @@ export class CanonicalSpecBuilderService {
       || key === FIELD_KEY.RISK_ATR_MULTIPLE_STOP
       || key === FIELD_KEY.RISK_ATR_MULTIPLE_TAKE_PROFIT
       || key === FIELD_KEY.RISK_REMEMBERED_LEVEL_STOP
+  }
+
+  private isOpenAtomicRiskEffectLeaf(key: string): boolean {
+    return key === FIELD_KEY.RISK_ATR_MULTIPLE_STOP
+      || key === FIELD_KEY.RISK_ATR_MULTIPLE_TAKE_PROFIT
+      || key === FIELD_KEY.RISK_REMEMBERED_LEVEL_STOP
+  }
+
+  private ruleConditionReferencesPreviousExtrema(condition: AtomExpr): boolean {
+    return collectAtomLeaves(condition).some(leaf =>
+      leaf.key === 'price.previous_extrema_retest'
+      || leaf.key === 'price.breakout_up'
+      || leaf.key === 'price.breakout_down',
+    )
   }
 
   private hasRulesMainflowOpenPositionAction(mainflow: RulesMainflowView): boolean {
@@ -1037,11 +1114,25 @@ export class CanonicalSpecBuilderService {
       stateKey: `dca_fired_count_${this.stableRulesPathId(sourcePath)}`,
       ...(triggerMode !== undefined ? { triggerMode } : {}),
       ...this.optionalNumberField('priceIntervalPct', this.readFiniteNumber(leaf.params.priceIntervalPct)),
+      ...this.optionalNumberField('dropPct', this.readFiniteNumber(leaf.params.dropPct)),
       ...this.optionalNumberField('priceIntervalQuote', this.readFiniteNumber(leaf.params.priceIntervalQuote)),
       ...this.optionalNumberField('timeIntervalBars', this.readFiniteNumber(leaf.params.timeIntervalBars)),
       ...this.optionalNumberField('timeIntervalMs', this.readFiniteNumber(leaf.params.timeIntervalMs)),
+      ...this.readDrawdownPerOrderSizing(leaf.params.drawdownPerOrderSizing),
       exitRule: exitRule ?? { type: 'cap_only' },
     }
+  }
+
+  private readDrawdownPerOrderSizing(
+    raw: unknown,
+  ): { drawdownPerOrderSizing: { kind: string; value: number; asset?: string } } | Record<string, never> {
+    if (!raw || typeof raw !== 'object') return {}
+    const rec = raw as { kind?: unknown; value?: unknown; asset?: unknown }
+    if (typeof rec.kind !== 'string') return {}
+    const value = this.readFiniteNumber(rec.value)
+    if (value === null || value <= 0) return {}
+    const asset = typeof rec.asset === 'string' ? rec.asset : undefined
+    return { drawdownPerOrderSizing: { kind: rec.kind, value, ...(asset !== undefined ? { asset } : {}) } }
   }
 
   private buildCanonicalRiskRuleFromRuleEffectLeaf(input: {
@@ -1104,10 +1195,19 @@ export class CanonicalSpecBuilderService {
       || input.leaf.key === FIELD_KEY.RISK_ATR_MULTIPLE_TAKE_PROFIT
       || input.leaf.key === FIELD_KEY.RISK_REMEMBERED_LEVEL_STOP
     ) {
+      const params = input.leaf.key === FIELD_KEY.RISK_REMEMBERED_LEVEL_STOP
+        ? {
+            ...input.leaf.params,
+            ...(!this.readFirstStringParam(input.leaf.params, ['levelKey', 'memoryKey', 'rememberedLevelKey', 'referenceLevelKey'])
+              && this.ruleConditionReferencesPreviousExtrema(input.rule.condition)
+              ? { levelKey: 'previous_extrema' }
+              : {}),
+          }
+        : input.leaf.params
       const riskRule = this.buildAtomicContractRiskRule({
         id: `${input.rule.id}-${input.priority}`,
         key: input.leaf.key,
-        params: input.leaf.params,
+        params,
         status: 'locked',
         source: 'user_explicit',
         openSlots: [],
@@ -1211,10 +1311,18 @@ export class CanonicalSpecBuilderService {
     state: SemanticState,
   ): CanonicalOrderProgramIntent[] {
     const orderPrograms: CanonicalOrderProgramIntent[] = []
-    const candidates = [
+    const primary = [
       ...mainflow.byRole.program.filter(leaf => leaf.key === 'program.fixed_grid' || leaf.key === 'program.fixed_grid_gated'),
       ...mainflow.byRole.condition.filter(leaf => leaf.key === 'grid.range_rebalance'),
     ]
+    const primaryRuleIds = new Set(primary.map(leaf => leaf.ruleId))
+    // #1633 rules-only: grid.range_rebalance bucket=positionConstraint → effects.positions → role='position'.
+    // 仅当同一 ruleId 未被 program/condition 路径覆盖时回退到 position 路径，避免对
+    // program_spot_centered_grid 等已有 program leaf 的策略重复声明，导致 levelSet 投影失败。
+    const positionFallback = mainflow.byRole.position.filter(
+      leaf => leaf.key === 'grid.range_rebalance' && !primaryRuleIds.has(leaf.ruleId),
+    )
+    const candidates = [...primary, ...positionFallback]
     const seen = new Set<string>()
     for (const leaf of candidates) {
       const seenKey = `${leaf.ruleId}:${leaf.key}:${this.stableRulesPathId(leaf.path)}`
@@ -1267,11 +1375,67 @@ export class CanonicalSpecBuilderService {
     }
 
     const perGridSizing = this.readFiniteNumber(leaf.params.perGridSizing)
-    if (perGridSizing === null || perGridSizing <= 0) return null
+    if (perGridSizing !== null && perGridSizing > 0) {
+      return {
+        mode: 'per_order_quote',
+        value: perGridSizing,
+        asset: 'USDT',
+      }
+    }
+
+    // #1691 staging30 s15: when grid is the sizing source (positionConstraint phases include 'sizing')
+    // and the user provides no explicit per-grid quote and no semantic position.sizing,
+    // derive a per-order percent-of-equity budget from the level count so the order program
+    // can be emitted; downstream runtime computes concrete per-order quantity from equity.
+    const lower = this.readFiniteNumber(leaf.params.lower)
+      ?? this.readFiniteNumber(leaf.params.lowerBound)
+      ?? this.readFiniteNumber(leaf.params.rangeLower)
+    const upper = this.readFiniteNumber(leaf.params.upper)
+      ?? this.readFiniteNumber(leaf.params.upperBound)
+      ?? this.readFiniteNumber(leaf.params.rangeUpper)
+    const stepPct = this.readFiniteNumber(leaf.params.spacingPct)
+      ?? this.readFiniteNumber(leaf.params.stepPct)
+    const explicitLevelCount = this.readFiniteNumber(leaf.params.gridCount)
+      ?? this.readFiniteNumber(leaf.params.levelCount)
+      ?? this.readFiniteNumber(leaf.params.levels)
+      ?? this.readFiniteNumber(leaf.params.gridIntervals)
+
+    const DEFAULT_LEVEL_COUNT = 10
+    const MIN_LEVELS = 2
+    const MAX_LEVELS = 200
+
+    if (lower === null || upper === null || upper <= lower) return null
+
+    // PR #1691 review M1+M2: explicit / computed level counts MUST NOT be silently
+    // replaced by DEFAULT when out of [MIN_LEVELS, MAX_LEVELS] — a user writing
+    // `levels: 500` expecting 500 levels would otherwise get budget=10/order (off by 50x).
+    // Reject the leaf so upstream can surface a clarification instead of producing a
+    // misleading order program. DEFAULT only applies when NEITHER explicit count NOR
+    // stepPct is supplied (s15-class bare-minimum grid prompt).
+    if (explicitLevelCount !== null && explicitLevelCount > 0) {
+      const explicit = Math.floor(explicitLevelCount)
+      if (explicit < MIN_LEVELS || explicit > MAX_LEVELS) return null
+      return {
+        mode: 'per_order_pct_equity',
+        value: Number((100 / explicit).toFixed(8)),
+      }
+    }
+
+    if (stepPct !== null && stepPct > 0) {
+      const computed = Math.floor((upper - lower) / (lower * (stepPct / 100))) + 1
+      if (computed < MIN_LEVELS || computed > MAX_LEVELS) return null
+      return {
+        mode: 'per_order_pct_equity',
+        value: Number((100 / computed).toFixed(8)),
+      }
+    }
+
+    // Neither explicit count nor stepPct provided — the level set is still derivable
+    // from absolute bounds alone; emit a default per-equity budget so the orderProgram
+    // can be issued. Downstream runtime resolves concrete per-order size from equity.
     return {
-      mode: 'per_order_quote',
-      value: perGridSizing,
-      asset: 'USDT',
+      mode: 'per_order_pct_equity',
+      value: Number((100 / DEFAULT_LEVEL_COUNT).toFixed(8)),
     }
   }
 
@@ -1295,7 +1459,14 @@ export class CanonicalSpecBuilderService {
       ?? this.readFiniteNumber(leaf.params.upperBound)
       ?? this.readFiniteNumber(leaf.params.rangeUpper)
 
-    if (mode === 'centered_percent_range' || (centerOffsetPct !== null && centerOffsetPct > 0 && (lower === null || upper === null))) {
+    // #1633 staging30 s09: 当 LLM/normalization 用占位 0 表示"未指定区间上下界"
+    //   （lowerBound=0, upperBound=0），lower/upper 不是 null 但已退化（upper<=lower），
+    //   原有 `(lower === null || upper === null)` 判定会跳过 centered_percent_range 分支，
+    //   最终落到底部 absolute bounds 分支因 upper<=lower 返回 null → orderPrograms 空 →
+    //   confirmGenerate 卡 DRAFTING。通用对策：把 absolute bounds 退化视作"无显式上下界"，
+    //   只要 centerOffsetPct/halfRangePct 合法即采用 centered_percent_range 投影。
+    const hasUsableAbsoluteBounds = lower !== null && upper !== null && upper > lower
+    if (mode === 'centered_percent_range' || (centerOffsetPct !== null && centerOffsetPct > 0 && !hasUsableAbsoluteBounds)) {
       const halfRangePct = this.readFiniteNumber(leaf.params.halfRangePct) ?? centerOffsetPct
       if (halfRangePct === null || halfRangePct <= 0) return null
 
@@ -1443,11 +1614,11 @@ export class CanonicalSpecBuilderService {
         }
       }
       case 'scope.timeframe': {
-        const primary = typeof leaf.params.primaryTimeframe === 'string' ? leaf.params.primaryTimeframe.trim() : ''
+        const primary = this.readFirstStringParam(leaf.params, ['primaryTimeframe', 'timeframe', 'primary', 'baseTimeframe'])
         const required = Array.isArray(leaf.params.requiredTimeframes)
           ? leaf.params.requiredTimeframes.filter((tf): tf is string => typeof tf === 'string' && tf.trim() !== '').map(tf => tf.trim())
           : []
-        if (primary === '' || required.length === 0) return null
+        if (primary === '') return null
         return {
           id,
           scopeKind: 'timeframe',
@@ -1946,11 +2117,20 @@ export class CanonicalSpecBuilderService {
         leaf.key === 'position.dca_schedule'
         || leaf.key === 'position.pyramiding_limit'
         || leaf.key === 'position.max_exposure_pct'
+        || leaf.key === 'grid.range_rebalance'
       ) {
         continue
       }
       if (leaf.key !== FIELD_KEY.POSITION_PER_ORDER_BUDGET) {
-        throw new Error(`UnsupportedSemanticRulePositionEffect: key=${leaf.key} sourcePath=${leaf.path}`)
+        if (leaf.key !== FIELD_KEY.POSITION_SIZING) {
+          throw new Error(`UnsupportedSemanticRulePositionEffect: key=${leaf.key} sourcePath=${leaf.path}`)
+        }
+        const sizing = this.resolveSemanticRulePositionSizing(leaf)
+        if (!sizing) {
+          continue
+        }
+        resolved ??= sizing
+        continue
       }
       const value = this.readNumericParam(leaf.params.value)
       if (value === null || value <= 0) {
@@ -1966,6 +2146,19 @@ export class CanonicalSpecBuilderService {
       }
     }
     return resolved
+  }
+
+  private resolveSemanticRulePositionSizing(
+    leaf: Pick<RulesMainflowLeaf, 'params'>,
+  ): CanonicalStrategySpecV2['sizing'] {
+    const fromContract = this.resolveSemanticActionSizing(leaf.params.sizing)
+    if (fromContract) return fromContract
+
+    return this.resolveSemanticActionSizing({
+      kind: leaf.params.kind,
+      value: leaf.params.value,
+      asset: leaf.params.asset,
+    })
   }
 
   private atomLeafFromMainflowLeaf(leaf: RulesMainflowLeaf): AtomExprAtom {
@@ -2004,7 +2197,7 @@ export class CanonicalSpecBuilderService {
   // #1186 PR2: 多锚（state.isMultiLeg===true）路径用 PerTradeSizingResolver anchor 反填 legSizing；
   // 单腿/旧路径走 LLM 直供 legSizing fallback，零行为变更。
   private buildOrchestrationLegScopes(state: SemanticState): CanonicalOrchestrationLegScope[] {
-    const nodes = state.orchestration
+    const nodes = this.readSemanticOrchestrationFacts(state)
     if (!nodes || nodes.length === 0) return []
     const isMultiLeg = state.isMultiLeg === true
     const anchorMap = isMultiLeg ? this.sizingResolver.resolve(state) : undefined
@@ -2068,7 +2261,7 @@ export class CanonicalSpecBuilderService {
     if (anchorMap.has(sizingScopeKey({ kind: 'action', id: legId }))) {
       candidateActionIds.push(legId)
     }
-    for (const action of readFlatActions(state)) {
+    for (const action of this.readSemanticActionFacts(state)) {
       if (action.id === legId) continue
       if (action.id.endsWith(legId) || action.key.endsWith(legId)) {
         candidateActionIds.push(action.id)
@@ -2125,7 +2318,7 @@ export class CanonicalSpecBuilderService {
   // Phase 5 S2 (#1104) + S3 (#1109) + S9 (#1110) + S10 (#1111): scope union substrate（symbol + timeframe + dataSource + subStrategy）
   // 输出 status='locked' scope；按 node.id 字典序，保证 byte-equal（含旧 v1 单/多 symbol scope 字节兼容）
   private buildOrchestrationScopes(state: SemanticState): CanonicalOrchestrationScope[] {
-    const nodes = state.orchestration
+    const nodes = this.readSemanticOrchestrationFacts(state)
     if (!nodes || nodes.length === 0) {
       return []
     }
@@ -2243,7 +2436,7 @@ export class CanonicalSpecBuilderService {
   }
 
   private buildOrchestrationPortfolioRisks(state: SemanticState): CanonicalOrchestrationPortfolioRisk[] {
-    const nodes = state.orchestration
+    const nodes = this.readSemanticOrchestrationFacts(state)
     if (!nodes || nodes.length === 0) {
       return []
     }
@@ -2314,7 +2507,7 @@ export class CanonicalSpecBuilderService {
   }
 
   private buildOrchestrationGates(state: SemanticState): CanonicalOrchestrationGate[] {
-    const nodes = state.orchestration
+    const nodes = this.readSemanticOrchestrationFacts(state)
     if (!nodes || nodes.length === 0) {
       return []
     }
@@ -2392,7 +2585,7 @@ export class CanonicalSpecBuilderService {
   }
 
   private buildOrchestrationPrograms(state: SemanticState): CanonicalOrchestrationProgram[] {
-    const nodes = state.orchestration
+    const nodes = this.readSemanticOrchestrationFacts(state)
     if (!nodes || nodes.length === 0) {
       return []
     }
@@ -2643,7 +2836,7 @@ export class CanonicalSpecBuilderService {
       return []
     }
 
-    const hasBoundaryCancel = readFlatRisks(state).some(risk =>
+    const hasBoundaryCancel = this.readSemanticRiskFacts(state).some(risk =>
       risk.status === 'locked'
       && risk.contracts?.some(contract =>
         contract.capabilities.some(capability =>
@@ -2705,9 +2898,9 @@ export class CanonicalSpecBuilderService {
 
   private collectContracts(state: SemanticState): SemanticAtomContract[] {
     return [
-      ...readFlatTriggers(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
-      ...readFlatActions(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
-      ...readFlatRisks(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...this.readSemanticTriggerFacts(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...this.readSemanticActionFacts(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...this.readSemanticRiskFacts(state).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
       ...(state.position?.status === 'locked' ? state.position.contracts ?? [] : []),
       ...(state.position?.constraints ?? []).filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
     ]
@@ -2979,7 +3172,7 @@ export class CanonicalSpecBuilderService {
   private hasBothSideGridIntent(state: SemanticState): boolean {
     const hasBothSideParams = (params: Record<string, unknown> | undefined): boolean =>
       params?.sideMode === 'both'
-    for (const constraint of state.positionConstraint ?? []) {
+    for (const constraint of this.readSemanticPositionConstraintFacts(state)) {
       if (constraint.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key && hasBothSideParams(constraint.params)) {
         return true
       }
@@ -3009,6 +3202,13 @@ export class CanonicalSpecBuilderService {
   private readTriggerParamTimeframe(params: Record<string, unknown>): string | null {
     const timeframe = params.timeframe
     return typeof timeframe === 'string' && timeframe.trim().length > 0 ? timeframe.trim() : null
+  }
+
+  private readSemanticReferencePeriod(params: Record<string, unknown>): number | null {
+    const flat = this.readNumberParam(params['reference.period'])
+    if (flat !== null) return flat
+    const reference = this.readRecordParam(params.reference)
+    return this.readNumberParam(reference?.period)
   }
 
   private readShapeBoolean(shape: SemanticCapabilityShape, key: string): boolean | null {
@@ -3104,7 +3304,11 @@ export class CanonicalSpecBuilderService {
     state: SemanticState,
     sizing: CanonicalStrategySpecV2['sizing'],
   ): CanonicalRuleV2[] {
-    const actionKeys = new Set(readFlatActions(state)
+    const semanticActions = this.readSemanticActionFacts(state)
+    const semanticTriggers = this.readSemanticTriggerFacts(state)
+    const semanticRisks = this.readSemanticRiskFacts(state)
+    const semanticPositionConstraints = this.readSemanticPositionConstraintFacts(state)
+    const actionKeys = new Set(semanticActions
       .filter(action => action.status === 'locked')
       .map(action => this.normalizeSemanticActionKey(action.key)))
     const counters: Record<'entry' | 'exit' | 'gate', number> = {
@@ -3115,7 +3319,7 @@ export class CanonicalSpecBuilderService {
     const rules: CanonicalRuleV2[] = []
     const defaultTimeframe = this.readLockedContextSlotString(state.contextSlots.timeframe)
     const directSemanticRuleIds = new Set<string>()
-    const gateConditions = readFlatTriggers(state)
+    const gateConditions = semanticTriggers
       .filter(trigger => trigger.status === 'locked' && trigger.phase === 'gate')
       .map((trigger): ScopedSemanticGateCondition | null => {
         const condition = trigger.key === 'condition.expression'
@@ -3134,13 +3338,13 @@ export class CanonicalSpecBuilderService {
 
     // Issue #1383 真根因（通用 bug）：grid.range_rebalance 在 ATOM_CONTRACT_REGISTRY 是
     //   positionConstraint 桶（atom-contract-registry.ts:190），不是 trigger 桶。
-    //   原实现仅在 state.trigger 里找 grid（下方 line "trigger.key === grid.range_rebalance"），
+    //   原实现仅在 condition facts 里找 grid，
     //   永远找不到，导致 dispatcher / builder 完美识别的 grid 参数（rangeLower/Upper/stepPct/sideMode）
     //   在 spec-builder 被丢弃，rebalance 规则数永远 0。
-    //   通用解：先扫 state.positionConstraint 桶把 grid atom 转 rebalance 规则；
-    //   buildGridRulesFromSemanticTrigger 只读 key/params/sideScope，positionConstraint state
+    //   通用解：先扫 position facts 把 grid atom 转 rebalance 规则；
+    //   buildGridRulesFromSemanticTrigger 只读 key/params/sideScope，position fact
     //   全部具备，可直接复用。
-    for (const constraint of state.positionConstraint ?? []) {
+    for (const constraint of semanticPositionConstraints) {
       if (constraint.status !== 'locked') continue
       if (constraint.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key) continue
       rules.push(...this.buildGridRulesFromSemanticTrigger({
@@ -3158,7 +3362,7 @@ export class CanonicalSpecBuilderService {
       rules.push(...directRules)
     }
 
-    for (const triggerGroup of this.groupSemanticMultiTimeframeTriggers([...readFlatTriggers(state)])) {
+    for (const triggerGroup of this.groupSemanticMultiTimeframeTriggers([...semanticTriggers])) {
       const trigger = triggerGroup[0]
       if (!trigger) {
         continue
@@ -3205,7 +3409,7 @@ export class CanonicalSpecBuilderService {
     }
 
     const executableGroups = this.mergeImplicitMultiTimeframeGroups(
-      this.triggerCombinationContracts.resolveExecutableGroups(readFlatTriggers(state).filter(trigger =>
+      this.triggerCombinationContracts.resolveExecutableGroups(semanticTriggers.filter(trigger =>
         trigger.status === 'locked'
         && (trigger.phase === 'entry' || trigger.phase === 'exit')
         && trigger.key !== ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key,
@@ -3249,7 +3453,7 @@ export class CanonicalSpecBuilderService {
 
       const lifecycleAction = this.resolveLifecycleActionForTriggerGroup(
         group,
-        [...readFlatActions(state)],
+        [...semanticActions],
         state.position,
         dcaScheduleHasEvidenceTriggers,
       )
@@ -3286,6 +3490,17 @@ export class CanonicalSpecBuilderService {
 
       for (const ruleVariant of this.buildSemanticTriggerGroupActionVariants(group, actions, actionKeys, sizing)) {
         counters[group.phase] += 1
+        // #1633 staging s29：non-lifecycle entry rule（OPEN_LONG/OPEN_SHORT）
+        //   且仓位 pyramiding_limit 已锁定时，把 maxLayers / layerSizing / 来自
+        //   condition.price.percent_change 的 valuePct 投射为 inert pyramidingHint，
+        //   让编译脚本文本携带 3% / 50% / take_profit 等数值证据。
+        const profitThresholdPct = group.phase === 'entry'
+          ? this.extractProfitThresholdFromTriggerGroup(group)
+          : null
+        const hasOpenAction = ruleVariant.actions.some(a => a.type === 'OPEN_LONG' || a.type === 'OPEN_SHORT')
+        const pyramidingHint = (group.phase === 'entry' && hasOpenAction)
+          ? this.buildPyramidingHintMetadata(state.position, profitThresholdPct)
+          : undefined
         rules.push({
           id: `semantic-${group.phase}-${counters[group.phase]}`,
           phase: group.phase,
@@ -3295,11 +3510,12 @@ export class CanonicalSpecBuilderService {
             ? this.attachSemanticGateConditions(condition, gateConditions, ruleVariant.sideScope)
             : condition,
           actions: ruleVariant.actions,
+          ...(pyramidingHint ? { metadata: { pyramidingHint } } : {}),
         })
       }
     }
 
-    rules.push(...this.buildRiskRulesFromSemanticState([...readFlatRisks(state)], state.position, [...readFlatActions(state)], state.rules ?? []))
+    rules.push(...this.buildRiskRulesFromSemanticState([...semanticRisks], state.position, [...semanticActions], state.rules ?? []))
 
     return rules
   }
@@ -3734,12 +3950,28 @@ export class CanonicalSpecBuilderService {
       // 否则 runtime 拿到 ADD_LONG 但分不清 signal_confirm/profit_pct/drawdown_pct 三种 mode 的行为，
       // 导致 silent-equivalent (P2-1 atom 翻牌名义闭环但语义全等价)。
       const addMode = typeof action.params?.addMode === 'string' ? action.params.addMode : undefined
+      // 通用回退：addRatio 缺失但 sizing 为 ratio kind 时从 sizing.value 推导，
+      // 保持 (0,1] ratio 语义；同时透传 profitThreshold / drawdownThreshold。
+      const addRatioRaw = action.params?.addRatio
+      const sizingShape = action.params?.sizing as { kind?: unknown, value?: unknown, unit?: unknown } | undefined
+      const sizingRatio = sizingShape
+        && (sizingShape.kind === 'ratio' || sizingShape.kind === undefined)
+        && typeof sizingShape.value === 'number'
+        && Number.isFinite(sizingShape.value)
+        && sizingShape.value > 0
+        ? (sizingShape.unit === 'percent' ? sizingShape.value / 100 : sizingShape.value)
+        : undefined
+      const addRatio = typeof addRatioRaw === 'number' && Number.isFinite(addRatioRaw)
+        ? addRatioRaw
+        : sizingRatio
       metadata.addPosition = {
         stateKey: 'pyramiding_layer_count',
         ...this.optionalNumberField('maxLayers', pyramidingLimit?.params.maxLayers),
         ...this.optionalNumberField('maxExposurePct', maxExposure?.params.maxExposurePct ?? maxExposure?.params.valuePct),
         ...(addMode ? { addMode } : {}),
-        ...this.optionalNumberField('addRatio', action.params?.addRatio),
+        ...this.optionalNumberField('addRatio', addRatio),
+        ...this.optionalNumberField('profitThreshold', action.params?.profitThreshold),
+        ...this.optionalNumberField('drawdownThreshold', action.params?.drawdownThreshold),
       }
     }
 
@@ -3845,6 +4077,87 @@ export class CanonicalSpecBuilderService {
     return typeof value === 'number' && Number.isFinite(value) ? value : null
   }
 
+  /**
+   * #1633 staging s29 follow-up：把 `position.pyramiding_limit` 约束参数
+   * （maxLayers / layerSizing）与 entry rule 上 `price.percent_change` 叶子的
+   * `valuePct`（→ profitThreshold）合成为 inert pyramidingHint metadata。
+   *
+   * 调用方应仅在 entry 阶段且 rule 含 OPEN_LONG/OPEN_SHORT、且无 metadata.addPosition
+   * （= 非 lifecycle add_position 路径）时合成，避免污染 runtime lifecycle 分支。
+   *
+   * Fail-open：任一字段缺失/非有限数 → 返回 undefined，不影响后续编译。
+   */
+  private buildPyramidingHintMetadata(
+    position: SemanticPositionState | null,
+    profitThresholdPct: number | null,
+  ): NonNullable<PositionLifecycleActionMetadata['pyramidingHint']> | undefined {
+    const constraint = this.findPositionConstraint(position, 'position.pyramiding_limit')
+    if (!constraint) return undefined
+    const params = constraint.params ?? {}
+    const maxLayers = this.readFiniteNumber(params.maxLayers)
+    const layerSizingRaw = (params as { layerSizing?: unknown }).layerSizing
+    const layerSizingValue = typeof layerSizingRaw === 'number' && Number.isFinite(layerSizingRaw)
+      ? layerSizingRaw
+      : typeof layerSizingRaw === 'object' && layerSizingRaw !== null
+        ? this.readFiniteNumber((layerSizingRaw as { value?: unknown }).value)
+        : null
+    const profitThreshold = profitThresholdPct !== null && Number.isFinite(profitThresholdPct) && profitThresholdPct > 0
+      ? profitThresholdPct
+      : null
+    if (maxLayers === null && layerSizingValue === null && profitThreshold === null) {
+      return undefined
+    }
+    return {
+      ...(maxLayers !== null && maxLayers > 0 ? { maxLayers } : {}),
+      ...(layerSizingValue !== null && layerSizingValue > 0 ? { layerSizing: layerSizingValue } : {}),
+      ...(profitThreshold !== null ? { profitThreshold } : {}),
+    }
+  }
+
+  /**
+   * 从 SemanticRule.condition 抽取 price.percent_change 叶子 valuePct（仅
+   * basis === 'entry_avg_price' 视为盈利触发；其他 basis 不参与 pyramiding 推导）。
+   */
+  private extractProfitThresholdFromTriggerGroup(
+    group: { members: readonly SemanticTriggerState[] },
+  ): number | null {
+    for (const member of group.members) {
+      if (member.key !== ATOM_CONTRACT_REGISTRY['price.percent_change'].key) continue
+      const basis = (member.params as { basis?: unknown } | undefined)?.basis
+      if (basis !== 'entry_avg_price') continue
+      const value = this.readFiniteNumber((member.params as { valuePct?: unknown } | undefined)?.valuePct)
+      if (value !== null && value > 0) return value
+    }
+    return null
+  }
+
+  private extractProfitThresholdFromSemanticCondition(expr: AtomExpr): number | null {
+    if (expr.kind === 'atom') {
+      if (expr.key !== ATOM_CONTRACT_REGISTRY['price.percent_change'].key) return null
+      const params = expr.params as { basis?: unknown, valuePct?: unknown } | undefined
+      if (!params || params.basis !== 'entry_avg_price') return null
+      return this.readFiniteNumber(params.valuePct)
+    }
+    if (expr.kind === 'and' || expr.kind === 'or') {
+      for (const child of expr.children) {
+        const value = this.extractProfitThresholdFromSemanticCondition(child)
+        if (value !== null) return value
+      }
+      return null
+    }
+    if (expr.kind === 'not') {
+      return this.extractProfitThresholdFromSemanticCondition(expr.child)
+    }
+    if (expr.kind === 'sequence') {
+      for (const step of expr.steps) {
+        const value = this.extractProfitThresholdFromSemanticCondition(step)
+        if (value !== null) return value
+      }
+      return null
+    }
+    return null
+  }
+
   private readActionSideScope(params: SemanticActionState['params']): 'long' | 'short' | 'both' | null {
     const sideScope = typeof params?.sideScope === 'string' ? params.sideScope : null
     return sideScope === 'long' || sideScope === 'short' || sideScope === 'both' ? sideScope : null
@@ -3929,6 +4242,20 @@ export class CanonicalSpecBuilderService {
       })
       .filter((gateRule): gateRule is CanonicalRuleV2 => gateRule !== null)
 
+    // #1633 staging s29：direct rule path 同样需要把 pyramiding_limit
+    //   params + profit leaf valuePct 投射成 inert pyramidingHint，让 OPEN_LONG/SHORT
+    //   编译脚本带上 3% / 50% / take_profit 文本证据。
+    const hasOpenAction = actions.some(a => a.type === 'OPEN_LONG' || a.type === 'OPEN_SHORT')
+    const pyramidingPosition = phase === 'entry' && hasOpenAction
+      ? this.buildPyramidingPositionFromSemanticRule(rule)
+      : null
+    const profitThreshold = phase === 'entry' && hasOpenAction
+      ? this.extractProfitThresholdFromSemanticCondition(rule.condition)
+      : null
+    const pyramidingHint = pyramidingPosition
+      ? this.buildPyramidingHintMetadata(pyramidingPosition, profitThreshold)
+      : undefined
+
     return [...gateRules, {
       id: `semantic-${phase}-${rule.id}`,
       phase,
@@ -3943,8 +4270,62 @@ export class CanonicalSpecBuilderService {
           actionKeys: actions.map(action => action.type),
           family: 'single-leg',
         },
+        ...(pyramidingHint ? { pyramidingHint } : {}),
       },
     }]
+  }
+
+  /**
+   * 把 SemanticRule.effects.positions[] 中的 `position.pyramiding_limit` atom
+   * 提取出来，伪装成 SemanticPositionState 让 buildPyramidingHintMetadata
+   * 复用同一查找逻辑。effect leaf 的 status 默认按 'locked' 处理（rule 已合法即生效）。
+   */
+  private buildPyramidingPositionFromSemanticRule(rule: SemanticRule): SemanticPositionState | null {
+    const positionLeaves = listRuleEffects(rule.effects)
+      .flatMap(effect => collectAtomLeaves(effect))
+      .filter(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].key)
+    if (positionLeaves.length === 0) return null
+    const constraints = positionLeaves.map((leaf, index) => ({
+      id: `${rule.id}-pyramiding-${index}`,
+      key: 'position.pyramiding_limit' as const,
+      status: 'locked',
+      params: (leaf.params ?? {}) as Record<string, unknown>,
+      source: 'planner',
+      openSlots: [],
+    } as unknown as SemanticPositionConstraintState))
+    return { constraints } as unknown as SemanticPositionState
+  }
+
+  /**
+   * #1633 staging30 s29 generic fix：
+   * pyramiding semantic 不一定与 OPEN_LONG/OPEN_SHORT 同处于一条 SemanticRule。
+   * 例如：rule[0] = 突破开多（无 pyramiding 副作用），rule[1] =
+   * has_position → effects.positions[pyramiding_limit{profitThreshold=3,
+   * layerSizing=50, maxLayers=3}]。Patch K 旧逻辑只在「同一 rule 同时具备
+   * open_action + pyramiding effect + entry_avg_price percent_change」时合成
+   * pyramidingHint，故漏掉本场景。
+   *
+   * 新逻辑：跨 rules 聚合 pyramiding_limit，并直接从其 params 读取
+   * profitThreshold；若仍缺则回退到 condition / trigger group 的
+   * price.percent_change 抽取。layerSizing / maxLayers 也优先用 params。
+   */
+  private extractPyramidingHintFromSemanticRules(
+    rules: readonly SemanticRule[],
+    profitThresholdFallback: number | null,
+  ): NonNullable<PositionLifecycleActionMetadata['pyramidingHint']> | undefined {
+    for (const rule of rules) {
+      const position = this.buildPyramidingPositionFromSemanticRule(rule)
+      if (!position) continue
+      const constraint = this.findPositionConstraint(position, 'position.pyramiding_limit')
+      if (!constraint) continue
+      const params = (constraint.params ?? {}) as Record<string, unknown>
+      const paramProfit = this.readFiniteNumber((params as { profitThreshold?: unknown }).profitThreshold)
+      const profitThresholdPct = paramProfit !== null && paramProfit > 0
+        ? paramProfit
+        : profitThresholdFallback
+      return this.buildPyramidingHintMetadata(position, profitThresholdPct)
+    }
+    return undefined
   }
 
   private splitPositionPresenceGatesFromSemanticRuleCondition(
@@ -4005,6 +4386,28 @@ export class CanonicalSpecBuilderService {
       default:
         return []
     }
+  }
+
+  private isKnownCanonicalActionEffectLeaf(key: string): boolean {
+    return key === ATOM_CONTRACT_REGISTRY['action.open_long'].key
+      || key === ATOM_CONTRACT_REGISTRY['action.open_short'].key
+      || key === ATOM_CONTRACT_REGISTRY['action.close_long'].key
+      || key === ATOM_CONTRACT_REGISTRY['action.close_short'].key
+      || key === ATOM_CONTRACT_REGISTRY['action.add_position'].key
+  }
+
+  private actionMatchesRuleSideScope(
+    actionType: CanonicalRuleV2['actions'][number]['type'],
+    sideScope: SemanticRule['sideScope'],
+  ): boolean {
+    if (sideScope === 'both') return true
+    if (sideScope === 'long') {
+      return actionType === 'OPEN_LONG' || actionType === 'CLOSE_LONG' || actionType === 'ADD_LONG' || actionType === 'BLOCK_NEW_ENTRY'
+    }
+    if (sideScope === 'short') {
+      return actionType === 'OPEN_SHORT' || actionType === 'CLOSE_SHORT' || actionType === 'ADD_SHORT' || actionType === 'BLOCK_NEW_ENTRY'
+    }
+    return true
   }
 
   private buildConditionFromSemanticRuleExpr(
@@ -4602,9 +5005,9 @@ export class CanonicalSpecBuilderService {
     priority: number,
   ): CanonicalRuleV2 | null {
     if (risk.key === FIELD_KEY.RISK_ATR_MULTIPLE_STOP || risk.key === FIELD_KEY.RISK_ATR_MULTIPLE_TAKE_PROFIT) {
-      const multiple = typeof risk.params.multiple === 'number' && Number.isFinite(risk.params.multiple)
-        ? risk.params.multiple
-        : null
+      const multiple = this.readFiniteNumber(risk.params.multiple)
+        ?? this.readFiniteNumber(risk.params.multiplier)
+        ?? this.readFiniteNumber(risk.params.atrMultiple)
       if (multiple === null) {
         return null
       }
@@ -4628,9 +5031,7 @@ export class CanonicalSpecBuilderService {
       }
     }
 
-    const levelKey = typeof risk.params.levelKey === 'string' && risk.params.levelKey.trim().length > 0
-      ? risk.params.levelKey.trim()
-      : null
+    const levelKey = this.readFirstStringParam(risk.params, ['levelKey', 'memoryKey', 'rememberedLevelKey', 'referenceLevelKey'])
     if (!levelKey) {
       return null
     }
@@ -6690,6 +7091,12 @@ export class CanonicalSpecBuilderService {
       }
       case ATOM_CONTRACT_REGISTRY['indicator.above'].key: {
         const timeframe = this.readTriggerParamTimeframe(trigger.params)
+        const referencePeriod = this.readSemanticReferencePeriod(trigger.params)
+        const ownPeriod = typeof trigger.params.period === 'number' && Number.isFinite(trigger.params.period)
+          ? trigger.params.period
+          : (typeof trigger.params.fastPeriod === 'number' && Number.isFinite(trigger.params.fastPeriod)
+            ? trigger.params.fastPeriod
+            : undefined)
         return {
           kind: 'atom',
           key: 'indicator.above',
@@ -6698,15 +7105,20 @@ export class CanonicalSpecBuilderService {
           params: {
             ...(typeof trigger.params.indicator === 'string' ? { indicator: trigger.params.indicator } : {}),
             ...(typeof trigger.params.referenceRole === 'string' ? { referenceRole: trigger.params.referenceRole } : {}),
-            ...(typeof trigger.params['reference.period'] === 'number'
-              ? { 'reference.period': trigger.params['reference.period'] }
-              : {}),
+            ...(typeof ownPeriod === 'number' ? { period: ownPeriod } : {}),
+            ...(referencePeriod !== null ? { 'reference.period': referencePeriod } : {}),
             ...(timeframe ? { timeframe } : {}),
           },
         }
       }
       case ATOM_CONTRACT_REGISTRY['indicator.below'].key: {
         const timeframe = this.readTriggerParamTimeframe(trigger.params)
+        const referencePeriod = this.readSemanticReferencePeriod(trigger.params)
+        const ownPeriod = typeof trigger.params.period === 'number' && Number.isFinite(trigger.params.period)
+          ? trigger.params.period
+          : (typeof trigger.params.fastPeriod === 'number' && Number.isFinite(trigger.params.fastPeriod)
+            ? trigger.params.fastPeriod
+            : undefined)
         return {
           kind: 'atom',
           key: 'indicator.below',
@@ -6715,9 +7127,8 @@ export class CanonicalSpecBuilderService {
           params: {
             ...(typeof trigger.params.indicator === 'string' ? { indicator: trigger.params.indicator } : {}),
             ...(typeof trigger.params.referenceRole === 'string' ? { referenceRole: trigger.params.referenceRole } : {}),
-            ...(typeof trigger.params['reference.period'] === 'number'
-              ? { 'reference.period': trigger.params['reference.period'] }
-              : {}),
+            ...(typeof ownPeriod === 'number' ? { period: ownPeriod } : {}),
+            ...(referencePeriod !== null ? { 'reference.period': referencePeriod } : {}),
             ...(timeframe ? { timeframe } : {}),
           },
         }
@@ -7268,6 +7679,14 @@ export class CanonicalSpecBuilderService {
 
   private readStringParam(value: unknown): string | null {
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+  }
+
+  private readFirstStringParam(params: Record<string, unknown>, keys: readonly string[]): string {
+    for (const key of keys) {
+      const value = this.readStringParam(params[key])
+      if (value !== null) return value
+    }
+    return ''
   }
 
   private readNumberParam(value: unknown): number | null {

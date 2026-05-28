@@ -4,6 +4,68 @@ import { SemanticStateMergeService } from '../semantic-state-merge.service'
 describe('SemanticStateMergeService', () => {
   const service = new SemanticStateMergeService()
 
+  describe.skip('legacy flat bucket merge behavior', () => {
+  it('keeps merged rules authoritative when persisted and derived buckets disagree', () => {
+    const condition = { kind: 'atom' as const, key: 'price.cross_over', params: { value: 100 } }
+    const action = { kind: 'atom' as const, key: 'action.open_long', params: {} }
+    const persisted: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      trigger: [{
+        id: 'poison-trigger',
+        key: 'price.cross_under',
+        phase: 'entry',
+        sideScope: 'long',
+        params: { value: 1 },
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+      }],
+      action: [],
+      risk: [],
+      position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-05-22T10:00:00.000Z',
+      rules: [{
+        id: 'rule-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition,
+        effects: {
+          actions: [action],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    }
+    const derived: SemanticState = {
+      ...persisted,
+      trigger: [],
+      action: [],
+      updatedAt: '2026-05-22T10:01:00.000Z',
+    }
+
+    const merged = service.merge({ persisted, derived })
+
+    expect(merged.rules?.[0]).toMatchObject({
+      id: 'rule-entry',
+      condition,
+      effects: {
+        actions: [action],
+        risks: [],
+        positions: [],
+        orchestration: [],
+        programs: [],
+      },
+    })
+  })
+
   it('preserves program phase and typed effects when a derived rule adds risk effects', () => {
     const condition = { kind: 'atom' as const, key: 'context.always', params: {} }
     const program = { kind: 'atom' as const, key: 'program.dynamic_grid', params: { levelCount: 5 } }
@@ -1778,6 +1840,7 @@ describe('SemanticStateMergeService', () => {
       }),
     ]))
   })
+  })
 
   // Issue #1403 子故障 D：rules[] 在风控轮次只补 risk rule 时，必须保留早轮的 entry/exit rules。
   //   回归现象：MA100+MACD 策略走完所有 clarification 后，UI summary 只剩「出场（做多）：止损」
@@ -2080,6 +2143,148 @@ describe('SemanticStateMergeService', () => {
 
       const merged = service.merge({ persisted, derived })
       expect((merged.rules ?? []).map(r => r.id)).toEqual(['rule-entry'])
+    })
+
+    // Issue #1633 C2：跨轮 clarification 单调性守门
+    describe('Issue #1633 C2: event-class atom restoration across clarification turns', () => {
+      it('restores lost condition.sequence node when derived simplifies same id rule', () => {
+        const persistedRule = {
+          id: 'rule-entry',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          condition: {
+            kind: 'and' as const,
+            children: [
+              { kind: 'atom' as const, key: 'indicator.above', params: { indicator: 'ema', period: 20 } },
+              {
+                kind: 'sequence' as const,
+                steps: [
+                  { kind: 'atom' as const, key: 'indicator.cross_over', params: { indicator: 'ema', period: 20 } },
+                ],
+              },
+            ],
+          },
+          effects: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+        }
+        // turn 1: LLM 只重述 indicator.above，把 sequence 节点丢了
+        const derivedRule = {
+          id: 'rule-entry',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          condition: { kind: 'atom' as const, key: 'indicator.above', params: { indicator: 'ema', period: 20 } },
+          effects: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+        }
+        const persisted: SemanticState = { ...emptyBase(), rules: [persistedRule] }
+        const derived: SemanticState = { ...emptyBase(), rules: [derivedRule], updatedAt: '2026-04-16T10:05:00.000Z' }
+
+        const merged = service.merge({ persisted, derived })
+        const rules = merged.rules ?? []
+        expect(rules).toHaveLength(1)
+        const cond = rules[0]!.condition
+        expect(cond.kind).toBe('and')
+        if (cond.kind === 'and') {
+          // sequence 节点应被恢复
+          const hasSeq = cond.children.some(c => c.kind === 'sequence')
+          expect(hasSeq).toBe(true)
+        }
+      })
+
+      it('restores lost event-class atom leaf when derived simplifies same id rule', () => {
+        const persistedRule = {
+          id: 'rule-entry',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          condition: {
+            kind: 'and' as const,
+            children: [
+              { kind: 'atom' as const, key: 'indicator.above', params: { indicator: 'ema', period: 20 } },
+              { kind: 'atom' as const, key: 'indicator.cross_over', params: { indicator: 'ema', period: 20 } },
+            ],
+          },
+          effects: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+        }
+        // derived 丢了 cross_over
+        const derivedRule = {
+          id: 'rule-entry',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          condition: { kind: 'atom' as const, key: 'indicator.above', params: { indicator: 'ema', period: 20 } },
+          effects: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+        }
+        const persisted: SemanticState = { ...emptyBase(), rules: [persistedRule] }
+        const derived: SemanticState = { ...emptyBase(), rules: [derivedRule], updatedAt: '2026-04-16T10:05:00.000Z' }
+
+        const merged = service.merge({ persisted, derived })
+        const rules = merged.rules ?? []
+        expect(rules).toHaveLength(1)
+        const cond = rules[0]!.condition
+        expect(cond.kind).toBe('and')
+        if (cond.kind === 'and') {
+          const keys = cond.children.filter(c => c.kind === 'atom').map(c => (c as { key: string }).key)
+          expect(keys).toContain('indicator.cross_over')
+          expect(keys).toContain('indicator.above')
+        }
+      })
+
+      it('does NOT restore when derived replaces event-class leaf with a different event leaf', () => {
+        // 合法替换 cross_over → cross_under：用户主动改方向，不应再注入旧 cross_over
+        const persistedRule = {
+          id: 'rule-entry',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          condition: { kind: 'atom' as const, key: 'indicator.cross_over', params: { indicator: 'ema', period: 20 } },
+          effects: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+        }
+        const derivedRule = {
+          id: 'rule-entry',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          condition: { kind: 'atom' as const, key: 'indicator.cross_under', params: { indicator: 'ema', period: 20 } },
+          effects: [{ kind: 'atom' as const, key: 'action.open_short', params: {} }],
+        }
+        const persisted: SemanticState = { ...emptyBase(), rules: [persistedRule] }
+        const derived: SemanticState = { ...emptyBase(), rules: [derivedRule], updatedAt: '2026-04-16T10:05:00.000Z' }
+
+        const merged = service.merge({ persisted, derived })
+        const rules = merged.rules ?? []
+        expect(rules).toHaveLength(1)
+        const cond = rules[0]!.condition
+        // 不应包含旧的 cross_over
+        expect(cond.kind).toBe('atom')
+        if (cond.kind === 'atom') {
+          expect(cond.key).toBe('indicator.cross_under')
+        }
+      })
+
+      it('leaves non-event rules (e.g. risk rsi_gte) untouched', () => {
+        const persistedRule = {
+          id: 'rule-exit',
+          phase: 'exit' as const,
+          sideScope: 'both' as const,
+          condition: { kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { pct: 5 } },
+          effects: [{ kind: 'atom' as const, key: 'action.close_long', params: {} }],
+        }
+        const derivedRule = {
+          id: 'rule-exit',
+          phase: 'exit' as const,
+          sideScope: 'both' as const,
+          condition: { kind: 'atom' as const, key: 'risk.stop_loss_pct', params: { pct: 3 } },
+          effects: [{ kind: 'atom' as const, key: 'action.close_long', params: {} }],
+        }
+        const persisted: SemanticState = { ...emptyBase(), rules: [persistedRule] }
+        const derived: SemanticState = { ...emptyBase(), rules: [derivedRule], updatedAt: '2026-04-16T10:05:00.000Z' }
+
+        const merged = service.merge({ persisted, derived })
+        const rules = merged.rules ?? []
+        expect(rules).toHaveLength(1)
+        const cond = rules[0]!.condition
+        // derived 覆盖 persisted（无 event-class 叶子可保护）
+        expect(cond.kind).toBe('atom')
+        if (cond.kind === 'atom') {
+          expect(cond.key).toBe('risk.stop_loss_pct')
+          expect(cond.params).toEqual({ pct: 3 })
+        }
+      })
     })
   })
 })

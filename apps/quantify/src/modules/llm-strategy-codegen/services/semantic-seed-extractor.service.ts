@@ -1,6 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common'
 import { MARKET_TIMEFRAMES } from '@ai/shared'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+import type { SemanticRule } from '../types/atom-expr'
 import type {
   SemanticAtomContract,
   SemanticCapability,
@@ -9,6 +10,7 @@ import type {
   SemanticExpression,
   SemanticExpressionOperator,
   SemanticExpressionOperand,
+  SemanticOrchestrationNode,
   SemanticPositionSizingContract,
   SemanticRiskBasis,
   SemanticRiskBasisSource,
@@ -24,12 +26,35 @@ import { SemanticEventFrameProjectorService } from './semantic-event-frame-proje
 import { SemanticFrameNormalizerService } from './semantic-frame-normalizer.service'
 import { buildTriggerCombinationContract } from './semantic-state-normalization'
 
-type SeedTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
+type SeedNode = Record<string, unknown> & {
+  key: string
+  phase?: SemanticTriggerState['phase'] | SemanticRule['phase']
+  sideScope?: 'long' | 'short' | 'both'
+  params?: Record<string, unknown>
+  evidence?: { text: string, source?: string }
+  contracts?: SemanticAtomContract[]
+  openSlots?: SemanticSlotState[]
+  support?: unknown
+}
+type SeedTrigger = SeedNode & { phase: SemanticTriggerState['phase'] }
 type SeedCombinationTrigger = SeedTrigger & { phase: SemanticTriggerState['phase'] }
-type SeedAction = NonNullable<CodegenSemanticPatch['actions']>[number]
-type SeedRisk = NonNullable<CodegenSemanticPatch['risk']>[number]
+type SeedAction = SeedNode
+type SeedRisk = SeedNode
 type SeedContextSlots = NonNullable<CodegenSemanticPatch['contextSlots']>
-type SeedPositionConstraint = NonNullable<NonNullable<CodegenSemanticPatch['position']>['constraints']>[number]
+type SeedPositionConstraint = Record<string, unknown> & {
+  key: string
+  params: Record<string, unknown>
+}
+type SeedPositionPatch = Record<string, unknown> & {
+  sizing?: SemanticPositionSizingContract
+  evidence?: { text: string, source?: string }
+  constraints?: SeedPositionConstraint[]
+  contracts?: SemanticAtomContract[]
+  mode?: string
+  value?: number
+  positionMode?: 'long_only' | 'short_only' | 'long_short'
+}
+type SeedOrchestrationPatch = { nodes?: SemanticOrchestrationNode[] }
 type QuoteAsset = 'USDT' | 'USDC' | 'USD'
 type FixedGridRange = {
   lower: number
@@ -91,12 +116,12 @@ export class SemanticSeedExtractorService {
     const contextSlots = this.mergeContextSlots(gatewayPatch.contextSlots ?? {}, legacyContextSlots, text)
     const aliasContext = this.extractAliasContext(text)
     const eventFramePatch = this.eventFrameProjector.project(this.eventFrameParser.parse(text))
-    const eventFrameTriggers = eventFramePatch.triggers ?? []
+    const eventFrameTriggers: SeedTrigger[] = []
     const legacyTriggers = this.extractTriggers(text, aliasContext)
-    const gatewayTriggers = this.filterGatewayTriggers(gatewayPatch.triggers ?? [], legacyTriggers)
-    const gatewayRisk = gatewayPatch.risk ?? []
+    const gatewayTriggers: SeedTrigger[] = []
+    const gatewayRisk: SeedRisk[] = []
     const gatewayActions = gatewayTriggers.length > 0 || gatewayRisk.length > 0
-      ? (gatewayPatch.actions ?? [])
+      ? []
       : []
     const triggers = this.atomizeTriggers(this.withRecognizedTriggerCombinationContracts(this.groupEntryConfirmationTriggers(this.inheritIndicatorBoundaryConfirmationModes(
       this.removeStaticIndicatorTriggersCoveredBySequences(
@@ -110,7 +135,7 @@ export class SemanticSeedExtractorService {
       gatewayActions,
       this.mergeSeedActions(
         this.mergeSeedActions(
-          eventFramePatch.actions ?? [],
+          [],
           this.extractActions(text, triggers),
         ),
         lifecycleActions,
@@ -132,22 +157,13 @@ export class SemanticSeedExtractorService {
     if (Object.keys(contextSlots).length > 0) {
       patch.contextSlots = contextSlots
     }
-    if (triggers.length > 0) {
-      patch.triggers = triggers
-    }
-    if (actions.length > 0) {
-      patch.actions = actions
-    }
-    if (risk.length > 0) {
-      patch.risk = risk
-    }
-    if (position) {
-      patch.position = position
-    }
-    const orchestrationNodes = gatewayPatch.orchestration?.nodes ?? []
-    if (orchestrationNodes.length > 0) {
-      patch.orchestration = { nodes: [...orchestrationNodes] }
-    }
+    const orchestrationNodes: SemanticOrchestrationNode[] = []
+    const rules = [
+      ...(gatewayPatch.rules ?? []),
+      ...(eventFramePatch.rules ?? []),
+      ...this.buildRulesFromSeedNodes(triggers, actions, risk, position, orchestrationNodes, text),
+    ]
+    if (rules.length > 0) patch.rules = rules
 
     return patch
   }
@@ -163,6 +179,109 @@ export class SemanticSeedExtractorService {
 
       return !this.hasLegacyMovingAverageStackForGatewayGate(trigger, legacyTriggers)
     })
+  }
+
+  private buildRulesFromSeedNodes(
+    triggers: readonly SeedTrigger[],
+    actions: readonly SeedAction[],
+    risks: readonly SeedRisk[],
+    position: SeedPositionPatch | null,
+    orchestrationNodes: readonly SemanticOrchestrationNode[],
+    text: string,
+  ): SemanticRule[] {
+    const actionEffects = actions.map(action => this.seedNodeToAtom(this.normalizeActionSeed(action)))
+    const riskEffects = risks.map(risk => this.seedNodeToAtom(risk))
+    const positionEffects = [
+      ...(position?.sizing
+        ? [{
+            kind: 'atom' as const,
+            key: 'position.sizing',
+            params: { sizing: position.sizing },
+            ...(position.evidence?.text ? { evidence: { text: position.evidence.text } } : {}),
+          }]
+        : []),
+      ...((position?.constraints ?? []).map(constraint => ({
+        kind: 'atom' as const,
+        key: constraint.key,
+        params: constraint.params,
+        ...(position.evidence?.text ? { evidence: { text: position.evidence.text } } : {}),
+      }))),
+    ]
+    const orchestrationEffects = orchestrationNodes.map(node => ({
+      kind: 'atom' as const,
+      key: node.key ?? 'scope.context',
+      params: { ...node.params, ...node },
+      ...(node.evidence?.text ? { evidence: { text: node.evidence.text } } : {}),
+    }))
+
+    const buildEffects = (sideScope: SemanticRule['sideScope']) => ({
+      actions: actionEffects.filter(action => this.actionMatchesRuleSideScope(action.key, sideScope)),
+      risks: riskEffects,
+      positions: positionEffects,
+      orchestration: orchestrationEffects,
+      programs: [],
+    })
+
+    if (triggers.length > 0) {
+      return triggers.map((trigger, index) => ({
+        id: `seed-extractor-rule-${index + 1}`,
+        phase: this.toRulePhase(trigger.phase),
+        sideScope: trigger.sideScope ?? 'both',
+        condition: this.seedNodeToAtom(trigger),
+        effects: buildEffects(trigger.sideScope ?? 'both'),
+        ...(trigger.evidence?.text ? { evidence: { text: trigger.evidence.text } } : {}),
+      }))
+    }
+
+    if (
+      actionEffects.length === 0
+      && riskEffects.length === 0
+      && positionEffects.length === 0
+      && orchestrationEffects.length === 0
+    ) {
+      return []
+    }
+
+    return [{
+      id: 'seed-extractor-rule-on-start',
+      phase: 'entry',
+      sideScope: 'both',
+      condition: {
+        kind: 'atom',
+        key: 'execution.on_start',
+        params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
+        ...(text.trim() ? { evidence: { text: text.trim() } } : {}),
+      },
+      effects: buildEffects('both'),
+    }]
+  }
+
+  private actionMatchesRuleSideScope(actionKey: string, sideScope: SemanticRule['sideScope']): boolean {
+    if (sideScope === 'both') return true
+    if (sideScope === 'long') return actionKey === 'action.open_long' || actionKey === 'action.close_long'
+    if (sideScope === 'short') return actionKey === 'action.open_short' || actionKey === 'action.close_short'
+    return true
+  }
+
+  private seedNodeToAtom(node: SeedNode) {
+    return {
+      kind: 'atom' as const,
+      key: node.key,
+      params: node.params ?? {},
+      ...(node.sideScope ? { sideScope: node.sideScope } : {}),
+      ...(node.evidence?.text ? { evidence: { text: node.evidence.text } } : {}),
+    }
+  }
+
+  private normalizeActionSeed(action: SeedAction): SeedAction {
+    return {
+      ...action,
+      key: action.key.startsWith('action.') ? action.key : `action.${action.key}`,
+    }
+  }
+
+  private toRulePhase(phase: SeedNode['phase']): SemanticRule['phase'] {
+    return phase === 'entry' || phase === 'exit' || phase === 'gate' || phase === 'program' ? phase : 'exit'
   }
 
   private hasLegacyMovingAverageStackForGatewayGate(
@@ -1067,8 +1186,8 @@ export class SemanticSeedExtractorService {
   }
 
   private atomizePosition(
-    position: NonNullable<CodegenSemanticPatch['position']> | null,
-  ): NonNullable<CodegenSemanticPatch['position']> | null {
+    position: SeedPositionPatch | null,
+  ): SeedPositionPatch | null {
     if (!position || this.hasContracts(position)) {
       return position
     }
@@ -1326,7 +1445,7 @@ export class SemanticSeedExtractorService {
   }
 
   private buildPositionCapability(
-    position: NonNullable<CodegenSemanticPatch['position']>,
+    position: SeedPositionPatch,
   ): SemanticCapability {
     return {
       domain: 'capital',
@@ -1409,8 +1528,8 @@ export class SemanticSeedExtractorService {
     return value.replace(/[^a-z0-9]+/giu, '-').replace(/^-|-$/gu, '').toLowerCase() || 'atom'
   }
 
-  private extractContextSlots(text: string): NonNullable<CodegenSemanticPatch['contextSlots']> {
-    const contextSlots: NonNullable<CodegenSemanticPatch['contextSlots']> = {}
+  private extractContextSlots(text: string): SeedContextSlots {
+    const contextSlots: SeedContextSlots = {}
 
     const exchange = this.extractExchange(text)
     if (exchange) {
@@ -1480,7 +1599,7 @@ export class SemanticSeedExtractorService {
     return this.removeLogicalAnyOfExitChildren(this.harmonizeBollingerTriggers(triggers))
   }
 
-  private extractActions(text: string, triggers: SeedTrigger[]): NonNullable<CodegenSemanticPatch['actions']> {
+  private extractActions(text: string, triggers: SeedTrigger[]): SeedAction[] {
     const actions: SeedAction[] = []
     const seen = new Set<string>()
     const push = (key: string, params?: Record<string, unknown>, extra?: Omit<SeedAction, 'key' | 'params'>) => {
@@ -1635,7 +1754,7 @@ export class SemanticSeedExtractorService {
     return actions
   }
 
-  private extractPositionLifecycleConstraints(text: string): NonNullable<CodegenSemanticPatch['position']>['constraints'] {
+  private extractPositionLifecycleConstraints(text: string): SeedPositionConstraint[] {
     const constraints: SeedPositionConstraint[] = []
 
     for (const clause of this.extractAddPositionLifecycleTexts(text)) {
@@ -1698,11 +1817,11 @@ export class SemanticSeedExtractorService {
   }
 
   private withPositionLifecycleConstraints(
-    position: NonNullable<CodegenSemanticPatch['position']> | null,
-    lifecycleConstraints: NonNullable<NonNullable<CodegenSemanticPatch['position']>['constraints']>,
+    position: SeedPositionPatch | null,
+    lifecycleConstraints: SeedPositionConstraint[],
     hasLifecycleActions = false,
     lifecyclePositionMode: 'long_only' | 'short_only' | 'long_short' = 'long_only',
-  ): NonNullable<CodegenSemanticPatch['position']> | null {
+  ): SeedPositionPatch | null {
     if (lifecycleConstraints.length === 0 && !hasLifecycleActions) {
       return position
     }
@@ -1851,8 +1970,8 @@ export class SemanticSeedExtractorService {
   }
 
   private withInheritedLifecycleContextSlots(
-    contextSlots: NonNullable<CodegenSemanticPatch['contextSlots']>,
-  ): NonNullable<CodegenSemanticPatch['contextSlots']> {
+    contextSlots: SeedContextSlots,
+  ): SeedContextSlots {
     return {
       exchange: contextSlots.exchange ?? this.buildInheritedLifecycleContextSlot('exchange', 'contextSlots.exchange'),
       symbol: contextSlots.symbol ?? this.buildInheritedLifecycleContextSlot('symbol', 'contextSlots.symbol'),
@@ -2110,8 +2229,8 @@ export class SemanticSeedExtractorService {
     return { value, asset }
   }
 
-  private extractRisk(text: string): NonNullable<CodegenSemanticPatch['risk']> {
-    const risk: NonNullable<CodegenSemanticPatch['risk']> = []
+  private extractRisk(text: string): SeedRisk[] {
+    const risk: SeedRisk[] = []
 
     const stopLossPatterns = [
       /亏损\s*[：:]?\s*(\d+(?:\.\d+)?)\s*%/u,
@@ -2536,7 +2655,7 @@ export class SemanticSeedExtractorService {
   private extractPosition(
     text: string,
     triggers: SeedTrigger[],
-  ): NonNullable<CodegenSemanticPatch['position']> | null {
+  ): SeedPositionPatch | null {
     if (this.hasPositiveDcaScheduleContext(text)) {
       return null
     }
@@ -3497,7 +3616,11 @@ export class SemanticSeedExtractorService {
             ? 'short_only'
             : (sideScope === 'both' ? 'bidirectional' : 'long_only'),
           recycle: /反向挂单|反向单|自动挂/u.test(segment),
-          breakoutAction: /停|暂停|停止/u.test(segment) ? 'pause' : 'continue',
+          ...(/停|暂停|停止/u.test(segment)
+            ? { breakoutAction: 'pause' }
+            : /继续|continue/iu.test(segment)
+              ? { breakoutAction: 'continue' }
+              : {}),
         },
         contracts: [{
           id: 'contract-grid-centered-levels',
@@ -3597,7 +3720,11 @@ export class SemanticSeedExtractorService {
           ? 'short_only'
           : (sideScope === 'both' ? 'bidirectional' : 'long_only'),
         recycle: true,
-        breakoutAction: /停|暂停|停止/u.test(segment) ? 'pause' : 'continue',
+        ...(/停|暂停|停止/u.test(segment)
+          ? { breakoutAction: 'pause' }
+          : /继续|continue/iu.test(segment)
+            ? { breakoutAction: 'continue' }
+            : {}),
       },
       contracts: [{
         id: 'contract-grid-fixed-levels',
@@ -5292,7 +5419,7 @@ export class SemanticSeedExtractorService {
   private extractRecognizedUnsupportedPosition(
     text: string,
     triggers: SeedTrigger[],
-  ): NonNullable<CodegenSemanticPatch['position']> | null {
+  ): SeedPositionPatch | null {
     const leverage = this.extractNumber(text, [
       /(\d+(?:\.\d+)?)\s*(?:倍杠杆|x\s*leverage|X\s*leverage)/u,
     ])

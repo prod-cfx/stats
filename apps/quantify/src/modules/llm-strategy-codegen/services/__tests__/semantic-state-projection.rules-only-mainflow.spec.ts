@@ -1,5 +1,14 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { SemanticState } from '../../types/semantic-state'
 import { SemanticStateProjectionService } from '../semantic-state-projection.service'
+
+const repoRoot = join(__dirname, '../../../../../../..')
+const guardedFiles = [
+  'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-projection.service.ts',
+  'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-normalization.ts',
+  'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-open-slot-answer-resolver.service.ts',
+] as const
 
 const poisonSlot = {
   slotKey: 'poison.slot',
@@ -101,6 +110,13 @@ function rulesOnlyStateWithPoisonFlat(): SemanticState {
 describe('SemanticStateProjectionService rules-only mainflow', () => {
   const service = new SemanticStateProjectionService()
 
+  it.each(guardedFiles)('%s reads rules mainflow through facts, not flat buckets', (file) => {
+    const source = readFileSync(join(repoRoot, file), 'utf8')
+
+    expect(source).not.toContain('semantic-state-flat-readers')
+    expect(source).not.toMatch(/\bstate\.(?:trigger|action|risk|positionConstraint|orchestration)\b/u)
+  })
+
   it('does not read poison flat buckets for summaries, display graph, or next question', () => {
     const state = rulesOnlyStateWithPoisonFlat()
 
@@ -119,5 +135,29 @@ describe('SemanticStateProjectionService rules-only mainflow', () => {
     expect(serialized).not.toContain('66')
     expect(serialized).not.toContain('回撤')
     expect(serialized).not.toContain('open_short')
+  })
+
+  it('keeps locked execution context in rules-only conversation summary', () => {
+    const state = rulesOnlyStateWithPoisonFlat()
+    const conversation = service.buildConversationView({
+      ...state,
+      trigger: [],
+      action: [],
+      risk: [],
+      position: null,
+      orchestration: [],
+      contextSlots: {
+        exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', confidence: 1 },
+        symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'ETHUSDT', status: 'locked', confidence: 1 },
+        marketType: { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'spot', status: 'locked', confidence: 1 },
+        timeframe: { slotKey: 'timeframe', fieldPath: 'contextSlots.timeframe', value: '1h', status: 'locked', confidence: 1 },
+      },
+    })
+
+    expect(conversation.summary).toContain('OKX')
+    expect(conversation.summary).toContain('ETHUSDT')
+    expect(conversation.summary).toContain('现货')
+    expect(conversation.summary).toContain('1h')
+    expect(conversation.summary).toContain('BOLL')
   })
 })

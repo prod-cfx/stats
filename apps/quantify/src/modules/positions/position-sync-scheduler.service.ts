@@ -19,6 +19,7 @@ export class PositionSyncSchedulerService {
    */
   @Cron(CronExpression.EVERY_30_MINUTES)
   async handlePositionReconciliation() {
+    if (process.env.QUANTIFY_STAGING_VALIDATION_MODE === 'true') return
     this.logger.log('Starting scheduled position reconciliation')
     const startTime = Date.now()
 
@@ -74,6 +75,7 @@ export class PositionSyncSchedulerService {
    */
   @Cron('0 2 * * *')
   async handleDailyPositionAudit() {
+    if (process.env.QUANTIFY_STAGING_VALIDATION_MODE === 'true') return
     this.logger.log('Starting daily position audit')
 
     try {

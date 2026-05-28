@@ -893,7 +893,17 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
       const perOrderSizing = formatDcaSizing(params?.perOrderSizing)
       const capitalCap = formatDcaCapitalCap(params?.capitalCap)
       const triggerMode = typeof params?.triggerMode === 'string' ? renderDcaTriggerMode(params.triggerMode) : ''
-      const parts = [triggerMode, perOrderSizing, maxCount, capitalCap].filter(Boolean)
+      // #s30：dropPct 是用户额外声明的回撤加投阈值，需在渲染中可见，避免
+      //   "DCA + 回撤" 复合表述被压缩成单触发模式而丢失 drawdown 信号
+      const dropPct = typeof params?.dropPct === 'number' && (params.dropPct as number) > 0
+        ? `回撤 ${params.dropPct}% 加投`
+        : ''
+      // #s30：第二段 sizing（与主 leg sizing 不同时）独立渲染，避免 200 USDT 被静默丢弃
+      const drawdownSizing = formatDcaSizing(params?.drawdownPerOrderSizing)
+      const dropPctWithSizing = dropPct && drawdownSizing
+        ? `${dropPct} ${drawdownSizing}`
+        : dropPct || (drawdownSizing ? `加投 ${drawdownSizing}` : '')
+      const parts = [triggerMode, perOrderSizing, dropPctWithSizing, maxCount, capitalCap].filter(Boolean)
       return parts.length > 0
         ? renderDisplayToken('atom.position.dca_schedule.display', { parts: parts.join('，') })
         : renderDisplayToken('atom.position.dca_schedule.display.empty')

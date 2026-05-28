@@ -2204,6 +2204,72 @@ describe('SemanticAtomInvariantService', () => {
     ]))
   })
 
+  // Regression: staging30 s06 — OR-merged exit rule with mixed bases
+  //   (prev_close + entry_avg_price siblings) must not trigger spurious
+  //   price.percent_change drift. position_gain_pct siblings inside an OR
+  //   are downstream encodings of price.percent_change with basis=entry_avg_price,
+  //   not "non-price-change" weakening branches.
+  it('does not flag drift for OR-merged exit with prev_close + entry_avg_price siblings (staging30 s06)', () => {
+    const state: SemanticState = {
+      ...buildSemanticState(),
+      trigger: [
+        ...buildSemanticState().trigger,
+      ],
+      rules: [
+        rule({
+          id: 'entry-immediate-market-long-10pct',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: atom('execution.on_start', { timing: 'on_start', orderType: 'market', occurrence: 'once' }),
+          actions: [atom('action.open_long')],
+        }),
+        rule({
+          id: 'exit-takeprofit-1pct-prevclose',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: atom('price.percent_change', { basis: 'prev_close', window: '1h', valuePct: 1, direction: 'up' }),
+          actions: [atom('action.close_long')],
+        }),
+        rule({
+          id: 'exit-stoploss-5pct-entryavg',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: atom('price.percent_change', { basis: 'entry_avg_price', window: '1h', valuePct: 5, direction: 'down' }),
+          actions: [atom('action.close_long')],
+        }),
+        rule({
+          id: 'exit-takeprofit-10pct-entryavg',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: atom('price.percent_change', { basis: 'entry_avg_price', window: '1h', valuePct: 10, direction: 'up' }),
+          actions: [atom('action.close_long')],
+        }),
+        rule({
+          id: 'exit-or-priority-confirmation-placeholder',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: {
+            kind: 'or',
+            children: [
+              atom('price.percent_change', { basis: 'prev_close', window: '1h', valuePct: 1, direction: 'up' }),
+              atom('price.percent_change', { basis: 'entry_avg_price', window: '1h', valuePct: 5, direction: 'down' }),
+              atom('price.percent_change', { basis: 'entry_avg_price', window: '1h', valuePct: 10, direction: 'up' }),
+            ],
+          },
+          actions: [atom('action.close_long')],
+        }),
+      ],
+    }
+
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    const driftFailures = checks.filter(check =>
+      check.key === 'semantic_atom.price_percent_change' && check.status === 'failed',
+    )
+    expect(driftFailures).toEqual([])
+  })
+
   // PR3.8: 投影后 state.position.sizing 填充，invariant 不报 sizing missing
   it('PR3.8: invariant passes position_sizing check when position.sizing is derived from action per_order_budget', () => {
     // Simulate state after PR3.7 projection: position.sizing is derived from action budget

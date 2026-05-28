@@ -14,7 +14,7 @@ import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gat
 import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant-conversations.repository'
 import type { EditablePublishedStrategySnapshotRecord } from '../repositories/published-strategy-snapshots.repository'
 import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
-import { collectAtomLeaves, gracefulParseSemanticRule, isRuleEffectsByRole, type AtomExpr, type RuleEffectsByRole, type SemanticRule } from '../types/atom-expr'
+import { collectAtomLeaves, gracefulParseSemanticRule, isRuleEffectsByRole, updateRuleAtomParams, type AtomExpr, type RuleEffectsByRole, type SemanticRule } from '../types/atom-expr'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { SemanticEditDecision } from '../types/semantic-edit'
@@ -29,7 +29,7 @@ import type {
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyBlockingReason, StrategyInferredAssumption } from '../types/strategy-decision'
 import type { StrategyExecutionContextResolution } from '../types/strategy-execution-context'
-import type { StrategyLogicSnapshot, StrategyRuleBasis, StrategyRuleDraft } from '../types/strategy-logic-snapshot'
+import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
 import type {ConversationMessage, GuidePromptConfig, RecommendationStyle} from './codegen-conversation-context.helper';
 
@@ -95,11 +95,10 @@ import {
   
 } from './inferred-confirmation-classifier.service'
 import { GenericSeedDispatcher } from './generic-seed-dispatcher.service'
-import { canonicalizeStrategySymbolInput, isEquivalentMarketScopeValue } from './market-scope-equivalence'
+import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
 import { PlannerDispatcherMergeService } from './planner-dispatcher-merge.service'
 import { PositionSizingContractService } from './position-sizing-contract.service'
-import { buildStrategyRuleDrafts, resolveStrategyDefaultTimeframe } from './rule-draft-projection'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RuntimeGuardrailService } from './runtime-guardrail.service'
@@ -133,7 +132,7 @@ import { StrategyClarificationRulesService } from './strategy-clarification-rule
 import { StrategyExecutionContextService } from './strategy-execution-context.service'
 import { validateSemanticPositionContract } from './strategy-semantic-contracts'
 import { UnsupportedFallbackService } from './unsupported-fallback.service'
-import { readFlatActions, readFlatRisks, readFlatTriggers } from '../types/semantic-state-flat-readers'
+import { RulesMainflowReaderService, type RulesMainflowAtomFact } from './rules-mainflow-reader.service'
 
 // PR3b: 非 atom 字段路径的类型化引用（Issue #1279 AC-4）
 // 这些 key 不在 ATOM_CONTRACT_REGISTRY,但恰好匹配 lint 规则的 prefix regex,
@@ -196,7 +195,6 @@ interface StructuredClarificationContinuationArgs {
     latestSpecDesc?: Prisma.JsonValue | null
     strategyInstanceId?: string | null
   }
-  checklist: StrategyLogicSnapshot
   semanticState: SemanticState
   clarificationState: StrategyClarificationState
   constraintPack: ReturnType<CodegenConversationService['readConstraintPack']>
@@ -252,6 +250,34 @@ const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
 
 const conversationContextHelper = new CodegenConversationContextHelper()
 const responseMapperHelper = new CodegenConversationResponseMapperHelper()
+const conversationRulesMainflowReader = new RulesMainflowReaderService()
+
+function semanticFactsByRole(
+  state: SemanticState,
+  role: 'condition' | 'action' | 'risk' | 'position' | 'orchestration',
+): RulesMainflowAtomFact[] {
+  return [...conversationRulesMainflowReader.readFactsByRole(state, role)]
+}
+
+function semanticTriggerFacts(state: SemanticState): SemanticTriggerState[] {
+  return semanticFactsByRole(state, 'condition') as unknown as SemanticTriggerState[]
+}
+
+function semanticActionFacts(state: SemanticState): SemanticActionState[] {
+  return semanticFactsByRole(state, 'action') as unknown as SemanticActionState[]
+}
+
+function semanticRiskFacts(state: SemanticState): SemanticRiskState[] {
+  return semanticFactsByRole(state, 'risk') as unknown as SemanticRiskState[]
+}
+
+function semanticPositionFacts(state: SemanticState): RulesMainflowAtomFact[] {
+  return semanticFactsByRole(state, 'position')
+}
+
+function semanticOrchestrationFacts(state: SemanticState): RulesMainflowAtomFact[] {
+  return semanticFactsByRole(state, 'orchestration')
+}
 
 function normalizePublishedSymbol(raw: string): string {
   return raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
@@ -372,7 +398,7 @@ export class CodegenConversationService {
     if (initialSupportGate.route === 'unsupported_fallback') {
       const unsupportedFallback = this.unsupportedFallback.buildPendingFallback(
         initialSupportGate.unsupportedAtoms,
-        readFlatTriggers(initialSupportGate.state),
+        semanticTriggerFacts(initialSupportGate.state),
         responseLocale,
       )
       if (unsupportedFallback !== null) {
@@ -414,7 +440,7 @@ export class CodegenConversationService {
         site: 'initial_session',
         userId: sessionUserId,
         unsupportedAtoms: initialSupportGate.unsupportedAtoms.map(a => a.key),
-        supportedTriggers: readFlatTriggers(initialSupportGate.state)?.map(t => t.key) ?? [],
+        supportedTriggers: semanticTriggerFacts(initialSupportGate.state)?.map(t => t.key) ?? [],
       })
       initialSemanticState = this.clearUnsupportedFallback(initialSemanticState)
     }
@@ -975,7 +1001,7 @@ export class CodegenConversationService {
     state: SemanticState,
     snapshot: EditablePublishedStrategySnapshotRecord,
   ): SemanticState {
-    if (readFlatTriggers(state).length > 0 || readFlatActions(state).length > 0 || readFlatRisks(state).length > 0) {
+    if (semanticTriggerFacts(state).length > 0 || semanticActionFacts(state).length > 0 || semanticRiskFacts(state).length > 0) {
       return state
     }
 
@@ -1002,9 +1028,7 @@ export class CodegenConversationService {
 
     return {
       ...state,
-      trigger: triggers,
-      action: actions,
-      risk,
+      rules: this.buildRecoveredRulesFromSemanticFacts(triggers, actions, risk),
       updatedAt: new Date().toISOString(),
     }
   }
@@ -1138,15 +1162,21 @@ export class CodegenConversationService {
   }
 
   private buildRecoveredRiskFromCanonicalSpec(spec: Record<string, unknown> | null): SemanticRiskState[] {
-    const riskRules = this.readJsonRecord(spec?.riskRules)
+    const rules = Array.isArray(spec?.rules) ? spec.rules : []
     const risk: SemanticRiskState[] = []
-    const stopLossPct = this.readPositiveNumber(riskRules?.stopLossPct)
-    if (stopLossPct !== null) {
-      risk.push(this.buildRecoveredRiskAtom('recovered-risk-stop-loss', 'risk.stop_loss_pct', stopLossPct))
-    }
-    const takeProfitPct = this.readPositiveNumber(riskRules?.takeProfitPct)
-    if (takeProfitPct !== null) {
-      risk.push(this.buildRecoveredRiskAtom('recovered-risk-take-profit', 'risk.take_profit_pct', takeProfitPct))
+    for (const rule of rules) {
+      const effects = this.readJsonRecord(this.readJsonRecord(rule)?.effects)
+      const risks = Array.isArray(effects?.risks) ? effects.risks : []
+      for (const item of risks) {
+        const atom = this.readJsonRecord(item)
+        if (atom?.kind !== 'atom') continue
+        const key = this.readStringValue(atom.key)
+        const params = this.readJsonRecord(atom.params)
+        const valuePct = this.readPositiveNumber(params?.valuePct)
+        if ((key === FIELD_KEY.RISK_STOP_LOSS_PCT || key === FIELD_KEY.RISK_TAKE_PROFIT_PCT) && valuePct !== null) {
+          risk.push(this.buildRecoveredRiskAtom(`recovered-risk-${risk.length + 1}`, key, valuePct))
+        }
+      }
     }
     return risk
   }
@@ -1171,6 +1201,43 @@ export class CodegenConversationService {
       },
       openSlots: [],
     }
+  }
+
+  private buildRecoveredRulesFromSemanticFacts(
+    triggers: readonly SemanticTriggerState[],
+    actions: readonly SemanticActionState[],
+    risks: readonly SemanticRiskState[],
+  ): SemanticRule[] {
+    return triggers.map((trigger, index): SemanticRule => ({
+      id: trigger.id || `recovered-rule-${index + 1}`,
+      phase: trigger.phase === 'gate' ? 'gate' : trigger.phase === 'exit' ? 'exit' : 'entry',
+      sideScope: trigger.sideScope === 'short' || trigger.sideScope === 'both' ? trigger.sideScope : 'long',
+      condition: {
+        kind: 'atom',
+        key: trigger.key,
+        params: { ...trigger.params },
+        ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
+        ...(trigger.evidence?.text ? { evidence: { text: trigger.evidence.text } } : {}),
+      },
+      effects: {
+        actions: actions.map(action => ({
+          kind: 'atom',
+          key: action.key,
+          params: { ...action.params },
+          ...(action.evidence?.text ? { evidence: { text: action.evidence.text } } : {}),
+        })),
+        risks: risks.map(risk => ({
+          kind: 'atom',
+          key: risk.key,
+          params: { ...risk.params },
+          ...(risk.evidence?.text ? { evidence: { text: risk.evidence.text } } : {}),
+        })),
+        positions: [],
+        orchestration: [],
+        programs: [],
+      },
+      ...(trigger.evidence?.text ? { evidence: { text: trigger.evidence.text } } : {}),
+    }))
   }
 
   private readSemanticSideScope(value: unknown): 'long' | 'short' | 'both' | undefined {
@@ -1451,11 +1518,21 @@ export class CodegenConversationService {
     }
     let semanticEditDecision: SemanticEditDecision = { kind: 'NO_EDIT' }
     if (dto.confirmGenerate !== true) {
-      semanticEditDecision = this.conversationSemanticEdit.decide({
-        status: session.status,
-        message: dto.message,
-        semanticState: currentSemanticState,
-      })
+      // Fix #1691 ROOT CAUSE 1：当 session 处于 NEEDS_CLARIFICATION 且本次消息可识别为澄清回答时，
+      // 不要触发隐式 REPLACE_STRATEGY_DRAFT（否则会将完整原始 prompt 当作新种子，导致 rules 漂移）。
+      const persistedClarificationStateForEditGate = this.readClarificationState(session.clarificationState)
+      const isClarificationAnswerMessage = this.isLikelyClarificationAnswerMessage(
+        dto.message,
+        dto.clarificationAnswers,
+        persistedClarificationStateForEditGate,
+      )
+      if (!isClarificationAnswerMessage) {
+        semanticEditDecision = this.conversationSemanticEdit.decide({
+          status: session.status,
+          message: dto.message,
+          semanticState: currentSemanticState,
+        })
+      }
     }
     const hasPublishedUnsupportedEditIntent = session.status === 'PUBLISHED'
       && semanticEditDecision.kind === 'NO_EDIT'
@@ -1679,7 +1756,7 @@ export class CodegenConversationService {
       supportGateResponse.semanticState,
     )
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
-      this.withRequiredSemanticOpenSlots(semanticStateBeforeRequiredSlots, {}, {
+      this.withRequiredSemanticOpenSlots(semanticStateBeforeRequiredSlots, {
         preserveLockedPositionSizing: this.hasValidLockedPositionSizing(plannedSemanticState.position),
       }),
       supportGateResponse.strategyVersion,
@@ -1844,7 +1921,6 @@ export class CodegenConversationService {
       if (hasStructuredClarificationAnswers) {
         return this.continueWithStructuredClarificationAnswers({
           session,
-          checklist: {},
           semanticState: baseSemanticState,
           clarificationState: clarificationStateAfterAnswers,
           constraintPack,
@@ -1981,7 +2057,7 @@ export class CodegenConversationService {
       supportGateResponse.strategyVersion,
     )
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
-      this.withRequiredSemanticOpenSlots(semanticStateAfterSupport, {}, {
+      this.withRequiredSemanticOpenSlots(semanticStateAfterSupport, {
         preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticStateAfterSupport.position),
       }),
       supportGateResponse.strategyVersion,
@@ -2619,7 +2695,6 @@ export class CodegenConversationService {
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
       this.withRequiredSemanticOpenSlots(
         this.reconcileSemanticMissingPlaceholders(semanticStateAfterAnswers),
-        {},
         {
           preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticStateAfterAnswers.position),
         },
@@ -2886,18 +2961,12 @@ export class CodegenConversationService {
   private hasPersistedSemanticState(
     payload: Prisma.JsonValue | null | undefined,
   ): payload is Prisma.JsonValue & SemanticState {
-    // Issue #1383 Round 2 真根因：SemanticState 字段是单数 trigger/action（无 s），
-    //   旧实现查 payload.triggers/actions（带 s）导致**任何合法持久化 state 都被判 false**，
-    //   进而 shouldRejectChecklistOnlySession 误触 REJECTED + "当前会话缺少语义状态"。
-    //   原 user 报告的核心回归即由此引起（S1 网格 turn 2 失败）。
     return Boolean(
       payload
       && typeof payload === 'object'
       && !Array.isArray(payload)
       && (payload as { version?: unknown }).version === 1
-      && Array.isArray((payload as { trigger?: unknown }).trigger)
-      && Array.isArray((payload as { action?: unknown }).action)
-      && Array.isArray((payload as { risk?: unknown }).risk),
+      && Array.isArray((payload as { rules?: unknown }).rules),
     )
   }
 
@@ -2909,14 +2978,11 @@ export class CodegenConversationService {
   }
 
   private isEmptySemanticState(semanticState: SemanticState): boolean {
-    // Issue #1383 Round 2 真根因：旧实现不查 positionConstraint / orchestration，
-    //   导致仅含 grid.range_rebalance / DCA schedule / program.* 的合法 state 被判 empty。
-    //   叠加 hasPersistedSemanticState bug 触发 REJECTED 链路。
-    return readFlatTriggers(semanticState).length === 0
-      && readFlatActions(semanticState).length === 0
-      && readFlatRisks(semanticState).length === 0
-      && semanticState.positionConstraint.length === 0
-      && (semanticState.orchestration?.length ?? 0) === 0
+    return semanticTriggerFacts(semanticState).length === 0
+      && semanticActionFacts(semanticState).length === 0
+      && semanticRiskFacts(semanticState).length === 0
+      && semanticPositionFacts(semanticState).length === 0
+      && semanticOrchestrationFacts(semanticState).length === 0
       && semanticState.position === null
       && Object.values(semanticState.contextSlots).every(slot => slot === null)
   }
@@ -2980,22 +3046,22 @@ export class CodegenConversationService {
           continue
         }
       }
-      const isLegacyPositionSizingAnswer = item.key === 'sizing.positionPct' || item.field === 'riskRules.positionPct'
+      const isPositionSizingAnswer = item.key === FIELD_KEY.POSITION_SIZING || item.field === 'position.sizing'
       if (
         typeof rawAnswer !== 'string'
         || !rawAnswer.trim()
         || (!item.key.startsWith('semantic.')
           && !item.key.startsWith('grid.')
           && !item.key.startsWith('executionContext.')
-          && !isLegacyPositionSizingAnswer)
+          && !isPositionSizingAnswer)
       ) {
         continue
       }
 
-      const legacyPositionSizingSlot = isLegacyPositionSizingAnswer
+      const positionSizingSlot = isPositionSizingAnswer
         ? nextState.position?.openSlots?.find(slot => slot.slotKey === FIELD_KEY.POSITION_SIZING && slot.status === 'open')
         : undefined
-      const targetSlotKey = isLegacyPositionSizingAnswer
+      const targetSlotKey = isPositionSizingAnswer
         ? 'position.sizing'
         : item.slotKey
           ?? (item.key.startsWith('executionContext.')
@@ -3004,9 +3070,9 @@ export class CodegenConversationService {
       nextState = this.semanticStateReducer.applyClarificationAnswer({
         currentState: nextState,
         targetSlotKey,
-        targetFieldPath: isLegacyPositionSizingAnswer ? legacyPositionSizingSlot?.fieldPath : item.fieldPath,
-        targetSlotId: isLegacyPositionSizingAnswer && legacyPositionSizingSlot
-          ? buildSemanticSlotId(legacyPositionSizingSlot)
+        targetFieldPath: isPositionSizingAnswer ? positionSizingSlot?.fieldPath : item.fieldPath,
+        targetSlotId: isPositionSizingAnswer && positionSizingSlot
+          ? buildSemanticSlotId(positionSizingSlot)
           : item.slotId,
         answer: rawAnswer.trim(),
         applyEquivalentConfirmationSlots: targetSlotKey.includes('confirmationMode'),
@@ -3322,13 +3388,13 @@ export class CodegenConversationService {
 
   private collectStructuredLevelSetOpenSlots(semanticState: SemanticState): SemanticSlotState[] {
     const slots: SemanticSlotState[] = []
-    for (const trigger of readFlatTriggers(semanticState)) {
+    for (const trigger of semanticTriggerFacts(semanticState)) {
       slots.push(...trigger.openSlots.filter(slot => this.isStructuredLevelSetOpenSlot(slot)))
     }
-    for (const action of readFlatActions(semanticState)) {
+    for (const action of semanticActionFacts(semanticState)) {
       slots.push(...(action.openSlots ?? []).filter(slot => this.isStructuredLevelSetOpenSlot(slot)))
     }
-    for (const risk of readFlatRisks(semanticState)) {
+    for (const risk of semanticRiskFacts(semanticState)) {
       slots.push(...risk.openSlots.filter(slot => this.isStructuredLevelSetOpenSlot(slot)))
     }
     if (semanticState.position?.openSlots?.length) {
@@ -3378,31 +3444,26 @@ export class CodegenConversationService {
 
   private withRequiredSemanticOpenSlots(
     state: SemanticState,
-    checklist: StrategyLogicSnapshot,
     options?: { preserveLockedPositionSizing?: boolean },
   ): SemanticState {
     const normalizedInput = this.normalizeRiskState(state)
-    const stateWithDeterministicContext = this.withDeterministicContextSlots(normalizedInput, checklist)
+    const stateWithDeterministicContext = this.withDeterministicContextSlots(normalizedInput)
     const stateWithRuleDerivedExecutionTimeframe = this.withRuleDerivedExecutionTimeframe(stateWithDeterministicContext)
-    const stateWithExplicitDeterministicPosition = this.withExplicitDeterministicPositionSizing(
-      stateWithRuleDerivedExecutionTimeframe,
-      checklist,
-    )
-    const stateWithExplicitDeterministicRisk = this.withExplicitDeterministicStopLossRisk(
-      stateWithExplicitDeterministicPosition,
-      checklist,
-    )
+    const stateWithExplicitDeterministicPosition = this.withExplicitDeterministicPositionSizing(stateWithRuleDerivedExecutionTimeframe)
+    const stateWithExplicitDeterministicRisk = this.withExplicitDeterministicStopLossRisk(stateWithExplicitDeterministicPosition)
     const hasExecutableSemantics = this.hasExecutableBehaviorSemantics(stateWithExplicitDeterministicRisk)
 
     if (!hasExecutableSemantics) {
       return {
         ...stateWithExplicitDeterministicRisk,
-        position: this.hasExplicitPositionSizing(checklist) ? stateWithExplicitDeterministicRisk.position : null,
+        position: this.hasValidLockedPositionSizing(stateWithExplicitDeterministicRisk.position)
+          ? stateWithExplicitDeterministicRisk.position
+          : null,
       }
     }
 
     const stateWithExecutionContextSlots = this.ensureExecutionContextSlots(stateWithExplicitDeterministicRisk)
-    const stateWithPositionSizing = this.ensurePositionSizingSlot(stateWithExecutionContextSlots, checklist, options)
+    const stateWithPositionSizing = this.ensurePositionSizingSlot(stateWithExecutionContextSlots, options)
 
     if (!this.hasLockedExecutionContext(stateWithPositionSizing)) {
       return {
@@ -3414,9 +3475,9 @@ export class CodegenConversationService {
   }
 
   private hasExecutableBehaviorSemantics(state: SemanticState): boolean {
-    return readFlatTriggers(state).length > 0
-      || readFlatActions(state).length > 0
-      || state.positionConstraint.length > 0
+    return semanticTriggerFacts(state).length > 0
+      || semanticActionFacts(state).length > 0
+      || semanticPositionFacts(state).length > 0
       || Boolean(state.position?.constraints?.length)
       || this.hasExecutableCapabilityGraph(state)
   }
@@ -3436,8 +3497,8 @@ export class CodegenConversationService {
   //   - hasLockedScheduleSemantics
   //   - collectLockedCapabilities
 
-  private withDeterministicContextSlots(state: SemanticState, compatibilitySnapshot: StrategyLogicSnapshot): SemanticState {
-    const executionContext = this.executionContext.resolve(compatibilitySnapshot)
+  private withDeterministicContextSlots(state: SemanticState): SemanticState {
+    const executionContext = this.executionContext.resolveFromSemanticState(state)
     const questionHints = {
       exchange: '请确认交易所（binance / okx / hyperliquid）。',
       symbol: '请确认策略交易标的（例如 BTCUSDT）。',
@@ -3505,7 +3566,7 @@ export class CodegenConversationService {
 
   private resolvePrimaryExecutionTimeframeFromRules(state: SemanticState): string | null {
     const timeframes = new Set<string>()
-    for (const trigger of readFlatTriggers(state)) {
+    for (const trigger of semanticTriggerFacts(state)) {
       if (trigger.status !== 'locked') continue
       const timeframe = trigger.params.timeframe
       if (typeof timeframe === 'string' && timeframe.trim().length > 0) {
@@ -3536,85 +3597,93 @@ export class CodegenConversationService {
     return value * 10080
   }
 
-  private withExplicitDeterministicPositionSizing(
-    state: SemanticState,
-    checklist: StrategyLogicSnapshot,
-  ): SemanticState {
-    const positionPct = checklist.riskRules?.positionPct
-    if (typeof positionPct !== 'number' || !Number.isFinite(positionPct) || positionPct <= 0) {
+  private withExplicitDeterministicPositionSizing(state: SemanticState): SemanticState {
+    if (!this.hasValidLockedPositionSizing(state.position)) {
       return state
-    }
-
-    if (this.hasValidLockedPositionSizing(state.position)) {
-      return {
-        ...state,
-        position: {
-          ...state.position,
-          openSlots: state.position.openSlots ?? [],
-        },
-      }
     }
 
     return {
       ...state,
       position: {
-        mode: 'fixed_ratio',
-        value: positionPct / 100,
-        sizing: { kind: 'ratio', value: positionPct / 100, unit: 'ratio' },
-        positionMode: state.position?.positionMode ?? this.inferPositionModeFromActions(readFlatActions(state), checklist),
-        status: 'locked',
-        source: 'user_explicit',
+        ...state.position,
         openSlots: [],
       },
     }
   }
 
-  private withExplicitDeterministicStopLossRisk(
+  private withExplicitDeterministicStopLossRisk(state: SemanticState): SemanticState {
+    return this.hasStopLossRisk(semanticRiskFacts(state))
+      ? this.withFilteredRiskEffects(state, risk => risk.key !== FIELD_KEY.RISK_PROTECTIVE_EXIT)
+      : state
+  }
+
+  private withFilteredRiskEffects(
     state: SemanticState,
-    checklist: StrategyLogicSnapshot,
+    predicate: (risk: AtomExpr & { kind: 'atom' }) => boolean,
   ): SemanticState {
-    const stopLossPct = checklist.riskRules?.stopLossPct
-    if (typeof stopLossPct !== 'number' || !Number.isFinite(stopLossPct) || stopLossPct <= 0) {
-      return state
-    }
+    const rules = state.rules?.map((rule) => {
+      if (!isRuleEffectsByRole(rule.effects)) return rule
+      return {
+        ...rule,
+        effects: {
+          ...rule.effects,
+          risks: rule.effects.risks.filter(effect => effect.kind !== 'atom' || predicate(effect)),
+        },
+      }
+    })
+    return rules ? { ...state, rules, updatedAt: new Date().toISOString() } : state
+  }
 
-    if (this.hasStopLossRisk(readFlatRisks(state))) {
-      return state
-    }
-    const stopLossBasis = checklist.riskRules?.stopLossBasis ?? 'entry_avg_price'
-
+  private withAppendedRiskEffect(
+    state: SemanticState,
+    risk: AtomExpr & { kind: 'atom' },
+  ): SemanticState {
+    if (!state.rules?.length) return state
+    const [firstRule, ...rest] = state.rules
+    if (!firstRule || !isRuleEffectsByRole(firstRule.effects)) return state
     return {
       ...state,
-      risk: [
-        ...readFlatRisks(state).filter(risk => !(risk.key === FIELD_KEY.RISK_PROTECTIVE_EXIT && risk.status === 'open')),
-        {
-          id: `risk-stop-loss-${readFlatRisks(state).length + 1}`,
-          key: 'risk.stop_loss_pct',
-          params: {
-            valuePct: stopLossPct,
-            basis: stopLossBasis,
-            ...(checklist.riskRules?.stopLossBasis == null ? { basisSource: 'system_default' } : {}),
-          },
-          status: 'locked',
-          source: 'user_explicit',
-          openSlots: [],
+      rules: [{
+        ...firstRule,
+        effects: {
+          ...firstRule.effects,
+          risks: [...firstRule.effects.risks, risk],
         },
-      ],
+      }, ...rest],
+      updatedAt: new Date().toISOString(),
     }
+  }
+
+  private withRiskEffects(
+    state: SemanticState,
+    risks: readonly (AtomExpr & { kind: 'atom' })[],
+  ): SemanticState {
+    if (!state.rules?.length) return state
+    let attached = false
+    const rules = state.rules.map((rule) => {
+      if (!isRuleEffectsByRole(rule.effects)) return rule
+      const nextRisks = attached ? [] : risks
+      attached = true
+      return {
+        ...rule,
+        effects: {
+          ...rule.effects,
+          risks: nextRisks,
+        },
+      }
+    })
+    return attached ? { ...state, rules, updatedAt: new Date().toISOString() } : state
   }
 
   private ensurePositionSizingSlot(
     state: SemanticState,
-    checklist: StrategyLogicSnapshot,
     options?: { preserveLockedPositionSizing?: boolean },
   ): SemanticState {
-    // PR3.2: use PerTradeSizingResolver instead of hasContractPerOrderBudget
-    const anchors = this.sizingResolver.resolve(state, { riskRules: checklist.riskRules as { positionPct?: number } | undefined })
+    const anchors = this.sizingResolver.resolve(state)
     const anyExecutionAnchored = [...anchors.values()].some(a => a.executionAnchored)
 
     if (
-      this.hasExplicitPositionSizing(checklist)
-      || options?.preserveLockedPositionSizing === true
+      options?.preserveLockedPositionSizing === true
       || anyExecutionAnchored
     ) {
       return state.position
@@ -3636,7 +3705,7 @@ export class CodegenConversationService {
         mode: 'fixed_ratio',
         value: 0,
         sizing: null,
-        positionMode: this.inferPositionModeFromActions(readFlatActions(state), checklist),
+        positionMode: this.inferPositionModeFromActions(semanticActionFacts(state), state),
         status: 'open',
         source: 'derived',
         openSlots: [{
@@ -3657,7 +3726,7 @@ export class CodegenConversationService {
     }
 
     if (
-      readFlatRisks(state).some(risk =>
+      semanticRiskFacts(state).some(risk =>
         risk.key === FIELD_KEY.RISK_PROTECTIVE_EXIT
         && risk.status === 'open'
         && risk.openSlots.some(slot => slot.slotKey === FIELD_KEY.RISK_PROTECTIVE_EXIT && slot.status === 'open'),
@@ -3674,7 +3743,7 @@ export class CodegenConversationService {
       return true
     }
 
-    return readFlatRisks(state).some((risk) => {
+    return semanticRiskFacts(state).some((risk) => {
       if (risk.status !== 'locked') {
         return false
       }
@@ -3709,14 +3778,13 @@ export class CodegenConversationService {
   }
 
   private hasProtectiveOrchestrationRisk(state: SemanticState): boolean {
-    return (state.orchestration ?? []).some(node =>
-      node.kind === 'portfolioRisk'
-      && node.key === 'portfolioRisk.drawdown_block'
+    return semanticOrchestrationFacts(state).some(node =>
+      node.key === 'portfolioRisk.drawdown_block'
       && node.status === 'locked'
-      && node.mode === 'enforce'
-      && typeof node.thresholdPct === 'number'
-      && Number.isFinite(node.thresholdPct)
-      && node.thresholdPct > 0,
+      && node.params.mode === 'enforce'
+      && typeof node.params.thresholdPct === 'number'
+      && Number.isFinite(node.params.thresholdPct)
+      && node.params.thresholdPct > 0,
     )
   }
 
@@ -3732,7 +3800,7 @@ export class CodegenConversationService {
     )
   }
 
-  private hasStopLossRisk(riskItems: SemanticState['risk']): boolean {
+  private hasStopLossRisk(riskItems: readonly SemanticRiskState[]): boolean {
     return riskItems.some((risk) => {
       if (risk.status !== 'locked' || risk.key !== FIELD_KEY.RISK_STOP_LOSS_PCT) {
         return false
@@ -3744,17 +3812,11 @@ export class CodegenConversationService {
   }
 
   private inferPositionModeFromActions(
-    actions: SemanticState['action'],
-    checklist: StrategyLogicSnapshot,
+    actions: readonly SemanticActionState[],
+    state: SemanticState,
   ): string {
-    if (checklist.riskRules?.marketType === 'spot' || checklist.market?.marketType === 'spot') {
+    if (this.readSemanticContextValue(state.contextSlots.marketType) === 'spot') {
       return 'long_only'
-    }
-    if (checklist.grid?.sideMode === 'bidirectional') {
-      return 'long_short'
-    }
-    if (checklist.grid?.sideMode === 'long_only' || checklist.grid?.sideMode === 'short_only') {
-      return checklist.grid.sideMode
     }
 
     const actionKeys = new Set(actions.map(action => action.key))
@@ -3763,12 +3825,6 @@ export class CodegenConversationService {
     if (hasLong && hasShort) return 'long_short'
     if (hasShort) return 'short_only'
     return 'long_only'
-  }
-
-  private hasExplicitPositionSizing(checklist: StrategyLogicSnapshot): boolean {
-    return typeof checklist.riskRules?.positionPct === 'number'
-      && Number.isFinite(checklist.riskRules.positionPct)
-      && checklist.riskRules.positionPct > 0
   }
 
   private hasLockedExecutionContext(state: SemanticState): boolean {
@@ -3780,16 +3836,11 @@ export class CodegenConversationService {
       return state
     }
 
-    return {
-      ...state,
-      risk: readFlatRisks(state).filter(risk =>
-        !(risk.key === FIELD_KEY.RISK_PROTECTIVE_EXIT && risk.status === 'open'),
-      ),
-    }
+    return this.withFilteredRiskEffects(state, risk => risk.key !== FIELD_KEY.RISK_PROTECTIVE_EXIT)
   }
 
   private hasLockedExitSemantics(state: SemanticState): boolean {
-    return readFlatTriggers(state).some(trigger =>
+    return semanticTriggerFacts(state).some(trigger =>
       trigger.phase === 'exit'
       && trigger.status === 'locked'
       && trigger.openSlots.every(slot => slot.status !== 'open'),
@@ -3798,7 +3849,7 @@ export class CodegenConversationService {
   }
 
   private hasLockedExitRiskSemantics(state: SemanticState): boolean {
-    return readFlatRisks(state).some((risk) => {
+    return semanticRiskFacts(state).some((risk) => {
       if (risk.status !== 'locked' || risk.openSlots.some(slot => slot.status === 'open')) {
         return false
       }
@@ -3936,14 +3987,14 @@ export class CodegenConversationService {
     item: StrategyClarificationItem,
     semanticState: SemanticState,
   ): boolean {
-    if (item.reason === 'missing_entry_rules' || item.field === 'entryRules') {
+    if (item.reason === 'missing_entry_rules' || item.field === 'rules.entry') {
       if (semanticState.rules && semanticState.rules.length > 0) {
         return this.semanticContractReadiness.evaluateRulesReadiness(semanticState.rules).hasEntry
       }
       return this.executableSemantics.hasExecutableEntrySemantics(semanticState)
     }
 
-    if (item.reason === 'missing_exit_rules' || item.field === 'exitRules') {
+    if (item.reason === 'missing_exit_rules' || item.field === 'rules.exit') {
       if (semanticState.rules && semanticState.rules.length > 0) {
         return this.semanticContractReadiness.evaluateRulesReadiness(semanticState.rules).hasExit
       }
@@ -3960,7 +4011,7 @@ export class CodegenConversationService {
 
     if (this.isTakeProfitClarificationItem(item)) {
       return this.hasLockedExitSemantics(semanticState)
-        || readFlatRisks(semanticState).some(risk =>
+        || semanticRiskFacts(semanticState).some(risk =>
           risk.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT
           && risk.status === 'locked'
           && typeof risk.params.valuePct === 'number'
@@ -3978,7 +4029,7 @@ export class CodegenConversationService {
       return false
     }
 
-    return readFlatTriggers(semanticState).some(trigger =>
+    return semanticTriggerFacts(semanticState).some(trigger =>
       trigger.phase === 'gate'
       && trigger.status === 'locked'
       && trigger.openSlots.every(slot => slot.status !== 'open'),
@@ -4028,33 +4079,29 @@ export class CodegenConversationService {
 
   private isPositionSizingClarificationItem(item: StrategyClarificationItem): boolean {
     return item.reason === 'missing_position_pct'
-      || item.field === 'riskRules.positionPct'
-      || item.key === 'riskRules.positionPct'
+      || item.field === 'position.sizing'
       || item.key === FIELD_KEY.POSITION_SIZING
-      || item.key === 'sizing.positionPct'
       || item.slotKey === FIELD_KEY.POSITION_SIZING
   }
 
   private isProtectiveRiskClarificationItem(item: StrategyClarificationItem): boolean {
     return item.reason === 'missing_stop_loss_rule'
-      || item.field === 'riskRules.stopLossPct'
-      || item.key === 'riskRules.stopLossPct'
-      || item.key === 'risk.stopLoss.rule'
+      || item.field === 'risk.stopLossPct'
+      || item.key === 'risk.stopLossPct'
       || item.key === FIELD_KEY.RISK_PROTECTIVE_EXIT
       || item.slotKey === FIELD_KEY.RISK_PROTECTIVE_EXIT
   }
 
   private isTakeProfitClarificationItem(item: StrategyClarificationItem): boolean {
     return item.reason === 'missing_take_profit_rule'
-      || item.field === 'riskRules.takeProfitPct'
-      || item.key === 'riskRules.takeProfitPct'
-      || item.key === 'risk.takeProfit.rule'
+      || item.field === 'risk.takeProfitPct'
+      || item.key === 'risk.takeProfitPct'
   }
 
   private findNextOpenSemanticSlot(state: SemanticState): SemanticSlotState | null {
     const triggerPhaseOrder: Array<'entry' | 'exit' | 'risk' | 'gate'> = ['entry', 'exit', 'risk', 'gate']
     const openTriggerSlots = triggerPhaseOrder.flatMap(phase =>
-      readFlatTriggers(state)
+      semanticTriggerFacts(state)
         .filter(trigger => trigger.phase === phase && trigger.status !== 'superseded')
         .flatMap(trigger => trigger.openSlots)
         .filter(isBlockingSemanticOpenSlot),
@@ -4096,26 +4143,26 @@ export class CodegenConversationService {
       return nestedPositionConstraintSlot
     }
 
-    const positionConstraintSlot = state.positionConstraint
+    const positionConstraintSlot = semanticPositionFacts(state)
       .flatMap(constraint => constraint.openSlots)
       .find(isBlockingSemanticOpenSlot)
     if (positionConstraintSlot) {
       return positionConstraintSlot
     }
 
-    const actionSlot = readFlatActions(state)
+    const actionSlot = semanticActionFacts(state)
       .flatMap(action => action.openSlots ?? [])
       .find(isBlockingSemanticOpenSlot)
     if (actionSlot) {
       return actionSlot
     }
 
-    const riskSlot = readFlatRisks(state).flatMap(risk => risk.openSlots).find(isBlockingSemanticOpenSlot)
+    const riskSlot = semanticRiskFacts(state).flatMap(risk => risk.openSlots).find(isBlockingSemanticOpenSlot)
     if (riskSlot) {
       return riskSlot
     }
 
-    const orchestrationSlot = state.orchestration
+    const orchestrationSlot = semanticOrchestrationFacts(state)
       .flatMap(node => node.openSlots)
       .find(isBlockingSemanticOpenSlot)
     if (orchestrationSlot) {
@@ -4199,15 +4246,15 @@ export class CodegenConversationService {
   private listOpenSemanticSlots(state: SemanticState): SemanticSlotState[] {
     const triggerPhaseOrder: Array<'entry' | 'exit' | 'risk' | 'gate'> = ['entry', 'exit', 'risk', 'gate']
     const openTriggerSlots = triggerPhaseOrder.flatMap(phase =>
-      readFlatTriggers(state)
+      semanticTriggerFacts(state)
         .filter(trigger => trigger.phase === phase)
         .flatMap(trigger => trigger.openSlots)
         .filter(isBlockingSemanticOpenSlot),
     )
-    const openRiskSlots = readFlatRisks(state)
+    const openRiskSlots = semanticRiskFacts(state)
       .flatMap(risk => risk.openSlots)
       .filter(isBlockingSemanticOpenSlot)
-    const openActionSlots = readFlatActions(state)
+    const openActionSlots = semanticActionFacts(state)
       .flatMap(action => action.openSlots ?? [])
       .filter(isBlockingSemanticOpenSlot)
     // Issue #1403 子故障 A：与 findNextOpenSemanticSlot 同步——atom 自声明 'sizing'
@@ -4216,17 +4263,17 @@ export class CodegenConversationService {
     const openPositionSlots = hasContinuousSizing
       ? []
       : (state.position?.openSlots?.filter(isBlockingSemanticOpenSlot) ?? [])
-    const topLevelConstraintIds = new Set(state.positionConstraint.map(constraint => constraint.id))
+    const topLevelConstraintIds = new Set(semanticPositionFacts(state).map(constraint => constraint.id))
     const openNestedPositionConstraintSlots = hasContinuousSizing
       ? []
       : (state.position?.constraints
         ?.filter(constraint => !topLevelConstraintIds.has(constraint.id))
         .flatMap(constraint => constraint.openSlots)
         .filter(isBlockingSemanticOpenSlot) ?? [])
-    const openPositionConstraintSlots = state.positionConstraint
+    const openPositionConstraintSlots = semanticPositionFacts(state)
       .flatMap(constraint => constraint.openSlots)
       .filter(isBlockingSemanticOpenSlot)
-    const openOrchestrationSlots = state.orchestration
+    const openOrchestrationSlots = semanticOrchestrationFacts(state)
       .flatMap(node => node.openSlots)
       .filter(isBlockingSemanticOpenSlot)
     const openContextSlots = Object.values(state.contextSlots)
@@ -4391,28 +4438,28 @@ export class CodegenConversationService {
       case 'READINESS_RULES_TREE_EMPTY':
         return {
           key: 'rulesTree.empty',
-          field: 'entryRules',
+          field: 'rules.entry',
           reason: 'missing_entry_rules',
           question: '当前还没有形成可执行规则。请补充入场条件、出场条件、风控和仓位。',
         }
       case 'READINESS_RULES_TREE_MISSING_ENTRY':
         return {
           key: 'rulesTree.entry',
-          field: 'entryRules',
+          field: 'rules.entry',
           reason: 'missing_entry_rules',
           question: '请补充入场条件，例如什么价格或指标条件触发开仓。',
         }
       case 'READINESS_RULES_TREE_MISSING_EXIT':
         return {
           key: 'rulesTree.exit',
-          field: 'exitRules',
+          field: 'rules.exit',
           reason: 'missing_exit_rules',
           question: '请补充出场条件，例如什么价格或指标条件触发平仓。',
         }
       default:
         return {
           key: 'rulesTree.readiness',
-          field: 'entryRules',
+          field: 'rules.entry',
           reason: 'missing_semantic_contract_requirement',
           question: '请补充完整的可执行规则。',
         }
@@ -4439,11 +4486,11 @@ export class CodegenConversationService {
       return []
     }
 
-    const hasShortAction = readFlatActions(state).some(action =>
+    const hasShortAction = semanticActionFacts(state).some(action =>
       action.status === 'locked'
       && (action.key === 'open_short' || action.key === 'close_short' || action.key === 'reduce_short'),
     )
-    const hasShortScopedTrigger = readFlatTriggers(state).some(trigger =>
+    const hasShortScopedTrigger = semanticTriggerFacts(state).some(trigger =>
       trigger.status === 'locked'
       && trigger.sideScope === 'short',
     )
@@ -4463,9 +4510,9 @@ export class CodegenConversationService {
   }
 
   private hasSemanticMainFlowEvidence(state: SemanticState): boolean {
-    return readFlatTriggers(state).length > 0
-      || readFlatActions(state).length > 0
-      || readFlatRisks(state).length > 0
+    return semanticTriggerFacts(state).length > 0
+      || semanticActionFacts(state).length > 0
+      || semanticRiskFacts(state).length > 0
       || state.position !== null
   }
 
@@ -4478,7 +4525,7 @@ export class CodegenConversationService {
       ? persistedClarificationState.items.filter(item =>
           item.blocking
           && item.status === 'pending'
-          && !this.isLegacyLogicCompletenessItem(item)
+          && !this.isRulesCompletenessItem(item)
           && !this.isResolvedBySemanticState(item, semanticState),
         )
       : []
@@ -4506,15 +4553,15 @@ export class CodegenConversationService {
     }
   }
 
-  private isLegacyLogicCompletenessItem(item: StrategyClarificationItem): boolean {
+  private isRulesCompletenessItem(item: StrategyClarificationItem): boolean {
     return item.reason === 'missing_entry_rules'
       || item.reason === 'missing_exit_rules'
       || item.reason === 'missing_stop_loss_rule'
       || item.reason === 'missing_take_profit_rule'
-      || item.key === 'entry.rules'
-      || item.key === 'exit.rules'
-      || item.key === 'risk.stopLoss.rule'
-      || item.key === 'risk.takeProfit.rule'
+      || item.key === 'rules.entry'
+      || item.key === 'rules.exit'
+      || item.key === 'risk.stopLossPct'
+      || item.key === 'risk.takeProfitPct'
   }
 
   private applyConversationPlanToSemanticState(input: {
@@ -4523,19 +4570,19 @@ export class CodegenConversationService {
     message?: string
   }): SemanticState {
     let nextState = input.currentState
-    const semanticPatchState = this.buildSemanticStateFromPlannerPatch(input.plan.semanticPatch, input.message)
+    const derivedSemanticState = this.buildSemanticStateFromPlannerPatch(input.plan.semanticPatch, input.message)
 
-    if (semanticPatchState) {
+    if (derivedSemanticState) {
       nextState = this.semanticStateMerge.merge({
         persisted: nextState,
-        derived: semanticPatchState,
+        derived: derivedSemanticState,
       })
     }
 
     const reconciledNextState = this.reconcileSemanticMissingPlaceholders(nextState)
-    const stateWithRequiredSlots = this.withRequiredSemanticOpenSlots(reconciledNextState, {}, {
+    const stateWithRequiredSlots = this.withRequiredSemanticOpenSlots(reconciledNextState, {
       preserveLockedPositionSizing: Boolean(
-        this.hasValidLockedPositionSizing(semanticPatchState?.position)
+        this.hasValidLockedPositionSizing(derivedSemanticState?.position)
         || this.hasValidLockedPositionSizing(input.currentState.position),
       ),
     })
@@ -4577,11 +4624,6 @@ export class CodegenConversationService {
     return {
       version: 1,
       families: [],
-      trigger: [],
-      action: [],
-      risk: [],
-      positionConstraint: [],
-      orchestration: [],
       orchestrationContracts: [],
       position: null,
       contextSlots: {
@@ -4593,75 +4635,6 @@ export class CodegenConversationService {
       normalizationNotes: [],
       updatedAt: new Date().toISOString(),
     }
-  }
-
-  /**
-   * Explicit legacy boundary: projects SemanticState into the old
-   * StrategyLogicSnapshot shape for compatibility-only summary/clarification
-   * paths that have not been migrated yet. Do not use this for canonical
-   * generation or publication authority.
-   */
-  private projectSemanticStateToStrategySnapshotForCompatibility(
-    state: SemanticState,
-    fallbackLogicSnapshot: StrategyLogicSnapshot,
-  ): StrategyLogicSnapshot {
-    const semanticLogicSnapshot = this.buildLegacyLogicSnapshotFromSemanticState(state, {
-      ...fallbackLogicSnapshot,
-      riskRules: fallbackLogicSnapshot.riskRules ? { ...fallbackLogicSnapshot.riskRules } : undefined,
-      stateGates: fallbackLogicSnapshot.stateGates ? { ...fallbackLogicSnapshot.stateGates } : undefined,
-    })
-
-    return this.normalizeLogicSnapshot({
-      ...fallbackLogicSnapshot,
-      ...semanticLogicSnapshot,
-      entryRules: this.mergeProjectedRuleArrays(fallbackLogicSnapshot.entryRules, semanticLogicSnapshot.entryRules, 'entry'),
-      exitRules: this.mergeProjectedRuleArrays(fallbackLogicSnapshot.exitRules, semanticLogicSnapshot.exitRules, 'exit'),
-      riskRules: semanticLogicSnapshot.riskRules ?? fallbackLogicSnapshot.riskRules,
-      stateGates: semanticLogicSnapshot.stateGates ?? fallbackLogicSnapshot.stateGates,
-      entryRuleDrafts: semanticLogicSnapshot.entryRuleDrafts ?? fallbackLogicSnapshot.entryRuleDrafts,
-      exitRuleDrafts: semanticLogicSnapshot.exitRuleDrafts ?? fallbackLogicSnapshot.exitRuleDrafts,
-    })
-  }
-
-  private mergeProjectedRuleArrays(
-    fallbackRules: string[] | undefined,
-    projectedRules: string[] | undefined,
-    phase: 'entry' | 'exit',
-  ): string[] | undefined {
-    if (!projectedRules || projectedRules.length === 0) {
-      return fallbackRules
-    }
-    if (!fallbackRules || fallbackRules.length === 0) {
-      return projectedRules
-    }
-
-    const hasProjectedSpecificRule = projectedRules.some(rule => !this.isGenericLogicPlaceholderRule(rule, phase))
-    const preservedFallbackRules = fallbackRules.filter(rule => (
-      !this.isSemanticProjectableRule(rule)
-      && !(hasProjectedSpecificRule && this.isGenericLogicPlaceholderRule(rule, phase))
-    ))
-    const merged = [...preservedFallbackRules]
-    for (const projectedRule of projectedRules) {
-      if (!merged.includes(projectedRule)) {
-        merged.push(projectedRule)
-      }
-    }
-
-    return merged
-  }
-
-  private isSemanticProjectableRule(rule: string): boolean {
-    const text = rule.trim()
-    if (!text) {
-      return false
-    }
-
-    return (
-      /当前K线收盘价相对于.+(?:上涨|下跌).+?(?:买入|卖出|平仓|开仓|平多|平空)/u.test(text)
-      || /立即开始时市价(?:买入|卖出|做多|做空|平仓|平多|平空)一次/u.test(text)
-      || (/均线|\bma\b|\bsma\b|\bema\b/iu.test(text) && (/突破|跌破|金叉|死叉/u.test(text)))
-      || /布林带|上轨|下轨|中轨/u.test(text)
-    )
   }
 
   private isSemanticClarificationItem(
@@ -4754,68 +4727,6 @@ export class CodegenConversationService {
 
   private readStringValue(value: unknown): string | null {
     return typeof value === 'string' && value.trim() ? value.trim() : null
-  }
-
-  private restoreInferredAssumptionsFromLatestSpecDesc(
-    specDescPayload: Prisma.JsonValue | null | undefined,
-    checklist: StrategyLogicSnapshot,
-  ): StrategyLogicSnapshot {
-    if (!specDescPayload || typeof specDescPayload !== 'object' || Array.isArray(specDescPayload)) {
-      return checklist
-    }
-
-    const specDesc = specDescPayload as Record<string, unknown>
-    const normalizedIntent = specDesc.normalizedIntent
-    if (!normalizedIntent || typeof normalizedIntent !== 'object' || Array.isArray(normalizedIntent)) {
-      return checklist
-    }
-
-    const riskEntries = (normalizedIntent as { risk?: unknown }).risk
-    if (!Array.isArray(riskEntries) || riskEntries.length === 0) {
-      return checklist
-    }
-
-    const inferredAssumptions = new Set<string>(
-      Array.isArray(checklist.riskRules?._inferredAssumptions)
-        ? checklist.riskRules._inferredAssumptions.filter((item): item is string => typeof item === 'string')
-        : [],
-    )
-
-    for (const entry of riskEntries) {
-      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-        continue
-      }
-      const riskEntry = entry as {
-        key?: unknown
-        source?: unknown
-        params?: { basis?: unknown, basisSource?: unknown } | null
-      }
-      const basis = riskEntry.params?.basis
-      const source = riskEntry.source
-      const basisSource = riskEntry.params?.basisSource
-      const isSystemDefault = source === 'system_default' || basisSource === 'system_default'
-      if (!isSystemDefault || basis !== 'entry_avg_price') {
-        continue
-      }
-      if (riskEntry.key === FIELD_KEY.RISK_STOP_LOSS_PCT) {
-        inferredAssumptions.add('risk.stopLossBasis')
-      }
-      if (riskEntry.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT) {
-        inferredAssumptions.add('risk.takeProfitBasis')
-      }
-    }
-
-    if (inferredAssumptions.size === 0) {
-      return checklist
-    }
-
-    return this.normalizeLogicSnapshot({
-      ...checklist,
-      riskRules: {
-        ...(checklist.riskRules ?? {}),
-        _inferredAssumptions: Array.from(inferredAssumptions),
-      },
-    })
   }
 
 
@@ -5061,635 +4972,6 @@ export class CodegenConversationService {
     }
   }
 
-  private applyClarificationAnswers(
-    checklist: StrategyLogicSnapshot,
-    clarificationState: StrategyClarificationState | null,
-    answers?: Record<string, string>,
-  ): StrategyLogicSnapshot {
-    if (!answers || Object.keys(answers).length === 0) {
-      return checklist
-    }
-
-    const expandedAnswers = this.expandClarificationAnswers(checklist, clarificationState, answers)
-    let nextLogicSnapshot = this.normalizeLogicSnapshot({
-      ...checklist,
-      riskRules: checklist.riskRules ? { ...checklist.riskRules } : undefined,
-    })
-
-    for (const item of clarificationState?.items ?? []) {
-      const rawAnswer = expandedAnswers[item.key]
-      if (typeof rawAnswer !== 'string' || !rawAnswer.trim()) {
-        continue
-      }
-
-      nextLogicSnapshot = this.applyClarificationAnswer(nextLogicSnapshot, item, rawAnswer.trim())
-    }
-
-    nextLogicSnapshot = this.clearInferredAssumptionsResolvedByClarificationAnswers(
-      nextLogicSnapshot,
-      clarificationState,
-      expandedAnswers,
-    )
-
-    return this.normalizeLogicSnapshot(nextLogicSnapshot)
-  }
-
-  private expandClarificationAnswers(
-    checklist: StrategyLogicSnapshot,
-    clarificationState: StrategyClarificationState | null,
-    answers: Record<string, string>,
-  ): Record<string, string> {
-    const expanded = { ...answers }
-    const exitBasisItems = (clarificationState?.items ?? []).filter(item =>
-      item.reason === 'ambiguous_condition_basis'
-      && item.field === 'exitRules.basis'
-      && item.status === 'pending',
-    )
-    if (exitBasisItems.length <= 1) {
-      return expanded
-    }
-
-    const answeredExitBasis = exitBasisItems.find(item => typeof expanded[item.key] === 'string' && expanded[item.key].trim().length > 0)
-    if (!answeredExitBasis) {
-      return expanded
-    }
-
-    const answeredBasis = this.normalizeBasisClarificationAnswer(expanded[answeredExitBasis.key])
-    if (!answeredBasis || !this.shouldBroadcastExitBasisAnswer(checklist, exitBasisItems)) {
-      return expanded
-    }
-
-    for (const item of exitBasisItems) {
-      if (!expanded[item.key]?.trim()) {
-        expanded[item.key] = expanded[answeredExitBasis.key]
-      }
-    }
-
-    return expanded
-  }
-
-  private shouldBroadcastExitBasisAnswer(
-    checklist: StrategyLogicSnapshot,
-    exitBasisItems: StrategyClarificationItem[],
-  ): boolean {
-    const ruleIndexes = exitBasisItems
-      .map(item => this.readClarificationRuleIndex(item))
-      .filter((index): index is number => index !== null)
-    if (ruleIndexes.length <= 1) {
-      return false
-    }
-
-    return ruleIndexes.every((index) => {
-      const ruleText = checklist.exitRules?.[index] ?? ''
-      return /止损|止盈|盈利|亏损|收益/u.test(ruleText)
-    })
-  }
-
-  private clearInferredAssumptionsResolvedByClarificationAnswers(
-    checklist: StrategyLogicSnapshot,
-    clarificationState: StrategyClarificationState | null,
-    answers: Record<string, string>,
-  ): StrategyLogicSnapshot {
-    const currentAssumptions = Array.isArray(checklist.riskRules?._inferredAssumptions)
-      ? checklist.riskRules._inferredAssumptions.filter((item): item is string => typeof item === 'string')
-      : []
-    if (currentAssumptions.length === 0) {
-      return checklist
-    }
-
-    const resolvedKeys = new Set<string>()
-    for (const item of clarificationState?.items ?? []) {
-      const rawAnswer = answers[item.key]
-      if (typeof rawAnswer !== 'string' || !rawAnswer.trim() || item.reason !== 'ambiguous_condition_basis') {
-        continue
-      }
-
-      if (item.field === 'riskRules.stopLossBasis') {
-        resolvedKeys.add('risk.stopLossBasis')
-        continue
-      }
-      if (item.field === 'riskRules.takeProfitBasis') {
-        resolvedKeys.add('risk.takeProfitBasis')
-        continue
-      }
-      if (item.field !== 'exitRules.basis') {
-        continue
-      }
-
-      const ruleIndex = this.readClarificationRuleIndex(item)
-      const ruleText = ruleIndex === null ? '' : (checklist.exitRules?.[ruleIndex] ?? '')
-      if (/止损|亏损/u.test(ruleText)) {
-        resolvedKeys.add('risk.stopLossBasis')
-      }
-      if (/止盈|盈利|收益/u.test(ruleText)) {
-        resolvedKeys.add('risk.takeProfitBasis')
-      }
-    }
-
-    if (resolvedKeys.size === 0) {
-      return checklist
-    }
-
-    const nextAssumptions = currentAssumptions.filter(item => !resolvedKeys.has(item))
-    const nextRiskRules = { ...(checklist.riskRules ?? {}) }
-    if (nextAssumptions.length > 0) {
-      nextRiskRules._inferredAssumptions = nextAssumptions
-    } else {
-      delete nextRiskRules._inferredAssumptions
-    }
-
-    return {
-      ...checklist,
-      riskRules: nextRiskRules,
-    }
-  }
-
-  private applyClarificationAnswer(
-    checklist: StrategyLogicSnapshot,
-    item: StrategyClarificationItem,
-    answer: string,
-  ): StrategyLogicSnapshot {
-    const normalizedAnswer = answer.trim()
-    if (!normalizedAnswer) return checklist
-
-    if (item.key.startsWith('semantic.') || item.key.startsWith('grid.')) {
-      return this.applySemanticSlotClarification(checklist, item, normalizedAnswer)
-    }
-
-    if (item.key.startsWith('entry.side.') || item.key.startsWith('entry.action_uniqueness.')) {
-      return this.applyEntryRuleDirectionClarification(checklist, item, normalizedAnswer)
-    }
-
-    if (item.key === 'entry.rules' || item.field === 'entryRules') {
-      return this.normalizeLogicSnapshot({
-        ...checklist,
-        entryRules: [...(checklist.entryRules ?? []), normalizedAnswer],
-      })
-    }
-
-    if (item.key === 'exit.rules' || item.field === 'exitRules') {
-      return this.normalizeLogicSnapshot({
-        ...checklist,
-        exitRules: [...(checklist.exitRules ?? []), normalizedAnswer],
-      })
-    }
-
-    if (item.key === 'risk.stopLoss.rule' || item.field === 'riskRules.stopLossPct') {
-      const parsedPct = this.normalizePositionPctClarificationAnswer(normalizedAnswer)
-      return this.normalizeLogicSnapshot({
-        ...checklist,
-        riskRules: {
-          ...(checklist.riskRules ?? {}),
-          stopLoss: normalizedAnswer,
-          ...(parsedPct !== null ? { stopLossPct: parsedPct } : {}),
-        },
-      })
-    }
-
-    if (item.key === 'risk.takeProfit.rule' || item.field === 'riskRules.takeProfitPct') {
-      const parsedPct = this.normalizePositionPctClarificationAnswer(normalizedAnswer)
-      return this.normalizeLogicSnapshot({
-        ...checklist,
-        riskRules: {
-          ...(checklist.riskRules ?? {}),
-          takeProfit: normalizedAnswer,
-          ...(parsedPct !== null ? { takeProfitPct: parsedPct } : {}),
-        },
-      })
-    }
-
-    if (item.key === FIELD_KEY.MARKET_SYMBOL || item.field === 'symbol') {
-      const symbol = normalizePublishedSymbol(normalizedAnswer)
-      return this.normalizeLogicSnapshot({
-        ...checklist,
-        symbols: symbol ? [symbol] : checklist.symbols,
-        riskRules: this.clearMarketScopeConflicts(checklist.riskRules, 'symbol'),
-      })
-    }
-
-    if (item.key === FIELD_KEY.MARKET_TIMEFRAME || item.field === 'timeframe') {
-      const timeframe = normalizedAnswer
-      return this.normalizeLogicSnapshot({
-        ...checklist,
-        timeframes: timeframe ? [timeframe] : checklist.timeframes,
-        riskRules: this.clearMarketScopeConflicts(checklist.riskRules, 'timeframe'),
-      })
-    }
-
-    if (item.key === FIELD_KEY.MARKET_EXCHANGE || item.field === 'exchange') {
-      const exchange = this.normalizeExchangeClarificationAnswer(normalizedAnswer)
-      if (!exchange) return checklist
-      return this.normalizeLogicSnapshot({
-        ...checklist,
-        riskRules: {
-          ...this.clearMarketScopeConflicts(checklist.riskRules, 'exchange'),
-          exchange,
-        },
-      })
-    }
-
-    if (item.key === 'market.marketType' || item.field === 'marketType') {
-      const marketType = this.normalizeMarketTypeClarificationAnswer(normalizedAnswer)
-      if (!marketType) return checklist
-      return this.normalizeLogicSnapshot({
-        ...checklist,
-        riskRules: {
-          ...this.clearMarketScopeConflicts(checklist.riskRules, 'marketType'),
-          marketType,
-        },
-      })
-    }
-
-    if (item.key === 'sizing.positionPct' || item.field === 'riskRules.positionPct') {
-      const positionPct = this.normalizePositionPctClarificationAnswer(normalizedAnswer)
-      if (positionPct === null) return checklist
-      return this.normalizeLogicSnapshot({
-        ...checklist,
-        riskRules: {
-          ...(checklist.riskRules ?? {}),
-          positionPct,
-        },
-      })
-    }
-
-    if (item.reason === 'atomic_semantic_fork' || item.field === 'trigger.confirmation') {
-      return this.applyTriggerConfirmationClarification(checklist, item, normalizedAnswer)
-    }
-
-    if (item.reason === 'ambiguous_condition_basis') {
-      const basis = this.normalizeBasisClarificationAnswer(normalizedAnswer)
-      if (!basis) return checklist
-
-      if (item.field === 'entryRules.basis') {
-        const ruleIndex = this.readClarificationRuleIndex(item)
-        if (ruleIndex === null) return checklist
-        return this.normalizeLogicSnapshot({
-          ...checklist,
-          entryRuleBases: {
-            ...(checklist.entryRuleBases ?? {}),
-            [`entry-${ruleIndex + 1}`]: basis,
-          },
-        })
-      }
-
-      if (item.field === 'exitRules.basis') {
-        const ruleIndex = this.readClarificationRuleIndex(item)
-        if (ruleIndex === null) return checklist
-        const ruleText = checklist.exitRules?.[ruleIndex] ?? ''
-        const nextRiskRules = {
-          ...(checklist.riskRules ?? {}),
-          ...(/止损|亏损/u.test(ruleText) ? { stopLossBasis: basis } : {}),
-          ...(/止盈|盈利|收益率/u.test(ruleText) ? { takeProfitBasis: basis } : {}),
-        }
-        return this.normalizeLogicSnapshot({
-          ...checklist,
-          exitRuleBases: {
-            ...(checklist.exitRuleBases ?? {}),
-            [`exit-${ruleIndex + 1}`]: basis,
-          },
-          riskRules: this.pruneResolvedRiskInferredAssumptions(nextRiskRules, nextRiskRules),
-        })
-      }
-
-      if (item.field === 'riskRules.stopLossBasis') {
-        const nextRiskRules = {
-          ...(checklist.riskRules ?? {}),
-          stopLossBasis: basis,
-        }
-        return this.normalizeLogicSnapshot({
-          ...checklist,
-          riskRules: this.pruneResolvedRiskInferredAssumptions(nextRiskRules, nextRiskRules),
-        })
-      }
-
-      if (item.field === 'riskRules.takeProfitBasis') {
-        const nextRiskRules = {
-          ...(checklist.riskRules ?? {}),
-          takeProfitBasis: basis,
-        }
-        return this.normalizeLogicSnapshot({
-          ...checklist,
-          riskRules: this.pruneResolvedRiskInferredAssumptions(nextRiskRules, nextRiskRules),
-        })
-      }
-
-      if (item.field === 'riskRules.maxDrawdownBasis') {
-        return this.normalizeLogicSnapshot({
-          ...checklist,
-          riskRules: {
-            ...(checklist.riskRules ?? {}),
-            maxDrawdownBasis: basis,
-          },
-        })
-      }
-    }
-
-    if (item.key === 'riskRules.earlyStop.action' || item.field === 'riskRules.earlyStop.action') {
-      const action = this.normalizeEarlyStopClarificationAnswer(normalizedAnswer)
-      if (!action) return checklist
-      return this.normalizeLogicSnapshot({
-        ...checklist,
-        riskRules: {
-          ...(checklist.riskRules ?? {}),
-          earlyStop: action === 'reduce'
-            ? '价格连续3根K线在轨外时提前减仓'
-            : '价格连续3根K线在轨外时提前全平',
-        },
-      })
-    }
-
-    return checklist
-  }
-
-  private applySemanticSlotClarification(
-    checklist: StrategyLogicSnapshot,
-    item: StrategyClarificationItem,
-    answer: string,
-  ): StrategyLogicSnapshot {
-    const key = item.key.toLowerCase()
-    const targetPhase = this.readSemanticClarificationPhase(item)
-
-    if (key.startsWith('grid.')) {
-      const nextGrid = this.applyGridLogicClarification(checklist.grid, item, answer)
-      if (!nextGrid) {
-        return checklist
-      }
-
-      return this.normalizeLogicSnapshot({
-        ...checklist,
-        grid: nextGrid,
-      })
-    }
-
-    if (/均线是多少/u.test(item.question) || key.includes('reference.period')) {
-      const period = this.normalizeMovingAveragePeriodClarificationAnswer(answer)
-      if (period === null) return checklist
-
-      if (!targetPhase) return checklist
-
-      const isLongTerm = /长期均线/u.test(item.question)
-      const targetRules = targetPhase === 'entry' ? checklist.entryRules : checklist.exitRules
-      if (!targetRules || targetRules.length === 0) return checklist
-
-      const nextRules = targetRules.map((rule) => {
-        const normalized = rule.trim()
-        if (!normalized) return rule
-        if (isLongTerm && !/长期均线/u.test(normalized)) return normalized
-        if (!isLongTerm && !/短期均线/u.test(normalized)) return normalized
-        return normalized.replace(
-          isLongTerm ? /长期均线/u : /短期均线/u,
-          `${isLongTerm ? '长期均线' : '短期均线'}（${period}）`,
-        )
-      })
-
-      return this.normalizeLogicSnapshot(targetPhase === 'entry'
-        ? { ...checklist, entryRules: nextRules }
-        : { ...checklist, exitRules: nextRules })
-    }
-
-    if (/按收盘确认还是盘中触发/u.test(item.question) || key.includes('confirmationmode')) {
-      const confirmation = this.normalizeSemanticTriggerConfirmationAnswer(answer)
-      if (!confirmation) return checklist
-
-      if (!targetPhase) return checklist
-
-      const targetRules = targetPhase === 'entry' ? checklist.entryRules : checklist.exitRules
-      if (!targetRules || targetRules.length === 0) return checklist
-
-      const nextRules = targetRules.map((rule) => {
-        const normalized = rule.trim()
-        if (!normalized) return rule
-        const stripped = normalized
-          .replace(/收盘确认/gu, '')
-          .replace(/盘中/gu, '')
-          .trim()
-        return confirmation === 'close_confirm'
-          ? `收盘确认${stripped}`
-          : `盘中${stripped}`
-      })
-
-      return this.normalizeLogicSnapshot(targetPhase === 'entry'
-        ? { ...checklist, entryRules: nextRules }
-        : { ...checklist, exitRules: nextRules })
-    }
-
-    return checklist
-  }
-
-  private applyGridLogicClarification(
-    currentGrid: StrategyLogicSnapshot['grid'] | undefined,
-    item: StrategyClarificationItem,
-    answer: string,
-  ): StrategyLogicSnapshot['grid'] | null {
-    const nextGrid: NonNullable<StrategyLogicSnapshot['grid']> = {
-      ...(currentGrid ?? {}),
-    }
-    const key = item.key.toLowerCase()
-
-    if (key === FIELD_KEY.GRID_RANGE_LOWER || key === FIELD_KEY.GRID_LOWER) {
-      const value = this.parseGridLogicNumericAnswer('grid.range.lower', answer)
-      if (value === null) return null
-      nextGrid.lower = value
-      return nextGrid
-    }
-
-    if (key === FIELD_KEY.GRID_RANGE_UPPER || key === FIELD_KEY.GRID_UPPER) {
-      const value = this.parseGridLogicNumericAnswer('grid.range.upper', answer)
-      if (value === null) return null
-      nextGrid.upper = value
-      return nextGrid
-    }
-
-    if (key === FIELD_KEY.GRID_STEPPCT) {
-      const value = this.parseGridLogicNumericAnswer('grid.stepPct', answer)
-      if (value === null) return null
-      nextGrid.stepPct = value
-      return nextGrid
-    }
-
-    if (key === FIELD_KEY.GRID_SIDEMODE) {
-      const sideMode = this.normalizeGridLogicSideMode(answer)
-      if (!sideMode) return null
-      nextGrid.sideMode = sideMode
-      return nextGrid
-    }
-
-    return null
-  }
-
-  private parseGridLogicNumericAnswer(
-    slotKey: 'grid.range.lower' | 'grid.range.upper' | 'grid.stepPct',
-    answer: string,
-  ): number | null {
-    if (slotKey === 'grid.stepPct') {
-      const percentMatch = answer.match(/(\d+(?:\.\d+)?)\s*%/u)
-      if (percentMatch?.[1]) {
-        return Number(percentMatch[1])
-      }
-
-      const perMilleMatch = answer.match(/千分之\s*(\d+(?:\.\d+)?)/u)
-      if (perMilleMatch?.[1]) {
-        return Number(perMilleMatch[1]) / 10
-      }
-    }
-
-    const numericMatch = answer.match(/-?\d+(?:\.\d+)?/u)
-    if (!numericMatch) {
-      return null
-    }
-
-    const value = Number(numericMatch[0])
-    return Number.isFinite(value) ? value : null
-  }
-
-  private normalizeGridLogicSideMode(
-    answer: string,
-  ): NonNullable<StrategyLogicSnapshot['grid']>['sideMode'] | null {
-    const normalized = answer.trim().toLowerCase()
-    if (!normalized) {
-      return null
-    }
-
-    if (normalized === 'bidirectional' || /双向|低买高卖|来回|往返|自动买卖|自动交易/u.test(answer)) {
-      return 'bidirectional'
-    }
-    if (normalized === 'long_only' || /只做多|仅做多|做多网格|多头网格|做多|多头/u.test(answer)) {
-      return 'long_only'
-    }
-    if (normalized === 'short_only' || /只做空|仅做空|做空网格|空头网格|做空|空头/u.test(answer)) {
-      return 'short_only'
-    }
-
-    return null
-  }
-
-  private applyEntryRuleDirectionClarification(
-    checklist: StrategyLogicSnapshot,
-    item: StrategyClarificationItem,
-    answer: string,
-  ): StrategyLogicSnapshot {
-    const direction = this.normalizeDirectionClarificationAnswer(answer)
-    const ruleIndex = this.readClarificationRuleIndex(item)
-    if (!direction || ruleIndex === null || !checklist.entryRules || checklist.entryRules.length === 0) {
-      return checklist
-    }
-
-    const actionText = direction === 'short' ? '做空' : '做多'
-    const entryRules = checklist.entryRules.map((rule, index) => {
-      const normalized = rule.trim()
-      if (index !== ruleIndex) {
-        return normalized || rule
-      }
-      if (!normalized) return rule
-      if (/做多|多单|开多|long|买入/i.test(normalized) || /做空|空单|开空|short|卖出/i.test(normalized)) {
-        return this.replaceRuleDirection(normalized, actionText)
-      }
-      return `${normalized}，${actionText}`
-    })
-
-    return this.normalizeLogicSnapshot({
-      ...checklist,
-      entryRules,
-    })
-  }
-
-  private applyTriggerConfirmationClarification(
-    checklist: StrategyLogicSnapshot,
-    item: StrategyClarificationItem,
-    answer: string,
-  ): StrategyLogicSnapshot {
-    const confirmation = this.normalizeTriggerConfirmationClarificationAnswer(answer)
-    const ruleIndex = this.readClarificationRuleIndex(item)
-    if (!confirmation || ruleIndex === null) {
-      return checklist
-    }
-
-    const targetRules = item.ruleId?.startsWith('exit-')
-      ? checklist.exitRules
-      : checklist.entryRules
-    if (!targetRules || targetRules.length === 0) {
-      return checklist
-    }
-
-    const nextRules = targetRules.map((rule, index) => {
-      const normalized = rule.trim()
-      if (index !== ruleIndex || !normalized) {
-        return normalized || rule
-      }
-
-      const stripped = normalized
-        .replace(/触及/gu, '')
-        .replace(/触碰/gu, '')
-        .replace(/碰到/gu, '')
-        .replace(/收盘后?确认?/gu, '')
-        .replace(/k线收盘后?确认?/giu, '')
-        .replace(/close\s*confirm/giu, '')
-        .trim()
-
-      return confirmation === 'touch'
-        ? `触及${stripped}`
-        : `收盘确认${stripped}`
-    })
-
-    return this.normalizeLogicSnapshot(item.ruleId?.startsWith('exit-')
-      ? {
-          ...checklist,
-          exitRules: nextRules,
-        }
-      : {
-          ...checklist,
-          entryRules: nextRules,
-        })
-  }
-
-  private replaceRuleDirection(rule: string, actionText: '做多' | '做空'): string {
-    const replaced = rule
-      .replace(/做多|多单|开多|long|买入/iu, actionText)
-      .replace(/做空|空单|开空|short|卖出/iu, actionText)
-      .replace(/做多和做多|做空和做空/u, actionText)
-      .replace(/同时做多|同时做空/u, actionText)
-
-    return replaced.trim()
-  }
-
-  private readClarificationRuleIndex(item: StrategyClarificationItem): number | null {
-    const fromRuleId = item.ruleId?.match(/^entry-(\d+)$/u)?.[1]
-    const fromKey = item.key.match(/\.(\d+)$/u)?.[1]
-    const rawIndex = fromRuleId ?? fromKey
-    if (!rawIndex) return null
-
-    const parsed = Number.parseInt(rawIndex, 10)
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      return null
-    }
-
-    return parsed - 1
-  }
-
-  private clearMarketScopeConflicts(
-    riskRules: StrategyLogicSnapshot['riskRules'],
-    field: 'exchange' | 'marketType' | 'symbol' | 'timeframe',
-  ): Record<string, unknown> {
-    const next = { ...(riskRules ?? {}) }
-    const rawConflicts = next._marketScopeConflicts
-    if (!Array.isArray(rawConflicts)) {
-      return next
-    }
-
-    const filtered = rawConflicts.filter((item) => {
-      if (!item || typeof item !== 'object' || Array.isArray(item)) return false
-      return (item as { field?: unknown }).field !== field
-    })
-
-    if (filtered.length > 0) {
-      next._marketScopeConflicts = filtered
-    } else {
-      delete next._marketScopeConflicts
-    }
-
-    return next
-  }
-
   private async continueWithStructuredClarificationAnswers(
     args: StructuredClarificationContinuationArgs,
   ): Promise<CodegenSessionResponseDto> {
@@ -5703,7 +4985,6 @@ export class CodegenConversationService {
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
       this.withRequiredSemanticOpenSlots(
         semanticState,
-        {},
         {
           preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticState.position),
         },
@@ -5949,56 +5230,6 @@ export class CodegenConversationService {
     return sessionId.startsWith(STRATEGY_PLAZA_RUN_SESSION_ID_PREFIX)
   }
 
-  private normalizeDirectionClarificationAnswer(answer: string): 'long' | 'short' | null {
-    const hasLong = /做多|多单|开多|long/i.test(answer)
-    const hasShort = /做空|空单|开空|short/i.test(answer)
-    if (hasLong === hasShort) {
-      return null
-    }
-    return hasLong ? 'long' : 'short'
-  }
-
-  private normalizeExchangeClarificationAnswer(
-    answer: string,
-  ): 'binance' | 'okx' | 'hyperliquid' | null {
-    const normalized = answer.trim().toLowerCase()
-    if (normalized === 'binance' || normalized === 'okx' || normalized === 'hyperliquid') {
-      return normalized
-    }
-    return null
-  }
-
-  private normalizeMarketTypeClarificationAnswer(answer: string): 'spot' | 'perp' | null {
-    if (/现货|spot/i.test(answer)) return 'spot'
-    if (/永续|合约|perp|swap|\bcontract\b/i.test(answer)) return 'perp'
-    return null
-  }
-
-  private normalizeEarlyStopClarificationAnswer(answer: string): 'reduce' | 'close' | null {
-    const hasReduce = /减仓|reduce/i.test(answer)
-    const hasClose = /全平|平仓|止损|close|exit/i.test(answer)
-    if (hasReduce === hasClose) {
-      return null
-    }
-    return hasReduce ? 'reduce' : 'close'
-  }
-
-  private normalizeTriggerConfirmationClarificationAnswer(
-    answer: string,
-  ): 'touch' | 'close_confirm' | null {
-    const normalized = answer.trim().toLowerCase()
-    if (!normalized) return null
-
-    if (/触及|触碰|碰到|touch/u.test(normalized)) {
-      return 'touch'
-    }
-    if (/收盘|确认|close/u.test(normalized)) {
-      return 'close_confirm'
-    }
-
-    return null
-  }
-
   private normalizePositionPctClarificationAnswer(answer: string): number | null {
     const normalized = answer.replace(/％/gu, '%')
     const match = normalized.match(/(\d+(?:\.\d+)?)\s*%?/u)
@@ -6009,37 +5240,6 @@ export class CodegenConversationService {
       return null
     }
     return value
-  }
-
-  private normalizeMovingAveragePeriodClarificationAnswer(answer: string): number | null {
-    const normalized = answer.trim().toLowerCase()
-    if (!normalized) return null
-
-    const match = normalized.match(/(?:ma|ema|sma)?\s*(\d{1,4})/u)
-    if (!match?.[1]) return null
-
-    const value = Number(match[1])
-    if (!Number.isFinite(value) || value <= 0) {
-      return null
-    }
-
-    return value
-  }
-
-  private normalizeSemanticTriggerConfirmationAnswer(
-    answer: string,
-  ): 'touch' | 'close_confirm' | null {
-    const normalized = answer.trim().toLowerCase()
-    if (!normalized) return null
-
-    if (/盘中|即时|触发|touch/u.test(normalized)) {
-      return 'touch'
-    }
-    if (/收盘|确认|close/u.test(normalized)) {
-      return 'close_confirm'
-    }
-
-    return null
   }
 
   private normalizeBasisClarificationAnswer(answer: string): StrategyRuleBasis['kind'] | null {
@@ -6403,8 +5603,8 @@ export class CodegenConversationService {
     let hasGridExit = false
     for (const rule of canonicalSpec.rules) {
       if (!this.conditionContainsAtomKey(rule.condition, 'grid.range_rebalance')) continue
-      if (rule.phase === 'entry') hasGridEntry = true
-      if (rule.phase === 'exit' || rule.phase === 'rebalance') hasGridExit = true
+      if (rule.phase === 'entry' || rule.phase === 'program') hasGridEntry = true
+      if (rule.phase === 'exit' || rule.phase === 'rebalance' || rule.phase === 'program') hasGridExit = true
     }
     return hasGridEntry && hasGridExit
   }
@@ -6422,7 +5622,7 @@ export class CodegenConversationService {
       }
     }
 
-    for (const risk of readFlatRisks(semanticState)) {
+    for (const risk of semanticRiskFacts(semanticState)) {
       if (risk.status !== 'locked' || risk.openSlots.length > 0) continue
       if (
         risk.key === FIELD_KEY.RISK_CONDITION_EXPRESSION
@@ -6530,7 +5730,7 @@ export class CodegenConversationService {
       return 'positionMode'
     }
     if (input.reason === 'ambiguous_risk_effect') {
-      return 'riskRules.earlyStop.action'
+      return 'risk.earlyStop.action'
     }
     if (input.reason === 'atomic_semantic_fork') {
       return 'trigger.confirmation'
@@ -6545,7 +5745,7 @@ export class CodegenConversationService {
     if (key.includes('markettype') || /现货|合约|市场/u.test(question)) return 'marketType'
     if (key.includes('trigger.confirmation') || /触碰|触发|收盘确认/u.test(question)) return 'trigger.confirmation'
     if (key.includes('earlystop') || key.includes('risk.effect') || /减仓|平仓|止损/u.test(question)) {
-      return 'riskRules.earlyStop.action'
+      return 'risk.earlyStop.action'
     }
     if (key.includes('entry.side') || key.includes('action_uniqueness') || /方向|做多|做空/u.test(question)) {
       return 'positionMode'
@@ -6824,29 +6024,6 @@ export class CodegenConversationService {
       ].includes(type)
   }
 
-  private resolveLogicSnapshotMissingFields(checklist: StrategyLogicSnapshot): string[] {
-    const missing: string[] = []
-    if (!Array.isArray(checklist.entryRules) || checklist.entryRules.length === 0) {
-      missing.push('entryRules')
-    }
-    if (!Array.isArray(checklist.exitRules) || checklist.exitRules.length === 0) {
-      missing.push('exitRules')
-    }
-    return missing
-  }
-
-  private resolveActiveGateMissingFields(
-    checklist: StrategyLogicSnapshot,
-    semanticReady: boolean,
-    compileability: CanonicalCompileabilityReport,
-  ): string[] {
-    const missingFields = this.resolveLogicSnapshotMissingFields(checklist)
-    if (semanticReady && compileability.canCompile) {
-      return []
-    }
-    return missingFields
-  }
-
   private evaluateCanonicalCompileability(spec: {
     rules: Array<{
       phase: string
@@ -6955,321 +6132,6 @@ export class CodegenConversationService {
     return slot.value.trim()
   }
 
-  private buildLegacyLogicSnapshotFromSemanticState(
-    state: SemanticState,
-    fallbackLogicSnapshot: StrategyLogicSnapshot = {},
-  ): StrategyLogicSnapshot {
-    const projectedGrid = this.buildLegacyGrid([...readFlatTriggers(state)])
-    const nextLogicSnapshot: StrategyLogicSnapshot = {
-      ...fallbackLogicSnapshot,
-      riskRules: fallbackLogicSnapshot.riskRules ? { ...fallbackLogicSnapshot.riskRules } : undefined,
-      stateGates: fallbackLogicSnapshot.stateGates ? { ...fallbackLogicSnapshot.stateGates } : undefined,
-      market: fallbackLogicSnapshot.market ? { ...fallbackLogicSnapshot.market } : undefined,
-      grid: fallbackLogicSnapshot.grid ? { ...fallbackLogicSnapshot.grid } : undefined,
-    }
-
-    const entryRules = this.buildProjectedRulesForPhase(state, 'entry')
-    const exitRules = this.buildProjectedRulesForPhase(state, 'exit')
-
-    if (entryRules.length > 0) {
-      nextLogicSnapshot.entryRules = entryRules
-      nextLogicSnapshot.entryRuleDrafts = undefined
-    }
-    if (exitRules.length > 0) {
-      nextLogicSnapshot.exitRules = exitRules
-      nextLogicSnapshot.exitRuleDrafts = undefined
-    }
-
-    const projectedStateGates = this.buildProjectedStateGates(state)
-    if (Object.keys(projectedStateGates).length > 0) {
-      nextLogicSnapshot.stateGates = {
-        ...(nextLogicSnapshot.stateGates ?? {}),
-        ...projectedStateGates,
-      }
-    }
-
-    const riskRules = {
-      ...(nextLogicSnapshot.riskRules ?? {}),
-    } as Record<string, unknown>
-
-    for (const risk of readFlatRisks(state)) {
-      if (risk.key === FIELD_KEY.RISK_STOP_LOSS_PCT && typeof risk.params.valuePct === 'number') {
-        riskRules.stopLossPct = risk.params.valuePct
-      }
-      if (risk.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT && typeof risk.params.valuePct === 'number') {
-        riskRules.takeProfitPct = risk.params.valuePct
-      }
-      if (risk.key === FIELD_KEY.RISK_MAX_DRAWDOWN_PCT && typeof risk.params.valuePct === 'number') {
-        riskRules.maxDrawdownPct = risk.params.valuePct
-      }
-      if (risk.key === FIELD_KEY.RISK_MAX_SINGLE_LOSS_PCT && typeof risk.params.valuePct === 'number') {
-        riskRules.maxSingleLossPct = risk.params.valuePct
-      }
-      if (
-        (risk.key === FIELD_KEY.RISK_STOP_LOSS_PCT || risk.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT)
-        && typeof risk.params.basis === 'string'
-      ) {
-        if (risk.key === FIELD_KEY.RISK_STOP_LOSS_PCT) {
-          riskRules.stopLossBasis = risk.params.basis
-        }
-        if (risk.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT) {
-          riskRules.takeProfitBasis = risk.params.basis
-        }
-      }
-    }
-
-    if (
-      state.position?.status === 'locked'
-      && state.position.mode === 'fixed_ratio'
-      && Number.isFinite(state.position.value)
-      && state.position.value > 0
-    ) {
-      riskRules.positionPct = state.position.value <= 1
-        ? state.position.value * 100
-        : state.position.value
-    }
-
-    const exchange = this.readSemanticContextValue(state.contextSlots.exchange)
-    const symbol = this.readSemanticContextValue(state.contextSlots.symbol)
-    const marketType = this.readSemanticContextValue(state.contextSlots.marketType)
-    const timeframe = this.readSemanticContextValue(state.contextSlots.timeframe)
-
-    if (exchange) riskRules.exchange = exchange
-    if (marketType) riskRules.marketType = marketType
-    if (Object.keys(riskRules).length > 0) {
-      nextLogicSnapshot.riskRules = riskRules
-    }
-    if (symbol) {
-      nextLogicSnapshot.symbols = [symbol]
-    }
-    if (timeframe) {
-      nextLogicSnapshot.timeframes = [timeframe]
-    }
-    if (projectedGrid) {
-      nextLogicSnapshot.grid = {
-        ...(nextLogicSnapshot.grid ?? {}),
-        ...projectedGrid,
-      }
-    }
-
-    return nextLogicSnapshot
-  }
-
-  private buildLegacyGrid(
-    triggers: SemanticTriggerState[],
-  ): StrategyLogicSnapshot['grid'] | undefined {
-    const activeGrid = triggers.find(trigger =>
-      trigger.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key
-      && trigger.status !== 'superseded'
-    )
-    if (!activeGrid) {
-      return undefined
-    }
-
-    const lower = typeof activeGrid.params.rangeLower === 'number'
-      ? activeGrid.params.rangeLower as number
-      : undefined
-    const upper = typeof activeGrid.params.rangeUpper === 'number'
-      ? activeGrid.params.rangeUpper as number
-      : undefined
-    const stepPct = typeof activeGrid.params.stepPct === 'number'
-      ? activeGrid.params.stepPct as number
-      : undefined
-    const sideMode = activeGrid.params.sideMode === 'long_only'
-      || activeGrid.params.sideMode === 'short_only'
-      || activeGrid.params.sideMode === 'bidirectional'
-      ? activeGrid.params.sideMode
-      : undefined
-    const breakoutAction = activeGrid.params.breakoutAction === 'pause'
-      || activeGrid.params.breakoutAction === 'continue'
-      ? activeGrid.params.breakoutAction
-      : undefined
-
-    if (lower === undefined && upper === undefined && stepPct === undefined && sideMode === undefined && breakoutAction === undefined) {
-      return undefined
-    }
-
-    return {
-      ...(lower !== undefined ? { lower } : {}),
-      ...(upper !== undefined ? { upper } : {}),
-      ...(stepPct !== undefined ? { stepPct } : {}),
-      ...(sideMode !== undefined ? { sideMode } : {}),
-      ...(breakoutAction !== undefined ? { breakoutAction } : {}),
-    }
-  }
-
-  private buildProjectedStateGates(state: SemanticState): NonNullable<StrategyLogicSnapshot['stateGates']> {
-    const nextStateGates: NonNullable<StrategyLogicSnapshot['stateGates']> = {}
-
-    for (const trigger of readFlatTriggers(state)) {
-      if (trigger.phase !== 'gate') continue
-
-      if (trigger.key === ATOM_CONTRACT_REGISTRY['market.regime'].key && typeof trigger.params.value === 'string') {
-        nextStateGates.marketRegime = trigger.params.value as NonNullable<StrategyLogicSnapshot['stateGates']>['marketRegime']
-      }
-      if (trigger.key === ATOM_CONTRACT_REGISTRY['trend.direction'].key && typeof trigger.params.value === 'string') {
-        nextStateGates.trendDirection = trigger.params.value as NonNullable<StrategyLogicSnapshot['stateGates']>['trendDirection']
-      }
-      if (trigger.key === ATOM_CONTRACT_REGISTRY['volatility.state'].key && typeof trigger.params.value === 'string') {
-        nextStateGates.volatilityState = trigger.params.value as NonNullable<StrategyLogicSnapshot['stateGates']>['volatilityState']
-      }
-    }
-
-    return nextStateGates
-  }
-
-  private buildProjectedRulesForPhase(
-    state: SemanticState,
-    phase: 'entry' | 'exit',
-  ): string[] {
-    return readFlatTriggers(state)
-      .filter(trigger => trigger.phase === phase && trigger.status !== 'superseded')
-      .map(trigger => this.buildProjectedRuleText(trigger))
-      .filter((rule): rule is string => Boolean(rule))
-  }
-
-  private buildProjectedRuleText(trigger: SemanticTriggerState): string | null {
-    if (trigger.key === ATOM_CONTRACT_REGISTRY['execution.on_start'].key) {
-      return this.buildProjectedExecutionRule(trigger)
-    }
-
-    if (trigger.key === ATOM_CONTRACT_REGISTRY['price.percent_change'].key) {
-      return this.buildProjectedPercentChangeRule(trigger)
-    }
-
-    if (
-      (trigger.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key || trigger.key === ATOM_CONTRACT_REGISTRY['indicator.below'].key)
-      && trigger.params.indicator === 'ma'
-    ) {
-      return this.buildProjectedMovingAverageRule(trigger)
-    }
-
-    if (
-      trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key
-      || trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key
-      || trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key
-    ) {
-      return this.buildProjectedBollingerRule(trigger)
-    }
-
-    return null
-  }
-
-  private buildProjectedExecutionRule(trigger: SemanticTriggerState): string | null {
-    if (trigger.phase === 'entry') {
-      if (trigger.sideScope === 'short') {
-        return '立即开始时市价做空一次'
-      }
-      return '立即开始时市价买入一次'
-    }
-
-    if (trigger.phase === 'exit') {
-      if (trigger.sideScope === 'short') {
-        return '立即开始时市价平空一次'
-      }
-      return '立即开始时市价卖出一次'
-    }
-
-    return null
-  }
-
-  private buildProjectedPercentChangeRule(trigger: SemanticTriggerState): string | null {
-    const valuePct = typeof trigger.params.valuePct === 'number'
-      ? trigger.params.valuePct
-      : null
-    if (valuePct === null || !Number.isFinite(valuePct) || valuePct === 0) {
-      return null
-    }
-
-    const timeframe = typeof trigger.params.window === 'string' && trigger.params.window.trim().length > 0
-      ? `${trigger.params.window.trim()} `
-      : ''
-    const basis = typeof trigger.params.basis === 'string' ? trigger.params.basis : 'prev_close'
-    const basisLabel = basis === 'entry_avg_price' || basis === 'position_pnl'
-      ? '开仓均价'
-      : '上一根K线收盘价'
-    const direction = valuePct > 0 ? '上涨' : '下跌'
-    const pctText = `${Math.abs(valuePct)}%`
-    const action = trigger.phase === 'entry'
-      ? (trigger.sideScope === 'short' ? '做空开仓' : '买入开仓')
-      : (trigger.sideScope === 'short' ? '卖出平空' : '卖出平仓')
-
-    return `${timeframe}当前K线收盘价相对于${basisLabel}${direction}≥${pctText}时${action}`.trim()
-  }
-
-  private buildProjectedMovingAverageRule(trigger: SemanticTriggerState): string | null {
-    const referenceRole = trigger.params.referenceRole === 'short_term' ? '短期均线' : '长期均线'
-    const referencePeriod = typeof trigger.params['reference.period'] === 'number'
-      ? `（${trigger.params['reference.period']}）`
-      : ''
-    const confirmationPrefix = trigger.params.confirmationMode === 'close_confirm'
-      ? '收盘确认'
-      : (trigger.params.confirmationMode === 'touch' ? '盘中' : '')
-    const verb = trigger.key === ATOM_CONTRACT_REGISTRY['indicator.above'].key ? '突破' : '跌破'
-    const action = trigger.phase === 'entry'
-      ? (trigger.sideScope === 'short' ? '做空' : '买入')
-      : (trigger.sideScope === 'short' ? '平空' : '卖出')
-
-    return `${confirmationPrefix}价格${verb}${referenceRole}${referencePeriod}时${action}`
-  }
-
-  private buildProjectedBollingerRule(trigger: SemanticTriggerState): string | null {
-    const period = this.readPositiveNumber(trigger.params.period) ?? 20
-    const stdDev = this.readPositiveNumber(trigger.params.stdDev) ?? 2
-    const confirmationPrefix = trigger.params.confirmationMode === 'close_confirm'
-      ? 'K线收盘后确认'
-      : '触及'
-
-    if (trigger.phase === 'entry') {
-      const band = trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_upper'].key
-        ? '上轨'
-        : trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_lower'].key
-          ? '下轨'
-          : '中轨'
-      const action = trigger.sideScope === 'short' ? '做空' : '做多'
-      return `${confirmationPrefix}突破布林带(${period},${this.formatPositiveNumber(stdDev)})${band}时${action}`
-    }
-
-    if (trigger.phase === 'exit' && trigger.key === ATOM_CONTRACT_REGISTRY['bollinger.touch_middle'].key) {
-      const action = this.resolveProjectedExitAction(trigger, {
-        long: '平多',
-        short: '平空',
-        generic: '平仓',
-      })
-      return `价格回到布林带中轨(MA${period})时${action}`
-    }
-
-    return null
-  }
-
-  private resolveProjectedExitAction(
-    trigger: SemanticTriggerState,
-    labels: {
-      long: string
-      short: string
-      generic: string
-    },
-  ): string {
-    const evidenceText = trigger.evidence?.text?.trim() ?? ''
-    if (/平多/u.test(evidenceText)) {
-      return labels.long
-    }
-    if (/平空/u.test(evidenceText)) {
-      return labels.short
-    }
-    if (/平仓|离场|出场/u.test(evidenceText)) {
-      return labels.generic
-    }
-
-    if (trigger.sideScope === 'short') {
-      return labels.short
-    }
-    if (trigger.sideScope === 'long') {
-      return labels.long
-    }
-    return labels.generic
-  }
-
   private readPositiveNumber(value: unknown): number | null {
     return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
   }
@@ -7315,19 +6177,22 @@ export class CodegenConversationService {
   }
 
   private normalizeRiskState(state: SemanticState): SemanticState {
-    const normalizedRisk = normalizeRiskSemantics([...readFlatRisks(state)])
-    const hasPortfolioDrawdownOrchestration = (state.orchestration ?? []).some(node =>
-      node.kind === 'portfolioRisk'
-      && node.key === 'portfolioRisk.drawdown_block'
+    const normalizedRisk = normalizeRiskSemantics([...semanticRiskFacts(state)])
+    const hasPortfolioDrawdownOrchestration = semanticOrchestrationFacts(state).some(node =>
+      node.key === 'portfolioRisk.drawdown_block'
       && node.status !== 'superseded',
     ) === true
 
-    return {
-      ...state,
-      risk: hasPortfolioDrawdownOrchestration
-        ? normalizedRisk.filter(risk => risk.key !== 'portfolioRisk.drawdown_block')
-        : normalizedRisk,
-    }
+    const nextRisk = hasPortfolioDrawdownOrchestration
+      ? normalizedRisk.filter(risk => risk.key !== 'portfolioRisk.drawdown_block')
+      : normalizedRisk
+
+    return this.withRiskEffects(state, nextRisk.map(risk => ({
+      kind: 'atom',
+      key: risk.key,
+      params: { ...risk.params },
+      ...(risk.evidence?.text ? { evidence: { text: risk.evidence.text } } : {}),
+    })))
   }
 
   private normalizeSemanticContractReadiness(
@@ -7375,7 +6240,7 @@ export class CodegenConversationService {
     if (classification.route === 'unsupported_fallback') {
       const unsupportedFallback = this.unsupportedFallback.buildPendingFallback(
         classification.unsupportedAtoms,
-        readFlatTriggers(classification.state),
+        semanticTriggerFacts(classification.state),
         responseLocale,
       )
       if (unsupportedFallback !== null) {
@@ -7427,7 +6292,7 @@ export class CodegenConversationService {
         userId: args.userId,
         sessionId: args.session.id,
         unsupportedAtoms: classification.unsupportedAtoms.map(a => a.key),
-        supportedTriggers: readFlatTriggers(classification.state)?.map(t => t.key) ?? [],
+        supportedTriggers: semanticTriggerFacts(classification.state)?.map(t => t.key) ?? [],
       })
       return {
         semanticState: this.clearUnsupportedFallback(classification.state),
@@ -7679,7 +6544,7 @@ export class CodegenConversationService {
       updatedAt: new Date().toISOString(),
     })
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
-      this.withRequiredSemanticOpenSlots(supportedState, {}, {
+      this.withRequiredSemanticOpenSlots(supportedState, {
         preserveLockedPositionSizing: this.hasValidLockedPositionSizing(supportedState.position),
       }),
       strategyVersion,
@@ -7788,21 +6653,39 @@ export class CodegenConversationService {
       const positionPct = this.extractFallbackPositionPct(modificationMessage)
       if (positionPct !== null) {
         const value = positionPct / 100
-        nextPatch.position = {
-          ...(nextPatch.position ?? {
-            mode: 'fixed_ratio',
-            value,
-            positionMode: 'long_only',
-          }),
-          mode: 'fixed_ratio',
-          value,
-          sizing: { kind: 'ratio', value, unit: 'ratio' },
-        }
+        nextPatch.rules = this.withPatchPositionSizingRule(nextPatch.rules, value)
         modifiedFields.push(`仓位为 ${positionPct}%`)
       }
     }
 
     return { patch: nextPatch, modifiedFields }
+  }
+
+  private withPatchPositionSizingRule(
+    rules: CodegenSemanticPatch['rules'],
+    value: number,
+  ): CodegenSemanticPatch['rules'] {
+    if (!rules?.length) return rules
+    const [firstRule, ...rest] = rules
+    if (!firstRule || !isRuleEffectsByRole(firstRule.effects)) return rules
+    return [{
+      ...firstRule,
+      effects: {
+        ...firstRule.effects,
+        positions: [
+          ...firstRule.effects.positions,
+          {
+            kind: 'atom',
+            key: 'position.sizing',
+            params: {
+              mode: 'fixed_ratio',
+              value,
+              sizing: { kind: 'ratio', value, unit: 'ratio' },
+            },
+          },
+        ],
+      },
+    }, ...rest]
   }
 
   private cloneSemanticPatch(patch: CodegenSemanticPatch): CodegenSemanticPatch {
@@ -7890,9 +6773,6 @@ export class CodegenConversationService {
   private clearRejectedUnsupportedFallbackState(state: SemanticState): SemanticState {
     return {
       ...state,
-      trigger: readFlatTriggers(state).map(trigger => this.supersedeUnsupportedNode(trigger)),
-      action: readFlatActions(state).map(action => this.supersedeUnsupportedNode(action)),
-      risk: readFlatRisks(state).map(risk => this.supersedeUnsupportedNode(risk)),
       position: state.position ? this.supersedeUnsupportedNode(state.position) : null,
       unsupportedFallback: null,
       updatedAt: new Date().toISOString(),
@@ -7945,7 +6825,7 @@ export class CodegenConversationService {
     }
 
     const riskKey = key === 'risk.stopLossBasis' ? 'risk.stop_loss_pct' : 'risk.take_profit_pct'
-    return readFlatRisks(state).some(risk =>
+    return semanticRiskFacts(state).some(risk =>
       risk.key === riskKey
       && risk.status === 'locked'
       && risk.openSlots.length === 0
@@ -7993,6 +6873,69 @@ export class CodegenConversationService {
     clarificationState: Pick<StrategyClarificationState, 'status' | 'items'>,
   ): boolean {
     return !this.hasPendingBlockingClarification(clarificationState)
+  }
+
+  /**
+   * Fix #1691 ROOT CAUSE 1：
+   * 判定本次消息是否在回答已存在的 pending clarification。
+   * 命中则跳过 conversationSemanticEdit.decide，避免把完整原始 prompt
+   * 误识别为隐式 REPLACE_STRATEGY_DRAFT 种子，从而触发 rules 漂移。
+   *
+   * 通用判定规则（不绑定具体 case）：
+   *   1) dto.clarificationAnswers 是非空 record；或
+   *   2) trim 后消息以 "<key>:" 开头，且 <key> 命中当前 pending 项的 key；或
+   *   3) trim 后消息以通用 clarification key 前缀开头
+   *      （rulesMainflow./semantic./executionContext./grid./position./rules[/risk[/triggers[/actions[/contract.）
+   */
+  private isLikelyClarificationAnswerMessage(
+    message: string | null | undefined,
+    clarificationAnswers: Record<string, unknown> | null | undefined,
+    clarificationState: StrategyClarificationStateWithSummary | null,
+  ): boolean {
+    if (clarificationAnswers && Object.keys(clarificationAnswers).length > 0) {
+      return true
+    }
+    if (!this.hasPendingBlockingClarification(clarificationState)) {
+      return false
+    }
+    const trimmed = typeof message === 'string' ? message.trim() : ''
+    if (trimmed.length === 0) return false
+
+    const pendingKeys = clarificationState.items
+      .filter(item => item.blocking && item.status === 'pending')
+      .map(item => item.key)
+
+    const colonIdx = trimmed.indexOf(':')
+    if (colonIdx > 0) {
+      const candidateKey = trimmed.slice(0, colonIdx).trim()
+      if (candidateKey.length > 0) {
+        // m4: also accept parent-path candidates whose pending key is `<candidate>.subpath`
+        // or `<candidate>[idx]…`, since the user may answer a parent key when planner asked
+        // for a leaf under it.
+        if (pendingKeys.some(k =>
+          k === candidateKey
+          || k.startsWith(`${candidateKey}.`)
+          || k.startsWith(`${candidateKey}[`),
+        )) return true
+      }
+    }
+
+    // m3: instead of a hard-coded prefix allow-list, derive prefixes from the live pending
+    // clarification keys. A "prefix" here is the namespace before the first `.` or `[`.
+    // Keeps recognition aligned with whatever clarification namespaces are currently active.
+    const dynamicPrefixes = new Set<string>()
+    for (const key of pendingKeys) {
+      const splitIdx = key.search(/[.[]/u)
+      if (splitIdx > 0) {
+        const ns = key.slice(0, splitIdx)
+        const tail = key.charAt(splitIdx)
+        dynamicPrefixes.add(`${ns}${tail}`)
+      }
+    }
+    for (const prefix of dynamicPrefixes) {
+      if (trimmed.startsWith(prefix)) return true
+    }
+    return false
   }
 
   private estimateBlockingReasonPriority(
@@ -8356,46 +7299,60 @@ export class CodegenConversationService {
     }
 
     let changed = false
-    const nextRisk = readFlatRisks(semanticState).map(item => {
+    let nextRules = [...(semanticState.rules ?? [])]
+    for (const item of semanticRiskFacts(semanticState)) {
       if (item.key === FIELD_KEY.RISK_STOP_LOSS_PCT && nextStopLossBasis) {
         const currentBasis = this.readStrategyRuleBasisKind(item.params?.basis)
         if (currentBasis !== nextStopLossBasis) {
           changed = true
-          return {
-            ...item,
-            params: {
-              ...(item.params ?? {}),
-              basis: nextStopLossBasis,
-              basisSource: 'user_explicit',
-            },
-          }
+          nextRules = this.updateRuleFactParams(nextRules, item as unknown as RulesMainflowAtomFact, {
+            ...item.params,
+            basis: nextStopLossBasis,
+            basisSource: 'user_explicit',
+          })
         }
       }
       if (item.key === FIELD_KEY.RISK_TAKE_PROFIT_PCT && nextTakeProfitBasis) {
         const currentBasis = this.readStrategyRuleBasisKind(item.params?.basis)
         if (currentBasis !== nextTakeProfitBasis) {
           changed = true
-          return {
-            ...item,
-            params: {
+          nextRules = this.updateRuleFactParams(nextRules, item as unknown as RulesMainflowAtomFact, {
               ...(item.params ?? {}),
               basis: nextTakeProfitBasis,
               basisSource: 'user_explicit',
-            },
-          }
+          })
         }
       }
-
-      return item
-    })
+    }
 
     return changed
       ? {
           ...semanticState,
-          risk: nextRisk,
+          rules: nextRules,
           updatedAt: new Date().toISOString(),
         }
       : semanticState
+  }
+
+  private updateRuleFactParams(
+    rules: readonly SemanticRule[],
+    fact: RulesMainflowAtomFact,
+    params: Record<string, unknown>,
+  ): SemanticRule[] {
+    const path = fact.path.replace(/^rules\[\d+\]\./u, '')
+    try {
+      return updateRuleAtomParams(rules, fact.ruleId, path, atom => ({
+        ...atom,
+        params,
+      }))
+    }
+    catch (err) {
+      this.logger.warn(
+        `[#1633] rules-only risk basis update path miss: ruleId=${fact.ruleId} path=${fact.path}`,
+        err,
+      )
+      return [...rules]
+    }
   }
 
   private readStrategyRuleBasisKind(value: unknown): StrategyRuleBasis['kind'] | null {
@@ -8430,274 +7387,8 @@ export class CodegenConversationService {
     return normalized
   }
 
-  private normalizeLogicSnapshot(payload: StrategyLogicSnapshot | Record<string, unknown>): StrategyLogicSnapshot {
-    const normalizeStringArray = (value: unknown): string[] | undefined => {
-      if (!Array.isArray(value)) return undefined
-      const normalized = value
-        .filter(item => typeof item === 'string')
-        .map(item => item.trim())
-        .filter(Boolean) as string[]
-      return normalized.length > 0 ? normalized : undefined
-    }
-
-    const normalizeObject = (value: unknown): Record<string, unknown> | undefined => {
-      if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        return undefined
-      }
-      const normalized = Object.fromEntries(
-        Object.entries(value as Record<string, unknown>)
-          .filter(([, v]) => v !== undefined && v !== null && v !== ''),
-      )
-      return Object.keys(normalized).length > 0 ? normalized : undefined
-    }
-
-    const normalizeBasisMap = (
-      value: unknown,
-    ): Record<string, StrategyRuleBasis['kind']> | undefined => {
-      if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        return undefined
-      }
-
-      const normalized = Object.fromEntries(
-        Object.entries(value as Record<string, unknown>)
-          .filter(([, item]) => typeof item === 'string' && item.trim().length > 0)
-          .map(([key, item]) => [key, (item as string).trim() as StrategyRuleBasis['kind']]),
-      ) as Record<string, StrategyRuleBasis['kind']>
-
-      return Object.keys(normalized).length > 0 ? normalized : undefined
-    }
-
-    const normalizeDrafts = (value: unknown, phase: StrategyRuleDraft['phase']): StrategyRuleDraft[] | undefined => {
-      if (!Array.isArray(value)) return undefined
-      const drafts = value
-        .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
-        .map((item, index) => {
-          const text = typeof item.text === 'string' ? item.text.trim() : ''
-          if (!text) return null
-          const timeframe = typeof item.timeframe === 'string' && item.timeframe.trim().length > 0
-            ? item.timeframe.trim()
-            : null
-          const basis = typeof item.basis === 'string' && item.basis.trim().length > 0
-            ? item.basis.trim() as StrategyRuleBasis['kind']
-            : null
-          return {
-            id: typeof item.id === 'string' && item.id.trim().length > 0 ? item.id.trim() : `${phase}-${index + 1}`,
-            phase,
-            text,
-            timeframe,
-            ...(basis ? { basis } : {}),
-          } satisfies StrategyRuleDraft
-        })
-        .filter((item): item is StrategyRuleDraft => item !== null)
-
-      return drafts.length > 0 ? drafts : undefined
-    }
-
-    const normalizeMarket = (value: unknown): StrategyLogicSnapshot['market'] | undefined => {
-      if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        return undefined
-      }
-      const raw = value as Record<string, unknown>
-      const exchange = typeof raw.exchange === 'string' && ['binance', 'okx', 'hyperliquid'].includes(raw.exchange.trim().toLowerCase())
-        ? raw.exchange.trim().toLowerCase() as NonNullable<StrategyLogicSnapshot['market']>['exchange']
-        : undefined
-      const marketType = typeof raw.marketType === 'string' && ['spot', 'perp'].includes(raw.marketType.trim().toLowerCase())
-        ? raw.marketType.trim().toLowerCase() as NonNullable<StrategyLogicSnapshot['market']>['marketType']
-        : undefined
-      const defaultTimeframe = typeof raw.defaultTimeframe === 'string' && raw.defaultTimeframe.trim().length > 0
-        ? raw.defaultTimeframe.trim()
-        : null
-
-      if (!exchange && !marketType && !defaultTimeframe) {
-        return undefined
-      }
-
-      return {
-        ...(exchange ? { exchange } : {}),
-        ...(marketType ? { marketType } : {}),
-        ...(defaultTimeframe ? { defaultTimeframe } : {}),
-      }
-    }
-
-    const normalizeStateGates = (value: unknown): StrategyLogicSnapshot['stateGates'] | undefined => {
-      if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        return undefined
-      }
-      const raw = value as Record<string, unknown>
-      const marketRegime = typeof raw.marketRegime === 'string' && raw.marketRegime.trim().length > 0
-        ? raw.marketRegime.trim() as NonNullable<StrategyLogicSnapshot['stateGates']>['marketRegime']
-        : undefined
-      const trendDirection = typeof raw.trendDirection === 'string' && raw.trendDirection.trim().length > 0
-        ? raw.trendDirection.trim() as NonNullable<StrategyLogicSnapshot['stateGates']>['trendDirection']
-        : undefined
-      const volatilityState = typeof raw.volatilityState === 'string' && raw.volatilityState.trim().length > 0
-        ? raw.volatilityState.trim() as NonNullable<StrategyLogicSnapshot['stateGates']>['volatilityState']
-        : undefined
-
-      if (!marketRegime && !trendDirection && !volatilityState) {
-        return undefined
-      }
-
-      return {
-        ...(marketRegime ? { marketRegime } : {}),
-        ...(trendDirection ? { trendDirection } : {}),
-        ...(volatilityState ? { volatilityState } : {}),
-      }
-    }
-
-    const normalizeGrid = (value: unknown): StrategyLogicSnapshot['grid'] | undefined => {
-      if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        return undefined
-      }
-      const raw = value as Record<string, unknown>
-      const lower = typeof raw.lower === 'number' && Number.isFinite(raw.lower)
-        ? raw.lower
-        : undefined
-      const upper = typeof raw.upper === 'number' && Number.isFinite(raw.upper)
-        ? raw.upper
-        : undefined
-      const stepPct = typeof raw.stepPct === 'number' && Number.isFinite(raw.stepPct)
-        ? raw.stepPct
-        : undefined
-      const breakoutAction = raw.breakoutAction === 'pause' || raw.breakoutAction === 'continue'
-        ? raw.breakoutAction
-        : undefined
-      const sideMode = typeof raw.sideMode === 'string'
-        && (raw.sideMode === 'long_only' || raw.sideMode === 'short_only' || raw.sideMode === 'bidirectional')
-        ? raw.sideMode
-        : undefined
-
-      if (lower === undefined && upper === undefined && stepPct === undefined && !sideMode && !breakoutAction) {
-        return undefined
-      }
-
-      return {
-        ...(lower !== undefined ? { lower } : {}),
-        ...(upper !== undefined ? { upper } : {}),
-        ...(stepPct !== undefined ? { stepPct } : {}),
-        ...(sideMode ? { sideMode } : {}),
-        ...(breakoutAction ? { breakoutAction } : {}),
-      }
-    }
-
-    const normalized: StrategyLogicSnapshot = {
-      symbols: normalizeStringArray(payload.symbols),
-      timeframes: normalizeStringArray(payload.timeframes),
-      entryRules: normalizeStringArray(payload.entryRules),
-      exitRules: normalizeStringArray(payload.exitRules),
-      riskRules: this.backfillDefaultRiskBasis(normalizeObject(payload.riskRules)),
-      stateGates: normalizeStateGates(payload.stateGates),
-      entryRuleBases: normalizeBasisMap(payload.entryRuleBases),
-      exitRuleBases: normalizeBasisMap(payload.exitRuleBases),
-      entryRuleDrafts: normalizeDrafts(payload.entryRuleDrafts, 'entry'),
-      exitRuleDrafts: normalizeDrafts(payload.exitRuleDrafts, 'exit'),
-      riskRuleDrafts: normalizeDrafts(payload.riskRuleDrafts, 'risk'),
-      market: normalizeMarket(payload.market),
-      grid: normalizeGrid(payload.grid),
-    }
-    const drafts = buildStrategyRuleDrafts(normalized)
-
-    return {
-      ...normalized,
-      entryRuleDrafts: drafts.entry.length > 0 ? drafts.entry : undefined,
-      exitRuleDrafts: drafts.exit.length > 0 ? drafts.exit : undefined,
-      riskRuleDrafts: drafts.risk.length > 0 ? drafts.risk : undefined,
-      market: normalized.market ?? (resolveStrategyDefaultTimeframe(normalized)
-        ? { defaultTimeframe: resolveStrategyDefaultTimeframe(normalized) }
-        : undefined),
-    }
-  }
-
-  private backfillDefaultRiskBasis(
-    riskRules: Record<string, unknown> | undefined,
-  ): Record<string, unknown> | undefined {
-    if (!riskRules) return undefined
-
-    const nextRiskRules = { ...riskRules }
-    const inferredAssumptions = Array.isArray(nextRiskRules._inferredAssumptions)
-      ? [...nextRiskRules._inferredAssumptions]
-      : []
-    const stopLossPct = typeof nextRiskRules.stopLossPct === 'number' ? nextRiskRules.stopLossPct : null
-    const takeProfitPct = typeof nextRiskRules.takeProfitPct === 'number' ? nextRiskRules.takeProfitPct : null
-
-    if (this.isValidRiskPct(stopLossPct) && !this.isNamedBasis(nextRiskRules.stopLossBasis)) {
-      const basis = this.resolveRiskBasis(
-        typeof nextRiskRules.stopLoss === 'string' ? nextRiskRules.stopLoss : `止损 ${stopLossPct}%`,
-        null,
-      )
-      if (basis) {
-        nextRiskRules.stopLossBasis = basis
-        inferredAssumptions.push('risk.stopLossBasis')
-      }
-    }
-
-    if (this.isValidRiskPct(takeProfitPct) && !this.isNamedBasis(nextRiskRules.takeProfitBasis)) {
-      const basis = this.resolveRiskBasis(
-        typeof nextRiskRules.takeProfit === 'string' ? nextRiskRules.takeProfit : `止盈 ${takeProfitPct}%`,
-        null,
-      )
-      if (basis) {
-        nextRiskRules.takeProfitBasis = basis
-        inferredAssumptions.push('risk.takeProfitBasis')
-      }
-    }
-
-    if (inferredAssumptions.length > 0) {
-      nextRiskRules._inferredAssumptions = Array.from(new Set(inferredAssumptions))
-    }
-
-    return nextRiskRules
-  }
-
   private isValidRiskPct(value: unknown): value is number {
     return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 100
-  }
-
-  private pruneResolvedRiskInferredAssumptions(
-    riskRules: Record<string, unknown>,
-    patchRiskRules: Record<string, unknown>,
-  ): Record<string, unknown> {
-    const inferredAssumptions = Array.isArray(riskRules._inferredAssumptions)
-      ? riskRules._inferredAssumptions.filter((item): item is string => typeof item === 'string')
-      : []
-    const patchInferredAssumptions = Array.isArray(patchRiskRules._inferredAssumptions)
-      ? patchRiskRules._inferredAssumptions.filter((item): item is string => typeof item === 'string')
-      : []
-    if (inferredAssumptions.length === 0) {
-      return riskRules
-    }
-
-    const remainingAssumptions = inferredAssumptions.filter((item) => {
-      if (
-        item === 'risk.stopLossBasis'
-        && this.isNamedBasis(patchRiskRules.stopLossBasis)
-        && !patchInferredAssumptions.includes('risk.stopLossBasis')
-      ) {
-        return false
-      }
-      if (
-        item === 'risk.takeProfitBasis'
-        && this.isNamedBasis(patchRiskRules.takeProfitBasis)
-        && !patchInferredAssumptions.includes('risk.takeProfitBasis')
-      ) {
-        return false
-      }
-      return true
-    })
-
-    if (remainingAssumptions.length === inferredAssumptions.length) {
-      return riskRules
-    }
-
-    if (remainingAssumptions.length === 0) {
-      const { _inferredAssumptions: _ignored, ...rest } = riskRules
-      return rest
-    }
-
-    return {
-      ...riskRules,
-      _inferredAssumptions: remainingAssumptions,
-    }
   }
 
   private isNamedBasis(value: unknown): value is StrategyRuleBasis['kind'] {
@@ -8902,7 +7593,7 @@ export class CodegenConversationService {
           providerCode: options?.providerCode,
           model: options?.model,
           messages,
-          temperature: options?.temperature ?? 0.2,
+          temperature: options?.temperature ?? 0,
           maxTokens: options?.maxTokens ?? 1000,
           responseFormat: {
             type: 'json_schema',
@@ -8945,7 +7636,7 @@ export class CodegenConversationService {
         providerCode: options?.providerCode,
         model: options?.model,
         messages,
-        temperature: options?.temperature ?? 0.2,
+        temperature: options?.temperature ?? 0,
         maxTokens: options?.maxTokens ?? 1000,
       })
       code = this.normalizeGeneratedScript(result.content)
@@ -9815,17 +8506,6 @@ export class CodegenConversationService {
         || text === '触发止盈/止损阈值出场'
   }
 
-  private hasUnresolvedGenericCompileabilityGap(checklist: StrategyLogicSnapshot): boolean {
-    const entryRules = checklist.entryRules ?? []
-    const exitRules = checklist.exitRules ?? []
-    const entryHasGenericOnly = entryRules.some(rule => this.isGenericLogicPlaceholderRule(rule, 'entry'))
-      && !entryRules.some(rule => !this.isGenericLogicPlaceholderRule(rule, 'entry'))
-    const exitHasGenericOnly = exitRules.some(rule => this.isGenericLogicPlaceholderRule(rule, 'exit'))
-      && !exitRules.some(rule => !this.isGenericLogicPlaceholderRule(rule, 'exit'))
-
-    return entryHasGenericOnly || exitHasGenericOnly
-  }
-
   private isLikelySameRule(baseRule: string, patchRule: string): boolean {
     if (baseRule === patchRule) {
       return true
@@ -9886,46 +8566,6 @@ export class CodegenConversationService {
       return `bollinger-middle:${action}`
     }
     return null
-  }
-
-  private collectMarketScopeConflicts(base: StrategyLogicSnapshot, patch: StrategyLogicSnapshot): Array<{
-    field: 'exchange' | 'marketType' | 'symbol' | 'timeframe'
-    previous: string
-    next: string
-  }> {
-    const conflicts: Array<{
-      field: 'exchange' | 'marketType' | 'symbol' | 'timeframe'
-      previous: string
-      next: string
-    }> = []
-    const pushConflict = (
-      field: 'exchange' | 'marketType' | 'symbol' | 'timeframe',
-      previous: string | undefined,
-      next: string | undefined,
-    ) => {
-      if (!previous || !next) return
-      if (isEquivalentMarketScopeValue(field, previous, next)) return
-      conflicts.push({
-        field,
-        previous: previous.trim(),
-        next: next.trim(),
-      })
-    }
-
-    pushConflict('symbol', base.symbols?.[0], patch.symbols?.[0])
-    pushConflict('timeframe', base.timeframes?.[0], patch.timeframes?.[0])
-    pushConflict(
-      'exchange',
-      typeof base.riskRules?.exchange === 'string' ? base.riskRules.exchange : undefined,
-      typeof patch.riskRules?.exchange === 'string' ? patch.riskRules.exchange : undefined,
-    )
-    pushConflict(
-      'marketType',
-      typeof base.riskRules?.marketType === 'string' ? base.riskRules.marketType : undefined,
-      typeof patch.riskRules?.marketType === 'string' ? patch.riskRules.marketType : undefined,
-    )
-
-    return conflicts
   }
 
   private normalizeSemanticPatch(semanticPatch: unknown): CodegenSemanticPatch | null {

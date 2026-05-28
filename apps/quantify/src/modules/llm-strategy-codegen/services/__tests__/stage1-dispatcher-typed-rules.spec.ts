@@ -194,6 +194,25 @@ describe('stage1 typed rules corpus fixture', () => {
     expect(riskLeaves.some(effect => effect.rulePhase === 'exit')).toBe(true)
   })
 
+  // Issue #1691 staging30 s28: 用户描述「下穿平仓」类纯出场动作时，
+  // dispatcher 必须为 exit phase 注入 action.close_long / action.close_short fallback。
+  // 否则 readiness.hasExit=false，前端持续追问 rulesTree.exit，触发 assistant_prompt_loop。
+  it('infers exit close_long action when text expresses close intent without explicit verb', () => {
+    const patch = new GenericSeedDispatcher().dispatch('SOL 1d，EMA20 上穿 EMA60 开多，下穿平仓，最大回撤 15% 熔断。')
+    const exitRule = patch.rules?.find(rule => rule.phase === 'exit')
+
+    expect(exitRule).toBeDefined()
+    expect(ruleEffectKeys(exitRule!)).toContain('action.close_long')
+  })
+
+  it('infers exit close_short action for short-side close intent', () => {
+    const patch = new GenericSeedDispatcher().dispatch('BTC 1h MA20 下穿 MA60 开空，上穿平空。')
+    const exitRule = patch.rules?.find(rule => rule.phase === 'exit')
+
+    expect(exitRule).toBeDefined()
+    expect(ruleEffectKeys(exitRule!)).toContain('action.close_short')
+  })
+
   it('does not treat exit price-change percentage as position sizing', () => {
     const patch = new GenericSeedDispatcher().dispatch('价格相对入场均价下跌 5% 时平仓。')
     const sizingLeaves = allEffectLeaves(patch).filter(effect => effect.key === 'position.sizing')

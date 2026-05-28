@@ -282,6 +282,45 @@ describe('StrategyExecutionContextService semantic state', () => {
     )
   })
 
+  it('does not emit timeframe ambiguity when rules-native grid range_rebalance exists without flat triggers', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      trigger: [],
+      action: [],
+      risk: [],
+      position: null,
+      positionConstraint: [],
+      orchestration: [],
+      orchestrationContracts: [],
+      rules: [{
+        id: 'grid-mainflow',
+        phase: 'program',
+        sideScope: 'both',
+        condition: { kind: 'atom', key: 'grid.range_rebalance', params: { lower: 60000, upper: 80000 } },
+        effects: { actions: [], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+      contextSlots: {
+        exchange: slot('exchange', 'contextSlots.exchange', 'okx'),
+        symbol: slot('symbol', 'contextSlots.symbol', 'BTCUSDT'),
+        marketType: slot('marketType', 'contextSlots.marketType', 'perp'),
+        timeframe: slot('timeframe', 'contextSlots.timeframe', ''),
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    }
+
+    const result = service.resolveFromSemanticState(state)
+
+    expect(result.context.timeframe).toBeNull()
+    expect(result.ambiguities).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ field: 'timeframe' })]),
+    )
+    expect(result.evidence).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: 'timeframe_not_required_for_uniqueness' })]),
+    )
+  })
+
   it('treats invalid exchange or marketType values as missing', () => {
     const state: SemanticState = {
       version: 1,

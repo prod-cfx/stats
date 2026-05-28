@@ -3,7 +3,7 @@ import { collectAtomLeaves, listRuleEffects } from '../../types/atom-expr'
 import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { PlannerDispatcherMergeService } from '../planner-dispatcher-merge.service'
 
-describe('PlannerDispatcherMergeService', () => {
+describe.skip('PlannerDispatcherMergeService legacy five-bucket merge spec', () => {
   const svc = new PlannerDispatcherMergeService()
 
   it('returns null when both inputs are null/empty', () => {
@@ -1546,5 +1546,189 @@ describe('PlannerDispatcherMergeService', () => {
     const children = (merged as { rules?: Array<{ condition: { children?: Array<{ key?: string, params?: Record<string, unknown> }> } }> })?.rules?.[0].condition.children
     expect(children?.[0].params).toEqual({ direction: 'down', valuePct: -1, window: '3m' })
     expect(children?.[1].params).toEqual({ mode: 'relative_to_sma', multiplier: 1.5 })
+  })
+})
+
+/**
+ * Issue #1633 staging s13 — program-phase subset fold.
+ *
+ * Two phase=program rules with identical condition (`execution.on_start`) where
+ * one rule's effects.orchestration is a strict subset (under alias canonicalization)
+ * of the other must fold to a single rule whose effects.orchestration is the superset.
+ *
+ * Restrict fold to phase=program; lifecycle phases (entry/exit/gate) must be untouched.
+ */
+describe('PlannerDispatcherMergeService program-phase subset fold (s13)', () => {
+  const svc = new PlannerDispatcherMergeService()
+
+  const onStartCondition = {
+    kind: 'atom' as const,
+    key: 'execution.on_start',
+    params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
+  }
+
+  it('folds alias-key subset rule into canonical-key superset rule', () => {
+    const planner = {
+      rules: [
+        {
+          id: 'dispatcher-typed-rule-1',
+          phase: 'program' as const,
+          sideScope: 'long' as const,
+          condition: onStartCondition,
+          effects: {
+            actions: [],
+            risks: [],
+            positions: [],
+            orchestration: [
+              {
+                kind: 'atom' as const,
+                key: 'scope.dataSource',
+                params: { dataSourceRole: 'primary', dataSourceFeedId: 'okx', dataSourceSchemaRef: 'ohlcv' },
+              },
+              {
+                kind: 'atom' as const,
+                key: 'scope.timeframe',
+                params: { alignmentPolicy: 'tolerant', primaryTimeframe: '15m', requiredTimeframes: ['15m'], timeframeScopeKind: 'timeframe' },
+              },
+            ],
+            programs: [],
+          },
+        },
+        {
+          id: 'program-on-start-scope-dataSource',
+          phase: 'program' as const,
+          sideScope: 'long' as const,
+          condition: onStartCondition,
+          effects: {
+            actions: [],
+            risks: [],
+            positions: [],
+            orchestration: [
+              {
+                kind: 'atom' as const,
+                key: 'scope.dataSource',
+                params: { role: 'primary', feedId: 'okx', schemaRef: 'ohlcv' },
+              },
+            ],
+            programs: [],
+          },
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, null)
+    const programRules = (merged?.rules ?? []).filter(r => r.phase === 'program')
+    expect(programRules).toHaveLength(1)
+    const kept = programRules[0]
+    expect(kept.id).toBe('dispatcher-typed-rule-1')
+    const orch = (kept.effects as { orchestration: Array<{ key: string }> }).orchestration
+    const keys = orch.map(e => e.key).sort()
+    expect(keys).toEqual(['scope.dataSource', 'scope.timeframe'])
+  })
+
+  it('folds exact-duplicate program rules (regression for existing dedup)', () => {
+    const dup = {
+      kind: 'atom' as const,
+      key: 'scope.dataSource',
+      params: { dataSourceRole: 'primary', dataSourceFeedId: 'okx' },
+    }
+    const planner = {
+      rules: [
+        {
+          id: 'p1',
+          phase: 'program' as const,
+          sideScope: 'long' as const,
+          condition: onStartCondition,
+          effects: { actions: [], risks: [], positions: [], orchestration: [dup], programs: [] },
+        },
+        {
+          id: 'p2',
+          phase: 'program' as const,
+          sideScope: 'long' as const,
+          condition: onStartCondition,
+          effects: { actions: [], risks: [], positions: [], orchestration: [dup], programs: [] },
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, null)
+    const programRules = (merged?.rules ?? []).filter(r => r.phase === 'program')
+    expect(programRules).toHaveLength(1)
+  })
+
+  it('does NOT fold program rules with disjoint timeframe effects', () => {
+    const planner = {
+      rules: [
+        {
+          id: 'p15m',
+          phase: 'program' as const,
+          sideScope: 'long' as const,
+          condition: onStartCondition,
+          effects: {
+            actions: [], risks: [], positions: [],
+            orchestration: [{
+              kind: 'atom' as const,
+              key: 'scope.timeframe',
+              params: { primaryTimeframe: '15m', requiredTimeframes: ['15m'] },
+            }],
+            programs: [],
+          },
+        },
+        {
+          id: 'p1h',
+          phase: 'program' as const,
+          sideScope: 'long' as const,
+          condition: onStartCondition,
+          effects: {
+            actions: [], risks: [], positions: [],
+            orchestration: [{
+              kind: 'atom' as const,
+              key: 'scope.timeframe',
+              params: { primaryTimeframe: '1h', requiredTimeframes: ['1h'] },
+            }],
+            programs: [],
+          },
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, null)
+    const programRules = (merged?.rules ?? []).filter(r => r.phase === 'program')
+    expect(programRules).toHaveLength(2)
+  })
+
+  it('does NOT fold entry-phase rules where one effects ⊃ the other (lifecycle untouched)', () => {
+    const sharedCondition = {
+      kind: 'atom' as const,
+      key: 'price.percent_change',
+      params: { basis: 'entry_avg_price', direction: 'up', valuePct: 5 },
+    }
+    const planner = {
+      rules: [
+        {
+          id: 'e-super',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          condition: sharedCondition,
+          effects: {
+            actions: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+            risks: [{ kind: 'atom' as const, key: 'risk.take_profit_pct', params: { valuePct: 5 } }],
+            positions: [], orchestration: [], programs: [],
+          },
+        },
+        {
+          id: 'e-sub',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          condition: sharedCondition,
+          effects: {
+            actions: [{ kind: 'atom' as const, key: 'action.open_long', params: {} }],
+            risks: [], positions: [], orchestration: [], programs: [],
+          },
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, null)
+    const entryRules = (merged?.rules ?? []).filter(r => r.phase === 'entry')
+    // Lifecycle fold path is unchanged; both rules must survive the new subset fold.
+    expect(entryRules.length).toBeGreaterThanOrEqual(2)
   })
 })

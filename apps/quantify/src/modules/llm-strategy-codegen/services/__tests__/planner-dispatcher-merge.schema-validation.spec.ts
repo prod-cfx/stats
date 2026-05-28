@@ -28,6 +28,47 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
     programs: roles.programs ?? [],
   })
 
+  it('dedupes equivalent planner and dispatcher typed rules by semantic signature', () => {
+    const planner = {
+      rules: [{
+        id: 'entry-long-15m-ema-stack',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'and',
+          children: [
+            { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', 'reference.period': 20, timeframe: '15m' } },
+            { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', 'reference.period': 60, timeframe: '15m' } },
+          ],
+        },
+        effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: {} }] }),
+        evidence: { text: '价格在 ema20 ema60 上方时做多开仓' },
+      }],
+    }
+    const dispatcher = {
+      rules: [{
+        id: 'dispatcher-typed-rule-1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'and',
+          children: [
+            { kind: 'atom', key: 'indicator.above', params: { timeframe: '15m', 'reference.period': 60, indicator: 'ema' } },
+            { kind: 'atom', key: 'indicator.above', params: { timeframe: '15m', 'reference.period': 20, indicator: 'ema' } },
+          ],
+        },
+        effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: { phase: 'entry' } }] }),
+        evidence: { text: '价格在 ema20 ema60 上方时做多开仓' },
+      }],
+    }
+
+    const merged = svc.mergePlannerAndDispatcherPatches(planner as never, dispatcher as never)
+
+    expect(merged?.rules).toHaveLength(1)
+    expect(merged?.rules?.[0]?.id).toBe('entry-long-15m-ema-stack')
+    expect(JSON.stringify(merged?.rules)).not.toContain('dispatcher-typed-rule-1')
+  })
+
   it('rejects legacy flat atoms[] form (no rules[])', () => {
     const patch = {
       atoms: [
@@ -240,6 +281,66 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
     }
   })
 
+  it('accepts grid range rebalance inside effects.programs for program-phase rule (#1691 staging30 s10)', () => {
+    // 复现 staging30 s10 主链路 regression：planner 对「价格区间 + 双向网格 + 止损止盈」
+    // 用户输入产出 phase=program 规则，condition=grid.range_rebalance；planner 同时把
+    // grid.range_rebalance（bucket=positionConstraint，作为程序载体）放进 effects.programs。
+    // 修复前 role gate 仅接受 program.* atom，导致 effects_leaf_bucket_invalid，10 轮均无脚本产出。
+    const userMessage = '在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 79200-80200，采用双向网格，每格间距 0.1%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈'
+    const patch = {
+      rules: [{
+        id: 'program-bidirectional-grid-range',
+        phase: 'program',
+        sideScope: 'both',
+        condition: {
+          kind: 'atom',
+          key: 'grid.range_rebalance',
+          params: { rangeLower: 79200, rangeUpper: 80200, stepPct: 0.1, sideMode: 'both' },
+        },
+        effects: typedEffects({
+          risks: [
+            { kind: 'atom', key: 'risk.stop_loss_pct', params: { basis: 'entry_avg_price', scope: 'position', effect: 'close', valuePct: 5, direction: 'down', basisSource: 'user_explicit' } },
+            { kind: 'atom', key: 'risk.take_profit_pct', params: { basis: 'entry_avg_price', scope: 'position', effect: 'close', valuePct: 10, direction: 'up', basisSource: 'user_explicit' } },
+            // 重复条目模拟 planner 多轮累积叠加；validator 不应因重复阻断。
+            { kind: 'atom', key: 'risk.stop_loss_pct', params: { basis: 'entry_avg_price', scope: 'position', effect: 'close', valuePct: 5, direction: 'down', basisSource: 'user_explicit' } },
+            { kind: 'atom', key: 'risk.take_profit_pct', params: { basis: 'entry_avg_price', scope: 'position', effect: 'close', valuePct: 10, direction: 'up', basisSource: 'user_explicit' } },
+          ],
+          programs: [{ kind: 'atom', key: 'grid.range_rebalance', params: { rangeLower: 79200, rangeUpper: 80200, stepPct: 0.1, sideMode: 'both' } }],
+        }),
+        evidence: { text: '价格区间 79200-80200，采用双向网格' },
+      }],
+    }
+
+    const result = svc.validatePlannerSemanticPatch(patch, userMessage)
+
+    expect(result.ok).toBe(true)
+    if (result.ok === false) {
+      expect(result.reasons).not.toContain('effects_leaf_bucket_invalid')
+    }
+  })
+
+  it('still rejects non-whitelisted positionConstraint atom inside effects.programs', () => {
+    // 防止对所有 positionConstraint 桶放行造成的回退：只有 CONDITION_ALLOWED_POSITION_CONSTRAINT_ATOMS
+    // 白名单上的 atom（当前仅 grid.range_rebalance）可作 program body。
+    const patch = {
+      rules: [{
+        id: 'program-role-invalid',
+        phase: 'program',
+        sideScope: 'both',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: typedEffects({
+          programs: [{ kind: 'atom', key: 'position.dca_schedule', params: {} }],
+        }),
+        evidence: { text: '启动后运行' },
+      }],
+    }
+    const result = svc.validatePlannerSemanticPatch(patch, '启动后运行')
+    expect(result.ok).toBe(false)
+    if (result.ok === false) {
+      expect(result.reasons).toContain('effects_leaf_bucket_invalid')
+    }
+  })
+
   it('accepts grid range rebalance as a rules-tree condition leaf', () => {
     const patch = {
       rules: [
@@ -332,5 +433,140 @@ describe('PlannerDispatcherMergeService.validatePlannerSemanticPatch (#1445)', (
     finally {
       warnSpy.mockRestore()
     }
+  })
+
+  // Issue #1633 C1：subset-condition entry/exit rule fold pass
+  describe('Issue #1633 C1: foldSubsetConditionRules', () => {
+    it('folds state-only entry into and(state,event) entry sharing lifecycle action key', () => {
+      // staging s18 复测复现：planner 把同语义入场拆成两条 entry rule
+      const merged: { rules: unknown[] } = {
+        rules: [
+          {
+            id: 'r-entry-state-only',
+            phase: 'entry',
+            sideScope: 'long',
+            condition: { kind: 'atom', key: 'price.candle_pattern', params: { pattern: 'engulfing' } },
+            effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: {} }] }),
+            evidence: { text: '看涨吞没形态' },
+          },
+          {
+            id: 'r-entry-state-and-event',
+            phase: 'entry',
+            sideScope: 'long',
+            condition: {
+              kind: 'and',
+              children: [
+                { kind: 'atom', key: 'price.candle_pattern', params: { pattern: 'engulfing' } },
+                { kind: 'atom', key: 'volume.threshold', params: { multiplier: 1.5 } },
+              ],
+            },
+            // superset 这条被错误改成 add_position
+            effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: {} }] }),
+            evidence: { text: '看涨吞没形态 + 放量' },
+          },
+        ],
+      }
+      const result = svc.mergePlannerAndDispatcherPatches(merged as never, null)
+      expect(result?.rules).toHaveLength(1)
+      const folded = result?.rules?.[0]
+      expect(folded?.condition?.kind).toBe('and')
+      // 保留 subset rule 的身份 + effects（带正确的 open_long）
+      expect(folded?.id).toBe('r-entry-state-only')
+    })
+
+    it('does NOT fold when conditions are disjoint (no subset relation)', () => {
+      const merged: { rules: unknown[] } = {
+        rules: [
+          {
+            id: 'r1',
+            phase: 'entry',
+            sideScope: 'long',
+            condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
+            effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: {} }] }),
+            evidence: { text: 'BOLL 下轨' },
+          },
+          {
+            id: 'r2',
+            phase: 'entry',
+            sideScope: 'long',
+            condition: {
+              kind: 'and',
+              children: [
+                { kind: 'atom', key: 'indicator.above', params: { indicator: 'ema', period: 20 } },
+                { kind: 'atom', key: 'volume.threshold', params: { multiplier: 2 } },
+              ],
+            },
+            effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: {} }] }),
+            evidence: { text: 'EMA 上方 + 放量' },
+          },
+        ],
+      }
+      const result = svc.mergePlannerAndDispatcherPatches(merged as never, null)
+      expect(result?.rules).toHaveLength(2)
+    })
+
+    it('does NOT fold when condition contains or/not/sequence (non-and superset)', () => {
+      const merged: { rules: unknown[] } = {
+        rules: [
+          {
+            id: 'r1',
+            phase: 'entry',
+            sideScope: 'long',
+            condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
+            effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: {} }] }),
+            evidence: { text: 'BOLL 下轨' },
+          },
+          {
+            id: 'r2',
+            phase: 'entry',
+            sideScope: 'long',
+            condition: {
+              kind: 'or',
+              children: [
+                { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
+                { kind: 'atom', key: 'volume.threshold', params: { multiplier: 2 } },
+              ],
+            },
+            effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: {} }] }),
+            evidence: { text: 'BOLL 下轨或放量' },
+          },
+        ],
+      }
+      const result = svc.mergePlannerAndDispatcherPatches(merged as never, null)
+      // or 不是合法 superset 形态 → 不折叠
+      expect(result?.rules).toHaveLength(2)
+    })
+
+    it('does NOT fold when rules do not share any lifecycle action', () => {
+      const merged: { rules: unknown[] } = {
+        rules: [
+          {
+            id: 'r1',
+            phase: 'entry',
+            sideScope: 'long',
+            condition: { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
+            effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_long', params: {} }] }),
+            evidence: { text: 'BOLL 下轨开多' },
+          },
+          {
+            id: 'r2',
+            phase: 'entry',
+            sideScope: 'short',
+            condition: {
+              kind: 'and',
+              children: [
+                { kind: 'atom', key: 'bollinger.touch_lower', params: {} },
+                { kind: 'atom', key: 'volume.threshold', params: { multiplier: 2 } },
+              ],
+            },
+            effects: typedEffects({ actions: [{ kind: 'atom', key: 'action.open_short', params: {} }] }),
+            evidence: { text: 'BOLL 下轨放量开空' },
+          },
+        ],
+      }
+      const result = svc.mergePlannerAndDispatcherPatches(merged as never, null)
+      // 无共享 lifecycle action (open_long vs open_short) → 不折叠
+      expect(result?.rules).toHaveLength(2)
+    })
   })
 })

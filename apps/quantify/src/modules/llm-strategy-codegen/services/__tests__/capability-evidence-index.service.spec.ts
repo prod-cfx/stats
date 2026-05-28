@@ -187,6 +187,41 @@ describe('CapabilityEvidenceIndex', () => {
     })
   })
 
+  describe('rules-native facts', () => {
+    it('indexes sizing evidence from rules-only action leaves', () => {
+      const idx = CapabilityEvidenceIndex.build({
+        ...baseState(),
+        rules: [{
+          id: 'rules-sizing',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'volume.threshold', params: { value: 1000 } },
+          effects: {
+            actions: [{
+              kind: 'atom',
+              key: 'action.open_long',
+              params: { sizing: { kind: 'quote', value: 125, asset: 'USDT' } },
+            }],
+            risks: [],
+            positions: [],
+            orchestration: [],
+            programs: [],
+          },
+        }],
+      })
+
+      const [evidence] = idx.byKey('capital', 'allocate', 'per_order_budget')
+      expect(evidence).toEqual(expect.objectContaining({
+        mount: 'action',
+        ownerId: 'rules-sizing:rules-0-effects-actions-0',
+        ownerStatus: 'locked',
+        capability: expect.objectContaining({
+          shape: { kind: 'quote', value: 125, asset: 'USDT' },
+        }),
+      }))
+    })
+  })
+
   // -------------------------------------------------------------------------
   // Case 4: ownerStatus transparency — three-state passthrough
   // -------------------------------------------------------------------------

@@ -50,6 +50,10 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
   ) {}
 
   async onModuleInit() {
+    if (process.env.QUANTIFY_STAGING_VALIDATION_MODE === 'true') {
+      this.logger.warn('market data ingestion skipped: QUANTIFY_STAGING_VALIDATION_MODE=true')
+      return
+    }
     const baseConfig = this.getConfig()
     const config = await this.mergeDynamicSymbols(baseConfig)
     this.logger.log(
@@ -87,6 +91,7 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
 
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleGapFill() {
+    if (process.env.QUANTIFY_STAGING_VALIDATION_MODE === 'true') return
     const config = await this.mergeDynamicSymbols(this.getConfig())
     const startedAt = Date.now()
     try {
@@ -100,6 +105,7 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
 
   @Cron(CronExpression.EVERY_MINUTE)
   async handleDynamicSymbolRefresh() {
+    if (process.env.QUANTIFY_STAGING_VALIDATION_MODE === 'true') return
     if (this.refreshInProgress) return
     this.refreshInProgress = true
 

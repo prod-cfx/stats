@@ -20,6 +20,7 @@ export class GridRuntimeSchedulerService {
 
   @Cron(CronExpression.EVERY_MINUTE)
   async syncActiveInstances(): Promise<void> {
+    if (process.env.QUANTIFY_STAGING_VALIDATION_MODE === 'true') return
     const instances = await this.txEvents.withAfterCommit(async () => this.repository.listActiveInstances(this.batchSize))
     for (const instance of instances) {
       try {

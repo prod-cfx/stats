@@ -47,7 +47,6 @@ import { SemanticExecutableSemanticsService } from './services/semantic-executab
 import { SemanticFrameNormalizerService } from './services/semantic-frame-normalizer.service'
 import { SemanticOpenSlotAnswerResolverService } from './services/semantic-open-slot-answer-resolver.service'
 import { SemanticOrchestrationRegistryService } from './services/semantic-orchestration-registry.service'
-import { SemanticRuleProjectionService } from './services/semantic-rule-projection.service'
 // M3: SemanticSeedExtractorService import 已移除（PR2c-final-1bc 清理：caller 切 GenericSeedDispatcher 后字段 0 引用）
 // M5: SemanticPresentationRegistryService 已于 PR3c.7d 移除（切 pure helper，Issue #1279）
 import { SemanticSeedStateBuilderService } from './services/semantic-seed-state-builder.service'
@@ -123,7 +122,6 @@ import { UnsupportedFallbackService } from './services/unsupported-fallback.serv
     SemanticAtomContractService,
     SemanticAtomRegistryService,
     SemanticOrchestrationRegistryService,
-    SemanticRuleProjectionService,
     SemanticContractReadinessService,
     SemanticContractShapeNormalizerService,
     SemanticExecutableSemanticsService,
