@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { SemanticActionState, SemanticAtomContract, SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticOrchestrationContract, SemanticOrchestrationNode, SemanticPositionConstraintState, SemanticRiskState, SemanticSlotState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import type { AtomExpr, RuleEffects, RuleEffectsByRole, SemanticRule, SemanticRulePhase, SemanticRuleSideScope } from '../types/atom-expr'
@@ -241,6 +241,8 @@ const INTERNAL_SEMANTIC_DISPLAY_KEY_PATTERN
 
 @Injectable()
 export class SemanticStateProjectionService {
+  private readonly logger = new Logger(SemanticStateProjectionService.name)
+
   constructor(
     private readonly executableSemantics: SemanticExecutableSemanticsService = new SemanticExecutableSemanticsService(),
     private readonly rulesMainflowReader: RulesMainflowReaderService = new RulesMainflowReaderService(),
@@ -471,6 +473,17 @@ export class SemanticStateProjectionService {
     if (eligible.length === 0) return []
 
     const blocks: SemanticDisplayLogicGraphBlock[] = []
+    // 显示层兜底去重：上游 merge / dedupeRulesBySignature 命中条件以签名为 key，
+    //   若两条语义等价的 rule 在 leaf 上有微差（如 evidence/sideScope 局部差异），
+    //   会同时进入 projection 渲染，UI 表现为重复 IF block。
+    //   兜底以「phase + conditionText + 排序后的 actionText 集合」为指纹去重，
+    //   保留 eligible 中首次出现的那条（顺序契约由 spec 固化）。
+    //   actionItems 为空时仍参与 dedupe（用空数组占位）—— 两条完全等价的
+    //   condition-only rule 本就是真正的重复；effects 不同的 rule 会因
+    //   actionItems 数组本身的差异而签名不同，不会误合。
+    //   签名用 JSON.stringify 避免 '|' 字面分隔符碰撞。
+    //   命中 dedupe 用 logger.debug 输出，避免 conversation view 热路径刷日志。
+    const seenRenderSignatures = new Set<string>()
     for (const [ruleIndex, rule] of eligible.entries()) {
       const sourceRuleIndex = sourceRules.findIndex(sourceRule => sourceRule.id === rule.id)
       const sourcePath = `rules[${sourceRuleIndex >= 0 ? sourceRuleIndex : ruleIndex}]`
@@ -509,6 +522,19 @@ export class SemanticStateProjectionService {
           sourcePath: `${sourcePath}.effects`,
         })
       }
+
+      const renderSignature = JSON.stringify([
+        rule.phase,
+        conditionText,
+        [...actionItems.map(item => item.text)].sort(),
+      ])
+      if (seenRenderSignatures.has(renderSignature)) {
+        this.logger.debug(
+          `display-layer dedupe dropped rule ${rule.id} with signature ${renderSignature}`,
+        )
+        continue
+      }
+      seenRenderSignatures.add(renderSignature)
 
       blocks.push({
         // Issue #1443：每条 rule 独立 IF block；不再用 AND_AT_THEN 连接独立 rule

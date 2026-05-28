@@ -8,7 +8,6 @@
 
 import type { SemanticRule } from '../../types/atom-expr'
 import type { SemanticState } from '../../types/semantic-state'
-import { SemanticRuleProjectionService } from '../semantic-rule-projection.service'
 import { SemanticStateProjectionService } from '../semantic-state-projection.service'
 
 function baseState(overrides: Partial<SemanticState>): SemanticState {
@@ -407,6 +406,109 @@ describe('semanticStateProjectionService — rules-first summary 渲染（#1395�
       expect(JSON.stringify(graph)).not.toContain('macd.golden_cross')
       expect(JSON.stringify(graph)).not.toContain('open_long')
     })
+
+    // staging 30 策略复测发现：两条 phase=exit 的 rule 在 dedupeRulesBySignature
+    //   签名上有微差（id 不同 + leaf 局部差异）但语义等价（同一退场条件 + 同一动作），
+    //   被透传到 projection 后 UI 渲染出两个重复 IF 出场块（见 issue 截图 1）。
+    //   buildDisplayLogicGraph 应基于「phase + 渲染后的 conditionText + 排序后的
+    //   actionText 集合」做兜底去重，保证 UI 不出现重复的出场提示。
+    it('两条语义等价的 exit rule（leaf 微差）→ displayLogicGraph 仅渲染一个出场块', () => {
+      const exitRuleA: SemanticRule = {
+        id: 'exit-ema20-a',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: {
+          kind: 'atom',
+          key: 'price.below_ma',
+          params: { maType: 'ema', period: 20 },
+        },
+        effects: [
+          { kind: 'atom', key: 'action.close_long', params: {} },
+        ],
+      }
+      const exitRuleB: SemanticRule = {
+        ...exitRuleA,
+        id: 'exit-ema20-b',
+        // 故意保留 evidence 微差 —— 之前的 dedupeRulesBySignature 会因此放过
+        evidence: { text: '价格低于 EMA20 时平多', source: 'dispatcher' },
+      } as SemanticRule
+      const graph = service.buildDisplayLogicGraph(baseState({ rules: [exitRuleA, exitRuleB] }))
+      const exitBlocks = graph.blocks.filter(b => b.type === 'IF')
+      expect(exitBlocks).toHaveLength(1)
+      // 契约：保留 eligible 中首次出现的 A（顺序契约）
+      expect(exitBlocks[0].id).toBe('exit-ema20-a')
+      // 内容契约：渲染出的 condition 与 action 必须含 EMA20 / 平多 语义，
+      //   而不是 dedupe 把内容也吞掉留个空壳块
+      const blockText = exitBlocks[0].items.map(item => item.text).join(' ')
+      expect(blockText).toMatch(/EMA/)
+      expect(blockText).toContain('平多')
+    })
+
+    // 反向用例：phase 同为 exit、condition 真不同 → 必须保留两个 block
+    it('两条 exit rule 条件不同 → 保留两个 IF block', () => {
+      const exitClose: SemanticRule = {
+        id: 'exit-below-ema20',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.below_ma', params: { maType: 'ema', period: 20 } },
+        effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+      }
+      const exitStop: SemanticRule = {
+        id: 'exit-above-ema60',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.above_ma', params: { maType: 'ema', period: 60 } },
+        effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+      }
+      const graph = service.buildDisplayLogicGraph(baseState({ rules: [exitClose, exitStop] }))
+      const exitBlocks = graph.blocks.filter(b => b.type === 'IF')
+      expect(exitBlocks).toHaveLength(2)
+      expect(exitBlocks.map(b => b.id).sort()).toEqual(['exit-above-ema60', 'exit-below-ema20'])
+    })
+
+    // 反向用例：phase 不同且 effects 不同 → 必须保留两个 block
+    //   （注：纯净隔离 phase 维度的最小反例难构造——entry/exit 的 actionSuffix
+    //   `buildRuleActionSuffix` 与 effects 都会引入差异；此 spec 实际同时测
+    //   conditionText 副作用 + effects + phase 三维度，命名已更新避免误导）
+    it('phase 不同且 effects 不同 → 保留两个 IF block', () => {
+      const entryRule: SemanticRule = {
+        id: 'entry-cross-ema',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.above_ma', params: { maType: 'ema', period: 20 } },
+        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      }
+      const exitRule: SemanticRule = {
+        id: 'exit-cross-ema',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.above_ma', params: { maType: 'ema', period: 20 } },
+        effects: [{ kind: 'atom', key: 'action.close_short', params: {} }],
+      }
+      const graph = service.buildDisplayLogicGraph(baseState({ rules: [entryRule, exitRule] }))
+      const ifBlocks = graph.blocks.filter(b => b.type === 'IF')
+      expect(ifBlocks).toHaveLength(2)
+    })
+
+    // 配套 n1（PR #1694 第 2 轮）：condition-only（无 effects）的两条等价 rule
+    //   仍应被显示层去重；防止「actionItems 为空时跳过 dedupe」回归。
+    it('两条 condition-only rule 完全等价 → 仅渲染一个 IF block', () => {
+      const ruleA: SemanticRule = {
+        id: 'condition-only-a',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.above_ma', params: { maType: 'ema', period: 20 } },
+        effects: [],
+      }
+      const ruleB: SemanticRule = {
+        ...ruleA,
+        id: 'condition-only-b',
+      }
+      const graph = service.buildDisplayLogicGraph(baseState({ rules: [ruleA, ruleB] }))
+      const ifBlocks = graph.blocks.filter(b => b.type === 'IF')
+      expect(ifBlocks).toHaveLength(1)
+      expect(ifBlocks[0].id).toBe('condition-only-a')
+    })
   })
 
   // Issue #1403 子故障 A：grid 域 clarification 不再追问 atom-based position size。
@@ -661,78 +763,9 @@ describe('Issue #1443 — renderRule 通用 UI 简化', () => {
   })
 })
 
-describe('rules projection — pyramiding lifecycle guard noise', () => {
-  const ruleProjection = new SemanticRuleProjectionService()
-  const stateProjection = new SemanticStateProjectionService()
-
-  it('drops pyramiding_limit gate when no add_position action exists', () => {
-    const rules: SemanticRule[] = [
-      {
-        id: 'entry-ema',
-        phase: 'entry',
-        sideScope: 'long',
-        condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 60 } },
-        effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
-      },
-      {
-        id: 'exit-ema',
-        phase: 'exit',
-        sideScope: 'long',
-        condition: { kind: 'atom', key: 'indicator.cross_under', params: { indicator: 'ema', fastPeriod: 20, slowPeriod: 60 } },
-        effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
-      },
-      {
-        id: 'synthetic-pyramiding-gate',
-        phase: 'gate',
-        sideScope: 'both',
-        condition: { kind: 'atom', key: 'position.no_position', params: { sideScope: 'both' } },
-        effects: [{ kind: 'atom', key: 'position.pyramiding_limit', params: { maxLayers: 1, layerSizing: { kind: 'ratio', value: 0.01, unit: 'ratio' } } }],
-      },
-    ]
-
-    const state = ruleProjection.reprojectFromRules(baseState({
-      rules,
-      position: {
-        mode: 'fixed_ratio',
-        value: 0.01,
-        positionMode: 'long_only',
-        sizing: { kind: 'ratio', value: 0.01, unit: 'ratio' },
-        status: 'locked',
-        source: 'user_explicit',
-        openSlots: [],
-      },
-    }))
-    const summary = stateProjection.buildConversationView(state).summary
-
-    expect(state.rules?.map(rule => rule.id)).not.toContain('synthetic-pyramiding-gate')
-    expect(state.positionConstraint).toHaveLength(0)
-    expect(summary).not.toContain('金字塔')
-    expect(summary).not.toContain('最多1次加仓')
-    expect(summary).not.toContain('无任意方向仓位')
-    expect(summary).not.toContain('仓位：1%')
-  })
-
-  it('keeps pyramiding_limit when add_position action exists', () => {
-    const rules: SemanticRule[] = [
-      {
-        id: 'add-profit',
-        phase: 'entry',
-        sideScope: 'long',
-        condition: { kind: 'atom', key: 'price.percent_change', params: { basis: 'entry_avg_price', direction: 'up', valuePct: 3 } },
-        effects: [
-          { kind: 'atom', key: 'action.add_position', params: { addMode: 'profit_pct', profitThreshold: 3, sizing: { kind: 'ratio', value: 0.5, unit: 'ratio' } } },
-          { kind: 'atom', key: 'position.pyramiding_limit', params: { maxLayers: 3 } },
-        ],
-      },
-    ]
-
-    const state = ruleProjection.reprojectFromRules(baseState({ rules }))
-
-    expect(state.positionConstraint).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        key: 'position.pyramiding_limit',
-        params: expect.objectContaining({ maxLayers: 3 }),
-      }),
-    ]))
-  })
-})
+// PR #1691 hard-deleted `SemanticRuleProjectionService`，原本依赖该 service
+// 的 `rules projection — pyramiding lifecycle guard noise` describe 整段失效，
+// 连带阻塞同文件 spec 加载（编译期 `Cannot find module ../semantic-rule-projection.service`）。
+// 这里删除已死的 describe，让本文件其余 spec 与本 PR 新增 dedupe case 真正可执行。
+// 配套 follow-up Issue #1696：补全 #1691 后置清理，迁移这两条断言到新的
+// rules-only 主流程 spec（同时收 9 个同根因 spec 的清理）。
