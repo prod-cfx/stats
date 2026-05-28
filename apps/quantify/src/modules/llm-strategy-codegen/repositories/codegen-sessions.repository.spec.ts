@@ -1237,3 +1237,101 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     }))
   })
 })
+
+describe('codegenSessionsRepository symbol strict validation (Issue #1702)', () => {
+  const buildTxAndRepo = () => {
+    const tx = {
+      $executeRaw: jest.fn(),
+      strategyTemplate: { create: jest.fn().mockResolvedValue({ id: 'template-1' }) },
+      strategyInstance: { create: jest.fn().mockResolvedValue({ id: 'instance-1' }) },
+      llmStrategyCodegenSession: { findUnique: jest.fn(), update: jest.fn() },
+    }
+    const txHost = {
+      tx,
+      withTransaction: jest.fn(async (callback: () => Promise<unknown>) => callback()),
+    }
+    const repo = new CodegenSessionsRepository(txHost as any)
+    return { tx, repo }
+  }
+
+  const baseInput = (symbol: unknown, marketType: string = 'spot') => ({
+    userId: 'user-1',
+    sessionId: 'session-strict-1',
+    name: 'strict-symbol-test',
+    description: 'desc',
+    llmModel: 'gpt-4o-mini',
+    scriptCode: 'return {}',
+    specDesc: {},
+    params: {
+      exchange: 'okx',
+      marketType,
+      symbol,
+      timeframe: '5m',
+    },
+  })
+
+  it('rejects naked base "eth" with BACKTEST_SNAPSHOT_SYMBOL_INVALID', async () => {
+    const { repo } = buildTxAndRepo()
+    await expect(repo.createDraftStrategyInstanceFromPublishedSession(baseInput('eth') as any))
+      .rejects.toMatchObject({
+        code: 'BACKTEST_SNAPSHOT_SYMBOL_INVALID',
+        args: expect.objectContaining({ reason: 'missing_quote' }),
+      })
+  })
+
+  it('rejects venue-native "BTC-USDT-SWAP" with shape_mismatch', async () => {
+    const { repo } = buildTxAndRepo()
+    await expect(repo.createDraftStrategyInstanceFromPublishedSession(baseInput('BTC-USDT-SWAP', 'perp') as any))
+      .rejects.toMatchObject({
+        code: 'BACKTEST_SNAPSHOT_SYMBOL_INVALID',
+        args: expect.objectContaining({ reason: 'shape_mismatch' }),
+      })
+  })
+
+  it('rejects shape with hyphen separators (btc-usdt) — fails strict shape_mismatch after toUpperCase', async () => {
+    // resolveExecutionSymbol does toUpperCase first ('btc-usdt' -> 'BTC-USDT'); the strict
+    // regex only allows [A-Z0-9]+ in basePair, so hyphen-separated shapes still trip
+    // shape_mismatch after normalization. Guards venue-native hyphen forms reaching the gate.
+    const { repo } = buildTxAndRepo()
+    await expect(repo.createDraftStrategyInstanceFromPublishedSession(baseInput('btc-usdt') as any))
+      .rejects.toMatchObject({
+        code: 'BACKTEST_SNAPSHOT_SYMBOL_INVALID',
+        args: expect.objectContaining({ reason: 'shape_mismatch' }),
+      })
+  })
+
+  it('rejects non-string symbol payload', async () => {
+    const { repo } = buildTxAndRepo()
+    await expect(repo.createDraftStrategyInstanceFromPublishedSession(baseInput(123) as any))
+      .rejects.toMatchObject({
+        code: 'BACKTEST_SNAPSHOT_SYMBOL_INVALID',
+      })
+  })
+
+  it('accepts compliant BTCUSDT and proceeds to template/instance creation', async () => {
+    const { tx, repo } = buildTxAndRepo()
+    const result = await repo.createDraftStrategyInstanceFromPublishedSession(baseInput('BTCUSDT') as any)
+    expect(result).toEqual({ strategyTemplateId: 'template-1', strategyInstanceId: 'instance-1' })
+    expect(tx.strategyTemplate.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('accepts compliant ETHUSDC for spot', async () => {
+    const { tx, repo } = buildTxAndRepo()
+    await repo.createDraftStrategyInstanceFromPublishedSession(baseInput('ETHUSDC') as any)
+    expect(tx.strategyTemplate.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back to BTCUSDT default when params.symbol is missing (backward compatible)', async () => {
+    const { tx, repo } = buildTxAndRepo()
+    const input = baseInput(undefined)
+    delete (input.params as any).symbol
+    await repo.createDraftStrategyInstanceFromPublishedSession(input as any)
+    expect(tx.strategyTemplate.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        legs: expect.arrayContaining([
+          expect.objectContaining({ symbol: 'BTCUSDT:SPOT' }),
+        ]),
+      }),
+    }))
+  })
+})

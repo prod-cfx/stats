@@ -9,6 +9,7 @@ import {
   CODEGEN_CONFIRMABLE_SESSION_STATUSES,
   CODEGEN_REQUEUEABLE_SESSION_STATUSES,
 } from '../types/codegen-session-status'
+import { assertStrictSymbol } from '../utils/strict-symbol.util'
 
 const SESSION_SELECT_BASE = {
   id: true,
@@ -508,10 +509,29 @@ export class CodegenSessionsRepository {
     return timeframe || '5m'
   }
 
-  private resolveExecutionSymbol(params: Record<string, unknown>): string {
-    const rawSymbol = typeof params.symbol === 'string' ? params.symbol.trim().toUpperCase() : 'BTCUSDT'
+  /**
+   * Issue #1702：codegen → strategy_instance 写入前的 symbol strict 校验。
+   * 与 publish 闸门（compiled-publication-gate.service）使用同一份 assertStrictSymbol util，
+   * 拦下裸 base `eth` / venue 原生 `BTC-USDT-SWAP` / 大小写不规范等脏值在 codegen 阶段直接 fail-fast，
+   * 避免 symbol 错误传导到 publish/backtest 才被发现。
+   *
+   * params.symbol 缺省时走 `BTCUSDT` 默认（向后兼容历史 session）；提供时必须通过 strict 校验。
+   */
+  private resolveExecutionSymbol(params: Record<string, unknown>, sessionId: string): string {
     const marketType = typeof params.marketType === 'string' ? params.marketType.trim().toLowerCase() : 'spot'
-    return toSymbolCode(rawSymbol, marketType === 'perp' ? 'PERP' : 'SPOT')
+    const normalizedMarketType: 'spot' | 'perp' = marketType === 'perp' ? 'perp' : 'spot'
+
+    if (params.symbol === undefined || params.symbol === null) {
+      return toSymbolCode('BTCUSDT', normalizedMarketType === 'perp' ? 'PERP' : 'SPOT')
+    }
+
+    const rawSymbol = typeof params.symbol === 'string' ? params.symbol.trim().toUpperCase() : params.symbol
+    assertStrictSymbol(rawSymbol, {
+      sessionId,
+      marketType: normalizedMarketType,
+      messageKey: 'codegen.session_symbol_invalid',
+    })
+    return toSymbolCode(rawSymbol as string, normalizedMarketType === 'perp' ? 'PERP' : 'SPOT')
   }
 
   private buildParamsSchema(params: Record<string, unknown>): Prisma.InputJsonValue {
@@ -551,7 +571,7 @@ export class CodegenSessionsRepository {
     },
   ): Promise<{ strategyTemplateId: string, strategyInstanceId: string }> {
     const executionTimeframe = this.resolveExecutionTimeframe(input.params)
-    const executionSymbol = this.resolveExecutionSymbol(input.params)
+    const executionSymbol = this.resolveExecutionSymbol(input.params, input.sessionId)
     const templateName = `${input.name}-${input.sessionId}`
     const strategyTemplate = await tx.strategyTemplate.create({
       data: {
