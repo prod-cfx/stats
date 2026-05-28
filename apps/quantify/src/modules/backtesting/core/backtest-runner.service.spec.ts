@@ -1368,6 +1368,42 @@ describe('backtestRunnerService', () => {
       expect(report.diagnostics.signalTriggerCount).toBeGreaterThan(0)
       expect(report.diagnostics.fillCount).toBe(0)
     })
+
+    // Issue #1708：V1 StrategyDecision { action: 'NOOP' } 不能被 signalTriggerCount 错算成 trigger，
+    //   否则 diagnosticReason 会被错派为 SIGNAL_FIRED_BUT_NO_FILL（实证 staging session
+    //   cmppkswpt0iytbbqsb3z8eyv2：7 天 673 bars 全 V1 NOOP，应归 NO_SIGNAL_FIRED_IN_RANGE）
+    it('V1 StrategyDecision action=NOOP 不计入 signalTriggerCount（Issue #1708 回归）', async () => {
+      const runner = createRunner()
+      const report = await runner.run({
+        ...baseInput,
+        strategy: {
+          id: 'v1-noop-only', params: {},
+          fn: () => ({ action: 'NOOP', reason: 'compiled.noop' } as never),
+          specSnapshot: { rules: [{ id: 'r1' }] },
+        },
+      })
+      expect(report.diagnostics.compiledRulesCount).toBe(1)
+      expect(report.diagnostics.signalTriggerCount).toBe(0)
+      expect(report.diagnostics.fillCount).toBe(0)
+    })
+
+    it('V1 StrategyDecision action=OPEN_LONG 正确计入 signalTriggerCount', async () => {
+      const runner = createRunner()
+      const report = await runner.run({
+        ...baseInput,
+        strategy: {
+          id: 'v1-open-long', params: {},
+          fn: () => ({
+            action: 'OPEN_LONG',
+            size: { mode: 'QUOTE', value: 10 },
+            reason: 'compiled.open',
+          } as never),
+          specSnapshot: { rules: [{ id: 'r1' }] },
+        },
+      })
+      expect(report.diagnostics.compiledRulesCount).toBe(1)
+      expect(report.diagnostics.signalTriggerCount).toBeGreaterThan(0)
+    })
   })
 })
 

@@ -264,10 +264,16 @@ export class BacktestRunnerService {
         : await input.strategy.fn({
           ...strategyContext,
         })
-      // 任何非 NOOP 都算 trigger；intent 必为 object（null/undefined 视为无信号不计数）。
+      // 任何非 NOOP 都算 trigger。intent 形态有两种：
+      //   - legacy engine intent: { type: 'NOOP' | 'OPEN_LONG' | ... }
+      //   - V1 StrategyDecision: { action: 'NOOP' | 'OPEN_LONG' | ... }（Stage3 主流编译产物）
+      // 同时识别两种 NOOP，避免 V1 NOOP 被错算成 trigger 导致 diagnosticReason
+      // 误派为 SIGNAL_FIRED_BUT_NO_FILL（实证 Issue #1708）。
       const isObjectIntent = intent != null && typeof intent === 'object'
-      const isNoop = isObjectIntent && 'type' in intent && (intent as { type?: unknown }).type === 'NOOP'
-      if (isObjectIntent && !isNoop) {
+      const intentRecord = intent as { type?: unknown; action?: unknown }
+      const isLegacyNoop = isObjectIntent && intentRecord.type === 'NOOP'
+      const isV1Noop = isObjectIntent && intentRecord.action === 'NOOP'
+      if (isObjectIntent && !isLegacyNoop && !isV1Noop) {
         diagnostics.signalTriggerCount += 1
       }
       this.applyCompiledOrderProgramFills({
