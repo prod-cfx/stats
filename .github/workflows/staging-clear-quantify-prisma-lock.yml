@@ -43,7 +43,7 @@ jobs:
             fi
           done
 
-          pnpm exec dotenv "${ENV_ARGS[@]}" -- node <<'NODE'
+          pnpm exec dotenv -o "${ENV_ARGS[@]}" -- node <<'NODE'
           const { Client } = require('pg')
 
           void (async () => {
