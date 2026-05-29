@@ -4451,6 +4451,15 @@ export class CanonicalSpecBuilderService {
     sideScope: SemanticRule['sideScope'],
     defaultTimeframe: string | null,
   ): CanonicalConditionNode | null {
+    // rules-only 主数据流：planner 常把「不限制开仓时间」误产出为 strategy.time_window
+    //   { windows: "all" } 注入 entry/exit condition。该窗口语义恒真，且 strategy.time_window
+    //   是 structural gate atom，IR condition 层无对应 emit，会落到 dispatcher default
+    //   抛 codegen.canonical_spec_v2_condition_unsupported:strategy.time_window，整条策略被
+    //   REJECTED、无法发布回测。no-op 窗口直接 drop，由上层 buildConditionFromSemanticRuleExpr
+    //   的 null-filter 自动从 AND/OR/sequence 中剔除；有实义的时间窗仍按原路径处理（不静默降级）。
+    if (this.isNoOpTimeWindowRuleAtom(atom)) {
+      return null
+    }
     return this.buildConditionFromSemanticTriggerContract({
       id: `rules-tree-${atom.key}`,
       key: atom.key,
@@ -4544,6 +4553,38 @@ export class CanonicalSpecBuilderService {
       && (condition.key === ATOM_CONTRACT_REGISTRY['volume.threshold'].key
         || condition.key === ATOM_CONTRACT_REGISTRY['volatility.atr_threshold'].key
         || condition.key === ATOM_CONTRACT_REGISTRY['strategy.time_window'].key)
+  }
+
+  /**
+   * no-op time_window：windows 全为「不限制」语义（或缺省）→ 恒真，无过滤作用。
+   * 与 registry negativeExample「不限制开仓时间」对齐。仅判定 no-op；有实义窗口返回 false。
+   */
+  private isNoOpTimeWindowRuleAtom(atom: AtomExprAtom): boolean {
+    if (atom.key !== ATOM_CONTRACT_REGISTRY['strategy.time_window'].key) return false
+    const windowsParam = atom.params?.windows
+    const windows = Array.isArray(windowsParam)
+      ? windowsParam
+      : (typeof windowsParam === 'string' && windowsParam.trim().length > 0 ? [windowsParam.trim()] : [])
+    // every([]) === true：缺省 windows 等同「不限制」
+    return windows.every(window => this.isUnrestrictedTimeWindowValue(window))
+  }
+
+  private isUnrestrictedTimeWindowValue(value: unknown): boolean {
+    if (typeof value !== 'string') return false
+    const normalized = value.trim().toLowerCase()
+    return normalized === ''
+      || normalized === 'all'
+      || normalized === 'any'
+      || normalized === 'always'
+      || normalized === 'anytime'
+      || normalized === '24/7'
+      || normalized === '24x7'
+      || normalized === '24h'
+      || normalized === 'none'
+      || normalized === 'unrestricted'
+      || normalized === '不限'
+      || normalized === '不限制'
+      || normalized === '全天'
   }
 
   private buildConditionFromSemanticExpressionTrigger(

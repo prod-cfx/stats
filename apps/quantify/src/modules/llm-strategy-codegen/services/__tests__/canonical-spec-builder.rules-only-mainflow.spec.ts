@@ -2077,3 +2077,79 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     }))
   })
 })
+
+describe('CanonicalSpecBuilderService rules-only no-op strategy.time_window', () => {
+  const compileFallback = {
+    exchange: 'binance' as const,
+    symbol: 'BTCUSDT',
+    baseTimeframe: '15m',
+    positionPct: 10,
+  }
+
+  // 复现 staging session cmpqktdul124q1hqskd8wgay5：
+  //   OKX 合约 BTCUSDT 15m，webhook signalId=whale_buy 开多。planner 误注入
+  //   strategy.time_window{windows:"all"}（=「不限制开仓时间」）进 entry condition AND，
+  //   该 structural gate atom 落到 IR dispatcher default 抛
+  //   codegen.canonical_spec_v2_condition_unsupported:strategy.time_window，整条策略 REJECTED。
+  function webhookEntryState(timeWindowParams: Record<string, unknown> | null): SemanticState {
+    const children: AtomExprAtom[] = [
+      { kind: 'atom', key: 'external.signal', params: { secret: 'configured', provider: 'webhook', signalId: 'whale_buy' } },
+    ]
+    if (timeWindowParams) {
+      children.push({ kind: 'atom', key: 'strategy.time_window', params: timeWindowParams })
+    }
+    return baseState({
+      rules: [{
+        id: 'entry-webhook-whale-buy',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: children.length === 1 ? children[0]! : { kind: 'and', children },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+  }
+
+  it('drops no-op windows:"all" time_window and collapses entry condition to external.signal', () => {
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(
+      webhookEntryState({ windows: 'all', timezone: 'Asia/Shanghai' }),
+    )
+    const entry = spec.rules.find(rule => rule.phase === 'entry')
+    expect(entry).toBeDefined()
+    expect(JSON.stringify(entry!.condition)).not.toContain('strategy.time_window')
+    expect(JSON.stringify(entry!.condition)).toContain('external.signal')
+  })
+
+  it('compiles to IR without unsupported:strategy.time_window after no-op drop', () => {
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(
+      webhookEntryState({ windows: 'all', timezone: 'Asia/Shanghai' }),
+    )
+    expect(() => new CanonicalSpecV2IrCompilerService().compile({ canonicalSpec: spec, fallback: compileFallback }))
+      .not.toThrow(/canonical_spec_v2_condition_unsupported/u)
+  })
+
+  it.each([
+    ['windows: "24/7"', { windows: '24/7', timezone: 'UTC' }],
+    ['windows: "always"', { windows: 'always', timezone: 'UTC' }],
+    ['windows: [] 空数组', { windows: [], timezone: 'UTC' }],
+    ['windows 缺省', { timezone: 'UTC' }],
+    ['windows: ["all"] 数组形态', { windows: ['all'], timezone: 'Asia/Shanghai' }],
+  ])('treats %s as no-op and drops it from entry condition', (_label, params) => {
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(webhookEntryState(params))
+    const entry = spec.rules.find(rule => rule.phase === 'entry')
+    expect(JSON.stringify(entry?.condition ?? {})).not.toContain('strategy.time_window')
+  })
+
+  it('keeps a meaningful time_window in the spec (no silent degradation)', () => {
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(
+      webhookEntryState({ windows: '09:30-11:30', timezone: 'Asia/Shanghai' }),
+    )
+    const entry = spec.rules.find(rule => rule.phase === 'entry')
+    expect(JSON.stringify(entry?.condition ?? {})).toContain('strategy.time_window')
+  })
+})
