@@ -63,10 +63,8 @@ jobs:
             echo "[INFO] APP_ENV=$APP_ENV DATABASE_URL=set"
 
             env APP_ENV="$APP_ENV" DATABASE_URL="$DATABASE_URL" pnpm --filter @net/quantify exec prisma migrate resolve \
-              --rolled-back "$MIGRATION" \
-              --schema apps/quantify/prisma/schema
+              --rolled-back "$MIGRATION"
 
-            env APP_ENV="$APP_ENV" DATABASE_URL="$DATABASE_URL" pnpm --filter @net/quantify exec prisma migrate status \
-              --schema apps/quantify/prisma/schema
+            env APP_ENV="$APP_ENV" DATABASE_URL="$DATABASE_URL" pnpm --filter @net/quantify exec prisma migrate status
           '
           REMOTE
