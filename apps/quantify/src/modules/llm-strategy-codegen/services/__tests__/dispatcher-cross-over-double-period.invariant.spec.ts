@@ -39,6 +39,19 @@ describe('issue #1338 — dispatcher cross_over double-period + 多原子并行�
     })
   })
 
+  it('cross_over paramSlots：MA 6/48 斜杠写法保留 fastPeriod=6, slowPeriod=48', () => {
+    const patch = dispatcher.dispatch('OKX 模拟盘 BTC-USDT-SWAP 合约 15m，MA 6/48 均线交叉趋势跟随，MA6 上穿 MA48 做多，仓位 35%。')
+    const crossOverTrigger = collectRuleConditionLeaves(patch).find(
+      (t): t is TypedLeaf => t.key === 'indicator.cross_over',
+    )
+    expect(crossOverTrigger).toBeDefined()
+    expect(crossOverTrigger!.params).toMatchObject({
+      indicator: 'ma',
+      fastPeriod: 6,
+      slowPeriod: 48,
+    })
+  })
+
   it('cross_under paramSlots：fastPeriod=20, slowPeriod=50（与 cross_over 对称）', () => {
     const patch = dispatcher.dispatch(utterance)
     const crossUnderTrigger = collectRuleConditionLeaves(patch).find(t => t.key === 'indicator.cross_under')

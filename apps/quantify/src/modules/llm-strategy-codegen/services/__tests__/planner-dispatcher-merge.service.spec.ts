@@ -2115,3 +2115,70 @@ describe('PlannerDispatcherMergeService — lift dispatcher position.sizing acro
     expect(positions).toHaveLength(1)
   })
 })
+
+describe('PlannerDispatcherMergeService — MA cross placeholder period repair', () => {
+  const svc = new PlannerDispatcherMergeService()
+
+  const zeroMaParams = {
+    indicator: 'ma',
+    fastPeriod: 0,
+    slowPeriod: 0,
+    period: 0,
+    value: 0,
+  }
+
+  const explicitMaParams = {
+    indicator: 'ma',
+    fastPeriod: 6,
+    slowPeriod: 48,
+  }
+
+  it('uses dispatcher MA6/48 periods when planner emitted zero placeholders', () => {
+    const planner: CodegenSemanticPatch = {
+      rules: [{
+        id: 'planner-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_over', params: zeroMaParams },
+        effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }, {
+        id: 'planner-exit',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_under', params: zeroMaParams },
+        effects: { actions: [{ kind: 'atom', key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+
+    const dispatcher: CodegenSemanticPatch = {
+      rules: [{
+        id: 'dispatcher-entry',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_over', params: explicitMaParams },
+        effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }, {
+        id: 'dispatcher-exit',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.cross_under', params: explicitMaParams },
+        effects: { actions: [{ kind: 'atom', key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergePlannerAndDispatcherPatches(planner, dispatcher)
+    const entry = merged?.rules?.find(rule => rule.phase === 'entry')
+    const exit = merged?.rules?.find(rule => rule.phase === 'exit')
+
+    expect(entry?.condition).toEqual(expect.objectContaining({
+      kind: 'atom',
+      key: 'indicator.cross_over',
+      params: expect.objectContaining({ indicator: 'ma', fastPeriod: 6, slowPeriod: 48 }),
+    }))
+    expect(exit?.condition).toEqual(expect.objectContaining({
+      kind: 'atom',
+      key: 'indicator.cross_under',
+      params: expect.objectContaining({ indicator: 'ma', fastPeriod: 6, slowPeriod: 48 }),
+    }))
+  })
+})

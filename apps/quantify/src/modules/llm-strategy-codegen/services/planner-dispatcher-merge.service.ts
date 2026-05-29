@@ -3768,7 +3768,11 @@ export class PlannerDispatcherMergeService {
         ...(sig === `${leaf.key}|both` ? [] : (dispatcherByKey.get(`${leaf.key}|both`) ?? [])),
       ]
       if (candidates.length === 0) return leaf
-      const filledParams = this.fillMissingParams(leaf.params, candidates)
+      const filledParams = this.repairMovingAverageCrossPlaceholderParams(
+        leaf.key,
+        this.fillMissingParams(leaf.params, candidates),
+        candidates,
+      )
       if (filledParams === leaf.params) return leaf
       return { ...leaf, params: filledParams }
     }
@@ -3812,6 +3816,46 @@ export class PlannerDispatcherMergeService {
       }
     }
     return filled ?? base
+  }
+
+  private repairMovingAverageCrossPlaceholderParams(
+    key: string,
+    base: Record<string, unknown> | undefined,
+    candidates: ReadonlyArray<Record<string, unknown>>,
+  ): Record<string, unknown> | undefined {
+    if (key !== 'indicator.cross_over' && key !== 'indicator.cross_under') return base
+    if (!base || !this.isMovingAverageIndicator(base.indicator)) return base
+
+    const candidate = candidates.find(params => this.isMovingAverageIndicator(params.indicator))
+    if (!candidate) return base
+
+    const fastPeriod = this.readPositiveNumberParam(candidate, 'fastPeriod')
+    const slowPeriod = this.readPositiveNumberParam(candidate, 'slowPeriod')
+    if (fastPeriod === null || slowPeriod === null) return base
+
+    let next = base
+    const setIfPlaceholder = (paramKey: string, value: number): void => {
+      if (!this.isZeroPlaceholder(next[paramKey])) return
+      next = { ...next, [paramKey]: value }
+    }
+    setIfPlaceholder('fastPeriod', fastPeriod)
+    setIfPlaceholder('slowPeriod', slowPeriod)
+    return next
+  }
+
+  private isMovingAverageIndicator(value: unknown): boolean {
+    return value === 'ma' || value === 'sma' || value === 'ema'
+  }
+
+  private readPositiveNumberParam(params: Record<string, unknown>, key: string): number | null {
+    const raw = params[key]
+    const value = typeof raw === 'number' ? raw : (typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN)
+    if (!Number.isFinite(value) || value <= 0) return null
+    return value
+  }
+
+  private isZeroPlaceholder(value: unknown): boolean {
+    return value === 0 || value === '0' || value === null
   }
 
   /**
