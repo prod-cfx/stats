@@ -1734,6 +1734,7 @@ export class PlannerDispatcherMergeService {
     }
     const dispatcher = dispatcherPatch as InternalPlannerPatch | null | undefined
     const merged = this.mergeRulesNativePatches(plannerPatch, dispatcher) ?? this.cloneRulesNativePatch(plannerPatch as InternalPlannerPatch)
+    if (dispatcher) this.appendDispatcherRulesForMissingLifecyclePhases(merged, dispatcher)
     if (userMessage.trim().length > 0) {
       try {
         this.hydratePlannerMultiTimeframeRules(merged, userMessage)
@@ -2036,7 +2037,15 @@ export class PlannerDispatcherMergeService {
   ): AtomExpr {
     if (rule.phase !== 'entry') return condition
     const leaves = collectAtomLeaves(condition)
-    if (leaves.some(leaf => leaf.key === ATOM_CONTRACT_REGISTRY['condition.sequence'].key)) return condition
+    const existingRsiReclaim = leaves.find(leaf =>
+      leaf.key === ATOM_CONTRACT_REGISTRY['condition.sequence'].key
+      && leaf.params?.sequenceKind === 'rsi_reclaim',
+    )
+    if (existingRsiReclaim) {
+      return this.isRsiReclaimWithOnlyRsiThresholdNoise(leaves, existingRsiReclaim)
+        ? existingRsiReclaim
+        : condition
+    }
     if (!/RSI/iu.test(userMessage)) return condition
     if (!/跌破|低于|下方/iu.test(userMessage)) return condition
     if (!/重新上穿|上穿|回到|重新站上/iu.test(userMessage)) return condition
@@ -2061,6 +2070,32 @@ export class PlannerDispatcherMergeService {
       kind: 'and',
       children: [condition, sequence],
     }
+  }
+
+  private isRsiReclaimWithOnlyRsiThresholdNoise(
+    leaves: ReadonlyArray<AtomExprAtom>,
+    sequence: AtomExprAtom,
+  ): boolean {
+    const otherLeaves = leaves.filter(leaf => leaf !== sequence)
+    if (otherLeaves.length === 0) return false
+    return otherLeaves.every(leaf => this.isRsiReclaimThresholdNoiseLeaf(leaf))
+  }
+
+  private isRsiReclaimThresholdNoiseLeaf(leaf: AtomExprAtom): boolean {
+    if (
+      leaf.key === ATOM_CONTRACT_REGISTRY['oscillator.rsi_lte'].key
+      || leaf.key === ATOM_CONTRACT_REGISTRY['oscillator.rsi_gte'].key
+    ) {
+      return true
+    }
+    if (
+      leaf.key !== ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key
+      && leaf.key !== 'indicator.threshold_lte'
+      && leaf.key !== 'indicator.threshold_gte'
+    ) {
+      return false
+    }
+    return this.readStringParam(leaf.params, 'indicator') === 'rsi'
   }
 
   private extractRsiReclaimThreshold(text: string): number | null {
@@ -2822,6 +2857,34 @@ export class PlannerDispatcherMergeService {
     if (expr.kind === 'not') return { ...expr, child: this.normalizeAtomExprForSignature(expr.child) }
     if (expr.kind === 'sequence') return { ...expr, steps: expr.steps.map(step => this.normalizeAtomExprForSignature(step)) }
     return expr
+  }
+
+  private appendDispatcherRulesForMissingLifecyclePhases(
+    merged: InternalPlannerPatch,
+    dispatcher: InternalPlannerPatch,
+  ): void {
+    const rules = merged.rules
+    const dispatcherRules = dispatcher.rules
+    if (!rules?.length || !dispatcherRules?.length) return
+
+    const existingPhases = new Set(rules.map(rule => rule.phase))
+    const toAppend = dispatcherRules.filter(rule => {
+      if (rule.phase !== 'entry' && rule.phase !== 'exit') return false
+      if (existingPhases.has(rule.phase)) return false
+      if (collectAtomLeaves(rule.condition).length === 0) return false
+      return listRuleEffects(rule.effects)
+        .flatMap(effect => collectAtomLeaves(effect))
+        .some(leaf => this.isLifecycleActionAtom(leaf.key))
+    })
+    if (toAppend.length === 0) return
+    merged.rules = [...rules, ...toAppend]
+  }
+
+  private isLifecycleActionAtom(key: string): boolean {
+    return key === ATOM_CONTRACT_REGISTRY['action.open_long'].key
+      || key === ATOM_CONTRACT_REGISTRY['action.open_short'].key
+      || key === ATOM_CONTRACT_REGISTRY['action.close_long'].key
+      || key === ATOM_CONTRACT_REGISTRY['action.close_short'].key
   }
 
   private findDispatcherTakeProfitReplacement(

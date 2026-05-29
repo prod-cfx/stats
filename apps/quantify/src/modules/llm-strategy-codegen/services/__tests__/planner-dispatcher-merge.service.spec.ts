@@ -2182,3 +2182,107 @@ describe('PlannerDispatcherMergeService — MA cross placeholder period repair',
     }))
   })
 })
+
+describe('PlannerDispatcherMergeService — plaza range and RSI regressions', () => {
+  const svc = new PlannerDispatcherMergeService()
+
+  it('keeps dispatcher range-low entry when planner only produced range-high exit', () => {
+    const text = '基于 OKX 模拟盘 BTC-USDT 现货 15m，创建区间低买高卖策略。入场规则：价格位于最近 36 根 K 线区间下 20% 时买入；出场规则：价格回到区间上 55% 或盈利达到 0.45% 时卖出平仓；风控：单次仓位 25%，不使用杠杆，止损 3%。'
+    const planner = {
+      rules: [{
+        id: 'planner-exit-range-high',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.range_position_gte', params: { lookbackBars: 36, thresholdPct: 55 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const entry = merged?.rules?.find(rule => rule.phase === 'entry')
+    const entryEffects = entry ? listRuleEffects(entry.effects).flatMap(effect => collectAtomLeaves(effect)) : []
+
+    expect(entry?.condition).toEqual(expect.objectContaining({
+      key: 'price.range_position_lte',
+      params: expect.objectContaining({ lookbackBars: 36, thresholdPct: 20 }),
+    }))
+    expect(entryEffects).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'action.open_long' }),
+      expect.objectContaining({ key: 'position.sizing', params: expect.objectContaining({ sizing: { kind: 'ratio', value: 0.25, unit: 'ratio' } }) }),
+    ]))
+  })
+
+  it('repairs RSI reclaim rules that already contain impossible LTE plus CROSS_OVER noise', () => {
+    const text = '基于 OKX 模拟盘 ETH-USDT 现货 15m，创建 RSI 反转策略。入场规则：RSI14 从 38 下方向上穿回 38 时买入；出场规则：RSI14 高于 64 时卖出平仓；风控：仓位 25%，不使用杠杆，止损 5%，止盈 0.5%。'
+    const noisyEntryCondition = {
+      kind: 'and' as const,
+      children: [{
+        kind: 'and' as const,
+        children: [{
+          kind: 'atom' as const,
+          key: 'indicator.threshold_lte',
+          params: { indicator: 'rsi', period: 14, value: 38 },
+        }, {
+          kind: 'atom' as const,
+          key: 'indicator.cross_over',
+          params: { indicator: 'rsi', period: 14, value: 38 },
+        }],
+      }, {
+        kind: 'atom' as const,
+        key: 'condition.sequence',
+        params: { sequenceKind: 'rsi_reclaim', indicator: 'rsi', period: 14, threshold: 38, value: 38 },
+      }],
+    }
+    const planner = {
+      rules: [{
+        id: 'entry-rsi-reclaim-noisy',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: noisyEntryCondition,
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [
+            { kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: 5 } },
+            { kind: 'atom', key: 'risk.take_profit_pct', params: { valuePct: 0.5 } },
+          ],
+          positions: [{ kind: 'atom', key: 'position.sizing', params: { sizing: { kind: 'ratio', value: 0.25, unit: 'ratio' }, phase: 'entry' } }],
+          orchestration: [],
+          programs: [],
+        },
+      }, {
+        id: 'entry-rsi-cross-duplicate',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'and',
+          children: [{ kind: 'atom', key: 'indicator.threshold_lte', params: { indicator: 'rsi', period: 14, value: 38 } }, { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'rsi', period: 14, value: 38 } }],
+        },
+        effects: { actions: [{ kind: 'atom', key: 'action.open_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }, {
+        id: 'exit-rsi64',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.threshold_gte', params: { indicator: 'rsi', period: 14, value: 64 } },
+        effects: { actions: [{ kind: 'atom', key: 'action.close_long', params: {} }], risks: [], positions: [], orchestration: [], programs: [] },
+      }],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const entryRules = merged?.rules?.filter(rule => rule.phase === 'entry') ?? []
+    const entryLeaves = entryRules.flatMap(rule => collectAtomLeaves(rule.condition))
+
+    expect(entryRules).toHaveLength(1)
+    expect(entryLeaves).toEqual([expect.objectContaining({
+      key: 'condition.sequence',
+      params: expect.objectContaining({ sequenceKind: 'rsi_reclaim', period: 14, threshold: 38 }),
+    })])
+  })
+})
