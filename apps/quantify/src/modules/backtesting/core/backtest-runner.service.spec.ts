@@ -1,6 +1,7 @@
 import type { StrategyDecisionV1 } from '@ai/shared'
 import type { CanonicalStrategyIrV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ir'
 import type { BacktestRunInput, StrategyContext } from '../types/backtesting.types'
+import { evaluateExprPool } from '@ai/shared/script-engine/compiled-runtime'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { CanonicalStrategyAstCompilerService } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
 import { CompiledScriptEmitterService } from '@/modules/llm-strategy-codegen/services/compiled-script-emitter.service'
@@ -294,6 +295,75 @@ describe('backtestRunnerService', () => {
 
     expect(report.diagnostics.dataRequirementMissingCount).toBe(1)
     expect(report.summary.diagnosticReason).toBe('BACKTEST_DATA_REQUIREMENT_UNAVAILABLE')
+  })
+
+  it('runs compiled timeframe-scoped expressions against snapshot-derived secondary bars', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 'strategy-24-compiled-runtime-entry',
+        params: { marketType: 'perp' },
+        dataRequirements: { primary: ['15m', '1h'] },
+        specSnapshot: { rules: [{ id: 'entry-1h-above-ema' }] },
+        fn: (ctx) => {
+          if (ctx.position?.qty && ctx.position.qty > 0) {
+            return { action: 'CLOSE_LONG', size: { mode: 'QTY', value: 1 } } satisfies StrategyDecisionV1
+          }
+
+          const values = evaluateExprPool(
+            ctx,
+            [
+              {
+                id: 'close_1h',
+                nodeType: 'series',
+                sourceRef: 'close_1h',
+                payload: { kind: 'PRICE', field: 'close', timeframe: '1h' },
+                deps: [],
+              },
+              {
+                id: 'ema_2_1h',
+                nodeType: 'series',
+                sourceRef: 'ema_2_1h',
+                payload: { kind: 'EMA', params: { period: 2 }, timeframe: '1h' },
+                deps: ['close_1h'],
+              },
+              {
+                id: 'entry_1h',
+                nodeType: 'predicate',
+                sourceRef: 'indicator.above.1h',
+                payload: { kind: 'GT' },
+                deps: ['close_1h', 'ema_2_1h'],
+              },
+            ],
+            ['close_1h', 'ema_2_1h', 'entry_1h'],
+          )
+
+          return values.entry_1h === true
+            ? { action: 'OPEN_LONG', size: { mode: 'QUOTE', value: 100 } } satisfies StrategyDecisionV1
+            : { action: 'NOOP' } satisfies StrategyDecisionV1
+        },
+      },
+      dataRange: { fromTs: 4_000, toTs: 6_000 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 1_000, close: 10 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 2_000, close: 20 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 3_000, close: 30 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', closeTime: 4_000, open: 1, close: 1 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', closeTime: 5_000, open: 1, close: 1 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', closeTime: 6_000, open: 1, close: 1 }),
+      ],
+    })
+
+    expect(report.diagnostics.signalTriggerCount).toBeGreaterThan(0)
+    expect(report.summary.totalTrades).toBe(1)
+    expect(report.summary.diagnosticReason).toBeUndefined()
   })
 
   it('counts missing data requirements per symbol instead of globally', async () => {
