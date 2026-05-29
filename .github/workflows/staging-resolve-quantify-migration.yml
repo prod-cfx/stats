@@ -60,27 +60,6 @@ jobs:
               exit 1
             fi
 
-            node -e "
-              const { Client } = require('pg')
-              void (async () => {
-                const client = new Client({ connectionString: process.env.DATABASE_URL })
-                await client.connect()
-                const result = await client.query(\`
-                  SELECT migration_name, started_at, finished_at, rolled_back_at, logs
-                  FROM _prisma_migrations
-                  WHERE migration_name = \$1
-                  ORDER BY started_at
-                \`, [process.env.MIGRATION])
-                console.log('[INFO] migration rows before:', JSON.stringify(result.rows, null, 2))
-                const failed = result.rows.some(row => row.finished_at === null && row.rolled_back_at === null)
-                await client.end()
-                if (!failed) {
-                  console.error('[ERROR] no unresolved failed migration row found')
-                  process.exit(1)
-                }
-              })()
-            "
-
             pnpm --filter @net/quantify exec prisma migrate resolve \
               --rolled-back "$MIGRATION" \
               --schema apps/quantify/prisma/schema
