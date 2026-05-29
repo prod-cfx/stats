@@ -258,17 +258,26 @@ Bottom sheet（无独立 route，由调用方 `showXxxSheet(context, ...)` 打�
 
 **落地范围**：本决策仅落文档（本节 + `README.md` 设计真源段）。后续页面对齐 issue 引用本节作为基线，不在每个 PR 里重新解释。
 
-### 6. 策略详情形态与「载入到对话」主操作（Issue #1666）
+### 6. 策略详情形态与「载入到对话」主操作（Issue #1666 / #1757）
 
-**背景**：设计稿 `m-screens-2.jsx` 中 `StratDetail` 以 bottom sheet 形式呈现，主操作为底部「载入到对话」（紫色渐变按钮 + toast + 跳 `/ai`）；Flutter 一直把 `/strategy/:id` 实现为 `StrategyDetailPage`。
+**背景**：设计稿 `m-screens-2.jsx` 中 `StratDetail` 以 bottom sheet 形式呈现（`m-screens-2.jsx:986` `function StratDetail`，`borderRadius:'20px 20px 0 0'` + 顶部拖拽条 + `qfSheetUp` 上滑动画 + 半透明遮罩），底栏三按钮为「分享（ghost）→ 载入对话（ghost）→ 运行策略（`run-strat`，紫色渐变主操作）」；Flutter 一直把 `/strategy/:id` 实现为 full-screen `StrategyDetailPage`。#1666 已就形态与主操作做出技术决策，#1757 负责把该决策回流为设计基线文档，逐条钉到 app 现状，避免后续设计稿反复出现 sheet 与 route 冲突。
 
-**判定**：
+**判定**：以 Flutter app `/strategy/:id` full-screen route 当前实现为准；设计稿 sheet 形态仅作视觉探索，不作为 app 验收基线。
 
 - **形态保持 full-screen route**——`/strategy/:id` 命中本节 #3 的硬条件（需要深链 / 浏览器返回栈语义、内容超过半屏、列表卡片 push 进入需保留返回路径），不迁移到 bottom sheet。
-- **底部主操作 = 「载入到对话」**——对齐设计稿语义。按钮顺序为「分享（ghost）→ 载入到对话（accent，主操作）→ 订阅」。
-- **载入对话流程统一**——复用 `strategy_home_page._onLoadConversation` 的 toast helper：显示 `_LoadConversationToast`，~700ms 后跳 `/ai?loadStrategy=<id>`；timer 在 dispose / 重复点击时安全取消。toast key 与列表页保持一致 `strategy-load-conversation-toast`。
+- **底部主操作 = 「载入到对话」**——app 刻意把设计稿底栏 `run-strat`（运行策略）的紫色渐变主操作位让给「载入到对话」，对齐 #1666 决策；按钮顺序固定为「分享（ghost）→ 载入到对话（accent，主操作，`Expanded`）→ 订阅（ghost，`Expanded`）」，不保留独立「运行」按钮。
+- **载入对话流程统一**——复用 `strategy_home_page._onLoadConversation` 的 toast helper：显示 `LoadConversationToast`，~700ms 后 `context.go('/ai?loadStrategy=<id>')`；timer 在 dispose / 重复点击时安全取消。toast key 与列表页保持一致 `strategy-load-conversation-toast`。
 
-**不变项**：设计稿 `StratDetail` 中已有的「收益曲线 + 统计网格 + 策略参数 + 策略说明 + 用户反馈」内容已在 Flutter 详情页覆盖（#1565），本次不扩展也不删减。
+**验收对照（以 #1757 验收标准逐条核对，全部以 app 现状为基线）**：
+
+| # | 验收标准 | 结论 | app 证据 |
+|---|---------|------|---------|
+| [1] | 详情在 app 中是 full-screen route，不是 bottom sheet | 已满足。`/strategy/:id` 注册为 top-level `GoRoute`，builder 返回 `StrategyDetailPage`（带独立 `Scaffold`/`AppBar`），push 覆盖 tab bar；router 无对应 sheet | `lib/router/app_router.dart`（`/strategy/:id`）、`lib/pages/strategy/strategy_detail_page.dart` |
+| [2] | 主操作为「载入到对话」，行为与 app 一致 | 已满足。accent 主按钮 → toast → 700ms → `context.go('/ai?loadStrategy=<id>')`；detail 未加载完时按钮 disabled，避免空 toast | `strategy_detail_page.dart:84`（`_onLoadConversation`）、`:97`（`context.go`） |
+| [3] | 按钮顺序、文案、跳转目标与 app 一致 | 已满足。底栏顺序＝分享（`strategy-detail-share-btn`，ghost）→ 载入到对话（`strategy-detail-load-chat-btn`，accent）→ 订阅（`strategy-detail-subscribe-btn`，ghost）；文案走 l10n（`strategyDetailShareButton` / `strategyDetailLoadConversation` / `strategyDetailSubscribe`）；跳转目标 `/ai?loadStrategy=<id>` | `strategy_detail_page.dart:281`-`:317` |
+| [4] | 若设计稿仍保留 sheet 展示，必须标为视觉探索而非验收基线 | 已满足。`m-screens-2.jsx` `StratDetail` sheet + 底栏 `run-strat` 主操作均标记为**视觉探索**，不作为 app 验收基线；app 一律以 full-screen route + 「载入到对话」accent 主操作为准 | 本节「判定」首句 + 本表 |
+
+**不变项**：设计稿 `StratDetail` 中已有的「收益曲线 + 统计网格 + 策略参数 + 策略说明」内容已在 Flutter 详情页覆盖（#1565），本次不扩展也不删减；不回流设计稿 `run-strat`（运行策略）独立按钮。本节仅落文档，不改设计稿、不改 app 代码。
 
 ---
 
