@@ -2,6 +2,7 @@ import type { StrategyAdapterV1, StrategyDecisionV1 } from '@ai/shared'
 import type { ProgramLifecycleState, SubStrategySwitchInput } from '@ai/shared/script-engine/compiled-runtime'
 import type { BacktestRunInput } from '../types/backtesting.types'
 import { ErrorCode } from '@ai/shared'
+import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
 import {
   buildCompiledManifest,
   evaluateExprPool,
@@ -17,13 +18,18 @@ import { buildTimeframeBarStatus } from '@ai/shared/script-engine/helpers/build-
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/services/compiled-script-parser.service'
+import { isStrategyAdapterV1 } from '@/modules/strategy-runtime/strategy-protocol.util'
+import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 
 export interface BacktestProtocolScriptInput {
   id: string
   protocolVersion: 'v1'
   scriptCode: string
   params: Record<string, unknown>
+  executionEnvelope?: Record<string, unknown>
 }
+
+const SIGNAL_GENERATOR_VM_TIMEOUT_MS = 1000
 
 @Injectable()
 export class BacktestStrategyAdapterService {
@@ -46,7 +52,7 @@ export class BacktestStrategyAdapterService {
       })
     }
 
-    const adapter = this.resolveAdapter(rawScript)
+    const adapter = await this.resolveAdapter(rawScript, input.executionEnvelope)
 
     return {
       id: input.id,
@@ -55,13 +61,55 @@ export class BacktestStrategyAdapterService {
     }
   }
 
-  private resolveAdapter(scriptCode: string): StrategyAdapterV1 {
+  private async resolveAdapter(
+    scriptCode: string,
+    executionEnvelope?: Record<string, unknown>,
+  ): Promise<StrategyAdapterV1> {
     const compiledAdapter = this.buildCompiledAdapter(scriptCode)
     if (compiledAdapter) {
       return compiledAdapter
     }
 
+    if (this.isSignalGeneratorExecutionEnvelope(executionEnvelope)) {
+      return this.buildSignalGeneratorAdapter(scriptCode)
+    }
+
     this.raiseCompiledStrategyInvalid(new Error('compiled manifest required'))
+  }
+
+  private async buildSignalGeneratorAdapter(scriptCode: string): Promise<StrategyAdapterV1> {
+    const compiledScript = compileStrategyScriptForVm(scriptCode)
+    if (!compiledScript.ok) {
+      this.raiseCompiledStrategyInvalid(new Error(compiledScript.error ?? 'signal-generator script compile failed'))
+    }
+
+    const engine = createScriptEngine()
+    const result = await engine.execute(compiledScript.executableCode, {
+      timeout: SIGNAL_GENERATOR_VM_TIMEOUT_MS,
+      allowAsync: false,
+    })
+
+    if (!result.success) {
+      this.raiseCompiledStrategyInvalid(result.error ?? new Error('signal-generator script execution failed'))
+    }
+
+    const validation = validateScriptOutput(result.value, { allowEmpty: false })
+    if (!validation.valid || !validation.value) {
+      this.raiseCompiledStrategyInvalid(new Error(validation.error ?? 'signal-generator script output invalid'))
+    }
+
+    if (!isStrategyAdapterV1(validation.value)) {
+      this.raiseCompiledStrategyInvalid(new Error('signal-generator adapter v1 required'))
+    }
+
+    return validation.value
+  }
+
+  private isSignalGeneratorExecutionEnvelope(envelope: unknown): boolean {
+    if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) return false
+    const record = envelope as Record<string, unknown>
+    return record.runtime === 'signal-generator'
+      && record.source === 'strategy-plaza-official-template'
   }
 
   private buildCompiledAdapter(scriptCode: string): StrategyAdapterV1 | null {

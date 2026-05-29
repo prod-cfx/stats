@@ -213,6 +213,11 @@ export interface AccountAiQuantBacktestConfigDefaults {
   priceSource: string | null
   allowPartial: boolean | null
   stateTimeframes?: string[] | null
+  range?: {
+    preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
+    startAt?: string | null
+    endAt?: string | null
+  } | null
 }
 
 export interface AccountAiQuantDeploymentExecutionConfig {

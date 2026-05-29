@@ -1,3 +1,4 @@
+import { BacktestStrategyAdapterService } from '@/modules/backtesting/services/backtest-strategy-adapter.service'
 import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '../constants/official-strategy-plaza-templates'
 import { StrategyPlazaTemplateResponseDto } from '../dto/strategy-plaza-template.response.dto'
 import { StrategyPlazaTemplateNotFoundException } from '../exceptions/strategy-plaza-template-not-found.exception'
@@ -52,6 +53,23 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     )).toBe(true)
     expect(snapshots.map(item => item.content.executionEnvelope.runtime)).not.toContain('grid-runtime')
     expect(snapshots.map(item => item.content.executionEnvelope.runtime)).not.toContain('trading-execution')
+    expect(snapshots.every(item => item.content.backtestConfigDefaults.priceSource === 'close')).toBe(true)
+    expect(snapshots.every(item => item.content.backtestConfigDefaults.range?.preset === 'CUSTOM')).toBe(true)
+  })
+
+  it('builds backtest adapters for all six official signal-generator snapshots', async () => {
+    const adapter = new BacktestStrategyAdapterService()
+
+    await expect(Promise.all(OFFICIAL_STRATEGY_PLAZA_TEMPLATES.map(async (template) => {
+      const content = buildOfficialStrategySnapshotContent(template)
+      return adapter.build({
+        id: template.id,
+        protocolVersion: 'v1',
+        scriptCode: content.scriptSnapshot,
+        params: content.paramsSnapshot,
+        executionEnvelope: content.executionEnvelope,
+      })
+    }))).resolves.toHaveLength(6)
   })
 
   it('exposes fixed run parameters without user override fields', () => {
