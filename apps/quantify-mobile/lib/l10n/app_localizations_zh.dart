@@ -549,6 +549,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketDetailMoreTooltip => '更多';
 
   @override
+  String get marketDetailFavoriteAddedToast => '已加入自选';
+
+  @override
+  String get marketDetailFavoriteRemovedToast => '已移出自选';
+
+  @override
+  String get marketDetailMoreSheetTitle => '更多操作';
+
+  @override
+  String get marketDetailMoreCopySymbol => '复制交易对';
+
+  @override
+  String get marketDetailMoreCopiedToast => '已复制交易对';
+
+  @override
+  String get marketDetailMoreShare => '分享';
+
+  @override
+  String get marketDetailMoreAlert => '价格提醒';
+
+  @override
+  String get marketDetailMoreSwitchExchange => '切换交易所';
+
+  @override
+  String get marketDetailMoreComingSoon => '即将上线';
+
+  @override
   String get tradeOrderSheetTabLimit => '限价';
 
   @override

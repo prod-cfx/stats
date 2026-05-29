@@ -1160,6 +1160,60 @@ abstract class AppLocalizations {
   /// **'更多'**
   String get marketDetailMoreTooltip;
 
+  /// No description provided for @marketDetailFavoriteAddedToast.
+  ///
+  /// In zh, this message translates to:
+  /// **'已加入自选'**
+  String get marketDetailFavoriteAddedToast;
+
+  /// No description provided for @marketDetailFavoriteRemovedToast.
+  ///
+  /// In zh, this message translates to:
+  /// **'已移出自选'**
+  String get marketDetailFavoriteRemovedToast;
+
+  /// No description provided for @marketDetailMoreSheetTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多操作'**
+  String get marketDetailMoreSheetTitle;
+
+  /// No description provided for @marketDetailMoreCopySymbol.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制交易对'**
+  String get marketDetailMoreCopySymbol;
+
+  /// No description provided for @marketDetailMoreCopiedToast.
+  ///
+  /// In zh, this message translates to:
+  /// **'已复制交易对'**
+  String get marketDetailMoreCopiedToast;
+
+  /// No description provided for @marketDetailMoreShare.
+  ///
+  /// In zh, this message translates to:
+  /// **'分享'**
+  String get marketDetailMoreShare;
+
+  /// No description provided for @marketDetailMoreAlert.
+  ///
+  /// In zh, this message translates to:
+  /// **'价格提醒'**
+  String get marketDetailMoreAlert;
+
+  /// No description provided for @marketDetailMoreSwitchExchange.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换交易所'**
+  String get marketDetailMoreSwitchExchange;
+
+  /// No description provided for @marketDetailMoreComingSoon.
+  ///
+  /// In zh, this message translates to:
+  /// **'即将上线'**
+  String get marketDetailMoreComingSoon;
+
   /// No description provided for @tradeOrderSheetTabLimit.
   ///
   /// In zh, this message translates to:

@@ -4,6 +4,7 @@ import '../theme/theme_notifier.dart' show sharedPreferencesProvider;
 import 'models/account_models.dart';
 import 'models/api_key_models.dart';
 import 'models/live_strategy_models.dart';
+import 'storage/market_favorites_persistence.dart';
 import 'storage/strategy_favorites_persistence.dart';
 import 'storage/strategy_subscription_persistence.dart';
 import 'mock/mock_account_repository.dart';
@@ -241,6 +242,64 @@ final NotifierProvider<StrategyFavoritesNotifier, Set<String>>
 strategyFavoritesProvider =
     NotifierProvider<StrategyFavoritesNotifier, Set<String>>(
       StrategyFavoritesNotifier.new,
+    );
+
+final Provider<MarketFavoritesPersistence> marketFavoritesPersistenceProvider =
+    Provider<MarketFavoritesPersistence>((Ref ref) {
+      return MarketFavoritesPersistence(ref.watch(sharedPreferencesProvider));
+    });
+
+/// 已收藏（自选）行情 symbol 集合（#1755）。
+///
+/// 与 [StrategyFavoritesNotifier] 同 toggle/写盘/回滚模式：乐观更新内存，
+/// 写盘失败回滚保证内存与磁盘一致。详情页与行情列表自选 tab 共享此 provider，
+/// 使收藏状态在两个入口间保持一致。
+class MarketFavoritesNotifier extends Notifier<Set<String>> {
+  /// 首次启动（键从未写盘）时的默认自选集合，对齐行情列表自选 tab 的
+  /// mock 种子。用户一旦增删即以持久化为准；显式清空后不再被种子填充。
+  static const Set<String> kDefaultSymbols = <String>{
+    'BTCUSDT',
+    'ETHUSDT',
+    'SOLUSDT',
+    'BNBUSDT',
+    'XRPUSDT',
+  };
+
+  @override
+  Set<String> build() {
+    // null = 键从未写盘 → 填种子；空集 = 用户已清空 → 保持空，不复活。
+    final Set<String>? stored =
+        ref.watch(marketFavoritesPersistenceProvider).read();
+    return stored ?? <String>{...kDefaultSymbols};
+  }
+
+  bool isFavorite(String symbol) => state.contains(symbol);
+
+  /// 写盘进行中标志：串行化 toggle，避免快速双击时回滚快照交错丢值。
+  bool _writing = false;
+
+  Future<void> toggle(String symbol) async {
+    if (_writing) return;
+    final Set<String> previous = state;
+    final Set<String> next = <String>{...previous};
+    if (!next.add(symbol)) next.remove(symbol);
+    state = next;
+    _writing = true;
+    try {
+      await ref.read(marketFavoritesPersistenceProvider).write(next);
+    } catch (_) {
+      state = previous;
+      rethrow;
+    } finally {
+      _writing = false;
+    }
+  }
+}
+
+final NotifierProvider<MarketFavoritesNotifier, Set<String>>
+marketFavoritesProvider =
+    NotifierProvider<MarketFavoritesNotifier, Set<String>>(
+      MarketFavoritesNotifier.new,
     );
 
 /// 实盘策略列表（#1752）。列表页 watch；含 stopped。

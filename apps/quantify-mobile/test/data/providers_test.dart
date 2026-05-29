@@ -14,6 +14,26 @@ import 'package:quantify_mobile/data/mock/mock_whale_feed_repository.dart';
 import 'package:quantify_mobile/data/mock/unimplemented_repositories.dart';
 import 'package:quantify_mobile/data/providers.dart';
 import 'package:quantify_mobile/data/repositories/repositories.dart';
+import 'package:quantify_mobile/data/storage/market_favorites_persistence.dart';
+
+/// 可控的自选持久化桩：用注入的 [seed] 模拟 read()（null=未写盘），
+/// [failWrite] 为 true 时 write 抛错，用于覆盖回滚路径。
+class _FakeMarketFavoritesPersistence implements MarketFavoritesPersistence {
+  _FakeMarketFavoritesPersistence({this.seed, this.failWrite = false});
+
+  Set<String>? seed;
+  bool failWrite;
+  Set<String>? lastWritten;
+
+  @override
+  Set<String>? read() => seed;
+
+  @override
+  Future<void> write(Set<String> symbols) async {
+    if (failWrite) throw StateError('mock write failure');
+    lastWritten = symbols;
+  }
+}
 
 void main() {
   group('useMockProvider', () {
@@ -98,6 +118,64 @@ void main() {
       expect(container.read(backtestRepositoryProvider), isA<UnimplementedBacktestRepository>());
       expect(container.read(accountRepositoryProvider), isA<UnimplementedAccountRepository>());
       expect(container.read(apiKeyRepositoryProvider), isA<UnimplementedApiKeyRepository>());
+    });
+  });
+
+  group('marketFavoritesProvider（#1755）', () {
+    ProviderContainer makeContainer(_FakeMarketFavoritesPersistence fake) {
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[
+          marketFavoritesPersistenceProvider.overrideWithValue(fake),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    test('首次启动（read 返回 null）以默认 5 条种子兜底', () {
+      final ProviderContainer container = makeContainer(
+        _FakeMarketFavoritesPersistence(seed: null),
+      );
+      expect(
+        container.read(marketFavoritesProvider),
+        MarketFavoritesNotifier.kDefaultSymbols,
+      );
+    });
+
+    test('用户已清空（read 返回空集）保持空，不被种子复活', () {
+      final ProviderContainer container = makeContainer(
+        _FakeMarketFavoritesPersistence(seed: <String>{}),
+      );
+      expect(container.read(marketFavoritesProvider), isEmpty);
+    });
+
+    test('toggle 成功：增删并写盘', () async {
+      final _FakeMarketFavoritesPersistence fake =
+          _FakeMarketFavoritesPersistence(seed: <String>{'ETHUSDT'});
+      final ProviderContainer container = makeContainer(fake);
+
+      await container.read(marketFavoritesProvider.notifier).toggle('BTCUSDT');
+      expect(container.read(marketFavoritesProvider), <String>{'ETHUSDT', 'BTCUSDT'});
+      expect(fake.lastWritten, <String>{'ETHUSDT', 'BTCUSDT'});
+
+      await container.read(marketFavoritesProvider.notifier).toggle('ETHUSDT');
+      expect(container.read(marketFavoritesProvider), <String>{'BTCUSDT'});
+    });
+
+    test('toggle 写盘失败：state 回滚且 rethrow', () async {
+      final _FakeMarketFavoritesPersistence fake =
+          _FakeMarketFavoritesPersistence(seed: <String>{'ETHUSDT'}, failWrite: true);
+      final ProviderContainer container = makeContainer(fake);
+
+      await expectLater(
+        container.read(marketFavoritesProvider.notifier).toggle('BTCUSDT'),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        container.read(marketFavoritesProvider),
+        <String>{'ETHUSDT'},
+        reason: '写盘失败应回滚到 toggle 前的 state',
+      );
     });
   });
 }

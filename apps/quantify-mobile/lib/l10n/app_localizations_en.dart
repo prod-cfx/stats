@@ -568,6 +568,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketDetailMoreTooltip => 'More';
 
   @override
+  String get marketDetailFavoriteAddedToast => 'Added to watchlist';
+
+  @override
+  String get marketDetailFavoriteRemovedToast => 'Removed from watchlist';
+
+  @override
+  String get marketDetailMoreSheetTitle => 'More actions';
+
+  @override
+  String get marketDetailMoreCopySymbol => 'Copy symbol';
+
+  @override
+  String get marketDetailMoreCopiedToast => 'Symbol copied';
+
+  @override
+  String get marketDetailMoreShare => 'Share';
+
+  @override
+  String get marketDetailMoreAlert => 'Price alert';
+
+  @override
+  String get marketDetailMoreSwitchExchange => 'Switch exchange';
+
+  @override
+  String get marketDetailMoreComingSoon => 'Coming soon';
+
+  @override
   String get tradeOrderSheetTabLimit => 'Limit';
 
   @override

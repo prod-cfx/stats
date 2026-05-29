@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantify_mobile/data/mock/fixtures/tickers.dart';
 import 'package:quantify_mobile/data/models/ticker_models.dart';
 import 'package:quantify_mobile/data/providers.dart';
@@ -37,7 +38,10 @@ Future<void> _pump(
   WidgetTester tester,
   _FakeTickerRepository repo, {
   QzTheme theme = QzTheme.fallback,
+  Map<String, Object>? prefsSeed,
 }) async {
+  SharedPreferences.setMockInitialValues(prefsSeed ?? <String, Object>{});
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
   await tester.binding.setSurfaceSize(const Size(420, 3000));
   final GoRouter router = GoRouter(
     initialLocation: '/market',
@@ -56,7 +60,10 @@ Future<void> _pump(
   );
   await tester.pumpWidget(
     ProviderScope(
-      overrides: <Override>[tickerRepositoryProvider.overrideWithValue(repo)],
+      overrides: <Override>[
+        tickerRepositoryProvider.overrideWithValue(repo),
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
       child: MaterialApp.router(
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,

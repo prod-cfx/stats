@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -17,6 +18,7 @@ import '../../theme/tokens.dart';
 import '../../widgets/qz_card.dart';
 import '../../widgets/qz_empty_state.dart';
 import '../../widgets/qz_kline_chart.dart';
+import '../../widgets/qz_sheet.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
 import '../../widgets/qz_trade_order_sheet.dart';
@@ -189,9 +191,58 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
     );
   }
 
+  Future<void> _toggleFavorite() async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final bool wasFavorite =
+        ref.read(marketFavoritesProvider).contains(widget.symbol);
+    try {
+      await ref.read(marketFavoritesProvider.notifier).toggle(widget.symbol);
+    } catch (_) {
+      // 写盘失败由 notifier 回滚 state；不弹成功 toast。
+      return;
+    }
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          wasFavorite
+              ? l10n.marketDetailFavoriteRemovedToast
+              : l10n.marketDetailFavoriteAddedToast,
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _openMoreSheet() async {
+    await QzSheet.show<void>(
+      context: context,
+      builder: (BuildContext sheetCtx) => _MoreActionsSheet(
+        symbol: widget.symbol,
+        onCopySymbol: _copySymbol,
+      ),
+    );
+  }
+
+  Future<void> _copySymbol() async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    await Clipboard.setData(ClipboardData(text: widget.symbol));
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(l10n.marketDetailMoreCopiedToast),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10nForBar = AppLocalizations.of(context);
+    final bool isFavorite =
+        ref.watch(marketFavoritesProvider).contains(widget.symbol);
     return Scaffold(
       appBar: QzTopBar(
         title: widget.symbol,
@@ -199,13 +250,19 @@ class _MarketDetailPageState extends ConsumerState<MarketDetailPage> {
         onBack: () => context.pop(),
         actions: <Widget>[
           IconButton(
-            icon: const Icon(Icons.star_border, size: 20),
-            onPressed: () {},
+            key: const Key('market-detail-favorite'),
+            icon: Icon(
+              isFavorite ? Icons.star : Icons.star_border,
+              size: 20,
+              color: isFavorite ? context.qzScheme.statusWarn : null,
+            ),
+            onPressed: () => unawaited(_toggleFavorite()),
             tooltip: l10nForBar.marketDetailStarTooltip,
           ),
           IconButton(
+            key: const Key('market-detail-more'),
             icon: const Icon(Icons.more_horiz, size: 20),
-            onPressed: () {},
+            onPressed: () => unawaited(_openMoreSheet()),
             tooltip: l10nForBar.marketDetailMoreTooltip,
           ),
         ],
@@ -541,6 +598,115 @@ class _ActionButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 行情详情「更多」底部菜单（#1755）。
+///
+/// 「复制交易对」是当前阶段唯一可用项；分享 / 提醒 / 切换交易所标注
+/// 「即将上线」并禁用点击，避免空回调造成已实现错觉。
+class _MoreActionsSheet extends StatelessWidget {
+  const _MoreActionsSheet({required this.symbol, required this.onCopySymbol});
+
+  final String symbol;
+  final Future<void> Function() onCopySymbol;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            QzSpacing.lg,
+            0,
+            QzSpacing.lg,
+            QzSpacing.sm,
+          ),
+          child: Text(
+            l10n.marketDetailMoreSheetTitle,
+            style: TextStyle(
+              color: c.textMid,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        _MoreActionTile(
+          key: const Key('market-more-copy-symbol'),
+          icon: Icons.copy_rounded,
+          label: l10n.marketDetailMoreCopySymbol,
+          onTap: () {
+            Navigator.of(context).pop();
+            unawaited(onCopySymbol());
+          },
+        ),
+        _MoreActionTile(
+          key: const Key('market-more-share'),
+          icon: Icons.ios_share_rounded,
+          label: l10n.marketDetailMoreShare,
+          disabledNote: l10n.marketDetailMoreComingSoon,
+        ),
+        _MoreActionTile(
+          key: const Key('market-more-alert'),
+          icon: Icons.notifications_none_rounded,
+          label: l10n.marketDetailMoreAlert,
+          disabledNote: l10n.marketDetailMoreComingSoon,
+        ),
+        _MoreActionTile(
+          key: const Key('market-more-switch-exchange'),
+          icon: Icons.swap_horiz_rounded,
+          label: l10n.marketDetailMoreSwitchExchange,
+          disabledNote: l10n.marketDetailMoreComingSoon,
+        ),
+      ],
+    );
+  }
+}
+
+class _MoreActionTile extends StatelessWidget {
+  const _MoreActionTile({
+    super.key,
+    required this.icon,
+    required this.label,
+    this.onTap,
+    this.disabledNote,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+
+  /// 非 null 时该项禁用，并在右侧展示该提示文案。
+  final String? disabledNote;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    final bool enabled = disabledNote == null;
+    final Color fg = enabled ? c.text : c.textDim;
+    return ListTile(
+      enabled: enabled,
+      leading: Icon(icon, size: 20, color: fg),
+      title: Text(
+        label,
+        style: TextStyle(
+          color: fg,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      trailing: disabledNote == null
+          ? null
+          : Text(
+              disabledNote!,
+              style: TextStyle(color: c.textDim, fontSize: 12),
+            ),
+      onTap: onTap,
     );
   }
 }

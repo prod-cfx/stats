@@ -18,15 +18,6 @@ import '../whale/widgets/whale_notification_sheet.dart';
 import 'widgets/ticker_row.dart'
     show TickerRow, kTickerRowNameFlex, kTickerRowPriceFlex, kTickerRowChangeFlex;
 
-/// 行情列表「自选」固定收藏集合（mock 阶段）。真实接入后由后端返回。
-const Set<String> _kFavoriteSet = <String>{
-  'BTCUSDT',
-  'ETHUSDT',
-  'SOLUSDT',
-  'BNBUSDT',
-  'XRPUSDT',
-};
-
 enum _MarketTab { watchlist, spot, perp, gainers, losers }
 
 /// 行情列表首页（issue #1561）。
@@ -120,16 +111,16 @@ class _MarketHomePageState extends ConsumerState<MarketHomePage> {
   /// 按当前 tab + 搜索词过滤/排序行情列表。
   ///
   /// Tab 语义：
-  /// - watchlist：仅命中 `_kFavoriteSet` 的条目；
+  /// - watchlist：仅命中收藏集合 [favorites]（来自 `marketFavoritesProvider`）的条目；
   /// - spot/perp：按 `Ticker.kind` 过滤；
   /// - gainers：按 24H 涨幅降序（仅展示涨幅 > 0）；
   /// - losers：按 24H 跌幅升序（仅展示跌幅 < 0）。
   /// 搜索仅在 symbol 上做包含匹配，大小写无关。
-  List<Ticker> _visibleTickers() {
+  List<Ticker> _visibleTickers(Set<String> favorites) {
     Iterable<Ticker> base;
     switch (_tab) {
       case _MarketTab.watchlist:
-        base = _tickers.where((Ticker t) => _kFavoriteSet.contains(t.symbol));
+        base = _tickers.where((Ticker t) => favorites.contains(t.symbol));
         break;
       case _MarketTab.spot:
         base = _tickers.where((Ticker t) => t.kind == MarketKind.spot);
@@ -173,7 +164,8 @@ class _MarketHomePageState extends ConsumerState<MarketHomePage> {
       (tab: _MarketTab.gainers, label: l10n.marketHomeTabGainers),
       (tab: _MarketTab.losers, label: l10n.marketHomeTabLosers),
     ];
-    final List<Ticker> visible = _visibleTickers();
+    final Set<String> favorites = ref.watch(marketFavoritesProvider);
+    final List<Ticker> visible = _visibleTickers(favorites);
 
     return Scaffold(
       backgroundColor: c.bg,

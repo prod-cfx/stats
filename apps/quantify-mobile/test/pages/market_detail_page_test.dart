@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantify_mobile/data/mock/fixtures/candles.dart';
 import 'package:quantify_mobile/data/mock/fixtures/orderbook.dart';
 import 'package:quantify_mobile/data/mock/fixtures/tickers.dart';
@@ -17,6 +19,7 @@ import 'package:quantify_mobile/data/repositories/kline_repository.dart';
 import 'package:quantify_mobile/data/repositories/long_short_repository.dart';
 import 'package:quantify_mobile/data/repositories/orderbook_repository.dart';
 import 'package:quantify_mobile/data/repositories/ticker_repository.dart';
+import 'package:quantify_mobile/data/storage/market_favorites_persistence.dart';
 import 'package:quantify_mobile/pages/market/market_detail_page.dart';
 import 'package:quantify_mobile/pages/market/widgets/orderbook_view.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
@@ -140,10 +143,13 @@ Future<_FakeKlineRepository> _pump(
   _FakeOrderbookRepository orderbookRepo, {
   QzTheme theme = QzTheme.fallback,
   _FakeKlineRepository? klineRepo,
+  Map<String, Object>? prefsSeed,
 }) async {
   final _FakeKlineRepository repo = klineRepo ?? _FakeKlineRepository();
   // 注册 teardown 关闭 broadcast controller，避免 flutter_test 警告资源泄漏。
   addTearDown(() => repo.controller.isClosed ? null : repo.close());
+  SharedPreferences.setMockInitialValues(prefsSeed ?? <String, Object>{});
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
   await tester.binding.setSurfaceSize(const Size(420, 1600));
   final GoRouter router = GoRouter(
     initialLocation: '/market/BTCUSDT',
@@ -164,6 +170,7 @@ Future<_FakeKlineRepository> _pump(
           _FakeLongShortRepository(),
         ),
         klineRepositoryProvider.overrideWithValue(repo),
+        sharedPreferencesProvider.overrideWithValue(prefs),
       ],
       child: MaterialApp.router(
         locale: const Locale('zh'),
@@ -355,5 +362,153 @@ void main() {
     expect(find.text('卖出 / 做空'), findsOneWidget);
     expect(find.text('开多 · 10x'), findsOneWidget);
     expect(find.text('开空 · 10x'), findsOneWidget);
+  });
+
+  // #1755 收藏：默认未收藏（prefs 含其它 symbol），点击切换为已收藏并提示。
+  testWidgets('MarketDetailPage 收藏按钮点击：未收藏 → 已收藏 + toast + 写盘', (
+    WidgetTester tester,
+  ) async {
+    await _pump(
+      tester,
+      _FakeOrderbookRepository(),
+      prefsSeed: <String, Object>{
+        MarketFavoritesPersistence.kKey: <String>['ETHUSDT'],
+      },
+    );
+
+    // 初始为 star_border（未收藏）
+    Icon icon = tester.widget<Icon>(
+      find.descendant(
+        of: find.byKey(const Key('market-detail-favorite')),
+        matching: find.byType(Icon),
+      ),
+    );
+    expect(icon.icon, Icons.star_border);
+
+    await tester.tap(find.byKey(const Key('market-detail-favorite')));
+    await tester.pump();
+    await tester.pump();
+
+    icon = tester.widget<Icon>(
+      find.descendant(
+        of: find.byKey(const Key('market-detail-favorite')),
+        matching: find.byType(Icon),
+      ),
+    );
+    expect(icon.icon, Icons.star, reason: '点击后图标应变为实心星');
+    expect(find.text('已加入自选'), findsOneWidget);
+
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getStringList(MarketFavoritesPersistence.kKey),
+      containsAll(<String>['ETHUSDT', 'BTCUSDT']),
+      reason: '收藏应持久化到 SharedPreferences',
+    );
+  });
+
+  // #1755 取消收藏：默认已收藏（prefs 含当前 symbol），点击切回未收藏。
+  testWidgets('MarketDetailPage 收藏按钮点击：已收藏 → 取消 + toast', (
+    WidgetTester tester,
+  ) async {
+    await _pump(
+      tester,
+      _FakeOrderbookRepository(),
+      prefsSeed: <String, Object>{
+        MarketFavoritesPersistence.kKey: <String>['BTCUSDT'],
+      },
+    );
+
+    Icon icon = tester.widget<Icon>(
+      find.descendant(
+        of: find.byKey(const Key('market-detail-favorite')),
+        matching: find.byType(Icon),
+      ),
+    );
+    expect(icon.icon, Icons.star);
+
+    await tester.tap(find.byKey(const Key('market-detail-favorite')));
+    await tester.pump();
+    await tester.pump();
+
+    icon = tester.widget<Icon>(
+      find.descendant(
+        of: find.byKey(const Key('market-detail-favorite')),
+        matching: find.byType(Icon),
+      ),
+    );
+    expect(icon.icon, Icons.star_border);
+    expect(find.text('已移出自选'), findsOneWidget);
+  });
+
+  // #1755 更多菜单：打开后含可用「复制交易对」与禁用项「即将上线」。
+  testWidgets('MarketDetailPage 更多按钮打开菜单：复制可用 + 三项禁用', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester, _FakeOrderbookRepository());
+
+    await tester.tap(find.byKey(const Key('market-detail-more')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('更多操作'), findsOneWidget);
+    expect(find.byKey(const Key('market-more-copy-symbol')), findsOneWidget);
+    expect(find.byKey(const Key('market-more-share')), findsOneWidget);
+    expect(find.byKey(const Key('market-more-alert')), findsOneWidget);
+    expect(
+      find.byKey(const Key('market-more-switch-exchange')),
+      findsOneWidget,
+    );
+
+    // 三个禁用项都展示「即将上线」，且 ListTile.enabled == false
+    expect(find.text('即将上线'), findsNWidgets(3));
+    for (final Key key in <Key>[
+      const Key('market-more-share'),
+      const Key('market-more-alert'),
+      const Key('market-more-switch-exchange'),
+    ]) {
+      final ListTile tile = tester.widget<ListTile>(
+        find.descendant(
+          of: find.byKey(key),
+          matching: find.byType(ListTile),
+        ),
+      );
+      expect(tile.enabled, isFalse, reason: '$key 应禁用');
+    }
+  });
+
+  // #1755 复制交易对：点击关闭菜单并写入剪贴板 + 提示。
+  testWidgets('MarketDetailPage 更多菜单复制交易对：写剪贴板 + toast', (
+    WidgetTester tester,
+  ) async {
+    final List<MethodCall> clipboardCalls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (MethodCall call) async {
+        if (call.method == 'Clipboard.setData') {
+          clipboardCalls.add(call);
+        }
+        return null;
+      },
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
+    });
+
+    await _pump(tester, _FakeOrderbookRepository());
+    await tester.tap(find.byKey(const Key('market-detail-more')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('market-more-copy-symbol')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('更多操作'), findsNothing, reason: '复制后菜单应关闭');
+    expect(clipboardCalls, isNotEmpty);
+    expect(
+      (clipboardCalls.first.arguments as Map<Object?, Object?>)['text'],
+      'BTCUSDT',
+    );
+    expect(find.text('已复制交易对'), findsOneWidget);
   });
 }
