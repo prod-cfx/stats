@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-05-30 · API 配置入口与授权表单设计对齐（Issue #1756）
+
+**背景**：设计稿用 `ScreenApiConfig`（`m-screens-4.jsx:2821`）/ `sheet === 'api'`（`proto.jsx:312`）表达 API 配置；Flutter app 已统一为 `showApiFormSheet`（`lib/pages/me/api_form_sheet.dart`），历史 `/me/api` 列表页 #1648 已下线、router 不再注册（见本文 §「API 配置入口命名与历史路由」）。#1756 目标是把**入口唯一性、表单字段、授权权限、保存反馈、部署未授权交易所引导**这五处的设计表达一次性钉到 app 现状，避免后续设计稿再画独立列表页或第二条入口。
+
+**判定**：**一律以 Flutter app `ApiFormSheet` / `QzDeploySheet` 当前实现为准**；`ScreenApiConfig` 中超出 app 的能力按「设计超前 / future」处理，不在本 issue 回流。本节仅落文档，不改设计稿、不改 app 代码。
+
+**对齐结论（对应 #1756 验收标准逐条）**：
+
+| 验收标准 | 结论 | 依据 |
+|---------|------|------|
+| [1] 不再出现独立 `/me/api` 列表页 | 已满足。唯一形态为 bottom sheet，无 route；router 无 `/me/api`，`proto.jsx` 也只有 `sheet === 'api'`，无列表页 | `app_router.dart`、`proto.jsx:312` |
+| [2] 入口只从我的页与部署流程触发 | 已满足。两类触发面：我的页 1 处 + 部署弹层 2 处，全部收敛到同一 `showApiFormSheet`，无独立 route。① 我的页交易所行「连接 / 管理」→ `showApiFormSheet`；② 部署弹层未授权交易所 consent 后 `_openApiForm` → 同一 sheet；③ 部署弹层空列表兜底入口 `_goConfigureApi`（固定 `exchange:'Binance'`）→ 同一 sheet | `me_home_page.dart:328`、`qz_deploy_sheet.dart:146`（`_openApiForm`）、`qz_deploy_sheet.dart:157`（`_goConfigureApi`，空列表兜底） |
+| [3] 字段 / 权限提示 / 保存反馈与 app 一致 | 以 app 为准固定：字段＝交易所徽标（锁定，sheet 内不可改）+ API Key（必填，≥16）+ Secret（必填、可见性切换、≥16）+ 备注（可选，≤30）；权限区＝读取账户与持仓/现货下单（必需）+ 合约下单（可选）+ 提币（必须关闭，红色禁止行）；保存成功 `pop(true)` 关闭并刷新列表，失败显示固定通用文案 SnackBar（不透传后端原文，避免泄露请求体/内部字段） | `api_form_sheet.dart` `_PermissionList` / `_save` |
+| [4] 部署未授权交易所引导到同一 API 表单 | 已满足。`QzDeploySheet` 未授权流＝3 步授权引导 + 提币警告 + 合规 checkbox → consent 后打开同一 `showApiFormSheet`；已授权交易所走原权限授权流，不再二次配置 | `qz_deploy_sheet.dart:113`（`_pickUnauthorized` 引导入口）、`:140`（`_openApiForm`）、`:146`（`showApiFormSheet` 调用） |
+
+**设计超前项（标 future，不算对齐缺口）**：`ScreenApiConfig` 含以下 app 未实现能力，均依赖真实凭据读写（#1682）就绪后另行立项，未接入前不在 app 落 mock 表单，也不要在后续 PR 里以「对齐缺口」名义补：
+
+- **环境切换（主网 / 测试网）+ 测试网密钥提示 / 接口域名展示**：app 当前不区分 env，保存按钮固定「保存」。
+- **按交易所差异化授权形态**：Hyperliquid 钱包模式（主钱包地址 + Agent 私钥，无 key/secret）、OKX 家族 Passphrase 字段。app 当前为通用 key+secret+备注表单。
+- **「验证并保存」服务端校验语义**：app 当前仅做客户端非空 / 最小长度校验 + 直接 `addKey`，真实下单前校验随 #1682 接入。
+
+**理由**：
+
+1. #1756 是设计表达对齐 issue（`documentation`），目标是钉死「以 app 为准」基线，非补齐 app 功能；env/wallet/passphrase 均为数据驱动能力，真实凭据通道（#1682）未就绪前实现违反 YAGNI 且后续大概率重写。
+2. 入口唯一性、字段、权限、保存反馈、部署引导五处在 app 侧已收敛且自洽，本节把结论文档化，避免每个子任务重新论证。
+3. 与 #1662/#1749/#1750 处理「未实现 / 设计超前入口」一致：设计稿保留高保真表达作为 future 能力，app 按真实数据就绪节奏分批落地，零破坏。
+
+**不变项**：`showApiFormSheet` 命名与 `ApiFormSheet` 字段 / 权限 / 反馈维持现状；`QzDeploySheet` 未授权引导流维持现状。`ScreenApiConfig` 的 env/wallet/passphrase 表达保留为 future，不删除、不回流到 app，直到 #1682 接入真实凭据读写后另立 issue 解除。
+
+**落地范围**：仅文档。`apps/quantify-mobile/docs/decisions.md`（本节）+ `apps/quantify-mobile/README.md`「设计真源」段补 #1756 引用。不改 `proto.jsx` / `m-screens-4.jsx`、不改 `app_router.dart` 与 app 代码 / 测试。
+
+---
+
 ## 2026-05-30 · 巨鲸搜索与地址监控管理：落地实现（解除 #1651/#1663 暂缓，Issue #1754）
 
 **背景**：#1663 把巨鲸首页搜索按钮（待 #1651 收口搜索范围）与监控 tab「添加地址监控」按钮钉为禁用态，作为「未实现入口」基线。#1754 目标是「实现 OR 标 future」二选一，本节给出结论并解除上述两处暂缓。
