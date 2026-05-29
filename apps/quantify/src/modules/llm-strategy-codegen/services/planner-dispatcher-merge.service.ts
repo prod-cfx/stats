@@ -2076,6 +2076,24 @@ export class PlannerDispatcherMergeService {
         ? existingRsiReclaim
         : condition
     }
+    // 无 sequence atom，但 planner 直出 `and(rsi cross_over(T), rsi_lte(T))`：
+    // cross_over 已含「上一根在阈值另一侧、当前上穿」语义，同 bar 再 AND rsi_lte(T)
+    // 恒为矛盾（当前需同时 ≤T 且 >T）→ 永不触发。塌缩为单独 cross_over（可执行 reclaim）。
+    // 仅同阈值才判矛盾：cross_over(38) AND rsi_lte(50) 是合法过滤，不可误删。
+    const rsiCrossOver = leaves.find(leaf =>
+      leaf.key === ATOM_CONTRACT_REGISTRY['indicator.cross_over'].key
+      && this.readStringParam(leaf.params, 'indicator') === 'rsi',
+    )
+    if (rsiCrossOver) {
+      const crossThreshold = this.readRsiThreshold(rsiCrossOver)
+      const others = leaves.filter(leaf => leaf !== rsiCrossOver)
+      const allContradictoryNoise = others.length > 0 && others.every(leaf =>
+        this.isRsiThresholdComparatorLeaf(leaf)
+        && crossThreshold !== null
+        && this.readRsiThreshold(leaf) === crossThreshold,
+      )
+      if (allContradictoryNoise) return rsiCrossOver
+    }
     if (!/RSI/iu.test(userMessage)) return condition
     if (!/跌破|低于|下方/iu.test(userMessage)) return condition
     if (!/重新上穿|上穿|回到|重新站上/iu.test(userMessage)) return condition
@@ -2109,6 +2127,28 @@ export class PlannerDispatcherMergeService {
     const otherLeaves = leaves.filter(leaf => leaf !== sequence)
     if (otherLeaves.length === 0) return false
     return otherLeaves.every(leaf => this.isRsiReclaimThresholdNoiseLeaf(leaf))
+  }
+
+  // 纯 RSI 阈值比较叶子——与 rsi cross_over 同 bar AND 时是矛盾噪音。
+  // 兼容两类 atom key：oscillator.rsi_lte/gte 与 indicator.threshold_lte/gte(indicator=rsi)，
+  // 与 isRsiReclaimThresholdNoiseLeaf 的识别口径一致。
+  private isRsiThresholdComparatorLeaf(leaf: AtomExprAtom): boolean {
+    if (
+      leaf.key === ATOM_CONTRACT_REGISTRY['oscillator.rsi_lte'].key
+      || leaf.key === ATOM_CONTRACT_REGISTRY['oscillator.rsi_gte'].key
+    ) {
+      return true
+    }
+    if (leaf.key !== 'indicator.threshold_lte' && leaf.key !== 'indicator.threshold_gte') {
+      return false
+    }
+    return this.readStringParam(leaf.params, 'indicator') === 'rsi'
+  }
+
+  // RSI 比较/穿越叶子的阈值：兼容 value / threshold 两种 param 命名。
+  private readRsiThreshold(leaf: AtomExprAtom): number | null {
+    return this.readNumericParam(leaf.params, 'value')
+      ?? this.readNumericParam(leaf.params, 'threshold')
   }
 
   private isRsiReclaimThresholdNoiseLeaf(leaf: AtomExprAtom): boolean {
@@ -2378,6 +2418,9 @@ export class PlannerDispatcherMergeService {
     const out: AtomExprAtom[] = []
     const stopLoss = /(?:止损|stop\s*loss)\D{0,12}(\d+(?:\.\d+)?)\s*%/iu.exec(userMessage)
     const takeProfit = /(?:止盈|take\s*profit)\D{0,12}(\d+(?:\.\d+)?)\s*%/iu.exec(userMessage)
+      // 兼容「盈利/获利/收益 达到 X% 时卖出平仓」这类出场式止盈表述（区间低买高卖模板）。
+      // 要求百分比后近距离出现平仓动词，排除「盈利 X% 后加仓」的 pyramiding 语义。
+      ?? this.matchProfitExitTakeProfit(userMessage)
     if (stopLoss?.[1]) {
       const valuePct = Number(stopLoss[1])
       if (Number.isFinite(valuePct) && valuePct > 0) {
@@ -2401,6 +2444,12 @@ export class PlannerDispatcherMergeService {
       }
     }
     return out
+  }
+
+  // 「盈利/获利/收益 [达到|超过] X% [时] 卖出/平仓/清仓/出场」→ 出场式止盈百分比。
+  // 强约束百分比后须紧跟平仓动词，避免与「盈利 X% 后加仓」pyramiding 语义混淆。
+  private matchProfitExitTakeProfit(userMessage: string): RegExpExecArray | null {
+    return /(?:盈利|获利|收益)(?:达到|超过|到|达)?\s*(\d+(?:\.\d+)?)\s*%[^，。,.；;]{0,12}?(?:卖出|平仓|清仓|出场|离场|止盈)/iu.exec(userMessage)
   }
 
   private extractRsiPeriod(text: string): number | null {
