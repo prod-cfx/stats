@@ -5,6 +5,7 @@ import {
   evaluateOrchestrationPortfolioRisks,
   type CompiledOrchestrationPortfolioRisk,
 } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-portfolio-risks'
+import { SignalGenerationDecisionStage } from './signal-generation-decision.stage'
 
 /**
  * Phase 5 S7 Task 14 (issue #984) — live-signal fast path 接入 portfolio risk evaluator。
@@ -109,6 +110,83 @@ describe('signalGeneratorService portfolio risk gate (live-signal fast path)', (
       // 不允许 `(instance as { drawdownPct?... }).drawdownPct` 类型断言绕过
       expect(src).toMatch(/accountDrawdownPct:\s*instance\.drawdownPct\s*\?\?\s*undefined/)
       expect(src).not.toMatch(/instance as \{\s*drawdownPct/)
+    })
+  })
+
+  describe('Task 10 live published strategy runtime context', () => {
+    it('builds data.primary 15m/1h/4h through shared runtime context assembler by primary close timestamp', () => {
+      const stage = new SignalGenerationDecisionStage(
+        {},
+        { error: jest.fn(), warn: jest.fn(), debug: jest.fn(), log: jest.fn() },
+      )
+      const context = stage.buildPublishedStrategyContext({
+        bars: [],
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        indicators: {},
+        currentPrice: 110,
+        timestamp: 18_000_000,
+        params: { marketType: 'perp' },
+        runtimeBarsByTimeframe: {
+          '15m': [
+            { symbol: 'BTCUSDT', timeframe: '15m', openTime: 17_100_000, closeTime: 18_000_000, open: 100, high: 112, low: 99, close: 110, volume: 1 },
+          ],
+          '1h': [
+            { symbol: 'BTCUSDT', timeframe: '1h', openTime: 14_400_000, closeTime: 18_000_000, open: 101, high: 113, low: 98, close: 109, volume: 10 },
+            { symbol: 'BTCUSDT', timeframe: '1h', openTime: 18_000_000, closeTime: 21_600_000, open: 109, high: 116, low: 107, close: 114, volume: 11 },
+          ],
+          '4h': [
+            { symbol: 'BTCUSDT', timeframe: '4h', openTime: 0, closeTime: 14_400_000, open: 90, high: 115, low: 89, close: 108, volume: 40 },
+            { symbol: 'BTCUSDT', timeframe: '4h', openTime: 14_400_000, closeTime: 28_800_000, open: 108, high: 118, low: 106, close: 116, volume: 42 },
+          ],
+        },
+      } as Parameters<SignalGenerationDecisionStage['buildPublishedStrategyContext']>[0] & {
+        runtimeBarsByTimeframe: Record<string, unknown[]>
+      })
+
+      expect(context.data.primary['15m'].bars.map(bar => bar.timestamp)).toEqual([18_000_000])
+      expect(context.data.primary['1h'].bars.map(bar => bar.timestamp)).toEqual([18_000_000])
+      expect(context.data.primary['4h'].bars.map(bar => bar.timestamp)).toEqual([14_400_000])
+      expect(context.dataRequirements.primary).toEqual(['15m', '1h', '4h'])
+      expect(context.execution.timeframe).toBe('15m')
+    })
+
+    it('keeps legacy fields when runtime market context has no base bars', () => {
+      const stage = new SignalGenerationDecisionStage(
+        {},
+        { error: jest.fn(), warn: jest.fn(), debug: jest.fn(), log: jest.fn() },
+      )
+      const legacyBars = [
+        { open: 100, high: 112, low: 99, close: 110, volume: 1, timestamp: 18_000_000 },
+      ]
+
+      const context = stage.buildPublishedStrategyContext({
+        bars: legacyBars,
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        indicators: { ema20: 108 },
+        currentPrice: 110,
+        timestamp: 18_000_000,
+        params: { marketType: 'perp' },
+        runtimeBarsByTimeframe: {
+          '1h': [],
+        },
+      } as Parameters<SignalGenerationDecisionStage['buildPublishedStrategyContext']>[0] & {
+        runtimeBarsByTimeframe: Record<string, unknown[]>
+      })
+
+      expect(context.bars).toBe(legacyBars)
+      expect(context.symbol).toBe('BTCUSDT')
+      expect(context.timeframe).toBe('15m')
+      expect(context.currentPrice).toBe(110)
+      expect(context.indicators).toEqual({ ema20: 108 })
+    })
+
+    it('loads published snapshot runtime bars from all dataRequirements timeframes', () => {
+      const src = readFileSync(resolve(__dirname, 'signal-generator.service.ts'), 'utf8')
+
+      expect(src).toMatch(/const runtimeTimeframes = this\.resolvePublishedRuntimeTimeframes\(strategy, timeframe\)/)
+      expect(src).toMatch(/runtimeBarsByTimeframe:\s*runtimeBarsByTimeframe\.marketBarsByTimeframe/)
     })
   })
 })

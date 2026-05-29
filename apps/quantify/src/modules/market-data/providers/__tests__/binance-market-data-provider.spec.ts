@@ -32,6 +32,7 @@ describe('binanceMarketDataProvider', () => {
       expect.objectContaining({ params: expect.objectContaining({ symbol: 'BTCUSDT', interval: '1m' }) }),
     )
     expect(bars[0]?.symbol).toBe('BTCUSDT:PERP')
+    expect(bars[0]?.timestamp).toBe(1710000059999)
   })
 
   it('routes :SPOT historical bars to api v3 path', async () => {

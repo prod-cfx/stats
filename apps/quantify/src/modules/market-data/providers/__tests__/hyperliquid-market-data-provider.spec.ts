@@ -39,6 +39,7 @@ describe('hyperliquid market data provider', () => {
       expect.anything(),
     )
     expect(bars[0]?.symbol).toBe('BTCUSDC:PERP')
+    expect(bars[0]?.timestamp).toBe(1710000060000)
   })
 
   it('accepts USDT requested symbols by mapping to USDC universe symbols', async () => {

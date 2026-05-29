@@ -406,7 +406,7 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
       volume: entry[5],
       quoteVolume: entry[7],
       trades: entry[8],
-      timestamp: entry[0],
+      timestamp: entry[6],
       isFinal: true,
       source: 'BINANCE_REST',
     }

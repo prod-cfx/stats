@@ -20,6 +20,7 @@ import {
   ensureSemanticRuntimeStateKeys,
   readAtomicRuntimeRequirementsFromSnapshot,
 } from '@/modules/strategy-runtime/semantic-runtime-state.util'
+import { buildRuntimeMarketContext } from '@/modules/strategy-runtime/runtime-context-assembler'
 import { strategyDecisionToDeltaQty, validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TheoreticalExecutionModel } from '../execution/theoretical-execution.model'
@@ -104,6 +105,17 @@ function readRequiredTimeframesFromUnknown(source: unknown): string[] | null {
   return null
 }
 
+function readTimeframesFromDataRequirements(source: unknown): Timeframe[] {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return []
+  const record = source as Record<string, unknown>
+  const requiredTimeframes = readRequiredTimeframesFromUnknown(record)
+  const values = Object.entries(record)
+    .filter(([key]) => key !== 'requiredTimeframes')
+    .flatMap(([, value]) => Array.isArray(value) ? value : [])
+  return [...(requiredTimeframes ?? []), ...values]
+    .filter((timeframe): timeframe is Timeframe => typeof timeframe === 'string' && timeframe.length > 0)
+}
+
 function buildRuntimeSymbolSet(input: BacktestRunInput): Set<string> {
   const marketType = typeof input.strategy?.params?.marketType === 'string'
     ? input.strategy.params.marketType.trim().toLowerCase()
@@ -153,7 +165,10 @@ export class BacktestRunnerService {
       compiledRulesCount: this.countCompiledRules(input.strategy.specSnapshot),
       signalTriggerCount: 0,
       fillCount: 0,
+      dataRequirementMissingCount: 0,
     }
+    const requestedRuntimeTimeframes = this.resolveRequestedRuntimeTimeframes(input)
+    const availableRuntimeKeys = new Set<string>()
 
     const baseBars = input.bars
       .filter(bar =>
@@ -166,9 +181,8 @@ export class BacktestRunnerService {
 
     const stateBars = input.bars
       .filter(bar =>
-        input.stateTimeframes.includes(bar.timeframe)
+        requestedRuntimeTimeframes.includes(bar.timeframe)
         && (symbolSet.size === 0 || symbolSet.has(bar.symbol))
-        && bar.closeTime >= input.dataRange.fromTs
         && bar.closeTime <= input.dataRange.toTs,
       )
       .sort((a, b) => a.closeTime - b.closeTime)
@@ -203,7 +217,7 @@ export class BacktestRunnerService {
         })
         stateCursor += 1
       }
-      if (!input.stateTimeframes.includes(input.baseTimeframe)) {
+      if (!requestedRuntimeTimeframes.includes(input.baseTimeframe)) {
         this.appendHistoryBar(historyBarsBySymbolTimeframe, bar)
       }
 
@@ -232,7 +246,7 @@ export class BacktestRunnerService {
         bar.symbol,
         runtimeRequirements?.stateKeys ?? [],
       )
-      const htfState = this.stateEngine.getLatestByTimeframes(bar.symbol, input.stateTimeframes)
+      const htfState = this.stateEngine.getLatestByTimeframes(bar.symbol, requestedRuntimeTimeframes)
       const strategyContext = this.buildScriptContext({
         bar,
         input,
@@ -249,6 +263,8 @@ export class BacktestRunnerService {
         positionRuntimeState,
         semanticRuntimeState,
       })
+      this.collectAvailableRuntimeTimeframes(strategyContext)
+        .forEach(timeframe => availableRuntimeKeys.add(this.buildRuntimeRequirementKey(bar.symbol, timeframe)))
       const htfAligned = BacktestRunnerService.isHtfAligned(
         this.stateEngine,
         bar.symbol,
@@ -272,7 +288,9 @@ export class BacktestRunnerService {
       const isObjectIntent = intent != null && typeof intent === 'object'
       const intentRecord = intent as { type?: unknown; action?: unknown }
       const isLegacyNoop = isObjectIntent && intentRecord.type === 'NOOP'
-      const isV1Noop = isObjectIntent && intentRecord.action === 'NOOP'
+      const isV1Noop = isObjectIntent
+        && intentRecord.action === 'NOOP'
+        && !this.hasCompiledOrderSignal(intent)
       if (isObjectIntent && !isLegacyNoop && !isV1Noop) {
         diagnostics.signalTriggerCount += 1
       }
@@ -364,6 +382,11 @@ export class BacktestRunnerService {
     const openPnl = openPositions.reduce((sum, position) => sum + position.unrealizedPnl, 0)
     // 只数已完结撮合，避免「开仓未平」被误判为成交导致 SIGNAL_FIRED_BUT_NO_FILL 错判。
     diagnostics.fillCount = report.trades.length
+    const requiredRuntimeKeys = this.resolveRequiredRuntimeKeys(baseBars, requestedRuntimeTimeframes)
+    diagnostics.dataRequirementMissingCount = requiredRuntimeKeys
+      .filter(key => !availableRuntimeKeys.has(key))
+      .length
+    const diagnosticReason = this.resolveDiagnosticReason(report, diagnostics)
 
     this.stateEngine.reset()
     this.riskEvaluator.reset()
@@ -374,11 +397,61 @@ export class BacktestRunnerService {
         ...report.summary,
         totalOpenTrades: openPositions.length,
         openPnl,
+        ...(diagnosticReason ? { diagnosticReason } : {}),
       },
       diagnostics,
       openPositions,
       pendingSignals,
     }
+  }
+
+  private collectAvailableRuntimeTimeframes(context: unknown): Timeframe[] {
+    if (!context || typeof context !== 'object') return []
+    const data = (context as { data?: unknown }).data
+    if (!data || typeof data !== 'object') return []
+    const primary = (data as { primary?: unknown }).primary
+    if (!primary || typeof primary !== 'object') return []
+    return Object.entries(primary as Record<string, unknown>)
+      .filter(([, value]) => {
+        if (!value || typeof value !== 'object') return false
+        const bars = (value as { bars?: unknown }).bars
+        return Array.isArray(bars) && bars.length > 0
+      })
+      .map(([timeframe]) => timeframe as Timeframe)
+  }
+
+  private resolveRequestedRuntimeTimeframes(input: BacktestRunInput): Timeframe[] {
+    return Array.from(new Set<Timeframe>([
+      input.baseTimeframe,
+      ...input.stateTimeframes,
+      ...readTimeframesFromDataRequirements(input.strategy.dataRequirements),
+    ]))
+  }
+
+  private resolveRequiredRuntimeKeys(
+    baseBars: readonly Bar[],
+    requiredTimeframes: readonly Timeframe[],
+  ): string[] {
+    const symbols = Array.from(new Set(baseBars.map(bar => bar.symbol)))
+    return symbols.flatMap(symbol => requiredTimeframes.map(timeframe => (
+      this.buildRuntimeRequirementKey(symbol, timeframe)
+    )))
+  }
+
+  private buildRuntimeRequirementKey(symbol: string, timeframe: Timeframe): string {
+    return `${symbol}:${timeframe}`
+  }
+
+  private resolveDiagnosticReason(
+    report: BacktestReport,
+    diagnostics: BacktestReport['diagnostics'],
+  ): BacktestReport['summary']['diagnosticReason'] | undefined {
+    if (report.summary.totalTrades > 0) return undefined
+    if (diagnostics.compiledRulesCount === 0) return 'BACKTEST_NO_RULES_COMPILED'
+    if (diagnostics.dataRequirementMissingCount > 0) return 'BACKTEST_DATA_REQUIREMENT_UNAVAILABLE'
+    if (diagnostics.signalTriggerCount === 0) return 'BACKTEST_NO_SIGNAL_FIRED_IN_RANGE'
+    if (diagnostics.fillCount === 0) return 'BACKTEST_SIGNAL_FIRED_BUT_NO_FILL'
+    return undefined
   }
 
   private countCompiledRules(specSnapshot: BacktestRunInput['strategy']['specSnapshot']): number {
@@ -494,6 +567,7 @@ export class BacktestRunnerService {
     workingOrders: CompiledWorkingOrderProgram[]
     activeProgramIds: string[]
     cancelledProgramIds: string[]
+    closeProgramIds: string[]
   } | null {
     if (typeof intent !== 'object' || intent === null) return null
     const meta = (intent as { meta?: unknown }).meta
@@ -513,7 +587,18 @@ export class BacktestRunnerService {
       cancelledProgramIds: Array.isArray(record.cancelledProgramIds)
         ? record.cancelledProgramIds.filter((id): id is string => typeof id === 'string')
         : [],
+      closeProgramIds: Array.isArray(record.closeProgramIds)
+        ? record.closeProgramIds.filter((id): id is string => typeof id === 'string')
+        : [],
     }
+  }
+
+  private hasCompiledOrderSignal(intent: SignalIntent): boolean {
+    const orderState = this.extractCompiledOrderState(intent)
+    if (!orderState) return false
+    return orderState.activeProgramIds.length > 0
+      || orderState.workingOrders.length > 0
+      || orderState.closeProgramIds.length > 0
   }
 
   private isCompiledWorkingOrderProgram(value: unknown): value is CompiledWorkingOrderProgram {
@@ -985,34 +1070,28 @@ export class BacktestRunnerService {
     historyBarsBySymbolTimeframe: Map<string, HistorySeries>
   }) {
     const { bar, htfState, portfolio } = input
-    const primaryLegId = 'primary'
-    const requestedTimeframes = Array.from(new Set([input.input.baseTimeframe, ...input.input.stateTimeframes]))
-    const dataForPrimary: Record<string, { bars: ScriptRuntimeBar[]; indicators: Record<string, number>; currentPrice: number }> = {}
+    const requestedTimeframes = this.resolveRequestedRuntimeTimeframes(input.input)
+    const barsByTimeframe: Record<string, Bar[]> = {}
 
     for (const timeframe of requestedTimeframes) {
       const history = input.historyBarsBySymbolTimeframe.get(this.buildHistoryKey(bar.symbol, timeframe))
       if (!history || history.rawBars.length === 0) continue
-      dataForPrimary[timeframe] = {
-        bars: history.scriptBars,
-        indicators: {},
-        currentPrice: history.rawBars[history.rawBars.length - 1]!.close,
-      }
+      barsByTimeframe[timeframe] = history.rawBars
     }
 
-    const multiLegContext: MultiLegStrategyContext = {
-      data: { [primaryLegId]: dataForPrimary },
-      execution: { timeframe: input.input.baseTimeframe },
-      legs: [{ id: primaryLegId, symbol: bar.symbol, role: 'primary' }],
-      dataRequirements: { [primaryLegId]: requestedTimeframes },
-      timestamp: bar.closeTime,
+    const multiLegContext = buildRuntimeMarketContext({
+      symbol: bar.symbol,
+      baseTimeframe: input.input.baseTimeframe,
+      primaryCloseTs: bar.closeTime,
       params: input.input.strategy.params,
-    }
+      barsByTimeframe,
+    }) as MultiLegStrategyContext
 
     // Phase 5 S0a: 给 compiled-runtime 暴露 ctx.bars 通道（StrategyExecutionContextV1.bars）。
     // 取主腿 + base timeframe 的 ScriptRuntimeBar[]（与 packages/shared Bar 字段兼容：
     // {open, high, low, close, volume, timestamp}）。S0a fixed_grid_gated 不消费，
     // S5/S6 dynamic_grid / adaptive_volatility_grid 走此通道做 ATR/regime 判定。
-    const primaryBars = dataForPrimary[input.input.baseTimeframe]?.bars ?? []
+    const primaryBars = multiLegContext.data.primary?.[input.input.baseTimeframe]?.bars ?? []
 
     const runtimeContext = buildMultiLegStrategyContext(multiLegContext)
     return {

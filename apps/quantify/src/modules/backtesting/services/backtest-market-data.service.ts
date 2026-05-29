@@ -80,10 +80,13 @@ export class BacktestMarketDataService {
     await this.marketDataService.upsertSymbolsFromProvider(providerSymbols, provider.name.toUpperCase())
 
     const targetSymbols = this.resolveProviderBackfillSymbols(normalizedSymbols, providerSymbols)
-    const targetTimeframes = [...new Set<Timeframe>([input.baseTimeframe, ...input.stateTimeframes])]
+    const targetTimeframes = this.resolveRequestedTimeframes(input)
     for (const symbol of targetSymbols) {
       for (const timeframe of targetTimeframes) {
-        await this.backfillHistoricalBars(provider, symbol, timeframe, input.dataRange)
+        await this.backfillHistoricalBars(provider, symbol, timeframe, {
+          fromTs: this.resolveQueryFromTs(input.dataRange.fromTs, input.baseTimeframe, timeframe),
+          toTs: input.dataRange.toTs,
+        })
       }
     }
   }
@@ -197,7 +200,7 @@ export class BacktestMarketDataService {
     const symbols = this.normalizeSymbols(input.symbols, this.extractMarketType(input.strategy?.params ?? {}))
     const bars: Bar[] = []
     const symbolMap = await this.loadSymbolMap(symbols)
-    const timeframes = [...new Set<Timeframe>([input.baseTimeframe, ...input.stateTimeframes])]
+    const timeframes = this.resolveRequestedTimeframes(input)
 
     for (const symbol of symbols) {
       const symbolId = symbolMap.get(symbol)
@@ -208,7 +211,7 @@ export class BacktestMarketDataService {
         const rows = await this.repository.findBars({
           symbolId,
           timeframe: timeframe as MarketTimeframe,
-          fromTs: input.dataRange.fromTs,
+          fromTs: this.resolveQueryFromTs(input.dataRange.fromTs, input.baseTimeframe, timeframe),
           toTs: input.dataRange.toTs,
         })
 
@@ -238,7 +241,7 @@ export class BacktestMarketDataService {
     const symbolMap = await this.loadSymbolMap(symbols)
     if (symbolMap.size < symbols.length) return { kind: 'empty' }
 
-    const timeframes = [...new Set<Timeframe>([input.baseTimeframe, ...input.stateTimeframes])]
+    const timeframes = this.resolveRequestedTimeframes(input)
     for (const symbol of symbols) {
       const symbolId = symbolMap.get(symbol)
       if (!symbolId) return { kind: 'empty' }
@@ -252,7 +255,25 @@ export class BacktestMarketDataService {
         const from = aggregate._min.time
         const to = aggregate._max.time
         if (!from || !to) return { kind: 'empty' }
-        ranges.push({ fromTs: from.getTime(), toTs: to.getTime() })
+        if (timeframe === input.baseTimeframe) {
+          ranges.push({ fromTs: from.getTime(), toTs: to.getTime() })
+          continue
+        }
+
+        const bars = await this.repository.findBars({
+          symbolId,
+          timeframe: timeframe as MarketTimeframe,
+          fromTs: this.resolveQueryFromTs(input.dataRange.fromTs, input.baseTimeframe, timeframe),
+          toTs: input.dataRange.toTs,
+        })
+        const supported = this.resolveContinuousSecondaryCoverageRange({
+          closeTimes: bars.map(row => row.time.getTime()),
+          baseTimeframe: input.baseTimeframe,
+          timeframe,
+          requestedFromTs: input.dataRange.fromTs,
+        })
+        if (!supported) return { kind: 'empty' }
+        ranges.push(supported)
       }
     }
 
@@ -295,6 +316,67 @@ export class BacktestMarketDataService {
       }
     }
     return result
+  }
+
+  private resolveRequestedTimeframes(
+    input: Pick<BacktestRunInput, 'baseTimeframe' | 'stateTimeframes'> & {
+      strategy?: BacktestRunInput['strategy']
+    },
+  ): Timeframe[] {
+    const dataRequirements = input.strategy?.dataRequirements
+    const strategyTimeframes = dataRequirements && typeof dataRequirements === 'object'
+      ? Object.values(dataRequirements).flatMap((value): Timeframe[] => (
+          Array.isArray(value)
+            ? value.filter((item): item is Timeframe => typeof item === 'string' && item.trim().length > 0)
+            : []
+        ))
+      : []
+
+    return Array.from(new Set<Timeframe>([
+      input.baseTimeframe,
+      ...input.stateTimeframes,
+      ...strategyTimeframes,
+    ]))
+  }
+
+  private resolveQueryFromTs(fromTs: number, baseTimeframe: Timeframe, timeframe: Timeframe): number {
+    if (timeframe === baseTimeframe) return fromTs
+    return fromTs - getMarketTimeframeMs(timeframe)
+  }
+
+  private resolveContinuousSecondaryCoverageRange(input: {
+    closeTimes: number[]
+    baseTimeframe: Timeframe
+    timeframe: Timeframe
+    requestedFromTs: number
+  }): { fromTs: number; toTs: number } | null {
+    const sortedCloseTimes = [...new Set(input.closeTimes)].sort((a, b) => a - b)
+    if (sortedCloseTimes.length === 0) return null
+
+    const timeframeMs = getMarketTimeframeMs(input.timeframe)
+    const baseTimeframeMs = getMarketTimeframeMs(input.baseTimeframe)
+    const supportLengthMs = Math.max(0, timeframeMs - baseTimeframeMs)
+    const firstIndex = sortedCloseTimes.findIndex((closeTime) => {
+      const supportEnd = closeTime + supportLengthMs
+      return closeTime <= input.requestedFromTs && input.requestedFromTs <= supportEnd
+    })
+    const startIndex = firstIndex >= 0
+      ? firstIndex
+      : sortedCloseTimes.findIndex(closeTime => closeTime >= input.requestedFromTs)
+    if (startIndex < 0) return null
+
+    let previousClose = sortedCloseTimes[startIndex]!
+    let supportedToTs = previousClose + supportLengthMs
+    for (const closeTime of sortedCloseTimes.slice(startIndex + 1)) {
+      if (closeTime > previousClose + timeframeMs) break
+      previousClose = closeTime
+      supportedToTs = closeTime + supportLengthMs
+    }
+
+    return {
+      fromTs: sortedCloseTimes[startIndex]!,
+      toTs: supportedToTs,
+    }
   }
 
   private normalizeSymbols(symbols: string[], marketType?: BacktestMarketType | null): string[] {

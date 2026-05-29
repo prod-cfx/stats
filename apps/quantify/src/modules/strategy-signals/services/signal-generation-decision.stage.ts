@@ -7,7 +7,14 @@ import type { StrategyExecutionConfig, StrategyLegDefinition } from '@/modules/s
 import type { StrategyInstance, StrategyTemplate, Symbol } from '@/prisma/prisma.types'
 import { fillPromptTemplate, parseAiSignalResponse } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
-import { buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
+import {
+  buildMultiLegStrategyContext,
+  buildStrategyContext,
+} from '@ai/shared/script-engine/helpers/context-builder'
+import {
+  buildRuntimeMarketContext,
+  type BuildRuntimeMarketContextInput,
+} from '@/modules/strategy-runtime/runtime-context-assembler'
 import {
   buildSemanticRuntimeState,
   type SemanticRuntimeState,
@@ -91,7 +98,16 @@ export interface PublishedStrategyRuntimeContextInput {
    * 公式与 backtest adapter 同源（与 account-strategy-view.service.ts:1970 一致）。
    */
   accountDrawdownPct?: number
+  runtimeBarsByTimeframe?: BuildRuntimeMarketContextInput['barsByTimeframe']
 }
+
+type PublishedStrategyRuntimeContext = ReturnType<typeof buildStrategyContext>
+  & Partial<ReturnType<typeof buildMultiLegStrategyContext>>
+  & {
+    __compiledDecisionState?: { barIndex: number; lastTriggeredByProgram: Record<string, number> }
+    semanticRuntimeState?: SemanticRuntimeState
+    accountDrawdownPct?: number
+  }
 
 export class SignalGenerationDecisionStage {
   private readonly runtimeSignalIntentAdapter = new RuntimeSignalIntentAdapter()
@@ -682,11 +698,7 @@ export class SignalGenerationDecisionStage {
     return buildSemanticRuntimeState(stateKeys)
   }
 
-  buildPublishedStrategyContext(input: PublishedStrategyRuntimeContextInput): ReturnType<typeof buildStrategyContext> & {
-    __compiledDecisionState?: { barIndex: number; lastTriggeredByProgram: Record<string, number> }
-    semanticRuntimeState?: SemanticRuntimeState
-    accountDrawdownPct?: number
-  } {
+  buildPublishedStrategyContext(input: PublishedStrategyRuntimeContextInput): PublishedStrategyRuntimeContext {
     // Phase 5 S7 follow-up (#1058) — accountDrawdownPct 仅注入有限正数；NaN / Infinity / 负值
     // 一律视为缺失（evaluator 内 Number.isFinite 兜底，但此处也防止上游污染）
     const drawdownPctValue = input.accountDrawdownPct
@@ -694,16 +706,40 @@ export class SignalGenerationDecisionStage {
       ? drawdownPctValue
       : undefined
 
+    const runtimeMarketContext = input.runtimeBarsByTimeframe
+      ? buildRuntimeMarketContext({
+          symbol: input.symbol,
+          baseTimeframe: input.timeframe as AppMarketTimeframe,
+          primaryCloseTs: input.timestamp,
+          params: input.params ?? {},
+          barsByTimeframe: input.runtimeBarsByTimeframe,
+        })
+      : null
+    const legacyContext = buildStrategyContext({
+      bars: input.bars,
+      symbol: input.symbol,
+      timeframe: input.timeframe,
+      indicators: input.indicators,
+      currentPrice: input.currentPrice,
+      timestamp: input.timestamp,
+      params: input.params ?? {},
+    })
+    const baseRuntimeBars = runtimeMarketContext?.data.primary?.[input.timeframe]?.bars ?? []
+    const baseContext = runtimeMarketContext && baseRuntimeBars.length > 0
+      ? {
+          ...buildMultiLegStrategyContext({
+            ...runtimeMarketContext,
+            legs: runtimeMarketContext.legs.map(leg => ({
+              ...leg,
+              role: leg.role as MultiLegStrategyContext['legs'][number]['role'],
+            })),
+          }),
+          ...legacyContext,
+        }
+      : legacyContext
+
     return {
-      ...buildStrategyContext({
-        bars: input.bars,
-        symbol: input.symbol,
-        timeframe: input.timeframe,
-        indicators: input.indicators,
-        currentPrice: input.currentPrice,
-        timestamp: input.timestamp,
-        params: input.params ?? {},
-      }),
+      ...baseContext,
       ...(input.compiledDecisionState ? { __compiledDecisionState: input.compiledDecisionState } : {}),
       ...(input.semanticRuntimeState ? { semanticRuntimeState: input.semanticRuntimeState } : {}),
       ...(input.position ? { position: input.position } : {}),

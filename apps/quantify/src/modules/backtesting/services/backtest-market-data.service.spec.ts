@@ -107,9 +107,40 @@ describe('backtestMarketDataService', () => {
     ])
   })
 
+  it('loads snapshot-derived secondary timeframes even when payload stateTimeframes is empty', async () => {
+    const repository = createRepositoryMock()
+    repository.findSymbolsByCodes.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
+    repository.findBars.mockResolvedValue([])
+
+    const { service } = createService(repository)
+    await service.loadBars({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      dataRange: { fromTs: 1_500, toTs: 2_500 },
+      strategy: {
+        id: 'strategy-24',
+        params: {},
+        dataRequirements: {
+          primary: ['15m', '1h', '4h'],
+        },
+        fn: () => ({ type: 'NOOP' }),
+      },
+    })
+
+    expect(repository.findBars).toHaveBeenCalledTimes(3)
+    expect(repository.findBars.mock.calls.map(([query]) => query.timeframe)).toEqual(['15m', '1h', '4h'])
+    expect(repository.findBars.mock.calls.map(([query]) => query.fromTs)).toEqual([
+      1_500,
+      1_500 - 60 * 60 * 1000,
+      1_500 - 4 * 60 * 60 * 1000,
+    ])
+  })
+
   it('resolves full coverage when requested range is inside available range', async () => {
     const repository = createRepositoryMock()
     repository.findSymbolsByCodes.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
+    repository.findBars.mockResolvedValue([{ time: new Date(2_000) }])
     repository.aggregateCoverage
       .mockResolvedValueOnce({ _min: { time: new Date(1_000) }, _max: { time: new Date(5_000) } })
       .mockResolvedValueOnce({ _min: { time: new Date(2_000) }, _max: { time: new Date(4_000) } })
@@ -124,14 +155,44 @@ describe('backtestMarketDataService', () => {
 
     expect(coverage).toEqual({
       kind: 'full',
-      availableRange: { fromTs: 2_000, toTs: 4_000 },
+      availableRange: { fromTs: 2_000, toTs: 5_000 },
       appliedRange: { fromTs: 2_100, toTs: 3_900 },
     })
+  })
+
+  it('resolves coverage with snapshot-derived secondary timeframes even when payload stateTimeframes is empty', async () => {
+    const repository = createRepositoryMock()
+    repository.findSymbolsByCodes.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
+    repository.findBars.mockResolvedValue([{ time: new Date(1_000) }])
+    repository.aggregateCoverage.mockResolvedValue({
+      _min: { time: new Date(1_000) },
+      _max: { time: new Date(5_000) },
+    })
+
+    const { service } = createService(repository)
+    await service.resolveCoverage({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      dataRange: { fromTs: 1_500, toTs: 4_500 },
+      strategy: {
+        id: 'strategy-24',
+        params: {},
+        dataRequirements: {
+          primary: ['15m', '1h', '4h'],
+        },
+        fn: () => ({ type: 'NOOP' }),
+      },
+    })
+
+    expect(repository.aggregateCoverage).toHaveBeenCalledTimes(3)
+    expect(repository.aggregateCoverage.mock.calls.map(([query]) => query.timeframe)).toEqual(['15m', '1h', '4h'])
   })
 
   it('resolves partial coverage when requested range exceeds available range', async () => {
     const repository = createRepositoryMock()
     repository.findSymbolsByCodes.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
+    repository.findBars.mockResolvedValue([{ time: new Date(2_000) }])
     repository.aggregateCoverage
       .mockResolvedValueOnce({ _min: { time: new Date(1_000) }, _max: { time: new Date(5_000) } })
       .mockResolvedValueOnce({ _min: { time: new Date(2_000) }, _max: { time: new Date(4_000) } })
@@ -146,14 +207,15 @@ describe('backtestMarketDataService', () => {
 
     expect(coverage).toEqual({
       kind: 'partial',
-      availableRange: { fromTs: 2_000, toTs: 4_000 },
-      appliedRange: { fromTs: 2_000, toTs: 4_000 },
+      availableRange: { fromTs: 2_000, toTs: 5_000 },
+      appliedRange: { fromTs: 2_000, toTs: 4_500 },
     })
   })
 
   it('resolves empty coverage when no overlap exists', async () => {
     const repository = createRepositoryMock()
     repository.findSymbolsByCodes.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
+    repository.findBars.mockResolvedValue([{ time: new Date(1_000) }])
     repository.aggregateCoverage
       .mockResolvedValueOnce({ _min: { time: new Date(1_000) }, _max: { time: new Date(2_000) } })
       .mockResolvedValueOnce({ _min: { time: new Date(1_000) }, _max: { time: new Date(2_000) } })
@@ -213,6 +275,7 @@ describe('backtestMarketDataService', () => {
   it('does not mark duplicate normalized symbols as missing coverage', async () => {
     const repository = createRepositoryMock()
     repository.findSymbolsByCodes.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
+    repository.findBars.mockResolvedValue([{ time: new Date(2_000) }])
     repository.aggregateCoverage
       .mockResolvedValueOnce({ _min: { time: new Date(1_000) }, _max: { time: new Date(5_000) } })
       .mockResolvedValueOnce({ _min: { time: new Date(2_000) }, _max: { time: new Date(4_000) } })
@@ -228,7 +291,7 @@ describe('backtestMarketDataService', () => {
     expect(repository.aggregateCoverage).toHaveBeenCalledTimes(2)
     expect(coverage).toEqual({
       kind: 'full',
-      availableRange: { fromTs: 2_000, toTs: 4_000 },
+      availableRange: { fromTs: 2_000, toTs: 5_000 },
       appliedRange: { fromTs: 2_100, toTs: 3_900 },
     })
   })
@@ -364,6 +427,119 @@ describe('backtestMarketDataService', () => {
       symbol: 'ETHUSDC:SPOT',
       timeframe: '15m',
     }))
+  })
+
+  it('prepares snapshot-derived secondary timeframes even when payload stateTimeframes is empty', async () => {
+    const repository = createRepositoryMock()
+    const { service, binanceProvider } = createService(repository)
+    binanceProvider.fetchSymbols.mockResolvedValue([
+      {
+        symbol: 'BTCUSDT',
+        exchange: 'BINANCE',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        instrumentType: 'PERPETUAL',
+        status: 'ACTIVE',
+        filters: [],
+      },
+    ])
+    binanceProvider.fetchHistoricalBars.mockResolvedValue([])
+
+    await service.prepareData({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      dataRange: { fromTs: 900_000, toTs: 2_700_000 },
+      strategy: {
+        id: 'strategy-24',
+        params: { exchange: 'binance', marketType: 'perp' },
+        dataRequirements: {
+          primary: ['15m', '1h', '4h'],
+        },
+        fn: () => ({ type: 'NOOP' }),
+      },
+    })
+
+    expect(binanceProvider.fetchHistoricalBars).toHaveBeenCalledTimes(3)
+    expect(binanceProvider.fetchHistoricalBars.mock.calls.map(([query]) => query.timeframe)).toEqual(['15m', '1h', '4h'])
+    expect(binanceProvider.fetchHistoricalBars.mock.calls.map(([query]) => query.start?.getTime())).toEqual([
+      900_000,
+      900_000 - 60 * 60 * 1000,
+      900_000 - 4 * 60 * 60 * 1000,
+    ])
+  })
+
+  it('treats a closed 4h bar as covering following 15m primary bars until the next 4h close', async () => {
+    const repository = createRepositoryMock()
+    repository.findSymbolsByCodes.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
+    repository.findBars.mockResolvedValue([{ time: new Date(Date.parse('2026-04-20T12:00:00.000Z')) }])
+    repository.aggregateCoverage
+      .mockResolvedValueOnce({
+        _min: { time: new Date(Date.parse('2026-04-20T12:15:00.000Z')) },
+        _max: { time: new Date(Date.parse('2026-04-20T15:30:00.000Z')) },
+      })
+      .mockResolvedValueOnce({
+        _min: { time: new Date(Date.parse('2026-04-20T12:00:00.000Z')) },
+        _max: { time: new Date(Date.parse('2026-04-20T12:00:00.000Z')) },
+      })
+
+    const { service } = createService(repository)
+    const coverage = await service.resolveCoverage({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: ['4h'],
+      dataRange: {
+        fromTs: Date.parse('2026-04-20T12:15:00.000Z'),
+        toTs: Date.parse('2026-04-20T15:30:00.000Z'),
+      },
+    })
+
+    expect(coverage.kind).toBe('full')
+    expect(coverage.appliedRange).toEqual({
+      fromTs: Date.parse('2026-04-20T12:15:00.000Z'),
+      toTs: Date.parse('2026-04-20T15:30:00.000Z'),
+    })
+  })
+
+  it('does not report full coverage when a required 4h close is missing inside the requested 15m range', async () => {
+    const repository = createRepositoryMock()
+    repository.findSymbolsByCodes.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
+    repository.findBars.mockResolvedValue([
+      { time: new Date(Date.parse('2026-04-20T12:00:00.000Z')) },
+      { time: new Date(Date.parse('2026-04-20T20:00:00.000Z')) },
+    ])
+    repository.aggregateCoverage
+      .mockResolvedValueOnce({
+        _min: { time: new Date(Date.parse('2026-04-20T12:15:00.000Z')) },
+        _max: { time: new Date(Date.parse('2026-04-20T19:45:00.000Z')) },
+      })
+      .mockResolvedValueOnce({
+        _min: { time: new Date(Date.parse('2026-04-20T12:00:00.000Z')) },
+        _max: { time: new Date(Date.parse('2026-04-20T20:00:00.000Z')) },
+      })
+
+    const { service } = createService(repository)
+    const coverage = await service.resolveCoverage({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: ['4h'],
+      dataRange: {
+        fromTs: Date.parse('2026-04-20T12:15:00.000Z'),
+        toTs: Date.parse('2026-04-20T19:45:00.000Z'),
+      },
+    })
+
+    expect(coverage).toEqual({
+      kind: 'partial',
+      availableRange: {
+        fromTs: Date.parse('2026-04-20T12:15:00.000Z'),
+        toTs: Date.parse('2026-04-20T15:45:00.000Z'),
+      },
+      appliedRange: {
+        fromTs: Date.parse('2026-04-20T12:15:00.000Z'),
+        toTs: Date.parse('2026-04-20T15:45:00.000Z'),
+      },
+    })
   })
 
   it('backfills OKX historical bars backward until the requested range start is covered', async () => {

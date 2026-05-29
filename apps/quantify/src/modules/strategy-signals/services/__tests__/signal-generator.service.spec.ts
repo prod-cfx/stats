@@ -574,7 +574,7 @@ describe('signalGeneratorService coordinator behavior', () => {
     )
   })
 
-  it('uses the previous closed 1m bar for bar-close published runtime evaluation', async () => {
+  it('drops the latest 1m bar when its close timestamp is still in the future', async () => {
     const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-04-20T09:30:01.000Z'))
     const { service } = createService()
     jest.spyOn(service as any, 'loadRecentBars').mockResolvedValue([
@@ -600,7 +600,7 @@ describe('signalGeneratorService coordinator behavior', () => {
         low: 99,
         close: 100,
         volume: 10,
-        timestamp: Date.parse('2026-04-20T09:30:00.000Z'),
+        timestamp: Date.parse('2026-04-20T09:31:00.000Z'),
       },
     ])
     const onBar = jest.fn().mockReturnValue({
@@ -645,6 +645,164 @@ describe('signalGeneratorService coordinator behavior', () => {
     })
 
     nowSpy.mockRestore()
+  })
+
+  it('loads published snapshot runtime bars for every declared dataRequirements timeframe', async () => {
+    const { service } = createService()
+    const primaryCloseTs = 1_775_000_900_000
+    const loadRecentBars = jest
+      .spyOn(service as any, 'loadRecentBars')
+      .mockImplementation(async (_symbolId: string, timeframe: string) => [{
+        open: 99,
+        high: 101,
+        low: 98,
+        close: timeframe === '4h' ? 104 : timeframe === '1h' ? 102 : 100,
+        volume: 10,
+        timestamp: primaryCloseTs,
+        isFinal: true,
+      }])
+    const onBar = jest.fn().mockReturnValue({
+      action: 'NOOP',
+      reason: 'test.noop',
+    })
+    jest.spyOn(service as any, 'buildCompiledRuntimeAdapter').mockReturnValue({
+      adapter: { onBar },
+      parseError: null,
+    })
+    jest
+      .spyOn((service as any).decisionStage, 'buildPublishedRuntimeSignalOutcomeFromDecision')
+      .mockReturnValue({
+        kind: 'noop',
+        reasonCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+        reason: 'test',
+      })
+
+    await (service as any).generatePublishedSnapshotRuntimeSignalOutcome(
+      { id: 'instance-1', params: {} },
+      {
+        id: 'template-1',
+        promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+        script: 'compiled strategy script',
+        dataRequirements: { primary: ['15m', '1h', '4h'] },
+      },
+      {
+        id: 'symbol-perp-1',
+        code: 'BTCUSDT:PERP',
+        exchange: 'OKX',
+        instrumentType: 'PERPETUAL',
+      },
+      '15m',
+      config,
+      100,
+    )
+
+    expect(loadRecentBars.mock.calls.map(([, timeframe]) => timeframe)).toEqual(['15m', '1h', '4h'])
+    const context = onBar.mock.calls[0]?.[0]
+    expect(Object.keys(context.data.primary).sort()).toEqual(['15m', '1h', '4h'])
+    expect(context.data.primary['4h'].bars.at(-1)).toMatchObject({
+      close: 104,
+      timestamp: primaryCloseTs,
+    })
+  })
+
+  it('fails closed when published snapshot secondary bars are not closed as of the primary bar', async () => {
+    const { service } = createService()
+    jest
+      .spyOn(service as any, 'loadRecentBars')
+      .mockImplementation(async (_symbolId: string, timeframe: string) => {
+        const timestamp = timeframe === '15m'
+          ? Date.parse('2026-04-20T09:15:00.000Z')
+          : Date.parse('2026-04-20T10:00:00.000Z')
+        return [{
+          open: 99,
+          high: 101,
+          low: 98,
+          close: 100,
+          volume: 10,
+          timestamp,
+          isFinal: true,
+        }]
+      })
+    const onBar = jest.fn()
+    jest.spyOn(service as any, 'buildCompiledRuntimeAdapter').mockReturnValue({
+      adapter: { onBar },
+      parseError: null,
+    })
+
+    const outcome = await (service as any).generatePublishedSnapshotRuntimeSignalOutcome(
+      { id: 'instance-1', params: {} },
+      {
+        id: 'template-1',
+        promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+        script: 'compiled strategy script',
+        dataRequirements: { primary: ['15m', '1h'] },
+      },
+      {
+        id: 'symbol-perp-1',
+        code: 'BTCUSDT:PERP',
+        exchange: 'OKX',
+        instrumentType: 'PERPETUAL',
+      },
+      '15m',
+      config,
+      100,
+    )
+
+    expect(outcome).toMatchObject({
+      kind: 'unexpected_error',
+      reasonCode: 'SNAPSHOT_RUNTIME_DATA_REQUIREMENT_UNAVAILABLE',
+    })
+    expect(onBar).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when published snapshot secondary bars are stale for the primary bar support window', async () => {
+    const { service } = createService()
+    jest
+      .spyOn(service as any, 'loadRecentBars')
+      .mockImplementation(async (_symbolId: string, timeframe: string) => {
+        const timestamp = timeframe === '15m'
+          ? Date.parse('2026-04-20T15:45:00.000Z')
+          : Date.parse('2026-04-20T08:00:00.000Z')
+        return [{
+          open: 99,
+          high: 101,
+          low: 98,
+          close: 100,
+          volume: 10,
+          timestamp,
+          isFinal: true,
+        }]
+      })
+    const onBar = jest.fn()
+    jest.spyOn(service as any, 'buildCompiledRuntimeAdapter').mockReturnValue({
+      adapter: { onBar },
+      parseError: null,
+    })
+
+    const outcome = await (service as any).generatePublishedSnapshotRuntimeSignalOutcome(
+      { id: 'instance-1', params: {} },
+      {
+        id: 'template-1',
+        promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+        script: 'compiled strategy script',
+        dataRequirements: { primary: ['15m', '4h'] },
+      },
+      {
+        id: 'symbol-perp-1',
+        code: 'BTCUSDT:PERP',
+        exchange: 'OKX',
+        instrumentType: 'PERPETUAL',
+      },
+      '15m',
+      config,
+      100,
+    )
+
+    expect(outcome).toMatchObject({
+      kind: 'unexpected_error',
+      reasonCode: 'SNAPSHOT_RUNTIME_DATA_REQUIREMENT_UNAVAILABLE',
+    })
+    expect(onBar).not.toHaveBeenCalled()
   })
 
   it('uses effective params market type for multi-leg primary and batch symbol lookup', async () => {
@@ -1692,6 +1850,15 @@ strategy`,
       timestamp: Date.now(),
       isFinal: true,
     })
+    jest.spyOn(service as any, 'loadRecentBars').mockResolvedValue([{
+      open: 99,
+      high: 101,
+      low: 98,
+      close: 100,
+      volume: 10,
+      timestamp: Date.parse('2026-04-20T08:45:00.000Z'),
+      isFinal: true,
+    }])
     jest.spyOn(service as any, 'handleStrategyFailure').mockResolvedValue(undefined)
 
     await (service as any).processStrategyInstance(
@@ -2663,8 +2830,8 @@ describe('signalGeneratorService live HTF alignment gate (#1017)', () => {
     { id: 'primary', symbol: 'BTCUSDT', role: 'primary' as const },
   ]
 
-  function makeBar(openTs: number) {
-    return { timestamp: openTs, close: 1 }
+  function makeBar(closeTs: number) {
+    return { timestamp: closeTs, close: 1 }
   }
 
   afterEach(() => jest.restoreAllMocks())
@@ -2686,7 +2853,7 @@ describe('signalGeneratorService live HTF alignment gate (#1017)', () => {
     const multiLegData = {
       primary: {
         '1m': { bars: [makeBar(now - ONE_MIN)] },
-        '1h': { bars: [makeBar(now - ONE_HOUR - 1000)] }, // closeTime = now - 1000
+        '1h': { bars: [makeBar(now - 1000)] },
       },
     }
     const result = service.evaluateLiveHtfGate(legs, dataRequirements, multiLegData, '1m', now)
@@ -2716,7 +2883,7 @@ describe('signalGeneratorService live HTF alignment gate (#1017)', () => {
     const multiLegData = {
       primary: {
         '1m': { bars: [makeBar(now - ONE_MIN)] },
-        '1h': { bars: [makeBar(now - 1000)] }, // closeTime = now + ONE_HOUR - 1000 > now
+        '1h': { bars: [makeBar(now + 1000)] },
       },
     }
     const result = service.evaluateLiveHtfGate(legs, dataRequirements, multiLegData, '1m', now)
@@ -2738,7 +2905,7 @@ describe('signalGeneratorService live HTF alignment gate (#1017)', () => {
     const multiLegData = {
       primary: {
         '1m': { bars: [makeBar(now - ONE_MIN)] },
-        '1h': { bars: [makeBar(now - ONE_HOUR - 1000)] }, // 已对齐
+        '1h': { bars: [makeBar(now - 1000)] },
       },
       context: {
         '1m': { bars: [makeBar(now - ONE_MIN)] },

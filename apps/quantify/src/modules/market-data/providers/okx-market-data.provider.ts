@@ -24,6 +24,7 @@ import {
   parseSymbolMarket,
   toSymbolCode,
 } from '../utils/market-symbol-code.util'
+import { getMarketTimeframeMs } from '../utils/market-timeframe.util'
 import { WsLifecycleManager } from './ws-lifecycle.manager'
 
 interface OkxInstrument {
@@ -144,7 +145,7 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
         close: item[4] ?? '0',
         volume: item[5] ?? undefined,
         quoteVolume: item[7] ?? undefined,
-        timestamp: Number(item[0]),
+        timestamp: Number(item[0]) + getMarketTimeframeMs(query.timeframe),
         source: 'OKX_REST',
         isFinal: true,
       }))
@@ -424,16 +425,17 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
     if (channel.startsWith('candle')) {
       const candle = rows[0]
       if (!Array.isArray(candle)) return
+      const timeframe = this.fromOkxBar(channel.replace('candle', ''))
       await this.klineHandler?.({
         symbol: toSymbolCode(rawSymbol, market),
-        timeframe: this.fromOkxBar(channel.replace('candle', '')),
+        timeframe,
         open: candle[1] ?? '0',
         high: candle[2] ?? '0',
         low: candle[3] ?? '0',
         close: candle[4] ?? '0',
         volume: candle[5] ?? undefined,
         quoteVolume: candle[7] ?? undefined,
-        timestamp: Number(candle[0]),
+        timestamp: Number(candle[0]) + getMarketTimeframeMs(timeframe),
         isFinal: candle[8] === '1',
         source: 'OKX_WS',
       })

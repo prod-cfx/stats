@@ -1,4 +1,5 @@
 import type { CodegenSemanticPatch } from '../../types/codegen-semantic-patch'
+import type { AtomExpr } from '../../types/atom-expr'
 /**
  * Issue #1279 PR2 — dispatcher 自洽 baseline 录制 spec
  *
@@ -126,6 +127,42 @@ function baselinePathFor(bucket: BaselineBucket): string {
 
 describe('issue #1279 PR2 — dispatcher self-baseline', () => {
   const dispatcher = new GenericSeedDispatcher()
+
+  it('does not convert ordinary exchange context into scope.dataSource', () => {
+    const collectTypedRuleGlobalEffects = (
+      dispatcher as unknown as {
+        collectTypedRuleGlobalEffects: (
+          flatPatch: {
+            contextSlots: {
+              exchange: string
+              symbol: string
+              timeframe: string
+            }
+          },
+          userMessage: string,
+        ) => AtomExpr[]
+      }
+    ).collectTypedRuleGlobalEffects.bind(dispatcher)
+
+    const result = collectTypedRuleGlobalEffects(
+      {
+        contextSlots: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+        },
+      },
+      '在币安交易所 BTCUSDT 永续 15m，价格突破 EMA20 买入',
+    )
+
+    const atomKeys = result
+      .filter(item => item.kind === 'atom')
+      .map(item => item.key)
+
+    expect(atomKeys).toContain('scope.symbol')
+    expect(atomKeys).toContain('scope.timeframe')
+    expect(atomKeys).not.toContain('scope.dataSource')
+  })
 
   // 收集所有 case
   const cases: Array<Omit<BaselineCase, 'patch'>> = []

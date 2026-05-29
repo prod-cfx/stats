@@ -163,6 +163,168 @@ describe('backtestRunnerService', () => {
     expect(tsSeen).toEqual([2, 3])
   })
 
+  it('uses 15m primary clock and exposes only closed 1h and 4h series for strategy 24', async () => {
+    const runner = createRunner()
+    const seen: Array<{
+      ts: number
+      timeframes: string[]
+      oneHourLastTs?: number
+      fourHourLastTs?: number
+    }> = []
+
+    await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: ['1h', '4h'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 'strategy-24-acceptance',
+        params: { marketType: 'perp' },
+        fn: (ctx) => {
+          const data = (ctx as {
+            data?: Record<string, Record<string, { bars: Array<{ timestamp: number }> }>>
+          }).data?.primary ?? {}
+          seen.push({
+            ts: ctx.ts,
+            timeframes: Object.keys(data).sort(),
+            oneHourLastTs: data['1h']?.bars.at(-1)?.timestamp,
+            fourHourLastTs: data['4h']?.bars.at(-1)?.timestamp,
+          })
+          return { type: 'NOOP', reason: 'strategy24.acceptance' }
+        },
+      },
+      dataRange: { fromTs: 5_400_000, toTs: 15_300_000 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '1h', openTime: 0, closeTime: 3_600_000, close: 105 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '4h', openTime: 0, closeTime: 14_400_000, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', openTime: 4_500_000, closeTime: 5_400_000, close: 110 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', openTime: 14_400_000, closeTime: 15_300_000, close: 120 }),
+      ],
+    })
+
+    expect(seen).toEqual([
+      {
+        ts: 5_400_000,
+        timeframes: ['15m', '1h'],
+        oneHourLastTs: 3_600_000,
+        fourHourLastTs: undefined,
+      },
+      {
+        ts: 15_300_000,
+        timeframes: ['15m', '1h', '4h'],
+        oneHourLastTs: 3_600_000,
+        fourHourLastTs: 14_400_000,
+      },
+    ])
+  })
+
+  it('derives runner runtime timeframes from strategy dataRequirements when stateTimeframes is empty', async () => {
+    const runner = createRunner()
+    const seen: Array<{
+      timeframes: string[]
+      oneHourLastTs?: number
+      fourHourLastTs?: number
+    }> = []
+
+    await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 'strategy-24-snapshot-derived-requirements',
+        params: { marketType: 'perp' },
+        dataRequirements: { primary: ['15m', '1h', '4h'] },
+        fn: (ctx) => {
+          const data = (ctx as {
+            data?: Record<string, Record<string, { bars: Array<{ timestamp: number }> }>>
+          }).data?.primary ?? {}
+          seen.push({
+            timeframes: Object.keys(data).sort(),
+            oneHourLastTs: data['1h']?.bars.at(-1)?.timestamp,
+            fourHourLastTs: data['4h']?.bars.at(-1)?.timestamp,
+          })
+          return { type: 'NOOP', reason: 'strategy24.acceptance' }
+        },
+      },
+      dataRange: { fromTs: 15_300_000, toTs: 15_300_000 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '1h', openTime: 0, closeTime: 3_600_000, close: 105 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '4h', openTime: 0, closeTime: 14_400_000, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', openTime: 14_400_000, closeTime: 15_300_000, close: 120 }),
+      ],
+    })
+
+    expect(seen).toEqual([
+      {
+        timeframes: ['15m', '1h', '4h'],
+        oneHourLastTs: 3_600_000,
+        fourHourLastTs: 14_400_000,
+      },
+    ])
+  })
+
+  it('reports data requirement unavailable when strategy 24 secondary timeframe never has closed data', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: ['1h', '4h'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 'strategy-24-missing-4h',
+        params: { marketType: 'perp' },
+        specSnapshot: { rules: [{ id: 'r1' }] },
+        fn: () => ({ type: 'NOOP', reason: 'strategy24.acceptance' }),
+      },
+      dataRange: { fromTs: 5_400_000, toTs: 15_300_000 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '1h', openTime: 0, closeTime: 3_600_000, close: 105 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', openTime: 4_500_000, closeTime: 5_400_000, close: 110 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', openTime: 14_400_000, closeTime: 15_300_000, close: 120 }),
+      ],
+    })
+
+    expect(report.diagnostics.dataRequirementMissingCount).toBe(1)
+    expect(report.summary.diagnosticReason).toBe('BACKTEST_DATA_REQUIREMENT_UNAVAILABLE')
+  })
+
+  it('counts missing data requirements per symbol instead of globally', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT', 'ETHUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 'multi-symbol-requirements',
+        params: {},
+        specSnapshot: { rules: [{ id: 'r1' }] },
+        dataRequirements: { primary: ['15m', '4h'] },
+        fn: () => ({ type: 'NOOP', reason: 'test' }),
+      },
+      dataRange: { fromTs: 15_300_000, toTs: 15_300_000 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '4h', openTime: 0, closeTime: 14_400_000, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', openTime: 14_400_000, closeTime: 15_300_000, close: 120 }),
+        createBar({ symbol: 'ETHUSDT', timeframe: '15m', openTime: 14_400_000, closeTime: 15_300_000, close: 220 }),
+      ],
+    })
+
+    expect(report.diagnostics.dataRequirementMissingCount).toBe(1)
+    expect(report.summary.diagnosticReason).toBe('BACKTEST_DATA_REQUIREMENT_UNAVAILABLE')
+  })
+
   it('initializes semantic runtime state keys from atomic runtime requirements without changing legacy scripts', async () => {
     const runner = createRunner()
     const semanticRuntimeStates: Array<StrategyContext['semanticRuntimeState']> = []
@@ -1309,7 +1471,12 @@ describe('backtestRunnerService', () => {
           specSnapshot: { rules: [] },
         },
       })
-      expect(report.diagnostics).toEqual({ compiledRulesCount: 0, signalTriggerCount: 0, fillCount: 0 })
+      expect(report.diagnostics).toEqual({
+        compiledRulesCount: 0,
+        signalTriggerCount: 0,
+        fillCount: 0,
+        dataRequirementMissingCount: 0,
+      })
     })
 
     it('规则已编译但 fn 全程 NOOP → signalTriggerCount=0 反映 NO_SIGNAL_FIRED_IN_RANGE', async () => {
@@ -1385,6 +1552,37 @@ describe('backtestRunnerService', () => {
       expect(report.diagnostics.compiledRulesCount).toBe(1)
       expect(report.diagnostics.signalTriggerCount).toBe(0)
       expect(report.diagnostics.fillCount).toBe(0)
+    })
+
+    it('V1 StrategyDecision action=NOOP 但 order program 激活时计入 signalTriggerCount', async () => {
+      const runner = createRunner()
+      const report = await runner.run({
+        ...baseInput,
+        strategy: {
+          id: 'v1-order-program-active', params: {},
+          fn: () => ({
+            action: 'NOOP',
+            reason: 'compiled.order_program_active',
+            meta: {
+              orderState: {
+                activeProgramIds: ['grid-1'],
+                cancelledProgramIds: [],
+                closeProgramIds: [],
+                workingOrders: [{
+                  id: 'grid-1',
+                  sourceRef: 'rules[0].effects.programs[0]',
+                  payload: {},
+                  levels: [99],
+                }],
+                programLifecycleStateNext: {},
+              },
+            },
+          } as never),
+          specSnapshot: { rules: [{ id: 'r1' }] },
+        },
+      })
+      expect(report.diagnostics.compiledRulesCount).toBe(1)
+      expect(report.diagnostics.signalTriggerCount).toBeGreaterThan(0)
     })
 
     it('V1 StrategyDecision action=OPEN_LONG 正确计入 signalTriggerCount', async () => {

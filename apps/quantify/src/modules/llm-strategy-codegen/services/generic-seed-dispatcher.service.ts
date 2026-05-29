@@ -1553,18 +1553,6 @@ export class GenericSeedDispatcher {
         ...(timeframeEvidence ? { evidence: { text: timeframeEvidence } } : {}),
       })
     }
-    const exchangeEvidence = this.findEvidenceText(userMessage, this.escapeRegexText(contextSlots.exchange))
-    if (typeof contextSlots.exchange === 'string' && contextSlots.exchange.trim().length > 0) {
-      pushAtom({
-        key: ATOM_CONTRACT_REGISTRY['scope.dataSource'].key,
-        params: {
-          dataSourceRole: 'primary',
-          dataSourceFeedId: contextSlots.exchange,
-          dataSourceSchemaRef: 'ohlcv',
-        },
-        ...(exchangeEvidence ? { evidence: { text: exchangeEvidence } } : {}),
-      })
-    }
     if (flatPatch.position?.sizing) {
       out.push({
         kind: 'atom',

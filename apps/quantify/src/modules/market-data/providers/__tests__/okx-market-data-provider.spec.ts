@@ -36,6 +36,7 @@ describe('okx market data provider', () => {
     expect(requestConfig.params.instId).toBe('BTC-USDT-SWAP')
     expect(requestConfig.params.bar).toBe('1m')
     expect(bars[0]?.symbol).toBe('BTCUSDT:PERP')
+    expect(bars[0]?.timestamp).toBe(1710000060000)
   })
 
   it('uses before for forward gapfill start cursor on OKX history candles', async () => {

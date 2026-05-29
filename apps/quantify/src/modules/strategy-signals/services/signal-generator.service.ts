@@ -14,6 +14,7 @@ import type { CronJob } from 'cron'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { IndicatorGroup, IndicatorSnapshot } from './signal-generation-candidate.stage'
 import type { GeneratedSignalPayload, PublishedRuntimeSignalOutcome } from './signal-generation-decision.stage'
+import type { Bar as RuntimeMarketBar } from '@/modules/backtesting/types/backtesting.types'
 import type { PrismaMarketTimeframe } from '@/common/utils/prisma-enum-mappers'
 import type { GatewayBar } from '@/modules/market-data/services/market-data-read.gateway'
 import type {
@@ -101,6 +102,8 @@ import { StrategyRuntimeExecutionStateService } from './strategy-runtime-executi
 const DEFAULT_BAR_LIMIT = 100
 const MAX_SCRIPT_TIMEOUT_MS = 5000
 const PUBLISHED_SNAPSHOT_LOCKED_PARAMS_MARKER = '__publishedSnapshotLockedParams'
+
+type NormalizedRuntimeGatewayBar = ReturnType<typeof normalizeGatewayBars>[number]
 
 type StrategyInstanceWithTemplate = Prisma.StrategyInstanceGetPayload<{
   include: {
@@ -957,21 +960,38 @@ export class SignalGeneratorService {
     try {
       const engine = createScriptEngine()
 
-      const marketBars = await this.loadRecentBars(symbol.id, timeframe, DEFAULT_BAR_LIMIT, {
-        requireFinalLatestBar: true,
-      })
-      const bars = this.normalizeRuntimeBars(marketBars ?? [], {
-        requireFinalLatestBar: true,
-        timeframe,
-      })
+      const runtimeTimeframes = this.resolvePublishedRuntimeTimeframes(strategy, timeframe)
+      const runtimeBarsByTimeframe = await this.loadPublishedRuntimeBarsByTimeframe(
+        symbol.id,
+        symbol.code,
+        runtimeTimeframes,
+      )
+      const bars = runtimeBarsByTimeframe.normalizedBarsByTimeframe[timeframe] ?? []
+      const primaryCloseTs = this.readPrimaryCloseTimestamp(bars, timeframe)
+      const missingTimeframes = runtimeTimeframes.filter(item => !this.hasRuntimeBarSupportingPrimaryClose({
+        bars: runtimeBarsByTimeframe.marketBarsByTimeframe[item] ?? [],
+        timeframe: item,
+        primaryTimeframe: timeframe,
+        primaryCloseTs: primaryCloseTs ?? Number.NEGATIVE_INFINITY,
+      }))
+      if (missingTimeframes.length > 0) {
+        return {
+          kind: 'unexpected_error',
+          reasonCode: 'SNAPSHOT_RUNTIME_DATA_REQUIREMENT_UNAVAILABLE',
+          reason: `Published snapshot runtime missing bars for required timeframes: ${missingTimeframes.join(', ')}`,
+        }
+      }
+
+      const currentPrimaryCloseTs = primaryCloseTs ?? Date.now()
       const scriptContext = this.decisionStage.buildPublishedStrategyContext({
         bars,
         symbol: symbol.code,
         timeframe,
         indicators: {},
         currentPrice: referencePrice || 0,
-        timestamp: Date.now(),
+        timestamp: currentPrimaryCloseTs,
         params: this.buildEffectiveParams(strategy, instance),
+        runtimeBarsByTimeframe: runtimeBarsByTimeframe.marketBarsByTimeframe,
         compiledDecisionState,
         semanticRuntimeState,
         position,
@@ -1465,6 +1485,118 @@ export class SignalGeneratorService {
     return normalizedBars.slice(0, -1)
   }
 
+  private buildPrimaryRuntimeBarsByTimeframe(
+    bars: ReadonlyArray<{
+      open: number
+      high: number
+      low: number
+      close: number
+      volume: number
+      timestamp: number
+    }>,
+    symbol: string,
+    timeframe: AppMarketTimeframe,
+  ): Record<string, RuntimeMarketBar[]> {
+    const timeframeMs = getMarketTimeframeMs(timeframe)
+    return {
+      [timeframe]: bars.map(bar => ({
+        symbol,
+        timeframe,
+        openTime: bar.timestamp - timeframeMs,
+        closeTime: bar.timestamp,
+        open: bar.open,
+        high: bar.high,
+        low: bar.low,
+        close: bar.close,
+        volume: bar.volume,
+      })),
+    }
+  }
+
+  private resolvePublishedRuntimeTimeframes(
+    strategy: StrategyTemplate,
+    primaryTimeframe: AppMarketTimeframe,
+  ): AppMarketTimeframe[] {
+    const dataRequirements = parseDataRequirements(strategy.dataRequirements)
+    const requiredTimeframes = dataRequirements
+      ? Object.values(dataRequirements).flat()
+      : []
+
+    return Array.from(new Set<AppMarketTimeframe>([
+      primaryTimeframe,
+      ...requiredTimeframes,
+    ]))
+  }
+
+  private async loadPublishedRuntimeBarsByTimeframe(
+    symbolId: string,
+    symbolCode: string,
+    timeframes: readonly AppMarketTimeframe[],
+  ): Promise<{
+    normalizedBarsByTimeframe: Record<string, NormalizedRuntimeGatewayBar[]>
+    marketBarsByTimeframe: Record<string, RuntimeMarketBar[]>
+  }> {
+    const normalizedBarsByTimeframe: Record<string, NormalizedRuntimeGatewayBar[]> = {}
+    const marketBarsByTimeframe: Record<string, RuntimeMarketBar[]> = {}
+
+    const loaded = await Promise.all(timeframes.map(async (timeframe) => {
+      const marketBars = await this.loadRecentBars(symbolId, timeframe, DEFAULT_BAR_LIMIT, {
+        requireFinalLatestBar: true,
+      })
+      const bars = this.normalizeRuntimeBars(marketBars ?? [], {
+        requireFinalLatestBar: true,
+        timeframe,
+      })
+      return {
+        timeframe,
+        bars,
+        marketBars: this.buildPrimaryRuntimeBarsByTimeframe(bars, symbolCode, timeframe)[timeframe] ?? [],
+      }
+    }))
+
+    for (const item of loaded) {
+      normalizedBarsByTimeframe[item.timeframe] = item.bars
+      marketBarsByTimeframe[item.timeframe] = item.marketBars
+    }
+
+    return {
+      normalizedBarsByTimeframe,
+      marketBarsByTimeframe,
+    }
+  }
+
+  private hasRuntimeBarSupportingPrimaryClose(input: {
+    bars: readonly RuntimeMarketBar[]
+    timeframe: AppMarketTimeframe
+    primaryTimeframe: AppMarketTimeframe
+    primaryCloseTs: number
+  }): boolean {
+    if (!Number.isFinite(input.primaryCloseTs)) return false
+
+    const timeframeMs = getMarketTimeframeMs(input.timeframe)
+    const primaryTimeframeMs = getMarketTimeframeMs(input.primaryTimeframe)
+    const latestClosed = [...input.bars]
+      .filter(bar => bar.closeTime <= input.primaryCloseTs)
+      .sort((left, right) => right.closeTime - left.closeTime)[0]
+    if (!latestClosed) return false
+
+    if (timeframeMs <= primaryTimeframeMs) {
+      return latestClosed.closeTime >= input.primaryCloseTs
+    }
+
+    return latestClosed.closeTime >= input.primaryCloseTs - timeframeMs + primaryTimeframeMs
+  }
+
+  private readPrimaryCloseTimestamp(
+    bars: ReadonlyArray<{ timestamp: number }>,
+    timeframe: AppMarketTimeframe,
+  ): number | null {
+    const latest = bars[bars.length - 1]
+    if (!latest) return null
+
+    return latest.timestamp
+  }
+
   private isClosedRuntimeBar(
     bar: Pick<GatewayBar, 'timestamp' | 'isFinal'> | { timestamp: number; isFinal?: boolean },
     timeframe: AppMarketTimeframe,
@@ -1473,8 +1605,7 @@ export class SignalGeneratorService {
       return false
     }
 
-    const timeframeMs = getMarketTimeframeMs(timeframe)
-    return bar.timestamp + timeframeMs <= Date.now()
+    return bar.timestamp <= Date.now()
   }
 
   private buildPublishedCodegenSignalPayload(
@@ -1966,6 +2097,7 @@ export class SignalGeneratorService {
         ...strategy,
         script: snapshot.scriptSnapshot,
         promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+        dataRequirements: (this.readJsonRecord(snapshot.dataRequirements) ?? strategy.dataRequirements) as Prisma.JsonValue,
         defaultParams: {
           ...(this.readJsonRecord(snapshot.paramsSnapshot) ?? {}),
           ...(this.readJsonRecord(snapshot.lockedParams) ?? {}),
@@ -2404,7 +2536,7 @@ export class SignalGeneratorService {
    * Live signal HTF 对齐 gate（#1017）。
    *
    * 仅评估 base TF 之外的 timeframe（HTF）。每个 HTF 至少需要一根已闭合 bar，
-   * 且最新 bar 的 closeTime ≤ currentTs（即不是未来 bar）。任何 leg 上任意
+   * 且最新 bar 的 timestamp(closeTime) ≤ currentTs（即不是未来 bar）。任何 leg 上任意
    * HTF 不满足，则视为未对齐。
    *
    * 仅当策略 dataRequirements 显式声明 HTF 时此 gate 才会生效；空声明
@@ -2438,7 +2570,7 @@ export class SignalGeneratorService {
   }
 
   /**
-   * 单个 HTF 对齐判定：bars 至少 1 根，最新 bar 的 closeTime ≤ currentTs。
+   * 单个 HTF 对齐判定：bars 至少 1 根，最新 bar 的 timestamp(closeTime) ≤ currentTs。
    */
   private isLiveHtfAligned(
     bars: ReadonlyArray<{ timestamp: number }> | undefined,
@@ -2452,9 +2584,7 @@ export class SignalGeneratorService {
     if (!latest || typeof latest.timestamp !== 'number') {
       return false
     }
-    const tfMs = getMarketTimeframeMs(timeframe)
-    const closeTime = latest.timestamp + tfMs
-    return closeTime <= currentTs
+    return latest.timestamp <= currentTs
   }
 
   private async generateSignalForMultiLegStrategy(

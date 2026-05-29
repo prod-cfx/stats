@@ -24,6 +24,7 @@ import {
   parseSymbolMarket,
   toSymbolCode
 } from '../utils/market-symbol-code.util'
+import { getMarketTimeframeMs } from '../utils/market-timeframe.util'
 import { WsLifecycleManager } from './ws-lifecycle.manager'
 
 interface HyperliquidMetaResponse {
@@ -190,7 +191,7 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
       low: item.l,
       close: item.c,
       volume: item.v,
-      timestamp: item.t,
+      timestamp: item.T ?? item.t + getMarketTimeframeMs(query.timeframe),
       isFinal: true,
       source: 'HYPERLIQUID_REST',
     }))
@@ -300,7 +301,7 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
         low: candle.l,
         close: candle.c,
         volume: candle.v,
-        timestamp: candle.t,
+        timestamp: candle.T ?? candle.t + getMarketTimeframeMs(item.timeframe),
         isFinal: true,
         source: 'HYPERLIQUID_WS',
       })
