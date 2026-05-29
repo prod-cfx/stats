@@ -1169,7 +1169,7 @@ export class GenericSeedDispatcher {
             params,
             evidence,
           }
-          if (slot === 'triggers') {
+          if (slot === 'triggers' || slot === 'actions' || slot === 'risk') {
             node.sideScope = sideScope
           }
           atomItems.push({ ...node, sideScope })
@@ -1992,7 +1992,7 @@ export class GenericSeedDispatcher {
           params,
           evidence,
         }
-        if (slot === 'triggers') {
+        if (slot === 'triggers' || slot === 'actions' || slot === 'risk') {
           node.sideScope = sideScope
         }
         atomItems.push({ ...node, sideScope })

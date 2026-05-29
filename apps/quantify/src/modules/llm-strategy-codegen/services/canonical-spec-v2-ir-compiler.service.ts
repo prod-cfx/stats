@@ -251,7 +251,7 @@ export class CanonicalSpecV2IrCompilerService {
 
       const partialTakeProfitBlock = this.tryCompileReduceActionRule(rule, input.canonicalSpec, input.fallback.positionPct, context)
       if (partialTakeProfitBlock) {
-        ruleBlocks.push(partialTakeProfitBlock)
+        ruleBlocks.push(this.withRuleBlockSourcePath(partialTakeProfitBlock, rule))
         continue
       }
 
@@ -263,7 +263,7 @@ export class CanonicalSpecV2IrCompilerService {
 
       const maxDrawdownRisk = this.tryCompileRiskMaxDrawdownPct(rule)
       if (maxDrawdownRisk) {
-        rulePortfolioRisks.push(maxDrawdownRisk)
+        rulePortfolioRisks.push(this.withRuleSourcePath(maxDrawdownRisk, rule))
         continue
       }
 
@@ -4223,6 +4223,20 @@ export class CanonicalSpecV2IrCompilerService {
       : ''
     if (!sourcePath) return item
     return { ...item, sourcePath }
+  }
+
+  private withRuleBlockSourcePath(block: RuleBlock, rule: CanonicalRuleV2): RuleBlock {
+    const sourcePath = typeof rule.metadata?.sourcePath === 'string'
+      ? rule.metadata.sourcePath.trim()
+      : ''
+    if (!sourcePath) return block
+    return {
+      ...block,
+      metadata: {
+        ...block.metadata,
+        sourcePath,
+      },
+    }
   }
 
   private collectPositionLifecycleRuntimeRequirements(

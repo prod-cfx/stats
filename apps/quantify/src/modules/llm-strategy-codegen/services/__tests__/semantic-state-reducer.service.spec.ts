@@ -1,4 +1,5 @@
 import { buildSemanticSlotId, type SemanticState } from '../../types/semantic-state'
+import type { AtomExpr } from '../../types/atom-expr'
 import { SemanticStateReducerService } from '../semantic-state-reducer.service'
 
 describe('SemanticStateReducerService — rules-only service smoke', () => {
@@ -39,7 +40,93 @@ describe('SemanticStateReducerService — rules-only service smoke', () => {
     expect(next).not.toHaveProperty('positionConstraint')
     expect(next).not.toHaveProperty('orchestration')
   })
+
+  it('writes PR3 risk slot answer back to original rules[].effects.risks leaf without creating duplicate rules', () => {
+    const slot = {
+      slotKey: 'risk.trailing_stop_pct.valuePct',
+      fieldPath: 'rules[0].effects.risks[0].params.valuePct',
+    }
+    const state = createRulesState({
+      risks: [{ kind: 'atom', key: 'risk.trailing_stop_pct', params: {} }],
+      positions: [{ kind: 'atom', key: 'position.sizing', params: { sizing: { kind: 'quote', value: 10, asset: 'USDT' } } }],
+    })
+
+    const next = service.applyClarificationAnswer({
+      currentState: state,
+      targetSlotKey: slot.slotKey,
+      targetFieldPath: slot.fieldPath,
+      targetSlotId: buildSemanticSlotId(slot),
+      answer: '3',
+    })
+
+    expect(next.rules).toHaveLength(1)
+    expect(next.rules?.[0].effects).toEqual({
+      actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      risks: [{ kind: 'atom', key: 'risk.trailing_stop_pct', params: { valuePct: 3 } }],
+      positions: [{ kind: 'atom', key: 'position.sizing', params: { sizing: { kind: 'quote', value: 10, asset: 'USDT' } } }],
+      orchestration: [],
+      programs: [],
+    })
+    expect(next).not.toHaveProperty('risk')
+  })
+
+  it('writes PR3 position slot answer back to original rules[].effects.positions leaf without creating duplicate rules', () => {
+    const slot = {
+      slotKey: 'position.budget_cap.valueQuote',
+      fieldPath: 'rules[0].effects.positions[0].params.valueQuote',
+    }
+    const state = createRulesState({
+      risks: [{ kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: 5 } }],
+      positions: [{ kind: 'atom', key: 'position.budget_cap', params: {} }],
+    })
+
+    const next = service.applyClarificationAnswer({
+      currentState: state,
+      targetSlotKey: slot.slotKey,
+      targetFieldPath: slot.fieldPath,
+      targetSlotId: buildSemanticSlotId(slot),
+      answer: '1000',
+    })
+
+    expect(next.rules).toHaveLength(1)
+    expect(next.rules?.[0].effects).toEqual({
+      actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+      risks: [{ kind: 'atom', key: 'risk.stop_loss_pct', params: { valuePct: 5 } }],
+      positions: [{ kind: 'atom', key: 'position.budget_cap', params: { valueQuote: 1000 } }],
+      orchestration: [],
+      programs: [],
+    })
+    expect(next).not.toHaveProperty('positionConstraint')
+  })
 })
+
+function createRulesState(effects: {
+  risks: AtomExpr[]
+  positions: AtomExpr[]
+}): SemanticState {
+  return {
+    version: 1,
+    families: [],
+    position: null,
+    contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+    normalizationNotes: [],
+    updatedAt: '2026-05-26T00:00:00.000Z',
+    orchestrationContracts: [],
+    rules: [{
+      id: 'rule-pr3-slot-answer',
+      phase: 'entry',
+      sideScope: 'long',
+      condition: { kind: 'atom', key: 'price.breakout_up', params: { lookback: 20 } },
+      effects: {
+        actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        risks: effects.risks,
+        positions: effects.positions,
+        orchestration: [],
+        programs: [],
+      },
+    }],
+  }
+}
 
 describe.skip('SemanticStateReducerService legacy flat bucket fixtures', () => {
   const service = new SemanticStateReducerService()

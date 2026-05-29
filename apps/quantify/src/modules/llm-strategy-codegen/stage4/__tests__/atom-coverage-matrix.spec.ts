@@ -35,6 +35,24 @@ const pr2NewGranularAtomKeys = [
   'liquidation.condition',
 ] as const
 
+const pr3RiskAtomKeys = [
+  'risk.stop_loss_pct',
+  'risk.trailing_stop_pct',
+  'risk.partial_take_profit',
+  'risk.max_drawdown_pct',
+  'risk.cooldown',
+  'risk.max_loss_per_trade',
+] as const
+
+const pr3PositionAtomKeys = [
+  'position.sizing',
+  'position.pyramiding_limit',
+  'position.dca_schedule',
+  'position.budget_cap',
+  'position.leverage',
+  'position.max_exposure_pct',
+] as const
+
 describe('Stage 4 atom coverage matrix', () => {
   it('covers all Stage 4 atom families', () => {
     const families = new Set(STAGE4_ATOM_COVERAGE_MATRIX.map(row => row.family))
@@ -99,5 +117,49 @@ describe('Stage 4 atom coverage matrix', () => {
     )
 
     expect(executablePlannedAtoms).toEqual([])
+  })
+
+  it('contains direct PR3 risk atom rows under typed risk effects', () => {
+    const rowsByKey = new Map(STAGE4_ATOM_COVERAGE_MATRIX.map(row => [row.atomKey, row]))
+
+    for (const key of pr3RiskAtomKeys) {
+      const row = rowsByKey.get(key)
+      expect(row).toBeDefined()
+      expect(row?.family).toBe('risk')
+      expect(row?.rulePath).toBe('rules[].effects.risks')
+      expect(row?.coveredAtomKeys).toEqual([key])
+      expect(row?.prBatch).toBe('pr3-risk-position')
+    }
+  })
+
+  it('contains direct PR3 position atom rows under typed position effects', () => {
+    const rowsByKey = new Map(STAGE4_ATOM_COVERAGE_MATRIX.map(row => [row.atomKey, row]))
+
+    for (const key of pr3PositionAtomKeys) {
+      const row = rowsByKey.get(key)
+      expect(row).toBeDefined()
+      expect(row?.family).toBe('position')
+      expect(row?.rulePath).toBe('rules[].effects.positions')
+      expect(row?.coveredAtomKeys).toEqual([key])
+      expect(row?.prBatch).toBe('pr3-risk-position')
+    }
+  })
+
+  it('requires deploy-ready PR3 rows to declare full dataflow coverage', () => {
+    const invalidRows = STAGE4_ATOM_COVERAGE_MATRIX.filter(row =>
+      row.prBatch === 'pr3-risk-position'
+      && STAGE4_DEPLOY_READY_STATUSES.includes(row.status)
+      && (
+        row.utteranceExamples.length < 3
+        || !row.displayShape.includes('source path')
+        || row.canonicalShape === 'unsupported'
+        || row.irShape === 'unsupported'
+        || !row.reachesBacktest
+        || !row.reachesDeployPayload
+        || row.unsupportedReason !== null
+      ),
+    )
+
+    expect(invalidRows).toEqual([])
   })
 })

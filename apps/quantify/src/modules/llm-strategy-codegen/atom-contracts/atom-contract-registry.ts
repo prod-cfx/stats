@@ -242,11 +242,19 @@ const ATOM_BUCKETS = {
   'action.close_short': 'action',
   'risk.stop_loss_pct': 'risk',
   'risk.take_profit_pct': 'risk',
+  'risk.trailing_stop_pct': 'risk',
   'risk.atr_stop': 'risk',
   'risk.partial_take_profit': 'risk',
+  'risk.max_drawdown_pct': 'risk',
+  'risk.cooldown': 'risk',
+  'risk.max_loss_per_trade': 'risk',
   'portfolioRisk.drawdown_block': 'orchestration',
+  'position.sizing': 'positionConstraint',
   'position.dca_schedule': 'positionConstraint',
   'position.pyramiding_limit': 'positionConstraint',
+  'position.budget_cap': 'positionConstraint',
+  'position.leverage': 'positionConstraint',
+  'position.max_exposure_pct': 'positionConstraint',
   'grid.range_rebalance': 'positionConstraint',
   // ── orchestration / scope（#1329 follow-up：从 legacy-presentation-data.ts PRESENTATIONS 迁入）──
   'gate.regime': 'orchestration',
@@ -336,15 +344,23 @@ const ATOM_FULFILLS_STRATEGY_PHASE = {
   // ── risk ──
   'risk.stop_loss_pct': ['risk', 'exit'],
   'risk.take_profit_pct': ['risk', 'exit'],
+  'risk.trailing_stop_pct': ['risk', 'exit'],
   'risk.atr_stop': ['risk', 'exit'],
   'risk.partial_take_profit': ['risk'],
+  'risk.max_drawdown_pct': ['risk'],
+  'risk.cooldown': ['risk'],
+  'risk.max_loss_per_trade': ['risk', 'exit'],
   // ── portfolio / drawdown 护栏：不直接满足 entry/exit/risk 任一阶段（只是阻断） ──
   'portfolioRisk.drawdown_block': [],
   // ── positionConstraint ──
   // Issue #1383 Round 1 M5：DCA 调度自身已满足 entry+exit 语义（自洽程序，
   //   不需要额外出场触发即可生成可运行策略）。
+  'position.sizing': ['sizing'],
   'position.dca_schedule': ['entry', 'exit', 'sizing'],
   'position.pyramiding_limit': ['entry', 'sizing'],
+  'position.budget_cap': ['sizing'],
+  'position.leverage': ['sizing'],
+  'position.max_exposure_pct': ['sizing'],
   'grid.range_rebalance': ['entry', 'exit', 'sizing'],
   // ── orchestration ──
   'gate.regime': [],
@@ -449,13 +465,21 @@ const ATOM_ROLES = {
   // ── risk（默认 effect；被触及语义的 5 个 atom 同时含 predicate + effect）──
   'risk.stop_loss_pct': ['predicate', 'effect'],
   'risk.take_profit_pct': ['effect'],
+  'risk.trailing_stop_pct': ['predicate', 'effect'],
   'risk.atr_stop': ['predicate', 'effect'],
   'risk.partial_take_profit': ['predicate', 'effect'],
+  'risk.max_drawdown_pct': ['effect'],
+  'risk.cooldown': ['effect'],
+  'risk.max_loss_per_trade': ['effect'],
   // ── orchestration（drawdown_block：副作用护栏）──
   'portfolioRisk.drawdown_block': ['effect'],
   // ── positionConstraint（effect）──
+  'position.sizing': ['effect'],
   'position.dca_schedule': ['effect'],
   'position.pyramiding_limit': ['effect'],
+  'position.budget_cap': ['effect'],
+  'position.leverage': ['effect'],
+  'position.max_exposure_pct': ['effect'],
   'grid.range_rebalance': ['effect'],
   // ── orchestration / scope ──
   'gate.regime': ['predicate'],
@@ -586,15 +610,23 @@ const ATOM_TEMPORALITY = {
 
   'risk.stop_loss_pct': 'structural',
   'risk.take_profit_pct': 'structural',
+  'risk.trailing_stop_pct': 'structural',
   'risk.atr_stop': 'structural',
   'risk.atr_take_profit': 'structural',
   'risk.atr_multiple_stop': 'structural',
   'risk.atr_multiple_take_profit': 'structural',
   'risk.remembered_level_stop': 'structural',
   'risk.partial_take_profit': 'structural',
+  'risk.max_drawdown_pct': 'structural',
+  'risk.cooldown': 'structural',
+  'risk.max_loss_per_trade': 'structural',
 
+  'position.sizing': 'structural',
   'position.dca_schedule': 'structural',
   'position.pyramiding_limit': 'structural',
+  'position.budget_cap': 'structural',
+  'position.leverage': 'structural',
+  'position.max_exposure_pct': 'structural',
   'grid.range_rebalance': 'structural',
 
   'program.dynamic_grid': 'structural',
@@ -689,11 +721,19 @@ const ATOM_PUBLIC_NAMES = {
   'action.close_short': { zh: '平空', en: 'Close short' },
   'risk.stop_loss_pct': { zh: '百分比止损', en: 'Percent stop loss' },
   'risk.take_profit_pct': { zh: '百分比止盈', en: 'Percent take profit' },
+  'risk.trailing_stop_pct': { zh: '移动止损', en: 'Trailing stop' },
   'risk.atr_stop': { zh: 'ATR 动态止损', en: 'ATR stop' },
   'risk.partial_take_profit': { zh: '分批止盈', en: 'Partial take profit' },
+  'risk.max_drawdown_pct': { zh: '最大回撤限制', en: 'Maximum drawdown limit' },
+  'risk.cooldown': { zh: '交易冷却期', en: 'Trade cooldown' },
+  'risk.max_loss_per_trade': { zh: '单笔亏损上限', en: 'Max loss per trade' },
   'portfolioRisk.drawdown_block': { zh: '组合回撤护栏', en: 'Portfolio drawdown guard' },
+  'position.sizing': { zh: '仓位大小', en: 'Position sizing' },
   'position.dca_schedule': { zh: 'DCA 补仓计划', en: 'DCA schedule' },
   'position.pyramiding_limit': { zh: '金字塔加仓限制', en: 'Pyramiding limit' },
+  'position.budget_cap': { zh: '预算上限', en: 'Budget cap' },
+  'position.leverage': { zh: '杠杆倍数', en: 'Leverage' },
+  'position.max_exposure_pct': { zh: '敞口上限', en: 'Exposure cap' },
   'grid.range_rebalance': { zh: '网格区间再平衡', en: 'Grid range rebalance' },
   // ── orchestration / scope（#1329 follow-up：stub publicName，Phase 2 完整实现 paramRenderers / summaryTemplate）──
   'gate.regime': { zh: '趋势/状态过滤', en: 'Regime/Trend gate' },
@@ -3265,6 +3305,52 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
   },
 
+  'risk.trailing_stop_pct': {
+    corpus: {
+      aliases: ['移动止损', '跟踪止损', 'trailing stop'],
+      positiveExamples: ['3% 移动止损', 'Use a 4% trailing stop'],
+      negativeExamples: ['固定 3% 止损', '分批止盈'],
+      goldenUtterances: getGoldenUtterancesForAtom('risk.trailing_stop_pct'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'risk.trailing_stop_pct.valuePct') return '请补充移动止损百分比，例如 3%。'
+      return '请补充移动止损的缺失信息。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.trailing_stop_pct'],
+      paramRenderers: {
+        valuePct: (v) => `${v}%`,
+        activationPct: (v) => `${v}%`,
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.trailing_stop_pct'].en
+        const valuePct = typeof params.valuePct === 'number' ? `${params.valuePct}%` : ''
+        return valuePct ? `移动止损：回撤 ${valuePct} 平仓` : '移动止损'
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['移动止损', '跟踪止损', 'trailing stop', 'trail'] as const,
+        verbs: {
+          fixed: ['移动', '跟踪', 'trailing', 'trail'] as const,
+        },
+      },
+      paramSlots: {
+        valuePct: { kind: 'percent', required: true, range: [0, 100], extractor: { kind: 'percent', pattern: '(?:移动止损|跟踪止损|trailing\\s*stop|trail)\\D{0,12}(\\d+(?:\\.\\d+)?)\\s*%|(\\d+(?:\\.\\d+)?)\\s*%\\D{0,12}(?:移动止损|跟踪止损|trailing\\s*stop|trail)', range: [0, 100] } },
+        activationPct: { kind: 'percent', required: false, range: [0, 100], extractor: { kind: 'percent', pattern: '(?:盈利|profit|activation)\\D{0,12}(\\d+(?:\\.\\d+)?)\\s*%', range: [0, 100] } },
+      },
+      matchRequires: ['valuePct'],
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
+    },
+  },
+
   'risk.atr_stop': {
     corpus: {
       aliases: ['ATR 止损', '波动止损', 'ATR 动态止损'],
@@ -3414,6 +3500,130 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
   },
 
+  'risk.max_drawdown_pct': {
+    corpus: {
+      aliases: ['最大回撤', '回撤限制', 'max drawdown'],
+      positiveExamples: ['最大回撤超过 8% 停止开仓', 'Pause when drawdown exceeds 10%'],
+      negativeExamples: ['价格回撤 5% 补仓', '单笔止损 3%'],
+      goldenUtterances: getGoldenUtterancesForAtom('risk.max_drawdown_pct'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'risk.max_drawdown_pct.valuePct') return '请补充最大回撤百分比，例如 8%。'
+      return '请补充最大回撤限制的缺失信息。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.max_drawdown_pct'],
+      paramRenderers: { valuePct: (v) => `${v}%`, scope: (v) => String(v) },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.max_drawdown_pct'].en
+        const valuePct = typeof params.valuePct === 'number' ? `${params.valuePct}%` : ''
+        return valuePct ? `最大回撤超过 ${valuePct} 时限制交易` : '最大回撤限制'
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['最大回撤', '回撤限制', 'drawdown', 'max drawdown'] as const,
+        verbs: { gte: ['超过', '达到', 'exceeds', 'above'] as const },
+      },
+      paramSlots: {
+        valuePct: { kind: 'percent', required: true, range: [0, 100], extractor: { kind: 'percent', pattern: '(?:最大回撤|回撤|drawdown)\\D{0,12}(\\d+(?:\\.\\d+)?)\\s*%', range: [0, 100] } },
+        scope: { kind: 'enum', required: false, enum: ['strategy', 'account'], default: 'strategy', extractor: { kind: 'enum-zh-map', enumMap: { '策略': 'strategy', '账户': 'account' } } },
+      },
+      matchRequires: ['valuePct'],
+      phaseResolver: 'fixed-gate',
+      sideResolver: 'both',
+    },
+  },
+
+  'risk.cooldown': {
+    corpus: {
+      aliases: ['冷却期', '交易冷却', 'cooldown'],
+      positiveExamples: ['止损后冷却 5 根 K 线', 'Wait 30 minutes after exit'],
+      negativeExamples: ['只在上午交易', '时间窗口 9 点到 15 点'],
+      goldenUtterances: getGoldenUtterancesForAtom('risk.cooldown'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'risk.cooldown.durationBars') return '请补充冷却周期，例如 5 根 K 线。'
+      if (slotKey === 'risk.cooldown.durationMs') return '请补充冷却时长，例如 30 分钟。'
+      return '请补充交易冷却期的缺失信息。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.cooldown'],
+      paramRenderers: { durationBars: (v) => `${v} bars`, durationMs: (v) => String(v) },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.cooldown'].en
+        const bars = typeof params.durationBars === 'number' ? `${params.durationBars} 根 K 线` : ''
+        return bars ? `交易冷却：${bars}` : '交易冷却期'
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['冷却', '暂停', 'cooldown', 'wait'] as const,
+        verbs: { fixed: ['冷却', '暂停', '等待', 'cooldown', 'wait'] as const },
+      },
+      paramSlots: {
+        durationBars: { kind: 'number', required: false, range: [1, 10000], extractor: { kind: 'number-int', pattern: '(\\d+)\\s*(?:根|bar|bars|K)', range: [1, 10000] } },
+        durationMs: { kind: 'duration', required: false, extractor: { kind: 'duration', pattern: '\\d+[mhd]' } },
+      },
+      phaseResolver: 'fixed-gate',
+      sideResolver: 'both',
+    },
+  },
+
+  'risk.max_loss_per_trade': {
+    corpus: {
+      aliases: ['单笔亏损上限', '每笔最大亏损', 'max loss per trade'],
+      positiveExamples: ['单笔最多亏 2%', 'Limit each trade loss to 100 USDT'],
+      negativeExamples: ['总回撤 10%', '预算 1000 USDT'],
+      goldenUtterances: getGoldenUtterancesForAtom('risk.max_loss_per_trade'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'risk.max_loss_per_trade.valuePct') return '请补充单笔亏损上限百分比，例如 2%。'
+      if (slotKey === 'risk.max_loss_per_trade.valueQuote') return '请补充单笔亏损金额上限，例如 100 USDT。'
+      return '请补充单笔亏损上限的缺失信息。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['risk.max_loss_per_trade'],
+      paramRenderers: { valuePct: (v) => `${v}%`, valueQuote: (v) => String(v) },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['risk.max_loss_per_trade'].en
+        if (typeof params.valuePct === 'number') return `单笔亏损不超过 ${params.valuePct}%`
+        if (typeof params.valueQuote === 'number') return `单笔亏损不超过 ${params.valueQuote} USDT`
+        return '单笔亏损上限'
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['单笔亏损', '每笔亏损', '单次亏损', '单笔最多亏', '每笔最多亏', '单次最多亏', 'max loss per trade'] as const,
+        verbs: { fixed: ['不超过', '最多', 'limit', 'cap'] as const },
+      },
+      paramSlots: {
+        valuePct: { kind: 'percent', required: false, range: [0, 100], extractor: { kind: 'percent', pattern: '(?:单笔|每笔|单次|max loss).*?(\\d+(?:\\.\\d+)?)\\s*%', range: [0, 100] } },
+        valueQuote: { kind: 'number', required: false, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:单笔|每笔|单次|max loss).*?(\\d+(?:\\.\\d+)?)\\s*(?:USDT|U|usd)', range: [0, 1e9] } },
+      },
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
+    },
+  },
+
   // ── 组合风险 orchestration（portfolioRisk）
   'portfolioRisk.drawdown_block': {
     // TODO #1329b corpus stub，待补真实 NL 语料
@@ -3466,6 +3676,55 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   },
 
   // ── 仓位约束（positionConstraint）
+  'position.sizing': {
+    corpus: {
+      aliases: ['仓位', '固定仓位', '单笔仓位', 'position sizing'],
+      positiveExamples: ['单笔仓位 10%', '每次固定买入 100 USDT'],
+      negativeExamples: ['预算上限 1000 USDT', '最大敞口 30%'],
+      goldenUtterances: getGoldenUtterancesForAtom('position.sizing'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'position.sizing.value') return '请确认单笔仓位大小，例如 100 USDT 或账户 10%。'
+      return '请补充仓位大小的缺失信息。'
+    },
+    mutex: [],
+    isActionable: true,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['position.sizing'],
+      paramRenderers: {
+        value: (v) => String(v),
+        mode: (v) => String(v),
+        asset: (v) => String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['position.sizing'].en
+        const sizing = typeof params.sizing === 'object' && params.sizing !== null ? params.sizing as Record<string, unknown> : params
+        const value = typeof sizing.value === 'number' ? sizing.value : null
+        const kind = typeof sizing.kind === 'string' ? sizing.kind : typeof sizing.mode === 'string' ? sizing.mode : ''
+        if (value !== null && (kind === 'fixed_pct' || kind === 'percent' || sizing.unit === 'percent')) return `单笔仓位：账户 ${value}%`
+        if (value !== null) return `单笔仓位：${value} USDT`
+        return '仓位大小'
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['仓位', '单笔', '每次', 'position size', 'sizing'] as const,
+        verbs: { fixed: ['固定', '使用', '买入', 'use', 'allocate'] as const },
+      },
+      paramSlots: {
+        value: { kind: 'number', required: true, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:仓位|单笔|每次|position).*?(\\d+(?:\\.\\d+)?)\\s*(?:USDT|U|%)?', range: [0, 1e9] } },
+        mode: { kind: 'enum', required: false, enum: ['fixed_quote', 'fixed_pct'], default: 'fixed_quote', extractor: { kind: 'enum-zh-map', enumMap: { 'USDT': 'fixed_quote', 'U': 'fixed_quote', '%': 'fixed_pct', '百分比': 'fixed_pct' } } },
+      },
+      matchRequires: ['value'],
+      phaseResolver: 'fixed-entry',
+      sideResolver: 'inherit',
+    },
+  },
+
   // Issue #1313 PR4 决策（方案 B：保持 capabilityStatus = 'irshape-not-applicable'）
   // ----------------------------------------------------------------------------
   // `position.dca_schedule` IR 编译阶段无独立产出：`canonical-spec-v2-ir-compiler.service.ts`
@@ -3555,9 +3814,9 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
     },
     surface: {
       intent: {
-        keywords: ['定投', 'DCA', 'dca', '每跌', '分批入场', 'price drops', 'each interval'] as const,
+        keywords: ['定投', 'DCA', 'dca', '每跌', '补仓', '回撤补仓', '分批入场', 'price drops', 'each interval'] as const,
         verbs: {
-          fixed: ['跌', '每', '间隔', 'every', 'drops', 'interval'] as const,
+          fixed: ['跌', '回撤', '补仓', '每', '间隔', 'every', 'drops', 'interval'] as const,
         },
       },
       paramSlots: {
@@ -3625,6 +3884,128 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
         //   extractor 留空：该 slot 不参与单子句 atom 匹配，仅 backfill 写入。
         profitThreshold: { kind: 'percent', required: false, range: [0, 100] },
       },
+      phaseResolver: 'fixed-entry',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'position.budget_cap': {
+    corpus: {
+      aliases: ['预算上限', '总预算', 'capital cap', 'budget cap'],
+      positiveExamples: ['总预算最多 1000 USDT', 'Budget cap 500 USDT'],
+      negativeExamples: ['单笔 100 USDT', '单笔亏损 100 USDT'],
+      goldenUtterances: getGoldenUtterancesForAtom('position.budget_cap'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'position.budget_cap.valueQuote') return '请确认总预算上限，例如 1000 USDT。'
+      return '请补充预算上限的缺失信息。'
+    },
+    mutex: [],
+    isActionable: true,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['position.budget_cap'],
+      paramRenderers: { valueQuote: (v) => String(v), asset: (v) => String(v) },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['position.budget_cap'].en
+        const valueQuote = typeof params.valueQuote === 'number' ? `${params.valueQuote} USDT` : ''
+        return valueQuote ? `预算上限：${valueQuote}` : '预算上限'
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['预算', '总投入', '总资金', 'budget', 'capital cap'] as const,
+        verbs: { fixed: ['上限', '最多', '不超过', 'cap', 'limit'] as const },
+      },
+      paramSlots: {
+        valueQuote: { kind: 'number', required: true, range: [0, 1e9], extractor: { kind: 'number-decimal', pattern: '(?:预算|总投入|总资金|budget|capital)\\D{0,12}(\\d+(?:\\.\\d+)?)\\s*(?:USDT|U|usd)?', range: [0, 1e9] } },
+        asset: { kind: 'enum', required: false, enum: ['USDT', 'USD'], default: 'USDT', extractor: { kind: 'enum-zh-map', enumMap: { USDT: 'USDT', USD: 'USD', U: 'USDT' } } },
+      },
+      matchRequires: ['valueQuote'],
+      phaseResolver: 'fixed-entry',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'position.leverage': {
+    corpus: {
+      aliases: ['杠杆', '倍杠杆', 'leverage'],
+      positiveExamples: ['使用 2 倍杠杆', 'Run with 3x leverage'],
+      negativeExamples: ['3% 止损', '3 次补仓'],
+      goldenUtterances: getGoldenUtterancesForAtom('position.leverage'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'position.leverage.value') return '请确认杠杆倍数，例如 2 倍。'
+      return '请补充杠杆设置的缺失信息。'
+    },
+    mutex: [],
+    isActionable: true,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['position.leverage'],
+      paramRenderers: { value: (v) => `${v}x` },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['position.leverage'].en
+        const value = typeof params.value === 'number' ? `${params.value} 倍` : ''
+        return value ? `杠杆：${value}` : '杠杆倍数'
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['杠杆', '倍杠杆', 'leverage'] as const,
+        verbs: { fixed: ['使用', '固定', 'use', 'with'] as const },
+      },
+      paramSlots: {
+        value: { kind: 'number', required: true, range: [1, 125], multipleOf: 0.1, extractor: { kind: 'number-decimal', pattern: '(\\d+(?:\\.\\d+)?)\\s*(?:倍|x)\\s*(?:杠杆|leverage)?', range: [1, 125] } },
+      },
+      matchRequires: ['value'],
+      phaseResolver: 'fixed-entry',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'position.max_exposure_pct': {
+    corpus: {
+      aliases: ['最大敞口', '敞口上限', 'exposure cap'],
+      positiveExamples: ['最大敞口不超过 30%', 'Cap exposure at 25%'],
+      negativeExamples: ['最大回撤 10%', '单笔仓位 10%'],
+      goldenUtterances: getGoldenUtterancesForAtom('position.max_exposure_pct'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'position.max_exposure_pct.valuePct') return '请确认最大敞口百分比，例如 30%。'
+      return '请补充敞口上限的缺失信息。'
+    },
+    mutex: [],
+    isActionable: true,
+    sizingEvidence: null,
+    classifier: { ...DEFAULT_CLASSIFIER_META },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['position.max_exposure_pct'],
+      paramRenderers: { valuePct: (v) => `${v}%`, scope: (v) => String(v) },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['position.max_exposure_pct'].en
+        const valuePct = typeof params.valuePct === 'number' ? `${params.valuePct}%` : ''
+        return valuePct ? `最大敞口不超过 ${valuePct}` : '敞口上限'
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['敞口', '最大仓位', 'exposure cap', 'max exposure'] as const,
+        verbs: { fixed: ['不超过', '最多', 'cap', 'limit'] as const },
+      },
+      paramSlots: {
+        valuePct: { kind: 'percent', required: true, range: [0, 100], extractor: { kind: 'percent', pattern: '(?:敞口|最大仓位|exposure)\\D{0,12}(\\d+(?:\\.\\d+)?)\\s*%', range: [0, 100] } },
+        scope: { kind: 'enum', required: false, enum: ['strategy', 'symbol'], default: 'strategy', extractor: { kind: 'enum-zh-map', enumMap: { '策略': 'strategy', '标的': 'symbol' } } },
+      },
+      matchRequires: ['valuePct'],
       phaseResolver: 'fixed-entry',
       sideResolver: 'inherit',
     },

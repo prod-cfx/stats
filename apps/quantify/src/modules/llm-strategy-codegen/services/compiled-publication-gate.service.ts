@@ -645,6 +645,7 @@ export class CompiledPublicationGateService {
       ...ir.orderPrograms.map((item, index) => [item, `ir.orderPrograms[${index}]`] as const),
       ...ir.riskPolicy.guards.map((item, index) => [item, `ir.riskPolicy.guards[${index}]`] as const),
       ...(ir.riskPolicy.riskPredicates ?? []).map((item, index) => [item, `ir.riskPolicy.riskPredicates[${index}]`] as const),
+      ...(ir.orchestrationPortfolioRisks ?? []).map((item, index) => [item, `ir.orchestrationPortfolioRisks[${index}]`] as const),
       ...(ir.orchestrationGates ?? []).map((item, index) => [item, `ir.orchestrationGates[${index}]`] as const),
       ...(ir.orchestrationPrograms ?? []).map((item, index) => [item, `ir.orchestrationPrograms[${index}]`] as const),
     ].forEach(([item, label]) => {
@@ -676,6 +677,7 @@ export class CompiledPublicationGateService {
       ...ast.guards.map((item, index) => [item, `ast.guards[${index}]`] as const),
       ...ast.orderPrograms.map((item, index) => [item, `ast.orderPrograms[${index}]`] as const),
       ...(ast.riskPredicates ?? []).map((item, index) => [item, `ast.riskPredicates[${index}]`] as const),
+      ...(ast.orchestrationPortfolioRisks ?? []).map((item, index) => [item, `ast.orchestrationPortfolioRisks[${index}]`] as const),
       ...(ast.orchestrationPrograms ?? []).map((item, index) => [item, `ast.orchestrationPrograms[${index}]`] as const),
     ].forEach(([item, label]) => {
       this.collectExecutableSourcePath(item, label, sourcePaths, missing)

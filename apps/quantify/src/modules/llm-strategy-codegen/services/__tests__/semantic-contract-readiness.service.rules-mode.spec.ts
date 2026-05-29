@@ -349,6 +349,76 @@ describe('semanticContractReadinessService.evaluateRulesReadiness', () => {
     ]))
   })
 
+  it('mainflow missing PR3 risk and position slots point to typed rules effect paths', () => {
+    const riskRules = svc.evaluateMainflowRulesReadiness([
+      rule({
+        id: 'r-entry-risk',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.trailing_stop_pct', {})],
+          positions: [atom('position.sizing', { sizing: { kind: 'quote', value: 10, asset: 'USDT' } })],
+          orchestration: [],
+          programs: [],
+        },
+      }),
+    ])
+    const positionRules = svc.evaluateMainflowRulesReadiness([
+      rule({
+        id: 'r-entry-position',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.stop_loss_pct', { valuePct: 5 })],
+          positions: [atom('position.budget_cap', {})],
+          orchestration: [],
+          programs: [],
+        },
+      }),
+    ])
+
+    expect(riskRules.openSlots).toEqual([
+      expect.objectContaining({
+        fieldPath: 'rules[0].effects.risks[0].params.valuePct',
+        slotKey: 'risk.trailing_stop_pct.valuePct',
+        atomKey: 'risk.trailing_stop_pct',
+        paramSlotKey: 'valuePct',
+      }),
+    ])
+    expect(positionRules.openSlots).toEqual([
+      expect.objectContaining({
+        fieldPath: 'rules[0].effects.positions[0].params.valueQuote',
+        slotKey: 'position.budget_cap.valueQuote',
+        atomKey: 'position.budget_cap',
+        paramSlotKey: 'valueQuote',
+      }),
+    ])
+  })
+
+  it('mainflow returns only one missing PR3 slot per clarification turn', () => {
+    const r = svc.evaluateMainflowRulesReadiness([
+      rule({
+        id: 'r-entry-multiple-open-slots',
+        phase: 'entry',
+        condition: atom('price.breakout_up', { lookback: 20 }),
+        effects: {
+          actions: [atom('action.open_long')],
+          risks: [atom('risk.trailing_stop_pct', {})],
+          positions: [atom('position.budget_cap', {})],
+          orchestration: [],
+          programs: [],
+        },
+      }),
+    ])
+
+    expect(r.openSlots).toHaveLength(1)
+    expect(r.openSlots[0]).toEqual(expect.objectContaining({
+      slotKey: 'risk.trailing_stop_pct.valuePct',
+    }))
+  })
+
   it('mainflow accepts stop loss valuePct without opening stop loss slot', () => {
     const rules: SemanticRule[] = [
       rule({

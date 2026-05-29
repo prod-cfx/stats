@@ -350,6 +350,45 @@ describe('#1495 buildDisplayLogicGraph — rules tree 不被 flat 拆散', () =>
     expect(serialized).not.toContain('rules[0].effects[1]')
   })
 
+  it('renders PR3 risk and position effects from typed rule paths', () => {
+    const state: SemanticState = baseState({
+      rules: [{
+        id: 'typed-pr3-risk-position-effects',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.breakout_up', params: { period: 20 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [
+            { kind: 'atom', key: 'risk.trailing_stop_pct', params: { valuePct: 3 } },
+            { kind: 'atom', key: 'risk.cooldown', params: { durationBars: 5 } },
+          ],
+          positions: [
+            { kind: 'atom', key: 'position.budget_cap', params: { valueQuote: 1000, asset: 'USDT' } },
+            { kind: 'atom', key: 'position.leverage', params: { value: 2 } },
+            { kind: 'atom', key: 'position.max_exposure_pct', params: { valuePct: 30 } },
+          ],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const serialized = JSON.stringify(graph)
+
+    expect(serialized).toContain('rules[0].effects.risks[0]')
+    expect(serialized).toContain('rules[0].effects.risks[1]')
+    expect(serialized).toContain('rules[0].effects.positions[0]')
+    expect(serialized).toContain('rules[0].effects.positions[1]')
+    expect(serialized).toContain('rules[0].effects.positions[2]')
+    expect(serialized).toContain('移动止损')
+    expect(serialized).toContain('交易冷却')
+    expect(serialized).toContain('预算上限')
+    expect(serialized).toContain('杠杆')
+    expect(serialized).toContain('最大敞口')
+  })
+
   it('keeps context execute items in rules mode without flat-only risk or position', () => {
     const state: SemanticState = {
       version: 1,

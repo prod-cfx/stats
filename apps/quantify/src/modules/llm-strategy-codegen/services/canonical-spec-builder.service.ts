@@ -71,12 +71,19 @@ const FIELD_KEY = {
   RISK_ATR_TAKE_PROFIT: 'risk.atr_take_profit',
   RISK_CONDITION_EXPRESSION: 'risk.condition_expression',
   RISK_MAX_DRAWDOWN_PCT: 'risk.max_drawdown_pct',
+  RISK_COOLDOWN: 'risk.cooldown',
+  RISK_COOLDOWN_BARS: 'risk.cooldown_bars',
+  RISK_MAX_LOSS_PER_TRADE: 'risk.max_loss_per_trade',
   RISK_MAX_SINGLE_LOSS_PCT: 'risk.max_single_loss_pct',
   RISK_REMEMBERED_LEVEL_STOP: 'risk.remembered_level_stop',
   RISK_STOP_LOSS_PCT: 'risk.stop_loss_pct',
   RISK_TAKE_PROFIT_PCT: 'risk.take_profit_pct',
+  RISK_TRAILING_STOP_PCT: 'risk.trailing_stop_pct',
   POSITION_SIZING: 'position.sizing',
   POSITION_PER_ORDER_BUDGET: 'position.per_order_budget',
+  POSITION_BUDGET_CAP: 'position.budget_cap',
+  POSITION_LEVERAGE: 'position.leverage',
+  POSITION_MAX_EXPOSURE_PCT: 'position.max_exposure_pct',
   VOLUME_RELATIVE_AVERAGE: 'volume.relative_average',
 } as const
 
@@ -975,7 +982,14 @@ export class CanonicalSpecBuilderService {
           if (partialTakeProfitRules.length === 0) {
             throw new Error(`UnsupportedSemanticRuleRiskEffect: key=${leaf.key} sourcePath=${leaf.path}`)
           }
-          canonicalRules.push(...partialTakeProfitRules)
+          canonicalRules.push(...partialTakeProfitRules.map(rule => ({
+            ...rule,
+            metadata: {
+              ...rule.metadata,
+              semanticKey: leaf.key,
+              sourcePath: leaf.path,
+            },
+          })))
           riskPriority -= partialTakeProfitRules.length
           continue
         }
@@ -1221,6 +1235,94 @@ export class CanonicalSpecBuilderService {
             },
           }
         : null
+    }
+    if (input.leaf.key === FIELD_KEY.RISK_TRAILING_STOP_PCT) {
+      const valuePct = this.readFiniteNumber(input.leaf.params.valuePct)
+      if (valuePct === null || valuePct <= 0 || valuePct >= 100) return null
+      return {
+        id: `semantic-risk-${input.rule.id}-${input.priority}`,
+        phase: 'risk',
+        sideScope: input.rule.sideScope,
+        priority: input.priority,
+        condition: {
+          kind: 'atom',
+          key: FIELD_KEY.RISK_TRAILING_STOP_PCT,
+          semanticScope: 'position',
+          op: 'GTE',
+          value: Number((valuePct / 100).toFixed(4)),
+          params: typeof input.leaf.params.basis === 'string' ? { basis: input.leaf.params.basis } : {},
+        },
+        actions: [{ type: 'FORCE_EXIT' }],
+        metadata: {
+          semanticKey: input.leaf.key,
+          sourcePath: input.sourcePath,
+        },
+      }
+    }
+    if (input.leaf.key === FIELD_KEY.RISK_MAX_DRAWDOWN_PCT) {
+      const valuePct = this.readFiniteNumber(input.leaf.params.valuePct)
+      if (valuePct === null || valuePct <= 0 || valuePct >= 100) return null
+      return {
+        id: `semantic-risk-${input.rule.id}-${input.priority}`,
+        phase: 'risk',
+        sideScope: 'both',
+        priority: input.priority,
+        condition: {
+          kind: 'atom',
+          key: FIELD_KEY.RISK_MAX_DRAWDOWN_PCT,
+          semanticScope: 'portfolio',
+          op: 'GTE',
+          value: Number((valuePct / 100).toFixed(4)),
+        },
+        actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+        metadata: {
+          semanticKey: input.leaf.key,
+          sourcePath: input.sourcePath,
+        },
+      }
+    }
+    if (input.leaf.key === FIELD_KEY.RISK_COOLDOWN) {
+      const durationBars = this.readFiniteNumber(input.leaf.params.durationBars)
+      if (durationBars === null || !Number.isInteger(durationBars) || durationBars <= 0) return null
+      return {
+        id: `semantic-risk-${input.rule.id}-${input.priority}`,
+        phase: 'risk',
+        sideScope: input.rule.sideScope,
+        priority: input.priority,
+        condition: {
+          kind: 'atom',
+          key: FIELD_KEY.RISK_COOLDOWN_BARS,
+          semanticScope: 'market',
+          params: { bars: durationBars },
+        },
+        actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+        metadata: {
+          semanticKey: input.leaf.key,
+          sourcePath: input.sourcePath,
+        },
+      }
+    }
+    if (input.leaf.key === FIELD_KEY.RISK_MAX_LOSS_PER_TRADE) {
+      const valuePct = this.readFiniteNumber(input.leaf.params.valuePct)
+      if (valuePct === null || valuePct <= 0 || valuePct >= 100) return null
+      return {
+        id: `semantic-risk-${input.rule.id}-${input.priority}`,
+        phase: 'risk',
+        sideScope: input.rule.sideScope,
+        priority: input.priority,
+        condition: {
+          kind: 'atom',
+          key: FIELD_KEY.RISK_MAX_SINGLE_LOSS_PCT,
+          semanticScope: 'position',
+          op: 'GTE',
+          value: Number((valuePct / 100).toFixed(4)),
+        },
+        actions: [{ type: 'FORCE_EXIT' }],
+        metadata: {
+          semanticKey: input.leaf.key,
+          sourcePath: input.sourcePath,
+        },
+      }
     }
     if (input.leaf.key !== FIELD_KEY.RISK_STOP_LOSS_PCT && input.leaf.key !== FIELD_KEY.RISK_TAKE_PROFIT_PCT) {
       return null
@@ -2116,7 +2218,9 @@ export class CanonicalSpecBuilderService {
       if (
         leaf.key === 'position.dca_schedule'
         || leaf.key === 'position.pyramiding_limit'
-        || leaf.key === 'position.max_exposure_pct'
+        || leaf.key === FIELD_KEY.POSITION_MAX_EXPOSURE_PCT
+        || leaf.key === FIELD_KEY.POSITION_BUDGET_CAP
+        || leaf.key === FIELD_KEY.POSITION_LEVERAGE
         || leaf.key === 'grid.range_rebalance'
       ) {
         continue

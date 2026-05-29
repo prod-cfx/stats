@@ -36,7 +36,7 @@ import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry
 import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
 import { buildTriggerCombinationContract } from './semantic-state-normalization'
 import { validateSemanticExpressionContract } from './strategy-semantic-contracts'
-import type { RulesMainflowAtomFact } from './rules-mainflow-reader.service'
+import type { RulesMainflowAtomFact, RulesMainflowLeaf } from './rules-mainflow-reader.service'
 import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
 import type { ParamSlotSchema } from '../atom-contracts/atom-contract-surface.types'
 
@@ -869,30 +869,8 @@ export class SemanticContractReadinessService {
 
     const openSlots: SemanticSlotState[] = []
     for (const leaf of read.leaves) {
-      if (leaf.role === 'risk' && leaf.key === 'risk.stop_loss_pct' && !isPositiveFiniteNumber(leaf.params.valuePct)) {
-        openSlots.push({
-          slotKey: 'risk.stop_loss_pct.valuePct',
-          fieldPath: `${leaf.path}.params.valuePct`,
-          status: 'open',
-          priority: 'risk',
-          questionHint: '请确认止损百分比。',
-          affectsExecution: true,
-          atomKey: leaf.key,
-          paramSlotKey: 'valuePct',
-        })
-      }
-      if (leaf.role === 'position' && leaf.key === 'position.sizing' && !readSizingValueFromParams(leaf.params)) {
-        openSlots.push({
-          slotKey: 'position.sizing.value',
-          fieldPath: `${leaf.path}.params.sizing.value`,
-          status: 'open',
-          priority: 'risk',
-          questionHint: '请确认单笔仓位大小。',
-          affectsExecution: true,
-          atomKey: leaf.key,
-          paramSlotKey: 'sizing.value',
-        })
-      }
+      const slot = buildMainflowRequiredParamSlot(leaf)
+      if (slot) openSlots.push(slot)
     }
 
     const entryRuleIndexes = new Set(
@@ -937,7 +915,7 @@ export class SemanticContractReadinessService {
     return {
       ready: blockingReasons.length === 0,
       blockingReasons,
-      openSlots,
+      openSlots: openSlots.slice(0, 1),
     }
   }
 }
@@ -999,6 +977,72 @@ function readSizingValueFromParams(params: Readonly<Record<string, unknown>>): n
     if (isPositiveFiniteNumber(v)) return v
   }
   return null
+}
+
+function buildMainflowRequiredParamSlot(leaf: RulesMainflowLeaf): SemanticSlotState | null {
+  if (leaf.role !== 'risk' && leaf.role !== 'position') return null
+
+  if (leaf.key === ATOM_CONTRACT_REGISTRY['position.sizing'].key) {
+    return readSizingValueFromParams(leaf.params)
+      ? null
+      : buildMainflowParamSlot(leaf, 'sizing.value', '请确认单笔仓位大小。', 'position.sizing.value')
+  }
+
+  const oneOfSlot = buildMainflowOneOfParamSlot(leaf)
+  if (oneOfSlot) return oneOfSlot
+
+  const contract = (ATOM_CONTRACT_REGISTRY as Record<string, { surface?: { paramSlots?: Record<string, ParamSlotSchema> } } | undefined>)[leaf.key]
+  const paramSlots = contract?.surface?.paramSlots
+  if (!paramSlots) return null
+
+  for (const [slotKey, schema] of Object.entries(paramSlots)) {
+    if (!schema.required) continue
+    if (isPresentMainflowParamValue(readNestedParam(leaf.params, slotKey))) continue
+    return buildMainflowParamSlot(leaf, slotKey, `请补充 ${leaf.key} 的 ${slotKey} 参数。`)
+  }
+
+  return null
+}
+
+function buildMainflowOneOfParamSlot(leaf: RulesMainflowLeaf): SemanticSlotState | null {
+  if (leaf.key === ATOM_CONTRACT_REGISTRY['risk.cooldown'].key) {
+    return isPresentMainflowParamValue(leaf.params.durationBars) || isPresentMainflowParamValue(leaf.params.durationMs)
+      ? null
+      : buildMainflowParamSlot(leaf, 'durationBars', '请补充冷却周期，例如 5 根 K 线。')
+  }
+
+  if (leaf.key === ATOM_CONTRACT_REGISTRY['risk.max_loss_per_trade'].key) {
+    return isPresentMainflowParamValue(leaf.params.valuePct) || isPresentMainflowParamValue(leaf.params.valueQuote)
+      ? null
+      : buildMainflowParamSlot(leaf, 'valuePct', '请补充单笔亏损上限百分比，例如 2%。')
+  }
+
+  return null
+}
+
+function buildMainflowParamSlot(
+  leaf: RulesMainflowLeaf,
+  paramSlotKey: string,
+  questionHint: string,
+  slotKey = `${leaf.key}.${paramSlotKey}`,
+): SemanticSlotState {
+  return {
+    slotKey,
+    fieldPath: `${leaf.path}.params.${paramSlotKey}`,
+    status: 'open',
+    priority: leaf.role === 'risk' ? 'risk' : 'core',
+    questionHint,
+    affectsExecution: true,
+    atomKey: leaf.key,
+    paramSlotKey,
+  }
+}
+
+function isPresentMainflowParamValue(value: unknown): boolean {
+  if (value === undefined || value === null) return false
+  if (typeof value === 'number') return Number.isFinite(value) && value > 0
+  if (typeof value === 'string') return value.trim().length > 0
+  return true
 }
 
 function isPositiveFiniteNumber(value: unknown): value is number {

@@ -17,7 +17,7 @@ import type {
   SemanticState,
   SemanticTriggerState,
 } from '../types/semantic-state'
-import { updateRuleAtomParams, type SemanticRule } from '../types/atom-expr'
+import { updateRuleAtomParams, type RuleEffectsByRole, type SemanticRule } from '../types/atom-expr'
 import { PositionSizingContractService } from './position-sizing-contract.service'
 import { normalizeRiskSemantics } from './semantic-state-normalization'
 import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
@@ -42,6 +42,56 @@ function rulesPathPositionConstraints(state: SemanticState): readonly SemanticPo
 
 function rulesPathOrchestration(state: SemanticState): readonly SemanticOrchestrationNode[] {
   return reducerRulesMainflowReader.readFactsByRole(state, 'orchestration') as unknown as readonly SemanticOrchestrationNode[]
+}
+
+function applyDirectRuleParamAnswer(
+  rules: readonly SemanticRule[] | undefined,
+  fieldPath: string | undefined,
+  answerText: string,
+): readonly SemanticRule[] | undefined {
+  if (!rules?.length || !fieldPath) return rules
+
+  const effectMatch = fieldPath.match(/^rules\[(\d+)\]\.effects\.(actions|risks|positions|orchestration|programs)\[(\d+)\]\.params\.([A-Za-z_$][\w$]*)$/u)
+  if (!effectMatch?.[1] || !effectMatch[2] || !effectMatch[3] || !effectMatch[4]) return rules
+
+  const ruleIndex = Number.parseInt(effectMatch[1], 10)
+  const role = effectMatch[2] as keyof RuleEffectsByRole
+  const effectIndex = Number.parseInt(effectMatch[3], 10)
+  const paramKey = effectMatch[4]
+  const rule = rules[ruleIndex]
+  if (!rule || Array.isArray(rule.effects) || !rule.effects || !(role in rule.effects)) return rules
+
+  const effects = rule.effects as RuleEffectsByRole
+  const effect = effects[role][effectIndex]
+  if (!effect || effect.kind !== 'atom') return rules
+
+  const paramValue = parseDirectRuleParamAnswer(answerText)
+  const nextEffects = {
+    actions: [...effects.actions],
+    risks: [...effects.risks],
+    positions: [...effects.positions],
+    orchestration: [...effects.orchestration],
+    programs: [...effects.programs],
+  }
+  nextEffects[role][effectIndex] = {
+    ...effect,
+    params: {
+      ...(effect.params ?? {}),
+      [paramKey]: paramValue,
+    },
+  }
+
+  const nextRules = [...rules]
+  nextRules[ruleIndex] = {
+    ...rule,
+    effects: nextEffects,
+  }
+  return nextRules
+}
+
+function parseDirectRuleParamAnswer(answerText: string): string | number {
+  const numeric = Number(answerText.trim().replace(/%$/u, ''))
+  return Number.isFinite(numeric) ? numeric : answerText
 }
 
 /**
@@ -305,6 +355,15 @@ export class SemanticStateReducerService {
     }
 
     const answerText = input.answer.trim()
+    const directRulesPathUpdate = applyDirectRuleParamAnswer(nextRules, input.targetFieldPath, answerText)
+    if (directRulesPathUpdate !== nextRules) {
+      return this.removeFlatBucketsFromRulesState({
+        ...currentState,
+        rules: directRulesPathUpdate,
+        updatedAt: nextState.updatedAt,
+      })
+    }
+
     for (const trigger of rulesPathTriggers(nextState)) {
       const slot = trigger.openSlots.find((item) => {
         if (input.targetSlotId) {

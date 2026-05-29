@@ -82,8 +82,8 @@ describe('atom-bucket-derivation (issue #1364 PR1)', () => {
     // Issue #1498 S4 + S5: 新增 risk.atr_multiple_stop / risk.atr_multiple_take_profit /
     //   risk.remembered_level_stop 三个 atom，合计 +3。
     // Issue #1491 阶段 B: 新增 price.rolling_extrema_breakout 一个 atom，合计 +1。
-    // Issue #1736 Stage 4 PR2: 新增 predicate dialogue atom shell 九个，合计 +9。
-    const EXPECTED_ATOM_COUNT = 72
+    // Issue #1737 Stage 4 PR3: 新增 risk/position dialogue atom shell 八个，合计 +8。
+    const EXPECTED_ATOM_COUNT = 80
     expect(getAllRegisteredAtomKeys().length).toBe(EXPECTED_ATOM_COUNT)
   })
 })

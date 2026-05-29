@@ -322,6 +322,7 @@ export interface IrOrchestrationGate {
 // Phase 5 S7 (#1057): drawdown_block IR —— scope='portfolio'
 export interface IrPortfolioDrawdownRisk {
   id: string
+  sourcePath?: string
   scope: 'portfolio'
   mode: 'observe' | 'enforce'
   thresholdPct: number
@@ -331,6 +332,7 @@ export interface IrPortfolioDrawdownRisk {
 // Phase 5 S8 (#1119): symbol exposure cap IR —— scope='symbol'
 export interface IrPortfolioSymbolExposureCapRisk {
   id: string
+  sourcePath?: string
   scope: 'symbol'
   mode: 'observe' | 'enforce'
   notionalCapPct: number
@@ -341,6 +343,7 @@ export interface IrPortfolioSymbolExposureCapRisk {
 // Phase 5 S8 (#1119): subStrategy exposure cap IR —— scope='subStrategy'
 export interface IrPortfolioSubStrategyExposureCapRisk {
   id: string
+  sourcePath?: string
   scope: 'subStrategy'
   mode: 'observe' | 'enforce'
   notionalCapPct: number

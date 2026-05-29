@@ -469,6 +469,59 @@ describe('publication gate rules-only hash chain', () => {
     ]))
   })
 
+  it('passes when canonical max drawdown risk is traced through IR and AST portfolio risks', () => {
+    const input = fixture()
+    const canonicalRules = input.canonicalSpec.rules as Array<Record<string, unknown>>
+    canonicalRules.push({
+      id: 'semantic-risk-max-drawdown',
+      phase: 'risk',
+      priority: 120,
+      condition: { kind: 'atom', key: 'risk.max_drawdown_pct', value: 0.12 },
+      actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+      metadata: { sourcePath: 'rules[1].effects.risks[0]' },
+    })
+    input.rules.push({
+      id: 'rule-max-drawdown',
+      phase: 'entry',
+      condition: { kind: 'atom', key: 'price.above' },
+      effects: {
+        actions: [],
+        risks: [{ kind: 'atom', key: 'risk.max_drawdown_pct', params: { valuePct: 12 } }],
+      },
+    })
+    input.ir.orchestrationPortfolioRisks = [{
+      id: 'semantic-risk-max-drawdown',
+      scope: 'portfolio',
+      mode: 'enforce',
+      thresholdPct: 12,
+      effectWhenTriggered: 'block_new_entries',
+      sourcePath: 'rules[1].effects.risks[0]',
+    }]
+    input.ast = new CanonicalStrategyAstCompilerService().compile(input.ir)
+    linkFixtureHashes(input)
+    input.script = emitScript(input.ast)
+
+    const result = newGate().validateRulesOnlyHashChain(input)
+
+    expect(result.passed).toBe(true)
+    expect(result.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'trace.ir',
+        passed: true,
+        actual: expect.objectContaining({
+          sourcePaths: expect.arrayContaining(['rules[1].effects.risks[0]']),
+        }),
+      }),
+      expect.objectContaining({
+        key: 'trace.ast',
+        passed: true,
+        actual: expect.objectContaining({
+          sourcePaths: expect.arrayContaining(['rules[1].effects.risks[0]']),
+        }),
+      }),
+    ]))
+  })
+
   it('passes when canonical guard rules are traced through IR and AST guards', () => {
     const input = fixture()
     const canonicalRules = input.canonicalSpec.rules as Array<Record<string, unknown>>

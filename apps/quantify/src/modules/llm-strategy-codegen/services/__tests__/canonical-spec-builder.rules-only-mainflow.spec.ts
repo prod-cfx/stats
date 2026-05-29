@@ -1356,6 +1356,145 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     ]))
   })
 
+  it.each([
+    ['risk.stop_loss_pct', { valuePct: 5, basis: 'entry_avg_price' }, 'STOP_LOSS_PCT', 'rules[0].effects.risks[0]'],
+    ['risk.trailing_stop_pct', { valuePct: 3, basis: 'entry_avg_price' }, 'TRAILING_STOP_PCT', 'rules[0].effects.risks[0]'],
+    ['risk.max_drawdown_pct', { valuePct: 12 }, 'portfolioRisk:12', 'rules[0].effects.risks[0]'],
+    ['risk.cooldown', { durationBars: 5 }, 'cooldownBars:5', 'rules[0].effects.risks[0]'],
+    ['risk.max_loss_per_trade', { valuePct: 2 }, 'MAX_SINGLE_LOSS_PCT', 'rules[0].effects.risks[0]'],
+  ])('keeps PR3 risk effect %s through canonical spec and IR with source path', (key, params, expected, sourcePath) => {
+    const state = baseState({
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+      rules: [{
+        id: `entry-with-${key.replace(/\./gu, '-')}`,
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.breakout_up', params: { period: 20 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [{ kind: 'atom', key, params }],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+    const { ir } = new CanonicalSpecV2IrCompilerService().compile({ canonicalSpec: spec, fallback: compileFallback })
+    const riskRule = spec.rules.find(rule => rule.metadata?.sourcePath === sourcePath)
+
+    expect(riskRule).toEqual(expect.objectContaining({
+      phase: 'risk',
+      metadata: expect.objectContaining({ semanticKey: key, sourcePath }),
+    }))
+
+    if (expected === 'portfolioRisk:12') {
+      expect(ir.orchestrationPortfolioRisks).toEqual(expect.arrayContaining([
+        expect.objectContaining({ thresholdPct: 12, sourcePath }),
+      ]))
+      return
+    }
+    if (expected === 'cooldownBars:5') {
+      expect(ir.riskPolicy.riskPredicates).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: 'cooldownBars', params: { bars: 5 }, sourcePath }),
+      ]))
+      return
+    }
+    expect(ir.riskPolicy.guards).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: expected, sourcePath }),
+    ]))
+  })
+
+  it('keeps PR3 partial take profit source path through canonical spec and IR rule block', () => {
+    const state = baseState({
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+      rules: [{
+        id: 'entry-with-partial-take-profit',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.breakout_up', params: { period: 20 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [{
+            kind: 'atom',
+            key: 'risk.partial_take_profit',
+            params: {
+              memoryKey: 'ptp',
+              tiers: [{ trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 }],
+            },
+          }],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+    const { ir } = new CanonicalSpecV2IrCompilerService().compile({ canonicalSpec: spec, fallback: compileFallback })
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        condition: expect.objectContaining({ key: 'risk.partial_take_profit' }),
+        metadata: expect.objectContaining({
+          semanticKey: 'risk.partial_take_profit',
+          sourcePath: 'rules[0].effects.risks[0]',
+        }),
+      }),
+    ]))
+    expect(ir.ruleBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        metadata: expect.objectContaining({ sourcePath: 'rules[0].effects.risks[0]' }),
+      }),
+    ]))
+  })
+
+  it('keeps PR3 position effect source paths without treating unsupported runtime atoms as sizing', () => {
+    const state = baseState({
+      rules: [{
+        id: 'entry-with-position-effects',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.breakout_up', params: { period: 20 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [
+            { kind: 'atom', key: 'position.budget_cap', params: { valueQuote: 1000, asset: 'USDT' } },
+            { kind: 'atom', key: 'position.leverage', params: { value: 2 } },
+            { kind: 'atom', key: 'position.max_exposure_pct', params: { valuePct: 30 } },
+          ],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.metadata?.rulesMainflow?.positionSourcePaths).toEqual([
+      'rules[0].effects.positions[0]',
+      'rules[0].effects.positions[1]',
+      'rules[0].effects.positions[2]',
+    ])
+    expect(spec.sizing).toEqual({ mode: 'RATIO', value: 0.1 })
+  })
+
   it('builds rules-only ATR multiple risk effects with multiplier alias', () => {
     const state = baseState({
       rules: [{

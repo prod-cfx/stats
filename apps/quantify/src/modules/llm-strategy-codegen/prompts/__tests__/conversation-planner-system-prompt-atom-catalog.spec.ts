@@ -88,6 +88,25 @@ describe('conversationPlannerSystemPrompt — atom catalog injection (issue #134
         expect(prompt).toContain(key)
       }
     })
+
+    it('exposes PR3 risk and position atom keys in the planner catalog', () => {
+      for (const key of [
+        'risk.stop_loss_pct',
+        'risk.trailing_stop_pct',
+        'risk.partial_take_profit',
+        'risk.max_drawdown_pct',
+        'risk.cooldown',
+        'risk.max_loss_per_trade',
+        'position.sizing',
+        'position.pyramiding_limit',
+        'position.dca_schedule',
+        'position.budget_cap',
+        'position.leverage',
+        'position.max_exposure_pct',
+      ]) {
+        expect(prompt).toContain(key)
+      }
+    })
   })
 
   describe('en locale', () => {
