@@ -2,7 +2,9 @@ import {
   STAGE4_ATOM_COVERAGE_MATRIX,
   STAGE4_ATOM_FAMILIES,
   STAGE4_DEPLOY_READY_STATUSES,
+  isStage4DeployReadyAtom,
 } from '../atom-coverage-matrix'
+import { buildStage4CoverageReport } from '../stage4-coverage-reporter'
 import { ATOM_CONTRACT_REGISTRY } from '../../atom-contracts/atom-contract-registry'
 
 const pr2UmbrellaKeys = [
@@ -54,6 +56,8 @@ const pr3PositionAtomKeys = [
 ] as const
 
 describe('Stage 4 atom coverage matrix', () => {
+  const pr3Rows = STAGE4_ATOM_COVERAGE_MATRIX.filter(row => row.prBatch === 'pr3-risk-position')
+
   it('covers all Stage 4 atom families', () => {
     const families = new Set(STAGE4_ATOM_COVERAGE_MATRIX.map(row => row.family))
 
@@ -146,9 +150,8 @@ describe('Stage 4 atom coverage matrix', () => {
   })
 
   it('requires deploy-ready PR3 rows to declare full dataflow coverage', () => {
-    const invalidRows = STAGE4_ATOM_COVERAGE_MATRIX.filter(row =>
-      row.prBatch === 'pr3-risk-position'
-      && STAGE4_DEPLOY_READY_STATUSES.includes(row.status)
+    const invalidRows = pr3Rows.filter(row =>
+      isStage4DeployReadyAtom(row)
       && (
         row.utteranceExamples.length < 3
         || !row.displayShape.includes('source path')
@@ -161,5 +164,28 @@ describe('Stage 4 atom coverage matrix', () => {
     )
 
     expect(invalidRows).toEqual([])
+  })
+
+  it('does not let PR3 risk and position rows remain empty planned coverage', () => {
+    expect(pr3Rows.every(row => row.status === 'planned')).toBe(false)
+    expect(pr3Rows.filter(isStage4DeployReadyAtom).length).toBeGreaterThan(0)
+  })
+
+  it('requires non deploy-ready PR3 rows to carry concrete blockers', () => {
+    const invalidRows = pr3Rows.filter(row =>
+      !isStage4DeployReadyAtom(row)
+      && (
+        row.unsupportedReason === null
+        || (row.reachesBacktest && row.reachesDeployPayload)
+      ),
+    )
+
+    expect(invalidRows).toEqual([])
+  })
+
+  it('counts PR3 deploy-ready atoms in the coverage reporter numerator', () => {
+    const report = buildStage4CoverageReport({ atoms: pr3Rows, corpusResults: [] })
+
+    expect(report.atomDeployReady).toBeGreaterThan(0)
   })
 })
