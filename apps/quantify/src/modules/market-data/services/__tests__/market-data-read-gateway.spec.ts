@@ -82,6 +82,63 @@ describe('market data read gateway', () => {
     expect(bars.map(bar => bar.timestamp)).toEqual([older.getTime(), newer.getTime()])
   })
 
+  it('normalizes legacy repository bars stored with open-time timestamps', async () => {
+    const openTime = new Date('2026-03-17T10:00:00.000Z')
+
+    mockRepository.findRecentBars.mockResolvedValue([
+      {
+        id: 'bar-1',
+        symbolId: 'symbol-1',
+        timeframe: 'h1',
+        time: openTime,
+        open: '100',
+        high: '110',
+        low: '90',
+        close: '105',
+        volume: '10',
+        quoteVolume: '1000',
+        trades: 1,
+        source: 'OKX_REST',
+        isFinal: true,
+        createdAt: openTime,
+        updatedAt: openTime,
+      } as unknown as MarketBar,
+    ])
+
+    const bars = await gateway.getRecentBars('BTCUSDT', '1h', 1)
+
+    expect(bars.map(bar => bar.timestamp)).toEqual([Date.parse('2026-03-17T11:00:00.000Z')])
+    expect(bars[0]?.time.toISOString()).toBe('2026-03-17T11:00:00.000Z')
+  })
+
+  it('does not shift close-time repository bars written with versioned provider source', async () => {
+    const closeTime = new Date('2026-03-17T11:00:00.000Z')
+
+    mockRepository.findRecentBars.mockResolvedValue([
+      {
+        id: 'bar-1',
+        symbolId: 'symbol-1',
+        timeframe: 'h1',
+        time: closeTime,
+        open: '100',
+        high: '110',
+        low: '90',
+        close: '105',
+        volume: '10',
+        quoteVolume: '1000',
+        trades: 1,
+        source: 'OKX_REST_CLOSE_TIME',
+        isFinal: true,
+        createdAt: closeTime,
+        updatedAt: closeTime,
+      } as unknown as MarketBar,
+    ])
+
+    const bars = await gateway.getRecentBars('BTCUSDT', '1h', 1)
+
+    expect(bars.map(bar => bar.timestamp)).toEqual([closeTime.getTime()])
+  })
+
   it('preserves null volume semantics', async () => {
     const ts = new Date('2026-03-17T10:00:00.000Z')
     mockRepository.findLatestBar.mockResolvedValue({

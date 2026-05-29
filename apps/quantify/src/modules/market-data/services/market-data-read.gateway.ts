@@ -3,6 +3,7 @@ import type { MarketBar, MarketQuote } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { normalizeMarketBarCloseTimestamp } from '../utils/market-bar-time.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 MarketDataRepository
 import { MarketDataRepository } from './market-data.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 MarketDataService
@@ -115,9 +116,14 @@ export class MarketDataReadGateway {
     bar: MarketBar | null,
   ): GatewayBar | null {
     if (!bar) return null
-    return {
-      time: bar.time,
+    const timestamp = normalizeMarketBarCloseTimestamp({
       timestamp: bar.time.getTime(),
+      timeframe: bar.timeframe,
+      source: bar.source,
+    })
+    return {
+      time: new Date(timestamp),
+      timestamp,
       open: Number(bar.open),
       high: Number(bar.high),
       low: Number(bar.low),

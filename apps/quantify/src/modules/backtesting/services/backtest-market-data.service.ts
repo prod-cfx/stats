@@ -23,6 +23,7 @@ import {
   toSymbolCode,
 } from '@/modules/market-data/utils/market-symbol-code.util'
 import { getMarketTimeframeMs } from '@/modules/market-data/utils/market-timeframe.util'
+import { normalizeMarketBarCloseTimestamp } from '@/modules/market-data/utils/market-bar-time.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestMarketDataRepository } from '../repositories/backtest-market-data.repository'
 
@@ -211,12 +212,17 @@ export class BacktestMarketDataService {
         const rows = await this.repository.findBars({
           symbolId,
           timeframe: timeframe as MarketTimeframe,
-          fromTs: this.resolveQueryFromTs(input.dataRange.fromTs, input.baseTimeframe, timeframe),
+          fromTs: input.dataRange.fromTs - getMarketTimeframeMs(timeframe),
           toTs: input.dataRange.toTs,
         })
 
         for (const row of rows) {
-          const closeTime = row.time.getTime()
+          const closeTime = normalizeMarketBarCloseTimestamp({
+            timestamp: row.time.getTime(),
+            timeframe: row.timeframe,
+            source: row.source,
+          })
+          if (closeTime < input.dataRange.fromTs || closeTime > input.dataRange.toTs) continue
           bars.push({
             symbol,
             timeframe,
@@ -267,7 +273,11 @@ export class BacktestMarketDataService {
           toTs: input.dataRange.toTs,
         })
         const supported = this.resolveContinuousSecondaryCoverageRange({
-          closeTimes: bars.map(row => row.time.getTime()),
+          closeTimes: bars.map(row => normalizeMarketBarCloseTimestamp({
+            timestamp: row.time.getTime(),
+            timeframe: row.timeframe,
+            source: row.source,
+          })),
           baseTimeframe: input.baseTimeframe,
           timeframe,
           requestedFromTs: input.dataRange.fromTs,

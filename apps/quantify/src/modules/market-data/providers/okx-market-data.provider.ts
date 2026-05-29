@@ -146,7 +146,7 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
         volume: item[5] ?? undefined,
         quoteVolume: item[7] ?? undefined,
         timestamp: Number(item[0]) + getMarketTimeframeMs(query.timeframe),
-        source: 'OKX_REST',
+        source: 'OKX_REST_CLOSE_TIME',
         isFinal: true,
       }))
       .sort((a, b) => a.timestamp - b.timestamp)
@@ -437,7 +437,7 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
         quoteVolume: candle[7] ?? undefined,
         timestamp: Number(candle[0]) + getMarketTimeframeMs(timeframe),
         isFinal: candle[8] === '1',
-        source: 'OKX_WS',
+        source: 'OKX_WS_CLOSE_TIME',
       })
       return
     }

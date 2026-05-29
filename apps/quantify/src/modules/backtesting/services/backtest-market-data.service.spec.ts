@@ -131,7 +131,7 @@ describe('backtestMarketDataService', () => {
     expect(repository.findBars).toHaveBeenCalledTimes(3)
     expect(repository.findBars.mock.calls.map(([query]) => query.timeframe)).toEqual(['15m', '1h', '4h'])
     expect(repository.findBars.mock.calls.map(([query]) => query.fromTs)).toEqual([
-      1_500,
+      1_500 - 15 * 60 * 1000,
       1_500 - 60 * 60 * 1000,
       1_500 - 4 * 60 * 60 * 1000,
     ])
@@ -542,6 +542,46 @@ describe('backtestMarketDataService', () => {
     })
   })
 
+  it('loads legacy open-time market bars as close-time bars for the requested range', async () => {
+    const repository = createRepositoryMock()
+    repository.findSymbolsByCodes.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
+    repository.findBars.mockResolvedValue([
+      {
+        time: new Date(Date.parse('2026-04-20T12:00:00.000Z')),
+        timeframe: 'h1',
+        source: 'OKX_REST',
+        open: '100',
+        high: '110',
+        low: '90',
+        close: '105',
+        volume: '10',
+      },
+    ] as any)
+
+    const { service } = createService(repository)
+    const bars = await service.loadBars({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '1h',
+      stateTimeframes: [],
+      dataRange: {
+        fromTs: Date.parse('2026-04-20T13:00:00.000Z'),
+        toTs: Date.parse('2026-04-20T13:00:00.000Z'),
+      },
+    })
+
+    expect(repository.findBars).toHaveBeenCalledWith(expect.objectContaining({
+      fromTs: Date.parse('2026-04-20T12:00:00.000Z'),
+      toTs: Date.parse('2026-04-20T13:00:00.000Z'),
+    }))
+    expect(bars).toEqual([
+      expect.objectContaining({
+        symbol: 'BTCUSDT',
+        timeframe: '1h',
+        closeTime: Date.parse('2026-04-20T13:00:00.000Z'),
+      }),
+    ])
+  })
+
   it('backfills OKX historical bars backward until the requested range start is covered', async () => {
     const repository = createRepositoryMock()
     const { service, marketDataService, okxProvider } = createService(repository)
@@ -814,7 +854,7 @@ describe('backtestMarketDataService', () => {
     expect(repository.findBars).toHaveBeenCalledWith({
       symbolId: 'perp-id',
       timeframe: '15m',
-      fromTs: 1_500,
+      fromTs: 1_500 - 15 * 60 * 1000,
       toTs: 2_500,
     })
     expect(bars).toEqual([
