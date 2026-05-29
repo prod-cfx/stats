@@ -28,17 +28,17 @@ function pct(numerator: number, denominator: number): number {
   return Number(((numerator / denominator) * 100).toFixed(2))
 }
 
+function isStage4CorpusPass(result: Stage4CorpusResult): boolean {
+  return result.status === 'corpus_pass' && result.passed && result.attemptCount === 1
+}
+
 export function buildStage4CoverageReport(input: {
   readonly atoms: readonly Stage4AtomCoverageRow[]
   readonly corpusResults: readonly Stage4CorpusResult[]
 }): Stage4CoverageReport {
   const atomDeployReady = input.atoms.filter(isStage4DeployReadyAtom).length
-  const corpusPass = input.corpusResults.filter(result => result.status === 'corpus_pass' && result.passed).length
-  const attemptOnePass = input.corpusResults.filter(result =>
-    result.status === 'corpus_pass'
-    && result.passed
-    && result.attemptCount === 1,
-  ).length
+  const corpusPass = input.corpusResults.filter(isStage4CorpusPass).length
+  const attemptOnePass = corpusPass
   const blockers: Partial<Record<Stage4BlockerKind, number>> = {}
 
   for (const result of input.corpusResults) {

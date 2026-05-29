@@ -44,7 +44,7 @@ describe('Stage 4 coverage reporter', () => {
     expect(report.atomDeployReadyPct).toBe(50)
   })
 
-  it('reports corpus pass coverage, attempt-1 pass rate, and blocker distribution', () => {
+  it('reports attempt-1 corpus pass coverage and blocker distribution', () => {
     const report = buildStage4CoverageReport({
       atoms: [],
       corpusResults: [
@@ -57,8 +57,8 @@ describe('Stage 4 coverage reporter', () => {
     })
 
     expect(report.corpusTotal).toBe(5)
-    expect(report.corpusPass).toBe(2)
-    expect(report.corpusPassPct).toBe(40)
+    expect(report.corpusPass).toBe(1)
+    expect(report.corpusPassPct).toBe(20)
     expect(report.attemptOnePassPct).toBe(20)
     expect(report.blockers).toEqual({
       deploy_payload_drift: 2,
