@@ -89,7 +89,7 @@ jobs:
       - name: 安装项目依赖
         run: pnpm install --frozen-lockfile
 
-      - name: 部署 front 到 Vercel
+      - name: 在 GitHub Actions runner 构建并部署 front 到 Vercel
         run: |
           unset NO_COLOR
           ./scripts/ci/vercel-deploy-with-retry.sh front ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }}
@@ -153,7 +153,7 @@ jobs:
       - name: 安装项目依赖
         run: pnpm install --frozen-lockfile
 
-      - name: 部署 admin 到 Vercel
+      - name: 在 GitHub Actions runner 构建并部署 admin 到 Vercel
         run: |
           unset NO_COLOR
           ./scripts/ci/vercel-deploy-with-retry.sh admin ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }}
