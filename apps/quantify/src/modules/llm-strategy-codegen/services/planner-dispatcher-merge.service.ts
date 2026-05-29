@@ -2267,18 +2267,25 @@ export class PlannerDispatcherMergeService {
       }
     })
     if (!mutated) return
-    merged.rules = nextRules.filter((rule) => {
-      if (rule.phase === 'gate') {
-        const effects = listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))
-        const hasOnlyRiskEffects = effects.length > 0 && effects.every(leaf => entryRiskKeys.has(leaf.key))
-        if (hasOnlyRiskEffects) return false
-      }
-      if (rule.phase !== 'exit') return true
-      const conditionLeaves = collectAtomLeaves(rule.condition)
-      if (!conditionLeaves.some(leaf => entryRiskKeys.has(leaf.key))) return true
-      const closeActions = this.closeActionSet(rule)
-      return closeActions.size === 0
-    })
+    merged.rules = nextRules
+      .map((rule): SemanticRule | null => {
+        if (rule.phase === 'gate') {
+          const effects = listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect))
+          const hasOnlyRiskEffects = effects.length > 0 && effects.every(leaf => entryRiskKeys.has(leaf.key))
+          return hasOnlyRiskEffects ? null : rule
+        }
+        if (rule.phase !== 'exit') return rule
+        const conditionLeaves = collectAtomLeaves(rule.condition)
+        if (!conditionLeaves.some(leaf => entryRiskKeys.has(leaf.key))) return rule
+        if (this.closeActionSet(rule).size === 0) return rule
+        // 出场 condition 含已迁移到入场 effect 的止盈止损 risk 叶子：剥掉这些冗余 risk 叶子，
+        // 保留 cross_under 等真实信号出场，避免把死叉平多这类信号式出场连带删除。
+        // 剥离后 condition 为空（纯风控冗余出场）才删除整条 rule。
+        const strippedCondition = this.filterAtomExpr(rule.condition, leaf => entryRiskKeys.has(leaf.key))
+        if (!strippedCondition) return null
+        return { ...rule, condition: strippedCondition }
+      })
+      .filter((rule): rule is SemanticRule => rule !== null)
   }
 
   /**
