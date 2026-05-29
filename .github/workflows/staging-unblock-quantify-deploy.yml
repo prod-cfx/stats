@@ -1,0 +1,84 @@
+name: Staging Unblock Quantify Deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  kill-stale-quantify-migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 加载 SSH 私钥
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+
+      - name: 终止旧 quantify migrate 部署进程
+        env:
+          HOST: ${{ secrets.AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+          USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "$PORT" -H "$HOST" >> ~/.ssh/known_hosts
+          ssh -p "$PORT" "$USER@$HOST" "bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          LOCK_FILE="/opt/work/quantify/.deploy.lock"
+          STALE_RELEASE="/opt/work/quantify/releases/backend-v0.1.0-20260529-031952"
+          PIDS="120643 121019 121031 121150"
+
+          echo "[INFO] before:"
+          ps -fp $PIDS || true
+
+          for pid in $PIDS; do
+            if ! kill -0 "$pid" 2>/dev/null; then
+              echo "[INFO] pid $pid already gone"
+              continue
+            fi
+
+            cmd="$(ps -p "$pid" -o cmd= || true)"
+            case "$cmd" in
+              *"$STALE_RELEASE"*"prisma migrate deploy"*|*"$STALE_RELEASE"*"schema-engine"*|*"bash -s"*)
+                echo "[INFO] terminating stale deploy pid=$pid cmd=$cmd"
+                kill -TERM "$pid" || true
+                ;;
+              *)
+                echo "[ERROR] refusing to kill unexpected pid=$pid cmd=$cmd" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          sleep 5
+
+          for pid in $PIDS; do
+            if kill -0 "$pid" 2>/dev/null; then
+              cmd="$(ps -p "$pid" -o cmd= || true)"
+              case "$cmd" in
+                *"$STALE_RELEASE"*"prisma migrate deploy"*|*"$STALE_RELEASE"*"schema-engine"*|*"bash -s"*)
+                  echo "[WARN] force killing stale deploy pid=$pid cmd=$cmd"
+                  kill -KILL "$pid" || true
+                  ;;
+                *)
+                  echo "[ERROR] refusing to force kill unexpected pid=$pid cmd=$cmd" >&2
+                  exit 1
+                  ;;
+              esac
+            fi
+          done
+
+          sleep 2
+          echo "[INFO] after:"
+          ps -fp $PIDS || true
+
+          if flock -n "$LOCK_FILE" true; then
+            echo "[INFO] quantify deploy lock is free"
+          else
+            echo "[ERROR] quantify deploy lock is still held"
+            if command -v fuser >/dev/null 2>&1; then
+              fuser -v "$LOCK_FILE" || true
+            fi
+            exit 1
+          fi
+          REMOTE
