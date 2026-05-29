@@ -32,7 +32,13 @@
   <script type="text/babel" src="m-screens-2.jsx"></script>
   <script type="text/babel" src="m-screens-3.jsx"></script>
   <script type="text/babel" src="m-screens-4.jsx"></script>
+  <script type="text/babel" src="m-screens-whale-discover.jsx"></script>
   <script type="text/babel" src="m-screens-5.jsx"></script>
+  <script type="text/babel" src="m-screens-confirm.jsx"></script>
+  <script type="text/babel" src="m-screens-btconfig.jsx"></script>
+  <script type="text/babel" src="m-screens-backtest.jsx"></script>
+  <script type="text/babel" src="m-screens-deploy.jsx"></script>
+  <script type="text/babel" src="m-screens-livestrats.jsx"></script>
 
   <script type="text/babel">
     // Each Frame is an iPhone-style device. data-theme + data-accent on the
@@ -93,10 +99,31 @@
             <DCArtboard id="chat" label="08 · AI 对话 (含回测结果)" width={402} height={874}>
               <Frame><ScreenAIChat/></Frame>
             </DCArtboard>
-            <DCArtboard id="config" label="09 · 回测参数 (底部抽屉)" width={402} height={874}>
-              <Frame><ScreenAIConfig/></Frame>
+            <DCArtboard id="confirm" label="09 · 确认策略" width={402} height={874}>
+              <Frame><ScreenStratConfirm/></Frame>
             </DCArtboard>
-            <DCArtboard id="strat" label="10 · 策略广场" width={402} height={874}>
+            <DCArtboard id="btconfig" label="10 · 回测设置" width={402} height={874}>
+              <Frame><ScreenBacktestConfig/></Frame>
+            </DCArtboard>
+            <DCArtboard id="btrun" label="11 · 回测中" width={402} height={874}>
+              <Frame><ScreenBacktestRun/></Frame>
+            </DCArtboard>
+            <DCArtboard id="btres" label="12 · 回测结果" width={402} height={874}>
+              <Frame><ScreenBacktestResult/></Frame>
+            </DCArtboard>
+            <DCArtboard id="dp-select" label="13 · 部署 · 选择交易所" width={402} height={874}>
+              <Frame><ScreenDeploySelect/></Frame>
+            </DCArtboard>
+            <DCArtboard id="dp-alloc" label="14 · 部署 · 资金配置" width={402} height={874}>
+              <Frame><ScreenDeployAllocate/></Frame>
+            </DCArtboard>
+            <DCArtboard id="dp-run" label="15 · 部署 · 进行中" width={402} height={874}>
+              <Frame><ScreenDeployDeploying/></Frame>
+            </DCArtboard>
+            <DCArtboard id="dp-done" label="16 · 部署 · 成功" width={402} height={874}>
+              <Frame><ScreenDeploySuccess/></Frame>
+            </DCArtboard>
+            <DCArtboard id="strat" label="17 · 策略广场" width={402} height={874}>
               <Frame><ScreenMarket/></Frame>
             </DCArtboard>
           </DCSection>
@@ -120,11 +147,23 @@
           </DCSection>
 
           <DCSection id="me" title="账户" subtitle="个人中心 · 交易所 API 安全配置">
-            <DCArtboard id="acct" label="15 · 我的" width={402} height={874}>
+            <DCArtboard id="acct" label="18 · 我的" width={402} height={874}>
               <Frame><ScreenAccount/></Frame>
             </DCArtboard>
-            <DCArtboard id="api" label="16 · 交易所 API · 验证表单" width={402} height={874}>
-              <Frame><ScreenApiConfig/></Frame>
+            <DCArtboard id="live" label="19 · 实盘策略" width={402} height={874}>
+              <Frame><ScreenLiveStrats/></Frame>
+            </DCArtboard>
+            <DCArtboard id="live-detail" label="20 · 策略详情" width={402} height={874}>
+              <Frame><ScreenLiveStratDetail/></Frame>
+            </DCArtboard>
+            <DCArtboard id="api" label="21 · 交易所 API · Binance (含测试网)" width={402} height={874}>
+              <Frame><ScreenApiConfig ex="Binance"/></Frame>
+            </DCArtboard>
+            <DCArtboard id="api-okx" label="21b · 交易所 API · OKX (含 Passphrase)" width={402} height={874}>
+              <Frame><ScreenApiConfig ex="OKX"/></Frame>
+            </DCArtboard>
+            <DCArtboard id="api-hl" label="21c · 交易所 API · Hyperliquid (钱包模式)" width={402} height={874}>
+              <Frame><ScreenApiConfig ex="Hyperliquid"/></Frame>
             </DCArtboard>
           </DCSection>
         </DesignCanvas>

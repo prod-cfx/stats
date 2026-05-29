@@ -64,6 +64,16 @@ function Candles({ width=358, height=240 }) {
    SCREEN 1 — LOGIN
    ======================================================================== */
 function ScreenLogin() {
+  // verification code countdown — clicking "发送验证码" starts a 60s timer
+  const [sent, setSent] = React.useState(false);
+  const [secs, setSecs] = React.useState(0);
+  React.useEffect(() => {
+    if (secs <= 0) return;
+    const t = setTimeout(() => setSecs(s => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [secs]);
+  const sendCode = () => { setSent(true); setSecs(58); };
+
   return (
     <div style={{height:'100%', display:'flex', flexDirection:'column', background:M.elev}}>
       {/* gradient hero — smaller, leaves room for thumb-area actions */}
@@ -113,7 +123,25 @@ function ScreenLogin() {
 
         <Field label="邮箱" value="victor@gmail.com"/>
         <div style={{height:12}}/>
-        <Field label="密码" value="••••••••••" right={<span style={{fontSize:12, color:M.violet, fontWeight:500}}>忘记?</span>}/>
+        <Field
+          label="验证码"
+          value={sent ? "•••" : ""}
+          placeholder="6位验证码"
+          right={
+            <button
+              onClick={sendCode}
+              disabled={secs > 0}
+              style={{
+                height:32, padding:'0 12px', borderRadius:8, border:`1px solid ${M.borderSoft}`,
+                background: secs > 0 ? 'transparent' : M.elev,
+                color: secs > 0 ? M.faint : M.violet,
+                fontSize:12, fontWeight:500, fontFamily:M.mono,
+                cursor: secs > 0 ? 'default' : 'pointer', whiteSpace:'nowrap',
+              }}>
+              {secs > 0 ? `${secs}s 后重发` : (sent ? '重新发送' : '发送验证码')}
+            </button>
+          }
+        />
 
         {/* spacer pushes the action stack to the bottom thumb zone */}
         <div style={{flex:1, minHeight:16}}/>
@@ -143,18 +171,7 @@ function ScreenLogin() {
             通过 Telegram 登录
           </button>
 
-          {/* guest entry — low-commitment way to explore the product */}
-          <button data-guest style={{
-            width:'100%', height:40, marginTop:12, borderRadius:12, border:0,
-            background:'transparent', color:M.mid, fontSize:13, fontWeight:500, cursor:'pointer',
-            display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-          }}>
-            <Ico d="M12 11a4 4 0 100-8 4 4 0 000 8zm-7 9a7 7 0 0114 0" w={14} sw={1.6}/>
-            <span>以游客身份先看看</span>
-            <span style={{color:M.faint, fontSize:11}}>· 无需注册</span>
-          </button>
-
-          <div style={{textAlign:'center', fontSize:11, color:M.dim, marginTop:10, lineHeight:1.6}}>
+          <div style={{textAlign:'center', fontSize:11, color:M.dim, marginTop:16, lineHeight:1.6}}>
             继续即表示同意 <span style={{color:M.violet}}>服务条款</span> 与 <span style={{color:M.violet}}>隐私政策</span>
           </div>
         </div>
@@ -192,12 +209,14 @@ if (!window.__qfChatSessions) {
         id: 's1', title: 'BTC 趋势 · 双均线', pair:'BTC/USDT', timeframe:'15m',
         category:'趋势跟踪', updatedAt:'刚刚',
         backtest: { cagr:'+31.6%', sharpe:'1.78', mdd:'-12.4%' },
+        deployedTo: 'QF-AY7K2P',  // already deployed — chat is now archive
         messages: [
           QF_GREETING,
           { who:'user', kind:'text', text:'BTC 15 分钟周期，5 日均线上穿 20 日均线开多，跌破平仓，止损 2%。' },
           { who:'bot',  kind:'params' },
           { who:'user', kind:'text', text:'开始回测，区间 2021-01 至今' },
           { who:'bot',  kind:'result' },
+          { who:'bot',  kind:'deployed' },
         ],
       },
       {
@@ -219,6 +238,33 @@ if (!window.__qfChatSessions) {
           QF_GREETING,
           { who:'user', kind:'text', text:'SOL 1 小时，140-180 区间内做网格，10 格。' },
           { who:'bot',  kind:'text', text:<>明白。网格策略需要先确认 SOL 当前是否在 <strong>140-180</strong> 区间内运行。我先拉一下最近 30 天数据。</> },
+        ],
+      },
+      {
+        id: 's4', title: 'ETH 网格 · 现货', pair:'ETH/USDT', timeframe:'1H',
+        category:'网格 · 现货', updatedAt:'5 分钟前',
+        backtest: { cagr:'+14.6%', sharpe:'1.32', mdd:'-6.8%' },
+        scenario: 'eth',  // maps to STRAT_SCENARIOS in confirm screen
+        messages: [
+          QF_GREETING,
+          { who:'user', kind:'text', text:'ETH 1 小时,在 2400-3000 区间内做现货网格,10 格,每格 10% 仓位,跌破 2% 暂停。' },
+          { who:'bot',  kind:'text', text:<>已识别为 <strong>现货网格</strong>。区间宽度合适,每格约 <strong>2.7%</strong> 价差,扣除手续费仍有正期望。要不要先跑一次回测?</> },
+          { who:'bot',  kind:'text', text:<>初步回测:<strong>CAGR +14.6% · 最大回撤 -6.8%</strong>,在区间内表现稳健,出区间会持续被动接货。</> },
+        ],
+      },
+      {
+        id: 's5', title: 'AVAX 突破 · 待部署', pair:'AVAX/USDT', timeframe:'1H',
+        category:'突破', updatedAt:'12 分钟前',
+        backtest: { cagr:'+22.4%', sharpe:'1.51', mdd:'-9.8%' },
+        wipStep: 'deploy',  // workflow position: confirm | btconfig | btres | deploy
+        messages: [
+          QF_GREETING,
+          { who:'user', kind:'text', text:'AVAX 1 小时,突破前 20 根 K 线高点开多,跌破 ATR 止损。' },
+          { who:'bot',  kind:'text', text:<>已识别为 <strong>突破跟踪</strong>。建议加上「成交量过滤」减少假突破。</> },
+          { who:'bot',  kind:'params' },
+          { who:'user', kind:'text', text:'开始回测' },
+          { who:'bot',  kind:'result' },
+          { who:'bot',  kind:'wip' },
         ],
       },
     ],
@@ -263,7 +309,7 @@ function ScreenAIChat() {
     if (/部署|deploy|实盘/i.test(q))
       return <>部署到 Binance 需要最大回撤 ≤ 20%。当前为 <strong>-12.4%</strong>，已满足条件，可以点击「一键部署」。</>;
     if (/参数|param|调整/i.test(q))
-      return <>你可以点击右上角 <Chip tone="violet">参数</Chip> 修改 fast_ma / slow_ma / 止损 / 仓位等。</>;
+      return <>可以在「<strong>确认策略</strong>」页修改回测设置(资金 / 杠杆 / 滑点 / 手续费),策略本身的 fast_ma / slow_ma / 止损直接告诉我就行。</>;
     if (s.includes('eth') || s.includes('以太'))
       return <>已切换至 <strong>ETH/USDT · 15m</strong>，要不要也跑一次同样规则的回测？</>;
     return <>明白了，我会基于「{q.slice(0, 24)}{q.length>24?'…':''}」帮你迭代策略。需要我重新跑一次回测吗？</>;
@@ -315,15 +361,16 @@ function ScreenAIChat() {
     <div style={{height:'100%', position:'relative', background:M.bg, display:'flex', flexDirection:'column'}}>
       <MStatus/>
       <MTopBar
+        compact
         title={current.title}
         sub={`${current.category} · ${current.pair}${current.timeframe!=='—' ? ' · '+current.timeframe : ''}`}
         left={
           <button onClick={(e)=>{stop(e); setDrawerOpen(true);}} style={{
-            width:36, height:36, borderRadius:10, background:M.soft,
+            width:32, height:32, borderRadius:9, background:M.soft,
             color:M.text, border:0, cursor:'pointer',
             display:'flex', alignItems:'center', justifyContent:'center',
           }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 12a9 9 0 1 0 3-6.7"/>
               <path d="M3 4v5h5"/>
@@ -344,11 +391,6 @@ function ScreenAIChat() {
                 <path d="M12 8v8M8 12h8"/>
               </svg>
             </button>
-            <button style={{
-              height:32, padding:'0 12px', borderRadius:999, background:M.violetSoft,
-              color:M.violet, border:0, fontSize:12, fontWeight:600, cursor:'pointer',
-              display:'flex', alignItems:'center', gap:6,
-            }}><Ico d={ICONS.sliders} w={14} sw={2}/>参数</button>
           </div>
         }
       />
@@ -358,9 +400,11 @@ function ScreenAIChat() {
             return <Bubble key={i} user={m.who==='user'}>{m.text}</Bubble>;
           }
           if (m.kind === 'params') {
+            const locked = !!current.deployedTo;
             return (
               <Bubble key={i}>
-                已为你识别为 <Chip tone="violet" style={{margin:'0 2px'}}>趋势跟踪</Chip> 类策略。建议参数：
+                {locked && <LockedBanner/>}
+                已为你识别为 <Chip tone="violet" style={{margin:'0 2px'}}>趋势跟踪</Chip> 类策略。建议参数:
                 <div style={{
                   marginTop:10, padding:'10px 12px', borderRadius:10, background:M.soft,
                   fontFamily:M.mono, fontSize:12, lineHeight:1.7, color:M.text,
@@ -370,33 +414,127 @@ function ScreenAIChat() {
                   <div><span style={{color:M.dim}}>stop_loss</span> = 2.0%</div>
                   <div><span style={{color:M.dim}}>position</span> = 100%</div>
                 </div>
-                <div style={{marginTop:10}}>需要我开始回测吗？</div>
+                {!locked && (
+                  <>
+                    <div style={{marginTop:10, marginBottom:10}}>需要我开始回测吗?</div>
+                    <button
+                      data-go-confirm
+                      onClick={(e)=>{stop(e); window.__nav?.go('confirm');}}
+                      style={{
+                        width:'100%', height:36, borderRadius:10, border:0,
+                        background:M.violetGrad, color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer',
+                        boxShadow:'0 4px 14px rgba(124,92,255,0.28)',
+                        display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                      }}>
+                      确认策略
+                      <Ico d={ICONS.caretR} w={13} sw={2}/>
+                    </button>
+                  </>
+                )}
               </Bubble>
             );
           }
           if (m.kind === 'result') {
+            return null;
+          }
+          if (m.kind === 'deployed') {
+            // terminal bubble — confirms the chat session was used to deploy
             return (
               <Bubble key={i}>
-                <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:10}}>
-                  <Chip tone="ok"><span style={{width:6, height:6, borderRadius:3, background:M.ok}}/>回测完成</Chip>
-                  <span style={{fontSize:11, color:M.dim}}>2021-01 → 2026-04 · 15m</span>
+                <div style={{
+                  padding:'12px 14px', borderRadius:10, background:M.violetSoft,
+                  marginBottom:12, display:'flex', gap:10, alignItems:'flex-start',
+                }}>
+                  <div style={{
+                    width:30, height:30, borderRadius:8, background:M.violet, color:'#fff',
+                    display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
+                  }}>
+                    <Ico d={ICONS.check} w={16} sw={2.4}/>
+                  </div>
+                  <div style={{flex:1, minWidth:0}}>
+                    <div style={{fontSize:13, fontWeight:700, color:M.violet, marginBottom:2}}>
+                      策略已部署到 Binance
+                    </div>
+                    <div style={{fontSize:11, color:M.text, opacity:0.7, lineHeight:1.55}}>
+                      策略 ID <strong style={{fontFamily:M.mono}}>{current.deployedTo || 'QF-AY7K2P'}</strong> · 当前运行中
+                    </div>
+                  </div>
                 </div>
-                <div style={{background:M.soft, borderRadius:10, padding:'10px 12px 4px'}}>
-                  <MiniChart width={282} height={88} up/>
-                </div>
-                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginTop:10}}>
-                  <Stat label="CAGR" v="+31.6%" tone="up"/>
-                  <Stat label="Sharpe" v="1.78"/>
-                  <Stat label="最大回撤" v="-12.4%" tone="dn"/>
+                这条对话已归档,后续调整请<strong>新建方案</strong>或在实盘策略中操作。
+                <button
+                  data-go-live={current.deployedTo || 'QF-AY7K2P'}
+                  onClick={(e)=>{
+                    stop(e);
+                    window.__qfSelectedStrat = current.deployedTo || 'QF-AY7K2P';
+                    window.__nav?.go('liveDetail');
+                  }}
+                  style={{
+                    marginTop:12, width:'100%', height:38, borderRadius:10, border:0,
+                    background:M.violetGrad, color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer',
+                    boxShadow:'0 4px 14px rgba(124,92,255,0.28)',
+                    display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                  }}>
+                  查看实盘策略
+                  <Ico d={ICONS.caretR} w={13} sw={2}/>
+                </button>
+              </Bubble>
+            );
+          }
+          if (m.kind === 'wip') {
+            return null;
+          }
+          if (false) {
+            // unfinished workflow — user has results but hasn't deployed yet
+            const stepInfo = {
+              confirm:  { label:'确认策略',   pct:25, screen:'confirm',  cta:'回到确认策略' },
+              btconfig: { label:'回测设置',   pct:50, screen:'btconfig', cta:'回到回测设置' },
+              btres:    { label:'查看回测结果', pct:75, screen:'btres',    cta:'回到回测结果' },
+              deploy:   { label:'部署到交易所', pct:90, screen:'btres',    cta:'继续部署' },
+            }[current.wipStep || 'deploy'];
+            return (
+              <Bubble key={i}>
+                <div style={{
+                  padding:'12px 14px', borderRadius:10, background:M.warnSoft,
+                  marginBottom:10, display:'flex', gap:10, alignItems:'flex-start',
+                }}>
+                  <div style={{
+                    width:30, height:30, borderRadius:8, background:M.warn, color:'#fff',
+                    display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
+                  }}>
+                    <Ico d="M12 8v4m0 4h.01M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"
+                      w={16} sw={2}/>
+                  </div>
+                  <div style={{flex:1, minWidth:0}}>
+                    <div style={{fontSize:13, fontWeight:700, color:M.warn, marginBottom:4}}>
+                      流程未完成 · 待{stepInfo.label}
+                    </div>
+                    {/* tiny progress bar */}
+                    <div style={{
+                      height:4, borderRadius:2, background:'rgba(245,158,11,0.18)',
+                      overflow:'hidden', marginBottom:6,
+                    }}>
+                      <div style={{
+                        height:'100%', width:`${stepInfo.pct}%`,
+                        background:M.warn, borderRadius:2,
+                      }}/>
+                    </div>
+                    <div style={{fontSize:11, color:M.text, opacity:0.7, lineHeight:1.55}}>
+                      上次离开时停在「{stepInfo.label}」,继续可完成部署。
+                    </div>
+                  </div>
                 </div>
                 <button
-                  onClick={(e)=>{stop(e); setDeployFor({cagr:'+31.6%', sharpe:'1.78', mdd:'-12.4%', pair: current.pair});}}
+                  onClick={(e)=>{stop(e); window.__nav?.go(stepInfo.screen);}}
                   style={{
-                  marginTop:12, width:'100%', height:38, borderRadius:10, border:0,
-                  background:M.violetGrad, color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer',
-                  boxShadow:'0 4px 14px rgba(124,92,255,0.28)',
-                  display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-                }}><Ico d={ICONS.play} w={14} fill="#fff" sw={0}/> 一键部署</button>
+                    width:'100%', height:38, borderRadius:10, border:0,
+                    background:`linear-gradient(135deg, #F59E0B, #D97706)`,
+                    color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer',
+                    boxShadow:'0 4px 14px rgba(245,158,11,0.28)',
+                    display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                  }}>
+                  {stepInfo.cta}
+                  <Ico d={ICONS.caretR} w={13} sw={2}/>
+                </button>
               </Bubble>
             );
           }
@@ -547,13 +685,26 @@ function ScreenAIChat() {
                           overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
                           flex:'0 1 auto', minWidth:0,
                         }}>{s.title}</span>
-                        {s.backtest && (
+                        {s.deployedTo ? (
                           <span style={{
                             flexShrink:0, padding:'1px 5px', borderRadius:4, fontSize:9,
-                            fontWeight:700, fontFamily:M.mono,
-                            background:'rgba(22,199,131,0.12)', color:M.up,
-                          }}>{s.backtest.cagr}</span>
-                        )}
+                            fontWeight:700, letterSpacing:0.3,
+                            background:M.violetSoft, color:M.violet,
+                            display:'inline-flex', alignItems:'center', gap:3,
+                          }}>
+                            <span style={{
+                              width:5, height:5, borderRadius:3, background:M.ok,
+                              boxShadow:`0 0 0 2px ${M.okSoft}`,
+                            }}/>
+                            实盘
+                          </span>
+                        ) : s.wipStep ? (
+                          <span style={{
+                            flexShrink:0, padding:'1px 5px', borderRadius:4, fontSize:9,
+                            fontWeight:700, letterSpacing:0.3,
+                            background:M.warnSoft, color:M.warn,
+                          }}>待部署</span>
+                        ) : null}
                       </div>
                       <div style={{
                         fontSize:11, color:M.dim, lineHeight:1.4,
@@ -966,6 +1117,8 @@ function lastUserOrBot(messages) {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (m.kind === 'text') return typeof m.text === 'string' ? m.text : extractText(m.text);
+    if (m.kind === 'wip') return '⏸ 待部署 · 可继续';
+    if (m.kind === 'deployed') return '✓ 已部署 · 实盘运行中';
     if (m.kind === 'result') return '✓ 回测完成 · 可一键部署';
     if (m.kind === 'params') return '已生成策略参数';
   }
@@ -977,6 +1130,20 @@ function extractText(node) {
   if (Array.isArray(node)) return node.map(extractText).join('');
   if (node.props && node.props.children) return extractText(node.props.children);
   return '';
+}
+
+function LockedBanner() {
+  return (
+    <div style={{
+      padding:'6px 10px', marginBottom:10, borderRadius:8,
+      background:M.soft, border:`1px dashed ${M.borderSoft}`,
+      fontSize:11, color:M.dim,
+      display:'flex', alignItems:'center', gap:6,
+    }}>
+      <Ico d="M5 11V8a5 5 0 0110 0v3M5 11h10v8H5z" w={11} sw={1.8}/>
+      已归档 · 仅供查看
+    </div>
+  );
 }
 
 function Bubble({ user, children }) {

@@ -1800,6 +1800,259 @@
     { name: "Alameda 遗留", addr: "0x342…7b1f", venue: "OKX", side: "sell", amt: "-580 BTC", time: "12:15:42" },
   ];
 
+  // ---- realtime feed data (deterministic per-seed) ----
+  const WHALE_COINS = {
+    BTC:  { px: 75740,   step: 0.0001 },
+    ETH:  { px: 2071.4,  step: 0.001  },
+    SOL:  { px: 83.7,    step: 0.01   },
+    XRP:  { px: 2.18,    step: 0.1    },
+    DOGE: { px: 0.182,   step: 1      },
+    SUI:  { px: 3.92,    step: 0.1    },
+  };
+  const WHALE_TAGS = ["滚仓交易者", "趋势策略", "趋势预测", "波段交易者", "震荡狙击"];
+
+  let _whaleFeedCache = null;
+  const genWhaleFeed = () => {
+    if (_whaleFeedCache) return _whaleFeedCache;
+    let h = 0x1f5c2c >>> 0;
+    const rnd = () => { h = (h * 1103515245 + 12345) >>> 0; return (h >>> 16) / 65535; };
+    const hex = (n) => Math.floor(rnd() * 0xfffff).toString(16).padStart(5, "0").slice(0, n);
+    const coins = Object.keys(WHALE_COINS);
+
+    const N = 44;
+    const out = [];
+    for (let i = 0; i < N; i++) {
+      const coin = coins[Math.floor(rnd() * coins.length)];
+      const px = WHALE_COINS[coin].px;
+      const isShort = rnd() > 0.55;
+      const isCross = rnd() > 0.4; // 全仓 vs 逐仓
+      const sizeBucket = rnd();
+      const baseAmt = coin === "BTC"
+        ? (sizeBucket > 0.9 ? 20 + rnd() * 10 : sizeBucket > 0.7 ? 0.9 + rnd() * 0.4 : 0.15 + rnd() * 0.5)
+        : coin === "ETH" ? 5 + rnd() * 12
+        : coin === "SOL" ? 80 + rnd() * 250
+        : coin === "XRP" ? 8000 + rnd() * 30000
+        : coin === "DOGE" ? 80000 + rnd() * 200000
+        : 1000 + rnd() * 5000;
+      const openPx = px * (0.995 + rnd() * 0.02);
+      const value = baseAmt * px;
+      const winRate = 45 + Math.floor(rnd() * 45);
+      const minutesAgo = 4 + Math.floor(i * (rnd() * 0.4 + 0.15));
+      const lev = rnd() > 0.78 ? Math.floor(rnd() * 18) + 3 + "x" : "—";
+      out.push({
+        addr: "0x" + hex(2) + "…" + hex(4),
+        tag: WHALE_TAGS[Math.floor(rnd() * WHALE_TAGS.length)],
+        coin,
+        cross: isCross,
+        side: isShort ? "short" : "long",
+        lev,
+        value,
+        amt: baseAmt,
+        openPx,
+        winRate,
+        minutesAgo,
+      });
+    }
+    _whaleFeedCache = out;
+    return out;
+  };
+
+  const fmtUsd = (n) => {
+    if (n >= 1000) return "$" + n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    if (n >= 1) return "$" + n.toFixed(2);
+    return "$" + n.toFixed(4);
+  };
+  const fmtAmt = (n, coin) => {
+    if (coin === "BTC") return n.toFixed(4) + " " + coin;
+    if (coin === "ETH") return n.toFixed(4) + " " + coin;
+    if (coin === "SOL") return n.toFixed(4) + " " + coin;
+    return n.toLocaleString(undefined, { maximumFractionDigits: 2 }) + " " + coin;
+  };
+
+  const ensureWhaleFeedState = () => {
+    if (!appState.whaleFeed) {
+      appState.whaleFeed = { coin: "ALL", side: "all", sort: "time", followOpen: false };
+      saveState(appState);
+    }
+    return appState.whaleFeed;
+  };
+
+  // shared countdown so it survives partial re-renders inside the same page
+  let _whaleTickHandle = null;
+  let _whaleTickValue = 5;
+
+  const renderWhaleFeed = () => {
+    const s = ensureWhaleFeedState();
+    const wrap = el("section", { class: "wf-wrap" });
+
+    // --- toolbar (filters + meta) ---
+    const tbar = el("div", { class: "wf-toolbar" });
+
+    // coin filter
+    const coinSeg = el("div", { class: "seg wf-coin-seg" });
+    ["ALL", "BTC", "ETH", "SOL", "XRP", "DOGE", "SUI"].forEach((c) => {
+      coinSeg.appendChild(el("button", {
+        class: s.coin === c ? "is-on" : "",
+        onclick: () => { s.coin = c; saveState(appState); render(); }
+      }, c === "ALL" ? "全部币种" : c));
+    });
+    tbar.appendChild(el("div", { class: "wf-filter-grp" },
+      el("span", { class: "wf-filter-label" }, "币种"),
+      coinSeg
+    ));
+
+    // side filter
+    const sideSeg = el("div", { class: "seg wf-side-seg" });
+    [["all", "全部"], ["long", "做多"], ["short", "做空"]].forEach(([k, lab]) => {
+      sideSeg.appendChild(el("button", {
+        class: s.side === k ? "is-on " + (k === "long" ? "is-long" : k === "short" ? "is-short" : "") : "",
+        onclick: () => { s.side = k; saveState(appState); render(); }
+      }, lab));
+    });
+    tbar.appendChild(el("div", { class: "wf-filter-grp" },
+      el("span", { class: "wf-filter-label" }, "方向"),
+      sideSeg
+    ));
+
+    // sort filter
+    const sortSel = el("select", {
+      class: "wf-sort",
+      onchange: (e) => { s.sort = e.target.value; saveState(appState); render(); }
+    });
+    [["time", "最新成交"], ["value", "持仓价值 ↓"], ["win", "胜率 ↓"]].forEach(([k, lab]) => {
+      const opt = el("option", { value: k }, lab);
+      if (s.sort === k) opt.selected = true;
+      sortSel.appendChild(opt);
+    });
+    tbar.appendChild(el("div", { class: "wf-filter-grp" },
+      el("span", { class: "wf-filter-label" }, "排序"),
+      sortSel
+    ));
+
+    // right-side meta strip
+    tbar.appendChild(el("div", { class: "wf-meta" },
+      el("span", { class: "chip chip-ok" }, el("span", { class: "dot" }), "LIVE · 全网"),
+      el("span", { class: "wf-meta-stat" }, el("span", { class: "k" }, "近 1h"), el("span", { class: "v" }, "1,284 笔")),
+      el("span", { class: "wf-meta-stat" }, el("span", { class: "k" }, "净流入"), el("span", { class: "v up" }, "+$4.18M")),
+    ));
+
+    wrap.appendChild(tbar);
+
+    // --- table ---
+    let rows = genWhaleFeed().slice();
+    if (s.coin !== "ALL") rows = rows.filter((r) => r.coin === s.coin);
+    if (s.side !== "all") rows = rows.filter((r) => r.side === s.side);
+    if (s.sort === "value") rows.sort((a, b) => b.value - a.value);
+    else if (s.sort === "win") rows.sort((a, b) => b.winRate - a.winRate);
+    else rows.sort((a, b) => a.minutesAgo - b.minutesAgo);
+
+    const card = el("div", { class: "wf-card" });
+
+    // empty state
+    if (rows.length === 0) {
+      card.appendChild(el("div", { class: "wf-empty" },
+        el("div", { class: "wf-empty-ico", html: icon("search", 22) }),
+        el("h4", {}, "暂无匹配的巨鲸成交"),
+        el("p", {}, "切换币种或方向筛选，或等待新的大额成交进入。")
+      ));
+      wrap.appendChild(card);
+      return wrap;
+    }
+
+    const table = el("table", { class: "wf-table" });
+    table.appendChild(el("thead", {}, el("tr", {},
+      el("th", {}, "交易地址"),
+      el("th", {}, "币种"),
+      el("th", {}, "多空方向"),
+      el("th", {}, "杠杆"),
+      el("th", { class: "num-col" }, "持仓价值"),
+      el("th", { class: "num-col" }, "开盘价格"),
+      el("th", { class: "num-col sortable", onclick: () => { s.sort = "win"; saveState(appState); render(); } },
+        el("span", {}, "胜率"),
+        el("span", { class: "wf-sort-ind " + (s.sort === "win" ? "is-on" : "") }, "↓")
+      ),
+      el("th", {}, "成交时间"),
+      el("th", { style: { textAlign: "center" } }, "操作"),
+    )));
+
+    const tb = el("tbody");
+    rows.forEach((r) => {
+      const winTier = r.winRate >= 75 ? "tier-high" : r.winRate >= 60 ? "tier-mid" : "tier-low";
+      const sideCls = r.side === "long" ? "wf-side-long" : "wf-side-short";
+      const sideLab = r.side === "long" ? "做多" : "做空";
+      tb.appendChild(el("tr", {},
+        // addr + tag
+        el("td", {},
+          el("div", { class: "wf-addr-cell" },
+            el("span", { class: "wf-addr" }, r.addr),
+            el("button", {
+              class: "wf-copy",
+              title: "复制地址",
+              onclick: (e) => copyText(r.addr, e.currentTarget),
+              html: icon("copy", 12)
+            })
+          ),
+          el("span", { class: "wf-tag" }, r.tag),
+        ),
+        // coin + 全/逐仓
+        el("td", {},
+          el("div", { class: "wf-coin" }, r.coin),
+          el("div", { class: "wf-mode" }, r.cross ? "全仓" : "逐仓"),
+        ),
+        // side
+        el("td", {}, el("span", { class: "wf-pill " + sideCls }, sideLab)),
+        // lev
+        el("td", { class: "wf-lev" }, r.lev),
+        // value
+        el("td", { class: "num-col" },
+          el("div", { class: "wf-value" }, fmtUsd(r.value)),
+          el("div", { class: "wf-amt" }, fmtAmt(r.amt, r.coin)),
+        ),
+        // open price
+        el("td", { class: "num-col wf-open" }, fmtUsd(r.openPx)),
+        // win rate
+        el("td", { class: "num-col" }, el("span", { class: "wf-win " + winTier }, r.winRate + "%")),
+        // time
+        el("td", { class: "wf-time" }, r.minutesAgo + " 分钟前"),
+        // action
+        el("td", { style: { textAlign: "center" } },
+          el("button", {
+            class: "wf-act",
+            title: "查看持仓走势",
+            onclick: () => toast("已打开 " + r.addr + " 的持仓走势", "info"),
+            html: icon("chart", 14),
+          })
+        ),
+      ));
+    });
+    table.appendChild(tb);
+
+    card.appendChild(el("div", { class: "wf-table-scroll" }, table));
+    wrap.appendChild(card);
+
+    // --- countdown ticker (auto-managed) ---
+    if (_whaleTickHandle) { clearInterval(_whaleTickHandle); _whaleTickHandle = null; }
+    _whaleTickHandle = setInterval(() => {
+      const btn = document.querySelector(".wf-refresh");
+      if (!btn) { clearInterval(_whaleTickHandle); _whaleTickHandle = null; return; }
+      _whaleTickValue -= 1;
+      const lab = btn.querySelector(".wf-countdown-label");
+      if (_whaleTickValue <= 0) {
+        if (lab) lab.textContent = "正在更新数据…";
+        btn.classList.add("is-refreshing");
+        setTimeout(() => {
+          _whaleFeedCache = null;
+          _whaleTickValue = 5;
+          render();
+        }, 700);
+      } else {
+        if (lab) lab.textContent = _whaleTickValue + " 秒后更新数据";
+      }
+    }, 1000);
+
+    return wrap;
+  };
+
   const renderWhalePage = (sub) => {
     sub = sub || "feed";
     const titles = {
@@ -1810,28 +2063,44 @@
     };
     const [t, sub2] = titles[sub] || titles.feed;
 
-    const page = el("main", { class: "page" });
+    const page = el("main", { class: sub === "feed" ? "page-wide" : "page" });
+    const headActions = el("div", { class: "actions" });
+    if (sub === "feed") {
+      headActions.appendChild(el("button", {
+        class: "btn btn-sm",
+        onclick: () => { toast("已开启 BTC · ETH · SOL 推送，可在「监控」中调整", "ok"); }
+      }, el("span", { html: icon("bell", 14) }), el("span", {}, "关注币种推送")));
+      headActions.appendChild(el("button", {
+        class: "btn btn-sm btn-soft-violet wf-refresh",
+        onclick: () => { _whaleFeedCache = null; _whaleTickValue = 5; render(); }
+      },
+        el("span", { class: "wf-spin", html: icon("activity", 14) }),
+        el("span", { class: "wf-countdown-label" }, "5 秒后更新数据")
+      ));
+    } else {
+      headActions.appendChild(el("button", { class: "btn btn-sm", onclick: () => navigate("#/whale/discover") }, "发现"));
+      headActions.appendChild(el("button", { class: "btn btn-sm", onclick: () => navigate("#/whale/feed") }, "实时"));
+      headActions.appendChild(el("button", { class: "btn btn-sm", onclick: () => navigate("#/whale/holdings") }, "持仓"));
+      headActions.appendChild(el("button", { class: "btn btn-sm", onclick: () => navigate("#/whale/watch") }, "监控"));
+    }
     page.appendChild(el("div", { class: "page-head" },
       el("div", {},
         el("h1", {}, t),
         el("p", {}, sub2)
       ),
-      el("div", { class: "actions" },
-        el("button", { class: "btn btn-sm", onclick: () => navigate("#/whale/discover") }, "发现"),
-        el("button", { class: "btn btn-sm", onclick: () => navigate("#/whale/feed") }, "实时"),
-        el("button", { class: "btn btn-sm", onclick: () => navigate("#/whale/holdings") }, "持仓"),
-        el("button", { class: "btn btn-sm", onclick: () => navigate("#/whale/watch") }, "监控"),
-      )
+      headActions
     ));
 
-    if (sub === "feed" || sub === "discover") {
+    if (sub === "feed") {
+      page.appendChild(renderWhaleFeed());
+    } else if (sub === "discover") {
       const feed = el("div", { class: "card whale-feed" });
       feed.appendChild(el("div", {
         class: "flex",
         style: { padding: "16px 22px", borderBottom: "1px solid var(--border-soft)", alignItems: "center", justifyContent: "space-between" }
       },
         el("div", { class: "flex-row" },
-          el("span", { style: { fontWeight: 600 } }, "实时巨鲸 · BTC"),
+          el("span", { style: { fontWeight: 600 } }, "聪明钱 · BTC"),
           el("span", { class: "chip chip-ok" }, el("span", { class: "dot" }), "LIVE")
         ),
         el("div", { class: "seg" }, el("button", { class: "is-on" }, "BTC"), el("button", {}, "ETH"), el("button", {}, "SOL"))

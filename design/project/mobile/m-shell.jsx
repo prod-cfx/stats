@@ -96,7 +96,7 @@ const ICONS = {
   caretR: 'M9 6l6 6-6 6',
   refresh:'M21 12a9 9 0 1 1-3-6.7M21 4v5h-5',
   more:   'M5 12h.01M12 12h.01M19 12h.01',
-  filter: 'M3 5h18M6 12h12M10 19h4',
+  filter: 'M3 7h10.5M18.5 7H21M13.5 7a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0M3 17h2.5M10.5 17H21M5.5 17a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0',
   play:   'M6 4l14 8-14 8V4z',
   shield: 'M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6l8-3z',
   star:   'M12 3l2.9 6 6.6.9-4.8 4.6 1.2 6.6L12 18.1 5.9 21l1.2-6.6L2.4 9.9 9 9z',
@@ -105,6 +105,7 @@ const ICONS = {
   arrowD: 'M12 5v14M6 13l6 6 6-6',
   arrowU: 'M12 19V5M18 11l-6-6-6 6',
   palette:'M12 22a10 10 0 1 1 0-20 8 8 0 0 1 8 8c0 2-1.5 3-3 3h-2a2 2 0 0 0-1 4 2 2 0 0 1-2 5z M6 11a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm4-4a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm6 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
+  trash:  'M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13',
 };
 
 /* --- iOS status bar (light/dark text) --- */
@@ -141,16 +142,17 @@ function MStatus({ dark = false, time = '9:41' }) {
 }
 
 /* --- top app bar --- */
-function MTopBar({ title, sub, left, right, onBack, backTo, transparent, dark, style={} }) {
+function MTopBar({ title, sub, left, right, onBack, backTo, transparent, dark, compact, style={} }) {
   return (
     <div style={{
-      padding:'62px 16px 12px', display:'flex', alignItems:'center', gap:10,
+      padding: compact ? '58px 16px 9px' : '62px 16px 12px',
+      display:'flex', alignItems:'center', gap:10,
       background: transparent ? 'transparent' : (dark ? '#0F0B22' : M.elev),
       borderBottom: transparent ? 'none' : `1px solid ${dark ? 'rgba(255,255,255,0.06)' : M.borderSoft}`,
       position: 'relative', zIndex:5, ...style,
     }}>
       {onBack && (
-        <button onClick={onBack} data-back={backTo || 'ai'} style={{
+        <button onClick={typeof onBack === 'function' ? onBack : undefined} data-back={backTo || 'ai'} style={{
           width:36, height:36, border:0, background:'transparent', cursor:'pointer',
           color: dark ? '#fff' : M.text, display:'flex', alignItems:'center', justifyContent:'center'}}>
           <Ico d={ICONS.back} w={22}/>
@@ -158,9 +160,9 @@ function MTopBar({ title, sub, left, right, onBack, backTo, transparent, dark, s
       )}
       {left}
       <div style={{flex:1, minWidth:0}}>
-        <div style={{fontSize:17, fontWeight:700, letterSpacing:-0.2,
+        <div style={{fontSize: compact ? 14 : 17, fontWeight:700, letterSpacing:-0.2,
           color: dark ? '#fff' : M.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{title}</div>
-        {sub && <div style={{fontSize:12, color: dark ? 'rgba(255,255,255,0.6)' : M.dim, marginTop:2,
+        {sub && <div style={{fontSize: compact ? 11 : 12, color: dark ? 'rgba(255,255,255,0.6)' : M.dim, marginTop: compact ? 1 : 2,
           overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{sub}</div>}
       </div>
       {right}
@@ -171,9 +173,9 @@ function MTopBar({ title, sub, left, right, onBack, backTo, transparent, dark, s
 /* --- bottom tab bar --- */
 function MTabBar({ active = 'ai' }) {
   const tabs = [
-    {k:'ai',     label:'AI 量化', icon:ICONS.ai},
-    {k:'market', label:'行情',    icon:ICONS.market},
     {k:'strat',  label:'策略',    icon:ICONS.strat},
+    {k:'ai',     label:'AI 量化', icon:ICONS.ai},
+    {k:'market', label:'数据',    icon:ICONS.market},
     {k:'whale',  label:'巨鲸',    icon:ICONS.whale},
     {k:'me',     label:'我的',    icon:ICONS.me},
   ];
@@ -252,6 +254,120 @@ function Card({ children, p='16px', style={} }) {
   );
 }
 
+/* --- shared full-screen search overlay (行情数据 style) ---
+   Pill input + 取消, 热门 chips, 搜索历史 chips with clear.
+   props:
+     open, onClose, placeholder, hotLabel, hot:[str], onPick(value),
+     renderResults(query, pick) -> array of nodes (empty -> emptyText),
+     emptyText
+*/
+function SearchOverlay({ open, onClose, placeholder='搜索', hotLabel='热门币种', hot=[], onPick, renderResults, emptyText='无匹配结果' }) {
+  const [query, setQuery] = React.useState('');
+  const [history, setHistory] = React.useState(() => hot.slice(0, 3));
+  const inputRef = React.useRef(null);
+  React.useEffect(() => {
+    if (open) { setQuery(''); setTimeout(() => inputRef.current && inputRef.current.focus(), 0); }
+  }, [open]);
+  if (!open) return null;
+  const q = query.trim();
+  const pick = (val) => {
+    setHistory(h => [val, ...h.filter(x => x !== val)].slice(0, 12));
+    onPick && onPick(val);
+    onClose && onClose();
+  };
+  const results = q && renderResults ? renderResults(q, pick) : [];
+  const chipStyle = {
+    minWidth:62, padding:'7px 16px', borderRadius:999, border:0,
+    background:M.violetSoft, color:M.text, cursor:'pointer',
+    fontSize:13, fontWeight:500, fontFamily:M.sans,
+  };
+  return (
+    <div style={{ position:'absolute', inset:0, zIndex:80, background:M.bg, display:'flex', flexDirection:'column' }}>
+      <MStatus/>
+      {/* input row */}
+      <div style={{ padding:'62px 16px 8px', display:'flex', alignItems:'center', gap:12 }}>
+        <div style={{
+          flex:1, height:38, background:M.soft, borderRadius:999,
+          padding:'0 14px', display:'flex', alignItems:'center', gap:8,
+        }}>
+          <Ico d={ICONS.search} w={16} sw={1.8}/>
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={e=>setQuery(e.target.value)}
+            placeholder={placeholder}
+            style={{ flex:1, border:0, outline:'none', background:'transparent', fontSize:13, color:M.text, fontFamily:M.sans }}
+          />
+          {query && (
+            <button onClick={()=>{ setQuery(''); inputRef.current && inputRef.current.focus(); }} style={{
+              border:0, background:M.border, color:M.bg, cursor:'pointer',
+              width:16, height:16, borderRadius:8, padding:0, fontSize:11, lineHeight:1,
+              display:'flex', alignItems:'center', justifyContent:'center',
+            }}>×</button>
+          )}
+        </div>
+        <button onClick={onClose} style={{
+          border:0, background:'transparent', color:M.mid, cursor:'pointer',
+          fontSize:13, fontWeight:500, fontFamily:M.sans, padding:'0 2px',
+        }}>取消</button>
+      </div>
+
+      <div style={{ flex:1, overflow:'auto', padding:'8px 16px 24px' }}>
+        {q ? (
+          results && results.length ? results : (
+            <div style={{ padding:'44px 16px', textAlign:'center', color:M.dim, fontSize:13 }}>{emptyText}</div>
+          )
+        ) : (
+          <React.Fragment>
+            {hot.length > 0 && (
+              <React.Fragment>
+                <div style={{ fontSize:14, fontWeight:600, color:M.text, margin:'8px 0 12px' }}>{hotLabel}</div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:'10px 10px' }}>
+                  {hot.map(c => <button key={c} onClick={()=>pick(c)} style={chipStyle}>{c}</button>)}
+                </div>
+              </React.Fragment>
+            )}
+            {history.length > 0 && (
+              <React.Fragment>
+                <div style={{ display:'flex', alignItems:'center', margin:'26px 0 12px' }}>
+                  <div style={{ flex:1, fontSize:14, fontWeight:600, color:M.text }}>搜索历史</div>
+                  <button aria-label="清空搜索历史" onClick={()=>setHistory([])} style={{
+                    border:0, background:'transparent', color:M.dim, cursor:'pointer',
+                    padding:4, display:'flex', alignItems:'center',
+                  }}>
+                    <Ico d={ICONS.trash} w={16} sw={1.7}/>
+                  </button>
+                </div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:'10px 10px' }}>
+                  {history.map(c => <button key={c} onClick={()=>pick(c)} style={chipStyle}>{c}</button>)}
+                </div>
+              </React.Fragment>
+            )}
+          </React.Fragment>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* --- shared search result row (avatar + title + sub + right) --- */
+function SearchResultRow({ letter, color='#7C5CFF', title, sub, right, onClick }) {
+  return (
+    <div onClick={onClick} style={{
+      display:'flex', alignItems:'center', gap:10, padding:'10px 4px',
+      borderBottom:`1px solid ${M.borderSoft}`, cursor:'pointer',
+    }}>
+      <Av sym={letter} bg={color} size={28}/>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontSize:14, fontWeight:600, color:M.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+          {title}{sub && <span style={{ fontSize:11, color:M.dim, marginLeft:5, fontWeight:500 }}>{sub}</span>}
+        </div>
+      </div>
+      {right != null && <div style={{ fontFamily:M.mono, fontSize:13, fontWeight:600, color:M.text }}>{right}</div>}
+    </div>
+  );
+}
+
 /* --- segmented control (pill chips) --- */
 function Seg({ options, value, size='sm', style={} }) {
   const px = size === 'md' ? 14 : 10;
@@ -275,4 +391,4 @@ function Seg({ options, value, size='sm', style={} }) {
 }
 
 /* expose */
-Object.assign(window, { M, Ico, ICONS, MStatus, MTopBar, MTabBar, Chip, Av, Card, Seg });
+Object.assign(window, { M, Ico, ICONS, MStatus, MTopBar, MTabBar, Chip, Av, Card, Seg, SearchOverlay, SearchResultRow });

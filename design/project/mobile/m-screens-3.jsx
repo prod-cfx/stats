@@ -4,36 +4,61 @@
    SCREEN 6 — Trading Detail (BTC/USDT)
    ======================================================================== */
 const ASKS = [
-  {p:'68,432.10', q:'0.8214', t:'56.21K'},
-  {p:'68,430.50', q:'1.2480', t:'85.41K'},
-  {p:'68,428.20', q:'0.4862', t:'33.27K'},
-  {p:'68,425.80', q:'2.1306', t:'145.8K'},
-  {p:'68,422.40', q:'0.9012', t:'61.66K'},
+  {p:'74,240.30', q:'0.8214', t:'60.99K'},
+  {p:'74,238.10', q:'1.2480', t:'92.65K'},
+  {p:'74,235.40', q:'0.4862', t:'36.10K'},
+  {p:'74,231.60', q:'2.1306', t:'158.2K'},
+  {p:'74,229.80', q:'0.9012', t:'66.90K'},
 ];
 const BIDS = [
-  {p:'68,420.12', q:'1.4820', t:'101.4K'},
-  {p:'68,418.50', q:'0.7240', t:'49.54K'},
-  {p:'68,415.30', q:'2.8412', t:'194.4K'},
-  {p:'68,412.80', q:'0.5408', t:'37.00K'},
-  {p:'68,410.20', q:'1.9620', t:'134.2K'},
+  {p:'74,225.10', q:'1.4820', t:'109.9K'},
+  {p:'74,222.40', q:'0.7240', t:'53.74K'},
+  {p:'74,219.80', q:'2.8412', t:'210.8K'},
+  {p:'74,216.20', q:'0.5408', t:'40.13K'},
+  {p:'74,213.50', q:'1.9620', t:'145.6K'},
 ];
 const TRADES = [
-  {t:'14:02:18', p:'68,422.40', q:'0.0824', side:'buy'},
-  {t:'14:02:17', p:'68,420.80', q:'0.4118', side:'buy'},
-  {t:'14:02:15', p:'68,420.12', q:'0.1248', side:'sell'},
-  {t:'14:02:14', p:'68,418.50', q:'1.8204', side:'sell'},
-  {t:'14:02:12', p:'68,420.10', q:'0.0612', side:'buy'},
-  {t:'14:02:11', p:'68,422.00', q:'0.2810', side:'buy'},
-  {t:'14:02:09', p:'68,418.30', q:'0.0942', side:'sell'},
-  {t:'14:02:07', p:'68,420.40', q:'0.6184', side:'buy'},
-  {t:'14:02:05', p:'68,416.20', q:'0.3206', side:'sell'},
-  {t:'14:02:03', p:'68,420.10', q:'0.1842', side:'buy'},
-  {t:'14:01:59', p:'68,418.80', q:'0.4012', side:'sell'},
-  {t:'14:01:57', p:'68,422.40', q:'0.0606', side:'buy'},
+  {t:'03:10:02', p:'74,229.80', q:'0.0824', side:'buy'},
+  {t:'03:10:01', p:'74,228.30', q:'0.4118', side:'buy'},
+  {t:'03:09:59', p:'74,225.10', q:'0.1248', side:'sell'},
+  {t:'03:09:57', p:'74,222.40', q:'1.8204', side:'sell'},
+  {t:'03:09:55', p:'74,225.10', q:'0.0612', side:'buy'},
+  {t:'03:09:53', p:'74,229.80', q:'0.2810', side:'buy'},
+  {t:'03:09:51', p:'74,222.40', q:'0.0942', side:'sell'},
+  {t:'03:09:48', p:'74,227.10', q:'0.6184', side:'buy'},
+  {t:'03:09:45', p:'74,219.80', q:'0.3206', side:'sell'},
+  {t:'03:09:42', p:'74,225.10', q:'0.1842', side:'buy'},
+  {t:'03:09:39', p:'74,222.40', q:'0.4012', side:'sell'},
+  {t:'03:09:36', p:'74,229.80', q:'0.0606', side:'buy'},
 ];
+/* 大额成交 — 与 PC 端「大额成交」对齐：价格 / 数量 / 时间 */
+const BIG_TRADES = [
+  {p:'73,171.90', q:'1.43700', t:'11:57:43', side:'sell'},
+  {p:'73,170.90', q:'1.47800', t:'11:57:43', side:'buy' },
+  {p:'73,170.90', q:'2.04400', t:'11:57:43', side:'buy' },
+  {p:'73,150.00', q:'1.88400', t:'11:57:37', side:'buy' },
+  {p:'73,120.00', q:'1.84800', t:'11:57:33', side:'buy' },
+  {p:'73,108.70', q:'1.40000', t:'11:57:32', side:'buy' },
+  {p:'73,108.70', q:'1.52100', t:'11:57:29', side:'buy' },
+  {p:'73,108.60', q:'1.48200', t:'11:57:23', side:'buy' },
+  {p:'73,108.60', q:'1.52100', t:'11:57:23', side:'buy' },
+  {p:'73,108.60', q:'1.53700', t:'11:57:23', side:'buy' },
+  {p:'73,108.60', q:'1.55500', t:'11:57:23', side:'buy' },
+  {p:'73,105.80', q:'2.85900', t:'11:57:21', side:'buy' },
+  {p:'73,111.70', q:'2.04400', t:'11:57:21', side:'sell'},
+  {p:'73,111.90', q:'2.47100', t:'11:57:21', side:'sell'},
+];
+
+const SRC_EXCHANGES = ['Binance', 'OKX'];
 
 function ScreenTradingDetail() {
   const [panel, setPanel] = React.useState('book'); // 'book' | 'trades' | 'depth'
+  const [agg, setAgg]     = React.useState(true); // 聚合: cross-exchange merged book (default ON)
+  const [exch, setExch]   = React.useState('Binance');
+  const [exchOpen, setExchOpen] = React.useState(false);
+  const [prec, setPrec]   = React.useState('0.01');
+  const [precOpen, setPrecOpen] = React.useState(false);
+  const PREC_OPTS = ['0.01','0.1','1','10','100'];
   return (
     <div style={{height:'100%', position:'relative', background:M.bg, overflow:'hidden', display:'flex', flexDirection:'column'}}>
       <MStatus/>
@@ -41,7 +66,7 @@ function ScreenTradingDetail() {
         onBack={()=>{}}
         backTo="market"
         title="BTC / USDT"
-        sub="永续 · Binance"
+        sub={agg ? '永续 · 聚合' : `永续 · ${exch}`}
         right={
           <div style={{display:'flex', gap:6}}>
             <button style={iconBtn}><Ico d={ICONS.star} w={18}/></button>
@@ -51,18 +76,41 @@ function ScreenTradingDetail() {
       />
       {/* scrollable region — sits beneath the fixed top bar, above the sticky buy/sell + tab bar */}
       <div style={{flex:1, minHeight:0, overflow:'auto', paddingBottom:158}}>
-      <div style={{padding:'12px 16px 8px', background:M.elev}}>
-        <div style={{display:'flex', alignItems:'baseline', gap:12, marginBottom:8}}>
-          <span style={{fontSize:26, fontWeight:700, color:M.up, fontFamily:M.mono, letterSpacing:-0.5}}>68,420.12</span>
-          <span style={{fontSize:13, color:M.up, fontFamily:M.mono, fontWeight:600}}>+1,572.40 (+2.34%)</span>
+      <div style={{padding:'12px 16px 10px', background:M.elev}}>
+        {/* row 1: price + change */}
+        <div style={{display:'flex', alignItems:'baseline', gap:10, minWidth:0, marginBottom:10}}>
+          <span style={{fontSize:26, fontWeight:700, color:M.dn, fontFamily:M.mono, letterSpacing:-0.5}}>74,228.30</span>
+          <span style={{fontSize:13, color:M.dn, fontFamily:M.mono, fontWeight:600, whiteSpace:'nowrap'}}>−586.40 (−0.79%)</span>
         </div>
-        <div style={{display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10, fontSize:11}}>
+
+        {/* row 2: 指数 / 标记 / 资金费率 / 下次结算 */}
+        <div style={{
+          display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10,
+          fontSize:10.5, paddingBottom:9, marginBottom:9,
+          borderBottom:`1px solid ${M.borderSoft}`,
+        }}>
           {[
-            ['24H 高', '69,210.40'], ['24H 低', '66,820.10'],
-            ['24H 量', '63.25K'],    ['持仓量', '89.36K BTC'],
+            { l:'指数价格', v:'67,403.6',  tone:M.text },
+            { l:'标记价格', v:'74,217.9',  tone:M.text },
+            { l:'资金费率', v:'+0.00%',    tone:M.text },
+            { l:'持仓量',   v:'95.82 BTC', tone:M.text },
+          ].map(s => (
+            <div key={s.l}>
+              <div style={{color:M.dim, letterSpacing:0.1}}>{s.l}</div>
+              <div style={{color:s.tone, fontFamily:M.mono, fontWeight:600, marginTop:2}}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* row 3: 24h 高 / 低 / 量 */}
+        <div style={{display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10, fontSize:10.5}}>
+          {[
+            ['24H 高', '74,555.50'],
+            ['24H 低', '74,336.70'],
+            ['24H 量', '67.82 BTC'],
           ].map(([l,v]) => (
             <div key={l}>
-              <div style={{color:M.dim}}>{l}</div>
+              <div style={{color:M.dim, letterSpacing:0.1}}>{l}</div>
               <div style={{color:M.text, fontFamily:M.mono, fontWeight:500, marginTop:2}}>{v}</div>
             </div>
           ))}
@@ -70,24 +118,46 @@ function ScreenTradingDetail() {
       </div>
 
       <div style={{background:M.elev, borderTop:`1px solid ${M.borderSoft}`, padding:'8px 16px 0'}}>
-        <div style={{display:'flex', gap:14, fontSize:12, fontWeight:500}}>
+        <div style={{display:'flex', alignItems:'center', gap:12, fontSize:12, fontWeight:500}}>
           {[['1m'],['15m'],['1H',true],['4H'],['1D'],['更多']].map(([t,on])=>(
             <span key={t} style={{
-              padding:'6px 0', color: on ? M.text : M.mid,
+              padding:'6px 0', color: on ? M.text : M.mid, whiteSpace:'nowrap',
               borderBottom: on ? `2px solid ${M.text}` : '2px solid transparent', fontWeight: on ? 700 : 500,
             }}>{t}</span>
           ))}
+          <div style={{flex:1}}/>
+          <SourcePicker exch={exch} agg={agg} setExch={setExch} setAgg={setAgg} open={exchOpen} setOpen={setExchOpen}/>
         </div>
       </div>
 
       <div style={{background:M.elev, padding:'4px 0 6px'}}>
         <div style={{padding:'6px 16px', fontFamily:M.mono, fontSize:10, color:M.mid, display:'flex', gap:10}}>
-          <span>O <span style={{color:M.text}}>67,892</span></span>
-          <span>H <span style={{color:M.up}}>68,540</span></span>
-          <span>L <span style={{color:M.dn}}>67,420</span></span>
-          <span>C <span style={{color:M.up}}>68,420</span></span>
+          <span>O <span style={{color:M.text}}>74,227.30</span></span>
+          <span>H <span style={{color:M.up}}>74,228.40</span></span>
+          <span>L <span style={{color:M.dn}}>74,217.90</span></span>
+          <span>C <span style={{color:M.dn}}>74,217.90</span></span>
         </div>
         <Candles width={402} height={200}/>
+      </div>
+
+      {/* 24h 累计成交额 / 累计净流入 / 最高 / 最低 — flat row matching header style */}
+      <div style={{
+        background:M.elev, borderTop:`6px solid ${M.bg}`,
+        padding:'14px 16px',
+        display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10,
+        fontSize:10.5,
+      }}>
+        {[
+          { l:'累计成交额($)', v:'783.09亿',     tone:M.text },
+          { l:'累计净流入($)', v:'−39.15亿',     tone:M.dn   },
+          { l:'最高',         v:'74,555.50',   tone:M.text },
+          { l:'最低',         v:'74,336.70',   tone:M.text },
+        ].map(s => (
+          <div key={s.l}>
+            <div style={{color:M.dim, letterSpacing:0.1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{s.l}</div>
+            <div style={{color:s.tone, fontFamily:M.mono, fontWeight:600, marginTop:2, fontSize:11, letterSpacing:-0.1}}>{s.v}</div>
+          </div>
+        ))}
       </div>
 
       {/* tab strip: 盘口 / 成交 / 深度图 */}
@@ -105,10 +175,9 @@ function ScreenTradingDetail() {
             );
           })}
           <div style={{flex:1}}/>
-          {panel === 'book' && <span style={{color:M.dim, fontSize:11, alignSelf:'center'}}>0.1 ▾</span>}
         </div>
 
-        {panel === 'book' && <OrderBookPanel/>}
+        {panel === 'book' && <OrderBookPanel agg={agg} prec={prec} setPrec={setPrec} precOpen={precOpen} setPrecOpen={setPrecOpen}/>}
         {panel === 'trades' && <TradesPanel/>}
         {panel === 'depth' && <DepthPanel/>}
       </div>
@@ -138,61 +207,519 @@ function ScreenTradingDetail() {
         </button>
       </div>
 
+      {/* ─── 交易所来源 — bottom drawer ─── */}
+      {exchOpen && (
+        <div
+          onClick={()=>setExchOpen(false)}
+          style={{
+            position:'absolute', inset:0, zIndex:85,
+            background:'rgba(15,11,34,0.55)',
+            animation:'m-fade-in .18s ease-out',
+          }}>
+          <div
+            onClick={(e)=>e.stopPropagation()}
+            style={{
+              position:'absolute', left:0, right:0, bottom:0,
+              background:M.elev, borderRadius:'20px 20px 0 0',
+              boxShadow:'0 -16px 48px rgba(15,11,34,0.32)',
+              display:'flex', flexDirection:'column',
+              animation:'m-slide-up .26s cubic-bezier(.2,.8,.2,1)',
+            }}>
+            <div style={{width:42, height:4, borderRadius:2, background:M.border, margin:'10px auto 0'}}/>
+            <div style={{padding:'12px 16px 6px', fontSize:14, fontWeight:700, color:M.text}}>
+              数据来源
+            </div>
+            <div style={{padding:'0 8px 6px'}}>
+              {[{ k:'__agg', label:'聚合所有交易所' }, ...SRC_EXCHANGES.map(x=>({ k:x, label:x }))].map(opt => {
+                const on = opt.k === '__agg' ? agg : (!agg && opt.k === exch);
+                return (
+                  <button
+                    key={opt.k}
+                    onClick={()=>{
+                      if (opt.k === '__agg') { setAgg(true); }
+                      else { setAgg(false); setExch(opt.k); }
+                      setExchOpen(false);
+                    }}
+                    style={{
+                      display:'flex', alignItems:'center', gap:11,
+                      width:'100%', padding:'12px 12px',
+                      border:0, background:'transparent', cursor:'pointer',
+                      fontFamily:'inherit', textAlign:'left',
+                    }}>
+                    <span style={{
+                      flex:1, fontSize:14, fontWeight: opt.k === '__agg' ? 700 : 600,
+                      color: on ? M.violet : M.text,
+                    }}>{opt.label}</span>
+                    <span style={{
+                      width:20, height:20, borderRadius:'50%', flexShrink:0,
+                      background: on ? M.violet : 'transparent',
+                      border: `1.5px solid ${on ? M.violet : M.border}`,
+                      display:'inline-flex', alignItems:'center', justifyContent:'center',
+                      transition:'background 130ms, border-color 130ms',
+                    }}>
+                      {on && (
+                        <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
+                          <path d="M3 7.2L5.8 10L11 4" stroke="#fff"
+                            strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{
+              borderTop:`1px solid ${M.borderSoft}`,
+              padding:'6px 8px calc(8px + env(safe-area-inset-bottom))',
+            }}>
+              <button onClick={()=>setExchOpen(false)} style={{
+                width:'100%', height:46, border:0, cursor:'pointer',
+                background:'transparent', color:M.text,
+                fontSize:14, fontWeight:600, fontFamily:'inherit',
+              }}>取消</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── 价格精度 — bottom drawer ─── */}
+      {precOpen && (
+        <div
+          onClick={()=>setPrecOpen(false)}
+          style={{
+            position:'absolute', inset:0, zIndex:85,
+            background:'rgba(15,11,34,0.55)',
+            animation:'m-fade-in .18s ease-out',
+          }}>
+          <div
+            onClick={(e)=>e.stopPropagation()}
+            style={{
+              position:'absolute', left:0, right:0, bottom:0,
+              background:M.elev, borderRadius:'20px 20px 0 0',
+              boxShadow:'0 -16px 48px rgba(15,11,34,0.32)',
+              display:'flex', flexDirection:'column',
+              animation:'m-slide-up .26s cubic-bezier(.2,.8,.2,1)',
+            }}>
+            <div style={{width:42, height:4, borderRadius:2, background:M.border, margin:'10px auto 0'}}/>
+            <div style={{padding:'12px 16px 6px', fontSize:14, fontWeight:700, color:M.text}}>
+              价格精度
+            </div>
+            <div style={{padding:'0 8px 6px'}}>
+              {PREC_OPTS.map(o => {
+                const on = o === prec;
+                return (
+                  <button
+                    key={o}
+                    onClick={()=>{ setPrec(o); setPrecOpen(false); }}
+                    style={{
+                      display:'flex', alignItems:'center', gap:11,
+                      width:'100%', padding:'12px 12px',
+                      border:0, background:'transparent', cursor:'pointer',
+                      fontFamily:'inherit', textAlign:'left',
+                    }}>
+                    <span style={{
+                      flex:1, fontSize:14, fontWeight:600, fontFamily:M.mono,
+                      color: on ? M.violet : M.text,
+                    }}>{o}</span>
+                    <span style={{
+                      width:20, height:20, borderRadius:'50%', flexShrink:0,
+                      background: on ? M.violet : 'transparent',
+                      border: `1.5px solid ${on ? M.violet : M.border}`,
+                      display:'inline-flex', alignItems:'center', justifyContent:'center',
+                      transition:'background 130ms, border-color 130ms',
+                    }}>
+                      {on && (
+                        <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
+                          <path d="M3 7.2L5.8 10L11 4" stroke="#fff"
+                            strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{
+              borderTop:`1px solid ${M.borderSoft}`,
+              padding:'6px 8px calc(8px + env(safe-area-inset-bottom))',
+            }}>
+              <button onClick={()=>setPrecOpen(false)} style={{
+                width:'100%', height:46, border:0, cursor:'pointer',
+                background:'transparent', color:M.text,
+                fontSize:14, fontWeight:600, fontFamily:'inherit',
+              }}>取消</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <MTabBar active="market"/>
     </div>
   );
 }
 
+/* ---- exchange / aggregate picker (single dropdown → opens bottom drawer) ---- */
+function SourcePicker({ exch, agg, setExch, setAgg, open, setOpen }) {
+  const label = agg ? '聚合' : exch;
+
+  return (
+    <div style={{position:'relative', flexShrink:0}}>
+      <button
+        onClick={()=>setOpen(!open)}
+        style={{
+          height:26, padding:'0 6px 0 10px', borderRadius:999,
+          border:`1px solid ${agg ? 'transparent' : M.border}`,
+          background: agg ? M.violetGrad : M.elev,
+          color: agg ? '#fff' : M.text,
+          display:'inline-flex', alignItems:'center', gap:4, whiteSpace:'nowrap',
+          fontSize:11.5, fontWeight:600, fontFamily:'inherit', cursor:'pointer',
+          boxShadow: agg ? '0 4px 12px rgba(124,92,255,0.28)' : 'none',
+        }}
+      >
+        <span>{label}</span>
+        <svg width="9" height="9" viewBox="0 0 10 10" style={{opacity:0.7, transform: open ? 'rotate(180deg)' : 'none', transition:'transform 120ms'}}>
+          <path d="M2 4 L5 7 L8 4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+/* ---- exchange picker (used in trade detail header) ---- */
+function ExchangePicker({ value, onChange, open, setOpen, disabled }) {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const close = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open, setOpen]);
+
+  return (
+    <div ref={ref} style={{position:'relative', flexShrink:0}}>
+      <button
+        onClick={()=>!disabled && setOpen(!open)}
+        style={{
+          height:26, padding:'0 6px 0 10px', borderRadius:999,
+          border:`1px solid ${M.border}`,
+          background: M.elev,
+          color: disabled ? M.dim : M.text,
+          opacity: disabled ? 0.5 : 1,
+          display:'inline-flex', alignItems:'center', gap:3, whiteSpace:'nowrap',
+          fontSize:11.5, fontWeight:600, fontFamily:'inherit',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+        }}
+      >
+        <span>{value}</span>
+        <svg width="9" height="9" viewBox="0 0 10 10" style={{opacity:0.7, transform: open ? 'rotate(180deg)' : 'none', transition:'transform 120ms'}}>
+          <path d="M2 4 L5 7 L8 4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+      {open && (
+        <div style={{
+          position:'absolute', top:'calc(100% + 6px)', right:0, zIndex:50,
+          minWidth:140, padding:'6px',
+          background:M.elev, border:`1px solid ${M.border}`, borderRadius:12,
+          boxShadow:'0 12px 32px rgba(0,0,0,0.35)',
+        }}>
+          {SRC_EXCHANGES.map(x => {
+            const on = x === value;
+            return (
+              <button key={x} onClick={()=>{ onChange(x); setOpen(false); }} style={{
+                display:'flex', alignItems:'center', justifyContent:'space-between',
+                width:'100%', padding:'8px 10px', borderRadius:8,
+                background: on ? M.soft : 'transparent',
+                border:'0', cursor:'pointer', fontFamily:'inherit',
+                color: on ? M.text : M.text, fontSize:13, fontWeight: on ? 600 : 500,
+              }}>
+                <span>{x}</span>
+                {on && (
+                  <svg width="12" height="12" viewBox="0 0 12 12">
+                    <path d="M2.5 6.2 L5 8.5 L9.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---- 聚合 toggle (used in trade detail header) ---- */
+function AggToggle({ on, onChange }) {
+  return (
+    <button onClick={()=>onChange(!on)} style={{
+      flexShrink:0, height:26, padding:'0 4px 0 10px', borderRadius:999,
+      border:`1px solid ${on ? 'transparent' : M.border}`,
+      background: on ? M.violetGrad : M.elev,
+      color: on ? '#fff' : M.mid,
+      display:'inline-flex', alignItems:'center', gap:6, whiteSpace:'nowrap',
+      fontSize:11.5, fontWeight:600, fontFamily:'inherit', cursor:'pointer',
+      boxShadow: on ? '0 4px 12px rgba(124,92,255,0.28)' : 'none',
+    }}>
+      <span>聚合</span>
+      <span style={{
+        width:18, height:18, borderRadius:'50%',
+        background: on ? 'rgba(255,255,255,0.22)' : M.soft,
+        display:'inline-flex', alignItems:'center', justifyContent:'center',
+        fontSize:9, fontWeight:700, fontFamily:M.mono,
+        color: on ? '#fff' : M.dim,
+      }}>{on ? '7' : '1'}</span>
+    </button>
+  );
+}
+
 /* ---- order book panel ---- */
-function OrderBookPanel() {
+function OrderBookPanel({ agg, prec, setPrec, precOpen, setPrecOpen }) {
+  const [view, setView] = React.useState('both'); // both | asks | bids
+
+  const showAsks = view !== 'bids';
+  const showBids = view !== 'asks';
+
+  // cumulative qty for ask side (from mid outward = ASKS reversed)
+  const askRows = ASKS.slice().reverse(); // closest-to-mid first
+  let askCum = 0;
+  const askWithCum = askRows.map(o => {
+    askCum += parseFloat(o.q);
+    return { ...o, cum: askCum };
+  }).reverse(); // back to top-down (highest price first)
+
+  let bidCum = 0;
+  const bidWithCum = BIDS.map(o => {
+    bidCum += parseFloat(o.q);
+    return { ...o, cum: bidCum };
+  });
+  const maxCum = Math.max(askCum, bidCum);
+
   return (
     <React.Fragment>
+      {/* toolbar — refresh / view-mode / sort + precision */}
       <div style={{
-        display:'grid', gridTemplateColumns:'1fr 1fr 1fr', padding:'6px 16px',
+        padding:'8px 16px', display:'flex', alignItems:'center', gap:6,
+        borderBottom:`1px solid ${M.borderSoft}`,
+      }}>
+        <button title="刷新" style={obIconBtn}>
+          <Ico d={ICONS.refresh} w={13} sw={2}/>
+        </button>
+        {/* view mode 3-state */}
+        <div style={{
+          display:'inline-flex', gap:0, padding:2, borderRadius:7,
+          background:M.soft, border:`1px solid ${M.borderSoft}`,
+        }}>
+          {[
+            {k:'both', label:'双向'},
+            {k:'asks', label:'卖单'},
+            {k:'bids', label:'买单'},
+          ].map(v => (
+            <button key={v.k} onClick={()=>setView(v.k)} aria-label={v.label}
+              style={{
+                width:26, height:22, padding:0, borderRadius:5,
+                border:0, cursor:'pointer',
+                background: view === v.k ? M.elev : 'transparent',
+                color: view === v.k ? M.violet : M.mid,
+                display:'inline-flex', alignItems:'center', justifyContent:'center',
+              }}>
+              <ObViewIcon kind={v.k}/>
+            </button>
+          ))}
+        </div>
+        <button title="排序" style={obIconBtn}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7 4v16M3 8l4-4 4 4M17 20V4M21 16l-4 4-4-4"/>
+          </svg>
+        </button>
+        <div style={{flex:1}}/>
+        {/* precision dropdown — opens bottom drawer */}
+        <div style={{position:'relative'}}>
+          <button onClick={()=>setPrecOpen(true)} style={{
+            height:24, padding:'0 8px', borderRadius:6,
+            border:`1px solid ${precOpen ? M.violet : M.border}`,
+            background: precOpen ? M.violetSoft : M.elev,
+            color: precOpen ? M.violet : M.text,
+            fontSize:11, fontWeight:600, fontFamily:M.mono,
+            display:'inline-flex', alignItems:'center', gap:4,
+            cursor:'pointer',
+          }}>
+            {prec}
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+              style={{transform: precOpen ? 'rotate(180deg)' : 'none', transition:'transform 160ms'}}>
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* column header */}
+      <div style={{
+        display:'grid',
+        gridTemplateColumns:'minmax(70px,1fr) minmax(60px,1fr) minmax(70px,1fr)',
+        gap:8, padding:'6px 16px',
         fontSize:10, color:M.dim, fontFamily:M.mono,
       }}>
         <span>价格(USDT)</span>
         <span style={{textAlign:'right'}}>数量(BTC)</span>
-        <span style={{textAlign:'right'}}>累计</span>
+        <span style={{textAlign:'right'}}>委托额($)</span>
       </div>
+
       <div>
-        {ASKS.slice().reverse().map((o,i)=>(<OrderRow key={'a'+i} o={o} ask/>))}
-        <div style={{
-          padding:'8px 16px', display:'flex', alignItems:'center', gap:10,
-          background:M.soft, borderTop:`1px solid ${M.borderSoft}`, borderBottom:`1px solid ${M.borderSoft}`,
-        }}>
-          <span style={{fontSize:18, fontWeight:700, fontFamily:M.mono, color:M.up}}>68,420.12</span>
-          <span style={{fontSize:11, color:M.dim, fontFamily:M.mono}}>≈ $68,420.12</span>
-        </div>
-        {BIDS.map((o,i)=>(<OrderRow key={'b'+i} o={o}/>))}
+        {showAsks && askWithCum.map((o,i)=>(
+          <OrderRow key={'a'+i} o={o} ask maxCum={maxCum}/>
+        ))}
+
+        {view === 'both' && (
+          <div style={{
+            padding:'10px 16px', display:'flex', alignItems:'center', gap:8,
+            background: M.soft,
+            borderTop:`1px solid ${M.borderSoft}`,
+            borderBottom:`1px solid ${M.borderSoft}`,
+          }}>
+            <span style={{fontSize:18, fontWeight:700, fontFamily:M.mono, color:M.dn, letterSpacing:-0.3}}>
+              74,228.30
+            </span>
+            <span style={{fontSize:11, color:M.dn, fontFamily:M.mono, fontWeight:600}}>−0.79%</span>
+            <span style={{fontSize:10.5, color:M.dim, fontFamily:M.mono}}>≈ $74,228.30</span>
+          </div>
+        )}
+
+        {showBids && bidWithCum.map((o,i)=>(
+          <OrderRow key={'b'+i} o={o} maxCum={maxCum}/>
+        ))}
       </div>
     </React.Fragment>
   );
 }
 
+function ObViewIcon({ kind }) {
+  if (kind === 'asks') return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+      <rect x="2" y="3" width="12" height="2" rx="0.5" fill="currentColor" opacity="0.9"/>
+      <rect x="2" y="7" width="9"  height="2" rx="0.5" fill="currentColor" opacity="0.7"/>
+      <rect x="2" y="11" width="6" height="2" rx="0.5" fill="currentColor" opacity="0.5"/>
+    </svg>
+  );
+  if (kind === 'bids') return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+      <rect x="2" y="3" width="6"  height="2" rx="0.5" fill="currentColor" opacity="0.5"/>
+      <rect x="2" y="7" width="9"  height="2" rx="0.5" fill="currentColor" opacity="0.7"/>
+      <rect x="2" y="11" width="12" height="2" rx="0.5" fill="currentColor" opacity="0.9"/>
+    </svg>
+  );
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+      <rect x="2" y="3" width="11" height="1.6" rx="0.5" fill="currentColor" opacity="0.85"/>
+      <rect x="2" y="6.6" width="8" height="1.6" rx="0.5" fill="currentColor" opacity="0.85"/>
+      <rect x="2" y="10.2" width="11" height="1.6" rx="0.5" fill="currentColor" opacity="0.55"/>
+    </svg>
+  );
+}
+
+const obIconBtn = {
+  width:24, height:22, padding:0, borderRadius:6,
+  border:`1px solid var(--border-soft)`,
+  background:'var(--bg-elev)', color:'var(--text-mid)',
+  display:'inline-flex', alignItems:'center', justifyContent:'center',
+  cursor:'pointer',
+};
+
 /* ---- trades panel ---- */
 function TradesPanel() {
+  const [sub, setSub] = React.useState('latest'); // 'latest' | 'big'
+  return (
+    <React.Fragment>
+      {/* sub-tabs: 最新成交 / 大额成交 */}
+      <div style={{
+        display:'flex', gap:6, padding:'10px 16px 8px',
+        borderBottom:`1px solid ${M.borderSoft}`,
+      }}>
+        {[['latest','最新成交'], ['big','大额成交']].map(([k,label]) => {
+          const on = sub === k;
+          return (
+            <button key={k} onClick={()=>setSub(k)} style={{
+              padding:'6px 12px', borderRadius:999, border:0, cursor:'pointer',
+              background: on ? M.soft : 'transparent',
+              color: on ? M.text : M.mid,
+              fontSize:12, fontWeight: on ? 600 : 500,
+              fontFamily: M.sans,
+            }}>{label}</button>
+          );
+        })}
+        <div style={{flex:1}}/>
+        <button title="排序" style={{
+          width:26, height:24, padding:0, borderRadius:6,
+          border:`1px solid ${M.borderSoft}`, background:M.elev,
+          color:M.mid, cursor:'pointer',
+          display:'inline-flex', alignItems:'center', justifyContent:'center',
+        }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7 4v16M3 8l4-4 4 4M17 20V4M21 16l-4 4-4-4"/>
+          </svg>
+        </button>
+      </div>
+
+      {sub === 'latest' ? <LatestTradesList/> : <BigTradesList/>}
+    </React.Fragment>
+  );
+}
+
+function LatestTradesList() {
   return (
     <React.Fragment>
       <div style={{
-        display:'grid', gridTemplateColumns:'1fr 1.2fr 1fr', padding:'6px 16px',
+        display:'grid', gridTemplateColumns:'1.2fr 1fr 1fr', padding:'8px 16px 4px',
         fontSize:10, color:M.dim, fontFamily:M.mono,
       }}>
-        <span>时间</span>
-        <span style={{textAlign:'right'}}>价格(USDT)</span>
+        <span>价格(USDT)</span>
         <span style={{textAlign:'right'}}>数量(BTC)</span>
+        <span style={{textAlign:'right'}}>成交时间</span>
       </div>
       <div>
         {TRADES.map((tr,i)=>{
           const up = tr.side === 'buy';
           return (
             <div key={i} style={{
-              display:'grid', gridTemplateColumns:'1fr 1.2fr 1fr',
+              display:'grid', gridTemplateColumns:'1.2fr 1fr 1fr',
               padding:'7px 16px', fontSize:12, fontFamily:M.mono, alignItems:'center',
             }}>
-              <span style={{color:M.mid}}>{tr.t}</span>
-              <span style={{textAlign:'right', color: up ? M.up : M.dn, fontWeight:600}}>{tr.p}</span>
+              <span style={{color: up ? M.up : M.dn, fontWeight:600}}>{tr.p}</span>
               <span style={{textAlign:'right', color:M.text}}>{tr.q}</span>
+              <span style={{textAlign:'right', color:M.mid}}>{tr.t}</span>
+            </div>
+          );
+        })}
+      </div>
+    </React.Fragment>
+  );
+}
+
+function BigTradesList() {
+  return (
+    <React.Fragment>
+      <div style={{
+        display:'grid', gridTemplateColumns:'1.2fr 1fr 1fr', padding:'8px 16px 4px',
+        fontSize:10, color:M.dim, fontFamily:M.mono,
+      }}>
+        <span>价格(USDT)</span>
+        <span style={{textAlign:'right'}}>数量(BTC)</span>
+        <span style={{textAlign:'right'}}>成交时间</span>
+      </div>
+      <div>
+        {BIG_TRADES.map((tr,i)=>{
+          const up = tr.side === 'buy';
+          return (
+            <div key={i} style={{
+              display:'grid', gridTemplateColumns:'1.2fr 1fr 1fr',
+              padding:'7px 16px', fontSize:12, fontFamily:M.mono, alignItems:'center',
+            }}>
+              <span style={{color: up ? M.up : M.dn, fontWeight:600}}>{tr.p}</span>
+              <span style={{textAlign:'right', color:M.text}}>{tr.q}</span>
+              <span style={{textAlign:'right', color:M.mid}}>{tr.t}</span>
             </div>
           );
         })}
@@ -206,12 +733,12 @@ function DepthPanel() {
   const W = 402, H = 280;
   // build cumulative bid (left) and ask (right) curves
   const allBids = [...BIDS, ...[
-    {p:68408,q:0.62},{p:68404,q:1.21},{p:68400,q:0.84},{p:68395,q:2.14},{p:68390,q:1.45},
-    {p:68385,q:0.96},{p:68380,q:2.84},{p:68370,q:1.62},{p:68355,q:3.20},
+    {p:74211,q:0.62},{p:74208,q:1.21},{p:74205,q:0.84},{p:74201,q:2.14},{p:74198,q:1.45},
+    {p:74194,q:0.96},{p:74190,q:2.84},{p:74182,q:1.62},{p:74170,q:3.20},
   ]];
   const allAsks = [...ASKS, ...[
-    {p:68436,q:1.10},{p:68438,q:0.62},{p:68442,q:1.84},{p:68446,q:0.74},{p:68450,q:2.41},
-    {p:68458,q:1.02},{p:68466,q:1.96},{p:68480,q:2.50},{p:68498,q:3.15},
+    {p:74244,q:1.10},{p:74247,q:0.62},{p:74250,q:1.84},{p:74254,q:0.74},{p:74258,q:2.41},
+    {p:74266,q:1.02},{p:74274,q:1.96},{p:74288,q:2.50},{p:74305,q:3.15},
   ]];
   const parse = (o) => ({ p: typeof o.p === 'string' ? parseFloat(o.p.replace(/,/g,'')) : o.p, q: typeof o.q === 'string' ? parseFloat(o.q) : o.q });
   const bids = allBids.map(parse).sort((a,b) => b.p - a.p); // high → low
@@ -219,7 +746,7 @@ function DepthPanel() {
   let bidCum = 0; const bidPts = bids.map(o => ({ p: o.p, c: (bidCum += o.q) }));
   let askCum = 0; const askPts = asks.map(o => ({ p: o.p, c: (askCum += o.q) }));
   const maxC = Math.max(bidCum, askCum) * 1.1;
-  const mid = 68420.12;
+  const mid = 74228.30;
   const range = 110; // ±110 around mid
   const xMin = mid - range, xMax = mid + range;
   const xOf = (p) => ((p - xMin) / (xMax - xMin)) * W;
@@ -262,7 +789,7 @@ function DepthPanel() {
         {/* mid marker */}
         <line x1={xOf(mid)} y1="0" x2={xOf(mid)} y2={H} stroke="var(--text-dim)" strokeDasharray="3 3" strokeOpacity="0.5"/>
         <text x={xOf(mid)} y="14" fontSize="10" fontFamily="JetBrains Mono,monospace"
-          fill="var(--text-mid)" textAnchor="middle">68,420.12</text>
+          fill="var(--text-mid)" textAnchor="middle">74,228.30</text>
       </svg>
       <div style={{padding:'10px 16px', display:'flex', justifyContent:'space-between',
         fontSize:10, color:M.dim, fontFamily:M.mono}}>
@@ -280,189 +807,502 @@ const iconBtn = {
   display:'flex', alignItems:'center', justifyContent:'center',
 };
 
-function OrderRow({ o, ask }) {
-  const pct = parseFloat(o.q.replace(',','')) / 3.5;
+function OrderRow({ o, ask, maxCum }) {
+  const qty = parseFloat(String(o.q).replace(/,/g,''));
+  const cum = o.cum ?? qty;
+  const w   = maxCum ? Math.min(100, (cum / maxCum) * 100) : 0;
+  // 委托额 = 价格 × 数量 (notional). 't' field already encodes this in source data.
+  const notional = o.t || '';
   return (
     <div style={{
-      position:'relative', display:'grid', gridTemplateColumns:'1fr 1fr 1fr',
-      padding:'5px 16px', fontSize:12, fontFamily:M.mono, alignItems:'center',
+      position:'relative',
+      display:'grid',
+      gridTemplateColumns:'minmax(70px,1fr) minmax(60px,1fr) minmax(70px,1fr)',
+      gap:8, padding:'5px 16px', fontSize:12, fontFamily:M.mono, alignItems:'center',
     }}>
+      {/* depth bar — cumulative, anchored to right */}
       <div style={{
         position:'absolute', right:0, top:0, bottom:0,
-        width: `${Math.min(80, pct*60)}%`,
+        width:`${w}%`,
         background: ask ? 'rgba(229,72,77,0.10)' : 'rgba(22,163,107,0.10)',
+        pointerEvents:'none',
       }}/>
-      <span style={{position:'relative', color: ask ? M.dn : M.up, fontWeight:500}}>{o.p}</span>
+      <span style={{position:'relative', color: ask ? M.dn : M.up, fontWeight:600}}>{o.p}</span>
       <span style={{position:'relative', textAlign:'right', color:M.text}}>{o.q}</span>
-      <span style={{position:'relative', textAlign:'right', color:M.mid}}>{o.t}</span>
+      <span style={{position:'relative', textAlign:'right', color:M.mid}}>{notional}</span>
     </div>
   );
 }
 
 /* ========================================================================
-   SCREEN 7 — Long / Short Ratio
+   SCREEN 7 — 交易所多空比 (Long / Short Ratio)
+   Aligned to PC /zh/long-short-ratio
    ======================================================================== */
+const LS_COINS = ['BTC','ETH','SOL','XRP','DOGE','HYPE','BNB','SUI','ADA','LINK'];
+const LS_TFS   = ['5分钟','15分钟','1小时','4小时','24小时'];
+
+/* exchange registry — color + letter for the small badge */
+const LS_EX = {
+  BIN: { name:'Binance',     letter:'B', color:'#F0B90B', fg:'#000' },
+  MEX: { name:'MEXC',        letter:'M', color:'#1D6EFC', fg:'#fff' },
+  WBT: { name:'WhiteBIT',    letter:'W', color:'#0E1726', fg:'#fff' },
+  OKX: { name:'OKX',         letter:'O', color:'#000000', fg:'#fff' },
+  BYB: { name:'Bybit',       letter:'Y', color:'#F7A600', fg:'#000' },
+  GT:  { name:'Gate',        letter:'G', color:'#22D3EE', fg:'#000' },
+  BG:  { name:'Bitget',      letter:'G', color:'#00D8C9', fg:'#000' },
+  CB:  { name:'Coinbase',    letter:'C', color:'#1652F0', fg:'#fff' },
+  BIX: { name:'BingX',       letter:'X', color:'#2962FF', fg:'#fff' },
+  BTX: { name:'Bitunix',     letter:'B', color:'#0E1726', fg:'#fff' },
+  HL:  { name:'Hyperliquid', letter:'H', color:'#34D399', fg:'#000' },
+  LB:  { name:'LBank',       letter:'L', color:'#1B1B1B', fg:'#fff' },
+  AST: { name:'Aster',       letter:'A', color:'#F59E0B', fg:'#000' },
+  LGT: { name:'Lighter',     letter:'L', color:'#A78BFA', fg:'#fff' },
+  HTX: { name:'HTX',         letter:'H', color:'#3076FF', fg:'#fff' },
+  DER: { name:'Deribit',     letter:'D', color:'#E5484D', fg:'#fff' },
+  BMX: { name:'Bitmex',      letter:'B', color:'#1F2937', fg:'#fff' },
+  CRP: { name:'Crypto.com',  letter:'C', color:'#003CDA', fg:'#fff' },
+  CEX: { name:'CoinEx',      letter:'C', color:'#2EB8AA', fg:'#fff' },
+  KRK: { name:'Kraken',      letter:'K', color:'#5841D8', fg:'#fff' },
+  KC:  { name:'KuCoin',      letter:'K', color:'#22D896', fg:'#000' },
+  BFX: { name:'Bitfinex',    letter:'B', color:'#94A3B8', fg:'#fff' },
+  DYX: { name:'dYdX',        letter:'D', color:'#6966FF', fg:'#fff' },
+  TXY: { name:'tradeXYZ',    letter:'X', color:'#7C5CFF', fg:'#fff' },
+};
+
+/* BTC data — mirrors PC */
+const LS_BTC = {
+  total: { longPct: 51.65, shortPct: 48.35, longUsd: '23.21亿', shortUsd: '21.73亿' },
+  rows: [
+    { ex:'BIN', l:53.93, s:46.07, lUsd:'4.69亿',   sUsd:'4亿'      },
+    { ex:'MEX', l:50.12, s:49.88, lUsd:'3.56亿',   sUsd:'3.54亿'   },
+    { ex:'WBT', l:47.93, s:52.07, lUsd:'2.37亿',   sUsd:'2.57亿'   },
+    { ex:'OKX', l:54.91, s:45.09, lUsd:'2.67亿',   sUsd:'2.2亿'    },
+    { ex:'BYB', l:56.09, s:43.91, lUsd:'2亿',      sUsd:'1.57亿'   },
+    { ex:'GT',  l:51.67, s:48.33, lUsd:'1.78亿',   sUsd:'1.66亿'   },
+    { ex:'BG',  l:52.52, s:47.48, lUsd:'1.31亿',   sUsd:'1.18亿'   },
+    { ex:'CB',  l:47.20, s:52.80, lUsd:'7576.49万',sUsd:'8475.19万'},
+    { ex:'BIX', l:50.40, s:49.60, lUsd:'7937.35万',sUsd:'7812.64万'},
+    { ex:'BTX', l:53.89, s:46.11, lUsd:'8027.4万', sUsd:'6867.57万'},
+    { ex:'HL',  l:62.48, s:37.52, lUsd:'7381.29万',sUsd:'4431.78万'},
+    { ex:'LB',  l:25.87, s:74.13, lUsd:'2359.38万',sUsd:'6759.41万'},
+    { ex:'AST', l:49.54, s:50.46, lUsd:'3403.8万', sUsd:'3466.96万'},
+    { ex:'LGT', l:51.41, s:48.59, lUsd:'2929.53万',sUsd:'2768.84万'},
+    { ex:'HTX', l:49.67, s:50.33, lUsd:'1984.38万',sUsd:'2010.72万'},
+    { ex:'DER', l:50.67, s:49.33, lUsd:'1476.63万',sUsd:'1437.48万'},
+    { ex:'BMX', l:29.06, s:70.94, lUsd:'845.26万', sUsd:'2063.47万'},
+    { ex:'CRP', l:51.37, s:48.63, lUsd:'1333.74万',sUsd:'1262.62万'},
+    { ex:'CEX', l:41.79, s:58.21, lUsd:'782.65万', sUsd:'1090.05万'},
+    { ex:'KRK', l:58.66, s:41.34, lUsd:'1076.56万',sUsd:'758.8万'  },
+    { ex:'KC',  l:62.21, s:37.79, lUsd:'999.23万', sUsd:'607.04万' },
+    { ex:'BFX', l:64.04, s:35.96, lUsd:'134.18万', sUsd:'75.35万'  },
+    { ex:'DYX', l:42.74, s:57.26, lUsd:'82.87万',  sUsd:'111.01万' },
+    { ex:'TXY', l:0,     s:0,     lUsd:'0',        sUsd:'0',      empty:true },
+  ],
+};
+
+/* Demo data per coin — we ship BTC; everything else falls back to scaled BTC */
+const LS_DATA = { BTC: LS_BTC };
+
+function LSExIcon({ k, size=20 }) {
+  const e = LS_EX[k];
+  if (!e) return null;
+  return (
+    <span style={{
+      width:size, height:size, borderRadius:'50%',
+      background:e.color, color:e.fg,
+      display:'inline-flex', alignItems:'center', justifyContent:'center',
+      fontSize: size * 0.5, fontWeight:700,
+      fontFamily:'system-ui, -apple-system, sans-serif',
+      flexShrink:0,
+    }}>{e.letter}</span>
+  );
+}
+
+/* Coin dropdown — reused mini popover */
+function LSPopover({ value, options, onChange, render }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div style={{position:'relative'}}>
+      <button onClick={()=>setOpen(v=>!v)} style={{
+        height:30, padding:'0 12px', borderRadius:8,
+        border:`1px solid ${open ? M.violet : M.borderSoft}`,
+        background: open ? M.violetSoft : M.bg,
+        color: M.text, fontSize:12, fontWeight:600,
+        display:'inline-flex', alignItems:'center', gap:6,
+        cursor:'pointer', whiteSpace:'nowrap', fontFamily:render ? 'inherit' : M.mono,
+      }}>
+        <span>{render ? render(value) : value}</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+          style={{transform: open ? 'rotate(180deg)' : 'none', transition:'transform 160ms'}}>
+          <path d="M6 9l6 6 6-6"/>
+        </svg>
+      </button>
+      {open && (
+        <React.Fragment>
+          <div onClick={()=>setOpen(false)} style={{position:'fixed', inset:0, zIndex:40}}/>
+          <div style={{
+            position:'absolute', top:34, right:0, zIndex:41, minWidth:96,
+            background:M.elev, border:`1px solid ${M.border}`, borderRadius:10,
+            boxShadow:'0 14px 32px -10px rgba(15,22,35,0.22)',
+            padding:4, display:'flex', flexDirection:'column',
+            maxHeight:260, overflowY:'auto',
+          }}>
+            {options.map(o => {
+              const on = o === value;
+              return (
+                <button key={o} onClick={()=>{onChange(o); setOpen(false);}} style={{
+                  padding:'9px 12px', border:0, cursor:'pointer',
+                  background: on ? M.violetGrad || M.violet : 'transparent',
+                  color: on ? '#fff' : M.text,
+                  borderRadius:7, textAlign:'left',
+                  fontFamily: render ? 'inherit' : M.mono,
+                  display:'flex', alignItems:'center', gap:8,
+                  fontSize:12.5, fontWeight: on ? 700 : 500,
+                }}>
+                  <span style={{flex:1}}>{render ? render(o) : o}</span>
+                  {on && (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12l5 5L20 7"/>
+                    </svg>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </React.Fragment>
+      )}
+    </div>
+  );
+}
+
+/* horizontal coin tab strip (image-2 style — flat text with active pill) */
+/* horizontal coin tab strip with search */
+const LS_COIN_COLOR = { BTC:'#F7931A', ETH:'#627EEA', SOL:'#9945FF', XRP:'#23292F', DOGE:'#C2A633', BNB:'#F0B90B', HYPE:'#16C783', SUI:'#4DA2FF', ADA:'#0033AD', LINK:'#2A5ADA' };
+function LSCoinTabs({ value, onChange }) {
+  const [searching, setSearching] = React.useState(false);
+
+  /* inject scrollbar-hide rule once */
+  React.useEffect(() => {
+    if (document.getElementById('ls-coin-tabs-css')) return;
+    const s = document.createElement('style');
+    s.id = 'ls-coin-tabs-css';
+    s.textContent = '.ls-coin-tabs::-webkit-scrollbar { display: none; }';
+    document.head.appendChild(s);
+  }, []);
+
+  const renderResults = (q, pick) =>
+    LS_COINS.filter(c => c.toLowerCase().includes(q.toLowerCase()))
+      .map(c => (
+        <SearchResultRow key={c} letter={c.slice(0,1)} color={LS_COIN_COLOR[c] || M.violet}
+          title={c} sub="/ USDT" onClick={()=>pick(c)}/>
+      ));
+
+  return (
+    <React.Fragment>
+      <div style={{
+        position:'relative',
+        background:M.elev, borderBottom:`1px solid ${M.borderSoft}`,
+      }}>
+        {/* scrollable tabs */}
+        <div className="ls-coin-tabs" style={{
+          display:'flex', alignItems:'center', gap:4,
+          padding:'10px 44px 10px 12px', overflowX:'scroll',
+          WebkitOverflowScrolling:'touch', scrollbarWidth:'none',
+          msOverflowStyle:'none', flexWrap:'nowrap',
+        }}>
+          {LS_COINS.map(c => {
+            const on = c === value;
+            return (
+              <button key={c} onClick={()=>onChange(c)} style={{
+                flexShrink:0, cursor:'pointer',
+                padding:'6px 14px',
+                border: on ? `1px solid ${M.violet}` : '1px solid transparent',
+                background: on ? M.violetSoft : 'transparent',
+                color: on ? M.violet : M.mid,
+                fontSize:13, fontWeight: on ? 700 : 500,
+                borderRadius:8, letterSpacing:0.3,
+                fontFamily:M.mono,
+              }}>{c}</button>
+            );
+          })}
+        </div>
+        {/* sticky search button with fade */}
+        <div style={{
+          position:'absolute', right:0, top:0, bottom:0,
+          display:'flex', alignItems:'center', paddingRight:8,
+          background:`linear-gradient(to right, transparent, ${M.elev} 40%)`,
+          pointerEvents:'none',
+        }}>
+          <button aria-label="搜索币种" onClick={()=>setSearching(true)} style={{
+            width:32, height:32, padding:0, borderRadius:8,
+            border:0, background:M.elev, color:M.mid, cursor:'pointer',
+            display:'inline-flex', alignItems:'center', justifyContent:'center',
+            pointerEvents:'all', flexShrink:0,
+          }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14zm5.5 12.5L21 21"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <SearchOverlay
+        open={searching}
+        onClose={()=>setSearching(false)}
+        placeholder="搜索币种"
+        hotLabel="热门币种"
+        hot={LS_COINS}
+        onPick={onChange}
+        renderResults={renderResults}
+        emptyText="无匹配币种"
+      />
+    </React.Fragment>
+  );
+}
+
+/* one row in the exchange list — icon + name + USD amounts + split bar */
+function LSRow({ rank, r }) {
+  const empty = r.empty;
+  return (
+    <div style={{
+      display:'flex', alignItems:'center',
+      padding:'12px 14px',
+      borderBottom:`1px solid ${M.borderSoft}`,
+      background:M.elev,
+    }}>
+      <div style={{flex:1, minWidth:0}}>
+        <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:6}}>
+          <LSExIcon k={r.ex} size={20}/>
+          <span style={{
+            fontSize:12.5, fontWeight:600, color:M.text,
+            whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
+            flex:1, minWidth:0,
+          }}>{LS_EX[r.ex]?.name || r.ex}</span>
+          <span style={{display:'inline-flex', flexDirection:'column', alignItems:'flex-end', gap:1, flexShrink:0}}>
+            <span style={{fontSize:9.5, color:M.dim}}>做多</span>
+            <span style={{fontSize:10.5, fontFamily:M.mono, color:M.up, fontWeight:600}}>US${r.lUsd}</span>
+          </span>
+          <span style={{display:'inline-flex', flexDirection:'column', alignItems:'flex-end', gap:1, flexShrink:0, minWidth:62}}>
+            <span style={{fontSize:9.5, color:M.dim}}>做空</span>
+            <span style={{fontSize:10.5, fontFamily:M.mono, color:M.dn, fontWeight:600}}>US${r.sUsd}</span>
+          </span>
+        </div>
+        {empty ? (
+          <div style={{height:18, borderRadius:4, background:M.soft, border:`1px dashed ${M.borderSoft}`}}/>
+        ) : (
+          <div style={{height:18, borderRadius:4, display:'flex', overflow:'hidden', fontSize:10, fontWeight:700, fontFamily:M.mono, color:'#fff'}}>
+            <span style={{
+              width:`${r.l}%`, background:M.up,
+              display:'inline-flex', alignItems:'center', justifyContent:'center',
+              minWidth: r.l < 18 ? 'auto' : 0, paddingLeft: r.l < 18 ? 4 : 0,
+            }}>{r.l < 8 ? '' : r.l + '%'}</span>
+            <span style={{
+              width:`${r.s}%`, background:M.dn,
+              display:'inline-flex', alignItems:'center', justifyContent:'center',
+              minWidth: r.s < 18 ? 'auto' : 0, paddingRight: r.s < 18 ? 4 : 0,
+            }}>{r.s < 8 ? '' : r.s + '%'}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ScreenLS() {
-  const [asset, setAsset] = React.useState('BTC');
-  const [tf, setTf] = React.useState('4H');
-  const [openMenu, setOpenMenu] = React.useState(null); // 'asset' | 'tf' | null
-  const ASSETS = ['BTC','ETH','SOL','BNB','XRP','DOGE'];
-  const TFS = ['15m','1H','4H','1D','1W'];
-  const long = 64.2, short = 35.8;
-  const exchanges = [
-    { ex:'Binance',   color:'#F0B90B', longA:'$1.82B', shortA:'$1.04B', l:63.6, s:36.4},
-    { ex:'OKX',       color:'#1E1E1E', longA:'$884M',  shortA:'$526M',  l:62.7, s:37.3},
-    { ex:'Bybit',     color:'#F7A600', longA:'$642M',  shortA:'$418M',  l:60.6, s:39.4},
-    { ex:'Bitget',    color:'#00CED1', longA:'$386M',  shortA:'$210M',  l:64.8, s:35.2},
-    { ex:'HTX',       color:'#3076FF', longA:'$248M',  shortA:'$152M',  l:62.0, s:38.0},
-    { ex:'HyperLiquid',color:'#97F0E0',longA:'$184M',  shortA:'$118M',  l:60.9, s:39.1},
-  ];
+  const [coin, setCoin] = React.useState('BTC');
+  const [tf, setTf] = React.useState('4小时');
+  const [tfOpen, setTfOpen] = React.useState(false);
+  const data = LS_DATA[coin] || LS_BTC;
+
   return (
     <div style={{height:'100%', position:'relative', background:M.bg, display:'flex', flexDirection:'column'}}>
       <MStatus/>
-      <MTopBar title="多空比" sub={`全市场永续合约 · ${tf}`} right={
-        <button style={iconBtn}><Ico d={ICONS.refresh} w={18}/></button>
-      }/>
+      {window.DataHubHeader ? (
+        <window.DataHubHeader current="ls"/>
+      ) : (
+        <MTopBar title="多空比"/>
+      )}
 
-      <div style={{flex:1, overflow:'auto', padding:'14px 16px 100px'}}>
-        {/* selector chips */}
-        <div style={{display:'flex', gap:8, marginBottom:14, position:'relative'}}>
-          <button
-            onClick={()=>setOpenMenu(openMenu==='asset' ? null : 'asset')}
-            style={{
-              height:32, padding:'0 14px', borderRadius:999, background:M.violetGrad, color:'#fff',
-              fontSize:13, fontWeight:600, display:'inline-flex', alignItems:'center', gap:6,
-              border:0, cursor:'pointer',
-            }}
-          >{asset} <Ico d={ICONS.caret} w={12} sw={2.4}/></button>
-          <button
-            onClick={()=>setOpenMenu(openMenu==='tf' ? null : 'tf')}
-            style={{
-              height:32, padding:'0 14px', borderRadius:999, background:M.elev, color:M.mid,
-              border:`1px solid ${M.border}`, fontSize:13, fontWeight:500,
-              display:'inline-flex', alignItems:'center', gap:6, cursor:'pointer',
-            }}
-          >{tf} <Ico d={ICONS.caret} w={12} sw={2.4}/></button>
+      <div style={{flex:1, overflow:'auto', paddingBottom:100}}>
+        {/* coin tabs */}
+        <LSCoinTabs value={coin} onChange={setCoin}/>
 
-          {openMenu && (
-            <React.Fragment>
-              <div
-                onClick={()=>setOpenMenu(null)}
-                style={{position:'fixed', inset:0, zIndex:40}}
-              />
-              <div style={{
-                position:'absolute', top:38,
-                left: openMenu==='asset' ? 0 : 'auto',
-                right: openMenu==='tf' ? 0 : 'auto',
-                minWidth:120, zIndex:41,
-                background:M.elev, border:`1px solid ${M.border}`, borderRadius:12,
-                boxShadow:'0 12px 28px -8px rgba(15,22,35,0.18)',
-                padding:6, display:'flex', flexDirection:'column',
-              }}>
-                {(openMenu==='asset' ? ASSETS : TFS).map(v => {
-                  const cur = openMenu==='asset' ? asset : tf;
-                  const on = v === cur;
-                  return (
-                    <button
-                      key={v}
-                      onClick={() => {
-                        if (openMenu==='asset') setAsset(v); else setTf(v);
-                        setOpenMenu(null);
-                      }}
-                      style={{
-                        height:32, padding:'0 12px', borderRadius:8, border:0,
-                        background: on ? 'var(--accent-soft)' : 'transparent',
-                        color: on ? M.violet : M.text,
-                        fontSize:13, fontWeight: on ? 600 : 500, cursor:'pointer',
-                        display:'flex', alignItems:'center', justifyContent:'space-between',
-                        textAlign:'left', fontFamily:'inherit',
-                      }}
-                    >
-                      <span>{v}</span>
-                      {on && <Ico d={ICONS.check} w={12} sw={2.4}/>}
-                    </button>
-                  );
-                })}
-              </div>
-            </React.Fragment>
-          )}
+        {/* page title row with timeframe chip on the right */}
+        <div style={{padding:'18px 16px 14px', display:'flex', alignItems:'center', gap:8}}>
+          <span style={{fontSize:17, fontWeight:700, color:M.text, letterSpacing:-0.2}}>
+            交易所 多空比图表
+          </span>
+          <span aria-label="说明" style={{
+            width:18, height:18, borderRadius:'50%',
+            display:'inline-flex', alignItems:'center', justifyContent:'center',
+            color:M.dim, cursor:'pointer',
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="9"/>
+              <path d="M12 8h.01M11 12h1v5h1"/>
+            </svg>
+          </span>
+          <div style={{flex:1}}/>
+          <button onClick={()=>setTfOpen(true)} style={{
+            height:30, padding:'0 12px', borderRadius:8,
+            border:`1px solid ${tfOpen ? M.violet : M.borderSoft}`,
+            background: tfOpen ? M.violetSoft : M.bg,
+            color: M.text, fontSize:12, fontWeight:600,
+            display:'inline-flex', alignItems:'center', gap:6,
+            cursor:'pointer', whiteSpace:'nowrap', fontFamily:M.mono,
+          }}>
+            <span>{tf}</span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+              style={{transform: tfOpen ? 'rotate(180deg)' : 'none', transition:'transform 160ms'}}>
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
         </div>
 
-        {/* hero banner */}
-        <Card p="20px" style={{marginBottom:14}}>
-          <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:14}}>
-            <Av sym="₿" bg="linear-gradient(135deg, #F7931A 0%, #C16100 100%)" size={48}/>
-            <div style={{flex:1}}>
-              <div style={{fontSize:18, fontWeight:700, color:M.text}}>{asset} 全市场</div>
-              <div style={{fontSize:12, color:M.mid, marginTop:2}}>$8.6B 总持仓 · {tf} 数据</div>
-            </div>
-            <Chip tone="ok">LIVE</Chip>
-          </div>
-          {/* bar */}
+        {/* total hero card */}
+        <div style={{padding:'0 12px 4px'}}>
           <div style={{
-            height:38, borderRadius:8, display:'flex', overflow:'hidden', position:'relative',
+            padding:'14px 14px 12px', borderRadius:14,
+            background:M.elev, border:`1px solid ${M.borderSoft}`,
           }}>
-            <div style={{
-              width:`${long}%`, background:M.up, color:'#fff',
-              display:'flex', alignItems:'center', justifyContent:'center',
-              fontSize:14, fontWeight:700,
-            }}>多 {long}%</div>
-            <div style={{
-              width:`${short}%`, background:M.dn, color:'#fff',
-              display:'flex', alignItems:'center', justifyContent:'center',
-              fontSize:14, fontWeight:700,
-            }}>空 {short}%</div>
-          </div>
-          <div style={{display:'flex', justifyContent:'space-between', marginTop:14, fontSize:12}}>
-            <div>
-              <div style={{color:M.dim}}>多头持仓</div>
-              <div style={{color:M.up, fontFamily:M.mono, fontWeight:700, fontSize:16, marginTop:2}}>$5.52B</div>
+            <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:10}}>
+              <span style={{
+                width:30, height:30, borderRadius:'50%',
+                background:'#F7931A', color:'#000',
+                display:'inline-flex', alignItems:'center', justifyContent:'center',
+                fontSize:13, fontWeight:700,
+              }}>B</span>
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{fontSize:14, fontWeight:700, color:M.text, lineHeight:1.1}}>全部</div>
+                <div style={{fontSize:11, color:M.dim, marginTop:2}}>{coin} 总计</div>
+              </div>
+              <div style={{display:'flex', gap:14, fontSize:11, fontFamily:M.mono}}>
+                <div style={{textAlign:'right'}}>
+                  <div style={{color:M.dim, fontSize:10}}>做多</div>
+                  <div style={{color:M.up, fontWeight:700, marginTop:1}}>US${data.total.longUsd}</div>
+                </div>
+                <div style={{textAlign:'right'}}>
+                  <div style={{color:M.dim, fontSize:10}}>做空</div>
+                  <div style={{color:M.dn, fontWeight:700, marginTop:1}}>US${data.total.shortUsd}</div>
+                </div>
+              </div>
             </div>
-            <div style={{textAlign:'right'}}>
-              <div style={{color:M.dim}}>空头持仓</div>
-              <div style={{color:M.dn, fontFamily:M.mono, fontWeight:700, fontSize:16, marginTop:2}}>$3.08B</div>
+            <div style={{
+              height:32, borderRadius:6, display:'flex', overflow:'hidden',
+              fontSize:13, fontWeight:700, color:'#fff', fontFamily:M.mono,
+            }}>
+              <div style={{
+                width:`${data.total.longPct}%`, background:M.up,
+                display:'inline-flex', alignItems:'center', justifyContent:'center',
+              }}>{data.total.longPct.toFixed(2)}%</div>
+              <div style={{
+                width:`${data.total.shortPct}%`, background:M.dn,
+                display:'inline-flex', alignItems:'center', justifyContent:'center',
+              }}>{data.total.shortPct.toFixed(2)}%</div>
             </div>
           </div>
-        </Card>
+        </div>
+
+        {/* exchange section label */}
+        <div style={{
+          padding:'12px 16px 6px',
+          display:'flex', alignItems:'center', justifyContent:'space-between',
+          fontSize:11, color:M.dim, fontFamily:M.mono,
+        }}>
+          <span>交易所</span>
+          <span>持仓占比 (多 VS 空)</span>
+        </div>
 
         {/* exchange list */}
-        <div style={{fontSize:13, fontWeight:600, color:M.mid, padding:'8px 4px 10px', display:'flex', alignItems:'center'}}>
-          <span>交易所分布</span>
-          <span style={{flex:1}}/>
-          <span style={{fontSize:11, color:M.dim, fontWeight:500}}>按多头量排序</span>
-        </div>
-        <Card p="0">
-          {exchanges.map((e,i)=>(
-            <div key={e.ex} style={{
-              padding:'14px 16px',
-              borderBottom: i<exchanges.length-1 ? `1px solid ${M.borderSoft}` : 0,
-            }}>
-              <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:8}}>
-                <span style={{fontSize:11, color:M.dim, width:14}}>{i+1}</span>
-                <div style={{
-                  width:24, height:24, borderRadius:6, background:e.color, color:'#fff',
-                  display:'flex', alignItems:'center', justifyContent:'center',
-                  fontWeight:700, fontSize:11,
-                }}>{e.ex[0]}</div>
-                <span style={{fontSize:14, fontWeight:600}}>{e.ex}</span>
-                <div style={{flex:1}}/>
-                <span style={{fontSize:12, color:M.up, fontFamily:M.mono, fontWeight:600}}>{e.longA}</span>
-                <span style={{fontSize:10, color:M.dim}}>/</span>
-                <span style={{fontSize:12, color:M.dn, fontFamily:M.mono, fontWeight:600}}>{e.shortA}</span>
-              </div>
-              <div style={{height:8, borderRadius:4, display:'flex', overflow:'hidden'}}>
-                <div style={{width:`${e.l}%`, background:M.up}}/>
-                <div style={{width:`${e.s}%`, background:M.dn}}/>
-              </div>
-              <div style={{display:'flex', justifyContent:'space-between', marginTop:5, fontSize:10, color:M.mid, fontFamily:M.mono}}>
-                <span>多 {e.l}%</span>
-                <span>空 {e.s}%</span>
-              </div>
-            </div>
+        <div style={{
+          margin:'0 12px 16px',
+          borderRadius:12, overflow:'hidden',
+          border:`1px solid ${M.borderSoft}`,
+        }}>
+          {data.rows.map((r, i) => (
+            <LSRow key={r.ex} rank={i+1} r={r}/>
           ))}
-        </Card>
+        </div>
       </div>
       <MTabBar active="market"/>
+
+      {/* ─── 时间周期 — bottom drawer ─── */}
+      {tfOpen && (
+        <div
+          onClick={()=>setTfOpen(false)}
+          style={{
+            position:'absolute', inset:0, zIndex:85,
+            background:'rgba(15,11,34,0.55)',
+            animation:'m-fade-in .18s ease-out',
+          }}>
+          <div
+            onClick={(e)=>e.stopPropagation()}
+            style={{
+              position:'absolute', left:0, right:0, bottom:0,
+              background:M.elev, borderRadius:'20px 20px 0 0',
+              boxShadow:'0 -16px 48px rgba(15,11,34,0.32)',
+              display:'flex', flexDirection:'column',
+              animation:'m-slide-up .26s cubic-bezier(.2,.8,.2,1)',
+            }}>
+            <div style={{width:42, height:4, borderRadius:2, background:M.border, margin:'10px auto 0'}}/>
+            <div style={{padding:'12px 16px 6px', fontSize:14, fontWeight:700, color:M.text}}>
+              时间周期
+            </div>
+            <div style={{padding:'0 8px 6px'}}>
+              {LS_TFS.map(o => {
+                const on = o === tf;
+                return (
+                  <button
+                    key={o}
+                    onClick={()=>{ setTf(o); setTfOpen(false); }}
+                    style={{
+                      display:'flex', alignItems:'center', gap:11,
+                      width:'100%', padding:'12px 12px',
+                      border:0, background:'transparent', cursor:'pointer',
+                      fontFamily:'inherit', textAlign:'left',
+                    }}>
+                    <span style={{
+                      flex:1, fontSize:14, fontWeight:600,
+                      color: on ? M.violet : M.text,
+                    }}>{o}</span>
+                    <span style={{
+                      width:20, height:20, borderRadius:'50%', flexShrink:0,
+                      background: on ? M.violet : 'transparent',
+                      border: `1.5px solid ${on ? M.violet : M.border}`,
+                      display:'inline-flex', alignItems:'center', justifyContent:'center',
+                      transition:'background 130ms, border-color 130ms',
+                    }}>
+                      {on && (
+                        <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
+                          <path d="M3 7.2L5.8 10L11 4" stroke="#fff"
+                            strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{
+              borderTop:`1px solid ${M.borderSoft}`,
+              padding:'6px 8px calc(8px + env(safe-area-inset-bottom))',
+            }}>
+              <button
+                onClick={()=>setTfOpen(false)}
+                style={{
+                  width:'100%', height:46, border:0, cursor:'pointer',
+                  background:'transparent', color:M.text,
+                  fontSize:14, fontWeight:600, fontFamily:'inherit',
+                }}>取消</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -481,8 +1321,8 @@ function ScreenOrderEntry({ side = 'buy' }) {
   const [orderType, setOrderType] = React.useState(0);   // 0 限价 / 1 市价 / 2 条件
   const [marginMode, setMarginMode] = React.useState(0); // 0 全仓 / 1 逐仓
   const [leverage, setLeverage] = React.useState(10);
-  const [price, setPrice] = React.useState(68420.12);
-  const [trigger, setTrigger] = React.useState(68900);
+  const [price, setPrice] = React.useState(74228.30);
+  const [trigger, setTrigger] = React.useState(74700);
   const [pct, setPct] = React.useState(50);              // % of available used as margin
   const [tpsl, setTpsl] = React.useState(false);
   const [tp, setTp] = React.useState(isBuy ? 72500 : 64500);
@@ -651,7 +1491,7 @@ function ScreenOrderEntry({ side = 'buy' }) {
             <>
               <div style={{display:'flex', justifyContent:'space-between', marginBottom:6}}>
                 <span style={{fontSize:12, color:M.mid}}>触发价</span>
-                <span style={{fontSize:11, color:M.dim}}>最新 {fmt(68420.12)}</span>
+                <span style={{fontSize:11, color:M.dim}}>最新 {fmt(74228.30)}</span>
               </div>
               <div style={fieldBox(false)}>
                 <input type="number" inputMode="decimal" value={trigger}
@@ -681,9 +1521,9 @@ function ScreenOrderEntry({ side = 'buy' }) {
               </div>
               <div style={{display:'flex', gap:6, marginTop:6, marginBottom:14}}>
                 {[
-                  {l:'最新', v:68420.12},
-                  {l:'买一', v:68419.50},
-                  {l:'卖一', v:68420.80},
+                  {l:'最新', v:74228.30},
+                  {l:'买一', v:74225.10},
+                  {l:'卖一', v:74229.80},
                 ].map(o=>(
                   <button key={o.l} onClick={()=>setPrice(o.v)} style={{
                     flex:1, height:24, borderRadius:6, background:M.soft, border:0,
@@ -704,7 +1544,7 @@ function ScreenOrderEntry({ side = 'buy' }) {
               display:'flex', alignItems:'center', gap:8, fontSize:12, color:M.mid,
             }}>
               <Ico d={ICONS.bolt || ICONS.shield} w={14} fill={color} sw={0}/>
-              市价立即成交 · 参考价 <span style={{fontFamily:M.mono, color:M.text, fontWeight:600}}>{fmt(68420.12)}</span> USDT
+              市价立即成交 · 参考价 <span style={{fontFamily:M.mono, color:M.text, fontWeight:600}}>{fmt(74228.30)}</span> USDT
             </div>
           )}
 
