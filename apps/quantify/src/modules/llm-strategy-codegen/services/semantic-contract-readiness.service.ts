@@ -881,16 +881,16 @@ export class SemanticContractReadinessService {
           paramSlotKey: 'valuePct',
         })
       }
-      if (leaf.role === 'position' && leaf.key === 'position.sizing' && !isPositiveFiniteNumber(leaf.params.value)) {
+      if (leaf.role === 'position' && leaf.key === 'position.sizing' && !readSizingValueFromParams(leaf.params)) {
         openSlots.push({
           slotKey: 'position.sizing.value',
-          fieldPath: `${leaf.path}.params.value`,
+          fieldPath: `${leaf.path}.params.sizing.value`,
           status: 'open',
           priority: 'risk',
           questionHint: '请确认单笔仓位大小。',
           affectsExecution: true,
           atomKey: leaf.key,
-          paramSlotKey: 'value',
+          paramSlotKey: 'sizing.value',
         })
       }
     }
@@ -981,6 +981,24 @@ function collectAtomLeavesSafe(expr: AtomExpr | undefined): AtomExprAtom[] {
   catch {
     return []
   }
+}
+
+/**
+ * Issue #1707 readiness post-deploy fix：
+ *   dispatcher emit 的 `position.sizing` leaf params shape 是 `{ sizing: { kind, value, asset|unit } }`，
+ *   readiness 之前只看顶层 `params.value` → 顶层永远 undefined → 即便 spine 已含合法 sizing leaf
+ *   仍报缺，clarification 第二轮再问 sizing.value。
+ *   兼容两种 shape：顶层 `params.value`（旧 LLM patch）/ 嵌套 `params.sizing.value`（dispatcher emit）。
+ */
+function readSizingValueFromParams(params: Readonly<Record<string, unknown>>): number | null {
+  const direct = params.value
+  if (isPositiveFiniteNumber(direct)) return direct
+  const nested = params.sizing
+  if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+    const v = (nested as Record<string, unknown>).value
+    if (isPositiveFiniteNumber(v)) return v
+  }
+  return null
 }
 
 function isPositiveFiniteNumber(value: unknown): value is number {
