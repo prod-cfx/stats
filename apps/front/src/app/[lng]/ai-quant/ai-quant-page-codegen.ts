@@ -2,7 +2,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
 import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
-import type { LlmCodegenSessionResponse } from '@/lib/api'
+import type { AccountAiQuantBacktestConfigDefaults, LlmCodegenSessionResponse } from '@/lib/api'
 import {
   buildAiQuantErrorMessage,
   buildAiQuantStageFallbackMessage,
@@ -26,6 +26,7 @@ import { getCodegenSessionReconciliationAction } from './ai-quant-page-codegen-r
 import {
   BACKTEST_EXECUTION_PARAM_KEYS,
   BACKTEST_RANGE_PARAM_KEYS,
+  buildSnapshotBacktestExecutionParamValues,
   buildBacktestDraftConfigFromValues,
   hasExplicitBacktestExecutionOverrides,
   invalidateConversationPublication,
@@ -83,12 +84,17 @@ function normalizePublishedSnapshotParamValues(
 function mergeSnapshotBoundParamValues(input: {
   currentValues: Record<string, unknown>
   snapshotParamValues: Record<string, unknown> | null
+  snapshotBacktestConfigDefaults?: AccountAiQuantBacktestConfigDefaults | null
 }): {
   paramValues: Record<string, unknown>
   explicit: boolean
 } {
-  const { currentValues, snapshotParamValues } = input
-  if (!snapshotParamValues) {
+  const { currentValues, snapshotParamValues, snapshotBacktestConfigDefaults } = input
+  const snapshotBacktestExecutionParamValues = snapshotBacktestConfigDefaults
+    ? buildSnapshotBacktestExecutionParamValues(snapshotBacktestConfigDefaults)
+    : null
+
+  if (!snapshotParamValues && !snapshotBacktestExecutionParamValues) {
     return {
       paramValues: currentValues,
       explicit: hasExplicitBacktestExecutionOverrides(currentValues),
@@ -97,7 +103,8 @@ function mergeSnapshotBoundParamValues(input: {
 
   const nextValues = {
     ...currentValues,
-    ...snapshotParamValues,
+    ...(snapshotBacktestExecutionParamValues ?? {}),
+    ...(snapshotParamValues ?? {}),
   }
 
   return {
@@ -462,6 +469,10 @@ export function applyCodegenResponseToConversationState(args: {
     snapshotParamValues:
       response.status === 'PUBLISHED'
         ? normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
+        : null,
+    snapshotBacktestConfigDefaults:
+      response.status === 'PUBLISHED'
+        ? (response.publishedSnapshotBacktestConfigDefaults ?? null)
         : null,
   })
   const nextPublishedSnapshotParamValues =

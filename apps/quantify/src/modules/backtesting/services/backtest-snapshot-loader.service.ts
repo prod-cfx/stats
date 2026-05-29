@@ -103,13 +103,17 @@ export class BacktestSnapshotLoaderService {
       id: publishedSnapshot.id,
       strategyConfig: formalTruth.strategyConfig,
     })
-    this.compiledSnapshotPreflight.validate(publishedSnapshot)
+    const executionEnvelope = this.readJsonRecord(publishedSnapshot.executionEnvelope) ?? undefined
+    if (!this.isSignalGeneratorExecutionEnvelope(executionEnvelope)) {
+      this.compiledSnapshotPreflight.validate(publishedSnapshot)
+    }
 
     const strategy = await this.strategyAdapter.build({
       id: this.resolveStrategyId(publishedSnapshot, input.id),
       protocolVersion: input.protocolVersion,
       scriptCode: publishedSnapshot.scriptSnapshot,
       params: strictParams,
+      executionEnvelope,
     })
 
     const specSnapshot = this.readJsonRecord(publishedSnapshot.specSnapshot) ?? undefined
@@ -135,10 +139,17 @@ export class BacktestSnapshotLoaderService {
       riskRules: specSnapshot ? this.buildRiskRules(specSnapshot, irSnapshot) : undefined,
       irSnapshot,
       astSnapshot,
-      executionEnvelope: this.readJsonRecord(publishedSnapshot.executionEnvelope) ?? undefined,
+      executionEnvelope,
       dataRequirements: publishedSnapshot.dataRequirements ?? undefined,
       specSnapshot,
     } as BacktestRunInput['strategy']
+  }
+
+  private isSignalGeneratorExecutionEnvelope(envelope: unknown): boolean {
+    if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) return false
+    const record = envelope as Record<string, unknown>
+    return record.runtime === 'signal-generator'
+      && record.source === 'strategy-plaza-official-template'
   }
 
   private resolveStrictParams(snapshot: {
@@ -281,14 +292,14 @@ export class BacktestSnapshotLoaderService {
     const leverage = this.readFiniteNumber(raw.leverage)
     const slippageBps = this.readFiniteNumber(raw.slippageBps)
     const feeBps = this.readFiniteNumber(raw.feeBps)
-    const priceSource = raw.priceSource
+    const priceSource = this.normalizeBacktestPriceSource(raw.priceSource)
     const allowPartial = raw.allowPartial
 
     if (
       initialCash === null || initialCash <= 0
       || slippageBps === null || slippageBps < 0
       || feeBps === null || feeBps < 0
-      || (priceSource !== 'open' && priceSource !== 'close' && priceSource !== 'mid')
+      || !priceSource
       || typeof allowPartial !== 'boolean'
       || (marketType === 'perp' && (leverage === null || leverage <= 0))
       || (marketType !== 'spot' && marketType !== 'perp')
@@ -357,6 +368,12 @@ export class BacktestSnapshotLoaderService {
   private readStringArray(value: unknown): string[] {
     if (!Array.isArray(value)) return []
     return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+  }
+
+  private normalizeBacktestPriceSource(value: unknown): 'open' | 'close' | 'mid' | null {
+    if (value === 'open' || value === 'close' || value === 'mid') return value
+    if (value === 'mark' || value === 'last') return 'close'
+    return null
   }
 
   private resolveSpecHash(snapshot: {

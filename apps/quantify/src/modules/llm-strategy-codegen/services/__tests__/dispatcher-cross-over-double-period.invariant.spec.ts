@@ -39,6 +39,19 @@ describe('issue #1338 — dispatcher cross_over double-period + 多原子并行�
     })
   })
 
+  it('cross_over paramSlots：MA 6/48 斜杠写法保留 fastPeriod=6, slowPeriod=48', () => {
+    const patch = dispatcher.dispatch('OKX 模拟盘 BTC-USDT-SWAP 合约 15m，MA 6/48 均线交叉趋势跟随，MA6 上穿 MA48 做多，仓位 35%。')
+    const crossOverTrigger = collectRuleConditionLeaves(patch).find(
+      (t): t is TypedLeaf => t.key === 'indicator.cross_over',
+    )
+    expect(crossOverTrigger).toBeDefined()
+    expect(crossOverTrigger!.params).toMatchObject({
+      indicator: 'ma',
+      fastPeriod: 6,
+      slowPeriod: 48,
+    })
+  })
+
   it('cross_under paramSlots：fastPeriod=20, slowPeriod=50（与 cross_over 对称）', () => {
     const patch = dispatcher.dispatch(utterance)
     const crossUnderTrigger = collectRuleConditionLeaves(patch).find(t => t.key === 'indicator.cross_under')
@@ -103,5 +116,25 @@ describe('issue #1338 — dispatcher cross_over double-period + 多原子并行�
       period: 14,
       value: 70,
     })
+  })
+
+  it('range low buy clause with 买入 resolves entry predicate and 25% sizing', () => {
+    const patch = dispatcher.dispatch('基于 OKX 模拟盘 BTC-USDT 现货 15m，创建区间低买高卖策略。入场规则：价格位于最近 36 根 K 线区间下 20% 时买入；出场规则：价格回到区间上 55% 或盈利达到 0.45% 时卖出平仓；风控：单次仓位 25%，不使用杠杆，止损 3%。')
+    const entryRule = patch.rules?.find(rule => rule.phase === 'entry')
+    const entryLeaves = entryRule ? collectAtomLeaves(entryRule.condition) : []
+    const positionLeaves = entryRule
+      ? Object.values(entryRule.effects)
+          .flatMap(effects => effects)
+          .flatMap(effect => collectAtomLeaves(effect))
+          .filter(leaf => leaf.key === 'position.sizing')
+      : []
+
+    expect(entryLeaves).toEqual([expect.objectContaining({
+      key: 'price.range_position_lte',
+      params: expect.objectContaining({ lookbackBars: 36, thresholdPct: 20 }),
+    })])
+    expect(positionLeaves).toEqual([expect.objectContaining({
+      params: expect.objectContaining({ sizing: { kind: 'ratio', value: 0.25, unit: 'ratio' } }),
+    })])
   })
 })

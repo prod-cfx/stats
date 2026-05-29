@@ -552,6 +552,7 @@ function normalizeBacktestConfigDefaults(
         .map(item => item.trim())
         .filter(item => item.length > 0)
     : null
+  const range = normalizeLastBacktestRangeConfig(candidate.range)
   if (
     !Number.isFinite(initialCash)
     || !Number.isFinite(slippageBps)
@@ -569,13 +570,14 @@ function normalizeBacktestConfigDefaults(
     priceSource,
     allowPartial,
     ...(stateTimeframes ? { stateTimeframes } : {}),
+    ...(range ? { range } : {}),
   }
 }
 
-function buildSnapshotBacktestExecutionParamValues(
+export function buildSnapshotBacktestExecutionParamValues(
   snapshotBacktestConfigDefaults: AccountAiQuantBacktestConfigDefaults,
 ): Record<string, unknown> {
-  return {
+  const values: Record<string, unknown> = {
     backtestInitialCash: snapshotBacktestConfigDefaults.initialCash,
     backtestLeverage: snapshotBacktestConfigDefaults.leverage,
     backtestSlippageBps: snapshotBacktestConfigDefaults.slippageBps,
@@ -583,6 +585,14 @@ function buildSnapshotBacktestExecutionParamValues(
     backtestPriceSource: snapshotBacktestConfigDefaults.priceSource,
     backtestAllowPartial: snapshotBacktestConfigDefaults.allowPartial,
   }
+  if (snapshotBacktestConfigDefaults.range) {
+    values.backtestRangePreset = snapshotBacktestConfigDefaults.range.preset
+    if (snapshotBacktestConfigDefaults.range.preset === 'CUSTOM') {
+      values.backtestStart = snapshotBacktestConfigDefaults.range.startAt ?? ''
+      values.backtestEnd = snapshotBacktestConfigDefaults.range.endAt ?? ''
+    }
+  }
+  return values
 }
 
 function normalizeDeploymentExecutionConfig(

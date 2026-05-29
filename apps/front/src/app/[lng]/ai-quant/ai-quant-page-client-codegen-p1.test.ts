@@ -792,6 +792,87 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     })
   })
 
+  it('hydrates published snapshot backtest default range into the live conversation state', () => {
+    const next = applyCodegenResponseToConversationState({
+      conversation: {
+        id: 'conv-live-range',
+        serverConversationId: 'server-conv-1',
+        title: '新对话',
+        messages: [{ id: 'loading', role: 'assistant', content: 'loading' }],
+        params: DEFAULT_PARAMS,
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: {
+          ...DEFAULT_PARAM_VALUES,
+          backtestRangePreset: '90D',
+        },
+        backtestResult: null,
+        logicGraph: null,
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: 'session-1',
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: null,
+        publishedScriptCode: null,
+        publishedScriptGraphVersion: null,
+        latestSignalMessage: null,
+        backtestExecutionConfigExplicit: false,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      } as any,
+      response: {
+        id: 'session-1',
+        conversationId: 'server-conv-1',
+        status: 'PUBLISHED',
+        scriptCode: 'export default function strategy() { return true }',
+        publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotParamValues: {
+          exchange: 'okx',
+          symbol: 'BTC-USDT-SWAP',
+          baseTimeframe: '15m',
+          positionPct: 35,
+        },
+        publishedSnapshotBacktestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 2,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: false,
+          range: {
+            preset: 'CUSTOM',
+            startAt: '2026-01-26T02:00:00.000Z',
+            endAt: '2026-04-26T02:00:00.000Z',
+          },
+        },
+      } as any,
+      confirmGenerate: true,
+      targetParams: DEFAULT_PARAMS,
+      backtestCapabilities: null,
+      activeSessionId: 'session-1',
+      trimmedMessage: 'Confirm code generation',
+      t: (key: string, options?: Record<string, unknown>) =>
+        options?.defaultValue ? String(options.defaultValue) : key,
+      loadingMessageId: 'loading',
+    })
+
+    expect(next.backtestExecutionConfigExplicit).toBe(true)
+    expect(next.paramValues).toMatchObject({
+      backtestRangePreset: 'CUSTOM',
+      backtestStart: '2026-01-26T02:00:00.000Z',
+      backtestEnd: '2026-04-26T02:00:00.000Z',
+      backtestInitialCash: 10000,
+      backtestLeverage: 2,
+      backtestSlippageBps: 10,
+      backtestFeeBps: 5,
+      backtestPriceSource: 'close',
+      backtestAllowPartial: false,
+    })
+  })
+
   it('applies target quote sizing through codegen fallback without rendering it as percent', () => {
     const next = applyCodegenResponseToConversationState({
       conversation: {

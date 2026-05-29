@@ -1,6 +1,59 @@
 import { evaluateExprPool, invalidateMemoryOperand } from './evaluate-expr-pool'
 
 describe('evaluateExprPool', () => {
+  it('evaluates timeframe-scoped price and EMA series from runtime data.primary bars', () => {
+    const values = evaluateExprPool(
+      {
+        bars: [
+          { open: 1, high: 1, low: 1, close: 1, volume: 1, timestamp: 1 },
+          { open: 1, high: 1, low: 1, close: 1, volume: 1, timestamp: 2 },
+          { open: 1, high: 1, low: 1, close: 1, volume: 1, timestamp: 3 },
+        ],
+        data: {
+          primary: {
+            '1h': {
+              bars: [
+                { open: 10, high: 10, low: 10, close: 10, volume: 1, timestamp: 1_000 },
+                { open: 20, high: 20, low: 20, close: 20, volume: 1, timestamp: 2_000 },
+                { open: 30, high: 30, low: 30, close: 30, volume: 1, timestamp: 3_000 },
+              ],
+              indicators: {},
+              currentPrice: 30,
+            },
+          },
+        },
+      },
+      [
+        {
+          id: 'close_1h',
+          nodeType: 'series',
+          sourceRef: 'close_1h',
+          payload: { kind: 'PRICE', field: 'close', timeframe: '1h' },
+          deps: [],
+        },
+        {
+          id: 'ema_2_1h',
+          nodeType: 'series',
+          sourceRef: 'ema_2_1h',
+          payload: { kind: 'EMA', params: { period: 2 }, timeframe: '1h' },
+          deps: ['close_1h'],
+        },
+        {
+          id: 'close_above_ema_1h',
+          nodeType: 'predicate',
+          sourceRef: 'indicator.above.1h',
+          payload: { kind: 'GT' },
+          deps: ['close_1h', 'ema_2_1h'],
+        },
+      ],
+      ['close_1h', 'ema_2_1h', 'close_above_ema_1h'],
+    )
+
+    expect(values.close_1h).toBe(30)
+    expect(values.ema_2_1h).toBeGreaterThan(1)
+    expect(values.close_above_ema_1h).toBe(true)
+  })
+
   it('evaluates externalSignal predicates from webhook event inbox', () => {
     const values = evaluateExprPool(
       {

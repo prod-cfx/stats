@@ -1291,6 +1291,11 @@ describe('ai-quant-page-conversation', () => {
         feeBps: 4,
         priceSource: 'mid',
         allowPartial: false,
+        range: {
+          preset: 'CUSTOM',
+          startAt: '2026-04-01T02:00:00.000Z',
+          endAt: '2026-04-26T01:45:00.000Z',
+        },
       },
       publishedScriptCode: 'return { ok: true }',
       publishedScriptGraphVersion: 1,
@@ -1308,6 +1313,9 @@ describe('ai-quant-page-conversation', () => {
       backtestFeeBps: 4,
       backtestPriceSource: 'mid',
       backtestAllowPartial: false,
+      backtestRangePreset: 'CUSTOM',
+      backtestStart: '2026-04-01T02:00:00.000Z',
+      backtestEnd: '2026-04-26T01:45:00.000Z',
     }))
   })
 

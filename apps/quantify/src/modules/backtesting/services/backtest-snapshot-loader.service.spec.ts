@@ -1,6 +1,8 @@
 import type { CanonicalStrategyIrV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ir'
 import { CanonicalStrategyAstCompilerService } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
 import { CompiledScriptEmitterService } from '@/modules/llm-strategy-codegen/services/compiled-script-emitter.service'
+import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '@/modules/strategy-plaza/constants/official-strategy-plaza-templates'
+import { buildOfficialStrategySnapshotContent } from '@/modules/strategy-plaza/utils/official-strategy-plaza-snapshot-builder'
 import { BacktestSnapshotLoaderService } from './backtest-snapshot-loader.service'
 
 function createCompiledSnapshotFixture() {
@@ -173,6 +175,7 @@ describe('backtestSnapshotLoaderService', () => {
       id: 'instance-1',
       protocolVersion: 'v1',
       scriptCode: compiledSnapshot.scriptSnapshot,
+      executionEnvelope: compiledSnapshot.executionEnvelope,
         params: {
           exchange: 'okx',
           symbol: 'BTCUSDT',
@@ -223,6 +226,57 @@ describe('backtestSnapshotLoaderService', () => {
       dataRequirements: { primary: ['3m'], requiredTimeframes: ['3m', '15m'] },
       specSnapshot: { market: { exchange: 'okx' } },
     })
+  })
+
+  it('loads official Strategy Plaza signal-generator snapshots without compiler.v1 preflight', async () => {
+    const template = OFFICIAL_STRATEGY_PLAZA_TEMPLATES[0]!
+    const content = buildOfficialStrategySnapshotContent(template)
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'official-plaza-snapshot-1',
+        strategyInstanceId: 'official-instance-1',
+        strategyTemplateId: 'official-template-1',
+        snapshotHash: content.snapshotHash,
+        scriptHash: content.scriptHash,
+        specHash: content.specHash,
+        irHash: content.irHash,
+        astDigest: content.astDigest,
+        structuralDigest: content.structuralDigest,
+        scriptSnapshot: content.scriptSnapshot,
+        specSnapshot: content.specSnapshot,
+        compiledManifest: content.compiledManifest,
+        irSnapshot: content.irSnapshot,
+        astSnapshot: content.astSnapshot,
+        paramsSnapshot: content.paramsSnapshot,
+        strategyConfig: content.strategyConfig,
+        backtestConfigDefaults: { ...content.backtestConfigDefaults, priceSource: 'mark' },
+        deploymentExecutionDefaults: content.deploymentExecutionDefaults,
+        deploymentExecutionConstraints: content.deploymentExecutionConstraints,
+        lockedParams: content.lockedParams,
+        executionPolicy: content.executionPolicy,
+        dataRequirements: content.dataRequirements,
+        executionEnvelope: content.executionEnvelope,
+      }),
+    }
+    const strategyAdapter = {
+      build: jest.fn().mockResolvedValue({ id: 'official-instance-1', params: {}, fn: jest.fn() }),
+    }
+    const service = new BacktestSnapshotLoaderService(snapshotsRepository as never, strategyAdapter as never)
+
+    await expect(service.load({
+      id: 'official-instance-1',
+      protocolVersion: 'v1',
+      publishedSnapshotId: 'official-plaza-snapshot-1',
+      userId: 'user-1',
+    })).resolves.toMatchObject({
+      id: 'official-instance-1',
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+      executionEnvelope: content.executionEnvelope,
+    })
+    expect(strategyAdapter.build).toHaveBeenCalledWith(expect.objectContaining({
+      scriptCode: content.scriptSnapshot,
+      executionEnvelope: content.executionEnvelope,
+    }))
   })
 
   it('does not infer backtest risk rules from legacy graph snapshot trigger text', async () => {

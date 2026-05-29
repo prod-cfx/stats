@@ -283,6 +283,7 @@ describe('strategyPlazaOfficialSnapshotRepository', () => {
       protocolVersion: 'v1',
       scriptCode: content.scriptSnapshot,
       params: content.paramsSnapshot,
+      executionEnvelope: content.executionEnvelope,
     })).resolves.toMatchObject({
       id: 'official-ma-cross',
       params: expect.objectContaining({
@@ -540,8 +541,13 @@ describe('strategyPlazaOfficialSnapshotRepository', () => {
           leverage: 2,
           slippageBps: 10,
           feeBps: 5,
-          priceSource: 'mark',
+          priceSource: 'close',
           allowPartial: false,
+          range: {
+            preset: 'CUSTOM',
+            startAt: new Date(1775008800000).toISOString(),
+            endAt: new Date(1777167900000).toISOString(),
+          },
         },
         deploymentExecutionDefaults: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
         deploymentExecutionConstraints: {
