@@ -29,7 +29,21 @@ jobs:
           cd "$RELEASE_DIR"
           echo "[INFO] release=$RELEASE_DIR"
 
-          pnpm exec dotenv -e .env.staging -e .env.staging.local -- node <<'NODE'
+          ENV_ARGS=()
+          for file in \
+            "$RELEASE_DIR/.env.staging" \
+            "$RELEASE_DIR/.env.staging.local" \
+            "$APP_ROOT/shared/.env.staging" \
+            "$APP_ROOT/shared/.env.staging.local" \
+            "$APP_ROOT/.env.staging" \
+            "$APP_ROOT/.env.staging.local"; do
+            if [ -f "$file" ]; then
+              echo "[INFO] using env file: $file"
+              ENV_ARGS+=("-e" "$file")
+            fi
+          done
+
+          pnpm exec dotenv "${ENV_ARGS[@]}" -- node <<'NODE'
           const { Client } = require('pg')
 
           void (async () => {
