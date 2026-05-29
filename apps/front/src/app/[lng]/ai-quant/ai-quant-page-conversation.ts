@@ -574,7 +574,7 @@ function normalizeBacktestConfigDefaults(
   }
 }
 
-function buildSnapshotBacktestExecutionParamValues(
+export function buildSnapshotBacktestExecutionParamValues(
   snapshotBacktestConfigDefaults: AccountAiQuantBacktestConfigDefaults,
 ): Record<string, unknown> {
   const values: Record<string, unknown> = {
