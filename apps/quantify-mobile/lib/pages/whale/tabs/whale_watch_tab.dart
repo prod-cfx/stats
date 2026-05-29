@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../data/mock/fixtures/whale_extras.dart';
 import '../../../data/models/whale_extra_models.dart';
@@ -21,7 +22,11 @@ class WhaleWatchTab extends StatelessWidget {
         Container(
           color: c.bgElev,
           padding: const EdgeInsets.fromLTRB(
-              QzSpacing.lg, QzSpacing.md, QzSpacing.lg, QzSpacing.xs),
+            QzSpacing.lg,
+            QzSpacing.md,
+            QzSpacing.lg,
+            QzSpacing.xs,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -90,7 +95,11 @@ class WhaleWatchTab extends StatelessWidget {
         Container(
           color: c.bgElev,
           padding: const EdgeInsets.fromLTRB(
-              QzSpacing.lg, QzSpacing.lg, QzSpacing.lg, QzSpacing.lg),
+            QzSpacing.lg,
+            QzSpacing.lg,
+            QzSpacing.lg,
+            QzSpacing.lg,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -154,90 +163,98 @@ class _WatchRow extends StatelessWidget {
     final bool up = entry.tone == 'up';
     final Color toneColor = up ? c.marketUp : c.marketDown;
     final Color toneSoft = toneColor.withValues(alpha: 0.14);
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: isLast ? Colors.transparent : c.borderSoft,
-          ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => context.push(
+          '/whale/profile/${Uri.encodeComponent(entry.address)}',
         ),
-      ),
-      child: Row(
-        children: <Widget>[
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: toneSoft,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              up ? Icons.arrow_upward : Icons.arrow_downward,
-              size: 14,
-              color: toneColor,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: isLast ? Colors.transparent : c.borderSoft,
+              ),
             ),
           ),
-          const SizedBox(width: QzSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    Flexible(
-                      child: Text(
-                        entry.name,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: c.text,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    if (entry.live) ...<Widget>[
-                      const SizedBox(width: 6),
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: c.marketUp,
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '${entry.address} · ${entry.lastEventDisplay}',
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: c.textDim, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          child: Row(
             children: <Widget>[
-              Text(
-                entry.pnlDisplay,
-                style: TextStyle(
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: toneSoft,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  up ? Icons.arrow_upward : Icons.arrow_downward,
+                  size: 14,
                   color: toneColor,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.2,
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                l10n.whaleWatchPnl7d,
-                style: TextStyle(color: c.textFaint, fontSize: 10),
+              const SizedBox(width: QzSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        Flexible(
+                          child: Text(
+                            entry.name,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: c.text,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        if (entry.live) ...<Widget>[
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: c.marketUp,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${entry.address} · ${entry.lastEventDisplay}',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: c.textDim, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  Text(
+                    entry.pnlDisplay,
+                    style: TextStyle(
+                      color: toneColor,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    l10n.whaleWatchPnl7d,
+                    style: TextStyle(color: c.textFaint, fontSize: 10),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -269,17 +286,14 @@ class _AlertRow extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(
-            color: isLast ? Colors.transparent : c.borderSoft,
-          ),
+          bottom: BorderSide(color: isLast ? Colors.transparent : c.borderSoft),
         ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
               color: bg,
               borderRadius: BorderRadius.circular(4),

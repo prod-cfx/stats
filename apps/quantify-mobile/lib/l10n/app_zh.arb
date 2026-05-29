@@ -492,6 +492,33 @@
   "whaleSmartMoneyHoldingsPrefix": "主要持仓 · ",
   "whaleWinRatePrefix": "胜率 ",
   "whaleTrendingParticipantsSuffix": " 个巨鲸参与",
+  "whaleProfileTitle": "地址详情",
+  "whaleProfileTabOverview": "概览",
+  "whaleProfileTabStats": "交易统计",
+  "whaleProfileCopyTooltip": "复制地址",
+  "whaleProfileCopied": "地址已复制",
+  "whaleProfileAssetSummaryPrefix": "主要持仓 · ",
+  "whaleProfileHoldingsValueLabel": "总持仓估值",
+  "whaleProfileSectionHoldings": "持仓",
+  "whaleProfileSectionRecentActions": "近期动作",
+  "whaleProfileRecentActionsEmpty": "暂无近期动作",
+  "whaleProfileStatPnl": "总盈亏",
+  "whaleProfileStatWinRate": "胜率",
+  "whaleProfileWinRateValue": "{pct}%",
+  "@whaleProfileWinRateValue": {
+    "placeholders": {
+      "pct": {
+        "type": "int"
+      }
+    }
+  },
+  "whaleProfileStatRealized": "已实现",
+  "whaleProfileStatUnrealized": "未实现",
+  "whaleProfileDirectionBias": "方向偏好",
+  "whaleProfileLong": "做多",
+  "whaleProfileShort": "做空",
+  "whaleProfileSectionAssetPerf": "资产表现",
+  "whaleProfileLoadError": "地址详情加载失败",
   "whaleNotificationTitle": "通知中心",
   "whaleNotificationTabAll": "全部",
   "whaleNotificationTabAlert": "巨鲸预警",

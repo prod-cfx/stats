@@ -18,6 +18,7 @@ import '../pages/me/theme_settings_page.dart';
 import '../pages/strategy/strategy_detail_page.dart';
 import '../pages/strategy/strategy_home_page.dart';
 import '../pages/whale/whale_home_page.dart';
+import '../pages/whale/whale_profile_page.dart';
 import '../shell/main_shell_scaffold.dart';
 
 /// App-wide router.
@@ -83,12 +84,12 @@ GoRouter buildRouter({
     },
     routes: <RouteBase>[
       StatefulShellRoute.indexedStack(
-        builder: (
-          BuildContext context,
-          GoRouterState state,
-          StatefulNavigationShell shell,
-        ) =>
-            MainShellScaffold(navigationShell: shell),
+        builder:
+            (
+              BuildContext context,
+              GoRouterState state,
+              StatefulNavigationShell shell,
+            ) => MainShellScaffold(navigationShell: shell),
         branches: <StatefulShellBranch>[
           StatefulShellBranch(
             routes: <RouteBase>[
@@ -147,11 +148,13 @@ GoRouter buildRouter({
       // 这样后续 import 排序工具/代码格式化即便重排路由也不会静默打破。
       GoRoute(
         path: '/login',
-        builder: (BuildContext context, GoRouterState state) => const LoginPage(),
+        builder: (BuildContext context, GoRouterState state) =>
+            const LoginPage(),
       ),
       GoRoute(
         path: '/market/long-short',
-        builder: (BuildContext context, GoRouterState state) => const LongShortPage(),
+        builder: (BuildContext context, GoRouterState state) =>
+            const LongShortPage(),
       ),
       GoRoute(
         path: r'/market/:symbol([A-Z0-9-]{2,})',
@@ -163,6 +166,14 @@ GoRouter buildRouter({
         builder: (BuildContext context, GoRouterState s) =>
             StrategyDetailPage(id: s.pathParameters['id']!),
       ),
+      // 巨鲸地址详情（#1753）：公开（不在 kAuthProtectedPrefixes，匿名可浏览）。
+      // address 含 `…` 省略号与 `0x` 前缀，入口用 Uri.encodeComponent，
+      // go_router 自动 decode 回原文。
+      GoRoute(
+        path: '/whale/profile/:address',
+        builder: (BuildContext context, GoRouterState s) =>
+            WhaleProfilePage(address: s.pathParameters['address']!),
+      ),
       GoRoute(
         path: '/ai/backtest-config',
         builder: (BuildContext context, GoRouterState state) =>
@@ -170,7 +181,20 @@ GoRouter buildRouter({
       ),
       GoRoute(
         path: '/me/theme',
-        builder: (BuildContext context, GoRouterState state) => const ThemeSettingsPage(),
+        builder: (BuildContext context, GoRouterState state) =>
+            const ThemeSettingsPage(),
+      ),
+      // 实盘策略（#1752）：列表 + 详情，均落在 `/me` 前缀守卫内（需登录）。
+      // 详情 `:id` 显式注册在列表之后；`live` 字面量不会被静态段吞没。
+      GoRoute(
+        path: '/me/live',
+        builder: (BuildContext context, GoRouterState state) =>
+            const LiveStrategiesPage(),
+      ),
+      GoRoute(
+        path: '/me/live/:id',
+        builder: (BuildContext context, GoRouterState s) =>
+            LiveStrategyDetailPage(id: s.pathParameters['id']!),
       ),
       // 实盘策略（#1752）：列表 + 详情，均落在 `/me` 前缀守卫内（需登录）。
       // 详情 `:id` 显式注册在列表之后；`live` 字面量不会被静态段吞没。
@@ -187,7 +211,8 @@ GoRouter buildRouter({
       if (kDebugMode)
         GoRoute(
           path: '/_dev/theme-preview',
-          builder: (BuildContext context, GoRouterState state) => const ThemePreviewPage(),
+          builder: (BuildContext context, GoRouterState state) =>
+              const ThemePreviewPage(),
         ),
       if (kDebugMode)
         GoRoute(

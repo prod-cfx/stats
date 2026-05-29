@@ -18,7 +18,9 @@ import 'mock/mock_orderbook_repository.dart';
 import 'mock/mock_strategy_repository.dart';
 import 'mock/mock_ticker_repository.dart';
 import 'mock/mock_whale_feed_repository.dart';
+import 'mock/mock_whale_profile_repository.dart';
 import 'mock/unimplemented_repositories.dart';
+import 'models/whale_profile_models.dart';
 import 'repositories/repositories.dart';
 
 /// `USE_MOCK` 启动开关。
@@ -38,107 +40,126 @@ final Provider<bool> useMockProvider = Provider<bool>((Ref ref) {
 
 final Provider<AuthRepository> authRepositoryProvider =
     Provider<AuthRepository>((Ref ref) {
-  return ref.watch(useMockProvider)
-      ? MockAuthRepository()
-      : UnimplementedAuthRepository();
-});
+      return ref.watch(useMockProvider)
+          ? MockAuthRepository()
+          : UnimplementedAuthRepository();
+    });
 
 final Provider<TickerRepository> tickerRepositoryProvider =
     Provider<TickerRepository>((Ref ref) {
-  return ref.watch(useMockProvider)
-      ? MockTickerRepository()
-      : UnimplementedTickerRepository();
-});
+      return ref.watch(useMockProvider)
+          ? MockTickerRepository()
+          : UnimplementedTickerRepository();
+    });
 
 final Provider<KlineRepository> klineRepositoryProvider =
     Provider<KlineRepository>((Ref ref) {
-  return ref.watch(useMockProvider)
-      ? MockKlineRepository()
-      : UnimplementedKlineRepository();
-});
+      return ref.watch(useMockProvider)
+          ? MockKlineRepository()
+          : UnimplementedKlineRepository();
+    });
 
 final Provider<OrderbookRepository> orderbookRepositoryProvider =
     Provider<OrderbookRepository>((Ref ref) {
-  return ref.watch(useMockProvider)
-      ? MockOrderbookRepository()
-      : UnimplementedOrderbookRepository();
-});
+      return ref.watch(useMockProvider)
+          ? MockOrderbookRepository()
+          : UnimplementedOrderbookRepository();
+    });
 
 final Provider<LongShortRepository> longShortRepositoryProvider =
     Provider<LongShortRepository>((Ref ref) {
-  return ref.watch(useMockProvider)
-      ? MockLongShortRepository()
-      : UnimplementedLongShortRepository();
-});
+      return ref.watch(useMockProvider)
+          ? MockLongShortRepository()
+          : UnimplementedLongShortRepository();
+    });
 
 final Provider<WhaleFeedRepository> whaleFeedRepositoryProvider =
     Provider<WhaleFeedRepository>((Ref ref) {
-  return ref.watch(useMockProvider)
-      ? MockWhaleFeedRepository()
-      : UnimplementedWhaleFeedRepository();
-});
+      return ref.watch(useMockProvider)
+          ? MockWhaleFeedRepository()
+          : UnimplementedWhaleFeedRepository();
+    });
+
+final Provider<WhaleProfileRepository> whaleProfileRepositoryProvider =
+    Provider<WhaleProfileRepository>((Ref ref) {
+      return ref.watch(useMockProvider)
+          ? MockWhaleProfileRepository()
+          : UnimplementedWhaleProfileRepository();
+    });
+
+/// 单个巨鲸地址画像（#1753）。地址详情页 watch；未命中已知地址由 mock
+/// 派生 fallback，真实读路径依赖 #1682。
+final FutureProviderFamily<WhaleProfile, String> whaleProfileProvider =
+    FutureProvider.family<WhaleProfile, String>((
+      Ref ref,
+      String address,
+    ) async {
+      return ref.watch(whaleProfileRepositoryProvider).getProfile(address);
+    });
 
 final Provider<StrategyRepository> strategyRepositoryProvider =
     Provider<StrategyRepository>((Ref ref) {
-  return ref.watch(useMockProvider)
-      ? MockStrategyRepository()
-      : UnimplementedStrategyRepository();
-});
+      return ref.watch(useMockProvider)
+          ? MockStrategyRepository()
+          : UnimplementedStrategyRepository();
+    });
 
 final Provider<LiveStrategyRepository> liveStrategyRepositoryProvider =
     Provider<LiveStrategyRepository>((Ref ref) {
-  return ref.watch(useMockProvider)
-      ? MockLiveStrategyRepository()
-      : UnimplementedLiveStrategyRepository();
-});
+      return ref.watch(useMockProvider)
+          ? MockLiveStrategyRepository()
+          : UnimplementedLiveStrategyRepository();
+    });
 
 final Provider<AiChatRepository> aiChatRepositoryProvider =
     Provider<AiChatRepository>((Ref ref) {
-  return ref.watch(useMockProvider)
-      ? MockAiChatRepository()
-      : UnimplementedAiChatRepository();
-});
+      return ref.watch(useMockProvider)
+          ? MockAiChatRepository()
+          : UnimplementedAiChatRepository();
+    });
 
 final Provider<BacktestRepository> backtestRepositoryProvider =
     Provider<BacktestRepository>((Ref ref) {
-  return ref.watch(useMockProvider)
-      ? MockBacktestRepository()
-      : UnimplementedBacktestRepository();
-});
+      return ref.watch(useMockProvider)
+          ? MockBacktestRepository()
+          : UnimplementedBacktestRepository();
+    });
 
 final Provider<AccountRepository> accountRepositoryProvider =
     Provider<AccountRepository>((Ref ref) {
-  return ref.watch(useMockProvider)
-      ? MockAccountRepository()
-      : UnimplementedAccountRepository();
-});
+      return ref.watch(useMockProvider)
+          ? MockAccountRepository()
+          : UnimplementedAccountRepository();
+    });
 
 final Provider<ApiKeyRepository> apiKeyRepositoryProvider =
     Provider<ApiKeyRepository>((Ref ref) {
-  return ref.watch(useMockProvider)
-      ? MockApiKeyRepository()
-      : UnimplementedApiKeyRepository();
-});
+      return ref.watch(useMockProvider)
+          ? MockApiKeyRepository()
+          : UnimplementedApiKeyRepository();
+    });
 
 /// 当前账户概要。从 `/me` 主页 watch；写入路径走 repository。
 final FutureProvider<AccountInfo> accountInfoProvider =
     FutureProvider<AccountInfo>((Ref ref) async {
-  return ref.watch(accountRepositoryProvider).getInfo();
-});
+      return ref.watch(accountRepositoryProvider).getInfo();
+    });
 
 /// 交易所凭据列表。被「我的」首页摘要、API 表单 sheet、一键部署弹层共同
 /// watch；新增/删除后调用方应 `ref.invalidate(apiKeysProvider)` 让各处同步
 /// 刷新（issue #1648：入口统一为 bottom sheet 后无独立列表页）。
 final FutureProvider<List<ExchangeApiKey>> apiKeysProvider =
     FutureProvider<List<ExchangeApiKey>>((Ref ref) async {
-  return ref.watch(apiKeyRepositoryProvider).listKeys();
-});
+      return ref.watch(apiKeyRepositoryProvider).listKeys();
+    });
 
 final Provider<StrategySubscriptionPersistence>
-    strategySubscriptionPersistenceProvider =
+strategySubscriptionPersistenceProvider =
     Provider<StrategySubscriptionPersistence>((Ref ref) {
-  return StrategySubscriptionPersistence(ref.watch(sharedPreferencesProvider));
-});
+      return StrategySubscriptionPersistence(
+        ref.watch(sharedPreferencesProvider),
+      );
+    });
 
 /// 已订阅策略 id 集合。
 ///
@@ -169,13 +190,15 @@ class StrategySubscriptionsNotifier extends Notifier<Set<String>> {
 }
 
 final NotifierProvider<StrategySubscriptionsNotifier, Set<String>>
-    strategySubscriptionsProvider =
+strategySubscriptionsProvider =
     NotifierProvider<StrategySubscriptionsNotifier, Set<String>>(
-        StrategySubscriptionsNotifier.new);
+      StrategySubscriptionsNotifier.new,
+    );
 
 final Provider<StrategyFavoritesPersistence>
-    strategyFavoritesPersistenceProvider =
-    Provider<StrategyFavoritesPersistence>((Ref ref) {
+strategyFavoritesPersistenceProvider = Provider<StrategyFavoritesPersistence>((
+  Ref ref,
+) {
   return StrategyFavoritesPersistence(ref.watch(sharedPreferencesProvider));
 });
 
@@ -206,48 +229,55 @@ class StrategyFavoritesNotifier extends Notifier<Set<String>> {
 }
 
 final NotifierProvider<StrategyFavoritesNotifier, Set<String>>
-    strategyFavoritesProvider =
+strategyFavoritesProvider =
     NotifierProvider<StrategyFavoritesNotifier, Set<String>>(
-        StrategyFavoritesNotifier.new);
+      StrategyFavoritesNotifier.new,
+    );
 
 /// 实盘策略列表（#1752）。列表页 watch；含 stopped。
 final FutureProvider<List<LiveStrategy>> liveStrategiesProvider =
     FutureProvider<List<LiveStrategy>>((Ref ref) async {
-  return ref.watch(liveStrategyRepositoryProvider).listStrategies();
-});
+      return ref.watch(liveStrategyRepositoryProvider).listStrategies();
+    });
 
 /// 实盘策略聚合摘要（#1752）。列表页顶部卡 watch。
 final FutureProvider<LiveStrategySummary> liveStrategySummaryProvider =
     FutureProvider<LiveStrategySummary>((Ref ref) async {
-  return ref.watch(liveStrategyRepositoryProvider).getSummary();
-});
+      return ref.watch(liveStrategyRepositoryProvider).getSummary();
+    });
 
 /// 单个实盘策略详情（#1752）。
 final FutureProviderFamily<LiveStrategy, String> liveStrategyDetailProvider =
     FutureProvider.family<LiveStrategy, String>((Ref ref, String id) async {
-  return ref.watch(liveStrategyRepositoryProvider).getStrategy(id);
-});
+      return ref.watch(liveStrategyRepositoryProvider).getStrategy(id);
+    });
 
 /// 单个实盘策略持仓（#1752）。null 表示无持仓（已暂停/停止）。
 final FutureProviderFamily<LiveStrategyPosition?, String>
-    liveStrategyPositionProvider =
-    FutureProvider.family<LiveStrategyPosition?, String>(
-        (Ref ref, String id) async {
-  return ref.watch(liveStrategyRepositoryProvider).getPosition(id);
-});
+liveStrategyPositionProvider =
+    FutureProvider.family<LiveStrategyPosition?, String>((
+      Ref ref,
+      String id,
+    ) async {
+      return ref.watch(liveStrategyRepositoryProvider).getPosition(id);
+    });
 
 /// 单个实盘策略历史成交（#1752）。
 final FutureProviderFamily<List<LiveStrategyTrade>, String>
-    liveStrategyTradesProvider =
-    FutureProvider.family<List<LiveStrategyTrade>, String>(
-        (Ref ref, String id) async {
-  return ref.watch(liveStrategyRepositoryProvider).listTrades(id);
-});
+liveStrategyTradesProvider =
+    FutureProvider.family<List<LiveStrategyTrade>, String>((
+      Ref ref,
+      String id,
+    ) async {
+      return ref.watch(liveStrategyRepositoryProvider).listTrades(id);
+    });
 
 /// 单个实盘策略参数（#1752）。
 final FutureProviderFamily<List<LiveStrategyParam>, String>
-    liveStrategyParamsProvider =
-    FutureProvider.family<List<LiveStrategyParam>, String>(
-        (Ref ref, String id) async {
-  return ref.watch(liveStrategyRepositoryProvider).listParams(id);
-});
+liveStrategyParamsProvider =
+    FutureProvider.family<List<LiveStrategyParam>, String>((
+      Ref ref,
+      String id,
+    ) async {
+      return ref.watch(liveStrategyRepositoryProvider).listParams(id);
+    });

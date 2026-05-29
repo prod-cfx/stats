@@ -1257,6 +1257,68 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleTrendingParticipantsSuffix => ' 个巨鲸参与';
 
   @override
+  String get whaleProfileTitle => '地址详情';
+
+  @override
+  String get whaleProfileTabOverview => '概览';
+
+  @override
+  String get whaleProfileTabStats => '交易统计';
+
+  @override
+  String get whaleProfileCopyTooltip => '复制地址';
+
+  @override
+  String get whaleProfileCopied => '地址已复制';
+
+  @override
+  String get whaleProfileAssetSummaryPrefix => '主要持仓 · ';
+
+  @override
+  String get whaleProfileHoldingsValueLabel => '总持仓估值';
+
+  @override
+  String get whaleProfileSectionHoldings => '持仓';
+
+  @override
+  String get whaleProfileSectionRecentActions => '近期动作';
+
+  @override
+  String get whaleProfileRecentActionsEmpty => '暂无近期动作';
+
+  @override
+  String get whaleProfileStatPnl => '总盈亏';
+
+  @override
+  String get whaleProfileStatWinRate => '胜率';
+
+  @override
+  String whaleProfileWinRateValue(int pct) {
+    return '$pct%';
+  }
+
+  @override
+  String get whaleProfileStatRealized => '已实现';
+
+  @override
+  String get whaleProfileStatUnrealized => '未实现';
+
+  @override
+  String get whaleProfileDirectionBias => '方向偏好';
+
+  @override
+  String get whaleProfileLong => '做多';
+
+  @override
+  String get whaleProfileShort => '做空';
+
+  @override
+  String get whaleProfileSectionAssetPerf => '资产表现';
+
+  @override
+  String get whaleProfileLoadError => '地址详情加载失败';
+
+  @override
   String get whaleNotificationTitle => '通知中心';
 
   @override

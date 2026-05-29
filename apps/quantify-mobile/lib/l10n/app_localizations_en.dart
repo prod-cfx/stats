@@ -1282,6 +1282,68 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleTrendingParticipantsSuffix => ' whales';
 
   @override
+  String get whaleProfileTitle => 'Address detail';
+
+  @override
+  String get whaleProfileTabOverview => 'Overview';
+
+  @override
+  String get whaleProfileTabStats => 'Trade stats';
+
+  @override
+  String get whaleProfileCopyTooltip => 'Copy address';
+
+  @override
+  String get whaleProfileCopied => 'Address copied';
+
+  @override
+  String get whaleProfileAssetSummaryPrefix => 'Holdings · ';
+
+  @override
+  String get whaleProfileHoldingsValueLabel => 'Total holdings value';
+
+  @override
+  String get whaleProfileSectionHoldings => 'Holdings';
+
+  @override
+  String get whaleProfileSectionRecentActions => 'Recent actions';
+
+  @override
+  String get whaleProfileRecentActionsEmpty => 'No recent actions';
+
+  @override
+  String get whaleProfileStatPnl => 'Total PnL';
+
+  @override
+  String get whaleProfileStatWinRate => 'Win rate';
+
+  @override
+  String whaleProfileWinRateValue(int pct) {
+    return '$pct%';
+  }
+
+  @override
+  String get whaleProfileStatRealized => 'Realized';
+
+  @override
+  String get whaleProfileStatUnrealized => 'Unrealized';
+
+  @override
+  String get whaleProfileDirectionBias => 'Direction bias';
+
+  @override
+  String get whaleProfileLong => 'Long';
+
+  @override
+  String get whaleProfileShort => 'Short';
+
+  @override
+  String get whaleProfileSectionAssetPerf => 'Asset performance';
+
+  @override
+  String get whaleProfileLoadError => 'Failed to load address detail';
+
+  @override
   String get whaleNotificationTitle => 'Notifications';
 
   @override

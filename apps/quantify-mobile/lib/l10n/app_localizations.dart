@@ -2522,6 +2522,126 @@ abstract class AppLocalizations {
   /// **' 个巨鲸参与'**
   String get whaleTrendingParticipantsSuffix;
 
+  /// No description provided for @whaleProfileTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址详情'**
+  String get whaleProfileTitle;
+
+  /// No description provided for @whaleProfileTabOverview.
+  ///
+  /// In zh, this message translates to:
+  /// **'概览'**
+  String get whaleProfileTabOverview;
+
+  /// No description provided for @whaleProfileTabStats.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易统计'**
+  String get whaleProfileTabStats;
+
+  /// No description provided for @whaleProfileCopyTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制地址'**
+  String get whaleProfileCopyTooltip;
+
+  /// No description provided for @whaleProfileCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址已复制'**
+  String get whaleProfileCopied;
+
+  /// No description provided for @whaleProfileAssetSummaryPrefix.
+  ///
+  /// In zh, this message translates to:
+  /// **'主要持仓 · '**
+  String get whaleProfileAssetSummaryPrefix;
+
+  /// No description provided for @whaleProfileHoldingsValueLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'总持仓估值'**
+  String get whaleProfileHoldingsValueLabel;
+
+  /// No description provided for @whaleProfileSectionHoldings.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓'**
+  String get whaleProfileSectionHoldings;
+
+  /// No description provided for @whaleProfileSectionRecentActions.
+  ///
+  /// In zh, this message translates to:
+  /// **'近期动作'**
+  String get whaleProfileSectionRecentActions;
+
+  /// No description provided for @whaleProfileRecentActionsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无近期动作'**
+  String get whaleProfileRecentActionsEmpty;
+
+  /// No description provided for @whaleProfileStatPnl.
+  ///
+  /// In zh, this message translates to:
+  /// **'总盈亏'**
+  String get whaleProfileStatPnl;
+
+  /// No description provided for @whaleProfileStatWinRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'胜率'**
+  String get whaleProfileStatWinRate;
+
+  /// No description provided for @whaleProfileWinRateValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'{pct}%'**
+  String whaleProfileWinRateValue(int pct);
+
+  /// No description provided for @whaleProfileStatRealized.
+  ///
+  /// In zh, this message translates to:
+  /// **'已实现'**
+  String get whaleProfileStatRealized;
+
+  /// No description provided for @whaleProfileStatUnrealized.
+  ///
+  /// In zh, this message translates to:
+  /// **'未实现'**
+  String get whaleProfileStatUnrealized;
+
+  /// No description provided for @whaleProfileDirectionBias.
+  ///
+  /// In zh, this message translates to:
+  /// **'方向偏好'**
+  String get whaleProfileDirectionBias;
+
+  /// No description provided for @whaleProfileLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'做多'**
+  String get whaleProfileLong;
+
+  /// No description provided for @whaleProfileShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'做空'**
+  String get whaleProfileShort;
+
+  /// No description provided for @whaleProfileSectionAssetPerf.
+  ///
+  /// In zh, this message translates to:
+  /// **'资产表现'**
+  String get whaleProfileSectionAssetPerf;
+
+  /// No description provided for @whaleProfileLoadError.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址详情加载失败'**
+  String get whaleProfileLoadError;
+
   /// No description provided for @whaleNotificationTitle.
   ///
   /// In zh, this message translates to:

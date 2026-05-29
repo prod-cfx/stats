@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../data/mock/fixtures/whale_extras.dart';
 import '../../../data/models/whale_extra_models.dart';
@@ -20,7 +21,11 @@ class WhaleDiscoverTab extends StatelessWidget {
       children: <Widget>[
         _Section(
           padding: const EdgeInsets.fromLTRB(
-              QzSpacing.lg, QzSpacing.md, QzSpacing.lg, QzSpacing.xs),
+            QzSpacing.lg,
+            QzSpacing.md,
+            QzSpacing.lg,
+            QzSpacing.xs,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -50,7 +55,11 @@ class WhaleDiscoverTab extends StatelessWidget {
         ),
         _Section(
           padding: const EdgeInsets.fromLTRB(
-              QzSpacing.lg, QzSpacing.lg, QzSpacing.lg, QzSpacing.xs),
+            QzSpacing.lg,
+            QzSpacing.lg,
+            QzSpacing.lg,
+            QzSpacing.xs,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -76,7 +85,11 @@ class WhaleDiscoverTab extends StatelessWidget {
         ),
         _Section(
           padding: const EdgeInsets.fromLTRB(
-              QzSpacing.lg, QzSpacing.lg, QzSpacing.lg, QzSpacing.lg),
+            QzSpacing.lg,
+            QzSpacing.lg,
+            QzSpacing.lg,
+            QzSpacing.lg,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -106,8 +119,11 @@ class WhaleDiscoverTab extends StatelessWidget {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       alignment: Alignment.center,
-                      child: Icon(Icons.auto_awesome,
-                          size: 20, color: c.accent),
+                      child: Icon(
+                        Icons.auto_awesome,
+                        size: 20,
+                        color: c.accent,
+                      ),
                     ),
                     const SizedBox(width: QzSpacing.md),
                     Expanded(
@@ -117,9 +133,10 @@ class WhaleDiscoverTab extends StatelessWidget {
                           Text(
                             l10n.whaleSectionEmergingWhalesTitle,
                             style: TextStyle(
-                                color: c.text,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600),
+                              color: c.text,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                           const SizedBox(height: 3),
                           Text(
@@ -187,8 +204,10 @@ class _SectionHeader extends StatelessWidget {
               ),
               if (subtitle != null) ...<Widget>[
                 const SizedBox(height: 2),
-                Text(subtitle!,
-                    style: TextStyle(color: c.textDim, fontSize: 11)),
+                Text(
+                  subtitle!,
+                  style: TextStyle(color: c.textDim, fontSize: 11),
+                ),
               ],
             ],
           ),
@@ -199,7 +218,10 @@ class _SectionHeader extends StatelessWidget {
           Text(
             actionLabel!,
             style: TextStyle(
-                color: c.accent, fontSize: 11, fontWeight: FontWeight.w600),
+              color: c.accent,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
           ),
       ],
     );
@@ -217,80 +239,88 @@ class _SmartMoneyRow extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final bool topRank = entry.rank <= 3;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: isLast ? Colors.transparent : c.borderSoft,
-          ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => context.push(
+          '/whale/profile/${Uri.encodeComponent(entry.address)}',
         ),
-      ),
-      child: Row(
-        children: <Widget>[
-          Container(
-            width: 24,
-            height: 24,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: topRank ? c.accentSoft : c.bgSoft,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              '${entry.rank}',
-              style: TextStyle(
-                color: topRank ? c.accent : c.textMid,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: isLast ? Colors.transparent : c.borderSoft,
               ),
             ),
           ),
-          const SizedBox(width: QzSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Row(
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: 24,
+                height: 24,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: topRank ? c.accentSoft : c.bgSoft,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${entry.rank}',
+                  style: TextStyle(
+                    color: topRank ? c.accent : c.textMid,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: QzSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text(
-                      entry.address,
-                      style: TextStyle(
-                        color: c.text,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    Row(
+                      children: <Widget>[
+                        Text(
+                          entry.address,
+                          style: TextStyle(
+                            color: c.text,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: QzSpacing.xs),
+                        _Tag(label: entry.tag),
+                      ],
                     ),
-                    const SizedBox(width: QzSpacing.xs),
-                    _Tag(label: entry.tag),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${l10n.whaleSmartMoneyHoldingsPrefix}${entry.holdings}',
+                      style: TextStyle(color: c.textDim, fontSize: 11),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  '${l10n.whaleSmartMoneyHoldingsPrefix}${entry.holdings}',
-                  style: TextStyle(color: c.textDim, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: <Widget>[
-              Text(
-                entry.pnlDisplay,
-                style: TextStyle(
-                  color: c.marketUp,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                '${l10n.whaleWinRatePrefix}${entry.winRatePct}%',
-                style: TextStyle(color: c.textDim, fontSize: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  Text(
+                    entry.pnlDisplay,
+                    style: TextStyle(
+                      color: c.marketUp,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${l10n.whaleWinRatePrefix}${entry.winRatePct}%',
+                    style: TextStyle(color: c.textDim, fontSize: 10),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }

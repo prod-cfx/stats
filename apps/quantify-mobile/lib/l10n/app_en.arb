@@ -489,6 +489,33 @@
   "whaleSmartMoneyHoldingsPrefix": "Holdings · ",
   "whaleWinRatePrefix": "Win rate ",
   "whaleTrendingParticipantsSuffix": " whales",
+  "whaleProfileTitle": "Address detail",
+  "whaleProfileTabOverview": "Overview",
+  "whaleProfileTabStats": "Trade stats",
+  "whaleProfileCopyTooltip": "Copy address",
+  "whaleProfileCopied": "Address copied",
+  "whaleProfileAssetSummaryPrefix": "Holdings · ",
+  "whaleProfileHoldingsValueLabel": "Total holdings value",
+  "whaleProfileSectionHoldings": "Holdings",
+  "whaleProfileSectionRecentActions": "Recent actions",
+  "whaleProfileRecentActionsEmpty": "No recent actions",
+  "whaleProfileStatPnl": "Total PnL",
+  "whaleProfileStatWinRate": "Win rate",
+  "whaleProfileWinRateValue": "{pct}%",
+  "@whaleProfileWinRateValue": {
+    "placeholders": {
+      "pct": {
+        "type": "int"
+      }
+    }
+  },
+  "whaleProfileStatRealized": "Realized",
+  "whaleProfileStatUnrealized": "Unrealized",
+  "whaleProfileDirectionBias": "Direction bias",
+  "whaleProfileLong": "Long",
+  "whaleProfileShort": "Short",
+  "whaleProfileSectionAssetPerf": "Asset performance",
+  "whaleProfileLoadError": "Failed to load address detail",
   "whaleNotificationTitle": "Notifications",
   "whaleNotificationTabAll": "All",
   "whaleNotificationTabAlert": "Whale alerts",

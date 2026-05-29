@@ -8,8 +8,10 @@ Never _todo(String repoName) =>
 
 class UnimplementedAuthRepository implements AuthRepository {
   @override
-  Future<AuthSession> login({required String email, required String password}) =>
-      _todo('AuthRepository');
+  Future<AuthSession> login({
+    required String email,
+    required String password,
+  }) => _todo('AuthRepository');
   @override
   Future<void> logout() => _todo('AuthRepository');
   @override
@@ -29,14 +31,12 @@ class UnimplementedKlineRepository implements KlineRepository {
     required String symbol,
     required KlineInterval interval,
     required int limit,
-  }) =>
-      _todo('KlineRepository');
+  }) => _todo('KlineRepository');
   @override
   Stream<Candle> watchCandles({
     required String symbol,
     required KlineInterval interval,
-  }) =>
-      _todo('KlineRepository');
+  }) => _todo('KlineRepository');
 }
 
 class UnimplementedOrderbookRepository implements OrderbookRepository {
@@ -53,8 +53,7 @@ class UnimplementedLongShortRepository implements LongShortRepository {
   Future<LongShortRatio> getRatio({
     required String symbol,
     required KlineInterval interval,
-  }) =>
-      _todo('LongShortRepository');
+  }) => _todo('LongShortRepository');
 
   @override
   Future<MarketLongShortSnapshot> getSnapshot({required String symbol}) =>
@@ -67,6 +66,12 @@ class UnimplementedWhaleFeedRepository implements WhaleFeedRepository {
       _todo('WhaleFeedRepository');
   @override
   Stream<WhaleEvent> watchFeed() => _todo('WhaleFeedRepository');
+}
+
+class UnimplementedWhaleProfileRepository implements WhaleProfileRepository {
+  @override
+  Future<WhaleProfile> getProfile(String address) =>
+      _todo('WhaleProfileRepository');
 }
 
 class UnimplementedLiveStrategyRepository implements LiveStrategyRepository {
@@ -102,8 +107,7 @@ class UnimplementedStrategyRepository implements StrategyRepository {
     int pageSize = 10,
     String? query,
     StrategyCategory? category,
-  }) =>
-      _todo('StrategyRepository');
+  }) => _todo('StrategyRepository');
   @override
   Future<StrategyMarketItem> getFeaturedHero() => _todo('StrategyRepository');
   @override
@@ -116,8 +120,7 @@ class UnimplementedStrategyRepository implements StrategyRepository {
   Future<List<StrategySignal>> listStrategySignals(
     String id, {
     int limit = 20,
-  }) =>
-      _todo('StrategyRepository');
+  }) => _todo('StrategyRepository');
   @override
   Future<List<double>> getEquityCurve(String id, EquityTimeframe timeframe) =>
       _todo('StrategyRepository');
@@ -127,8 +130,7 @@ class UnimplementedAiChatRepository implements AiChatRepository {
   @override
   Future<List<AiSession>> listSessions() => _todo('AiChatRepository');
   @override
-  Future<AiSession> createSession({String? title}) =>
-      _todo('AiChatRepository');
+  Future<AiSession> createSession({String? title}) => _todo('AiChatRepository');
   @override
   Future<void> deleteSession(String sessionId) => _todo('AiChatRepository');
   @override
@@ -165,8 +167,7 @@ class UnimplementedApiKeyRepository implements ApiKeyRepository {
     required String label,
     required String apiKey,
     required String apiSecret,
-  }) =>
-      _todo('ApiKeyRepository');
+  }) => _todo('ApiKeyRepository');
   @override
   Future<void> removeKey(String id) => _todo('ApiKeyRepository');
 }

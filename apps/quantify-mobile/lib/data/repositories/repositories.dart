@@ -10,3 +10,4 @@ export 'orderbook_repository.dart';
 export 'strategy_repository.dart';
 export 'ticker_repository.dart';
 export 'whale_feed_repository.dart';
+export 'whale_profile_repository.dart';
