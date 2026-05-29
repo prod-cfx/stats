@@ -444,6 +444,34 @@ function readLatestPrice(
   return typeof currentPrice === 'number' && Number.isFinite(currentPrice) ? currentPrice : null
 }
 
+function resolveBarsForNode(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): readonly Bar[] {
+  const timeframe = typeof node.payload.timeframe === 'string' && node.payload.timeframe.length > 0
+    ? node.payload.timeframe
+    : null
+  if (timeframe) {
+    const scopedBars = readRuntimeDataBars(ctx, timeframe)
+    if (scopedBars) return scopedBars
+  }
+  return Array.isArray(ctx.bars) ? ctx.bars : []
+}
+
+function readRuntimeDataBars(
+  ctx: StrategyExecutionContextV1,
+  timeframe: string,
+): readonly Bar[] | null {
+  const data = ctx.data
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+  const primary = (data as { primary?: unknown }).primary
+  if (!primary || typeof primary !== 'object' || Array.isArray(primary)) return null
+  const timeframeData = (primary as Record<string, unknown>)[timeframe]
+  if (!timeframeData || typeof timeframeData !== 'object' || Array.isArray(timeframeData)) return null
+  const bars = (timeframeData as { bars?: unknown }).bars
+  return Array.isArray(bars) ? bars as Bar[] : null
+}
+
 function resolveSeriesValueAt(
   nodeId: string | undefined,
   offset: number,
@@ -464,7 +492,7 @@ function resolveSeriesValueAt(
     return null
   }
 
-  const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+  const bars = resolveBarsForNode(node, ctx)
   const resolved = (() => {
     switch (node.payload.kind) {
       case 'CONST':
@@ -1033,7 +1061,8 @@ function collectSeriesHistory(
   exprIndex?: ReadonlyMap<string, CompiledExprNode>,
   seriesMemo?: Map<string, number | null>,
 ): number[] {
-  const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+  const node = nodeId && exprIndex ? exprIndex.get(nodeId) : null
+  const bars = node ? resolveBarsForNode(node, ctx) : Array.isArray(ctx.bars) ? ctx.bars : []
   if (bars.length === 0 || offset < 0 || offset >= bars.length) return []
 
   const result: number[] = []
