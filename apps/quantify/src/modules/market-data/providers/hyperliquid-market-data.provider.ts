@@ -193,7 +193,7 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
       volume: item.v,
       timestamp: item.T ?? item.t + getMarketTimeframeMs(query.timeframe),
       isFinal: true,
-      source: 'HYPERLIQUID_REST',
+      source: 'HYPERLIQUID_REST_CLOSE_TIME',
     }))
   }
 
@@ -303,7 +303,7 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
         volume: candle.v,
         timestamp: candle.T ?? candle.t + getMarketTimeframeMs(item.timeframe),
         isFinal: true,
-        source: 'HYPERLIQUID_WS',
+        source: 'HYPERLIQUID_WS_CLOSE_TIME',
       })
     }
   }

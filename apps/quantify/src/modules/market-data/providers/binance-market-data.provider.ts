@@ -408,7 +408,7 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
       trades: entry[8],
       timestamp: entry[6],
       isFinal: true,
-      source: 'BINANCE_REST',
+      source: 'BINANCE_REST_CLOSE_TIME',
     }
   }
 
