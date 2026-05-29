@@ -4476,7 +4476,7 @@ export class CanonicalSpecBuilderService {
       case ATOM_CONTRACT_REGISTRY['action.close_short'].key:
         return phase === 'exit' ? [{ type: 'CLOSE_SHORT', atomKey: leaf.key }] : []
       case ATOM_CONTRACT_REGISTRY['action.add_position'].key:
-        const addPositionSideScope = leaf.sideScope ?? (sourcePath ? undefined : 'long')
+        const addPositionSideScope = this.readActionSideScope(leaf.params) ?? leaf.sideScope ?? (sourcePath ? undefined : 'long')
         if (addPositionSideScope !== 'long' && addPositionSideScope !== 'short') {
           throw new Error(`InvalidSemanticRuleActionEffect: key=${leaf.key} sourcePath=${sourcePath ?? 'unknown'} sideScope=${leaf.sideScope ?? 'unknown'}`)
         }
@@ -5204,10 +5204,11 @@ export class CanonicalSpecBuilderService {
     fallbackSideScope: 'long' | 'short' | 'both',
     startPriority: number,
   ): CanonicalRuleV2[] {
-    const memoryKey = typeof risk.params.memoryKey === 'string' && risk.params.memoryKey.trim().length > 0
+    const explicitMemoryKey = typeof risk.params.memoryKey === 'string' && risk.params.memoryKey.trim().length > 0
       ? risk.params.memoryKey.trim()
       : null
-    const rawTiers = Array.isArray(risk.params.tiers) ? risk.params.tiers : null
+    const memoryKey = explicitMemoryKey ?? `ptp-${this.stableRulesPathId(risk.id)}`
+    const rawTiers = Array.isArray(risk.params.tiers) ? risk.params.tiers : this.derivePartialTakeProfitTiersFromFlatParams(risk.params)
     if (!memoryKey || !rawTiers || rawTiers.length === 0) {
       // TODO(#984): when tiers/memoryKey are missing surface an open_slot
       // (risk.partial_take_profit.tiers / .memoryKey) instead of silently
@@ -5294,6 +5295,30 @@ export class CanonicalSpecBuilderService {
       })
     }
     return rules
+  }
+
+  private derivePartialTakeProfitTiersFromFlatParams(params: SemanticRiskState['params']): Array<{ trigger: { kind: 'pnl_pct'; threshold: number }; reduceRatio: number }> | null {
+    const threshold = this.readFiniteNumber(params.profitPct)
+      ?? this.readFiniteNumber(params.pct)
+      ?? this.readFiniteNumber(params.valuePct)
+    if (threshold === null || threshold <= 0) {
+      return null
+    }
+
+    const rawRatio = this.readFiniteNumber(params.reduceRatio)
+      ?? this.readFiniteNumber(params.ratio)
+      ?? this.readFiniteNumber(params.sizePct)
+    const reduceRatio = rawRatio === null
+      ? 0.5
+      : rawRatio > 1
+        ? rawRatio / 100
+        : rawRatio
+
+    if (!Number.isFinite(reduceRatio) || reduceRatio <= 0 || reduceRatio > 1) {
+      return null
+    }
+
+    return [{ trigger: { kind: 'pnl_pct', threshold }, reduceRatio }]
   }
 
   private deriveCumulativeReduceRatios(originalRatios: number[]): number[] {

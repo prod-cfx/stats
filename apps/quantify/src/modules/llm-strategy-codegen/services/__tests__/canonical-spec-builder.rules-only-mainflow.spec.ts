@@ -1829,6 +1829,68 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     ])
   })
 
+  it('uses add_position params.sideScope before outer both sideScope from dispatcher rules', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-add-param-side',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [{
+            kind: 'atom',
+            key: 'action.add_position',
+            sideScope: 'both',
+            params: { sideScope: 'long', sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' } },
+          }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.rules.find(rule => rule.id === 'semantic-entry-rule-add-param-side')?.actions).toEqual([
+      expect.objectContaining({ type: 'ADD_LONG', atomKey: 'action.add_position' }),
+    ])
+  })
+
+  it('normalizes dispatcher flat partial_take_profit params into canonical tiers', () => {
+    const state = baseState({
+      rules: [{
+        id: 'entry-with-flat-partial-take-profit',
+        phase: 'exit',
+        sideScope: 'both',
+        condition: { kind: 'atom', key: 'risk.partial_take_profit', params: { profitPct: 5, ratio: 50 } },
+        effects: {
+          actions: [],
+          risks: [{ kind: 'atom', key: 'risk.partial_take_profit', params: { profitPct: 5, ratio: 50 } }],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        condition: expect.objectContaining({
+          key: 'risk.partial_take_profit',
+          value: 5,
+        }),
+        actions: expect.arrayContaining([
+          expect.objectContaining({ type: 'REDUCE_LONG', sizing: { mode: 'RATIO', value: 0.5 } }),
+          expect.objectContaining({ type: 'REDUCE_SHORT', sizing: { mode: 'RATIO', value: 0.5 } }),
+        ]),
+      }),
+    ]))
+  })
+
   it('builds program-phase DCA schedule rules without falling back to flat buckets', () => {
     const state = baseState({
       rules: [{
