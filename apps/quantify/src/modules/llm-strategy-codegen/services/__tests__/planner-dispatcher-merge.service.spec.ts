@@ -523,6 +523,53 @@ describe.skip('PlannerDispatcherMergeService legacy five-bucket merge spec', () 
     expect(merged?.position?.sizing).toEqual({ kind: 'ratio', unit: 'ratio', value: 0.35 })
   })
 
+  // Issue #1733：planner 把死叉信号与止盈止损揉进同一条出场 rule 时，
+  // 旧过滤器「condition 含 risk 叶子 + 有平仓动作 → 整条删」会连带删掉 cross_under 信号式出场。
+  it('keeps death-cross signal exit when planner bundles stop-loss/take-profit into the same exit condition', () => {
+    const text = '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 MACD 16/34/12 金叉做多、死叉平多策略。入场规则：MACD DIF 上穿 DEA 时做多开仓；出场规则：MACD DIF 下穿 DEA 时平多；本策略只做多，不做空；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.5%。'
+    const planner = {
+      rules: [
+        {
+          id: 'entry-macd-16-34-12',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'macd', fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 } },
+          effects: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+        },
+        {
+          id: 'exit-macd-death-cross-bundled-risk',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: {
+            kind: 'and',
+            children: [
+              { kind: 'atom', key: 'indicator.cross_under', params: { indicator: 'macd', fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 } },
+              { kind: 'atom', key: 'risk.stop_loss_pct', params: { basis: 'entry_avg_price', valuePct: 2 } },
+              { kind: 'atom', key: 'risk.take_profit_pct', params: { basis: 'entry_avg_price', valuePct: 0.5 } },
+            ],
+          },
+          effects: [{ kind: 'atom', key: 'action.close_long', params: {} }],
+        },
+      ],
+    } as unknown as CodegenSemanticPatch
+    const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher, text)
+    const exitRules = merged?.rules?.filter(rule => rule.phase === 'exit') ?? []
+    const exitConditionLeaves = exitRules.flatMap(rule => collectAtomLeaves(rule.condition))
+    const entryRiskLeaves = (merged?.rules ?? [])
+      .filter(rule => rule.phase === 'entry')
+      .flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)))
+      .map(leaf => leaf.key)
+
+    // 死叉信号式出场必须保留
+    expect(exitConditionLeaves.some(leaf => leaf.key === 'indicator.cross_under' && leaf.params?.indicator === 'macd')).toBe(true)
+    // 止盈止损不再在出场 condition 中重复携带（已迁移到入场 effect 单点）
+    expect(exitConditionLeaves.some(leaf => leaf.key === 'risk.stop_loss_pct' || leaf.key === 'risk.take_profit_pct')).toBe(false)
+    // 止盈止损落在入场 effect
+    expect(entryRiskLeaves).toEqual(expect.arrayContaining(['risk.stop_loss_pct', 'risk.take_profit_pct']))
+  })
+
   it('builds plaza MACD dispatcher fallback without duplicate risk rules or open sizing slot', () => {
     const text = '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 MACD 16/34/12 金叉做多、死叉平多策略。入场规则：MACD DIF 上穿 DEA 时做多开仓；出场规则：MACD DIF 下穿 DEA 时平多；本策略只做多，不做空；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.5%。'
     const dispatcher = new GenericSeedDispatcher().dispatch(text) as CodegenSemanticPatch
