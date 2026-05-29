@@ -82,6 +82,13 @@ Future<ProviderContainer> _pumpMe(
         builder: (BuildContext context, GoRouterState state) =>
             const _LoginPlaceholder(),
       ),
+      GoRoute(
+        path: '/me/live',
+        builder: (BuildContext context, GoRouterState state) => const Scaffold(
+          key: Key('live-stub'),
+          body: Center(child: Text('LIVE_STUB')),
+        ),
+      ),
     ],
   );
 
@@ -107,6 +114,16 @@ void main() {
     token: 't',
     email: 'me@quantify.dev',
   );
+
+  testWidgets('实盘策略入口存在并可进入列表（#1752）', (WidgetTester tester) async {
+    await _pumpMe(tester, initialSession: kSession);
+    final Finder entry = find.byKey(const Key('me-live-strategies-entry'));
+    expect(entry, findsOneWidget);
+    await tester.ensureVisible(entry);
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('live-stub')), findsOneWidget);
+  });
 
   testWidgets('渲染 header + 分组 + 退出登录按钮', (WidgetTester tester) async {
     await _pumpMe(tester, initialSession: kSession);

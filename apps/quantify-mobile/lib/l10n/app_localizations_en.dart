@@ -1351,4 +1351,208 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tabMe => 'Me';
+
+  @override
+  String get liveStrategyEntryTitle => 'Live Strategies';
+
+  @override
+  String get liveStrategyEntrySubtitle => 'Track status, positions and PnL';
+
+  @override
+  String get liveListTitle => 'Live Strategies';
+
+  @override
+  String get liveListTotalAssets => 'Total Assets (position + available)';
+
+  @override
+  String get liveListTodayPnl => 'Today PnL';
+
+  @override
+  String get liveListTotalPnl => 'Total PnL';
+
+  @override
+  String get liveListCapital => 'Capital';
+
+  @override
+  String get liveFilterAll => 'All';
+
+  @override
+  String get liveFilterRunning => 'Running';
+
+  @override
+  String get liveFilterPaused => 'Paused';
+
+  @override
+  String get liveFilterStopped => 'Stopped';
+
+  @override
+  String get liveStoppedRetentionHint =>
+      'Stopped strategies are kept for 30 days; you can resume or export history anytime. After that they are permanently deleted.';
+
+  @override
+  String get liveEmptyTitle => 'No live strategies yet';
+
+  @override
+  String get liveEmptyHint =>
+      'Once you generate and deploy a strategy from AI chat, it will appear here with live status and PnL.';
+
+  @override
+  String get liveCreateFromAi => 'Create from AI chat';
+
+  @override
+  String get liveSortComingSoon => 'Filter & sort coming soon';
+
+  @override
+  String get liveLoadError => 'Failed to load live strategies';
+
+  @override
+  String get liveStatusRunning => 'Running';
+
+  @override
+  String get liveStatusPaused => 'Paused';
+
+  @override
+  String get liveStatusWarning => 'Attention';
+
+  @override
+  String get liveStatusStopped => 'Stopped';
+
+  @override
+  String get liveDetailTitle => 'Strategy Detail';
+
+  @override
+  String get liveDetailTotalPnl => 'Total PnL';
+
+  @override
+  String get liveTabOverview => 'Overview';
+
+  @override
+  String get liveTabPositions => 'Positions';
+
+  @override
+  String get liveTabHistory => 'History';
+
+  @override
+  String get liveTabParams => 'Params';
+
+  @override
+  String get liveStatToday => 'Today PnL';
+
+  @override
+  String get liveStatTodayPct => 'Today %';
+
+  @override
+  String get liveStatTotalPct => 'Total %';
+
+  @override
+  String get liveStatCapital => 'Capital';
+
+  @override
+  String get liveStatTrades => 'Trades';
+
+  @override
+  String get liveStatWinRate => 'Win Rate';
+
+  @override
+  String get liveStatRunFor => 'Running Days';
+
+  @override
+  String get liveStatExchange => 'Exchange';
+
+  @override
+  String get liveStatTradesUnit => '';
+
+  @override
+  String get liveAiObservationLabel => 'AI Insight';
+
+  @override
+  String get liveAiObservationWarning =>
+      'The last 3 trades hit stop-loss consecutively; today\'s loss is near the set limit. Consider pausing or adjusting the stop-loss in chat.';
+
+  @override
+  String get liveAiObservationPaused =>
+      'Currently paused with position closed. It will wait for the next entry signal once resumed.';
+
+  @override
+  String get liveAiObservationRunning =>
+      'Running steadily; the 7-day win rate is above the backtest average. Consider reducing size if volatility rises.';
+
+  @override
+  String get liveArchiveSectionTitle => 'Strategy Archive';
+
+  @override
+  String get liveArchiveScript => 'Strategy Script';
+
+  @override
+  String get liveArchiveScriptSub => 'Generated at deploy time';
+
+  @override
+  String get liveArchiveBacktest => 'Backtest Record';
+
+  @override
+  String get liveArchiveBacktestSub => 'Historical backtest before deploy';
+
+  @override
+  String get liveArchiveDeploy => 'Deploy Config';
+
+  @override
+  String get liveArchiveDeploySub => 'Capital / position / risk';
+
+  @override
+  String get liveArchiveComingSoon => 'Coming soon';
+
+  @override
+  String get livePositionEmptyTitle => 'Strategy paused';
+
+  @override
+  String get livePositionEmptyHint =>
+      'Position closed; waiting for new signals after resume';
+
+  @override
+  String get livePositionEntry => 'Entry';
+
+  @override
+  String get livePositionCurrent => 'Current';
+
+  @override
+  String get livePositionStop => 'Stop';
+
+  @override
+  String get livePositionStopLabel => 'Stop-loss';
+
+  @override
+  String get livePositionStopDistance => 'To stop';
+
+  @override
+  String get livePositionHold => 'Held';
+
+  @override
+  String get livePositionSideLong => 'Long';
+
+  @override
+  String get livePositionSideShort => 'Short';
+
+  @override
+  String get liveParamsTuneInAi => 'Tune params in AI chat';
+
+  @override
+  String get liveActionStart => 'Start';
+
+  @override
+  String get liveActionPause => 'Pause';
+
+  @override
+  String get liveActionResume => 'Resume';
+
+  @override
+  String get liveActionDelete => 'Delete';
+
+  @override
+  String get liveActionDeletePermanent => 'Delete permanently';
+
+  @override
+  String get liveActionComingSoon => 'Strategy actions coming soon';
+
+  @override
+  String get deployViewLiveStrategies => 'View live strategies';
 }

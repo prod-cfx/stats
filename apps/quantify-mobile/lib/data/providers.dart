@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/theme_notifier.dart' show sharedPreferencesProvider;
 import 'models/account_models.dart';
 import 'models/api_key_models.dart';
+import 'models/live_strategy_models.dart';
 import 'storage/strategy_favorites_persistence.dart';
 import 'storage/strategy_subscription_persistence.dart';
 import 'mock/mock_account_repository.dart';
@@ -11,6 +12,7 @@ import 'mock/mock_api_key_repository.dart';
 import 'mock/mock_auth_repository.dart';
 import 'mock/mock_backtest_repository.dart';
 import 'mock/mock_kline_repository.dart';
+import 'mock/mock_live_strategy_repository.dart';
 import 'mock/mock_long_short_repository.dart';
 import 'mock/mock_orderbook_repository.dart';
 import 'mock/mock_strategy_repository.dart';
@@ -81,6 +83,13 @@ final Provider<StrategyRepository> strategyRepositoryProvider =
   return ref.watch(useMockProvider)
       ? MockStrategyRepository()
       : UnimplementedStrategyRepository();
+});
+
+final Provider<LiveStrategyRepository> liveStrategyRepositoryProvider =
+    Provider<LiveStrategyRepository>((Ref ref) {
+  return ref.watch(useMockProvider)
+      ? MockLiveStrategyRepository()
+      : UnimplementedLiveStrategyRepository();
 });
 
 final Provider<AiChatRepository> aiChatRepositoryProvider =
@@ -200,3 +209,45 @@ final NotifierProvider<StrategyFavoritesNotifier, Set<String>>
     strategyFavoritesProvider =
     NotifierProvider<StrategyFavoritesNotifier, Set<String>>(
         StrategyFavoritesNotifier.new);
+
+/// 实盘策略列表（#1752）。列表页 watch；含 stopped。
+final FutureProvider<List<LiveStrategy>> liveStrategiesProvider =
+    FutureProvider<List<LiveStrategy>>((Ref ref) async {
+  return ref.watch(liveStrategyRepositoryProvider).listStrategies();
+});
+
+/// 实盘策略聚合摘要（#1752）。列表页顶部卡 watch。
+final FutureProvider<LiveStrategySummary> liveStrategySummaryProvider =
+    FutureProvider<LiveStrategySummary>((Ref ref) async {
+  return ref.watch(liveStrategyRepositoryProvider).getSummary();
+});
+
+/// 单个实盘策略详情（#1752）。
+final FutureProviderFamily<LiveStrategy, String> liveStrategyDetailProvider =
+    FutureProvider.family<LiveStrategy, String>((Ref ref, String id) async {
+  return ref.watch(liveStrategyRepositoryProvider).getStrategy(id);
+});
+
+/// 单个实盘策略持仓（#1752）。null 表示无持仓（已暂停/停止）。
+final FutureProviderFamily<LiveStrategyPosition?, String>
+    liveStrategyPositionProvider =
+    FutureProvider.family<LiveStrategyPosition?, String>(
+        (Ref ref, String id) async {
+  return ref.watch(liveStrategyRepositoryProvider).getPosition(id);
+});
+
+/// 单个实盘策略历史成交（#1752）。
+final FutureProviderFamily<List<LiveStrategyTrade>, String>
+    liveStrategyTradesProvider =
+    FutureProvider.family<List<LiveStrategyTrade>, String>(
+        (Ref ref, String id) async {
+  return ref.watch(liveStrategyRepositoryProvider).listTrades(id);
+});
+
+/// 单个实盘策略参数（#1752）。
+final FutureProviderFamily<List<LiveStrategyParam>, String>
+    liveStrategyParamsProvider =
+    FutureProvider.family<List<LiveStrategyParam>, String>(
+        (Ref ref, String id) async {
+  return ref.watch(liveStrategyRepositoryProvider).listParams(id);
+});

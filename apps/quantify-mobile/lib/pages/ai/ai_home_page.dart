@@ -345,8 +345,15 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
       );
     });
     _scrollToBottom();
+    // 部署成功后提供「查看实盘策略」入口（#1752）：跳 `/me/live`。
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(l10n.deployDoneToast)),
+      SnackBar(
+        content: Text(l10n.deployDoneToast),
+        action: SnackBarAction(
+          label: l10n.deployViewLiveStrategies,
+          onPressed: () => context.push('/me/live'),
+        ),
+      ),
     );
   }
 

@@ -127,6 +127,19 @@ class _Content extends ConsumerWidget {
                   ),
                 ],
               ),
+              // 实盘策略入口（#1752）：进入 `/me/live`（受登录守卫）。
+              _SettingsGroup(
+                children: <Widget>[
+                  QzSettingsRow(
+                    key: const Key('me-live-strategies-entry'),
+                    label: l10n.liveStrategyEntryTitle,
+                    value: l10n.liveStrategyEntrySubtitle,
+                    trailing: const QzSettingsCaret(),
+                    onTap: () => context.push('/me/live'),
+                    last: true,
+                  ),
+                ],
+              ),
               QzSectionTitle(text: l10n.meSectionApi),
               _ApiExchangesGroup(apiKeys: apiKeys),
               QzSectionTitle(text: l10n.meSectionPreferences),

@@ -69,6 +69,26 @@ class UnimplementedWhaleFeedRepository implements WhaleFeedRepository {
   Stream<WhaleEvent> watchFeed() => _todo('WhaleFeedRepository');
 }
 
+class UnimplementedLiveStrategyRepository implements LiveStrategyRepository {
+  @override
+  Future<List<LiveStrategy>> listStrategies() =>
+      _todo('LiveStrategyRepository');
+  @override
+  Future<LiveStrategy> getStrategy(String id) =>
+      _todo('LiveStrategyRepository');
+  @override
+  Future<LiveStrategySummary> getSummary() => _todo('LiveStrategyRepository');
+  @override
+  Future<LiveStrategyPosition?> getPosition(String id) =>
+      _todo('LiveStrategyRepository');
+  @override
+  Future<List<LiveStrategyTrade>> listTrades(String id, {int limit = 6}) =>
+      _todo('LiveStrategyRepository');
+  @override
+  Future<List<LiveStrategyParam>> listParams(String id) =>
+      _todo('LiveStrategyRepository');
+}
+
 class UnimplementedStrategyRepository implements StrategyRepository {
   @override
   Future<List<StrategyCard>> listFeatured() => _todo('StrategyRepository');

@@ -1326,4 +1326,204 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get tabMe => '我的';
+
+  @override
+  String get liveStrategyEntryTitle => '实盘策略';
+
+  @override
+  String get liveStrategyEntrySubtitle => '查看运行状态、持仓与收益';
+
+  @override
+  String get liveListTitle => '实盘策略';
+
+  @override
+  String get liveListTotalAssets => '总资产 (持仓 + 可用)';
+
+  @override
+  String get liveListTodayPnl => '今日盈亏';
+
+  @override
+  String get liveListTotalPnl => '累计盈亏';
+
+  @override
+  String get liveListCapital => '投入本金';
+
+  @override
+  String get liveFilterAll => '全部';
+
+  @override
+  String get liveFilterRunning => '运行中';
+
+  @override
+  String get liveFilterPaused => '已暂停';
+
+  @override
+  String get liveFilterStopped => '已停止';
+
+  @override
+  String get liveStoppedRetentionHint =>
+      '已停止策略保留 30 天，期间可随时恢复或导出历史。超期后会自动永久删除。';
+
+  @override
+  String get liveEmptyTitle => '暂无实盘策略';
+
+  @override
+  String get liveEmptyHint => '从 AI 对话生成并部署策略后，会在这里追踪运行状态与收益。';
+
+  @override
+  String get liveCreateFromAi => '从 AI 对话创建新策略';
+
+  @override
+  String get liveSortComingSoon => '筛选与排序即将上线';
+
+  @override
+  String get liveLoadError => '实盘策略加载失败';
+
+  @override
+  String get liveStatusRunning => '运行中';
+
+  @override
+  String get liveStatusPaused => '已暂停';
+
+  @override
+  String get liveStatusWarning => '需关注';
+
+  @override
+  String get liveStatusStopped => '已停止';
+
+  @override
+  String get liveDetailTitle => '策略详情';
+
+  @override
+  String get liveDetailTotalPnl => '累计盈亏';
+
+  @override
+  String get liveTabOverview => '概览';
+
+  @override
+  String get liveTabPositions => '持仓';
+
+  @override
+  String get liveTabHistory => '交易记录';
+
+  @override
+  String get liveTabParams => '参数';
+
+  @override
+  String get liveStatToday => '今日盈亏';
+
+  @override
+  String get liveStatTodayPct => '今日 %';
+
+  @override
+  String get liveStatTotalPct => '累计 %';
+
+  @override
+  String get liveStatCapital => '投入本金';
+
+  @override
+  String get liveStatTrades => '交易笔数';
+
+  @override
+  String get liveStatWinRate => '胜率';
+
+  @override
+  String get liveStatRunFor => '运行天数';
+
+  @override
+  String get liveStatExchange => '交易所';
+
+  @override
+  String get liveStatTradesUnit => '笔';
+
+  @override
+  String get liveAiObservationLabel => 'AI 观察';
+
+  @override
+  String get liveAiObservationWarning =>
+      '近 3 笔交易连续止损，日内已亏损接近设定上限。建议暂停或在对话中调整止损阈值。';
+
+  @override
+  String get liveAiObservationPaused => '当前已暂停，持仓已平。开启后会等待下一个开仓信号触发。';
+
+  @override
+  String get liveAiObservationRunning => '策略运行平稳，近 7 天胜率高于回测均值。波动率上升时可考虑降仓位。';
+
+  @override
+  String get liveArchiveSectionTitle => '策略档案';
+
+  @override
+  String get liveArchiveScript => '策略脚本';
+
+  @override
+  String get liveArchiveScriptSub => '部署时生成';
+
+  @override
+  String get liveArchiveBacktest => '回测记录';
+
+  @override
+  String get liveArchiveBacktestSub => '部署前的历史回测结果';
+
+  @override
+  String get liveArchiveDeploy => '部署配置';
+
+  @override
+  String get liveArchiveDeploySub => '初始资金 / 仓位 / 风控';
+
+  @override
+  String get liveArchiveComingSoon => '即将上线';
+
+  @override
+  String get livePositionEmptyTitle => '策略已暂停';
+
+  @override
+  String get livePositionEmptyHint => '持仓已平，等待开启后接收新信号';
+
+  @override
+  String get livePositionEntry => '入场价';
+
+  @override
+  String get livePositionCurrent => '当前价';
+
+  @override
+  String get livePositionStop => '止损价';
+
+  @override
+  String get livePositionStopLabel => '止损';
+
+  @override
+  String get livePositionStopDistance => '距止损';
+
+  @override
+  String get livePositionHold => '持仓';
+
+  @override
+  String get livePositionSideLong => '多';
+
+  @override
+  String get livePositionSideShort => '空';
+
+  @override
+  String get liveParamsTuneInAi => '在 AI 对话中调优参数';
+
+  @override
+  String get liveActionStart => '开启策略';
+
+  @override
+  String get liveActionPause => '暂停策略';
+
+  @override
+  String get liveActionResume => '恢复策略';
+
+  @override
+  String get liveActionDelete => '删除';
+
+  @override
+  String get liveActionDeletePermanent => '永久删除';
+
+  @override
+  String get liveActionComingSoon => '策略操作即将上线';
+
+  @override
+  String get deployViewLiveStrategies => '查看实盘策略';
 }

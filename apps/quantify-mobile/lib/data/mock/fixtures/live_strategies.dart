@@ -1,0 +1,171 @@
+import '../../models/live_strategy_models.dart';
+
+/// 实盘策略 mock fixtures（#1752）。
+///
+/// 5 条覆盖全部 4 种状态（running×2 / warning / paused / stopped），
+/// 数值照搬设计稿 `design/project/mobile/m-screens-livestrats.jsx` `LIVE_STRATS`，
+/// 便于与原型肉眼比对，并保证 widget test 确定性。
+const List<LiveStrategy> mockLiveStrategies = <LiveStrategy>[
+  LiveStrategy(
+    id: 'QF-AY7K2P',
+    name: 'BTC 趋势 · 双均线',
+    pair: 'BTC/USDT',
+    timeframe: '15m',
+    exchange: 'Binance',
+    exchangeGlyph: 'B',
+    market: '合约 5x',
+    status: LiveStrategyStatus.running,
+    runFor: '14 天',
+    todayPct: 2.04,
+    todayPnl: 204.16,
+    totalPct: 18.42,
+    totalPnl: 1842.20,
+    capital: 10000,
+    trades: 47,
+    winRate: 55.3,
+    spark: <double>[
+      100, 102, 101, 104, 106, 105, 108, 109, 107, 112,
+      114, 115, 118, 116, 120, 119, 123, 127, 126, 130,
+    ],
+  ),
+  LiveStrategy(
+    id: 'QF-9MX31R',
+    name: 'ETH 均值回归 · 4H',
+    pair: 'ETH/USDT',
+    timeframe: '4H',
+    exchange: 'Binance',
+    exchangeGlyph: 'B',
+    market: '现货',
+    status: LiveStrategyStatus.running,
+    runFor: '32 天',
+    todayPct: -0.42,
+    todayPnl: -21.50,
+    totalPct: 9.12,
+    totalPnl: 456.20,
+    capital: 5000,
+    trades: 23,
+    winRate: 60.9,
+    spark: <double>[
+      100, 101, 99, 102, 103, 101, 104, 105, 103, 106,
+      107, 105, 108, 110, 108, 111, 112, 110, 113, 109,
+    ],
+  ),
+  LiveStrategy(
+    id: 'QF-DK4F71',
+    name: '资金费率套利',
+    pair: '多币种',
+    timeframe: '1H',
+    exchange: 'OKX',
+    exchangeGlyph: 'O',
+    market: '永续',
+    status: LiveStrategyStatus.warning,
+    statusNote: '日内亏损接近上限',
+    runFor: '7 天',
+    todayPct: -3.84,
+    todayPnl: -76.80,
+    totalPct: 1.04,
+    totalPnl: 20.80,
+    capital: 2000,
+    trades: 156,
+    winRate: 72.4,
+    spark: <double>[
+      100, 100, 101, 101, 102, 103, 103, 104, 104, 105,
+      106, 107, 106, 105, 104, 103, 102, 101, 100, 99,
+    ],
+  ),
+  LiveStrategy(
+    id: 'QF-2H8N5W',
+    name: 'SOL 网格 · 区间震荡',
+    pair: 'SOL/USDT',
+    timeframe: '1H',
+    exchange: 'Binance',
+    exchangeGlyph: 'B',
+    market: '现货',
+    status: LiveStrategyStatus.paused,
+    statusNote: '已暂停 · 等待恢复',
+    runFor: '21 天',
+    todayPct: 0,
+    todayPnl: 0,
+    totalPct: 12.80,
+    totalPnl: 384.00,
+    capital: 3000,
+    trades: 84,
+    winRate: 58.3,
+    spark: <double>[
+      100, 104, 99, 103, 98, 102, 97, 101, 99, 103,
+      98, 104, 100, 106, 102, 108, 104, 110, 113, 112,
+    ],
+  ),
+  LiveStrategy(
+    id: 'QF-5J1RT8',
+    name: 'BNB 高频做市',
+    pair: 'BNB/USDT',
+    timeframe: '1m',
+    exchange: 'OKX',
+    exchangeGlyph: 'O',
+    market: '合约 3x',
+    status: LiveStrategyStatus.stopped,
+    statusNote: '已停止 · 28 天后永久删除',
+    runFor: '11 天',
+    todayPct: 0,
+    todayPnl: 0,
+    totalPct: -4.20,
+    totalPnl: -84.00,
+    capital: 2000,
+    trades: 312,
+    winRate: 48.7,
+    spark: <double>[
+      100, 102, 99, 101, 98, 100, 97, 99, 96, 98,
+      95, 97, 94, 96, 93, 95, 94, 96, 95, 96,
+    ],
+  ),
+];
+
+/// 持仓 mock（仅 running / warning 策略有；对齐设计稿 `STRAT_POSITIONS`）。
+const Map<String, LiveStrategyPosition> mockLivePositions =
+    <String, LiveStrategyPosition>{
+  'QF-AY7K2P': LiveStrategyPosition(
+    side: PositionSide.long,
+    pair: 'BTC/USDT',
+    entryPrice: 67420.5,
+    currentPrice: 67950.2,
+    qty: 0.0742,
+    pnl: 39.30,
+    pct: 0.78,
+    stopPrice: 66072.0,
+    stopDistance: '-2.0%',
+    holdFor: '4h 12m',
+  ),
+  'QF-DK4F71': LiveStrategyPosition(
+    side: PositionSide.short,
+    pair: 'SOL/USDT',
+    entryPrice: 142.50,
+    currentPrice: 144.20,
+    qty: 14.0,
+    pnl: -23.80,
+    pct: -1.19,
+    stopPrice: 147.50,
+    stopDistance: '-3.5%',
+    holdFor: '42m',
+  ),
+};
+
+/// 历史成交 mock（对齐设计稿 `LsDetailHistory`）。所有策略复用同一组样例。
+const List<LiveStrategyTrade> mockLiveTrades = <LiveStrategyTrade>[
+  LiveStrategyTrade(time: '今天 14:30', side: PositionSide.long, entryPrice: 67420.5, exitPrice: 67950.2, pct: 0.78, win: true, holdFor: '4h'),
+  LiveStrategyTrade(time: '昨天 22:18', side: PositionSide.long, entryPrice: 66800.0, exitPrice: 67421.4, pct: 0.93, win: true, holdFor: '2h'),
+  LiveStrategyTrade(time: '昨天 09:42', side: PositionSide.long, entryPrice: 66200.0, exitPrice: 64876.0, pct: -2.00, win: false, holdFor: '45m'),
+  LiveStrategyTrade(time: '5/24 18:00', side: PositionSide.long, entryPrice: 65420.0, exitPrice: 66597.6, pct: 1.80, win: true, holdFor: '12h'),
+  LiveStrategyTrade(time: '5/23 14:30', side: PositionSide.long, entryPrice: 64800.0, exitPrice: 65448.0, pct: 1.00, win: true, holdFor: '3h'),
+  LiveStrategyTrade(time: '5/22 10:15', side: PositionSide.long, entryPrice: 65100.0, exitPrice: 63798.0, pct: -2.00, win: false, holdFor: '1h'),
+];
+
+/// 策略参数 mock（对齐设计稿 `LsDetailParams`）。
+const List<LiveStrategyParam> mockLiveParams = <LiveStrategyParam>[
+  LiveStrategyParam(key: 'fast_ma', value: '5', note: '快速均线周期(K 线根数)'),
+  LiveStrategyParam(key: 'slow_ma', value: '20', note: '慢速均线周期'),
+  LiveStrategyParam(key: 'stop_loss', value: '2.0%', note: '单笔最大亏损'),
+  LiveStrategyParam(key: 'position', value: '100%', note: '每次开仓占用资金'),
+  LiveStrategyParam(key: 'leverage', value: '5x', note: '杠杆倍数(合约)'),
+  LiveStrategyParam(key: 'max_daily', value: '-5%', note: '日内亏损停止阈值'),
+];

@@ -19,6 +19,7 @@ import 'package:quantify_mobile/pages/auth/login_page.dart';
 import 'package:quantify_mobile/pages/market/long_short_page.dart';
 import 'package:quantify_mobile/pages/market/market_detail_page.dart';
 import 'package:quantify_mobile/pages/market/market_home_page.dart';
+import 'package:quantify_mobile/pages/live/live_strategies_page.dart';
 import 'package:quantify_mobile/pages/me/me_home_page.dart';
 import 'package:quantify_mobile/pages/me/theme_settings_page.dart';
 import 'package:quantify_mobile/pages/strategy/strategy_home_page.dart';
@@ -253,6 +254,28 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ThemeSettingsPage), findsOneWidget);
+  });
+
+  testWidgets('/me/live resolves to LiveStrategiesPage（已登录）', (
+    WidgetTester tester,
+  ) async {
+    final BuildContext ctx = await _pumpApp(
+      tester,
+      storage: _loggedInStorage(),
+    );
+    GoRouter.of(ctx).push('/me/live');
+    await tester.pumpAndSettle();
+    expect(find.byType(LiveStrategiesPage), findsOneWidget);
+  });
+
+  testWidgets('未登录访问 /me/live 重定向到 /login（#1752 受守卫）', (
+    WidgetTester tester,
+  ) async {
+    final BuildContext ctx = await _pumpApp(tester);
+    GoRouter.of(ctx).go('/me/live');
+    await tester.pumpAndSettle();
+    expect(find.byType(LoginPage), findsOneWidget);
+    expect(find.byType(LiveStrategiesPage), findsNothing);
   });
 
   testWidgets('未登录首次启动落在 /login', (WidgetTester tester) async {

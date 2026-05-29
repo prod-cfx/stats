@@ -8,6 +8,8 @@ import '../pages/_dev/theme_preview_page.dart';
 import '../pages/ai/ai_home_page.dart';
 import '../pages/ai/backtest_config_sheet.dart';
 import '../pages/auth/login_page.dart';
+import '../pages/live/live_strategies_page.dart';
+import '../pages/live/live_strategy_detail_page.dart';
 import '../pages/market/long_short_page.dart';
 import '../pages/market/market_detail_page.dart';
 import '../pages/market/market_home_page.dart';
@@ -169,6 +171,18 @@ GoRouter buildRouter({
       GoRoute(
         path: '/me/theme',
         builder: (BuildContext context, GoRouterState state) => const ThemeSettingsPage(),
+      ),
+      // 实盘策略（#1752）：列表 + 详情，均落在 `/me` 前缀守卫内（需登录）。
+      // 详情 `:id` 显式注册在列表之后；`live` 字面量不会被静态段吞没。
+      GoRoute(
+        path: '/me/live',
+        builder: (BuildContext context, GoRouterState state) =>
+            const LiveStrategiesPage(),
+      ),
+      GoRoute(
+        path: '/me/live/:id',
+        builder: (BuildContext context, GoRouterState s) =>
+            LiveStrategyDetailPage(id: s.pathParameters['id']!),
       ),
       if (kDebugMode)
         GoRoute(

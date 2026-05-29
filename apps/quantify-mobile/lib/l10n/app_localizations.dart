@@ -2659,6 +2659,402 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'我的'**
   String get tabMe;
+
+  /// No description provided for @liveStrategyEntryTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'实盘策略'**
+  String get liveStrategyEntryTitle;
+
+  /// No description provided for @liveStrategyEntrySubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看运行状态、持仓与收益'**
+  String get liveStrategyEntrySubtitle;
+
+  /// No description provided for @liveListTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'实盘策略'**
+  String get liveListTitle;
+
+  /// No description provided for @liveListTotalAssets.
+  ///
+  /// In zh, this message translates to:
+  /// **'总资产 (持仓 + 可用)'**
+  String get liveListTotalAssets;
+
+  /// No description provided for @liveListTodayPnl.
+  ///
+  /// In zh, this message translates to:
+  /// **'今日盈亏'**
+  String get liveListTodayPnl;
+
+  /// No description provided for @liveListTotalPnl.
+  ///
+  /// In zh, this message translates to:
+  /// **'累计盈亏'**
+  String get liveListTotalPnl;
+
+  /// No description provided for @liveListCapital.
+  ///
+  /// In zh, this message translates to:
+  /// **'投入本金'**
+  String get liveListCapital;
+
+  /// No description provided for @liveFilterAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部'**
+  String get liveFilterAll;
+
+  /// No description provided for @liveFilterRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'运行中'**
+  String get liveFilterRunning;
+
+  /// No description provided for @liveFilterPaused.
+  ///
+  /// In zh, this message translates to:
+  /// **'已暂停'**
+  String get liveFilterPaused;
+
+  /// No description provided for @liveFilterStopped.
+  ///
+  /// In zh, this message translates to:
+  /// **'已停止'**
+  String get liveFilterStopped;
+
+  /// No description provided for @liveStoppedRetentionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'已停止策略保留 30 天，期间可随时恢复或导出历史。超期后会自动永久删除。'**
+  String get liveStoppedRetentionHint;
+
+  /// No description provided for @liveEmptyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无实盘策略'**
+  String get liveEmptyTitle;
+
+  /// No description provided for @liveEmptyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'从 AI 对话生成并部署策略后，会在这里追踪运行状态与收益。'**
+  String get liveEmptyHint;
+
+  /// No description provided for @liveCreateFromAi.
+  ///
+  /// In zh, this message translates to:
+  /// **'从 AI 对话创建新策略'**
+  String get liveCreateFromAi;
+
+  /// No description provided for @liveSortComingSoon.
+  ///
+  /// In zh, this message translates to:
+  /// **'筛选与排序即将上线'**
+  String get liveSortComingSoon;
+
+  /// No description provided for @liveLoadError.
+  ///
+  /// In zh, this message translates to:
+  /// **'实盘策略加载失败'**
+  String get liveLoadError;
+
+  /// No description provided for @liveStatusRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'运行中'**
+  String get liveStatusRunning;
+
+  /// No description provided for @liveStatusPaused.
+  ///
+  /// In zh, this message translates to:
+  /// **'已暂停'**
+  String get liveStatusPaused;
+
+  /// No description provided for @liveStatusWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'需关注'**
+  String get liveStatusWarning;
+
+  /// No description provided for @liveStatusStopped.
+  ///
+  /// In zh, this message translates to:
+  /// **'已停止'**
+  String get liveStatusStopped;
+
+  /// No description provided for @liveDetailTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略详情'**
+  String get liveDetailTitle;
+
+  /// No description provided for @liveDetailTotalPnl.
+  ///
+  /// In zh, this message translates to:
+  /// **'累计盈亏'**
+  String get liveDetailTotalPnl;
+
+  /// No description provided for @liveTabOverview.
+  ///
+  /// In zh, this message translates to:
+  /// **'概览'**
+  String get liveTabOverview;
+
+  /// No description provided for @liveTabPositions.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓'**
+  String get liveTabPositions;
+
+  /// No description provided for @liveTabHistory.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易记录'**
+  String get liveTabHistory;
+
+  /// No description provided for @liveTabParams.
+  ///
+  /// In zh, this message translates to:
+  /// **'参数'**
+  String get liveTabParams;
+
+  /// No description provided for @liveStatToday.
+  ///
+  /// In zh, this message translates to:
+  /// **'今日盈亏'**
+  String get liveStatToday;
+
+  /// No description provided for @liveStatTodayPct.
+  ///
+  /// In zh, this message translates to:
+  /// **'今日 %'**
+  String get liveStatTodayPct;
+
+  /// No description provided for @liveStatTotalPct.
+  ///
+  /// In zh, this message translates to:
+  /// **'累计 %'**
+  String get liveStatTotalPct;
+
+  /// No description provided for @liveStatCapital.
+  ///
+  /// In zh, this message translates to:
+  /// **'投入本金'**
+  String get liveStatCapital;
+
+  /// No description provided for @liveStatTrades.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易笔数'**
+  String get liveStatTrades;
+
+  /// No description provided for @liveStatWinRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'胜率'**
+  String get liveStatWinRate;
+
+  /// No description provided for @liveStatRunFor.
+  ///
+  /// In zh, this message translates to:
+  /// **'运行天数'**
+  String get liveStatRunFor;
+
+  /// No description provided for @liveStatExchange.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易所'**
+  String get liveStatExchange;
+
+  /// No description provided for @liveStatTradesUnit.
+  ///
+  /// In zh, this message translates to:
+  /// **'笔'**
+  String get liveStatTradesUnit;
+
+  /// No description provided for @liveAiObservationLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 观察'**
+  String get liveAiObservationLabel;
+
+  /// No description provided for @liveAiObservationWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'近 3 笔交易连续止损，日内已亏损接近设定上限。建议暂停或在对话中调整止损阈值。'**
+  String get liveAiObservationWarning;
+
+  /// No description provided for @liveAiObservationPaused.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前已暂停，持仓已平。开启后会等待下一个开仓信号触发。'**
+  String get liveAiObservationPaused;
+
+  /// No description provided for @liveAiObservationRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略运行平稳，近 7 天胜率高于回测均值。波动率上升时可考虑降仓位。'**
+  String get liveAiObservationRunning;
+
+  /// No description provided for @liveArchiveSectionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略档案'**
+  String get liveArchiveSectionTitle;
+
+  /// No description provided for @liveArchiveScript.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略脚本'**
+  String get liveArchiveScript;
+
+  /// No description provided for @liveArchiveScriptSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'部署时生成'**
+  String get liveArchiveScriptSub;
+
+  /// No description provided for @liveArchiveBacktest.
+  ///
+  /// In zh, this message translates to:
+  /// **'回测记录'**
+  String get liveArchiveBacktest;
+
+  /// No description provided for @liveArchiveBacktestSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'部署前的历史回测结果'**
+  String get liveArchiveBacktestSub;
+
+  /// No description provided for @liveArchiveDeploy.
+  ///
+  /// In zh, this message translates to:
+  /// **'部署配置'**
+  String get liveArchiveDeploy;
+
+  /// No description provided for @liveArchiveDeploySub.
+  ///
+  /// In zh, this message translates to:
+  /// **'初始资金 / 仓位 / 风控'**
+  String get liveArchiveDeploySub;
+
+  /// No description provided for @liveArchiveComingSoon.
+  ///
+  /// In zh, this message translates to:
+  /// **'即将上线'**
+  String get liveArchiveComingSoon;
+
+  /// No description provided for @livePositionEmptyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略已暂停'**
+  String get livePositionEmptyTitle;
+
+  /// No description provided for @livePositionEmptyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓已平，等待开启后接收新信号'**
+  String get livePositionEmptyHint;
+
+  /// No description provided for @livePositionEntry.
+  ///
+  /// In zh, this message translates to:
+  /// **'入场价'**
+  String get livePositionEntry;
+
+  /// No description provided for @livePositionCurrent.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前价'**
+  String get livePositionCurrent;
+
+  /// No description provided for @livePositionStop.
+  ///
+  /// In zh, this message translates to:
+  /// **'止损价'**
+  String get livePositionStop;
+
+  /// No description provided for @livePositionStopLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'止损'**
+  String get livePositionStopLabel;
+
+  /// No description provided for @livePositionStopDistance.
+  ///
+  /// In zh, this message translates to:
+  /// **'距止损'**
+  String get livePositionStopDistance;
+
+  /// No description provided for @livePositionHold.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓'**
+  String get livePositionHold;
+
+  /// No description provided for @livePositionSideLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'多'**
+  String get livePositionSideLong;
+
+  /// No description provided for @livePositionSideShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'空'**
+  String get livePositionSideShort;
+
+  /// No description provided for @liveParamsTuneInAi.
+  ///
+  /// In zh, this message translates to:
+  /// **'在 AI 对话中调优参数'**
+  String get liveParamsTuneInAi;
+
+  /// No description provided for @liveActionStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启策略'**
+  String get liveActionStart;
+
+  /// No description provided for @liveActionPause.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂停策略'**
+  String get liveActionPause;
+
+  /// No description provided for @liveActionResume.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复策略'**
+  String get liveActionResume;
+
+  /// No description provided for @liveActionDelete.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除'**
+  String get liveActionDelete;
+
+  /// No description provided for @liveActionDeletePermanent.
+  ///
+  /// In zh, this message translates to:
+  /// **'永久删除'**
+  String get liveActionDeletePermanent;
+
+  /// No description provided for @liveActionComingSoon.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略操作即将上线'**
+  String get liveActionComingSoon;
+
+  /// No description provided for @deployViewLiveStrategies.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看实盘策略'**
+  String get deployViewLiveStrategies;
 }
 
 class _AppLocalizationsDelegate
