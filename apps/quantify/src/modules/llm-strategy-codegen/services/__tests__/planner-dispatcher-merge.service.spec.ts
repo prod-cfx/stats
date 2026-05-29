@@ -1549,6 +1549,58 @@ describe.skip('PlannerDispatcherMergeService legacy five-bucket merge spec', () 
   })
 })
 
+describe('PlannerDispatcherMergeService — deterministic context slot merge', () => {
+  const svc = new PlannerDispatcherMergeService()
+
+  it('keeps dispatcher locked context when planner returns an open placeholder for the same field', () => {
+    const dispatcher = {
+      contextSlots: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        timeframe: '15m',
+      },
+      rules: [],
+    } as unknown as CodegenSemanticPatch
+    const planner = {
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'open',
+          priority: 'context',
+          affectsExecution: true,
+        },
+      },
+      rules: [],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher)
+
+    expect(merged?.contextSlots).toEqual({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
+      timeframe: '15m',
+    })
+  })
+
+  it('keeps dispatcher locked context when planner returns a non-string malformed value', () => {
+    const dispatcher = {
+      contextSlots: { exchange: 'okx' },
+      rules: [],
+    } as unknown as CodegenSemanticPatch
+    const planner = {
+      contextSlots: { exchange: false },
+      rules: [],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, dispatcher)
+
+    expect(merged?.contextSlots).toEqual({ exchange: 'okx' })
+  })
+})
+
 /**
  * Issue #1633 staging s13 — program-phase subset fold.
  *

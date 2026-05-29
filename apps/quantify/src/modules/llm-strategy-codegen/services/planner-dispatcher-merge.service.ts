@@ -128,6 +128,8 @@ type InternalPlannerPatch = CodegenSemanticPatch & {
   __zodQuarantine?: unknown
 }
 
+type ContextSlotsPatch = NonNullable<CodegenSemanticPatch['contextSlots']>
+
 type FallbackPredicateAtom = {
   key: string
   phase?: 'entry' | 'exit' | 'risk' | 'gate' | 'program'
@@ -196,9 +198,10 @@ export class PlannerDispatcherMergeService {
 
     const planner = plannerPatch as InternalPlannerPatch
     const dispatcher = dispatcherPatch as InternalPlannerPatch
+    const contextSlots = this.mergeContextSlots(planner.contextSlots, dispatcher.contextSlots)
     const patch: InternalPlannerPatch = {
-      ...(planner.contextSlots || dispatcher.contextSlots
-        ? { contextSlots: { ...(dispatcher.contextSlots ?? {}), ...(planner.contextSlots ?? {}) } }
+      ...(contextSlots
+        ? { contextSlots }
         : {}),
       rules: this.mergeRulesById(planner.rules, dispatcher.rules),
     }
@@ -209,6 +212,33 @@ export class PlannerDispatcherMergeService {
     this.overrideRulesLeafParamsFromDispatcher(patch, dispatcher)
     this.liftDispatcherPositionSizingIntoPlannerRules(patch, dispatcher)
     return patch.rules?.length || patch.contextSlots ? patch : null
+  }
+
+  private mergeContextSlots(
+    plannerSlots: ContextSlotsPatch | undefined,
+    dispatcherSlots: ContextSlotsPatch | undefined,
+  ): ContextSlotsPatch | undefined {
+    if (!plannerSlots && !dispatcherSlots) return undefined
+
+    const merged: ContextSlotsPatch = { ...(dispatcherSlots ?? {}) }
+    for (const [field, plannerValue] of Object.entries(plannerSlots ?? {})) {
+      const dispatcherValue = dispatcherSlots?.[field]
+      if (this.isUsableContextSlotValue(plannerValue) || !this.isUsableContextSlotValue(dispatcherValue)) {
+        merged[field] = plannerValue
+      }
+    }
+
+    return Object.keys(merged).length > 0 ? merged : undefined
+  }
+
+  private isUsableContextSlotValue(value: unknown): boolean {
+    if (value === null || value === undefined) return false
+    if (typeof value === 'string') return value.trim().length > 0
+    if (typeof value !== 'object' || Array.isArray(value)) return false
+
+    const record = value as Record<string, unknown>
+    if ('value' in record) return this.isUsableContextSlotValue(record.value)
+    return false
   }
 
   /**
