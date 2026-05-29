@@ -3,6 +3,37 @@ import {
   STAGE4_ATOM_FAMILIES,
   STAGE4_DEPLOY_READY_STATUSES,
 } from '../atom-coverage-matrix'
+import { ATOM_CONTRACT_REGISTRY } from '../../atom-contracts/atom-contract-registry'
+
+const pr2UmbrellaKeys = [
+  'indicator.cross',
+  'indicator.threshold',
+  'indicator.slope',
+  'pattern.breakout',
+  'pattern.pullback',
+  'pattern.range',
+  'volume.spike',
+  'volume.confirmation',
+  'time.session',
+  'time.cooldownWindow',
+  'event.externalSignal',
+  'orderbook.imbalance',
+  'fundingRate.condition',
+  'openInterest.condition',
+  'liquidation.condition',
+] as const
+
+const pr2NewGranularAtomKeys = [
+  'indicator.slope',
+  'pattern.pullback',
+  'pattern.range',
+  'volume.confirmation',
+  'time.cooldown_window',
+  'orderbook.imbalance',
+  'fundingRate.condition',
+  'openInterest.condition',
+  'liquidation.condition',
+] as const
 
 describe('Stage 4 atom coverage matrix', () => {
   it('covers all Stage 4 atom families', () => {
@@ -32,5 +63,41 @@ describe('Stage 4 atom coverage matrix', () => {
 
   it('keeps deploy-ready numerator statuses explicit', () => {
     expect(STAGE4_DEPLOY_READY_STATUSES).toEqual(['deploy_ready', 'corpus_pass'])
+  })
+
+  it('contains PR2 predicate umbrella rows mapped to typed condition atoms', () => {
+    const rowsByKey = new Map(STAGE4_ATOM_COVERAGE_MATRIX.map(row => [row.atomKey, row]))
+
+    for (const key of pr2UmbrellaKeys) {
+      const row = rowsByKey.get(key)
+      expect(row).toBeDefined()
+      expect(row?.family).toBe('predicate')
+      expect(row?.rulePath).toBe('rules[].condition')
+      expect(row?.prBatch).toBe('pr2-predicate')
+      expect(row?.coveredAtomKeys.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('requires PR2 deploy-ready rows to include at least three dialogue utterances', () => {
+    const invalidRows = STAGE4_ATOM_COVERAGE_MATRIX.filter(row =>
+      row.prBatch === 'pr2-predicate'
+      && STAGE4_DEPLOY_READY_STATUSES.includes(row.status)
+      && row.utteranceExamples.length < 3,
+    )
+
+    expect(invalidRows).toEqual([])
+  })
+
+  it('does not classify planned PR2 granular atoms as executable', () => {
+    const plannedPr2AtomKeys = STAGE4_ATOM_COVERAGE_MATRIX
+      .filter(row => row.prBatch === 'pr2-predicate' && !STAGE4_DEPLOY_READY_STATUSES.includes(row.status))
+      .flatMap(row => row.coveredAtomKeys)
+      .filter((key): key is typeof pr2NewGranularAtomKeys[number] => pr2NewGranularAtomKeys.includes(key as typeof pr2NewGranularAtomKeys[number]))
+
+    const executablePlannedAtoms = plannedPr2AtomKeys.filter(key =>
+      ATOM_CONTRACT_REGISTRY[key].classifier.supportStatus === 'supported_executable',
+    )
+
+    expect(executablePlannedAtoms).toEqual([])
   })
 })

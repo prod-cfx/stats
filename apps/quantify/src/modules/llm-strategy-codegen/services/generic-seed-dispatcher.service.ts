@@ -1328,9 +1328,14 @@ export class GenericSeedDispatcher {
   ): void {
     const role = this.resolveRuleEffectRole(effect)
     if (!role) return
-    const signature = JSON.stringify(effect)
-    if (effects[role].some(item => JSON.stringify(item) === signature)) return
+    const signature = this.semanticEffectSignature(effect)
+    if (effects[role].some(item => this.semanticEffectSignature(item) === signature)) return
     effects[role].push(effect)
+  }
+
+  private semanticEffectSignature(effect: AtomExpr): string {
+    if (effect.kind !== 'atom') return JSON.stringify(effect)
+    return JSON.stringify({ kind: effect.kind, key: effect.key, params: effect.params, sideScope: effect.sideScope })
   }
 
   private typedEffectAppliesToPhase(effect: AtomExpr, phase: SemanticRule['phase']): boolean {
@@ -1511,7 +1516,7 @@ export class GenericSeedDispatcher {
 
   private collectTypedRuleGlobalEffects(flatPatch: InternalSeedDraft, userMessage: string): AtomExpr[] {
     const out: AtomExpr[] = []
-    const pushAtom = (item: { key: string, phase?: unknown, params?: Record<string, unknown>, sideScope?: 'long' | 'short' | 'both', evidence?: unknown }): void => {
+    const pushAtom = (item: { key: string, phase?: unknown, params?: Record<string, unknown>, sideScope?: 'long' | 'short' | 'both' | null, evidence?: unknown }): void => {
       const effect: AtomExpr = {
         kind: 'atom',
         key: item.key,

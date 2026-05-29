@@ -62,6 +62,15 @@ import { scopeDataSourceUtterances } from './atoms/scope.dataSource.utterance'
 import { scopeSubStrategyUtterances } from './atoms/scope.subStrategy.utterance'
 import { gateSubStrategyUtterances } from './atoms/gate.subStrategy.utterance'
 import { volumeThresholdUtterances } from './atoms/volume.threshold.utterance'
+import { indicatorSlopeUtterances } from './atoms/indicator.slope.utterance'
+import { patternPullbackUtterances } from './atoms/pattern.pullback.utterance'
+import { patternRangeUtterances } from './atoms/pattern.range.utterance'
+import { volumeConfirmationUtterances } from './atoms/volume.confirmation.utterance'
+import { timeCooldownWindowUtterances } from './atoms/time.cooldown_window.utterance'
+import { orderbookImbalanceUtterances } from './atoms/orderbook.imbalance.utterance'
+import { fundingRateConditionUtterances } from './atoms/fundingRate.condition.utterance'
+import { openInterestConditionUtterances } from './atoms/openInterest.condition.utterance'
+import { liquidationConditionUtterances } from './atoms/liquidation.condition.utterance'
 
 export type {
   SupportedAtomKey,
@@ -156,10 +165,19 @@ export const SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS = [
   'scope.dataSource',
   'scope.subStrategy',
   'gate.subStrategy',
+  'indicator.slope',
+  'pattern.pullback',
+  'pattern.range',
+  'volume.confirmation',
+  'time.cooldown_window',
 ] as const satisfies readonly SupportedAtomKey[]
 
 export const SUPPORTED_REQUIRES_SLOT_UTTERANCE_ATOMS = [
   'external.signal',
+  'orderbook.imbalance',
+  'fundingRate.condition',
+  'openInterest.condition',
+  'liquidation.condition',
 ] as const satisfies readonly SupportedAtomKey[]
 
 export const SUPPORTED_UTTERANCE_CORPUS_ATOMS = [
@@ -217,6 +235,15 @@ export const utteranceCorpus = [
   ...scopeDataSourceUtterances,
   ...scopeSubStrategyUtterances,
   ...gateSubStrategyUtterances,
+  ...indicatorSlopeUtterances,
+  ...patternPullbackUtterances,
+  ...patternRangeUtterances,
+  ...volumeConfirmationUtterances,
+  ...timeCooldownWindowUtterances,
+  ...orderbookImbalanceUtterances,
+  ...fundingRateConditionUtterances,
+  ...openInterestConditionUtterances,
+  ...liquidationConditionUtterances,
 ] as const satisfies readonly UtteranceCorpusCase[]
 
 export function getUtteranceCorpusForAtom(atomKey: SupportedAtomKey): UtteranceCorpusCase[] {

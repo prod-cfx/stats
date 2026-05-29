@@ -15,6 +15,7 @@ export const STAGE4_BLOCKER_TAXONOMY = [
   'canonical_unsupported_atom',
   'ir_compile_missing_branch',
   'runtime_missing_data',
+  'data_source_missing',
   'backtest_rejected',
   'deploy_payload_missing_binding',
 ] as const

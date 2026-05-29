@@ -1809,6 +1809,12 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      case 'orderbook.imbalance':
+      case 'fundingRate.condition':
+      case 'openInterest.condition':
+      case 'liquidation.condition':
+        throw new Error(`data_source_missing:${atom.key}`)
+
       case 'order_program.active_range': {
         const programId = typeof atom.params?.programId === 'string' ? atom.params.programId : null
         const activePredicate = programId ? context.orderProgramActivePredicateMap.get(programId) : null

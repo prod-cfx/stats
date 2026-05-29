@@ -43,6 +43,7 @@ describe('TRIGGER_DISPLAY_CONTRACT_REGISTRY invariants', () => {
         "bollinger.touch_lower",
         "bollinger.touch_middle",
         "bollinger.touch_upper",
+        "external.signal",
         "indicator.above",
         "indicator.below",
         "indicator.cross_over",

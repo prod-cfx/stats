@@ -72,6 +72,22 @@ describe('conversationPlannerSystemPrompt — atom catalog injection (issue #134
       expect(prompt).toContain('不得覆盖当前消息未涉及的已锁定语义')
       expect(prompt).toContain('JSON 结构：')
     })
+
+    it('exposes PR2 predicate atom keys in the planner catalog', () => {
+      for (const key of [
+        'indicator.slope',
+        'pattern.pullback',
+        'pattern.range',
+        'volume.confirmation',
+        'time.cooldown_window',
+        'orderbook.imbalance',
+        'fundingRate.condition',
+        'openInterest.condition',
+        'liquidation.condition',
+      ]) {
+        expect(prompt).toContain(key)
+      }
+    })
   })
 
   describe('en locale', () => {

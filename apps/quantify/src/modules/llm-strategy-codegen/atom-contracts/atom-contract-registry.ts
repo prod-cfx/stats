@@ -272,6 +272,16 @@ const ATOM_BUCKETS = {
   'risk.remembered_level_stop': 'risk',
   // Issue #1491 阶段 B：滚动 N 根 K 高/低点突破/跌破
   'price.rolling_extrema_breakout': 'trigger',
+  // Stage 4 PR2 predicate dialogue atoms
+  'indicator.slope': 'trigger',
+  'pattern.pullback': 'trigger',
+  'pattern.range': 'trigger',
+  'volume.confirmation': 'trigger',
+  'time.cooldown_window': 'trigger',
+  'orderbook.imbalance': 'trigger',
+  'fundingRate.condition': 'trigger',
+  'openInterest.condition': 'trigger',
+  'liquidation.condition': 'trigger',
 } as const satisfies Record<AtomContractKey, AtomContractBucket>
 
 // =========================================================
@@ -364,6 +374,16 @@ const ATOM_FULFILLS_STRATEGY_PHASE = {
   'risk.remembered_level_stop': ['risk', 'exit'],
   // Issue #1491 阶段 B：双向触发（突破 high 做多 / 跌破 low 平仓）
   'price.rolling_extrema_breakout': ['entry', 'exit'],
+  // Stage 4 PR2 predicate dialogue atoms
+  'indicator.slope': ['entry', 'exit'],
+  'pattern.pullback': ['entry', 'exit'],
+  'pattern.range': ['entry', 'exit'],
+  'volume.confirmation': ['entry', 'exit'],
+  'time.cooldown_window': ['entry', 'exit'],
+  'orderbook.imbalance': ['entry', 'exit'],
+  'fundingRate.condition': ['entry', 'exit'],
+  'openInterest.condition': ['entry', 'exit'],
+  'liquidation.condition': ['entry', 'exit'],
 } as const satisfies Record<AtomContractKey, ReadonlyArray<'entry' | 'exit' | 'risk' | 'sizing' | 'context'>>
 
 export function getAtomFulfillsStrategyPhase(
@@ -461,6 +481,16 @@ const ATOM_ROLES = {
   'risk.remembered_level_stop': ['effect'],
   // Issue #1491 阶段 B
   'price.rolling_extrema_breakout': ['predicate'],
+  // Stage 4 PR2 predicate dialogue atoms
+  'indicator.slope': ['predicate'],
+  'pattern.pullback': ['predicate'],
+  'pattern.range': ['predicate'],
+  'volume.confirmation': ['predicate'],
+  'time.cooldown_window': ['predicate'],
+  'orderbook.imbalance': ['predicate'],
+  'fundingRate.condition': ['predicate'],
+  'openInterest.condition': ['predicate'],
+  'liquidation.condition': ['predicate'],
 } as const satisfies Record<AtomContractKey, ReadonlyArray<'predicate' | 'effect'>>
 
 export function getAtomRoles(key: AtomContractKey): ReadonlyArray<'predicate' | 'effect'> {
@@ -579,6 +609,16 @@ const ATOM_TEMPORALITY = {
   'scope.subStrategy': 'structural',
   // Issue #1491 阶段 B：突破/跌破是 rising-edge 事件
   'price.rolling_extrema_breakout': 'event',
+  // Stage 4 PR2 predicate dialogue atoms
+  'indicator.slope': 'state',
+  'pattern.pullback': 'event',
+  'pattern.range': 'state',
+  'volume.confirmation': 'event',
+  'time.cooldown_window': 'structural',
+  'orderbook.imbalance': 'state',
+  'fundingRate.condition': 'state',
+  'openInterest.condition': 'state',
+  'liquidation.condition': 'event',
 } as const satisfies Record<AtomContractKey, 'state' | 'event' | 'structural'>
 
 export function getAtomTemporality(key: AtomContractKey): 'state' | 'event' | 'structural' {
@@ -679,6 +719,16 @@ const ATOM_PUBLIC_NAMES = {
   'risk.remembered_level_stop': { zh: '记忆位止损', en: 'Remembered level stop' },
   // Issue #1491 阶段 B
   'price.rolling_extrema_breakout': { zh: '滚动高低点突破', en: 'Rolling extrema breakout' },
+  // Stage 4 PR2 predicate dialogue atoms
+  'indicator.slope': { zh: '指标斜率', en: 'Indicator slope' },
+  'pattern.pullback': { zh: '回踩形态', en: 'Pullback pattern' },
+  'pattern.range': { zh: '震荡区间形态', en: 'Range pattern' },
+  'volume.confirmation': { zh: '成交量确认', en: 'Volume confirmation' },
+  'time.cooldown_window': { zh: '冷却窗口', en: 'Cooldown window' },
+  'orderbook.imbalance': { zh: '盘口失衡', en: 'Orderbook imbalance' },
+  'fundingRate.condition': { zh: '资金费率条件', en: 'Funding rate condition' },
+  'openInterest.condition': { zh: '持仓量条件', en: 'Open interest condition' },
+  'liquidation.condition': { zh: '清算条件', en: 'Liquidation condition' },
 } as const satisfies Record<AtomContractKey, { zh: string; en: string }>
 
 export { ATOM_PUBLIC_NAMES }
@@ -695,6 +745,57 @@ function createNotApplicableIrShape(key: AtomContractKey): NotApplicableIrShapeB
     )
   }) as AtomContractEmit['irShape']
   return Object.assign(sentinel, { __notApplicable: true as const })
+}
+
+function createMarketDataPredicateShell(
+  key: AtomContractKey,
+  keywords: readonly string[],
+  fixedVerbs: readonly string[],
+): AtomContractSeed {
+  return {
+    corpus: {
+      aliases: [ATOM_PUBLIC_NAMES[key].zh, ATOM_PUBLIC_NAMES[key].en],
+      positiveExamples: getGoldenUtterancesForAtom(key).slice(0, 2),
+      negativeExamples: ['普通 OHLCV 价格条件'],
+      goldenUtterances: getGoldenUtterancesForAtom(key),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (_slotKey, _params, locale) => locale === 'en'
+      ? 'This predicate requires a market-data source binding before runtime execution.'
+      : '该 predicate 需要先接入对应市场数据源后才能执行。',
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: {
+      supportStatus: 'unsupported_data_source_missing_public_beta_unsupported',
+      unsupportedMeta: {
+        reasonCode: 'data_source_missing',
+        publicReasonZh: '缺少运行时市场数据源绑定',
+        publicReasonEn: 'Runtime market data source binding is missing',
+      },
+    },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES[key],
+      paramRenderers: {
+        dataSource: (v) => String(v),
+        threshold: (v) => String(v),
+      },
+      summaryTemplate: (_params, locale) => ATOM_PUBLIC_NAMES[key][locale],
+    },
+    surface: {
+      intent: {
+        keywords,
+        verbs: { fixed: fixedVerbs },
+      },
+      paramSlots: {
+        dataSource: { kind: 'enum', required: true, enum: ['orderbook', 'funding', 'open_interest', 'liquidation'] },
+        threshold: { kind: 'number', required: false, range: [-1_000_000_000, 1_000_000_000] },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  }
 }
 
 // Issue #1279 PR1c: createPr1bDisplay 接受 {zh, en} 对象解构（review M2：消除位置参数顺序错陷阱）。
@@ -820,7 +921,7 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       goldenUtterances: getGoldenUtterancesForAtom('volume.threshold'),
     },
     summaryContribution: VIA_PRESENTATION_DISPLAY,
-    readinessCheck: COMMON_PIPELINE,
+    readinessCheck: UNSUPPORTED_SKIP,
     clarificationQuestion: (slotKey, _params, _locale) => {
       if (slotKey === 'volume.threshold.value') return '请给出成交量阈值，例如 1000（成交量单位：张/枚）或 500000（成交额单位：USDT）。'
       if (slotKey === 'volume.threshold.operator') return '请指明比较方向：GT（大于）/ GTE（不低于）/ LT（小于）/ LTE（不高于）。'
@@ -5174,6 +5275,235 @@ export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
       sideResolver: 'inherit',
     },
   },
+
+  'indicator.slope': {
+    corpus: {
+      aliases: ['指标斜率', '均线斜率', 'indicator slope'],
+      positiveExamples: ['EMA20 斜率向上时开多', 'MA50 向下倾斜时平多'],
+      negativeExamples: ['EMA20 上穿 EMA50'],
+      goldenUtterances: getGoldenUtterancesForAtom('indicator.slope'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: (slotKey, _params, _locale) => {
+      if (slotKey === 'indicator.slope.indicator') return '请指定要判断斜率的指标，例如 EMA 或 MA。'
+      if (slotKey === 'indicator.slope.direction') return '请指定斜率方向：up（向上）或 down（向下）。'
+      return '请补充指标斜率条件的缺失信息。'
+    },
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: {
+      supportStatus: 'unsupported_ir_compile_missing_branch_public_beta_unsupported',
+      unsupportedMeta: {
+        reasonCode: 'ir_compile_missing_branch',
+        publicReasonZh: '该 predicate 已可从对话入口识别，但尚未接入 IR 编译和运行时执行。',
+        publicReasonEn: 'This predicate is recognized at dialogue entrance but is not wired to IR compile and runtime execution yet.',
+      },
+    },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['indicator.slope'],
+      paramRenderers: {
+        indicator: (v) => String(v).toUpperCase(),
+        period: (v) => String(v),
+        direction: (v, locale) => locale === 'zh' ? (v === 'down' ? '向下' : '向上') : String(v),
+      },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['indicator.slope'].en
+        const indicator = typeof params.indicator === 'string' ? params.indicator.toUpperCase() : '指标'
+        const period = typeof params.period === 'number' ? params.period : ''
+        const direction = params.direction === 'down' ? '向下' : '向上'
+        return `${indicator}${period} 斜率${direction}`
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['斜率', '倾斜', 'slope'] as const,
+        verbs: { fixed: ['向上', '向下', 'turns up', 'turns down'] as const },
+      },
+      paramSlots: {
+        indicator: { kind: 'enum', required: true, enum: ['ema', 'ma', 'sma'] },
+        period: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, default: 20 },
+        direction: { kind: 'enum', required: true, enum: ['up', 'down'] },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'pattern.pullback': {
+    corpus: {
+      aliases: ['回踩', 'pullback', 'retest hold'],
+      positiveExamples: ['突破后回踩不破再买', 'Pullback holds the breakout level'],
+      negativeExamples: ['直接突破开多'],
+      goldenUtterances: getGoldenUtterancesForAtom('pattern.pullback'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: UNSUPPORTED_SKIP,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充回踩形态条件的锚点与行为。',
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: {
+      supportStatus: 'unsupported_ir_compile_missing_branch_public_beta_unsupported',
+      unsupportedMeta: {
+        reasonCode: 'ir_compile_missing_branch',
+        publicReasonZh: '该 predicate 已可从对话入口识别，但尚未接入 IR 编译和运行时执行。',
+        publicReasonEn: 'This predicate is recognized at dialogue entrance but is not wired to IR compile and runtime execution yet.',
+      },
+    },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['pattern.pullback'],
+      paramRenderers: { anchor: (v) => String(v), behavior: (v) => String(v) },
+      summaryTemplate: (_params, locale) => ATOM_PUBLIC_NAMES['pattern.pullback'][locale],
+    },
+    surface: {
+      intent: {
+        keywords: ['回踩', '站稳', '不破', 'pullback', 'retest'] as const,
+        verbs: { fixed: ['回踩', 'holds', 'retest'] as const },
+      },
+      paramSlots: {
+        anchor: { kind: 'enum', required: true, enum: ['breakout_level', 'ma20', 'previous_extrema'], default: 'breakout_level' },
+        behavior: { kind: 'enum', required: true, enum: ['hold', 'break_through'], default: 'hold' },
+        withinBars: { kind: 'number', required: false, range: [1, 100], multipleOf: 1, default: 6 },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'pattern.range': {
+    corpus: {
+      aliases: ['震荡区间', 'range-bound', '区间内'],
+      positiveExamples: ['价格在震荡区间内只做网格', 'Range-bound between support and resistance'],
+      negativeExamples: ['向上突破区间'],
+      goldenUtterances: getGoldenUtterancesForAtom('pattern.range'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: UNSUPPORTED_SKIP,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充区间形态的上下沿或区间模式。',
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: {
+      supportStatus: 'unsupported_ir_compile_missing_branch_public_beta_unsupported',
+      unsupportedMeta: {
+        reasonCode: 'ir_compile_missing_branch',
+        publicReasonZh: '该 predicate 已可从对话入口识别，但尚未接入 IR 编译和运行时执行。',
+        publicReasonEn: 'This predicate is recognized at dialogue entrance but is not wired to IR compile and runtime execution yet.',
+      },
+    },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['pattern.range'],
+      paramRenderers: { mode: (v) => String(v), lowerRole: (v) => String(v), upperRole: (v) => String(v) },
+      summaryTemplate: (_params, locale) => ATOM_PUBLIC_NAMES['pattern.range'][locale],
+    },
+    surface: {
+      intent: {
+        keywords: ['震荡区间', '区间', 'range-bound', 'support and resistance'] as const,
+        verbs: { fixed: ['区间内', 'between', 'inside'] as const },
+      },
+      paramSlots: {
+        mode: { kind: 'enum', required: true, enum: ['inside_range', 'near_lower', 'near_upper'], default: 'inside_range' },
+        lowerRole: { kind: 'enum', required: false, enum: ['range_low'], default: 'range_low' },
+        upperRole: { kind: 'enum', required: false, enum: ['range_high'], default: 'range_high' },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'volume.confirmation': {
+    corpus: {
+      aliases: ['放量确认', 'volume confirmation'],
+      positiveExamples: ['突破后需要放量确认再开多', 'Confirm breakout with volume above average'],
+      negativeExamples: ['成交量小于阈值'],
+      goldenUtterances: getGoldenUtterancesForAtom('volume.confirmation'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: UNSUPPORTED_SKIP,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充成交量确认条件的倍数或参考窗口。',
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: {
+      supportStatus: 'unsupported_ir_compile_missing_branch_public_beta_unsupported',
+      unsupportedMeta: {
+        reasonCode: 'ir_compile_missing_branch',
+        publicReasonZh: '该 predicate 已可从对话入口识别，但尚未接入 IR 编译和运行时执行。',
+        publicReasonEn: 'This predicate is recognized at dialogue entrance but is not wired to IR compile and runtime execution yet.',
+      },
+    },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['volume.confirmation'],
+      paramRenderers: { mode: (v) => String(v), multiplier: (v) => String(v), refWindow: (v) => String(v) },
+      summaryTemplate: (params, locale) => {
+        if (locale === 'en') return ATOM_PUBLIC_NAMES['volume.confirmation'].en
+        const multiplier = typeof params.multiplier === 'number' ? params.multiplier : 1.5
+        const refWindow = typeof params.refWindow === 'number' ? params.refWindow : 20
+        return `成交量确认：>${multiplier} × ${refWindow} 根均量`
+      },
+    },
+    surface: {
+      intent: {
+        keywords: ['放量确认', '量能确认', '成交量确认', 'volume confirmation', 'confirm breakout'] as const,
+        verbs: { fixed: ['确认', 'confirm'] as const },
+      },
+      paramSlots: {
+        mode: { kind: 'enum', required: true, enum: ['confirm_breakout', 'confirm_pullback'], default: 'confirm_breakout' },
+        multiplier: { kind: 'number', required: false, range: [0.1, 100], default: 1.5 },
+        refWindow: { kind: 'number', required: false, range: [1, 500], multipleOf: 1, default: 20 },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'time.cooldown_window': {
+    corpus: {
+      aliases: ['冷却窗口', 'cooldown window'],
+      positiveExamples: ['每次交易后冷却 5 根 K 线再开仓', 'Wait 30 minutes after exit'],
+      negativeExamples: ['只在北京时间开仓'],
+      goldenUtterances: getGoldenUtterancesForAtom('time.cooldown_window'),
+    },
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: UNSUPPORTED_SKIP,
+    clarificationQuestion: (_slotKey, _params, _locale) => '请补充冷却窗口长度，例如 5 根 K 线或 30 分钟。',
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    classifier: {
+      supportStatus: 'unsupported_runtime_missing_data_public_beta_unsupported',
+      unsupportedMeta: {
+        reasonCode: 'runtime_missing_data',
+        publicReasonZh: '该 predicate 已可从对话入口识别，但尚未接入运行时状态数据。',
+        publicReasonEn: 'This predicate is recognized at dialogue entrance but is not wired to runtime state data yet.',
+      },
+    },
+    display: {
+      publicName: ATOM_PUBLIC_NAMES['time.cooldown_window'],
+      paramRenderers: { durationBars: (v) => String(v), durationMinutes: (v) => String(v), scope: (v) => String(v) },
+      summaryTemplate: (_params, locale) => ATOM_PUBLIC_NAMES['time.cooldown_window'][locale],
+    },
+    surface: {
+      intent: {
+        keywords: ['冷却', 'cooldown', 'wait'] as const,
+        verbs: { fixed: ['冷却', '等待', 'wait'] as const },
+      },
+      paramSlots: {
+        durationBars: { kind: 'number', required: true, range: [1, 1000], multipleOf: 1, default: 5 },
+        durationMinutes: { kind: 'number', required: false, range: [1, 10080], multipleOf: 1 },
+        scope: { kind: 'enum', required: false, enum: ['after_trade', 'after_exit', 'after_stop_loss'], default: 'after_trade' },
+      },
+      phaseResolver: 'fixed-gate',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'orderbook.imbalance': createMarketDataPredicateShell('orderbook.imbalance', ['盘口', '订单簿', 'orderbook', 'imbalance'], ['失衡', 'imbalance']),
+  'fundingRate.condition': createMarketDataPredicateShell('fundingRate.condition', ['资金费率', 'funding rate'], ['大于', '小于', '为正', '为负', 'positive', 'negative']),
+  'openInterest.condition': createMarketDataPredicateShell('openInterest.condition', ['持仓量', 'OI', 'open interest'], ['增加', '上升', '下降', 'rising', 'falling']),
+  'liquidation.condition': createMarketDataPredicateShell('liquidation.condition', ['清算', 'liquidation'], ['超过', 'spike', '瀑布']),
 })
 
 // TS exhaustive 编译期守门验证（无运行时开销）

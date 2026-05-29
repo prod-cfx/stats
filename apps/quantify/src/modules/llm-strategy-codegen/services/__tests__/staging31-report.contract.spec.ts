@@ -12,6 +12,7 @@ describe('staging31 hard gate report contract', () => {
       completedInput: 'x',
       assistantResponse: 'x',
       rulesTree: {},
+      rulesFacts: {},
       projectedFlat: {},
       contextPositionRisk: {},
       clarification: {},

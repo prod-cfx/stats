@@ -21,4 +21,8 @@ describe('Stage 4 staging dialogue runner gates', () => {
       'deploy_payload_drift',
     ]))
   })
+
+  it('defines PR2 market-data fail-closed blocker taxonomy', () => {
+    expect(STAGE4_BLOCKER_TAXONOMY).toContain('data_source_missing')
+  })
 })

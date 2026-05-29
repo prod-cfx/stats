@@ -83,6 +83,16 @@ export type SupportedAtomKey =
   | 'risk.remembered_level_stop'
   // ── Issue #1491 阶段 B：滚动高低点突破 ──
   | 'price.rolling_extrema_breakout'
+  // ── Stage 4 PR2 predicate dialogue atoms ──
+  | 'indicator.slope'
+  | 'pattern.pullback'
+  | 'pattern.range'
+  | 'volume.confirmation'
+  | 'time.cooldown_window'
+  | 'orderbook.imbalance'
+  | 'fundingRate.condition'
+  | 'openInterest.condition'
+  | 'liquidation.condition'
 
 /** @deprecated #1329 已更名 SupportedAtomKey，本 alias 保留兼容 in-flight branch；下个 PR 删 */
 export type SupportedExecutableUtteranceAtom = SupportedAtomKey

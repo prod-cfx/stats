@@ -114,6 +114,48 @@ function createSizingCanonicalSpec(
 }
 
 describe('canonicalSpecV2IrCompilerService', () => {
+  it.each([
+    'orderbook.imbalance',
+    'fundingRate.condition',
+    'openInterest.condition',
+    'liquidation.condition',
+  ])('fails closed for %s until runtime market data source is bound', (key) => {
+    const canonicalSpec: CanonicalStrategySpecV2 = {
+      version: 2,
+      market: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        defaultTimeframe: '1m',
+      },
+      indicators: [],
+      sizing: { mode: 'fixed_ratio', value: 0.1 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: { requiredTimeframes: ['1m'] },
+      rules: [{
+        id: `entry-${key}`,
+        phase: 'entry',
+        sideScope: 'long',
+        priority: 100,
+        condition: { kind: 'atom', key, params: {} },
+        actions: [{ type: 'OPEN_LONG', sizing: { mode: 'fixed_ratio', value: 0.1 } }],
+      }],
+    }
+
+    expect(() => new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1m',
+        positionPct: 10,
+      },
+    })).toThrow(`data_source_missing:${key}`)
+  })
+
   it('preserves rules-only EMA stack reference periods through canonical and IR compile', () => {
     const semanticState: SemanticState = {
       version: 1,
