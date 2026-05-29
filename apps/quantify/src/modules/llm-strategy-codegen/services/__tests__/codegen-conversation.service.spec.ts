@@ -1197,6 +1197,48 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect((service as any).findNextOpenSemanticSlot(result)).toBeNull()
   })
 
+  it('hydrates deterministic execution context from the user message when planner rules omit context slots', () => {
+    const message = '在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%'
+    const currentState = (service as any).createEmptySemanticState()
+
+    const result = (service as any).applyConversationPlanToSemanticState({
+      currentState,
+      message,
+      plan: {
+        related: true,
+        logicReady: false,
+        assistantPrompt: '已识别入场和出场。',
+        semanticPatch: {
+          rules: [
+            {
+              id: 'entry-btc-drop-within-3m-1pct',
+              phase: 'entry',
+              sideScope: 'long',
+              condition: {
+                kind: 'atom',
+                key: 'price.percent_change',
+                params: { direction: 'down', valuePct: 1, window: '3m' },
+                evidence: { text: message },
+              },
+              effects: {
+                actions: [{ kind: 'atom', key: 'action.open_long', params: {}, evidence: { text: '买入' } }],
+                risks: [],
+                positions: [],
+                programs: [],
+                orchestration: [],
+              },
+            },
+          ],
+        },
+      },
+    })
+
+    expect(result.contextSlots.exchange).toEqual(expect.objectContaining({ status: 'locked', value: 'okx' }))
+    expect(result.contextSlots.symbol).toEqual(expect.objectContaining({ status: 'locked', value: 'BTCUSDT' }))
+    expect(result.contextSlots.timeframe).toEqual(expect.objectContaining({ status: 'locked', value: '3m' }))
+    expect(result.contextSlots.marketType).toEqual(expect.objectContaining({ status: 'open', value: null }))
+  })
+
   it('opens position sizing when semanticPatch carries a zero fixed-ratio position', async () => {
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({

@@ -4578,6 +4578,7 @@ export class CodegenConversationService {
         derived: derivedSemanticState,
       })
     }
+    nextState = this.hydrateDeterministicExecutionContextFromMessage(nextState, input.message)
 
     const reconciledNextState = this.reconcileSemanticMissingPlaceholders(nextState)
     const stateWithRequiredSlots = this.withRequiredSemanticOpenSlots(reconciledNextState, {
@@ -4588,6 +4589,35 @@ export class CodegenConversationService {
     })
 
     return this.normalizeRiskState(stateWithRequiredSlots)
+  }
+
+  private hydrateDeterministicExecutionContextFromMessage(
+    state: SemanticState,
+    message?: string,
+  ): SemanticState {
+    const text = message?.trim()
+    if (!text) return state
+
+    try {
+      const dispatcherPatch = this.genericSeedDispatcher.dispatch(text) as CodegenSemanticPatch
+      if (!dispatcherPatch.contextSlots) return state
+
+      const contextState = this.semanticSeedStateBuilder.build({
+        contextSlots: dispatcherPatch.contextSlots,
+      }, text)
+      if (!contextState) return state
+
+      return this.semanticStateMerge.merge({
+        persisted: state,
+        derived: contextState,
+      })
+    }
+    catch (error) {
+      this.logger.warn(
+        `deterministic execution context hydration failed, keeping planner state: ${error instanceof Error ? error.message : String(error)}`,
+      )
+      return state
+    }
   }
 
   private mergeSemanticPatchIntoState(
