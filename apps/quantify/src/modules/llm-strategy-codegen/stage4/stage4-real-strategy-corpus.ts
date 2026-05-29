@@ -25,4 +25,77 @@ export interface Stage4RealStrategyCase {
   readonly expectedFailure: Stage4BlockerKind | null
 }
 
-export const STAGE4_REAL_STRATEGY_CORPUS = [] as const satisfies readonly Stage4RealStrategyCase[]
+export const STAGE4_REAL_STRATEGY_CORPUS = [
+  {
+    id: 'stage4-simple-trend-ema-cross-stop-sizing',
+    category: 'simple_trend',
+    initialUserMessage: 'binance 永续 BTCUSDT 15m。EMA20 上穿 EMA50 开多，亏损 3% 止损，单笔使用 10% 仓位。',
+    expectedAtomKeys: ['indicator.cross_over', 'risk.stop_loss_pct', 'position.sizing'],
+    expectedSemanticIntent: ['trend entry', 'fixed stop loss', 'fixed ratio sizing'],
+    clarificationTurns: [],
+    expectedFailure: null,
+  },
+  {
+    id: 'stage4-mean-reversion-rsi-partial-tp',
+    category: 'mean_reversion',
+    initialUserMessage: 'binance 永续 BTCUSDT 15m。RSI14 低于 30 做多，盈利 5% 平一半，盈利 10% 平剩余。',
+    expectedAtomKeys: ['oscillator.rsi_lte', 'risk.partial_take_profit'],
+    expectedSemanticIntent: ['mean reversion entry', 'partial take profit exit'],
+    clarificationTurns: [],
+    expectedFailure: null,
+  },
+  {
+    id: 'stage4-grid-range-risk-sizing',
+    category: 'grid',
+    initialUserMessage: '价格维持在震荡区间内时开多，单笔 10% 仓位。',
+    expectedAtomKeys: ['pattern.range', 'position.sizing'],
+    expectedSemanticIntent: ['range-bound grid gate', 'fixed ratio sizing'],
+    clarificationTurns: [],
+    expectedFailure: 'ir_compile_missing_branch',
+  },
+  {
+    id: 'stage4-dca-schedule-budget',
+    category: 'dca',
+    initialUserMessage: 'BTC 回撤 3% 补仓，最多 3 次，每次 100 USDT，总预算最多 1000 USDT。',
+    expectedAtomKeys: ['position.dca_schedule', 'position.budget_cap'],
+    expectedSemanticIntent: ['drawdown DCA schedule', 'budget cap'],
+    clarificationTurns: [],
+    expectedFailure: 'runtime_missing_data',
+  },
+  {
+    id: 'stage4-add-position-pyramiding',
+    category: 'add_position',
+    initialUserMessage: 'binance 永续 BTCUSDT 15m。EMA20 上穿开多，盈利 2% 后加仓 10%，最多加仓 2 次，单笔使用 10% 仓位。',
+    expectedAtomKeys: ['indicator.cross_over', 'position.pyramiding_limit', 'position.sizing'],
+    expectedSemanticIntent: ['trend entry', 'pyramiding limit', 'fixed ratio sizing'],
+    clarificationTurns: [],
+    expectedFailure: null,
+  },
+  {
+    id: 'stage4-portfolio-risk-drawdown-exposure',
+    category: 'portfolio_risk',
+    initialUserMessage: 'EMA20 上穿开多，最大回撤超过 8% 停止开仓，最大敞口不超过账户 30%。',
+    expectedAtomKeys: ['indicator.cross_over', 'risk.max_drawdown_pct', 'position.max_exposure_pct'],
+    expectedSemanticIntent: ['trend entry', 'portfolio drawdown guard', 'exposure cap'],
+    clarificationTurns: [],
+    expectedFailure: 'runtime_missing_data',
+  },
+  {
+    id: 'stage4-multi-timeframe-trend-confirmation',
+    category: 'multi_timeframe',
+    initialUserMessage: 'BTC 15m EMA20 上穿 EMA50 开多，1h MA50 上方才允许入场，单笔 10% 仓位。',
+    expectedAtomKeys: ['indicator.cross_over', 'indicator.above', 'position.sizing'],
+    expectedSemanticIntent: ['lower timeframe entry', 'higher timeframe gate', 'fixed ratio sizing'],
+    clarificationTurns: [],
+    expectedFailure: null,
+  },
+  {
+    id: 'stage4-multi-symbol-shared-risk',
+    category: 'multi_symbol',
+    initialUserMessage: 'binance 永续 BTCUSDT 和 ETHUSDT 15m 都按 EMA20 上穿 EMA50 开多，单笔使用 10% 仓位，亏损 3% 止损。',
+    expectedAtomKeys: ['indicator.cross_over', 'position.sizing', 'risk.stop_loss_pct'],
+    expectedSemanticIntent: ['shared symbol basket rule', 'fixed ratio sizing', 'fixed stop loss'],
+    clarificationTurns: [],
+    expectedFailure: null,
+  },
+] as const satisfies readonly Stage4RealStrategyCase[]
