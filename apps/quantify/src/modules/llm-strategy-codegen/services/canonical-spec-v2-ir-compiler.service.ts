@@ -993,7 +993,13 @@ export class CanonicalSpecV2IrCompilerService {
   // union: CanonicalOrchestrationSymbolScope | CanonicalOrchestrationTimeframeScope | CanonicalOrchestrationDataSourceScope | CanonicalOrchestrationSubStrategyScope
   private compileOrchestrationScopes(spec: CanonicalStrategySpecV2): IrOrchestrationScope[] {
     const scopes = spec.orchestration?.scopes ?? []
-    return scopes.map((scope): IrOrchestrationScope => {
+    return scopes
+      // 裁剪 no-op timeframe scope：requiredTimeframes 去掉 primary 后为空时，
+      // 该 scope 不施加任何跨周期对齐约束，却会让运行期对「未绑定 timeframeScopeRef
+      // 的 decision program」一律 fail-closed NOOP（run-decision-programs.ts
+      // applyTimeframeScopeAlignment: unbound_program），导致单周期策略零成交。
+      .filter(scope => !this.isNoOpTimeframeScope(scope))
+      .map((scope): IrOrchestrationScope => {
       switch (scope.scopeKind) {
         case 'symbol':
           return {
@@ -1035,6 +1041,14 @@ export class CanonicalSpecV2IrCompilerService {
           throw new Error('codegen.orchestration_scope_unsupported')
       }
     })
+  }
+
+  // 单周期 timeframe scope（requiredTimeframes 仅含 primary 或为空）不构成真实跨周期
+  // 对齐约束，属噪音 orchestration rule 产物，编译期直接剔除，避免运行期孤儿 fail-closed。
+  private isNoOpTimeframeScope(scope: CanonicalOrchestrationScope): boolean {
+    if (scope.scopeKind !== 'timeframe') return false
+    const primary = scope.primaryTimeframe
+    return scope.requiredTimeframes.every(tf => tf === primary)
   }
 
   // Phase 5 S11 (#1112): scope.leg substrate IR compile

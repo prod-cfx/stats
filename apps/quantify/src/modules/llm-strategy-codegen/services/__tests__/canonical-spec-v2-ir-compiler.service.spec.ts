@@ -4712,6 +4712,45 @@ describe('canonicalSpecV2IrCompilerService orchestration gates', () => {
     expect(result.ir.orchestrationGates).toEqual([])
   })
 
+  it('prunes self-referential no-op timeframe scope (required ⊆ {primary}) so unbound decisions are not fail-closed', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.orchestration = {
+      scopes: [
+        {
+          id: 'noop-timeframe-scope',
+          scopeKind: 'timeframe',
+          primaryTimeframe: '1m',
+          requiredTimeframes: ['1m'],
+          alignmentPolicy: 'tolerant',
+        },
+      ],
+    }
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const scopes = result.ir.orchestrationScopes ?? []
+    expect(scopes.some(s => s.id === 'noop-timeframe-scope')).toBe(false)
+    expect(scopes.filter(s => s.scopeKind === 'timeframe')).toHaveLength(0)
+  })
+
+  it('retains a real multi-timeframe scope (required has a timeframe other than primary)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.orchestration = {
+      scopes: [
+        {
+          id: 'real-htf-scope',
+          scopeKind: 'timeframe',
+          primaryTimeframe: '1m',
+          requiredTimeframes: ['1h'],
+          alignmentPolicy: 'tolerant',
+        },
+      ],
+    }
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const scopes = result.ir.orchestrationScopes ?? []
+    expect(scopes.some(s => s.id === 'real-htf-scope' && s.scopeKind === 'timeframe')).toBe(true)
+  })
+
   it('compiles a single portfolioRisk into IR.orchestrationPortfolioRisks with passthrough metadata', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
     const spec = buildBaseSpec()

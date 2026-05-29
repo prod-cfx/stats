@@ -2285,4 +2285,129 @@ describe('PlannerDispatcherMergeService — plaza range and RSI regressions', ()
       params: expect.objectContaining({ sequenceKind: 'rsi_reclaim', period: 14, threshold: 38 }),
     })])
   })
+
+  it('collapses bare same-threshold `and(rsi_lte(T), cross_over(rsi,T))` (no sequence atom) to the executable cross_over', () => {
+    // 真实失败产物形态：planner 直出 LTE+CROSS_OVER 且无 condition.sequence。
+    // userMessage 不含「跌破/低于/下方」，文本合成分支不触发 → 仅结构塌缩可救。
+    const text = 'RSI 上穿 38 买入'
+    const planner = {
+      rules: [{
+        id: 'entry-rsi-cross-contradiction',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'and',
+          children: [
+            { kind: 'atom', key: 'oscillator.rsi_lte', params: { period: 14, value: 38 } },
+            { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'rsi', period: 14, value: 38 } },
+          ],
+        },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, null, text)
+    const entry = merged?.rules?.find(rule => rule.phase === 'entry')
+    const leaves = entry ? collectAtomLeaves(entry.condition) : []
+
+    expect(entry?.condition).toEqual(expect.objectContaining({
+      kind: 'atom',
+      key: 'indicator.cross_over',
+      params: expect.objectContaining({ indicator: 'rsi', value: 38 }),
+    }))
+    expect(leaves.some(leaf => leaf.key === 'oscillator.rsi_lte')).toBe(false)
+  })
+
+  it('keeps a legitimate different-threshold rsi_lte filter ANDed with cross_over (not contradictory)', () => {
+    // cross_over(38) AND rsi_lte(50)：当前可同时 ≥38 且 ≤50 → 合法过滤，不得塌缩。
+    const text = 'RSI 上穿 38 且 RSI 低于 50 买入'
+    const planner = {
+      rules: [{
+        id: 'entry-rsi-cross-with-filter',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          kind: 'and',
+          children: [
+            { kind: 'atom', key: 'oscillator.rsi_lte', params: { period: 14, value: 50 } },
+            { kind: 'atom', key: 'indicator.cross_over', params: { indicator: 'rsi', period: 14, value: 38 } },
+          ],
+        },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, null, text)
+    const entry = merged?.rules?.find(rule => rule.phase === 'entry')
+    const leaves = entry ? collectAtomLeaves(entry.condition) : []
+
+    expect(leaves.some(leaf => leaf.key === 'oscillator.rsi_lte')).toBe(true)
+    expect(leaves.some(leaf => leaf.key === 'indicator.cross_over')).toBe(true)
+  })
+
+  it('hydrates exit-style take-profit ("盈利达到 0.45% 时卖出平仓") into a take_profit_pct risk guard', () => {
+    const text = '基于 OKX 模拟盘 BTC-USDT 现货 15m，创建区间低买高卖策略。入场规则：价格位于最近 36 根 K 线区间下 20% 时买入；出场规则：价格回到区间上 55% 或盈利达到 0.45% 时卖出平仓；风控：单次仓位 25%，不使用杠杆，止损 3%。'
+    const planner = {
+      rules: [{
+        id: 'planner-entry-range-low',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'price.range_position_lte', params: { lookbackBars: 36, thresholdPct: 20 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, null, text)
+    const entry = merged?.rules?.find(rule => rule.phase === 'entry')
+    const riskLeaves = entry
+      ? listRuleEffects(entry.effects).flatMap(effect => collectAtomLeaves(effect)).filter(leaf => leaf.key.startsWith('risk.'))
+      : []
+
+    expect(riskLeaves).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.take_profit_pct', params: expect.objectContaining({ valuePct: 0.45 }) }),
+      expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 3 }) }),
+    ]))
+  })
+
+  it('does NOT misread "盈利 3% 后加仓" (pyramiding) as a take-profit risk', () => {
+    const text = 'BTC 15m，价格上穿 MA20 买入，盈利 3% 后加仓，单次仓位 10%。'
+    const planner = {
+      rules: [{
+        id: 'planner-entry-ma20',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'indicator.above', params: { indicator: 'ma', period: 20 } },
+        effects: {
+          actions: [{ kind: 'atom', key: 'action.open_long', params: {} }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    } as unknown as CodegenSemanticPatch
+
+    const merged = svc.mergeDeterministicExecutionSlots(planner, null, text)
+    const allLeaves = (merged?.rules ?? []).flatMap(rule => listRuleEffects(rule.effects).flatMap(effect => collectAtomLeaves(effect)))
+
+    expect(allLeaves.some(leaf => leaf.key === 'risk.take_profit_pct')).toBe(false)
+  })
 })
