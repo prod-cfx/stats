@@ -59,12 +59,14 @@ jobs:
               echo "[ERROR] missing quantify DATABASE_URL" >&2
               exit 1
             fi
+            export APP_ENV=staging
+            echo "[INFO] APP_ENV=$APP_ENV DATABASE_URL=set"
 
-            pnpm --filter @net/quantify exec prisma migrate resolve \
+            env APP_ENV="$APP_ENV" DATABASE_URL="$DATABASE_URL" pnpm --filter @net/quantify exec prisma migrate resolve \
               --rolled-back "$MIGRATION" \
               --schema apps/quantify/prisma/schema
 
-            pnpm --filter @net/quantify exec prisma migrate status \
+            env APP_ENV="$APP_ENV" DATABASE_URL="$DATABASE_URL" pnpm --filter @net/quantify exec prisma migrate status \
               --schema apps/quantify/prisma/schema
           '
           REMOTE
