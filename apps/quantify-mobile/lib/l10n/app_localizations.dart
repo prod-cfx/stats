@@ -3175,6 +3175,234 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'查看实盘策略'**
   String get deployViewLiveStrategies;
+
+  /// No description provided for @whaleSearchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入地址 / 标签 / 资产 / 交易所'**
+  String get whaleSearchHint;
+
+  /// No description provided for @whaleSearchPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索地址、标签、资产、交易所或事件类型'**
+  String get whaleSearchPrompt;
+
+  /// No description provided for @whaleSearchEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'未找到匹配结果'**
+  String get whaleSearchEmpty;
+
+  /// No description provided for @whaleSearchKindAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址'**
+  String get whaleSearchKindAddress;
+
+  /// No description provided for @whaleSearchKindLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'标签'**
+  String get whaleSearchKindLabel;
+
+  /// No description provided for @whaleSearchKindAsset.
+  ///
+  /// In zh, this message translates to:
+  /// **'资产'**
+  String get whaleSearchKindAsset;
+
+  /// No description provided for @whaleSearchKindExchange.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易所'**
+  String get whaleSearchKindExchange;
+
+  /// No description provided for @whaleSearchKindEventType.
+  ///
+  /// In zh, this message translates to:
+  /// **'事件类型'**
+  String get whaleSearchKindEventType;
+
+  /// No description provided for @whaleWatchEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无监控地址，点击下方添加'**
+  String get whaleWatchEmpty;
+
+  /// No description provided for @whaleRuleAddTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加地址监控'**
+  String get whaleRuleAddTitle;
+
+  /// No description provided for @whaleRuleEditTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑监控规则'**
+  String get whaleRuleEditTitle;
+
+  /// No description provided for @whaleRuleAddressLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'监控地址'**
+  String get whaleRuleAddressLabel;
+
+  /// No description provided for @whaleRuleAddressHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'0x… 地址或缩写'**
+  String get whaleRuleAddressHint;
+
+  /// No description provided for @whaleRuleAddressRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入监控地址'**
+  String get whaleRuleAddressRequired;
+
+  /// No description provided for @whaleRuleAddressInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'地址格式不正确'**
+  String get whaleRuleAddressInvalid;
+
+  /// No description provided for @whaleRuleThresholdLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'触发阈值（USD）'**
+  String get whaleRuleThresholdLabel;
+
+  /// No description provided for @whaleRuleThresholdHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'例如 1000000'**
+  String get whaleRuleThresholdHint;
+
+  /// No description provided for @whaleRuleThresholdRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入触发阈值'**
+  String get whaleRuleThresholdRequired;
+
+  /// No description provided for @whaleRuleThresholdInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'阈值需为大于 0 的数字'**
+  String get whaleRuleThresholdInvalid;
+
+  /// No description provided for @whaleRuleDirectionLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'监控方向'**
+  String get whaleRuleDirectionLabel;
+
+  /// No description provided for @whaleRuleDirectionInflow.
+  ///
+  /// In zh, this message translates to:
+  /// **'流入'**
+  String get whaleRuleDirectionInflow;
+
+  /// No description provided for @whaleRuleDirectionOutflow.
+  ///
+  /// In zh, this message translates to:
+  /// **'流出'**
+  String get whaleRuleDirectionOutflow;
+
+  /// No description provided for @whaleRuleDirectionBoth.
+  ///
+  /// In zh, this message translates to:
+  /// **'双向'**
+  String get whaleRuleDirectionBoth;
+
+  /// No description provided for @whaleRuleChannelLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'推送渠道'**
+  String get whaleRuleChannelLabel;
+
+  /// No description provided for @whaleRuleChannelPush.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用推送'**
+  String get whaleRuleChannelPush;
+
+  /// No description provided for @whaleRuleChannelTelegram.
+  ///
+  /// In zh, this message translates to:
+  /// **'Telegram'**
+  String get whaleRuleChannelTelegram;
+
+  /// No description provided for @whaleRuleChannelEmail.
+  ///
+  /// In zh, this message translates to:
+  /// **'邮件'**
+  String get whaleRuleChannelEmail;
+
+  /// No description provided for @whaleRuleChannelRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'至少选择一个推送渠道'**
+  String get whaleRuleChannelRequired;
+
+  /// No description provided for @whaleRuleCreate.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建监控'**
+  String get whaleRuleCreate;
+
+  /// No description provided for @whaleRuleSave.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存'**
+  String get whaleRuleSave;
+
+  /// No description provided for @whaleRuleMenuTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'监控规则操作'**
+  String get whaleRuleMenuTooltip;
+
+  /// No description provided for @whaleRuleMenuEdit.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑'**
+  String get whaleRuleMenuEdit;
+
+  /// No description provided for @whaleRuleMenuMute.
+  ///
+  /// In zh, this message translates to:
+  /// **'静音'**
+  String get whaleRuleMenuMute;
+
+  /// No description provided for @whaleRuleMenuUnmute.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消静音'**
+  String get whaleRuleMenuUnmute;
+
+  /// No description provided for @whaleRuleMenuDelete.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除'**
+  String get whaleRuleMenuDelete;
+
+  /// No description provided for @whaleRuleDeleteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除监控'**
+  String get whaleRuleDeleteTitle;
+
+  /// No description provided for @whaleRuleDeleteBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'确定删除对「{name}」的监控吗？'**
+  String whaleRuleDeleteBody(String name);
+
+  /// No description provided for @whaleRuleDeleteConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除'**
+  String get whaleRuleDeleteConfirm;
 }
 
 class _AppLocalizationsDelegate

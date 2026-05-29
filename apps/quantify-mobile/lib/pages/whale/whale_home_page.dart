@@ -14,6 +14,7 @@ import 'tabs/whale_holdings_tab.dart';
 import 'tabs/whale_live_tab.dart';
 import 'tabs/whale_watch_tab.dart';
 import 'widgets/whale_notification_sheet.dart';
+import 'widgets/whale_search_sheet.dart';
 
 /// 巨鲸动向首页（issue #1560）。
 ///
@@ -70,9 +71,8 @@ class _WhaleHomePageState extends ConsumerState<WhaleHomePage> {
           _CircularIconAction(
             icon: Icons.search,
             tooltip: l10n.whaleSearchTooltip,
-            // 搜索能力尚未落地（issue #1651）：禁用按钮避免空点击误导用户，
-            // 待产品确认搜索范围后再补齐 onTap。
-            onTap: null,
+            // #1754：搜索能力落地，点击打开搜索 sheet（解除 #1651 暂缓）。
+            onTap: () => WhaleSearchSheet.show(context),
           ),
           const SizedBox(width: QzSpacing.xs),
           QzNotificationBell(

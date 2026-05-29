@@ -1588,4 +1588,120 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deployViewLiveStrategies => '查看实盘策略';
+
+  @override
+  String get whaleSearchHint => '输入地址 / 标签 / 资产 / 交易所';
+
+  @override
+  String get whaleSearchPrompt => '搜索地址、标签、资产、交易所或事件类型';
+
+  @override
+  String get whaleSearchEmpty => '未找到匹配结果';
+
+  @override
+  String get whaleSearchKindAddress => '地址';
+
+  @override
+  String get whaleSearchKindLabel => '标签';
+
+  @override
+  String get whaleSearchKindAsset => '资产';
+
+  @override
+  String get whaleSearchKindExchange => '交易所';
+
+  @override
+  String get whaleSearchKindEventType => '事件类型';
+
+  @override
+  String get whaleWatchEmpty => '暂无监控地址，点击下方添加';
+
+  @override
+  String get whaleRuleAddTitle => '添加地址监控';
+
+  @override
+  String get whaleRuleEditTitle => '编辑监控规则';
+
+  @override
+  String get whaleRuleAddressLabel => '监控地址';
+
+  @override
+  String get whaleRuleAddressHint => '0x… 地址或缩写';
+
+  @override
+  String get whaleRuleAddressRequired => '请输入监控地址';
+
+  @override
+  String get whaleRuleAddressInvalid => '地址格式不正确';
+
+  @override
+  String get whaleRuleThresholdLabel => '触发阈值（USD）';
+
+  @override
+  String get whaleRuleThresholdHint => '例如 1000000';
+
+  @override
+  String get whaleRuleThresholdRequired => '请输入触发阈值';
+
+  @override
+  String get whaleRuleThresholdInvalid => '阈值需为大于 0 的数字';
+
+  @override
+  String get whaleRuleDirectionLabel => '监控方向';
+
+  @override
+  String get whaleRuleDirectionInflow => '流入';
+
+  @override
+  String get whaleRuleDirectionOutflow => '流出';
+
+  @override
+  String get whaleRuleDirectionBoth => '双向';
+
+  @override
+  String get whaleRuleChannelLabel => '推送渠道';
+
+  @override
+  String get whaleRuleChannelPush => '应用推送';
+
+  @override
+  String get whaleRuleChannelTelegram => 'Telegram';
+
+  @override
+  String get whaleRuleChannelEmail => '邮件';
+
+  @override
+  String get whaleRuleChannelRequired => '至少选择一个推送渠道';
+
+  @override
+  String get whaleRuleCreate => '创建监控';
+
+  @override
+  String get whaleRuleSave => '保存';
+
+  @override
+  String get whaleRuleMenuTooltip => '监控规则操作';
+
+  @override
+  String get whaleRuleMenuEdit => '编辑';
+
+  @override
+  String get whaleRuleMenuMute => '静音';
+
+  @override
+  String get whaleRuleMenuUnmute => '取消静音';
+
+  @override
+  String get whaleRuleMenuDelete => '删除';
+
+  @override
+  String get whaleRuleDeleteTitle => '删除监控';
+
+  @override
+  String whaleRuleDeleteBody(String name) {
+    return '确定删除对「$name」的监控吗？';
+  }
+
+  @override
+  String get whaleRuleDeleteConfirm => '删除';
 }

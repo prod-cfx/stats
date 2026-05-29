@@ -19,6 +19,7 @@ import 'mock/mock_strategy_repository.dart';
 import 'mock/mock_ticker_repository.dart';
 import 'mock/mock_whale_feed_repository.dart';
 import 'mock/mock_whale_profile_repository.dart';
+import 'mock/mock_whale_watch_repository.dart';
 import 'mock/unimplemented_repositories.dart';
 import 'models/whale_profile_models.dart';
 import 'repositories/repositories.dart';
@@ -95,6 +96,14 @@ final FutureProviderFamily<WhaleProfile, String> whaleProfileProvider =
       String address,
     ) async {
       return ref.watch(whaleProfileRepositoryProvider).getProfile(address);
+    });
+
+/// 巨鲸搜索与地址监控（#1754）。mock 驱动；真实读写依赖 #1682/#1683。
+final Provider<WhaleWatchRepository> whaleWatchRepositoryProvider =
+    Provider<WhaleWatchRepository>((Ref ref) {
+      return ref.watch(useMockProvider)
+          ? const MockWhaleWatchRepository()
+          : UnimplementedWhaleWatchRepository();
     });
 
 final Provider<StrategyRepository> strategyRepositoryProvider =

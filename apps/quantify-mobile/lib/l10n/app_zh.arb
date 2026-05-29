@@ -614,5 +614,50 @@
   "liveActionDelete": "删除",
   "liveActionDeletePermanent": "永久删除",
   "liveActionComingSoon": "策略操作即将上线",
-  "deployViewLiveStrategies": "查看实盘策略"
+  "deployViewLiveStrategies": "查看实盘策略",
+  "whaleSearchHint": "输入地址 / 标签 / 资产 / 交易所",
+  "whaleSearchPrompt": "搜索地址、标签、资产、交易所或事件类型",
+  "whaleSearchEmpty": "未找到匹配结果",
+  "whaleSearchKindAddress": "地址",
+  "whaleSearchKindLabel": "标签",
+  "whaleSearchKindAsset": "资产",
+  "whaleSearchKindExchange": "交易所",
+  "whaleSearchKindEventType": "事件类型",
+  "whaleWatchEmpty": "暂无监控地址，点击下方添加",
+  "whaleRuleAddTitle": "添加地址监控",
+  "whaleRuleEditTitle": "编辑监控规则",
+  "whaleRuleAddressLabel": "监控地址",
+  "whaleRuleAddressHint": "0x… 地址或缩写",
+  "whaleRuleAddressRequired": "请输入监控地址",
+  "whaleRuleAddressInvalid": "地址格式不正确",
+  "whaleRuleThresholdLabel": "触发阈值（USD）",
+  "whaleRuleThresholdHint": "例如 1000000",
+  "whaleRuleThresholdRequired": "请输入触发阈值",
+  "whaleRuleThresholdInvalid": "阈值需为大于 0 的数字",
+  "whaleRuleDirectionLabel": "监控方向",
+  "whaleRuleDirectionInflow": "流入",
+  "whaleRuleDirectionOutflow": "流出",
+  "whaleRuleDirectionBoth": "双向",
+  "whaleRuleChannelLabel": "推送渠道",
+  "whaleRuleChannelPush": "应用推送",
+  "whaleRuleChannelTelegram": "Telegram",
+  "whaleRuleChannelEmail": "邮件",
+  "whaleRuleChannelRequired": "至少选择一个推送渠道",
+  "whaleRuleCreate": "创建监控",
+  "whaleRuleSave": "保存",
+  "whaleRuleMenuTooltip": "监控规则操作",
+  "whaleRuleMenuEdit": "编辑",
+  "whaleRuleMenuMute": "静音",
+  "whaleRuleMenuUnmute": "取消静音",
+  "whaleRuleMenuDelete": "删除",
+  "whaleRuleDeleteTitle": "删除监控",
+  "whaleRuleDeleteBody": "确定删除对「{name}」的监控吗？",
+  "@whaleRuleDeleteBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "whaleRuleDeleteConfirm": "删除"
 }

@@ -74,6 +74,14 @@ class UnimplementedWhaleProfileRepository implements WhaleProfileRepository {
       _todo('WhaleProfileRepository');
 }
 
+class UnimplementedWhaleWatchRepository implements WhaleWatchRepository {
+  @override
+  Future<List<WatchRule>> listRules() => _todo('WhaleWatchRepository');
+  @override
+  Future<List<WhaleSearchResult>> search(String query) =>
+      _todo('WhaleWatchRepository');
+}
+
 class UnimplementedLiveStrategyRepository implements LiveStrategyRepository {
   @override
   Future<List<LiveStrategy>> listStrategies() =>

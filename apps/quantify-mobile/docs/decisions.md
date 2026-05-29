@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-05-30 · 巨鲸搜索与地址监控管理：落地实现（解除 #1651/#1663 暂缓，Issue #1754）
+
+**背景**：#1663 把巨鲸首页搜索按钮（待 #1651 收口搜索范围）与监控 tab「添加地址监控」按钮钉为禁用态，作为「未实现入口」基线。#1754 目标是「实现 OR 标 future」二选一，本节给出结论并解除上述两处暂缓。
+
+**候选**：
+
+| 方案 | 内容 | 取舍 |
+|------|------|------|
+| A. 继续标 future | 维持禁用态，等真实数据通道（#1682/#1683） | 与 #1751/#1752/#1753 已确立的 mock-first 路线不一致；搜索/监控 CRUD 是自包含客户端流，无需真实数据即可落地体验 |
+| B. mock-first 实现（采纳） | 搜索 sheet（地址/标签/资产/交易所/事件类型）+ 监控规则 CRUD（增删改静音）+ 表单校验，全部基于 mock repository | 对齐 #1751/#1752/#1753；运行期不依赖任何写入方先产生数据（不触发数据流跨越）；真实读写接入时仅替换 repository 实现，UI/校验/测试不变 |
+
+**判定**：**采纳 B——落地实现**。
+
+- 搜索按钮 `onTap` 接 `WhaleSearchSheet.show`（解除 #1651 暂缓）。
+- 「添加地址监控」按钮接 `WhaleWatchRuleSheet`（解除 #1663 暂缓）；监控行支持编辑 / 静音 / 删除（确认弹窗）。
+- 监控规则字段（地址 / 阈值 / 方向 / 渠道）带表单校验与行内错误提示。
+
+**理由**：
+
+1. issue 目标二选一，实现分支同样满足验收；搜索与 CRUD 无后端依赖。
+2. mock CRUD 为 **session 内存态**：UI 持 `List<WatchRule>` 作单一数据源，重建 app 回到种子。真实持久化随 #1682（监控数据）/ #1683（实时推送）接入，届时替换 `WhaleWatchRepository` 实现即可。
+3. 与既有 repository/provider/Unimplemented 占位约定一致，零破坏。
+
+**落地范围**：
+
+- 模型：`lib/data/models/whale_watch_models.dart`（`WatchRule` / `WhaleSearchResult` 等）。
+- 数据：`lib/data/repositories/whale_watch_repository.dart`、`lib/data/mock/mock_whale_watch_repository.dart`、`lib/data/mock/fixtures/whale_watch.dart`、`unimplemented_repositories.dart` 占位、`providers.dart` 注册、两个 barrel。
+- UI：`lib/pages/whale/widgets/whale_search_sheet.dart`、`whale_watch_rule_sheet.dart`；`whale_home_page.dart` 搜索按钮接线；`whale_watch_tab.dart` 改 ConsumerStatefulWidget 承载 CRUD。
+- 文案：`lib/l10n/app_zh.arb` + `app_en.arb`（双语）+ 重新生成 localizations。
+- 测试：`test/data/mock_whale_watch_repository_test.dart`、`test/pages/whale_search_sheet_test.dart`、`test/pages/whale_watch_rule_sheet_test.dart`；翻转 `whale_home_page_test.dart` 两个禁用态守护。
+
+---
+
 ## 2026-05-30 · 行情二级入口归属：聚合挂单 / 预测市场 / 币股 标记为 future（Issue #1750）
 
 **背景**：设计稿 `proto.jsx` 行情域（`under: 'market'`）除 `/market`（`ScreenTickers`）、交易详情（`ScreenOrderEntry`）、多空比（`ScreenLongShort`）外，另挂三个二级入口——聚合挂单 `ScreenAggOrders`、预测市场 `ScreenPredMarket`、币股 `ScreenCoinStocks`（完整高保真实现见 `m-screens-data.jsx`）。Flutter app 当前仅注册 `/market`、`/market/long-short`、`/market/:symbol`，未注册这三个入口。#1749 §1 已把「`数据 hub` 二级入口聚合挂单 / 预测市场 / 币股」的命名归属统一钉到 `行情` Tab，但**未对「是否进入当前 app 信息架构」给出结论**，本节补齐该结论。

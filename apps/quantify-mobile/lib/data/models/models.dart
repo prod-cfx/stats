@@ -13,3 +13,4 @@ export 'ticker_models.dart';
 export 'trade_models.dart';
 export 'whale_models.dart';
 export 'whale_profile_models.dart';
+export 'whale_watch_models.dart';

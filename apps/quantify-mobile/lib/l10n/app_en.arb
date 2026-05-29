@@ -611,5 +611,50 @@
   "liveActionDelete": "Delete",
   "liveActionDeletePermanent": "Delete permanently",
   "liveActionComingSoon": "Strategy actions coming soon",
-  "deployViewLiveStrategies": "View live strategies"
+  "deployViewLiveStrategies": "View live strategies",
+  "whaleSearchHint": "Address / label / asset / exchange",
+  "whaleSearchPrompt": "Search addresses, labels, assets, exchanges or event types",
+  "whaleSearchEmpty": "No matching results",
+  "whaleSearchKindAddress": "Addresses",
+  "whaleSearchKindLabel": "Labels",
+  "whaleSearchKindAsset": "Assets",
+  "whaleSearchKindExchange": "Exchanges",
+  "whaleSearchKindEventType": "Event types",
+  "whaleWatchEmpty": "No watched addresses yet, add one below",
+  "whaleRuleAddTitle": "Add watch address",
+  "whaleRuleEditTitle": "Edit watch rule",
+  "whaleRuleAddressLabel": "Watch address",
+  "whaleRuleAddressHint": "0x… address or short form",
+  "whaleRuleAddressRequired": "Enter a watch address",
+  "whaleRuleAddressInvalid": "Invalid address format",
+  "whaleRuleThresholdLabel": "Trigger threshold (USD)",
+  "whaleRuleThresholdHint": "e.g. 1000000",
+  "whaleRuleThresholdRequired": "Enter a trigger threshold",
+  "whaleRuleThresholdInvalid": "Threshold must be a number greater than 0",
+  "whaleRuleDirectionLabel": "Direction",
+  "whaleRuleDirectionInflow": "Inflow",
+  "whaleRuleDirectionOutflow": "Outflow",
+  "whaleRuleDirectionBoth": "Both",
+  "whaleRuleChannelLabel": "Channels",
+  "whaleRuleChannelPush": "Push",
+  "whaleRuleChannelTelegram": "Telegram",
+  "whaleRuleChannelEmail": "Email",
+  "whaleRuleChannelRequired": "Select at least one channel",
+  "whaleRuleCreate": "Create",
+  "whaleRuleSave": "Save",
+  "whaleRuleMenuTooltip": "Rule actions",
+  "whaleRuleMenuEdit": "Edit",
+  "whaleRuleMenuMute": "Mute",
+  "whaleRuleMenuUnmute": "Unmute",
+  "whaleRuleMenuDelete": "Delete",
+  "whaleRuleDeleteTitle": "Delete watch",
+  "whaleRuleDeleteBody": "Delete the watch on \"{name}\"?",
+  "@whaleRuleDeleteBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "whaleRuleDeleteConfirm": "Delete"
 }

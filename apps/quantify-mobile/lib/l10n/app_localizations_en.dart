@@ -1617,4 +1617,122 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deployViewLiveStrategies => 'View live strategies';
+
+  @override
+  String get whaleSearchHint => 'Address / label / asset / exchange';
+
+  @override
+  String get whaleSearchPrompt =>
+      'Search addresses, labels, assets, exchanges or event types';
+
+  @override
+  String get whaleSearchEmpty => 'No matching results';
+
+  @override
+  String get whaleSearchKindAddress => 'Addresses';
+
+  @override
+  String get whaleSearchKindLabel => 'Labels';
+
+  @override
+  String get whaleSearchKindAsset => 'Assets';
+
+  @override
+  String get whaleSearchKindExchange => 'Exchanges';
+
+  @override
+  String get whaleSearchKindEventType => 'Event types';
+
+  @override
+  String get whaleWatchEmpty => 'No watched addresses yet, add one below';
+
+  @override
+  String get whaleRuleAddTitle => 'Add watch address';
+
+  @override
+  String get whaleRuleEditTitle => 'Edit watch rule';
+
+  @override
+  String get whaleRuleAddressLabel => 'Watch address';
+
+  @override
+  String get whaleRuleAddressHint => '0x… address or short form';
+
+  @override
+  String get whaleRuleAddressRequired => 'Enter a watch address';
+
+  @override
+  String get whaleRuleAddressInvalid => 'Invalid address format';
+
+  @override
+  String get whaleRuleThresholdLabel => 'Trigger threshold (USD)';
+
+  @override
+  String get whaleRuleThresholdHint => 'e.g. 1000000';
+
+  @override
+  String get whaleRuleThresholdRequired => 'Enter a trigger threshold';
+
+  @override
+  String get whaleRuleThresholdInvalid =>
+      'Threshold must be a number greater than 0';
+
+  @override
+  String get whaleRuleDirectionLabel => 'Direction';
+
+  @override
+  String get whaleRuleDirectionInflow => 'Inflow';
+
+  @override
+  String get whaleRuleDirectionOutflow => 'Outflow';
+
+  @override
+  String get whaleRuleDirectionBoth => 'Both';
+
+  @override
+  String get whaleRuleChannelLabel => 'Channels';
+
+  @override
+  String get whaleRuleChannelPush => 'Push';
+
+  @override
+  String get whaleRuleChannelTelegram => 'Telegram';
+
+  @override
+  String get whaleRuleChannelEmail => 'Email';
+
+  @override
+  String get whaleRuleChannelRequired => 'Select at least one channel';
+
+  @override
+  String get whaleRuleCreate => 'Create';
+
+  @override
+  String get whaleRuleSave => 'Save';
+
+  @override
+  String get whaleRuleMenuTooltip => 'Rule actions';
+
+  @override
+  String get whaleRuleMenuEdit => 'Edit';
+
+  @override
+  String get whaleRuleMenuMute => 'Mute';
+
+  @override
+  String get whaleRuleMenuUnmute => 'Unmute';
+
+  @override
+  String get whaleRuleMenuDelete => 'Delete';
+
+  @override
+  String get whaleRuleDeleteTitle => 'Delete watch';
+
+  @override
+  String whaleRuleDeleteBody(String name) {
+    return 'Delete the watch on \"$name\"?';
+  }
+
+  @override
+  String get whaleRuleDeleteConfirm => 'Delete';
 }

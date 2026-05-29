@@ -120,20 +120,22 @@ void main() {
   });
 
   testWidgets(
-      '监控 tab「添加地址监控」按钮禁用 (onPressed=null)，对齐设计稿无 onClick',
+      '监控 tab「添加地址监控」按钮可点，打开规则表单 sheet',
       (WidgetTester tester) async {
-    // issue #1663：能力未落地前按钮应明示禁用，避免空 lambda 的 ripple
-    // 暗示可点。
+    // issue #1754：监控能力落地，按钮可点打开 WhaleWatchRuleSheet（解除
+    // #1663 暂缓的禁用态）。
     await _pump(tester);
     await tester.tap(find.text('监控'));
     await tester.pumpAndSettle();
-    final Finder ctaText = find.text('添加地址监控');
-    expect(ctaText, findsOneWidget);
-    final OutlinedButton cta = tester.widget<OutlinedButton>(
-      find.ancestor(of: ctaText, matching: find.byType(OutlinedButton)).first,
+    final Finder ctaButton = find.ancestor(
+      of: find.text('添加地址监控'),
+      matching: find.byType(OutlinedButton),
     );
-    expect(cta.onPressed, isNull,
-        reason: '添加地址监控能力未实现前按钮应禁用');
+    final OutlinedButton cta = tester.widget<OutlinedButton>(ctaButton.first);
+    expect(cta.onPressed, isNotNull, reason: '#1754 后添加按钮应可点');
+    await tester.tap(ctaButton.first);
+    await tester.pumpAndSettle();
+    expect(find.text('创建监控'), findsOneWidget);
   });
 
   testWidgets('默认进入「实时」tab：tab 高亮 + 实时内容可见',
@@ -174,14 +176,13 @@ void main() {
     // 搜索 icon 渲染（设计稿 iconBtn 风格）。
     expect(find.byIcon(Icons.search), findsOneWidget);
 
-    // issue #1651：搜索能力尚未落地，按钮应为禁用态（onPressed=null），
-    // 避免出现空 onTap 的误导点击。
+    // issue #1754：搜索能力落地，按钮可点（解除 #1651 暂缓的禁用态）。
     final Finder searchIcon = find.byIcon(Icons.search);
     final IconButton searchButton = tester.widget<IconButton>(
       find.ancestor(of: searchIcon, matching: find.byType(IconButton)).first,
     );
-    expect(searchButton.onPressed, isNull,
-        reason: '搜索按钮未实现前应禁用，避免空点击');
+    expect(searchButton.onPressed, isNotNull,
+        reason: '#1754 后搜索按钮应可点');
 
     // 铃铛使用 36x36 SizedBox（QzNotificationBell circular=true 路径）。
     final Finder bellIcon = find.byIcon(Icons.notifications_outlined);
