@@ -32,15 +32,16 @@ jobs:
           pnpm exec dotenv -e .env.staging -e .env.staging.local -- node <<'NODE'
           const { Client } = require('pg')
 
-          const url = process.env.QUANTIFY_DATABASE_URL || process.env.DATABASE_URL
-          if (!url || url === '__SET_IN_env.local__') {
-            throw new Error('missing quantify database url')
-          }
+          void (async () => {
+            const url = process.env.QUANTIFY_DATABASE_URL || process.env.DATABASE_URL
+            if (!url || url === '__SET_IN_env.local__') {
+              throw new Error('missing quantify database url')
+            }
 
-          const client = new Client({ connectionString: url })
-          await client.connect()
+            const client = new Client({ connectionString: url })
+            await client.connect()
 
-          const lockSql = `
+            const lockSql = `
             SELECT
               a.pid,
               a.usename,
@@ -58,21 +59,22 @@ jobs:
             ORDER BY a.query_start NULLS LAST
           `
 
-          const holders = await client.query(lockSql)
-          console.log('[INFO] advisory lock holders:', JSON.stringify(holders.rows, null, 2))
+            const holders = await client.query(lockSql)
+            console.log('[INFO] advisory lock holders:', JSON.stringify(holders.rows, null, 2))
 
-          for (const row of holders.rows) {
-            const result = await client.query('SELECT pg_terminate_backend($1) AS terminated', [row.pid])
-            console.log('[INFO] terminated:', JSON.stringify({ pid: row.pid, result: result.rows[0] }))
-          }
+            for (const row of holders.rows) {
+              const result = await client.query('SELECT pg_terminate_backend($1) AS terminated', [row.pid])
+              console.log('[INFO] terminated:', JSON.stringify({ pid: row.pid, result: result.rows[0] }))
+            }
 
-          const remaining = await client.query(lockSql)
-          console.log('[INFO] remaining advisory lock holders:', JSON.stringify(remaining.rows, null, 2))
+            const remaining = await client.query(lockSql)
+            console.log('[INFO] remaining advisory lock holders:', JSON.stringify(remaining.rows, null, 2))
 
-          await client.end()
+            await client.end()
 
-          if (remaining.rows.length > 0) {
-            process.exitCode = 1
-          }
+            if (remaining.rows.length > 0) {
+              process.exitCode = 1
+            }
+          })()
           NODE
           REMOTE
