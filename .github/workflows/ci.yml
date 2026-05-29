@@ -306,6 +306,9 @@ jobs:
   deploy-quantify:
     runs-on: ubuntu-latest
     if: ${{ inputs.target == 'all' || inputs.target == 'quantify' }}
+    concurrency:
+      group: ci-deploy-quantify
+      cancel-in-progress: false
     env:
       NX_DAEMON: 'false'
       CI: '1'
@@ -420,6 +423,46 @@ jobs:
 
           fs.writeFileSync(targetPath, `${JSON.stringify(config, null, 2)}\n`)
           NODE
+
+      - name: 等待 quantify 远端部署锁释放
+        timeout-minutes: 35
+        env:
+          HOST: ${{ secrets.AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+          USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -p "$PORT" "$USER@$HOST" "bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          APP_ROOT="/opt/work/quantify"
+          LOCK_FILE="$APP_ROOT/.deploy.lock"
+          WAIT_SECONDS=1800
+          SLEEP_SECONDS=30
+
+          mkdir -p "$APP_ROOT"
+          deadline=$((SECONDS + WAIT_SECONDS))
+
+          while ! flock -n "$LOCK_FILE" true; do
+            echo "[WARN] quantify deploy lock is held; waiting ${SLEEP_SECONDS}s before retry"
+            if command -v fuser >/dev/null 2>&1; then
+              fuser -v "$LOCK_FILE" || true
+            fi
+            ps -eo pid,ppid,stat,etime,cmd \
+              | grep -E 'prisma|migrate|pnpm|dx|ssh.*bash -s|deploy' \
+              | grep -v grep \
+              || true
+
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "[ERROR] quantify deploy lock still held after ${WAIT_SECONDS}s"
+              exit 1
+            fi
+
+            sleep "$SLEEP_SECONDS"
+          done
+
+          echo "[INFO] quantify deploy lock is available"
+          REMOTE
 
       - name: 使用 dx 执行 quantify 制品部署
         env:

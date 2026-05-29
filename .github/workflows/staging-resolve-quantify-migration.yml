@@ -1,0 +1,70 @@
+name: Staging Resolve Quantify Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      migration:
+        description: Prisma migration name to mark rolled back
+        required: true
+        default: '20260529111000_normalize_market_bar_close_time'
+
+jobs:
+  resolve-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 加载 SSH 私钥
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+
+      - name: 标记 staging quantify 失败迁移为 rolled back
+        env:
+          HOST: ${{ secrets.AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+          USER: ${{ secrets.AWS_SSH_USER }}
+          MIGRATION: ${{ inputs.migration }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "$PORT" -H "$HOST" >> ~/.ssh/known_hosts
+          ssh -p "$PORT" "$USER@$HOST" "MIGRATION='$MIGRATION' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          APP_ROOT="/opt/work/quantify"
+          RELEASE_DIR="$(ls -td "$APP_ROOT"/releases/* 2>/dev/null | head -n 1)"
+          cd "$RELEASE_DIR"
+          echo "[INFO] release=$RELEASE_DIR"
+          echo "[INFO] migration=$MIGRATION"
+
+          ENV_ARGS=()
+          for file in \
+            "$RELEASE_DIR/.env.staging" \
+            "$RELEASE_DIR/.env.staging.local" \
+            "$APP_ROOT/shared/.env.staging" \
+            "$APP_ROOT/shared/.env.staging.local" \
+            "$APP_ROOT/.env.staging" \
+            "$APP_ROOT/.env.staging.local"; do
+            if [ -f "$file" ]; then
+              echo "[INFO] using env file: $file"
+              ENV_ARGS+=("-e" "$file")
+            fi
+          done
+
+          pnpm exec dotenv -o "${ENV_ARGS[@]}" -- bash -lc '
+            set -euo pipefail
+            if [ -n "${QUANTIFY_DATABASE_URL:-}" ] && [ "${QUANTIFY_DATABASE_URL}" != "__SET_IN_env.local__" ]; then
+              export DATABASE_URL="$QUANTIFY_DATABASE_URL"
+            fi
+            if [ -z "${DATABASE_URL:-}" ] || [ "${DATABASE_URL}" = "__SET_IN_env.local__" ]; then
+              echo "[ERROR] missing quantify DATABASE_URL" >&2
+              exit 1
+            fi
+            export APP_ENV=staging
+            echo "[INFO] APP_ENV=$APP_ENV DATABASE_URL=set"
+
+            env APP_ENV="$APP_ENV" DATABASE_URL="$DATABASE_URL" pnpm --filter @net/quantify exec prisma migrate resolve \
+              --rolled-back "$MIGRATION"
+
+            env APP_ENV="$APP_ENV" DATABASE_URL="$DATABASE_URL" pnpm --filter @net/quantify exec prisma migrate status
+          '
+          REMOTE

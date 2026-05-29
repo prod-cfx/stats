@@ -2,6 +2,7 @@ import type { AiSignalPayload, MarketTimeframe as AppMarketTimeframe, StrategyDe
 import type { MultiLegStrategyContext, LegTimeframeData } from '@ai/shared/script-engine/helpers/context-builder'
 import type { Logger } from '@nestjs/common'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
+import type { RuntimeEvent } from '@/modules/backtesting/types/backtesting.types'
 import type { AiService } from '@/modules/ai/ai.service'
 import type { StrategyExecutionConfig, StrategyLegDefinition } from '@/modules/strategy-templates/types/strategy-template.types'
 import type { StrategyInstance, StrategyTemplate, Symbol } from '@/prisma/prisma.types'
@@ -99,6 +100,7 @@ export interface PublishedStrategyRuntimeContextInput {
    */
   accountDrawdownPct?: number
   runtimeBarsByTimeframe?: BuildRuntimeMarketContextInput['barsByTimeframe']
+  eventStreams?: Record<string, RuntimeEvent[]>
 }
 
 type PublishedStrategyRuntimeContext = ReturnType<typeof buildStrategyContext>
@@ -713,6 +715,7 @@ export class SignalGenerationDecisionStage {
           primaryCloseTs: input.timestamp,
           params: input.params ?? {},
           barsByTimeframe: input.runtimeBarsByTimeframe,
+          eventStreams: input.eventStreams,
         })
       : null
     const legacyContext = buildStrategyContext({
@@ -735,6 +738,7 @@ export class SignalGenerationDecisionStage {
             })),
           }),
           ...legacyContext,
+          ...(runtimeMarketContext.eventInbox ? { eventInbox: runtimeMarketContext.eventInbox } : {}),
         }
       : legacyContext
 

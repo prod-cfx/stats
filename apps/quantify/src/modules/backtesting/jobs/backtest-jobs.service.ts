@@ -420,12 +420,14 @@ export class BacktestJobsService {
     if (!result.diagnostics) {
       return result
     }
-    const { compiledRulesCount, signalTriggerCount, fillCount, dataRequirementMissingCount } = result.diagnostics
+    const { compiledRulesCount, signalTriggerCount, fillCount, dataRequirementMissingCount, eventStreamMissingCount } = result.diagnostics
     let diagnosticReason: BacktestReport['summary']['diagnosticReason']
     if (compiledRulesCount === 0) {
       diagnosticReason = ErrorCode.BACKTEST_NO_RULES_COMPILED as BacktestReport['summary']['diagnosticReason']
     } else if (dataRequirementMissingCount > 0) {
       diagnosticReason = ErrorCode.BACKTEST_DATA_REQUIREMENT_UNAVAILABLE as BacktestReport['summary']['diagnosticReason']
+    } else if (eventStreamMissingCount > 0) {
+      diagnosticReason = ErrorCode.BACKTEST_EVENT_STREAM_UNAVAILABLE as BacktestReport['summary']['diagnosticReason']
     } else if (signalTriggerCount === 0) {
       diagnosticReason = ErrorCode.BACKTEST_NO_SIGNAL_FIRED_IN_RANGE as BacktestReport['summary']['diagnosticReason']
     } else if (fillCount === 0) {

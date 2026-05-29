@@ -21,6 +21,7 @@ import {
   readAtomicRuntimeRequirementsFromSnapshot,
 } from '@/modules/strategy-runtime/semantic-runtime-state.util'
 import { buildRuntimeMarketContext } from '@/modules/strategy-runtime/runtime-context-assembler'
+import { readEventStreamsFromExprPool } from '@/modules/strategy-runtime/runtime-data-plan.resolver'
 import { strategyDecisionToDeltaQty, validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TheoreticalExecutionModel } from '../execution/theoretical-execution.model'
@@ -166,6 +167,7 @@ export class BacktestRunnerService {
       signalTriggerCount: 0,
       fillCount: 0,
       dataRequirementMissingCount: 0,
+      eventStreamMissingCount: 0,
     }
     const requestedRuntimeTimeframes = this.resolveRequestedRuntimeTimeframes(input)
     const availableRuntimeKeys = new Set<string>()
@@ -386,6 +388,7 @@ export class BacktestRunnerService {
     diagnostics.dataRequirementMissingCount = requiredRuntimeKeys
       .filter(key => !availableRuntimeKeys.has(key))
       .length
+    diagnostics.eventStreamMissingCount = this.resolveMissingEventStreamCount(input)
     const diagnosticReason = this.resolveDiagnosticReason(report, diagnostics)
 
     this.stateEngine.reset()
@@ -449,9 +452,41 @@ export class BacktestRunnerService {
     if (report.summary.totalTrades > 0) return undefined
     if (diagnostics.compiledRulesCount === 0) return 'BACKTEST_NO_RULES_COMPILED'
     if (diagnostics.dataRequirementMissingCount > 0) return 'BACKTEST_DATA_REQUIREMENT_UNAVAILABLE'
+    if (diagnostics.eventStreamMissingCount > 0) return 'BACKTEST_EVENT_STREAM_UNAVAILABLE'
     if (diagnostics.signalTriggerCount === 0) return 'BACKTEST_NO_SIGNAL_FIRED_IN_RANGE'
     if (diagnostics.fillCount === 0) return 'BACKTEST_SIGNAL_FIRED_BUT_NO_FILL'
     return undefined
+  }
+
+  private resolveMissingEventStreamCount(input: BacktestRunInput): number {
+    const requiredEventStreams = this.resolveRequiredEventStreams(input.strategy)
+    if (requiredEventStreams.length === 0) return 0
+
+    const suppliedStreams = input.eventStreams ?? {}
+    return requiredEventStreams.filter((stream) => {
+      const events = suppliedStreams[stream.sourceFeedId]
+      return !Array.isArray(events)
+    }).length
+  }
+
+  private resolveRequiredEventStreams(strategy: BacktestRunInput['strategy']): ReturnType<typeof readEventStreamsFromExprPool> {
+    const candidates = [
+      this.readRecord(strategy.astSnapshot)?.exprPool,
+      this.readRecord(strategy.irSnapshot)?.exprPool,
+      this.readRecord(strategy.specSnapshot)?.exprPool,
+    ]
+    const streams = candidates.flatMap(candidate => readEventStreamsFromExprPool(candidate))
+    const byFeedId = new Map<string, (typeof streams)[number]>()
+    streams.forEach((stream) => {
+      if (!byFeedId.has(stream.sourceFeedId)) byFeedId.set(stream.sourceFeedId, stream)
+    })
+    return [...byFeedId.values()]
+  }
+
+  private readRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null
   }
 
   private countCompiledRules(specSnapshot: BacktestRunInput['strategy']['specSnapshot']): number {
@@ -1085,6 +1120,7 @@ export class BacktestRunnerService {
       primaryCloseTs: bar.closeTime,
       params: input.input.strategy.params,
       barsByTimeframe,
+      eventStreams: input.input.eventStreams,
     }) as MultiLegStrategyContext
 
     // Phase 5 S0a: 给 compiled-runtime 暴露 ctx.bars 通道（StrategyExecutionContextV1.bars）。
@@ -1094,6 +1130,7 @@ export class BacktestRunnerService {
     const primaryBars = multiLegContext.data.primary?.[input.input.baseTimeframe]?.bars ?? []
 
     const runtimeContext = buildMultiLegStrategyContext(multiLegContext)
+    const eventInbox = (multiLegContext as { eventInbox?: unknown }).eventInbox
     return {
       ts: bar.closeTime,
       symbol: bar.symbol,
@@ -1109,6 +1146,7 @@ export class BacktestRunnerService {
       },
       portfolio,
       params: input.input.strategy.params,
+      ...(eventInbox ? { eventInbox } : {}),
       ...(input.semanticRuntimeState ? { semanticRuntimeState: input.semanticRuntimeState } : {}),
       __compiledDecisionState: input.compiledDecisionState,
       ...runtimeContext,

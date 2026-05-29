@@ -129,6 +129,21 @@ export class BacktestDataRangeDto {
   toTs!: number
 }
 
+export class BacktestRuntimeEventDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  id!: string
+
+  @ApiProperty()
+  @IsNumber()
+  ts!: number
+
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  @IsObject()
+  payload!: Record<string, unknown>
+}
+
 export class BacktestRequestedRangeInputDto {
   @ApiProperty({ enum: ['7D', '30D', '90D', '1Y', 'CUSTOM'] })
   @IsIn(['7D', '30D', '90D', '1Y', 'CUSTOM'])
@@ -249,4 +264,9 @@ export class RunBacktestDto implements RunBacktestDtoShape {
   @ValidateNested({ each: true })
   @Type(() => BacktestBarDto)
   bars?: BacktestRunInput['bars']
+
+  @ApiPropertyOptional({ type: 'object', additionalProperties: { type: 'array', items: { type: 'object' } } })
+  @IsOptional()
+  @IsObject()
+  eventStreams?: BacktestRunInput['eventStreams']
 }

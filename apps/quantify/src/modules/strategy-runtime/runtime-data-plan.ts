@@ -27,7 +27,11 @@ export interface RuntimeExternalDataSourceRequirement {
 }
 
 export interface RuntimeEventStreamRequirement {
-  sourceRef: string
+  provider: 'webhook'
+  signalId: string
+  sourceFeedId: string
+  ttlMs?: number
+  schemaRef: 'webhook_event'
 }
 
 export interface RuntimeDataPlan {

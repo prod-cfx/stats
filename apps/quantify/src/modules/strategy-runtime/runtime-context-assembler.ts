@@ -1,5 +1,5 @@
 import type { MarketTimeframe } from '@ai/shared'
-import type { Bar } from '@/modules/backtesting/types/backtesting.types'
+import type { Bar, RuntimeEvent } from '@/modules/backtesting/types/backtesting.types'
 import { getClosedBarsAsOf, toRuntimeScriptBars } from './runtime-data-portal'
 
 export interface BuildRuntimeMarketContextInput {
@@ -8,6 +8,7 @@ export interface BuildRuntimeMarketContextInput {
   primaryCloseTs: number
   params: Record<string, unknown>
   barsByTimeframe: Record<string, Bar[]>
+  eventStreams?: Record<string, RuntimeEvent[]>
 }
 
 export function buildRuntimeMarketContext(input: BuildRuntimeMarketContextInput) {
@@ -32,6 +33,8 @@ export function buildRuntimeMarketContext(input: BuildRuntimeMarketContextInput)
     }
   }
 
+  const eventInbox = buildEventInboxAsOf(input.eventStreams, input.primaryCloseTs)
+
   return {
     data: { [primaryLegId]: dataForPrimary },
     execution: { timeframe: input.baseTimeframe },
@@ -39,5 +42,33 @@ export function buildRuntimeMarketContext(input: BuildRuntimeMarketContextInput)
     dataRequirements: { [primaryLegId]: Object.keys(dataForPrimary) },
     timestamp: input.primaryCloseTs,
     params: input.params,
+    ...(eventInbox ? { eventInbox } : {}),
   }
+}
+
+function buildEventInboxAsOf(
+  eventStreams: Record<string, RuntimeEvent[]> | undefined,
+  primaryCloseTs: number,
+): Record<string, RuntimeEvent[]> | undefined {
+  if (!eventStreams) return undefined
+
+  const eventInbox: Record<string, RuntimeEvent[]> = {}
+  for (const [feedId, events] of Object.entries(eventStreams)) {
+    if (!Array.isArray(events)) continue
+    const visibleEvents = events.filter(event => (
+      event
+      && typeof event.id === 'string'
+      && typeof event.ts === 'number'
+      && Number.isFinite(event.ts)
+      && event.ts <= primaryCloseTs
+      && event.payload
+      && typeof event.payload === 'object'
+      && !Array.isArray(event.payload)
+    ))
+    if (visibleEvents.length > 0) {
+      eventInbox[feedId] = visibleEvents
+    }
+  }
+
+  return Object.keys(eventInbox).length > 0 ? eventInbox : undefined
 }

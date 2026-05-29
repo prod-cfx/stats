@@ -260,6 +260,47 @@ export class SignalGeneratorRepository {
     })
   }
 
+  findActiveWebhookSignalSubscriptions(input: {
+    strategyInstanceId: string
+    signalIds: string[]
+  }) {
+    return this.txHost.tx.webhookSignalSubscription.findMany({
+      where: {
+        strategyInstanceId: input.strategyInstanceId,
+        signalId: { in: input.signalIds },
+        status: 'ACTIVE',
+      },
+      select: { signalId: true },
+    })
+  }
+
+  findAcceptedWebhookRuntimeEvents(input: {
+    strategyInstanceId: string
+    signalIds: string[]
+    since: Date
+    until: Date
+  }) {
+    return this.txHost.tx.webhookSignalEvent.findMany({
+      where: {
+        strategyInstanceId: input.strategyInstanceId,
+        signalId: { in: input.signalIds },
+        signatureStatus: 'ACCEPTED',
+        receivedAt: {
+          gte: input.since,
+          lte: input.until,
+        },
+      },
+      orderBy: { receivedAt: 'asc' },
+      select: {
+        id: true,
+        signalId: true,
+        payload: true,
+        receivedAt: true,
+        sourceTimestamp: true,
+      },
+    })
+  }
+
   updateStrategyInstanceMetadata(instanceId: string, metadata: Prisma.InputJsonValue) {
     return this.txHost.tx.strategyInstance.update({
       where: { id: instanceId },

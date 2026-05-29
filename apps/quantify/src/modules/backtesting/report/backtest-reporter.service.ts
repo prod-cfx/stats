@@ -135,6 +135,7 @@ export class BacktestReporter {
         signalTriggerCount: 0,
         fillCount: this.trades.length,
         dataRequirementMissingCount: 0,
+        eventStreamMissingCount: 0,
       },
       equityCurve: this.equityCurve,
       trades: this.trades,

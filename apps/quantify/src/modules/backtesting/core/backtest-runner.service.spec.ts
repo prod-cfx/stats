@@ -366,6 +366,165 @@ describe('backtestRunnerService', () => {
     expect(report.summary.diagnosticReason).toBeUndefined()
   })
 
+  it('reports event stream unavailable when an externalSignal strategy has no supplied event stream', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 'webhook-missing-stream',
+        params: { marketType: 'perp' },
+        specSnapshot: { rules: [{ id: 'r1' }] },
+        astSnapshot: {
+          exprPool: [
+            {
+              id: 'expr_webhook_whale_buy',
+              nodeType: 'predicate',
+              payload: {
+                kind: 'externalSignal',
+                params: {
+                  provider: 'webhook',
+                  signalId: 'whale_buy',
+                  sourceFeedId: 'webhook.whale_buy',
+                  ttlMs: 60_000,
+                },
+              },
+            },
+          ],
+        },
+        fn: () => ({ type: 'NOOP', reason: 'webhook.no_event' }),
+      },
+      dataRange: { fromTs: 900_000, toTs: 900_000 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', openTime: 0, closeTime: 900_000, close: 100 }),
+      ],
+    })
+
+    expect(report.diagnostics.eventStreamMissingCount).toBe(1)
+    expect(report.summary.diagnosticReason).toBe('BACKTEST_EVENT_STREAM_UNAVAILABLE')
+  })
+
+  it('injects matching webhook events into strategy context point-in-time', async () => {
+    const runner = createRunner()
+    const inboxes: unknown[] = []
+
+    await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      eventStreams: {
+        'webhook.whale_buy': [
+          { id: 'evt-past', ts: 899_000, payload: { signalId: 'whale_buy' } },
+          { id: 'evt-future', ts: 901_000, payload: { signalId: 'whale_buy' } },
+        ],
+      },
+      strategy: {
+        id: 'webhook-with-stream',
+        params: { marketType: 'perp' },
+        specSnapshot: { rules: [{ id: 'r1' }] },
+        astSnapshot: {
+          exprPool: [
+            {
+              id: 'expr_webhook_whale_buy',
+              nodeType: 'predicate',
+              payload: {
+                kind: 'externalSignal',
+                params: { provider: 'webhook', signalId: 'whale_buy', sourceFeedId: 'webhook.whale_buy' },
+              },
+            },
+          ],
+        },
+        fn: (ctx) => {
+          inboxes.push((ctx as { eventInbox?: unknown }).eventInbox)
+          return { type: 'NOOP', reason: 'webhook.observed' }
+        },
+      },
+      dataRange: { fromTs: 900_000, toTs: 900_000 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', openTime: 0, closeTime: 900_000, close: 100 }),
+      ],
+    })
+
+    expect(inboxes).toEqual([
+      {
+        'webhook.whale_buy': [
+          { id: 'evt-past', ts: 899_000, payload: { signalId: 'whale_buy' } },
+        ],
+      },
+    ])
+  })
+
+  it('opens from webhook event fixture and exits on stop loss', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      eventStreams: {
+        'webhook.whale_buy': [
+          { id: 'evt-entry', ts: 899_000, payload: { signalId: 'whale_buy' } },
+        ],
+      },
+      strategy: {
+        id: 'webhook-entry-stop-loss',
+        params: { marketType: 'perp' },
+        riskRules: { maxFloatingLossPct: 5 },
+        specSnapshot: { rules: [{ id: 'entry' }, { id: 'stop-loss' }] },
+        astSnapshot: {
+          exprPool: [
+            {
+              id: 'expr_webhook_whale_buy',
+              nodeType: 'predicate',
+              payload: {
+                kind: 'externalSignal',
+                params: {
+                  provider: 'webhook',
+                  signalId: 'whale_buy',
+                  sourceFeedId: 'webhook.whale_buy',
+                  ttlMs: 60_000,
+                },
+              },
+            },
+          ],
+        },
+        fn: (ctx): StrategyDecisionV1 => {
+          const events = (ctx as { eventInbox?: Record<string, Array<{ payload?: Record<string, unknown> }>> })
+            .eventInbox?.['webhook.whale_buy'] ?? []
+          return ctx.ts === 900_000 && events.some(event => event.payload?.signalId === 'whale_buy')
+            ? { action: 'OPEN_LONG', size: { mode: 'QTY', value: 1 }, confidence: 90, reason: 'webhook.whale_buy' }
+            : { action: 'NOOP' }
+        },
+      },
+      dataRange: { fromTs: 900_000, toTs: 1_020_000 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', openTime: 0, closeTime: 900_000, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', openTime: 900_000, closeTime: 960_000, open: 100, close: 94 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', openTime: 960_000, closeTime: 1_020_000, open: 94, close: 94 }),
+      ],
+    })
+
+    expect(report.summary.totalTrades).toBe(1)
+    expect(report.openPositions ?? []).toHaveLength(0)
+    expect(report.trades[0]).toMatchObject({
+      symbol: 'BTCUSDT',
+      side: 'LONG',
+      exitReason: 'risk.max_floating_loss',
+      exitSource: 'risk',
+    })
+  })
+
   it('counts missing data requirements per symbol instead of globally', async () => {
     const runner = createRunner()
 
@@ -1546,6 +1705,7 @@ describe('backtestRunnerService', () => {
         signalTriggerCount: 0,
         fillCount: 0,
         dataRequirementMissingCount: 0,
+        eventStreamMissingCount: 0,
       })
     })
 

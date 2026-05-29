@@ -15,6 +15,8 @@ import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-con
 import type { IndicatorGroup, IndicatorSnapshot } from './signal-generation-candidate.stage'
 import type { GeneratedSignalPayload, PublishedRuntimeSignalOutcome } from './signal-generation-decision.stage'
 import type { Bar as RuntimeMarketBar } from '@/modules/backtesting/types/backtesting.types'
+import type { RuntimeEvent } from '@/modules/backtesting/types/backtesting.types'
+import type { RuntimeEventStreamRequirement } from '@/modules/strategy-runtime/runtime-data-plan'
 import type { PrismaMarketTimeframe } from '@/common/utils/prisma-enum-mappers'
 import type { GatewayBar } from '@/modules/market-data/services/market-data-read.gateway'
 import type {
@@ -71,6 +73,7 @@ import {
   type AtomicRuntimeRequirements,
   type SemanticRuntimeState,
 } from '@/modules/strategy-runtime/semantic-runtime-state.util'
+import { readEventStreamsFromExprPool } from '@/modules/strategy-runtime/runtime-data-plan.resolver'
 import { resolveStrategyOutput, strategyDecisionToSignalPayload } from '@/modules/strategy-runtime/strategy-protocol.util'
 import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 import {
@@ -938,6 +941,88 @@ export class SignalGeneratorService {
     }
   }
 
+  private resolveRequiredEventStreamsFromScript(scriptCode: string): RuntimeEventStreamRequirement[] {
+    const parsed = this.tryParseCompiledScriptProjection(scriptCode)
+    if (parsed) return readEventStreamsFromExprPool(parsed.exprPool)
+
+    const exprPool = this.tryReadCompiledExprPoolConstant(scriptCode)
+    return readEventStreamsFromExprPool(exprPool)
+  }
+
+  private tryParseCompiledScriptProjection(scriptCode: string): { exprPool?: unknown } | null {
+    try {
+      return this.compiledScriptParser.parse(scriptCode) as { exprPool?: unknown }
+    } catch {
+      return null
+    }
+  }
+
+  private tryReadCompiledExprPoolConstant(scriptCode: string): unknown {
+    const match = scriptCode.match(/const\s+EXPR_POOL\s*=\s*(\[[\s\S]*?\])\s+as\s+const/u)
+    if (!match?.[1]) return null
+    try {
+      return JSON.parse(match[1])
+    } catch {
+      return null
+    }
+  }
+
+  private async loadPublishedRuntimeEventStreams(
+    strategyInstanceId: string,
+    requiredEventStreams: readonly RuntimeEventStreamRequirement[],
+    primaryCloseTs: number,
+  ): Promise<
+    | { available: true; eventStreams?: Record<string, RuntimeEvent[]>; missingSignalIds: [] }
+    | { available: false; eventStreams?: undefined; missingSignalIds: string[] }
+  > {
+    if (requiredEventStreams.length === 0) {
+      return { available: true, missingSignalIds: [] }
+    }
+
+    const signalIds = [...new Set(requiredEventStreams.map(stream => stream.signalId))]
+    const subscriptions = await this.generatorRepository.findActiveWebhookSignalSubscriptions({
+      strategyInstanceId,
+      signalIds,
+    })
+    const activeSignalIds = new Set(subscriptions.map(item => item.signalId))
+    const missingSignalIds = signalIds.filter(signalId => !activeSignalIds.has(signalId))
+    if (missingSignalIds.length > 0) {
+      return { available: false, missingSignalIds }
+    }
+
+    const maxTtlMs = Math.max(
+      60_000,
+      ...requiredEventStreams.map(stream => stream.ttlMs ?? 60_000),
+    )
+    const events = await this.generatorRepository.findAcceptedWebhookRuntimeEvents({
+      strategyInstanceId,
+      signalIds,
+      since: new Date(primaryCloseTs - maxTtlMs),
+      until: new Date(primaryCloseTs),
+    })
+    const eventStreams: Record<string, RuntimeEvent[]> = {}
+    for (const stream of requiredEventStreams) {
+      const streamEvents = events
+        .filter(event => event.signalId === stream.signalId)
+        .map((event): RuntimeEvent => ({
+          id: event.id,
+          ts: (event.sourceTimestamp ?? event.receivedAt).getTime(),
+          payload: this.normalizeRuntimeEventPayload(event.payload, event.signalId),
+        }))
+      eventStreams[stream.sourceFeedId] = streamEvents
+    }
+
+    return { available: true, eventStreams, missingSignalIds: [] }
+  }
+
+  private normalizeRuntimeEventPayload(payload: Prisma.JsonValue, signalId: string): Record<string, unknown> {
+    const record = this.asRecord(payload)
+    return {
+      signalId,
+      ...record,
+    }
+  }
+
   private async generatePublishedSnapshotRuntimeSignalOutcome(
     instance: StrategyInstanceWithTemplate,
     strategy: StrategyTemplate,
@@ -983,6 +1068,19 @@ export class SignalGeneratorService {
       }
 
       const currentPrimaryCloseTs = primaryCloseTs ?? Date.now()
+      const requiredEventStreams = this.resolveRequiredEventStreamsFromScript(strategy.script)
+      const eventStreams = await this.loadPublishedRuntimeEventStreams(
+        instance.id,
+        requiredEventStreams,
+        currentPrimaryCloseTs,
+      )
+      if (!eventStreams.available) {
+        return {
+          kind: 'unexpected_error',
+          reasonCode: 'LIVE_EVENT_STREAM_UNAVAILABLE',
+          reason: `Published snapshot runtime missing webhook event streams: ${eventStreams.missingSignalIds.join(', ')}`,
+        }
+      }
       const scriptContext = this.decisionStage.buildPublishedStrategyContext({
         bars,
         symbol: symbol.code,
@@ -992,6 +1090,7 @@ export class SignalGeneratorService {
         timestamp: currentPrimaryCloseTs,
         params: this.buildEffectiveParams(strategy, instance),
         runtimeBarsByTimeframe: runtimeBarsByTimeframe.marketBarsByTimeframe,
+        eventStreams: eventStreams.eventStreams,
         compiledDecisionState,
         semanticRuntimeState,
         position,

@@ -42,4 +42,30 @@ describe('buildRuntimeMarketContext', () => {
     expect(context.data.primary['1h'].bars.map(bar => bar.timestamp)).toEqual([3_600_000])
     expect(context.execution.timeframe).toBe('15m')
   })
+
+  it('injects only point-in-time event stream entries into eventInbox', () => {
+    const context = buildRuntimeMarketContext({
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+      primaryCloseTs: 5_400_000,
+      params: { marketType: 'perp' },
+      barsByTimeframe: {
+        '15m': [
+          { symbol: 'BTCUSDT', timeframe: '15m', openTime: 4_500_000, closeTime: 5_400_000, open: 100, high: 111, low: 99, close: 110, volume: 1 },
+        ],
+      },
+      eventStreams: {
+        'webhook.whale_buy': [
+          { id: 'past', ts: 5_399_000, payload: { signalId: 'whale_buy' } },
+          { id: 'future', ts: 5_401_000, payload: { signalId: 'whale_buy' } },
+        ],
+      },
+    })
+
+    expect(context.eventInbox).toEqual({
+      'webhook.whale_buy': [
+        { id: 'past', ts: 5_399_000, payload: { signalId: 'whale_buy' } },
+      ],
+    })
+  })
 })

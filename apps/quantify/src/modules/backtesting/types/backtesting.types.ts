@@ -15,6 +15,12 @@ export interface Bar {
   volume: number
 }
 
+export interface RuntimeEvent {
+  id: string
+  ts: number
+  payload: Record<string, unknown>
+}
+
 export interface StateSnapshot {
   symbol: string
   timeframe: Timeframe
@@ -199,6 +205,7 @@ export interface BacktestReport {
 export type BacktestDiagnosticReasonCode =
   | 'BACKTEST_NO_RULES_COMPILED'
   | 'BACKTEST_DATA_REQUIREMENT_UNAVAILABLE'
+  | 'BACKTEST_EVENT_STREAM_UNAVAILABLE'
   | 'BACKTEST_NO_SIGNAL_FIRED_IN_RANGE'
   | 'BACKTEST_SIGNAL_FIRED_BUT_NO_FILL'
 
@@ -213,6 +220,7 @@ export interface BacktestDiagnostics {
   signalTriggerCount: number
   fillCount: number
   dataRequirementMissingCount: number
+  eventStreamMissingCount: number
 }
 
 export type BacktestRequestedRangePreset = '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
@@ -258,5 +266,6 @@ export interface BacktestRunInput {
   }
   requestedRangeInput?: BacktestRequestedRangeInput
   dataRange: { fromTs: number; toTs: number }
+  eventStreams?: Record<string, RuntimeEvent[]>
   bars: Bar[]
 }

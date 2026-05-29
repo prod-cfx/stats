@@ -60,4 +60,43 @@ describe('resolveRuntimeDataPlan', () => {
       { role: 'event', feedId: 'webhook.tradingview.alert', schemaRef: 'webhook_event' },
     ])
   })
+
+  it('derives webhook event stream requirements from externalSignal predicates', () => {
+    const plan = resolveRuntimeDataPlan({
+      strictParams: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+      },
+      stateTimeframes: [],
+      scriptMetadata: {},
+      orchestrationScopes: [],
+      exprPool: [
+        {
+          id: 'expr_webhook_whale_buy',
+          nodeType: 'predicate',
+          payload: {
+            kind: 'externalSignal',
+            params: {
+              provider: 'webhook',
+              signalId: 'whale_buy',
+              sourceFeedId: 'webhook.whale_buy',
+              ttlMs: 60_000,
+            },
+          },
+        },
+      ],
+    })
+
+    expect(plan.eventStreams).toEqual([
+      {
+        provider: 'webhook',
+        signalId: 'whale_buy',
+        sourceFeedId: 'webhook.whale_buy',
+        ttlMs: 60_000,
+        schemaRef: 'webhook_event',
+      },
+    ])
+  })
 })
