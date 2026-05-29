@@ -1,0 +1,78 @@
+name: Staging Clear Quantify Prisma Lock
+
+on:
+  workflow_dispatch:
+
+jobs:
+  clear-prisma-advisory-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 加载 SSH 私钥
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+
+      - name: 清理 quantify Prisma migrate advisory lock
+        env:
+          HOST: ${{ secrets.AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+          USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "$PORT" -H "$HOST" >> ~/.ssh/known_hosts
+          ssh -p "$PORT" "$USER@$HOST" "bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          APP_ROOT="/opt/work/quantify"
+          RELEASE_DIR="$(ls -td "$APP_ROOT"/releases/* 2>/dev/null | head -n 1)"
+          cd "$RELEASE_DIR"
+          echo "[INFO] release=$RELEASE_DIR"
+
+          pnpm exec dotenv -e .env.staging -e .env.staging.local -- node <<'NODE'
+          const { Client } = require('pg')
+
+          const url = process.env.QUANTIFY_DATABASE_URL || process.env.DATABASE_URL
+          if (!url || url === '__SET_IN_env.local__') {
+            throw new Error('missing quantify database url')
+          }
+
+          const client = new Client({ connectionString: url })
+          await client.connect()
+
+          const lockSql = `
+            SELECT
+              a.pid,
+              a.usename,
+              a.application_name,
+              a.client_addr::text AS client_addr,
+              a.state,
+              now() - a.query_start AS age,
+              left(coalesce(a.query, ''), 500) AS query
+            FROM pg_locks l
+            JOIN pg_stat_activity a ON a.pid = l.pid
+            WHERE l.locktype = 'advisory'
+              AND l.objid = 72707369
+              AND l.granted = true
+              AND a.pid <> pg_backend_pid()
+            ORDER BY a.query_start NULLS LAST
+          `
+
+          const holders = await client.query(lockSql)
+          console.log('[INFO] advisory lock holders:', JSON.stringify(holders.rows, null, 2))
+
+          for (const row of holders.rows) {
+            const result = await client.query('SELECT pg_terminate_backend($1) AS terminated', [row.pid])
+            console.log('[INFO] terminated:', JSON.stringify({ pid: row.pid, result: result.rows[0] }))
+          }
+
+          const remaining = await client.query(lockSql)
+          console.log('[INFO] remaining advisory lock holders:', JSON.stringify(remaining.rows, null, 2))
+
+          await client.end()
+
+          if (remaining.rows.length > 0) {
+            process.exitCode = 1
+          }
+          NODE
+          REMOTE
