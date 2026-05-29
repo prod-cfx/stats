@@ -68,7 +68,7 @@ void main() {
     expect(find.text('已收到："hi"。这是一段 mock 回复。'), findsOneWidget);
   });
 
-  testWidgets('AI 对话页：点回测按钮 → 抽屉打开 → 提交后卡片插入对话流',
+  testWidgets('AI 对话页：点回测按钮 → 抽屉打开 → 提交后先回测中 → 完成切结果卡',
       (WidgetTester tester) async {
     await _pump(tester);
 
@@ -80,11 +80,42 @@ void main() {
         .ensureVisible(find.byKey(const Key('backtest-submit')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('backtest-submit')));
+    // sheet 内 200ms mock + pop 回 AI 页，先进入「回测中」进度卡
     await tester.pump(const Duration(milliseconds: 250));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    expect(find.byKey(const Key('backtest-progress-card')), findsOneWidget);
+    expect(find.text('回测进行中'), findsOneWidget);
+    // 结果卡此时尚未出现
+    expect(find.text('回测结果'), findsNothing);
 
+    // 推进进度计时器（120ms × ~25 tick）直到完成
+    for (int i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 120));
+    }
+    expect(find.byKey(const Key('backtest-progress-card')), findsNothing);
     expect(find.text('回测结果'), findsOneWidget);
     expect(find.text('+18.20%'), findsOneWidget);
+    expect(find.byKey(const Key('ai-deploy-button')), findsOneWidget);
+  });
+
+  testWidgets('回测中：点取消回测 → 进度卡消失，不出现结果卡',
+      (WidgetTester tester) async {
+    await _pump(tester);
+
+    await tester.tap(find.byKey(const Key('ai-backtest-button')));
+    await tester.pumpAndSettle();
+    await tester
+        .ensureVisible(find.byKey(const Key('backtest-submit')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('backtest-submit')));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump();
+    expect(find.byKey(const Key('backtest-progress-card')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('backtest-progress-cancel')));
+    await tester.pump();
+    expect(find.byKey(const Key('backtest-progress-card')), findsNothing);
+    expect(find.text('回测结果'), findsNothing);
   });
 
   testWidgets('回测抽屉：自定义区间留空起止时间 → 显示校验错误，不 pop',

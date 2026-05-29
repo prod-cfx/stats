@@ -188,6 +188,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backtestResultTradesSuffix => '';
 
   @override
+  String get backtestProgressTitle => 'Backtesting in Progress';
+
+  @override
+  String get backtestProgressSubtitle =>
+      'Replaying historical candles, please wait…';
+
+  @override
+  String get backtestProgressCancel => 'Cancel Backtest';
+
+  @override
   String get deployButton => 'One-click Deploy';
 
   @override

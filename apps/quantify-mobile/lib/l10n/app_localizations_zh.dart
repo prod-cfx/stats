@@ -181,6 +181,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backtestResultTradesSuffix => ' 笔';
 
   @override
+  String get backtestProgressTitle => '回测进行中';
+
+  @override
+  String get backtestProgressSubtitle => '正在回放历史 K 线，请稍候…';
+
+  @override
+  String get backtestProgressCancel => '取消回测';
+
+  @override
   String get deployButton => '一键部署';
 
   @override

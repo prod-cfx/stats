@@ -440,6 +440,24 @@ abstract class AppLocalizations {
   /// **' 笔'**
   String get backtestResultTradesSuffix;
 
+  /// No description provided for @backtestProgressTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'回测进行中'**
+  String get backtestProgressTitle;
+
+  /// No description provided for @backtestProgressSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在回放历史 K 线，请稍候…'**
+  String get backtestProgressSubtitle;
+
+  /// No description provided for @backtestProgressCancel.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消回测'**
+  String get backtestProgressCancel;
+
   /// No description provided for @deployButton.
   ///
   /// In zh, this message translates to:

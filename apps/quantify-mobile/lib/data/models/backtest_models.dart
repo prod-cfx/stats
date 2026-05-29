@@ -1,3 +1,14 @@
+/// 回测在 AI 对话流中的阶段。
+///
+/// - [idle]：未发起回测，对话流不渲染进度/结果卡。
+/// - [running]：回测进行中，渲染 `QzBacktestProgressCard`（验收 #3：明确 UI 表达）。
+/// - [done]：回测完成，渲染 `QzBacktestResultCard` + 部署按钮。
+enum BacktestPhase {
+  idle,
+  running,
+  done,
+}
+
 /// 回测请求与完整结果。
 class BacktestRequest {
   final String strategyId;
