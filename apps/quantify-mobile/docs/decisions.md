@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-05-30 · 行情二级入口归属：聚合挂单 / 预测市场 / 币股 标记为 future（Issue #1750）
+
+**背景**：设计稿 `proto.jsx` 行情域（`under: 'market'`）除 `/market`（`ScreenTickers`）、交易详情（`ScreenOrderEntry`）、多空比（`ScreenLongShort`）外，另挂三个二级入口——聚合挂单 `ScreenAggOrders`、预测市场 `ScreenPredMarket`、币股 `ScreenCoinStocks`（完整高保真实现见 `m-screens-data.jsx`）。Flutter app 当前仅注册 `/market`、`/market/long-short`、`/market/:symbol`，未注册这三个入口。#1749 §1 已把「`数据 hub` 二级入口聚合挂单 / 预测市场 / 币股」的命名归属统一钉到 `行情` Tab，但**未对「是否进入当前 app 信息架构」给出结论**，本节补齐该结论。
+
+**候选**：
+
+| 方案 | 内容 | 取舍 |
+|------|------|------|
+| A. 立即实现 | 补三个 full-screen route + 页面 + mock 数据 + 入口 + 空/错态 + widget tests | 设计稿这三屏是重型数据 hub（聚合订单簿 + 深度图 + 持仓量表 + 成交量表 / 预测市场网格 + 详情 sheet / 币股表 + 排序 + 详情），合计 ~2700 行原型；真实数据依赖 #1682/#1683 尚未接入，当前只能堆纯 mock 展示页，维护成本高、产品价值低 |
+| B. 标记 future（采纳） | 不进入当前 app 信息架构，文档钉死「暂缓 + 不纳入当前验收」，待真实数据接入后单独立 issue | 对齐 #1662/#1663/#1749 已建立的「未实现入口的设计表达规范」基线；零破坏、KISS/YAGNI |
+
+**判定**：**三个入口统一标记为 future，不纳入当前 quantify-mobile app 信息架构与验收**。
+
+- **聚合挂单 `ScreenAggOrders`** → future。真实数据依赖跨所聚合订单簿 / 持仓量 / 成交量接入（#1683 范围），未接入前不落 mock 页。
+- **预测市场 `ScreenPredMarket`** → future。依赖 Polymarket 类链上事件数据源，当前 app 无对应 repository / 数据通道。
+- **币股 `ScreenCoinStocks`** → future。依赖加密相关股票行情数据源（#1682 范围），当前 app 无对应数据通道。
+
+**理由**：
+
+1. issue 目标是「明确落地策略：实现 OR 标 future」，不是「必须实现」；二者择一即满足验收。
+2. 三屏均为数据驱动页面，真实数据源（#1682 币股 / #1683 聚合）不在当前范围；先实现纯 mock 页违反 YAGNI，且后续接真实数据时大概率重写。
+3. 与 #1662/#1663/#1749 处理「未实现入口」的方式一致：设计稿保留高保真表达，app 侧按真实数据就绪节奏分批落地，文档钉死归属与暂缓结论，避免每个子任务重新论证。
+
+**不变项**：`/market` 行情列表、`/market/long-short` 多空比、`/market/:symbol` 交易详情维持现状，不受本决策影响。设计稿 `m-screens-data.jsx` / `proto.jsx` 中这三屏的表达**保留为 future 能力**，不删除、不回流到 app，也不在后续 PR 里以「对齐缺口」名义复活，直到对应真实数据接入 issue 立项。
+
+**后续触发条件**：当 #1682（币股行情）/ #1683（聚合数据）对应数据通道在 app 侧就绪时，分别为聚合挂单 / 币股新立「行情二级入口实现」issue，引用本节作为暂缓结论的解除依据；预测市场待 Polymarket 数据源接入范围明确后另行立项。
+
+**落地范围**：仅文档。`apps/quantify-mobile/docs/decisions.md`（本节）+ `apps/quantify-mobile/README.md`「设计真源」段补 #1750 引用。不改 `proto.jsx` / `m-screens-*.jsx`、不改 `app_router.dart` 与 app 代码 / 测试。
+
+---
+
 ## 2026-05-30 · 移动端设计基线复核：Tab、`数据→行情` 命名、登录态与路由形态（Issue #1749）
 
 **背景**：`design/project/mobile/` 是 quantify-mobile 设计真源，但 `proto.jsx` 及 `m-screens-*.jsx` 与 Flutter app 当前产品基线在以下点上仍有差异：底部 Tab 顺序、`数据 / 行情` 命名、冷启动入口、登录保护、游客页 / 登录弹层、full-screen route 与 bottom sheet 边界。#1662 已固定 screen graph 与登录态策略，但**未显式记录 `proto.jsx` 自身的 Tab 排序 / 命名 / `LoginSheet` 形态属于已废弃差异**，导致子任务对齐时仍需逐个重新解释。本节把这组差异一次性钉死，作为 #1750–#1757 等后续移动端设计对齐 issue 的前置基线。

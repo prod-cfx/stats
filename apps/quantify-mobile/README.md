@@ -39,7 +39,7 @@ UI / 交互设计稿位于仓库根 `design/project/mobile/Quantify Mobile App.h
 
 设计 token 真源位于上一层目录 `design/project/tokens.css`（被 `Quantify Mobile App.html` 通过 `../tokens.css` 引用），不在 `design/project/mobile/` 内重复一份。落地时统一引用该路径，避免拷贝漂移。
 
-移动端对齐基线（screen graph、登录态策略、bottom sheet 边界、API 配置入口命名、设计 token 路径）见 `docs/decisions.md` 中「移动端设计对齐基线」（#1662）一节；底部 Tab 顺序、`数据→行情` 命名、冷启动 / 游客 / `/me` 守卫、route↔sheet 边界相对 `proto.jsx` 的差异判定见同文件「移动端设计基线复核」（#1749）一节。后续 PR 基于该基线落地 token / 组件 / 路由，子任务对齐时直接引用，不重复解释同一组差异。
+移动端对齐基线（screen graph、登录态策略、bottom sheet 边界、API 配置入口命名、设计 token 路径）见 `docs/decisions.md` 中「移动端设计对齐基线」（#1662）一节；底部 Tab 顺序、`数据→行情` 命名、冷启动 / 游客 / `/me` 守卫、route↔sheet 边界相对 `proto.jsx` 的差异判定见同文件「移动端设计基线复核」（#1749）一节。行情二级入口（聚合挂单 / 预测市场 / 币股）暂缓、标记 future 的归属结论见同文件「行情二级入口归属」（#1750）一节。后续 PR 基于该基线落地 token / 组件 / 路由，子任务对齐时直接引用，不重复解释同一组差异。
 
 ## 与仓库其他 app 的关系
 
