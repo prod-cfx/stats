@@ -1,6 +1,7 @@
 import type { MarketTimeframe } from '@ai/shared'
 import type {
   RuntimeDataPlan,
+  RuntimeEventStreamRequirement,
   RuntimeExternalDataSourceRequirement,
   RuntimeIndicatorRequirement,
   RuntimePrimaryClock,
@@ -17,6 +18,7 @@ interface ResolveRuntimeDataPlanInput {
   stateTimeframes: MarketTimeframe[]
   scriptMetadata?: Record<string, unknown>
   orchestrationScopes?: Array<Record<string, unknown>>
+  exprPool?: unknown
 }
 
 function readIndicators(metadata: Record<string, unknown> | undefined): RuntimeIndicatorRequirement[] {
@@ -47,6 +49,48 @@ function readExternalDataSources(scopes: Array<Record<string, unknown>> | undefi
   })
 }
 
+export function readEventStreamsFromExprPool(exprPool: unknown): RuntimeEventStreamRequirement[] {
+  if (!Array.isArray(exprPool)) return []
+
+  const streams = exprPool.flatMap((node): RuntimeEventStreamRequirement[] => {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return []
+    const payload = (node as Record<string, unknown>).payload
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return []
+    const payloadRecord = payload as Record<string, unknown>
+    if (payloadRecord.kind !== 'externalSignal') return []
+
+    const params = payloadRecord.params
+    if (!params || typeof params !== 'object' || Array.isArray(params)) return []
+    const paramsRecord = params as Record<string, unknown>
+    const provider = typeof paramsRecord.provider === 'string' && paramsRecord.provider.trim()
+      ? paramsRecord.provider.trim()
+      : 'webhook'
+    const signalId = typeof paramsRecord.signalId === 'string' ? paramsRecord.signalId.trim() : ''
+    if (provider !== 'webhook' || !signalId) return []
+
+    const sourceFeedId = typeof paramsRecord.sourceFeedId === 'string' && paramsRecord.sourceFeedId.trim()
+      ? paramsRecord.sourceFeedId.trim()
+      : `webhook.${signalId}`
+    const ttlMs = typeof paramsRecord.ttlMs === 'number' && Number.isFinite(paramsRecord.ttlMs) && paramsRecord.ttlMs > 0
+      ? paramsRecord.ttlMs
+      : undefined
+
+    return [{
+      provider: 'webhook',
+      signalId,
+      sourceFeedId,
+      ...(ttlMs ? { ttlMs } : {}),
+      schemaRef: 'webhook_event',
+    }]
+  })
+
+  const byFeedId = new Map<string, RuntimeEventStreamRequirement>()
+  streams.forEach((stream) => {
+    if (!byFeedId.has(stream.sourceFeedId)) byFeedId.set(stream.sourceFeedId, stream)
+  })
+  return [...byFeedId.values()]
+}
+
 export function resolveRuntimeDataPlan(input: ResolveRuntimeDataPlanInput): RuntimeDataPlan {
   const primaryClock: RuntimePrimaryClock = {
     exchange: input.strictParams.exchange,
@@ -71,6 +115,6 @@ export function resolveRuntimeDataPlan(input: ResolveRuntimeDataPlanInput): Runt
     })),
     indicators,
     externalDataSources: readExternalDataSources(input.orchestrationScopes),
-    eventStreams: [],
+    eventStreams: readEventStreamsFromExprPool(input.exprPool),
   }
 }

@@ -1113,7 +1113,7 @@ describe('backtestJobsService', () => {
   // Issue #1699 P2a：runner 完成回测后，jobs service 按 BacktestDiagnostics 派发
   //   summary.diagnosticReason，让 trades=0 的根因可被前端区分
   describe('Issue #1699: diagnosticReason 派发', () => {
-    const buildRunner = (diagnostics: { compiledRulesCount: number; signalTriggerCount: number; fillCount: number }) => ({
+    const buildRunner = (diagnostics: { compiledRulesCount: number; signalTriggerCount: number; fillCount: number; dataRequirementMissingCount?: number; eventStreamMissingCount?: number }) => ({
       run: jest.fn().mockResolvedValue({
         summary: { netProfit: 0, netProfitPct: 0, maxDrawdownPct: 0, winRate: 0, profitFactor: 0, totalTrades: 0 },
         diagnostics,
@@ -1124,7 +1124,7 @@ describe('backtestJobsService', () => {
       }),
     })
 
-    const runAndReadResult = async (diagnostics: { compiledRulesCount: number; signalTriggerCount: number; fillCount: number }) => {
+    const runAndReadResult = async (diagnostics: { compiledRulesCount: number; signalTriggerCount: number; fillCount: number; dataRequirementMissingCount?: number; eventStreamMissingCount?: number }) => {
       const runner = buildRunner(diagnostics)
       const marketData = createMarketDataMock()
       const availability = createAvailabilityMock()
@@ -1154,6 +1154,11 @@ describe('backtestJobsService', () => {
     it('规则编译但信号未触发 → BACKTEST_NO_SIGNAL_FIRED_IN_RANGE', async () => {
       const { persistedResult } = await runAndReadResult({ compiledRulesCount: 2, signalTriggerCount: 0, fillCount: 0 })
       expect(persistedResult.summary.diagnosticReason).toBe('BACKTEST_NO_SIGNAL_FIRED_IN_RANGE')
+    })
+
+    it('规则需要事件流但未提供 → BACKTEST_EVENT_STREAM_UNAVAILABLE', async () => {
+      const { persistedResult } = await runAndReadResult({ compiledRulesCount: 2, signalTriggerCount: 0, fillCount: 0, eventStreamMissingCount: 1 })
+      expect(persistedResult.summary.diagnosticReason).toBe('BACKTEST_EVENT_STREAM_UNAVAILABLE')
     })
 
     it('信号触发但未撮合 → BACKTEST_SIGNAL_FIRED_BUT_NO_FILL', async () => {
