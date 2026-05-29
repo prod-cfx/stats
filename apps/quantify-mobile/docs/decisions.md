@@ -4,6 +4,55 @@
 
 ---
 
+## 2026-05-30 · 移动端设计基线复核：Tab、`数据→行情` 命名、登录态与路由形态（Issue #1749）
+
+**背景**：`design/project/mobile/` 是 quantify-mobile 设计真源，但 `proto.jsx` 及 `m-screens-*.jsx` 与 Flutter app 当前产品基线在以下点上仍有差异：底部 Tab 顺序、`数据 / 行情` 命名、冷启动入口、登录保护、游客页 / 登录弹层、full-screen route 与 bottom sheet 边界。#1662 已固定 screen graph 与登录态策略，但**未显式记录 `proto.jsx` 自身的 Tab 排序 / 命名 / `LoginSheet` 形态属于已废弃差异**，导致子任务对齐时仍需逐个重新解释。本节把这组差异一次性钉死，作为 #1750–#1757 等后续移动端设计对齐 issue 的前置基线。
+
+**判定**：**一律以 Flutter app 当前实现为准**；`proto.jsx` / `m-screens-*.jsx` 中与下表冲突的表达视为历史原型差异，不再回流到 app，也不要在后续 PR 里复活。本节仅落文档，不改设计稿、不改 app 代码。
+
+### 1. 底部 Tab 顺序与命名（以 app 为准）
+
+| index | 路径 | app 名称（`QzBottomTabBar` / l10n） | `proto.jsx` 旧表达 | 差异判定 |
+|------|------|--------------------------------|-------------------|---------|
+| 0 | `/ai` | AI 量化 | `TAB_SCREENS[1]` `ai` `AI 量化`（排第 2） | 顺序以 app 为准：AI 量化置首 |
+| 1 | `/market` | 行情（`tabMarket`） | `TAB_SCREENS[2]` `market` **`数据`**（排第 3） | **`数据` 统一改称 `行情`**；顺序提到第 2 |
+| 2 | `/strategy` | 策略 | `TAB_SCREENS[0]` `strat` `策略`（排第 1） | 顺序以 app 为准：策略置第 3 |
+| 3 | `/whale` | 巨鲸 | `whale` `巨鲸` | 一致 |
+| 4 | `/me` | 我的 | `me` `我的` | 一致 |
+
+- `proto.jsx` 中 `MTabBar` 的 `策略 / AI 量化 / 数据 / 巨鲸 / 我的` 顺序与首项命名均为旧基线，**以 app `AI 量化 / 行情 / 策略 / 巨鲸 / 我的` 为准**。
+- 设计稿中所有 `数据`（含 `m-screens-data.jsx` 文件头注释的「数据 hub」、二级入口聚合挂单 / 预测市场 / 币股的归属）在产品语义上统一表述为 **`行情`**；`行情` 作为 Tab 1 名称与其二级页面的归属容器。下游 #1750（行情二级入口）直接引用本条，不再单列命名差异。
+
+### 2. 冷启动入口、游客模式与 `/me` 登录保护（以 app 为准）
+
+| 入口态 | 默认落地 | 规则 |
+|-------|---------|------|
+| 未登录（无 session） | `/login` | `initialLocation: '/login'`；访问 `/me` 或 `/me/*` redirect 回 `/login` |
+| 游客（登录页内「访客模式」或直接 tap 公开 tab） | `/ai`（或所点 tab） | 行情 / AI / 巨鲸 / 策略 允许匿名浏览；仅 `/me` 前缀受 `kAuthProtectedPrefixes` 守卫 |
+| 已登录 | `/ai` | 已登录访问 `/login` redirect 到 `/ai` |
+
+- **冷启动以 `/login` 为准**，已登录跳 `/ai`；`proto.jsx` 默认 `setScreen('ai')` 是原型省略了鉴权，以 app 为准。
+- **游客入口在登录页内**（登录页内「访客模式」CTA），不是全局弹层。`proto.jsx` 中 `LoginSheet` + 游客 CTA `setSheet('login')` 把登录表达成全局 bottom sheet，**该形态废弃**：app 侧登录是独立 `/login` 全屏页（`LoginPage`），不存在默认 `LoginSheet`。
+- `/me` 与 `/me/*` 受登录保护，是 `proto.jsx` 未表达的真实约束，以 app `kAuthProtectedPrefixes = ['/me']` 为准。
+
+### 3. Full-screen route 与 bottom sheet 判定边界
+
+沿用 #1662 第 3 节的判定标准，复述边界供子任务直接引用：
+
+**Full-screen route**（top-level `GoRoute`，push 覆盖 tab bar）适用于：需要深链 / 浏览器返回栈语义；生命周期跨 tab 切换；有独立 AppBar / 滚动容器、内容超过半屏。当前命中：`/login`、`/market/long-short`、`/market/:symbol`、`/strategy/:id`、`/me/theme`、`/ai/backtest-config`。
+
+**Bottom sheet**（`showModalBottomSheet` 系列，无独立 route）适用于：局部交互、用完即销毁；触发点与归属页面强绑定；内容高度可控（半屏 / 自适应）。当前命中：`showApiFormSheet`、order entry sheet。
+
+**硬边界：同一交互不允许同时存在 route + sheet 两条入口。** `api` 入口统一为 sheet（`showApiFormSheet`，历史 `/me/api` 列表页已下线、router 不再注册）；`backtest-config` 以 route 形式承载弹层视觉，保持现状不回退独立 sheet。后续 #1756（API 配置入口）/#1757（策略详情形态）直接引用本条边界，不再重新论证。
+
+### 4. 与子任务的引用关系
+
+本节是 #1750–#1757 的前置基线依赖：子任务在做页面级对齐时，凡涉及 Tab 顺序 / 命名、登录态 / 守卫、route↔sheet 形态判定，直接引用本节与 #1662，不在各自 PR 里重复解释同一组差异。
+
+**落地范围**：仅文档。`apps/quantify-mobile/docs/decisions.md`（本节）+ `apps/quantify-mobile/README.md`「设计真源」段补 #1749 引用。不改 `proto.jsx` / `m-screens-*.jsx`、不改 app 代码与测试。
+
+---
+
 ## 2026-05-23 · 巨鲸首页搜索、通知中心、默认 Tab 与监控入口对齐（Issue #1663）
 
 **背景**：依据 #1662 已建立的"未实现入口的设计表达规范"基线，对 `WhaleHomePage` / `WhaleNotificationSheet` / `WhaleWatchTab` 做逐项对齐核对。
