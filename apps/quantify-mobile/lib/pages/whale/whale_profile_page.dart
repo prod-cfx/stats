@@ -10,39 +10,29 @@ import '../../theme/colors.dart';
 import '../../theme/theme_context.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/qz_chip.dart';
-import '../../widgets/qz_segmented_tabs.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
+import 'widgets/whale_detail_rows.dart';
+import 'widgets/whale_perp_summary_card.dart';
+import 'widgets/whale_pnl_chart.dart';
+import 'widgets/whale_stat_cards.dart';
 import 'widgets/whale_trade_stats_sheet.dart';
 
-/// 巨鲸地址详情页（#1753，`/whale/profile/:address`）。
+/// 巨鲸地址详情页（#1791，`/whale/profile/:address`）。
 ///
-/// 对齐设计稿 `WhaleProfileDetail` / `WhaleTradeStats`：hero（地址 + 标签 +
-/// 资产摘要 + 总持仓估值）→ 概览/交易统计 segmented tab。
-/// 概览=持仓列表 + 近期动作；统计=总盈亏/胜率/方向偏好/资产表现。
-/// 复制地址走 Clipboard + snackbar；加载态 QzSpinner，错误态错误文案。
+/// 对齐设计稿 `WhaleProfileDetail`（`m-screens-whale-discover.jsx:617`）的
+/// 6 tab 重型详情：基本信息（P&L 图 + 4 stat 卡 + 永续总价值明细）/ 现货 /
+/// 永续 / 挂单 / 成交 / 历史。消费 #1858 落地的明细数据模型 + fixtures。
+/// 交易统计弹窗（#1859/#1866）入口保留为 topbar 按钮，避免成为死代码。
 /// 数据由 mock 驱动，真实读路径依赖 #1682。
-class WhaleProfilePage extends ConsumerStatefulWidget {
+class WhaleProfilePage extends ConsumerWidget {
   const WhaleProfilePage({super.key, required this.address});
 
   final String address;
 
-  @override
-  ConsumerState<WhaleProfilePage> createState() => _WhaleProfilePageState();
-}
-
-class _WhaleProfilePageState extends ConsumerState<WhaleProfilePage> {
-  late String _tab;
-
-  @override
-  void initState() {
-    super.initState();
-    _tab = 'overview';
-  }
-
-  Future<void> _copyAddress(AppLocalizations l10n) async {
-    await Clipboard.setData(ClipboardData(text: widget.address));
-    if (!mounted) return;
+  Future<void> _copyAddress(BuildContext context, AppLocalizations l10n) async {
+    await Clipboard.setData(ClipboardData(text: address));
+    if (!context.mounted) return;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
         content: Text(l10n.whaleProfileCopied),
@@ -52,102 +42,63 @@ class _WhaleProfilePageState extends ConsumerState<WhaleProfilePage> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final AsyncValue<WhaleProfile> profile = ref.watch(
-      whaleProfileProvider(widget.address),
+      whaleProfileProvider(address),
     );
 
     return Scaffold(
       backgroundColor: c.bg,
       body: profile.when(
-        loading: () => Column(
-          children: <Widget>[
-            QzTopBar(
-              title: l10n.whaleProfileTitle,
-              subtitle: widget.address,
-              onBack: () => context.pop(),
-            ),
-            const Expanded(child: Center(child: QzSpinner())),
-          ],
+        loading: () => _Frame(
+          address: address,
+          l10n: l10n,
+          child: const Expanded(child: Center(child: QzSpinner())),
         ),
-        error: (Object e, StackTrace _) => Column(
-          children: <Widget>[
-            QzTopBar(
-              title: l10n.whaleProfileTitle,
-              subtitle: widget.address,
-              onBack: () => context.pop(),
-            ),
-            Expanded(
-              child: Center(
-                child: Text(
-                  l10n.whaleProfileLoadError,
-                  style: TextStyle(color: c.statusDanger),
-                ),
+        error: (Object e, StackTrace _) => _Frame(
+          address: address,
+          l10n: l10n,
+          child: Expanded(
+            child: Center(
+              child: Text(
+                l10n.whaleProfileLoadError,
+                style: TextStyle(color: c.statusDanger),
               ),
             ),
-          ],
+          ),
         ),
-        data: (WhaleProfile p) => _build(context, l10n, c, p),
+        data: (WhaleProfile p) => _Detail(
+          profile: p,
+          onCopy: () => _copyAddress(context, l10n),
+        ),
       ),
     );
   }
+}
 
-  Widget _build(
-    BuildContext context,
-    AppLocalizations l10n,
-    QzColorScheme c,
-    WhaleProfile p,
-  ) {
+/// loading/error 共用骨架（topbar + 占位）。
+class _Frame extends StatelessWidget {
+  const _Frame({
+    required this.address,
+    required this.l10n,
+    required this.child,
+  });
+  final String address;
+  final AppLocalizations l10n;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       children: <Widget>[
         QzTopBar(
           title: l10n.whaleProfileTitle,
-          subtitle: p.address,
+          subtitle: address,
           onBack: () => context.pop(),
-          actions: <Widget>[
-            IconButton(
-              icon: const Icon(Icons.copy, size: 18),
-              color: c.textMid,
-              tooltip: l10n.whaleProfileCopyTooltip,
-              onPressed: () => _copyAddress(l10n),
-            ),
-          ],
         ),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(
-              QzSpacing.lg,
-              QzSpacing.md,
-              QzSpacing.lg,
-              QzSpacing.lg,
-            ),
-            children: <Widget>[
-              _Hero(profile: p),
-              const SizedBox(height: QzSpacing.md),
-              QzSegmentedTabs(
-                options: <String>[
-                  l10n.whaleProfileTabOverview,
-                  l10n.whaleProfileTabStats,
-                ],
-                value: _tab == 'overview'
-                    ? l10n.whaleProfileTabOverview
-                    : l10n.whaleProfileTabStats,
-                onChanged: (String v) => setState(() {
-                  _tab = v == l10n.whaleProfileTabOverview
-                      ? 'overview'
-                      : 'stats';
-                }),
-              ),
-              const SizedBox(height: QzSpacing.md),
-              if (_tab == 'overview')
-                _Overview(profile: p)
-              else
-                _StatsEntry(profile: p),
-            ],
-          ),
-        ),
+        child,
       ],
     );
   }
@@ -166,14 +117,242 @@ QzChipTone _chipTone(String tone) {
   }
 }
 
-Color _toneColor(QzColorScheme c, String tone) {
-  switch (tone) {
-    case 'up':
-      return c.marketUp;
-    case 'dn':
-      return c.marketDown;
-    default:
-      return c.textDim;
+class _Detail extends StatelessWidget {
+  const _Detail({required this.profile, required this.onCopy});
+  final WhaleProfile profile;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final QzColorScheme c = context.qzScheme;
+    return DefaultTabController(
+      length: 6,
+      child: Column(
+        children: <Widget>[
+          QzTopBar(
+            title: l10n.whaleProfileTitle,
+            subtitle: profile.address,
+            onBack: () => context.pop(),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => WhaleTradeStatsSheet.show(
+                  context,
+                  address: profile.address,
+                  stats: profile.stats,
+                ),
+                child: Text(
+                  l10n.whaleTradeStatsTitle,
+                  style: TextStyle(
+                    color: c.accent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.copy, size: 18),
+                color: c.textMid,
+                tooltip: l10n.whaleProfileCopyTooltip,
+                onPressed: onCopy,
+              ),
+            ],
+          ),
+          _Hero(profile: profile),
+          _TabBar(profile: profile),
+          Expanded(
+            child: TabBarView(
+              children: <Widget>[
+                _BasicTab(profile: profile),
+                _ListTab(
+                  count: profile.spotHoldings.length,
+                  empty: l10n.whaleProfileEmptySpot,
+                  rows: <Widget>[
+                    for (final WhaleSpotHolding h in profile.spotHoldings)
+                      WhaleSpotRow(h: h),
+                  ],
+                ),
+                _ListTab(
+                  count: profile.perpHoldings.length,
+                  empty: l10n.whaleProfileEmptyPerp,
+                  rows: <Widget>[
+                    for (final WhalePerpHolding h in profile.perpHoldings)
+                      WhalePerpRow(h: h),
+                  ],
+                ),
+                _ListTab(
+                  count: profile.openOrders.length,
+                  empty: l10n.whaleProfileEmptyOrders,
+                  rows: <Widget>[
+                    for (final WhaleOpenOrder o in profile.openOrders)
+                      WhaleOrderRow(o: o),
+                  ],
+                ),
+                _ListTab(
+                  count: profile.recentTrades.length,
+                  empty: l10n.whaleProfileEmptyTrades,
+                  rows: <Widget>[
+                    for (final WhaleRecentTrade t in profile.recentTrades)
+                      WhaleTradeRow(t: t),
+                  ],
+                ),
+                _ListTab(
+                  count: profile.histOrders.length,
+                  empty: l10n.whaleProfileEmptyHistory,
+                  rows: <Widget>[
+                    for (final WhaleHistOrder o in profile.histOrders)
+                      WhaleHistRow(o: o),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TabBar extends StatelessWidget {
+  const _TabBar({required this.profile});
+  final WhaleProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final QzColorScheme c = context.qzScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: c.bgElev,
+        border: Border(bottom: BorderSide(color: c.borderSoft)),
+      ),
+      child: TabBar(
+        isScrollable: true,
+        tabAlignment: TabAlignment.start,
+        labelColor: c.accent,
+        unselectedLabelColor: c.textMid,
+        indicatorColor: c.accent,
+        indicatorSize: TabBarIndicatorSize.label,
+        dividerColor: Colors.transparent,
+        labelStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+        unselectedLabelStyle:
+            const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+        tabs: <Widget>[
+          Tab(text: l10n.whaleProfileTabBasic),
+          Tab(text: _withCount(l10n.whaleProfileTabSpot, profile.spotHoldings.length)),
+          Tab(text: _withCount(l10n.whaleProfileTabPerp, profile.perpHoldings.length)),
+          Tab(text: _withCount(l10n.whaleProfileTabOrders, profile.openOrders.length)),
+          Tab(text: _withCount(l10n.whaleProfileTabTrades, profile.recentTrades.length)),
+          Tab(text: _withCount(l10n.whaleProfileTabHistory, profile.histOrders.length)),
+        ],
+      ),
+    );
+  }
+
+  String _withCount(String label, int n) => n > 0 ? '$label $n' : label;
+}
+
+/// 基本信息 tab：P&L 图（含静态 pill 行）+ 4 stat 卡 + 永续总价值明细。
+class _BasicTab extends StatelessWidget {
+  const _BasicTab({required this.profile});
+  final WhaleProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final QzColorScheme c = context.qzScheme;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 40),
+      children: <Widget>[
+        Container(
+          padding: const EdgeInsets.all(QzSpacing.lg),
+          decoration: BoxDecoration(
+            color: c.bgElev,
+            border: Border.all(color: c.borderSoft),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                l10n.whaleProfilePnlChartTitle(
+                  l10n.whaleProfilePeriodWeek,
+                  l10n.whaleProfileScopePerpOnly,
+                ),
+                style: TextStyle(fontSize: 12, color: c.textMid),
+              ),
+              const SizedBox(height: QzSpacing.sm),
+              Wrap(
+                spacing: QzSpacing.xs,
+                runSpacing: QzSpacing.xs,
+                children: <Widget>[
+                  _StaticPill(text: l10n.whaleProfilePeriodWeek),
+                  _StaticPill(text: l10n.whaleProfileScopePerpOnly),
+                  _StaticPill(text: l10n.whaleProfileMetricTotalPnl, accent: true),
+                ],
+              ),
+              const SizedBox(height: QzSpacing.md),
+              WhalePnlChart(points: profile.pnlCurve),
+            ],
+          ),
+        ),
+        const SizedBox(height: QzSpacing.md),
+        if (profile.statCards != null)
+          WhaleStatCards(cards: profile.statCards!, stats: profile.stats),
+        if (profile.perpSummary != null) ...<Widget>[
+          const SizedBox(height: QzSpacing.md),
+          WhalePerpSummaryCard(summary: profile.perpSummary!),
+        ],
+      ],
+    );
+  }
+}
+
+/// 静态 pill（图表参数当前值展示，不可交互——mock 阶段切换无意义）。
+class _StaticPill extends StatelessWidget {
+  const _StaticPill({required this.text, this.accent = false});
+  final String text;
+  final bool accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    return Container(
+      height: 28,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: accent ? c.accent : c.bgElev,
+        border: Border.all(color: accent ? c.accent : c.border),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: accent ? FontWeight.w600 : FontWeight.w500,
+          color: accent ? c.accentOn : c.text,
+        ),
+      ),
+    );
+  }
+}
+
+/// 明细列表 tab（空 list 显示空态）。
+class _ListTab extends StatelessWidget {
+  const _ListTab({
+    required this.count,
+    required this.empty,
+    required this.rows,
+  });
+  final int count;
+  final String empty;
+  final List<Widget> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    if (count == 0) return WhaleDetailEmpty(text: empty);
+    return ListView(padding: EdgeInsets.zero, children: rows);
   }
 }
 
@@ -186,6 +365,7 @@ class _Hero extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     return Container(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: c.bgElev,
@@ -267,271 +447,6 @@ class _Hero extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _Overview extends StatelessWidget {
-  const _Overview({required this.profile});
-  final WhaleProfile profile;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final QzColorScheme c = context.qzScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        _SectionTitle(text: l10n.whaleProfileSectionHoldings),
-        const SizedBox(height: QzSpacing.sm),
-        _Bordered(
-          children: <Widget>[
-            for (int i = 0; i < profile.holdings.length; i++)
-              _HoldingRow(
-                entry: profile.holdings[i],
-                isLast: i == profile.holdings.length - 1,
-              ),
-          ],
-        ),
-        const SizedBox(height: QzSpacing.lg),
-        _SectionTitle(text: l10n.whaleProfileSectionRecentActions),
-        const SizedBox(height: QzSpacing.sm),
-        if (profile.recentActions.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 18),
-            child: Center(
-              child: Text(
-                l10n.whaleProfileRecentActionsEmpty,
-                style: TextStyle(color: c.textDim, fontSize: 12),
-              ),
-            ),
-          )
-        else
-          _Bordered(
-            children: <Widget>[
-              for (int i = 0; i < profile.recentActions.length; i++)
-                _ActionRow(
-                  entry: profile.recentActions[i],
-                  isLast: i == profile.recentActions.length - 1,
-                ),
-            ],
-          ),
-      ],
-    );
-  }
-}
-
-class _HoldingRow extends StatelessWidget {
-  const _HoldingRow({required this.entry, required this.isLast});
-  final WhaleHoldingEntry entry;
-  final bool isLast;
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: isLast ? Colors.transparent : c.borderSoft),
-        ),
-      ),
-      child: Row(
-        children: <Widget>[
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  entry.symbol,
-                  style: TextStyle(
-                    color: c.text,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  entry.amountDisplay,
-                  style: TextStyle(color: c.textMid, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: <Widget>[
-              Text(
-                entry.valueDisplay,
-                style: TextStyle(
-                  color: c.text,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                entry.pctDisplay,
-                style: TextStyle(
-                  color: _toneColor(c, entry.tone),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActionRow extends StatelessWidget {
-  const _ActionRow({required this.entry, required this.isLast});
-  final WhaleRecentAction entry;
-  final bool isLast;
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    final Color tone = _toneColor(c, entry.tone);
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: isLast ? Colors.transparent : c.borderSoft),
-        ),
-      ),
-      child: Row(
-        children: <Widget>[
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: tone,
-              borderRadius: BorderRadius.circular(3),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  entry.action,
-                  style: TextStyle(
-                    color: tone,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  entry.detail,
-                  style: TextStyle(color: c.textMid, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            entry.timeDisplay,
-            style: TextStyle(color: c.textDim, fontSize: 11),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 交易统计 tab：交易统计已迁出为底部上滑 modal（设计稿 `WhaleTradeStats`，
-/// issue #1859），此处提供唤起入口与概要摘要，点击打开 [WhaleTradeStatsSheet]。
-class _StatsEntry extends StatelessWidget {
-  const _StatsEntry({required this.profile});
-  final WhaleProfile profile;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final QzColorScheme c = context.qzScheme;
-    return GestureDetector(
-      onTap: () => WhaleTradeStatsSheet.show(
-        context,
-        address: profile.address,
-        stats: profile.stats,
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: c.bgElev,
-          border: Border.all(color: c.borderSoft),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: <Widget>[
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    l10n.whaleTradeStatsTitle,
-                    style: TextStyle(
-                      color: c.text,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${l10n.whaleProfileStatWinRate} '
-                    '${l10n.whaleProfileWinRateValue(profile.stats.winRatePct)}'
-                    ' · ${l10n.whaleTradeStatsTradeCount} '
-                    '${profile.stats.tradesTotal ?? 0}',
-                    style: TextStyle(color: c.textDim, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right, size: 20, color: c.textDim),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.text});
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    return Text(
-      text,
-      style: TextStyle(
-        color: c.text,
-        fontSize: 15,
-        fontWeight: FontWeight.w700,
-        letterSpacing: -0.2,
-      ),
-    );
-  }
-}
-
-class _Bordered extends StatelessWidget {
-  const _Bordered({required this.children});
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: c.borderSoft),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(children: children),
     );
   }
 }

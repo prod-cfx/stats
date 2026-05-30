@@ -737,6 +737,17 @@
   "whaleProfileLongValue": "Long value",
   "whaleProfileShortValue": "Short value",
   "whaleProfileCurrentPosition": "Current position",
+  "whaleProfileRoi": "ROI",
+  "whaleProfilePerfTitle": "Performance",
+  "whaleProfileTradeCount": "Trade count",
+  "whaleProfilePeriodWeek": "1W",
+  "whaleProfileScopePerpOnly": "Perps only",
+  "whaleProfileMetricTotalPnl": "Total PnL",
+  "whaleProfileEmptySpot": "No spot holdings",
+  "whaleProfileEmptyPerp": "No perpetual positions",
+  "whaleProfileEmptyOrders": "No open orders",
+  "whaleProfileEmptyTrades": "No recent trades",
+  "whaleProfileEmptyHistory": "No order history",
   "whaleProfilePnlChartTitle": "{period} total PnL ({scope})",
   "@whaleProfilePnlChartTitle": {
     "placeholders": {

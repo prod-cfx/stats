@@ -1929,6 +1929,39 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleProfileCurrentPosition => '当前持仓';
 
   @override
+  String get whaleProfileRoi => '投资回报率';
+
+  @override
+  String get whaleProfilePerfTitle => '交易表现';
+
+  @override
+  String get whaleProfileTradeCount => '交易次数';
+
+  @override
+  String get whaleProfilePeriodWeek => '1周';
+
+  @override
+  String get whaleProfileScopePerpOnly => '仅永续合约';
+
+  @override
+  String get whaleProfileMetricTotalPnl => '总盈亏';
+
+  @override
+  String get whaleProfileEmptySpot => '暂无现货持仓';
+
+  @override
+  String get whaleProfileEmptyPerp => '暂无永续合约持仓';
+
+  @override
+  String get whaleProfileEmptyOrders => '暂无挂单';
+
+  @override
+  String get whaleProfileEmptyTrades => '暂无最近成交';
+
+  @override
+  String get whaleProfileEmptyHistory => '暂无历史委托';
+
+  @override
   String whaleProfilePnlChartTitle(String period, String scope) {
     return '$period 总盈亏（$scope）';
   }

@@ -1,0 +1,174 @@
+import 'package:flutter/material.dart';
+
+import '../../../data/models/whale_profile_models.dart';
+import '../../../theme/colors.dart';
+import '../../../theme/theme_context.dart';
+import '../../../theme/tokens.dart';
+
+/// 基本信息 tab 的 P&L 曲线图（设计稿 `WhaleProfileDetail` P&L chart `:760`）。
+///
+/// area + line + 横向虚线网格 + 右侧 Y 轴标签（单位 K）。坐标映射对齐设计：
+/// 纵轴 top=400 / span=700（400K..-300K），消费 [WhalePnlPoint]（x:0..276）。
+/// 末点正负决定 up/dn 配色。空数据降级为占位文案。
+class WhalePnlChart extends StatelessWidget {
+  const WhalePnlChart({super.key, required this.points});
+
+  final List<WhalePnlPoint> points;
+
+  @override
+  Widget build(BuildContext context) {
+    final QzColorScheme c = context.qzScheme;
+    if (points.isEmpty) {
+      return SizedBox(
+        height: 140,
+        child: Center(
+          child: Text(
+            '—',
+            style: TextStyle(color: c.textFaint, fontSize: 12),
+          ),
+        ),
+      );
+    }
+    final bool down = points.last.valueK < 0;
+    final Color tone = down ? c.marketDown : c.marketUp;
+    return SizedBox(
+      height: 140,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Expanded(
+            child: CustomPaint(
+              painter: _PnlPainter(
+                points: points,
+                line: tone,
+                grid: c.borderSoft,
+                axis: c.border,
+              ),
+            ),
+          ),
+          const SizedBox(width: QzSpacing.xs),
+          _AxisLabels(color: c.textFaint),
+        ],
+      ),
+    );
+  }
+}
+
+/// 右侧 Y 轴刻度（与网格线对齐）。
+class _AxisLabels extends StatelessWidget {
+  const _AxisLabels({required this.color});
+  final Color color;
+
+  static const List<int> _ticks = <int>[400, 300, 200, 100, 0, -100, -200, -300];
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 30,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: <Widget>[
+          for (final int t in _ticks)
+            Text(
+              t == 0 ? '0' : '${t}K',
+              style: TextStyle(
+                color: color,
+                fontSize: 9,
+                fontFamily: QzFont.mono,
+                fontFamilyFallback: QzFont.monoFallback,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PnlPainter extends CustomPainter {
+  _PnlPainter({
+    required this.points,
+    required this.line,
+    required this.grid,
+    required this.axis,
+  });
+
+  final List<WhalePnlPoint> points;
+  final Color line;
+  final Color grid;
+  final Color axis;
+
+  static const double _top = 400; // 纵轴顶
+  static const double _span = 700; // 400K .. -300K
+  static const double _maxX = 276; // 横轴满量程（设计坐标系）
+
+  double _y(double valueK, double h) => ((_top - valueK) / _span) * h;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 横向虚线网格（与右侧刻度同步）。
+    const List<double> ticks = <double>[400, 300, 200, 100, 0, -100, -200, -300];
+    for (final double v in ticks) {
+      final double y = _y(v, size.height);
+      final Paint g = Paint()
+        ..color = v == 0 ? axis : grid
+        ..strokeWidth = 1;
+      _dashedLine(canvas, Offset(0, y), Offset(size.width, y), g);
+    }
+
+    final Path linePath = Path();
+    for (int i = 0; i < points.length; i++) {
+      final double x = (points[i].x / _maxX) * size.width;
+      final double y = _y(points[i].valueK, size.height);
+      if (i == 0) {
+        linePath.moveTo(x, y);
+      } else {
+        linePath.lineTo(x, y);
+      }
+    }
+
+    final Path area = Path.from(linePath)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+
+    final Paint fill = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[
+          line.withValues(alpha: 0.22),
+          line.withValues(alpha: 0),
+        ],
+      ).createShader(Offset.zero & size);
+    canvas.drawPath(area, fill);
+
+    final Paint stroke = Paint()
+      ..color = line
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(linePath, stroke);
+  }
+
+  void _dashedLine(Canvas canvas, Offset from, Offset to, Paint paint) {
+    const double dash = 3, gap = 3;
+    final double total = (to - from).distance;
+    final double dx = (to.dx - from.dx) / total;
+    double drawn = 0;
+    while (drawn < total) {
+      final double end = (drawn + dash).clamp(0, total);
+      canvas.drawLine(
+        Offset(from.dx + dx * drawn, from.dy),
+        Offset(from.dx + dx * end, from.dy),
+        paint,
+      );
+      drawn += dash + gap;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PnlPainter old) =>
+      old.points != points || old.line != line;
+}

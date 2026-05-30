@@ -179,6 +179,8 @@ app 现状核查（**原 issue 描述与代码有出入，以下以代码为准*
 
 ## 2026-05-30 · 巨鲸地址详情 6 tab 重型详情：方案 B 暂缓、标 future（Issue #1791）
 
+> ⚠️ **本节已被 2026-05-31 节 supersede**：暂缓前提（数据通道 #1682 未就绪、只能堆纯 mock）已被 #1858（PR #1864）消除——11 个明细数据模型 + fixtures + l10n 已 merge 到 main。结论反转为「方案 A 落地（mock-first）」，详见下方「2026-05-31 · 巨鲸地址详情 6 tab 重型详情落地」节。本节保留作历史决策记录。
+
 **背景**：设计稿 `design/project/mobile/m-screens-whale-discover.jsx:617`（`WhaleProfileDetail`）为全屏 6 tab 详情——基本信息 / 现货 / 永续 / 挂单 / 成交 / 历史，含 P&L 曲线图（period / scope / metric 三个下拉切换）+ 4 个 stat 卡 + 永续持仓明细（保证金 / 多空占比 / ROI / 未实现盈亏）。Flutter app `apps/quantify-mobile/lib/pages/whale/whale_profile_page.dart` 当前为 hero（地址 + 标签 + 资产摘要 + 总持仓估值）+ 2 segment（概览＝持仓列表 + 近期动作 / 交易统计＝盈亏/胜率/方向偏好/资产表现），信息维度少于设计稿。#1791 目标是「6 tab 全量落地 OR 分批 OR 标 future」三选一，先做产品取舍。
 
 **候选**：
@@ -216,6 +218,46 @@ app 现状核查（**原 issue 描述与代码有出入，以下以代码为准*
 **后续触发条件**：当 #1682（读路径 REST 接入 whale 数据）在 app 侧产出真实地址明细（现货 / 永续持仓、当前挂单、逐笔成交、历史动作、盈亏时序）时，新立「巨鲸地址详情 6 tab 实现」issue，引用本节作为暂缓结论的解除依据，届时统一评估 6 tab + P&L 图 + 永续明细落地。
 
 **落地范围**：仅文档。`apps/quantify-mobile/docs/decisions.md`（本节）+ `apps/quantify-mobile/README.md`「设计真源」段补 #1791 引用。不改 `design/project/mobile/m-screens-whale-discover.jsx`、不改 `whale_profile_page.dart` 与 app 代码 / 测试。
+
+---
+
+## 2026-05-31 · 巨鲸地址详情 6 tab 重型详情落地：决策反转为方案 A（Issue #1791，supersedes 2026-05-30 节）
+
+**背景**：2026-05-30 节采纳「方案 B 暂缓、标 future」，**唯一前提**是 6 tab 明细（现货/永续/挂单/成交/历史 + P&L 时序）依赖真实地址数据通道 #1682，未接入前只能堆纯 mock、真实接入后大概率重写（YAGNI）。**该前提现已不成立**：#1858（PR #1864，已 merge 到 main）已落地完整数据底座——
+
+- 11 个明细数据模型（`lib/data/models/whale_profile_models.dart`）：`WhaleSpotHolding` / `WhalePerpHolding` / `WhaleOpenOrder` / `WhaleRecentTrade` / `WhaleHistOrder` / `WhalePnlPoint` / `WhaleProfileStatCards` / `WhalePerpSummary` / `WhaleStatCardExtra` / `WhaleStatCardDonut`，并扩展 `WhaleProfile` 持有 6 tab 全部明细字段。
+- 完整 fixtures（`lib/data/mock/fixtures/whale_profiles.dart`）：已知地址 `0x88e…3a01` + 第二地址 + `buildFallbackWhaleProfile` 全量填充上述明细，与设计稿常量 1:1 对齐。
+- 6 tab l10n key 集合（zh/en 双语，tab 标签 + 各列标签 + stat 卡 + 永续偏差段 + PnlChartTitle）。
+
+数据底座既已就绪，「纯 mock、真实接入重写」的暂缓理由消失；落地 6 tab 与 #1751/#1752/#1753 已确立的 **mock-first 分批落地路线**一致——运行期不依赖任何写入方先产生数据（不触发数据流跨越），真实读路径 #1682 接入时仅替换 `whaleProfileProvider` 的 repository 实现，UI / 测试不变。
+
+**候选**：
+
+| 方案 | 内容 | 取舍 |
+|------|------|------|
+| A. mock-first 落地（采纳） | `whale_profile_page.dart` 重构为 6 tab：基本信息（P&L 图 + 4 stat 卡 + 永续总价值明细）+ 现货/永续/挂单/成交/历史明细列表，消费 #1858 数据模型 | 数据底座（#1858）已 merge，消除原暂缓前提；对齐 mock-first 路线；真实接入仅换 repository，零返工风险；与设计稿 `WhaleProfileDetail` 信息架构一致 |
+| B. 维持暂缓 | 保持 hero + 2 segment | 数据已就绪仍标 future 与现实脱节；#1858 投入的模型/fixtures/l10n 闲置；信息维度持续少于设计稿 |
+
+**判定**：**采纳方案 A——落地 6 tab 重型详情**，supersede 2026-05-30 节的暂缓结论。
+
+**对齐结论（对应 #1791 验收标准逐条）**：
+
+| 验收标准 | 结论 | 依据 |
+|---------|------|------|
+| [1] 产品确认落地范围（全量 / 分批 / future），记入 decisions.md | 已满足。结论＝方案 A 全量落地，记入本节 | 本节 |
+| [2] 地址详情提供 基本信息/现货/永续/挂单/成交/历史 tab + P&L 图 + 4 stat 卡 | 已满足。`whale_profile_page.dart` 6 tab + `WhalePnlChart` + `WhaleStatCards`（4 卡）+ `WhalePerpSummaryCard` | 实现 |
+| [3] decisions.md 钉死决策反转（#1858 数据底座就绪），README 同步 | 已满足。本节钉死反转 + supersede 标注；README 设计真源段更新 | 本节 + README |
+
+**落地范围**：
+
+- `lib/pages/whale/whale_profile_page.dart`：hero + topbar（保留复制；新增「交易统计」按钮）→ `DefaultTabController`(6) + scrollable `TabBar` + `TabBarView`。基本信息 tab = P&L 卡（静态 pill 行 + `WhalePnlChart`）+ `WhaleStatCards` + `WhalePerpSummaryCard`；其余 5 tab = 明细行列表（带计数 + 空态）。
+- 新建 widget：`widgets/whale_pnl_chart.dart`（P&L CustomPaint）、`widgets/whale_stat_cards.dart`（4 stat 卡 + donut）、`widgets/whale_perp_summary_card.dart`（永续总价值明细）、`widgets/whale_detail_rows.dart`（5 个明细行 + 空态）。
+- `lib/l10n/app_zh.arb` / `app_en.arb`：补 pill 静态值 / ROI / 交易表现 / 交易次数 / 5 个 tab 空态 key，重生成 localizations。
+- `test/pages/whale_profile_page_test.dart`：重写覆盖 6 tab 切换 + 基本信息 tab + 统计弹窗入口 + 复制 + 返回 + fallback 空态。
+
+**Never break userspace**：经核查 `WhaleTradeStatsSheet.show`（#1859/#1866，刚 merge）的唯一调用点是旧 stats segment；移除 segment 会使统计弹窗成死代码。故在 topbar 新增「交易统计」按钮承接该入口，统计弹窗仍可达。
+
+**设计裁剪（KISS / YAGNI）**：mock fixtures 每 tab 固定 3 行，**不实现**设计稿的列排序三态循环 / 币种筛选下拉 / PillSelect 可交互下拉 / 拖拽滚动 tab / refresh / 一键监控 / 分享按钮。pill 仅静态展示当前值（1周 / 仅永续合约 / 总盈亏）。交易表现卡只渲染 model 有的字段（胜率 + 交易次数），不造无来源的「最大回撤 / 已成交订单 / 平仓次数」占位常量。这些交互在固定 mock 数据下无产品价值，真实数据（#1682）接入时再评估。
 
 ---
 

@@ -1969,6 +1969,39 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleProfileCurrentPosition => 'Current position';
 
   @override
+  String get whaleProfileRoi => 'ROI';
+
+  @override
+  String get whaleProfilePerfTitle => 'Performance';
+
+  @override
+  String get whaleProfileTradeCount => 'Trade count';
+
+  @override
+  String get whaleProfilePeriodWeek => '1W';
+
+  @override
+  String get whaleProfileScopePerpOnly => 'Perps only';
+
+  @override
+  String get whaleProfileMetricTotalPnl => 'Total PnL';
+
+  @override
+  String get whaleProfileEmptySpot => 'No spot holdings';
+
+  @override
+  String get whaleProfileEmptyPerp => 'No perpetual positions';
+
+  @override
+  String get whaleProfileEmptyOrders => 'No open orders';
+
+  @override
+  String get whaleProfileEmptyTrades => 'No recent trades';
+
+  @override
+  String get whaleProfileEmptyHistory => 'No order history';
+
+  @override
   String whaleProfilePnlChartTitle(String period, String scope) {
     return '$period total PnL ($scope)';
   }

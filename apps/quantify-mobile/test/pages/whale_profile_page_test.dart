@@ -7,13 +7,15 @@ import 'package:quantify_mobile/data/mock/fixtures/whale_profiles.dart';
 import 'package:quantify_mobile/data/models/whale_profile_models.dart';
 import 'package:quantify_mobile/l10n/app_localizations.dart';
 import 'package:quantify_mobile/pages/whale/whale_profile_page.dart';
+import 'package:quantify_mobile/pages/whale/widgets/whale_pnl_chart.dart';
 import 'package:quantify_mobile/theme/theme_data.dart';
 import 'package:quantify_mobile/theme/theme_notifier.dart';
 
-/// 地址详情页守护测试（#1753）。
+/// 地址详情页守护测试（#1791 — 6 tab 重型详情）。
 ///
-/// 用两段路由（home 触发按钮 → push profile）覆盖入口打开 + 返回关闭；
-/// 直接落在 profile 路由覆盖字段渲染 / 统计 tab / 复制行为 / fallback 空态。
+/// 覆盖：入口 push + hero（地址/标签）、默认基本信息 tab（P&L 图 + stat 卡 +
+/// 永续总价值）、各明细 tab 切换渲染核心字段、统计弹窗入口保留（#1859）、
+/// 复制地址、返回关闭、fallback 空态。
 const String _knownAddress = '0x88e…3a01';
 
 GoRouter _router({required String initial}) {
@@ -43,7 +45,7 @@ GoRouter _router({required String initial}) {
 }
 
 Future<void> _pump(WidgetTester tester, {required String initial}) async {
-  await tester.binding.setSurfaceSize(const Size(420, 1600));
+  await tester.binding.setSurfaceSize(const Size(420, 1800));
   await tester.pumpWidget(
     ProviderScope(
       child: MaterialApp.router(
@@ -61,6 +63,11 @@ Future<void> _pump(WidgetTester tester, {required String initial}) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> _openTab(WidgetTester tester, String label) async {
+  await tester.tap(find.text(label).first);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('入口：点击地址行 push 详情页，渲染地址 + 标签', (WidgetTester tester) async {
     await _pump(tester, initial: '/home');
@@ -70,51 +77,68 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(WhaleProfilePage), findsOneWidget);
-    // 地址在 topbar subtitle 与 hero 同时出现
     expect(find.text(_knownAddress), findsWidgets);
     expect(find.text('机构'), findsWidgets);
   });
 
-  testWidgets('概览 tab：渲染持仓与近期动作核心字段', (WidgetTester tester) async {
-    await _pump(
-      tester,
-      initial: '/whale/profile/${Uri.encodeComponent(_knownAddress)}',
-    );
-    final WhaleProfile p = mockWhaleProfiles[_knownAddress]!;
-    // 持仓 symbol
-    expect(find.text(p.holdings.first.symbol), findsWidgets);
-    expect(find.text(p.holdings.first.valueDisplay), findsOneWidget);
-    // 近期动作 detail
-    expect(find.text(p.recentActions.first.detail), findsOneWidget);
-  });
-
-  testWidgets('交易统计 tab：切换后渲染唤起入口，点击打开统计弹窗', (
+  testWidgets('基本信息 tab：默认渲染 P&L 图 + stat 卡 + 永续总价值', (
     WidgetTester tester,
   ) async {
     await _pump(
       tester,
       initial: '/whale/profile/${Uri.encodeComponent(_knownAddress)}',
     );
-    // 切到统计 tab（segmented 标签文本即「交易统计」）。
-    await tester.tap(find.text('交易统计'));
-    await tester.pumpAndSettle();
+    // P&L 图 widget 存在。
+    expect(find.byType(WhalePnlChart), findsOneWidget);
+    // 4 stat 卡：账户总价值标签 + 交易表现标签。
+    expect(find.text('账户总价值'), findsOneWidget);
+    expect(find.text('交易表现'), findsOneWidget);
+    // 永续总价值卡标签。
+    expect(find.text('永续合约总价值'), findsOneWidget);
+  });
 
-    // tab 内仅渲染唤起入口（含 chevron），不再内嵌统计明细。
-    expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+  testWidgets('明细 tab：切换现货/永续/挂单/成交/历史渲染核心字段', (
+    WidgetTester tester,
+  ) async {
+    await _pump(
+      tester,
+      initial: '/whale/profile/${Uri.encodeComponent(_knownAddress)}',
+    );
+    final WhaleProfile p = mockWhaleProfiles[_knownAddress]!;
 
-    // 点击入口卡片 → 打开底部统计弹窗（设计稿 WhaleTradeStats）。
-    await tester.tap(find.byIcon(Icons.chevron_right));
+    await _openTab(tester, '现货持仓 ${p.spotHoldings.length}');
+    expect(find.text(p.spotHoldings.first.sym), findsWidgets);
+
+    await _openTab(tester, '永续合约持仓 ${p.perpHoldings.length}');
+    expect(find.text(p.perpHoldings.first.pnlDisplay), findsOneWidget);
+
+    await _openTab(tester, '挂单 ${p.openOrders.length}');
+    expect(find.text(p.openOrders.first.id), findsOneWidget);
+
+    await _openTab(tester, '最近成交 ${p.recentTrades.length}');
+    expect(find.text(p.recentTrades.first.feeDisplay), findsOneWidget);
+
+    await _openTab(tester, '历史委托 ${p.histOrders.length}');
+    expect(find.text(p.histOrders.first.id), findsOneWidget);
+  });
+
+  testWidgets('统计弹窗入口保留：点击 topbar 交易统计按钮打开弹窗', (
+    WidgetTester tester,
+  ) async {
+    await _pump(
+      tester,
+      initial: '/whale/profile/${Uri.encodeComponent(_knownAddress)}',
+    );
+    // topbar「交易统计」按钮（#1859 弹窗唯一入口）。
+    await tester.tap(find.text('交易统计').first);
     await tester.pumpAndSettle();
 
     final WhaleProfile p = mockWhaleProfiles[_knownAddress]!;
-    // 弹窗内胜率卡数值（mono，两位小数）。
     expect(
       find.text('${p.stats.winRatePct.toStringAsFixed(2)}%'),
-      findsOneWidget,
+      findsWidgets,
     );
-    // 弹窗内双子 tab 标签。
     expect(find.text('按资产的表现'), findsOneWidget);
-    expect(find.text('按仓位的表现'), findsOneWidget);
   });
 
   testWidgets('复制地址：点击复制按钮写入剪贴板并提示', (WidgetTester tester) async {
@@ -161,7 +185,7 @@ void main() {
     expect(find.byType(WhaleProfilePage), findsNothing);
   });
 
-  testWidgets('空态：未命中地址走 fallback，仍渲染核心字段', (WidgetTester tester) async {
+  testWidgets('fallback：未命中地址仍渲染 6 tab 骨架与地址', (WidgetTester tester) async {
     const String unknown = '0xdead…beef';
     await _pump(
       tester,
@@ -169,7 +193,7 @@ void main() {
     );
     expect(find.byType(WhaleProfilePage), findsOneWidget);
     expect(find.text(unknown), findsWidgets);
-    expect(find.text('持仓'), findsOneWidget);
-    expect(find.text('近期动作'), findsOneWidget);
+    // tab 骨架：基本信息 tab 默认渲染 P&L 图。
+    expect(find.byType(WhalePnlChart), findsOneWidget);
   });
 }

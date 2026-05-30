@@ -3806,6 +3806,72 @@ abstract class AppLocalizations {
   /// **'当前持仓'**
   String get whaleProfileCurrentPosition;
 
+  /// No description provided for @whaleProfileRoi.
+  ///
+  /// In zh, this message translates to:
+  /// **'投资回报率'**
+  String get whaleProfileRoi;
+
+  /// No description provided for @whaleProfilePerfTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易表现'**
+  String get whaleProfilePerfTitle;
+
+  /// No description provided for @whaleProfileTradeCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易次数'**
+  String get whaleProfileTradeCount;
+
+  /// No description provided for @whaleProfilePeriodWeek.
+  ///
+  /// In zh, this message translates to:
+  /// **'1周'**
+  String get whaleProfilePeriodWeek;
+
+  /// No description provided for @whaleProfileScopePerpOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅永续合约'**
+  String get whaleProfileScopePerpOnly;
+
+  /// No description provided for @whaleProfileMetricTotalPnl.
+  ///
+  /// In zh, this message translates to:
+  /// **'总盈亏'**
+  String get whaleProfileMetricTotalPnl;
+
+  /// No description provided for @whaleProfileEmptySpot.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无现货持仓'**
+  String get whaleProfileEmptySpot;
+
+  /// No description provided for @whaleProfileEmptyPerp.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无永续合约持仓'**
+  String get whaleProfileEmptyPerp;
+
+  /// No description provided for @whaleProfileEmptyOrders.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无挂单'**
+  String get whaleProfileEmptyOrders;
+
+  /// No description provided for @whaleProfileEmptyTrades.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无最近成交'**
+  String get whaleProfileEmptyTrades;
+
+  /// No description provided for @whaleProfileEmptyHistory.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无历史委托'**
+  String get whaleProfileEmptyHistory;
+
   /// No description provided for @whaleProfilePnlChartTitle.
   ///
   /// In zh, this message translates to:

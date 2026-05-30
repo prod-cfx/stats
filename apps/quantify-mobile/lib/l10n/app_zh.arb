@@ -749,6 +749,17 @@
   "whaleProfileLongValue": "多头价值",
   "whaleProfileShortValue": "空头价值",
   "whaleProfileCurrentPosition": "当前持仓",
+  "whaleProfileRoi": "投资回报率",
+  "whaleProfilePerfTitle": "交易表现",
+  "whaleProfileTradeCount": "交易次数",
+  "whaleProfilePeriodWeek": "1周",
+  "whaleProfileScopePerpOnly": "仅永续合约",
+  "whaleProfileMetricTotalPnl": "总盈亏",
+  "whaleProfileEmptySpot": "暂无现货持仓",
+  "whaleProfileEmptyPerp": "暂无永续合约持仓",
+  "whaleProfileEmptyOrders": "暂无挂单",
+  "whaleProfileEmptyTrades": "暂无最近成交",
+  "whaleProfileEmptyHistory": "暂无历史委托",
   "whaleProfilePnlChartTitle": "{period} 总盈亏（{scope}）",
   "@whaleProfilePnlChartTitle": {
     "placeholders": {
