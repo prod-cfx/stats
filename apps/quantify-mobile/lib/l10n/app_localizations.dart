@@ -2006,6 +2006,24 @@ abstract class AppLocalizations {
   /// **'简体中文'**
   String get meSettingsLanguageValue;
 
+  /// No description provided for @meSettingsLanguageSheetTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'语言'**
+  String get meSettingsLanguageSheetTitle;
+
+  /// No description provided for @meSettingsLanguageOptionZh.
+  ///
+  /// In zh, this message translates to:
+  /// **'简体中文'**
+  String get meSettingsLanguageOptionZh;
+
+  /// No description provided for @meSettingsLanguageOptionEn.
+  ///
+  /// In zh, this message translates to:
+  /// **'English'**
+  String get meSettingsLanguageOptionEn;
+
   /// No description provided for @meSettingsTheme.
   ///
   /// In zh, this message translates to:
@@ -2023,6 +2041,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'推送通知'**
   String get meSettingsNotifications;
+
+  /// No description provided for @meSettingsNotificationsValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'Telegram · 开启'**
+  String get meSettingsNotificationsValue;
 
   /// No description provided for @meLogout.
   ///

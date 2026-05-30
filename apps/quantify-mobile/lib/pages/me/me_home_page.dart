@@ -55,6 +55,149 @@ class MeHomePage extends ConsumerWidget {
 /// 统计卡相对于 header 的垂直叠加偏移（原型 `m-screens-4.jsx:992` `marginTop:-26`）。
 const double _statsCardOverlap = -26;
 
+/// 偏好分组「语言」行的选中值（UI 会话态）。
+///
+/// 当前 app locale 在 `main.dart` 硬锁 `Locale('zh')`，无应用级语言切换基建
+/// （tracking #1515 follow-up）。本 provider 仅承载抽屉选中值回显，**不实际
+/// 切换 locale**；待 locale 基建接通后改为驱动真实 `localeProvider`。
+/// 默认值在 widget 内由 `meSettingsLanguageOptionZh` 回填（避免在此硬编码文案）。
+final StateProvider<String?> selectedLanguageProvider =
+    StateProvider<String?>((Ref ref) => null);
+
+/// 弹出语言底部抽屉（简体中文 / English 单选 + 勾选态 + 取消），结构对齐
+/// 设计稿 `m-screens-4.jsx:2640-2730`。返回所选项；点取消 / 点遮罩返回 null。
+Future<void> showLanguageSheet(BuildContext context, WidgetRef ref) async {
+  final AppLocalizations l10n = AppLocalizations.of(context);
+  final QzColorScheme c = context.qzScheme;
+  final String current =
+      ref.read(selectedLanguageProvider) ?? l10n.meSettingsLanguageOptionZh;
+  final List<String> options = <String>[
+    l10n.meSettingsLanguageOptionZh,
+    l10n.meSettingsLanguageOptionEn,
+  ];
+
+  final String? picked = await showModalBottomSheet<String>(
+    context: context,
+    backgroundColor: c.bgElev,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (BuildContext sheetCtx) {
+      return SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Container(
+              width: 42,
+              height: 4,
+              margin: const EdgeInsets.only(top: 10),
+              decoration: BoxDecoration(
+                color: c.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(QzSpacing.lg, 12, QzSpacing.lg, 6),
+              child: Text(
+                l10n.meSettingsLanguageSheetTitle,
+                style: TextStyle(
+                  color: c.text,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            for (final String o in options)
+              _LanguageOptionRow(
+                label: o,
+                selected: o == current,
+                onTap: () => Navigator.of(sheetCtx).pop(o),
+                c: c,
+              ),
+            Divider(height: 1, color: c.borderSoft),
+            TextButton(
+              onPressed: () => Navigator.of(sheetCtx).pop(),
+              style: TextButton.styleFrom(
+                minimumSize: const Size.fromHeight(46),
+                foregroundColor: c.text,
+              ),
+              child: Text(
+                l10n.commonCancel,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+
+  // await 后用户可能已导航离开（router redirect / 返回手势），widget 已
+  // dispose；缺 mounted 检查时写 ref 会触发 `Cannot use "ref" after the
+  // widget was disposed` StateError。与同文件 `_openSheet` 的守卫一致。
+  if (picked != null && context.mounted) {
+    ref.read(selectedLanguageProvider.notifier).state = picked;
+  }
+}
+
+/// 语言抽屉单个选项行：左侧文案 + 右侧单选勾选圆点，对齐设计稿。
+class _LanguageOptionRow extends StatelessWidget {
+  const _LanguageOptionRow({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    required this.c,
+  });
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final QzColorScheme c;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: QzSpacing.lg,
+          vertical: 12,
+        ),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: selected ? c.accent : c.text,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Container(
+              width: 20,
+              height: 20,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: selected ? c.accent : Colors.transparent,
+                border: Border.all(
+                  color: selected ? c.accent : c.border,
+                  width: 1.5,
+                ),
+              ),
+              child: selected
+                  ? const Icon(Icons.check, size: 12, color: Colors.white)
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _Content extends ConsumerWidget {
   const _Content({required this.info, required this.apiKeys});
   final AccountInfo info;
@@ -140,8 +283,11 @@ class _Content extends ConsumerWidget {
                 children: <Widget>[
                   QzSettingsRow(
                     label: l10n.meSettingsLanguage,
-                    value: l10n.meSettingsLanguageValue,
+                    // 选中值回显（会话态）；未选择时退回默认 简体中文。
+                    value: ref.watch(selectedLanguageProvider) ??
+                        l10n.meSettingsLanguageValue,
                     trailing: const QzSettingsCaret(),
+                    onTap: () => showLanguageSheet(context, ref),
                   ),
                   QzSettingsRow(
                     label: l10n.meSettingsTheme,
@@ -151,7 +297,10 @@ class _Content extends ConsumerWidget {
                   ),
                   QzSettingsRow(
                     label: l10n.meSettingsNotifications,
-                    value: l10n.commonView,
+                    // 对齐设计稿 `m-screens-4.jsx:2556`：value=「Telegram · 开启」
+                    // 并用 ok 绿色 tone。
+                    value: l10n.meSettingsNotificationsValue,
+                    tone: QzSettingsRowTone.ok,
                     trailing: const QzSettingsCaret(),
                     last: true,
                   ),

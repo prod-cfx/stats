@@ -1032,6 +1032,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get meSettingsLanguageValue => 'Simplified Chinese';
 
   @override
+  String get meSettingsLanguageSheetTitle => 'Language';
+
+  @override
+  String get meSettingsLanguageOptionZh => '简体中文';
+
+  @override
+  String get meSettingsLanguageOptionEn => 'English';
+
+  @override
   String get meSettingsTheme => 'Theme';
 
   @override
@@ -1039,6 +1048,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get meSettingsNotifications => 'Notifications';
+
+  @override
+  String get meSettingsNotificationsValue => 'Telegram · On';
 
   @override
   String get meLogout => 'Log Out';

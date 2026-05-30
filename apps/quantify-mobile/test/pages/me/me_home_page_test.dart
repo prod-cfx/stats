@@ -284,8 +284,39 @@ void main() {
     // 对齐设计稿 m-screens-4.jsx:1009-1010
     expect(find.text('@victor_qf'), findsOneWidget);
     expect(find.text('双重认证 · 已开启'), findsOneWidget);
-    // 「查看」仅推送通知行残留一处，安全行不再退化（共 1 次）
-    expect(find.text('查看'), findsOneWidget);
+    // 「查看」文案不再出现（推送通知行已改为「Telegram · 开启」#1817）
+    expect(find.text('查看'), findsNothing);
+  });
+
+  testWidgets('推送通知行显示「Telegram · 开启」（ok tone）（#1817）',
+      (WidgetTester tester) async {
+    await _pumpMe(tester, initialSession: kSession);
+    expect(find.text('Telegram · 开启'), findsOneWidget);
+  });
+
+  testWidgets('点击语言行弹出底部抽屉（含两选项 + 取消）（#1817）',
+      (WidgetTester tester) async {
+    await _pumpMe(tester, initialSession: kSession);
+    await tester.tap(find.text('语言'));
+    await tester.pumpAndSettle();
+    // 抽屉内含 简体中文 + English 选项 + 取消按钮。
+    expect(find.text('English'), findsOneWidget);
+    expect(find.text('取消'), findsOneWidget);
+    // 简体中文同时出现在语言行 value + 抽屉选项（≥2 处）。
+    expect(find.text('简体中文'), findsWidgets);
+  });
+
+  testWidgets('选择 English 后抽屉关闭并回显到语言行（#1817）',
+      (WidgetTester tester) async {
+    await _pumpMe(tester, initialSession: kSession);
+    await tester.tap(find.text('语言'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('English'));
+    await tester.pumpAndSettle();
+    // 抽屉已关闭：取消按钮消失。
+    expect(find.text('取消'), findsNothing);
+    // 语言行 value 回显为 English。
+    expect(find.text('English'), findsOneWidget);
   });
 
   testWidgets('UID 复制按钮点击 → Clipboard.setData(uid) + SnackBar',
