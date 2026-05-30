@@ -18,11 +18,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 简化测试用 router（**故意不含 shell**）：仅验证 `/strategy` 与
 /// `/strategy/:id` 两个 builder 命中，不验证 shell 覆盖语义（那个由
 /// smoke test 用真实 `buildRouter()` 校验）。
-Future<void> _pump(WidgetTester tester, {QzTheme? theme}) async {
+Future<void> _pump(
+  WidgetTester tester, {
+  QzTheme? theme,
+  List<String> favorites = const <String>[],
+}) async {
   // 用足够高的 surface 让 ListView.builder 一次性建出整页卡片，
   // 避免 viewport 截断使 widget count 少于 pageSize。
   await tester.binding.setSurfaceSize(const Size(420, 4200));
-  SharedPreferences.setMockInitialValues(<String, Object>{});
+  SharedPreferences.setMockInitialValues(<String, Object>{
+    if (favorites.isNotEmpty) 'qz.strategy.favorites': favorites,
+  });
   final SharedPreferences prefs = await SharedPreferences.getInstance();
   final GoRouter router = GoRouter(
     initialLocation: '/strategy',
@@ -446,5 +452,80 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(Key('strategy-tile-$id22')), findsOneWidget,
         reason: '上拉到底应触发 loadMore，末条卡片应可见');
+  });
+
+  // ───────────────────────── #1822 收藏筛选视图 ─────────────────────────
+
+  testWidgets('分类行头部存在「收藏」toggle (#1822 验收 1)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    expect(find.byKey(const Key('strategy-fav-toggle')), findsOneWidget);
+  });
+
+  testWidgets('开启「收藏」后列表仅显示已星标策略 (#1822 验收 2)',
+      (WidgetTester tester) async {
+    final String favId = mockFeaturedStrategies.first.id;
+    final String otherName = mockFeaturedStrategies
+        .firstWhere((StrategyCard s) => s.id != favId)
+        .name;
+    await _pump(tester, favorites: <String>[favId]);
+    await tester.tap(find.byKey(const Key('strategy-fav-toggle')));
+    await tester.pump();
+    await tester.pump();
+    // 收藏视图仅有这一张已星标卡。
+    expect(find.byKey(Key('strategy-tile-$favId')), findsOneWidget);
+    expect(find.text(otherName), findsNothing);
+    expect(tester.widgetList(find.byType(StrategyCardTile)).length, 1);
+  });
+
+  testWidgets('收藏视图与分类互斥：开收藏 hero 隐藏 (#1822 验收 5)',
+      (WidgetTester tester) async {
+    final String favId = mockFeaturedStrategies.first.id;
+    await _pump(tester, favorites: <String>[favId]);
+    expect(find.byKey(const Key('strategy-featured-hero')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('strategy-fav-toggle')));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('strategy-featured-hero')), findsNothing);
+  });
+
+  testWidgets('收藏为空时显示专属空态 + CTA (#1822 验收 3)',
+      (WidgetTester tester) async {
+    await _pump(tester); // 无收藏
+    await tester.tap(find.byKey(const Key('strategy-fav-toggle')));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('strategy-fav-empty')), findsOneWidget);
+    expect(find.byKey(const Key('strategy-fav-empty-cta')), findsOneWidget);
+    expect(find.text('还没有收藏的策略'), findsOneWidget);
+  });
+
+  testWidgets('点击「去策略广场看看」回到全部策略视图 (#1822 验收 4)',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('strategy-fav-toggle')));
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('strategy-fav-empty-cta')));
+    await tester.pump();
+    await tester.pump();
+    // 退出收藏视图：空态消失，卡片重新出现。
+    expect(find.byKey(const Key('strategy-fav-empty')), findsNothing);
+    expect(find.byType(StrategyCardTile), findsWidgets);
+  });
+
+  testWidgets('选分类自动退出收藏视图 (#1822 验收 5 互斥)',
+      (WidgetTester tester) async {
+    final String favId = mockFeaturedStrategies.first.id;
+    await _pump(tester, favorites: <String>[favId]);
+    await tester.tap(find.byKey(const Key('strategy-fav-toggle')));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(StrategyCardTile), findsOneWidget);
+    // 切到分类应退出收藏视图，恢复按分类过滤的多张卡。
+    await tester.tap(find.byKey(const Key('strategy-chip-all')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byType(StrategyCardTile), findsWidgets);
   });
 }

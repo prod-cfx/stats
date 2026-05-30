@@ -41,6 +41,7 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
   final ScrollController _scrollCtrl = ScrollController();
 
   StrategyCategory _category = StrategyCategory.all;
+  bool _favOnly = false;
   String _query = '';
   StrategySortKey _sort = StrategySortKey.hot;
   int _page = 1;
@@ -201,9 +202,20 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
   }
 
   void _onCategoryChanged(StrategyCategory c) {
-    if (c == _category) return;
-    setState(() => _category = c);
+    // 选分类即退出收藏视图（与「收藏」toggle 互斥）。
+    if (c == _category && !_favOnly) return;
+    setState(() {
+      _favOnly = false;
+      _category = c;
+    });
     _reload();
+  }
+
+  /// 切换「收藏」视图。开启后列表仅显示已星标策略（在内存里过滤，不重拉接口），
+  /// 与分类互斥——开收藏不改变 `_category`，但 [_listItems] 忽略分类、只看星标。
+  void _onFavOnlyChanged(bool on) {
+    if (on == _favOnly) return;
+    setState(() => _favOnly = on);
   }
 
   void _onQueryChanged(String q) {
@@ -246,22 +258,33 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     }
   }
 
+  /// featured hero 仅在「全部 + 无搜索 + 非收藏视图」时显示（设计稿 line 646）。
   bool get _showFeatured =>
       _featured != null &&
+      !_favOnly &&
       _category == StrategyCategory.all &&
       _query.isEmpty;
 
-  /// 列表渲染用的视图项：当 hero 卡显示时，剔除列表中与 hero 同 id 的策略，
-  /// 避免同一张卡同时出现在 hero 和列表里。
+  /// 列表渲染用的视图项。
+  ///
+  /// - 收藏视图（[_favOnly]）：仅保留 `favorites` 集合内的策略，忽略分类。
+  /// - hero 卡显示时（[_showFeatured]）：剔除与 hero 同 id 的策略，避免同一张卡
+  ///   同时出现在 hero 和列表里。
   ///
   /// 注意：仅在 [_showFeatured] 为 true 时访问 `_featured!`，依赖该 getter
   /// 内部已保证 `_featured != null`；如未来改 [_showFeatured] 实现，请同步检查这里。
-  List<StrategyMarketItem> get _listItems {
-    if (!_showFeatured) return _items;
-    final String heroId = _featured!.card.id;
-    return _items
-        .where((StrategyMarketItem it) => it.card.id != heroId)
-        .toList(growable: false);
+  List<StrategyMarketItem> _computeListItems(Set<String> favorites) {
+    Iterable<StrategyMarketItem> items = _items;
+    if (_favOnly) {
+      items = items.where(
+        (StrategyMarketItem it) => favorites.contains(it.card.id),
+      );
+    }
+    if (_showFeatured) {
+      final String heroId = _featured!.card.id;
+      items = items.where((StrategyMarketItem it) => it.card.id != heroId);
+    }
+    return items.toList(growable: false);
   }
 
   @override
@@ -269,6 +292,7 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
     final Set<String> favorites = ref.watch(strategyFavoritesProvider);
+    final List<StrategyMarketItem> listItems = _computeListItems(favorites);
     return Scaffold(
       appBar: QzTopBar(
         title: l10n.strategyHomeTitle,
@@ -297,11 +321,14 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
           ),
           CategoryChipBar(
             selected: _category,
+            favOnly: _favOnly,
             onChanged: _onCategoryChanged,
+            onFavOnlyChanged: _onFavOnlyChanged,
           ),
           _SortRow(
             sort: _sort,
-            resultCount: _items.length,
+            // 收藏视图下结果计数应反映过滤后的条数（含 hero 已剔除项）。
+            resultCount: _favOnly ? listItems.length : _items.length,
             onChanged: _onSortChanged,
           ),
           const SizedBox(height: QzSpacing.xs),
@@ -310,17 +337,22 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
               onRefresh: _reload,
               child: _loading
                   ? const Center(child: QzSpinner())
-                  : _listItems.isEmpty && !_showFeatured
+                  : listItems.isEmpty && !_showFeatured
                       ? ListView(
                           // RefreshIndicator 要求可滚动 child
                           physics: const AlwaysScrollableScrollPhysics(),
                           children: <Widget>[
                             const SizedBox(height: 80),
-                            QzEmptyState(title: l10n.strategyHomeEmpty),
+                            // 收藏视图为空时走专属空态（星标图标 + 引导 + CTA）；
+                            // 其余情况沿用「暂无匹配策略」。
+                            _favOnly
+                                ? _FavoritesEmptyState(
+                                    onBrowse: () => _onFavOnlyChanged(false),
+                                  )
+                                : QzEmptyState(title: l10n.strategyHomeEmpty),
                           ],
                         )
                       : Builder(builder: (BuildContext _) {
-                          final List<StrategyMarketItem> listItems = _listItems;
                           return ListView.builder(
                           controller: _scrollCtrl,
                           physics: const AlwaysScrollableScrollPhysics(),
@@ -384,6 +416,74 @@ class _StrategyHomePageState extends ConsumerState<StrategyHomePage> {
         ],
       ),
       backgroundColor: c.bg,
+    );
+  }
+}
+
+/// 收藏视图空态（设计稿 m-screens-2 line 712-740）：琥珀星标图标 +
+/// 「还没有收藏的策略」+ 引导文案 + 「去策略广场看看」CTA。
+class _FavoritesEmptyState extends StatelessWidget {
+  const _FavoritesEmptyState({required this.onBrowse});
+
+  final VoidCallback onBrowse;
+
+  static const Color _amber = Color(0xFFF59E0B);
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final QzColorScheme c = context.qzScheme;
+    return Padding(
+      key: const Key('strategy-fav-empty'),
+      padding: const EdgeInsets.symmetric(horizontal: QzSpacing.xl),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          // 琥珀星标圆形徽标。
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: _amber.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.star_rounded,
+              size: 26,
+              color: _amber,
+            ),
+          ),
+          const SizedBox(height: QzSpacing.lg),
+          Text(
+            l10n.strategyHomeFavEmptyTitle,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: c.text,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: QzSpacing.xs),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 240),
+            child: Text(
+              l10n.strategyHomeFavEmptyHint,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: c.textDim,
+                fontSize: 13,
+                height: 1.6,
+              ),
+            ),
+          ),
+          const SizedBox(height: QzSpacing.lg),
+          FilledButton(
+            key: const Key('strategy-fav-empty-cta'),
+            onPressed: onBrowse,
+            child: Text(l10n.strategyHomeFavEmptyCta),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1204,6 +1204,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get strategyHomeEmpty => 'No matching strategies';
 
   @override
+  String get strategyHomeFavorites => 'Favorites';
+
+  @override
+  String get strategyHomeFavEmptyTitle => 'No favorite strategies yet';
+
+  @override
+  String get strategyHomeFavEmptyHint =>
+      'Tap the ☆ star at the top-right of a strategy card to save the ones you like here.';
+
+  @override
+  String get strategyHomeFavEmptyCta => 'Browse the plaza';
+
+  @override
   String get strategyCategoryTrend => 'Trend';
 
   @override

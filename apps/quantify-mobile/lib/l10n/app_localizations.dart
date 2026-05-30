@@ -2342,6 +2342,30 @@ abstract class AppLocalizations {
   /// **'暂无匹配策略'**
   String get strategyHomeEmpty;
 
+  /// No description provided for @strategyHomeFavorites.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏'**
+  String get strategyHomeFavorites;
+
+  /// No description provided for @strategyHomeFavEmptyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有收藏的策略'**
+  String get strategyHomeFavEmptyTitle;
+
+  /// No description provided for @strategyHomeFavEmptyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'点击策略卡右上角的 ☆ 星标，把感兴趣的策略收藏到这里。'**
+  String get strategyHomeFavEmptyHint;
+
+  /// No description provided for @strategyHomeFavEmptyCta.
+  ///
+  /// In zh, this message translates to:
+  /// **'去策略广场看看'**
+  String get strategyHomeFavEmptyCta;
+
   /// No description provided for @strategyCategoryTrend.
   ///
   /// In zh, this message translates to:

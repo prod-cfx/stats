@@ -1169,6 +1169,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get strategyHomeEmpty => '暂无匹配策略';
 
   @override
+  String get strategyHomeFavorites => '收藏';
+
+  @override
+  String get strategyHomeFavEmptyTitle => '还没有收藏的策略';
+
+  @override
+  String get strategyHomeFavEmptyHint => '点击策略卡右上角的 ☆ 星标，把感兴趣的策略收藏到这里。';
+
+  @override
+  String get strategyHomeFavEmptyCta => '去策略广场看看';
+
+  @override
   String get strategyCategoryTrend => '趋势';
 
   @override
