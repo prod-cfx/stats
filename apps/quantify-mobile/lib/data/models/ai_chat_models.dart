@@ -20,6 +20,12 @@ class ChatTurn {
   /// 渲染层按等宽字体逐行展示；其它 kind 下应为 null。
   final Map<String, String>? params;
 
+  /// 当 `kind == ChatTurnKind.deployed` 时携带的部署目标交易所展示名
+  /// （如 `Binance`）与实例 ID，供部署终态富气泡的 header / subline 渲染。
+  /// 其它 kind 下应为 null。
+  final String? deployedExchange;
+  final String? deployedInstanceId;
+
   const ChatTurn({
     required this.id,
     required this.role,
@@ -27,6 +33,8 @@ class ChatTurn {
     required this.timestamp,
     this.kind = ChatTurnKind.text,
     this.params,
+    this.deployedExchange,
+    this.deployedInstanceId,
   });
 }
 

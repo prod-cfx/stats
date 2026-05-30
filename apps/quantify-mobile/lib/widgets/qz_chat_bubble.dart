@@ -35,6 +35,9 @@ class QzChatBubble extends StatelessWidget {
     this.codeBlock,
     this.params,
     this.onConfirm,
+    this.deployedExchange,
+    this.deployedInstanceId,
+    this.onViewLive,
   });
 
   final QzChatRole role;
@@ -50,6 +53,15 @@ class QzChatBubble extends StatelessWidget {
   /// 为 null 时不显示 CTA（保持与历史调用方兼容）。confirm 屏（#1832）
   /// 就绪前由 `ai_home_page.dart` 注入占位/回测配置入口。
   final VoidCallback? onConfirm;
+
+  /// 部署终态富气泡（#1833）专用字段。三者同时注入时（[onViewLive] 非空），
+  /// 气泡渲染对齐设计稿 m-screens-1.jsx:440 的富卡片：✓ 图标 +
+  /// 「策略已部署到 {ex}」+「策略 ID {id} · 当前运行中」+ 归档话术 +
+  /// 「查看实盘策略 →」CTA（[onViewLive] 跳 `/me/live`）。其它场景下为 null，
+  /// 保持与历史调用方兼容。
+  final String? deployedExchange;
+  final String? deployedInstanceId;
+  final VoidCallback? onViewLive;
 
   /// 设计稿对齐：assistant `4/16/16/16`，user `16/16/4/16`。
   static const BorderRadius _assistantRadius = BorderRadius.only(
@@ -68,6 +80,9 @@ class QzChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final QzColorScheme c = context.qzScheme;
+    if (onViewLive != null) {
+      return _buildDeployed(context, c);
+    }
     if (role == QzChatRole.system) {
       // 居中提示条：弱化背景 + 细边框，与左右气泡区分开。
       return Center(
@@ -303,6 +318,123 @@ class QzChatBubble extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  /// 部署终态富气泡（#1833）。对齐设计稿 m-screens-1.jsx:440 的 `deployed`
+  /// 分支：violetSoft 头部块（✓ + 部署交易所 + 「策略 ID … · 运行中」）+
+  /// 归档话术 + 满宽 violetGrad「查看实盘策略 →」CTA。
+  Widget _buildDeployed(BuildContext context, QzColorScheme c) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final String id = deployedInstanceId ?? '';
+    return Container(
+      key: const Key('ai-bubble-deployed'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(QzSpacing.md),
+      decoration: BoxDecoration(
+        color: c.bgElev,
+        border: Border.all(color: c.borderSoft),
+        borderRadius: BorderRadius.circular(QzRadii.input),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          // 头部块：✓ 图标 + 部署交易所标题 + 「策略 ID … · 运行中」副行。
+          Container(
+            padding: const EdgeInsets.all(QzSpacing.sm),
+            decoration: BoxDecoration(
+              color: c.accentSoft,
+              borderRadius: BorderRadius.circular(QzRadii.input),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: c.accent,
+                    borderRadius: BorderRadius.circular(QzSpacing.sm),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(Icons.check, size: 16, color: c.accentOn),
+                ),
+                const SizedBox(width: QzSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(
+                        content,
+                        style: TextStyle(
+                          color: c.accent,
+                          fontSize: 13,
+                          height: 1.3,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        l10n.deployedBubbleStrategyId(id),
+                        style: TextStyle(
+                          color: c.textDim,
+                          fontSize: 11,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: QzSpacing.sm),
+          Text(
+            l10n.deployedBubbleArchivedNotice,
+            style: TextStyle(color: c.text, fontSize: 13, height: 1.5),
+          ),
+          const SizedBox(height: QzSpacing.sm),
+          // 满宽 violetGrad CTA：label + trailing caret。QzButton 无 trailing
+          // 槽位，这里就近自绘以贴合设计稿。
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              key: const Key('ai-bubble-view-live'),
+              onTap: onViewLive,
+              borderRadius: BorderRadius.circular(QzRadii.input),
+              child: Container(
+                height: 38,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: c.accentGrad,
+                  borderRadius: BorderRadius.circular(QzRadii.input),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    Text(
+                      l10n.deployViewLiveStrategies,
+                      style: TextStyle(
+                        color: c.accentOn,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: QzSpacing.xs),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 16,
+                      color: c.accentOn,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

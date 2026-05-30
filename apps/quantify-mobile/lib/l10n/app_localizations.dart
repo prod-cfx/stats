@@ -668,6 +668,18 @@ abstract class AppLocalizations {
   /// **' · 实例 ID '**
   String get deploySystemMessageInstanceInfix;
 
+  /// No description provided for @deployedBubbleStrategyId.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略 ID {id} · 当前运行中'**
+  String deployedBubbleStrategyId(Object id);
+
+  /// No description provided for @deployedBubbleArchivedNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'这条对话已归档，后续调整请新建方案或在实盘策略中操作。'**
+  String get deployedBubbleArchivedNotice;
+
   /// No description provided for @deploySheetTitleAllocate.
   ///
   /// In zh, this message translates to:

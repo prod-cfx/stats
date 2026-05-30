@@ -315,6 +315,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deploySystemMessageInstanceInfix => ' · instance ID ';
 
   @override
+  String deployedBubbleStrategyId(Object id) {
+    return 'Strategy ID $id · running';
+  }
+
+  @override
+  String get deployedBubbleArchivedNotice =>
+      'This conversation is archived. To adjust, create a new plan or manage it in live strategies.';
+
+  @override
   String get deploySheetTitleAllocate => 'Allocate Funds';
 
   @override

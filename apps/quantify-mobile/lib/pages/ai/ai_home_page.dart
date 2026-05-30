@@ -338,9 +338,11 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
     final AiChatRepository repo = ref.read(aiChatRepositoryProvider);
     await repo.markDeployed(id, result.instanceId);
     if (!mounted) return;
-    final String msg =
-        '${l10n.deploySystemMessagePrefix}${result.exchange.toUpperCase()}'
-        '${l10n.deploySystemMessageInstanceInfix}${result.instanceId}';
+    // 部署终态富气泡（#1833）：header 复用 prefix 文案，exchange / instanceId
+    // 走结构化字段供气泡渲染「策略已部署到 {ex}」+「策略 ID {id} · 运行中」。
+    // 「查看实盘策略」CTA 收敛进气泡内（onViewLive），不再额外弹 SnackBar，
+    // 避免与气泡 CTA 形成重复入口。
+    final String exchangeName = result.exchange.toUpperCase();
     setState(() {
       _sessions[id] = cur.copyWith(
         deployedTo: result.instanceId,
@@ -349,24 +351,16 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
           ChatTurn(
             id: 'system-${DateTime.now().microsecondsSinceEpoch}',
             role: 'system',
-            content: msg,
+            content: '${l10n.deploySystemMessagePrefix}$exchangeName',
             timestamp: result.deployedAt,
             kind: ChatTurnKind.deployed,
+            deployedExchange: exchangeName,
+            deployedInstanceId: result.instanceId,
           ),
         ],
       );
     });
     _scrollToBottom();
-    // 部署成功后提供「查看实盘策略」入口（#1752）：跳 `/me/live`。
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(l10n.deployDoneToast),
-        action: SnackBarAction(
-          label: l10n.deployViewLiveStrategies,
-          onPressed: () => context.push('/me/live'),
-        ),
-      ),
-    );
   }
 
   void _scrollToBottom() {
@@ -620,6 +614,8 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                                 'system' => QzChatRole.system,
                                 _ => QzChatRole.assistant,
                               };
+                              final bool isDeployed =
+                                  t.kind == ChatTurnKind.deployed;
                               return QzChatBubble(
                                 role: role,
                                 content: t.content,
@@ -629,6 +625,16 @@ class _AiHomePageState extends ConsumerState<AiHomePage> {
                                 // 进入确认策略屏 `/ai/confirm`，当前参数经 extra 透传。
                                 onConfirm: t.kind == ChatTurnKind.params
                                     ? () => _openConfirm(t.params)
+                                    : null,
+                                // 部署终态富气泡（#1833）：传交易所 / 实例 ID +
+                                // 「查看实盘策略」CTA（跳 `/me/live`），气泡内渲染
+                                // ✓ + 运行中状态 + 归档话术。
+                                deployedExchange:
+                                    isDeployed ? t.deployedExchange : null,
+                                deployedInstanceId:
+                                    isDeployed ? t.deployedInstanceId : null,
+                                onViewLive: isDeployed
+                                    ? () => context.push('/me/live')
                                     : null,
                               );
                             }

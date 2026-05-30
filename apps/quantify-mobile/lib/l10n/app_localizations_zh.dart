@@ -297,6 +297,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deploySystemMessageInstanceInfix => ' · 实例 ID ';
 
   @override
+  String deployedBubbleStrategyId(Object id) {
+    return '策略 ID $id · 当前运行中';
+  }
+
+  @override
+  String get deployedBubbleArchivedNotice => '这条对话已归档，后续调整请新建方案或在实盘策略中操作。';
+
+  @override
   String get deploySheetTitleAllocate => '资金配置';
 
   @override

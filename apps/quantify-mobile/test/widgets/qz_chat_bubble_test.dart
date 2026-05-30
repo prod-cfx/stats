@@ -108,6 +108,43 @@ void main() {
     expect(confirmed, greaterThan(0));
   });
 
+  testWidgets(
+      'deployed bubble renders ✓ header + 策略 ID 运行中 + 归档话术 + 查看实盘 CTA',
+      (WidgetTester tester) async {
+    int viewed = 0;
+    await verifyAllThemes(
+      tester,
+      () => QzChatBubble(
+        role: QzChatRole.system,
+        content: '策略已部署到 BINANCE',
+        deployedExchange: 'BINANCE',
+        deployedInstanceId: 'QF-AY7K2P',
+        onViewLive: () => viewed++,
+      ),
+      // 富气泡含头部块 + 归档话术 + CTA，整体超过缩略图默认高度。
+      surfaceSize: const Size(360, 360),
+      (WidgetTester t) async {
+        // #1833 验收 1：富气泡 + 实例 ID + 运行中状态 + 归档话术。
+        expect(find.byKey(const Key('ai-bubble-deployed')), findsOneWidget);
+        expect(find.text('策略已部署到 BINANCE'), findsOneWidget);
+        expect(find.text('策略 ID QF-AY7K2P · 当前运行中'), findsOneWidget);
+        expect(
+          find.text('这条对话已归档，后续调整请新建方案或在实盘策略中操作。'),
+          findsOneWidget,
+        );
+        // #1833 验收 2：气泡内「查看实盘策略」CTA。
+        expect(find.byKey(const Key('ai-bubble-view-live')), findsOneWidget);
+        expect(find.text('查看实盘策略'), findsOneWidget);
+        // 非部署态的居中 system pill 不应出现。
+        expect(find.byKey(const Key('ai-bubble-bot-avatar')), findsNothing);
+      },
+    );
+    // 点击 CTA 触发 onViewLive（单次校验，避免跨 9 主题累加干扰）。
+    await tester.tap(find.byKey(const Key('ai-bubble-view-live')).first);
+    await tester.pump();
+    expect(viewed, greaterThan(0));
+  });
+
   testWidgets('params bubble without onConfirm renders no CTA',
       (WidgetTester tester) async {
     await verifyAllThemes(
