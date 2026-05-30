@@ -11,7 +11,7 @@ import { collectAtomLeaves, isRuleEffectsByRole, listRuleEffects } from '../type
 import { RulesMainflowReaderService } from './rules-mainflow-reader.service'
 
 type PriceChangeDirection = 'up' | 'down'
-type PositionAction = 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
+type PositionAction = 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'ADD_LONG' | 'ADD_SHORT'
 type OrdinaryFallbackAction = PositionAction | 'BUY' | 'SELL'
 type PredicateKind = PredicateDef['kind']
 
@@ -1058,7 +1058,7 @@ export class SemanticAtomInvariantService {
     const triggersByBucket = new Map<string, SemanticTriggerState[]>()
 
     for (const trigger of triggers) {
-      for (const action of this.expectedActions(trigger)) {
+      for (const action of this.expectedActions(trigger, input.semanticState)) {
         const key = this.bucketKey(trigger.phase, action)
         const bucket = triggersByBucket.get(key) ?? []
         bucket.push(trigger)
@@ -1548,7 +1548,7 @@ export class SemanticAtomInvariantService {
     }
 
     return triggers.flatMap((trigger) => {
-      return this.expectedActions(trigger).map((action) => {
+      return this.expectedActions(trigger, input.semanticState).map((action) => {
         const bucket = triggersByBucket.get(this.bucketKey(trigger.phase, action)) ?? [trigger]
         return this.validatePricePercentChangeTrigger(trigger, action, bucket, input, this.readLockedContextTimeframe(input.semanticState))
       })
@@ -1584,7 +1584,7 @@ export class SemanticAtomInvariantService {
     // spurious "conflict" reports. Trigger filter is in isBlockingPricePercentChangeTrigger.
     const expectedBasis = typeof trigger.params.basis === 'string' ? trigger.params.basis : 'prev_close'
     const canonical = this.buildLayerSnapshot(
-      this.findCanonicalPredicates(input.canonicalSpec, trigger.phase, expectedAction, expectedBasis),
+      this.findCanonicalPredicates(input.canonicalSpec, trigger.phase, expectedAction, expectedBasis, expected.timeframe),
       expected,
       expectedBucket,
     )
@@ -1691,6 +1691,7 @@ export class SemanticAtomInvariantService {
     phase: SemanticTriggerState['phase'],
     action: PositionAction,
     expectedBasis: string,
+    fallbackTimeframe: string | null,
   ): PriceChangeSnapshot[] {
     if (canonicalSpec.version !== 2 || (phase !== 'entry' && phase !== 'exit')) {
       return []
@@ -1701,7 +1702,7 @@ export class SemanticAtomInvariantService {
         rule.phase === phase
         && rule.actions.some(ruleAction => ruleAction.type === action)
       ) {
-        return this.collectCanonicalPriceChangePredicates(rule.condition, rule.id, expectedBasis)
+        return this.collectCanonicalPriceChangePredicates(rule.condition, rule.id, expectedBasis, fallbackTimeframe)
       }
       return []
     })
@@ -1711,6 +1712,7 @@ export class SemanticAtomInvariantService {
     condition: CanonicalConditionNode,
     ruleId: string,
     expectedBasis: string,
+    fallbackTimeframe: string | null,
   ): PriceChangeSnapshot[] {
     if (condition.kind === 'atom') {
       // eslint-disable-next-line atom-keys/no-atom-key-literal -- legacy atom key not yet in ATOM_CONTRACT_REGISTRY (follow-up #1329)
@@ -1725,7 +1727,7 @@ export class SemanticAtomInvariantService {
         predicateKind: this.canonicalPredicateKind(condition.op),
         constValue: this.readNumber(condition.value),
         hasPriceChangeSeries: true,
-        timeframe: this.readString(condition.params?.timeframe),
+        timeframe: this.readString(condition.params?.timeframe) ?? fallbackTimeframe,
         lookbackBars: this.readPositiveInteger(condition.params?.lookbackBars) ?? 1,
       }]
     }
@@ -1735,7 +1737,7 @@ export class SemanticAtomInvariantService {
 
     const childResults = condition.children.map(child => ({
       child,
-      leaves: this.collectCanonicalPriceChangePredicates(child, ruleId, expectedBasis),
+      leaves: this.collectCanonicalPriceChangePredicates(child, ruleId, expectedBasis, fallbackTimeframe),
       hasAnyPriceChange: this.canonicalSubtreeHasPriceChange(child),
     }))
     const nested = childResults.flatMap(entry => entry.leaves)
@@ -2000,7 +2002,10 @@ export class SemanticAtomInvariantService {
     return this.readNumber(trigger.params.valuePct) < 0 ? 'down' : 'up'
   }
 
-  private expectedActions(trigger: SemanticTriggerState): PositionAction[] {
+  private expectedActions(trigger: SemanticTriggerState, state?: SemanticState): PositionAction[] {
+    if (trigger.phase === 'entry' && state && this.entryPriceChangeFeedsDcaSchedule(trigger, state)) {
+      return trigger.sideScope === 'short' ? ['ADD_SHORT'] : ['ADD_LONG']
+    }
     if (trigger.phase === 'entry') {
       if (trigger.sideScope === 'short') return ['OPEN_SHORT']
       if (trigger.sideScope === 'both') return ['OPEN_LONG', 'OPEN_SHORT']
@@ -2009,6 +2014,26 @@ export class SemanticAtomInvariantService {
     if (trigger.sideScope === 'short') return ['CLOSE_SHORT']
     if (trigger.sideScope === 'both') return ['CLOSE_LONG', 'CLOSE_SHORT']
     return ['CLOSE_LONG']
+  }
+
+  private entryPriceChangeFeedsDcaSchedule(trigger: SemanticTriggerState, state: SemanticState): boolean {
+    return state.rules?.some((rule) => {
+      if (rule.phase !== trigger.phase) return false
+      if (!collectAtomLeaves(rule.condition).some(leaf => leaf.key === trigger.key && this.samePriceChangeParams(leaf.params, trigger.params))) {
+        return false
+      }
+      if (!isRuleEffectsByRole(rule.effects)) return false
+      return rule.effects.positions.some(effect => collectAtomLeaves(effect).some(leaf => leaf.key === 'position.dca_schedule'))
+    }) ?? false
+  }
+
+  private samePriceChangeParams(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
+    const leftValue = this.readNumber(left.valuePct)
+    const rightValue = this.readNumber(right.valuePct)
+    if (leftValue !== rightValue) return false
+    const leftDirection = typeof left.direction === 'string' ? left.direction : null
+    const rightDirection = typeof right.direction === 'string' ? right.direction : null
+    return leftDirection === rightDirection
   }
 
   private bucketKey(phase: SemanticTriggerState['phase'], action: PositionAction): string {

@@ -80,7 +80,7 @@ export class StrategyConsistencyService {
     checks.push(this.checkSizing(specProfile, scriptProfile))
     checks.push(this.checkMarketMetadata(input.canonicalSpec, parsedProjection))
     checks.push(...this.checkTimeframeConsistency(input.canonicalSpec))
-    const compiledIr = this.tryCompileCanonicalIr(input.canonicalSpec)
+    const compiledIr = this.tryCompileCanonicalIr(input.canonicalSpec, parsedProjection?.executionModel.venue)
     if (compiledIr) {
       checks.push(this.checkAstProjection(compiledIr, parsedProjection))
       checks.push(this.checkExecutionEnvelopePositionMode(compiledIr, parsedProjection))
@@ -119,7 +119,10 @@ export class StrategyConsistencyService {
     }
   }
 
-  private tryCompileCanonicalIr(spec: CanonicalStrategySpec): CanonicalStrategyIrV1 | null {
+  private tryCompileCanonicalIr(
+    spec: CanonicalStrategySpec,
+    fallbackExchange?: 'binance' | 'okx' | 'hyperliquid',
+  ): CanonicalStrategyIrV1 | null {
     if (spec.version !== 2) {
       return null
     }
@@ -127,7 +130,7 @@ export class StrategyConsistencyService {
     try {
       const compiled = this.canonicalSpecV2IrCompiler.compile({
         canonicalSpec: spec,
-        fallback: this.buildCanonicalSpecV2Fallback(spec),
+        fallback: this.buildCanonicalSpecV2Fallback(spec, fallbackExchange),
       })
       return compiled.ir
     } catch {
@@ -300,21 +303,21 @@ export class StrategyConsistencyService {
     for (const expr of projection.exprPool) {
       if (expr.nodeType !== 'predicate') continue
 
-      const actions = projection.decisionPrograms
-        .filter(program => program.when === expr.id)
-        .flatMap(program => program.actions)
-      for (const action of actions) {
-        const normalizedAction = this.normalizeAction(action.kind)
-        if (!normalizedAction) continue
-        const keys = this.collectRuleKeysFromProjectionExpr(expr.id, projectionExprsById)
-        keys.forEach((key) => {
-          pushRule({
-            key,
-            action: normalizedAction,
-            phase: this.resolvePhaseFromAction(normalizedAction),
-            sideScope: this.resolveRuleSideScope('both', normalizedAction),
+      const programs = projection.decisionPrograms.filter(program => program.when === expr.id)
+      for (const program of programs) {
+        for (const action of program.actions) {
+          const normalizedAction = this.normalizeAction(action.kind)
+          if (!normalizedAction) continue
+          const keys = this.collectRuleKeysFromProjectionExpr(expr.id, projectionExprsById)
+          keys.forEach((key) => {
+            pushRule({
+              key,
+              action: normalizedAction,
+              phase: this.resolveDecisionProgramRulePhase(program.phase, normalizedAction, program.actions),
+              sideScope: this.resolveRuleSideScope('both', normalizedAction),
+            })
           })
-        })
+        }
       }
     }
 
@@ -1279,10 +1282,12 @@ export class StrategyConsistencyService {
       const orderProgramMode = this.resolveOrderProgramPositionMode(spec.orderPrograms ?? [])
       const hasLongExposure = spec.rules.some(rule => rule.actions.some(action => (
         action.type === 'OPEN_LONG'
+        || action.type === 'CLOSE_LONG'
         || action.type === 'REDUCE_LONG'
       )))
       const hasShortExposure = spec.rules.some(rule => rule.actions.some(action => (
         action.type === 'OPEN_SHORT'
+        || action.type === 'CLOSE_SHORT'
         || action.type === 'REDUCE_SHORT'
       )))
       if (orderProgramMode === 'long_short') return 'long_short'
@@ -1348,18 +1353,23 @@ export class StrategyConsistencyService {
     const explicitActions = (actions ?? [])
       .map(action => this.normalizeAction(action.kind ?? ''))
       .filter((action): action is CanonicalAction =>
-        action === 'FORCE_EXIT' || action === 'CLOSE_LONG' || action === 'CLOSE_SHORT',
+        action === 'FORCE_EXIT' || action === 'CLOSE_LONG' || action === 'CLOSE_SHORT' || action === 'BLOCK_NEW_ENTRY',
       )
     if (explicitActions.length > 0) {
       return Array.from(new Set(explicitActions)).map(action => ({
         action,
-        sideScope: this.resolveRuleSideScope(this.resolveRiskPredicateSideScope(positionMode), action),
+        sideScope: action === 'BLOCK_NEW_ENTRY'
+          ? 'both'
+          : this.resolveRuleSideScope(this.resolveRiskPredicateSideScope(positionMode), action),
       }))
     }
 
     const sideScope = this.resolveRiskPredicateSideScope(positionMode)
     if (kind === 'atrMultipleStop' || kind === 'atrTrailingStop' || kind === 'rememberedLevelStop') {
       return [{ action: 'FORCE_EXIT', sideScope }]
+    }
+    if (kind === 'cooldownBars') {
+      return [{ action: 'BLOCK_NEW_ENTRY', sideScope: 'both' }]
     }
     if (kind !== 'atrMultipleTakeProfit') {
       return []
@@ -1381,6 +1391,7 @@ export class StrategyConsistencyService {
     if (kind === 'atrMultipleTakeProfit') return 'risk.atr_multiple_take_profit'
     if (kind === 'atrTrailingStop') return 'risk.atr_stop'
     if (kind === 'rememberedLevelStop') return 'risk.remembered_level_stop'
+    if (kind === 'cooldownBars') return 'risk.cooldown_bars'
     return null
   }
 
@@ -1617,10 +1628,12 @@ export class StrategyConsistencyService {
     const orderProgramMode = this.resolveIrOrderProgramPositionMode(ir.orderPrograms)
     const hasLongExposure = ir.ruleBlocks.some(rule => rule.actions.some(action => (
       action.kind === 'OPEN_LONG'
+      || action.kind === 'CLOSE_LONG'
       || action.kind === 'REDUCE_LONG'
     )))
     const hasShortExposure = ir.ruleBlocks.some(rule => rule.actions.some(action => (
       action.kind === 'OPEN_SHORT'
+      || action.kind === 'CLOSE_SHORT'
       || action.kind === 'REDUCE_SHORT'
     )))
 
@@ -1683,13 +1696,16 @@ export class StrategyConsistencyService {
     return null
   }
 
-  private buildCanonicalSpecV2Fallback(spec: Extract<CanonicalStrategySpec, { version: 2 }>): {
+  private buildCanonicalSpecV2Fallback(
+    spec: Extract<CanonicalStrategySpec, { version: 2 }>,
+    fallbackExchange?: 'binance' | 'okx' | 'hyperliquid',
+  ): {
     exchange: 'binance' | 'okx' | 'hyperliquid'
     symbol: string
     baseTimeframe: string
     positionPct: number
   } {
-    const exchange = spec.market.exchange
+    const exchange = spec.market.exchange ?? fallbackExchange ?? 'okx'
     const symbol = spec.market.symbol ?? 'BTCUSDT'
     const baseTimeframe = spec.market.defaultTimeframe ?? spec.market.timeframe ?? spec.dataRequirements.requiredTimeframes[0] ?? '15m'
     const positionPct = spec.sizing && spec.sizing.mode === 'RATIO'
@@ -1976,6 +1992,22 @@ export class StrategyConsistencyService {
       return 'risk'
     }
     return 'rebalance'
+  }
+
+  private resolveDecisionProgramRulePhase(
+    programPhase: StrategySemanticRuleProfile['phase'],
+    action: CanonicalAction,
+    siblingActions: ReadonlyArray<{ kind?: string }>,
+  ): StrategySemanticRuleProfile['phase'] {
+    if (
+      programPhase === 'entry'
+      && (action === 'CLOSE_LONG' || action === 'CLOSE_SHORT')
+      && siblingActions.some(sibling => sibling.kind === 'OPEN_LONG' || sibling.kind === 'OPEN_SHORT')
+    ) {
+      return 'entry'
+    }
+
+    return this.resolvePhaseFromAction(action)
   }
 
   private toRuleMappings(rules: StrategySemanticRuleProfile[]): StrategySemanticRuleMapping[] {

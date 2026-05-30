@@ -1535,6 +1535,33 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     switch (atom.key) {
+      case 'strategy.time_window': {
+        const timezone = typeof atom.params?.timezone === 'string' ? atom.params.timezone : null
+        const windowsRaw = atom.params?.windows
+        if (!timezone || typeof windowsRaw !== 'string') {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:windows`)
+        }
+        let parsedWindows: Array<{ daysOfWeek?: number[]; start: string; end: string }>
+        try {
+          const parsed = JSON.parse(windowsRaw)
+          if (!Array.isArray(parsed) || parsed.length === 0) {
+            throw new Error('empty')
+          }
+          parsedWindows = parsed
+        }
+        catch {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:windows`)
+        }
+        const timeWindowRef = this.ensureTimeWindowSeries(context, timezone, parsedWindows)
+        const constRef = this.ensureConstSeries(context, 0)
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_time_window`,
+          'EQ',
+          [timeWindowRef, constRef],
+        )
+      }
+
       case 'execution.on_start': {
         const barIndexRef = 'bar_index'
         if (!context.seriesMap.has(barIndexRef)) {
@@ -1787,6 +1814,23 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      case 'pattern.range': {
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_pattern_range`,
+          'compare',
+          [],
+          {
+            op: 'EQ',
+            mode: typeof atom.params?.mode === 'string' ? atom.params.mode : 'inside_range',
+            lowerRole: typeof atom.params?.lowerRole === 'string' ? atom.params.lowerRole : 'range_low',
+            upperRole: typeof atom.params?.upperRole === 'string' ? atom.params.upperRole : 'range_high',
+            lookbackBars: this.readNumber([atom.params?.lookbackBars], 48),
+            ...(typeof atom.params?.timeframe === 'string' ? { timeframe: atom.params.timeframe } : {}),
+          },
+        )
+      }
+
       case 'external.signal': {
         const provider = typeof atom.params?.provider === 'string'
           ? atom.params.provider.trim().toLowerCase()
@@ -1810,10 +1854,40 @@ export class CanonicalSpecV2IrCompilerService {
       }
 
       case 'orderbook.imbalance':
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_orderbook_imbalance`,
+          'orderbookImbalance',
+          [],
+          this.buildMarketDataPredicateParams(atom, 'orderbook', 'orderbook.imbalance'),
+        )
+
       case 'fundingRate.condition':
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_funding_rate_condition`,
+          'fundingRateCondition',
+          [],
+          this.buildMarketDataPredicateParams(atom, 'funding', 'funding.rate'),
+        )
+
       case 'openInterest.condition':
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_open_interest_condition`,
+          'openInterestCondition',
+          [],
+          this.buildMarketDataPredicateParams(atom, 'open_interest', 'open_interest'),
+        )
+
       case 'liquidation.condition':
-        throw new Error(`data_source_missing:${atom.key}`)
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_liquidation_condition`,
+          'liquidationCondition',
+          [],
+          this.buildMarketDataPredicateParams(atom, 'liquidation', 'liquidation.events'),
+        )
 
       case 'order_program.active_range': {
         const programId = typeof atom.params?.programId === 'string' ? atom.params.programId : null
@@ -3199,8 +3273,8 @@ export class CanonicalSpecV2IrCompilerService {
   private compileRiskPredicateActions(rule: CanonicalRuleV2): RiskPredicateDef['actions'] {
     const actions = rule.actions
       .map(action => action.type)
-      .filter((action): action is 'FORCE_EXIT' | 'CLOSE_LONG' | 'CLOSE_SHORT' =>
-        action === 'FORCE_EXIT' || action === 'CLOSE_LONG' || action === 'CLOSE_SHORT',
+      .filter((action): action is 'FORCE_EXIT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'BLOCK_NEW_ENTRY' =>
+        action === 'FORCE_EXIT' || action === 'CLOSE_LONG' || action === 'CLOSE_SHORT' || action === 'BLOCK_NEW_ENTRY',
       )
 
     if (actions.length === 0) {
@@ -4746,6 +4820,34 @@ export class CanonicalSpecV2IrCompilerService {
 
   private resolveOperandTimeframe(value: string | undefined, fallbackTimeframe: string): string {
     return value && value.trim().length > 0 ? value.trim() : fallbackTimeframe
+  }
+
+  private buildMarketDataPredicateParams(
+    atom: CanonicalConditionAtom,
+    schemaRef: string,
+    defaultFeedId: string,
+  ): PredicateDef['params'] {
+    const params: Record<string, number | string | boolean> = {
+      schemaRef,
+      sourceFeedId: this.readStringParam(atom.params?.sourceFeedId) ?? defaultFeedId,
+      operator: atom.op ?? 'GT',
+    }
+    const timeframe = this.readStringParam(atom.params?.timeframe)
+    if (timeframe) params.timeframe = timeframe
+    const side = this.readStringParam(atom.params?.side)
+    if (side) params.side = side
+    const direction = this.readStringParam(atom.params?.direction)
+    if (direction) params.direction = direction
+    const value = this.readOptionalNumber(atom.value)
+      ?? this.readOptionalNumber(atom.params?.value)
+      ?? this.readOptionalNumber(atom.params?.valuePct)
+      ?? this.readOptionalNumber(atom.params?.thresholdPct)
+      ?? this.readOptionalNumber(atom.params?.changePct)
+      ?? this.readOptionalNumber(atom.params?.notionalUsd)
+    if (value !== null) params.value = value
+    const window = this.readStringParam(atom.params?.window)
+    if (window) params.window = window
+    return params
   }
 
   private readStringParam(value: unknown): string | undefined {

@@ -448,7 +448,7 @@ export class CodegenPublicationGenerationStage {
     return {
       exchange: exchange === 'binance' || exchange === 'okx' || exchange === 'hyperliquid'
         ? exchange
-        : 'binance',
+        : 'okx',
       symbol: args.publishParams.symbol,
       baseTimeframe: args.publishParams.timeframe,
       positionPct: typeof positionPct === 'number' && Number.isFinite(positionPct)
@@ -669,10 +669,10 @@ export class CodegenPublicationGenerationStage {
     // 多轮对话下 state.position.positionMode 第一次锁定后不会随 action 暴露重算，
     // 因此 canonical spec 推得出真实暴露时必须以 canonical 为准，避免与 IR expected positionMode 漂移。
     const hasLong = canonicalSpec.rules.some(rule => rule.actions.some(action =>
-      action.type === 'OPEN_LONG' || action.type === 'REDUCE_LONG',
+      action.type === 'OPEN_LONG' || action.type === 'CLOSE_LONG' || action.type === 'REDUCE_LONG',
     ))
     const hasShort = canonicalSpec.rules.some(rule => rule.actions.some(action =>
-      action.type === 'OPEN_SHORT' || action.type === 'REDUCE_SHORT',
+      action.type === 'OPEN_SHORT' || action.type === 'CLOSE_SHORT' || action.type === 'REDUCE_SHORT',
     ))
     if (hasLong && hasShort) return 'long_short'
     if (hasShort) return 'short_only'

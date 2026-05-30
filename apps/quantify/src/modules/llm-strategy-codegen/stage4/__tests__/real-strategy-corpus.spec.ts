@@ -118,11 +118,29 @@ describe('Stage 4 real strategy corpus', () => {
     expect(invalidCases).toEqual([])
   })
 
-  it('does not mark PR5 multi-timeframe or multi-symbol corpus cases as null-pass until their atoms are deploy-ready', () => {
+  it('covers every deploy-ready Stage 4 atom with at least one pass strategy', () => {
+    const passAtomKeys = new Set(
+      STAGE4_REAL_STRATEGY_CORPUS
+        .filter(item => item.expectedFailure === null)
+        .flatMap(item => item.expectedAtomKeys),
+    )
+
+    const missingDeployReadyAtoms = STAGE4_ATOM_COVERAGE_MATRIX
+      .filter(isStage4DeployReadyAtom)
+      .filter(row => !row.coveredAtomKeys.some(atomKey => passAtomKeys.has(atomKey)))
+      .map(row => row.atomKey)
+
+    expect(missingDeployReadyAtoms).toEqual([])
+  })
+
+  it('marks PR5 multi-timeframe and multi-symbol corpus cases as pass only when their atoms are deploy-ready', () => {
     const invalidCases = STAGE4_REAL_STRATEGY_CORPUS
       .filter(item => item.id === 'stage4-multi-timeframe-trend-confirmation' || item.id === 'stage4-multi-symbol-shared-risk')
-      .filter(item => item.expectedFailure === null)
-      .map(item => item.id)
+      .flatMap((item) => {
+        if (item.expectedFailure !== null) return [{ id: item.id, issue: 'expected_failure_present' }]
+        const nonReadyAtom = item.expectedAtomKeys.find(atomKey => !coverageRowsForAtomKey(atomKey).some(isStage4DeployReadyAtom))
+        return nonReadyAtom ? [{ id: item.id, atomKey: nonReadyAtom, issue: 'atom_not_deploy_ready' }] : []
+      })
 
     expect(invalidCases).toEqual([])
   })

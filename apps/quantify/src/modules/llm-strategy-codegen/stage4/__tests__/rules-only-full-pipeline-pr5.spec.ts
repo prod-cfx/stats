@@ -75,12 +75,19 @@ function coverageRowsForAtomKey(atomKey: string) {
 }
 
 describe('Stage 4 PR5 rules-only full pipeline', () => {
-  it('does not claim deploy-ready PR5 rows before full deploy payload proof exists', () => {
+  it('claims deploy-ready PR5 rows only after full deploy payload proof exists', () => {
     const pr5ReadyRows = STAGE4_ATOM_COVERAGE_MATRIX
       .filter(row => row.prBatch === 'pr5-orchestration-data')
       .filter(isStage4DeployReadyAtom)
 
-    expect(pr5ReadyRows).toEqual([])
+    expect(pr5ReadyRows.map(row => row.atomKey).sort()).toEqual([
+      'orchestration.data_source_binding',
+      'orchestration.multi_symbol',
+      'orchestration.multi_timeframe',
+      'orchestration.portfolio_risk',
+      'orchestration.regime_gate',
+    ].sort())
+    expect(pr5ReadyRows.every(row => row.reachesBacktest && row.reachesDeployPayload)).toBe(true)
   })
 
   it.each([
@@ -88,12 +95,11 @@ describe('Stage 4 PR5 rules-only full pipeline', () => {
     ['fundingRate.condition', 'BTCUSDT 15m。资金费率为正并且 EMA20 上穿时开多。'],
     ['openInterest.condition', 'BTCUSDT 15m。未平仓量增加并且突破 20 根高点时开多。'],
     ['liquidation.condition', 'BTCUSDT 15m。出现多头清算瀑布后只做空。'],
-    ['external.signal', '收到 TradingView webhook buy 信号后开多，单笔 10% 仓位。'],
-  ])('%s stays fail-closed through rules pipeline without fake deploy payload', async (atomKey, utterance) => {
+    ['external.signal', 'OKX 合约 BTCUSDT 15m，收到 TradingView webhook buy 信号后开多，单笔 10% 仓位。'],
+  ])('%s reaches publication pipeline without fake deploy payload', async (atomKey, utterance) => {
     const rows = coverageRowsForAtomKey(atomKey)
     expect(rows.length).toBeGreaterThan(0)
-    expect(rows.every(row => !isStage4DeployReadyAtom(row))).toBe(true)
-    expect(rows.some(row => row.unsupportedReason === 'data_source_missing')).toBe(true)
+    expect(rows.some(isStage4DeployReadyAtom)).toBe(true)
 
     const result = await runFailClosedPipeline(utterance)
     const serializedState = JSON.stringify(result.state)
@@ -101,6 +107,8 @@ describe('Stage 4 PR5 rules-only full pipeline', () => {
 
     expect(serializedState).toContain('rules')
     expect(serializedState).toContain(atomKey)
-    expect(serializedPublication).not.toContain('deployPayload.dataRequirements.sourcePath')
+    expect(result.publicationError).toBeNull()
+    expect(serializedPublication).toContain('protocolVersion')
+    expect(serializedPublication).not.toContain('fake_deploy_payload')
   })
 })

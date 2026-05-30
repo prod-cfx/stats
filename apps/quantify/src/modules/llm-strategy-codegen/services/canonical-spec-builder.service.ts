@@ -625,8 +625,7 @@ export class CanonicalSpecBuilderService {
     const orderPrograms = this.buildOrderProgramsFromSemanticRulesMainflow(mainflow, state)
     const rules = this.buildCanonicalRulesFromSemanticRulesMainflow(mainflow, sizing)
     const orchestrationPrograms = this.buildOrchestrationProgramsFromSemanticRulesMainflow(mainflow, state)
-    const orchestrationGates = this.buildProgramGatesFromSemanticRulesMainflow(mainflow)
-      .filter(gate => orchestrationPrograms.some(program => program.activeWhenRef === gate.id))
+    const orchestrationGates = this.buildOrchestrationGatesFromSemanticRulesMainflow(mainflow, orchestrationPrograms)
     const orchestrationScopes = [
       ...this.buildProgramScopesFromSemanticRulesMainflow(orchestrationPrograms),
       ...this.buildOrchestrationScopesFromSemanticRulesMainflow(mainflow),
@@ -928,14 +927,15 @@ export class CanonicalSpecBuilderService {
                   }))
               })
           : []
+        const normalizedActions = this.dedupeReversePositionImpliedOpenActions(actions)
 
-        if (condition && actions.length > 0) {
+        if (condition && normalizedActions.length > 0) {
           // #1633 staging s29 follow-up：mainflow byRole.action 路径也需要把
           //   `position.pyramiding_limit` effect + 入场 `price.percent_change`
           //   叶子的 valuePct 投射为 inert pyramidingHint，让 entry OPEN_LONG/SHORT
           //   编译脚本文本携带 `3%` / `50%` 数值证据；与 direct rule / trigger group
           //   两条路径保持同形。
-          const hasOpenAction = actions.some(a => a.type === 'OPEN_LONG' || a.type === 'OPEN_SHORT')
+          const hasOpenAction = normalizedActions.some(a => a.type === 'OPEN_LONG' || a.type === 'OPEN_SHORT')
           // #1633 staging30 s29：pyramiding_limit effect 可能挂在 *另一条*
           //   semantic rule 上（如 has_position → effects.positions[pyramiding_limit]）。
           //   只看当前 rule 会漏抽 layerSizing / profitThreshold / maxLayers。
@@ -952,7 +952,7 @@ export class CanonicalSpecBuilderService {
             sideScope: rule.sideScope,
             priority: this.resolveSemanticRulePriority(phase, ruleIndex + 1),
             condition,
-            actions,
+            actions: normalizedActions,
             metadata: {
               normalized: {
                 source: 'normalized-intent',
@@ -1263,7 +1263,8 @@ export class CanonicalSpecBuilderService {
       }
     }
     if (input.leaf.key === FIELD_KEY.RISK_MAX_DRAWDOWN_PCT) {
-      const valuePct = this.readFiniteNumber(input.leaf.params.valuePct)
+      const rawValuePct = this.readFiniteNumber(input.leaf.params.valuePct)
+      const valuePct = rawValuePct === null ? null : Math.abs(rawValuePct)
       if (valuePct === null || valuePct <= 0 || valuePct >= 100) return null
       return {
         id: `semantic-risk-${input.rule.id}-${input.priority}`,
@@ -1861,11 +1862,46 @@ export class CanonicalSpecBuilderService {
       if (leaf.key.startsWith('portfolioRisk.')) {
         throw new Error(`UnsupportedSemanticRuleOrchestrationEffect: key=${leaf.key} sourcePath=${leaf.path}`)
       }
-      if (!leaf.key.startsWith('scope.')) {
+      if (!leaf.key.startsWith('scope.') && !leaf.key.startsWith('gate.')) {
         throw new Error(`UnsupportedSemanticRuleOrchestrationEffect: key=${leaf.key} sourcePath=${leaf.path}`)
       }
     }
     return risks.sort((a, b) => a.id.localeCompare(b.id))
+  }
+
+  private buildOrchestrationGatesFromSemanticRulesMainflow(
+    mainflow: RulesMainflowView,
+    programs: CanonicalOrchestrationProgram[],
+  ): CanonicalOrchestrationGate[] {
+    const gates = this.buildProgramGatesFromSemanticRulesMainflow(mainflow)
+      .filter(gate => programs.some(program => program.activeWhenRef === gate.id))
+
+    const seenIds = new Set(gates.map(gate => gate.id))
+    for (const leaf of mainflow.byRole.orchestration) {
+      if (leaf.key !== 'gate.regime') continue
+      const rule = mainflow.rules[leaf.ruleIndex]
+      if (!rule || rule.phase !== 'entry') continue
+      const condition = this.buildConditionFromSemanticRuleAtom(
+        { kind: 'atom', key: leaf.key, params: leaf.params },
+        'gate',
+        rule.sideScope,
+        null,
+      )
+      if (!condition) continue
+
+      const id = `${leaf.ruleId}-${this.stableRulesPathId(leaf.path)}`
+      if (seenIds.has(id)) continue
+      seenIds.add(id)
+      gates.push({
+        id,
+        target: { phase: 'entry', sideScope: rule.sideScope },
+        activeWhen: condition,
+        effectWhenFalse: 'block_new_entries',
+        sourcePath: leaf.path,
+      })
+    }
+
+    return gates.sort((a, b) => a.id.localeCompare(b.id))
   }
 
   private buildProgramGateConditionFromRule(rule: SemanticRule): CanonicalConditionNode {
@@ -1944,6 +1980,25 @@ export class CanonicalSpecBuilderService {
           levelCount: this.readFiniteNumber(leaf.params.levelCount) ?? this.readFiniteNumber(leaf.params.levels) ?? 10,
           onDeactivate: leaf.params.onDeactivate === 'keep' || leaf.params.onDeactivate === 'close' ? leaf.params.onDeactivate : 'cancel',
         }
+      case 'program.fixed_grid':
+      case 'program.fixed_grid_gated': {
+        const grid = this.resolveGridParams(
+          [leaf.evidence?.text, rule.evidence?.text]
+            .filter((value): value is string => typeof value === 'string' && value.trim() !== '')
+            .join(' '),
+        )
+        return {
+          ...(grid
+            ? {
+                lowerBound: grid.rangeMin,
+                upperBound: grid.rangeMax,
+                levelCount: grid.levelCount,
+                stepPct: grid.stepPct,
+              }
+            : {}),
+          onDeactivate: leaf.params.onDeactivate === 'keep' || leaf.params.onDeactivate === 'close' ? leaf.params.onDeactivate : 'cancel',
+        }
+      }
       case 'program.adaptive_volatility_grid':
         return {
           atrPeriod: this.readFiniteNumber(leaf.params.atrPeriod) ?? 14,
@@ -2941,7 +2996,7 @@ export class CanonicalSpecBuilderService {
       return true
     }
 
-    return this.conditionContainsAtom(rule.condition, 'grid.range_rebalance')
+    return rule.condition.kind === 'atom' && rule.condition.key === 'grid.range_rebalance'
   }
 
   private buildBoundaryGuardRulesFromSemanticState(
@@ -4339,9 +4394,9 @@ export class CanonicalSpecBuilderService {
     const phase = rule.phase
     const condition = this.buildConditionFromSemanticRuleExpr(split.condition, phase, rule.sideScope, defaultTimeframe)
     if (!condition) return []
-    const actions = listRuleEffects(rule.effects)
+    const actions = this.dedupeReversePositionImpliedOpenActions(listRuleEffects(rule.effects)
       .flatMap(effect => collectAtomLeaves(effect))
-      .flatMap(leaf => this.buildCanonicalActionsFromRuleEffectLeaf(leaf, phase, sizing))
+      .flatMap(leaf => this.buildCanonicalActionsFromRuleEffectLeaf(leaf, phase, sizing)))
     if (actions.length === 0) return []
     const gateRules = split.gateAtoms
       .map((atom, index): CanonicalRuleV2 | null => {
@@ -4520,6 +4575,22 @@ export class CanonicalSpecBuilderService {
       default:
         return []
     }
+  }
+
+  private dedupeReversePositionImpliedOpenActions(
+    actions: CanonicalRuleV2['actions'],
+  ): CanonicalRuleV2['actions'] {
+    const reverseOpenTypes = new Set(actions
+      .filter(action => action.atomKey === ATOM_CONTRACT_REGISTRY['action.reverse_position'].key)
+      .filter(action => action.type === 'OPEN_LONG' || action.type === 'OPEN_SHORT')
+      .map(action => action.type))
+
+    if (reverseOpenTypes.size === 0) return actions
+
+    return actions.filter(action => !(
+      (action.atomKey === ATOM_CONTRACT_REGISTRY['action.open_long'].key || action.atomKey === ATOM_CONTRACT_REGISTRY['action.open_short'].key)
+      && reverseOpenTypes.has(action.type)
+    ))
   }
 
   private isKnownCanonicalActionEffectLeaf(key: string): boolean {
@@ -7086,6 +7157,22 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
+      case ATOM_CONTRACT_REGISTRY['pattern.range'].key:
+        return {
+          kind: 'atom',
+          key: 'pattern.range',
+          semanticScope: 'market',
+          predicateForm: 'generic',
+          op: 'EQ',
+          value: true,
+          params: {
+            mode: typeof trigger.params.mode === 'string' ? trigger.params.mode : 'inside_range',
+            lowerRole: typeof trigger.params.lowerRole === 'string' ? trigger.params.lowerRole : 'range_low',
+            upperRole: typeof trigger.params.upperRole === 'string' ? trigger.params.upperRole : 'range_high',
+            lookbackBars: typeof trigger.params.lookbackBars === 'number' ? trigger.params.lookbackBars : 48,
+            ...(defaultTimeframe ? { timeframe: defaultTimeframe } : {}),
+          },
+        }
       case ATOM_CONTRACT_REGISTRY['price.breakout_up'].key:
         return {
           kind: 'atom',
@@ -7575,6 +7662,21 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
+      case ATOM_CONTRACT_REGISTRY['orderbook.imbalance'].key:
+      case ATOM_CONTRACT_REGISTRY['fundingRate.condition'].key:
+      case ATOM_CONTRACT_REGISTRY['openInterest.condition'].key:
+      case ATOM_CONTRACT_REGISTRY['liquidation.condition'].key:
+        return {
+          kind: 'atom',
+          key: trigger.key,
+          semanticScope: 'market',
+          predicateForm: 'generic',
+          op: this.readGateThresholdOperator(trigger.params.operator),
+          params: {
+            ...trigger.params,
+            ...(defaultTimeframe ? { timeframe: defaultTimeframe } : {}),
+          },
+        }
       case ATOM_CONTRACT_REGISTRY['liquidity.sweep'].key: {
         // P4-4: 白名单方向 (bullish/bearish) + 4 reference (prev_low / prev_high / session_low / session_high)。
         // 缺失 direction 或 reference → fail-closed (null)；reclaimBars 默认值集中定义于
@@ -8015,7 +8117,7 @@ export class CanonicalSpecBuilderService {
   } | null {
     const rangeMatch = text.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
     const stepPct = this.resolveGridStepPct(text)
-    const levelMatch = text.match(/(?:共|总计)?\s*(\d+)\s*格/u)
+    const levelMatch = text.match(/(?:共|总计)?\s*(\d+)\s*[格档]/u)
     if (!rangeMatch?.[1] || !rangeMatch[2] || stepPct === null || !levelMatch?.[1]) {
       return null
     }
@@ -8029,9 +8131,12 @@ export class CanonicalSpecBuilderService {
   }
 
   private resolveGridStepPct(text: string): number | null {
-    const percentMatch = text.match(/(?:步长|网格步长)\s*(\d+(?:\.\d+)?)\s*%/u)
+    const percentMatch = text.match(/(?:(?:步长|网格步长)\s*(\d+(?:\.\d+)?)\s*%|(\d+(?:\.\d+)?)\s*%\s*(?:步长|网格步长))/u)
     if (percentMatch?.[1]) {
       return Number(percentMatch[1])
+    }
+    if (percentMatch?.[2]) {
+      return Number(percentMatch[2])
     }
 
     const perMilleMatch = text.match(/千分之\s*(\d+(?:\.\d+)?)/u)

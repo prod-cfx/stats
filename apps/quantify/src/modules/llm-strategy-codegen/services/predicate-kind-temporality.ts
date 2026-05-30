@@ -34,6 +34,9 @@ export const PREDICATE_KIND_TEMPORALITY: Readonly<Record<PredicateDef['kind'], P
   LTE: 'state', // 数值持续小于等于
   EQ: 'state', // 数值相等比较（在浮点维度退化为状态）
   compare: 'state', // 显式持有 op 的通用比较器（与 GT/LT/GTE/LTE 同构）
+  orderbookImbalance: 'state', // orderbook imbalance feed state
+  fundingRateCondition: 'state', // funding rate feed state
+  openInterestCondition: 'state', // open interest feed state
   WITHIN_LEVEL_SET: 'state', // close 位于 level set 区间内，持续判定
   // ── event：rising-edge / 触碰 / 序列 ──
   CROSS_OVER: 'event', // 上穿瞬间发射
@@ -43,6 +46,7 @@ export const PREDICATE_KIND_TEMPORALITY: Readonly<Record<PredicateDef['kind'], P
   TOUCH_LEVEL_DOWN: 'event', // 自上而下触及一根 level 时触发
   sequence: 'event', // 多步序列条件，最终 step 满足时一次触发
   externalSignal: 'event', // webhook / 外部事件到达时触发
+  liquidationCondition: 'event', // liquidation feed event
   // ── composite：组合算子，由子节点判定 ──
   AND: 'composite',
   OR: 'composite',

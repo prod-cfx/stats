@@ -49,7 +49,7 @@ function coverageRowsForAtomKey(atomKey: string) {
 }
 
 describe('Stage 4 rules-only atom corpus e2e', () => {
-  it.each(STAGE4_REAL_STRATEGY_CORPUS.filter(item => item.expectedFailure === null))(
+  it.each(STAGE4_REAL_STRATEGY_CORPUS)(
     '$id reaches canonical spec, IR, AST, script, and deploy payload shape on attempt-1',
     async (item) => {
       for (const atomKey of item.expectedAtomKeys) {
@@ -59,9 +59,19 @@ describe('Stage 4 rules-only atom corpus e2e', () => {
       const state = buildSemanticState(item.initialUserMessage)
       const artifacts = await createPublicationStage().generate({ semanticState: state })
 
-      expect(artifacts.canonicalSpec.rules.length).toBeGreaterThan(0)
-      expect(artifacts.compiled.ir.ruleBlocks.length).toBeGreaterThan(0)
-      expect(artifacts.ast.decisionPrograms.length).toBeGreaterThan(0)
+      const canonicalExecutableCount = artifacts.canonicalSpec.rules.length
+        + (artifacts.canonicalSpec.orchestration?.programs?.length ?? 0)
+        + (artifacts.canonicalSpec.orderPrograms?.length ?? 0)
+      const irExecutableCount = artifacts.compiled.ir.ruleBlocks.length
+        + (artifacts.compiled.ir.orchestrationPrograms?.length ?? 0)
+        + (artifacts.compiled.ir.orderPrograms?.length ?? 0)
+      const astExecutableCount = artifacts.ast.decisionPrograms.length
+        + (artifacts.ast.orchestrationPrograms?.length ?? 0)
+        + (artifacts.ast.orderPrograms?.length ?? 0)
+
+      expect(canonicalExecutableCount).toBeGreaterThan(0)
+      expect(irExecutableCount).toBeGreaterThan(0)
+      expect(astExecutableCount).toBeGreaterThan(0)
       expect(artifacts.compiledScript).toContain('protocolVersion')
       expect(artifacts.compiledScript).toContain('onBar')
       expect(artifacts.validation.passed).toBe(true)
@@ -69,18 +79,6 @@ describe('Stage 4 rules-only atom corpus e2e', () => {
       expect(artifacts.publishParams.symbol).toBeTruthy()
       expect(artifacts.publishParams.timeframe).toBeTruthy()
       expect(JSON.stringify(artifacts)).toContain('rules[')
-    },
-  )
-
-  it.each(STAGE4_REAL_STRATEGY_CORPUS.filter(item => item.expectedFailure !== null))(
-    '$id stays fail-closed before deploy payload when atom runtime support is incomplete',
-    (item) => {
-      const blockerRows = item.expectedAtomKeys
-        .flatMap(atomKey => coverageRowsForAtomKey(atomKey).map(row => ({ atomKey, row })))
-        .filter(({ row }) => !isStage4DeployReadyAtom(row) && row.unsupportedReason === item.expectedFailure)
-
-      expect(blockerRows.length).toBeGreaterThan(0)
-      expect(blockerRows.every(({ row }) => row.reachesBacktest === false || row.reachesDeployPayload === false)).toBe(true)
     },
   )
 })

@@ -5,7 +5,9 @@ import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-c
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 import { CompiledScriptExecutionEnvelopeService } from '../compiled-script-execution-envelope.service'
 import { CompiledScriptParserService } from '../compiled-script-parser.service'
+import { GenericSeedDispatcher } from '../generic-seed-dispatcher.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
+import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticGraphCompilerService } from '../semantic-graph-compiler.service'
 import { StrategyConsistencyService } from '../strategy-consistency.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
@@ -182,6 +184,55 @@ strategy
       key: 'compiler_consistency.ast_projection',
       status: 'passed',
     }))
+  })
+
+  it('keeps cooldown BLOCK_NEW_ENTRY semantics when emitted through risk predicates', () => {
+    const canonicalSpec = buildCanonicalSpecFromMessage('OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，亏损 3% 止损，止损后冷却 5 根 K 线再开仓，单笔 10%。')
+    const { script } = compileCanonicalSpec(canonicalSpec)
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.scriptProfile.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.cooldown_bars', action: 'BLOCK_NEW_ENTRY', phase: 'risk' }),
+    ]))
+  })
+
+  it('uses the compiled OKX default exchange when canonical market exchange is null', () => {
+    const canonicalSpec = buildCanonicalSpecFromMessage('BTC 15m EMA20 上穿 EMA50 开多，1h MA50 上方才允许入场，单笔 10% 仓位。')
+    expect(canonicalSpec.market.exchange).toBeNull()
+    const { script } = compileCanonicalSpecWithFallbackExchange(canonicalSpec, 'okx')
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(report.checks).toContainEqual(expect.objectContaining({
+      key: 'compiler_consistency.ast_projection',
+      status: 'passed',
+    }))
+  })
+
+  it('keeps decision-program phase for reverse-position lifecycle actions', () => {
+    const canonicalSpec = buildCanonicalSpecFromMessage('OKX 永续 BTCUSDT 15m。EMA20 下穿 EMA50 时从多头反手做空，单笔 10% 仓位。')
+    const reverseRule = canonicalSpec.rules.find(rule => rule.actions.some(action => action.atomKey === 'action.reverse_position'))
+    expect(reverseRule?.actions.filter(action => action.type === 'OPEN_SHORT')).toHaveLength(1)
+    const { script } = compileCanonicalSpec(canonicalSpec, 'long_short')
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.scriptProfile.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'ma.death_cross', action: 'CLOSE_LONG', phase: 'entry' }),
+      expect.objectContaining({ key: 'ma.death_cross', action: 'OPEN_SHORT', phase: 'entry' }),
+    ]))
   })
 
   it('passes consistency for mixed EMA and SMA crossover atoms in one generated script', () => {
@@ -2119,6 +2170,35 @@ function compileCanonicalSpec(
   })
 
   return { ast, script }
+}
+
+function compileCanonicalSpecWithFallbackExchange(
+  canonicalSpec: Parameters<CanonicalSpecV2IrCompilerService['compile']>[0]['canonicalSpec'],
+  exchange: 'binance' | 'okx' | 'hyperliquid',
+) {
+  const compiled = new CanonicalSpecV2IrCompilerService().compile({
+    canonicalSpec,
+    fallback: {
+      exchange,
+      symbol: canonicalSpec.market.symbol ?? 'BTCUSDT',
+      baseTimeframe: canonicalSpec.market.defaultTimeframe ?? canonicalSpec.market.timeframe ?? '15m',
+      positionPct: 10,
+    },
+  })
+  const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
+  const script = new CompiledScriptEmitterService().emit({
+    ast,
+    executionEnvelope: new CompiledScriptExecutionEnvelopeService().build(canonicalSpec),
+  })
+
+  return { ast, script }
+}
+
+function buildCanonicalSpecFromMessage(message: string) {
+  const patch = new GenericSeedDispatcher().dispatch(message)
+  const state = new SemanticSeedStateBuilderService().build(patch, message)
+  if (!state) throw new Error('semantic_state_not_built')
+  return new CanonicalSpecBuilderService().buildFromSemanticState(state)
 }
 
 function buildAtrTakeProfitSpec(sideScope: 'short' | 'both') {

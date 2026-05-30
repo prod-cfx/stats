@@ -18,6 +18,10 @@ export const STAGE4_BLOCKER_TAXONOMY = [
   'data_source_missing',
   'backtest_rejected',
   'deploy_payload_missing_binding',
+  'attempt_not_one',
+  'unstable_rerun',
+  'expected_blocker_missing',
+  'fake_deploy_payload',
 ] as const
 
 export type Stage4BlockerKind = typeof STAGE4_BLOCKER_TAXONOMY[number]

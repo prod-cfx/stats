@@ -1728,10 +1728,13 @@ export class GenericSeedDispatcher {
           || (programKey === ATOM_CONTRACT_REGISTRY['program.fixed_grid_gated'].key && atom.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
           || (programKey === ATOM_CONTRACT_REGISTRY['program.event_listener'].key && atom.key === ATOM_CONTRACT_REGISTRY['external.signal'].key)
         )?.evidence
+        const fixedGridParams = programKey === ATOM_CONTRACT_REGISTRY['program.fixed_grid_gated'].key
+          ? this.readFixedGridProgramParamsFromMessage(userMessage)
+          : {}
         pushAtom({
           key: programKey,
           phase: 'program',
-          params: { programKind: programKey.slice('program.'.length) },
+          params: { programKind: programKey.slice('program.'.length), ...fixedGridParams },
           ...(isEvidenceWithText(atomEvidence)
             ? { evidence: { text: atomEvidence.text } }
             : explicitProgramEvidence
@@ -1745,6 +1748,22 @@ export class GenericSeedDispatcher {
 
   private hasFixedGridGatedProgramIntent(userMessage: string): boolean {
     return /固定网格|门控网格|区间挂|步长|启用|失活|撤单|fixed\s*grid|cancel\s+orders\s+on\s+deactivate|step/iu.test(userMessage)
+  }
+
+  private readFixedGridProgramParamsFromMessage(userMessage: string): Record<string, number> {
+    const rangeMatch = userMessage.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
+    const levelMatch = userMessage.match(/(?:共|总计)?\s*(\d+)\s*[格档]/u)
+    const stepMatch = userMessage.match(/(?:(?:步长|网格步长)\s*(\d+(?:\.\d+)?)\s*%|(\d+(?:\.\d+)?)\s*%\s*(?:步长|网格步长))/u)
+    const lowerBound = rangeMatch?.[1] ? Number(rangeMatch[1]) : null
+    const upperBound = rangeMatch?.[2] ? Number(rangeMatch[2]) : null
+    const levelCount = levelMatch?.[1] ? Number(levelMatch[1]) : null
+    const stepPct = stepMatch?.[1] ? Number(stepMatch[1]) : (stepMatch?.[2] ? Number(stepMatch[2]) : null)
+    return {
+      ...(lowerBound !== null && Number.isFinite(lowerBound) ? { lowerBound } : {}),
+      ...(upperBound !== null && Number.isFinite(upperBound) ? { upperBound } : {}),
+      ...(levelCount !== null && Number.isInteger(levelCount) ? { levelCount } : {}),
+      ...(stepPct !== null && Number.isFinite(stepPct) ? { stepPct } : {}),
+    }
   }
 
   private hasOpenActionIntent(userMessage: string): boolean {

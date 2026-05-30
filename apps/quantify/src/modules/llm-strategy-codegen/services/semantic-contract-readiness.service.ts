@@ -808,6 +808,9 @@ export class SemanticContractReadinessService {
         if (!leaf.key.startsWith('risk.')) return false
         return fulfillsPhase(leaf, 'exit')
       })
+      if (exitCapableEffect) {
+        summary.hasExit = true
+      }
 
       if (rule.phase === 'entry' || rule.phase === 'gate') {
         if (effectKeys.has('action.open_long') || effectKeys.has('action.open_short') || entryCapableEffect) {

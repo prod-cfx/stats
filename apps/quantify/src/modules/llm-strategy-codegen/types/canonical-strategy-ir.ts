@@ -211,6 +211,10 @@ export interface PredicateDef {
     | 'compare'
     | 'cross'
     | 'externalSignal'
+    | 'orderbookImbalance'
+    | 'fundingRateCondition'
+    | 'openInterestCondition'
+    | 'liquidationCondition'
   args: string[]
   params?: Record<string, number | string | boolean>
 }
@@ -229,7 +233,7 @@ export interface RiskPredicateDef {
 }
 
 export interface RiskPredicateActionDef {
-  kind: 'FORCE_EXIT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
+  kind: 'FORCE_EXIT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'BLOCK_NEW_ENTRY'
 }
 
 export interface RuleBlock {

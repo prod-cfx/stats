@@ -13,6 +13,7 @@ export const NORMALIZED_TRIGGER_ATOM_KEYS = [
   'price.percent_change',
   'price.range_position_lte',
   'price.range_position_gte',
+  'pattern.range',
   'price.breakout_up',
   'price.breakout_down',
   'price.detect.indicator_boundary',
@@ -43,6 +44,10 @@ export const NORMALIZED_TRIGGER_ATOM_KEYS = [
   'price.chart_pattern',
   'liquidity.sweep',
   'external.signal',
+  'orderbook.imbalance',
+  'fundingRate.condition',
+  'openInterest.condition',
+  'liquidation.condition',
 ] as const
 
 export type NormalizedTriggerAtomKey = (typeof NORMALIZED_TRIGGER_ATOM_KEYS)[number]
