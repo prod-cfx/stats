@@ -88,24 +88,33 @@ void main() {
     expect(find.text(p.recentActions.first.detail), findsOneWidget);
   });
 
-  testWidgets('交易统计 tab：切换后渲染收益 / 胜率 / 方向偏好 / 资产表现', (
+  testWidgets('交易统计 tab：切换后渲染唤起入口，点击打开统计弹窗', (
     WidgetTester tester,
   ) async {
     await _pump(
       tester,
       initial: '/whale/profile/${Uri.encodeComponent(_knownAddress)}',
     );
+    // 切到统计 tab（segmented 标签文本即「交易统计」）。
     await tester.tap(find.text('交易统计'));
     await tester.pumpAndSettle();
 
+    // tab 内仅渲染唤起入口（含 chevron），不再内嵌统计明细。
+    expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+
+    // 点击入口卡片 → 打开底部统计弹窗（设计稿 WhaleTradeStats）。
+    await tester.tap(find.byIcon(Icons.chevron_right));
+    await tester.pumpAndSettle();
+
     final WhaleProfile p = mockWhaleProfiles[_knownAddress]!;
-    expect(find.text('总盈亏'), findsOneWidget);
-    expect(find.text(p.stats.pnlDisplay), findsOneWidget);
-    expect(find.text('${p.stats.winRatePct}%'), findsOneWidget);
-    expect(find.text('方向偏好'), findsOneWidget);
-    expect(find.text('资产表现'), findsOneWidget);
-    // 资产表现首行 symbol
-    expect(find.text(p.stats.assetPerf.first.symbol), findsWidgets);
+    // 弹窗内胜率卡数值（mono，两位小数）。
+    expect(
+      find.text('${p.stats.winRatePct.toStringAsFixed(2)}%'),
+      findsOneWidget,
+    );
+    // 弹窗内双子 tab 标签。
+    expect(find.text('按资产的表现'), findsOneWidget);
+    expect(find.text('按仓位的表现'), findsOneWidget);
   });
 
   testWidgets('复制地址：点击复制按钮写入剪贴板并提示', (WidgetTester tester) async {

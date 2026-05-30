@@ -13,6 +13,7 @@ import '../../widgets/qz_chip.dart';
 import '../../widgets/qz_segmented_tabs.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
+import 'widgets/whale_trade_stats_sheet.dart';
 
 /// 巨鲸地址详情页（#1753，`/whale/profile/:address`）。
 ///
@@ -143,7 +144,7 @@ class _WhaleProfilePageState extends ConsumerState<WhaleProfilePage> {
               if (_tab == 'overview')
                 _Overview(profile: p)
               else
-                _Stats(stats: p.stats),
+                _StatsEntry(profile: p),
             ],
           ),
         ),
@@ -442,209 +443,58 @@ class _ActionRow extends StatelessWidget {
   }
 }
 
-class _Stats extends StatelessWidget {
-  const _Stats({required this.stats});
-  final WhaleTradeStats stats;
+/// 交易统计 tab：交易统计已迁出为底部上滑 modal（设计稿 `WhaleTradeStats`，
+/// issue #1859），此处提供唤起入口与概要摘要，点击打开 [WhaleTradeStatsSheet]。
+class _StatsEntry extends StatelessWidget {
+  const _StatsEntry({required this.profile});
+  final WhaleProfile profile;
 
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final QzColorScheme c = context.qzScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: _StatCell(
-                label: l10n.whaleProfileStatPnl,
-                value: stats.pnlDisplay,
-                valueColor: _toneColor(c, stats.pnlTone),
-              ),
-            ),
-            const SizedBox(width: QzSpacing.sm),
-            Expanded(
-              child: _StatCell(
-                label: l10n.whaleProfileStatWinRate,
-                value: l10n.whaleProfileWinRateValue(stats.winRatePct),
-                valueColor: c.text,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: QzSpacing.sm),
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: _StatCell(
-                label: l10n.whaleProfileStatRealized,
-                value: stats.realizedDisplay,
-                valueColor: c.text,
-              ),
-            ),
-            const SizedBox(width: QzSpacing.sm),
-            Expanded(
-              child: _StatCell(
-                label: l10n.whaleProfileStatUnrealized,
-                value: stats.unrealizedDisplay,
-                valueColor: c.text,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: QzSpacing.lg),
-        _SectionTitle(text: l10n.whaleProfileDirectionBias),
-        const SizedBox(height: QzSpacing.sm),
-        _DirectionBar(longPct: stats.longPct, shortPct: stats.shortPct),
-        const SizedBox(height: QzSpacing.lg),
-        _SectionTitle(text: l10n.whaleProfileSectionAssetPerf),
-        const SizedBox(height: QzSpacing.sm),
-        _Bordered(
-          children: <Widget>[
-            for (int i = 0; i < stats.assetPerf.length; i++)
-              _AssetPerfRow(
-                entry: stats.assetPerf[i],
-                isLast: i == stats.assetPerf.length - 1,
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _StatCell extends StatelessWidget {
-  const _StatCell({
-    required this.label,
-    required this.value,
-    required this.valueColor,
-  });
-
-  final String label;
-  final String value;
-  final Color valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: c.bgElev,
-        border: Border.all(color: c.borderSoft),
-        borderRadius: BorderRadius.circular(12),
+    return GestureDetector(
+      onTap: () => WhaleTradeStatsSheet.show(
+        context,
+        address: profile.address,
+        stats: profile.stats,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(label, style: TextStyle(color: c.textDim, fontSize: 11)),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              color: valueColor,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.3,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DirectionBar extends StatelessWidget {
-  const _DirectionBar({required this.longPct, required this.shortPct});
-  final int longPct;
-  final int shortPct;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final QzColorScheme c = context.qzScheme;
-    final int total = longPct + shortPct == 0 ? 1 : longPct + shortPct;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: c.bgElev,
+          border: Border.all(color: c.borderSoft),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
           children: <Widget>[
-            Text(
-              '${l10n.whaleProfileLong} $longPct%',
-              style: TextStyle(
-                color: c.marketUp,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    l10n.whaleTradeStatsTitle,
+                    style: TextStyle(
+                      color: c.text,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${l10n.whaleProfileStatWinRate} '
+                    '${l10n.whaleProfileWinRateValue(profile.stats.winRatePct)}'
+                    ' · ${l10n.whaleTradeStatsTradeCount} '
+                    '${profile.stats.tradesTotal ?? 0}',
+                    style: TextStyle(color: c.textDim, fontSize: 12),
+                  ),
+                ],
               ),
             ),
-            Text(
-              '${l10n.whaleProfileShort} $shortPct%',
-              style: TextStyle(
-                color: c.marketDown,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            Icon(Icons.chevron_right, size: 20, color: c.textDim),
           ],
         ),
-        const SizedBox(height: QzSpacing.sm),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(3),
-          child: Row(
-            children: <Widget>[
-              Expanded(
-                flex: longPct == 0 ? 0 : (longPct * 1000 ~/ total),
-                child: Container(height: 6, color: c.marketUp),
-              ),
-              Expanded(
-                flex: shortPct == 0 ? 0 : (shortPct * 1000 ~/ total),
-                child: Container(height: 6, color: c.marketDown),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AssetPerfRow extends StatelessWidget {
-  const _AssetPerfRow({required this.entry, required this.isLast});
-  final WhaleAssetPerf entry;
-  final bool isLast;
-
-  @override
-  Widget build(BuildContext context) {
-    final QzColorScheme c = context.qzScheme;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: isLast ? Colors.transparent : c.borderSoft),
-        ),
-      ),
-      child: Row(
-        children: <Widget>[
-          Expanded(
-            child: Text(
-              entry.symbol,
-              style: TextStyle(
-                color: c.text,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Text(
-            entry.pctDisplay,
-            style: TextStyle(
-              color: _toneColor(c, entry.tone),
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
       ),
     );
   }
