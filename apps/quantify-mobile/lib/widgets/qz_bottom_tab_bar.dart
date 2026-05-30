@@ -27,10 +27,17 @@ import '../theme/theme_context.dart';
 ///   `ImageFilter.blur(sigmaX/Y: 18)` (≈ CSS `blur(16px)`) clipped to the bar
 ///   bounds via [ClipRect], with `scheme.tabBlur` as the semi-transparent
 ///   tint overlay; a 1px top border uses `scheme.borderSoft`. The blur samples
-///   whatever scroll content sits behind via [Scaffold.extendBody]. Note: CSS
-///   `saturate(180%)` has no direct Flutter equivalent without a custom
-///   `ColorFilter.matrix`; deferred to avoid a perf hit and visual drift —
-///   tint color already biases saturation appropriately per theme.
+///   whatever scroll content sits behind via [Scaffold.extendBody].
+///
+///   **Tech-debt conclusion (#1798): CSS `saturate(180%)` is intentionally not
+///   ported.** Flutter's [BackdropFilter] composes a single [ImageFilter]; the
+///   design's `blur(16px) saturate(180%)` chain would need a `ColorFilter.
+///   matrix` saturation pass fused with the blur, which Flutter cannot express
+///   as one filter — a second full-screen backdrop pass would cost an extra
+///   offscreen composite every frame on the always-visible tab bar. The
+///   `scheme.tabBlur` tint already biases saturation per theme to approximate
+///   the look. Conclusion: keep the blur-only approximation; do not chase an
+///   exact saturate match.
 /// - Preserves bottom safe-area inset for iOS home indicator.
 class QzBottomTabBar extends StatelessWidget {
   static const int _tabCount = 5;

@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-05-30 · 全局视觉精修：打包 Inter/JetBrains Mono、Noto Sans SC 不打包、TabBar saturate 记技术债（Issue #1798）
+
+**背景**：设计稿主字体 Inter / JetBrains Mono / Noto Sans SC，app 此前仅 fallback 不打包；TabBar `saturate(180%)`、Sheet `cubic-bezier(.32,.72,0,1)` 360ms、我的 header 棋盘 logo 未对齐。
+
+**判定**：
+
+1. **打包 Inter（400/500/600/700）+ JetBrains Mono（400/500/700）**，接入 `QzFont.sans`/`QzFont.mono` 与 `ThemeData.fontFamily`。
+2. **Noto Sans SC 不打包（技术债结论）**：全量 CJK 16-17MB，bundle 会让 app 下载体积近翻倍；iOS PingFang SC / Android Noto CJK 已内置 CJK，`QzFont.sansFallback` 已 steer 中文字形解析到平台字体。Inter 无 CJK glyph，靠 fallback 链兜底。
+3. **Sheet 曲线已移植**：`showModalBottomSheet(sheetAnimationStyle: AnimationStyle(curve: QzCurves.standard, duration: QzCurves.long, ...))`，Flutter 内部 `CurvedAnimation` 消费，无需 `AnimationController`/`TickerProvider`。
+4. **我的 header logo**：`_AvatarPlaceholder` 改 `CustomPainter` 画 2×2 棋盘格，不引 `flutter_svg`。
+5. **TabBar saturate 记技术债（结论：不追平）**：`BackdropFilter` 只能组合单个 `ImageFilter`；`blur(16px) saturate(180%)` 需额外 `ColorFilter.matrix` 饱和度 pass，无法与 blur 融合为单 filter，二次全屏 backdrop 在常驻 tab bar 上每帧多一次离屏合成，性价比过低。`scheme.tabBlur` tint 已近似偏置饱和度。
+
+**理由**：Latin/mono 才是设计稿真正缺的自定义字形；CJK 体积不可控且平台已覆盖。saturate 无 Flutter 单 filter 等价，强行实现引入每帧离屏合成开销。
+
+**落地范围**：`pubspec.yaml`（fonts）、`assets/fonts/*`、`lib/theme/tokens.dart`（QzFont.sans/mono）、`lib/theme/theme_data.dart`（fontFamily）、`lib/widgets/qz_sheet.dart`（sheetAnimationStyle）、`lib/pages/me/widgets/qz_account_header.dart`（棋盘 painter）、`lib/widgets/qz_bottom_tab_bar.dart`（saturate 结论注释）。
+
+**已知技术债**：
+
+- Noto Sans SC 未打包：极端场景（用户系统缺 CJK 字体）中文可能 fallback 到 Roboto tofu，概率极低；如需 100% 像素一致需后续评估字体子集化（subset CJK 仅常用字）方案。
+- 既有 14 个 `qz_*` golden baseline 失败属 #1785 历史基线 drift，本次变更不改变失败集合（branch == main，均 14），baseline 重生归 #1785。
+
+---
+
 ## 2026-05-30 · 搜索体验基线：维持现状（market 内联 / long-short 无 / whale-live chip filter + WhaleSearchSheet），全屏 overlay（热门+历史 chips）标 future（Issue #1797）
 
 **背景**：设计稿三屏均含全屏 search overlay（热门 + 历史 chips）——行情列表 `m-screens-2.jsx ScreenTickers`（`:1197`，`openSearch` 全屏覆盖层）、多空比 `m-screens-3.jsx`（`LSCoinTabs` 的 `SearchOverlay`，`hotLabel="热门币种"`）、巨鲸实时 `m-screens-4.jsx WhaleLive`（`WhaleCoinTabs`，`:514` `searching` 币种搜索覆盖层）。`StratSearchOverlay`（`m-screens-2.jsx:243`）给出 overlay 模板：顶部输入框 + 「热门搜索」chips（`STRAT_TRENDING` 静态常量）+ 「搜索历史」chips（`history` useState 种子 + 清空按钮）+ 结果列表。

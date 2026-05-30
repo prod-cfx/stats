@@ -99,11 +99,26 @@ class QzCurves {
   static const Duration long = Duration(milliseconds: 360);
 }
 
-/// Font family fallbacks. iOS uses PingFang SC + SF Pro automatically;
-/// Android falls back to Roboto / Noto. We do not bundle custom fonts in
-/// this PR; typography tokens (sizes / weights) land in a later PR.
+/// Bundled font families + platform fallbacks.
+///
+/// Design spec calls for Inter / JetBrains Mono / Noto Sans SC. We bundle the
+/// Latin/mono faces ([sans] = Inter, [mono] = JetBrainsMono) because those are
+/// the custom glyphs the design actually depends on. **Noto Sans SC is not
+/// bundled**: the full CJK face is 16-17 MB and would roughly double the app
+/// download; every target platform already ships a CJK font (iOS PingFang SC,
+/// Android Noto CJK), and [sansFallback] steers Chinese glyph resolution to
+/// them. Tracked as the documented tech-debt conclusion for #1798.
 class QzFont {
   const QzFont._();
+
+  /// Bundled primary sans family (Latin/UI). See [pubspec.yaml] `fonts:`.
+  static const String sans = 'Inter';
+
+  /// Bundled monospace family (numbers / code / UID).
+  static const String mono = 'JetBrainsMono';
+
+  /// Fallback chain after [sans] — primarily steers CJK glyph resolution to
+  /// the platform-supplied Noto/PingFang faces.
   static const List<String> sansFallback = <String>[
     'PingFang SC',
     'Hiragino Sans GB',

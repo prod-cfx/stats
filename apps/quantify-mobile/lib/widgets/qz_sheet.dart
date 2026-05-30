@@ -10,11 +10,11 @@ import '../theme/tokens.dart';
 /// design-system look (16dp top radius, `bgElev` surface, `scrim` barrier,
 /// 40×4 drag handle).
 ///
-/// Note: the prototype targets a 360 ms cubic-bezier (`QzCurves.long` +
-/// `QzCurves.standard`). Honoring that exactly would require an external
-/// `AnimationController` driven by a [TickerProvider], which a static method
-/// cannot obtain. We accept Flutter's default modal-sheet timing here and
-/// leave the exact-curve port to a follow-up issue.
+/// The enter/exit transition matches the prototype's
+/// `cubic-bezier(.32,.72,0,1)` over 360 ms (enter) / 240 ms (exit) via
+/// [AnimationStyle] passed to `sheetAnimationStyle`. Flutter wraps the route
+/// animation in a [CurvedAnimation] internally, so no external
+/// [AnimationController] / [TickerProvider] is required from this static API.
 ///
 /// Known limitation: the [QzColorScheme] used for chrome (background, drag
 /// handle, scrim) is captured at [show] time. If the user toggles the app
@@ -37,6 +37,12 @@ class QzSheet {
       isScrollControlled: isScrollControlled,
       backgroundColor: c.bgElev,
       barrierColor: c.scrim,
+      sheetAnimationStyle: const AnimationStyle(
+        curve: QzCurves.standard,
+        duration: QzCurves.long,
+        reverseCurve: QzCurves.standard,
+        reverseDuration: QzCurves.short,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),

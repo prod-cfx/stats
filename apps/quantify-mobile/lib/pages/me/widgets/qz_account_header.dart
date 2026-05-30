@@ -125,8 +125,14 @@ class QzAccountHeader extends StatelessWidget {
   }
 }
 
+/// 「我的」header logo：设计稿为棋盘格（checkerboard）品牌标记。
+///
+/// 用 [CustomPainter] 画 2×2 棋盘格（白格 + 半透明格交替），避免为单个静态
+/// 图形引入 `flutter_svg`。容器保持 56×56 / radius 16 的品牌区底，棋盘绘制
+/// 在内边距内，[ClipRRect] 保证圆角不溢出。
 class _AvatarPlaceholder extends StatelessWidget {
   const _AvatarPlaceholder();
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -138,9 +144,42 @@ class _AvatarPlaceholder extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
       ),
       alignment: Alignment.center,
-      child: const Icon(Icons.person_outline, color: Colors.white, size: 30),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: const SizedBox(
+          width: 28,
+          height: 28,
+          child: CustomPaint(painter: _CheckerLogoPainter()),
+        ),
+      ),
     );
   }
+}
+
+/// 2×2 棋盘格：对角线两格用亮白，另两格用半透明白，形成 checkerboard。
+class _CheckerLogoPainter extends CustomPainter {
+  const _CheckerLogoPainter();
+
+  static const Color _light = Color(0xFFFFFFFF);
+  static const Color _dim = Color(0x33FFFFFF);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double cell = size.width / 2;
+    final Paint paint = Paint();
+    for (int row = 0; row < 2; row++) {
+      for (int col = 0; col < 2; col++) {
+        paint.color = (row + col).isEven ? _light : _dim;
+        canvas.drawRect(
+          Rect.fromLTWH(col * cell, row * cell, cell, cell),
+          paint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CheckerLogoPainter oldDelegate) => false;
 }
 
 class _HeaderChip extends StatelessWidget {

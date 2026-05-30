@@ -47,9 +47,11 @@ ThemeData buildQzThemeData(QzTheme theme) {
     scaffoldBackgroundColor: c.bg,
     canvasColor: c.bg,
     dividerColor: c.border,
-    // Do not pin a primary fontFamily — let each platform pick its native sans
-    // (iOS PingFang SC / SF Pro, Android Roboto). The fallback list steers
-    // Chinese glyph resolution.
+    // Primary face = bundled Inter (design spec). The fallback list steers
+    // CJK glyph resolution to the platform-supplied Noto/PingFang faces, since
+    // Inter carries no CJK glyphs (Noto Sans SC intentionally not bundled —
+    // see QzFont docs / #1798).
+    fontFamily: QzFont.sans,
     fontFamilyFallback: QzFont.sansFallback,
     extensions: <ThemeExtension<dynamic>>[QzColorSchemeExt(c)],
     cardTheme: CardThemeData(

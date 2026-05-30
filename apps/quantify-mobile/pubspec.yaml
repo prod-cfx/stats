@@ -41,6 +41,29 @@ flutter:
   generate: true
   assets:
     - assets/branding/
+  # 设计稿主字体：Inter（Latin UI sans）+ JetBrains Mono（数字/代码）。
+  # Noto Sans SC 不打包：全量 CJK 16-17MB，会让 app 体积翻倍；平台已自带
+  # CJK（iOS PingFang / Android Noto CJK），QzFont.sansFallback 已 steer 中文
+  # 字形解析。详见 #1798 技术债结论与 docs/decisions.md。
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+    - family: JetBrainsMono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/JetBrainsMono-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/JetBrainsMono-Bold.ttf
+          weight: 700
 
 # Brand assets generation; run `dart run flutter_launcher_icons` and
 # `dart run flutter_native_splash:create` in an env with Android/iOS SDK.
