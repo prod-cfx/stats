@@ -1800,6 +1800,205 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whaleProfileLoadError => '地址详情加载失败';
 
   @override
+  String get whaleProfileTabBasic => '基本信息';
+
+  @override
+  String get whaleProfileTabSpot => '现货持仓';
+
+  @override
+  String get whaleProfileTabPerp => '永续合约持仓';
+
+  @override
+  String get whaleProfileTabOrders => '挂单';
+
+  @override
+  String get whaleProfileTabTrades => '最近成交';
+
+  @override
+  String get whaleProfileTabHistory => '历史委托';
+
+  @override
+  String get whaleProfileColShare => '占比';
+
+  @override
+  String get whaleProfileColQty => '数量';
+
+  @override
+  String get whaleProfileColPrice => '价格';
+
+  @override
+  String get whaleProfileColValue => '价值';
+
+  @override
+  String get whaleProfileColChain => '链';
+
+  @override
+  String get whaleProfileColPosValue => '持仓价值';
+
+  @override
+  String get whaleProfileColUnrealized => '未实现盈亏';
+
+  @override
+  String get whaleProfileColEntry => '入场均价';
+
+  @override
+  String get whaleProfileColMark => '标记价格';
+
+  @override
+  String get whaleProfileColLiq => '清算价格';
+
+  @override
+  String get whaleProfileColMargin => '保证金';
+
+  @override
+  String get whaleProfileColFunding => '资金费';
+
+  @override
+  String get whaleProfileColTpSl => '止盈/止损';
+
+  @override
+  String get whaleProfileCross => '全仓';
+
+  @override
+  String get whaleProfileColTime => '时间';
+
+  @override
+  String get whaleProfileColTrigger => '触发条件';
+
+  @override
+  String get whaleProfileColStatus => '状态';
+
+  @override
+  String get whaleProfileColOrderId => '订单 ID';
+
+  @override
+  String get whaleProfileColType => '类型';
+
+  @override
+  String get whaleProfileColStart => '起始仓位';
+
+  @override
+  String get whaleProfileColClosedPnl => '已平盈亏';
+
+  @override
+  String get whaleProfileColFee => '费用';
+
+  @override
+  String get whaleProfileColExecStatus => '执行状态';
+
+  @override
+  String get whaleProfileStatAccountValue => '账户总价值';
+
+  @override
+  String get whaleProfileStatAvailMargin => '可用保证金';
+
+  @override
+  String get whaleProfileStatWithdrawable => '可提取';
+
+  @override
+  String get whaleProfileStatPositionValue => '总持仓价值';
+
+  @override
+  String get whaleProfileStatLeverage => '杠杆比';
+
+  @override
+  String get whaleProfileLegendPerp => '永续合约';
+
+  @override
+  String get whaleProfileLegendSpot => '现货';
+
+  @override
+  String get whaleProfilePerpTotalValue => '永续合约总价值';
+
+  @override
+  String get whaleProfileMarginUsage => '平均保证金使用率';
+
+  @override
+  String get whaleProfileDirectionBias2 => '方向偏差';
+
+  @override
+  String get whaleProfileBiasNeutral => '中性';
+
+  @override
+  String get whaleProfileLongPosition => '多头持仓';
+
+  @override
+  String get whaleProfileShortPosition => '空头持仓';
+
+  @override
+  String get whaleProfilePositionDist => '仓位分布';
+
+  @override
+  String get whaleProfileLongValue => '多头价值';
+
+  @override
+  String get whaleProfileShortValue => '空头价值';
+
+  @override
+  String get whaleProfileCurrentPosition => '当前持仓';
+
+  @override
+  String whaleProfilePnlChartTitle(String period, String scope) {
+    return '$period 总盈亏（$scope）';
+  }
+
+  @override
+  String get whaleTradeStatsTitle => '交易统计';
+
+  @override
+  String get whaleTradeStatsClosedPnl => '已平仓盈亏';
+
+  @override
+  String get whaleTradeStatsFeeAdjusted => '扣除费用后';
+
+  @override
+  String get whaleTradeStatsTradeCount => '交易次数';
+
+  @override
+  String get whaleTradeStatsWins => '盈利';
+
+  @override
+  String get whaleTradeStatsLosses => '亏损';
+
+  @override
+  String get whaleTradeStatsPerfTitle => '盈亏表现';
+
+  @override
+  String get whaleTradeStatsByAsset => '按资产的表现';
+
+  @override
+  String get whaleTradeStatsByPosition => '按仓位的表现';
+
+  @override
+  String get whaleTradeStatsNetPnl => '净盈亏';
+
+  @override
+  String get whaleTradeStatsSize => '规模';
+
+  @override
+  String get whaleTradeStatsFee => '费用';
+
+  @override
+  String get whaleTradeStatsEmpty => '暂无成交记录';
+
+  @override
+  String whaleTradeStatsTradeUnit(int count) {
+    return '$count 笔交易';
+  }
+
+  @override
+  String get whaleTradeStatsPeriodDay => '1天';
+
+  @override
+  String get whaleTradeStatsPeriodWeek => '1周';
+
+  @override
+  String get whaleTradeStatsPeriodMonth => '1月';
+
+  @override
+  String get whaleTradeStatsPeriodAll => '全部';
+
+  @override
   String get whaleNotificationTitle => '通知中心';
 
   @override

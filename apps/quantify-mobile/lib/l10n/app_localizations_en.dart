@@ -1840,6 +1840,205 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whaleProfileLoadError => 'Failed to load address detail';
 
   @override
+  String get whaleProfileTabBasic => 'Basic info';
+
+  @override
+  String get whaleProfileTabSpot => 'Spot';
+
+  @override
+  String get whaleProfileTabPerp => 'Perpetuals';
+
+  @override
+  String get whaleProfileTabOrders => 'Open orders';
+
+  @override
+  String get whaleProfileTabTrades => 'Recent trades';
+
+  @override
+  String get whaleProfileTabHistory => 'Order history';
+
+  @override
+  String get whaleProfileColShare => 'Share';
+
+  @override
+  String get whaleProfileColQty => 'Qty';
+
+  @override
+  String get whaleProfileColPrice => 'Price';
+
+  @override
+  String get whaleProfileColValue => 'Value';
+
+  @override
+  String get whaleProfileColChain => 'Chain';
+
+  @override
+  String get whaleProfileColPosValue => 'Position value';
+
+  @override
+  String get whaleProfileColUnrealized => 'Unrealized PnL';
+
+  @override
+  String get whaleProfileColEntry => 'Entry';
+
+  @override
+  String get whaleProfileColMark => 'Mark';
+
+  @override
+  String get whaleProfileColLiq => 'Liq. price';
+
+  @override
+  String get whaleProfileColMargin => 'Margin';
+
+  @override
+  String get whaleProfileColFunding => 'Funding';
+
+  @override
+  String get whaleProfileColTpSl => 'TP/SL';
+
+  @override
+  String get whaleProfileCross => 'Cross';
+
+  @override
+  String get whaleProfileColTime => 'Time';
+
+  @override
+  String get whaleProfileColTrigger => 'Trigger';
+
+  @override
+  String get whaleProfileColStatus => 'Status';
+
+  @override
+  String get whaleProfileColOrderId => 'Order ID';
+
+  @override
+  String get whaleProfileColType => 'Type';
+
+  @override
+  String get whaleProfileColStart => 'Start position';
+
+  @override
+  String get whaleProfileColClosedPnl => 'Closed PnL';
+
+  @override
+  String get whaleProfileColFee => 'Fee';
+
+  @override
+  String get whaleProfileColExecStatus => 'Exec status';
+
+  @override
+  String get whaleProfileStatAccountValue => 'Account value';
+
+  @override
+  String get whaleProfileStatAvailMargin => 'Available margin';
+
+  @override
+  String get whaleProfileStatWithdrawable => 'Withdrawable';
+
+  @override
+  String get whaleProfileStatPositionValue => 'Position value';
+
+  @override
+  String get whaleProfileStatLeverage => 'Leverage';
+
+  @override
+  String get whaleProfileLegendPerp => 'Perpetuals';
+
+  @override
+  String get whaleProfileLegendSpot => 'Spot';
+
+  @override
+  String get whaleProfilePerpTotalValue => 'Perp total value';
+
+  @override
+  String get whaleProfileMarginUsage => 'Avg margin usage';
+
+  @override
+  String get whaleProfileDirectionBias2 => 'Directional bias';
+
+  @override
+  String get whaleProfileBiasNeutral => 'Neutral';
+
+  @override
+  String get whaleProfileLongPosition => 'Long';
+
+  @override
+  String get whaleProfileShortPosition => 'Short';
+
+  @override
+  String get whaleProfilePositionDist => 'Position distribution';
+
+  @override
+  String get whaleProfileLongValue => 'Long value';
+
+  @override
+  String get whaleProfileShortValue => 'Short value';
+
+  @override
+  String get whaleProfileCurrentPosition => 'Current position';
+
+  @override
+  String whaleProfilePnlChartTitle(String period, String scope) {
+    return '$period total PnL ($scope)';
+  }
+
+  @override
+  String get whaleTradeStatsTitle => 'Trade stats';
+
+  @override
+  String get whaleTradeStatsClosedPnl => 'Closed PnL';
+
+  @override
+  String get whaleTradeStatsFeeAdjusted => 'After fees';
+
+  @override
+  String get whaleTradeStatsTradeCount => 'Trade count';
+
+  @override
+  String get whaleTradeStatsWins => 'Wins';
+
+  @override
+  String get whaleTradeStatsLosses => 'Losses';
+
+  @override
+  String get whaleTradeStatsPerfTitle => 'PnL performance';
+
+  @override
+  String get whaleTradeStatsByAsset => 'By asset';
+
+  @override
+  String get whaleTradeStatsByPosition => 'By position';
+
+  @override
+  String get whaleTradeStatsNetPnl => 'Net PnL';
+
+  @override
+  String get whaleTradeStatsSize => 'Size';
+
+  @override
+  String get whaleTradeStatsFee => 'Fee';
+
+  @override
+  String get whaleTradeStatsEmpty => 'No trades yet';
+
+  @override
+  String whaleTradeStatsTradeUnit(int count) {
+    return '$count trades';
+  }
+
+  @override
+  String get whaleTradeStatsPeriodDay => '1D';
+
+  @override
+  String get whaleTradeStatsPeriodWeek => '1W';
+
+  @override
+  String get whaleTradeStatsPeriodMonth => '1M';
+
+  @override
+  String get whaleTradeStatsPeriodAll => 'All';
+
+  @override
   String get whaleNotificationTitle => 'Notifications';
 
   @override

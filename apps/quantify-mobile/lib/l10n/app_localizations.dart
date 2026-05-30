@@ -3548,6 +3548,396 @@ abstract class AppLocalizations {
   /// **'地址详情加载失败'**
   String get whaleProfileLoadError;
 
+  /// No description provided for @whaleProfileTabBasic.
+  ///
+  /// In zh, this message translates to:
+  /// **'基本信息'**
+  String get whaleProfileTabBasic;
+
+  /// No description provided for @whaleProfileTabSpot.
+  ///
+  /// In zh, this message translates to:
+  /// **'现货持仓'**
+  String get whaleProfileTabSpot;
+
+  /// No description provided for @whaleProfileTabPerp.
+  ///
+  /// In zh, this message translates to:
+  /// **'永续合约持仓'**
+  String get whaleProfileTabPerp;
+
+  /// No description provided for @whaleProfileTabOrders.
+  ///
+  /// In zh, this message translates to:
+  /// **'挂单'**
+  String get whaleProfileTabOrders;
+
+  /// No description provided for @whaleProfileTabTrades.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近成交'**
+  String get whaleProfileTabTrades;
+
+  /// No description provided for @whaleProfileTabHistory.
+  ///
+  /// In zh, this message translates to:
+  /// **'历史委托'**
+  String get whaleProfileTabHistory;
+
+  /// No description provided for @whaleProfileColShare.
+  ///
+  /// In zh, this message translates to:
+  /// **'占比'**
+  String get whaleProfileColShare;
+
+  /// No description provided for @whaleProfileColQty.
+  ///
+  /// In zh, this message translates to:
+  /// **'数量'**
+  String get whaleProfileColQty;
+
+  /// No description provided for @whaleProfileColPrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'价格'**
+  String get whaleProfileColPrice;
+
+  /// No description provided for @whaleProfileColValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'价值'**
+  String get whaleProfileColValue;
+
+  /// No description provided for @whaleProfileColChain.
+  ///
+  /// In zh, this message translates to:
+  /// **'链'**
+  String get whaleProfileColChain;
+
+  /// No description provided for @whaleProfileColPosValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓价值'**
+  String get whaleProfileColPosValue;
+
+  /// No description provided for @whaleProfileColUnrealized.
+  ///
+  /// In zh, this message translates to:
+  /// **'未实现盈亏'**
+  String get whaleProfileColUnrealized;
+
+  /// No description provided for @whaleProfileColEntry.
+  ///
+  /// In zh, this message translates to:
+  /// **'入场均价'**
+  String get whaleProfileColEntry;
+
+  /// No description provided for @whaleProfileColMark.
+  ///
+  /// In zh, this message translates to:
+  /// **'标记价格'**
+  String get whaleProfileColMark;
+
+  /// No description provided for @whaleProfileColLiq.
+  ///
+  /// In zh, this message translates to:
+  /// **'清算价格'**
+  String get whaleProfileColLiq;
+
+  /// No description provided for @whaleProfileColMargin.
+  ///
+  /// In zh, this message translates to:
+  /// **'保证金'**
+  String get whaleProfileColMargin;
+
+  /// No description provided for @whaleProfileColFunding.
+  ///
+  /// In zh, this message translates to:
+  /// **'资金费'**
+  String get whaleProfileColFunding;
+
+  /// No description provided for @whaleProfileColTpSl.
+  ///
+  /// In zh, this message translates to:
+  /// **'止盈/止损'**
+  String get whaleProfileColTpSl;
+
+  /// No description provided for @whaleProfileCross.
+  ///
+  /// In zh, this message translates to:
+  /// **'全仓'**
+  String get whaleProfileCross;
+
+  /// No description provided for @whaleProfileColTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'时间'**
+  String get whaleProfileColTime;
+
+  /// No description provided for @whaleProfileColTrigger.
+  ///
+  /// In zh, this message translates to:
+  /// **'触发条件'**
+  String get whaleProfileColTrigger;
+
+  /// No description provided for @whaleProfileColStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'状态'**
+  String get whaleProfileColStatus;
+
+  /// No description provided for @whaleProfileColOrderId.
+  ///
+  /// In zh, this message translates to:
+  /// **'订单 ID'**
+  String get whaleProfileColOrderId;
+
+  /// No description provided for @whaleProfileColType.
+  ///
+  /// In zh, this message translates to:
+  /// **'类型'**
+  String get whaleProfileColType;
+
+  /// No description provided for @whaleProfileColStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'起始仓位'**
+  String get whaleProfileColStart;
+
+  /// No description provided for @whaleProfileColClosedPnl.
+  ///
+  /// In zh, this message translates to:
+  /// **'已平盈亏'**
+  String get whaleProfileColClosedPnl;
+
+  /// No description provided for @whaleProfileColFee.
+  ///
+  /// In zh, this message translates to:
+  /// **'费用'**
+  String get whaleProfileColFee;
+
+  /// No description provided for @whaleProfileColExecStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'执行状态'**
+  String get whaleProfileColExecStatus;
+
+  /// No description provided for @whaleProfileStatAccountValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户总价值'**
+  String get whaleProfileStatAccountValue;
+
+  /// No description provided for @whaleProfileStatAvailMargin.
+  ///
+  /// In zh, this message translates to:
+  /// **'可用保证金'**
+  String get whaleProfileStatAvailMargin;
+
+  /// No description provided for @whaleProfileStatWithdrawable.
+  ///
+  /// In zh, this message translates to:
+  /// **'可提取'**
+  String get whaleProfileStatWithdrawable;
+
+  /// No description provided for @whaleProfileStatPositionValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'总持仓价值'**
+  String get whaleProfileStatPositionValue;
+
+  /// No description provided for @whaleProfileStatLeverage.
+  ///
+  /// In zh, this message translates to:
+  /// **'杠杆比'**
+  String get whaleProfileStatLeverage;
+
+  /// No description provided for @whaleProfileLegendPerp.
+  ///
+  /// In zh, this message translates to:
+  /// **'永续合约'**
+  String get whaleProfileLegendPerp;
+
+  /// No description provided for @whaleProfileLegendSpot.
+  ///
+  /// In zh, this message translates to:
+  /// **'现货'**
+  String get whaleProfileLegendSpot;
+
+  /// No description provided for @whaleProfilePerpTotalValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'永续合约总价值'**
+  String get whaleProfilePerpTotalValue;
+
+  /// No description provided for @whaleProfileMarginUsage.
+  ///
+  /// In zh, this message translates to:
+  /// **'平均保证金使用率'**
+  String get whaleProfileMarginUsage;
+
+  /// No description provided for @whaleProfileDirectionBias2.
+  ///
+  /// In zh, this message translates to:
+  /// **'方向偏差'**
+  String get whaleProfileDirectionBias2;
+
+  /// No description provided for @whaleProfileBiasNeutral.
+  ///
+  /// In zh, this message translates to:
+  /// **'中性'**
+  String get whaleProfileBiasNeutral;
+
+  /// No description provided for @whaleProfileLongPosition.
+  ///
+  /// In zh, this message translates to:
+  /// **'多头持仓'**
+  String get whaleProfileLongPosition;
+
+  /// No description provided for @whaleProfileShortPosition.
+  ///
+  /// In zh, this message translates to:
+  /// **'空头持仓'**
+  String get whaleProfileShortPosition;
+
+  /// No description provided for @whaleProfilePositionDist.
+  ///
+  /// In zh, this message translates to:
+  /// **'仓位分布'**
+  String get whaleProfilePositionDist;
+
+  /// No description provided for @whaleProfileLongValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'多头价值'**
+  String get whaleProfileLongValue;
+
+  /// No description provided for @whaleProfileShortValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'空头价值'**
+  String get whaleProfileShortValue;
+
+  /// No description provided for @whaleProfileCurrentPosition.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前持仓'**
+  String get whaleProfileCurrentPosition;
+
+  /// No description provided for @whaleProfilePnlChartTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'{period} 总盈亏（{scope}）'**
+  String whaleProfilePnlChartTitle(String period, String scope);
+
+  /// No description provided for @whaleTradeStatsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易统计'**
+  String get whaleTradeStatsTitle;
+
+  /// No description provided for @whaleTradeStatsClosedPnl.
+  ///
+  /// In zh, this message translates to:
+  /// **'已平仓盈亏'**
+  String get whaleTradeStatsClosedPnl;
+
+  /// No description provided for @whaleTradeStatsFeeAdjusted.
+  ///
+  /// In zh, this message translates to:
+  /// **'扣除费用后'**
+  String get whaleTradeStatsFeeAdjusted;
+
+  /// No description provided for @whaleTradeStatsTradeCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易次数'**
+  String get whaleTradeStatsTradeCount;
+
+  /// No description provided for @whaleTradeStatsWins.
+  ///
+  /// In zh, this message translates to:
+  /// **'盈利'**
+  String get whaleTradeStatsWins;
+
+  /// No description provided for @whaleTradeStatsLosses.
+  ///
+  /// In zh, this message translates to:
+  /// **'亏损'**
+  String get whaleTradeStatsLosses;
+
+  /// No description provided for @whaleTradeStatsPerfTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'盈亏表现'**
+  String get whaleTradeStatsPerfTitle;
+
+  /// No description provided for @whaleTradeStatsByAsset.
+  ///
+  /// In zh, this message translates to:
+  /// **'按资产的表现'**
+  String get whaleTradeStatsByAsset;
+
+  /// No description provided for @whaleTradeStatsByPosition.
+  ///
+  /// In zh, this message translates to:
+  /// **'按仓位的表现'**
+  String get whaleTradeStatsByPosition;
+
+  /// No description provided for @whaleTradeStatsNetPnl.
+  ///
+  /// In zh, this message translates to:
+  /// **'净盈亏'**
+  String get whaleTradeStatsNetPnl;
+
+  /// No description provided for @whaleTradeStatsSize.
+  ///
+  /// In zh, this message translates to:
+  /// **'规模'**
+  String get whaleTradeStatsSize;
+
+  /// No description provided for @whaleTradeStatsFee.
+  ///
+  /// In zh, this message translates to:
+  /// **'费用'**
+  String get whaleTradeStatsFee;
+
+  /// No description provided for @whaleTradeStatsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无成交记录'**
+  String get whaleTradeStatsEmpty;
+
+  /// No description provided for @whaleTradeStatsTradeUnit.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 笔交易'**
+  String whaleTradeStatsTradeUnit(int count);
+
+  /// No description provided for @whaleTradeStatsPeriodDay.
+  ///
+  /// In zh, this message translates to:
+  /// **'1天'**
+  String get whaleTradeStatsPeriodDay;
+
+  /// No description provided for @whaleTradeStatsPeriodWeek.
+  ///
+  /// In zh, this message translates to:
+  /// **'1周'**
+  String get whaleTradeStatsPeriodWeek;
+
+  /// No description provided for @whaleTradeStatsPeriodMonth.
+  ///
+  /// In zh, this message translates to:
+  /// **'1月'**
+  String get whaleTradeStatsPeriodMonth;
+
+  /// No description provided for @whaleTradeStatsPeriodAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部'**
+  String get whaleTradeStatsPeriodAll;
+
   /// No description provided for @whaleNotificationTitle.
   ///
   /// In zh, this message translates to:
