@@ -4,6 +4,41 @@
 
 ---
 
+## 2026-05-30 · AI 链路「确认策略 / 策略脚本」步骤页：方案 B 暂缓、标 future（Issue #1770）
+
+**背景**：#1770 提出设计稿增强——把 AI 策略生成链路中的「确认策略」（IF/THEN 规则块 + EXECUTE 执行上下文 + AI 提示 banner + 「在对话中修改」编辑链接）与「策略脚本」（terminal 风格代码查看器 + 行号 + copy + 展开/折叠）作为两个显式步骤页落地，并补 5 步 StepBar（确认策略→脚本→设置→回测→部署）与「市场类型（现货/合约）+ 杠杆（1x-100x）」选择器。issue 同时声明这是相对 #1751（已 close，明确「AI 对话直接接 `/ai/backtest-config`，回测走聊天内卡片，不新增独立 route」）既定简化边界的偏离，需先做产品取舍。
+
+**核查发现**：issue 引用的设计源文件 `m-screens-confirm.jsx` / `m-screens-btconfig.jsx` 及 `ScreenStratConfirm` / `ScreenStratScript` / 5 步 StepBar 在当前设计真源中**确实存在**（由 #1748 引入，于本 PR head 与 `origin/main` 均可命中）：`design/project/mobile/m-screens-confirm.jsx:199`（`ScreenStratConfirm`，含 IF/THEN 规则块 + EXECUTE 上下文）、`:704`（`ScreenStratScript`，terminal 风格脚本查看器）、`design/project/mobile/m-screens-btconfig.jsx:285`（`BtcStepBar`）、`:287-288`（`确认策略` / `策略脚本` 标签）。即设计侧已有高保真表达，属「设计稿已画、app 未落地」。但落地与否仍是产品取舍：这些屏的真实价值依赖 #1679/#1682 的真实策略代码生成 / 回测凭据通道，未就绪前在 app 落 mock 步骤页大概率重写；故将其判为 **future 增量**而非「必须立即补齐的对齐缺口」。
+
+**判定**：**采纳方案 B（暂缓）**。维持 #1751 既定的「AI 对话流隐式覆盖确认/脚本步骤」边界；不新增确认策略页、策略脚本页与 5 步 StepBar，不在 `backtest_config_sheet.dart` 回流市场类型 / 杠杆选择器。设计稿对应屏（如后续补画）标 future，本差异关闭。本节仅落文档，不改设计稿、不改 app 代码与测试。
+
+**对齐结论（对应 #1770 验收标准逐条）**：
+
+| 验收标准 | 结论 | 依据 |
+|---------|------|------|
+| [1] 产品对方案 A/B 给出结论并记入 decisions.md | 已满足。结论＝方案 B 暂缓，记入本节 | 本节 |
+| [2] 若落地：确认策略页展示 IF/THEN + EXECUTE | 不落地。AI 对话流隐式覆盖策略确认语义（规则/上下文在对话消息内表达），不新增独立步骤页 | #1751 既定边界、`ai_home_page.dart` 对话流 |
+| [3] 若落地：策略脚本页提供代码查看器 + copy | 不落地。脚本查看依赖真实策略代码生成（#1679/#1682），未就绪前不落 mock 查看器 | 依赖未就绪，YAGNI |
+| [4] 若落地：链路含 5 步 StepBar | 不落地。当前链路＝AI 对话 → `/ai/backtest-config`（route 承载回测配置弹层）→ 聊天内回测卡片，无多步骤页向导，故无 StepBar | `app_router.dart:178`（`/ai/backtest-config`）、#1749 §3 route↔sheet 边界 |
+| [5] 若落地：市场类型 + 杠杆选择器接入回测参数 | 不落地。`backtest_config_sheet.dart` 刻意不承载 symbol/period/leverage，按原型语义「这些字段由 AI 对话上下文推断」 | `backtest_config_sheet.dart:28-29`（不再承载 symbol/period/leverage）、`:155`（对话上下文推断 mock 默认值） |
+| [6] 若暂缓：设计稿对应屏标 future，差异关闭 | 已满足。设计源已含对应屏（`m-screens-confirm.jsx:199/704`、`m-screens-btconfig.jsx:285`），现统一记为 future 增量、暂不回流 app；本 issue 以方案 B 关闭 | 本节 + 上方「核查发现」 |
+
+**理由**：
+
+1. **真实问题判定**：当前 AI 链路（对话 → `/ai/backtest-config` → 聊天内回测卡片）已闭环可走通，「确认/脚本显式步骤页」是想象中的增强而非阻塞用户的真实缺口；#1751 已对该简化边界做过现状盘点并采纳。
+2. **YAGNI / 依赖未就绪**：策略脚本查看、IF/THEN 规则块均依赖真实策略代码生成与回测接入（#1679/#1682）。在 mock 阶段堆砌步骤页与脚本查看器，真实接入后大概率重写，违反 KISS/YAGNI。
+3. **route↔sheet 硬边界**：#1749 §3 已钉死「同一交互不允许同时存在 route + sheet 两条入口」，且 `backtest-config` 以 route 承载弹层视觉、不回退独立 sheet。新增 5 步向导会引入第二条与回测配置并行的链路形态，与该边界冲突。
+4. **杠杆/市场类型语义归属**：`backtest_config_sheet.dart` 明确「symbol/period/leverage 由 AI 对话上下文推断，参数弹层只管回测配置」。把这些选择器塞进步骤页会割裂「对话是唯一会话上下文持有者」的契约。
+5. 与 #1662/#1749/#1750/#1756 处理「设计超前 / 未实现入口」一致：设计表达保留为 future，app 按真实数据就绪节奏分批落地，零破坏（Never break userspace）。
+
+**设计超前项（标 future，不算对齐缺口）**：确认策略页（IF/THEN + EXECUTE）、策略脚本页（代码查看器 + copy + 展开折叠）、5 步 StepBar、市场类型 + 杠杆选择器——均待真实策略代码生成 / 回测凭据通道（#1679/#1682）就绪后另行立项评估，未就绪前不在 app 落 mock，也不要在后续 PR 以「对齐缺口」名义补。
+
+**不变项**：AI 链路维持「对话 → `/ai/backtest-config`（route 承载回测配置弹层）→ 聊天内回测卡片」现状；`backtest_config_sheet.dart` 维持不承载 symbol/period/leverage、底部 shield 免责 banner 现状（`:581`）。设计稿不新增 confirm/script/StepBar 屏，已存在则标 future、不回流到 app，直到 #1679/#1682 接入真实能力后另立 issue 解除。
+
+**落地范围**：仅文档。`apps/quantify-mobile/docs/decisions.md`（本节）+ `apps/quantify-mobile/README.md`「设计真源」段补 #1770 引用。不改 `design/project/mobile/*.jsx`、不改 `app_router.dart` / `backtest_config_sheet.dart` / `ai_home_page.dart` 与 app 代码 / 测试。
+
+---
+
 ## 2026-05-30 · API 配置入口与授权表单设计对齐（Issue #1756）
 
 **背景**：设计稿用 `ScreenApiConfig`（`m-screens-4.jsx:2821`）/ `sheet === 'api'`（`proto.jsx:312`）表达 API 配置；Flutter app 已统一为 `showApiFormSheet`（`lib/pages/me/api_form_sheet.dart`），历史 `/me/api` 列表页 #1648 已下线、router 不再注册（见本文 §「API 配置入口命名与历史路由」）。#1756 目标是把**入口唯一性、表单字段、授权权限、保存反馈、部署未授权交易所引导**这五处的设计表达一次性钉到 app 现状，避免后续设计稿再画独立列表页或第二条入口。
