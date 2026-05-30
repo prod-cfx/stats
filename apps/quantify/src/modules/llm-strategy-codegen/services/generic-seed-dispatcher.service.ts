@@ -1657,7 +1657,9 @@ export class GenericSeedDispatcher {
       const programKey = hasAdaptive
         ? ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key
         : hasGrid
-          ? ATOM_CONTRACT_REGISTRY['program.dynamic_grid'].key
+          ? this.hasFixedGridGatedProgramIntent(userMessage)
+            ? ATOM_CONTRACT_REGISTRY['program.fixed_grid_gated'].key
+            : ATOM_CONTRACT_REGISTRY['program.dynamic_grid'].key
           : explicitProgramEvidence
             ? ATOM_CONTRACT_REGISTRY['program.event_listener'].key
             : null
@@ -1665,6 +1667,7 @@ export class GenericSeedDispatcher {
         const atomEvidence = atoms.find(atom =>
           (programKey === ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key && atom.key === ATOM_CONTRACT_REGISTRY['program.adaptive_volatility_grid'].key)
           || (programKey === ATOM_CONTRACT_REGISTRY['program.dynamic_grid'].key && atom.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
+          || (programKey === ATOM_CONTRACT_REGISTRY['program.fixed_grid_gated'].key && atom.key === ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].key)
           || (programKey === ATOM_CONTRACT_REGISTRY['program.event_listener'].key && atom.key === ATOM_CONTRACT_REGISTRY['external.signal'].key)
         )?.evidence
         pushAtom({
@@ -1680,6 +1683,10 @@ export class GenericSeedDispatcher {
       }
     }
     return out
+  }
+
+  private hasFixedGridGatedProgramIntent(userMessage: string): boolean {
+    return /固定网格|门控网格|区间挂|步长|启用|失活|撤单|fixed\s*grid|cancel\s+orders\s+on\s+deactivate|step/iu.test(userMessage)
   }
 
   private hasOpenActionIntent(userMessage: string): boolean {

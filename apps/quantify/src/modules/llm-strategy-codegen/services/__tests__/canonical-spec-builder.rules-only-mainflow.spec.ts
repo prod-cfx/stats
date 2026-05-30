@@ -1858,6 +1858,43 @@ describe('CanonicalSpecBuilderService rules-only mainflow', () => {
     ])
   })
 
+  it('keeps PR4 reverse_position canonical actions on the rules action source path', () => {
+    const state = baseState({
+      rules: [{
+        id: 'rule-reverse-short',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: { kind: 'atom', key: 'execution.on_start', params: {} },
+        effects: {
+          actions: [{
+            kind: 'atom',
+            key: 'action.reverse_position',
+            params: { fromSide: 'long', toSide: 'short', sizingSource: 'explicit' },
+          }],
+          risks: [],
+          positions: [],
+          orchestration: [],
+          programs: [],
+        },
+      }],
+    })
+
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+
+    expect(spec.rules.find(rule => rule.id === 'semantic-entry-rule-reverse-short')?.actions).toEqual([
+      expect.objectContaining({
+        type: 'CLOSE_LONG',
+        atomKey: 'action.reverse_position',
+        sourcePath: 'rules[0].effects.actions[0]',
+      }),
+      expect.objectContaining({
+        type: 'OPEN_SHORT',
+        atomKey: 'action.reverse_position',
+        sourcePath: 'rules[0].effects.actions[0]',
+      }),
+    ])
+  })
+
   it('normalizes dispatcher flat partial_take_profit params into canonical tiers', () => {
     const state = baseState({
       rules: [{

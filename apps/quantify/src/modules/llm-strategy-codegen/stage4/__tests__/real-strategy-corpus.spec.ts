@@ -12,6 +12,8 @@ const expectedCategories = [
   'portfolio_risk',
   'multi_timeframe',
   'multi_symbol',
+  'action_lifecycle',
+  'execution_program',
 ] as const
 
 function collectRuleAtomKeys(patch: ReturnType<GenericSeedDispatcher['dispatch']>): string[] {

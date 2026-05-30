@@ -918,7 +918,9 @@ export class CanonicalSpecBuilderService {
                   throw new Error(`UnsupportedSemanticRuleActionEffect: key=${leaf.key} sourcePath=${leaf.path}`)
                 }
                 return builtActions
-                  .filter(action => this.actionMatchesRuleSideScope(action.type, rule.sideScope) || leaf.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key)
+                  .filter(action => this.actionMatchesRuleSideScope(action.type, rule.sideScope)
+                    || leaf.key === ATOM_CONTRACT_REGISTRY['action.add_position'].key
+                    || leaf.key === ATOM_CONTRACT_REGISTRY['action.reverse_position'].key)
                   .map(action => ({
                     ...action,
                     sourcePath: leaf.path,
@@ -4487,6 +4489,24 @@ export class CanonicalSpecBuilderService {
               atomKey: leaf.key,
             }]
           : []
+      case ATOM_CONTRACT_REGISTRY['action.reverse_position'].key:
+        if (phase !== 'entry') return []
+        const fromSide = this.readSideParam(leaf.params.fromSide) ?? 'long'
+        const toSide = this.readSideParam(leaf.params.toSide) ?? (fromSide === 'long' ? 'short' : 'long')
+        const sizingSource = this.readReverseSizingSource(leaf.params.sizingSource)
+        return [
+          { type: fromSide === 'long' ? 'CLOSE_LONG' : 'CLOSE_SHORT', atomKey: leaf.key },
+          {
+            type: toSide === 'long' ? 'OPEN_LONG' : 'OPEN_SHORT',
+            sizing: sizingSource === 'current_position'
+              ? { mode: 'RATIO', value: 100 }
+              : this.resolveSemanticActionSizing(leaf.params.sizing) ?? sizing ?? undefined,
+            ...(sizingSource === 'current_position'
+              ? { params: { quantityMode: 'position_pct' } }
+              : {}),
+            atomKey: leaf.key,
+          },
+        ]
       default:
         return []
     }
@@ -4498,6 +4518,7 @@ export class CanonicalSpecBuilderService {
       || key === ATOM_CONTRACT_REGISTRY['action.close_long'].key
       || key === ATOM_CONTRACT_REGISTRY['action.close_short'].key
       || key === ATOM_CONTRACT_REGISTRY['action.add_position'].key
+      || key === ATOM_CONTRACT_REGISTRY['action.reverse_position'].key
   }
 
   private actionMatchesRuleSideScope(

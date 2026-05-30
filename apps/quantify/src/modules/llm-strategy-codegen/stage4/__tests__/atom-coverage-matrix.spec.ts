@@ -55,8 +55,30 @@ const pr3PositionAtomKeys = [
   'position.max_exposure_pct',
 ] as const
 
+const pr4ActionAtomKeys = [
+  'action.open_long',
+  'action.open_short',
+  'action.close_long',
+  'action.close_short',
+  'action.add_position',
+  'action.reduce_position',
+  'action.reverse_position',
+  'action.conditional_order',
+  'action.limit_order',
+] as const
+
+const pr4ProgramAtomKeys = [
+  'program.fixed_grid_gated',
+  'program.twap',
+  'program.dca',
+  'program.martingale',
+  'program.rebalance',
+  'program.iceberg',
+] as const
+
 describe('Stage 4 atom coverage matrix', () => {
   const pr3Rows = STAGE4_ATOM_COVERAGE_MATRIX.filter(row => row.prBatch === 'pr3-risk-position')
+  const pr4Rows = STAGE4_ATOM_COVERAGE_MATRIX.filter(row => row.prBatch === 'pr4-action-program')
 
   it('covers all Stage 4 atom families', () => {
     const families = new Set(STAGE4_ATOM_COVERAGE_MATRIX.map(row => row.family))
@@ -187,5 +209,79 @@ describe('Stage 4 atom coverage matrix', () => {
     const report = buildStage4CoverageReport({ atoms: pr3Rows, corpusResults: [] })
 
     expect(report.atomDeployReady).toBeGreaterThan(0)
+  })
+
+  it('contains direct PR4 action atom rows under typed action effects', () => {
+    const rowsByKey = new Map(STAGE4_ATOM_COVERAGE_MATRIX.map(row => [row.atomKey, row]))
+
+    for (const key of pr4ActionAtomKeys) {
+      const row = rowsByKey.get(key)
+      expect(row).toBeDefined()
+      expect(row?.family).toBe('action')
+      expect(row?.rulePath).toBe('rules[].effects.actions')
+      expect(row?.coveredAtomKeys).toEqual([key])
+      expect(row?.prBatch).toBe('pr4-action-program')
+    }
+  })
+
+  it('contains direct PR4 program atom rows under typed program effects', () => {
+    const rowsByKey = new Map(STAGE4_ATOM_COVERAGE_MATRIX.map(row => [row.atomKey, row]))
+
+    for (const key of pr4ProgramAtomKeys) {
+      const row = rowsByKey.get(key)
+      expect(row).toBeDefined()
+      expect(row?.family).toBe('program')
+      expect(row?.rulePath).toBe('rules[].effects.programs')
+      expect(row?.coveredAtomKeys).toEqual([key])
+      expect(row?.prBatch).toBe('pr4-action-program')
+    }
+  })
+
+  it('requires deploy-ready PR4 rows to declare full rules acceptance coverage', () => {
+    const invalidRows = pr4Rows.filter(row =>
+      isStage4DeployReadyAtom(row)
+      && (
+        row.utteranceExamples.length < 3
+        || !row.displayShape.includes('source path')
+        || !row.canonicalShape.includes('source path')
+        || !row.irShape.includes('source path')
+        || !row.runtimeRequirement.includes('runtime evaluator')
+        || !row.deployPayloadImpact.some(item => item.includes('sourcePath'))
+        || !row.reachesBacktest
+        || !row.reachesDeployPayload
+        || row.unsupportedReason !== null
+      ),
+    )
+
+    expect(invalidRows).toEqual([])
+  })
+
+  it('does not let PR4 action and program rows remain empty planned coverage', () => {
+    expect(pr4Rows.every(row => row.status === 'planned')).toBe(false)
+    expect(pr4Rows.filter(isStage4DeployReadyAtom).length).toBeGreaterThan(0)
+  })
+
+  it('requires non deploy-ready PR4 rows to carry concrete blockers', () => {
+    const invalidRows = pr4Rows.filter(row =>
+      !isStage4DeployReadyAtom(row)
+      && (
+        row.unsupportedReason === null
+        || (row.reachesBacktest && row.reachesDeployPayload)
+      ),
+    )
+
+    expect(invalidRows).toEqual([])
+  })
+
+  it('keeps DCA program distinct from existing position DCA support', () => {
+    const dcaProgram = STAGE4_ATOM_COVERAGE_MATRIX.find(row => row.atomKey === 'program.dca')
+    const dcaPosition = STAGE4_ATOM_COVERAGE_MATRIX.find(row => row.atomKey === 'position.dca_schedule')
+
+    expect(dcaProgram?.family).toBe('program')
+    expect(dcaProgram?.rulePath).toBe('rules[].effects.programs')
+    expect(dcaProgram?.unsupportedReason).toBe('program_dca_lifecycle_deploy_binding_missing')
+    expect(isStage4DeployReadyAtom(dcaProgram!)).toBe(false)
+    expect(dcaPosition?.family).toBe('position')
+    expect(dcaPosition?.rulePath).toBe('rules[].effects.positions')
   })
 })

@@ -9,6 +9,8 @@ export type Stage4RealStrategyCategory =
   | 'portfolio_risk'
   | 'multi_timeframe'
   | 'multi_symbol'
+  | 'action_lifecycle'
+  | 'execution_program'
 
 export interface Stage4ClarificationTurn {
   readonly assistantSlotPath: string
@@ -97,5 +99,23 @@ export const STAGE4_REAL_STRATEGY_CORPUS = [
     expectedSemanticIntent: ['shared symbol basket rule', 'fixed ratio sizing', 'fixed stop loss'],
     clarificationTurns: [],
     expectedFailure: null,
+  },
+  {
+    id: 'stage4-action-reverse-position',
+    category: 'action_lifecycle',
+    initialUserMessage: 'EMA20 下穿 EMA50 时从多头反手做空。',
+    expectedAtomKeys: ['indicator.cross_under', 'action.reverse_position'],
+    expectedSemanticIntent: ['trend reversal trigger', 'reverse from long to short'],
+    clarificationTurns: [],
+    expectedFailure: null,
+  },
+  {
+    id: 'stage4-program-fixed-grid-gated',
+    category: 'execution_program',
+    initialUserMessage: 'BTCUSDT 50000-60000 区间挂 10 档网格，5% 步长，趋势上涨时启用。',
+    expectedAtomKeys: ['program.fixed_grid_gated'],
+    expectedSemanticIntent: ['fixed grid program enters rules effects programs', 'deploy payload binding still missing'],
+    clarificationTurns: [],
+    expectedFailure: 'deploy_payload_missing_binding',
   },
 ] as const satisfies readonly Stage4RealStrategyCase[]

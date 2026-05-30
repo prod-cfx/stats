@@ -5,6 +5,7 @@ import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { buildStrategyAstDigestProjection, CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 import { CompiledPublicationGateService } from '../compiled-publication-gate.service'
+import { STAGE4_ATOM_COVERAGE_MATRIX, isStage4DeployReadyAtom } from '../../stage4/atom-coverage-matrix'
 
 function newGate(): CompiledPublicationGateService {
   return new CompiledPublicationGateService(
@@ -411,6 +412,18 @@ describe('publication gate rules-only hash chain', () => {
         }),
       }),
     ]))
+  })
+
+  it('keeps unsupported PR4 program rows out of deploy-ready payload claims', () => {
+    const unsupportedProgramRows = STAGE4_ATOM_COVERAGE_MATRIX.filter(row =>
+      row.prBatch === 'pr4-action-program'
+      && row.family === 'program'
+      && !isStage4DeployReadyAtom(row),
+    )
+
+    expect(unsupportedProgramRows.length).toBeGreaterThan(0)
+    expect(unsupportedProgramRows.map(row => row.unsupportedReason)).not.toContain(null)
+    expect(unsupportedProgramRows.every(row => !(row.reachesBacktest && row.reachesDeployPayload))).toBe(true)
   })
 
   it('passes when canonical risk rules are traced through IR and AST risk predicates', () => {
