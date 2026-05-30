@@ -26,110 +26,159 @@ class QzAccountHeader extends StatelessWidget {
   final bool telegramBound;
   final bool binanceConnected;
 
-  static const LinearGradient _gradient = LinearGradient(
+  // 底层对角线性渐变（设计稿 linear-gradient(160deg, #1F0F4A, #2E1A6B)）。
+  static const LinearGradient _baseGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: <Color>[Color(0xFF1F0F4A), Color(0xFF2E1A6B)],
   );
 
+  // 右上紫晕：radial-gradient(at 88% 16%, rgba(167,139,250,0.4) → transparent)。
+  // 百分比换算到 Alignment(-1..1)：88%→0.76，16%→-0.68。
+  static const RadialGradient _topRightGlow = RadialGradient(
+    center: Alignment(0.76, -0.68),
+    radius: 0.9,
+    colors: <Color>[Color(0x66A78BFA), Color(0x00A78BFA)],
+    stops: <double>[0, 0.6],
+  );
+
+  // 左下紫晕：radial-gradient(at 10% 90%, rgba(124,92,255,0.3) → transparent)。
+  // 10%→-0.8，90%→0.8。
+  static const RadialGradient _bottomLeftGlow = RadialGradient(
+    center: Alignment(-0.8, 0.8),
+    radius: 0.9,
+    colors: <Color>[Color(0x4D7C5CFF), Color(0x007C5CFF)],
+    stops: <double>[0, 0.6],
+  );
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(gradient: _gradient),
-      padding: const EdgeInsets.fromLTRB(20, 28, 20, 56),
-      width: double.infinity,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
+    // 设计稿顶距 62px 含状态栏；这里用状态栏占位 + 基础留白，避免文字被遮挡。
+    final double topPadding = MediaQuery.of(context).padding.top + 20;
+    return Stack(
+      children: <Widget>[
+        const Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(gradient: _baseGradient),
+          ),
+        ),
+        const Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(gradient: _topRightGlow),
+          ),
+        ),
+        const Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(gradient: _bottomLeftGlow),
+          ),
+        ),
+        Container(
+          padding: EdgeInsets.fromLTRB(20, topPadding, 20, 56),
+          width: double.infinity,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const _AvatarPlaceholder(),
-              const SizedBox(width: QzSpacing.md + 2),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Text(
-                      maskedEmail,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.2,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+              Row(
+                children: <Widget>[
+                  const _AvatarPlaceholder(),
+                  const SizedBox(width: QzSpacing.md + 2),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(
+                          maskedEmail,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'UID · $uid',
+                          style: const TextStyle(
+                            color: Color(0x99FFFFFF),
+                            fontSize: 11,
+                            fontFamilyFallback: <String>[
+                              'ui-monospace',
+                              'monospace',
+                            ],
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'UID · $uid',
-                      style: const TextStyle(
-                        color: Color(0x99FFFFFF),
-                        fontSize: 11,
-                        fontFamilyFallback: <String>[
-                          'ui-monospace',
-                          'monospace',
-                        ],
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                  ),
+                  // 复制按钮：点击 → Clipboard.setData(uid) → SnackBar 提示。
+                  IconButton(
+                    tooltip: AppLocalizations.of(context).meHeaderCopyUid,
+                    onPressed: () async {
+                      // 极少数情况 Clipboard API 会抛（权限拒绝 / 平台异常），
+                      // 包 try/catch 避免未处理异常冒泡到 Flutter framework。
+                      try {
+                        await Clipboard.setData(ClipboardData(text: uid));
+                      } catch (_) {
+                        return;
+                      }
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            AppLocalizations.of(context).meHeaderUidCopied,
+                          ),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0x1FFFFFFF),
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(32, 32),
                     ),
-                  ],
-                ),
+                    icon: const Icon(
+                      Icons.copy,
+                      size: 14,
+                      color: Color(0xCCFFFFFF),
+                    ),
+                  ),
+                ],
               ),
-              // 复制按钮：点击 → Clipboard.setData(uid) → SnackBar 提示。
-              IconButton(
-                tooltip: AppLocalizations.of(context).meHeaderCopyUid,
-                onPressed: () async {
-                  // 极少数情况 Clipboard API 会抛（权限拒绝 / 平台异常），
-                  // 包 try/catch 避免未处理异常冒泡到 Flutter framework。
-                  try {
-                    await Clipboard.setData(ClipboardData(text: uid));
-                  } catch (_) {
-                    return;
-                  }
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        AppLocalizations.of(context).meHeaderUidCopied,
-                      ),
-                      duration: const Duration(seconds: 2),
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  if (telegramBound)
+                    _HeaderChip(
+                      label: AppLocalizations.of(context).meHeaderTelegramBound,
+                      showStatusDot: true,
                     ),
-                  );
-                },
-                style: IconButton.styleFrom(
-                  backgroundColor: const Color(0x1FFFFFFF),
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(32, 32),
-                ),
-                icon: const Icon(
-                  Icons.copy,
-                  size: 14,
-                  color: Color(0xCCFFFFFF),
-                ),
+                  if (binanceConnected)
+                    _HeaderChip(
+                      label: AppLocalizations.of(
+                        context,
+                      ).meHeaderBinanceConnected,
+                    ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: <Widget>[
-              if (telegramBound) _HeaderChip(label: AppLocalizations.of(context).meHeaderTelegramBound),
-              if (binanceConnected) _HeaderChip(label: AppLocalizations.of(context).meHeaderBinanceConnected),
-            ],
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-/// 「我的」header logo：设计稿为棋盘格（checkerboard）品牌标记。
+/// 「我的」header logo：设计稿为 3×3 彩色像素方块品牌标记
+/// （`m-screens-4.jsx:2470-2480`，紫色系配色）。
 ///
-/// 用 [CustomPainter] 画 2×2 棋盘格（白格 + 半透明格交替），避免为单个静态
-/// 图形引入 `flutter_svg`。容器保持 56×56 / radius 16 的品牌区底，棋盘绘制
-/// 在内边距内，[ClipRRect] 保证圆角不溢出。
+/// 用 [CustomPainter] 画 3×3 彩格，避免为单个静态图形引入 `flutter_svg`。
+/// 容器保持 56×56 / radius 16 的品牌区底，彩格绘制在内边距内，[ClipRRect]
+/// 保证圆角不溢出。
 class _AvatarPlaceholder extends StatelessWidget {
   const _AvatarPlaceholder();
 
@@ -147,29 +196,33 @@ class _AvatarPlaceholder extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: const SizedBox(
-          width: 28,
-          height: 28,
-          child: CustomPaint(painter: _CheckerLogoPainter()),
+          width: 36,
+          height: 36,
+          child: CustomPaint(painter: _PixelLogoPainter()),
         ),
       ),
     );
   }
 }
 
-/// 2×2 棋盘格：对角线两格用亮白，另两格用半透明白，形成 checkerboard。
-class _CheckerLogoPainter extends CustomPainter {
-  const _CheckerLogoPainter();
+/// 3×3 彩色方块：配色取自设计稿 9 个 rect（紫色系），按行优先填充。
+class _PixelLogoPainter extends CustomPainter {
+  const _PixelLogoPainter();
 
-  static const Color _light = Color(0xFFFFFFFF);
-  static const Color _dim = Color(0x33FFFFFF);
+  // 行优先：design `m-screens-4.jsx:2470-2480` 的 9 个 rect 填色。
+  static const List<List<Color>> _palette = <List<Color>>[
+    <Color>[Color(0xFFA78BFA), Color(0xFF7C5CFF), Color(0xFFC4B5FD)],
+    <Color>[Color(0xFF7C5CFF), Color(0xFF5B21B6), Color(0xFFA78BFA)],
+    <Color>[Color(0xFFC4B5FD), Color(0xFFA78BFA), Color(0xFF7C5CFF)],
+  ];
 
   @override
   void paint(Canvas canvas, Size size) {
-    final double cell = size.width / 2;
+    final double cell = size.width / 3;
     final Paint paint = Paint();
-    for (int row = 0; row < 2; row++) {
-      for (int col = 0; col < 2; col++) {
-        paint.color = (row + col).isEven ? _light : _dim;
+    for (int row = 0; row < 3; row++) {
+      for (int col = 0; col < 3; col++) {
+        paint.color = _palette[row][col];
         canvas.drawRect(
           Rect.fromLTWH(col * cell, row * cell, cell, cell),
           paint,
@@ -179,15 +232,23 @@ class _CheckerLogoPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_CheckerLogoPainter oldDelegate) => false;
+  bool shouldRepaint(_PixelLogoPainter oldDelegate) => false;
 }
 
 class _HeaderChip extends StatelessWidget {
-  const _HeaderChip({required this.label});
+  const _HeaderChip({required this.label, this.showStatusDot = false});
   final String label;
+
+  /// 文字左侧绿色状态点（设计稿 Telegram chip `#16C783`，`m-screens-4.jsx:2497`）。
+  final bool showStatusDot;
 
   @override
   Widget build(BuildContext context) {
+    const TextStyle textStyle = TextStyle(
+      color: Color(0xFFDDD6FE),
+      fontSize: 11,
+      fontWeight: FontWeight.w500,
+    );
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: QzSpacing.md,
@@ -198,13 +259,22 @@ class _HeaderChip extends StatelessWidget {
         border: Border.all(color: const Color(0x2EFFFFFF)),
         borderRadius: BorderRadius.circular(QzRadii.pill),
       ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: Color(0xFFDDD6FE),
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          if (showStatusDot) ...<Widget>[
+            Container(
+              width: 6,
+              height: 6,
+              decoration: const BoxDecoration(
+                color: Color(0xFF16C783),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
+          Text(label, style: textStyle),
+        ],
       ),
     );
   }
