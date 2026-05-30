@@ -13,14 +13,18 @@ import '../../widgets/qz_chip.dart';
 import '../../widgets/qz_segmented_tabs.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
+import 'widgets/live_close_with_position_sheet.dart';
+import 'widgets/live_delete_sheet.dart';
 import 'widgets/live_equity_curve.dart';
+import 'widgets/live_need_pause_sheet.dart';
 import 'widgets/live_status_style.dart';
 
 /// 实盘策略详情页（#1752，`/me/live/:id`）。
 ///
 /// 对齐设计稿 `ScreenLiveStratDetail`：hero（交易所 glyph + 状态 + 累计盈亏
 /// + 权益曲线）→ 4 tab（概览/持仓/交易记录/参数）→ 底部 sticky 主操作。
-/// 开启/暂停/恢复/删除本迭代不接通，sticky 操作渲染为禁用 + tap 占位提示。
+/// 开启/暂停/恢复/删除走 mock 状态转换（#1773）；脚本/回测/部署档案入口仍依赖
+/// 真实数据，保持禁用占位（future）。
 class LiveStrategyDetailPage extends ConsumerStatefulWidget {
   const LiveStrategyDetailPage({super.key, required this.id});
   final String id;
@@ -113,7 +117,7 @@ class _LiveStrategyDetailPageState
                 left: 0,
                 right: 0,
                 bottom: 0,
-                child: _StickyAction(status: s.status),
+                child: _StickyAction(strategy: s),
               ),
             ],
           ),
@@ -535,7 +539,7 @@ class _ArchiveRow extends StatelessWidget {
       color: c.bgElev,
       borderRadius: radius,
       child: InkWell(
-        // 档案入口未接通：tap 提示「即将上线」，保持明确禁用语义。
+        // 脚本/回测/部署档案依赖真实部署数据（future），本迭代保持禁用占位。
         onTap: () => ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(l10n.liveArchiveComingSoon)),
         ),
@@ -997,10 +1001,9 @@ class _ParamsTab extends ConsumerWidget {
           ),
           const SizedBox(height: QzSpacing.md),
           OutlinedButton.icon(
-            // 调优入口未接通：占位提示。
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(l10n.liveActionComingSoon)),
-            ),
+            key: const Key('live-tune-in-ai'),
+            // 复用已接通的 `/ai?loadStrategy=<id>` query 链路（#1773）。
+            onPressed: () => context.go('/ai?loadStrategy=$id'),
             icon: Icon(Icons.smart_toy_outlined, size: 14, color: c.accent),
             label: Text(
               l10n.liveParamsTuneInAi,
@@ -1013,15 +1016,20 @@ class _ParamsTab extends ConsumerWidget {
   }
 }
 
-/// 底部 sticky 主操作。本迭代写操作未接通，按钮禁用 + tap 占位提示。
-class _StickyAction extends StatelessWidget {
-  const _StickyAction({required this.status});
-  final LiveStrategyStatus status;
+/// 底部 sticky 主操作（#1773）。开启/暂停/恢复/删除走 mock 状态转换。
+///
+/// - 主按钮：running → 暂停（有持仓先弹处理对话框）；paused/warning →
+///   开启；stopped → 恢复。
+/// - 删除按钮：running → 先弹「需暂停」守卫；其余 → 删除确认（软删/永久）。
+class _StickyAction extends ConsumerWidget {
+  const _StickyAction({required this.strategy});
+  final LiveStrategy strategy;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final QzColorScheme c = context.qzScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
+    final LiveStrategyStatus status = strategy.status;
     final bool stopped = status == LiveStrategyStatus.stopped;
     final bool canStart = status == LiveStrategyStatus.paused ||
         status == LiveStrategyStatus.warning;
@@ -1030,9 +1038,6 @@ class _StickyAction extends StatelessWidget {
         : canStart
             ? l10n.liveActionStart
             : l10n.liveActionPause;
-    void comingSoon() => ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.liveActionComingSoon)),
-        );
 
     return Container(
       padding: const EdgeInsets.fromLTRB(
@@ -1053,7 +1058,7 @@ class _StickyAction extends StatelessWidget {
           Expanded(
             child: OutlinedButton(
               key: const Key('live-delete-button'),
-              onPressed: comingSoon,
+              onPressed: () => _onDelete(context, ref),
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(50),
                 side: BorderSide(color: c.statusDanger.withValues(alpha: 0.4)),
@@ -1069,7 +1074,7 @@ class _StickyAction extends StatelessWidget {
             flex: 2,
             child: FilledButton(
               key: const Key('live-primary-action'),
-              onPressed: comingSoon,
+              onPressed: () => _onPrimary(context, ref),
               style: FilledButton.styleFrom(
                 minimumSize: const Size.fromHeight(50),
                 backgroundColor: c.accent,
@@ -1080,5 +1085,66 @@ class _StickyAction extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _onPrimary(BuildContext context, WidgetRef ref) async {
+    final LiveStrategyStore store =
+        ref.read(liveStrategyStoreProvider.notifier);
+    switch (strategy.status) {
+      case LiveStrategyStatus.paused:
+      case LiveStrategyStatus.warning:
+      case LiveStrategyStatus.stopped:
+        store.resume(strategy.id);
+      case LiveStrategyStatus.running:
+        await _pauseRunning(context, ref, store);
+    }
+  }
+
+  Future<void> _pauseRunning(
+    BuildContext context,
+    WidgetRef ref,
+    LiveStrategyStore store,
+  ) async {
+    final LiveStrategyPosition? position =
+        await ref.read(liveStrategyPositionProvider(strategy.id).future);
+    if (!context.mounted) return;
+    if (position == null) {
+      store.pause(strategy.id);
+      return;
+    }
+    final LivePauseMode? mode = await LiveCloseWithPositionSheet.show(
+      context,
+      strategy: strategy,
+      position: position,
+    );
+    if (mode == null) return;
+    store.pause(strategy.id);
+  }
+
+  Future<void> _onDelete(BuildContext context, WidgetRef ref) async {
+    final LiveStrategyStore store =
+        ref.read(liveStrategyStoreProvider.notifier);
+    if (strategy.status == LiveStrategyStatus.running) {
+      final bool? goPause = await LiveNeedPauseSheet.show(
+        context,
+        name: strategy.name,
+      );
+      if (goPause != true || !context.mounted) return;
+      await _pauseRunning(context, ref, store);
+      return;
+    }
+    final bool stopped = strategy.status == LiveStrategyStatus.stopped;
+    final bool? permanent = await LiveDeleteSheet.show(
+      context,
+      name: strategy.name,
+      stopped: stopped,
+    );
+    if (permanent == null || !context.mounted) return;
+    if (permanent) {
+      store.permanentDelete(strategy.id);
+    } else {
+      store.softDelete(strategy.id);
+    }
+    if (context.mounted) context.pop();
   }
 }

@@ -134,6 +134,8 @@ const Map<String, LiveStrategyPosition> mockLivePositions =
     pct: 0.78,
     stopPrice: 66072.0,
     stopDistance: '-2.0%',
+    stopPct: -2.0,
+    tpPct: 3.5,
     holdFor: '4h 12m',
   ),
   'QF-DK4F71': LiveStrategyPosition(
@@ -146,6 +148,8 @@ const Map<String, LiveStrategyPosition> mockLivePositions =
     pct: -1.19,
     stopPrice: 147.50,
     stopDistance: '-3.5%',
+    stopPct: -3.5,
+    tpPct: 2.0,
     holdFor: '42m',
   ),
 };

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/theme_notifier.dart' show sharedPreferencesProvider;
 import 'models/account_models.dart';
 import 'models/api_key_models.dart';
+import 'mock/fixtures/live_strategies.dart' show mockLivePositions;
 import 'models/live_strategy_models.dart';
 import 'storage/market_favorites_persistence.dart';
 import 'storage/strategy_favorites_persistence.dart';
@@ -302,32 +303,135 @@ marketFavoritesProvider =
       MarketFavoritesNotifier.new,
     );
 
-/// 实盘策略列表（#1752）。列表页 watch；含 stopped。
+/// 实盘策略有状态 store（#1773）。
+///
+/// 单一可变真源：初始 seed 自 repository，暂停/恢复/删除等操作在客户端就地
+/// 转换状态（mock-first）。列表/摘要/详情/持仓 provider 均从此派生，保证一次
+/// 操作后全端一致刷新。真实实例接口（#1682/#1683）接通后此 store 退役。
+class LiveStrategyStore extends AsyncNotifier<List<LiveStrategy>> {
+  @override
+  Future<List<LiveStrategy>> build() async {
+    return ref.watch(liveStrategyRepositoryProvider).listStrategies();
+  }
+
+  /// 暂停：running / warning -> paused，附「等待恢复」状态注。
+  void pause(String id) {
+    _mutate(
+      id,
+      (LiveStrategy s) => s.copyWith(
+        status: LiveStrategyStatus.paused,
+        statusNote: '已暂停 · 等待恢复',
+      ),
+    );
+  }
+
+  /// 恢复：任意非 running -> running，清状态注。
+  void resume(String id) {
+    _mutate(
+      id,
+      (LiveStrategy s) => s.copyWith(
+        status: LiveStrategyStatus.running,
+        statusNote: null,
+      ),
+    );
+  }
+
+  /// 软删：-> stopped，保留 30 天。
+  void softDelete(String id) {
+    _mutate(
+      id,
+      (LiveStrategy s) => s.copyWith(
+        status: LiveStrategyStatus.stopped,
+        statusNote: '已停止 · 28 天后永久删除',
+      ),
+    );
+  }
+
+  /// 永久删除：从列表移除。
+  void permanentDelete(String id) {
+    final List<LiveStrategy>? current = state.value;
+    if (current == null) return;
+    state = AsyncData<List<LiveStrategy>>(
+      current.where((LiveStrategy s) => s.id != id).toList(growable: false),
+    );
+  }
+
+  void _mutate(String id, LiveStrategy Function(LiveStrategy) transform) {
+    final List<LiveStrategy>? current = state.value;
+    if (current == null) return;
+    state = AsyncData<List<LiveStrategy>>(
+      current
+          .map((LiveStrategy s) => s.id == id ? transform(s) : s)
+          .toList(growable: false),
+    );
+  }
+}
+
+/// 实盘策略 store provider（#1773）。
+final AsyncNotifierProvider<LiveStrategyStore, List<LiveStrategy>>
+liveStrategyStoreProvider =
+    AsyncNotifierProvider<LiveStrategyStore, List<LiveStrategy>>(
+      LiveStrategyStore.new,
+    );
+
+/// 实盘策略列表（#1752）。列表页 watch；含 stopped。派生自 store。
 final FutureProvider<List<LiveStrategy>> liveStrategiesProvider =
     FutureProvider<List<LiveStrategy>>((Ref ref) async {
-      return ref.watch(liveStrategyRepositoryProvider).listStrategies();
+      return ref.watch(liveStrategyStoreProvider.future);
     });
 
-/// 实盘策略聚合摘要（#1752）。列表页顶部卡 watch。
+/// 实盘策略聚合摘要（#1752）。列表页顶部卡 watch。从 store 当前列表重算
+/// （排除 stopped），口径与设计稿 `active` 统计一致。
 final FutureProvider<LiveStrategySummary> liveStrategySummaryProvider =
     FutureProvider<LiveStrategySummary>((Ref ref) async {
-      return ref.watch(liveStrategyRepositoryProvider).getSummary();
+      final List<LiveStrategy> all =
+          await ref.watch(liveStrategyStoreProvider.future);
+      final List<LiveStrategy> active =
+          all.where((LiveStrategy s) => s.isActive).toList();
+      double cap = 0;
+      double today = 0;
+      double total = 0;
+      int running = 0;
+      for (final LiveStrategy s in active) {
+        cap += s.capital;
+        today += s.todayPnl;
+        total += s.totalPnl;
+        if (s.status == LiveStrategyStatus.running) running++;
+      }
+      final int stopped = all
+          .where((LiveStrategy s) => s.status == LiveStrategyStatus.stopped)
+          .length;
+      return LiveStrategySummary(
+        totalAssets: cap + total,
+        totalCapital: cap,
+        todayPnl: today,
+        totalPnl: total,
+        runningCount: running,
+        stoppedCount: stopped,
+      );
     });
 
-/// 单个实盘策略详情（#1752）。
+/// 单个实盘策略详情（#1752）。派生自 store；未命中抛错（详情页落 error 态）。
 final FutureProviderFamily<LiveStrategy, String> liveStrategyDetailProvider =
     FutureProvider.family<LiveStrategy, String>((Ref ref, String id) async {
-      return ref.watch(liveStrategyRepositoryProvider).getStrategy(id);
+      final List<LiveStrategy> all =
+          await ref.watch(liveStrategyStoreProvider.future);
+      return all.firstWhere((LiveStrategy s) => s.id == id);
     });
 
 /// 单个实盘策略持仓（#1752）。null 表示无持仓（已暂停/停止）。
+/// 从 store 取最新 status 判断 mayHavePosition，确保暂停后持仓即时消失。
 final FutureProviderFamily<LiveStrategyPosition?, String>
 liveStrategyPositionProvider =
     FutureProvider.family<LiveStrategyPosition?, String>((
       Ref ref,
       String id,
     ) async {
-      return ref.watch(liveStrategyRepositoryProvider).getPosition(id);
+      final List<LiveStrategy> all =
+          await ref.watch(liveStrategyStoreProvider.future);
+      final LiveStrategy s = all.firstWhere((LiveStrategy x) => x.id == id);
+      if (!s.mayHavePosition) return null;
+      return mockLivePositions[id];
     });
 
 /// 单个实盘策略历史成交（#1752）。

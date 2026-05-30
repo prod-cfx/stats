@@ -90,10 +90,34 @@ void main() {
     expect(find.textContaining('保留 30 天'), findsOneWidget);
   });
 
-  testWidgets('排序入口未接通：tap 提示即将上线', (WidgetTester tester) async {
+  testWidgets('排序入口：打开筛选 & 排序 sheet', (WidgetTester tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('live-sort-button')));
-    await tester.pump();
-    expect(find.text('筛选与排序即将上线'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.text('筛选 & 排序'), findsOneWidget);
+    expect(find.byKey(const Key('live-sort-apply')), findsOneWidget);
+    // 6 个排序指标可选
+    expect(find.byKey(const Key('live-sort-metric-todayPnl')), findsOneWidget);
+    expect(find.byKey(const Key('live-sort-metric-winRate')), findsOneWidget);
+  });
+
+  testWidgets('排序生效：按累计盈亏升序后首卡为最小盈亏策略',
+      (WidgetTester tester) async {
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('live-sort-button')));
+    await tester.pumpAndSettle();
+    // 选累计盈亏 + 升序
+    await tester.tap(find.byKey(const Key('live-sort-metric-totalPnl')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('升序'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('live-sort-apply')));
+    await tester.pumpAndSettle();
+    // all 过滤排除 stopped；活跃 4 条累计盈亏最小为 QF-DK4F71（+20.80）
+    final Offset first =
+        tester.getTopLeft(find.byKey(const Key('live-card-QF-DK4F71')));
+    final Offset btc =
+        tester.getTopLeft(find.byKey(const Key('live-card-QF-AY7K2P')));
+    expect(first.dy, lessThan(btc.dy));
   });
 }

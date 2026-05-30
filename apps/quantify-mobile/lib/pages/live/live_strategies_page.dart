@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/live_strategy_models.dart';
+import '../../data/models/live_strategy_sort.dart';
 import '../../data/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
@@ -12,13 +13,14 @@ import '../../widgets/qz_card.dart';
 import '../../widgets/qz_chip.dart';
 import '../../widgets/qz_spinner.dart';
 import '../../widgets/qz_top_bar.dart';
+import 'widgets/live_sort_sheet.dart';
 import 'widgets/live_strategy_card.dart';
 
 /// 实盘策略列表页（#1752，`/me/live`）。
 ///
 /// 入口：「我的」页「实盘策略」行 / AI 部署成功态。受 `/me` 前缀登录守卫。
 /// 结构对齐设计稿 `ScreenLiveStrats`：聚合卡 → filter pills → 策略卡列表。
-/// 排序入口本迭代未接通，渲染为禁用按钮（tap 提示「即将上线」）。
+/// 排序入口打开「筛选 & 排序」bottom sheet（#1773），选择会话内持久化。
 class LiveStrategiesPage extends ConsumerStatefulWidget {
   const LiveStrategiesPage({super.key});
 
@@ -32,6 +34,8 @@ enum _LiveFilter { all, running, paused, stopped }
 
 class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
   _LiveFilter _filter = _LiveFilter.all;
+  LiveSortMetric? _sortMetric;
+  LiveSortDirection _sortDir = LiveSortDirection.none;
 
   bool _matches(LiveStrategy s) {
     switch (_filter) {
@@ -44,6 +48,27 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
       case _LiveFilter.stopped:
         return s.status == LiveStrategyStatus.stopped;
     }
+  }
+
+  Future<void> _openSortSheet(
+    AsyncValue<List<LiveStrategy>> strategies,
+  ) async {
+    final int count = strategies.maybeWhen(
+      data: (List<LiveStrategy> list) =>
+          list.where(_matches).length,
+      orElse: () => 0,
+    );
+    final LiveSortSelection? result = await LiveSortSheet.show(
+      context,
+      metric: _sortMetric,
+      direction: _sortDir,
+      resultCount: count,
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _sortMetric = result.metric;
+      _sortDir = result.direction;
+    });
   }
 
   @override
@@ -64,12 +89,9 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
           IconButton(
             key: const Key('live-sort-button'),
             icon: const Icon(Icons.tune, size: 20),
-            color: c.textDim,
-            // 排序未接通：禁用语义用 tooltip + snackbar 占位。
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(l10n.liveSortComingSoon)),
-            ),
-            tooltip: l10n.liveSortComingSoon,
+            color: _sortDir == LiveSortDirection.none ? c.textDim : c.accent,
+            onPressed: () => _openSortSheet(strategies),
+            tooltip: l10n.liveSortSheetTitle,
           ),
         ],
       ),
@@ -94,8 +116,10 @@ class _LiveStrategiesPageState extends ConsumerState<LiveStrategiesPage> {
     List<LiveStrategy> all,
     AsyncValue<LiveStrategySummary> summary,
   ) {
-    final List<LiveStrategy> visible =
+    final List<LiveStrategy> filtered =
         all.where(_matches).toList(growable: false);
+    final List<LiveStrategy> visible =
+        sortStrategies(filtered, _sortMetric, _sortDir);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(

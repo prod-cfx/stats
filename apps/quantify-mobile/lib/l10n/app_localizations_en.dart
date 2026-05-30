@@ -1728,6 +1728,176 @@ class AppLocalizationsEn extends AppLocalizations {
   String get liveActionComingSoon => 'Strategy actions coming soon';
 
   @override
+  String get liveActionCancel => 'Cancel';
+
+  @override
+  String get liveSortSheetTitle => 'Filter & Sort';
+
+  @override
+  String get liveSortStatusLabel => 'Status';
+
+  @override
+  String get liveSortMetricLabel => 'Sort by';
+
+  @override
+  String get liveSortDirectionLabel => 'Direction';
+
+  @override
+  String get liveSortMetricTodayPnl => 'Today P&L';
+
+  @override
+  String get liveSortMetricTotalPnl => 'Total P&L';
+
+  @override
+  String get liveSortMetricTotalPct => 'Return';
+
+  @override
+  String get liveSortMetricWinRate => 'Win rate';
+
+  @override
+  String get liveSortMetricCapital => 'Capital';
+
+  @override
+  String get liveSortMetricRunFor => 'Run days';
+
+  @override
+  String get liveSortDirAsc => 'Ascending';
+
+  @override
+  String get liveSortDirDesc => 'Descending';
+
+  @override
+  String get liveSortDirNone => 'None';
+
+  @override
+  String liveSortApply(int count) {
+    return 'View $count strategies';
+  }
+
+  @override
+  String get livePauseSheetTitle => 'Pause strategy';
+
+  @override
+  String livePauseSheetSubtitle(String name) {
+    return '\"$name\" has 1 open position. Choose how to handle it before pausing.';
+  }
+
+  @override
+  String get livePauseModeMarketLabel => 'Close at market, then pause';
+
+  @override
+  String get livePauseModeMarketTag => 'Recommended';
+
+  @override
+  String get livePauseModeMarketDesc =>
+      'Close the position at market immediately, realize current P&L, then pause.';
+
+  @override
+  String livePauseModeMarketEffect(String pnl) {
+    return 'Estimated realized P&L $pnl';
+  }
+
+  @override
+  String get livePauseModeNaturalLabel => 'Wait for stop-loss/take-profit';
+
+  @override
+  String get livePauseModeNaturalDesc =>
+      'Keep running until stop-loss or take-profit triggers, then pause automatically.';
+
+  @override
+  String livePauseModeNaturalEffect(String stop, String tp) {
+    return 'To stop $stop   To target $tp';
+  }
+
+  @override
+  String get livePauseModeKeepLabel => 'Keep position, pause strategy only';
+
+  @override
+  String get livePauseModeKeepDesc =>
+      'The strategy stops monitoring; you manage the position manually on the exchange and can hand it back after resuming.';
+
+  @override
+  String get livePauseModeKeepEffect =>
+      '⚠ While paused, automatic stop-loss / take-profit / sizing will not apply';
+
+  @override
+  String get livePauseResumeNote =>
+      'Pausing keeps all params and history; resume anytime from \"Paused\".';
+
+  @override
+  String get livePausePrimaryMarket => 'Close & pause';
+
+  @override
+  String get livePausePrimaryNatural => 'Keep running · wait to close';
+
+  @override
+  String get livePausePrimaryKeep => 'Pause · keep position';
+
+  @override
+  String get livePausePositionHolding => '1 position';
+
+  @override
+  String get livePausePositionEntry => 'Entry';
+
+  @override
+  String get livePausePositionCurrent => 'Current';
+
+  @override
+  String get livePausePositionFloatingPnl => 'Unrealized P&L';
+
+  @override
+  String get liveDeleteSheetTitleSoft => 'Delete strategy?';
+
+  @override
+  String get liveDeleteSheetTitlePermanent => 'Delete permanently?';
+
+  @override
+  String liveDeleteBodySoft(String name) {
+    return '\"$name\" will stop immediately; history is kept for 30 days and viewable under \"Stopped\".';
+  }
+
+  @override
+  String liveDeleteBodyPermanentRunning(String name) {
+    return '\"$name\" will stop immediately and its history will not be kept. This cannot be undone.';
+  }
+
+  @override
+  String liveDeleteBodyStopped(String name) {
+    return 'The history of \"$name\" will be permanently deleted immediately. This cannot be undone.';
+  }
+
+  @override
+  String get liveDeleteToggleExpand => 'Don\'t keep history?';
+
+  @override
+  String get liveDeleteToggleCollapse => 'Collapse';
+
+  @override
+  String get liveDeleteDangerNote =>
+      'Delete permanently now · no 30-day history will be kept. Usually only for compliance or privacy needs.';
+
+  @override
+  String get liveDeleteDangerCheckbox =>
+      'Also permanently delete strategy history now (irreversible)';
+
+  @override
+  String get liveDeletePrimarySoft => 'Delete strategy';
+
+  @override
+  String get liveDeletePrimaryPermanent => 'Delete permanently';
+
+  @override
+  String get liveNeedPauseTitle => 'Pause the strategy first';
+
+  @override
+  String liveNeedPauseBody(String name) {
+    return '\"$name\" is still running. To avoid deleting positions and in-flight trades by mistake, pause it before deleting.';
+  }
+
+  @override
+  String get liveNeedPausePrimary => 'Pause strategy';
+
+  @override
   String get deployViewLiveStrategies => 'View live strategies';
 
   @override

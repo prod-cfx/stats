@@ -3386,6 +3386,300 @@ abstract class AppLocalizations {
   /// **'策略操作即将上线'**
   String get liveActionComingSoon;
 
+  /// No description provided for @liveActionCancel.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消'**
+  String get liveActionCancel;
+
+  /// No description provided for @liveSortSheetTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'筛选 & 排序'**
+  String get liveSortSheetTitle;
+
+  /// No description provided for @liveSortStatusLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'状态'**
+  String get liveSortStatusLabel;
+
+  /// No description provided for @liveSortMetricLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'排序指标'**
+  String get liveSortMetricLabel;
+
+  /// No description provided for @liveSortDirectionLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'排序方式'**
+  String get liveSortDirectionLabel;
+
+  /// No description provided for @liveSortMetricTodayPnl.
+  ///
+  /// In zh, this message translates to:
+  /// **'今日盈亏'**
+  String get liveSortMetricTodayPnl;
+
+  /// No description provided for @liveSortMetricTotalPnl.
+  ///
+  /// In zh, this message translates to:
+  /// **'累计盈亏'**
+  String get liveSortMetricTotalPnl;
+
+  /// No description provided for @liveSortMetricTotalPct.
+  ///
+  /// In zh, this message translates to:
+  /// **'收益率'**
+  String get liveSortMetricTotalPct;
+
+  /// No description provided for @liveSortMetricWinRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'胜率'**
+  String get liveSortMetricWinRate;
+
+  /// No description provided for @liveSortMetricCapital.
+  ///
+  /// In zh, this message translates to:
+  /// **'投入本金'**
+  String get liveSortMetricCapital;
+
+  /// No description provided for @liveSortMetricRunFor.
+  ///
+  /// In zh, this message translates to:
+  /// **'运行天数'**
+  String get liveSortMetricRunFor;
+
+  /// No description provided for @liveSortDirAsc.
+  ///
+  /// In zh, this message translates to:
+  /// **'升序'**
+  String get liveSortDirAsc;
+
+  /// No description provided for @liveSortDirDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'降序'**
+  String get liveSortDirDesc;
+
+  /// No description provided for @liveSortDirNone.
+  ///
+  /// In zh, this message translates to:
+  /// **'不排序'**
+  String get liveSortDirNone;
+
+  /// No description provided for @liveSortApply.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看 {count} 个策略'**
+  String liveSortApply(int count);
+
+  /// No description provided for @livePauseSheetTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂停策略'**
+  String get livePauseSheetTitle;
+
+  /// No description provided for @livePauseSheetSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'「{name}」当前有 1 笔持仓，请选择如何处理后再暂停。'**
+  String livePauseSheetSubtitle(String name);
+
+  /// No description provided for @livePauseModeMarketLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'市价平仓后暂停'**
+  String get livePauseModeMarketLabel;
+
+  /// No description provided for @livePauseModeMarketTag.
+  ///
+  /// In zh, this message translates to:
+  /// **'推荐'**
+  String get livePauseModeMarketTag;
+
+  /// No description provided for @livePauseModeMarketDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'立即按市价单平掉持仓，实现当前盈亏后暂停策略。'**
+  String get livePauseModeMarketDesc;
+
+  /// No description provided for @livePauseModeMarketEffect.
+  ///
+  /// In zh, this message translates to:
+  /// **'预计实现盈亏 {pnl}'**
+  String livePauseModeMarketEffect(String pnl);
+
+  /// No description provided for @livePauseModeNaturalLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'等待止损/止盈触发'**
+  String get livePauseModeNaturalLabel;
+
+  /// No description provided for @livePauseModeNaturalDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'保持运行直到触发止损或止盈，然后自动暂停。'**
+  String get livePauseModeNaturalDesc;
+
+  /// No description provided for @livePauseModeNaturalEffect.
+  ///
+  /// In zh, this message translates to:
+  /// **'距止损 {stop}   距止盈 {tp}'**
+  String livePauseModeNaturalEffect(String stop, String tp);
+
+  /// No description provided for @livePauseModeKeepLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留持仓，仅暂停策略'**
+  String get livePauseModeKeepLabel;
+
+  /// No description provided for @livePauseModeKeepDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'策略不再监控，持仓需要你在交易所手动管理，恢复后可继续接管。'**
+  String get livePauseModeKeepDesc;
+
+  /// No description provided for @livePauseModeKeepEffect.
+  ///
+  /// In zh, this message translates to:
+  /// **'⚠ 暂停期间 止损 / 止盈 / 加减仓 等自动指令将不生效'**
+  String get livePauseModeKeepEffect;
+
+  /// No description provided for @livePauseResumeNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂停后策略保留全部参数和历史，随时可在「已暂停」中一键恢复。'**
+  String get livePauseResumeNote;
+
+  /// No description provided for @livePausePrimaryMarket.
+  ///
+  /// In zh, this message translates to:
+  /// **'市价平仓并暂停'**
+  String get livePausePrimaryMarket;
+
+  /// No description provided for @livePausePrimaryNatural.
+  ///
+  /// In zh, this message translates to:
+  /// **'保持运行 · 等待平仓'**
+  String get livePausePrimaryNatural;
+
+  /// No description provided for @livePausePrimaryKeep.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂停策略 · 保留持仓'**
+  String get livePausePrimaryKeep;
+
+  /// No description provided for @livePausePositionHolding.
+  ///
+  /// In zh, this message translates to:
+  /// **'1 笔持仓'**
+  String get livePausePositionHolding;
+
+  /// No description provided for @livePausePositionEntry.
+  ///
+  /// In zh, this message translates to:
+  /// **'入场'**
+  String get livePausePositionEntry;
+
+  /// No description provided for @livePausePositionCurrent.
+  ///
+  /// In zh, this message translates to:
+  /// **'现价'**
+  String get livePausePositionCurrent;
+
+  /// No description provided for @livePausePositionFloatingPnl.
+  ///
+  /// In zh, this message translates to:
+  /// **'浮动盈亏'**
+  String get livePausePositionFloatingPnl;
+
+  /// No description provided for @liveDeleteSheetTitleSoft.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除策略？'**
+  String get liveDeleteSheetTitleSoft;
+
+  /// No description provided for @liveDeleteSheetTitlePermanent.
+  ///
+  /// In zh, this message translates to:
+  /// **'永久删除策略？'**
+  String get liveDeleteSheetTitlePermanent;
+
+  /// No description provided for @liveDeleteBodySoft.
+  ///
+  /// In zh, this message translates to:
+  /// **'「{name}」会立即停止运行，历史记录保留 30 天，可在「已停止」中查看。'**
+  String liveDeleteBodySoft(String name);
+
+  /// No description provided for @liveDeleteBodyPermanentRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'「{name}」会立即停止运行，历史记录将不予保留，此操作不可撤销。'**
+  String liveDeleteBodyPermanentRunning(String name);
+
+  /// No description provided for @liveDeleteBodyStopped.
+  ///
+  /// In zh, this message translates to:
+  /// **'「{name}」的历史记录会被立即永久删除，此操作不可撤销。'**
+  String liveDeleteBodyStopped(String name);
+
+  /// No description provided for @liveDeleteToggleExpand.
+  ///
+  /// In zh, this message translates to:
+  /// **'不保留历史？'**
+  String get liveDeleteToggleExpand;
+
+  /// No description provided for @liveDeleteToggleCollapse.
+  ///
+  /// In zh, this message translates to:
+  /// **'收起'**
+  String get liveDeleteToggleCollapse;
+
+  /// No description provided for @liveDeleteDangerNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'立即永久删除 · 删除后将不保留 30 天历史。通常仅在合规或隐私要求时选择。'**
+  String get liveDeleteDangerNote;
+
+  /// No description provided for @liveDeleteDangerCheckbox.
+  ///
+  /// In zh, this message translates to:
+  /// **'同时立即永久删除策略历史（不可撤销）'**
+  String get liveDeleteDangerCheckbox;
+
+  /// No description provided for @liveDeletePrimarySoft.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除策略'**
+  String get liveDeletePrimarySoft;
+
+  /// No description provided for @liveDeletePrimaryPermanent.
+  ///
+  /// In zh, this message translates to:
+  /// **'永久删除'**
+  String get liveDeletePrimaryPermanent;
+
+  /// No description provided for @liveNeedPauseTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要先暂停策略'**
+  String get liveNeedPauseTitle;
+
+  /// No description provided for @liveNeedPauseBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'「{name}」当前仍在运行，为避免误删持仓和正在进行的交易，请先暂停策略后再删除。'**
+  String liveNeedPauseBody(String name);
+
+  /// No description provided for @liveNeedPausePrimary.
+  ///
+  /// In zh, this message translates to:
+  /// **'去暂停策略'**
+  String get liveNeedPausePrimary;
+
   /// No description provided for @deployViewLiveStrategies.
   ///
   /// In zh, this message translates to:

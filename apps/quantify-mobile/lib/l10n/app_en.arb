@@ -654,6 +654,96 @@
   "liveActionDelete": "Delete",
   "liveActionDeletePermanent": "Delete permanently",
   "liveActionComingSoon": "Strategy actions coming soon",
+  "liveActionCancel": "Cancel",
+  "liveSortSheetTitle": "Filter & Sort",
+  "liveSortStatusLabel": "Status",
+  "liveSortMetricLabel": "Sort by",
+  "liveSortDirectionLabel": "Direction",
+  "liveSortMetricTodayPnl": "Today P&L",
+  "liveSortMetricTotalPnl": "Total P&L",
+  "liveSortMetricTotalPct": "Return",
+  "liveSortMetricWinRate": "Win rate",
+  "liveSortMetricCapital": "Capital",
+  "liveSortMetricRunFor": "Run days",
+  "liveSortDirAsc": "Ascending",
+  "liveSortDirDesc": "Descending",
+  "liveSortDirNone": "None",
+  "liveSortApply": "View {count} strategies",
+  "@liveSortApply": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "livePauseSheetTitle": "Pause strategy",
+  "livePauseSheetSubtitle": "\"{name}\" has 1 open position. Choose how to handle it before pausing.",
+  "@livePauseSheetSubtitle": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "livePauseModeMarketLabel": "Close at market, then pause",
+  "livePauseModeMarketTag": "Recommended",
+  "livePauseModeMarketDesc": "Close the position at market immediately, realize current P&L, then pause.",
+  "livePauseModeMarketEffect": "Estimated realized P&L {pnl}",
+  "@livePauseModeMarketEffect": {
+    "placeholders": {
+      "pnl": {"type": "String"}
+    }
+  },
+  "livePauseModeNaturalLabel": "Wait for stop-loss/take-profit",
+  "livePauseModeNaturalDesc": "Keep running until stop-loss or take-profit triggers, then pause automatically.",
+  "livePauseModeNaturalEffect": "To stop {stop}   To target {tp}",
+  "@livePauseModeNaturalEffect": {
+    "placeholders": {
+      "stop": {"type": "String"},
+      "tp": {"type": "String"}
+    }
+  },
+  "livePauseModeKeepLabel": "Keep position, pause strategy only",
+  "livePauseModeKeepDesc": "The strategy stops monitoring; you manage the position manually on the exchange and can hand it back after resuming.",
+  "livePauseModeKeepEffect": "⚠ While paused, automatic stop-loss / take-profit / sizing will not apply",
+  "livePauseResumeNote": "Pausing keeps all params and history; resume anytime from \"Paused\".",
+  "livePausePrimaryMarket": "Close & pause",
+  "livePausePrimaryNatural": "Keep running · wait to close",
+  "livePausePrimaryKeep": "Pause · keep position",
+  "livePausePositionHolding": "1 position",
+  "livePausePositionEntry": "Entry",
+  "livePausePositionCurrent": "Current",
+  "livePausePositionFloatingPnl": "Unrealized P&L",
+  "liveDeleteSheetTitleSoft": "Delete strategy?",
+  "liveDeleteSheetTitlePermanent": "Delete permanently?",
+  "liveDeleteBodySoft": "\"{name}\" will stop immediately; history is kept for 30 days and viewable under \"Stopped\".",
+  "@liveDeleteBodySoft": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "liveDeleteBodyPermanentRunning": "\"{name}\" will stop immediately and its history will not be kept. This cannot be undone.",
+  "@liveDeleteBodyPermanentRunning": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "liveDeleteBodyStopped": "The history of \"{name}\" will be permanently deleted immediately. This cannot be undone.",
+  "@liveDeleteBodyStopped": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "liveDeleteToggleExpand": "Don't keep history?",
+  "liveDeleteToggleCollapse": "Collapse",
+  "liveDeleteDangerNote": "Delete permanently now · no 30-day history will be kept. Usually only for compliance or privacy needs.",
+  "liveDeleteDangerCheckbox": "Also permanently delete strategy history now (irreversible)",
+  "liveDeletePrimarySoft": "Delete strategy",
+  "liveDeletePrimaryPermanent": "Delete permanently",
+  "liveNeedPauseTitle": "Pause the strategy first",
+  "liveNeedPauseBody": "\"{name}\" is still running. To avoid deleting positions and in-flight trades by mistake, pause it before deleting.",
+  "@liveNeedPauseBody": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "liveNeedPausePrimary": "Pause strategy",
   "deployViewLiveStrategies": "View live strategies",
   "whaleSearchHint": "Address / label / asset / exchange",
   "whaleSearchPrompt": "Search addresses, labels, assets, exchanges or event types",

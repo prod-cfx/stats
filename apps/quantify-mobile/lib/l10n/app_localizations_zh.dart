@@ -1698,6 +1698,169 @@ class AppLocalizationsZh extends AppLocalizations {
   String get liveActionComingSoon => '策略操作即将上线';
 
   @override
+  String get liveActionCancel => '取消';
+
+  @override
+  String get liveSortSheetTitle => '筛选 & 排序';
+
+  @override
+  String get liveSortStatusLabel => '状态';
+
+  @override
+  String get liveSortMetricLabel => '排序指标';
+
+  @override
+  String get liveSortDirectionLabel => '排序方式';
+
+  @override
+  String get liveSortMetricTodayPnl => '今日盈亏';
+
+  @override
+  String get liveSortMetricTotalPnl => '累计盈亏';
+
+  @override
+  String get liveSortMetricTotalPct => '收益率';
+
+  @override
+  String get liveSortMetricWinRate => '胜率';
+
+  @override
+  String get liveSortMetricCapital => '投入本金';
+
+  @override
+  String get liveSortMetricRunFor => '运行天数';
+
+  @override
+  String get liveSortDirAsc => '升序';
+
+  @override
+  String get liveSortDirDesc => '降序';
+
+  @override
+  String get liveSortDirNone => '不排序';
+
+  @override
+  String liveSortApply(int count) {
+    return '查看 $count 个策略';
+  }
+
+  @override
+  String get livePauseSheetTitle => '暂停策略';
+
+  @override
+  String livePauseSheetSubtitle(String name) {
+    return '「$name」当前有 1 笔持仓，请选择如何处理后再暂停。';
+  }
+
+  @override
+  String get livePauseModeMarketLabel => '市价平仓后暂停';
+
+  @override
+  String get livePauseModeMarketTag => '推荐';
+
+  @override
+  String get livePauseModeMarketDesc => '立即按市价单平掉持仓，实现当前盈亏后暂停策略。';
+
+  @override
+  String livePauseModeMarketEffect(String pnl) {
+    return '预计实现盈亏 $pnl';
+  }
+
+  @override
+  String get livePauseModeNaturalLabel => '等待止损/止盈触发';
+
+  @override
+  String get livePauseModeNaturalDesc => '保持运行直到触发止损或止盈，然后自动暂停。';
+
+  @override
+  String livePauseModeNaturalEffect(String stop, String tp) {
+    return '距止损 $stop   距止盈 $tp';
+  }
+
+  @override
+  String get livePauseModeKeepLabel => '保留持仓，仅暂停策略';
+
+  @override
+  String get livePauseModeKeepDesc => '策略不再监控，持仓需要你在交易所手动管理，恢复后可继续接管。';
+
+  @override
+  String get livePauseModeKeepEffect => '⚠ 暂停期间 止损 / 止盈 / 加减仓 等自动指令将不生效';
+
+  @override
+  String get livePauseResumeNote => '暂停后策略保留全部参数和历史，随时可在「已暂停」中一键恢复。';
+
+  @override
+  String get livePausePrimaryMarket => '市价平仓并暂停';
+
+  @override
+  String get livePausePrimaryNatural => '保持运行 · 等待平仓';
+
+  @override
+  String get livePausePrimaryKeep => '暂停策略 · 保留持仓';
+
+  @override
+  String get livePausePositionHolding => '1 笔持仓';
+
+  @override
+  String get livePausePositionEntry => '入场';
+
+  @override
+  String get livePausePositionCurrent => '现价';
+
+  @override
+  String get livePausePositionFloatingPnl => '浮动盈亏';
+
+  @override
+  String get liveDeleteSheetTitleSoft => '删除策略？';
+
+  @override
+  String get liveDeleteSheetTitlePermanent => '永久删除策略？';
+
+  @override
+  String liveDeleteBodySoft(String name) {
+    return '「$name」会立即停止运行，历史记录保留 30 天，可在「已停止」中查看。';
+  }
+
+  @override
+  String liveDeleteBodyPermanentRunning(String name) {
+    return '「$name」会立即停止运行，历史记录将不予保留，此操作不可撤销。';
+  }
+
+  @override
+  String liveDeleteBodyStopped(String name) {
+    return '「$name」的历史记录会被立即永久删除，此操作不可撤销。';
+  }
+
+  @override
+  String get liveDeleteToggleExpand => '不保留历史？';
+
+  @override
+  String get liveDeleteToggleCollapse => '收起';
+
+  @override
+  String get liveDeleteDangerNote => '立即永久删除 · 删除后将不保留 30 天历史。通常仅在合规或隐私要求时选择。';
+
+  @override
+  String get liveDeleteDangerCheckbox => '同时立即永久删除策略历史（不可撤销）';
+
+  @override
+  String get liveDeletePrimarySoft => '删除策略';
+
+  @override
+  String get liveDeletePrimaryPermanent => '永久删除';
+
+  @override
+  String get liveNeedPauseTitle => '需要先暂停策略';
+
+  @override
+  String liveNeedPauseBody(String name) {
+    return '「$name」当前仍在运行，为避免误删持仓和正在进行的交易，请先暂停策略后再删除。';
+  }
+
+  @override
+  String get liveNeedPausePrimary => '去暂停策略';
+
+  @override
   String get deployViewLiveStrategies => '查看实盘策略';
 
   @override

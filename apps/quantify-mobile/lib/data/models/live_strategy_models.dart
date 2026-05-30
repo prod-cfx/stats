@@ -87,7 +87,42 @@ class LiveStrategy {
   bool get mayHavePosition =>
       status == LiveStrategyStatus.running ||
       status == LiveStrategyStatus.warning;
+
+  /// 仅用于客户端 mock 状态转换（暂停/恢复/软删）。
+  ///
+  /// [statusNote] 用 sentinel 区分「不改」与「显式置 null」：默认 `_unset`
+  /// 保持原值，传 `null` 显式清空（恢复时清掉暂停附注）。
+  LiveStrategy copyWith({
+    LiveStrategyStatus? status,
+    Object? statusNote = _unset,
+  }) {
+    return LiveStrategy(
+      id: id,
+      name: name,
+      pair: pair,
+      timeframe: timeframe,
+      exchange: exchange,
+      exchangeGlyph: exchangeGlyph,
+      market: market,
+      status: status ?? this.status,
+      statusNote: identical(statusNote, _unset)
+          ? this.statusNote
+          : statusNote as String?,
+      runFor: runFor,
+      todayPct: todayPct,
+      todayPnl: todayPnl,
+      totalPct: totalPct,
+      totalPnl: totalPnl,
+      capital: capital,
+      trades: trades,
+      winRate: winRate,
+      spark: spark,
+    );
+  }
 }
+
+/// copyWith sentinel：区分「省略参数」与「显式传 null」。
+const Object _unset = Object();
 
 /// 持仓方向。
 enum PositionSide { long, short }
@@ -106,6 +141,12 @@ class LiveStrategyPosition {
   /// 距止损展示串，例如 `-2.0%`。
   final String stopDistance;
 
+  /// 距止损百分比（负数，例如 -2.0）。暂停对话框「等待止损/止盈」用。
+  final double stopPct;
+
+  /// 距止盈百分比（正数，例如 3.5）。暂停对话框「等待止损/止盈」用。
+  final double tpPct;
+
   /// 持仓时长展示串，例如 `4h 12m`。
   final String holdFor;
 
@@ -119,6 +160,8 @@ class LiveStrategyPosition {
     required this.pct,
     required this.stopPrice,
     required this.stopDistance,
+    required this.stopPct,
+    required this.tpPct,
     required this.holdFor,
   });
 }
