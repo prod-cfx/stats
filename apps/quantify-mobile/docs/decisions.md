@@ -4,6 +4,48 @@
 
 ---
 
+## 2026-05-30 · 巨鲸地址详情 6 tab 重型详情：方案 B 暂缓、标 future（Issue #1791）
+
+**背景**：设计稿 `design/project/mobile/m-screens-whale-discover.jsx:617`（`WhaleProfileDetail`）为全屏 6 tab 详情——基本信息 / 现货 / 永续 / 挂单 / 成交 / 历史，含 P&L 曲线图（period / scope / metric 三个下拉切换）+ 4 个 stat 卡 + 永续持仓明细（保证金 / 多空占比 / ROI / 未实现盈亏）。Flutter app `apps/quantify-mobile/lib/pages/whale/whale_profile_page.dart` 当前为 hero（地址 + 标签 + 资产摘要 + 总持仓估值）+ 2 segment（概览＝持仓列表 + 近期动作 / 交易统计＝盈亏/胜率/方向偏好/资产表现），信息维度少于设计稿。#1791 目标是「6 tab 全量落地 OR 分批 OR 标 future」三选一，先做产品取舍。
+
+**候选**：
+
+| 方案 | 内容 | 取舍 |
+|------|------|------|
+| A. mock-first 全量落地 | 新增 6 tab（基本信息/现货/永续/挂单/成交/历史）+ P&L 曲线图（period/scope/metric 切换）+ 4 stat 卡 + 永续持仓明细，全部基于 mock | 现货/永续/挂单/成交/历史五个明细 tab 均为依赖真实逐笔成交 / 当前挂单 / 持仓快照 / 历史动作序列的重型数据展示；真实地址数据通道 #1682 未接入，当前只能堆纯 mock 明细页，维护成本高、产品价值低；P&L 曲线的 period/scope/metric 三维切换在 mock 下是无意义的固定曲线；真实接入后明细列口径 / 分页 / 曲线分桶大概率重写，违反 YAGNI |
+| B. 暂缓，标记 future（采纳） | 维持现有 hero + 2 segment 形态，6 tab 重型详情 + P&L 图标 future，关联数据依赖 #1682，待真实地址数据接入后单独立 issue | 对齐 #1750/#1770/#1771 已建立的「设计超前 / 真实数据通道未就绪 → 标 future」基线；现有 hero + 概览 / 统计已覆盖地址核心信息（持仓 + 近期动作 + 盈亏统计），零破坏（Never break userspace）；KISS/YAGNI |
+
+**判定**：**采纳方案 B——暂缓，6 tab 重型详情 + P&L 曲线图统一标记为 future**，不纳入当前 quantify-mobile app 信息架构与验收。维持 `whale_profile_page.dart` 现有 hero + 概览 / 交易统计 2 segment 形态。本节仅落文档，不改 app 代码 / 测试、不改设计稿。
+
+- **现货 / 永续 / 挂单 / 成交 / 历史 5 个明细 tab** → future。均依赖真实逐笔成交 / 当前挂单 / 持仓快照 / 历史动作序列（#1682 范围），未接入前不落 mock 明细页。
+- **P&L 曲线图（period / scope / metric 三维切换）** → future。三维切换在无真实时序数据下退化为固定占位曲线，无产品价值；待真实盈亏时序接入后随明细 tab 一并落地。
+- **4 stat 卡 + 永续持仓明细（保证金 / 多空占比 / ROI / 未实现盈亏）** → future。现有「交易统计」segment 已以 4 个 stat cell（总盈亏 / 胜率 / 已实现 / 未实现）+ 方向偏好条 + 资产表现列表覆盖核心统计维度；永续逐仓明细依赖真实持仓快照，未接入前不补 mock。
+
+**对齐结论（对应 #1791 验收标准逐条）**：
+
+| 验收标准 | 结论 | 依据 |
+|---------|------|------|
+| [1] 产品确认落地范围（6 tab 全量 OR 分批 OR 标 future），记入 decisions.md | 已满足。结论＝方案 B 标 future，记入本节 | 本节 |
+| [2] 若落地：提供 基本信息/现货/永续/挂单/成交/历史 tab + P&L 图 + 4 stat 卡 | 不适用。未落地 6 tab；现有 hero + 概览 / 交易统计形态维持现状 | 本节判定 |
+| [3] 若标 future：decisions.md 钉死暂缓结论并关联数据依赖 | 已满足。本节钉死暂缓结论，关联数据依赖 #1682（读路径 REST），后续触发条件见下 | 本节 + 后续触发条件 |
+
+**理由**：
+
+1. #1791 目标是「全量 / 分批 / future」三选一，标 future 分支同样满足验收（验收标准末条「若标 future：decisions.md 钉死暂缓结论并关联数据依赖」）；非「必须实现」。
+2. **YAGNI / 依赖未就绪**：现货/永续/挂单/成交/历史明细 + P&L 时序曲线均依赖真实地址数据通道 #1682（读路径 REST），不在当前范围；先实现纯 mock 6 tab 重型详情违反 YAGNI，真实接入后明细列口径 / 分页 / 曲线分桶大概率重写。
+3. **Never break userspace**：现有 hero + 概览（持仓 + 近期动作）+ 交易统计（盈亏 / 胜率 / 方向偏好 / 资产表现）已覆盖地址核心信息，是可走通的现役形态；在真实数据与产品价值尚未明确前强行扩为 6 tab 不带来用户价值，保持现状对现有地址详情链路零破坏。
+4. 与 #1750/#1770/#1771 处理「设计超前 / 真实数据通道未就绪」一致：设计稿保留高保真表达作为 future 能力，app 按真实数据就绪节奏分批落地，文档钉死暂缓结论，避免每个子任务重新论证。
+
+**设计超前 / future 项（不算对齐缺口）**：6 tab 结构（基本信息/现货/永续/挂单/成交/历史）、P&L 曲线图（period/scope/metric 三维切换）、永续持仓逐仓明细（保证金 / 多空占比 / ROI / 未实现盈亏）——均待真实地址数据通道 #1682 就绪后另行立项评估，未就绪前不在 app 落 mock，也不要在后续 PR 以「对齐缺口」名义补。
+
+**不变项**：`whale_profile_page.dart` 维持 hero（地址 + 标签 + 资产摘要 + 总持仓估值）+ 概览 / 交易统计 2 segment 现状，`whaleProfileProvider` mock 数据形态不变。设计稿 `m-screens-whale-discover.jsx` `WhaleProfileDetail` 的 6 tab + P&L 图表达**保留为 future 能力**，不删除、不回流到 app，直到 #1682 接入真实地址数据后另立 issue 解除。
+
+**后续触发条件**：当 #1682（读路径 REST 接入 whale 数据）在 app 侧产出真实地址明细（现货 / 永续持仓、当前挂单、逐笔成交、历史动作、盈亏时序）时，新立「巨鲸地址详情 6 tab 实现」issue，引用本节作为暂缓结论的解除依据，届时统一评估 6 tab + P&L 图 + 永续明细落地。
+
+**落地范围**：仅文档。`apps/quantify-mobile/docs/decisions.md`（本节）+ `apps/quantify-mobile/README.md`「设计真源」段补 #1791 引用。不改 `design/project/mobile/m-screens-whale-discover.jsx`、不改 `whale_profile_page.dart` 与 app 代码 / 测试。
+
+---
+
 ## 2026-05-30 · 登录认证方式基线：维持 app 邮箱+密码，设计稿验证码形态标历史/future（Issue #1788）
 
 **背景**：设计稿 `design/project/mobile/m-screens-1.jsx:124-144`（`ScreenLogin`）登录流程为**邮箱 + 验证码**（「发送验证码」按钮 + `secs` 60s 倒计时 + `sent ? '重新发送'` 重发，无密码字段）。Flutter app `apps/quantify-mobile/lib/pages/auth/login_page.dart:517-559` 为**邮箱 + 密码**（`obscureText` 密码框 + 「忘记?」suffix 入口 + `onSubmitEmail` 提交），无验证码。两者认证交互不同，属真实未对齐缺口，且是产品方向取舍而非纯视觉对齐。
